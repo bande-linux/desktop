@@ -14,7 +14,7 @@ use std::time::Instant;
 use bande_fs::Entry;
 use bande_l10n::Localizer;
 use bande_toolkit::ui::{Animated, Cursor, Event, Key, Modifiers, Spring};
-use bande_toolkit::{Image, Point, Rect, ResizeEdge};
+use bande_toolkit::{Image, Point, Rect, ResizeEdge, Window};
 use bande_xdg::{DesktopEntry, state_home};
 
 use crate::content::Shown;
@@ -327,24 +327,35 @@ impl QuickLook {
 
     pub fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = vec![self.loader.fd()];
-        if let Shown::Pdf(pdf) = &self.shown {
-            sources.push(pdf.fd());
+        match &self.shown {
+            Shown::Pdf(pdf) => sources.push(pdf.fd()),
+            Shown::Media(Some(stage)) => sources.extend(stage.session().fd()),
+            _ => {}
         }
         sources
     }
 
-    pub fn source_ready(&mut self, index: usize) -> bool {
+    pub fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
         match index {
             0 => {
                 let mut changed = false;
                 for content in self.loader.take() {
-                    self.shown = Shown::from_loaded(content);
+                    let path = self
+                        .subjects
+                        .get(self.at)
+                        .map(|subject| subject.entry.path.clone());
+                    self.shown = Shown::from_loaded(content, path.as_deref());
                     changed = true;
                 }
                 changed
             }
             _ => match &mut self.shown {
                 Shown::Pdf(pdf) => pdf.take(),
+                Shown::Media(Some(stage)) => {
+                    let changed = stage.session_mut().ready(window);
+                    stage.settle(Instant::now());
+                    changed
+                }
                 _ => false,
             },
         }
@@ -524,9 +535,34 @@ impl QuickLook {
         }
     }
 
+    fn handle_media(&mut self, event: &Event, now: Instant) -> Option<bool> {
+        let Shown::Media(Some(stage)) = &mut self.shown else {
+            return None;
+        };
+        match event {
+            Event::PointerDown(pointer) if stage.in_bar(pointer.position) => {
+                Some(stage.pointer_down(pointer.position, now))
+            }
+            Event::PointerUp(pointer) if stage.is_pressed() => {
+                Some(stage.pointer_up(pointer.position, now))
+            }
+            Event::PointerMove(pointer) | Event::PointerEnter(pointer) if stage.is_pressed() => {
+                Some(stage.pointer_moved(pointer.position, now))
+            }
+            Event::PointerMove(_) | Event::PointerEnter(_) => {
+                stage.reveal_controls(now);
+                None
+            }
+            _ => None,
+        }
+    }
+
     pub fn handle(&mut self, event: &Event, now: Instant) -> bool {
         if self.closing {
             return false;
+        }
+        if let Some(handled) = self.handle_media(event, now) {
+            return handled;
         }
         match event {
             Event::PointerMove(pointer) | Event::PointerEnter(pointer) => {

@@ -73,6 +73,9 @@ impl State {
 
     pub(crate) fn powered(&self, output: &str) -> bool {
         self.power_mode(output) == Mode::On
+            && !self
+                .screen_named(output)
+                .is_some_and(|screen| self.screens[screen].parked)
     }
 
     pub(crate) fn power_key(&mut self, pressed: bool, time: u32) {
@@ -122,6 +125,10 @@ impl GlobalDispatch<ZwlrOutputPowerManagerV1, ()> for State {
         data_init: &mut DataInit<'_, Self>,
     ) {
         data_init.init(resource, ());
+    }
+
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        !crate::trust::is_sandboxed(&client)
     }
 }
 

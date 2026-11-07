@@ -13,6 +13,9 @@ use std::rc::{Rc, Weak};
 use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
+use bande_protocols::client::xdg_toplevel_session_v1::XdgToplevelSessionV1;
+
+use crate::app_connection::WindowInSession;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
     Appearance, Captured, CpuRenderer, Cursor, Event, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST,
@@ -31,8 +34,14 @@ use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, EventQueue, Proxy};
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_manager_v1::ExtBackgroundEffectManagerV1;
+use wayland_protocols::ext::background_effect::v1::client::ext_background_effect_surface_v1::ExtBackgroundEffectSurfaceV1;
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
+use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
+use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_importer_v2::ZxdgImporterV2;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
@@ -80,21 +89,25 @@ pub enum Role {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Dialog {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Utility {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Panel {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Layer(LayerOptions),
     Lock,
@@ -106,6 +119,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -114,6 +128,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -122,6 +137,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -130,6 +146,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -140,6 +157,17 @@ impl Role {
         | Self::Panel { tag, .. } = &mut self
         {
             *tag = window_tag.to_owned();
+        }
+        self
+    }
+
+    pub fn in_session(mut self, window: Option<WindowInSession>) -> Self {
+        if let Self::Toplevel { session, .. }
+        | Self::Dialog { session, .. }
+        | Self::Utility { session, .. }
+        | Self::Panel { session, .. } = &mut self
+        {
+            *session = window;
         }
         self
     }
@@ -267,10 +295,18 @@ pub(crate) struct State {
     pub(crate) shm: Option<WlShm>,
     pub(crate) subcompositor: Option<WlSubcompositor>,
     pub(crate) dmabuf: Option<wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1>,
+    pub(crate) background_effects: Option<ExtBackgroundEffectManagerV1>,
     pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
+    pub(crate) dmabuf_formats: Vec<(u32, u64)>,
+    pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
+    toplevel_session: Option<XdgToplevelSessionV1>,
+    exporter: Option<ZxdgExporterV2>,
+    importer: Option<ZxdgImporterV2>,
+    dialogs: Option<XdgWmDialogV1>,
+    exported_handle: Option<String>,
     pub(crate) toplevel_drag: Option<wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1>,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) data_device_manager: Option<WlDataDeviceManager>,
@@ -299,6 +335,9 @@ pub(crate) struct State {
 
 impl State {
     fn release(&mut self) {
+        if let Some(session) = self.toplevel_session.take() {
+            session.destroy();
+        }
         self.capture.release();
         if let Some(subcompositor) = self.subcompositor.take() {
             subcompositor.destroy();
@@ -326,6 +365,15 @@ impl State {
         }
         if let Some(manager) = self.toplevel_drag.take() {
             manager.destroy();
+        }
+        if let Some(exporter) = self.exporter.take() {
+            exporter.destroy();
+        }
+        if let Some(importer) = self.importer.take() {
+            importer.destroy();
+        }
+        if let Some(dialogs) = self.dialogs.take() {
+            dialogs.destroy();
         }
         if let Some(wm_base) = self.wm_base.take() {
             wm_base.destroy();
@@ -383,6 +431,8 @@ pub struct Window {
     shown_frame: Option<Frame>,
     planned: Option<FrameTime>,
     shown_opaque: Option<Opaque>,
+    shown_backdrop: Option<Rect>,
+    backdrop_effect: Option<ExtBackgroundEffectSurfaceV1>,
     pub(crate) externals: Vec<Weak<RefCell<External>>>,
     staged: bool,
     pub(crate) app_cursor: Cursor,
@@ -484,10 +534,30 @@ impl Window {
             Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
         };
         let role = match role {
-            Role::Toplevel { title, app_id, tag }
-            | Role::Dialog { title, app_id, tag }
-            | Role::Utility { title, app_id, tag }
-            | Role::Panel { title, app_id, tag } => {
+            Role::Toplevel {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Dialog {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Utility {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Panel {
+                title,
+                app_id,
+                tag,
+                session,
+            } => {
                 let wm_base = state
                     .wm_base
                     .clone()
@@ -511,6 +581,14 @@ impl Window {
                     }
                     manager.destroy();
                 }
+                state.toplevel_session = session.map(|window| match window.restoring {
+                    true => window
+                        .session
+                        .restore_toplevel(&toplevel, window.name, &handle, ()),
+                    false => window
+                        .session
+                        .add_toplevel(&toplevel, window.name, &handle, ()),
+                });
                 if fixed {
                     let (width, height) = match titled {
                         true => (
@@ -620,6 +698,8 @@ impl Window {
             shown_frame: None,
             planned: None,
             shown_opaque: None,
+            shown_backdrop: None,
+            backdrop_effect: None,
             externals: Vec::new(),
             staged: false,
             app_cursor: Cursor::Default,
@@ -781,6 +861,32 @@ impl Window {
             menu: self.chrome.as_ref().is_some_and(|chrome| chrome.menu),
             width: width as f32,
             height: height as f32,
+        }
+    }
+
+    pub fn export(&mut self) {
+        if let Some(exporter) = self.state.exporter.as_ref() {
+            exporter.export_toplevel(&self.surface, &self.queue.handle(), ());
+        }
+    }
+
+    pub fn exported_handle(&self) -> Option<&str> {
+        self.state.exported_handle.as_deref()
+    }
+
+    pub fn attach_to(&mut self, parent_handle: &str) {
+        let ShellSurface::Toplevel(_, toplevel) = &self.role else {
+            return;
+        };
+        if let Some(importer) = self.state.importer.as_ref() {
+            let imported =
+                importer.import_toplevel(parent_handle.to_owned(), &self.queue.handle(), ());
+            imported.set_parent_of(&self.surface);
+        }
+        if let Some(dialogs) = self.state.dialogs.as_ref() {
+            dialogs
+                .get_xdg_dialog(toplevel, &self.queue.handle(), ())
+                .set_modal();
         }
     }
 
@@ -1249,6 +1355,7 @@ impl Window {
         let look = Look {
             active: toplevel.activated,
             zoomed: toplevel.maximized || toplevel.fullscreen,
+            fullscreen: toplevel.fullscreen,
         };
         match &mut self.chrome {
             Some(chrome) => {
@@ -1298,6 +1405,38 @@ impl Window {
         match &self.gpu {
             Gpu::Ready(gpu) => gpu.transparent,
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
+        }
+    }
+
+    pub fn set_backdrop(&mut self, area: Option<Rect>) {
+        if self.shown_backdrop == area {
+            return;
+        }
+        let handle = self.queue.handle();
+        let (Some(manager), Some(compositor)) =
+            (&self.state.background_effects, &self.state.compositor)
+        else {
+            return;
+        };
+        self.shown_backdrop = area;
+        let effect = self
+            .backdrop_effect
+            .get_or_insert_with(|| manager.get_background_effect(&self.surface, &handle, ()));
+        let region = area.map(|area| {
+            let region = compositor.create_region(&handle, ());
+            let left = area.x.floor();
+            let top = area.y.floor();
+            region.add(
+                left as i32,
+                top as i32,
+                ((area.x + area.width).ceil() - left) as i32,
+                ((area.y + area.height).ceil() - top) as i32,
+            );
+            region
+        });
+        effect.set_blur_region(region.as_ref());
+        if let Some(region) = region {
+            region.destroy();
         }
     }
 
@@ -1394,8 +1533,12 @@ impl Window {
             let sheet_opaque = scene.background.a == u8::MAX;
             let framed = self.framed(&frame, scene, frame_time.presentation);
             self.frame_surface(&frame);
-            let chassis = self.appearance.borrow().current().palette().chassis;
-            let opaque = (chassis.a == u8::MAX && sheet_opaque).then(|| frame.window());
+            let translucent = self.appearance.borrow().current().palette().frame.a != u8::MAX;
+            self.set_backdrop(translucent.then(|| frame.window()));
+            let opaque = sheet_opaque.then(|| match translucent {
+                true => frame.opaque_sheet(),
+                false => frame.window(),
+            });
             (framed, opaque)
         } else {
             let opaque = (scene.background.a == u8::MAX)

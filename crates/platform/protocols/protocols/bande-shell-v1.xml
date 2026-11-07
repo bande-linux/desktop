@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="5">
+  <interface name="bande_shell_v1" version="6">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -125,6 +125,15 @@
       <arg name="app_id" type="string"/>
     </request>
 
+    <request name="reopening_app" since="6">
+      <description summary="the shell is reopening this app for the session">
+        The shell reopens this app as the last session had it, so windows of the
+        app that use no xdg_session_v1 take the display, workspace and frame of
+        its windows then, matched by tag and title.
+      </description>
+      <arg name="app_id" type="string"/>
+    </request>
+
     <request name="force_quit_app">
       <description summary="end an app at once">
         Kills the app with this app id without asking, as Force Quit does:
@@ -163,6 +172,15 @@
       </description>
       <arg name="app_id" type="string"/>
     </event>
+
+    <request name="set_backdrop_opacity" since="6">
+      <description summary="fade the background effect of a surface">
+        How much of the surface's background effect shows, from 0 to 1, for a
+        panel that fades in and out. 1 is the default.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="opacity" type="fixed"/>
+    </request>
 
     <request name="set_corner_radius">
       <description summary="round the background effect of a surface">
@@ -555,7 +573,7 @@
     </event>
   </interface>
 
-  <interface name="bande_app_v1" version="8">
+  <interface name="bande_app_v1" version="9">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -564,6 +582,14 @@
     </description>
 
     <request name="destroy" type="destructor"/>
+
+    <event name="session_ending" since="9">
+      <description summary="the next quit_requested is because the session ends">
+        Sent just before quit_requested when the session is ending. The user did
+        not choose to close this app's windows, so it should keep what it needs
+        to bring them back, and should not ask about work it can keep.
+      </description>
+    </event>
 
     <event name="quit_requested">
       <description summary="the user asked to quit the app">

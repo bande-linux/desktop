@@ -17,7 +17,7 @@ One read-only image does all three jobs. `images/build.sh` builds a root tree wi
 
 - **Live boot:** `boot=bande-live`, a small initramfs-tools boot script in the ordinary initramfs: squashfs below, tmpfs overlay above. So one kernel and initramfs serve both modes.
 - **Disk layout** (`fix-update-safety` owns subvolumes and snapshots, `fix-security` owns encryption): GPT with ESP, `BANDE-RECOVERY`, `BANDE-ROOT` (LUKS2 + btrfs).
-- **Mac image:** macOS cannot run cryptsetup, so `root.img` is a prebuilt LUKS2 volume with a well-known key. First run sets the real passphrase, removes that key and reencrypts online in the background, like FileVault. The USB install makes a fresh volume key and skips the reencrypt.
+- **Mac image:** macOS cannot run cryptsetup, so `root.img` is a prebuilt LUKS2 volume with a well-known passphrase (`bande-provisional`). First run sets the real passphrase, removes that key and reencrypts online in the background, like FileVault. The USB install makes a fresh volume key and skips the reencrypt.
 - **`bande-install`** (`images/rootfs`): the one engine for install and reinstall, a root script run through pkexec, reporting progress as lines on stdout.
 - **Assistant:** `bande-setup`, the login-window role in `bande-compositor --greeter`, chosen while `/var/lib/bande/setup-pending` exists. It runs unprivileged as `_greetd`. Accounts, locale, time and Wi-Fi go through accountsservice, localed, timedated and NetworkManager, with a polkit rule that holds only while setup is pending. Disk steps go through pkexec. It signs in over greetd's IPC when done.
 - **Recovery UI:** the same `bande-setup` binary, on the live system.

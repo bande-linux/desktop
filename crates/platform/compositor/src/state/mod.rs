@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -54,6 +55,7 @@ use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::session::{LockScreen, SessionClient, SessionRole, Summoned};
 use crate::tile::{Preview, SnapDrag};
 use crate::window::Window;
+use smithay::reexports::wayland_protocols::wp::text_input::zv3::server::zwp_text_input_v3::ZwpTextInputV3;
 
 mod compose;
 mod focus;
@@ -79,8 +81,13 @@ pub struct State {
     pub(crate) display_handle: DisplayHandle,
     pub(crate) globals: Globals,
     pub(crate) blockers: smithay::reexports::calloop::LoopHandle<'static, State>,
+    pub(crate) consent_file: PathBuf,
+    pub(crate) consent_watch: Option<smithay::reexports::calloop::RegistrationToken>,
+    pub(crate) consenting: Vec<(Client, crate::trust::Access)>,
+    pub(crate) secret_text_inputs: Vec<ZwpTextInputV3>,
     pub(crate) screens: Vec<Screen>,
     pub(crate) departed: Vec<crate::displays::Departed>,
+    pub(crate) outputs_refitted: bool,
     pub(crate) display_config: bande_config::Config,
     pub(crate) night_light: crate::night::NightLight,
     pub(crate) output_managers: Vec<crate::management::Manager>,
@@ -119,6 +126,7 @@ pub struct State {
     pub(crate) switcher: crate::switcher::Switcher,
     pub(crate) assist: crate::assist::Assist,
     pub(crate) recall: crate::recall::Recall,
+    pub(crate) resume: crate::resume::Resume,
     pub(crate) reopen_file: Option<std::path::PathBuf>,
     pub(crate) running_apps: Option<crate::app::RunningApps>,
     pub(crate) apps_changed: bool,
@@ -145,6 +153,7 @@ pub struct State {
     pub(crate) reduce_motion: bool,
     pub(crate) zoom: crate::zoom::Zoom,
     pub(crate) assistive: crate::assistive::Assistive,
+    pub(crate) materials: crate::material::Materials,
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) app_states: crate::app_states::AppStates,
@@ -213,8 +222,9 @@ impl Compositor {
         crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
-        handle.create_global::<State, BandeShellV1, ()>(crate::shell::OPEN_TERMINAL_SINCE, ());
-        handle.create_global::<State, BandeAppV1, ()>(8, ());
+        handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
+        handle.create_global::<State, BandeAppV1, ()>(9, ());
+        crate::resume::create_global(&handle);
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
         handle.create_global::<State, ExtBackgroundEffectManagerV1, ()>(1, ());
@@ -225,8 +235,13 @@ impl Compositor {
             display_handle: handle.clone(),
             globals,
             blockers: fences.handle(),
+            consent_file: crate::trust::default_consent_file(),
+            consent_watch: None,
+            consenting: Vec::new(),
+            secret_text_inputs: Vec::new(),
             screens: vec![screen],
             departed: Vec::new(),
+            outputs_refitted: false,
             display_config: bande_config::Config::default(),
             night_light: crate::night::NightLight::default(),
             output_managers: Vec::new(),
@@ -265,6 +280,7 @@ impl Compositor {
             switcher: crate::switcher::Switcher::default(),
             assist: crate::assist::Assist::default(),
             recall: crate::recall::Recall::default(),
+            resume: crate::resume::Resume::default(),
             reopen_file: None,
             running_apps: None,
             apps_changed: false,
@@ -291,6 +307,7 @@ impl Compositor {
             reduce_motion: false,
             zoom: crate::zoom::Zoom::default(),
             assistive: crate::assistive::Assistive::default(),
+            materials: crate::material::Materials::default(),
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             app_states: crate::app_states::AppStates::default(),
@@ -339,6 +356,7 @@ impl Compositor {
             })
             .map_err(|error| io::Error::other(error.error))?;
         state.force_quit.take_actions(actions);
+        state.watch_consents();
         Ok(Self {
             display,
             fences,
@@ -351,11 +369,20 @@ impl Compositor {
     }
 
     pub fn insert_client(&mut self, stream: UnixStream) -> io::Result<Client> {
+        let process = crate::force_quit::Process::of_peer(&stream);
         let state = ClientState {
-            process: crate::force_quit::Process::of_peer(&stream),
+            claimant: process
+                .as_ref()
+                .and_then(|process| crate::trust::verified_program(process.pid())),
+            process,
             ..ClientState::default()
         };
         self.display.handle().insert_client(stream, Arc::new(state))
+    }
+
+    pub fn set_consent_file(&mut self, path: PathBuf) {
+        self.state.consent_file = path;
+        self.state.watch_consents();
     }
 
     pub(crate) fn display_handle(&self) -> DisplayHandle {
@@ -370,6 +397,7 @@ impl Compositor {
         self.state.announce_windowless_apps();
         self.state.announce_apps_running();
         self.state.note_running_apps();
+        self.state.note_window_sessions();
         self.state.note_app_states();
         self.state.popups.cleanup();
         self.state.end_orphaned_drag();
@@ -398,6 +426,7 @@ impl Compositor {
     }
 
     pub fn latch_on(&mut self, output: &str) {
+        self.state.note_window_sessions();
         if let Some(screen) = self.state.screen_named(output) {
             self.latch_screen(screen);
         }
@@ -530,6 +559,8 @@ impl Compositor {
 pub(crate) struct ClientState {
     pub(crate) compositor_state: CompositorClientState,
     pub(crate) role: Option<SessionRole>,
+    pub(crate) claimant: Option<crate::trust::Claimant>,
+    pub(crate) sandboxed: bool,
     pub(crate) departed: AtomicBool,
     pub(crate) process: Option<crate::force_quit::Process>,
 }

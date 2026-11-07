@@ -1,4 +1,7 @@
+use bande_inbox::Inbox;
+use bande_volumes::leads_to_connected_volume as on_server;
 use std::io;
+use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 
 use bande_files::FilesSettings;
@@ -98,7 +101,7 @@ pub fn initial_folder(
     [dialog.folder.clone(), given, remembered]
         .into_iter()
         .flatten()
-        .find(|folder| folder.is_dir())
+        .find(|folder| bande_volumes::quick_is_dir(folder))
         .unwrap_or_else(|| fallback.to_path_buf())
 }
 
@@ -122,6 +125,8 @@ pub struct Chooser {
     mime: MimeDatabase,
     folder: PathBuf,
     entries: Vec<Entry>,
+    listings: Option<Inbox<(PathBuf, io::Result<Vec<Entry>>)>>,
+    loading: bool,
     filter: Option<usize>,
     sort: Sort,
     pub name: String,
@@ -147,6 +152,8 @@ impl Chooser {
             mime,
             folder: PathBuf::new(),
             entries: Vec::new(),
+            listings: Inbox::new().ok(),
+            loading: false,
             filter,
             sort: Sort::default(),
             show_extensions: settings.show_extensions,
@@ -175,9 +182,64 @@ impl Chooser {
     }
 
     pub fn open(&mut self, folder: &Path) -> io::Result<()> {
-        self.entries = list(folder, self.show_hidden, self.sort)?;
+        self.entries = match on_server(folder) {
+            true => {
+                self.start_listing(folder.to_path_buf(), self.show_hidden);
+                Vec::new()
+            }
+            false => list(folder, self.show_hidden, self.sort)?,
+        };
         self.folder = folder.to_path_buf();
         Ok(())
+    }
+
+    pub fn listing_fd(&self) -> Option<BorrowedFd<'_>> {
+        self.listings.as_ref().map(Inbox::fd)
+    }
+
+    fn start_listing(&mut self, folder: PathBuf, show_hidden: bool) {
+        self.loading = true;
+        let order = self.sort;
+        let Some(outbox) = self.listings.as_ref().map(Inbox::outbox) else {
+            return;
+        };
+        let spawned = std::thread::Builder::new()
+            .name("connected folder".to_owned())
+            .spawn(move || {
+                let listed = list(&folder, show_hidden, order);
+                outbox.send((folder, listed));
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot list a folder on a server: {error}");
+        }
+    }
+
+    pub fn take_listings(&mut self) -> bool {
+        let finished = self.listings.as_mut().map(Inbox::drain).unwrap_or_default();
+        let mut changed = false;
+        for (folder, listed) in finished {
+            if folder != self.folder {
+                continue;
+            }
+            self.loading = false;
+            changed = true;
+            match listed {
+                Ok(entries) => self.entries = entries,
+                Err(error) => tracing::warn!("cannot list {}: {error}", folder.display()),
+            }
+        }
+        changed
+    }
+
+    pub fn is_folder(&self, path: &Path) -> bool {
+        match on_server(path) {
+            true => self
+                .entries
+                .iter()
+                .find(|entry| entry.path == path)
+                .is_some_and(Entry::is_folder),
+            false => path.is_dir(),
+        }
     }
 
     pub fn shows_hidden(&self) -> bool {
@@ -185,7 +247,10 @@ impl Chooser {
     }
 
     pub fn set_show_hidden(&mut self, show: bool) -> io::Result<()> {
-        self.entries = list(&self.folder, show, self.sort)?;
+        match on_server(&self.folder) {
+            true => self.start_listing(self.folder.clone(), show),
+            false => self.entries = list(&self.folder, show, self.sort)?,
+        }
         self.show_hidden = show;
         Ok(())
     }
@@ -274,7 +339,7 @@ impl Chooser {
     }
 
     pub fn accept(&self, selected: &[PathBuf]) -> Accept {
-        let is_folder = |path: &PathBuf| path.is_dir();
+        let is_folder = |path: &PathBuf| self.is_folder(path);
         match &self.dialog.mode {
             Mode::Open {
                 directory: false,
@@ -321,9 +386,13 @@ impl Chooser {
                     return Accept::Nothing;
                 }
                 let path = self.folder.join(name);
-                if path.is_dir() {
+                let exists = match on_server(&path) {
+                    true => self.entries.iter().any(|entry| entry.path == path),
+                    false => path.exists(),
+                };
+                if self.is_folder(&path) {
                     Accept::Enter(path)
-                } else if path.exists() {
+                } else if exists {
                     Accept::Replace(path)
                 } else {
                     Accept::Done(self.selection(vec![path]))

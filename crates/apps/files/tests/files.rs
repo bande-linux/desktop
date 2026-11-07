@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bande_files::{Browser, FilesView, Location, Sheet};
+use bande_files::{Browser, FilesView, Location, Request, Sheet};
 use bande_fs::Trash;
 use bande_toolkit::ui::{Event, Key, Modifiers};
 use bande_toolkit::{Palette, Scheme, TextSystem};
@@ -129,4 +129,29 @@ fn a_duplicate_that_cannot_be_written_asks_and_stops_without_leaving_a_copy() {
     finish(&mut files);
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("unlock");
     assert_eq!(fs::read_dir(&locked).expect("listing").count(), 1);
+}
+
+#[test]
+fn quit_during_a_copy_asks_and_goes_through_when_the_copy_ends() {
+    let root = TempDir::new().expect("temporary folder");
+    fs::write(root.path().join("notes.txt"), "notes\n").expect("file");
+    let trash = Trash::isolated(root.path().join("Trash"), 0);
+    let mut files = view(Browser::open(Location::Folder(root.path().into()), trash));
+    key(&mut files, Key::Down, false, false);
+    assert!(files.menu_action("duplicate"));
+    assert!(files.busy());
+    files.ask_before_leaving(true);
+    assert!(matches!(
+        files.sheet(),
+        Some(Sheet::Busy { quitting: true })
+    ));
+    run_until(&mut files, |files| files.sheet().is_none());
+    assert!(!files.busy());
+    assert!(
+        files
+            .take_requests()
+            .iter()
+            .any(|request| matches!(request, Request::Leave { quitting: true }))
+    );
+    assert!(root.path().join("notes copy.txt").exists());
 }

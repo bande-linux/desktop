@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use bande_fs::{ARCHIVES, DOCUMENTS, Recency};
-use bande_search::{FUZZY, FileIndex};
+use bande_search::{FUZZY, FileIndex, FileResults, SearchService};
 use bande_toolkit::ui::{BUTTON_HEIGHT, PopUpButton, SEGMENTED_HEIGHT, SegmentedControl, WidgetId};
 use bande_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
 
@@ -91,9 +91,43 @@ pub(crate) struct Searching {
     pub(crate) date_control: WidgetId,
 }
 
+pub(crate) enum Searcher {
+    Home(SearchService),
+    Elsewhere(FileIndex),
+}
+
+impl Searcher {
+    fn query_within(&self, generation: u64, text: &str, within: &Path, limit: usize) {
+        match self {
+            Self::Home(service) => service.query_within(generation, text, within, limit),
+            Self::Elsewhere(index) => index.query_within(generation, text, within, limit),
+        }
+    }
+
+    pub(crate) fn exclude(&self, excluded: Vec<PathBuf>) {
+        if let Self::Elsewhere(index) = self {
+            index.exclude(excluded);
+        }
+    }
+
+    pub(crate) fn fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        match self {
+            Self::Home(service) => service.fd(),
+            Self::Elsewhere(index) => index.fd(),
+        }
+    }
+
+    fn take(&mut self) -> Option<FileResults> {
+        match self {
+            Self::Home(service) => service.take(),
+            Self::Elsewhere(index) => index.take(),
+        }
+    }
+}
+
 pub(crate) struct Index {
     root: PathBuf,
-    pub(crate) index: FileIndex,
+    pub(crate) index: Searcher,
     generation: u64,
 }
 
@@ -217,7 +251,8 @@ impl FilesView {
             return;
         };
         let home = home();
-        let root = match covered(&home, &scope) {
+        let in_home = covered(&home, &scope);
+        let root = match in_home {
             true => home,
             false => scope.clone(),
         };
@@ -226,7 +261,12 @@ impl FilesView {
             .as_ref()
             .is_some_and(|index| covered(&index.root, &scope))
         {
-            match FileIndex::spawn(root.clone(), self.search_excluded.clone()) {
+            let searcher = match in_home {
+                true => SearchService::connect().map(Searcher::Home),
+                false => FileIndex::spawn(root.clone(), self.search_excluded.clone())
+                    .map(Searcher::Elsewhere),
+            };
+            match searcher {
                 Ok(index) => {
                     self.index = Some(Index {
                         root,
@@ -285,6 +325,9 @@ impl FilesView {
             .iter()
             .filter(|path| {
                 if kind == SearchKind::Any && recency == Recency::AnyTime {
+                    return true;
+                }
+                if bande_volumes::on_connected_volume(path) {
                     return true;
                 }
                 let Ok(metadata) = std::fs::metadata(path) else {

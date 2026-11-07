@@ -11,11 +11,13 @@ repository.workspace = true
 hayro.workspace = true
 image = { workspace = true, features = ["gif", "jpeg", "webp"] }
 kamadak-exif.workspace = true
+quick-xml.workspace = true
 resvg = { workspace = true, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
 rustix = { workspace = true, features = ["fs", "process"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+zip.workspace = true
 bande-fs.workspace = true
 bande-inbox.workspace = true
 

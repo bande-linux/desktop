@@ -4,6 +4,8 @@ use std::os::unix::net::UnixStream;
 
 use bande_graphics::{Event, Modifiers};
 use bande_protocols::client::bande_app_v1::{self, BandeAppV1};
+use bande_protocols::client::xdg_session_manager_v1::{self, XdgSessionManagerV1};
+use bande_protocols::client::xdg_session_v1::{self, XdgSessionV1};
 use wayland_client::backend::WaylandError;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle};
@@ -13,18 +15,30 @@ use crate::seat::key_for;
 use crate::window::{Role, Window, WindowError};
 
 const KEEP_RUNNING_SINCE: u32 = 2;
+const APP_VERSION: u32 = 9;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppRequest {
     Reopen(String),
     Key(Event),
+    SessionEnding,
     Quit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowInSession {
+    pub(crate) session: XdgSessionV1,
+    pub(crate) name: String,
+    pub(crate) restoring: bool,
 }
 
 #[derive(Default)]
 struct Link {
-    global: Option<(WlRegistry, u32)>,
+    global: Option<(WlRegistry, u32, u32)>,
     app: Option<BandeAppV1>,
+    session_manager: Option<XdgSessionManagerV1>,
+    session: Option<XdgSessionV1>,
+    session_id: Option<String>,
     requests: Vec<AppRequest>,
 }
 
@@ -92,9 +106,44 @@ impl AppConnection {
         if let Some(app) = self.link.app.take() {
             app.destroy();
         }
-        self.link.app = self.link.global.as_ref().map(|(registry, name)| {
-            registry.bind(*name, KEEP_RUNNING_SINCE, &self.queue.handle(), ())
+        self.link.app = self.link.global.as_ref().map(|(registry, name, version)| {
+            registry.bind(*name, *version, &self.queue.handle(), ())
         });
+    }
+
+    pub fn join_session(&mut self, saved: Option<&str>) -> Result<Option<String>, WindowError> {
+        let Some(manager) = &self.link.session_manager else {
+            return Ok(None);
+        };
+        let reason = match saved {
+            Some(_) => xdg_session_manager_v1::Reason::SessionRestore,
+            None => xdg_session_manager_v1::Reason::Launch,
+        };
+        self.link.session_id = saved.map(str::to_owned);
+        self.link.session =
+            Some(manager.get_session(reason, saved.map(str::to_owned), &self.queue.handle(), ()));
+        self.queue.roundtrip(&mut self.link)?;
+        Ok(self.link.session_id.clone())
+    }
+
+    pub fn window_in_session(&self, name: String, restoring: bool) -> Option<WindowInSession> {
+        Some(WindowInSession {
+            session: self.link.session.clone()?,
+            name,
+            restoring,
+        })
+    }
+
+    pub fn leave_session(&self, name: &str) {
+        if let Some(session) = &self.link.session {
+            session.remove_toplevel(name.to_owned());
+        }
+    }
+
+    pub fn end_session(&mut self) {
+        if let Some(session) = self.link.session.take() {
+            session.remove();
+        }
     }
 
     pub fn open(&self, role: Role, size: (u32, u32)) -> Result<Window, WindowError> {
@@ -141,16 +190,24 @@ impl Dispatch<WlRegistry, ()> for Link {
         _: &Connection,
         handle: &QueueHandle<Self>,
     ) {
-        if let wl_registry::Event::Global {
+        let wl_registry::Event::Global {
             name,
             interface,
             version,
         } = event
-            && interface == "bande_app_v1"
-            && version >= KEEP_RUNNING_SINCE
-        {
-            link.app = Some(registry.bind(name, KEEP_RUNNING_SINCE, handle, ()));
-            link.global = Some((registry.clone(), name));
+        else {
+            return;
+        };
+        match interface.as_str() {
+            "bande_app_v1" if version >= KEEP_RUNNING_SINCE => {
+                let version = version.min(APP_VERSION);
+                link.app = Some(registry.bind(name, version, handle, ()));
+                link.global = Some((registry.clone(), name, version));
+            }
+            "xdg_session_manager_v1" => {
+                link.session_manager = Some(registry.bind(name, 1, handle, ()));
+            }
+            _ => {}
         }
     }
 }
@@ -165,6 +222,7 @@ impl Dispatch<BandeAppV1, ()> for Link {
         _: &QueueHandle<Self>,
     ) {
         let request = match event {
+            bande_app_v1::Event::SessionEnding => AppRequest::SessionEnding,
             bande_app_v1::Event::QuitRequested => AppRequest::Quit,
             bande_app_v1::Event::Reopen { token } => AppRequest::Reopen(token),
             bande_app_v1::Event::Key {
@@ -180,5 +238,38 @@ impl Dispatch<BandeAppV1, ()> for Link {
             _ => return,
         };
         link.requests.push(request);
+    }
+}
+
+impl Dispatch<XdgSessionManagerV1, ()> for Link {
+    fn event(
+        _: &mut Self,
+        _: &XdgSessionManagerV1,
+        _: xdg_session_manager_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<XdgSessionV1, ()> for Link {
+    fn event(
+        link: &mut Self,
+        session: &XdgSessionV1,
+        event: xdg_session_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            xdg_session_v1::Event::Created { session_id } => link.session_id = Some(session_id),
+            xdg_session_v1::Event::Replaced => {
+                session.destroy();
+                link.session = None;
+                link.session_id = None;
+            }
+            _ => {}
+        }
     }
 }

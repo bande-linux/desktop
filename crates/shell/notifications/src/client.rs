@@ -12,7 +12,7 @@ use bande_inbox::{Inbox, Outbox};
 use bande_notify::client::NotificationCenter;
 use bande_notify::{BUS_NAME, Picture, Presentation};
 use bande_toolkit::{
-    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Rect, Role, Scene,
+    App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Radius, Rect, Role, Scene,
     TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
@@ -214,6 +214,11 @@ impl App for Notifications {
         if !self.screen.visible(now) && !self.screen.animating(now) {
             self.hide_pending = true;
         }
+        let backdrop = self.screen.backdrop(now);
+        if backdrop.is_some() {
+            let _ = window.set_corner_radius(Radius::XL as u32);
+        }
+        window.set_backdrop(backdrop);
         self.screen.scene(now)
     }
 

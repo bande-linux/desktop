@@ -12,8 +12,9 @@ mod text;
 mod title_bar;
 
 pub use bande_design::{
-    Accent, Appearance, Color, Contrast, ControlSize, Elevation, Palette, Radius, Scheme, Shadow,
-    Spacing, TextRole, TextSize, Typeface, grown_line, window_edge_opacity,
+    Accent, Appearance, BackdropTone, Color, Contrast, ControlSize, Elevation, Look, Material,
+    Palette, Radius, Scheme, Shadow, Spacing, Style, TextRole, TextSize, Typeface, backdrop_tone,
+    grown_line, limit_backdrop, window_edge_opacity,
 };
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};
@@ -26,11 +27,12 @@ pub use input::{
 pub use parley::FontData;
 pub use render::{DrawError, Snapshot, pixels};
 pub use scene::{
-    Blend, Image, Item, Paint, Path, Picture, Point, Rect, Scene, Shape, Stop, Transform,
+    Blend, Image, Item, Paint, Path, PathElement, Picture, Point, Rect, Scene, Shape, Stop,
+    Transform,
 };
 pub use surface::{PlacedSurface, SurfaceId, SurfaceScaling, placed_surfaces, surface_area};
 pub use text::{
-    Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextStyle, TextSystem, shortened,
+    Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextRun, TextStyle, TextSystem, shortened,
 };
 pub use title_bar::{
     ControlHover, FRAME_HEADER_HEIGHT, HEADER_LEADING, PLACEMENTS_AFTER_HOLD,

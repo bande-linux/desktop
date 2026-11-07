@@ -7,18 +7,19 @@ use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
     ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule, InputSource,
     LidOnPower, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search, SearchCategory,
-    SecondaryClick, Sound, Suspend, Trackpad, WallpaperFit, WallpaperVariant, accent_keyword,
-    same_displays,
+    SecondaryClick, Sound, Style, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
+    accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Setting {
     Appearance(Appearance),
+    Style(Style),
     Accent(Accent),
     TintedFrame(bool),
     ReopenApps(bool),
-    ReopenAppsAfterCrash(bool),
     AutomaticUpdates(bool),
+    UpdateCheckEvery(Option<Duration>),
     LockMessage(String),
     ShowPreviews(bool),
     Clock(ClockFormat),
@@ -29,6 +30,7 @@ pub enum Setting {
     BarEdge(BarEdge),
     BarApps(Vec<String>),
     BarAutoHide(bool),
+    BarFloating(bool),
     BarIconSize(u32),
     IdleScreenSaverAfter(Option<Duration>),
     IdleDisplayOffAfter(Option<Duration>),
@@ -78,6 +80,7 @@ impl Setting {
                 "appearance",
                 Some(appearance.keyword().into()),
             ),
+            Self::Style(style) => set(&mut document, None, "style", Some(style.keyword().into())),
             Self::Accent(accent) => set(
                 &mut document,
                 None,
@@ -108,17 +111,17 @@ impl Setting {
                 "lock-message",
                 (!message.is_empty()).then(|| message.clone().into()),
             ),
-            Self::ReopenAppsAfterCrash(on) => set(
-                &mut document,
-                None,
-                "reopen-apps-after-crash",
-                on.then_some(KdlValue::Bool(true)),
-            ),
             Self::AutomaticUpdates(on) => set(
                 &mut document,
                 None,
                 "automatic-updates",
                 on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::UpdateCheckEvery(every) => set(
+                &mut document,
+                None,
+                "update-check-every",
+                every.map(|every| duration(every).into()),
             ),
             Self::Clock(format) => set(
                 &mut document,
@@ -162,6 +165,12 @@ impl Setting {
                 Some("bar"),
                 "auto-hide",
                 auto_hide.then_some(KdlValue::Bool(true)),
+            ),
+            Self::BarFloating(floating) => set(
+                &mut document,
+                Some("bar"),
+                "floating",
+                (!floating).then_some(KdlValue::Bool(false)),
             ),
             Self::BarIconSize(size) => set(
                 &mut document,

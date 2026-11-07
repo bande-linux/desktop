@@ -23,6 +23,7 @@ const KEEP_BYTES: u64 = 256 * 1024 * 1024;
 const REPORT_BYTES: u64 = 16 * 1024 * 1024;
 const KEEP_FREE_BYTES: u64 = 512 * 1024 * 1024;
 const ANY_STATE_WINDOW: Duration = Duration::from_secs(60 * 60);
+const EVERY_ONE_KEPT: [&str; 3] = ["unexpected-restart", "kernel-panic", "manual"];
 const UNSENT_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub struct Attachment {
@@ -203,7 +204,14 @@ impl Spool {
         attachments: Vec<Attachment>,
         automatic: bool,
     ) -> io::Result<String> {
-        if let Some(existing) = self.repeat_of(manifest.get("signature")) {
+        let collapses = manifest
+            .get("kind")
+            .and_then(Value::as_str)
+            .is_none_or(|kind| !EVERY_ONE_KEPT.contains(&kind));
+        if let Some(existing) = self
+            .repeat_of(manifest.get("signature"))
+            .filter(|_| collapses)
+        {
             self.count_repeat(&existing)?;
             if automatic && existing.status == Status::Sent {
                 self.queue(&existing.id)?;

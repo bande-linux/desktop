@@ -34,11 +34,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use super::{State, ToplevelState, WindowEvent};
-<<<<<<< HEAD
-use crate::shell::{BACKDROP_OPACITY_SINCE, OFFER_PLACEMENTS_SINCE};
-=======
 use crate::shell::{OFFER_PLACEMENTS_SINCE, SHELL_VERSION};
->>>>>>> gap-look-lit
 
 impl Dispatch<WlRegistry, ()> for State {
     fn event(
@@ -137,11 +133,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "bande_shell_v1" => {
                     state.shell.protocol =
-<<<<<<< HEAD
-                        Some(registry.bind(name, version.min(BACKDROP_OPACITY_SINCE), handle, ()));
-=======
                         Some(registry.bind(name, version.min(SHELL_VERSION), handle, ()));
->>>>>>> gap-look-lit
                 }
                 "bande_app_v1" => {
                     state.shell.app =

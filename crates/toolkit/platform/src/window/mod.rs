@@ -13,6 +13,9 @@ use std::rc::{Rc, Weak};
 use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
+use bande_protocols::client::xdg_toplevel_session_v1::XdgToplevelSessionV1;
+
+use crate::app_connection::WindowInSession;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_graphics::{
     Appearance, Captured, CpuRenderer, Cursor, Event, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST,
@@ -86,21 +89,25 @@ pub enum Role {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Dialog {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Utility {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Panel {
         title: String,
         app_id: String,
         tag: String,
+        session: Option<WindowInSession>,
     },
     Layer(LayerOptions),
     Lock,
@@ -112,6 +119,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -120,6 +128,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -128,6 +137,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -136,6 +146,7 @@ impl Role {
             title: title.to_owned(),
             app_id: app_id.to_owned(),
             tag: String::new(),
+            session: None,
         }
     }
 
@@ -146,6 +157,17 @@ impl Role {
         | Self::Panel { tag, .. } = &mut self
         {
             *tag = window_tag.to_owned();
+        }
+        self
+    }
+
+    pub fn in_session(mut self, window: Option<WindowInSession>) -> Self {
+        if let Self::Toplevel { session, .. }
+        | Self::Dialog { session, .. }
+        | Self::Utility { session, .. }
+        | Self::Panel { session, .. } = &mut self
+        {
+            *session = window;
         }
         self
     }
@@ -279,6 +301,7 @@ pub(crate) struct State {
     pub(crate) activation: Option<XdgActivationV1>,
     pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
+    toplevel_session: Option<XdgToplevelSessionV1>,
     exporter: Option<ZxdgExporterV2>,
     importer: Option<ZxdgImporterV2>,
     dialogs: Option<XdgWmDialogV1>,
@@ -311,6 +334,9 @@ pub(crate) struct State {
 
 impl State {
     fn release(&mut self) {
+        if let Some(session) = self.toplevel_session.take() {
+            session.destroy();
+        }
         self.capture.release();
         if let Some(subcompositor) = self.subcompositor.take() {
             subcompositor.destroy();
@@ -507,10 +533,30 @@ impl Window {
             Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
         };
         let role = match role {
-            Role::Toplevel { title, app_id, tag }
-            | Role::Dialog { title, app_id, tag }
-            | Role::Utility { title, app_id, tag }
-            | Role::Panel { title, app_id, tag } => {
+            Role::Toplevel {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Dialog {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Utility {
+                title,
+                app_id,
+                tag,
+                session,
+            }
+            | Role::Panel {
+                title,
+                app_id,
+                tag,
+                session,
+            } => {
                 let wm_base = state
                     .wm_base
                     .clone()
@@ -534,6 +580,14 @@ impl Window {
                     }
                     manager.destroy();
                 }
+                state.toplevel_session = session.map(|window| match window.restoring {
+                    true => window
+                        .session
+                        .restore_toplevel(&toplevel, window.name, &handle, ()),
+                    false => window
+                        .session
+                        .add_toplevel(&toplevel, window.name, &handle, ()),
+                });
                 if fixed {
                     let (width, height) = match titled {
                         true => (

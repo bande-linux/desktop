@@ -167,6 +167,10 @@ fn window_memory() -> Option<PathBuf> {
     bande_xdg::state_home().map(|state| state.join("bande/windows"))
 }
 
+fn window_sessions() -> Option<PathBuf> {
+    bande_xdg::state_home().map(|state| state.join("bande/window-sessions"))
+}
+
 fn follow_display_settings(
     connection: &Connection,
     publish: channel::Sender<()>,
@@ -425,6 +429,9 @@ fn run_drm(
     sync_heads(&mut app);
     if matches!(session, Session::User) {
         note_running_apps(&mut app);
+        if let Some(path) = window_sessions() {
+            app.compositor.remember_sessions_in(path);
+        }
     }
     let App {
         compositor, output, ..
@@ -668,6 +675,9 @@ fn note_running_apps<O>(app: &mut App<O>) {
     };
     if let Err(error) = bande_xdg::set_aside_apps_of_unclean_end(&running, &reopen, &crashed) {
         tracing::warn!("cannot set aside the apps of the last session: {error}");
+    }
+    if !bande_xdg::listed_apps(&crashed).is_empty() {
+        app.compositor.ask_about_reopening_after_crash();
     }
     app.compositor.note_running_apps_in(running);
 }

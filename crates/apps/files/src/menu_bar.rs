@@ -139,6 +139,8 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 Entry::separator(),
                 plain("menu-eject", "eject-current"),
                 shortcut("menu-find", "Ctrl+F"),
+                Entry::separator(),
+                bande_app_menu::print_item(view.can_print()),
             ],
         ),
         submenu(

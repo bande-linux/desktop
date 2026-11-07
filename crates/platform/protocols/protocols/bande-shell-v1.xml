@@ -715,22 +715,6 @@
       <arg name="serial" type="uint"/>
     </request>
 
-    <enum name="offer" since="8">
-      <entry name="resting" value="0" summary="the pointer rests on the control; the menu leaves with the pointer and takes no input from the window"/>
-      <entry name="held" value="1" summary="the button is held on the control; the menu takes the press like any menu"/>
-    </enum>
-
-    <request name="offer_placements" since="8">
-      <description summary="offer Move and Resize below a toplevel's zoom control">
-        Opens the compositor's Move and Resize menu below the zoom control of
-        the toolkit's title bar. Ignored unless the pointer is on that control,
-        the window can be resized and is not in full screen, and no window
-        menu is open.
-      </description>
-      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
-      <arg name="offer" type="uint" enum="offer"/>
-    </request>
-
     <request name="set_panel" since="5">
       <description summary="make one of the app's windows a panel that never takes the keyboard">
         Makes the toplevel a floating panel, as a non-activating panel on a
@@ -785,6 +769,22 @@
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="tiled" type="uint"/>
     </event>
+
+    <enum name="offer" since="8">
+      <entry name="resting" value="0" summary="the pointer rests on the control; the menu leaves with the pointer and takes no input from the window"/>
+      <entry name="held" value="1" summary="the button is held on the control; the menu takes the press like any menu"/>
+    </enum>
+
+    <request name="offer_placements" since="8">
+      <description summary="offer Move and Resize below a toplevel's zoom control">
+        Opens the compositor's Move and Resize menu below the zoom control of
+        the toolkit's title bar. Ignored unless the pointer is on that control,
+        the window can be resized and is not in full screen, and no window
+        menu is open.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="offer" type="uint" enum="offer"/>
+    </request>
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for Activity Monitor">

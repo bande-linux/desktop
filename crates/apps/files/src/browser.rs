@@ -12,7 +12,7 @@ use bande_volumes::on_connected_volume;
 
 use crate::lister::{FIRST_CHUNK, Lister, Ticket};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Location {
     Folder(PathBuf),
     Trash,

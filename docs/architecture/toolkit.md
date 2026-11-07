@@ -368,6 +368,12 @@ writes a hex value, a corner radius or a font name of its own.
   shows for 3 s; leaving the window, losing the lock or a sheet appearing releases too, and held
   keys are sent up first. Widgets ask through `Context::capture_input`/`release_input`;
   `Window::capture_input`/`release_input` do it for apps without `Ui`.
+  `Window::set_cursor_image(CursorImage)` gives the window a cursor from premultiplied ARGB pixels
+  (a guest's hardware cursor, one buffer pixel per device pixel); `SurfaceView::set_cursor` with
+  `Cursor::Image` or `Cursor::Hidden` shows it, or nothing, while the pointer is over the view.
+- **Clipboard changes.** `WindowEvent::ClipboardChanged` says something another window copied became
+  the selection, so a guest can be offered it. It stays silent for the window's own copies and for
+  anything marked as a password.
 
 Since `wayland-backend` is built with `client_system`, every Wayland client in a workspace
 build, `bande-test-wayland` included, goes through libwayland.

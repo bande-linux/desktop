@@ -259,7 +259,7 @@ SMC DC-in updates at 1 Hz and scatters by 1 W. Paired rounds, mode against idle,
 
 ## T. Frame scheduler
 
-Authorised by the owner to be built, in stages, each with the kill switch `BANDE_FRAME_TIMING=classic`, which keeps today's rule until the new one has proved itself on the real display.
+Authorised by the owner to be built, in stages, with the kill switch `BANDE_FRAME_TIMING=classic`, which keeps the old rule until the new one has proved itself on the real display. Built: the scheduler, `bande-flip-report`, honest `wp_presentation` and per-surface callback timing (see `compositor.md`). Remaining below.
 
 **What a user feels:** dragging stops running at half rate. Typing and pointer respond up to a frame sooner. At 144 Hz the desktop actually reaches 144.
 
@@ -304,12 +304,8 @@ Pinned: KWin `1bc2e471`, Mutter `b766717a`, sway `1652c54b`, wlroots `1dedee12`,
 
 | # | What | Done when |
 |---|---|---|
-| F1 | `bande-flip-report`, `pacing.rs`, slot choice, sim regression test at 60, 120, 144 and cut-offs | merged; simulator baseline shows old failing, new passing |
-| F2 | Real session re-measure by the owner's command; honest `wp_presentation`: `hw_completion`, grid time, sequence | misses < 1 %, one-refresh intervals > 95 % |
-| F3 | Client callbacks timed per surface | key to flip p50 ≤ 10 ms, no client hitches |
+| F2 | Real session re-measure by the owner's command, at 120 and 144 | misses < 1 %, one-refresh intervals > 95 % |
 | F4 | `fifo-v1`, `commit-timing-v1` (P); classes if bench asks | Mesa's clients pace |
-
-**F3, callbacks.** Today at the flip, so a client's work competes with `lead + render` already gone (at 144 Hz only about 3.5 ms left). KWin sends right after painting (earliest, full budget, stale input). Mutter at the frame deadline (latest, for idle clients). We send after our commit for clients rendering at full rate, which gives the budget, and at `next start − client's own commit-after-callback p95 − 500 µs` for input-driven ones, starting from "after commit" and only delaying once its history is stable, backing off for a second after any late commit. Hidden surfaces get none, as the spec asks.
 
 **Occlusion, per Mesa:** its FIFO path relies on `discarded` and barrier clearing for occluded clients, or `presentWait` degrades; F4 must drain them at a virtual refresh.
 

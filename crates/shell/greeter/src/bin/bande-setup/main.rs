@@ -14,14 +14,15 @@ use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::Layouts;
 use bande_l10n::Localizer;
 use bande_l10n::system::{AvailableLocale, read_supported};
+use bande_lock::{BackdropSource, Look, Variant, load_backdrop};
 use bande_network::{JoinOutcome, Network, NetworkManager};
 use bande_toolkit::ui::{
     Axis, Bounded, Button, Cell, Column, Context, Event, FreeLayout, Key, Label, Row, SecureField,
     SegmentedControl, Stack, Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    App, Appearance, Edges, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, Scheme,
-    Spacing, TextSystem, Window, WindowEvent, run,
+    App, Appearance, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene,
+    Scheme, Shape, Spacing, TextSystem, Window, WindowEvent, run,
 };
 use zeroize::Zeroizing;
 
@@ -132,6 +133,8 @@ struct Answers {
 struct Assistant {
     ui: Ui,
     appearance: Appearance,
+    backdrop: Option<Image>,
+    backdrop_inbox: Option<Inbox<(Look, Image)>>,
     table: Option<WidgetId>,
     text: TextSystem,
     page: Page,
@@ -351,6 +354,17 @@ impl Assistant {
             ui.set_focus(focus);
         }
         self.ui = ui;
+    }
+
+    fn request_backdrop(&mut self) {
+        self.backdrop_inbox = load_backdrop(
+            BackdropSource::Picture(None),
+            Variant::Dark,
+            self.size,
+            vec![Look::Blurred],
+        )
+        .inspect_err(|error| tracing::warn!("cannot load the wallpaper: {error}"))
+        .ok();
     }
 
     fn secret(&self, index: usize) -> Zeroizing<String> {
@@ -622,9 +636,27 @@ impl App for Assistant {
         let (width, height) = window.size();
         if (width, height) != self.size {
             self.size = (width, height);
+            self.request_backdrop();
             self.present();
         }
-        self.ui.scene(width, height)
+        let mut scene = self.ui.scene(width, height);
+        if let Some(image) = &self.backdrop {
+            let frame = Rect::new(0.0, 0.0, width as f32, height as f32);
+            scene.items.splice(
+                0..0,
+                [
+                    Item::Image {
+                        rect: frame,
+                        image: image.clone(),
+                    },
+                    Item::Fill {
+                        shape: Shape::rect(frame),
+                        paint: self.appearance.palette().scrim.into(),
+                    },
+                ],
+            );
+        }
+        scene
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
@@ -653,12 +685,20 @@ impl App for Assistant {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        vec![self.inbox.fd()]
+        std::iter::once(self.inbox.fd())
+            .chain(self.backdrop_inbox.as_ref().map(Inbox::fd))
+            .collect()
     }
 
-    fn source_ready(&mut self, window: &mut Window, _index: usize) {
-        for reply in self.inbox.drain() {
-            self.receive(reply);
+    fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if index == 0 {
+            for reply in self.inbox.drain() {
+                self.receive(reply);
+            }
+        } else if let Some(inbox) = &mut self.backdrop_inbox {
+            for (_, image) in inbox.drain() {
+                self.backdrop = Some(image);
+            }
         }
         window.request_redraw();
     }
@@ -709,6 +749,8 @@ fn run_assistant() -> Result<(), Box<dyn std::error::Error>> {
     let mut assistant = Assistant {
         ui,
         appearance,
+        backdrop: None,
+        backdrop_inbox: None,
         table: None,
         text,
         page: Page::Language,

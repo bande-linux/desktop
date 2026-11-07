@@ -573,6 +573,12 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
                 .rotation
                 .map(|rotation| vec![pixels(rotation.degrees())]),
         ),
+        (
+            "match-colours",
+            display
+                .match_colours
+                .map(|enabled| vec![KdlValue::Bool(enabled)]),
+        ),
     ];
     let position = document.nodes().iter().position(|node| {
         node.name().value() == "display"

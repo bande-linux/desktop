@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use bande_search::{Query, WORDS, fold};
@@ -29,7 +29,27 @@ pub struct EmojiSet {
     toned: HashSet<&'static str>,
 }
 
-pub static EMOJI: LazyLock<EmojiSet> = LazyLock::new(|| EmojiSet::parse(DATA));
+pub static EMOJI: LazyLock<EmojiSet> = LazyLock::new(|| {
+    let mut set = EmojiSet::parse(DATA);
+    if let Some(names) = local_names() {
+        set.localize(names.leak());
+    }
+    set
+});
+
+fn local_names() -> Option<String> {
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))?;
+    let language = locale.split(['_', '.', '@']).next()?.to_owned();
+    let shared = std::env::var("XDG_DATA_DIRS")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".to_owned());
+    shared.split(':').find_map(|directory| {
+        std::fs::read_to_string(format!("{directory}/bande/emoji/{language}.tsv")).ok()
+    })
+}
 
 impl EmojiSet {
     fn parse(data: &'static str) -> Self {
@@ -64,6 +84,29 @@ impl EmojiSet {
             });
         }
         set
+    }
+
+    fn localize(&mut self, data: &'static str) {
+        let local: HashMap<&str, (&'static str, &'static str)> = data
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split('\t');
+                Some((fields.next()?, (fields.next()?, fields.next()?)))
+            })
+            .collect();
+        for emoji in &mut self.emoji {
+            if let Some((name, keywords)) = local.get(emoji.character) {
+                emoji.keywords.push(emoji.folded.clone());
+                emoji.keywords.extend(
+                    keywords
+                        .split('|')
+                        .filter(|keyword| !keyword.is_empty())
+                        .map(fold),
+                );
+                emoji.name = name;
+                emoji.folded = fold(name);
+            }
+        }
     }
 
     pub fn find(&self, character: &str) -> Option<&Emoji> {

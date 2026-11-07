@@ -57,6 +57,7 @@ more-apps-name = { $count ->
 trash-full = contains items
 opening = opening
 running = running
+active = active
 attention = needs attention
 badge = { $count } new
 progress = { $percent } % done

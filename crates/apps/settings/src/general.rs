@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use bande_fs::format_size;
-use bande_settings_panes::{PaneId, SettingId, Value, duration_label};
+use bande_settings_panes::{PaneId, SettingId};
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
 
@@ -46,25 +46,6 @@ fn shown_path(path: &Path, home: Option<&Path>) -> String {
 }
 
 impl SettingsView {
-    fn lock_summary(&self) -> Option<String> {
-        let seconds = |id| match self.values.get(&id) {
-            Some(Value::Seconds(seconds)) => Some(*seconds),
-            _ => None,
-        };
-        let rest = [SettingId::ScreenSaverAfter, SettingId::DisplayOffAfter]
-            .into_iter()
-            .filter_map(seconds)
-            .filter(|seconds| *seconds > 0)
-            .min();
-        Some(match rest {
-            Some(rest) => {
-                let after = rest + seconds(SettingId::RequirePasswordAfter)?;
-                L10N.tr_args("lock-summary", [("time", duration_label(after).into())])
-            }
-            None => duration_label(0),
-        })
-    }
-
     pub(crate) fn pane_summary(&self, pane: PaneId) -> Option<String> {
         match pane {
             PaneId::SoftwareUpdate => match &self.software {
@@ -79,7 +60,6 @@ impl SettingsView {
                 .about
                 .as_ref()
                 .map(|about| available_of(about.available, about.capacity)),
-            PaneId::Power => self.lock_summary(),
             PaneId::NightLight => self.night_light_summary(),
             PaneId::Camera
             | PaneId::Microphone

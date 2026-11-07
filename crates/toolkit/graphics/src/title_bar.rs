@@ -115,7 +115,6 @@ pub enum ResizeEdge {
 pub struct WalledSides {
     pub left: bool,
     pub right: bool,
-    pub top: bool,
     pub bottom: bool,
 }
 
@@ -128,7 +127,6 @@ pub fn walled_resize_zone(window: Rect, walled: WalledSides, point: Point) -> Op
     let within = |depth: f32| depth < RESIZE_WALL_BAND;
     let on_wall = (walled.left && within(point.x - window.x))
         || (walled.right && within(window.x + window.width - point.x))
-        || (walled.top && within(point.y - window.y))
         || (walled.bottom && within(window.y + window.height - point.y));
     (window.contains(point) && on_wall).then(|| edge_at(window, point))
 }

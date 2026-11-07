@@ -46,7 +46,13 @@ const RAIL_PADDING: f32 = 4.0;
 const RAIL_SHRINK: f32 = 4.0;
 const RAIL_HAIRLINE: f32 = 32.0;
 const RUNNING_DOT: f32 = 3.0;
-const ACTIVE_BAR: (f32, f32) = (3.0, 16.0);
+const FRAME_OUTSET: f32 = 4.0;
+const FRAME_STROKE: f32 = 1.5;
+const FRAME_GIVE: f32 = 0.3;
+const FRAME_PLATE: f32 = 36.0;
+const FRAME_PLATE_HOVERED: f32 = 56.0;
+const FRAME_PLATE_PRESSED: f32 = 76.0;
+const OUTLINE_ROUNDNESS: f32 = 0.26;
 const MORE_TEXT: f32 = 13.0;
 const RAIL_WELL_RADIUS: f32 = 10.0;
 pub const WELL_ALPHA: u8 = 14;
@@ -116,6 +122,9 @@ struct Slot {
     presence: Animated,
     leaving: bool,
     dot: Animated,
+    frame: Animated,
+    frame_shift: (Animated, Animated),
+    hover: Animated,
     press: Animated,
     badge: Animated,
     progress: Animated,
@@ -137,6 +146,9 @@ impl Slot {
             presence: Animated::new(presence),
             leaving: false,
             dot: Animated::new(0.0),
+            frame: Animated::new(0.0),
+            frame_shift: (Animated::points(0.0), Animated::points(0.0)),
+            hover: Animated::new(0.0),
             press: Animated::new(1.0),
             badge: Animated::new(0.0),
             progress: Animated::new(0.0),
@@ -152,6 +164,10 @@ impl Slot {
 
     fn kept(&self) -> bool {
         self.app.as_ref().is_some_and(|app| app.kept)
+    }
+
+    fn running(&self) -> bool {
+        self.app.as_ref().is_some_and(|app| app.running)
     }
 
     fn cell_length(&self, icon: f32, padding: f32) -> f32 {
@@ -239,6 +255,7 @@ pub struct TaskbarState {
     rail: TaskbarLayout,
     rail_icon: f32,
     active: Option<String>,
+    framed: Option<Key>,
     more: Option<More>,
 }
 
@@ -312,6 +329,7 @@ impl TaskbarState {
             rail: TaskbarLayout::default(),
             rail_icon: icon_size,
             active: None,
+            framed: None,
             more: None,
         };
         state.slots.push(Slot::new(Key::RunningSeparator, 0.0));
@@ -398,15 +416,8 @@ impl TaskbarState {
             let key = Key::App(app.app_id.clone());
             let mut slot =
                 take(&key).unwrap_or_else(|| Slot::new(key, if animate { 0.0 } else { 1.0 }));
-            let running = app.running || self.launching.contains_key(&app.app_id);
-            slot.dot.animate_at(
-                now,
-                reduce_motion,
-                if running { 1.0 } else { 0.0 },
-                Spring::FADE,
-            );
             if !animate {
-                slot.dot.jump_to(if running { 1.0 } else { 0.0 });
+                slot.dot.jump_to(if app.running { 1.0 } else { 0.0 });
             }
             slot.presence
                 .animate_at(now, reduce_motion, 1.0, Spring::STANDARD);
@@ -443,7 +454,6 @@ impl TaskbarState {
             slot.leaving = true;
             slot.presence
                 .animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
-            slot.dot.animate_at(now, reduce_motion, 0.0, Spring::FADE);
             let at = order
                 .iter()
                 .take_while(|id| **id != slot.id)
@@ -479,10 +489,6 @@ impl TaskbarState {
 
     pub fn launching(&mut self, app_id: &str, now: Instant) {
         self.launching.insert(app_id.to_owned(), now);
-        let reduce_motion = self.reduce_motion;
-        if let Some(slot) = self.slot_mut(&Key::App(app_id.to_owned())) {
-            slot.dot.animate_at(now, reduce_motion, 1.0, Spring::FADE);
-        }
     }
 
     pub fn is_launching(&self, app_id: &str) -> bool {
@@ -585,21 +591,8 @@ impl TaskbarState {
         {
             self.show_label(key, now);
         }
-        let expired = self
-            .launching
-            .iter()
-            .filter(|(_, since)| now >= **since + LAUNCH_TIMEOUT)
-            .map(|(app_id, _)| app_id.clone())
-            .collect::<Vec<_>>();
-        let reduce_motion = self.reduce_motion;
-        for app_id in expired {
-            self.launching.remove(&app_id);
-            if let Some(slot) = self.slot_mut(&Key::App(app_id))
-                && !slot.app.as_ref().is_some_and(|app| app.running)
-            {
-                slot.dot.animate_at(now, reduce_motion, 0.0, Spring::FADE);
-            }
-        }
+        self.launching
+            .retain(|_, since| now < *since + LAUNCH_TIMEOUT);
     }
 
     pub fn pulsing(&self, now: Instant) -> bool {
@@ -1014,6 +1007,102 @@ impl TaskbarState {
         }
     }
 
+    fn frame_cell(&self, slot: &Slot) -> Rect {
+        match (&self.more, slot.hidden) {
+            (Some(more), true) => more.cell,
+            _ => slot.cell,
+        }
+    }
+
+    fn frame_origin(&self, slot: &Slot, now: Instant) -> Point {
+        let cell = self.frame_cell(slot);
+        match slot.pinned {
+            Some(center) => Point::new(center.x - cell.width / 2.0, center.y - cell.height / 2.0),
+            None if slot.hidden => Point::new(cell.x, cell.y),
+            None => Point::new(
+                cell.x + slot.shift.0.value_at(now).0,
+                cell.y + slot.shift.1.value_at(now).0,
+            ),
+        }
+    }
+
+    fn settle_frame(&mut self, now: Instant) {
+        let wanted = self.active.as_ref().and_then(|app_id| {
+            let key = Key::App(app_id.clone());
+            self.slots
+                .iter()
+                .any(|slot| slot.key == key && !slot.leaving && slot.running())
+                .then_some(key)
+        });
+        if wanted != self.framed {
+            let reduce_motion = self.reduce_motion;
+            let incoming = wanted
+                .as_ref()
+                .and_then(|key| self.slot_position(key))
+                .map(|index| self.frame_origin(&self.slots[index], now));
+            let handed_from = self
+                .framed
+                .as_ref()
+                .and_then(|key| self.slots.iter().find(|slot| slot.key == *key))
+                .filter(|slot| !reduce_motion && slot.frame.value_at(now).0 > 0.5)
+                .map(|slot| {
+                    let origin = self.frame_origin(slot, now);
+                    Point::new(
+                        origin.x + slot.frame_shift.0.value_at(now).0,
+                        origin.y + slot.frame_shift.1.value_at(now).0,
+                    )
+                });
+            let glide = incoming.zip(handed_from);
+            for slot in &mut self.slots {
+                if Some(&slot.key) == wanted.as_ref() {
+                    match glide {
+                        Some((to, from)) => {
+                            slot.frame.jump_to(1.0);
+                            slot.frame_shift.0.jump_to(from.x - to.x);
+                            slot.frame_shift.1.jump_to(from.y - to.y);
+                            slot.frame_shift
+                                .0
+                                .animate_at(now, reduce_motion, 0.0, Spring::QUICK);
+                            slot.frame_shift
+                                .1
+                                .animate_at(now, reduce_motion, 0.0, Spring::QUICK);
+                        }
+                        None => {
+                            slot.frame_shift.0.jump_to(0.0);
+                            slot.frame_shift.1.jump_to(0.0);
+                            slot.frame.animate_at(now, reduce_motion, 1.0, Spring::FADE);
+                        }
+                    }
+                } else if Some(&slot.key) == self.framed.as_ref() && glide.is_some() {
+                    slot.frame.jump_to(0.0);
+                } else {
+                    slot.frame.animate_at(now, reduce_motion, 0.0, Spring::FADE);
+                }
+            }
+            self.framed = wanted;
+        }
+        let reduce_motion = self.reduce_motion;
+        for slot in &mut self.slots {
+            let launching =
+                matches!(&slot.key, Key::App(app_id) if self.launching.contains_key(app_id));
+            let dotted = !slot.leaving
+                && Some(&slot.key) != self.framed.as_ref()
+                && (slot.running() || launching);
+            slot.dot.animate_at(
+                now,
+                reduce_motion,
+                if dotted { 1.0 } else { 0.0 },
+                Spring::FADE,
+            );
+        }
+    }
+
+    fn slot_position(&self, key: &Key) -> Option<usize> {
+        self.slots
+            .iter()
+            .position(|slot| &slot.key == key && !slot.leaving)
+    }
+
     fn slot_mut(&mut self, key: &Key) -> Option<&mut Slot> {
         self.slots
             .iter_mut()
@@ -1109,6 +1198,7 @@ impl TaskbarState {
             }
         }
         self.settle_moves(&before, now);
+        self.settle_frame(now);
         self.slots
             .retain(|slot| !(slot.leaving && !slot.presence.value_at(now).1));
         if self
@@ -1362,10 +1452,14 @@ impl TaskbarState {
         let now = cx.now();
         let dragged = self.drag.as_ref().map(|drag| &drag.key);
         let mut on_top = Vec::new();
+        for slot in self.slots.iter().filter(|slot| dragged != Some(&slot.key)) {
+            self.paint_frame(cx, slot, items);
+        }
         for slot in &self.slots {
             let cell = self.painted_cell(slot, cx);
             if dragged == Some(&slot.key) {
                 if let Key::App(app_id) = &slot.key {
+                    self.paint_frame(cx, slot, &mut on_top);
                     self.paint_app(cx, slot, cell, app_id, now, &mut on_top);
                 }
                 continue;
@@ -1410,6 +1504,60 @@ impl TaskbarState {
         items.extend(on_top);
         self.paint_remove_label(cx, items);
         self.paint_label(cx, items);
+    }
+
+    fn paint_frame(&self, cx: &Context, slot: &Slot, items: &mut Vec<Item>) {
+        let dragged = slot.pinned.is_some();
+        let presence = if dragged {
+            1.0
+        } else {
+            cx.sample(&slot.presence)
+        };
+        let shown = (cx.sample(&slot.frame) * presence).clamp(0.0, 1.0);
+        if shown <= 0.0 {
+            return;
+        }
+        let cell = if slot.hidden && !dragged {
+            self.frame_cell(slot)
+        } else {
+            self.painted_cell(slot, cx)
+        };
+        let glided = Rect::new(
+            cell.x + cx.sample(&slot.frame_shift.0),
+            cell.y + cx.sample(&slot.frame_shift.1),
+            cell.width,
+            cell.height,
+        );
+        let press = cx.sample(&slot.press);
+        let rect = scaled(
+            self.icon_rect(glided).inset(-FRAME_OUTSET),
+            1.0 + (press - 1.0) * FRAME_GIVE,
+        );
+        let pressing = ((1.0 - press) / (1.0 - PRESSED_SCALE)).clamp(0.0, 1.0);
+        let hovered = cx.sample(&slot.hover).clamp(0.0, 1.0);
+        let plate = FRAME_PLATE
+            + (FRAME_PLATE_HOVERED - FRAME_PLATE) * hovered
+            + (FRAME_PLATE_PRESSED - FRAME_PLATE_HOVERED) * pressing;
+        let radius = rect.width * OUTLINE_ROUNDNESS;
+        let frame = vec![
+            Item::Fill {
+                shape: Shape::rounded(rect, radius),
+                paint: cx.palette.focus.with_alpha(plate.round() as u8).into(),
+            },
+            Item::Stroke {
+                shape: Shape::rounded(rect.inset(FRAME_STROKE / 2.0), radius - FRAME_STROKE / 2.0),
+                width: FRAME_STROKE,
+                paint: cx.palette.focus.into(),
+            },
+        ];
+        if shown < 1.0 {
+            items.push(Item::Opacity {
+                alpha: shown,
+                items: frame,
+            });
+        } else {
+            items.extend(frame);
+        }
     }
 
     fn paint_ghost(&self, cx: &Context, items: &mut Vec<Item>) {
@@ -1563,13 +1711,12 @@ impl TaskbarState {
         if self.attention.contains_key(app_id) {
             let ring = rect.inset(-3.0);
             items.push(Item::Stroke {
-                shape: Shape::rounded(ring, ring.width * 0.26),
+                shape: Shape::rounded(ring, ring.width * OUTLINE_ROUNDNESS),
                 width: 2.0,
                 paint: cx.palette.warning.into(),
             });
         }
-        let dot = cx.sample(&slot.dot);
-        self.paint_indicators(cx, self.rail.bar, base, app_id, dot, items);
+        self.paint_dot(cx, base, cx.sample(&slot.dot), items);
         let entry = self.launcher.get(app_id).copied().unwrap_or_default();
         if entry.progress().is_some() {
             let progress = cx.sample(&slot.progress).clamp(0.0, 1.0);
@@ -1629,44 +1776,36 @@ impl TaskbarState {
         }
     }
 
-    fn paint_indicators(
-        &self,
-        cx: &Context,
-        bar: Rect,
-        icon: Rect,
-        app_id: &str,
-        running: f32,
-        items: &mut Vec<Item>,
-    ) {
-        let beside = |depth: f32, length: f32, inset: f32| {
-            let middle_y = (icon.y + (icon.height - length) / 2.0).round();
-            let middle_x = (icon.x + (icon.width - length) / 2.0).round();
-            match self.edge {
-                BarEdge::Left => Rect::new(bar.x + inset, middle_y, depth, length),
-                BarEdge::Right => {
-                    Rect::new(bar.x + bar.width - inset - depth, middle_y, depth, length)
-                }
-                BarEdge::Top => Rect::new(middle_x, bar.y + inset, length, depth),
-                BarEdge::Bottom => {
-                    Rect::new(middle_x, bar.y + bar.height - inset - depth, length, depth)
-                }
-            }
-        };
-        if self.active.as_deref() == Some(app_id) && running > 0.0 {
-            let (depth, length) = ACTIVE_BAR;
-            items.push(Item::Fill {
-                shape: Shape::rect(beside(depth, length, 0.0)),
-                paint: cx.palette.accent.into(),
-            });
-        } else if running > 0.0 {
-            items.push(Item::Opacity {
-                alpha: running.min(1.0),
-                items: vec![Item::Fill {
-                    shape: Shape::rect(beside(RUNNING_DOT, RUNNING_DOT, 1.0)),
-                    paint: cx.palette.ink2.into(),
-                }],
-            });
+    fn paint_dot(&self, cx: &Context, icon: Rect, shown: f32, items: &mut Vec<Item>) {
+        if shown <= 0.0 {
+            return;
         }
+        let bar = self.rail.bar;
+        let y = (icon.y + (icon.height - RUNNING_DOT) / 2.0).round();
+        let x = (icon.x + (icon.width - RUNNING_DOT) / 2.0).round();
+        let rect = match self.edge {
+            BarEdge::Left => Rect::new(bar.x + 1.0, y, RUNNING_DOT, RUNNING_DOT),
+            BarEdge::Right => Rect::new(
+                bar.x + bar.width - 1.0 - RUNNING_DOT,
+                y,
+                RUNNING_DOT,
+                RUNNING_DOT,
+            ),
+            BarEdge::Top => Rect::new(x, bar.y + 1.0, RUNNING_DOT, RUNNING_DOT),
+            BarEdge::Bottom => Rect::new(
+                x,
+                bar.y + bar.height - 1.0 - RUNNING_DOT,
+                RUNNING_DOT,
+                RUNNING_DOT,
+            ),
+        };
+        items.push(Item::Opacity {
+            alpha: shown.min(1.0),
+            items: vec![Item::Fill {
+                shape: Shape::rect(rect),
+                paint: cx.palette.ink2.into(),
+            }],
+        });
     }
 
     fn paint_more(&self, cx: &Context, items: &mut Vec<Item>) {
@@ -1793,6 +1932,17 @@ impl Tile {
         }
     }
 
+    fn hover(&self, cx: &Context, hovered: bool) {
+        let mut state = self.state.borrow_mut();
+        if let Some(slot) = state.slots.iter_mut().find(|slot| slot.key == self.key) {
+            cx.animate(
+                &mut slot.hover,
+                if hovered { 1.0 } else { 0.0 },
+                Spring::FADE,
+            );
+        }
+    }
+
     fn pressed(&self) -> bool {
         self.state
             .borrow()
@@ -1830,11 +1980,11 @@ impl Widget for Tile {
             let slot = state.slots.iter().find(|slot| slot.key == self.key);
             if state.launching.contains_key(app_id) {
                 details.push(L10N.tr("opening"));
-            } else if slot
-                .and_then(|slot| slot.app.as_ref())
-                .is_some_and(|app| app.running)
-            {
+            } else if slot.is_some_and(Slot::running) {
                 details.push(L10N.tr("running"));
+            }
+            if state.framed.as_ref() == Some(&self.key) {
+                details.push(L10N.tr("active"));
             }
             let launcher = state.launcher.get(app_id).copied().unwrap_or_default();
             if let Some(count) = launcher.badge() {
@@ -1871,9 +2021,11 @@ impl Widget for Tile {
         let now = cx.now();
         match event {
             Event::PointerEnter(_) => {
+                self.hover(cx, true);
                 self.state.borrow_mut().hover_enter(self.key.clone(), now);
             }
             Event::PointerLeave => {
+                self.hover(cx, false);
                 if self.pressed() {
                     self.press(cx, false, false);
                 }

@@ -436,10 +436,35 @@ impl SettingsView {
         let label = Text::new(&setting.label, Tone::Primary)
             .highlighted(matched.map(|hit| hit.label.clone()).unwrap_or_default());
         let mut row = Row::new(label, Some(control)).highlighted(matched.is_some());
-        if let Some(description) = &setting.description {
-            row = row.detail(Text::new(description, Tone::Muted).caption());
+        if let Some(detail) = setting
+            .description
+            .clone()
+            .or_else(|| self.inactivity_note(setting.id))
+        {
+            row = row.detail(Text::new(&detail, Tone::Muted).caption());
         }
         Some(boxed(row))
+    }
+
+    fn inactivity_note(&self, id: SettingId) -> Option<String> {
+        let seconds = |id| match self.values.get(&id) {
+            Some(Value::Seconds(seconds)) => Some(*seconds),
+            _ => None,
+        };
+        let display_off = seconds(SettingId::DisplayOffAfter)?;
+        let note = match id {
+            SettingId::ScreenSaverAfter => (display_off > 0 && display_off <= seconds(id)?)
+                .then_some("saver-after-display-off"),
+            SettingId::SleepAfter => {
+                let sleep = seconds(id)?;
+                (sleep > 0 && sleep < display_off).then_some("sleep-before-display-off")
+            }
+            SettingId::RequirePasswordAfter => (display_off == 0
+                && seconds(SettingId::ScreenSaverAfter)? == 0)
+                .then_some("never-locks-when-inactive"),
+            _ => None,
+        };
+        note.map(|note| L10N.tr(note))
     }
 
     fn page_row(
@@ -450,10 +475,6 @@ impl SettingsView {
     ) -> Box<dyn Widget> {
         let (summary, revealed) = match setting.id {
             SettingId::TextSizeLink => (self.text_size_label(), Some(SettingId::TextSize)),
-            SettingId::ScreenLock => (
-                self.pane_summary(child),
-                Some(SettingId::RequirePasswordAfter),
-            ),
             _ => (self.pane_summary(child), None),
         };
         let value = summary.map_or_else(|| "›".to_owned(), |summary| format!("{summary}  ›"));
@@ -1277,9 +1298,6 @@ impl SettingsView {
                 body.push(boxed(Caption::new(Text::new(error, Tone::Muted))));
             }
         }
-        if let Some(message) = &self.message {
-            body.push(boxed(Caption::new(Text::new(message, Tone::Muted))));
-        }
         page.push(boxed(Fade::new(
             boxed(Column::new(PAGE_SPACING, 0.0, body)),
             Rc::clone(&self.crossfade),
@@ -1297,7 +1315,13 @@ impl SettingsView {
         }
     }
 
-    fn page(&mut self, page: Widgets) -> Box<dyn Widget> {
+    fn page(&mut self, mut page: Widgets) -> Box<dyn Widget> {
+        if let Some(failure) = self.failure() {
+            let failure = boxed(Caption::new(
+                Text::new(failure, Tone::Danger).role(TextRole::Callout),
+            ));
+            page.insert(page.len().min(1), failure);
+        }
         let view = ScrollView::shared(
             boxed(Column::new(PAGE_SPACING, PAGE_PADDING, page)),
             Rc::clone(&self.scroll),

@@ -125,7 +125,7 @@ fn resizable(window: &Window) -> bool {
 }
 
 fn resize_band(window: &Window, frame: Rect, point: bande_graphics::Point) -> Option<ResizeEdge> {
-    (resizable(window) && window.tile.is_none())
+    resizable(window)
         .then(|| resize_zone(frame, RESIZE_MARGIN as f32, point))
         .flatten()
 }
@@ -205,12 +205,10 @@ impl State {
         let rect = window.geometry()?;
         let usable = self.usable_area(self.screen_of(window));
         let no_room = |room: i32| (room as f32) < RESIZE_WALL_BAND;
-        let tiled = window.tile.is_some();
         let walled = WalledSides {
-            left: tiled || no_room(rect.loc.x - usable.loc.x),
-            right: tiled || no_room(usable.loc.x + usable.size.w - rect.loc.x - rect.size.w),
-            top: tiled && !no_room(rect.loc.y - usable.loc.y),
-            bottom: tiled || no_room(usable.loc.y + usable.size.h - rect.loc.y - rect.size.h),
+            left: no_room(rect.loc.x - usable.loc.x),
+            right: no_room(usable.loc.x + usable.size.w - rect.loc.x - rect.size.w),
+            bottom: no_room(usable.loc.y + usable.size.h - rect.loc.y - rect.size.h),
         };
         let frame = Rect::new(0.0, 0.0, rect.size.w as f32, rect.size.h as f32);
         walled_resize_zone(frame, walled, local_point(rect, location)).map(Zone::Resize)

@@ -10,7 +10,6 @@ sort-kind = Kind
 sort-date-added = Date Added
 sort-size = Size
 clean-up = Clean Up
-show-desktop-folder = Show Desktop Folder in Files
 open = Open
 open-with = Open With
 rename = Rename

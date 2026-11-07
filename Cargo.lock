@@ -950,6 +950,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-lookup"
+version = "0.1.7"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-xdg",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "bande-media"
 version = "0.1.7"
 dependencies = [

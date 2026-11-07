@@ -1,0 +1,10 @@
+app-name = Slå upp
+no-entries = Inget hittades för ”{ $word }”.
+no-packs = Inga ordböcker är installerade. Lägg till dem i Inställningar.
+derived = Finns inte med. Bara sista delen: { $first } + { $ending }
+more = Mer
+form-of = Form av { $word }
+pos-noun = substantiv
+pos-verb = verb
+pos-adj = adjektiv
+pos-adv = adverb

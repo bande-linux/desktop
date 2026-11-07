@@ -462,7 +462,7 @@ impl State {
                     Band::Front
                 } else if window.is_minimized() {
                     Band::Leaving
-                } else if window.keep_on_top || window.panel {
+                } else if window.keep_on_top || window.panel || window.popover {
                     Band::OnTop
                 } else {
                     Band::Rest

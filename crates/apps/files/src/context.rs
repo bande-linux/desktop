@@ -228,6 +228,16 @@ impl FilesView {
                 let files = self.browser.selected_paths();
                 self.ask_open_with(files);
             }
+            Command::LookUp => {
+                let stem = self
+                    .browser
+                    .selected_paths()
+                    .first()
+                    .and_then(|path| path.file_stem()?.to_str().map(str::to_owned));
+                if let Some(stem) = stem {
+                    self.requests.push(Request::LookUp(stem));
+                }
+            }
             Command::QuickLook => {
                 if !self.quick_look_shown() {
                     self.open_quick_look(false);

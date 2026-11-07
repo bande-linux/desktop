@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Look Up
+Name[sv]=Slå upp
+Comment=Look up a word in the installed dictionaries
+Comment[sv]=Slå upp ett ord i de installerade ordböckerna
+Icon=org.bande.Lookup
+Exec=bande-lookup %U
+DBusActivatable=true
+NoDisplay=true
+StartupNotify=true

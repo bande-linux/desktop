@@ -100,6 +100,14 @@ fn bundle(language: LanguageIdentifier, source: &str) -> FluentBundle<FluentReso
     bundle
 }
 
+pub fn preferred_languages() -> Vec<String> {
+    let variable = |name: &str| std::env::var(name).ok();
+    requested_languages(variable)
+        .iter()
+        .map(|language| language.language.to_string())
+        .collect()
+}
+
 fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<LanguageIdentifier> {
     let Some(locale) = LOCALE_VARIABLES
         .into_iter()

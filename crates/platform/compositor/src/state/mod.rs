@@ -210,6 +210,7 @@ impl Compositor {
             scale: 1.0,
             transform: Transform::Normal,
             position: Point::default(),
+            match_colours: true,
         };
         let display = Display::new().map_err(io::Error::other)?;
         let fences = smithay::reexports::calloop::EventLoop::try_new().map_err(io::Error::other)?;
@@ -225,7 +226,7 @@ impl Compositor {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
-        handle.create_global::<State, BandeAppV1, ()>(9, ());
+        handle.create_global::<State, BandeAppV1, ()>(10, ());
         crate::resume::create_global(&handle);
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());

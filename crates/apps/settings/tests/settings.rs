@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use accesskit::Role;
 use bande_config::{Config, ConfigService, ConfigStore};
-use bande_settings::{Command, PaneId, SettingId, SettingsClient, SettingsView, Value};
+use bande_settings::{
+    Command, PaneId, PasswordCommand, SettingId, SettingsClient, SettingsView, Update, Value, feed,
+    follow_passwords,
+};
 use bande_test_bus::SessionBus;
 use bande_toolkit::ui::{Event, Key, Modifiers, Pointer};
 use bande_toolkit::{Palette, Point, Scheme, TextSystem};
@@ -84,5 +87,53 @@ fn a_pane_chosen_after_a_press_lost_to_a_pop_up_grab_is_shown_at_once() {
             .iter()
             .any(|(_, node)| node.role() == Role::Heading && node.label() == Some(name.as_str())),
         "the content still shows the previous pane"
+    );
+}
+
+fn shows(view: &mut SettingsView, text: &str) -> bool {
+    view.scene(SIZE.0, SIZE.1);
+    view.accessibility()
+        .nodes
+        .iter()
+        .any(|(_, node)| node.label() == Some(text) || node.value() == Some(text))
+}
+
+#[test]
+fn a_failed_unlock_says_what_failed_and_stays_on_the_pane_that_raised_it() {
+    let bus = SessionBus::start().expect("dbus-daemon");
+    let (feed, updates) = feed().expect("update feed");
+    let commands = follow_passwords(&bus.connect().expect("connection"), None, updates);
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.select_pane(PaneId::Passwords);
+
+    commands.send(PasswordCommand::Unlock).expect("worker");
+    let failure = (0..500)
+        .find_map(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            feed.drain().into_iter().find_map(|update| match update {
+                Update::PaneFailed(PaneId::Passwords, failure) => Some(failure),
+                _ => None,
+            })
+        })
+        .expect("an answer from the worker");
+    assert_eq!(
+        failure,
+        "The keychain isn't responding. Try again in a moment."
+    );
+    view.apply(vec![Update::PaneFailed(PaneId::Passwords, failure.clone())]);
+    assert!(shows(&mut view, &failure));
+
+    view.select_pane(PaneId::About);
+    assert!(!shows(&mut view, &failure), "it follows to another pane");
+    view.select_pane(PaneId::Passwords);
+    assert!(!shows(&mut view, &failure), "leaving the pane ends it");
+
+    view.select_pane(PaneId::About);
+    view.apply(vec![Update::PaneFailed(PaneId::Passwords, failure.clone())]);
+    assert!(!shows(&mut view, &failure), "it arrived for another pane");
+    view.select_pane(PaneId::Passwords);
+    assert!(
+        shows(&mut view, &failure),
+        "a late failure waits for its pane"
     );
 }

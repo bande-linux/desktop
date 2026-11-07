@@ -37,7 +37,9 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `libs/datetime/tests/daylight.rs` | Sunrise and sunset fall on the right day east and west of Greenwich and past the Arctic Circle. |
 | `services/config/tests/config.rs` | KDL `config.kdl` parsing reports problems at their line and column while valid settings apply; edits keep comments; bars written before the `layout` key keep their layout. |
 | `libs/keyboard/tests/layouts.rs` | The XKB rules XML is read despite its DOCTYPE. |
-| `apps/settings/tests/settings.rs` | Settings: a setting found by search and changed from the keyboard is written to `config.kdl` through `org.bande.Config`; a pane chosen after a press lost to a pop-up is shown at once (the stuck press). |
+| `apps/settings/tests/settings.rs` | Settings: a failure stays on the pane that raised it; a setting found by search and changed from the keyboard is written to `config.kdl` through `org.bande.Config`; a pane chosen after a press lost to a pop-up is shown at once (the stuck press). |
+| `services/secrets/tests/keychain.rs` | The keychain boundary: another app's item opens only with the password; Settings unlocks with one prompt and reads only until `Conceal`; a cancelled or impossible prompt opens nothing; only root may pass a login password; a wrong old password changes nothing. |
+| `apps/secrets-prompt/tests/prompt.rs` | Regression: the keychain prompt reads a request written after it started, and a window that fails to open is no answer. |
 | `apps/settings/tests/updates.rs` | Settings: updates install at once through PackageKit (trusted only, simulated first) unless one needs a restart, which is prepared for the next boot. |
 | `libs/packages/src/flatpak.rs` | Flatpak's progress lines across several refs, and an app's sandbox permissions from its metadata. |
 | `apps/settings/src/software/stale.rs` | Which processes run replaced packaged code, and the unit that holds each, from `/proc` maps and cgroup lines. |

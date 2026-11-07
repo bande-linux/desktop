@@ -10,7 +10,7 @@ use futures_lite::{AsyncReadExt, AsyncWriteExt};
 use oo7::Secret;
 use rustix::io::{FdFlags, fcntl_setfd};
 use rustix::net::sockopt::socket_peercred;
-use rustix::process::{getpid, getuid};
+use rustix::process::getpid;
 use zeroize::Zeroizing;
 
 use crate::service::Daemon;
@@ -86,7 +86,7 @@ pub fn parse(message: &[u8]) -> Option<Request> {
 
 async fn answer(daemon: Arc<Daemon>, mut stream: Async<UnixStream>) -> io::Result<()> {
     let peer = socket_peercred(stream.as_fd())?;
-    if !peer.uid.is_root() && peer.uid != getuid() {
+    if !peer.uid.is_root() {
         tracing::warn!("refused a login message from uid {}", peer.uid.as_raw());
         return Ok(());
     }

@@ -1,10 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
 
 use std::ffi::{CStr, c_char, c_int, c_void};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::Shutdown;
 use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use zeroize::Zeroizing;
@@ -57,6 +58,8 @@ struct Failure {
     priority: c_int,
     text: &'static CStr,
 }
+
+const DISK_ENCRYPTION: &str = "/usr/libexec/bande-disk-encryption";
 
 const fn warning(text: &'static CStr) -> Failure {
     Failure {
@@ -247,6 +250,23 @@ pub extern "C" fn pam_sm_close_session(
     PAM_IGNORE
 }
 
+fn change_disk_password(old: &[u8], new: &[u8]) {
+    let Ok(mut helper) = Command::new(DISK_ENCRYPTION)
+        .arg("change-passphrase")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return;
+    };
+    if let Some(mut input) = helper.stdin.take() {
+        let lines = Zeroizing::new([old, b"\n", new, b"\n"].concat());
+        let _ = input.write_all(&lines);
+    }
+    let _ = helper.wait();
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_chauthtok(
     handle: *mut PamHandle,
@@ -265,5 +285,6 @@ pub unsafe extern "C" fn pam_sm_chauthtok(
     if let Some(uid) = unsafe { user_id(handle) } {
         unsafe { report(handle, send(uid, &message(CHANGE, &[&old, &new]))) };
     }
+    change_disk_password(&old, &new);
     PAM_SUCCESS
 }

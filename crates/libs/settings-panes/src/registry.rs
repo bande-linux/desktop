@@ -296,6 +296,8 @@ pub enum SettingId {
     SoftwareUpdatePage,
     ShortcutsPage,
     ClipboardHistory,
+    KeyboardAccess,
+    SecurityStatus,
     DefaultApps,
     Brightness,
     NightLightPage,
@@ -316,6 +318,9 @@ pub enum SettingId {
     SearchRecentApps,
     SearchRecentDocuments,
     SearchDocuments,
+    SearchMail,
+    SearchEvents,
+    SearchContacts,
     SearchFolders,
     SearchSettings,
     SearchSystem,
@@ -373,6 +378,8 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    KeyboardAccess,
+    SecurityStatus,
     SearchExcluded,
     Permissions(Permission),
     Passwords,
@@ -968,6 +975,9 @@ fn search_pane() -> Pane {
                     switch(SettingId::SearchRecentApps, "search-recent-apps"),
                     switch(SettingId::SearchRecentDocuments, "search-recent-documents"),
                     switch(SettingId::SearchDocuments, "search-documents"),
+                    switch(SettingId::SearchMail, "search-mail"),
+                    switch(SettingId::SearchEvents, "search-events"),
+                    switch(SettingId::SearchContacts, "search-contacts"),
                     switch(SettingId::SearchFolders, "search-folders"),
                     switch(SettingId::SearchSettings, "search-system-settings"),
                     switch(SettingId::SearchSystem, "search-system-actions"),
@@ -1444,6 +1454,14 @@ fn system_panes() -> Vec<Pane> {
             PaneId::PrivacySecurity,
             vec![
                 section(
+                    Some(L10N.tr("this-mac")),
+                    vec![list(
+                        SettingId::SecurityStatus,
+                        "this-mac",
+                        List::SecurityStatus,
+                    )],
+                ),
+                section(
                     Some(L10N.tr("app-permissions")),
                     vec![
                         page(SettingId::CameraPage, PaneId::Camera),
@@ -1452,6 +1470,14 @@ fn system_panes() -> Vec<Pane> {
                         page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
                         page(SettingId::LocationPage, PaneId::Location),
                     ],
+                ),
+                section(
+                    Some(L10N.tr("keyboard-access")),
+                    vec![list(
+                        SettingId::KeyboardAccess,
+                        "keyboard-access",
+                        List::KeyboardAccess,
+                    )],
                 ),
                 section(
                     Some(L10N.tr("clipboard")),

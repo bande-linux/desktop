@@ -823,7 +823,7 @@ impl SettingsView {
         if sources == login {
             return muted_row(&L10N.tr("login-layouts-same"));
         }
-        let button = (!self.refused.contains(&Privilege::Keyboard)).then(|| {
+        let button = (!self.refused.contains(&Privilege::Locale)).then(|| {
             let codes = sources.to_vec();
             let mut send = intent(&self.intents, Intent::Locale);
             boxed(Button::new(&L10N.tr("use-at-login"), move || {

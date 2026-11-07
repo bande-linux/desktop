@@ -25,6 +25,7 @@ mod environment;
 mod family;
 mod force_quit;
 mod frame;
+mod frame_callbacks;
 mod gesture;
 mod grab;
 mod idle;

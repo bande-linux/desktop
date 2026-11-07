@@ -24,6 +24,8 @@ use crate::view::{
 use crate::views::{ICON_SIZES, ListColumn, ViewMode, save_list_columns};
 
 pub(crate) const COLUMN_ACTION: &str = "column:";
+pub(crate) const COLUMN_LEFT_ACTION: &str = "column-left:";
+pub(crate) const COLUMN_RIGHT_ACTION: &str = "column-right:";
 
 #[derive(Default)]
 pub(crate) struct Formats {
@@ -46,6 +48,7 @@ pub(crate) enum Signal {
     Selection,
     Activate,
     Sort(TableSort),
+    ColumnOrder(Vec<usize>),
     Search(String),
     GoTo(String),
     ApplyToAll(bool),
@@ -95,7 +98,8 @@ pub(crate) fn sender(signals: &Signals) -> impl Fn(Signal) + 'static {
 }
 
 pub(crate) fn table(signals: &Signals) -> Table {
-    let (selection, activate, sort, drag, expand) = (
+    let (selection, activate, sort, order, drag, expand) = (
+        sender(signals),
         sender(signals),
         sender(signals),
         sender(signals),
@@ -106,6 +110,7 @@ pub(crate) fn table(signals: &Signals) -> Table {
         .on_selection(move |_| selection(Signal::Selection))
         .on_activate(move |_| activate(Signal::Activate))
         .on_sort(move |order| sort(Signal::Sort(order)))
+        .on_column_order(move |shown| order(Signal::ColumnOrder(shown.to_vec())))
         .on_drag(move |_, at| drag(Signal::Drag(at)))
         .on_expand(move |keys, expanded, all| expand(Signal::Expand(keys.to_vec(), expanded, all)))
 }
@@ -133,7 +138,7 @@ fn nested_rows(rows: Vec<Row>, depths: &[u8]) -> Vec<Row> {
     roots
 }
 
-fn column_title(column: ListColumn) -> String {
+pub fn list_column_title(column: ListColumn) -> String {
     L10N.tr(match column {
         ListColumn::Modified => "column-modified",
         ListColumn::Created => "column-created",
@@ -144,24 +149,32 @@ fn column_title(column: ListColumn) -> String {
 
 fn table_columns(found: bool, shown: &[ListColumn]) -> Vec<Column> {
     let mut columns = match found {
-        false => vec![Column::new(&L10N.tr("column-name"), 280.0)],
+        false => vec![Column::new(&L10N.tr("column-name"), 280.0).flexible()],
         true => vec![
             Column::new(&L10N.tr("column-name"), 200.0).flexible(),
             Column::new(&L10N.tr("column-where"), 170.0).unsortable(),
         ],
     };
     columns.extend(shown.iter().map(|column| {
-        let title = column_title(*column);
-        match (column, found) {
+        let title = list_column_title(*column);
+        let shown = match (column, found) {
             (ListColumn::Modified | ListColumn::Created, false) => Column::new(&title, 170.0),
             (ListColumn::Modified | ListColumn::Created, true) => Column::new(&title, 150.0),
             (ListColumn::Size, false) => Column::new(&title, 80.0).numeric(),
             (ListColumn::Size, true) => Column::new(&title, 70.0).numeric(),
             (ListColumn::Kind, false) => Column::new(&title, 160.0),
             (ListColumn::Kind, true) => Column::new(&title, 120.0),
-        }
+        };
+        shown.movable()
     }));
     columns
+}
+
+fn table_columns_before(found: bool) -> usize {
+    match found {
+        true => 2,
+        false => 1,
+    }
 }
 
 fn table_sorts(found: bool, shown: &[ListColumn]) -> Vec<Option<SortBy>> {
@@ -184,19 +197,45 @@ fn cached_date(time: SystemTime, formats: &mut Formats) -> Rc<str> {
         .clone()
 }
 
-pub(crate) fn columns_menu(shown: &[ListColumn]) -> Menu {
-    Menu::new(
-        ListColumn::ALL
-            .iter()
-            .map(|column| {
-                MenuItem::new(
-                    &column_title(*column),
-                    &format!("{COLUMN_ACTION}{}", column.name()),
-                )
+pub fn list_column_action(column: ListColumn) -> String {
+    format!("{COLUMN_ACTION}{}", column.name())
+}
+
+pub fn list_column_move_action(column: ListColumn, by: isize) -> String {
+    match by < 0 {
+        true => format!("{COLUMN_LEFT_ACTION}{}", column.name()),
+        false => format!("{COLUMN_RIGHT_ACTION}{}", column.name()),
+    }
+}
+
+pub(crate) fn columns_menu(shown: &[ListColumn], clicked: Option<ListColumn>) -> Menu {
+    let mut items = ListColumn::ALL
+        .iter()
+        .map(|column| {
+            MenuItem::new(&list_column_title(*column), &list_column_action(*column))
                 .checked(shown.contains(column))
-            })
-            .collect(),
-    )
+        })
+        .collect::<Vec<_>>();
+    if let Some((column, at)) =
+        clicked.and_then(|column| Some((column, shown.iter().position(|known| *known == column)?)))
+    {
+        items.push(MenuItem::separator());
+        items.push(
+            MenuItem::new(
+                &L10N.tr("column-move-left"),
+                &list_column_move_action(column, -1),
+            )
+            .enabled(at > 0),
+        );
+        items.push(
+            MenuItem::new(
+                &L10N.tr("column-move-right"),
+                &list_column_move_action(column, 1),
+            )
+            .enabled(at + 1 < shown.len()),
+        );
+    }
+    Menu::new(items)
 }
 
 fn shown_folder(folder: &Path, scope: &Path) -> String {
@@ -375,6 +414,9 @@ impl FilesView {
         if self.quick_look_key(key, modifiers) {
             return true;
         }
+        if key == Key::Escape && self.shown_table().is_some_and(Table::is_moving_column) {
+            return self.ui.handle(&Event::Key { key, modifiers });
+        }
         if self.mode == ViewMode::List
             && table_key(key, modifiers)
             && self.ui.handle(&Event::Key { key, modifiers })
@@ -447,7 +489,7 @@ impl FilesView {
         let at = pointer.position;
         let menu = pointer.button == PointerButton::Secondary;
         if at.y < table.y + Table::HEADER_HEIGHT && menu && !self.browser.searching() {
-            let menu = columns_menu(&self.list_columns);
+            let menu = columns_menu(&self.list_columns, self.list_column_at(at));
             self.show_menu(menu, at);
             return true;
         }
@@ -570,6 +612,7 @@ impl FilesView {
                     }
                     Signal::Activate => self.open(),
                     Signal::Sort(order) => self.table_sorted(order),
+                    Signal::ColumnOrder(order) => self.table_order_chosen(&order),
                     Signal::Search(text) => self.search_changed(&text),
                     Signal::View(index) => self.view_chosen(index),
                     Signal::Back => self.back(),
@@ -640,7 +683,7 @@ impl FilesView {
 
     fn table_sorted(&mut self, order: TableSort) {
         let found = self.browser.searching();
-        let sorts = table_sorts(found, &self.list_columns);
+        let sorts = table_sorts(found, &self.table_list_columns());
         let Some(by) = sorts.get(order.column).copied().flatten() else {
             return;
         };
@@ -651,6 +694,73 @@ impl FilesView {
         });
         self.remember_view();
         self.selection_changed();
+    }
+
+    fn table_list_columns(&self) -> Vec<ListColumn> {
+        ListColumn::ALL
+            .into_iter()
+            .filter(|column| self.list_columns.contains(column))
+            .collect()
+    }
+
+    fn list_column_at(&self, at: Point) -> Option<ListColumn> {
+        let fixed = table_columns_before(self.browser.searching());
+        let column = self.shown_table()?.column_at(at)?.checked_sub(fixed)?;
+        self.table_list_columns().get(column).copied()
+    }
+
+    fn table_column_order(&self) -> Vec<usize> {
+        let fixed = table_columns_before(self.browser.searching());
+        let known = self.table_list_columns();
+        (0..fixed)
+            .chain(self.list_columns.iter().filter_map(|column| {
+                let at = known.iter().position(|shown| shown == column)?;
+                Some(fixed + at)
+            }))
+            .collect()
+    }
+
+    fn table_order_chosen(&mut self, order: &[usize]) {
+        let fixed = table_columns_before(self.browser.searching());
+        let known = self.table_list_columns();
+        self.list_columns = order
+            .iter()
+            .filter_map(|column| known.get(column.checked_sub(fixed)?).copied())
+            .collect();
+        self.save_list_columns();
+    }
+
+    fn save_list_columns(&self) {
+        if let Some(file) = &self.list_columns_file
+            && let Err(error) = save_list_columns(file, &self.list_columns)
+        {
+            tracing::warn!("cannot remember the list columns: {error}");
+        }
+    }
+
+    pub(crate) fn move_list_column(&mut self, column: ListColumn, by: isize) {
+        let Some(from) = self.list_columns.iter().position(|shown| *shown == column) else {
+            return;
+        };
+        let to = from.saturating_add_signed(by);
+        if to == from || to >= self.list_columns.len() {
+            return;
+        }
+        let shown = table_columns_before(self.browser.searching())
+            + self
+                .table_list_columns()
+                .iter()
+                .position(|known| *known == column)
+                .unwrap_or_default();
+        self.list_columns.remove(from);
+        self.list_columns.insert(to, column);
+        self.save_list_columns();
+        if self.mode == ViewMode::List {
+            self.ui.update_widget(self.table, |table: &mut Table, cx| {
+                table.move_column(cx, shown, by);
+            });
+        }
+        self.sync_table();
     }
 
     fn table(&mut self) -> Option<&mut Table> {
@@ -667,16 +777,16 @@ impl FilesView {
                 self.list_columns.remove(index);
             }
             None => {
-                self.list_columns.push(column);
-                self.list_columns
-                    .sort_by_key(|shown| ListColumn::ALL.iter().position(|known| known == shown));
+                let rank = |known: &ListColumn| ListColumn::ALL.iter().position(|all| all == known);
+                let at = self
+                    .list_columns
+                    .iter()
+                    .position(|shown| rank(shown) > rank(&column))
+                    .unwrap_or(self.list_columns.len());
+                self.list_columns.insert(at, column);
             }
         }
-        if let Some(file) = &self.list_columns_file
-            && let Err(error) = save_list_columns(file, &self.list_columns)
-        {
-            tracing::warn!("cannot remember the list columns: {error}");
-        }
+        self.save_list_columns();
         self.sync_table();
     }
 
@@ -742,7 +852,7 @@ impl FilesView {
             false => self.shown_name(entry),
         };
         cells.push(Cell::new(name).icon(icon).cut_in_middle());
-        for column in &self.list_columns {
+        for column in self.table_list_columns() {
             let text = match column {
                 ListColumn::Modified => modified.clone(),
                 ListColumn::Created => crate::view::created_at(entry.created, entry.modified)
@@ -876,7 +986,7 @@ impl FilesView {
             return;
         }
         let found = self.browser.searching();
-        let shape = (found, self.list_columns.clone());
+        let shape = (found, self.table_list_columns());
         if self.table_shape != shape {
             self.table_synced = None;
             let columns = table_columns(found, &shape.1);
@@ -890,7 +1000,8 @@ impl FilesView {
         let column = &self.browser.columns()[0];
         let cursor = column.selected;
         let wanted = column.marked.clone();
-        let shown = table_sorts(found, &self.list_columns)
+        let order = self.table_column_order();
+        let shown = table_sorts(found, &self.table_list_columns())
             .iter()
             .position(|by| *by == Some(sort.by))
             .filter(|_| *self.browser.root() != Location::Recents)
@@ -900,6 +1011,7 @@ impl FilesView {
             });
         if let Some(table) = self.table() {
             table.set_sort(shown);
+            table.set_column_order(&order);
             if table.selected_rows() != wanted {
                 table.select_rows(&wanted);
             }

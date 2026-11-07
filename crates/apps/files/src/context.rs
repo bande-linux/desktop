@@ -6,7 +6,7 @@ use bande_xdg::UserDir;
 use crate::browser::Location;
 use std::path::PathBuf;
 
-use crate::controls::COLUMN_ACTION;
+use crate::controls::{COLUMN_ACTION, COLUMN_LEFT_ACTION, COLUMN_RIGHT_ACTION};
 use crate::menus::{
     App, Command, Destination, Folder, Place, Selection, command, folder_menu, items_menu,
     place_menu, sidebar_menu,
@@ -183,6 +183,20 @@ impl FilesView {
                 .find(|known| known.name() == name)
         }) {
             self.toggle_list_column(column);
+            return true;
+        }
+        let moved = |prefix: &str| {
+            let name = action.strip_prefix(prefix)?;
+            ListColumn::ALL
+                .into_iter()
+                .find(|known| known.name() == name)
+        };
+        if let Some(column) = moved(COLUMN_LEFT_ACTION) {
+            self.move_list_column(column, -1);
+            return true;
+        }
+        if let Some(column) = moved(COLUMN_RIGHT_ACTION) {
+            self.move_list_column(column, 1);
             return true;
         }
         let Some(command) = command(action) else {

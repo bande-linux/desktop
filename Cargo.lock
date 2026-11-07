@@ -1027,6 +1027,7 @@ dependencies = [
  "bande-pdf",
  "bande-printers",
  "bande-test-bus",
+ "bande-test-wayland",
  "bande-xdg",
  "blocking",
  "ring",
@@ -1331,6 +1332,7 @@ version = "0.1.7"
 dependencies = [
  "bande-compositor",
  "bande-protocols",
+ "libc",
  "smithay",
  "tempfile",
  "wayland-client",

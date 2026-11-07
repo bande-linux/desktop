@@ -299,6 +299,7 @@ pub(crate) struct State {
     pub(crate) wm_base: Option<XdgWmBase>,
     layer_shell: Option<ZwlrLayerShellV1>,
     pub(crate) activation: Option<XdgActivationV1>,
+    pub(crate) dmabuf_formats: Vec<(u32, u64)>,
     pub(crate) idle_inhibit_manager: Option<ZwpIdleInhibitManagerV1>,
     toplevel_tag: Option<XdgToplevelTagManagerV1>,
     toplevel_session: Option<XdgToplevelSessionV1>,

@@ -27,6 +27,8 @@ done
 [ ${#missing[@]} -eq 0 ] || sudo -n apt-get install -y -q --no-install-recommends "${missing[@]}" || exit 2
 printf 'auth required pam_permit.so\naccount required pam_permit.so\n' | sudo -n tee /etc/pam.d/bande-lock > /dev/null || exit 2
 
+sudo -n prlimit --core=unlimited:unlimited --pid $$ || exit 2
+
 mkdir -p "$out"
 out=$(realpath "$out")
 export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json

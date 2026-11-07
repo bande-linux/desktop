@@ -8,7 +8,7 @@ use bande_toolkit::ui::{
     Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Slider, Toggle, Ui, Widget,
 };
 use bande_toolkit::{Appearance, TextSystem};
-use bande_xdg::{UserDir, config_home, replace_file, state_home, user_dir};
+use bande_xdg::{UserDir, read_user_dirs, replace_file, state_home, user_dir};
 
 use crate::L10N;
 use crate::browser::Location;
@@ -256,8 +256,7 @@ fn sidebar_lines() -> Vec<FormLine> {
     let file = sidebar_file(state_home().as_deref(), &home);
     let layout = fs::read_to_string(&file).ok();
     let hidden = hidden_places(layout.as_deref());
-    let user_dirs =
-        config_home().and_then(|config| fs::read_to_string(config.join("user-dirs.dirs")).ok());
+    let user_dirs = read_user_dirs();
     let mut lines = vec![FormLine::Heading(L10N.tr("settings-sidebar"))];
     for place in standard_places(&home, user_dirs.as_deref()) {
         let shown = !hidden.contains(&place.location);

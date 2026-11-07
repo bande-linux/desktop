@@ -551,10 +551,11 @@ prompts (they are answered in the secure field), and power and accessibility men
 
 ## Crash handling and supervision
 
-Every failure is meant to end in a working desktop without a reboot. What happens for each:
+Every failure is meant to end in a working desktop without a reboot, each stage only taking down
+what the one before could not save. What happens for each:
 
-- **An app hangs**: Force Quit (in the compositor, opened from the system menu, a Taskbar
-  icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
+- **An app hangs**: Force Quit (in the compositor, opened with `Ctrl+Alt+Esc`, from the system
+  menu, a Taskbar icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
   `xdg_wm_base` ping and kills its whole scope ([behaviour](behaviour.md)).
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes
@@ -564,6 +565,20 @@ Every failure is meant to end in a working desktop without a reboot. What happen
   Responding)" with Relaunch, as macOS lists the Finder; Relaunch kills it and the supervisor
   starts it again. The lock screen is supervised too: the session stays locked if it dies, and
   one that has not answered a ping for 10 s while locked is killed and started again.
+- **Frames stop reaching the display** while the compositor itself runs: a failed frame is retried
+  four times a second (one log line per distinct error) and a page flip that does not arrive
+  within a second is written off with `frame_submitted`, so a lost flip event cannot hold the
+  output. After 3 s without a frame on every display the compositor starts a new renderer and
+  resets the DRM state of each display; apps keep running. After 15 s it exits, which ends the
+  session as a crash does. The login window has no work to lose: when it cannot reach the display
+  for 15 s on a computer up for over 5 minutes it asks logind to restart the computer.
+- **The desktop is stuck and the keyboard is all that is left**: pressing `Shift+Ctrl+Alt+Esc`
+  twice within 5 s restarts the desktop, whatever state the session is in. It is logind's Secure
+  Attention Key (`logind.conf(5)`), which logind reads from the keyboard itself and signals on the
+  system bus. `bande-recovery`, a small root service with no other input, counts the presses and
+  ends the active graphical session through its cgroup (`cgroup.kill` of the compositor service)
+  and `KillSession`; the login window comes back. It leaves text console sessions alone. The first
+  press also opens Force Quit when the compositor can still draw, which names the second press.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s` and the
   compositor's event loop pings it, so a hung compositor is aborted (then killed after
   `TimeoutAbortSec=10s`); a crash or abort ends the session and greetd shows the login window,
@@ -573,11 +588,12 @@ Every failure is meant to end in a working desktop without a reboot. What happen
   greetd starts it again. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind
   (libseat) while the compositor runs, for a text console login when the screen is wrong; with
   the compositor hung the kernel ignores them until the watchdog has ended it.
-- **The GPU is lost or reset**: a `VK_ERROR_DEVICE_LOST` from a frame marks the renderer lost;
-  the DRM backend drops it, creates a new Vulkan device and repaints every display. Textures
-  are keyed by the renderer's context, so everything is uploaded again; apps keep running. If no
-  new device can be created, the compositor exits (back to the login window). A GPU that hangs
-  without reporting blocks the frame's fence wait, and the watchdog ends the compositor.
+- **The GPU is lost, hangs or its memory runs out**: a `VK_ERROR_DEVICE_LOST`, a frame whose fence
+  has not signalled after 5 s, or `VK_ERROR_OUT_OF_DEVICE_MEMORY` (at most once per 10 s) makes
+  the backend drop the renderer, create a new Vulkan device and repaint every display. The log
+  line says what the renderer held, by kind. A hung device is abandoned rather than waited for.
+  Textures are keyed by the renderer's context, so everything is uploaded again; apps keep
+  running. If no new device can be created, the compositor exits (back to the login window).
 - **Memory runs out**: zram, the low-memory window, systemd-oomd on `app.slice` and the
   notification of a closed app ([decision 0004](../decisions/0004-memory-pressure.md)). The
   compositor (with the shell and every client it starts) and the session bus, PipeWire,
@@ -589,6 +605,10 @@ Every failure is meant to end in a working desktop without a reboot. What happen
   `-tray`, `-polkit-agent`, `-automount`, `-notify`, the portal backend) has
   `Restart=on-failure` with systemd's start limit (5 in 10 s), runs in `session.slice` and is
   restarted by D-Bus activation on the next call after that.
+- **The kernel fails**: a panic, an oops, or a CPU stuck past the lockup detectors restarts the
+  computer after 10 s (`50-bande-recovery.conf` in `sysctl.d`), and systemd feeds the hardware
+  watchdog (`RuntimeWatchdogSec=2min`), so a kernel that stops scheduling restarts it too, as
+  macOS's watchdog does. Neither needs the power button.
 - **Too many processes**: each app scope gets the user manager's default `TasksMax` (15 % of
   the kernel's limit) and `app.slice` together 25 %, under logind's 33 % for the user, so a
   fork bomb in an app leaves room for the session.

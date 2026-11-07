@@ -54,6 +54,8 @@ pub enum Action {
     ShowNotificationCenter,
     ShowControlCenter,
     LockScreen,
+    ForceQuit,
+    RestartDesktop,
     TextConsole,
     ToggleZoom,
     ZoomIn,
@@ -82,6 +84,8 @@ impl Action {
             | Self::ShowNotificationCenter
             | Self::ShowControlCenter
             | Self::LockScreen
+            | Self::ForceQuit
+            | Self::RestartDesktop
             | Self::TextConsole => Area::System,
         }
     }
@@ -108,6 +112,8 @@ impl Action {
             Self::ShowNotificationCenter => L10N.tr("show-notification-center"),
             Self::ShowControlCenter => L10N.tr("show-control-center"),
             Self::LockScreen => L10N.tr("lock-screen"),
+            Self::ForceQuit => L10N.tr("force-quit"),
+            Self::RestartDesktop => L10N.tr("restart-desktop"),
             Self::TextConsole => L10N.tr("text-console"),
             Self::ToggleZoom => L10N.tr("toggle-zoom"),
             Self::ZoomIn => L10N.tr("zoom-in"),
@@ -139,6 +145,10 @@ const SHIFT: Modifiers = Modifiers {
 const ALT: Modifiers = Modifiers { alt: true, ..NONE };
 const SHIFT_ALT: Modifiers = Modifiers { shift: true, ..ALT };
 const CTRL_ALT: Modifiers = Modifiers { ctrl: true, ..ALT };
+const SHIFT_CTRL_ALT: Modifiers = Modifiers {
+    shift: true,
+    ..CTRL_ALT
+};
 const SHIFT_SUPER: Modifiers = Modifiers {
     shift: true,
     ..SUPER
@@ -154,6 +164,7 @@ pub enum Key {
     Tap,
     Character(char),
     Tab,
+    Escape,
     Print,
     Function(u8),
     AnyFunction,
@@ -180,6 +191,7 @@ impl Key {
             Self::Tap => String::new(),
             Self::Character(character) => character.to_ascii_uppercase().to_string(),
             Self::Tab => "Tab".to_owned(),
+            Self::Escape => "Esc".to_owned(),
             Self::Print => "Print".to_owned(),
             Self::Function(number) => format!("F{number}"),
             Self::AnyFunction => "F1".to_owned(),
@@ -230,7 +242,7 @@ const fn shortcut(action: Action, modifiers: Modifiers, key: Key) -> Shortcut {
     }
 }
 
-pub const SHORTCUTS: [Shortcut; 26] = [
+pub const SHORTCUTS: [Shortcut; 28] = [
     shortcut(Action::CloseWindow, ALT, Key::Function(4)),
     shortcut(Action::MinimizeWindow, SUPER, Key::Character('h')),
     shortcut(Action::TileWindow, SUPER, Key::AnyArrow),
@@ -252,6 +264,8 @@ pub const SHORTCUTS: [Shortcut; 26] = [
     shortcut(Action::ShowNotificationCenter, SUPER, Key::Character('n')),
     shortcut(Action::ShowControlCenter, SUPER, Key::Character('s')),
     shortcut(Action::LockScreen, SUPER, Key::Character('l')),
+    shortcut(Action::ForceQuit, CTRL_ALT, Key::Escape),
+    shortcut(Action::RestartDesktop, SHIFT_CTRL_ALT, Key::Escape),
     shortcut(Action::TextConsole, CTRL_ALT, Key::AnyFunction),
     shortcut(Action::ToggleZoom, ALT_SUPER, Key::Character('8')),
     shortcut(Action::ZoomIn, ALT_SUPER, Key::Character('=')),

@@ -31,13 +31,21 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Power: displays off at the lock stage and after 60 s locked, wake on input, the power button,
   an external display through standby and back (`drm.rs` relink may hit EBUSY).
 - Reopen after a real crash with `reopen-apps-after-crash #true`.
+- Stuck desktop: `Ctrl+Alt+Esc` opens Force Quit; `Shift+Ctrl+Alt+Esc` twice ends the session and the
+  login window comes back (`journalctl -u systemd-logind` says "Secure Attention Key", and
+  `-u bande-recovery` says it restarted the desktop); after a new login
+  `sysctl kernel.panic` says 10 and `systemctl show -p RuntimeWatchdogUSec` says 2min.
+- Panic logs on the mini: whether RAM survives its reboot is unknown. Test with one normal reboot:
+  `reserve_mem=2M:16384:oops ramoops.mem_name=oops ramoops.console_size=262144` in
+  `/etc/kernel/cmdline` and `ramoops` in `modules-load.d`; `/sys/fs/pstore` then has the previous
+  boot's console if it does. Ship it in the images only then.
 - Recovery on the mini: `Ctrl+Alt+Fn+F2` reaches a text console and `Ctrl+Alt+Fn+F7` comes back
   (also from the login window); `kill -STOP` of `bande-shell` shows "Taskbar & Desktop (Not
   Responding)" in Force Quit and Relaunch brings the bar back; `kill -STOP` of `bande-lock` while
   locked brings a new lock screen within about 15 s; after `apt install systemd-oomd` and a new
   login, `oomctl` lists `app.slice` and `systemctl show user.slice -p MemoryLow` says 640M. GPU
   loss recovery (a new Vulkan device after `VK_ERROR_DEVICE_LOST`) is untested on asahi: the
-  journal says "the GPU was lost; starting the renderer again" when it happens.
+  journal says "starting the renderer again" when it happens.
 - Footprint on the real GPU: shell and greeter memory, the greeter's unveil after sign-in, the
   shell's PipeWire clients with two displays.
 - Login: the greetd console frame before the greeter (`vt.global_cursor_default=0` or a greetd

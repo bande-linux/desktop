@@ -47,7 +47,7 @@ graph LR
 - **Crash resilience**: if the lock screen crashes, the session stays locked; the compositor
   draws a blank frame and a new locker may take over the lock.
 - Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
-  Settings ▸ Power ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
+  Settings ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
   screen itself, its clock and date over the blurred desktop picture, covering the desktop
   through `ext-session-lock`, as macOS hands its saver over to the lock screen. "Require
@@ -55,6 +55,9 @@ graph LR
   period: until it passes, any key, click or movement dismisses the saver without a password.
   Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer
   sleeps with the display unless `suspend-after` is later or `"never"`.
+  The earlier of the screen saver and the display turning off starts the lock, and sleep never
+  comes before the display turns off; the settings say so on their rows when a choice is overridden,
+  and the sleep row only shows when logind's `CanSuspend` is `yes`.
 - Keeping awake: a playing video holds off dimming, the display turning off and the lock, as
   macOS's display-sleep assertion does, through whichever path the player uses:
 

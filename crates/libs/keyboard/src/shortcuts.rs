@@ -153,6 +153,7 @@ const ALT_SUPER: Modifiers = Modifiers { alt: true, ..SUPER };
 pub enum Key {
     Tap,
     Character(char),
+    Space,
     Tab,
     Print,
     Function(u8),
@@ -179,6 +180,7 @@ impl Key {
         match self {
             Self::Tap => String::new(),
             Self::Character(character) => character.to_ascii_uppercase().to_string(),
+            Self::Space => "Space".to_owned(),
             Self::Tab => "Tab".to_owned(),
             Self::Print => "Print".to_owned(),
             Self::Function(number) => format!("F{number}"),
@@ -230,7 +232,7 @@ const fn shortcut(action: Action, modifiers: Modifiers, key: Key) -> Shortcut {
     }
 }
 
-pub const SHORTCUTS: [Shortcut; 26] = [
+pub const SHORTCUTS: [Shortcut; 27] = [
     shortcut(Action::CloseWindow, ALT, Key::Function(4)),
     shortcut(Action::MinimizeWindow, SUPER, Key::Character('h')),
     shortcut(Action::TileWindow, SUPER, Key::AnyArrow),
@@ -247,6 +249,7 @@ pub const SHORTCUTS: [Shortcut; 26] = [
     shortcut(Action::CaptureArea, SHIFT_SUPER, Key::Character('s')),
     shortcut(Action::CaptureOptions, NONE, Key::Print),
     shortcut(Action::ShowLauncher, SUPER, Key::Tap),
+    shortcut(Action::ShowLauncher, SUPER, Key::Space),
     shortcut(Action::ShowClipboardHistory, SUPER, Key::Character('v')),
     shortcut(Action::ShowEmojiPicker, SUPER, Key::Character('.')),
     shortcut(Action::ShowNotificationCenter, SUPER, Key::Character('n')),

@@ -1,24 +1,31 @@
-use bande_toolkit::ui::{Button, Table, WidgetId};
+use bande_toolkit::ui::{Axis, Button, Stack, Table, WidgetId};
 use bande_toolkit::{ControlSize, Item, Point, Rect, TextAlign, TextRole, TextStyle};
+use bande_volumes::{connected_volume_of, on_connected_volume};
 
 use crate::L10N;
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
 use crate::tabs::location_title;
-use crate::view::FilesView;
+use crate::view::{FilesView, Request};
 use crate::views::ViewMode;
 
 const GAP: f32 = 8.0;
 const MARGIN: f32 = 16.0;
 const BUTTON_PADDING: f32 = 16.0;
+const TROUBLE_WIDTH: f32 = 220.0;
 
 impl FilesView {
     pub(crate) fn empty_message(&self, index: usize) -> Option<String> {
         let column = self.browser.columns().get(index)?;
+        let connected = column.folder().is_some_and(on_connected_volume);
+        if column.entries.is_empty() && connected && column.is_listing() {
+            return Some(L10N.tr("server-waiting"));
+        }
         if !column.entries.is_empty() || column.is_listing() {
             return None;
         }
         Some(match &column.location {
+            Location::Folder(_) if column.unavailable => L10N.tr("server-not-responding"),
             Location::Folder(_) if column.denied => L10N.tr_args(
                 "no-permission",
                 [("folder", location_title(&column.location).into())],
@@ -26,6 +33,7 @@ impl FilesView {
             Location::Folder(_) => L10N.tr("empty-folder"),
             Location::Trash => L10N.tr("trash-empty"),
             Location::Recents => L10N.tr("recents-empty"),
+            Location::Server(_) => L10N.tr("empty-folder"),
             Location::Search(scope) => {
                 let searching = self.searching.as_ref().filter(|shown| shown.answered)?;
                 L10N.tr_args(
@@ -65,6 +73,67 @@ impl FilesView {
                 .quiet();
                 self.search_home_button = Some(self.insert(button));
             }
+        }
+    }
+
+    fn wants_connection_trouble(&self) -> bool {
+        let Some(column) = self.browser.columns().first() else {
+            return false;
+        };
+        column.folder().is_some_and(on_connected_volume)
+            && column.entries.is_empty()
+            && (column.unavailable || column.is_listing())
+    }
+
+    pub(crate) fn sync_connection_trouble(&mut self) {
+        let wanted = self.wants_connection_trouble();
+        if wanted == self.trouble_buttons.is_some() {
+            return;
+        }
+        match self.trouble_buttons.take() {
+            Some(buttons) => self.remove(buttons),
+            None => {
+                let (again, disconnect) = (sender(&self.signals), sender(&self.signals));
+                let buttons = Stack::new(
+                    Axis::Horizontal,
+                    GAP,
+                    0.0,
+                    vec![
+                        Box::new(Button::new(&L10N.tr("try-again"), move || {
+                            again(Signal::TryConnectionAgain);
+                        })),
+                        Box::new(Button::new(&L10N.tr("server-disconnect"), move || {
+                            disconnect(Signal::DisconnectCurrent);
+                        })),
+                    ],
+                );
+                self.trouble_buttons = Some(self.insert(buttons));
+            }
+        }
+    }
+
+    pub(crate) fn trouble_frame(&mut self, area: Rect) -> Option<(WidgetId, Rect)> {
+        let buttons = self.trouble_buttons?;
+        let height = self.ui.context().control_height(ControlSize::Regular);
+        let centre = area.y + (area.height / 2.0).round();
+        Some((
+            buttons,
+            Rect::new(
+                area.x + ((area.width - TROUBLE_WIDTH) / 2.0).round(),
+                centre + 3.0 * GAP,
+                TROUBLE_WIDTH,
+                height,
+            ),
+        ))
+    }
+
+    pub(crate) fn disconnect_current(&mut self) {
+        if let Some(volume) = self
+            .browser
+            .current_folder()
+            .and_then(|folder| connected_volume_of(&folder))
+        {
+            self.requests.push(Request::Eject(volume));
         }
     }
 

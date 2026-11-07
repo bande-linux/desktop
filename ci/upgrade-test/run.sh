@@ -8,6 +8,7 @@ done
 old=$(realpath "$1")
 new=$(realpath "$2")
 here=$(realpath "$(dirname "$0")")
+[ -w /dev/kvm ] || { echo "run.sh: needs write access to /dev/kvm" >&2; exit 127; }
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bande-ci/upgrade-test
 mkdir -p "$cache"
 scratch=$(mktemp -d -p "$cache")
@@ -69,7 +70,7 @@ boot() {
         if timeout 120 ssh "${guest[@]}" -p "$port" root@127.0.0.1 'cloud-init status --wait > /dev/null; true' 2>/dev/null; then
             return 0
         fi
-        kill -0 "$vm" || return 1
+        kill -0 "$vm" 2>/dev/null || return 1
         sleep 5
     done
     return 1

@@ -19,7 +19,7 @@ use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 
 pub use cx::{Cx, WindowId};
 pub use portal::{Filter, choose_file, choose_save_file};
-pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost};
+pub use tabs::{Detached, TabCarry, TabDrop, TabDropTarget, TabHost, move_tab};
 
 pub type Error = Box<dyn std::error::Error>;
 

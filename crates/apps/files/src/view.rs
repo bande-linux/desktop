@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
+use bande_app::TabDrop;
 use bande_content::Preview;
 use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, Format,
@@ -18,7 +19,7 @@ use bande_search::{Usage, recent_files, recently_used};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{
     ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer,
-    PointerButton, Scroll, ScrollState, Slider, Ui, Widget, WidgetId,
+    PointerButton, Scroll, ScrollState, Slider, TabStrip, TypeSelect, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
 use bande_volumes::{EjectFailure, mounted_volumes};
@@ -33,7 +34,7 @@ use crate::loader::{Loaded, Loader};
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
-use crate::tabs::{Tab, location_title};
+use crate::tabs::{TabSlot, location_title};
 use crate::thumbs::Thumbs;
 use crate::toolbar::{TOOLBAR_HEIGHT, Toolbar};
 use crate::views::{
@@ -50,7 +51,6 @@ pub const PROGRESS_HEIGHT: f32 = 48.0;
 pub const TOP_INSET: f32 = 6.0;
 pub const HEADER_HEIGHT: f32 = 26.0;
 pub(crate) const SLOW_CLICK_RENAME: Duration = Duration::from_millis(600);
-const TYPE_SELECT_PAUSE: Duration = Duration::from_millis(1000);
 const NOTICE_TIME: Duration = Duration::from_secs(5);
 const MAX_RECENTS: usize = 200;
 const HIDDEN: &str = "hidden";
@@ -139,7 +139,6 @@ pub enum Hit {
     MoreInfo,
     Tab(usize),
     CloseTab(usize),
-    NewTab,
     GroupToggle(usize),
 }
 
@@ -148,6 +147,11 @@ const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     ShowQuickLook,
+    DetachTab {
+        index: usize,
+        grab: Point,
+    },
+    TabDrop(TabDrop),
     Open {
         app: Box<DesktopEntry>,
         files: Vec<PathBuf>,
@@ -204,8 +208,10 @@ pub struct FilesView {
     templates: Option<PathBuf>,
     pub(crate) drop: Option<crate::drag::Hover>,
     pub(crate) scrolls: Vec<(Location, ScrollState)>,
-    pub(crate) tabs: Vec<Option<Tab>>,
+    pub(crate) tabs: Vec<TabSlot>,
     pub(crate) active_tab: usize,
+    pub(crate) strip: TabStrip,
+    pub(crate) window_active: bool,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
     pub(crate) quick_look: Option<QuickLookLink>,
@@ -260,7 +266,7 @@ pub struct FilesView {
     pub(crate) requests: Vec<Request>,
     pub(crate) pending_rename: Option<(Instant, PathBuf)>,
     pointer: Point,
-    typed: (String, Option<Instant>),
+    typed: TypeSelect,
     pub(crate) paste_moves: Option<bool>,
     pub(crate) clipboard_files: bool,
 }
@@ -344,8 +350,10 @@ impl FilesView {
             templates: None,
             drop: None,
             scrolls: Vec::new(),
-            tabs: vec![None],
+            tabs: vec![TabSlot::shown()],
             active_tab: 0,
+            strip: TabStrip::new(),
+            window_active: true,
             sheet_cancel: None,
             size: (0.0, 0.0),
             quick_look: None,
@@ -400,7 +408,7 @@ impl FilesView {
             requests: Vec::new(),
             pending_rename: None,
             pointer: Point::default(),
-            typed: (String::new(), None),
+            typed: TypeSelect::default(),
             paste_moves: None,
             clipboard_files: false,
         };
@@ -495,6 +503,7 @@ impl FilesView {
         if !active {
             self.close_quick_look();
         }
+        self.window_active = active;
         self.ui.set_window_active(active)
     }
 
@@ -518,7 +527,7 @@ impl FilesView {
     }
 
     pub fn animating(&self) -> bool {
-        self.ui.is_animating()
+        self.ui.is_animating() || self.tab_bar_animating()
     }
 
     pub fn browser(&self) -> &Browser {
@@ -1320,12 +1329,7 @@ impl FilesView {
             Hit::OpenWithChosen => self.open_with_chosen(),
             Hit::UseForAll => self.use_chosen_for_all(),
             Hit::MoreInfo => self.show_inspector(),
-            Hit::Inspector | Hit::Sidebar => return false,
-            Hit::Tab(index) => self.select_tab(index),
-            Hit::CloseTab(index) => {
-                self.close_tab(index);
-            }
-            Hit::NewTab => self.open_tab(self.browser.root().clone()),
+            Hit::Inspector | Hit::Sidebar | Hit::Tab(_) | Hit::CloseTab(_) => return false,
             Hit::GroupToggle(section) => self.toggle_group(section),
         }
         true
@@ -1399,15 +1403,12 @@ impl FilesView {
                     | Hit::Eject(_)
                     | Hit::Segment(_)
                     | Hit::CancelJob(_)
-                    | Hit::Tab(_)
-                    | Hit::CloseTab(_)
-                    | Hit::NewTab
                     | Hit::GroupToggle(_)
             )
         });
         let changed = hover != self.hover;
         self.hover = hover;
-        changed
+        self.tab_bar_hover(Some(pointer.position)) | changed
     }
 
     pub(crate) fn files_scroll(&mut self, scroll: &Scroll) -> bool {
@@ -1416,7 +1417,8 @@ impl FilesView {
     }
 
     pub(crate) fn leave(&mut self) -> bool {
-        self.hover.take().is_some()
+        self.tab_bar_cancel();
+        self.tab_bar_hover(None) | self.hover.take().is_some()
     }
 
     pub(crate) fn choose(&mut self, action: &str) {
@@ -1516,17 +1518,7 @@ impl FilesView {
     }
 
     fn type_select(&mut self, character: char) -> bool {
-        let now = Instant::now();
-        let fresh = self
-            .typed
-            .1
-            .is_none_or(|last| now.duration_since(last) > TYPE_SELECT_PAUSE);
-        if fresh {
-            self.typed.0.clear();
-        }
-        self.typed.0.extend(character.to_lowercase());
-        self.typed.1 = Some(now);
-        let typed = self.typed.0.clone();
+        let typed = self.typed.push([character], Instant::now()).to_owned();
         let column = self.browser.active_column();
         let found = column
             .entries

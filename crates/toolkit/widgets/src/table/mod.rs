@@ -4,10 +4,12 @@ mod paint;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
 
+use crate::TypeSelect;
 use accesskit::{Action, ActionRequest, Node, Role, SortDirection};
-use bande_graphics::{Color, Cut, Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle};
+use bande_graphics::{
+    Color, Cut, Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle, past_drag_slop,
+};
 
 pub use self::model::{Cell, Column, Row, Sort};
 use self::model::{Line, flatten};
@@ -25,8 +27,6 @@ const CELL_PADDING: f32 = 8.0;
 const ICON_SIZE: f32 = 16.0;
 const RESIZE_GRIP: f32 = 4.0;
 const MIN_COLUMN: f32 = 40.0;
-const TYPE_SELECT_PAUSE: Duration = Duration::from_secs(1);
-const DRAG_THRESHOLD: f32 = 4.0;
 const INDENT: f32 = 16.0;
 const DISCLOSURE_WIDTH: f32 = 16.0;
 
@@ -87,8 +87,7 @@ pub struct Table {
     scroll: ScrollState,
     frame: Rect,
     drag: Option<Drag>,
-    typed: String,
-    typed_at: Option<Instant>,
+    typed: TypeSelect,
     texts: RefCell<HashMap<TextKey, Paragraph>>,
     titles: Vec<Paragraph>,
     on_sort: Box<dyn FnMut(Sort)>,
@@ -142,8 +141,7 @@ impl Table {
             scroll: ScrollState::default(),
             frame: Rect::default(),
             drag: None,
-            typed: String::new(),
-            typed_at: None,
+            typed: TypeSelect::default(),
             texts: RefCell::new(HashMap::new()),
             titles: Vec::new(),
             on_sort: Box::new(|_| {}),
@@ -912,21 +910,12 @@ impl Table {
     }
 
     fn type_select(&mut self, cx: &Context, character: char) -> bool {
-        let now = cx.now();
-        if self
-            .typed_at
-            .is_none_or(|at| now.saturating_duration_since(at) > TYPE_SELECT_PAUSE)
-        {
-            self.typed.clear();
-        }
-        self.typed_at = Some(now);
-        self.typed.extend(character.to_lowercase());
-        let typed = self.typed.clone();
+        let typed = self.typed.push([character], cx.now());
         let found = self.shown.iter().position(|line| {
             self.lines[*line]
                 .cells
                 .first()
-                .is_some_and(|cell| cell.text.to_lowercase().starts_with(&typed))
+                .is_some_and(|cell| cell.text.to_lowercase().starts_with(typed))
         });
         match found {
             Some(index) => self.step(cx, index, false),
@@ -1057,8 +1046,7 @@ impl Table {
     }
 
     fn press_moved(&mut self, cx: &mut Context, from: Point, row: usize, point: Point) -> bool {
-        let distance = (point.x - from.x).hypot(point.y - from.y);
-        if distance < DRAG_THRESHOLD {
+        if !past_drag_slop(from, point) {
             return false;
         }
         if self.on_drag.is_some() {
@@ -1096,8 +1084,7 @@ impl Table {
             }
             Some(Drag::Press { from, row, .. }) => self.press_moved(cx, from, row, point),
             Some(Drag::Header { from, column }) => {
-                (point.x - from.x).hypot(point.y - from.y) >= DRAG_THRESHOLD
-                    && self.lift_column(cx, column, from, point)
+                past_drag_slop(from, point) && self.lift_column(cx, column, from, point)
             }
             Some(Drag::Column) => {
                 self.drag_column(cx, point.x);

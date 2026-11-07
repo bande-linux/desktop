@@ -1,8 +1,8 @@
 use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
     Color, Cut, Item, MenuButton, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene,
-    Shape, TextAlign, TextStyle, TextSystem, TitleBar, menu_button_area, resize_zone, shortened,
-    title_style, window_controls_area,
+    Shape, TextAlign, TextStyle, TextSystem, TitleBar, menu_button_area, past_drag_slop,
+    resize_zone, shortened, title_style, window_controls_area,
 };
 
 use std::time::Instant;
@@ -10,7 +10,6 @@ use std::time::Instant;
 use bande_widgets::{Animated, Spring};
 
 use crate::L10N;
-use crate::seat::CLICK_SLOP;
 
 pub(crate) use bande_graphics::RESIZE_MARGIN;
 pub use bande_graphics::WINDOW_HEADER_HEIGHT;
@@ -264,7 +263,7 @@ impl Chrome {
         match self.tab_drag {
             Some(TabDrag::Pressed(start)) => {
                 let (dx, dy) = (point.x - start.x, point.y - start.y);
-                if dx.hypot(dy) <= CLICK_SLOP {
+                if !past_drag_slop(start, point) {
                     return false;
                 }
                 if self.detachable_tabs || dx.abs() > dy.abs() {

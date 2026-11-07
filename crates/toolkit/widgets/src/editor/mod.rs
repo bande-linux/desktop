@@ -10,7 +10,9 @@ use std::ops::Range;
 use accesskit::{
     Action, ActionData, ActionRequest, Node, NodeId, Role, TextPosition, TextSelection,
 };
-use bande_graphics::{Color, Item, Paint, Point, Rect, Shape, TextSystem, Typeface};
+use bande_graphics::{
+    Color, Item, Paint, Point, Rect, Shape, TextSystem, Typeface, past_drag_slop,
+};
 use parley::{Affinity, Cursor, Selection as Span};
 
 use self::history::{Edit, EditKind, History, Restyle};
@@ -28,7 +30,6 @@ const CARET_WIDTH: f32 = 1.5;
 const LINE_HEIGHT_RATIO: f32 = 1.21;
 const UNDERLINE: f32 = 1.0;
 const CLAUSE_UNDERLINE: f32 = 2.0;
-const DRAG_START: f32 = 4.0;
 const MARKER_GAP: f32 = 6.0;
 
 fn decorations(layout: &parley::Layout<Color>, origin: Point, items: &mut Vec<Item>) {
@@ -692,7 +693,7 @@ impl Editor {
         let Some(Carry::Pending(from)) = self.carry else {
             return false;
         };
-        if (point.x - from.x).hypot(point.y - from.y) <= DRAG_START {
+        if !past_drag_slop(from, point) {
             return true;
         }
         let range = self.selection();

@@ -1,3 +1,4 @@
+use bande_xdg::replace_file;
 use std::collections::HashSet;
 use std::fs;
 use std::io;
@@ -178,16 +179,11 @@ pub fn load_list_columns(file: &Path) -> Vec<ListColumn> {
 }
 
 pub fn save_list_columns(file: &Path, columns: &[ListColumn]) -> io::Result<()> {
-    if let Some(parent) = file.parent() {
-        fs::create_dir_all(parent)?;
-    }
     let text = columns
         .iter()
         .map(|column| format!("{}\n", column.name()))
         .collect::<String>();
-    let partial = file.with_extension("partial");
-    fs::write(&partial, text)?;
-    fs::rename(partial, file)
+    replace_file(file, text)
 }
 
 pub fn status_bar_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
@@ -249,9 +245,6 @@ impl ViewMemory {
         let Some(file) = &self.file else {
             return Ok(());
         };
-        if let Some(parent) = file.parent() {
-            fs::create_dir_all(parent)?;
-        }
         let text = self
             .folders
             .iter()
@@ -266,8 +259,6 @@ impl ViewMemory {
                 )
             })
             .collect::<String>();
-        let partial = file.with_extension("partial");
-        fs::write(&partial, text)?;
-        fs::rename(partial, file)
+        replace_file(file, text)
     }
 }

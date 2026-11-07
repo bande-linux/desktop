@@ -2,6 +2,21 @@ use bande_toolkit::{DragAction, DragEvent, Point, Window, WindowDrag};
 
 use crate::{Cx, Error, Program, View, WindowId};
 
+pub fn move_tab<T>(tabs: &mut Vec<T>, active: &mut usize, from: usize, to: usize) -> bool {
+    if from >= tabs.len() || to >= tabs.len() {
+        return false;
+    }
+    let tab = tabs.remove(from);
+    tabs.insert(to, tab);
+    *active = match *active {
+        shown if shown == from => to,
+        shown if from < shown && shown <= to => shown - 1,
+        shown if to <= shown && shown < from => shown + 1,
+        shown => shown,
+    };
+    true
+}
+
 pub trait TabHost: View {
     type Tab;
 

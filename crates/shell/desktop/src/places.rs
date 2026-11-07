@@ -197,10 +197,5 @@ pub fn layouts_path() -> Option<PathBuf> {
 }
 
 pub fn save_layouts(path: &Path, layouts: &Layouts) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let partial = path.with_extension("tsv.new");
-    fs::write(&partial, format_layouts(layouts))?;
-    fs::rename(partial, path)
+    bande_xdg::replace_file(path, format_layouts(layouts))
 }

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use bande_toolkit::ui::{Animated, Event, Menu, MenuItem, Spring};
+use bande_toolkit::ui::{Animated, Event, Menu, MenuItem, Spring, past_drag_slop};
 use bande_toolkit::{
     Color, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
 };
@@ -15,7 +15,6 @@ const BORDER: f32 = 3.0;
 const RADIUS: f32 = Radius::S;
 const SHOWN_FOR: Duration = Duration::from_secs(5);
 const LINGER: Duration = Duration::from_secs(2);
-const DRAG_THRESHOLD: f32 = 4.0;
 const SWIPE_AWAY: f32 = 40.0;
 const PLAY_RADIUS: f32 = 16.0;
 const PLAY_DISC: f32 = 0.7;
@@ -187,12 +186,13 @@ impl Thumbnail {
                 self.hovered = self.contains(screen, pointer.position);
                 if let Some(from) = self.pressed {
                     let (across, down) = (pointer.position.x - from.x, pointer.position.y - from.y);
-                    if self.swiping || (across > DRAG_THRESHOLD && across > 2.0 * down.abs()) {
+                    let past_slop = past_drag_slop(from, pointer.position);
+                    if self.swiping || (past_slop && across > 2.0 * down.abs()) {
                         self.swiping = true;
                         self.swipe.jump_to(across.max(0.0));
                         return ThumbnailAction::None;
                     }
-                    if across.hypot(down) > DRAG_THRESHOLD {
+                    if past_slop {
                         self.pressed = None;
                         return ThumbnailAction::Drag(self.path.clone());
                     }

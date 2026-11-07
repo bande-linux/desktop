@@ -10,7 +10,7 @@ use bande_datetime::{DateFormats, Month};
 use bande_l10n::Localizer;
 use bande_notify::{Notification, Presentation, Stack};
 use bande_spring::rubber_band;
-use bande_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for};
+use bande_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for, past_drag_slop};
 use bande_toolkit::{
     Color, ControlSize, DisplayEdge, Elevation, Item, Palette, Paragraph, Point, Radius, Rect,
     Scene, Scheme, Shape, Spacing, TextAlign, TextRole, TextStyle, TextSystem,
@@ -51,7 +51,6 @@ const GROUP_HEIGHT: f32 = 28.0;
 const BUTTON_HEIGHT: f32 = ControlSize::Small.height();
 const BUTTON_INSET: f32 = Spacing::S as f32;
 const TEXT_INSET: f32 = Spacing::XS as f32;
-const DRAG_SLOP: f32 = 4.0;
 const DISMISS_FRACTION: f32 = 0.35;
 const FLICK_SPEED: f32 = 600.0;
 const FLICK_WINDOW: Duration = Duration::from_millis(100);
@@ -952,8 +951,7 @@ impl Screen {
                         drag.velocity = (pointer.position.x - drag.last.0) * away / elapsed;
                     }
                     drag.last = (pointer.position.x, now);
-                    drag.moved |= dx.abs() > DRAG_SLOP
-                        || (pointer.position.y - drag.start.y).abs() > DRAG_SLOP;
+                    drag.moved |= past_drag_slop(drag.start, pointer.position);
                     if drag.moved {
                         let x = if dx >= 0.0 {
                             dx

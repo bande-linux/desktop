@@ -9,6 +9,7 @@ use bande_config::{BAR_ICON_SIZE_RANGE, BarEdge};
 use bande_taskbar_model::{LauncherEntry, LauncherUpdate};
 use bande_toolkit::ui::{
     Animated, Context, Cursor, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
+    past_drag_slop,
 };
 
 use crate::L10N;
@@ -38,7 +39,6 @@ const REVEAL_DWELL: Duration = Duration::from_millis(120);
 const FULL_SCREEN_DWELL: Duration = Duration::from_millis(300);
 const HIDE_DELAY: Duration = Duration::from_millis(450);
 const EDGE_STRIP: f32 = 2.0;
-const DRAG_THRESHOLD: f32 = 4.0;
 const DROP_SCALE: f32 = 1.12;
 
 const REMOVE_TEXT: f32 = 12.0;
@@ -786,8 +786,7 @@ impl TaskbarState {
         let Some(origin_point) = self.press_at else {
             return false;
         };
-        let moved = (point.x - origin_point.x).hypot(point.y - origin_point.y);
-        if moved < DRAG_THRESHOLD {
+        if !past_drag_slop(origin_point, point) {
             return false;
         }
         let Some(origin) = self

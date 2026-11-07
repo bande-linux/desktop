@@ -602,6 +602,9 @@ impl Recovery {
                     versions: Vec::new(),
                     password: None,
                     secret: Zeroizing::new(String::new()),
+                    disk_password: None,
+                    backups: Vec::new(),
+                    backup: None,
                 };
                 tools.present();
                 Pane(tools)

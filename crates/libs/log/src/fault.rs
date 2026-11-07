@@ -81,7 +81,7 @@ fn hang_request(kind: &str, pid: u32, seconds: u64) -> String {
 
 pub fn report_hang_and_wait(kind: &str, pid: u32, seconds: u64, wait: Duration) {
     if let Err(error) = send(hang_request(kind, pid, seconds), Some(wait)) {
-        tracing::debug!("cannot leave a hang report: {error}");
+        tracing::warn!("cannot leave a hang report: {error}");
     }
 }
 
@@ -191,6 +191,7 @@ fn watch(shared: &StallShared, kind: &'static str, limit: Duration) {
             if error == rustix::io::Errno::INTR {
                 continue;
             }
+            tracing::warn!("the stall watch stopped: {error}");
             return;
         }
         let since = shared.busy_since.load(Ordering::Acquire);
@@ -210,6 +211,10 @@ fn watch(shared: &StallShared, kind: &'static str, limit: Duration) {
         let generation = shared.generation.load(Ordering::Relaxed);
         if elapsed >= limit && reported != Some(generation) {
             reported = Some(generation);
+            tracing::warn!(
+                "the event loop has not come back for {} s; asking for a hang report",
+                elapsed.as_secs()
+            );
             report_hang_and_wait(kind, std::process::id(), elapsed.as_secs(), WAIT_FOR_ANSWER);
         }
         let next = if elapsed >= limit {

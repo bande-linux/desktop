@@ -832,15 +832,19 @@ impl Editor {
     }
 
     pub(crate) fn handle(&mut self, cx: &mut Context, event: &Event, origin: Point) -> bool {
-        if matches!(event, Event::Key { key: Key::Backspace, .. }) && self.backspace_restores() {
+        if matches!(
+            event,
+            Event::Key {
+                key: Key::Backspace,
+                ..
+            }
+        ) && self.backspace_restores()
+        {
             return true;
         }
         let revision = self.revision;
         let handled = self.handle_event(cx, event, origin);
-        if self.read_only
-            && matches!(event, Event::PointerUp(_))
-            && self.selection.is_collapsed()
-        {
+        if self.read_only && matches!(event, Event::PointerUp(_)) && self.selection.is_collapsed() {
             let at = self.selection.focus;
             cx.link = spelling::links(&self.blocks[at.paragraph].text)
                 .into_iter()
@@ -849,8 +853,13 @@ impl Editor {
         }
         if self.revision != revision {
             let typed = match event {
-                Event::Key { key: Key::Character(character), .. } => Some(*character),
-                Event::Key { key: Key::Space, .. } => Some(' '),
+                Event::Key {
+                    key: Key::Character(character),
+                    ..
+                } => Some(*character),
+                Event::Key {
+                    key: Key::Space, ..
+                } => Some(' '),
                 Event::Commit(text) => text.chars().last(),
                 _ => None,
             };
@@ -1115,9 +1124,12 @@ impl Editor {
             if at.paragraph == corrected.start.paragraph
                 && (corrected.start.offset..=corrected.end.offset).contains(&at.offset)
             {
-                let title = L10N.tr_args("change-back", [("word", corrected.original.clone().into())]);
+                let title =
+                    L10N.tr_args("change-back", [("word", corrected.original.clone().into())]);
                 plain.items.insert(0, MenuItem::separator());
-                plain.items.insert(0, MenuItem::new(&title, CHANGE_BACK_ACTION));
+                plain
+                    .items
+                    .insert(0, MenuItem::new(&title, CHANGE_BACK_ACTION));
                 return plain;
             }
         }

@@ -6,3 +6,4 @@ quote-close = ”
 apostrophe-open = ’
 apostrophe-close = ’
 dash = –
+autocorrect = false

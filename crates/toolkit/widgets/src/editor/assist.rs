@@ -57,7 +57,10 @@ impl Editor {
         let enders = spelling::rule("sentence-enders");
         before.is_empty()
             || (before.len() < start.offset
-                && before.chars().last().is_some_and(|last| enders.contains(last)))
+                && before
+                    .chars()
+                    .last()
+                    .is_some_and(|last| enders.contains(last)))
     }
 
     fn straighten(&mut self, typed: char) {
@@ -142,9 +145,17 @@ impl Editor {
                 .chain(characters)
                 .collect();
             let end = Position::new(start.paragraph, start.offset + upper.len());
-            self.apply_step(start, Position::new(start.paragraph, start.offset + word.len()), &upper);
+            self.apply_step(
+                start,
+                Position::new(start.paragraph, start.offset + word.len()),
+                &upper,
+            );
             spelling::ask_correction(&upper);
-            self.pending = Some(Pending { start, end, word: upper });
+            self.pending = Some(Pending {
+                start,
+                end,
+                word: upper,
+            });
             return;
         }
         spelling::ask_correction(&word);
@@ -161,7 +172,9 @@ impl Editor {
         };
         if correction.is_empty()
             || pending.end.paragraph >= self.blocks.len()
-            || self.blocks[pending.end.paragraph].text.get(pending.start.offset..pending.end.offset)
+            || self.blocks[pending.end.paragraph]
+                .text
+                .get(pending.start.offset..pending.end.offset)
                 != Some(pending.word.as_str())
         {
             return;
@@ -169,7 +182,10 @@ impl Editor {
         self.apply_step(pending.start, pending.end, &correction);
         self.corrected = Some(Corrected {
             start: pending.start,
-            end: Position::new(pending.start.paragraph, pending.start.offset + correction.len()),
+            end: Position::new(
+                pending.start.paragraph,
+                pending.start.offset + correction.len(),
+            ),
             original: pending.word,
             fresh: true,
         });
@@ -179,10 +195,13 @@ impl Editor {
         let Some(corrected) = self.corrected.take() else {
             return false;
         };
-        let intact = self.blocks.get(corrected.start.paragraph).is_some_and(|block| {
-            block.text.is_char_boundary(corrected.start.offset)
-                && block.text.is_char_boundary(corrected.end.offset)
-        });
+        let intact = self
+            .blocks
+            .get(corrected.start.paragraph)
+            .is_some_and(|block| {
+                block.text.is_char_boundary(corrected.start.offset)
+                    && block.text.is_char_boundary(corrected.end.offset)
+            });
         if !intact {
             return false;
         }
@@ -192,6 +211,9 @@ impl Editor {
     }
 
     pub(super) fn backspace_restores(&mut self) -> bool {
-        self.corrected.as_ref().is_some_and(|corrected| corrected.fresh) && self.change_back()
+        self.corrected
+            .as_ref()
+            .is_some_and(|corrected| corrected.fresh)
+            && self.change_back()
     }
 }

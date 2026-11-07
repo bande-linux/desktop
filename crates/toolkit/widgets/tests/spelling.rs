@@ -46,7 +46,11 @@ fn type_text(ui: &mut Ui, text: &str) {
 fn a_correction_is_applied_at_word_end_and_backspace_restores_the_original() {
     let (mut ui, id, requests) = typing(TextField::new("", "", |_| {}));
     type_text(&mut ui, "helo ");
-    assert!(requests.borrow().contains(&SpellRequest::Correct("helo".to_owned())));
+    assert!(
+        requests
+            .borrow()
+            .contains(&SpellRequest::Correct("helo".to_owned()))
+    );
     receive_spelling(SpellReply::Corrected("helo".to_owned(), "hello".to_owned()));
     ui.spelling_answered();
     assert_eq!(ui.widget_ref::<TextField>(id).unwrap().text(), "hello ");

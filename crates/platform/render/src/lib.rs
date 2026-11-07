@@ -38,6 +38,10 @@ const REQUIRED_EXTENSIONS: [&CStr; 3] = [
     ash::khr::external_memory_fd::NAME,
     ash::ext::external_memory_dma_buf::NAME,
 ];
+const VIDEO_SAMPLING_EXTENSIONS: [&CStr; 2] = [
+    ash::ext::image_drm_format_modifier::NAME,
+    ash::ext::queue_family_foreign::NAME,
+];
 const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
 const TEXTURE_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Abgr8888];
 
@@ -223,6 +227,7 @@ struct Image {
 struct TextureImage {
     image: Image,
     readable: bool,
+    imported: bool,
 }
 
 struct Imported {
@@ -313,6 +318,8 @@ pub struct VulkanRenderer {
     queue: vk::Queue,
     queue_family: u32,
     output_on_device: bool,
+    samples_video: bool,
+    video_acquires: Vec<u64>,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
     reduced_effects: bool,
@@ -382,6 +389,7 @@ struct Chosen {
     physical: vk::PhysicalDevice,
     family: u32,
     output_on_device: bool,
+    samples_video: bool,
     info: DeviceInfo,
 }
 
@@ -424,6 +432,10 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
             let mut driver = vk::PhysicalDeviceDriverProperties::default();
             let mut properties2 = vk::PhysicalDeviceProperties2::default().push_next(&mut driver);
             unsafe { instance.get_physical_device_properties2(physical, &mut properties2) };
+            let on_real_gpu = matches!(
+                properties.device_type,
+                vk::PhysicalDeviceType::INTEGRATED_GPU | vk::PhysicalDeviceType::DISCRETE_GPU
+            );
             let info = DeviceInfo {
                 name: text(properties.device_name_as_c_str()),
                 driver: text(driver.driver_name_as_c_str()),
@@ -435,11 +447,13 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
                 Chosen {
                     physical,
                     family: u32::try_from(family).ok()?,
-                    output_on_device: matches!(
-                        properties.device_type,
-                        vk::PhysicalDeviceType::INTEGRATED_GPU
-                            | vk::PhysicalDeviceType::DISCRETE_GPU
-                    ),
+                    output_on_device: on_real_gpu,
+                    samples_video: on_real_gpu
+                        && VIDEO_SAMPLING_EXTENSIONS.iter().all(|wanted| {
+                            extensions
+                                .iter()
+                                .any(|extension| extension.extension_name_as_c_str() == Ok(*wanted))
+                        }),
                     info,
                 },
             ))
@@ -502,7 +516,17 @@ impl VulkanRenderer {
         let mut vulkan13 = vk::PhysicalDeviceVulkan13Features::default()
             .dynamic_rendering(true)
             .synchronization2(true);
-        let extensions = REQUIRED_EXTENSIONS.map(CStr::as_ptr);
+        let extensions: Vec<_> = REQUIRED_EXTENSIONS
+            .iter()
+            .chain(
+                chosen
+                    .samples_video
+                    .then_some(&VIDEO_SAMPLING_EXTENSIONS)
+                    .into_iter()
+                    .flatten(),
+            )
+            .map(|name| name.as_ptr())
+            .collect();
         let device = match unsafe {
             instance.create_device(
                 chosen.physical,
@@ -525,6 +549,8 @@ impl VulkanRenderer {
             queue: unsafe { device.get_device_queue(chosen.family, 0) },
             queue_family: chosen.family,
             output_on_device: chosen.output_on_device,
+            samples_video: chosen.samples_video,
+            video_acquires: Vec::new(),
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
             reduced_effects: chosen.info.software,
             info: chosen.info,
@@ -872,6 +898,150 @@ impl VulkanRenderer {
         }
     }
 
+    fn import_video_image(
+        &self,
+        width: i32,
+        height: i32,
+        layouts: &[vk::SubresourceLayout],
+        file: File,
+    ) -> Result<Image, RenderError> {
+        let mut explicit = vk::ImageDrmFormatModifierExplicitCreateInfoEXT::default()
+            .drm_format_modifier(u64::from(Modifier::Linear))
+            .plane_layouts(layouts);
+        let mut external = vk::ExternalMemoryImageCreateInfo::default()
+            .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        let image = unsafe {
+            self.device.create_image(
+                &vk::ImageCreateInfo::default()
+                    .flags(vk::ImageCreateFlags::MUTABLE_FORMAT)
+                    .image_type(vk::ImageType::TYPE_2D)
+                    .format(vk::Format::G8_B8R8_2PLANE_420_UNORM)
+                    .extent(vk::Extent3D {
+                        width: width.unsigned_abs(),
+                        height: height.unsigned_abs(),
+                        depth: 1,
+                    })
+                    .mip_levels(1)
+                    .array_layers(1)
+                    .samples(vk::SampleCountFlags::TYPE_1)
+                    .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
+                    .usage(vk::ImageUsageFlags::SAMPLED)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                    .initial_layout(vk::ImageLayout::UNDEFINED)
+                    .push_next(&mut explicit)
+                    .push_next(&mut external),
+                None,
+            )
+        }?;
+        let mut created = Image {
+            image,
+            memory: vk::DeviceMemory::null(),
+            view: vk::ImageView::null(),
+            width,
+            height,
+        };
+        match self.bind_imported_image(&mut created, file) {
+            Ok(()) => Ok(created),
+            Err(error) => {
+                self.destroy_image(&created);
+                Err(error)
+            }
+        }
+    }
+
+    fn bind_imported_image(&self, image: &mut Image, mut file: File) -> Result<(), RenderError> {
+        let size = file.seek(SeekFrom::End(0))?;
+        let requirements = unsafe { self.device.get_image_memory_requirements(image.image) };
+        if requirements.size > size {
+            return Err(RenderError::BufferOutOfBounds);
+        }
+        let mut properties = vk::MemoryFdPropertiesKHR::default();
+        unsafe {
+            self.external_memory_fd.get_memory_fd_properties(
+                vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
+                file.as_raw_fd(),
+                &mut properties,
+            )
+        }?;
+        let kind = self.memory_type(
+            requirements.memory_type_bits & properties.memory_type_bits,
+            vk::MemoryPropertyFlags::empty(),
+        )?;
+        let fd = file.into_raw_fd();
+        let mut import = vk::ImportMemoryFdInfoKHR::default()
+            .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT)
+            .fd(fd);
+        let mut dedicated = vk::MemoryDedicatedAllocateInfo::default().image(image.image);
+        match self.allocate(
+            &vk::MemoryAllocateInfo::default()
+                .allocation_size(requirements.size)
+                .memory_type_index(kind)
+                .push_next(&mut import)
+                .push_next(&mut dedicated),
+        ) {
+            Ok(memory) => image.memory = memory,
+            Err(error) => {
+                unsafe { smithay::reexports::rustix::io::close(fd) };
+                return Err(error.into());
+            }
+        }
+        unsafe { self.device.bind_image_memory(image.image, image.memory, 0) }?;
+        Ok(())
+    }
+
+    fn plane_view(
+        &self,
+        image: vk::Image,
+        format: vk::Format,
+        aspect: vk::ImageAspectFlags,
+    ) -> Result<vk::ImageView, RenderError> {
+        Ok(unsafe {
+            self.device.create_image_view(
+                &vk::ImageViewCreateInfo::default()
+                    .image(image)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(format)
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: aspect,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    }),
+                None,
+            )
+        }?)
+    }
+
+    fn record_video_acquires(&mut self) {
+        for id in std::mem::take(&mut self.video_acquires) {
+            let Some(texture) = self.textures.get_mut(&id) else {
+                continue;
+            };
+            let previous = if texture.readable {
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+            } else {
+                vk::ImageLayout::GENERAL
+            };
+            texture.readable = true;
+            let acquire = vk::ImageMemoryBarrier2::default()
+                .src_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
+                .dst_queue_family_index(self.queue_family)
+                .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
+                .dst_access_mask(vk::AccessFlags2::SHADER_SAMPLED_READ)
+                .old_layout(previous)
+                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image(texture.image.image)
+                .subresource_range(COLOR_RANGE);
+            unsafe {
+                self.device.cmd_pipeline_barrier2(
+                    self.command_buffer,
+                    &vk::DependencyInfo::default().image_memory_barriers(slice::from_ref(&acquire)),
+                );
+            }
+        }
+    }
+
     fn allocate(&self, info: &vk::MemoryAllocateInfo) -> Result<vk::DeviceMemory, vk::Result> {
         unsafe { self.device.allocate_memory(info, None) }.inspect_err(|error| {
             if *error == vk::Result::ERROR_OUT_OF_DEVICE_MEMORY {
@@ -1155,6 +1325,7 @@ impl VulkanRenderer {
             self.destroy_image(&removed.image);
         }
         self.copies.retain(|copy| copy.texture != id);
+        self.video_acquires.retain(|&acquire| acquire != id);
     }
 
     fn forget_target(&mut self, id: u64) {
@@ -1233,6 +1404,7 @@ impl VulkanRenderer {
                 self.textures.len(),
                 self.textures
                     .values()
+                    .filter(|texture| !texture.imported)
                     .map(|texture| image_bytes(&texture.image))
                     .sum(),
             ),
@@ -1283,7 +1455,7 @@ impl VulkanRenderer {
     }
 
     pub fn finish_uploads(&mut self) -> Result<(), RenderError> {
-        if self.copies.is_empty() {
+        if self.copies.is_empty() && self.video_acquires.is_empty() {
             return Ok(());
         }
         self.begin_commands()?;
@@ -1308,6 +1480,7 @@ impl VulkanRenderer {
     }
 
     fn record_copies(&mut self) {
+        self.record_video_acquires();
         let mut by_texture: HashMap<u64, Vec<&PendingCopy>> = HashMap::new();
         for copy in &self.copies {
             by_texture.entry(copy.texture).or_default().push(copy);

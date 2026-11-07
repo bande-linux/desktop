@@ -1,0 +1,100 @@
+Look Up the selected word with the desktop's bande-lookup, beside Search for
+
+--- a/browser/base/content/browser-context.inc.xhtml
++++ b/browser/base/content/browser-context.inc.xhtml
+@@ -365,6 +365,7 @@
+       <menuseparator id="context-sep-screenshots"/>
+       <menuitem id="context-add-engine"
+                 data-l10n-id="main-context-menu-add-engine"/>
++      <menuitem id="context-bande-lookup"/>
+       <menuitem id="context-searchselect"/>
+       <menuitem id="context-searchselect-private"/>
+       <menuitem id="context-translate-selection"
+--- a/browser/base/content/browser-context.js
++++ b/browser/base/content/browser-context.js
+@@ -195,6 +195,9 @@
+           }
+           gContextMenu.addSearchFieldAsEngine().catch(console.error);
+           break;
++        case "context-bande-lookup":
++          gContextMenu.bandeLookUp();
++          break;
+         case "context-searchselect":
+         case "context-searchselect-private":
+           gContextMenu.loadSearch({ event });
+--- a/browser/base/content/nsContextMenu.sys.mjs
++++ b/browser/base/content/nsContextMenu.sys.mjs
+@@ -28,6 +28,7 @@
+   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
+   SearchUIUtils: "moz-src:///browser/components/search/SearchUIUtils.sys.mjs",
+   SearchUtils: "moz-src:///toolkit/components/search/SearchUtils.sys.mjs",
++  Subprocess: "resource://gre/modules/Subprocess.sys.mjs",
+   ShortcutUtils: "resource://gre/modules/ShortcutUtils.sys.mjs",
+   TranslationsParent: "resource://gre/actors/TranslationsParent.sys.mjs",
+   TranslationsUtils:
+@@ -36,6 +37,18 @@
+ });
+ 
+ import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
++
++const BANDE_LOOK_UP = "/usr/bin/bande-lookup";
++let bandeLookUpFound = null;
++
++function bandeLookUpInstalled() {
++  if (bandeLookUpFound === null) {
++    let file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
++    file.initWithPath(BANDE_LOOK_UP);
++    bandeLookUpFound = file.exists();
++  }
++  return bandeLookUpFound;
++}
+ import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
+ import { PdfjsContextMenu } from "resource://pdf.js/PdfjsContextMenu.sys.mjs";
+ 
+@@ -909,6 +922,7 @@
+       this.setItemAttr("context-frameOsPid", "label", "PID: " + frameOsPid);
+     }
+ 
++    this.showBandeLookUpItem();
+     this.showAndFormatSearchContextItem();
+     this.showTranslateSelectionItem();
+     lazy.GenAI.buildAskChatMenu(document.getElementById("context-ask-chat"), {
+@@ -2752,6 +2766,29 @@
+     this.localizeTranslateSelectionItem(translateSelectionItem);
+   }
+ 
++  showBandeLookUpItem() {
++    let item = this.window.document.getElementById("context-bande-lookup");
++    let word = this.isTextSelected ? this.selectedText.trim() : "";
++    item.hidden =
++      !word || word.length > 100 || this.onImage || !bandeLookUpInstalled();
++    if (item.hidden) {
++      return;
++    }
++    let shown = word.length > 30 ? word.slice(0, 30) + "\u2026" : word;
++    this.window.document.l10n.setAttributes(
++      item,
++      "main-context-menu-bande-look-up",
++      { word: shown }
++    );
++  }
++
++  bandeLookUp() {
++    let word = this.selectedText.trim();
++    lazy.Subprocess.call({ command: BANDE_LOOK_UP, arguments: [word] })
++      .then(process => process.wait())
++      .catch(console.error);
++  }
++
+   // Formats the 'Search <engine> for "<selection or link text>"' context menu.
+   showAndFormatSearchContextItem() {
+     let selectedText = this.isTextSelected
+--- a/browser/locales/en-US/browser/browserContext.ftl
++++ b/browser/locales/en-US/browser/browserContext.ftl
+@@ -499,3 +499,6 @@
+ 
+ main-context-menu-pdfjs-save-page =
+     .label = Save selection as…
++
++main-context-menu-bande-look-up =
++    .label = Look Up “{ $word }”

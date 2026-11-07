@@ -29,3 +29,4 @@ bande/no-default-browser-prompt.patch
 bande/new-tab-page.patch
 bande/menu-button-in-row.patch
 bande/about-pages.patch
+bande/look-up.patch

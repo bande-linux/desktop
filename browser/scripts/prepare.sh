@@ -111,6 +111,7 @@ for lang in $(cat "$repo/l10n/languages"); do
     find "l10n-$lang" -type f \( -name '*.ftl' -o -name '*.properties' -o -name '*.dtd' \) \
         -exec sed -i -E '/^\s*(#|<!--)/! s/\bFirefox\b/Browser/g' {} +
 done
+printf '\nmain-context-menu-bande-look-up =\n    .label = Slå upp ”{ $word }”\n' >> l10n-sv-SE/browser/browser/browserContext.ftl
 python3 "$repo/scripts/fetch-tracking-lists.py" .
 python3 "$repo/scripts/gut.py" . browser/components/asrouter browser/components/ipprotection \
     toolkit/components/ipprotection browser/components/genai browser/components/aiwindow \

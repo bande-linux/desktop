@@ -15,7 +15,7 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::{Value, json};
 
 use crate::config::Config;
-use crate::spool::{MANIFEST, Stored};
+use crate::spool::{MANIFEST, STATE, Stored};
 
 const SYSTEM_ROOTS: &str = "/etc/ssl/certs/ca-certificates.crt";
 const PATH: &str = "/v1/reports";
@@ -88,16 +88,13 @@ fn boundary(id: &str) -> String {
 fn body_of(report: &Stored, without: &[String]) -> io::Result<(Vec<u8>, Vec<String>)> {
     let mut manifest = report.manifest.clone();
     manifest.insert("occurrences".to_owned(), json!(report.occurrences));
+    manifest.remove("owner_uid");
     let mut attachments: Vec<(String, Vec<u8>)> = Vec::new();
     for entry in fs::read_dir(&report.path)?.flatten() {
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
-        if name != MANIFEST
-            && !name.starts_with('.')
-            && name != "state.json"
-            && !without.contains(&name)
-        {
+        if name != MANIFEST && !name.starts_with('.') && name != STATE && !without.contains(&name) {
             attachments.push((name.clone(), fs::read(entry.path())?));
         }
     }

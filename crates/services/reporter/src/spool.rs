@@ -12,7 +12,7 @@ const OUTBOX: &str = "outbox";
 const STAGING: &str = "tmp";
 const INSTALL_ID: &str = "machine";
 pub const MANIFEST: &str = "manifest.json";
-const STATE: &str = "state.json";
+pub const STATE: &str = "state.json";
 const UUID_SOURCE: &str = "/proc/sys/kernel/random/uuid";
 const OS_RELEASE: &str = "/etc/os-release";
 const KERNEL_RELEASE: &str = "/proc/sys/kernel/osrelease";
@@ -339,6 +339,13 @@ impl Spool {
         let path = self.report_path(id)?;
         fs::remove_dir_all(&path)?;
         sync_folder(&self.root.join(REPORTS))
+    }
+
+    pub fn clear_outbox(&self) -> io::Result<()> {
+        for id in self.waiting()? {
+            self.unqueue(&id)?;
+        }
+        Ok(())
     }
 
     pub fn prune(&self) {

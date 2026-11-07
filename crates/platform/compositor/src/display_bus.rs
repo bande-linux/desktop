@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
+use std::thread;
 
 use smithay::reexports::calloop::channel::Sender;
 use zbus::blocking::Connection;
@@ -35,25 +36,28 @@ impl Displays {
 
 pub struct DisplaysHandle {
     connected: Arc<Mutex<Vec<ConnectedDisplay>>>,
-    interface: InterfaceRef<Displays>,
+    changed: mpsc::Sender<()>,
 }
 
 impl DisplaysHandle {
     pub fn publish(&self, displays: Vec<ConnectedDisplay>) {
-        {
-            let mut connected = self
-                .connected
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            if *connected == displays {
-                return;
-            }
+        let mut connected = self
+            .connected
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if *connected != displays {
             *connected = displays;
+            let _ = self.changed.send(());
         }
+    }
+}
+
+fn announce(interface: InterfaceRef<Displays>, changed: mpsc::Receiver<()>) {
+    for () in changed {
         let emitted = zbus::block_on(
-            self.interface
+            interface
                 .get()
-                .connected_changed(self.interface.signal_emitter()),
+                .connected_changed(interface.signal_emitter()),
         );
         if let Err(error) = emitted {
             tracing::warn!("cannot announce the connected displays: {error}");
@@ -76,10 +80,9 @@ pub fn serve_displays(
     )?;
     let interface = server.interface::<_, Displays>(PATH)?;
     connection.request_name(NAME)?;
-    Ok(DisplaysHandle {
-        connected,
-        interface,
-    })
+    let (changed, received) = mpsc::channel();
+    thread::spawn(move || announce(interface, received));
+    Ok(DisplaysHandle { connected, changed })
 }
 
 impl Compositor {

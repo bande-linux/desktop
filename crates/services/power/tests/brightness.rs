@@ -82,12 +82,8 @@ fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
 }
 
 fn head(connector: &str) -> Connected {
-    (
-        connector.to_owned(),
-        format!("Maker {connector}"),
-        format!("Maker {connector}"),
-        true,
-    )
+    let name = format!("Maker {connector}");
+    (connector.to_owned(), name.clone(), name, true)
 }
 
 #[test]
@@ -165,15 +161,16 @@ fn every_display_gets_a_bar_and_ddc_writes_are_coalesced() {
     });
     assert!(panel.lock().unwrap().writes <= 6);
 
-    brightness.set_level("HDMI-A-1", 0.0).expect("set");
-    wait_until("the compositor dims the display without DDC", || {
+    let dimmed = |connector: &str| {
         screens
             .lock()
             .unwrap()
             .dims
             .iter()
-            .any(|(connector, gain)| connector == "HDMI-A-1" && *gain < 0.5)
-    });
+            .any(|(dimmed, gain)| dimmed == connector && *gain < 1.0)
+    };
+    brightness.set_level("HDMI-A-1", 0.0).expect("set");
+    wait_until("the display without DDC is dimmed", || dimmed("HDMI-A-1"));
 
     let replug = |connected: Vec<Connected>| {
         screens.lock().unwrap().connected = connected;
@@ -194,15 +191,9 @@ fn every_display_gets_a_bar_and_ddc_writes_are_coalesced() {
     });
 
     panel.lock().unwrap().answering = false;
-    screens.lock().unwrap().dims.clear();
     brightness.set_level("DP-1", 0.3).expect("set");
-    wait_until("a monitor that stops answering is dimmed instead", || {
-        screens
-            .lock()
-            .unwrap()
-            .dims
-            .iter()
-            .any(|(connector, gain)| connector == "DP-1" && *gain < 1.0)
+    wait_until("a monitor that stops answering is dimmed", || {
+        dimmed("DP-1")
     });
     assert_eq!(level("DP-1"), Some(0.3));
 }

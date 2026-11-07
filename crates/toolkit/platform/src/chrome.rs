@@ -168,7 +168,7 @@ impl Frame {
     pub(crate) fn zone_at(&self, point: Point) -> Zone {
         let window = self.window();
         if self.resizes
-            && let Some(edge) = resize_zone(window, self.margin, point)
+            && let Some(edge) = resize_zone(window, point)
         {
             return Zone::Resize(edge);
         }

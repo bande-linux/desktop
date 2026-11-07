@@ -113,22 +113,21 @@ The mini stays plain ext4 and is not reinstalled.
   only if a profile survives real use. `systemd` hardening for the services we own costs little.
 - **Signed updates, audit:** apt's `InRelease` signatures with `Signed-By` from
   `bande-archive-keyring`, `Valid-Until` on our archive. Open: firmware and kernel payload paths.
-- **Firewall.** With SSH off and LLMNR off, only mDNS listens by default, so a firewall protects mostly
-  what the person starts later (a dev server on a café network). Justified, cheap with nftables: inbound
-  default deny except established, ICMP, mDNS, DHCP; on by default; a switch in the pane; Remote Login
-  opens its own port. Decided after the ports of `fix-devices` and file sharing are known.
+- **Firewall: no default.** With SSH off and LLMNR off only mDNS listens, so a default-deny ruleset
+  protects nothing that is on by default, and it silently breaks what a person starts on purpose (file
+  sharing, a dev server). macOS also ships its firewall off. Revisit if anything listens by default.
 
 ## Privacy & Security pane
 
 Real state only, read from the system: disk (Off, Encrypting N%, On, and whether a recovery key
 exists), Input Monitoring and Typing with who is allowed and who asked, screen recording and camera
-grants from the portal, Remote Login, firewall, update signature state, and one honest paragraph on
+grants from the portal, Remote Login, and one honest paragraph on
 what native apps can reach.
 
 ## Stages
 
 1. Input method and virtual keyboard gate, lock role, security context, secure input.
 2. Consent store, helper, notification, pane.
-3. Remaining gates: overlays, displays, idle; ptrace scope; SSH and LLMNR defaults.
+3. Remaining gates: overlays, displays, idle for third-party programs; ptrace scope; SSH and LLMNR defaults.
 4. Disk: helper, keyscript, `bande-unlock`, proven in QEMU, with first-run and update-safety.
-5. One password; firewall; signed-update audit results in the pane.
+5. One password; signed-update audit.

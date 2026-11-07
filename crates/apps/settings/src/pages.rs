@@ -736,6 +736,7 @@ impl SettingsView {
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
             List::KeyboardAccess => self.keyboard_access_rows(),
+            List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
             List::Passwords => self.keychain_rows(),

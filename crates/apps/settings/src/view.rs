@@ -278,6 +278,7 @@ pub struct SettingsView {
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
     pub(crate) permissions: Grants,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
+    pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
     stale: bool,
     rebuilt: bool,
@@ -373,6 +374,7 @@ impl SettingsView {
             default_apps: None,
             permissions: Vec::new(),
             keyboard_access: Vec::new(),
+            security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
             rebuilt: false,
@@ -787,6 +789,7 @@ impl SettingsView {
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
             Update::KeyboardAccess(access) => self.keyboard_access = access,
+            Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
                 if let Some(Detail::Printer(name)) = &self.detail
                     && !printers

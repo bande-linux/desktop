@@ -55,12 +55,12 @@ Platform later, only with outside translators. Weblate lists Fluent plurals as u
 
 ## Spelling
 
-Measured on this machine with Debian's `hunspell-sv` (4.6 MB unpacked `sv_SE`, 153,717 entries), on 38 Swedish words: compounds, inflections, and 12 errors.
+Measured on this machine with Debian's `hunspell-sv` (4.6 MB unpacked `sv_SE`, 153,717 entries), on 38 Swedish words: compounds, inflections, 10 misspellings and one nonsense word.
 
 | | spellbook 0.4.2 (Rust) | nuspell 5.1.9 (C++) | hunspell 1.7.6 (C++) |
 |---|---|---|---|
 | Accept/reject | all right | all right | all right |
-| First suggestion right | 10 of 11 | 10 of 11 | 8 of 11; none for 3 compounds |
+| First suggestion right | 10 of 10 | 10 of 10 | 6 of 10; none for 3 compounds |
 | Load + memory | 36 ms, 9 MB | 17 MB peak | 13 MB peak |
 | Check | about 16 µs a word | not separated | not separated |
 | Suggest | 5-235 ms | whole run 0.8 s | whole run 0.2 s |
@@ -76,7 +76,7 @@ Red underline by the theme. The context menu gets suggestions, Ignore and Learn;
 
 **Which fields.** On by default in every `TextView` and `TextField`. A field says it is off: search, URL, path, email, numbers, code editors, Terminal. `SecureField` has no path to it.
 
-**Dictionaries.** Debian's `hunspell-*` (91 packages), installed with the language. English stays in the default install. Mixed-language text uses the set of chosen languages: correct if any accepts, as macOS's automatic mode does in effect.
+**Dictionaries.** Debian's `hunspell-*` (91 packages), installed with the language. English stays in the default install. Mixed-language text uses the set of chosen languages: a word is correct if any of them accepts it.
 
 **Autocorrect: not now.** Compounds make "one sure suggestion" risky in Swedish, and a wrong silent change is worse than an underline. Look again once spelling has been used for a while.
 

@@ -1,35 +1,17 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::Path;
-use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use bande_compositor::Compositor;
 use bande_protocols::client::bande_shell_v1::SessionEnd;
 use bande_test_bus::SessionBus;
-use bande_test_bus::drives::FakeLogind;
+use bande_test_bus::drives::{FakeLogind, FakeSystemd};
+use bande_test_wayland::keys::{KEY_ENTER, KEY_ESC};
 use bande_test_wayland::{Frames, SeparateApp, TestClient, act_as_separate_app, chord, headless};
-use zbus::zvariant::OwnedObjectPath;
 
 const DIALOG: &str = "org.bande.MenuBar";
-const KEY_ESC: u32 = 1;
-const KEY_ENTER: u32 = 28;
 const PATIENCE: Duration = Duration::from_secs(40);
-
-#[derive(Clone, Default)]
-struct Systemd(Arc<Mutex<Vec<String>>>);
-
-#[zbus::interface(name = "org.freedesktop.systemd1.Manager")]
-impl Systemd {
-    fn stop_unit(&self, name: String, _mode: String) -> zbus::fdo::Result<OwnedObjectPath> {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(name);
-        OwnedObjectPath::try_from("/org/freedesktop/systemd1/job/1")
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
-    }
-}
 
 struct Scene {
     server: Compositor,
@@ -39,8 +21,8 @@ struct Scene {
 }
 
 impl Scene {
-    fn open(server_side: i32) -> Self {
-        let mut server = headless(server_side, server_side);
+    fn open() -> Self {
+        let mut server = headless(900, 900);
         server.set_session_dialog(Path::new(env!("CARGO_BIN_EXE_bande-shell")));
         let mut shell = TestClient::connect_as_shell(&mut server);
         shell.listen_as_shell(&mut server);
@@ -82,10 +64,11 @@ impl Scene {
             .any(|window| window.app_id() == DIALOG && window.size().is_some())
     }
 
-    fn ask(&mut self, ending: SessionEnd) {
+    fn confirm(&mut self, ending: SessionEnd) {
         self.shell.confirm_session_end(&mut self.server, ending);
         self.wait("the confirmation opens", Self::dialog_shown);
         self.pass(Duration::from_millis(200));
+        chord(&mut self.server, &[KEY_ENTER]);
     }
 }
 
@@ -102,16 +85,10 @@ fn a_confirmed_ending_goes_through_and_something_in_the_way_is_shown() {
         std::env::set_var("XDG_STATE_HOME", state.path());
     }
     let logind = FakeLogind::start(&bus).expect("fake logind");
-    let stopped = Systemd::default();
-    let _systemd = zbus::blocking::connection::Builder::address(bus.address())
-        .and_then(|builder| builder.name("org.freedesktop.systemd1"))
-        .and_then(|builder| builder.serve_at("/org/freedesktop/systemd1", stopped.clone()))
-        .and_then(|builder| builder.build())
-        .expect("fake systemd");
+    let systemd = FakeSystemd::start(&bus).expect("fake systemd");
 
-    let mut scene = Scene::open(900);
-    scene.ask(SessionEnd::ShutDown);
-    chord(&mut scene.server, &[KEY_ENTER]);
+    let mut scene = Scene::open();
+    scene.confirm(SessionEnd::ShutDown);
     scene.wait("the computer is asked to power off", |_| {
         logind.ended() == ["poweroff"]
     });
@@ -121,14 +98,13 @@ fn a_confirmed_ending_goes_through_and_something_in_the_way_is_shown() {
     );
     drop(scene);
 
-    let mut scene = Scene::open(900);
+    let mut scene = Scene::open();
     let mut stuck = SeparateApp::launch(
         &mut scene.server,
         "a_confirmed_ending_goes_through_and_something_in_the_way_is_shown",
     );
     stuck.show_window_of(&mut scene.server, 64, "org.example.Stuck");
-    scene.ask(SessionEnd::Restart);
-    chord(&mut scene.server, &[KEY_ENTER]);
+    scene.confirm(SessionEnd::Restart);
     scene.wait("a hung app does not stop the restart", |_| {
         logind.ended() == ["poweroff", "reboot"]
     });
@@ -143,9 +119,8 @@ fn a_confirmed_ending_goes_through_and_something_in_the_way_is_shown() {
     drop(stuck);
 
     logind.inhibit("Software Update", "Installing updates");
-    let mut scene = Scene::open(900);
-    scene.ask(SessionEnd::ShutDown);
-    chord(&mut scene.server, &[KEY_ENTER]);
+    let mut scene = Scene::open();
+    scene.confirm(SessionEnd::ShutDown);
     scene.pass(Duration::from_secs(2));
     assert_eq!(logind.ended(), ["poweroff", "reboot"]);
     assert!(
@@ -157,15 +132,9 @@ fn a_confirmed_ending_goes_through_and_something_in_the_way_is_shown() {
     assert_eq!(logind.ended(), ["poweroff", "reboot"]);
     drop(scene);
 
-    let mut scene = Scene::open(900);
-    scene.ask(SessionEnd::LogOut);
-    chord(&mut scene.server, &[KEY_ENTER]);
+    let mut scene = Scene::open();
+    scene.confirm(SessionEnd::LogOut);
     scene.wait("Log Out stops the compositor's service", |_| {
-        stopped
-            .0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .as_slice()
-            == ["bande-compositor.service"]
+        systemd.stopped() == ["bande-compositor.service"]
     });
 }

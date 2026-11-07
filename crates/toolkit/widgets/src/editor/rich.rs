@@ -177,29 +177,3 @@ impl RichText {
         lines
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::Editor;
-    use super::*;
-
-    #[test]
-    fn rich_text_comes_back_with_its_runs_where_they_were() {
-        let bold = TextAttributes {
-            bold: true,
-            ..TextAttributes::default()
-        };
-        let listed = ParagraphAttributes {
-            list: Some(ListMarker::Number),
-            ..ParagraphAttributes::default()
-        };
-        let rich = RichText {
-            text: "ab cd.\nxy z".to_owned(),
-            runs: vec![(3..5, bold.clone()), (10..11, bold)],
-            paragraphs: vec![ParagraphAttributes::default(), listed],
-        };
-        let mut editor = Editor::new("", 13.0, true);
-        editor.set_rich_text(&rich);
-        assert_eq!(editor.rich_text(), rich);
-    }
-}

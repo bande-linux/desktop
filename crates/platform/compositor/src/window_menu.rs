@@ -888,28 +888,4 @@ impl Compositor {
     pub fn window_menu_tick(&mut self, now: Instant) -> Option<Instant> {
         self.state.window_menu_due(now)
     }
-
-    pub fn window_menu(&self) -> Vec<Vec<String>> {
-        self.state
-            .window_menus
-            .open
-            .as_ref()
-            .filter(|open| !open.closing)
-            .map(|open| {
-                open.tracker
-                    .panels()
-                    .iter()
-                    .map(|panel| {
-                        panel
-                            .menu()
-                            .items
-                            .iter()
-                            .filter(|item| !item.separator)
-                            .map(|item| item.title.clone())
-                            .collect()
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
 }

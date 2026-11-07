@@ -106,7 +106,7 @@ when they reach the screen is Bande's own.
   yet verified on Apple hardware.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
-  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
+  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into
   dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
   drawn regions copied out, by the GPU when the device is a real one that can import the buffer,
   otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. udev change

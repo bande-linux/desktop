@@ -2,14 +2,14 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use bande_content::Preview;
-use bande_fs::{Entry, Purpose, format_date, format_size};
+use bande_fs::{Entry, Purpose, format_date, format_size, is_hidden};
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::ui::{
     BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
 };
 use bande_toolkit::{
-    Color, Cut, Elevation, Image, Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign,
-    TextRole, TextStyle, shortened,
+    Color, Cut, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Shape,
+    TextAlign, TextRole, TextStyle, shortened,
 };
 
 use crate::L10N;
@@ -68,6 +68,17 @@ pub(crate) fn centred(area: Rect, width: f32, height: f32) -> Rect {
         width,
         height,
     )
+}
+
+pub(crate) fn entry_picture(entry: &Entry, rect: Rect, image: Image) -> Item {
+    let picture = Item::Image { rect, image };
+    match is_hidden(&entry.name) {
+        true => Item::Opacity {
+            alpha: Palette::DIMMED_ALPHA,
+            items: vec![picture],
+        },
+        false => picture,
+    }
 }
 
 pub(crate) fn fitted(area: Rect, image: &Image) -> Rect {
@@ -136,6 +147,13 @@ impl FilesView {
             .icon_names_for_name(target.as_deref().unwrap_or(&entry.name));
         let names = names.iter().map(String::as_str).collect::<Vec<_>>();
         self.icons.first(&names, pixels)
+    }
+
+    pub(crate) fn entry_ink(&self, entry: &Entry) -> Color {
+        match is_hidden(&entry.name) {
+            true => self.palette.ink2,
+            false => self.palette.ink,
+        }
     }
 
     fn fill(&self, rect: Rect, radius: f32, color: Color) -> Item {
@@ -559,7 +577,7 @@ impl FilesView {
             let color = if marked && active {
                 self.palette.on_accent
             } else {
-                self.palette.ink
+                self.entry_ink(entry)
             };
             if marked {
                 rows.push(self.fill(
@@ -573,15 +591,13 @@ impl FilesView {
                 ));
             }
             if let Some(image) = self.entry_icon(entry, ICON_PIXELS) {
-                rows.push(Item::Image {
-                    rect: Rect::new(
-                        row.x + 6.0,
-                        y + ((ROW_HEIGHT - ICON_SIZE) / 2.0).round(),
-                        ICON_SIZE,
-                        ICON_SIZE,
-                    ),
-                    image,
-                });
+                let rect = Rect::new(
+                    row.x + 6.0,
+                    y + ((ROW_HEIGHT - ICON_SIZE) / 2.0).round(),
+                    ICON_SIZE,
+                    ICON_SIZE,
+                );
+                rows.push(entry_picture(entry, rect, image));
             }
             let name_x = row.x + 28.0;
             if renaming.as_ref() == Some(&entry.path) {

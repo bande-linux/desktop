@@ -881,8 +881,10 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, u64> for Capture {
             ext_image_copy_capture_session_v1::Event::DmabufFormat { format, modifiers } => {
                 session.dmabuf_offered |= format == DMABUF_FOURCC
                     && modifiers
-                        .chunks_exact(8)
-                        .any(|modifier| modifier == 0u64.to_ne_bytes());
+                        .as_chunks::<8>()
+                        .0
+                        .iter()
+                        .any(|modifier| *modifier == 0u64.to_ne_bytes());
             }
             ext_image_copy_capture_session_v1::Event::ShmFormat {
                 format: WEnum::Value(format),

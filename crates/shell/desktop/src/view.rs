@@ -499,7 +499,9 @@ impl DesktopView {
                 .map_or(name.len(), |stem| stem.len()),
             _ => name.len(),
         };
-        let mut field = TextField::new("", &name, |_| {}).in_place(LABEL_SIZE);
+        let mut field = TextField::new("", &name, |_| {})
+            .without_text_checking()
+            .in_place(LABEL_SIZE);
         field.select(0..stem);
         let at = self.editor_bounds(path).map(rect).unwrap_or_default();
         self.remove_editor();

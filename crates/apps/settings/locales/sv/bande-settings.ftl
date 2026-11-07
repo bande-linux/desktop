@@ -1,0 +1,10 @@
+spelling-check = Kontrollera stavning
+spelling-learned-none = Inga inlärda ord än.
+spelling-autocorrect = Rätta stavning automatiskt
+spelling-capitalise = Inled meningar med stor bokstav
+spelling-double-space = Lägg till punkt med dubbla mellanslag
+spelling-smart-quotes = Använd typografiska citattecken och tankstreck
+spelling-links = Visa webb- och e-postadresser som länkar
+replace-from = Ersätt
+replace-to = Med
+replace-add = Lägg till ersättning

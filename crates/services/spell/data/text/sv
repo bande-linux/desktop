@@ -1,1 +1,8 @@
 dictionary = sv_SE
+sentence-enders = .!?
+double-space = .
+quote-open = ”
+quote-close = ”
+apostrophe-open = ’
+apostrophe-close = ’
+dash = –

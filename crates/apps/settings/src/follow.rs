@@ -41,6 +41,7 @@ use crate::services::{
 };
 use crate::sharing::{SharingCommand, SharingState, follow_sharing};
 use crate::software::{SoftwareCommand, SoftwareState, follow_software};
+use crate::spelling::{SpellingCommand, SpellingState, follow_spelling};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
@@ -89,6 +90,7 @@ pub enum Update {
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
     KeyboardAccess(Vec<KeyboardAccess>),
+    Spelling(SpellingState),
     Security(SecurityStatus),
     Printers(PrintersState),
     Sharing(SharingState),
@@ -127,6 +129,7 @@ pub enum Command {
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
     KeyboardAccess(String, bool),
+    Spelling(SpellingCommand),
     Printers(PrinterCommand),
     Sharing(SharingCommand),
     Users(UsersCommand),
@@ -377,6 +380,7 @@ pub struct Services {
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
     keyboard_access: Sender<(String, bool)>,
+    spelling: Sender<SpellingCommand>,
     passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
@@ -419,6 +423,7 @@ impl Services {
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
             keyboard_access: follow_keyboard_access(updates.clone()),
+            spelling: follow_spelling(updates.clone()),
             _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
@@ -469,6 +474,7 @@ impl Services {
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
             Command::KeyboardAccess(line, on) => self.keyboard_access.send((line, on)).is_ok(),
+            Command::Spelling(command) => self.spelling.send(command).is_ok(),
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Sharing(command) => self.sharing.send(command).is_ok(),

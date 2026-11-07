@@ -34,6 +34,7 @@ mod security_status;
 mod services;
 mod sharing;
 mod software;
+mod spelling;
 mod state;
 mod storage;
 mod time;

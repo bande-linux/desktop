@@ -233,6 +233,7 @@ pub enum Request {
     NewWindow,
     OpenTerminal(PathBuf),
     ShowEmojiPicker,
+    LookUp(String),
     PlaySound(&'static str),
     ShowHidden(bool),
 }

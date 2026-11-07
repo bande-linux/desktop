@@ -1205,6 +1205,7 @@ impl Files {
                 }
                 self.load_sidebars(cx);
             }
+            Request::LookUp(text) => window.look_up(text),
             Request::ShowEmojiPicker => {
                 if let Err(error) = window.show_emoji_picker() {
                     tracing::warn!("cannot show the emoji picker: {error}");

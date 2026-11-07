@@ -1,6 +1,8 @@
 use accesskit::{Node, Role};
 
 use super::{Context, Size, Widget, WidgetId};
+use parley::Selection;
+
 use bande_graphics::{Item, Paragraph, Point, Rect, TextAlign, TextStyle};
 
 pub struct Label {
@@ -80,6 +82,17 @@ impl Widget for Label {
                 paragraph: paragraph.clone(),
             });
         }
+    }
+
+    fn word_at(&mut self, _cx: &mut Context, point: Point) -> Option<String> {
+        let paragraph = self.paragraph.as_ref()?;
+        let range = Selection::word_from_point(
+            paragraph.layout(),
+            point.x - self.frame.x,
+            point.y - self.frame.y,
+        )
+        .text_range();
+        self.text.get(range).map(str::to_owned)
     }
 
     fn access(&self, _cx: &Context) -> Node {

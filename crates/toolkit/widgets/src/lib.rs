@@ -91,6 +91,8 @@ pub type Animated = bande_spring::Animated<Instant>;
 
 use bande_l10n::Localizer;
 
+const LOOK_UP_ACTION: &str = "look-up-word";
+const LOOK_UP_LONGEST: usize = 100;
 static L10N: LazyLock<Localizer> =
     LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-widgets")));
 
@@ -177,6 +179,7 @@ pub struct Context {
     clipboard: Option<ClipboardRequest>,
     input_method_reset: bool,
     emoji_picker: bool,
+    look_up: Option<String>,
     menu: Option<(Menu, Point)>,
     drag: Option<String>,
     capture: Option<CaptureRequest>,
@@ -223,6 +226,7 @@ impl Context {
             clipboard: None,
             input_method_reset: false,
             emoji_picker: false,
+            look_up: None,
             menu: None,
             drag: None,
             capture: None,
@@ -335,6 +339,14 @@ pub trait Widget: Any {
         None
     }
 
+    fn selected_text(&self) -> Option<String> {
+        None
+    }
+
+    fn word_at(&mut self, _cx: &mut Context, _point: Point) -> Option<String> {
+        None
+    }
+
     fn menu_action(&mut self, _cx: &mut Context, _action: &str) -> bool {
         false
     }
@@ -386,6 +398,7 @@ pub struct Ui {
     hovered: Vec<WidgetId>,
     pointer: Option<Point>,
     menu_owner: Option<WidgetId>,
+    menu_look_up: Option<String>,
     menu_request: Option<(Menu, Point)>,
     awaiting_paste: bool,
     sheet: Option<Sheet>,
@@ -534,6 +547,7 @@ impl Ui {
             hovered: Vec::new(),
             pointer: None,
             menu_owner: None,
+            menu_look_up: None,
             menu_request: None,
             awaiting_paste: false,
             sheet: None,
@@ -882,6 +896,16 @@ impl Ui {
                 self.show_focus_tooltip();
                 true
             }
+            Event::Key {
+                key: Key::Character('d'),
+                modifiers:
+                    Modifiers {
+                        control: true,
+                        logo: true,
+                        shift: false,
+                        alt: false,
+                    },
+            } => self.look_up_at_pointer(),
             Event::Key { key, modifiers } if opens_menu(*key, *modifiers) => {
                 self.request_keyboard_menu()
             }
@@ -950,25 +974,77 @@ impl Ui {
         }
         let frame = find(active, target).map_or_else(|| active.frame(), |widget| widget.frame());
         let point = Point::new(frame.x, frame.y + frame.height);
-        self.request_menu_along(path, point)
+        let look_up = self.text_to_look_up(&path, None);
+        self.request_menu_along(path, point, look_up)
     }
 
     fn request_menu(&mut self, point: Point) -> bool {
-        self.request_menu_along(self.hovered.clone(), point)
+        let path = self.hovered.clone();
+        let look_up = self.text_to_look_up(&path, Some(point));
+        self.request_menu_along(path, point, look_up)
     }
 
-    fn request_menu_along(&mut self, path: Vec<WidgetId>, point: Point) -> bool {
+    fn text_to_look_up(&mut self, path: &[WidgetId], point: Option<Point>) -> Option<String> {
+        path.iter().rev().find_map(|id| {
+            let widget = lookup_in(&mut self.root, &mut self.sheet, *id)?;
+            widget
+                .selected_text()
+                .or_else(|| widget.word_at(&mut self.cx, point?))
+                .map(|text| text.trim().to_owned())
+                .filter(|text| {
+                    text.chars().any(char::is_alphanumeric)
+                        && text.chars().count() <= LOOK_UP_LONGEST
+                })
+        })
+    }
+
+    fn look_up_at_pointer(&mut self) -> bool {
+        let focused = Vec::from_iter(self.cx.focus);
+        let text = self.text_to_look_up(&focused, None).or_else(|| {
+            let path = self.hovered.clone();
+            self.text_to_look_up(&path, self.pointer)
+        });
+        let found = text.is_some();
+        self.cx.look_up = text;
+        found
+    }
+
+    fn request_menu_along(
+        &mut self,
+        path: Vec<WidgetId>,
+        point: Point,
+        look_up: Option<String>,
+    ) -> bool {
+        let innermost = path.last().copied();
+        let mut found = None;
         for id in path.into_iter().rev() {
             let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
                 continue;
             };
             if let Some(menu) = widget.context_menu(&mut self.cx, point) {
-                self.menu_owner = Some(id);
-                self.menu_request = Some((menu, point));
-                return true;
+                found = Some((id, menu));
+                break;
             }
         }
-        false
+        let (owner, mut menu) = match (found, innermost, &look_up) {
+            (Some(found), _, _) => found,
+            (None, Some(innermost), Some(_)) => (innermost, Menu::new(Vec::new())),
+            _ => return false,
+        };
+        if let Some(text) = &look_up {
+            if !menu.items.is_empty() {
+                menu.items.insert(0, MenuItem::separator());
+            }
+            let title = L10N.tr_args("look-up", [("word", text.as_str().into())]);
+            menu.items.insert(
+                0,
+                MenuItem::new(&title, LOOK_UP_ACTION).shortcut("Ctrl+Super+D"),
+            );
+        }
+        self.menu_look_up = look_up;
+        self.menu_owner = Some(owner);
+        self.menu_request = Some((menu, point));
+        true
     }
 
     pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
@@ -1076,6 +1152,10 @@ impl Ui {
         true
     }
 
+    pub fn take_look_up_request(&mut self) -> Option<String> {
+        self.cx.look_up.take()
+    }
+
     pub fn take_emoji_picker_request(&mut self) -> bool {
         std::mem::take(&mut self.cx.emoji_picker)
     }
@@ -1097,6 +1177,10 @@ impl Ui {
         let Some(owner) = self.menu_owner.take() else {
             return false;
         };
+        if action == LOOK_UP_ACTION {
+            self.cx.look_up = self.menu_look_up.take();
+            return true;
+        }
         let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, owner) else {
             return false;
         };

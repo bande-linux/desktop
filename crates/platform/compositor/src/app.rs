@@ -427,6 +427,17 @@ impl Dispatch<BandeAppV1, ()> for State {
                     state.needs_redraw = true;
                 }
             }
+            bande_app_v1::Request::SetPopover { toplevel }
+                if toplevel.client() == resource.client() =>
+            {
+                if let Some(index) = state
+                    .windows
+                    .iter()
+                    .position(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                {
+                    state.windows[index].popover = true;
+                }
+            }
             bande_app_v1::Request::SetPanelOrigin {
                 toplevel,
                 owner,

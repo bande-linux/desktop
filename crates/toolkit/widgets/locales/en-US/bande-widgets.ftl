@@ -9,3 +9,4 @@ clear-search = Clear
 show-choices = Show Choices
 caps-lock-on = Caps Lock is on
 release-capture = Press { $chord } to release
+look-up = Look Up “{ $word }”

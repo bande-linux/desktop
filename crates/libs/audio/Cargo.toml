@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 pipewire.workspace = true
+rustix = { workspace = true, features = ["fs"] }
 serde_json.workspace = true
 tracing.workspace = true
 

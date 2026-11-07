@@ -23,6 +23,7 @@ const SESSION_UNITS: [&str; 2] = ["bande-compositor.service", "dbus.service"];
     default_path = "/org/freedesktop/systemd1"
 )]
 trait Systemd {
+    fn reload(&self) -> zbus::Result<()>;
     fn try_restart_unit(&self, name: &str, mode: &str) -> zbus::Result<OwnedObjectPath>;
 }
 
@@ -110,6 +111,27 @@ fn holders() -> Vec<(u32, Holder)> {
 
 pub(crate) fn finish_in_session(session: &Connection) -> Stale {
     let found = holders();
+    if !found.is_empty() {
+        restart_services(session, &found);
+    }
+    stale_of(&found)
+}
+
+pub(crate) fn look() -> Stale {
+    stale_of(&holders())
+}
+
+fn restart_services(session: &Connection, found: &[(u32, Holder)]) {
+    let systemd = match SystemdProxyBlocking::new(session) {
+        Ok(systemd) => systemd,
+        Err(error) => {
+            tracing::warn!("cannot reach the user's systemd: {error}");
+            return;
+        }
+    };
+    if let Err(error) = systemd.reload() {
+        tracing::warn!("cannot reload the user's units: {error}");
+    }
     let services: BTreeSet<&str> = found
         .iter()
         .filter_map(|(_, holder)| match holder {
@@ -117,18 +139,14 @@ pub(crate) fn finish_in_session(session: &Connection) -> Stale {
             _ => None,
         })
         .collect();
-    if !services.is_empty() {
-        match SystemdProxyBlocking::new(session) {
-            Ok(systemd) => {
-                for unit in services {
-                    if let Err(error) = systemd.try_restart_unit(unit, "replace") {
-                        tracing::warn!("cannot restart {unit}: {error}");
-                    }
-                }
-            }
-            Err(error) => tracing::warn!("cannot reach the user's systemd: {error}"),
+    for unit in services {
+        if let Err(error) = systemd.try_restart_unit(unit, "replace") {
+            tracing::warn!("cannot restart {unit}: {error}");
         }
     }
+}
+
+fn stale_of(found: &[(u32, Holder)]) -> Stale {
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),

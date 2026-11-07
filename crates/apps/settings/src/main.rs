@@ -8,7 +8,8 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::Entry;
 use bande_settings::{
     Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
-    SoftwareCommand, UDEV_DATA, UpdateNotice, announce_updates, feed, sidebar_width,
+    SoftwareCommand, UDEV_DATA, UpdateNotice, announce_log_out, announce_updates, feed,
+    sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::{
@@ -328,9 +329,31 @@ impl Program for Settings {
 
 const CHECK_UPDATES: &str = "--check-updates";
 const ANNOUNCE_UPDATES: &str = "--announce-updates";
+const FINISH_UPDATE: &str = "--finish-update";
+const ANNOUNCE_LOG_OUT: &str = "--announce-log-out";
+const DELETED: &str = " (deleted)";
+
+fn installed_program() -> Result<String, std::io::Error> {
+    let program = std::env::current_exe()?.to_string_lossy().into_owned();
+    Ok(program
+        .strip_suffix(DELETED)
+        .map_or_else(|| program.clone(), str::to_owned))
+}
 
 fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
-    let program = std::env::current_exe()?.to_string_lossy().into_owned();
+    start_announcer(ANNOUNCE_UPDATES)
+}
+
+fn finish_update() -> Result<(), Box<dyn std::error::Error>> {
+    let session = zbus::blocking::Connection::session()?;
+    if bande_settings::finish_update(&session) {
+        start_announcer(ANNOUNCE_LOG_OUT)?;
+    }
+    Ok(())
+}
+
+fn start_announcer(flag: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let program = installed_program()?;
     let announcer = [
         "systemd-run",
         "--user",
@@ -339,22 +362,28 @@ fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
         "--collect",
         "--",
         &program,
-        ANNOUNCE_UPDATES,
+        flag,
     ]
     .map(str::to_owned);
     spawn_detached("", &announcer, None, None)?;
     Ok(())
 }
 
-fn announce_and_open_on_click() -> Result<(), Box<dyn std::error::Error>> {
-    let session = zbus::blocking::Connection::session()?;
+fn announce_updates_and_open_on_click() -> Result<(), Box<dyn std::error::Error>> {
     let system = zbus::blocking::Connection::system()?;
+    announce_and_open_on_click(|session| announce_updates(session, &system))
+}
+
+fn announce_and_open_on_click(
+    announce: impl FnOnce(&zbus::blocking::Connection) -> zbus::Result<Option<u32>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let session = zbus::blocking::Connection::session()?;
     let notice = UpdateNotice::listen(&session)?;
-    let Some(id) = announce_updates(&session, &system)? else {
+    let Some(id) = announce(&session)? else {
         return Ok(());
     };
     if notice.clicked(id)? {
-        let program = std::env::current_exe()?.to_string_lossy().into_owned();
+        let program = installed_program()?;
         let pane = PaneId::SoftwareUpdate.keyword().to_owned();
         spawn_detached(APP_ID, &[program, pane], None, None)?;
     }
@@ -380,7 +409,15 @@ fn main() -> ExitCode {
         }
         [flag] if flag == ANNOUNCE_UPDATES => {
             bande_log::init(INFO.package);
-            finish(announce_and_open_on_click())
+            finish(announce_updates_and_open_on_click())
+        }
+        [flag] if flag == FINISH_UPDATE => {
+            bande_log::init(INFO.package);
+            finish(finish_update())
+        }
+        [flag] if flag == ANNOUNCE_LOG_OUT => {
+            bande_log::init(INFO.package);
+            finish(announce_and_open_on_click(announce_log_out))
         }
         _ => bande_app::run::<Settings>(&INFO),
     }

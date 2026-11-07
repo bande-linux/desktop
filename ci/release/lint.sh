@@ -23,4 +23,5 @@ if grep -rnE '\.actions\b|Desktop Action|DesktopAction' crates/apps/files/src cr
     exit 1
 fi
 ci/check-apps.sh
+ci/release/check-protocols.py
 echo "lint passed"

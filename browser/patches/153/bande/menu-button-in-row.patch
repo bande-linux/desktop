@@ -18,23 +18,7 @@ Put the app menu button beside the window controls
  
      <hbox flex="1" align="end" class="toolbar-items">
        <toolbartabstop/>
-@@ -127,6 +136,15 @@
-     <html:img id="taskbar-tabs-favicon" alt="" decoding="sync" />
- 
-     <hbox class="titlebar-spacer" type="pre-tabs"/>
-+    <toolbaritem id="PanelUI-button"
-+                 removable="false">
-+      <toolbarbutton id="PanelUI-menu-button"
-+                     class="toolbarbutton-1"
-+                     delegatesanchor="true"
-+                     badged="true"
-+                     consumeanchor="PanelUI-button"
-+                     data-l10n-id="appmenu-menu-button-closed2"/>
-+    </toolbaritem>
-     <toolbartabstop/>
- 
-     <hbox id="nav-bar-customization-target" flex="1">
-@@ -523,15 +541,6 @@
+@@ -523,15 +532,6 @@
        </box>
      </toolbarbutton>
  

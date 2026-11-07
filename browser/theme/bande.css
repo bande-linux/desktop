@@ -101,6 +101,7 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
   }
 }
 #TabsToolbar { min-height: var(--bande-row-height) !important; }
+#appMenu-report-broken-site-button, #help_reportBrokenSite, #appMenu-help-report-site-issue { display: none !important; }
 #TabsToolbar .titlebar-spacer[type="pre-tabs"] {
   display: flex !important;
   width: var(--bande-well-gap) !important;

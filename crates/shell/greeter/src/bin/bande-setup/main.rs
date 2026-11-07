@@ -435,7 +435,7 @@ impl Assistant {
             let mut key = None;
             if encrypt {
                 match helper(&["encrypt"], Some(&format!("{}\n", password.as_str()))) {
-                    Ok(printed) => key = Some(printed),
+                    Ok(printed) => key = printed.lines().last().map(str::to_owned),
                     Err(error) => return Reply::Failed(error),
                 }
             }

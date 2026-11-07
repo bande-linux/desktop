@@ -307,8 +307,8 @@ impl View for QuickLookPane {
         self.panel.sources()
     }
 
-    fn source_ready(&mut self, _window: &mut Window, index: usize) -> bool {
-        self.panel.source_ready(index)
+    fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
+        self.panel.source_ready(window, index)
     }
 
     fn deadline(&self) -> Option<Instant> {

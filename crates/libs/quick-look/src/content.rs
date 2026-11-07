@@ -1,4 +1,7 @@
+use std::path::Path;
 use std::time::Instant;
+
+use bande_media_view::{Session, Stage};
 
 use bande_content::{Block, Code, Content, Contents, Frame, Level, Pixels};
 use bande_toolkit::Color;
@@ -87,14 +90,25 @@ pub enum Shown {
     Font(Box<FontView>),
     Folder { items: u64, bytes: Option<u64> },
     Archive(Contents),
-    Media,
+    Media(Option<Box<Stage>>),
     Other,
 }
 
+fn media_stage(path: &Path) -> Option<Box<Stage>> {
+    let mut session = Session::new();
+    match session.load(path, true) {
+        Ok(()) => Some(Box::new(Stage::new(session))),
+        Err(error) => {
+            tracing::info!("no media playback in Quick Look: {error}");
+            None
+        }
+    }
+}
+
 impl Shown {
-    pub fn from_loaded(loaded: Loaded) -> Self {
+    pub fn from_loaded(loaded: Loaded, path: Option<&Path>) -> Self {
         match loaded {
-            Loaded::Content(content) => Self::from_content(content),
+            Loaded::Content(content) => Self::from_content(content, path),
             Loaded::FontSample(sample) => sample
                 .and_then(
                     |Sample {
@@ -114,7 +128,7 @@ impl Shown {
         }
     }
 
-    fn from_content(content: Content) -> Self {
+    fn from_content(content: Content, path: Option<&Path>) -> Self {
         match content {
             Content::Picture(decoded) => {
                 let (levels, frames) = match decoded.pixels {
@@ -155,7 +169,7 @@ impl Shown {
             }
             Content::Document(blocks) => Self::Document(DocumentView { blocks, laid: None }),
             Content::Folder { items, bytes } => Self::Folder { items, bytes },
-            Content::Media => Self::Media,
+            Content::Media => Self::Media(path.and_then(media_stage)),
             Content::Font | Content::Archive | Content::Other => Self::Other,
         }
     }
@@ -167,11 +181,15 @@ impl Shown {
     pub fn deadline(&self) -> Option<Instant> {
         match self {
             Self::Picture(picture) => picture.next,
+            Self::Media(Some(stage)) => stage.deadline(),
             _ => None,
         }
     }
 
     pub fn tick(&mut self, now: Instant) -> bool {
+        if let Self::Media(Some(stage)) = self {
+            return stage.tick(now);
+        }
         let Self::Picture(picture) = self else {
             return false;
         };

@@ -1,0 +1,14 @@
+play = Play
+pause = Pause
+timeline = Timeline
+volume = Volume
+mute = Mute
+unmute = Unmute
+media-controls = Playback controls
+unsupported-title = This file can't be played
+unsupported-detail = Bande has no decoder for its format.
+unreadable-title = This file can't be opened
+unreadable-detail = It may have been moved, or you may not have permission to read it.
+failed-title = Playback stopped
+failed-detail = The player ran into a problem with this file.
+nothing-open = Open an audio or video file to play it.

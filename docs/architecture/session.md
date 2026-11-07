@@ -47,7 +47,7 @@ graph LR
 - **Crash resilience**: if the lock screen crashes, the session stays locked; the compositor
   draws a blank frame and a new locker may take over the lock.
 - Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
-  Settings ▸ Power ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
+  Settings ▸ Lock Screen): the backlight dims 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
   screen itself, its clock and date over the blurred desktop picture, covering the desktop
   through `ext-session-lock`, as macOS hands its saver over to the lock screen. "Require
@@ -55,6 +55,9 @@ graph LR
   period: until it passes, any key, click or movement dismisses the saver without a password.
   Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer
   sleeps with the display unless `suspend-after` is later or `"never"`.
+  The earlier of the screen saver and the display turning off starts the lock, and sleep never
+  comes before the display turns off; the settings say so on their rows when a choice is overridden,
+  and the sleep row only shows when logind's `CanSuspend` is `yes`.
 - Keeping awake: a playing video holds off dimming, the display turning off and the lock, as
   macOS's display-sleep assertion does, through whichever path the player uses:
 
@@ -127,8 +130,10 @@ graph LR
   bookmarks and volumes in a sidebar (from Files), a path bar from the home folder, a sortable
   Name, Date Modified and Size list with type-to-jump, folder icons from the accent icon
   theme, the app's filters as a pop-up, Save As with the name selected up to its extension,
-  "Replace?" before overwriting, New Folder when saving or choosing folders, `Alt+Up` and
-  `Alt+Down` to move up and into folders, and the last folder remembered per app in
+  "Replace?" before overwriting, New Folder when saving or choosing folders, Show Hidden Files
+  (`Ctrl+H`, starting from the setting in Files, for this dialog only) with hidden items dimmed
+  as in Files, `Alt+Up` and `Alt+Down` to move up and into folders, and the last folder
+  remembered per app in
   `$XDG_STATE_HOME/bande/file-chooser-folders`. Choices are answered with their initial
   values, and the dialog is not yet parented to the app window (xdg-foreign).
 - `org.freedesktop.impl.portal.Access`: the permission questions behind the Screenshot,
@@ -377,9 +382,11 @@ graph LR
   `bande-polkit-agent` binary and a systemd user unit wanted by `bande-session.target`: an
   `org.freedesktop.PolicyKit1.AuthenticationAgent` object that registers with polkitd for the
   user's logind session (logind's `auto` session, which is the display session for a user
-  service), runs `/usr/lib/polkit-1/polkit-agent-helper-1` for the chosen
-  user (the cookie on standard input, PAM prompts and results as escaped lines, as polkit 126's
-  own agent library does) and answers `CancelAuthentication` by stopping the helper. It
+  service), connects to polkit's socket-activated helper at `/run/polkit/agent-helper.socket`
+  (Debian's helper is not setuid, so an agent cannot run it itself), sends the chosen user and the
+  cookie, exchanges PAM prompts and results as escaped lines, as polkit's own agent library does,
+  and answers `CancelAuthentication` by closing the socket. A helper that cannot start or stops
+  early is an error in the journal and a refusal to polkitd, never a silent cancel. It
   authenticates as the requesting user when polkitd lists them, otherwise as the first listed
   user, as macOS pre-fills the dialog with the current administrator. Each request opens a
   Datum dialog on an overlay layer with exclusive keyboard focus: a padlock, polkit's message as
@@ -387,9 +394,9 @@ graph LR
   wrong password shakes the dialog, clears the field and says so, and the dialog stays open
   until the right password or Cancel, as the macOS authorization dialog does. Requests are
   shown one at a time. Once the field hands the password over, it stays in zeroized buffers
-  up to the helper's standard input. Settings checks its actions without interaction and
+  up to the helper's socket. Settings checks its actions without interaction and
   leaves rows changeable when polkit answers with a challenge, so changing them brings up the
-  dialog. Its polkitd test (ignored; it needs polkitd on the system bus) runs the agent against the real polkitd and PAM.
+  dialog.
 
 ## Desktop integration
 

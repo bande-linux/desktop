@@ -38,6 +38,7 @@ pub enum PaneId {
     Trackpad,
     Printers,
     Power,
+    LockScreen,
     Users,
     Passwords,
     PrivacySecurity,
@@ -54,7 +55,7 @@ pub enum PaneId {
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 30] = [
+    const KEYWORDS: [(Self, &'static str); 31] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -72,6 +73,7 @@ impl PaneId {
         (Self::Trackpad, "trackpad"),
         (Self::Printers, "printers"),
         (Self::Power, "power"),
+        (Self::LockScreen, "lock-screen"),
         (Self::Users, "users"),
         (Self::Passwords, "passwords"),
         (Self::PrivacySecurity, "privacy-security"),
@@ -102,6 +104,7 @@ impl PaneId {
             | Self::Trackpad
             | Self::Printers => Some(Group::Devices),
             Self::Power
+            | Self::LockScreen
             | Self::Users
             | Self::Passwords
             | Self::PrivacySecurity
@@ -138,6 +141,7 @@ impl PaneId {
             Self::Trackpad => "input-touchpad-symbolic",
             Self::Printers => "printer-symbolic",
             Self::Power => "system-shutdown-symbolic",
+            Self::LockScreen => "system-lock-screen-symbolic",
             Self::Users => "system-users-symbolic",
             Self::Passwords => "dialog-password-symbolic",
             Self::PrivacySecurity => "changes-prevent-symbolic",
@@ -289,7 +293,6 @@ pub enum SettingId {
     StoragePage,
     SoftwareUpdatePage,
     ShortcutsPage,
-    ScreenLock,
     ClipboardHistory,
     DefaultApps,
     Brightness,
@@ -652,7 +655,7 @@ fn numbers(values: &[u32]) -> Vec<Choice> {
 const SCREEN_SAVER_CHOICES: [u64; 8] = [60, 120, 300, 600, 1200, 1800, 3600, 0];
 const DISPLAY_OFF_CHOICES: [u64; 9] = [60, 120, 300, 600, 1200, 1800, 3600, 10800, 0];
 const PASSWORD_CHOICES: [u64; 7] = [0, 5, 60, 300, 900, 3600, 28800];
-pub const SLEEP_CHOICES: [u64; 4] = [1800, 3600, 10800, 0];
+const SLEEP_CHOICES: [u64; 4] = [1800, 3600, 10800, 0];
 pub const CURSOR_SIZES: [u32; 5] = [24, 32, 48, 64, 96];
 const REPEAT_RATES: [u32; 9] = [2, 5, 10, 15, 20, 25, 30, 45, 60];
 const REPEAT_DELAYS: [u32; 8] = [2000, 1500, 1000, 800, 600, 450, 300, 200];
@@ -1387,6 +1390,7 @@ fn gesture(id: SettingId, name: &str) -> Setting {
 fn system_panes() -> Vec<Pane> {
     vec![
         power_pane(),
+        lock_screen_pane(),
         pane(
             PaneId::Users,
             vec![section(
@@ -1417,15 +1421,6 @@ fn system_panes() -> Vec<Pane> {
                         page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
                         page(SettingId::LocationPage, PaneId::Location),
                     ],
-                ),
-                section(
-                    Some(L10N.tr("screen-lock")),
-                    vec![setting(
-                        SettingId::ScreenLock,
-                        L10N.tr("lock-when-off"),
-                        L10N.tr("screen-lock-keywords"),
-                        Kind::Page(PaneId::Power),
-                    )],
                 ),
                 section(
                     Some(L10N.tr("clipboard")),
@@ -1554,7 +1549,27 @@ fn power_pane() -> Pane {
                 ],
             ),
             section(
-                Some(L10N.tr("lock-screen")),
+                Some(L10N.tr("on-power-adapter")),
+                vec![setting(
+                    SettingId::LidOnPower,
+                    L10N.tr("lid-on-power"),
+                    L10N.tr("lid-on-power-keywords"),
+                    Kind::Menu(keyword_choices(vec![
+                        (L10N.tr("lid-sleep"), "sleep"),
+                        (L10N.tr("lid-keep-running"), "keep-running"),
+                    ])),
+                )],
+            ),
+        ],
+    )
+}
+
+fn lock_screen_pane() -> Pane {
+    pane(
+        PaneId::LockScreen,
+        vec![
+            section(
+                Some(L10N.tr("when-inactive")),
                 vec![
                     setting(
                         SettingId::ScreenSaverAfter,
@@ -1569,16 +1584,21 @@ fn power_pane() -> Pane {
                         choice(durations(&DISPLAY_OFF_CHOICES)),
                     ),
                     setting(
-                        SettingId::RequirePasswordAfter,
-                        L10N.tr("require-password-after"),
-                        L10N.tr("require-password-after-keywords"),
-                        choice(password_choices()),
-                    ),
-                    setting(
                         SettingId::SleepAfter,
                         L10N.tr("sleep-after"),
                         L10N.tr("sleep-after-keywords"),
                         choice(sleep_choices()),
+                    ),
+                ],
+            ),
+            section(
+                Some(L10N.tr("when-locked")),
+                vec![
+                    setting(
+                        SettingId::RequirePasswordAfter,
+                        L10N.tr("require-password-after"),
+                        L10N.tr("require-password-after-keywords"),
+                        choice(password_choices()),
                     ),
                     setting(
                         SettingId::LockMessage,
@@ -1588,18 +1608,6 @@ fn power_pane() -> Pane {
                     )
                     .described("lock-message-description"),
                 ],
-            ),
-            section(
-                Some(L10N.tr("on-power-adapter")),
-                vec![setting(
-                    SettingId::LidOnPower,
-                    L10N.tr("lid-on-power"),
-                    L10N.tr("lid-on-power-keywords"),
-                    Kind::Menu(keyword_choices(vec![
-                        (L10N.tr("lid-sleep"), "sleep"),
-                        (L10N.tr("lid-keep-running"), "keep-running"),
-                    ])),
-                )],
             ),
         ],
     )

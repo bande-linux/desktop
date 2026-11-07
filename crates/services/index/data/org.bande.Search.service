@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.bande.Search
+Exec=/usr/bin/bande-indexer
+SystemdService=bande-indexer.service

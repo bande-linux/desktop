@@ -16,6 +16,7 @@ use bande_toolkit::{
     WindowError, WindowEvent, run,
 };
 use rustix::event::{PollFd, PollFlags, poll};
+use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::OwnedObjectPath;
 
@@ -149,6 +150,7 @@ fn next(inbox: &mut Inbox<Message>, pending: &mut VecDeque<Message>) -> std::io:
 }
 
 fn serve() -> Result<(), Box<dyn Error>> {
+    set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let system = Connection::system()?;
     let mut inbox = Inbox::new()?;
     let locale = std::env::var("LANG").unwrap_or_else(|_| "C".to_owned());

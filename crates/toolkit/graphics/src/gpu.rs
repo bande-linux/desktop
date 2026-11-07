@@ -109,9 +109,16 @@ impl GpuDevice {
         config: &wgpu::SurfaceConfiguration,
     ) -> Result<(), DrawError> {
         let _submitting = self.submitting();
-        let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let memory = self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let internal = self.device.push_error_scope(wgpu::ErrorFilter::Internal);
         surface.configure(&self.device, config);
-        match pollster::block_on(scope.pop()) {
+        let errors = [
+            pollster::block_on(internal.pop()),
+            pollster::block_on(memory.pop()),
+            pollster::block_on(validation.pop()),
+        ];
+        match errors.into_iter().flatten().next() {
             Some(error) => Err(DrawError::Gpu(error.to_string())),
             None => Ok(()),
         }

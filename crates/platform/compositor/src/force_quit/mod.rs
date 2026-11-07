@@ -176,14 +176,14 @@ fn window_scene(content: Vec<Item>, palette: &Palette) -> Scene {
     }
 }
 
-fn relaunch_shell(client: &Client) {
+fn relaunch_shell(client: &Client, unresponsive: bool) {
     let Some(process) = client
         .get_data::<ClientState>()
         .and_then(|state| state.process.as_ref())
     else {
         return;
     };
-    if let Err(error) = process.force_quit(&[]) {
+    if let Err(error) = process.force_quit(&[], unresponsive) {
         tracing::warn!("cannot end the shell to start it again: {error}");
     }
 }
@@ -389,7 +389,9 @@ impl State {
             .filter(|candidate| keys.contains(&candidate.key))
         {
             if candidate.key == SHELL_KEY {
-                candidate.clients.iter().for_each(relaunch_shell);
+                for client in &candidate.clients {
+                    relaunch_shell(client, self.watchdog.is_unresponsive(&client.id()));
+                }
                 continue;
             }
             let ids = self.app_ids(&candidate.app_id);
@@ -423,7 +425,8 @@ impl State {
         if process.pid() == std::process::id() as i32 {
             return;
         }
-        if let Err(error) = process.force_quit(app_ids) {
+        if let Err(error) = process.force_quit(app_ids, self.watchdog.is_unresponsive(&client.id()))
+        {
             tracing::warn!("cannot force {} to quit: {error}", app_ids.join(", "));
         }
     }

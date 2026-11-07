@@ -1,5 +1,46 @@
 # Build vs reuse
 
+## Open: should the engine itself be a library? (owner's decision)
+
+The owner now wants the fastest and best browser, a native Bande app, using libraries where they
+get us there. Real uBlock Origin (MV2 with blocking `webRequest`) is a hard requirement. Updates
+must be easy to pull in. Browser work is paused with this undecided; the tables further down
+predate the change and have not been redone.
+
+| Option | Real uBO | Work and upkeep | Native Bande app |
+|---|---|---|---|
+| Own engine, V8, libraries | yes, we build the API (1–1.5 eng-years) | about 15–25 eng-years left (bottom-up estimate), then permanent web catch-up; V8 security updates about weekly | yes, and lean |
+| Stock Debian Firefox | yes, 0 patches; only Firefox has `filterResponseData` and CNAME uncloaking | almost none; Debian ships updates | no |
+| Firefox patch queue on Debian's source | yes, 0 patches for it | 1h18, 28.6 GB per Debian arm64 build; about weekly versions; LibreWolf carries 66 patches | themed only; Gecko can't be embedded in the toolkit |
+| Chromium or CEF, patched | partly: MV2 restorable (ungoogled-chromium: 60 lines, 4 files), no `filterResponseData` or CNAME uncloaking | 13h44, 21 GB per Debian arm64 build, every release; two-week milestones plus weekly security; no prebuilt binaries once patched; too big for the mini | no; extensions need Chrome's UI layer, CEF Wayland embedding still open |
+| WPE WebKit | no `webRequest` found, so out unless we build and patch it | low otherwise: Debian package, 134 MB, no GTK | closest of the engines |
+| Servo | no extension API found, so out | young, API may break monthly | possible |
+
+**Recommendation:** keep our own engine with V8 and libraries, with Debian's unpatched Firefox and
+uBO, force-installed by policy (untested here), as the fallback now. Our own engine is by far the
+most work, about 100 times a Firefox route; it is the only route that gives native, V8 and lean
+with real uBO. If "native" can be relaxed, Firefox wins outright. A fork adds little over stock
+Firefox beyond theme and branding. If a fork is ever needed, use Firefox ESR in a patch queue like
+the kernel repo's, not Chromium.
+
+**Stop rule:** re-decide when real uBO from AMO runs and the 200-site list has its first scores. If
+"works" is far below the roughly 55–70% planned for that stage, make Firefox the default.
+
+**Uncertain:** nothing here was benchmarked by us. There are no Speedometer figures for WPE or
+Servo, the cost of a native Gecko port is unmeasured, and the WPE `webRequest` evidence is from 2022.
+
+**Sources:** [Chrome webRequest](https://developer.chrome.com/docs/extensions/reference/api/webRequest),
+[Chrome release cycle](https://developer.chrome.com/blog/chrome-two-week-release),
+[ungoogled-chromium patch](https://github.com/ungoogled-software/ungoogled-chromium/blob/master/patches/core/ungoogled-chromium/extensions-manifestv2.patch),
+[uBO on Firefox](https://github.com/uBlockOrigin/uBlock-issues/wiki/uBlock-Origin-works-best-on-Firefox),
+[CEF Wayland](https://github.com/chromiumembedded/cef/issues/2804),
+[Debian build logs](https://buildd.debian.org/status/logs.php?pkg=chromium&arch=arm64),
+[LibreWolf](https://codeberg.org/librewolf/source),
+[Epiphany extensions](http://blog.tingping.se/2022/06/29/WebExtensions-Epiphany.html),
+[Servo embedding](https://phoronix.com/news/Servo-Embed-Crates-LTS).
+
+## Sizes and ownership before the change
+
 Sizes of existing crates were counted from their published sources in November 2026. "Owned" sizes
 are our estimates for a first complete version, in lines of Rust.
 

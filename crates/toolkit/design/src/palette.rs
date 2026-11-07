@@ -311,6 +311,10 @@ impl Palette {
         }
     }
 
+    pub fn on_panel(&self, tone: Color) -> Color {
+        tone.with_opacity(f32::from(self.panel.a) / f32::from(u8::MAX))
+    }
+
     pub fn sidebar_selection(&self, window_active: bool, focused: bool) -> Color {
         match (window_active, focused) {
             (false, _) => self.well.mix(self.chassis, 0.5),

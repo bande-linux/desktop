@@ -8,7 +8,7 @@ use std::os::unix::net::UnixStream;
 use zbus::blocking::Connection;
 
 use crate::backlight::{Backlight, KeyboardBacklight, dimmed};
-use crate::idle::{Command, IdleMachine, Inhibitor, Policy};
+use crate::idle::{Assertion, Command, IdleMachine, Inhibitor, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 use crate::password::PasswordPolicy;
 
@@ -39,6 +39,7 @@ pub enum WaylandCommand {
     RestartIdleTimers = 1,
     DisplayOff = 2,
     DisplayOn = 3,
+    RestartSleepTimer = 4,
 }
 
 impl WaylandCommand {
@@ -47,18 +48,25 @@ impl WaylandCommand {
             Command::RestartIdleTimers => Some(Self::RestartIdleTimers),
             Command::DisplayOff => Some(Self::DisplayOff),
             Command::DisplayOn => Some(Self::DisplayOn),
+            Command::RestartSleepTimer => Some(Self::RestartSleepTimer),
             Command::Dim
             | Command::Undim
             | Command::Lock
             | Command::RequirePassword(_)
+            | Command::IdleHint(_)
             | Command::Suspend => None,
         }
     }
 
     pub fn from_byte(byte: u8) -> Option<Self> {
-        [Self::RestartIdleTimers, Self::DisplayOff, Self::DisplayOn]
-            .into_iter()
-            .find(|command| *command as u8 == byte)
+        [
+            Self::RestartIdleTimers,
+            Self::DisplayOff,
+            Self::DisplayOn,
+            Self::RestartSleepTimer,
+        ]
+        .into_iter()
+        .find(|command| *command as u8 == byte)
     }
 }
 
@@ -107,6 +115,10 @@ impl IdleController {
         self.run(|machine| machine.set_inhibited(inhibitor, held));
     }
 
+    pub fn set_asserted(&self, assertion: Assertion, held: bool) {
+        self.run(|machine| machine.set_asserted(assertion, held));
+    }
+
     pub fn set_locked(&self, locked: bool) {
         self.run(|machine| machine.set_locked(locked));
     }
@@ -124,6 +136,13 @@ impl IdleController {
             .unwrap_or_else(PoisonError::into_inner)
             .push(listener);
         Ok(changes)
+    }
+
+    pub fn computer_sleeps_after(&self) -> Option<Duration> {
+        self.machine
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .computer_sleeps_after()
     }
 
     pub fn thresholds(&self) -> Vec<Duration> {
@@ -195,8 +214,18 @@ pub fn follow_idle_inhibitors(
     controller: &Arc<IdleController>,
 ) -> zbus::Result<()> {
     let controller = Arc::clone(controller);
-    logind::follow_idle_blocked(system, move |held| {
+    logind::follow_blocked(system, "idle", move |held| {
         controller.set_inhibited(Inhibitor::Logind, held);
+    })
+}
+
+pub fn follow_sleep_inhibitors(
+    system: &Connection,
+    controller: &Arc<IdleController>,
+) -> zbus::Result<()> {
+    let controller = Arc::clone(controller);
+    logind::follow_blocked(system, "sleep", move |held| {
+        controller.set_asserted(Assertion::Logind, held);
     })
 }
 
@@ -225,6 +254,7 @@ pub fn logind_executor(
         };
         let result = match command {
             Command::Lock => session.lock(),
+            Command::IdleHint(idle) => session.set_idle_hint(idle),
             Command::RequirePassword(required) => password.require(required),
             Command::Suspend => match manager.can_suspend() {
                 Ok(answer) if answer == "yes" => manager.suspend(false),
@@ -264,7 +294,10 @@ pub fn logind_executor(
                     .map_or(Ok(()), set_backlight)
                     .and(lit.map_or(Ok(()), set_keyboard))
             }
-            Command::RestartIdleTimers | Command::DisplayOff | Command::DisplayOn => Ok(()),
+            Command::RestartIdleTimers
+            | Command::RestartSleepTimer
+            | Command::DisplayOff
+            | Command::DisplayOn => Ok(()),
         };
         if let Err(error) = result {
             tracing::warn!("cannot carry out {command:?}: {error}");

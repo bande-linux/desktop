@@ -21,6 +21,7 @@ const BOUNCE_KEYS_DELAY: u32 = 300;
 const SHIFT_PRESSES: usize = 5;
 const SHIFT_PRESS_GAP: u32 = 600;
 const CONFIRMATION_TIMEOUT: i32 = 20_000;
+const KEY_POWER: u32 = 116;
 const KEY_LEFTSHIFT: u32 = 42;
 const KEY_RIGHTSHIFT: u32 = 54;
 const MODIFIERS: [u32; 8] = [29, 42, 54, 56, 97, 100, 125, 126];
@@ -346,6 +347,9 @@ impl State {
 impl Compositor {
     pub fn key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
         self.state.note_activity();
+        if evdev_code == KEY_POWER {
+            self.state.power_key(pressed, time);
+        }
         for (code, pressed, time) in self.state.access_keys(evdev_code, pressed, time) {
             self.state.deliver_key(code, pressed, time);
         }

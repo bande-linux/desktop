@@ -9,7 +9,7 @@ use bande_compositor::{
     SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL, SessionRequest, SessionRole, SessionUpkeep,
     Sleep, export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
     follow_session, follow_shutdown, follow_sleep, notify_service_manager, serve_app_states,
-    serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
+    serve_keyboard_monitor, sleep_on_request, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_datetime::ClockChanges;
@@ -644,6 +644,13 @@ where
     O::Error: Into<Box<dyn Error>>,
 {
     listen(&event_loop.handle(), &mut app)?;
+    if let Some(system) = &app.buses.system {
+        let (requests, received) = std::sync::mpsc::channel();
+        match sleep_on_request(system, received) {
+            Ok(()) => app.compositor.sleep_on_the_power_key(requests),
+            Err(error) => tracing::warn!("the power button cannot sleep: {error}"),
+        }
+    }
     let (mut greeter, mut review) = match session {
         Session::User => {
             app.compositor

@@ -86,6 +86,7 @@ pub struct Snapshot {
     pub inputs: Vec<Device>,
     pub apps: Vec<AppStream>,
     pub capturing: Vec<Capture>,
+    pub streaming: bool,
     pub default_output: Option<String>,
     pub default_input: Option<String>,
 }
@@ -158,6 +159,10 @@ impl Snapshot {
             inputs,
             apps,
             capturing: capturing(state),
+            streaming: state
+                .nodes
+                .values()
+                .any(|node| node.running && node.app.is_some()),
             default_output: state.default_output.clone(),
             default_input: state.default_input.clone(),
         }

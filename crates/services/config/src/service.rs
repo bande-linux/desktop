@@ -405,6 +405,9 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result
                         .ok_or_else(mismatch)?,
                 )
             }
+            "match-colours" => {
+                display.match_colours = Some(bool::try_from(value).map_err(|_| mismatch())?)
+            }
             _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
     }
@@ -1349,6 +1352,12 @@ impl ConfigInterface {
                         display
                             .rotation
                             .and_then(|rotation| owned(rotation.degrees().into())),
+                    ),
+                    (
+                        "match-colours",
+                        display
+                            .match_colours
+                            .and_then(|enabled| owned(enabled.into())),
                     ),
                 ]
                 .into_iter()

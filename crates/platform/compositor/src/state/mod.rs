@@ -210,6 +210,7 @@ impl Compositor {
             scale: 1.0,
             transform: Transform::Normal,
             position: Point::default(),
+            match_colours: true,
         };
         let display = Display::new().map_err(io::Error::other)?;
         let fences = smithay::reexports::calloop::EventLoop::try_new().map_err(io::Error::other)?;

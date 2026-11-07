@@ -14,7 +14,7 @@ fetch)
         > /etc/apt/sources.list.d/debian-src.sources
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends devscripts quilt python3 debhelper dpkg-dev \
-        fakeroot ca-certificates librsvg2-bin > /dev/null
+        fakeroot ca-certificates librsvg2-bin iso-codes > /dev/null
     mkdir -p "$work"
     cd "$work"
     apt-get source -qq "firefox-esr=$debver" > /dev/null

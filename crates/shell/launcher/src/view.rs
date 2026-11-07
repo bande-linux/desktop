@@ -955,8 +955,8 @@ impl Launcher {
         }
     }
 
-    pub fn set_panes(&mut self, panes: Vec<PaneInfo>) {
-        self.state.borrow_mut().model.set_panes(panes);
+    pub fn cannot_sleep(&mut self, panes: Vec<PaneInfo>) {
+        self.state.borrow_mut().model.cannot_sleep(panes);
     }
 
     pub fn set_clips(&mut self, clips: Vec<Clip>) {

@@ -77,6 +77,8 @@ pub struct ControlCenter {
     connected: Connected,
     connected_updates: Inbox<Connected>,
     refresh: Option<Sender<()>>,
+    can_sleep: bool,
+    cannot_sleep: Inbox<()>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -501,14 +503,17 @@ impl ControlCenter {
             }
             Change::Power => {
                 let user = [("user", full_name().into())];
-                let items = vec![
-                    MenuItem::new(&L10N.tr("sleep"), &format!("{SESSION}sleep")),
-                    MenuItem::separator(),
+                let mut items = Vec::new();
+                if self.can_sleep {
+                    items.push(MenuItem::new(&L10N.tr("sleep"), &format!("{SESSION}sleep")));
+                    items.push(MenuItem::separator());
+                }
+                items.extend([
                     MenuItem::new(&L10N.tr("restart"), &format!("{SESSION}restart")),
                     MenuItem::new(&L10N.tr("shut-down"), &format!("{SESSION}shut-down")),
                     MenuItem::separator(),
                     MenuItem::new(&L10N.tr_args("log-out", user), &format!("{SESSION}log-out")),
-                ];
+                ]);
                 report(
                     "open the power menu",
                     window.show_menu(Menu::new(items), MenuPlacement::AtPoint(self.pointer)),
@@ -971,10 +976,15 @@ impl App for ControlCenter {
             self.connected_updates.fd(),
             self.artworks.fd(),
             self.light_updates.fd(),
+            self.cannot_sleep.fd(),
         ]
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
+        if index == 4 {
+            self.can_sleep &= self.cannot_sleep.drain().is_empty();
+            return;
+        }
         if index == 3 {
             let Some(lights) = self.light_updates.drain().pop() else {
                 return;
@@ -1096,6 +1106,8 @@ impl ControlCenter {
             bluetooth: system.map(Bluetooth::new),
             lights: Vec::new(),
             light_updates,
+            can_sleep: true,
+            cannot_sleep: bande_status::devices::hear_if_cannot_sleep()?,
             light_requests,
             keyboard_light: KeyboardLight::find(Path::new(SYSFS_LEDS)),
             system: system.cloned(),

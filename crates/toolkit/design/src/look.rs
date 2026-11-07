@@ -116,11 +116,12 @@ pub fn over_backdrop(frame: Color, backdrop: [u8; 3]) -> Color {
     let mix = |top: u8, bottom: u8| {
         (f32::from(top) * opacity + f32::from(bottom) * (1.0 - opacity)).round() as u8
     };
-    Color::rgb(
-        mix(frame.r, backdrop[0]),
-        mix(frame.g, backdrop[1]),
-        mix(frame.b, backdrop[2]),
-    )
+    Color {
+        r: mix(frame.r, backdrop[0]),
+        g: mix(frame.g, backdrop[1]),
+        b: mix(frame.b, backdrop[2]),
+        a: u8::MAX,
+    }
 }
 
 #[cfg(test)]

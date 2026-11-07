@@ -14,7 +14,7 @@ mod title_bar;
 pub use bande_design::{
     Accent, Appearance, BarForm, Color, Contrast, ControlSize, Elevation, Look, Material, Palette,
     Radius, Scheme, Shadow, Spacing, Style, TextRole, TextSize, Typeface, grown_line,
-    window_edge_opacity,
+    limit_backdrop, window_edge_opacity,
 };
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};

@@ -182,7 +182,7 @@ All user configuration of the desktop is one human-readable [KDL](https://kdl.de
 to it, and it can be edited by hand while the session runs. Apps keep their own settings in one
 small `key = value` file each next to it (`files.conf`, `terminal.conf`).
 
-- **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `accent`,
+- **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `style`, `accent`,
   `tinted-frame`, `clock`, `reopen-apps`, `reopen-apps-after-crash`, `automatic-updates`, `lock-message`, `show-previews`, and the sections
   `accessibility`, `bar`, `idle`, `keyboard`, `trackpad`, `mouse`, `power`, `sound`, `wallpaper`,
   `night-light`, `do-not-disturb`, `search`, `display "<name>"` (one per display, named by EDID maker, model and serial) and

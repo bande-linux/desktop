@@ -10,6 +10,7 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Point, Rectangle, Scale, 
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::Logical;
 
+use smithay::backend::renderer::Texture;
 use smithay::wayland::compositor::get_role;
 use smithay::wayland::shell::xdg::XDG_POPUP_ROLE;
 
@@ -582,8 +583,8 @@ fn behind(id: Id, region: RoundedRect, scale: f64, alpha: f32, source: &Behind) 
                 (f64::from(region.x), f64::from(region.y)).into(),
                 (f64::from(region.width), f64::from(region.height)).into(),
             );
-            let across = f64::from(material.texture.width()) / screen.size.w.max(1.0);
-            let down = f64::from(material.texture.height()) / screen.size.h.max(1.0);
+            let across = f64::from(Texture::width(&material.texture)) / screen.size.w.max(1.0);
+            let down = f64::from(Texture::height(&material.texture)) / screen.size.h.max(1.0);
             let piece = Piece {
                 id,
                 texture: material.texture.clone(),

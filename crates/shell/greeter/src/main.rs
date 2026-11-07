@@ -19,6 +19,7 @@ use bande_lock::{
     load_backdrop, load_picture,
 };
 use bande_status::devices::{powers, use_power};
+use bande_status::session::Ending;
 use bande_status::status::{Battery, Wifi};
 use bande_toolkit::ui::{Event, Key, frame_time};
 use bande_toolkit::{
@@ -313,6 +314,8 @@ impl App for Greeter {
                 && let Err(error) = use_power(system, power)
             {
                 tracing::warn!("cannot {power:?}: {error}");
+                self.screen.set_message(power.ending().map(Ending::failed));
+                window.request_redraw();
             }
         }
     }

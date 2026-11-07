@@ -1,22 +1,25 @@
 use std::cell::Cell;
+use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::L10N;
 use crate::status_client::report;
+use bande_inbox::Inbox;
 use bande_status::devices::end_session;
-use bande_status::session::{Effect, Ending, Facts, SessionEnding, Stage, facts, quitting_apps};
+use bande_status::session::{
+    Effect, Ending, Facts, Refusal, SessionEnding, Stage, facts, quitting_apps, try_again,
+};
 use bande_toolkit::ui::{Alert, Event, Form, FormLine, Key, Label, Size, Ui};
 use bande_toolkit::{
-    App, Appearance, Image, Item, Palette, Point, Rect, Role, Scene, TextAlign, TextStyle,
+    App, Appearance, Image, Item, Palette, Point, Rect, Role, Scene, Sizing, TextAlign, TextStyle,
     TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
     Locale, applications, current_desktops, data_dirs, find_app, find_icon, reopen_file,
     take_apps_to_reopen,
 };
-use zbus::blocking::Connection;
 
 pub const DIALOGS: &str = "org.bande.MenuBar";
 const ABOUT_SIZE: (u32, u32) = (280, 190);
@@ -59,19 +62,33 @@ fn confirmation_ui(
             _ => Choice::Cancel,
         })
     };
+    let cancel = L10N.tr("button-cancel");
     let alert = match session.stage() {
         Stage::Asking { .. } => Alert::new(
             &ending.question(),
             &ending.countdown(session.left(now) + Duration::from_millis(999)),
             on_choice,
         )
-        .primary(&ending.button(), CONFIRM),
-        Stage::Quitting { .. } => Alert::new(&quitting_apps(), "", on_choice),
+        .primary(&ending.button(), CONFIRM)
+        .cancel(&cancel, CANCEL),
+        Stage::Quitting { .. } => {
+            Alert::new(&quitting_apps(), "", on_choice).cancel(&cancel, CANCEL)
+        }
         Stage::Blocked { app_id } => Alert::new(&ending.blocked(&app_name(app_id)), "", on_choice)
-            .destructive(&ending.anyway(), CONFIRM),
-        Stage::Ending => Alert::new("", "", on_choice),
-    }
-    .cancel(&L10N.tr("button-cancel"), CANCEL);
+            .destructive(&ending.anyway(), CONFIRM)
+            .cancel(&cancel, CANCEL),
+        Stage::Ending => Alert::new(&ending.progress(), "", on_choice),
+        Stage::Refused(refusal @ Refusal::Inhibited(_)) => {
+            Alert::new(&ending.inhibited(), &refusal.explanation(), on_choice)
+                .destructive(&ending.anyway(), CONFIRM)
+                .cancel(&cancel, CANCEL)
+        }
+        Stage::Refused(refusal @ Refusal::Failed(_)) => {
+            Alert::new(&ending.failed(), &refusal.explanation(), on_choice)
+                .primary(&try_again(), CONFIRM)
+                .cancel(&cancel, CANCEL)
+        }
+    };
     let mut ui = Ui::new(
         Box::new(alert),
         bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
@@ -91,24 +108,22 @@ pub(crate) fn fitted(ui: &mut Ui) -> (u32, u32) {
     (size.width.ceil() as u32, size.height.ceil() as u32)
 }
 
-fn confirmation_size(ending: Ending, appearance: Appearance, now: Instant) -> (u32, u32) {
-    let asking = SessionEnding::new(ending, now);
-    let choice = Rc::new(Cell::new(Choice::Undecided));
-    fitted(&mut confirmation_ui(&asking, &choice, appearance, now))
-}
-
 struct Confirmation {
     session: SessionEnding,
     ui: Ui,
     size: (u32, u32),
     choice: Rc<Cell<Choice>>,
+    answers: Inbox<Refusal>,
 }
 
 impl Confirmation {
     fn rebuild(&mut self, window: &mut Window, now: Instant) {
-        let appearance = window.appearance();
-        self.size = confirmation_size(self.session.ending, appearance, now);
-        self.ui = confirmation_ui(&self.session, &self.choice, appearance, now);
+        self.ui = confirmation_ui(&self.session, &self.choice, window.appearance(), now);
+        let size = fitted(&mut self.ui);
+        if size != self.size {
+            self.size = size;
+            window.resize_content(size, Sizing::Fixed);
+        }
         window.request_redraw();
     }
 
@@ -116,6 +131,7 @@ impl Confirmation {
         match effect {
             None => return,
             Some(Effect::QuitApps) => {
+                report("let the apps ask first", window.set_keep_on_top(false));
                 if let Err(error) = window.quit_all_apps() {
                     tracing::warn!("cannot ask the apps to quit: {error}");
                     let effect = self.session.confirm(now);
@@ -125,15 +141,14 @@ impl Confirmation {
             Some(Effect::Activate(app_id)) => {
                 report("bring the app forward", window.activate_app(&app_id))
             }
-            Some(Effect::End) => {
+            Some(Effect::End { insist }) => {
                 let ending = self.session.ending;
+                let answer = self.answers.outbox();
                 thread::spawn(move || {
-                    let result =
-                        Connection::system().and_then(|system| end_session(&system, ending));
-                    report("end the session", result);
+                    if let Err(refusal) = end_session(ending, insist) {
+                        answer.send(refusal);
+                    }
                 });
-                window.close();
-                return;
             }
         }
         self.rebuild(window, now);
@@ -166,7 +181,7 @@ impl App for Confirmation {
         match event {
             WindowEvent::Input(Event::Key {
                 key: Key::Escape, ..
-            }) => self.choice.set(Choice::Cancel),
+            }) if *self.session.stage() != Stage::Ending => self.choice.set(Choice::Cancel),
             WindowEvent::Input(Event::Key {
                 key: Key::Enter, ..
             }) if matches!(self.session.stage(), Stage::Asking { .. }) => {
@@ -193,6 +208,21 @@ impl App for Confirmation {
         self.decide(window);
     }
 
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        vec![self.answers.fd()]
+    }
+
+    fn source_ready(&mut self, window: &mut Window, _index: usize) {
+        for refusal in self.answers.drain() {
+            self.session.refused(refusal);
+        }
+        self.rebuild(window, Instant::now());
+    }
+
+    fn should_close(&mut self, _window: &mut Window) -> bool {
+        *self.session.stage() != Stage::Ending
+    }
+
     fn deadline(&self) -> Option<Instant> {
         self.session.deadline(Instant::now())
     }
@@ -211,16 +241,18 @@ impl App for Confirmation {
 
 pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>> {
     let now = Instant::now();
-    let size = confirmation_size(ending, Appearance::default(), now);
-    let mut window = Window::open(Role::dialog(&ending.button(), DIALOGS), size)?;
-    report("keep the dialog in front", window.set_keep_on_top(true));
     let session = SessionEnding::new(ending, now);
     let choice = Rc::new(Cell::new(Choice::Undecided));
+    let mut ui = confirmation_ui(&session, &choice, Appearance::default(), now);
+    let size = fitted(&mut ui);
+    let mut window = Window::open(Role::dialog(&ending.button(), DIALOGS), size)?;
+    report("keep the dialog in front", window.set_keep_on_top(true));
     let mut confirmation = Confirmation {
-        ui: confirmation_ui(&session, &choice, window.appearance(), now),
+        ui,
         session,
         size,
         choice,
+        answers: Inbox::new()?,
     };
     confirmation.rebuild(&mut window, now);
     bande_toolkit::run(&mut window, &mut confirmation)?;

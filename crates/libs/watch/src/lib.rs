@@ -52,7 +52,15 @@ fn lock(folders: &Folders) -> MutexGuard<'_, HashMap<i32, Vec<PathBuf>>> {
 impl FolderWatch {
     pub fn spawn(
         changes: Changes,
+        on_change: impl FnMut(Vec<PathBuf>) + Send + 'static,
+    ) -> io::Result<Self> {
+        Self::spawn_noting_overflow(changes, on_change, || {})
+    }
+
+    pub fn spawn_noting_overflow(
+        changes: Changes,
         mut on_change: impl FnMut(Vec<PathBuf>) + Send + 'static,
+        mut on_overflow: impl FnMut() + Send + 'static,
     ) -> io::Result<Self> {
         let inotify = Arc::new(inotify::init(CreateFlags::CLOEXEC | CreateFlags::NONBLOCK)?);
         let (stopped, stop) = pipe_with(PipeFlags::CLOEXEC)?;
@@ -62,9 +70,12 @@ impl FolderWatch {
             .name("folder-watch".to_owned())
             .spawn(move || {
                 let (inotify, folders) = reader;
-                while let Some(paths) = next_changes(&inotify, &stopped, &folders) {
+                while let Some((paths, overflowed)) = next_changes(&inotify, &stopped, &folders) {
                     if !paths.is_empty() {
                         on_change(paths);
+                    }
+                    if overflowed {
+                        on_overflow();
                     }
                 }
             })?;
@@ -89,9 +100,36 @@ impl FolderWatch {
         }
         Ok(())
     }
+
+    pub fn rewatch(&self, folder: &Path) -> io::Result<()> {
+        let mut folders = lock(&self.folders);
+        let descriptor = inotify::add_watch(
+            self.inotify.as_ref(),
+            folder,
+            self.changes.flags() | WatchFlags::ONLYDIR,
+        )?;
+        folders.insert(descriptor, vec![folder.to_path_buf()]);
+        Ok(())
+    }
+
+    pub fn unwatch(&self, folder: &Path) {
+        let mut folders = lock(&self.folders);
+        let known = folders
+            .iter()
+            .find(|(_, paths)| paths.iter().any(|path| path == folder))
+            .map(|(descriptor, _)| *descriptor);
+        if let Some(descriptor) = known {
+            folders.remove(&descriptor);
+            let _ = inotify::remove_watch(self.inotify.as_ref(), descriptor);
+        }
+    }
 }
 
-fn next_changes(inotify: &OwnedFd, stopped: &OwnedFd, folders: &Folders) -> Option<Vec<PathBuf>> {
+fn next_changes(
+    inotify: &OwnedFd,
+    stopped: &OwnedFd,
+    folders: &Folders,
+) -> Option<(Vec<PathBuf>, bool)> {
     let mut fds = [
         PollFd::new(inotify, PollFlags::IN),
         PollFd::new(stopped, PollFlags::IN),
@@ -106,12 +144,14 @@ fn next_changes(inotify: &OwnedFd, stopped: &OwnedFd, folders: &Folders) -> Opti
     let mut buffer = [MaybeUninit::uninit(); 8192];
     let mut reader = inotify::Reader::new(inotify, &mut buffer);
     let mut paths = Vec::new();
+    let mut overflowed = false;
     loop {
         let event = match reader.next() {
             Ok(event) => event,
-            Err(Errno::AGAIN | Errno::INTR) => return Some(paths),
+            Err(Errno::AGAIN | Errno::INTR) => return Some((paths, overflowed)),
             Err(_) => return None,
         };
+        overflowed |= event.events().contains(ReadFlags::QUEUE_OVERFLOW);
         let mut folders = lock(folders);
         if event.events().contains(ReadFlags::IGNORED) {
             folders.remove(&event.wd());

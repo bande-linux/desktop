@@ -419,7 +419,7 @@ graph LR
   the formats equal to `LANG`, and localed drops those. It also refuses a `LANGUAGE` holding
   a colon, so a stale list is replaced by one name.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
-  `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-automount`,
+  `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-indexer`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify` and
   the portal backend are started by D-Bus activation, and `bande-clipboard` and the shell
   clients by the compositor ([behaviour](behaviour.md)): `bande-shell`, one process for the
@@ -561,6 +561,7 @@ something to show.
 | bootloader, U-Boot | the mark, centred on black | the bootloader's logos; U-Boot's console is silent (`silent=1`) until an EFI program starts, or until no boot entry is found, when it lists what it scanned |
 | systemd-boot, kernel | the mark | `timeout 0`; the kernel's console logo (`logo_bande_clut224.ppm`, `fbcon=logo-count:1 fbcon=logo-pos:center`) on the firmware framebuffer, drawn under `quiet` thanks to our kernel patch `fbcon: Draw the logo under quiet`; `quiet` also silences the EFI stub |
 | `apple-drm` binds | the mark again after the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer (the kernel's own logo is only drawn during boot and never for a module) |
+| disk unlock, on an encrypted disk | the mark, a password field and the layout's short name | `bande-unlock`, see below |
 | login window | black with the mark, cross-fading to the login window | the compositor holds frames until the greeter is mapped; the greeter draws the same mark and opens once the desktop picture is decoded |
 | session | the picture the login window ended on, then the bar and icons fade in | below |
 
@@ -569,6 +570,23 @@ Cairo, fontconfig and fonts into the initramfs, it needs root to quit after the 
 it would add a third owner of the display during boot. The console path needs none of this, and
 shows text by itself: the mark sits in the console's own framebuffer, so anything the kernel or
 systemd prints (a failing boot, the emergency shell) appears over it.
+
+**Disk unlock.** Root is LUKS2, opened in the initramfs by Debian's `cryptsetup-initramfs` with
+`bande-unlock-script` as its keyscript. While the image's provisional key is there the script hands it
+over and nothing is asked. Otherwise `bande-unlock`, a small program with no fonts or xkb data of its
+own, draws on `/dev/fb0` in the same place as the mark and reads evdev keyboards directly (USB
+and built-in; Bluetooth does not work this early). `bande-unlock-assets` writes
+`bande/unlock.assets` on the ESP whenever the system keyboard or language changes: a key table for
+each system layout, dead-key pairs, and the prompt's text already drawn. Control+Space switches
+layout, Tab asks for the recovery key. If there is no framebuffer, the console's `askpass` asks.
+
+`bande-disk-encryption` (in `bande-settings`, root) is the only writer: `set-passphrase` adds the
+person's slot and a recovery key, removes the provisional one and, on an image with a shared volume
+key, starts an online reencrypt that `bande-disk-encryption.service` resumes at each boot. The disk does
+not count as encrypted until that finishes, and `/run/bande-disk-encryption/status` says so to
+Privacy & Security. On a one-person computer the greeter signs in with the password the disk was
+just unlocked with (`for-login`, in RAM, readable only by the greeter, emptied on read), and PAM's
+password step keeps the disk slot in step with the login password.
 
 Diagnostics stay one key away: holding Space at power-on opens systemd-boot's menu, where each
 kernel has a "(boot messages)" entry without `quiet` (`95-bande-boot-messages.install`);

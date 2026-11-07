@@ -340,6 +340,25 @@ impl<'a> Device<'a> for TextDevice {
     }
 }
 
+pub fn document_text(bytes: Vec<u8>, limit: usize) -> String {
+    let mut words = String::new();
+    let Ok(pdf) = Pdf::new(Arc::new(bytes)) else {
+        return words;
+    };
+    let cache = InterpreterCache::new();
+    let settings = InterpreterSettings::default();
+    for page in pdf.pages().iter() {
+        if words.len() >= limit {
+            break;
+        }
+        for glyph in text(page, &cache, &settings) {
+            words.push_str(&glyph.text);
+        }
+        words.push('\n');
+    }
+    words
+}
+
 fn text<'a>(
     page: &'a Page<'a>,
     cache: &InterpreterCache<'a>,

@@ -195,6 +195,10 @@ impl GlobalDispatch<ZwlrOutputManagerV1, ()> for State {
         manager.resource.done(state.output_serial);
         state.output_managers.push(manager);
     }
+
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        !crate::trust::is_sandboxed(&client)
+    }
 }
 
 impl Dispatch<ZwlrOutputManagerV1, ()> for State {

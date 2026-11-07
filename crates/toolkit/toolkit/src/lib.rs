@@ -5,7 +5,7 @@ pub use bande_graphics::{
     Appearance, Blend, Color, ControlSize, CpuRenderer, Cut, DrawError, Elevation, FontData,
     GlyphRun, GpuRenderer, HEADER_LEADING, Image, Item, Paint, Palette, Paragraph, Path, Picture,
     Point, PositionedGlyph, Radius, Rect, Region, Scene, Scheme, Shape, Snapshot, Spacing, Stop,
-    TextAlign, TextRole, TextSize, TextStyle, TextSystem, Transform, Typeface, grown_line,
+    TextAlign, TextRole, TextSize, TextStyle, TextSystem, Transform, Typeface, grown_line, pixels,
     shortened,
 };
 pub use bande_toolkit_platform::{

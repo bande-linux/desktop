@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 
 const RESOLVE: &str = "/run/systemd/resolve/io.systemd.Resolve";
 const RETRIES: [u64; 3] = [2, 8, 30];
-const SERVICES: [(&str, &str); 4] = [
+const SERVICES: [(&str, &str); 5] = [
+    ("_nfs._tcp", "nfs"),
     ("_smb._tcp", "smb"),
     ("_sftp-ssh._tcp", "sftp"),
     ("_webdav._tcp", "dav"),
@@ -66,13 +67,19 @@ fn send(stream: &mut UnixStream, request: &Value) -> io::Result<()> {
 }
 
 fn hostname_and_port(reply: &Value) -> Option<(String, u64)> {
-    let target = reply.get("parameters")?.get("services")?.get(0)?;
-    let host = target
-        .get("canonicalName")
-        .and_then(Value::as_str)
-        .or_else(|| target.get("hostname").and_then(Value::as_str))?;
+    let parameters = reply.get("parameters")?;
+    let target = parameters.get("services")?.get(0)?;
+    let host = target.get("hostname").and_then(Value::as_str)?;
     let port = target.get("port").and_then(Value::as_u64)?;
-    Some((host.trim_end_matches('.').to_owned(), port))
+    let path = parameters
+        .get("txt")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .find_map(|record| record.strip_prefix("path="))
+        .unwrap_or_default();
+    Some((format!("{}{path}", host.trim_end_matches('.')), port))
 }
 
 fn locate(name: &str, kind: &str, ifindex: i64) -> Option<(String, u64)> {
@@ -100,11 +107,14 @@ fn locate(name: &str, kind: &str, ifindex: i64) -> Option<(String, u64)> {
 fn url_of(scheme: &str, host: &str, port: u64) -> String {
     let default = matches!(
         (scheme, port),
-        ("smb", 445) | ("sftp", 22) | ("dav", 80) | ("davs", 443)
+        ("smb", 445) | ("sftp", 22) | ("dav", 80) | ("davs", 443) | ("nfs", 2049)
     );
     match default {
         true => format!("{scheme}://{host}"),
-        false => format!("{scheme}://{host}:{port}"),
+        false => match host.split_once('/') {
+            Some((name, path)) => format!("{scheme}://{name}:{port}/{path}"),
+            None => format!("{scheme}://{host}:{port}"),
+        },
     }
 }
 

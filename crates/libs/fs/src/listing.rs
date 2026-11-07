@@ -32,12 +32,21 @@ pub struct Entry {
     pub link: bool,
     pub trashed: Option<TrashItem>,
     pub extension_hidden: Option<bool>,
+    pub mode: Option<u32>,
+    pub owned: bool,
 }
 
 impl Entry {
     pub fn read(path: PathBuf, name: String) -> Self {
         let link = fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink());
+        if link && bande_volumes::leads_to_connected_volume(&path) {
+            return Self::link_to_connected(path, name);
+        }
         let metadata = fs::metadata(&path).ok();
+        let mode = metadata.as_ref().map(MetadataExt::mode);
+        let owned = metadata
+            .as_ref()
+            .is_some_and(|metadata| metadata.uid() == rustix::process::getuid().as_raw());
         let kind = match metadata.as_ref().is_some_and(fs::Metadata::is_dir) {
             true => Kind::Folder,
             false => Kind::File,
@@ -64,6 +73,28 @@ impl Entry {
             },
             path,
             trashed: None,
+            mode,
+            owned,
+        }
+    }
+
+    fn link_to_connected(path: PathBuf, name: String) -> Self {
+        Self {
+            kind: match Path::new(&name).extension() {
+                Some(_) => Kind::File,
+                None => Kind::Folder,
+            },
+            name,
+            path,
+            size: 0,
+            modified: None,
+            created: None,
+            added: None,
+            link: true,
+            trashed: None,
+            extension_hidden: None,
+            mode: None,
+            owned: false,
         }
     }
 
@@ -254,6 +285,13 @@ fn compare_numbers(a: &str, b: &str) -> Ordering {
 }
 
 pub fn same_volume(a: &Path, b: &Path) -> bool {
+    let (on_a, on_b) = (
+        bande_volumes::connected_volume_of(a),
+        bande_volumes::connected_volume_of(b),
+    );
+    if on_a.is_some() || on_b.is_some() {
+        return on_a == on_b;
+    }
     match (fs::metadata(a), fs::metadata(b)) {
         (Ok(a), Ok(b)) => a.dev() == b.dev(),
         _ => false,

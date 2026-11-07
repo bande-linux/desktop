@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Read, Write};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -15,8 +16,8 @@ use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use bande_packages::{Client, Info, Mode};
 use bande_volumes::{
-    MOUNTS_PATH, MOUNTS_SERVICE, SavedServer as Saved, connected_roots, load_saved_servers,
-    mounted, store_saved_servers, system_mounts_root, user_mounts_root,
+    MOUNTS_PATH, MOUNTS_SERVICE, SavedServer as Saved, connected_roots, connected_volume_of,
+    load_saved_servers, mounted, store_saved_servers, system_mounts_root, user_mounts_root,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{Pid, Signal, kill_process};
@@ -27,6 +28,7 @@ use zbus::{MatchRule, message};
 use crate::L10N;
 use crate::askpass::{Asked, Askpass, SOCKET_VARIABLE};
 use crate::discovery::Discovery;
+use crate::health::{self, Lost, Shared, follow_network_and_wake, should_retry};
 use crate::mounts_bus::MountsInterface;
 use crate::server::{Protocol, Server};
 
@@ -36,13 +38,16 @@ const SSHFS: &str = "/usr/bin/sshfs";
 const CIFS: &str = "/usr/sbin/mount.cifs";
 const SMBCLIENT: &str = "/usr/bin/smbclient";
 const DAVFS: &str = "/usr/sbin/mount.davfs";
+const NFS: &str = "/usr/sbin/mount.nfs";
+const SHOWMOUNT: &str = "/usr/sbin/showmount";
 const FUSERMOUNT: &str = "/usr/bin/fusermount3";
 const KEYRING_APP: &str = "bande-automount";
 const CONNECT_LIMIT: Duration = Duration::from_secs(40);
-const UNMOUNT_LIMIT: Duration = Duration::from_secs(40);
+const UNMOUNT_LIMIT: Duration = Duration::from_secs(4);
+const SHOW_LIMIT: Duration = Duration::from_secs(8);
+const HOST_LIMIT: Duration = Duration::from_secs(4);
 const SSHFS_OPTIONS: &str = "reconnect,ServerAliveInterval=5,ServerAliveCountMax=3,ConnectTimeout=10,idmap=user,NumberOfPasswordPrompts=1,StrictHostKeyChecking=ask,nosuid,nodev";
-const NM: &str = "org.freedesktop.NetworkManager";
-const NM_CONNECTED_LOCAL: u32 = 50;
+const ALERT_DISCONNECT: &str = "disconnect";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
@@ -225,6 +230,9 @@ pub struct Mounts {
     session: Connection,
     daemons: Arc<Mutex<HashMap<PathBuf, Daemon>>>,
     saved: Arc<Mutex<Vec<Saved>>>,
+    known: Arc<Mutex<HashMap<PathBuf, (Server, ConnectRequest)>>>,
+    alerts: Arc<Mutex<HashMap<u32, PathBuf>>>,
+    health: Arc<Shared>,
 }
 
 fn guard<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -279,6 +287,9 @@ impl Mounts {
             session: session.clone(),
             daemons: Arc::default(),
             saved: Arc::new(Mutex::new(load_saved_servers())),
+            known: Arc::default(),
+            alerts: Arc::default(),
+            health: Arc::default(),
         };
         if let Some(root) = user_mounts_root() {
             if let Err(error) = fs::create_dir_all(&root) {
@@ -286,14 +297,8 @@ impl Mounts {
             }
             mounts.clear_abandoned(&root);
         }
-        let announcing = session.clone();
-        let discovery = Discovery::start(move || {
-            let announced = SignalEmitter::new(announcing.inner(), MOUNTS_PATH)
-                .and_then(|emitter| block_on(MountsInterface::nearby_changed(&emitter)));
-            if let Err(error) = announced {
-                tracing::warn!("cannot announce nearby servers: {error}");
-            }
-        });
+        let announcing = mounts.clone();
+        let discovery = Discovery::start(move || announcing.announce());
         session
             .object_server()
             .at(MOUNTS_PATH, MountsInterface(mounts.clone(), discovery))?;
@@ -307,6 +312,183 @@ impl Mounts {
         };
         for entry in entries.flatten() {
             clear_fuse_mount(&entry.path());
+        }
+    }
+
+    pub fn announce(&self) {
+        let announced = SignalEmitter::new(self.session.inner(), MOUNTS_PATH)
+            .and_then(|emitter| block_on(MountsInterface::nearby_changed(&emitter)));
+        if let Err(error) = announced {
+            tracing::warn!("cannot announce a change: {error}");
+        }
+    }
+
+    pub fn mounted_urls(&self) -> Vec<String> {
+        guard(&self.known)
+            .values()
+            .map(|(server, _)| server.url())
+            .collect()
+    }
+
+    pub fn health(&self) -> Arc<Shared> {
+        Arc::clone(&self.health)
+    }
+
+    pub fn server_at(&self, point: &Path) -> Option<Server> {
+        guard(&self.known)
+            .get(point)
+            .map(|(server, _)| server.clone())
+    }
+
+    pub fn unresponsive(&self) -> Vec<PathBuf> {
+        guard(&self.health.unresponsive).clone()
+    }
+
+    pub fn set_unresponsive(&self, point: &Path, on: bool) {
+        let mut list = guard(&self.health.unresponsive);
+        let was = list.iter().any(|known| known == point);
+        if was == on {
+            return;
+        }
+        match on {
+            true => list.push(point.to_owned()),
+            false => list.retain(|known| known != point),
+        }
+        drop(list);
+        self.announce();
+    }
+
+    pub fn alert_unresponsive(&self, name: &str, point: &Path) -> Option<u32> {
+        let id = self.post_alert(
+            0,
+            &L10N.tr("server-unresponsive"),
+            &L10N.tr_args("server-unresponsive-body", [("name", name.into())]),
+        )?;
+        guard(&self.alerts).insert(id, point.to_owned());
+        Some(id)
+    }
+
+    fn post_alert(&self, replaces: u32, summary: &str, body: &str) -> Option<u32> {
+        let disconnect = L10N.tr("server-disconnect");
+        client::notify(
+            &self.session,
+            &Request {
+                app_name: &L10N.tr("app-name"),
+                replaces_id: replaces,
+                app_icon: "folder-remote",
+                summary,
+                body,
+                actions: &[(ALERT_DISCONNECT, &disconnect)],
+                urgency: Urgency::Critical,
+                sound: None,
+            },
+        )
+        .inspect_err(|error| tracing::warn!("cannot post the alert: {error}"))
+        .ok()
+    }
+
+    pub fn close_alert(&self, id: u32) {
+        guard(&self.alerts).remove(&id);
+        if let Err(error) = client::close(&self.session, id) {
+            tracing::warn!("cannot close the alert: {error}");
+        }
+    }
+
+    pub fn follow_alerts(&self) {
+        let mounts = self.clone();
+        let spawned = thread::Builder::new()
+            .name("mount alerts".to_owned())
+            .spawn(move || mounts.alert_answers());
+        if let Err(error) = spawned {
+            tracing::warn!("cannot follow alerts: {error}");
+        }
+    }
+
+    fn alert_answers(&self) {
+        let rule = MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .interface("org.freedesktop.Notifications")
+            .and_then(|rule| rule.member("ActionInvoked"))
+            .map(|rule| rule.build());
+        let answers =
+            rule.and_then(|rule| MessageIterator::for_match_rule(rule, &self.session, None));
+        let answers = match answers {
+            Ok(answers) => answers,
+            Err(error) => {
+                tracing::warn!("Disconnect cannot be clicked: {error}");
+                return;
+            }
+        };
+        for answer in answers.flatten() {
+            let Ok((id, key)) = answer.body().deserialize::<(u32, String)>() else {
+                continue;
+            };
+            if key != ALERT_DISCONNECT {
+                continue;
+            }
+            guard(&self.health.lost).retain(|lost| lost.alert != Some(id));
+            let Some(point) = guard(&self.alerts).remove(&id) else {
+                continue;
+            };
+            let mounts = self.clone();
+            thread::spawn(move || {
+                if let Err(error) = mounts.disconnect(&point) {
+                    tracing::warn!("cannot disconnect {}: {error}", point.display());
+                }
+            });
+        }
+    }
+
+    pub fn mark_lost(&self, point: &Path, server: &Server, name: &str, alert: Option<u32>) {
+        let request = guard(&self.known).get(point).map_or_else(
+            || ConnectRequest {
+                url: server.url(),
+                user: server.user.clone().unwrap_or_default(),
+                ..ConnectRequest::default()
+            },
+            |(_, request)| request.clone(),
+        );
+        if let Some(id) = alert {
+            guard(&self.alerts).remove(&id);
+        }
+        let alert = alert.and_then(|id| {
+            self.post_alert(
+                id,
+                &L10N.tr("server-lost"),
+                &L10N.tr_args("server-lost-body", [("name", name.into())]),
+            )
+        });
+        if let Err(error) = self.disconnect(point) {
+            tracing::warn!("cannot unmount {}: {error}", point.display());
+        }
+        self.set_unresponsive(point, false);
+        guard(&self.health.lost).push(Lost {
+            request,
+            name: name.to_owned(),
+            alert,
+        });
+    }
+
+    pub fn try_lost(&self) {
+        let lost = guard(&self.health.lost).clone();
+        for entry in lost {
+            let Some(server) = Server::parse(&entry.request.url) else {
+                continue;
+            };
+            if !host_answers(&server) {
+                continue;
+            }
+            let outcome = self.connect(&entry.request);
+            if should_retry(&outcome) {
+                continue;
+            }
+            guard(&self.health.lost).retain(|known| known.request.url != entry.request.url);
+            if let Some(id) = entry.alert {
+                self.close_alert(id);
+            }
+            if !matches!(outcome, Outcome::Connected(_)) {
+                tracing::warn!("cannot reconnect {}: {outcome:?}", entry.request.url);
+            }
         }
     }
 
@@ -356,10 +538,24 @@ impl Mounts {
             }
             Protocol::Smb => self.mount_cifs(&server, &user, password.as_deref()),
             Protocol::Dav | Protocol::Davs => self.mount_dav(&server, &user, password.as_deref()),
-            Protocol::Sftp => self.mount_sftp(&server, password, &request.trusted_key),
+            Protocol::Nfs if server.path.is_empty() => self.list_exports(&server),
+            Protocol::Nfs => self.mount_nfs(&server),
+            Protocol::Sftp => self.mount_sftp(&server, password.clone(), &request.trusted_key),
         };
         if let Outcome::Connected(_) | Outcome::Shares(_) = &outcome {
             self.remember(&server, &user, request);
+        }
+        if let Outcome::Connected(path) = &outcome {
+            let point = connected_volume_of(path).unwrap_or_else(|| path.clone());
+            let kept = ConnectRequest {
+                user: user.clone(),
+                password: password.unwrap_or_default(),
+                remember: false,
+                ..request.clone()
+            };
+            guard(&self.known).insert(point, (server, kept));
+            self.health.wake();
+            self.announce();
         }
         outcome
     }
@@ -449,6 +645,48 @@ impl Mounts {
                 Self::connected_at(system_mounts_root(uid).join(name), server)
             }
             Ok(Some((false, _, stderr))) => classify(&stderr, user),
+            Ok(None) => Outcome::Unreachable,
+            Err(error) => Outcome::Failed(error.to_string()),
+        }
+    }
+
+    fn list_exports(&self, server: &Server) -> Outcome {
+        if !Path::new(SHOWMOUNT).exists() {
+            return Outcome::Missing(vec!["nfs-common"]);
+        }
+        let mut command = Command::new(SHOWMOUNT);
+        command
+            .args(["-e", "--no-headers", &server.host])
+            .env("LC_ALL", "C");
+        let listed = run_bounded(command, None, SHOW_LIMIT);
+        let exports = match listed {
+            Ok(Some((true, stdout, _))) => parse_exports(&stdout),
+            _ => Vec::new(),
+        };
+        match exports.is_empty() {
+            true => self.mount_nfs(server),
+            false => Outcome::Shares(exports),
+        }
+    }
+
+    fn mount_nfs(&self, server: &Server) -> Outcome {
+        if !Path::new(NFS).exists() {
+            return Outcome::Missing(vec!["nfs-common"]);
+        }
+        let source = server.nfs_source();
+        if let Some(point) = self.already_mounted(&source) {
+            return Outcome::Connected(point);
+        }
+        let name = free_name(&server.volume_name());
+        let port = server.port.map(|port| port.to_string()).unwrap_or_default();
+        let mut command = Command::new(PKEXEC);
+        command.args([HELPER, "mount", "nfs", &source, &name, "", &port]);
+        match run_bounded(command, None, CONNECT_LIMIT) {
+            Ok(Some((true, _, _))) => {
+                let uid = rustix::process::getuid().as_raw();
+                Outcome::Connected(system_mounts_root(uid).join(name))
+            }
+            Ok(Some((false, _, stderr))) => classify(&stderr, ""),
             Ok(None) => Outcome::Unreachable,
             Err(error) => Outcome::Failed(error.to_string()),
         }
@@ -665,6 +903,8 @@ impl Mounts {
     }
 
     pub fn disconnect(&self, point: &Path) -> Result<(), String> {
+        guard(&self.known).remove(point);
+        self.set_unresponsive(point, false);
         let daemon = {
             let mut daemons = guard(&self.daemons);
             daemons.get_mut(point).map(|daemon| {
@@ -696,6 +936,7 @@ impl Mounts {
         match run_bounded(command, None, UNMOUNT_LIMIT) {
             Ok(Some((true, _, _))) => Ok(()),
             Ok(Some((false, _, stderr))) => Err(stderr),
+            Ok(None) if !is_mounted(point) => Ok(()),
             Ok(None) => Err("the server did not answer".to_owned()),
             Err(error) => Err(error.to_string()),
         }
@@ -720,81 +961,29 @@ impl Mounts {
             .map_err(|error| error.to_string())
     }
 
-    pub fn reconnect_saved(self) {
-        let spawned = thread::Builder::new()
-            .name("reconnect".to_owned())
-            .spawn(move || self.reconnect_loop());
-        if let Err(error) = spawned {
-            tracing::warn!("cannot reconnect servers: {error}");
-        }
-    }
-
-    fn try_saved(&self, pending: Vec<Saved>) -> Vec<Saved> {
-        pending
-            .into_iter()
-            .filter(|entry| {
-                let request = ConnectRequest {
-                    url: entry.url.clone(),
-                    user: entry.user.clone(),
-                    ..ConnectRequest::default()
-                };
-                let outcome = self.connect(&request);
-                if outcome != Outcome::Unreachable && !matches!(outcome, Outcome::Connected(_)) {
-                    tracing::warn!("cannot reconnect {}: {outcome:?}", entry.url);
-                }
-                outcome == Outcome::Unreachable
-            })
-            .collect()
-    }
-
-    fn reconnect_loop(&self) {
-        let wanted: Vec<Saved> = self
+    pub fn reconnect_saved(&self) {
+        let wanted = self
             .saved()
             .into_iter()
             .filter(|entry| entry.reconnect)
-            .collect();
-        let mut pending = self.try_saved(wanted);
-        if pending.is_empty() {
-            return;
-        }
-        let Some(changes) = network_changes() else {
-            return;
-        };
-        for change in changes.flatten() {
-            let Ok((state,)) = change.body().deserialize::<(u32,)>() else {
-                continue;
-            };
-            if state >= NM_CONNECTED_LOCAL {
-                pending = self.try_saved(pending);
-                if pending.is_empty() {
-                    return;
-                }
-            }
-        }
+            .map(|entry| Lost {
+                alert: None,
+                name: String::new(),
+                request: ConnectRequest {
+                    url: entry.url,
+                    user: entry.user,
+                    ..ConnectRequest::default()
+                },
+            });
+        guard(&self.health.lost).extend(wanted);
+        follow_network_and_wake(&self.health);
+        health::follow(self.clone());
     }
 }
 
 pub enum Started {
     Refused(Asked),
     Failed(String),
-}
-
-fn network_changes() -> Option<MessageIterator> {
-    let system = Connection::system()
-        .inspect_err(|error| tracing::warn!("cannot follow the network: {error}"))
-        .ok()?;
-    let rule = MatchRule::builder()
-        .msg_type(message::Type::Signal)
-        .sender(NM)
-        .ok()?
-        .interface(NM)
-        .ok()?
-        .member("StateChanged")
-        .ok()?
-        .build();
-    MessageIterator::for_match_rule(rule, &system, None)
-        .inspect_err(|error| tracing::warn!("cannot follow the network: {error}"))
-        .ok()
 }
 
 fn keychain_key<'a>(origin: &'a str, user: &'a str) -> [(&'a str, &'a str); 2] {
@@ -811,6 +1000,26 @@ fn stored_password(origin: &str, user: &str) -> Option<String> {
 
 fn askpass_program() -> PathBuf {
     std::env::current_exe().unwrap_or_else(|_| PathBuf::from("/usr/bin/bande-automount"))
+}
+
+fn parse_exports(listing: &str) -> Vec<String> {
+    listing
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|path| path.starts_with('/'))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn host_answers(server: &Server) -> bool {
+    let host = server.host.trim_start_matches('[').trim_end_matches(']');
+    (host, server.port())
+        .to_socket_addrs()
+        .is_ok_and(|addresses| {
+            addresses
+                .into_iter()
+                .any(|address| TcpStream::connect_timeout(&address, HOST_LIMIT).is_ok())
+        })
 }
 
 fn parse_shares(listing: &str) -> Vec<String> {

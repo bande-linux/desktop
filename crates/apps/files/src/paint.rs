@@ -815,9 +815,12 @@ impl FilesView {
         };
         let free = column
             .folder()
-            .filter(|folder| !on_connected_volume(folder))
-            .and_then(|folder| rustix::fs::statvfs(folder).ok())
-            .map(|stats| stats.f_bavail * stats.f_frsize);
+            .and_then(|folder| match on_connected_volume(folder) {
+                true => self.connected_free(folder),
+                false => rustix::fs::statvfs(folder)
+                    .ok()
+                    .map(|stats| stats.f_bavail * stats.f_frsize),
+            });
         match free {
             Some(bytes) => L10N.tr_args(
                 "status-free",

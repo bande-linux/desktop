@@ -530,6 +530,10 @@ impl Compositor {
         self.configure_output(&name, settings);
     }
 
+    pub fn unresponsive_clients(&self) -> usize {
+        self.state.watchdog.unresponsive()
+    }
+
     pub fn windows(&self) -> &[Window] {
         &self.state.windows
     }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.RecoveryTools</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Recovery</name>
+  <summary>Reinstall, restore and repair</summary>
+  <description>
+    <p>Install or reinstall Bande while keeping your files, go back to a previous version, restore from a backup, and open Disks and Terminal.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.RecoveryTools.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+</component>

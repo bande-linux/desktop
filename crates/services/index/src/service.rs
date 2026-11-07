@@ -163,14 +163,11 @@ pub fn run(home: PathBuf, folder: PathBuf) -> io::Result<()> {
     follow_policy(home, move |policy| {
         policy_messages.send(Message::Policy(policy)).is_ok()
     });
-    let connection = bus::start(messages).map_err(io::Error::other)?;
     thread::Builder::new()
-        .name("index-bus".to_owned())
-        .spawn(move || {
-            bande_bus::serve_until_closed(&connection);
-            std::process::exit(0);
-        })?;
-    service.run(received);
+        .name("index-service".to_owned())
+        .spawn(move || service.run(received))?;
+    let connection = bus::start(messages).map_err(io::Error::other)?;
+    bande_bus::serve_until_closed(&connection);
     Ok(())
 }
 

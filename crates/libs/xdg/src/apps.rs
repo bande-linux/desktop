@@ -192,9 +192,11 @@ impl Apps {
             .iter()
             .any(|dir| path.starts_with(dir.join("applications")));
         installed
-            || fs::metadata(path).is_ok_and(|metadata| {
-                metadata.uid() == rustix::process::getuid().as_raw() && metadata.mode() & 0o111 != 0
-            })
+            || !bande_volumes::on_connected_volume(path)
+                && fs::metadata(path).is_ok_and(|metadata| {
+                    metadata.uid() == rustix::process::getuid().as_raw()
+                        && metadata.mode() & 0o111 != 0
+                })
     }
 
     pub fn data_dirs(&self) -> &[PathBuf] {

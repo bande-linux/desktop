@@ -659,6 +659,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-crash-reports"
+version = "0.1.7"
+dependencies = [
+ "bande-log",
+ "jiff",
+ "rustc-demangle",
+ "rustix 1.1.6",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "bande-datetime"
 version = "0.1.7"
 dependencies = [
@@ -708,11 +720,14 @@ dependencies = [
  "bande-content",
  "bande-files",
  "bande-fs",
+ "bande-graphics",
  "bande-inbox",
  "bande-l10n",
  "bande-log",
  "bande-pdf",
  "bande-printers",
+ "bande-test-bus",
+ "bande-test-wayland",
  "bande-toolkit",
  "bande-volumes",
  "bande-wallpaper",
@@ -798,13 +813,16 @@ dependencies = [
  "bande-bus",
  "bande-config",
  "bande-datetime",
+ "bande-inbox",
  "bande-keyboard",
  "bande-l10n",
  "bande-lock",
  "bande-log",
+ "bande-network",
  "bande-status",
  "bande-toolkit",
  "libc",
+ "rustix 1.1.6",
  "serde",
  "serde_json",
  "tracing",
@@ -880,6 +898,7 @@ dependencies = [
  "bande-status",
  "bande-thumbnails",
  "bande-toolkit",
+ "bande-volumes",
  "bande-xdg",
  "image",
  "tracing",
@@ -1047,7 +1066,6 @@ dependencies = [
  "bande-pdf",
  "bande-printers",
  "bande-test-bus",
- "bande-test-wayland",
  "bande-xdg",
  "blocking",
  "ring",
@@ -1090,6 +1108,7 @@ dependencies = [
  "bande-l10n",
  "bande-media-view",
  "bande-toolkit",
+ "bande-volumes",
  "bande-xdg",
  "parley",
  "tracing",
@@ -1100,8 +1119,25 @@ name = "bande-recovery"
 version = "0.1.7"
 dependencies = [
  "bande-log",
+ "rustix 1.1.6",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-recovery-tools"
+version = "0.1.7"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-xdg",
+ "serde",
+ "serde_json",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]
@@ -1111,6 +1147,20 @@ dependencies = [
  "ash",
  "naga",
  "smithay",
+]
+
+[[package]]
+name = "bande-reporter"
+version = "0.1.7"
+dependencies = [
+ "bande-log",
+ "flate2",
+ "jiff",
+ "ring",
+ "rustix 1.1.6",
+ "rustls",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -1171,6 +1221,7 @@ dependencies = [
  "bande-config",
  "bande-fs",
  "bande-inbox",
+ "bande-volumes",
  "bande-watch",
  "bande-xdg",
  "jiff",
@@ -1368,6 +1419,7 @@ name = "bande-thumbnails"
 version = "0.1.7"
 dependencies = [
  "bande-inbox",
+ "bande-volumes",
  "bande-xdg",
  "image",
  "md-5 0.10.6",
@@ -1437,6 +1489,7 @@ name = "bande-wallpaper"
 version = "0.1.7"
 dependencies = [
  "bande-inbox",
+ "bande-volumes",
  "image",
  "resvg",
  "tracing",
@@ -1470,6 +1523,7 @@ dependencies = [
  "bande-inbox",
  "bande-l10n",
  "bande-notify",
+ "bande-volumes",
  "rustix 1.1.6",
  "tempfile",
  "tracing",
@@ -4933,6 +4987,12 @@ dependencies = [
  "serde",
  "serde_derive",
 ]
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
 
 [[package]]
 name = "rustc-hash"

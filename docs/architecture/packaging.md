@@ -15,7 +15,7 @@ profiles. Sizes are in [performance.md](performance.md).
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
   (`bande-config`, `bande-notify`, `bande-power`, `bande-recovery`, `bande-sound`, `bande-clipboard`, `bande-tray`,
-  `bande-automount`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
+  `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
@@ -93,6 +93,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   generate any language picked in Settings;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
   for screen recording;
+- `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides

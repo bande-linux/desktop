@@ -723,6 +723,7 @@ impl SettingsView {
             List::About => self.about_rows(),
             List::Storage => self.storage_rows(),
             List::LargeFiles => self.large_file_rows(),
+            List::Backup => self.backup_rows(),
             List::Clock => self.clock_rows(),
             List::TimeZones => self.zone_rows(),
             List::LoginItems => self.login_rows(),

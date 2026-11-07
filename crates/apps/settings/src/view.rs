@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 
 use crate::L10N;
 use crate::about::{About, AboutCommand};
+use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, BatteryState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::follow::{Command, Update};
@@ -84,6 +85,7 @@ pub(crate) enum Intent {
     AskClearClipboard(bool),
     ClearClipboard,
     EmptyTrash,
+    Backup(BackupIntent),
     Reveal(PathBuf),
     Pick(Option<Picker>),
     PickQuery(String),
@@ -237,6 +239,7 @@ pub struct SettingsView {
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) storage: Option<Storage>,
+    pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
     pub(crate) confirming_clear_clipboard: bool,
@@ -331,6 +334,7 @@ impl SettingsView {
             pointing: PointingDevices::default(),
             about: None,
             storage: None,
+            backup: BackupView::default(),
             drafts: HashMap::new(),
             confirming_empty_trash: false,
             confirming_clear_clipboard: false,
@@ -606,6 +610,7 @@ impl SettingsView {
                 Some(PaneId::Storage),
                 &[SettingId::StorageUsage, SettingId::LargeFiles],
             ),
+            Update::Backup(_) => (Some(PaneId::Backup), &[SettingId::BackupStatus]),
             Update::Software(_) => (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates]),
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
             Update::Printers(_)
@@ -769,6 +774,7 @@ impl SettingsView {
                 }
                 self.storage = Some(storage);
             }
+            Update::Backup(update) => self.backup_updated(update),
             Update::Failed(setting, error) => {
                 self.busy.clear();
                 self.errors.insert(setting, error);
@@ -916,6 +922,7 @@ impl SettingsView {
             | PaneId::Users
             | PaneId::Passwords
             | PaneId::Storage
+            | PaneId::Backup
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
             PaneId::Mouse => self.pointing.mouse,
@@ -1326,6 +1333,7 @@ impl SettingsView {
                     self.commands
                         .push(Command::Storage(StorageCommand::EmptyTrash));
                 }
+                Intent::Backup(intent) => self.backup_intent(intent),
                 Intent::Reveal(path) => self.commands.push(Command::Reveal(path)),
                 Intent::OpenApp(group) => {
                     self.focus_next = Some(Anchor::Back);
@@ -1681,6 +1689,7 @@ impl SettingsView {
             PaneId::Storage => self
                 .commands
                 .push(Command::Storage(StorageCommand::Measure)),
+            PaneId::Backup => self.backup_opened(),
             PaneId::Apps => {
                 self.commands.push(Command::Login(LoginCommand::Refresh));
                 self.commands

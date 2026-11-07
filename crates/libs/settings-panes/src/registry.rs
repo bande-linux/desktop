@@ -294,6 +294,8 @@ pub enum SettingId {
     SoftwareUpdatePage,
     ShortcutsPage,
     ClipboardHistory,
+    KeyboardAccess,
+    SecurityStatus,
     DefaultApps,
     Brightness,
     NightLightPage,
@@ -374,6 +376,8 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    KeyboardAccess,
+    SecurityStatus,
     SearchExcluded,
     Permissions(Permission),
     Passwords,
@@ -1434,6 +1438,14 @@ fn system_panes() -> Vec<Pane> {
             PaneId::PrivacySecurity,
             vec![
                 section(
+                    Some(L10N.tr("this-mac")),
+                    vec![list(
+                        SettingId::SecurityStatus,
+                        "this-mac",
+                        List::SecurityStatus,
+                    )],
+                ),
+                section(
                     Some(L10N.tr("app-permissions")),
                     vec![
                         page(SettingId::CameraPage, PaneId::Camera),
@@ -1442,6 +1454,14 @@ fn system_panes() -> Vec<Pane> {
                         page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
                         page(SettingId::LocationPage, PaneId::Location),
                     ],
+                ),
+                section(
+                    Some(L10N.tr("keyboard-access")),
+                    vec![list(
+                        SettingId::KeyboardAccess,
+                        "keyboard-access",
+                        List::KeyboardAccess,
+                    )],
                 ),
                 section(
                     Some(L10N.tr("clipboard")),

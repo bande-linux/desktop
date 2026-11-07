@@ -1,6 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 pub use drive::{Frames, chord, headless};
+pub use ime::grant_consent;
 pub use separate::{SeparateApp, act_as_separate_app};
 pub use toplevel::PopupRequest;
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;

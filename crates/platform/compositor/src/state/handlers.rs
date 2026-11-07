@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use super::{ClientState, State, is_mapped, send_preferred_scale};
@@ -23,6 +23,9 @@ use smithay::wayland::compositor::{
 use smithay::wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier};
 use smithay::wayland::fractional_scale::FractionalScaleHandler;
 use smithay::wayland::output::OutputHandler;
+use smithay::wayland::security_context::{
+    SecurityContext, SecurityContextHandler, SecurityContextListenerSource,
+};
 use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::selection::data_device::set_data_device_focus;
 use smithay::wayland::selection::ext_data_control::{DataControlHandler, DataControlState};
@@ -44,8 +47,8 @@ use smithay::wayland::xdg_activation::{
 use smithay::{
     delegate_compositor, delegate_cursor_shape, delegate_data_device, delegate_dmabuf,
     delegate_ext_data_control, delegate_fractional_scale, delegate_layer_shell, delegate_output,
-    delegate_presentation, delegate_primary_selection, delegate_seat, delegate_shm,
-    delegate_viewporter, delegate_xdg_activation, delegate_xdg_shell,
+    delegate_presentation, delegate_primary_selection, delegate_seat, delegate_security_context,
+    delegate_shm, delegate_viewporter, delegate_xdg_activation, delegate_xdg_shell,
 };
 
 use crate::shell;
@@ -394,6 +397,36 @@ delegate_seat!(State);
 delegate_shm!(State);
 delegate_xdg_shell!(State);
 delegate_layer_shell!(State);
+delegate_security_context!(State);
+
+impl SecurityContextHandler for State {
+    fn context_created(&mut self, source: SecurityContextListenerSource, context: SecurityContext) {
+        let accepted = self
+            .blockers
+            .insert_source(source, move |stream, _, state| {
+                let process = crate::force_quit::Process::of_peer(&stream);
+                let client_state = ClientState {
+                    claimant: context
+                        .app_id
+                        .clone()
+                        .filter(|_| context.sandbox_engine.is_some())
+                        .map(crate::trust::Claimant::Sandboxed),
+                    sandboxed: true,
+                    process,
+                    ..ClientState::default()
+                };
+                if let Err(error) = state
+                    .display_handle
+                    .insert_client(stream, Arc::new(client_state))
+                {
+                    tracing::warn!("cannot accept a sandboxed client: {error}");
+                }
+            });
+        if let Err(error) = accepted {
+            tracing::warn!("cannot listen for sandboxed clients: {error}");
+        }
+    }
+}
 delegate_xdg_activation!(State);
 delegate_viewporter!(State);
 delegate_fractional_scale!(State);

@@ -172,7 +172,13 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 shortcut("menu-bigger-icons", "Ctrl+="),
                 shortcut("menu-smaller-icons", "Ctrl+-"),
                 Entry::separator(),
-                shortcut("menu-show-hidden-files", "Ctrl+H"),
+                shortcut(
+                    match view.browser().shows_hidden() {
+                        true => "menu-hide-hidden-files",
+                        false => "menu-show-hidden-files",
+                    },
+                    "Ctrl+H",
+                ),
                 plain("menu-status-bar", "toggle-status-bar"),
                 shortcut("menu-quick-look", "Space"),
                 plain("menu-quick-look-full-screen", "quick-look-full-screen"),

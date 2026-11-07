@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use crate::controls::{COLUMN_ACTION, COLUMN_LEFT_ACTION, COLUMN_RIGHT_ACTION};
 use crate::menus::{
-    App, Command, Destination, Folder, Place, Selection, command, folder_menu, items_menu,
-    place_menu, sidebar_menu,
+    Command, Destination, Folder, Place, Selection, command, folder_menu, items_menu, place_menu,
+    sidebar_menu,
 };
 use crate::sidebar::{BookmarkEdit, PlaceKind, Row, SidebarEdit, favourites, layout_text};
 use crate::view::{FilesView, Hit, Request, user_folder};
@@ -117,28 +117,10 @@ impl FilesView {
         let selection = self.browser.selection();
         let trashed =
             !selection.is_empty() && selection.iter().all(|entry| entry.trashed.is_some());
-        let files = selection
-            .iter()
-            .filter(|entry| !entry.is_folder())
-            .collect::<Vec<_>>();
-        let mimes = files
-            .iter()
-            .map(|entry| self.apps.mime_for(&entry.path))
-            .collect::<Vec<_>>();
-        let apps = match mimes.split_first() {
-            Some((first, rest))
-                if files.len() == selection.len() && rest.iter().all(|mime| mime == first) =>
-            {
-                self.apps
-                    .apps_for(first)
-                    .into_iter()
-                    .map(|entry| App {
-                        id: entry.id.clone(),
-                        name: entry.name.clone(),
-                    })
-                    .collect()
-            }
-            _ => Vec::new(),
+        let only_files = selection.iter().all(|entry| !entry.is_folder());
+        let apps = match only_files {
+            true => self.apps.open_with_choices(&self.browser.selected_paths()),
+            false => Vec::new(),
         };
         items_menu(&Selection {
             count: selection.len(),
@@ -148,7 +130,7 @@ impl FilesView {
                 .unwrap_or_default(),
             trashed,
             away: self.searching.is_some() || *self.browser.root() == Location::Recents,
-            files: !selection.is_empty() && files.len() == selection.len() && !trashed,
+            files: !selection.is_empty() && only_files && !trashed,
             folders: !selection.is_empty()
                 && selection
                     .iter()
@@ -167,10 +149,6 @@ impl FilesView {
             templates: self.templates(),
             trash: self.browser.active_column().location == Location::Trash,
             trash_empty: !self.trash_full,
-            sort: self.browser.sort().by,
-            group: self.browser.groups(),
-            mode: self.mode,
-            hidden_shown: self.browser.shows_hidden(),
             paste: self.clipboard_files,
             terminal: self.terminal_installed(),
         })
@@ -274,10 +252,7 @@ impl FilesView {
                 layout: None,
                 bookmarks: None,
             })),
-            Command::OpenPlace
-            | Command::OpenPlaceInNewTab
-            | Command::RemoveFromSidebar
-            | Command::Eject => {
+            Command::OpenPlaceInNewTab | Command::RemoveFromSidebar | Command::Eject => {
                 let Some((index, Row::Place(place))) =
                     place.and_then(|index| Some((index, self.sidebar.get(index)?)))
                 else {
@@ -285,7 +260,6 @@ impl FilesView {
                 };
                 let location = place.location.clone();
                 match (command, location) {
-                    (Command::OpenPlace, location) => self.go(location),
                     (Command::OpenPlaceInNewTab, location) => self.open_tab(location),
                     (Command::Eject, Location::Folder(path)) => {
                         self.requests.push(Request::Eject(path));
@@ -300,13 +274,12 @@ impl FilesView {
 
     fn open_with(&mut self, id: &str) {
         let files = self.browser.selected_paths();
-        let app = files.first().and_then(|path| {
-            self.apps
-                .apps_for_path(path)
-                .into_iter()
-                .find(|app| app.id == id)
-                .cloned()
-        });
+        let app = self
+            .apps
+            .apps_for_files(&files)
+            .into_iter()
+            .find(|app| app.id == id)
+            .cloned();
         if let Some(app) = app {
             self.requests.push(Request::Open {
                 app: Box::new(app),

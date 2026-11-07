@@ -81,10 +81,9 @@ when they reach the screen is Bande's own.
   cursor, the corner cut-outs included (`resize_zone` in `bande-graphics`, shared with the
   toolkit); nothing inside the outline resizes, so the bar's top pixel moves the window. A
   floating client-side window gets the outside band too wherever its own input region leaves
-  the point to the compositor. A side with no room outside gets a 3 pt band inside instead,
-  which the compositor takes before any client (`walled_resize_zone`): a floating window's
-  left, right or bottom side against the usable area's limit, and every side of a tile except
-  one against the top limit, where a press still moves the window. A
+  the point to the compositor. A left, right or bottom side against the usable area's limit has
+  no room outside, so the compositor takes a 3 pt band inside it before any client
+  (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
@@ -192,9 +191,14 @@ when they reach the screen is Bande's own.
   with another display, where the pointer must rest 250 ms so a window can still be dragged
   across. Releasing over a shown preview springs the window into it. `Super+Left/Right` tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
-  `Up` zooms a free window and `Down` returns a zoomed one. Tiles get xdg-shell's tiled states
-  (for clients binding version 2) and no gaps. Dragging the edge two neighbouring tiles share
-  resizes both; dragging a tiled window away gives back its earlier size under the pointer.
+  `Up` zooms a free window and `Down` returns a zoomed one. A tile is only a shape, as on macOS:
+  no gaps, but the window keeps its rounded corners, shadow and resize edges, and gets no
+  xdg-shell tiled states, since clients drop their resize edges for those (GTK) and would have
+  none to offer. `bande_app_v1.window_tiled` tells toolkit apps instead. Dragging the edge two
+  neighbouring tiles share resizes both, down to the neighbour's minimum size, and both stay
+  tiled; resizing any other edge makes the window an ordinary window of that size. Dragging a
+  tiled window away gives back its earlier size under the pointer; one that became ordinary
+  keeps its size. Filling the other half fills what the tile next to it leaves free.
 - **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
   pointer, offset by the icon's attach offset, below the pointer. Holding Ctrl makes a
   drop a copy and Shift a move (as in GTK and KDE), when source and destination offer it; otherwise the

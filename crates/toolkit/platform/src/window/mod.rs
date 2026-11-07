@@ -742,7 +742,8 @@ impl Window {
     }
 
     fn resizes_from_band(&self) -> bool {
-        self.is_resizable() && self.state.toplevel.floating()
+        let toplevel = self.state.toplevel;
+        self.is_resizable() && !toplevel.maximized && !toplevel.fullscreen
     }
 
     fn resize_margin(&self) -> u32 {
@@ -967,6 +968,21 @@ impl Window {
         }
     }
 
+    fn take_window_tiled(&mut self) {
+        let window_tiled = std::mem::take(&mut self.state.shell.window_tiled);
+        let Ok(own) = self.toplevel().cloned() else {
+            return;
+        };
+        for (toplevel, tiled) in window_tiled {
+            if toplevel == own && self.state.toplevel.tiled != tiled {
+                self.state.toplevel.tiled = tiled;
+                self.state
+                    .events
+                    .push(WindowEvent::ToplevelChanged(self.state.toplevel));
+            }
+        }
+    }
+
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
         self.take_arrival();
         self.take_drop();
@@ -980,6 +996,7 @@ impl Window {
                 }
             }
         }
+        self.take_window_tiled();
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
             return events;

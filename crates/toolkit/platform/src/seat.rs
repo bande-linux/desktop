@@ -15,6 +15,7 @@ use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use xkbcommon::xkb::{self, Keycode, Keysym, keysyms};
 
+use crate::compose::{Compose, Step};
 use crate::window::{State, Window, WindowEvent};
 
 const BTN_LEFT: u32 = 0x110;
@@ -80,6 +81,7 @@ pub(crate) struct Input {
     shown_cursor: Option<Cursor>,
     keyboard: Option<WlKeyboard>,
     keymap: Option<Keymap>,
+    pub(crate) compose: Compose,
     modifiers: Modifiers,
     caps_lock: bool,
     pointer_at: Point,
@@ -231,6 +233,21 @@ impl Input {
         }))
     }
 
+    fn compose_step(&mut self, keycode: Keycode) -> Option<Step> {
+        let keysym = self.keymap.as_ref()?.state.key_get_one_sym(keycode);
+        let shortcut = self.modifiers.control || self.modifiers.alt || self.modifiers.logo;
+        let abandons = matches!(key_for(keysym), Some(Key::Backspace | Key::Escape));
+        if self.compose.is_composing() && (shortcut || abandons) {
+            self.compose.cancel();
+            return Some(Step {
+                text: String::new(),
+                preedit: String::new(),
+                deliver_key: shortcut,
+            });
+        }
+        (!shortcut).then(|| self.compose.feed(keysym))
+    }
+
     fn update_modifiers(&mut self) -> bool {
         let Some(keymap) = &self.keymap else {
             return false;
@@ -294,6 +311,7 @@ impl Input {
 
     pub(crate) fn set_raw_keys(&mut self, raw: bool) {
         self.raw_keys = raw;
+        self.compose.cancel();
         self.repeat = None;
     }
 
@@ -373,6 +391,58 @@ impl State {
         match (self.input.keyboard_popup, event) {
             (Some(level), WindowEvent::Input(input)) => self.popup_input.push((level, input)),
             (_, event) => self.events.push(event),
+        }
+    }
+
+    fn end_composition(&mut self) {
+        if self.input.compose.is_composing() {
+            self.input.compose.cancel();
+            self.key_event(WindowEvent::Input(Event::Preedit {
+                text: String::new(),
+                cursor: None,
+            }));
+        }
+    }
+
+    fn press_key(&mut self, keycode: Keycode) {
+        let was_composing = self.input.compose.is_composing();
+        let step = self.input.compose_step(keycode);
+        let deliver_key = step.as_ref().is_none_or(|step| step.deliver_key);
+        let repeats = deliver_key
+            && self.input.repeat_interval.is_some()
+            && self
+                .input
+                .keymap
+                .as_ref()
+                .is_some_and(|keymap| keymap.keymap.key_repeats(keycode));
+        self.input.repeat = repeats.then(|| Repeat {
+            keycode,
+            next: Instant::now() + self.input.repeat_delay,
+        });
+        if let Some(step) = step {
+            let stays_composing = !step.preedit.is_empty();
+            if was_composing && (!stays_composing || !step.deliver_key) {
+                self.key_event(WindowEvent::Input(Event::Preedit {
+                    text: String::new(),
+                    cursor: None,
+                }));
+            }
+            let modifiers = self.input.modifiers;
+            for character in step.text.chars() {
+                self.key_event(WindowEvent::Input(Event::Key {
+                    key: Key::Character(character),
+                    modifiers,
+                }));
+            }
+            if stays_composing && !step.deliver_key {
+                self.key_event(WindowEvent::Input(Event::Preedit {
+                    text: step.preedit,
+                    cursor: None,
+                }));
+            }
+        }
+        if deliver_key && let Some(event) = self.input.key_event(keycode) {
+            self.key_event(event);
         }
     }
 
@@ -643,6 +713,7 @@ impl Dispatch<WlKeyboard, ()> for State {
             wl_keyboard::Event::Leave { surface, .. } => {
                 input.repeat = None;
                 input.keyboard_here = false;
+                state.end_composition();
                 state.end_capture();
                 state.release_modifiers();
                 let menu_open = !state.popup_surfaces.is_empty();
@@ -703,17 +774,7 @@ impl Dispatch<WlKeyboard, ()> for State {
                 let keycode = Keycode::new(key + EVDEV_OFFSET);
                 if key_state == wl_keyboard::KeyState::Pressed {
                     input.keyboard_initiated = true;
-                    let repeats = input
-                        .keymap
-                        .as_ref()
-                        .is_some_and(|keymap| keymap.keymap.key_repeats(keycode));
-                    input.repeat = (repeats && input.repeat_interval.is_some()).then(|| Repeat {
-                        keycode,
-                        next: Instant::now() + input.repeat_delay,
-                    });
-                    if let Some(event) = input.key_event(keycode) {
-                        state.key_event(event);
-                    }
+                    state.press_key(keycode);
                 } else if input
                     .repeat
                     .as_ref()

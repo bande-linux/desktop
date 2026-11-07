@@ -20,6 +20,9 @@ const CHANGE: u8 = 2;
 const LONGEST_FIELD: usize = 4096;
 const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(20);
+const LOG_WARNING: c_int = 4;
+const LOG_INFO: c_int = 6;
+const AS_TEXT: &CStr = c"%s";
 
 #[repr(C)]
 pub struct PamHandle {
@@ -47,6 +50,19 @@ unsafe extern "C" {
         name: *const c_char,
         data: *mut *const c_void,
     ) -> c_int;
+    fn pam_syslog(handle: *const PamHandle, priority: c_int, format: *const c_char, ...);
+}
+
+struct Failure {
+    priority: c_int,
+    text: &'static CStr,
+}
+
+const fn warning(text: &'static CStr) -> Failure {
+    Failure {
+        priority: LOG_WARNING,
+        text,
+    }
 }
 
 type Password = Zeroizing<Vec<u8>>;
@@ -130,19 +146,49 @@ fn send_all(stream: &UnixStream, mut bytes: &[u8]) -> Option<()> {
     Some(())
 }
 
-fn send(uid: libc::uid_t, message: &[u8]) -> Option<()> {
+fn send(uid: libc::uid_t, message: &[u8]) -> Result<(), Failure> {
     let socket = format!("/run/user/{uid}/bande-secrets/pam");
-    let mut stream = UnixStream::connect(socket).ok()?;
+    let mut stream = UnixStream::connect(socket)
+        .map_err(|_| warning(c"cannot reach the keychain login socket"))?;
     if !peer_is(&stream, uid) {
-        return None;
+        return Err(warning(
+            c"the keychain login socket belongs to another user",
+        ));
     }
-    stream.set_write_timeout(Some(SEND_TIMEOUT)).ok()?;
-    stream.set_read_timeout(Some(ANSWER_TIMEOUT)).ok()?;
-    send_all(&stream, message)?;
-    stream.shutdown(Shutdown::Write).ok()?;
+    let unsent = || warning(c"cannot send to the keychain login socket");
+    stream
+        .set_write_timeout(Some(SEND_TIMEOUT))
+        .map_err(|_| unsent())?;
+    stream
+        .set_read_timeout(Some(ANSWER_TIMEOUT))
+        .map_err(|_| unsent())?;
+    send_all(&stream, message).ok_or_else(unsent)?;
+    stream.shutdown(Shutdown::Write).map_err(|_| unsent())?;
     let mut answer = [1u8];
-    stream.read_exact(&mut answer).ok()?;
-    (answer[0] == 0).then_some(())
+    stream
+        .read_exact(&mut answer)
+        .map_err(|_| warning(c"the keychain did not answer, or refused this process"))?;
+    if answer[0] == 0 {
+        Ok(())
+    } else {
+        Err(Failure {
+            priority: LOG_INFO,
+            text: c"the password does not open the login keychain",
+        })
+    }
+}
+
+unsafe fn report(handle: *mut PamHandle, result: Result<(), Failure>) {
+    if let Err(failure) = result {
+        unsafe {
+            pam_syslog(
+                handle,
+                failure.priority,
+                AS_TEXT.as_ptr(),
+                failure.text.as_ptr(),
+            );
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -185,7 +231,7 @@ pub unsafe extern "C" fn pam_sm_open_session(
     }
     let password = unsafe { &*data.cast::<Password>() };
     if let Some(uid) = unsafe { user_id(handle) } {
-        let _ = send(uid, &message(UNLOCK, &[password]));
+        unsafe { report(handle, send(uid, &message(UNLOCK, &[password]))) };
     }
     unsafe { pam_set_data(handle, STASH.as_ptr(), std::ptr::null_mut(), None) };
     PAM_SUCCESS
@@ -217,7 +263,7 @@ pub unsafe extern "C" fn pam_sm_chauthtok(
         return PAM_IGNORE;
     };
     if let Some(uid) = unsafe { user_id(handle) } {
-        let _ = send(uid, &message(CHANGE, &[&old, &new]));
+        unsafe { report(handle, send(uid, &message(CHANGE, &[&old, &new]))) };
     }
     PAM_SUCCESS
 }

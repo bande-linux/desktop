@@ -702,7 +702,10 @@ impl Session {
         let Some(slot) = self.capturing else {
             return;
         };
-        let sized = self.slots.get(&slot).map(|slot| (slot.shared.width, slot.shared.height));
+        let sized = self
+            .slots
+            .get(&slot)
+            .map(|slot| (slot.shared.width, slot.shared.height));
         if sized == self.size {
             self.refuse_dmabuf();
         } else {

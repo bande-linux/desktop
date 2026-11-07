@@ -16,10 +16,9 @@ use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder}
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT,
-    ViewMemory, follow_search_excluded, hidden_places, list_columns_file,
-    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
-    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
-    without_bookmark,
+    ViewMemory, hidden_places, list_columns_file, recent_folders_file as recent_folders_file_in,
+    rows, serve_file_manager, settings_view, sidebar_file, status_bar_file, views_file,
+    volumes_hidden, with_bookmarks, with_place_shown, without_bookmark,
 };
 use bande_fs::{History, Trash};
 use bande_inbox::Inbox;
@@ -964,7 +963,8 @@ impl Program for Files {
             .inspect_err(|error| tracing::warn!("cannot follow the Search privacy list: {error}"))
             .ok();
         if let Some(inbox) = &excluded {
-            follow_search_excluded(home.clone(), inbox.outbox());
+            let folders = inbox.outbox();
+            bande_search::follow_policy(home.clone(), move |policy| folders.send(policy.excluded));
         }
         let sidebar_watch = layout_file(&home)
             .parent()

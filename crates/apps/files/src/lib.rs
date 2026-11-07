@@ -16,7 +16,6 @@ mod loader;
 mod menus;
 mod open_with;
 mod paint;
-mod privacy;
 mod prompt;
 mod quick_look;
 mod search;
@@ -40,7 +39,6 @@ pub use file_manager::{Show, ShowRequest, serve_file_manager};
 pub use menus::{GROUPS, group_action};
 pub use open_with::OpenWith;
 pub use paint::permissions;
-pub use privacy::follow_search_excluded;
 pub use search::SEARCH_HEIGHT;
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{

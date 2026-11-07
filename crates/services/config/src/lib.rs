@@ -740,10 +740,13 @@ pub enum SearchCategory {
     System,
     Calculator,
     Conversion,
+    Mail,
+    Events,
+    Contacts,
 }
 
 impl SearchCategory {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 12] = [
         Self::Applications,
         Self::RecentApps,
         Self::RecentDocuments,
@@ -753,6 +756,9 @@ impl SearchCategory {
         Self::System,
         Self::Calculator,
         Self::Conversion,
+        Self::Mail,
+        Self::Events,
+        Self::Contacts,
     ];
 
     pub fn keyword(self) -> &'static str {
@@ -766,6 +772,9 @@ impl SearchCategory {
             Self::System => "system-actions",
             Self::Calculator => "calculator",
             Self::Conversion => "conversion",
+            Self::Mail => "mail",
+            Self::Events => "events",
+            Self::Contacts => "contacts",
         }
     }
 

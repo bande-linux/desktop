@@ -73,6 +73,7 @@ graph TB
         SOUND[bande-sound]
         CLIP[bande-clipboard]
         TRAY[bande-tray]
+        INDEXER[bande-indexer]
         AUTOMOUNT[bande-automount]
         PORTAL[xdg-desktop-portal-bande]
         POLKIT[bande-polkit]
@@ -85,7 +86,7 @@ graph TB
     FILES & SETTINGS & TERM -->|Wayland| SMITHAY
     CLIP -->|Wayland, trusted socket| SMITHAY
     DOCK & LAUNCHER & FILES & SETTINGS & TERM --- TOOLKIT
-    CONFIG & NOTIFY & POWER & TRAY & AUTOMOUNT & PORTAL & POLKIT <-->|D-Bus| SYS
+    CONFIG & NOTIFY & POWER & TRAY & INDEXER & AUTOMOUNT & PORTAL & POLKIT <-->|D-Bus| SYS
     SETTINGS & DOCK & CC <-->|D-Bus| CONFIG
 ```
 

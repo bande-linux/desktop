@@ -12,9 +12,10 @@ use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL,
 };
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, TestClient, act_as_separate_app,
-    chord, headless, roundtrip,
+    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
+    act_as_separate_app, chord, headless, roundtrip,
 };
+use wayland_client::protocol::wl_shm::Format;
 
 const MONITOR: &str = "org.freedesktop.a11y.KeyboardMonitor";
 const MONITOR_PATH: &str = "/org/freedesktop/a11y/Manager";

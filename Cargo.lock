@@ -845,6 +845,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-media"
+version = "0.1.7"
+dependencies = [
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bande-media-view"
+version = "0.1.7"
+dependencies = [
+ "accesskit",
+ "bande-content",
+ "bande-l10n",
+ "bande-media",
+ "bande-toolkit",
+ "tracing",
+]
+
+[[package]]
 name = "bande-network"
 version = "0.1.7"
 dependencies = [
@@ -957,6 +978,7 @@ dependencies = [
  "bande-fs",
  "bande-inbox",
  "bande-l10n",
+ "bande-media-view",
  "bande-toolkit",
  "bande-xdg",
  "parley",

@@ -345,7 +345,10 @@ writes a hex value, a corner radius or a font name of its own.
   region. `show_shm(fd, ShmLayout)` wraps the app's own memory in a `wl_shm` buffer without a
   copy, `show_dmabuf(&Dmabuf)` imports a dmabuf through `zwp_linux_dmabuf_v1` (`flipped` for
   bottom-up GL scanouts), and `damage(&[Region])` commits the changed rectangles of the current
-  buffer. A frame wakes neither the app's scene nor the window's renderer.
+  buffer. For a pool of buffers (video), `shm_buffer` and `dmabuf_buffer` make a reusable
+  `SurfaceBuffer` with a callback for `wl_buffer.release`, shown with `present`.
+  `set_idle_inhibited` holds a `zwp_idle_inhibitor_v1` on the surface for as long as it lives. A
+  frame wakes neither the app's scene nor the window's renderer.
   `ui::SurfaceView::new(surface.id(), label, on_input)` places it: it paints an
   `Item::Surface`, which the renderers draw as black letterboxing around a transparent hole
   (cut through the enclosing clips, so it keeps the sheet's rounded corners). The window puts

@@ -72,7 +72,7 @@ graph LR
   | `org.freedesktop.ScreenSaver.Inhibit` | Firefox (first choice), Chromium/Electron (after GNOME's) | `bande-power`, held until `UnInhibit` or the caller leaves the bus |
   | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | `xdg-desktop-portal-bande` forwards it to `org.freedesktop.ScreenSaver` |
   | logind `idle` block inhibitor (`systemd-inhibit --what=idle`) | scripts, `caffeinate`-style tools | `bande-power` follows logind's `BlockInhibited` |
-  | `zwp_idle_inhibitor_v1` on a surface | mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
+  | `zwp_idle_inhibitor_v1` on a surface | Player and Quick Look (on the video's surface), mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
 
   Audio alone keeps the computer but not the display awake, as on macOS, and neither CPU load,
   builds nor MPRIS keep anything awake. Idle time restarts when the last inhibitor ends, so a

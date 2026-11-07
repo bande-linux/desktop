@@ -437,8 +437,9 @@ impl Chrome {
             offset: Point::new(placed.x, placed.y),
             items: drawn,
         });
-        if frame.inset > 0.0 {
-            items.extend(Item::rim(Shape::rounded(sheet, radius), palette));
+        if frame.margin > 0.0 {
+            let outline = Rect::new(0.0, 0.0, frame.width, frame.height);
+            items.push(Item::lit_edge(Shape::rounded(outline, Radius::XL), palette));
         }
         Scene {
             width: (frame.width + 2.0 * frame.margin) as u32,

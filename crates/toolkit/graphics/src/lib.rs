@@ -13,7 +13,7 @@ mod title_bar;
 
 pub use bande_design::{
     Accent, Appearance, Color, Contrast, ControlSize, Elevation, Palette, Radius, Scheme, Shadow,
-    Spacing, TextRole, TextSize, Typeface, grown_line,
+    Spacing, TextRole, TextSize, Typeface, grown_line, window_edge_opacity,
 };
 pub use cpu::CpuRenderer;
 pub use damage::{Region, damage};

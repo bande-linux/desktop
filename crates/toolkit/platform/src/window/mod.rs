@@ -751,8 +751,6 @@ impl Window {
         let toplevel = self.state.toplevel;
         if !self.is_resizable() || toplevel.maximized || toplevel.fullscreen {
             None
-        } else if toplevel.tiled {
-            Some(0.0)
         } else {
             Some(Radius::XL)
         }
@@ -760,12 +758,12 @@ impl Window {
 
     fn resize_margin(&self) -> u32 {
         let toplevel = self.state.toplevel;
-        let floating = !(toplevel.maximized || toplevel.fullscreen || toplevel.tiled);
+        let free = !(toplevel.maximized || toplevel.fullscreen);
         let transparent = match &self.gpu {
             Gpu::Ready(gpu) => gpu.transparent,
             Gpu::Starting(_) | Gpu::Released | Gpu::Unavailable => true,
         };
-        if self.is_resizable() && floating && transparent {
+        if self.is_resizable() && free && transparent {
             RESIZE_MARGIN
         } else {
             0
@@ -982,6 +980,21 @@ impl Window {
         }
     }
 
+    fn take_window_tiled(&mut self) {
+        let window_tiled = std::mem::take(&mut self.state.shell.window_tiled);
+        let Ok(own) = self.toplevel().cloned() else {
+            return;
+        };
+        for (toplevel, tiled) in window_tiled {
+            if toplevel == own && self.state.toplevel.tiled != tiled {
+                self.state.toplevel.tiled = tiled;
+                self.state
+                    .events
+                    .push(WindowEvent::ToplevelChanged(self.state.toplevel));
+            }
+        }
+    }
+
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
         self.take_arrival();
         self.take_drop();
@@ -995,6 +1008,7 @@ impl Window {
                 }
             }
         }
+        self.take_window_tiled();
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
             return events;

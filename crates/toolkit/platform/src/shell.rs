@@ -24,7 +24,7 @@ pub(crate) const END_SESSION_SINCE: u32 = 3;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
-pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 7;
+pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
 
 struct Toplevel {
@@ -56,6 +56,7 @@ pub(crate) struct Shell {
     token: Option<String>,
     displays: Vec<String>,
     pub(crate) menus_open: Vec<(XdgToplevel, bool)>,
+    pub(crate) window_tiled: Vec<(XdgToplevel, bool)>,
 }
 
 impl Shell {
@@ -260,15 +261,6 @@ impl Window {
         apps
     }
 
-    pub fn is_windowless(&self, app_id: &str) -> bool {
-        let shell = &self.state.shell;
-        shell.windowless.iter().any(|known| known == app_id)
-            && !shell
-                .toplevels
-                .iter()
-                .any(|toplevel| toplevel.app_id == app_id)
-    }
-
     pub fn app_pid(&self, app_id: &str) -> Option<u32> {
         self.state.shell.processes.get(app_id).copied()
     }
@@ -445,6 +437,9 @@ impl Dispatch<BandeAppV1, ()> for State {
             bande_app_v1::Event::QuitRequested => state.events.push(WindowEvent::QuitRequested),
             bande_app_v1::Event::MenusOpen { toplevel, open } => {
                 state.shell.menus_open.push((toplevel, open != 0));
+            }
+            bande_app_v1::Event::WindowTiled { toplevel, tiled } => {
+                state.shell.window_tiled.push((toplevel, tiled != 0));
             }
             _ => {}
         }

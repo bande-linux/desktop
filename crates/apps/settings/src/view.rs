@@ -269,7 +269,7 @@ pub struct SettingsView {
     pub(crate) anchors: Vec<(Anchor, WidgetId)>,
     pub(crate) intents: Intents,
     pub(crate) commands: Vec<Command>,
-    pub(crate) message: Option<String>,
+    pub(crate) failures: HashMap<PaneId, String>,
     pub(crate) errors: HashMap<SettingId, String>,
     pub(crate) refused: Vec<Privilege>,
     pub(crate) default_apps: Option<Vec<DefaultApp>>,
@@ -362,7 +362,7 @@ impl SettingsView {
             anchors: Vec::new(),
             intents,
             commands: Vec::new(),
-            message: None,
+            failures: HashMap::new(),
             errors: HashMap::new(),
             refused: Vec::new(),
             default_apps: None,
@@ -419,8 +419,16 @@ impl SettingsView {
         self.values.get(&id)
     }
 
-    pub fn message(&self) -> Option<&str> {
-        self.message.as_deref()
+    pub fn failure(&self) -> Option<&str> {
+        self.failures.get(&self.pane).map(String::as_str)
+    }
+
+    pub(crate) fn clear_failure(&mut self) {
+        self.failures.remove(&self.pane);
+    }
+
+    pub(crate) fn fail_here(&mut self, failure: String) {
+        self.failures.insert(self.pane, failure);
     }
 
     pub fn set_pointing_devices(&mut self, devices: PointingDevices) {
@@ -755,12 +763,14 @@ impl SettingsView {
             }
             Update::Failed(setting, error) => {
                 self.busy.clear();
-                match setting {
-                    Some(setting) => {
-                        self.errors.insert(setting, error);
-                    }
-                    None => self.message = Some(error),
+                self.errors.insert(setting, error);
+            }
+            Update::PaneFailed(pane, error) => {
+                self.busy.clear();
+                if pane == self.pane {
+                    *self.scroll.borrow_mut() = ScrollState::default();
                 }
+                self.failures.insert(pane, error);
             }
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
@@ -1231,6 +1241,14 @@ impl SettingsView {
     }
 
     fn process_intents(&mut self) {
+        let (pane, sent) = (self.pane, self.commands.len());
+        self.run_intents();
+        if self.pane == pane && self.commands.len() > sent {
+            self.clear_failure();
+        }
+    }
+
+    fn run_intents(&mut self) {
         let intents = std::mem::take(&mut *self.intents.borrow_mut());
         for intent in intents {
             if let Intent::Draft(id, text) = intent {
@@ -1265,7 +1283,7 @@ impl SettingsView {
                     }
                     if let Some(detail) = self.detail.take() {
                         self.forgetting = None;
-                        self.message = None;
+                        self.clear_failure();
                         self.focus_next = Some(Anchor::Item(match detail {
                             Detail::App(group) => format!("app:{group}"),
                             Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
@@ -1375,7 +1393,7 @@ impl SettingsView {
                 Intent::OpenPrinter(name) => {
                     self.detail = Some(Detail::Printer(name));
                     self.forgetting = None;
-                    self.message = None;
+                    self.clear_failure();
                     self.focus_next = Some(Anchor::Back);
                     *self.scroll.borrow_mut() = ScrollState::default();
                 }
@@ -1384,20 +1402,17 @@ impl SettingsView {
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
                 }
                 Intent::AddPrinter(printer) => {
-                    self.message = None;
                     self.adding = Some(printer.uri.clone());
                     self.commands
                         .push(Command::Printers(PrinterCommand::Add(printer)));
                 }
                 Intent::InstallPrinting => {
-                    self.message = None;
                     self.installing_printing = true;
                     self.commands
                         .push(Command::Printers(PrinterCommand::InstallPrinting));
                 }
                 Intent::AddPrinterAddress => {
                     if let Some(printer) = self.printer_address_target() {
-                        self.message = None;
                         self.adding = Some(printer.uri.clone());
                         self.commands
                             .push(Command::Printers(PrinterCommand::Add(printer)));
@@ -1474,7 +1489,7 @@ impl SettingsView {
                     };
                     self.focus_next = Some(Anchor::Setting(picker.setting(), None));
                     self.errors.remove(&picker.setting());
-                    self.message = None;
+                    self.clear_failure();
                     self.picked(picker, key);
                 }
                 Intent::SelectPane(pane) => {
@@ -1606,7 +1621,6 @@ impl SettingsView {
         });
         if let Some(device) = device {
             self.busy.push(address);
-            self.message = None;
             self.commands.push(Command::Bluetooth(command(device)));
         }
     }
@@ -1667,7 +1681,7 @@ impl SettingsView {
             }
             _ => {}
         }
-        self.pane = pane;
+        let left = std::mem::replace(&mut self.pane, pane);
         self.follow_pane(true);
         self.confirming_empty_trash = false;
         self.confirming_clear_clipboard = false;
@@ -1680,6 +1694,7 @@ impl SettingsView {
         self.new_account = None;
         self.deleting_account = false;
         self.errors.clear();
+        self.failures.remove(&left);
         *self.scroll.borrow_mut() = ScrollState::default();
         self.invalidate();
     }
@@ -1842,18 +1857,19 @@ impl SettingsView {
                     Some(Value::Text(text)) => bande_network::parse_dns(text),
                     _ => Some(Vec::new()),
                 };
-                self.message = match (path, servers) {
+                match (path, servers) {
                     (Some(path), Some(servers)) if id == SettingId::EthernetDns => {
+                        self.clear_failure();
                         self.commands
                             .push(Command::Network(NetworkCommand::ChangeConnection(
+                                PaneId::Network,
                                 path,
                                 bande_network::ConnectionChange::Dns(servers),
                             )));
-                        None
                     }
-                    (_, None) => Some(L10N.tr("dns-invalid")),
-                    _ => None,
-                };
+                    (_, None) => self.fail_here(L10N.tr("dns-invalid")),
+                    _ => self.clear_failure(),
+                }
                 return;
             }
             let text = |id| match self.values.get(&id) {
@@ -1865,16 +1881,16 @@ impl SettingsView {
                 &text(SettingId::EthernetRouter),
                 &text(SettingId::EthernetDns),
             );
-            self.message = match manual {
+            match manual {
                 Some(manual) => {
+                    self.clear_failure();
                     self.commands
                         .push(Command::Network(NetworkCommand::ConfigureEthernet(Some(
                             manual,
                         ))));
-                    None
                 }
-                None => Some(L10N.tr("manual-address-invalid")),
-            };
+                None => self.fail_here(L10N.tr("manual-address-invalid")),
+            }
             return;
         }
         if let (
@@ -1927,7 +1943,7 @@ impl SettingsView {
             self.values.insert(muted, Value::Flag(false));
         }
         self.errors.remove(&id);
-        self.message = None;
+        self.clear_failure();
     }
 
     fn can_go_back(&self) -> bool {
@@ -2021,7 +2037,6 @@ impl SettingsView {
                 display.position = (x, y);
             }
         }
-        self.message = None;
         self.commands.push(Command::Arrangement(placements));
     }
 
@@ -2048,7 +2063,6 @@ impl SettingsView {
             source.main = true;
         }
 
-        self.message = None;
         self.commands.push(Command::Arrangement(placements));
     }
 
@@ -2108,7 +2122,6 @@ impl SettingsView {
             });
         }
         self.display_settings.insert(identity.clone(), display);
-        self.message = None;
         self.commands.push(Command::Display(identity, display));
     }
 

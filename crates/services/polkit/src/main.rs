@@ -10,7 +10,7 @@ use bande_inbox::Inbox;
 use bande_polkit::agent::{Agent, Answer, Subject};
 use bande_polkit::bridge::Bridge;
 use bande_polkit::dialog::{Dialog, Message, Prompt};
-use bande_polkit::helper::HELPER;
+use bande_polkit::helper::HELPER_SOCKET;
 use bande_toolkit::{
     App, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,
     WindowError, WindowEvent, run,
@@ -156,7 +156,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
         &system,
         subject(&system)?,
         &locale,
-        HELPER.into(),
+        HELPER_SOCKET.into(),
         Arc::new(Bridge::new(inbox.outbox())),
     )?;
     let mut pending = VecDeque::new();

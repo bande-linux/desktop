@@ -20,7 +20,10 @@ pub fn translations(input: TokenStream) -> TokenStream {
         .iter()
         .map(|language| {
             let file = locales.join(language).join(format!("{domain}.ftl"));
-            format!("({language:?}, include_str!({:?})),", file.display().to_string())
+            format!(
+                "({language:?}, include_str!({:?})),",
+                file.display().to_string()
+            )
         })
         .collect::<String>();
     format!("&[{entries}]")

@@ -10,6 +10,7 @@ enter-full-screen = Enter Full Screen
 exit-full-screen = Exit Full Screen
 close-window = Close Window
 settings = Settings…
+print = Print…
 edit = Edit
 undo = Undo
 redo = Redo

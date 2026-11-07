@@ -143,6 +143,10 @@ impl Service {
         self.send(Command::StopUsing)
     }
 
+    fn wake(&self) -> fdo::Result<()> {
+        self.send(Command::Wake)
+    }
+
     async fn back_up_now(
         &self,
         #[zbus(connection)] connection: &zbus::Connection,

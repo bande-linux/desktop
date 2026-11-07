@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{self, BufRead, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
 
 use serde::Serialize;
 
@@ -46,7 +46,8 @@ fn with_mount<T>(uuid: &str, filesystem: &str, work: impl FnOnce(&Path) -> T) ->
         .args(["-t", disk::mount_type(filesystem), "-o", MOUNT_OPTIONS])
         .arg(disk::device(uuid))
         .arg(&mount_point)
-        .stderr(std::process::Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()?;
     if !status.success() {
         return Err(io::Error::other(format!("mount: {status}")));
@@ -197,37 +198,25 @@ fn recreate_excluded_folders(target: &Path) -> io::Result<()> {
 }
 
 fn rebuild_boot(target: &Path) {
-    let pseudo = ["proc", "sys", "dev", "run"];
-    let mut bound = Vec::new();
-    for name in pseudo {
-        let inside = target.join(name);
-        let ok = Command::new("mount")
-            .args(["--rbind", &format!("/{name}")])
-            .arg(&inside)
-            .status()
-            .is_ok_and(|status| status.success());
-        if ok {
-            bound.push(inside);
-        }
-    }
-    for step in [
-        "command -v update-initramfs >/dev/null && update-initramfs -u -k all",
-        "command -v update-grub >/dev/null && update-grub",
-    ] {
-        let done = Command::new("chroot")
-            .arg(target)
-            .args(["/bin/sh", "-c", step])
-            .status();
-        match done {
-            Ok(status) if status.success() => {}
-            Ok(status) => tracing::warn!("{step}: {status}"),
-            Err(error) => tracing::warn!("{step}: {error}"),
-        }
-    }
-    for inside in bound.iter().rev() {
-        if let Err(error) = Command::new("umount").arg("-lR").arg(inside).status() {
-            tracing::warn!("cannot unmount {}: {error}", inside.display());
-        }
+    const SCRIPT: &str = r#"for pseudo in proc sys dev run; do mount --rbind "/$pseudo" "$1/$pseudo"; done
+chroot "$1" /bin/sh -c 'command -v update-initramfs >/dev/null && update-initramfs -u -k all; command -v update-grub >/dev/null && update-grub'"#;
+    let done = Command::new("unshare")
+        .args([
+            "--mount",
+            "--propagation",
+            "private",
+            "sh",
+            "-c",
+            SCRIPT,
+            "sh",
+        ])
+        .arg(target)
+        .stdout(Stdio::null())
+        .status();
+    match done {
+        Ok(status) if status.success() => {}
+        Ok(status) => tracing::warn!("rebuilding the boot files: {status}"),
+        Err(error) => tracing::warn!("rebuilding the boot files: {error}"),
     }
 }
 

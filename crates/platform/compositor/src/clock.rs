@@ -10,6 +10,7 @@ const FLIP_TIMEOUT: Duration = Duration::from_secs(1);
 const FAILED_FRAME_RETRY: Duration = Duration::from_millis(250);
 const RESTART_DISPLAY_AFTER: Duration = Duration::from_secs(3);
 const GIVE_UP_AFTER: Duration = Duration::from_secs(15);
+const MEASURED_GRACE: Duration = Duration::from_secs(1);
 
 const REMEMBERED_RENDERS: usize = 16;
 const TYPICAL_RENDER_WEIGHT: f64 = 0.1;
@@ -123,6 +124,10 @@ impl FrameClock {
                 typical_render: None,
             }),
         }
+    }
+
+    fn measured_timing(&self) -> bool {
+        matches!(self.timing, Timing::Measured(_))
     }
 
     fn retimed(&self, origin: Duration, refresh: Duration) -> Self {
@@ -318,6 +323,7 @@ pub struct FrameScheduler {
     stalled_since: Option<Duration>,
     asleep_until: Option<Duration>,
     committed: Option<Commit>,
+    waiting_since: Option<Duration>,
 }
 
 impl FrameScheduler {
@@ -330,6 +336,7 @@ impl FrameScheduler {
             stalled_since: None,
             asleep_until: None,
             committed: None,
+            waiting_since: None,
         }
     }
 
@@ -389,12 +396,25 @@ impl FrameScheduler {
                         presented,
                     });
                 }
-                Phase::Idle => self.phase = Phase::Waiting(self.clock.frame_for(now)),
+                Phase::Idle => {
+                    self.waiting_since.get_or_insert(now);
+                    self.phase = Phase::Waiting(self.clock.frame_for(now));
+                }
+                Phase::Waiting(_) if self.starved(now) => {
+                    tracing::warn!(
+                        "no frame for {name} could start on measured timing; using classic timing"
+                    );
+                    self.clock = FrameClock::classic(now, self.clock.refresh());
+                    self.phase = Phase::Waiting(self.clock.frame_for(now));
+                }
                 Phase::Waiting(vblank) if now > self.clock.latest_start(vblank) => {
+                    if let Some(planned) = self.asleep_until.take() {
+                        self.clock.woke_late(now.saturating_sub(planned));
+                    }
                     self.phase = Phase::Waiting(self.clock.frame_for(now));
                 }
                 Phase::Waiting(vblank) if now < self.clock.deadline(vblank) => {
-                    let wake_at = self.clock.deadline(vblank);
+                    let wake_at = self.wake_for(vblank);
                     self.asleep_until = Some(wake_at);
                     return Ok(Poll {
                         wake_at: Some(wake_at),
@@ -403,6 +423,7 @@ impl FrameScheduler {
                 }
                 Phase::Waiting(vblank) => {
                     let started = now;
+                    self.waiting_since = None;
                     if let Some(planned) = self.asleep_until.take() {
                         self.clock.woke_late(started.saturating_sub(planned));
                     }
@@ -497,15 +518,32 @@ impl FrameScheduler {
         }
     }
 
+    fn wake_for(&self, vblank: Vblank) -> Duration {
+        let deadline = self.clock.deadline(vblank);
+        match self.waiting_since {
+            Some(since) if self.clock.measured_timing() => deadline.min(since + MEASURED_GRACE),
+            _ => deadline,
+        }
+    }
+
+    fn starved(&self, now: Duration) -> bool {
+        self.clock.measured_timing()
+            && self
+                .waiting_since
+                .is_some_and(|since| now.saturating_sub(since) >= MEASURED_GRACE)
+    }
+
     pub fn resume(&mut self) {
         self.phase = Phase::Idle;
         self.wanted = true;
         self.stalled_since = None;
+        self.waiting_since = None;
     }
 
     pub fn restart(&mut self) {
         self.phase = Phase::Idle;
         self.wanted = true;
+        self.waiting_since = None;
     }
 
     pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Compositor) -> io::Result<()> {
@@ -661,6 +699,62 @@ mod tests {
         assert!(share(run.one_refresh, run.frames) > 0.9, "{run:?}");
     }
 
+    struct Counted(u32);
+
+    impl FrameOutput for Counted {
+        type Error = io::Error;
+
+        fn submit(&mut self, _: &mut Compositor, _: &str) -> io::Result<Submission> {
+            self.0 += 1;
+            Ok(Submission::AwaitingFlip)
+        }
+    }
+
+    fn frames_after_late_wakes(clock: FrameClock, late: Duration) -> io::Result<u32> {
+        let mut compositor = Compositor::new(smithay::utils::Size::from((640, 480)))?;
+        let mut scheduler = FrameScheduler::new(clock);
+        let mut output = Counted(0);
+        let mut now = Duration::from_secs(1);
+        for _ in 0..8 {
+            let poll = scheduler.poll(|| now, &mut compositor, &mut output)?;
+            if output.0 > 0 {
+                break;
+            }
+            let Some(wake_at) = poll.wake_at else { break };
+            now = wake_at.max(now) + late;
+        }
+        Ok(output.0)
+    }
+
+    #[test]
+    fn the_first_frame_is_drawn_although_timers_wake_late() -> io::Result<()> {
+        let refresh = Duration::from_secs_f64(1.0 / 74.99);
+        for late in [Duration::from_micros(30), Duration::from_micros(900)] {
+            for clock in [
+                FrameClock::measured(Duration::from_secs(1), refresh),
+                FrameClock::classic(Duration::from_secs(1), refresh),
+            ] {
+                assert_eq!(frames_after_late_wakes(clock, late)?, 1, "{late:?}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unusable_flip_times_fall_back_to_classic_timing() -> io::Result<()> {
+        let refresh = Duration::from_secs_f64(1.0 / 60.0);
+        let mut clock = FrameClock::measured(Duration::from_secs(1), refresh);
+        clock.flipped(
+            Vblank {
+                sequence: 0,
+                time: Duration::from_secs(3600),
+            },
+            None,
+        );
+        assert_eq!(frames_after_late_wakes(clock, Duration::from_micros(30))?, 1);
+        Ok(())
+    }
+
     #[test]
     fn a_mode_change_keeps_what_was_learned_about_rendering() {
         let at_120 = Duration::from_secs_f64(1.0 / 119.989);
@@ -672,18 +766,16 @@ mod tests {
             Duration::from_millis(3),
             true,
         );
-        let budget = clock.deadline(Vblank {
+        let vblank = Vblank {
             sequence: 1,
             time: Duration::from_secs(5),
-        });
+        };
         let changed = clock.retimed(Duration::from_secs(2), at_60);
+        let fresh = FrameClock::measured(Duration::from_secs(2), at_60);
         assert_eq!(changed.refresh(), at_60);
         assert_eq!(
-            changed.deadline(Vblank {
-                sequence: 1,
-                time: Duration::from_secs(5),
-            }),
-            budget
+            changed.deadline(vblank) + Duration::from_millis(3),
+            fresh.deadline(vblank)
         );
     }
 }

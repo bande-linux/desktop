@@ -177,6 +177,10 @@ impl Resume {
         }
     }
 
+    pub(crate) fn has_main_window(&self) -> bool {
+        self.names.iter().any(|(_, _, kind)| *kind == Kind::Main)
+    }
+
     pub(crate) fn kind(&self, window: WindowId) -> Option<Kind> {
         self.names
             .iter()

@@ -167,6 +167,8 @@ pub trait Program: Sized + 'static {
         self.reopen(cx);
     }
 
+    fn windows_restored(&mut self, _cx: &mut Cx<Self>) {}
+
     fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Self::View) {}
 
     fn changed(&mut self, _cx: &mut Cx<Self>, _window: WindowId) {}

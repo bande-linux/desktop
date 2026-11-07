@@ -14,7 +14,7 @@ use bande_toolkit::Image;
 
 #[derive(Debug)]
 enum Request {
-    Preview(Entry),
+    Preview(Box<Entry>),
     FolderSize(PathBuf),
 }
 
@@ -56,7 +56,7 @@ fn load_one(
                 _ => None,
             };
             Some(Loaded::Preview {
-                path: entry.path,
+                path: entry.path.clone(),
                 preview,
                 pixels,
             })
@@ -136,7 +136,9 @@ impl Loader {
 
     pub fn preview(&self, entry: Entry) {
         let generation = self.generation.load(Ordering::Relaxed);
-        let _ = self.requests.send((generation, Request::Preview(entry)));
+        let _ = self
+            .requests
+            .send((generation, Request::Preview(Box::new(entry))));
     }
 
     pub fn folder_size(&self, folder: PathBuf) {

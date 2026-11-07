@@ -31,8 +31,8 @@ Health: while a mount exists the service runs one statfs in a disposable thread 
 
 ## Stages
 
-1. NFS; forced unmount; `_nfs._tcp`.
-2. Health, the alert, dead timer, automatic reconnect, remembered servers.
-3. Close every blocking path found by the audit.
-4. Refresh of visible folders, free space and Get Info on servers, clear copy failures.
-5. Real link cuts and server power-offs: UI stall limit 50 ms, quit, logout, shutdown, sleep. Results in the report.
+NFS, forced unmount, health, the alert, the dead timer, reconnecting, and the Files, chooser, desktop and library paths have shipped.
+
+- Apps: Terminal starting in a server folder, TextEdit, Preview, Disks.
+- Copy under a cut link, logout, shutdown and sleep with a dead mount: measure, fix what they find.
+- Quick Look panel and print of a text or image file on a server (printing is off there for now).

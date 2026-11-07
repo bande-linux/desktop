@@ -1,6 +1,7 @@
 pub mod askpass;
 pub mod devices;
 pub mod discovery;
+pub mod health;
 pub mod mounts;
 mod mounts_bus;
 pub mod server;

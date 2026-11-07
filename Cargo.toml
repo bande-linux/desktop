@@ -49,9 +49,11 @@ pipewire = "=0.10.1"
 png = "=0.18.1"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
+quick-xml = "=0.41.0"
 ring = "=0.17.14"
 resvg = { version = "=0.49.0", default-features = false }
 roxmltree = "=0.21.2"
+rustc-demangle = "=0.1.28"
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
 ruzstd = "=0.9.1"
@@ -60,6 +62,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 skrifa = "=0.44.0"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
+tantivy = { version = "=0.25.0", default-features = false, features = ["mmap", "lz4-compression"] }
 tar = "=0.4.46"
 tempfile = "=3.27.0"
 tracing = "=0.1.44"
@@ -106,6 +109,7 @@ bande-fs = { path = "crates/libs/fs" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-pdf = { path = "crates/toolkit/pdf" }
 bande-greeter = { path = "crates/shell/greeter" }
+bande-indexer = { path = "crates/services/index" }
 bande-inbox = { path = "crates/libs/inbox" }
 bande-keyring = { path = "crates/libs/keyring" }
 bande-keyboard = { path = "crates/libs/keyboard" }
@@ -124,7 +128,9 @@ bande-notify = { path = "crates/services/notify" }
 bande-printd = { path = "crates/services/printd" }
 bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
+bande-crash-reports = { path = "crates/services/crash-reports" }
 bande-recovery = { path = "crates/services/recovery" }
+bande-reporter = { path = "crates/services/reporter" }
 bande-protocols = { path = "crates/platform/protocols" }
 bande-render = { path = "crates/platform/render" }
 bande-review = { path = "crates/testing/review" }
@@ -132,6 +138,7 @@ bande-sample = { path = "crates/testing/sample" }
 bande-screenshot = { path = "crates/shell/screenshot" }
 bande-secrets = { path = "crates/services/secrets" }
 bande-search = { path = "crates/libs/search" }
+bande-recovery-tools = { path = "crates/apps/recovery-tools" }
 bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }
@@ -159,4 +166,4 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-strip = true
+debug = "line-tables-only"

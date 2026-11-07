@@ -4,17 +4,19 @@ use std::thread;
 use std::time::Duration;
 
 use bande_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
-use bande_graphics::Palette;
+use bande_graphics::{Material, Palette, backdrop_tone};
+use bande_render::VulkanRenderer;
 use bande_spring::{Animated, Spring};
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::backend::renderer::element::Id;
+use smithay::utils::Rectangle;
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::cursor::CursorTheme;
 use crate::environment::export_cursor_environment;
 use crate::motion::SETTLED_ALPHA;
-use crate::scene::{FillElement, rounded};
+use crate::scene::{Behind, FillElement, rounded, scrim};
 use crate::state::{Compositor, OutputElement, State};
 
 const SOUND_BUS_NAME: &str = "org.bande.Sound";
@@ -130,17 +132,40 @@ impl State {
         }
         self.configure_access_keys(&settings);
         if before.reduce_transparency != settings.reduce_transparency {
+            self.refresh_materials();
             self.needs_redraw = true;
         }
     }
 
-    pub(crate) fn backdrop(&self) -> Option<[f32; 4]> {
-        if !self.assistive.settings.reduce_transparency {
-            return None;
-        }
+    pub(crate) fn solid_behind(&self) -> Behind {
         let chassis = Palette::for_scheme(self.decorations.scheme).chassis;
         let [r, g, b] = [chassis.r, chassis.g, chassis.b].map(|channel| f32::from(channel) / 255.0);
-        Some([r, g, b, 1.0])
+        Behind::Fill([r, g, b, 1.0])
+    }
+
+    pub(crate) fn behind(&self, renderer: &VulkanRenderer, screen: usize, scale: f64) -> Behind {
+        if self.assistive.settings.reduce_transparency {
+            return self.solid_behind();
+        }
+        match self.material() {
+            Material::Live if renderer.reduced_effects() => return self.solid_behind(),
+            Material::Live => return Behind::Live(Some(backdrop_tone(self.decorations.scheme))),
+            Material::Opaque => {
+                return scrim(renderer, self.decorations.scheme)
+                    .map_or(Behind::Live(None), Behind::Fill);
+            }
+            Material::Wallpaper => {}
+        }
+        let screen = &self.screens[screen];
+        let Some(material) = self.material_texture(&screen.name()) else {
+            return self.solid_behind();
+        };
+        let origin = screen.origin_in_pixels(scale);
+        let size = screen.settings.transform.transform_size(screen.mode_size());
+        Behind::Wallpaper {
+            material,
+            screen: Rectangle::new(origin.to_f64(), size.to_f64()),
+        }
     }
 
     pub(crate) fn flash_screen(&mut self) {

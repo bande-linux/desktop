@@ -1,8 +1,7 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use bande_config::{Search, SearchCategory};
-use bande_search::{FileHit, FileResults, Query, Usage, calculate, fold, recent_files};
+use bande_search::{FileHit, FileResults, Found, Query, Usage, calculate, fold, recent_files};
 use bande_xdg::path_from_file_uri;
 
 use crate::emoji::EMOJI;
@@ -303,6 +302,9 @@ pub enum Kind {
     Command,
     Folder,
     Document,
+    Mail,
+    Event,
+    Contact,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -314,6 +316,7 @@ pub enum Target {
     Emoji(String),
     Clip(u64),
     Command(SystemCommand),
+    Item { app: String, argument: String },
 }
 
 impl Target {
@@ -324,7 +327,7 @@ impl Target {
             Self::Path(path) => path.to_str().map(|path| format!("file:{path}")),
             Self::Emoji(character) => Some(format!("{EMOJI_KEY}{character}")),
             Self::Command(command) => Some(format!("command:{}", command.key())),
-            Self::Value(_) | Self::Clip(_) => None,
+            Self::Value(_) | Self::Clip(_) | Self::Item { .. } => None,
         }
     }
 }
@@ -347,6 +350,9 @@ pub enum Heading {
     System,
     Folders,
     Documents,
+    Mail,
+    Events,
+    Contacts,
     RecentApps,
     RecentDocuments,
     AllApps,
@@ -377,6 +383,7 @@ pub struct Model {
     pub query: String,
     pub generation: u64,
     files: Vec<FileHit>,
+    items: Vec<Found>,
     recent_documents: Vec<PathBuf>,
     search: Search,
     excluded: Vec<PathBuf>,
@@ -423,6 +430,7 @@ impl Model {
             query: String::new(),
             generation: 0,
             files: Vec::new(),
+            items: Vec::new(),
             recent_documents: Vec::new(),
             search: Search::default(),
             excluded: Vec::new(),
@@ -482,16 +490,6 @@ impl Model {
         bande_search::is_excluded(path, &self.excluded)
     }
 
-    pub fn file_boosts(&self) -> HashMap<PathBuf, u32> {
-        self.usage
-            .keys()
-            .filter_map(|key| {
-                let path = key.strip_prefix("file:")?;
-                Some((PathBuf::from(path), self.usage.boost(key, self.now)))
-            })
-            .collect()
-    }
-
     pub fn now(&self) -> u64 {
         self.now
     }
@@ -539,6 +537,7 @@ impl Model {
             .then(|| self.selection().map(|hit| hit.target.clone()))
             .flatten();
         self.files = results.hits;
+        self.items = results.items;
         self.files_complete = true;
         self.rebuild(keep);
     }
@@ -578,6 +577,26 @@ impl Model {
             title: name,
             target: Target::Path(file.path.clone()),
             score: score.saturating_sub(FILE_PENALTY),
+        })
+    }
+
+    fn item_hit(&self, item: &Found) -> Option<Hit> {
+        let (kind, category) = match item.kind.as_str() {
+            "mail" => (Kind::Mail, SearchCategory::Mail),
+            "event" => (Kind::Event, SearchCategory::Events),
+            "contact" => (Kind::Contact, SearchCategory::Contacts),
+            _ => return None,
+        };
+        self.shows(category).then(|| Hit {
+            kind,
+            title: item.title.clone(),
+            detail: Some(item.detail.clone()).filter(|detail| !detail.is_empty()),
+            target: Target::Item {
+                app: item.domain.clone(),
+                argument: item.target.clone(),
+            },
+            matched: Vec::new(),
+            score: item.score.saturating_sub(FILE_PENALTY),
         })
     }
 
@@ -699,14 +718,37 @@ impl Model {
             files.into_iter().partition(|hit| hit.kind == Kind::Folder);
         folders.sort_by(by_score);
         documents.sort_by(by_score);
+        let of_kind = |kind: Kind| -> Vec<Hit> {
+            let mut hits: Vec<Hit> = self
+                .items
+                .iter()
+                .filter_map(|item| self.item_hit(item))
+                .filter(|hit| hit.kind == kind)
+                .collect();
+            hits.sort_by(by_score);
+            hits
+        };
+        let (mut mail, mut events, mut contacts) = (
+            of_kind(Kind::Mail),
+            of_kind(Kind::Event),
+            of_kind(Kind::Contact),
+        );
 
         let top = match calculation {
             Some(calculation) => Some(calculation),
-            None => [&mut apps, &mut settings, &mut folders, &mut documents]
-                .into_iter()
-                .filter(|group| !group.is_empty())
-                .min_by(|a, b| by_score(&a[0], &b[0]))
-                .map(|group| group.remove(0)),
+            None => [
+                &mut apps,
+                &mut settings,
+                &mut folders,
+                &mut documents,
+                &mut mail,
+                &mut events,
+                &mut contacts,
+            ]
+            .into_iter()
+            .filter(|group| !group.is_empty())
+            .min_by(|a, b| by_score(&a[0], &b[0]))
+            .map(|group| group.remove(0)),
         };
         if let Some(top) = top {
             self.headings.push((0, Heading::TopHit));
@@ -718,6 +760,9 @@ impl Model {
             (Heading::System, commands, MAX_COMMANDS),
             (Heading::Folders, folders, MAX_FOLDERS),
             (Heading::Documents, documents, MAX_DOCUMENTS),
+            (Heading::Mail, mail, MAX_DOCUMENTS),
+            (Heading::Events, events, MAX_DOCUMENTS),
+            (Heading::Contacts, contacts, MAX_DOCUMENTS),
         ] {
             if group.is_empty() {
                 continue;
@@ -1072,7 +1117,10 @@ impl Model {
                 self.copied = true;
                 return true;
             }
-            Some(Target::App(_) | Target::Settings(_) | Target::Command(_)) | None => return false,
+            Some(
+                Target::App(_) | Target::Settings(_) | Target::Command(_) | Target::Item { .. },
+            )
+            | None => return false,
         };
         self.actions.push(Action::Copy(text));
         self.copied = true;

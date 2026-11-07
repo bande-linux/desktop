@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use crate::L10N;
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
-use crate::rail::{bar_zone, surface_size};
+use crate::rail::{BarForm, bar_zone, surface_size};
 use crate::taskbar::{
     MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, scene, taskbar_ui,
 };
@@ -783,6 +783,11 @@ impl Taskbar {
         for event in self.bus.drain() {
             match event {
                 BusEvent::IconSize(size) => self.resize(window, size as f32),
+                BusEvent::Floating(floating) => {
+                    self.state
+                        .borrow_mut()
+                        .set_form(BarForm::from_floating(floating));
+                }
                 BusEvent::AutoHide(auto_hide) => {
                     self.state.borrow_mut().set_auto_hide(auto_hide, now);
                 }
@@ -835,6 +840,10 @@ impl Taskbar {
 
     fn owns_open_menu_at(&self, point: Point) -> bool {
         self.menu.is_some() && self.state.borrow().target_at(point) == self.menu
+    }
+
+    pub fn form(&self) -> BarForm {
+        self.state.borrow().form()
     }
 
     pub fn revealed(&self, now: Instant) -> f32 {
@@ -1053,7 +1062,9 @@ impl Taskbar {
             bus::follow(session, inbox.outbox());
         }
         let appearance = window.appearance();
+        let form = BarForm::from_floating(config.floating);
         let state = TaskbarState::new(edge, icon_size);
+        state.borrow_mut().set_form(form);
         state.borrow_mut().set_appearance(appearance);
         state
             .borrow_mut()
@@ -1072,7 +1083,7 @@ impl Taskbar {
             icon_scale: window.scale(),
             reported: HashMap::new(),
             input: None,
-            zone: bar_zone(icon_size).round() as i32,
+            zone: bar_zone(icon_size, form).round() as i32,
             menu: None,
             confirming: false,
             swallow_release: false,

@@ -1,5 +1,6 @@
 mod decode;
 mod facts;
+mod import;
 pub mod pdf;
 mod text;
 
@@ -15,6 +16,7 @@ pub use decode::{
     open, read_file,
 };
 pub use facts::{Facts, camera_facts};
+pub use import::Importer;
 pub use text::{Block, Code, Tone, highlight, html, is_code, markdown, rtf};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;

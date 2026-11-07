@@ -18,6 +18,7 @@ const CONFIG_INTERFACE: &str = "org.bande.Config";
 pub enum BusEvent {
     Apps(Vec<String>),
     AutoHide(bool),
+    Floating(bool),
     IconSize(u32),
     Launcher(String, LauncherUpdate),
 }
@@ -95,6 +96,9 @@ fn bar_settings(config: &Proxy<'_>) -> zbus::Result<Vec<BusEvent>> {
     }
     if let Ok(auto_hide) = config.get_property::<bool>("BarAutoHide") {
         events.push(BusEvent::AutoHide(auto_hide));
+    }
+    if let Ok(floating) = config.get_property::<bool>("BarFloating") {
+        events.push(BusEvent::Floating(floating));
     }
     events.push(BusEvent::Apps(
         config.get_property::<Vec<String>>("BarApps")?,

@@ -18,7 +18,7 @@ use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::wlr_layer::Layer;
 
 use crate::scene::{
-    Closing, Drawn, Shading, preview_elements, scrim, surface_blurs, tie_blurs_to_what_lies_below,
+    Closing, Drawn, Shading, preview_elements, surface_blurs, tie_blurs_to_what_lies_below,
     window_elements,
 };
 use crate::window::Window;
@@ -111,6 +111,7 @@ impl Compositor {
         renderer: &mut VulkanRenderer,
         output: &str,
     ) -> Vec<ScreenElement> {
+        self.state.upload_materials(renderer);
         match self.state.screen_named(output) {
             Some(screen) => self.render_screen(renderer, screen),
             None => Vec::new(),
@@ -216,6 +217,7 @@ impl Compositor {
         elements.extend(self.state.switcher_elements(renderer, screen, scale));
         elements.extend(self.state.assist_elements(renderer, screen, scale));
         elements.extend(self.state.window_menu_elements(renderer, screen, scale));
+        let source = self.state.behind(renderer, screen, scale);
         let key = self.state.key_window();
         let shell_opacity = self.state.shell_opacity();
         let wallpapers: Vec<WlSurface> = match shell_opacity < 1.0 {
@@ -242,14 +244,7 @@ impl Compositor {
                         alpha,
                         ElementKind::Unspecified,
                     ));
-                    elements.extend(surface_blurs(
-                        &surface,
-                        location,
-                        scale,
-                        self.state
-                            .backdrop()
-                            .or_else(|| scrim(renderer, self.state.decorations.scheme)),
-                    ));
+                    elements.extend(surface_blurs(&surface, location, scale, &source));
                 }
                 Placed::Window(index, window) => {
                     let shading = Shading {
@@ -261,15 +256,8 @@ impl Compositor {
                         .client()
                         .is_some_and(|owner| self.state.watchdog.is_unresponsive(&owner.id()));
                     let presented = self.state.presented(window);
-                    let (shown, look) = window_elements(
-                        window,
-                        renderer,
-                        scale,
-                        shading,
-                        hung,
-                        presented,
-                        self.state.backdrop(),
-                    );
+                    let (shown, look) =
+                        window_elements(window, renderer, scale, shading, hung, presented, &source);
                     elements.extend(shown);
                     elements.extend(self.state.overview_ring(window, scale));
                     if let (Some(ghost), Some(look)) = (self.state.overview_ghost(window), &look) {

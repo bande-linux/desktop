@@ -1,3 +1,4 @@
+use bande_fs::Action;
 use std::path::PathBuf;
 
 use bande_fs::{
@@ -10,6 +11,7 @@ use bande_toolkit::ui::{
 
 use crate::L10N;
 use crate::controls::{Signal, sender};
+use crate::servers::ServerDone;
 use crate::view::{FilesView, Rename};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,6 +223,14 @@ impl FilesView {
         {
             shown.on = hidden;
         }
+        if bande_volumes::on_connected_volume(&entry.path) {
+            let path = entry.path.clone();
+            self.on_server(move || {
+                let result = set_extension_hidden(&path, hidden);
+                ServerDone::Changed(Action::Rename, Vec::new(), result.err())
+            });
+            return;
+        }
         match set_extension_hidden(&entry.path, hidden) {
             Ok(()) => {
                 let folders = entry.path.parent().map(PathBuf::from);
@@ -323,6 +333,16 @@ impl FilesView {
             return;
         };
         let changed = change(mode, folder);
+        if bande_volumes::on_connected_volume(&path) {
+            if let Some(info) = &mut self.info {
+                info.mode = Some(changed);
+            }
+            self.on_server(move || {
+                ServerDone::Changed(Action::Rename, Vec::new(), set_mode(&path, changed).err())
+            });
+            self.sync_inspector_controls();
+            return;
+        }
         match set_mode(&path, changed) {
             Ok(()) => {
                 if let Some(info) = &mut self.info {

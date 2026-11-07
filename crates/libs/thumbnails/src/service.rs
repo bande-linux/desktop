@@ -48,6 +48,7 @@ impl Shared {
 
 pub struct Thumbnails {
     shared: Arc<Shared>,
+    connected: Arc<Shared>,
     results: Inbox<Thumbnailed>,
 }
 
@@ -107,9 +108,13 @@ impl Thumbnails {
         let results = Inbox::new()?;
         let shared = Arc::new(Shared::default());
         let (cache, thumbnailers) = (Arc::new(cache), Arc::new(thumbnailers));
-        for index in 0..WORKERS {
+        let connected = Arc::new(Shared::default());
+        for index in 0..=WORKERS {
             let worker = Worker {
-                shared: shared.clone(),
+                shared: match index < WORKERS {
+                    true => shared.clone(),
+                    false => connected.clone(),
+                },
                 cache: cache.clone(),
                 thumbnailers: thumbnailers.clone(),
                 results: results.outbox(),
@@ -118,7 +123,11 @@ impl Thumbnails {
                 .name(format!("thumbnails {index}"))
                 .spawn(move || worker.run())?;
         }
-        Ok(Self { shared, results })
+        Ok(Self {
+            shared,
+            connected,
+            results,
+        })
     }
 
     pub fn for_user(data_dirs: &[PathBuf]) -> Option<Self> {
@@ -129,7 +138,15 @@ impl Thumbnails {
     }
 
     pub fn want(&self, requests: Vec<Request>) {
-        let mut state = self.shared.lock();
+        let (connected, local): (Vec<_>, Vec<_>) = requests
+            .into_iter()
+            .partition(|request| bande_volumes::on_connected_volume(&request.path));
+        Self::queue(&self.shared, local);
+        Self::queue(&self.connected, connected);
+    }
+
+    fn queue(shared: &Shared, requests: Vec<Request>) {
+        let mut state = shared.lock();
         let busy = &state.busy;
         let mut seen = HashSet::new();
         let queue = requests
@@ -140,7 +157,7 @@ impl Thumbnails {
             .collect();
         state.queue = queue;
         drop(state);
-        self.shared.ready.notify_all();
+        shared.ready.notify_all();
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {

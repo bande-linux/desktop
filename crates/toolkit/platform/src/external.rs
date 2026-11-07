@@ -18,7 +18,9 @@ use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibitor_v1::Zwp
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_buffer_params_v1::{
     Flags, ZwpLinuxBufferParamsV1,
 };
-use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
+use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::{
+    self, ZwpLinuxDmabufV1,
+};
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
 use crate::window::{State, Window, WindowError};
@@ -186,6 +188,10 @@ impl Window {
         self.externals.push(Rc::downgrade(&shared));
         self.stage();
         Ok(ExternalSurface { shared })
+    }
+
+    pub fn supports_dmabuf(&self, fourcc: u32, modifier: u64) -> bool {
+        self.state.dmabuf_formats.contains(&(fourcc, modifier))
     }
 
     pub(crate) fn place_externals(&mut self, placed: &[(SurfaceId, Rect)], below: bool) {
@@ -456,7 +462,27 @@ impl Dispatch<WlBuffer, ExternalBuffer> for State {
     }
 }
 
+impl Dispatch<ZwpLinuxDmabufV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZwpLinuxDmabufV1,
+        event: zwp_linux_dmabuf_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zwp_linux_dmabuf_v1::Event::Modifier {
+            format,
+            modifier_hi,
+            modifier_lo,
+        } = event
+        {
+            let modifier = u64::from(modifier_hi) << 32 | u64::from(modifier_lo);
+            state.dmabuf_formats.push((format, modifier));
+        }
+    }
+}
+
 delegate_noop!(State: ignore WlSubcompositor);
 delegate_noop!(State: ignore WlSubsurface);
-delegate_noop!(State: ignore ZwpLinuxDmabufV1);
 delegate_noop!(State: ignore ZwpLinuxBufferParamsV1);

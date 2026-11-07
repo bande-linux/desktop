@@ -254,7 +254,7 @@ impl Compositor {
                     shading,
                     false,
                     Some(at_origin),
-                    self.state.backdrop(),
+                    &self.state.solid_behind(),
                 );
                 let cursor = match paint_cursors {
                     true => self.cursor_elements(renderer, scale),

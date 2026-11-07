@@ -57,8 +57,9 @@ better.
   per-app values.
 - **Depth through tone and light, not lines.** Elevation is a tone step plus one shadow pair, and
   a window, the Taskbar and every panel share one lit edge instead of a drawn border. In dark,
-  content is recessed and what is raised is lighter. Blur only behind the launcher, the overview
-  and modal alerts. Hairlines are rare and named.
+  content is recessed and what is raised is lighter. The frame's material is a user choice
+  among [styles](datum.md#styles), with Refined Solid the default and the most efficient, and
+  every style holds the same text contrast. Hairlines are rare and named.
 - **Content first.** Chrome is quiet and recedes in inactive windows; the active window and
   the selection are the strongest elements on screen.
 - **Crisp at every scale.** Everything is laid out in points and drawn in pixels at the

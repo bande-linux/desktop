@@ -37,6 +37,7 @@ mod label;
 mod lock;
 mod logind;
 mod management;
+mod material;
 mod menu_button;
 mod motion;
 mod night;
@@ -59,6 +60,7 @@ mod switcher;
 mod sync;
 mod tile;
 mod toplevel_drag;
+mod trust;
 mod typing;
 mod watchdog;
 mod window;
@@ -84,7 +86,9 @@ pub use environment::{
     export_session_environment, notify_service_manager, watchdog_keepalive_interval,
 };
 pub use gesture::Gesture;
-pub use input_settings::{InputSettings, follow_input_settings, user_config};
+pub use input_settings::{
+    InputSettings, follow_input_settings, follow_system_keyboard, user_config,
+};
 pub use keyboard_monitor::{
     KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, SCREEN_READER_NAME, serve_keyboard_monitor,
 };
@@ -92,6 +96,7 @@ pub use keymap::KeyboardSettings;
 pub use logind::{
     SessionRequest, Sleep, follow_session, follow_shutdown, follow_sleep, sleep_on_request,
 };
+pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use render::{BACKGROUND, FrameStats, Renderer, Snapshot};
@@ -99,7 +104,7 @@ pub use reveal::Awaited;
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{
     CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, REVIEW, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE,
-    SHELL, SessionRole, SessionUpkeep,
+    SETUP, SETUP_PENDING, SHELL, SessionRole, SessionUpkeep,
 };
 pub use state::{Compositor, OutputElement, REFRESH, ScanoutDevice};
 pub use watchdog::UNRESPONSIVE_AFTER;

@@ -18,8 +18,15 @@ fn name_process(identifier: &str) {
 }
 
 pub fn init(identifier: &str) {
+    init_quieting(identifier, &[]);
+}
+
+pub fn init_quieting(identifier: &str, chatty: &[&str]) {
     name_process(identifier);
-    let filter = targets(std::env::var(FILTER_VARIABLE).ok().as_deref());
+    let filter = chatty.iter().fold(
+        targets(std::env::var(FILTER_VARIABLE).ok().as_deref()),
+        |filter, target| filter.with_target(*target, LevelFilter::WARN),
+    );
     let journal = tracing_journald::layer()
         .ok()
         .map(|journal| journal.with_syslog_identifier(identifier.to_owned()));

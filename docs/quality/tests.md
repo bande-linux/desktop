@@ -43,6 +43,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `apps/files/tests/files.rs` | Files: a file goes to the Trash and is put back; a new folder is named in place and undone; a duplicate that cannot be written asks and leaves no copy. |
 | `shell/launcher/tests/launcher.rs` | Launcher: typing ranks apps, arrows and Return open the choice. |
 | `shell/lock/tests/lock.rs` | Lock screen: a password is submitted once and a rejected one is cleared for another try. |
+| `toolkit/toolkit/tests/window_edges.rs` | Window edges: a drag from the first pixel inside the outline, above a tab too, moves the window; just outside and in the rounded cut-outs it resizes, diagonally at corners; a side resting on the screen edge resizes from 3 pt inside. |
 | `toolkit/toolkit/tests/accessibility.rs` | Toolkit: a screen reader finds a button over AT-SPI in a window on the headless compositor and presses it. |
 
 ## Support

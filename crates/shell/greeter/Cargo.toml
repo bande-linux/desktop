@@ -25,6 +25,7 @@ bande-network.workspace = true
 bande-status.workspace = true
 bande-toolkit.workspace = true
 zbus.workspace = true
+xkbcommon.workspace = true
 zeroize.workspace = true
 
 [package.metadata.deb]
@@ -43,6 +44,12 @@ assets = [
     ["target/release/bande-greeter", "usr/bin/", "755"],
     ["target/release/bande-setup", "usr/bin/", "755"],
     ["target/release/bande-display-keeper", "usr/libexec/", "755"],
+    ["target/release/bande-unlock", "usr/libexec/", "755"],
+    ["target/release/bande-unlock-assets", "usr/libexec/", "755"],
+    ["data/bande-unlock-script", "usr/libexec/", "755"],
+    ["data/bande-unlock.hook", "usr/share/initramfs-tools/hooks/bande-unlock", "755"],
+    ["data/bande-unlock-assets.service", "usr/lib/systemd/system/", "644"],
+    ["data/bande-unlock-assets.path", "usr/lib/systemd/system/", "644"],
     ["data/bande-display-keeper@.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-console-fallback.service", "usr/lib/systemd/system/", "644"],
     ["data/60-bande-display-keeper.rules", "usr/lib/udev/rules.d/", "644"],

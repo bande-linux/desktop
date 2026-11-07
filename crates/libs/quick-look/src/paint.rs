@@ -421,7 +421,7 @@ impl QuickLook {
         );
         match self.index_sheet {
             true => self.paint_index_sheet(&mut painter, area),
-            false => self.paint_content(&mut painter, area),
+            false => self.paint_content(&mut painter, area, now),
         }
         content.push(Item::Clip {
             shape,
@@ -614,7 +614,7 @@ impl QuickLook {
         });
     }
 
-    fn paint_content(&mut self, painter: &mut Painter<'_>, area: Rect) {
+    fn paint_content(&mut self, painter: &mut Painter<'_>, area: Rect, now: Instant) {
         let Some(subject) = self.subjects.get(self.at).cloned() else {
             return;
         };
@@ -631,6 +631,10 @@ impl QuickLook {
                 self.scroll = paint_document(painter, document, area, self.scroll);
             }
             Shown::Font(font) => self.scroll = paint_font(painter, font, area, self.scroll),
+            Shown::Media(Some(stage)) => {
+                stage.layout(painter.text, &painter.palette, area, now);
+                stage.paint(&painter.palette, now, &mut painter.items);
+            }
             shown => {
                 let lines = summary_lines(&subject, shown);
                 painter.summary(&subject, area, &lines);

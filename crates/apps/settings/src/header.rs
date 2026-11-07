@@ -300,14 +300,7 @@ impl SettingsView {
 
     pub(crate) fn notice(&mut self, pane: &Pane) -> Option<Box<dyn Widget>> {
         let name = pane.name.clone();
-        let (heading, line) = if pane.id == PaneId::Printers
-            && self.printers.as_ref().is_some_and(|state| !state.installed)
-        {
-            (
-                L10N.tr("printers-unavailable"),
-                L10N.tr("printers-unavailable-hint"),
-            )
-        } else if !self.available(pane.id) {
+        let (heading, line) = if !self.available(pane.id) {
             (
                 L10N.tr_args("unavailable", [("pane", name.clone().into())]),
                 L10N.tr_args("unavailable-hint", [("pane", name.into())]),

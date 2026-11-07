@@ -14,7 +14,7 @@ profiles. Sizes are in [performance.md](performance.md).
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-recovery`, `bande-sound`, `bande-clipboard`, `bande-tray`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-sound`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
   `bande-automount`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
@@ -38,8 +38,8 @@ profiles. Sizes are in [performance.md](performance.md).
   [Runtime stack](#runtime-stack). It also recommends, unversioned, every Bande app, listed in
   `packaging/bande-desktop/default-apps`: an app built in
   [bande-linux/apps](https://github.com/bande-linux/apps) is added there when it gets its first
-  APT release. It recommends no apps from Debian; a browser comes from Software, and printing
-  from Settings ▸ Printers.
+  APT release. It recommends no apps from Debian; a browser comes from Software. Network printers
+  need nothing more; support for USB and older printers comes from Settings ▸ Printers.
   `debian/default-apps.sh` turns that file into the `${bande:Recommends}` substitution variable
   at build time, so any default app can be removed or replaced. It installs
   `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which opens
@@ -77,8 +77,9 @@ another package's recommends. `bande-desktop` itself keeps:
 
 It does not pull in `gnome-keyring` (the Bande keychain replaces it and conflicts with it, so the
 bus name has one owner), `pipewire-alsa`, `needrestart` (Bande has
-`/usr/libexec/bande-desktop/restart-services`, below), `cups` (Settings ▸ Printers installs it on
-demand), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
+`/usr/libexec/bande-desktop/restart-services`, below), `cups` or `avahi-daemon` (`bande-printd` prints to
+network printers without them; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for USB
+and older printers), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
 nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
 `xdg-user-dirs`, which the Bande packages that use them declare:
@@ -91,6 +92,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
   (Software Update), power-profiles-daemon (Power) and depends on `locales`, so localed can
   generate any language picked in Settings;
+- `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
   for screen recording;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on

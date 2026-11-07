@@ -15,6 +15,7 @@ use crate::dynamic_launcher::{Confirmed, Launcher, LauncherUi};
 use crate::file_chooser::{
     Choice, Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection,
 };
+use crate::print::{Asked, DocumentSource, PrintAnswer, PrintRequest, PrintUi};
 use crate::request::Cancellation;
 use crate::wallpaper::WallpaperUi;
 
@@ -50,6 +51,9 @@ pub fn arguments(dialog: &Dialog) -> Vec<OsString> {
         os("--title"),
         os(&dialog.title),
     ];
+    if !dialog.parent_window.is_empty() {
+        arguments.extend([os("--parent"), os(&dialog.parent_window)]);
+    }
     if let Some(label) = &dialog.accept_label {
         arguments.extend([os("--accept-label"), os(label)]);
     }
@@ -130,6 +134,7 @@ pub fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Dialog, Ar
         match flag.as_str() {
             "--app-id" => dialog.app_id = text(value()?),
             "--title" => dialog.title = text(value()?),
+            "--parent" => dialog.parent_window = text(value()?),
             "--accept-label" => dialog.accept_label = Some(text(value()?)),
             "--open" | "--open-folder" => {
                 dialog.mode = Mode::Open {
@@ -300,6 +305,73 @@ impl FileChooserUi for DialogProcess {
 }
 
 pub const SET_WALLPAPER: &str = "--set-wallpaper";
+pub const PRINT: &str = "--print";
+
+pub fn print_arguments(request: &PrintRequest) -> Vec<OsString> {
+    let mut arguments = vec![
+        os(PRINT),
+        os("--app-id"),
+        os(&request.app_id),
+        os("--title"),
+        os(&request.title),
+    ];
+    if !request.parent_window.is_empty() {
+        arguments.extend([os("--parent"), os(&request.parent_window)]);
+    }
+    match &request.document {
+        DocumentSource::Later => arguments.push(os(DocumentSource::FLAG_LATER)),
+        DocumentSource::App => arguments.push(os("--from-app")),
+        DocumentSource::File(path) => {
+            arguments.extend([os("--document"), path.clone().into_os_string()]);
+        }
+    }
+    arguments
+}
+
+pub fn parse_print(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<PrintRequest, ArgumentError> {
+    let mut request = PrintRequest {
+        app_id: String::new(),
+        parent_window: String::new(),
+        title: String::new(),
+        document: DocumentSource::Later,
+    };
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            PRINT => {}
+            "--app-id" => request.app_id = text(value()?),
+            "--title" => request.title = text(value()?),
+            "--parent" => request.parent_window = text(value()?),
+            DocumentSource::FLAG_LATER => request.document = DocumentSource::Later,
+            "--from-app" => request.document = DocumentSource::App,
+            "--document" => request.document = DocumentSource::File(PathBuf::from(value()?)),
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(request)
+}
+
+impl PrintUi for DialogProcess {
+    fn ask(&self, request: &PrintRequest, cancellation: &Cancellation) -> Asked {
+        match self.show(print_arguments(request), cancellation) {
+            None => Asked::Unavailable,
+            Some(_) if cancellation.is_cancelled() => Asked::Cancelled,
+            Some((Some(code), output)) if code == i32::from(CHOSEN) => {
+                Asked::Done(PrintAnswer::from_pairs(&decode_pairs(&output)))
+            }
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Asked::Cancelled,
+            Some(_) => Asked::Unavailable,
+        }
+    }
+}
 
 impl WallpaperUi for DialogProcess {
     fn confirm(&self, app_id: &str, picture: &Path, cancellation: &Cancellation) -> bool {

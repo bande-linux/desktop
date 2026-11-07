@@ -5,7 +5,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 cargo=${REVIEW_CARGO:-cargo}
 packages=(
     bande-compositor bande-notify bande-clipboard bande-config bande-power bande-sound
-    xdg-desktop-portal-bande bande-file-chooser bande-tray bande-automount bande-polkit
+    xdg-desktop-portal-bande bande-file-chooser bande-tray bande-indexer bande-automount bande-polkit
     bande-shell bande-lock bande-screenshot bande-files
     bande-settings bande-greeter
 )
@@ -57,7 +57,7 @@ if [ "$build" = 1 ]; then
     done
     sudo apt-get install -y --allow-downgrades --reinstall "${debs[@]}"
     systemctl --user daemon-reload
-    systemctl --user try-restart bande-config bande-power bande-sound bande-tray bande-automount bande-polkit-agent \
+    systemctl --user try-restart bande-config bande-power bande-sound bande-tray bande-indexer bande-automount bande-polkit-agent \
         xdg-desktop-portal-bande
     pkill -u "$(id -u)" -x bande-notify || true
 fi

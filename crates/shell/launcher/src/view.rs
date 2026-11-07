@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -105,6 +104,9 @@ fn heading_text(heading: Heading) -> String {
         Heading::System => "system",
         Heading::Folders => "folders",
         Heading::Documents => "documents",
+        Heading::Mail => "mail",
+        Heading::Events => "events",
+        Heading::Contacts => "contacts",
         Heading::RecentApps => "recent-apps",
         Heading::RecentDocuments => "recent-documents",
         Heading::AllApps => "all-apps",
@@ -507,7 +509,7 @@ impl Widget for Card {
             shape,
             paint: cx.palette.overlay.into(),
         });
-        items.extend(Item::rim(shape, &cx.palette));
+        items.push(Item::lit_edge(shape, &cx.palette));
         let glyph = Rect::new(
             self.frame.x + 20.0,
             self.frame.y + ((FIELD_ROW - GLYPH_SIZE) / 2.0).round(),
@@ -794,10 +796,6 @@ impl Launcher {
 
     pub fn set_now(&mut self, seconds: u64) {
         self.state.borrow_mut().model.set_now(seconds);
-    }
-
-    pub fn file_boosts(&self) -> HashMap<PathBuf, u32> {
-        self.state.borrow().model.file_boosts()
     }
 
     pub fn record_use(&mut self, target: &Target) -> io::Result<()> {

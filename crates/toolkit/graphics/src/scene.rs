@@ -12,7 +12,7 @@ use vello_cpu::{PixelMetadata, Pixmap};
 
 use crate::surface::{SurfaceId, SurfaceScaling};
 use crate::text::{GlyphRun, Paragraph};
-use bande_design::{Color, Elevation, Palette, Scheme};
+use bande_design::{Color, Contrast, Elevation, Highlight, Palette, Scheme};
 
 const SYMBOLIC_INK: &str = "#201E1A";
 
@@ -88,7 +88,7 @@ impl Shape {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum PathElement {
+pub enum PathElement {
     Move(Point),
     Line(Point),
     Cubic(Point, Point, Point),
@@ -103,6 +103,10 @@ pub struct Path {
 impl Path {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn elements(&self) -> &[PathElement] {
+        &self.elements
     }
 
     pub fn through(points: &[Point]) -> Self {
@@ -616,12 +620,34 @@ impl Item {
             })
     }
 
-    pub fn rim(shape: Shape, palette: &Palette) -> Option<Self> {
-        (palette.scheme == Scheme::Dark).then(|| Self::Stroke {
-            shape: Shape::rounded(shape.rect.inset(0.5), shape.radius - 0.5),
-            width: 1.0,
-            paint: palette.rim.into(),
-        })
+    pub fn lit_edge(shape: Shape, palette: &Palette) -> Self {
+        if palette.contrast == Contrast::Increased {
+            return Self::Stroke {
+                shape: Shape::rounded(shape.rect.inset(0.5), shape.radius - 0.5),
+                width: 1.0,
+                paint: palette.edge.into(),
+            };
+        }
+        let inset = Highlight::WIDTH / 2.0;
+        let rect = shape.rect;
+        Self::Stroke {
+            shape: Shape::rounded(rect.inset(inset), shape.radius - inset),
+            width: Highlight::WIDTH,
+            paint: Paint::LinearGradient {
+                start: Point::new(rect.x, rect.y),
+                end: Point::new(rect.x, rect.y + rect.height.min(Highlight::REACH)),
+                stops: vec![
+                    Stop {
+                        offset: 0.0,
+                        color: palette.highlight.top,
+                    },
+                    Stop {
+                        offset: 1.0,
+                        color: palette.highlight.bottom,
+                    },
+                ],
+            },
+        }
     }
 }
 

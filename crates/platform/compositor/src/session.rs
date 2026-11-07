@@ -21,6 +21,7 @@ use crate::state::{ClientState, Compositor};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRole {
     ClipboardDaemon,
+    LockScreen,
     Shell,
 }
 
@@ -33,6 +34,7 @@ pub const SETUP: &str = "/usr/bin/bande-setup";
 pub const SETUP_PENDING: &str = "/var/lib/bande/setup-pending";
 pub const REVIEW: &str = "/usr/bin/bande-review";
 const CONFIRM_ARGUMENT: &str = "--confirm";
+const REOPEN_ARGUMENT: [&str; 1] = ["--reopen-after-crash"];
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 const LOCK_SCREEN_RELAUNCH_AFTER: Duration = Duration::from_secs(10);
@@ -222,7 +224,7 @@ impl Compositor {
         let mut command = Command::new(&executable);
         command.env(OUTPUT_VARIABLE, self.state.main_screen().name());
         match self
-            .spawn_session_command(command, SessionRole::Shell)
+            .spawn_session_command(command, SessionRole::LockScreen)
             .map(|(child, _)| child)
         {
             Ok(child) => self.lock_screen.child = Some(child),
@@ -239,9 +241,16 @@ impl Compositor {
             .session_end_requested
             .take()
             .map(|ending| [CONFIRM_ARGUMENT, session_end_keyword(ending)]);
+        let question = match std::mem::take(&mut self.state.resume.ask_after_crash) {
+            true => Some(REOPEN_ARGUMENT.as_slice()),
+            false => None,
+        };
         self.keep_summoned(
             |compositor| &mut compositor.session_dialog,
-            confirm.as_ref().map(|arguments| arguments.as_slice()),
+            confirm
+                .as_ref()
+                .map(|arguments| arguments.as_slice())
+                .or(question),
             &mut upkeep,
         );
         self.keep_screen_reader();
@@ -300,7 +309,9 @@ impl Compositor {
         command.envs(desktop_environment());
         command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
-            (Some(name), SessionRole::Shell) => command.env("WAYLAND_DISPLAY", name),
+            (Some(name), SessionRole::Shell | SessionRole::LockScreen) => {
+                command.env("WAYLAND_DISPLAY", name)
+            }
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
         unsafe {

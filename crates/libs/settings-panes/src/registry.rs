@@ -275,8 +275,8 @@ pub enum SettingId {
     Clock24Hour,
     LoginItems,
     ReopenApps,
-    ReopenAfterCrash,
     AutomaticUpdates,
+    UpdateCheckEvery,
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
@@ -294,6 +294,8 @@ pub enum SettingId {
     SoftwareUpdatePage,
     ShortcutsPage,
     ClipboardHistory,
+    KeyboardAccess,
+    SecurityStatus,
     DefaultApps,
     Brightness,
     NightLightPage,
@@ -314,6 +316,9 @@ pub enum SettingId {
     SearchRecentApps,
     SearchRecentDocuments,
     SearchDocuments,
+    SearchMail,
+    SearchEvents,
+    SearchContacts,
     SearchFolders,
     SearchSettings,
     SearchSystem,
@@ -371,6 +376,8 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    KeyboardAccess,
+    SecurityStatus,
     SearchExcluded,
     Permissions(Permission),
     Passwords,
@@ -611,6 +618,23 @@ fn durations(choices: &[u64]) -> Vec<Choice> {
 }
 
 pub const WITH_DISPLAY: &str = "with-display";
+
+const DAY: u64 = 24 * 60 * 60;
+
+fn update_check_choices() -> Vec<Choice> {
+    [
+        ("update-check-when-available", 0),
+        ("update-check-daily", DAY),
+        ("update-check-weekly", 7 * DAY),
+        ("update-check-monthly", 31 * DAY),
+    ]
+    .into_iter()
+    .map(|(label, seconds)| Choice {
+        label: L10N.tr(label),
+        value: Value::Seconds(seconds),
+    })
+    .collect()
+}
 
 fn password_choices() -> Vec<Choice> {
     PASSWORD_CHOICES
@@ -935,6 +959,9 @@ fn search_pane() -> Pane {
                     switch(SettingId::SearchRecentApps, "search-recent-apps"),
                     switch(SettingId::SearchRecentDocuments, "search-recent-documents"),
                     switch(SettingId::SearchDocuments, "search-documents"),
+                    switch(SettingId::SearchMail, "search-mail"),
+                    switch(SettingId::SearchEvents, "search-events"),
+                    switch(SettingId::SearchContacts, "search-contacts"),
                     switch(SettingId::SearchFolders, "search-folders"),
                     switch(SettingId::SearchSettings, "search-system-settings"),
                     switch(SettingId::SearchSystem, "search-system-actions"),
@@ -1411,6 +1438,14 @@ fn system_panes() -> Vec<Pane> {
             PaneId::PrivacySecurity,
             vec![
                 section(
+                    Some(L10N.tr("this-mac")),
+                    vec![list(
+                        SettingId::SecurityStatus,
+                        "this-mac",
+                        List::SecurityStatus,
+                    )],
+                ),
+                section(
                     Some(L10N.tr("app-permissions")),
                     vec![
                         page(SettingId::CameraPage, PaneId::Camera),
@@ -1419,6 +1454,14 @@ fn system_panes() -> Vec<Pane> {
                         page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
                         page(SettingId::LocationPage, PaneId::Location),
                     ],
+                ),
+                section(
+                    Some(L10N.tr("keyboard-access")),
+                    vec![list(
+                        SettingId::KeyboardAccess,
+                        "keyboard-access",
+                        List::KeyboardAccess,
+                    )],
                 ),
                 section(
                     Some(L10N.tr("clipboard")),
@@ -1454,8 +1497,6 @@ fn system_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::ReopenApps, "reopen-at-login")
                             .described("reopen-at-login-description"),
-                        switch(SettingId::ReopenAfterCrash, "reopen-after-crash")
-                            .described("reopen-after-crash-description"),
                     ],
                 ),
             ],
@@ -1494,6 +1535,13 @@ fn system_panes() -> Vec<Pane> {
                         "software-updates",
                         List::SoftwareUpdates,
                     ),
+                    setting(
+                        SettingId::UpdateCheckEvery,
+                        L10N.tr("update-check-every"),
+                        L10N.tr("update-check-every-keywords"),
+                        choice(update_check_choices()),
+                    )
+                    .described("update-check-every-description"),
                     switch(SettingId::AutomaticUpdates, "automatic-updates")
                         .described("automatic-updates-description"),
                 ],

@@ -710,7 +710,7 @@ impl SettingsView {
             List::KnownNetworks => self.known_network_rows(),
             List::Printers => self.printer_rows(),
             List::Accounts => self.account_rows(),
-            List::NearbyPrinters => self.nearby_printer_rows(),
+            List::NearbyPrinters => self.add_printer_rows(),
             List::Networks => self.network_rows(),
             List::PairedDevices => self.device_rows(true),
             List::NearbyDevices => self.device_rows(false),
@@ -735,6 +735,8 @@ impl SettingsView {
             List::Regions => self.region_rows(),
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
+            List::KeyboardAccess => self.keyboard_access_rows(),
+            List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
             List::Passwords => self.keychain_rows(),
@@ -1250,11 +1252,6 @@ impl SettingsView {
         let notice = self.notice(&pane);
         self.crossfade_on(pane.id, notice.is_some());
         let mut body: Widgets = notice.into_iter().collect();
-        if pane.id == PaneId::Printers
-            && self.printers.as_ref().is_some_and(|state| !state.installed)
-        {
-            body.push(self.install_printing_card());
-        }
         let sections: &[Section] = if body.is_empty() { &pane.sections } else { &[] };
         for section in sections {
             if section

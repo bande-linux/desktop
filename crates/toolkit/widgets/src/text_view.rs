@@ -1,9 +1,11 @@
 use accesskit::{ActionRequest, Node, Role};
 
 use super::control::paint_field;
-use super::editor::{Editor, ParagraphAttributes, RichText, TextAttributes};
+use super::editor::{Editor, ParagraphAttributes, PrintedBlock, RichText, TextAttributes};
 use super::{Context, Cursor, DragAction, Event, Menu, Parts, ScrollState, Size, Widget, WidgetId};
-use bande_graphics::{Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, Typeface};
+use bande_graphics::{
+    Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle, TextSystem, Typeface,
+};
 
 const FONT_SIZE: f32 = 13.0;
 const HORIZONTAL_PADDING: f32 = 8.0;
@@ -95,6 +97,16 @@ impl TextView {
     pub fn insert(&mut self, text: &str) {
         self.editor.insert(text);
         self.editor.reveal_selection();
+    }
+
+    pub fn printed_blocks(
+        rich: &RichText,
+        text: &mut TextSystem,
+        font_size: f32,
+        width: f32,
+        monospace: bool,
+    ) -> Vec<PrintedBlock> {
+        Editor::for_print(rich, font_size, width, monospace).print_blocks(text)
     }
 
     pub fn rich_text(&self) -> RichText {

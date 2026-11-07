@@ -98,7 +98,7 @@ impl App for QuickLookSurface {
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if self.panel.source_ready(index) {
+        if self.panel.source_ready(window, index) {
             window.request_redraw();
         }
     }

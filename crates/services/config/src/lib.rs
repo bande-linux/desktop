@@ -813,6 +813,7 @@ pub struct Config {
     pub tinted_frame: bool,
     pub reopen_apps: bool,
     pub automatic_updates: bool,
+    pub update_check_every: Option<Duration>,
     pub lock_message: String,
     pub show_previews: bool,
     pub clock: ClockFormat,
@@ -849,6 +850,7 @@ impl Default for Config {
             tinted_frame: false,
             reopen_apps: true,
             automatic_updates: false,
+            update_check_every: None,
             lock_message: String::new(),
             show_previews: true,
             clock: ClockFormat::Automatic,
@@ -1003,6 +1005,9 @@ impl Parser<'_> {
                 "automatic-updates" => self
                     .flag(node)
                     .map(|automatic| config.automatic_updates = automatic),
+                "update-check-every" => self
+                    .duration(node)
+                    .map(|every| config.update_check_every = Some(every)),
                 "accessibility" => {
                     config.accessibility = self.accessibility(node);
                     Ok(())

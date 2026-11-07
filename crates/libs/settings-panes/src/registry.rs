@@ -276,6 +276,7 @@ pub enum SettingId {
     LoginItems,
     ReopenApps,
     AutomaticUpdates,
+    UpdateCheckEvery,
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
@@ -610,6 +611,23 @@ fn durations(choices: &[u64]) -> Vec<Choice> {
 }
 
 pub const WITH_DISPLAY: &str = "with-display";
+
+const DAY: u64 = 24 * 60 * 60;
+
+fn update_check_choices() -> Vec<Choice> {
+    [
+        ("update-check-when-available", 0),
+        ("update-check-daily", DAY),
+        ("update-check-weekly", 7 * DAY),
+        ("update-check-monthly", 31 * DAY),
+    ]
+    .into_iter()
+    .map(|(label, seconds)| Choice {
+        label: L10N.tr(label),
+        value: Value::Seconds(seconds),
+    })
+    .collect()
+}
 
 fn password_choices() -> Vec<Choice> {
     PASSWORD_CHOICES
@@ -1491,6 +1509,13 @@ fn system_panes() -> Vec<Pane> {
                         "software-updates",
                         List::SoftwareUpdates,
                     ),
+                    setting(
+                        SettingId::UpdateCheckEvery,
+                        L10N.tr("update-check-every"),
+                        L10N.tr("update-check-every-keywords"),
+                        choice(update_check_choices()),
+                    )
+                    .described("update-check-every-description"),
                     switch(SettingId::AutomaticUpdates, "automatic-updates")
                         .described("automatic-updates-description"),
                 ],

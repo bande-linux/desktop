@@ -262,6 +262,7 @@ pub struct SettingsView {
     pub(crate) password: Option<PasswordForm>,
     pub(crate) password_message: Option<String>,
     pub(crate) software: SoftwareState,
+    pub(crate) software_checked: Option<i64>,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
     pub(crate) locale: Option<LocaleState>,
@@ -356,6 +357,7 @@ impl SettingsView {
             password: None,
             password_message: None,
             software: SoftwareState::Unknown,
+            software_checked: None,
             network: None,
             manual_ipv4: false,
             locale: None,
@@ -606,7 +608,9 @@ impl SettingsView {
                 Some(PaneId::Storage),
                 &[SettingId::StorageUsage, SettingId::LargeFiles],
             ),
-            Update::Software(_) => (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates]),
+            Update::Software(_) | Update::SoftwareChecked(_) => {
+                (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
+            }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
             Update::Printers(_)
             | Update::NearbyPrinters(_)
@@ -711,6 +715,7 @@ impl SettingsView {
             Update::Login(login) => self.login = Some(login),
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Software(state) => self.software = state,
+            Update::SoftwareChecked(at) => self.software_checked = at,
             Update::Locale(locale) => self.locale = locale,
             Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {

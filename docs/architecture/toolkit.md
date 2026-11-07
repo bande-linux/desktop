@@ -270,7 +270,13 @@ writes a hex value, a corner radius or a font name of its own.
   edge scrolls. The context menu offers Undo, Redo, Cut, Copy, Paste and Select All. Input
   method text being composed is shown underlined in place (the clause being converted thicker)
   without entering the value, the candidate window is placed through `set_cursor_rectangle`
-  under it, and a click while composing keeps the text and resets the input method. Text is
+  under it, and a click while composing keeps the text and resets the input method. Dead keys and
+  the Compose key work in every window without an input method: the seat follows xkbcommon's
+  Compose table of the session's locale (read at the first dead key) and reports the pending accent
+  as `Event::Preedit` and the result as ordinary `Key::Character` events, so every field, password
+  entry and terminal gets it. As on macOS, a dead key and Space type the accent itself, a key that
+  cannot combine types the accent and then that key (`~` then `/` is `~/`), and Backspace or Escape
+  abandon the accent. Shortcuts with Ctrl, Alt or Super never compose. Text is
   published to screen readers as text runs with the caret and selection, which they can also
   set. `TextView` wraps, scrolls with a `ScrollState`, keeps the caret in view and can be
   read-only; revealing the caret lays out the paragraphs it scrolls to and follows again, so a

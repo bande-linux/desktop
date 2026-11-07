@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::time::Duration;
 
 use bande_spring::{Animated, Spring};
@@ -7,10 +8,12 @@ use smithay::utils::{Logical, Rectangle, Size};
 use smithay::wayland::compositor::{RectangleKind, SurfaceAttributes, with_states};
 use smithay::wayland::shell::wlr_layer::Layer;
 
+use crate::environment::notify_service_manager;
 use crate::motion::{BAR_NAMESPACE, SETTLED_ALPHA};
 use crate::state::{Compositor, State, is_mapped};
 
 const LOGIN_WINDOW_NAMESPACE: &str = "greeter";
+const LOGIN_READY_SOCKET: &str = "/run/bande/login-ready";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Awaited {
@@ -161,6 +164,12 @@ impl Compositor {
         };
         if !ready && now < deadline {
             return Some(deadline);
+        }
+        if ready
+            && let Err(error) =
+                notify_service_manager(Some(OsStr::new(LOGIN_READY_SOCKET)), "READY=1")
+        {
+            tracing::debug!("nothing heard that the login window came up: {error}");
         }
         match awaited {
             Awaited::Shell => self.state.begin_reveal(now, since, ready),

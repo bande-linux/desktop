@@ -72,6 +72,7 @@ pub enum Update {
     CannotSleep,
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
+    SoftwareChecked(Option<i64>),
     Locale(Option<LocaleState>),
     Layouts(Layouts),
     Pointing(PointingDevices),

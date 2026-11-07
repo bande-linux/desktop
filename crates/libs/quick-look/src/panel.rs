@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{Cursor, Event, Key, Modifiers};
-use bande_toolkit::{Appearance, Item, Palette, Point, Rect, TextSystem};
+use bande_toolkit::{Appearance, Item, Palette, Point, Rect, TextSystem, Window};
 
 use crate::{Action, QuickLook, Subject};
 
@@ -302,11 +302,11 @@ impl Panel {
             .unwrap_or_default()
     }
 
-    pub fn source_ready(&mut self, index: usize) -> bool {
+    pub fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
         let changed = self
             .shown
             .as_mut()
-            .is_some_and(|shown| shown.source_ready(index));
+            .is_some_and(|shown| shown.source_ready(window, index));
         self.sync();
         changed
     }

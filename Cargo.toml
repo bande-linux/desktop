@@ -75,6 +75,7 @@ wayland-server = "=0.31.14"
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
 writeable = "=0.6.4"
 xkbcommon = "=0.8.0"
+udev = "=0.9.3"
 zbus = "=5.19.0"
 zeroize = { version = "=1.8.1", features = ["serde"] }
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
@@ -102,11 +103,14 @@ bande-fs = { path = "crates/libs/fs" }
 bande-graphics = { path = "crates/toolkit/graphics" }
 bande-greeter = { path = "crates/shell/greeter" }
 bande-inbox = { path = "crates/libs/inbox" }
+bande-keyring = { path = "crates/libs/keyring" }
 bande-keyboard = { path = "crates/libs/keyboard" }
 bande-l10n = { path = "crates/libs/l10n" }
 bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
+bande-media = { path = "crates/libs/media" }
+bande-media-view = { path = "crates/libs/media-view" }
 bande-network = { path = "crates/libs/network" }
 bande-printers = { path = "crates/libs/printers" }
 bande-quick-look = { path = "crates/libs/quick-look" }

@@ -87,6 +87,14 @@ impl Operations {
         &self.running
     }
 
+    pub fn take_running(&mut self) -> Vec<Running> {
+        std::mem::take(&mut self.running)
+    }
+
+    pub fn adopt(&mut self, running: Vec<Running>) {
+        self.running.extend(running);
+    }
+
     pub fn history(&self) -> Ref<'_, History> {
         self.history.borrow()
     }

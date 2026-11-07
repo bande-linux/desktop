@@ -448,16 +448,22 @@ dependencies = [
 name = "bande-automount"
 version = "0.1.7"
 dependencies = [
+ "async-io",
  "bande-bus",
  "bande-fs",
+ "bande-keyring",
  "bande-l10n",
  "bande-log",
  "bande-notify",
+ "bande-packages",
  "bande-test-bus",
  "bande-volumes",
  "bande-xdg",
+ "blocking",
  "rustix 1.1.6",
+ "serde_json",
  "tracing",
+ "udev",
  "zbus",
 ]
 
@@ -706,6 +712,7 @@ version = "0.1.7"
 dependencies = [
  "bande-datetime",
  "bande-l10n",
+ "bande-volumes",
  "bande-xdg",
  "bzip2",
  "flate2",
@@ -776,6 +783,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-keyring"
+version = "0.1.7"
+dependencies = [
+ "zbus",
+]
+
+[[package]]
 name = "bande-l10n"
 version = "0.1.7"
 dependencies = [
@@ -839,6 +853,27 @@ dependencies = [
  "tracing",
  "tracing-journald",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "bande-media"
+version = "0.1.7"
+dependencies = [
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bande-media-view"
+version = "0.1.7"
+dependencies = [
+ "accesskit",
+ "bande-content",
+ "bande-l10n",
+ "bande-media",
+ "bande-toolkit",
+ "tracing",
 ]
 
 [[package]]
@@ -952,6 +987,7 @@ dependencies = [
  "bande-fs",
  "bande-inbox",
  "bande-l10n",
+ "bande-media-view",
  "bande-toolkit",
  "bande-xdg",
  "parley",
@@ -1282,6 +1318,7 @@ name = "bande-volumes"
 version = "0.1.7"
 dependencies = [
  "bande-test-bus",
+ "rustix 1.1.6",
  "tracing",
  "zbus",
 ]

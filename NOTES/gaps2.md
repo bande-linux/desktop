@@ -34,7 +34,7 @@ In Files, there is no need to have the viewing options in the right click menu, 
 Status: started, branch gap-context-menus.
 
 Package Installer is stuck on "Install", no matter what i do or how many times i press nothing happens.
-Status: started, branch gap-package-installer.
+Status: started. Fixed on main: the polkit agent uses polkit's socket-activated helper (Debian's helper is no longer setuid, so every password request failed with no dialog), and the installer reports refusals. Left: the owner runs a real install after the next desktop release and `installer-v0.1.1`; Software still treats `NotAuthorized` as a silent stop.
 
 The shutdown button doesnt work. (right click Bande icon -> shutdown). Also the restart button.
 Status: started, branch gap-shutdown.

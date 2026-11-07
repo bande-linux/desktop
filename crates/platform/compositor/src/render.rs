@@ -171,4 +171,8 @@ impl FrameOutput for Renderer {
         }
         Ok(Submission::AtVblank)
     }
+
+    fn can_dim(&mut self, _output: &str) -> bool {
+        true
+    }
 }

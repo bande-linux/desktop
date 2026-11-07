@@ -9,3 +9,6 @@ if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-decon
 		fi
 	fi
 fi
+if [ "$1" = "configure" ] && [ -z "$DPKG_ROOT" ] && command -v modprobe >/dev/null ; then
+	modprobe i2c-dev || true
+fi

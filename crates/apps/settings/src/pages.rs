@@ -151,6 +151,11 @@ impl SettingsView {
     ) -> Option<(Box<dyn Widget>, WidgetId)> {
         let id = setting.id;
         let value = match scope {
+            Some(display) if id == SettingId::Brightness => self
+                .display_levels
+                .iter()
+                .find(|shown| shown.connector == display.connector)
+                .map(|shown| Value::Fraction(shown.level)),
             Some(display) => display_value(
                 display,
                 self.display_settings.get(&display.identity).copied(),

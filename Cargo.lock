@@ -472,6 +472,7 @@ version = "0.1.7"
 dependencies = [
  "accesskit",
  "bande-bluetooth",
+ "bande-bus",
  "bande-config",
  "bande-datetime",
  "bande-fs",

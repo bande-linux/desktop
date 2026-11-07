@@ -74,8 +74,8 @@ fn confirmation_ui(
         .accessory({
             let reopen = Rc::clone(reopen);
             let state = match reopen.get() {
-                true => CheckState::Checked,
-                false => CheckState::Unchecked,
+                true => CheckState::On,
+                false => CheckState::Off,
             };
             Checkbox::new(&L10N.tr("reopen-windows"), state, move |on| reopen.set(on))
         })

@@ -25,7 +25,6 @@ pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
-pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
 pub(crate) const SHELL_VERSION: u32 = 6;
 
 struct Toplevel {

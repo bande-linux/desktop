@@ -8,8 +8,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bande_l10n::Localizer;
-use bande_toolkit::ui::{Alert, Context, Ui};
-use bande_toolkit::{AppConnection, Appearance, Size, TextSystem, WindowError, WindowInSession};
+use bande_toolkit::ui::{Alert, Context, Size, Ui};
+use bande_toolkit::{AppConnection, Appearance, TextSystem, WindowError, WindowInSession};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

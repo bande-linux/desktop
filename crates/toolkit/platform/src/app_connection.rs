@@ -25,7 +25,7 @@ pub enum AppRequest {
     Quit,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInSession {
     pub(crate) session: XdgSessionV1,
     pub(crate) name: String,

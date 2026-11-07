@@ -13,7 +13,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
 };
-use smithay::utils::{Logical, Rectangle};
+use smithay::utils::Rectangle;
 
 use crate::app::StateWriter;
 use crate::recall::clamp_into;
@@ -468,26 +468,25 @@ impl State {
                 .iter()
                 .any(|placed| placed.session == *wanted)
         });
-        if let Some(known) = &known {
-            if let Some((taken, _)) = self
+        if let Some(known) = &known
+            && let Some((taken, _)) = self
                 .resume
                 .live
                 .iter()
                 .find(|(_, session)| session == known)
-            {
-                if taken.client() == client {
-                    manager.post_error(
-                        xdg_session_manager_v1::Error::InUse,
-                        "the session is already in use",
-                    );
-                    data_init.init(id, ());
-                    return;
-                }
-                taken.replaced();
-                let taken = taken.clone();
-                self.resume.live.retain(|(session, _)| *session != taken);
-                self.leave_session(known, None);
+        {
+            if taken.client() == client {
+                manager.post_error(
+                    xdg_session_manager_v1::Error::InUse,
+                    "the session is already in use",
+                );
+                data_init.init(id, ());
+                return;
             }
+            taken.replaced();
+            let taken = taken.clone();
+            self.resume.live.retain(|(session, _)| *session != taken);
+            self.leave_session(known, None);
         }
         let session = data_init.init(id, ());
         match known {

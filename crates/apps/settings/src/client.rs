@@ -43,7 +43,6 @@ pub trait Config {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    #[zbus(property)]
     fn automatic_updates(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_automatic_updates(&self, on: bool) -> zbus::Result<()>;
@@ -294,7 +293,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 73] = [
+pub const CONFIG_SETTINGS: [SettingId; 72] = [
     SettingId::Appearance,
     SettingId::Clock24Hour,
     SettingId::LowPowerOnBattery,

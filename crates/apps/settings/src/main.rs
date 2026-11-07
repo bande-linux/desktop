@@ -290,7 +290,7 @@ impl Program for Settings {
     fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
         (self.main == Some(window))
             .then(|| cx.view(window))?
-            .and_then(|Pane(view)| Saved::of(&view.pane.keyword()))
+            .and_then(|Pane(view)| Saved::of(&view.pane_keyword()))
     }
 
     fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {

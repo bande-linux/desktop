@@ -26,8 +26,8 @@ use bande_status::memory::{
 };
 use bande_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use bande_xdg::{
-    Apps, Locale, applications, config_dirs, current_desktops, data_dirs, follow_oom_kills,
-    forget_saved_windows, reopen_file, reopen_listed_apps, take_apps_to_reopen,
+    Apps, config_dirs, data_dirs, follow_oom_kills, forget_saved_windows, reopen_file,
+    reopen_listed_apps, take_apps_to_reopen,
 };
 use zbus::blocking::Connection;
 

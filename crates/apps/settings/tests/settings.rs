@@ -90,6 +90,10 @@ fn the_backup_pane_offers_disks_then_says_what_is_wrong() {
             name: "Passport".to_owned(),
             filesystem: "ext4".to_owned(),
             size: 1_000_000_000_000,
+            block: "/org/freedesktop/UDisks2/block_devices/sda".to_owned(),
+            drive_name: "Passport".to_owned(),
+            drive_size: 1_000_000_000_000,
+            contents: String::new(),
         }])),
     ]);
     assert!(shows(&mut view, "Use This Disk"));

@@ -9,21 +9,43 @@ use serde::{Deserialize, Serialize};
 pub const STATE_DIR: &str = "/var/lib/bande-backup";
 const STATE_FILE: &str = "state.json";
 const KEY_FILE: &str = "key";
+const SHARE_PASSWORD_FILE: &str = "share-password";
 const KEY_BYTES: usize = 32;
 const PRIVATE: u32 = 0o700;
 const SECRET: u32 = 0o400;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChosenDisk {
-    pub uuid: String,
-    pub name: String,
-    pub filesystem: String,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Destination {
+    Disk {
+        uuid: String,
+        name: String,
+        filesystem: String,
+    },
+    Network {
+        url: String,
+        user: String,
+        name: String,
+    },
+}
+
+impl Destination {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Disk { name, .. } | Self::Network { name, .. } => name,
+        }
+    }
+
+    pub fn is_network(&self) -> bool {
+        matches!(self, Self::Network { .. })
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct State {
-    pub disk: Option<ChosenDisk>,
+    pub destination: Option<Destination>,
+    pub excluded: Vec<String>,
     pub on_battery: bool,
     pub chosen_at: u64,
     pub last_success: u64,
@@ -95,6 +117,28 @@ pub fn ensure_key() -> io::Result<PathBuf> {
 fn getrandom_fill(buffer: &mut [u8]) -> io::Result<()> {
     let mut file = File::open("/dev/urandom")?;
     io::Read::read_exact(&mut file, buffer)
+}
+
+pub fn share_password() -> String {
+    fs::read_to_string(Path::new(STATE_DIR).join(SHARE_PASSWORD_FILE)).unwrap_or_default()
+}
+
+pub fn save_share_password(password: &str) -> io::Result<()> {
+    fs::create_dir_all(STATE_DIR)?;
+    fs::set_permissions(STATE_DIR, fs::Permissions::from_mode(PRIVATE))?;
+    let path = Path::new(STATE_DIR).join(SHARE_PASSWORD_FILE);
+    if let Err(error) = fs::remove_file(&path)
+        && error.kind() != io::ErrorKind::NotFound
+    {
+        return Err(error);
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(SECRET)
+        .open(&path)?;
+    file.write_all(password.as_bytes())?;
+    file.sync_all()
 }
 
 pub fn machine_id() -> io::Result<String> {

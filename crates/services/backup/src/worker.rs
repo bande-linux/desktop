@@ -12,11 +12,13 @@ use rustix::process::{Pid, Signal, kill_process};
 use zbus::blocking::Connection;
 
 use crate::client::{Status, phase, problem, setup_error};
-use crate::disk::{self, BROWSE_DIR, Space};
+use crate::disk::{self, BROWSE_DIR, LOCAL_BROWSE_DIR, Space};
+use crate::erase::erase;
+use crate::local;
 use crate::restic::{Exit, Finished, Repository, Snapshot, StopReason, Stopper, damaged_packs};
 use crate::service::{DAY, HOUR, emit_status};
 use crate::source::{self, SnapshotView};
-use crate::store::{self, ChosenDisk, SecretFile, State};
+use crate::store::{self, Destination, SecretFile, State};
 
 const IDLE_EXIT: Duration = Duration::from_secs(60);
 const EARLY_START: u64 = 5 * 60;
@@ -37,11 +39,16 @@ pub enum Command {
     Pause,
     Resume,
     Choose {
-        uuid: String,
-        name: String,
-        filesystem: String,
+        destination: Destination,
+        share_password: String,
         password: String,
     },
+    EraseAndChoose {
+        block: String,
+        password: String,
+    },
+    SetExcluded(Vec<String>),
+    Release(Sender<()>),
     StopUsing,
     OpenBrowser(String),
     CloseBrowser(String),
@@ -100,7 +107,7 @@ impl Shared {
         let state = locked(&self.state);
         let live = locked(&self.live);
         let phase = if live.phase.is_empty() {
-            match &state.disk {
+            match &state.destination {
                 None => phase::NO_DISK,
                 Some(_) => phase::IDLE,
             }
@@ -113,9 +120,14 @@ impl Shared {
             problem: state.problem.clone(),
             setup_error: live.setup_error.clone(),
             disk_name: state
-                .disk
+                .destination
                 .as_ref()
-                .map_or_else(String::new, |disk| disk.name.clone()),
+                .map_or_else(String::new, |destination| destination.name().to_owned()),
+            on_network: state
+                .destination
+                .as_ref()
+                .is_some_and(Destination::is_network),
+            excluded: state.excluded.clone(),
             last_success: state.last_success,
             paused_until: state.paused_until,
             oldest: state.oldest,
@@ -166,7 +178,8 @@ impl Shared {
 }
 
 struct Browser {
-    child: Child,
+    child: Option<Child>,
+    local: bool,
     clients: Vec<String>,
 }
 
@@ -177,6 +190,7 @@ pub struct Worker {
     pending: Option<Command>,
     run_again: bool,
     browser: Option<Browser>,
+    releases: Vec<Sender<()>>,
 }
 
 impl Worker {
@@ -188,6 +202,7 @@ impl Worker {
             pending: None,
             run_again: false,
             browser: None,
+            releases: Vec::new(),
         }
     }
 
@@ -227,7 +242,13 @@ impl Worker {
                 self.shared.change(|state| state.paused_until = 0);
                 self.run_now();
             }
-            choose @ (Command::Choose { .. } | Command::StopUsing) => {
+            Command::SetExcluded(folders) => {
+                self.shared.change(|state| state.excluded = folders);
+            }
+            Command::Release(done) => self.release(done),
+            choose @ (Command::Choose { .. }
+            | Command::EraseAndChoose { .. }
+            | Command::StopUsing) => {
                 if self.busy {
                     self.shared.stopper.stop(StopReason::Reconfigured);
                     self.pending = Some(choose);
@@ -248,6 +269,7 @@ impl Worker {
                 self.busy = false;
                 if self.browser.is_none() {
                     disk::unmount();
+                    self.answer_releases();
                 }
                 if let Some(pending) = self.pending.take() {
                     self.start_reconfiguring(pending);
@@ -255,6 +277,25 @@ impl Worker {
                     self.reconcile(true);
                 }
             }
+        }
+    }
+
+    fn release(&mut self, done: Sender<()>) {
+        self.run_again = false;
+        self.releases.push(done);
+        if self.busy {
+            self.shared.stopper.stop(StopReason::Released);
+        }
+        self.end_browser();
+        if !self.busy && self.browser.is_none() {
+            disk::unmount();
+            self.answer_releases();
+        }
+    }
+
+    fn answer_releases(&mut self) {
+        for done in self.releases.drain(..) {
+            let _ = done.send(());
         }
     }
 
@@ -290,19 +331,27 @@ impl Worker {
     fn start_reconfiguring(&mut self, command: Command) {
         match command {
             Command::Choose {
-                uuid,
-                name,
-                filesystem,
+                destination,
+                share_password,
                 password,
             } => {
-                let disk = ChosenDisk {
-                    uuid,
-                    name,
-                    filesystem,
-                };
                 self.run_again = true;
                 self.spawn_job(move |shared| {
-                    choose(shared, &disk, &password);
+                    choose(shared, &destination, &share_password, &password);
+                });
+            }
+            Command::EraseAndChoose { block, password } => {
+                self.run_again = true;
+                self.spawn_job(move |shared| {
+                    begin_setup(shared);
+                    disk::unmount();
+                    match erase(&block) {
+                        Ok(destination) => choose(shared, &destination, "", &password),
+                        Err(error) => {
+                            tracing::error!("cannot erase the disk: {error}");
+                            end_setup_with(shared, setup_error::ERASE_FAILED);
+                        }
+                    }
                 });
             }
             Command::StopUsing => {
@@ -322,22 +371,37 @@ impl Worker {
             return;
         }
         let state = self.shared.state();
-        let Some(disk) = state.disk else {
+        let Some(destination) = state.destination else {
             return;
         };
-        let opened = open_mount(&disk, self.commands.clone());
-        match opened {
-            Ok(child) => {
-                self.shared.browsers.fetch_add(1, Ordering::SeqCst);
-                self.browser = Some(Browser {
-                    child,
-                    clients: vec![client],
-                });
-            }
+        let local = local::open_view();
+        let child = match open_mount(&destination, self.commands.clone()) {
+            Ok(child) => Some(child),
             Err(error) => {
-                tracing::warn!("cannot open the backups for browsing: {error}");
-                self.shared.set_phase(phase::DISK_AWAY);
+                tracing::info!(
+                    "the backups can't be browsed on {}: {error}",
+                    destination.name()
+                );
+                None
             }
+        };
+        if child.is_none() && !local {
+            self.shared.set_phase(phase::DISK_AWAY);
+            return;
+        }
+        self.shared.browsers.fetch_add(1, Ordering::SeqCst);
+        self.browser = Some(Browser {
+            child,
+            local,
+            clients: vec![client],
+        });
+        if self
+            .browser
+            .as_ref()
+            .is_some_and(|browser| browser.child.is_none())
+        {
+            locked(&self.shared.live).browse_root = LOCAL_BROWSE_DIR.to_owned();
+            self.shared.publish();
         }
     }
 
@@ -347,24 +411,40 @@ impl Worker {
         };
         browser.clients.retain(|known| known != client);
         if browser.clients.is_empty() {
-            let target = i32::try_from(browser.child.id())
-                .ok()
-                .and_then(Pid::from_raw);
-            if let Some(target) = target
-                && let Err(error) = kill_process(target, Signal::INT)
-            {
-                tracing::warn!("cannot stop browsing the backups: {error}");
+            self.end_browser();
+        }
+    }
+
+    fn end_browser(&mut self) {
+        let Some(browser) = &mut self.browser else {
+            return;
+        };
+        browser.clients.clear();
+        match &browser.child {
+            Some(child) => {
+                let target = i32::try_from(child.id()).ok().and_then(Pid::from_raw);
+                if let Some(target) = target
+                    && let Err(error) = kill_process(target, Signal::INT)
+                {
+                    tracing::warn!("cannot stop browsing the backups: {error}");
+                }
             }
+            None => self.browser_exited(),
         }
     }
 
     fn browser_exited(&mut self) {
-        if let Some(mut browser) = self.browser.take()
-            && let Err(error) = browser.child.wait()
-        {
-            tracing::warn!("cannot collect the backup browser: {error}");
+        if let Some(browser) = self.browser.take() {
+            if let Some(mut child) = browser.child
+                && let Err(error) = child.wait()
+            {
+                tracing::warn!("cannot collect the backup browser: {error}");
+            }
+            if browser.local {
+                local::close_view();
+            }
+            self.shared.browsers.fetch_sub(1, Ordering::SeqCst);
         }
-        self.shared.browsers.fetch_sub(1, Ordering::SeqCst);
         if let Err(error) = Process::new("umount")
             .args(["-l", BROWSE_DIR])
             .stderr(Stdio::null())
@@ -376,6 +456,7 @@ impl Worker {
         self.shared.publish();
         if !self.busy {
             disk::unmount();
+            self.answer_releases();
         }
     }
 }
@@ -384,22 +465,40 @@ fn host() -> io::Result<String> {
     store::machine_id()
 }
 
-fn repository_on(mount_point: &Path) -> io::Result<Repository> {
-    Ok(Repository::new(
-        disk::repository_path(mount_point, &host()?),
-        &store::key_path(),
-    ))
+fn network_environment(
+    destination: &Destination,
+    share_password: &str,
+) -> Vec<(&'static str, String)> {
+    let Destination::Network { user, .. } = destination else {
+        return Vec::new();
+    };
+    if destination.is_rest() {
+        vec![
+            ("RESTIC_REST_USERNAME", user.clone()),
+            ("RESTIC_REST_PASSWORD", share_password.to_owned()),
+        ]
+    } else {
+        vec![("GODEBUG", "asyncpreemptoff=1".to_owned())]
+    }
 }
 
-fn open_mount(disk: &ChosenDisk, commands: Sender<Command>) -> io::Result<Child> {
-    if !disk::is_present(&disk.uuid) {
+fn repository_on(destination: &Destination, mount_point: &Path) -> io::Result<Repository> {
+    Ok(Repository::new(
+        destination.repository_location(mount_point, &host()?),
+        &store::key_path(),
+    )
+    .with_environment(network_environment(destination, &store::share_password())))
+}
+
+fn open_mount(destination: &Destination, commands: Sender<Command>) -> io::Result<Child> {
+    if !destination.is_present() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            "the backup disk is away",
+            "the backup location is away",
         ));
     }
-    let mount_point = disk::mount(disk)?;
-    let repository = repository_on(&mount_point)?;
+    let mount_point = destination.mount()?;
+    let repository = repository_on(destination, &mount_point)?;
     fs::create_dir_all(BROWSE_DIR)?;
     let mut child = repository
         .process()
@@ -432,15 +531,30 @@ fn open_mount(disk: &ChosenDisk, commands: Sender<Command>) -> io::Result<Child>
     Ok(child)
 }
 
-fn choose(shared: &Shared, disk: &ChosenDisk, password: &str) {
+fn begin_setup(shared: &Shared) {
     locked(&shared.live).setup_error.clear();
     shared.set_phase(phase::PREPARING);
-    let outcome = prepare_repository(shared, disk, password);
+}
+
+fn end_setup_with(shared: &Shared, code: &str) {
+    locked(&shared.live).setup_error = code.to_owned();
+    let phase = if shared.state().destination.is_some() {
+        phase::IDLE
+    } else {
+        phase::NO_DISK
+    };
+    shared.set_phase(phase);
+}
+
+fn choose(shared: &Shared, destination: &Destination, share_password: &str, password: &str) {
+    begin_setup(shared);
+    let outcome = prepare_repository(shared, destination, share_password, password);
     match outcome {
         Ok(()) => {
             shared.change(|state| {
                 *state = State {
-                    disk: Some(disk.clone()),
+                    destination: Some(destination.clone()),
+                    excluded: std::mem::take(&mut state.excluded),
                     chosen_at: now(),
                     ..State::default()
                 };
@@ -448,53 +562,54 @@ fn choose(shared: &Shared, disk: &ChosenDisk, password: &str) {
             store::set_timer(true);
             shared.set_phase(phase::IDLE);
         }
-        Err(code) => {
-            locked(&shared.live).setup_error = code.to_owned();
-            let phase = if shared.state().disk.is_some() {
-                phase::IDLE
-            } else {
-                phase::NO_DISK
-            };
-            shared.set_phase(phase);
-        }
+        Err(code) => end_setup_with(shared, code),
     }
 }
 
 fn prepare_repository(
     shared: &Shared,
-    disk: &ChosenDisk,
+    destination: &Destination,
+    share_password: &str,
     password: &str,
 ) -> Result<(), &'static str> {
     let failed = |error: io::Error| {
-        tracing::error!("cannot prepare the backup disk: {error}");
+        tracing::error!("cannot prepare the backup location: {error}");
         setup_error::FAILED
     };
-    if !disk::is_present(&disk.uuid) {
+    if !destination.is_present() {
         return Err(setup_error::DISK_GONE);
     }
     disk::unmount();
-    let mount_point = disk::mount(disk).map_err(failed)?;
+    if destination.is_network() {
+        store::save_share_password(share_password).map_err(failed)?;
+    }
+    let mount_point = destination.mount().map_err(failed)?;
     let key = store::ensure_key().map_err(failed)?;
     let id = host().map_err(failed)?;
-    let path = disk::repository_path(&mount_point, &id);
+    let path = destination.repository_location(&mount_point, &id);
     let secret = SecretFile::new(password).map_err(failed)?;
-    let by_person = Repository::new(path.clone(), secret.path());
-    let by_machine = Repository::new(path.clone(), &key);
+    let environment = network_environment(destination, share_password);
+    let by_person =
+        Repository::new(path.clone(), secret.path()).with_environment(environment.clone());
+    let by_machine = Repository::new(path.clone(), &key).with_environment(environment);
     let stopper = &shared.stopper;
-    if disk::has_repository(&path) {
-        match by_person.opens(stopper).map_err(failed)? {
-            Exit::Done => {}
-            Exit::WrongPassword => return Err(setup_error::WRONG_PASSWORD),
-            other => {
-                tracing::error!("restic cannot open the repository: {other:?}");
-                return Err(setup_error::FAILED);
-            }
+    let exists = match by_person.opens(stopper).map_err(failed)? {
+        Exit::Done => true,
+        Exit::WrongPassword => return Err(setup_error::WRONG_PASSWORD),
+        Exit::NoRepository => false,
+        other => {
+            tracing::error!("restic cannot open the repository: {other:?}");
+            return Err(setup_error::FAILED);
         }
+    };
+    if exists {
         if by_machine.opens(stopper).map_err(failed)? != Exit::Done {
             add_key(&by_person, stopper, &key).map_err(failed)?;
         }
     } else {
-        if let Some(parent) = path.parent() {
+        if !destination.is_rest()
+            && let Some(parent) = path.parent()
+        {
             fs::create_dir_all(parent).map_err(failed)?;
         }
         let created = by_person
@@ -505,13 +620,17 @@ fn prepare_repository(
             return Err(setup_error::FAILED);
         }
         if let Err(error) = add_key(&by_person, stopper, &key) {
-            if let Err(removing) = fs::remove_dir_all(&path) {
+            if !destination.is_rest()
+                && let Err(removing) = fs::remove_dir_all(&path)
+            {
                 tracing::error!("cannot remove the new repository: {removing}");
             }
             return Err(failed(error));
         }
     }
-    if let Some(parent) = path.parent() {
+    if !destination.is_rest()
+        && let Some(parent) = path.parent()
+    {
         let label = parent.join(format!("{id}.name"));
         if let Ok(name) = fs::read_to_string("/etc/hostname")
             && let Err(error) = fs::write(&label, name.trim())
@@ -585,11 +704,12 @@ fn on_battery() -> bool {
 fn back_up(shared: &Shared, forced: bool, browsing: bool) {
     shared.stay_on_battery.store(forced, Ordering::SeqCst);
     let state = shared.state();
-    let Some(disk) = state.disk.clone() else {
+    let Some(destination) = state.destination.clone() else {
         shared.set_phase(phase::NO_DISK);
         return;
     };
     if state.paused_until > now() {
+        local::take_hourly();
         shared.set_phase(phase::PAUSED);
         note_overdue(shared, &state);
         return;
@@ -597,12 +717,14 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
     if state.paused_until > 0 {
         shared.change(|state| state.paused_until = 0);
     }
-    if !disk::is_present(&disk.uuid) {
+    if !destination.is_present() {
+        local::take_hourly();
         shared.set_phase(phase::DISK_AWAY);
         note_overdue(shared, &state);
         return;
     }
     if !forced && !state.on_battery && on_battery() {
+        local::take_hourly();
         shared.set_phase(phase::WAITING_FOR_POWER);
         note_overdue(shared, &state);
         return;
@@ -612,11 +734,11 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
         shared.set_phase(phase::IDLE);
         return;
     }
-    let mount_point = match disk::mount(&disk) {
+    let mount_point = match destination.mount() {
         Ok(mount_point) => mount_point,
         Err(error) => {
-            tracing::warn!("cannot mount the backup disk: {error}");
-            shared.set_phase(if disk::is_present(&disk.uuid) {
+            tracing::warn!("cannot reach the backup location: {error}");
+            shared.set_phase(if destination.is_present() {
                 phase::IDLE
             } else {
                 phase::DISK_AWAY
@@ -625,7 +747,7 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
             return;
         }
     };
-    let repository = match repository_on(&mount_point) {
+    let repository = match repository_on(&destination, &mount_point) {
         Ok(repository) => repository,
         Err(error) => {
             tracing::error!("cannot find this computer's identity: {error}");
@@ -636,7 +758,7 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
     };
     let mut run = Run {
         shared,
-        disk: &disk,
+        destination: &destination,
         mount_point: &mount_point,
         repository,
         browsing,
@@ -646,7 +768,7 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
 
 struct Run<'a> {
     shared: &'a Shared,
-    disk: &'a ChosenDisk,
+    destination: &'a Destination,
     mount_point: &'a Path,
     repository: Repository,
     browsing: bool,
@@ -684,6 +806,9 @@ impl Run<'_> {
     }
 
     fn refresh_space(&self) -> Space {
+        if self.destination.is_rest() {
+            return Space::default();
+        }
         let space = disk::space(self.mount_point).unwrap_or_default();
         locked(&self.shared.live).space = space;
         space
@@ -756,7 +881,7 @@ impl Run<'_> {
     fn note_stop(&self, reason: StopReason) {
         match reason {
             StopReason::Paused => self.shared.set_phase(phase::PAUSED),
-            StopReason::DiskGone => {
+            StopReason::DiskGone | StopReason::Released => {
                 self.shared.set_phase(phase::DISK_AWAY);
                 note_overdue(self.shared, &self.shared.state());
             }
@@ -772,15 +897,15 @@ impl Run<'_> {
             return Attempt::Failed;
         };
         let sources = source::sources();
-        let args = source::backup_args(&id, &sources);
-        let uuid = self.disk.uuid.clone();
-        let view = SnapshotView::take(&sources, self.mount_point);
+        let args = source::backup_args(&id, &sources, &self.shared.state().excluded);
+        let destination = self.destination;
+        let view = SnapshotView::take(&sources);
         let reader = match &view {
             Some(view) => self.repository.inside(view.wrapper()),
             None => self.repository.clone(),
         };
         let finished = reader.follow_progress(self.stopper(), &args, |progress| {
-            if !disk::is_present(&uuid) {
+            if !destination.is_present() {
                 self.stopper().stop(StopReason::DiskGone);
                 return;
             }
@@ -824,7 +949,7 @@ impl Run<'_> {
             });
             return Attempt::Saved;
         }
-        if !disk::is_present(&self.disk.uuid) {
+        if !self.destination.is_present() {
             return Attempt::Stopped(StopReason::DiskGone);
         }
         match finished.exit {
@@ -967,7 +1092,7 @@ impl Run<'_> {
                 state.last_check = now();
                 state.check_slice = slice;
             }),
-            Exit::Failed if disk::is_present(&self.disk.uuid) && !self.stopper().is_stopping() => {
+            Exit::Failed if self.destination.is_present() && !self.stopper().is_stopping() => {
                 tracing::error!("the backups are damaged: {}", finished.output);
                 self.heal(&finished.output);
                 self.check_everything_after_damage();

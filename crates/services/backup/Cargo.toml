@@ -29,6 +29,7 @@ tracing.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true
+bande-packages.workspace = true
 bande-volumes.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
@@ -36,6 +37,7 @@ zbus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "admin"
+recommends = "btrfs-progs, e2fsprogs"
 depends = "$auto, restic (>= 0.18), fuse3, systemd (>= 257), dbus-system-bus | dbus, polkitd, udisks2"
 extended-description = """\
 Keeps hourly, daily and weekly versions of the whole computer on an external \

@@ -2,19 +2,15 @@ use std::fs;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, chown};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::time::{Duration, Instant};
 
-use bande_volumes::{mounted, system_mounts_root};
-use rustix::mount::{UnmountFlags, unmount};
+use bande_volumes::{
+    NFS_SOFT_OPTIONS, SMB_SOFT_OPTIONS, force_unmount, mounted, system_mounts_root,
+};
 
 const CIFS: &str = "/usr/sbin/mount.cifs";
 const DAVFS: &str = "/usr/sbin/mount.davfs";
 const NFS: &str = "/usr/sbin/mount.nfs";
-const NFS_MOUNT: &str = "softerr,softreval,timeo=30,retrans=2,retry=0,nosuid,nodev";
 const DAVFS_CONF: &str = "/usr/share/bande/bande-davfs2.conf";
-const DETACH_LIMIT: Duration = Duration::from_secs(3);
-const DETACH_CHECK: Duration = Duration::from_millis(50);
-const SOFT_MOUNT: &str = "soft,echo_interval=5,actimeo=1";
 const UNMOUNTABLE: [&str; 5] = ["cifs", "smb3", "fuse", "nfs", "nfs4"];
 
 fn fail(message: &str) -> ExitCode {
@@ -83,7 +79,7 @@ fn mount_cifs(uid: u32, gid: u32, unc: &str, point: &Path, user: &str, port: &st
         let _ = std::io::stdin().read_line(&mut line);
         line.trim_end_matches('\n').to_owned()
     });
-    let mut options = format!("{SOFT_MOUNT},nosuid,nodev,uid={uid},gid={gid},forceuid,forcegid");
+    let mut options = format!("{SMB_SOFT_OPTIONS},uid={uid},gid={gid},forceuid,forcegid");
     if user.is_empty() {
         options.push_str(",guest");
     } else {
@@ -113,7 +109,7 @@ fn mount_nfs(source: &str, point: &Path, port: &str) -> ExitCode {
             .arg(source)
             .arg(point)
             .arg("-o")
-            .arg(format!("{NFS_MOUNT}{port},{extra}"))
+            .arg(format!("{NFS_SOFT_OPTIONS}{port},{extra}"))
             .stdin(Stdio::null());
         run(command, None)
     };
@@ -174,27 +170,6 @@ fn mount(uid: u32, arguments: &[String]) -> ExitCode {
         let _ = fs::remove_dir(&point);
     }
     code
-}
-
-fn force_unmount(point: &Path) {
-    let detaching = point.to_owned();
-    let spawned = std::thread::Builder::new().spawn(move || {
-        let flags = UnmountFlags::FORCE | UnmountFlags::DETACH | UnmountFlags::NOFOLLOW;
-        if let Err(error) = unmount(&detaching, flags) {
-            eprintln!("cannot unmount {}: {error}", detaching.display());
-        }
-    });
-    if let Err(error) = spawned {
-        eprintln!("cannot unmount {}: {error}", point.display());
-        return;
-    }
-    let deadline = Instant::now() + DETACH_LIMIT;
-    while Instant::now() < deadline
-        && mounted(&fs::read_to_string("/proc/self/mountinfo").unwrap_or_default())
-            .any(|mount| mount.point == point)
-    {
-        std::thread::sleep(DETACH_CHECK);
-    }
 }
 
 fn unmount_all(uid: u32, name: Option<&str>) -> ExitCode {

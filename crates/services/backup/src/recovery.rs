@@ -43,7 +43,7 @@ fn with_mount<T>(uuid: &str, filesystem: &str, work: impl FnOnce(&Path) -> T) ->
     let mount_point = Path::new(disk::RUN_DIR).join("recovery");
     fs::create_dir_all(&mount_point)?;
     let status = Command::new("mount")
-        .args(["-t", disk::mount_type(filesystem), "-o", MOUNT_OPTIONS])
+        .args(["-t", filesystem, "-o", MOUNT_OPTIONS])
         .arg(disk::device(uuid))
         .arg(&mount_point)
         .stdout(Stdio::null())

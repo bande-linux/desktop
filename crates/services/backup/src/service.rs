@@ -21,9 +21,7 @@ pub const DAY: u64 = 24 * HOUR;
 const CONFIGURE: &str = "org.bande.backup.configure";
 const CONTROL: &str = "org.bande.backup.control";
 const ALLOW_INTERACTION: u32 = 1;
-const USABLE_FILESYSTEMS: [&str; 8] = [
-    "ext4", "ext3", "btrfs", "xfs", "f2fs", "exfat", "ntfs", "vfat",
-];
+const USABLE_FILESYSTEMS: [&str; 7] = ["ext4", "ext3", "btrfs", "xfs", "f2fs", "exfat", "vfat"];
 
 #[zbus::proxy(
     interface = "org.freedesktop.PolicyKit1.Authority",

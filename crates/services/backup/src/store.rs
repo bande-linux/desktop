@@ -35,6 +35,7 @@ pub struct State {
     pub interrupted: bool,
     pub problem: String,
     pub damaged_at: u64,
+    pub full_at: u64,
     pub oldest: u64,
     pub versions: u32,
 }

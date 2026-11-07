@@ -1,3 +1,4 @@
+spelling = Stavning
 wifi = Wi-Fi
 wifi-keywords = trådlöst, wlan, internet, nätverk
 wifi-power-keywords = på, av, flygplansläge

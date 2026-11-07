@@ -311,6 +311,7 @@ pub enum SettingId {
     CrashReportsPage,
     CrashReportList,
     ShortcutsPage,
+    Spelling,
     ClipboardHistory,
     KeyboardAccess,
     SecurityStatus,
@@ -399,6 +400,7 @@ pub enum List {
     Regions,
     DefaultApps,
     Clipboard,
+    Spelling,
     KeyboardAccess,
     SecurityStatus,
     SearchExcluded,
@@ -1309,6 +1311,10 @@ fn keyboard_pane() -> Pane {
                         },
                     ),
                 ],
+            ),
+            section(
+                Some(L10N.tr("spelling")),
+                vec![list(SettingId::Spelling, "spelling", List::Spelling)],
             ),
             section(
                 Some(L10N.tr("modifier-keys")),

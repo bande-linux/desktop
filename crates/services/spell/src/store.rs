@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 pub(crate) struct Store {
     settings_path: PathBuf,
     learned_path: PathBuf,
+    replacements_path: PathBuf,
     pub(crate) options: BTreeMap<String, bool>,
     pub(crate) languages: Vec<String>,
     pub(crate) learned: BTreeSet<String>,
@@ -59,10 +60,28 @@ impl Store {
         Self {
             settings_path,
             learned_path,
+            replacements_path: data.join("bande/text-replacements"),
             options,
             languages,
             learned,
         }
+    }
+
+    pub(crate) fn replacements(&self) -> HashMap<String, String> {
+        fs::read_to_string(&self.replacements_path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| line.split_once('\t'))
+            .map(|(from, to)| (from.to_owned(), to.to_owned()))
+            .collect()
+    }
+
+    pub(crate) fn save_replacements(&self, all: &HashMap<String, String>) -> io::Result<()> {
+        let mut contents = String::new();
+        for (from, to) in all {
+            contents.push_str(&format!("{from}\t{to}\n"));
+        }
+        write_atomically(&self.replacements_path, &contents)
     }
 
     pub(crate) fn save_settings(&self) -> io::Result<()> {

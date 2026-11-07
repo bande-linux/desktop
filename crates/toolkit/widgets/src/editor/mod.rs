@@ -1,3 +1,4 @@
+mod assist;
 mod history;
 mod keys;
 mod layout;
@@ -17,7 +18,7 @@ use parley::{Affinity, Cursor, Selection as Span};
 
 use self::history::{Edit, EditKind, History, Restyle};
 pub use self::layout::PrintedBlock;
-use self::layout::{Block, bounds};
+use self::layout::{Block, Misspelled, bounds};
 pub use self::rich::{Alignment, ListMarker, ParagraphAttributes, RichText, TextAttributes};
 use self::rich::{Fragment, attributes_at, cut, joined, normalize};
 use self::selection::{Position, Selection};
@@ -25,13 +26,17 @@ use super::{
     ClipboardRequest, Context, DragAction, Event, Key, Menu, MenuItem, Modifiers, PointerButton,
     WidgetId,
 };
-use crate::L10N;
+use crate::{L10N, spelling};
 
 const CARET_WIDTH: f32 = 1.5;
 const LINE_HEIGHT_RATIO: f32 = 1.21;
 const UNDERLINE: f32 = 1.0;
 const CLAUSE_UNDERLINE: f32 = 2.0;
 const MARKER_GAP: f32 = 6.0;
+const SPELLING_UNDERLINE: f32 = 1.5;
+const MENU_SUGGESTIONS: usize = 5;
+const REPLACE_ACTION: &str = "spelling-replace:";
+const CHANGE_BACK_ACTION: &str = "spelling-change-back";
 
 fn decorations(layout: &parley::Layout<Color>, origin: Point, items: &mut Vec<Item>) {
     for line in layout.lines() {
@@ -129,6 +134,10 @@ pub(crate) struct Editor {
     revision: u64,
     offered: Option<(u64, Range<usize>)>,
     typing: Option<(Position, TextAttributes)>,
+    spelling: bool,
+    menu_word: Option<(Position, Position)>,
+    pending: Option<assist::Pending>,
+    corrected: Option<assist::Corrected>,
 }
 
 fn normalized(text: &str) -> Cow<'_, str> {
@@ -168,6 +177,10 @@ impl Editor {
             revision: 0,
             offered: None,
             typing: None,
+            spelling: false,
+            menu_word: None,
+            pending: None,
+            corrected: None,
         };
         editor.set_text(text);
         editor
@@ -819,7 +832,43 @@ impl Editor {
     }
 
     pub(crate) fn handle(&mut self, cx: &mut Context, event: &Event, origin: Point) -> bool {
+        if matches!(
+            event,
+            Event::Key {
+                key: Key::Backspace,
+                ..
+            }
+        ) && self.backspace_restores()
+        {
+            return true;
+        }
+        let revision = self.revision;
         let handled = self.handle_event(cx, event, origin);
+        if self.read_only && matches!(event, Event::PointerUp(_)) && self.selection.is_collapsed() {
+            let at = self.selection.focus;
+            cx.link = spelling::links(&self.blocks[at.paragraph].text)
+                .into_iter()
+                .find(|range| range.contains(&at.offset))
+                .map(|range| spelling::link_target(&self.blocks[at.paragraph].text[range]));
+        }
+        if self.revision != revision {
+            let typed = match event {
+                Event::Key {
+                    key: Key::Character(character),
+                    ..
+                } => Some(*character),
+                Event::Key {
+                    key: Key::Space, ..
+                } => Some(' '),
+                Event::Commit(text) => text.chars().last(),
+                _ => None,
+            };
+            if let Some(typed) = typed {
+                self.after_typing(typed);
+            } else if let Some(corrected) = &mut self.corrected {
+                corrected.fresh = false;
+            }
+        }
         self.offer_primary(cx);
         handled
     }
@@ -1019,6 +1068,119 @@ impl Editor {
         true
     }
 
+    pub(crate) fn spelling(&self) -> bool {
+        self.spelling
+    }
+
+    pub(crate) fn set_spelling(&mut self, on: bool) {
+        self.spelling = on;
+    }
+
+    fn misspelled(&self, paragraph: usize, focused: bool) -> Vec<Range<usize>> {
+        if !self.spelling || self.read_only || self.preedit.is_some() {
+            return Vec::new();
+        }
+        let block = &self.blocks[paragraph];
+        let skipped = (focused && self.selection.focus.paragraph == paragraph)
+            .then_some(self.selection.focus.offset);
+        let generation = spelling::generation();
+        let mut cached = block.misspelled.borrow_mut();
+        if let Some(known) = cached.as_ref()
+            && known.generation == generation
+            && known.skipped == skipped
+        {
+            return known.ranges.clone();
+        }
+        let ranges = spelling::wrong_ranges(&block.text, skipped);
+        *cached = Some(Misspelled {
+            generation,
+            skipped,
+            ranges: ranges.clone(),
+        });
+        ranges
+    }
+
+    fn misspelled_word_at_caret(&self) -> Option<(Position, Position)> {
+        let at = self.selection.start();
+        spelling::wrong_ranges(&self.blocks[at.paragraph].text, None)
+            .into_iter()
+            .find(|range| range.start <= at.offset && at.offset <= range.end)
+            .map(|range| {
+                (
+                    Position::new(at.paragraph, range.start),
+                    Position::new(at.paragraph, range.end),
+                )
+            })
+    }
+
+    pub(crate) fn context_menu(&mut self, cx: &mut Context) -> Menu {
+        let mut plain = self.menu();
+        self.menu_word = None;
+        if !self.spelling || self.read_only {
+            return plain;
+        }
+        if let Some(corrected) = &self.corrected {
+            let at = self.selection.start();
+            if at.paragraph == corrected.start.paragraph
+                && (corrected.start.offset..=corrected.end.offset).contains(&at.offset)
+            {
+                let title =
+                    L10N.tr_args("change-back", [("word", corrected.original.clone().into())]);
+                plain.items.insert(0, MenuItem::separator());
+                plain
+                    .items
+                    .insert(0, MenuItem::new(&title, CHANGE_BACK_ACTION));
+                return plain;
+            }
+        }
+        let Some((start, end)) = self.misspelled_word_at_caret() else {
+            return plain;
+        };
+        let word = self.slice(start, end);
+        let Some(suggestions) = spelling::suggestions(&word) else {
+            cx.menu_awaits_suggestions = true;
+            return plain;
+        };
+        self.menu_word = Some((start, end));
+        let mut items: Vec<MenuItem> = suggestions
+            .iter()
+            .take(MENU_SUGGESTIONS)
+            .map(|suggestion| MenuItem::new(suggestion, &format!("{REPLACE_ACTION}{suggestion}")))
+            .collect();
+        if items.is_empty() {
+            items.push(MenuItem::new(&L10N.tr("no-suggestions"), "no-suggestions").enabled(false));
+        }
+        items.push(MenuItem::separator());
+        items.push(MenuItem::new(
+            &L10N.tr("ignore-spelling"),
+            "ignore-spelling",
+        ));
+        items.push(MenuItem::new(&L10N.tr("learn-spelling"), "learn-spelling"));
+        items.push(MenuItem::separator());
+        items.extend(plain.items);
+        Menu::new(items)
+    }
+
+    fn spelling_action(&mut self, action: &str) -> bool {
+        if action == CHANGE_BACK_ACTION {
+            return self.change_back();
+        }
+        let Some((start, end)) = self.menu_word else {
+            return false;
+        };
+        let word = self.slice(start, end);
+        if let Some(replacement) = action.strip_prefix(REPLACE_ACTION) {
+            self.replace(start, end, replacement, EditKind::Replacing);
+            return true;
+        }
+        match action {
+            "ignore-spelling" => spelling::ignore(&word),
+            "learn-spelling" => spelling::learn(&word),
+            _ => return false,
+        }
+        true
+    }
+
     pub(crate) fn menu(&self) -> Menu {
         let item = |key: &str, shortcut: &str, enabled: bool| {
             MenuItem::new(&L10N.tr(key), key)
@@ -1048,6 +1210,9 @@ impl Editor {
     }
 
     pub(crate) fn menu_action(&mut self, cx: &mut Context, action: &str) -> bool {
+        if self.spelling_action(action) {
+            return true;
+        }
         let shortcut = |character: char, shift: bool| {
             (
                 Key::Character(character),
@@ -1173,6 +1338,69 @@ impl Editor {
                 paragraph: text.clone(),
             });
             decorations(layout, Point::new(origin.x + left, top), items);
+            if let Some(corrected) = self
+                .corrected
+                .as_ref()
+                .filter(|corrected| corrected.start.paragraph == paragraph)
+            {
+                let span = Span::new(
+                    Cursor::from_byte_index(layout, corrected.start.offset, Affinity::Downstream),
+                    Cursor::from_byte_index(layout, corrected.end.offset, Affinity::Upstream),
+                );
+                span.geometry_with(layout, |rect, _| {
+                    let rect = at(bounds(rect));
+                    items.push(Item::Fill {
+                        shape: Shape::rect(Rect::new(
+                            rect.x,
+                            rect.y + rect.height - UNDERLINE - 1.0,
+                            rect.width,
+                            UNDERLINE,
+                        )),
+                        paint: cx.palette.accent.into(),
+                    });
+                });
+            }
+            let links = if self.read_only {
+                spelling::links(&self.blocks[paragraph].text)
+            } else {
+                Vec::new()
+            };
+            for range in links {
+                let span = Span::new(
+                    Cursor::from_byte_index(layout, range.start, Affinity::Downstream),
+                    Cursor::from_byte_index(layout, range.end, Affinity::Upstream),
+                );
+                span.geometry_with(layout, |rect, _| {
+                    let rect = at(bounds(rect));
+                    items.push(Item::Fill {
+                        shape: Shape::rect(Rect::new(
+                            rect.x,
+                            rect.y + rect.height - UNDERLINE - 1.0,
+                            rect.width,
+                            UNDERLINE,
+                        )),
+                        paint: cx.palette.accent.into(),
+                    });
+                });
+            }
+            for range in self.misspelled(paragraph, focused) {
+                let span = Span::new(
+                    Cursor::from_byte_index(layout, range.start, Affinity::Downstream),
+                    Cursor::from_byte_index(layout, range.end, Affinity::Upstream),
+                );
+                span.geometry_with(layout, |rect, _| {
+                    let rect = at(bounds(rect));
+                    items.push(Item::Fill {
+                        shape: Shape::rect(Rect::new(
+                            rect.x,
+                            rect.y + rect.height - SPELLING_UNDERLINE - 1.0,
+                            rect.width,
+                            SPELLING_UNDERLINE,
+                        )),
+                        paint: cx.palette.danger_text.into(),
+                    });
+                });
+            }
             if let Some(preedit) = &self.preedit
                 && self.caret_paragraph() == Some(paragraph)
             {

@@ -324,9 +324,12 @@ impl SettingsView {
                 };
                 let text = self.drafts.get(&id).cloned().or(saved)?;
                 let mut draft = intent(&self.intents, move |text: String| Intent::Draft(id, text));
-                boxed(TextField::new(&setting.label, &text, move |text: &str| {
-                    draft(text.to_owned())
-                }))
+                boxed(
+                    TextField::new(&setting.label, &text, move |text: &str| {
+                        draft(text.to_owned())
+                    })
+                    .without_text_checking(),
+                )
             }
             Kind::Resolutions => {
                 let sizes = scope?.resolutions();
@@ -734,6 +737,7 @@ impl SettingsView {
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),
             List::KeyboardAccess => self.keyboard_access_rows(),
+            List::Spelling => self.spelling_rows(),
             List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),

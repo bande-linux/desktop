@@ -53,7 +53,7 @@ fn tell(session: &Connection, status: &Status) -> Option<u32> {
 }
 
 enum Event {
-    Status(Status),
+    Status(Box<Status>),
     Action(u32),
 }
 
@@ -83,7 +83,7 @@ fn run() -> zbus::Result<()> {
     let (events, received) = mpsc::channel();
     follow_actions(&session, events.clone())?;
     follow_status(&system, move |status| match status {
-        Ok(status) => events.send(Event::Status(status)).is_ok(),
+        Ok(status) => events.send(Event::Status(Box::new(status))).is_ok(),
         Err(error) => {
             tracing::debug!("cannot read the backup status: {error}");
             true

@@ -4,7 +4,7 @@ pub mod discovery;
 pub mod health;
 pub mod mounts;
 mod mounts_bus;
-pub mod server;
+pub use bande_volumes::server;
 pub mod space;
 
 use std::collections::{HashMap, HashSet};

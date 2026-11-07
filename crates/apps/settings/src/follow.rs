@@ -408,7 +408,7 @@ impl Services {
             pictures: follow_pictures(session, bande_xdg::data_dirs(), updates.clone()),
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
-            backup: system.map(|system| follow_backup(system, updates.clone())),
+            backup: system.map(|system| follow_backup(session, system, updates.clone())),
             crash_reports: follow_crash_reports(updates.clone()),
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),

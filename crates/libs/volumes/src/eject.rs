@@ -9,6 +9,10 @@ use zbus::zvariant::{ObjectPath, Value};
 use crate::mounts::is_connected;
 use crate::udisks::{BLOCK, DRIVE, ENCRYPTED, FILESYSTEM, LOOP, Objects, PARTITION, UDISKS};
 
+const BACKUP_MOUNT: &str = "/run/bande-backup/disk";
+const BACKUP_SERVICE: &str = "org.bande.Backup";
+const BACKUP_PATH: &str = "/org/bande/Backup";
+
 const BUSY: &str = "org.freedesktop.UDisks2.Error.DeviceBusy";
 pub const MOUNTS_SERVICE: &str = "org.bande.Mounts";
 pub const MOUNTS_PATH: &str = "/org/bande/Mounts";
@@ -77,6 +81,62 @@ fn uid() -> Option<u32> {
         .map(|metadata| metadata.uid())
 }
 
+fn release_from_backups(
+    system: &Connection,
+    objects: &Objects,
+    members: &[String],
+) -> zbus::Result<()> {
+    let used = members.iter().any(|member| {
+        objects
+            .mount_points(member)
+            .iter()
+            .any(|point| point == BACKUP_MOUNT)
+    });
+    if used {
+        system.call_method(
+            Some(BACKUP_SERVICE),
+            BACKUP_PATH,
+            Some(BACKUP_SERVICE),
+            "Release",
+            &(),
+        )?;
+    }
+    Ok(())
+}
+
+fn unmount_members(
+    system: &Connection,
+    objects: &Objects,
+    members: &[String],
+    force: bool,
+) -> zbus::Result<()> {
+    for member in members {
+        if objects
+            .mount_points(member)
+            .iter()
+            .any(|point| point != BACKUP_MOUNT)
+        {
+            call(system, member, FILESYSTEM, "Unmount", force)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn eject_block_unmount_only(
+    system: &Connection,
+    objects: &Objects,
+    block: &str,
+) -> zbus::Result<()> {
+    let members = members(objects, block);
+    unmount_members(system, objects, &members, true)?;
+    for member in &members {
+        if objects.path(member, ENCRYPTED, "CleartextDevice").is_some() {
+            call(system, member, ENCRYPTED, "Lock", false)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn eject_block(
     system: &Connection,
     objects: &Objects,
@@ -84,11 +144,8 @@ pub fn eject_block(
     force: bool,
 ) -> zbus::Result<()> {
     let members = members(objects, block);
-    for member in &members {
-        if !objects.mount_points(member).is_empty() {
-            call(system, member, FILESYSTEM, "Unmount", force)?;
-        }
-    }
+    release_from_backups(system, objects, &members)?;
+    unmount_members(system, objects, &members, force)?;
     for member in &members {
         if objects.path(member, ENCRYPTED, "CleartextDevice").is_some() {
             call(system, member, ENCRYPTED, "Lock", false)?;

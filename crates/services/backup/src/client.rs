@@ -18,6 +18,8 @@ pub struct Status {
     pub problem: String,
     pub setup_error: String,
     pub disk_name: String,
+    pub on_network: bool,
+    pub excluded: Vec<String>,
     pub last_success: u64,
     pub paused_until: u64,
     pub oldest: u64,
@@ -36,6 +38,10 @@ pub struct DiskChoice {
     pub name: String,
     pub filesystem: String,
     pub size: u64,
+    pub block: String,
+    pub drive_name: String,
+    pub drive_size: u64,
+    pub contents: String,
 }
 
 pub mod phase {
@@ -62,6 +68,9 @@ pub mod setup_error {
     pub const WRONG_PASSWORD: &str = "wrong-password";
     pub const DISK_GONE: &str = "disk-gone";
     pub const FAILED: &str = "failed";
+    pub const ERASE_FAILED: &str = "erase-failed";
+    pub const UNREACHABLE: &str = "unreachable";
+    pub const BAD_ADDRESS: &str = "bad-address";
 }
 
 #[zbus::proxy(
@@ -78,6 +87,17 @@ pub trait Backup {
     fn disks(&self) -> zbus::Result<Vec<DiskChoice>>;
     fn has_backups(&self, uuid: &str) -> zbus::Result<bool>;
     fn choose(&self, uuid: &str, password: &str) -> zbus::Result<()>;
+    fn check_network(&self, url: &str, user: &str, share_password: &str) -> zbus::Result<String>;
+    fn choose_network(
+        &self,
+        url: &str,
+        user: &str,
+        share_password: &str,
+        password: &str,
+    ) -> zbus::Result<()>;
+    fn erase_and_choose(&self, block: &str, password: &str) -> zbus::Result<()>;
+    fn set_excluded(&self, folders: Vec<String>) -> zbus::Result<()>;
+    fn release(&self) -> zbus::Result<()>;
     fn stop_using(&self) -> zbus::Result<()>;
     fn back_up_now(&self) -> zbus::Result<()>;
     fn pause(&self) -> zbus::Result<()>;
@@ -148,6 +168,7 @@ pub fn follow_status(
 }
 
 pub const VERSIONS_ROOT: &str = "/run/bande-backup-browse/versions";
+pub const LOCAL_VERSIONS_ROOT: &str = "/run/bande-backup-local/versions";
 const LATEST: &str = "latest";
 const OPEN_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -210,8 +231,8 @@ pub fn open_browser() -> Result<Browsing, CannotBrowse> {
     Ok(browsing)
 }
 
-pub fn version_times() -> Vec<String> {
-    let mut times: Vec<String> = fs::read_dir(VERSIONS_ROOT)
+fn times_in(root: &str) -> Vec<String> {
+    fs::read_dir(root)
         .map(|entries| {
             entries
                 .flatten()
@@ -219,18 +240,36 @@ pub fn version_times() -> Vec<String> {
                 .filter(|name| name != LATEST)
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+pub fn version_times() -> Vec<String> {
+    let mut times = times_in(VERSIONS_ROOT);
+    times.extend(times_in(LOCAL_VERSIONS_ROOT));
     times.sort();
+    times.dedup();
     times
+}
+
+pub fn is_version_path(path: &Path) -> bool {
+    path.starts_with(VERSIONS_ROOT) || path.starts_with(LOCAL_VERSIONS_ROOT)
 }
 
 pub fn in_version(time: &str, live: &Path) -> PathBuf {
     let relative = live.strip_prefix("/").unwrap_or(live);
-    Path::new(VERSIONS_ROOT).join(time).join(relative)
+    let local = Path::new(LOCAL_VERSIONS_ROOT).join(time);
+    if local.is_dir() {
+        local.join(relative)
+    } else {
+        Path::new(VERSIONS_ROOT).join(time).join(relative)
+    }
 }
 
 pub fn live_path(version_path: &Path) -> Option<(String, PathBuf)> {
-    let rest = version_path.strip_prefix(VERSIONS_ROOT).ok()?;
+    let rest = version_path
+        .strip_prefix(VERSIONS_ROOT)
+        .or_else(|_| version_path.strip_prefix(LOCAL_VERSIONS_ROOT))
+        .ok()?;
     let mut components = rest.components();
     let time = components
         .next()?

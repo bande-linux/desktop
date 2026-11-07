@@ -5,15 +5,15 @@ use std::time::Duration;
 
 use std::path::Path;
 
-use bande_power::adapter;
 use bande_power::backlight::{KeyboardBacklight, SYSFS_BACKLIGHT, SYSFS_LEDS};
 use bande_power::battery::{self, BatteryNotifier};
 use bande_power::brightness::{Lights, Options};
 use bande_power::controller::{self, IdleController};
-use bande_power::idle::Inhibitor;
+use bande_power::idle::{Assertion, Inhibitor};
 use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
 use bande_power::password::PasswordPolicy;
 use bande_power::screensaver::InhibitionService;
+use bande_power::{adapter, audio};
 use zbus::blocking::Connection;
 
 const LOCK_WAIT: Duration = Duration::from_secs(3);
@@ -50,6 +50,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     ));
     let logind = system.clone();
     let inhibited = Arc::clone(&idle);
+    let asserted = Arc::clone(&idle);
     let inhibitions = InhibitionService::start(
         &session,
         move |application, reason| {
@@ -58,10 +59,14 @@ fn serve() -> Result<Services, Box<dyn Error>> {
                 .ok()
         },
         move |held| inhibited.set_inhibited(Inhibitor::ScreenSaver, held),
+        move |held| asserted.set_asserted(Assertion::Applications, held),
     )?;
     controller::follow_config(&session, &idle)?;
     controller::follow_lock(&system, &idle)?;
     controller::follow_idle_inhibitors(&system, &idle)?;
+    controller::follow_sleep_inhibitors(&system, &idle)?;
+    let streams = Arc::clone(&idle);
+    audio::follow_streams(move |streaming| streams.set_asserted(Assertion::Streams, streaming));
     match wayland_client::Connection::connect_to_env() {
         Ok(connection) => {
             if let Err(error) = bande_power::wayland::watch_idle(connection, Arc::clone(&idle)) {

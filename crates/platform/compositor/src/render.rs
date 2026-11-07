@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 
-use bande_render::{DeviceInfo, OffscreenTarget, RenderError, VulkanRenderer};
+use bande_render::{DeviceInfo, MemoryUse, OffscreenTarget, RenderError, VulkanRenderer};
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::damage::{Error as DamageError, OutputDamageTracker};
 use smithay::backend::renderer::{Bind, Color32F, Offscreen};
@@ -60,6 +60,10 @@ impl Renderer {
 
     pub fn device_info(&self) -> &DeviceInfo {
         self.vulkan.device_info()
+    }
+
+    pub fn memory_use(&self) -> MemoryUse {
+        self.vulkan.memory_use()
     }
 
     pub fn set_reduced_effects(&mut self, reduced: bool) {
@@ -135,6 +139,7 @@ impl Renderer {
                     .map_err(rendering_error)
             });
         self.outputs.insert(name.to_owned(), output);
+        self.vulkan.finish_uploads()?;
         let counters = self.vulkan.take_counters();
         compositor.copy_captures(&mut self.vulkan, name);
         self.vulkan.take_counters();
@@ -166,13 +171,33 @@ impl FrameOutput for Renderer {
         compositor: &mut Compositor,
         output: &str,
     ) -> Result<Submission, RenderError> {
-        if !compositor.holds_frames() {
-            self.render_output(compositor, output)?;
+        if compositor.holds_frames() {
+            return Ok(Submission::Unchanged);
         }
+        self.render_output(compositor, output)?;
         Ok(Submission::AtVblank)
     }
 
     fn can_dim(&mut self, _output: &str) -> bool {
         true
+    }
+
+    fn renew_failed_renderer(&mut self) -> Result<bool, RenderError> {
+        if !self.vulkan.needs_renewal() {
+            return Ok(false);
+        }
+        self.restart_display()?;
+        Ok(true)
+    }
+
+    fn restart_display(&mut self) -> Result<(), RenderError> {
+        tracing::error!(
+            "starting the renderer again (lost: {}, holding {})",
+            self.vulkan.is_lost(),
+            self.vulkan.memory_use()
+        );
+        self.outputs.clear();
+        self.vulkan = VulkanRenderer::new()?;
+        Ok(())
     }
 }

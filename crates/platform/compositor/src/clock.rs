@@ -6,6 +6,9 @@ use crate::state::Compositor;
 
 pub const SAFETY_MARGIN: Duration = Duration::from_millis(1);
 const FLIP_TIMEOUT: Duration = Duration::from_secs(1);
+const FAILED_FRAME_RETRY: Duration = Duration::from_millis(250);
+const RESTART_DISPLAY_AFTER: Duration = Duration::from_secs(3);
+const GIVE_UP_AFTER: Duration = Duration::from_secs(15);
 
 const REMEMBERED_RENDERS: usize = 16;
 const TYPICAL_RENDER_WEIGHT: f64 = 0.1;
@@ -104,6 +107,7 @@ impl FrameClock {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Submission {
     AtVblank,
+    Unchanged,
     AwaitingFlip,
     Paused,
 }
@@ -127,8 +131,43 @@ pub trait FrameOutput {
 
     fn switch_virtual_terminal(&mut self, _number: i32) {}
 
-    fn renew_lost_renderer(&mut self) -> Result<bool, Self::Error> {
+    fn renew_failed_renderer(&mut self) -> Result<bool, Self::Error> {
         Ok(false)
+    }
+
+    fn flip_missed(&mut self, _output: &str) {}
+
+    fn restart_display(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryStep {
+    Wait,
+    RestartDisplay,
+    GiveUp,
+}
+
+#[derive(Debug, Default)]
+pub struct FrameRecovery {
+    restarted: bool,
+}
+
+impl FrameRecovery {
+    pub fn step(&mut self, stalled_for: Option<Duration>) -> RecoveryStep {
+        let Some(stalled_for) = stalled_for else {
+            self.restarted = false;
+            return RecoveryStep::Wait;
+        };
+        if stalled_for >= GIVE_UP_AFTER {
+            RecoveryStep::GiveUp
+        } else if stalled_for >= RESTART_DISPLAY_AFTER && !self.restarted {
+            self.restarted = true;
+            RecoveryStep::RestartDisplay
+        } else {
+            RecoveryStep::Wait
+        }
     }
 }
 
@@ -139,6 +178,7 @@ enum Phase {
     Rendered(Vblank),
     Held,
     AwaitingFlip(Duration),
+    Backoff(Duration),
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -152,6 +192,7 @@ pub struct FrameScheduler {
     phase: Phase,
     wanted: bool,
     output: Option<String>,
+    stalled_since: Option<Duration>,
 }
 
 impl FrameScheduler {
@@ -161,6 +202,7 @@ impl FrameScheduler {
             phase: Phase::Idle,
             wanted: false,
             output: None,
+            stalled_since: None,
         }
     }
 
@@ -177,6 +219,10 @@ impl FrameScheduler {
 
     pub fn clock(&self) -> &FrameClock {
         &self.clock
+    }
+
+    pub fn stalled_since(&self) -> Option<Duration> {
+        self.stalled_since
     }
 
     pub fn poll<O: FrameOutput>(
@@ -218,15 +264,28 @@ impl FrameScheduler {
                     compositor.latch_on(&name);
                     let deadline = self.clock.deadline(vblank);
                     let submission = output.submit(compositor, &name).inspect_err(|_| {
-                        self.phase = Phase::Idle;
+                        self.wanted = true;
+                        self.stalled_since.get_or_insert(started);
+                        self.phase = Phase::Backoff(started + FAILED_FRAME_RETRY);
                     })?;
                     now = clock();
                     self.clock.record_render(deadline, started, now);
+                    let next_vblank = if now <= vblank.time {
+                        vblank
+                    } else {
+                        self.clock.vblank_after(now)
+                    };
                     self.phase = match submission {
                         Submission::AwaitingFlip => Phase::AwaitingFlip(now),
-                        Submission::Paused => Phase::Held,
-                        Submission::AtVblank if now <= vblank.time => Phase::Rendered(vblank),
-                        Submission::AtVblank => Phase::Rendered(self.clock.vblank_after(now)),
+                        Submission::Paused => {
+                            self.stalled_since = None;
+                            Phase::Held
+                        }
+                        Submission::AtVblank => {
+                            self.stalled_since = None;
+                            Phase::Rendered(next_vblank)
+                        }
+                        Submission::Unchanged => Phase::Rendered(next_vblank),
                     };
                 }
                 Phase::Held => {
@@ -241,11 +300,20 @@ impl FrameScheduler {
                         presented,
                     });
                 }
-                Phase::AwaitingFlip(_) => {
-                    tracing::warn!("page flip timed out, recovering");
+                Phase::AwaitingFlip(since) => {
+                    tracing::warn!("page flip on {name} timed out");
+                    self.stalled_since.get_or_insert(since);
+                    output.flip_missed(&name);
                     self.phase = Phase::Idle;
                     self.wanted = true;
                 }
+                Phase::Backoff(until) if now < until => {
+                    return Ok(Poll {
+                        wake_at: Some(until),
+                        presented,
+                    });
+                }
+                Phase::Backoff(_) => self.phase = Phase::Idle,
                 Phase::Rendered(vblank) if now < vblank.time => {
                     return Ok(Poll {
                         wake_at: Some(vblank.time),
@@ -265,6 +333,12 @@ impl FrameScheduler {
     pub fn resume(&mut self) {
         self.phase = Phase::Idle;
         self.wanted = true;
+        self.stalled_since = None;
+    }
+
+    pub fn restart(&mut self) {
+        self.phase = Phase::Idle;
+        self.wanted = true;
     }
 
     pub fn flipped(&mut self, vblank: Vblank, compositor: &mut Compositor) -> io::Result<()> {
@@ -275,6 +349,7 @@ impl FrameScheduler {
         compositor.present_on(&name, vblank)?;
         self.clock.anchor(vblank.time);
         self.phase = Phase::Idle;
+        self.stalled_since = None;
         Ok(())
     }
 }

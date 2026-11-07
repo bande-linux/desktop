@@ -78,8 +78,8 @@ fn media_key(keysym: u32) -> Option<MediaKey> {
 fn pressed_key(keysym: u32, unshifted: Option<u32>) -> Option<Key> {
     let base = unshifted.unwrap_or(keysym);
     let key = match base {
-        keysyms::KEY_space => Key::Space,
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Key::Tab,
+        keysyms::KEY_Escape => Key::Escape,
         keysyms::KEY_Print => Key::Print,
         keysyms::KEY_F1..=keysyms::KEY_F12 => {
             Key::Function(u8::try_from(base - keysyms::KEY_F1 + 1).ok()?)
@@ -119,7 +119,11 @@ fn offset(direction: Direction) -> (i32, i32) {
 
 fn allowed(action: Action, locked: bool, inhibited: bool) -> bool {
     (!locked || action.area() == Area::Accessibility)
-        && (!inhibited || action == Action::LockScreen)
+        && (!inhibited
+            || matches!(
+                action,
+                Action::LockScreen | Action::ForceQuit | Action::RestartDesktop
+            ))
         && (action != Action::ToggleScreenReader || crate::assistive::screen_reader_installed())
 }
 
@@ -235,6 +239,7 @@ impl State {
             Action::CaptureArea => self.capture_area(),
             Action::CaptureOptions => self.show_capture_options(),
             Action::LockScreen => self.lock_screen_requested = !self.is_locked(),
+            Action::ForceQuit | Action::RestartDesktop => self.open_force_quit(),
             Action::ShowNotificationCenter => self.toggle_panel(Panel::NotificationCenter),
             Action::ShowControlCenter => self.toggle_panel(Panel::ControlCenter),
             Action::NextApp => self.switch_apps(false),
@@ -620,8 +625,9 @@ impl State {
                     keysyms::KEY_Super_L | keysyms::KEY_Super_R
                 );
                 if pressed {
-                    state.super_tap =
-                        super_key && !(modifiers.ctrl || modifiers.alt || modifiers.shift);
+                    state.super_tap = super_key
+                        && !(modifiers.ctrl || modifiers.alt || modifiers.shift)
+                        && keyboard.pressed_keys().len() == 1;
                 } else if !super_key {
                     state.super_tap = false;
                 }

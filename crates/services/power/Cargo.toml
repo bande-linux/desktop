@@ -14,6 +14,7 @@ tempfile.workspace = true
 [dependencies]
 rustix.workspace = true
 tracing.workspace = true
+bande-audio.workspace = true
 bande-bus.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
@@ -29,13 +30,15 @@ zbus.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66), default-logind | logind"
-recommends = "upower, bande-config"
+recommends = "upower, pipewire, bande-config"
 extended-description = """\
 Locks the session before the computer sleeps through a logind delay \
-inhibitor, makes the power button put the computer to sleep, posts low and critical battery notifications from UPower, and \
+inhibitor, makes the power button lock the session, posts low and critical battery notifications from UPower, \
 serves org.freedesktop.ScreenSaver so applications can keep the screen \
-on, holding a logind idle inhibitor for each request. Controls the brightness \
-of each connected display, through its backlight, DDC/CI or the compositor."""
+on, holding a logind idle inhibitor for each request, and keeps the \
+computer from sleeping when idle while a sound stream runs. Sleep is off \
+until s2idle is reliable on Apple silicon. Controls the brightness of each \
+connected display, through its backlight, DDC/CI or the compositor."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-power", "usr/bin/", "755"],
@@ -45,6 +48,7 @@ assets = [
     ["data/70-bande-ddc.rules", "usr/lib/udev/rules.d/", "644"],
     ["data/bande-ddc.conf", "usr/lib/modules-load.d/", "644"],
     ["data/logind.conf", "usr/lib/systemd/logind.conf.d/bande-power.conf", "644"],
+    ["data/sleep.conf", "usr/lib/systemd/sleep.conf.d/bande-power.conf", "644"],
 ]
 
 [lints]

@@ -42,5 +42,11 @@ Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable
 | Attachment | Bilaga | | Inbox | Inkorg |
 | Bookmark | Bokmärke | | Download | Hämta / Hämtningar |
 | Error | Fel | | Couldn't X | Det gick inte att X |
+| Night Light | Nattljus | | Notification Center | Notiscenter |
+| Accent colour | Dekorfärg | | Trackpad | Styrplatta |
+| Quick Look | Snabbtitt | | Sticky Keys | Tröga tangenter |
+| Force Quit | Tvinga avslut | | Clipboard | Urklipp |
+| Launcher | Startare | | Pair (Bluetooth) | Parkoppla |
+| File sharing | Fildelning | | Startup disk | Startskiva |
 
 Product names stay: Bande, Velox. Add a row when a term recurs.

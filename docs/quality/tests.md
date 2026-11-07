@@ -45,6 +45,7 @@ the compositor and app tests render with lavapipe (`VK_DRIVER_FILES`).
 | `libs/packages/src/flatpak.rs` | Flatpak's progress lines across several refs, and an app's sandbox permissions from its metadata. |
 | `apps/settings/src/software/stale.rs` | Which processes run replaced packaged code, and the unit that holds each, from `/proc` maps and cgroup lines. |
 | `apps/files/tests/files.rs` | Files: a file goes to the Trash and is put back; a new folder is named in place and undone; a duplicate that cannot be written asks and leaves no copy. |
+| `apps/files/tests/tear_off.rs` | Files on the headless compositor: a tab dragged out of the bar floats in its own window, comes back over the toolbar and stays where it is dropped. |
 | `shell/launcher/tests/launcher.rs` | Launcher: typing ranks apps, arrows and Return open the choice. |
 | `shell/lock/tests/lock.rs` | Lock screen: a password is submitted once and a rejected one is cleared for another try; a resting lock wakes on the first input, keeps a typed letter and rests again with the field cleared. |
 | `services/power/tests/idle.rs` | A running stream holds back sleep but not the display off, and sleep follows its end. |

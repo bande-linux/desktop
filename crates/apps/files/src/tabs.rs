@@ -76,7 +76,7 @@ impl FilesView {
         self.active_tab
     }
 
-    pub fn shows_tab_bar(&self) -> bool {
+    pub(crate) fn shows_tab_bar(&self) -> bool {
         self.tabs.len() > 1
     }
 

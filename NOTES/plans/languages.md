@@ -30,9 +30,7 @@ Audit gap 17. Plan only; nothing here is built yet. Screen readers and X11 are o
 
 ## Translations
 
-**Files, in the package.** Each package installs `/usr/share/bande/l10n/<lang>/<domain>.ftl`. `Localizer` keeps en-US compiled in and reads only the one requested file at start. A missing file or message falls back to English, so a toolkit pinned at another revision by an app cannot break. No idle cost.
-
-Why not `.deb` language packs: all languages together stay under about 8 MB across the whole suite, and packs bring version coupling (Debian's `firefox-esr-l10n-sv-se` depends on an exact Firefox version range). Debian's own gettext practice is translations inside the package. Why not compiled in: every binary would carry every language, and a fix would rebuild everything.
+**Compiled in, in each package.** `bande_l10n::translations!("domain")` includes `locales/<lang>/<domain>.ftl` for every language in one table. Only the requested language is parsed, at start. A library's strings travel with the binary that links it, so an app pinned to an older toolkit always has matching strings, and the login window needs no file access. All languages stay under about 8 MB across the suite. This replaces the earlier files in `/usr/share`, which ran into ownership trouble for strings in statically linked libraries.
 
 **Source layout.** `locales/sv/` next to `locales/en-US/` in each crate, so a string and its translations move together.
 

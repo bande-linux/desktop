@@ -22,9 +22,8 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, message};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-automount.ftl");
-
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+pub static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-automount")));
 
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 const LOGIN1: &str = "org.freedesktop.login1";

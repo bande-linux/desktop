@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 cargo fmt --all --check
+ci/check-l10n.py crates
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
 forbid() {

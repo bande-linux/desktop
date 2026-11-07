@@ -17,8 +17,8 @@ use serde_json::Value;
 use crate::cx::Content;
 use crate::{Cx, Kind, Program, WindowId};
 
-const ENGLISH: &str = include_str!("../locales/en-US/bande-app.ftl");
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-app")));
 
 const RESUME_FOLDER: &str = "bande/resume";
 const SAVE_AFTER: Duration = Duration::from_secs(1);

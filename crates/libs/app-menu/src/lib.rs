@@ -18,9 +18,9 @@ pub const REDO: &str = "Shift+Ctrl+Z";
 pub const REDO_ALIAS: &str = "Ctrl+Y";
 pub const FULL_SCREEN: &str = "F11";
 const ROOT: i32 = 0;
-const ENGLISH: &str = include_str!("../locales/en-US/bande-app-menu.ftl");
 
-static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(&[("en-US", ENGLISH)]));
+static L10N: LazyLock<Localizer> =
+    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-app-menu")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standard {

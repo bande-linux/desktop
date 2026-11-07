@@ -13,6 +13,8 @@ use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
+use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1;
+use wayland_protocols::wp::idle_inhibit::zv1::client::zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
@@ -55,6 +57,9 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "zwp_linux_dmabuf_v1" if version >= 3 => {
                     state.dmabuf = Some(registry.bind(name, 3, handle, ()));
+                }
+                "zwp_idle_inhibit_manager_v1" => {
+                    state.idle_inhibit_manager = Some(registry.bind(name, 1, handle, ()));
                 }
                 "zwp_keyboard_shortcuts_inhibit_manager_v1" => {
                     state.capture.inhibit_manager = Some(registry.bind(name, 1, handle, ()));
@@ -270,6 +275,8 @@ impl Dispatch<WlBuffer, Arc<AtomicBool>> for State {
     }
 }
 
+delegate_noop!(State: ignore ZwpIdleInhibitManagerV1);
+delegate_noop!(State: ignore ZwpIdleInhibitorV1);
 delegate_noop!(State: ignore WlCompositor);
 delegate_noop!(State: ignore WlShm);
 delegate_noop!(State: ignore WlShmPool);

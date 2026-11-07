@@ -149,6 +149,7 @@ impl CompositorHandler for State {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        crate::frame_callbacks::note_commit(surface);
         crate::release::hold_replaced_buffers(surface);
         on_commit_buffer_handler::<Self>(surface);
         crate::effect::commit_blur(surface);

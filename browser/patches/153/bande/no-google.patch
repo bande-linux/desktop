@@ -1,4 +1,4 @@
-Remove Safe Browsing's Google providers, Google geolocation and the Widevine download URL, with the Settings group
+Remove Safe Browsing's Google providers and Google geolocation, with the Settings group
 
 --- a/browser/components/preferences/privacy.inc.xhtml
 +++ b/browser/components/preferences/privacy.inc.xhtml
@@ -71,13 +71,3 @@ Remove Safe Browsing's Google providers, Google geolocation and the Widevine dow
  
  #endif // ifndef MOZ_WIDGET_ANDROID
  
---- a/browser/app/profile/firefox.js
-+++ b/browser/app/profile/firefox.js
-@@ -2370,7 +2370,6 @@
- // unsupported.
- 
- #ifdef MOZ_WIDEVINE_EME
--  pref("media.gmp-manager.chromium-update-url", "https://update.googleapis.com/service/update2/crx?response=redirect&x=id%3D%GUID%%26uc&acceptformat=crx3&updaterversion=999");
-   pref("media.gmp-widevinecdm.visible", true);
-   pref("media.gmp-widevinecdm.enabled", true);
-   pref("media.gmp-widevinecdm.chromium-guid", "oimompecagnajdejgnnjijobebaeigek");

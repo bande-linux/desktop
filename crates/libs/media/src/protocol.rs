@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Command {
+    Configure {
+        nv12_dmabuf: bool,
+    },
     Open(PathBuf),
     Play,
     Pause,
@@ -92,6 +95,7 @@ pub struct FrameBuffer {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Event {
+    Ready,
     Info(Box<MediaInfo>),
     State(Playback),
     Position(u64),

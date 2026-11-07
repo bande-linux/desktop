@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use super::{ClientState, State, is_mapped, send_preferred_scale};
 use smithay::backend::allocator::dmabuf::Dmabuf;
-use smithay::backend::allocator::{Buffer, Modifier};
+use smithay::backend::allocator::{Buffer, Fourcc, Modifier};
 use smithay::backend::renderer::utils::on_commit_buffer_handler;
 use smithay::desktop::{LayerSurface as MappedLayer, WindowSurfaceType, layer_map_for_output};
 use smithay::input::pointer::{CursorIcon, CursorImageStatus};
@@ -181,7 +181,11 @@ impl DmabufHandler for State {
         dmabuf: Dmabuf,
         notifier: ImportNotifier,
     ) {
-        if dmabuf.num_planes() == 1 && dmabuf.format().modifier == Modifier::Linear {
+        let planes_fit = match dmabuf.format().code {
+            Fourcc::Nv12 => dmabuf.num_planes() == 2,
+            _ => dmabuf.num_planes() == 1,
+        };
+        if planes_fit && dmabuf.format().modifier == Modifier::Linear {
             dmabuf.set_node(self.scanout_node);
             let _ = notifier.successful::<State>();
         } else {

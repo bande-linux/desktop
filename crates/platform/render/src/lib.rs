@@ -158,6 +158,7 @@ impl Drop for Owned {
 pub struct VulkanTexture {
     _owned: Arc<Owned>,
     id: u64,
+    chroma: Option<Arc<VulkanTexture>>,
     renderer: u64,
     width: i32,
     height: i32,
@@ -342,6 +343,7 @@ impl fmt::Debug for VulkanRenderer {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Program {
     Texture,
+    Video,
     Solid,
     Shadow,
     BlurDown,
@@ -352,6 +354,7 @@ impl Program {
     fn entry_point(self) -> &'static CStr {
         match self {
             Self::Texture => c"fragment",
+            Self::Video => c"video",
             Self::Solid => c"solid",
             Self::Shadow => c"shadow",
             Self::BlurDown => c"blur_down",
@@ -444,6 +447,7 @@ fn is_opaque(format: Fourcc) -> Option<bool> {
 fn linear_formats() -> FormatSet {
     TEXTURE_FOURCCS
         .iter()
+        .chain([&Fourcc::Nv12])
         .map(|&code| Format {
             code,
             modifier: Modifier::Linear,
@@ -581,6 +585,11 @@ impl VulkanRenderer {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT)
                 .immutable_samplers(&samplers),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
         self.set_layout = unsafe {
             device.create_descriptor_set_layout(
@@ -604,6 +613,7 @@ impl VulkanRenderer {
         for format in TARGET_FORMATS {
             for program in [
                 Program::Texture,
+                Program::Video,
                 Program::Solid,
                 Program::Shadow,
                 Program::BlurDown,

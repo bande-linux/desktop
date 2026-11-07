@@ -151,7 +151,9 @@ fn send(uid: libc::uid_t, message: &[u8]) -> Result<(), Failure> {
     let mut stream = UnixStream::connect(socket)
         .map_err(|_| warning(c"cannot reach the keychain login socket"))?;
     if !peer_is(&stream, uid) {
-        return Err(warning(c"the keychain login socket belongs to another user"));
+        return Err(warning(
+            c"the keychain login socket belongs to another user",
+        ));
     }
     let unsent = || warning(c"cannot send to the keychain login socket");
     stream

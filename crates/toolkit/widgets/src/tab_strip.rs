@@ -1,12 +1,11 @@
 use std::time::Instant;
 
+use super::reorder::{Reorder, ReorderSlot};
+use super::{Pointer, PointerButton};
 use bande_graphics::{
     Color, Cut, Item, Palette, Path, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
     TextSystem, shortened,
 };
-use bande_spring::Spring;
-
-use super::{Animated, Pointer, PointerButton};
 
 pub const TAB_HEIGHT: f32 = 28.0;
 const TRAILING: f32 = 12.0;
@@ -93,6 +92,16 @@ impl TabStripLayout {
         Point::new(x + grab.x, grab.y)
     }
 
+    fn slots(&self) -> Vec<ReorderSlot> {
+        self.tabs
+            .iter()
+            .map(|tab| ReorderSlot {
+                x: tab.x,
+                width: tab.width,
+            })
+            .collect()
+    }
+
     fn contains_y(&self, y: f32) -> bool {
         (0.0..self.height).contains(&y)
     }
@@ -111,7 +120,7 @@ pub enum TabAction {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Gesture {
     Pressed(TabTarget, Point),
-    Reorder { index: usize, grab: f32, left: f32 },
+    Reordering,
 }
 
 pub struct TabLabel<'a> {
@@ -129,7 +138,7 @@ pub struct TabsShown<'a> {
 #[derive(Default)]
 pub struct TabStrip {
     ids: Vec<u64>,
-    slides: Vec<Animated>,
+    reorder: Reorder,
     hover: Option<TabTarget>,
     gesture: Option<Gesture>,
 }
@@ -143,26 +152,20 @@ impl TabStrip {
         if self.ids == ids {
             return;
         }
-        let slides = ids
-            .iter()
-            .map(|id| {
-                self.ids
-                    .iter()
-                    .position(|known| known == id)
-                    .and_then(|index| self.slides.get(index).copied())
-                    .unwrap_or_else(|| Animated::points(0.0))
-            })
-            .collect();
+        self.reorder.rearrange(
+            ids.iter()
+                .map(|id| self.ids.iter().position(|known| known == id)),
+        );
         self.ids = ids.to_vec();
-        self.slides = slides;
         if self.ids.len() < 2 {
             self.gesture = None;
             self.hover = None;
+            self.reorder.take_lifted();
         }
     }
 
     pub fn is_dragging(&self) -> bool {
-        matches!(self.gesture, Some(Gesture::Reorder { .. }))
+        self.reorder.lifted().is_some()
     }
 
     pub fn is_engaged(&self) -> bool {
@@ -208,20 +211,19 @@ impl TabStrip {
                 if (at.x - from.x).hypot(at.y - from.y) > DRAG_SLOP =>
             {
                 let grab = from.x - layout.tabs.get(index).map_or(from.x, |tab| tab.x);
-                self.drag(layout, index, grab, at.x, now, reduce_motion)
+                self.reorder.lift(&layout.slots(), index, grab);
+                self.gesture = Some(Gesture::Reordering);
+                self.drag(layout, at.x, now, reduce_motion)
             }
-            Gesture::Reorder { index, grab, .. }
-                if layout.tabs.len() > 1 && !layout.contains_y(at.y) =>
-            {
+            Gesture::Reordering if layout.tabs.len() > 1 && !layout.contains_y(at.y) => {
                 self.gesture = None;
+                let lifted = self.reorder.take_lifted()?;
                 Some(TabAction::Detach {
-                    index,
-                    grab: Point::new(grab, layout.height / 2.0),
+                    index: lifted.index,
+                    grab: Point::new(lifted.grab, layout.height / 2.0),
                 })
             }
-            Gesture::Reorder { index, grab, .. } => {
-                self.drag(layout, index, grab, at.x, now, reduce_motion)
-            }
+            Gesture::Reordering => self.drag(layout, at.x, now, reduce_motion),
             Gesture::Pressed(..) => None,
         }
     }
@@ -239,8 +241,8 @@ impl TabStrip {
                 TabTarget::NewTab => Some(TabAction::NewTab),
                 TabTarget::Select(_) => None,
             },
-            Gesture::Reorder { index, left, .. } => {
-                self.settle(layout, index, left, now, reduce_motion);
+            Gesture::Reordering => {
+                self.reorder.settle(&layout.slots(), now, reduce_motion);
                 None
             }
             Gesture::Pressed(..) => None,
@@ -248,8 +250,8 @@ impl TabStrip {
     }
 
     pub fn cancel(&mut self, layout: &TabStripLayout, now: Instant, reduce_motion: bool) {
-        if let Some(Gesture::Reorder { index, left, .. }) = self.gesture.take() {
-            self.settle(layout, index, left, now, reduce_motion);
+        if matches!(self.gesture.take(), Some(Gesture::Reordering)) {
+            self.reorder.settle(&layout.slots(), now, reduce_motion);
         }
     }
 
@@ -262,77 +264,32 @@ impl TabStrip {
         reduce_motion: bool,
     ) -> Option<TabAction> {
         let grab = layout.tabs.get(index).map_or(0.0, |slot| slot.width / 2.0);
-        let moved = self.drag(layout, index, grab, x, now, reduce_motion);
-        if let Some(Gesture::Reorder { index, left, .. }) = self.gesture.take() {
-            self.settle(layout, index, left, now, reduce_motion);
-        }
+        self.reorder.lift(&layout.slots(), index, grab);
+        let moved = self.drag(layout, x, now, reduce_motion);
+        self.reorder.settle(&layout.slots(), now, reduce_motion);
         moved
     }
 
     fn drag(
         &mut self,
         layout: &TabStripLayout,
-        from: usize,
-        grab: f32,
         x: f32,
         now: Instant,
         reduce_motion: bool,
     ) -> Option<TabAction> {
-        let slots = &layout.tabs;
-        let (Some(first), Some(last)) = (slots.first(), slots.last()) else {
-            return None;
-        };
-        let left = (x - grab).clamp(first.x, last.x);
-        let to = slots
-            .iter()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| (a.x - left).abs().total_cmp(&(b.x - left).abs()))
-            .map_or(from, |(index, _)| index);
-        self.gesture = Some(Gesture::Reorder {
-            index: to,
-            grab,
-            left,
-        });
-        if to == from || from >= self.ids.len() || to >= self.ids.len() {
-            return None;
-        }
-        let id = self.ids.remove(from);
-        self.ids.insert(to, id);
-        let slide = self.slides.remove(from);
-        self.slides.insert(to, slide);
-        let (low, high) = (from.min(to), from.max(to));
-        for index in (low..=high).filter(|index| *index != to) {
-            let old = if from < to { index + 1 } else { index - 1 };
-            let (Some(old_slot), Some(slot)) = (slots.get(old), slots.get(index)) else {
-                continue;
-            };
-            let shift = old_slot.x - slot.x;
-            if let Some(slide) = self.slides.get_mut(index) {
-                let (current, _) = slide.value_at(now);
-                slide.jump_to(current + shift);
-                slide.animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
-            }
+        let run = 0..=layout.tabs.len().checked_sub(1)?;
+        let (from, to) = self
+            .reorder
+            .drag_to(&layout.slots(), run, x, now, reduce_motion)?;
+        if from < self.ids.len() && to < self.ids.len() {
+            let id = self.ids.remove(from);
+            self.ids.insert(to, id);
         }
         Some(TabAction::Moved { from, to })
     }
 
-    fn settle(
-        &mut self,
-        layout: &TabStripLayout,
-        index: usize,
-        left: f32,
-        now: Instant,
-        reduce_motion: bool,
-    ) {
-        let (Some(slot), Some(slide)) = (layout.tabs.get(index), self.slides.get_mut(index)) else {
-            return;
-        };
-        slide.jump_to(left - slot.x);
-        slide.animate_at(now, reduce_motion, 0.0, Spring::STANDARD);
-    }
-
     pub fn animating(&self, now: Instant) -> bool {
-        self.slides.iter().any(|slide| slide.value_at(now).1)
+        self.reorder.animating(now)
     }
 
     pub fn paint(
@@ -349,12 +306,12 @@ impl TabStrip {
             palette,
         } = tabs;
         let (active, focused) = (*active, *focused);
-        let lifted = match self.gesture {
-            Some(Gesture::Reorder { index, left, .. }) => {
-                layout.tabs.get(index).map(|slot| (index, left - slot.x))
-            }
-            _ => None,
-        };
+        let lifted = self.reorder.lifted().and_then(|lifted| {
+            layout
+                .tabs
+                .get(lifted.index)
+                .map(|slot| (lifted.index, lifted.left - slot.x))
+        });
         let hover = self.hover.filter(|_| lifted.is_none());
         let mut items = Vec::new();
         let order = (0..layout.tabs.len())
@@ -367,8 +324,8 @@ impl TabStrip {
             let offset = match lifted {
                 Some((lifted, dragged)) if lifted == index => dragged,
                 _ => self
-                    .slides
-                    .get(index)
+                    .reorder
+                    .slide(index)
                     .map_or(0.0, |slide| slide.value_at(now).0),
             };
             let tab = Rect::new(slot.x + offset, slot.y, slot.width, slot.height);

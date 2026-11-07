@@ -173,6 +173,7 @@ impl FilesView {
         self.headings.clear();
         self.layout_controls();
         self.refresh_navigation();
+        self.notice_left_backups();
         if self.mode == ViewMode::List {
             self.ui.layout(Size::new(width as f32, height as f32));
             self.fill_table();
@@ -189,6 +190,7 @@ impl FilesView {
         self.paint_columns(&mut content);
         self.learn_kinds();
         self.paint_scope_bar(&mut content);
+        self.paint_backup_bar(&mut content);
         self.paint_tab_bar(&mut content);
         self.paint_path_bar(&mut content);
         content.extend(inspector);

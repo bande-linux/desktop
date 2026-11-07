@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.bande.Backup
+Exec=/bin/false
+User=root
+SystemdService=bande-backup.service

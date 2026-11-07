@@ -127,6 +127,7 @@ pub enum Problem {
     NameInvalid,
     TooLarge,
     DeviceGone,
+    ServerGone,
     DiskError,
     Missing,
     Other,
@@ -137,6 +138,22 @@ impl Failure {
         let errno = |code: Errno| self.error.raw_os_error() == Some(code.raw_os_error());
         if errno(Errno::ACCESS) || errno(Errno::PERM) {
             Problem::Permission
+        } else if [
+            Errno::TIMEDOUT,
+            Errno::HOSTDOWN,
+            Errno::HOSTUNREACH,
+            Errno::NETDOWN,
+            Errno::NETUNREACH,
+            Errno::NOTCONN,
+            Errno::CONNRESET,
+            Errno::CONNABORTED,
+            Errno::STALE,
+            Errno::AGAIN,
+        ]
+        .into_iter()
+        .any(errno)
+        {
+            Problem::ServerGone
         } else if errno(Errno::ROFS) {
             Problem::ReadOnly
         } else if errno(Errno::NOSPC) || errno(Errno::DQUOT) {
@@ -147,13 +164,10 @@ impl Failure {
             Problem::NameInvalid
         } else if errno(Errno::FBIG) {
             Problem::TooLarge
-        } else if errno(Errno::NODEV)
-            || errno(Errno::NXIO)
-            || errno(Errno::NOTCONN)
-            || errno(Errno::STALE)
-            || errno(Errno::SHUTDOWN)
-        {
+        } else if errno(Errno::NODEV) || errno(Errno::NXIO) || errno(Errno::SHUTDOWN) {
             Problem::DeviceGone
+        } else if errno(Errno::IO) && bande_volumes::on_connected_volume(&self.path) {
+            Problem::ServerGone
         } else if errno(Errno::IO) {
             Problem::DiskError
         } else if errno(Errno::NOENT) {

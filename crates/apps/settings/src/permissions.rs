@@ -9,7 +9,7 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 
 use crate::L10N;
-use crate::failure::unexpected;
+use crate::failure::pane_failed;
 use crate::follow::{Command, Update, Updates, spawn};
 use crate::forget::Forget;
 use crate::pages::{Widgets, boxed, muted_row};
@@ -242,15 +242,21 @@ pub fn follow_permissions(session: &Connection, updates: Updates) -> Sender<Perm
         }
         while let Ok(first) = receiver.recv() {
             for command in std::iter::once(first).chain(receiver.try_iter()) {
-                let result = match command {
-                    PermissionCommand::Refresh => Ok(()),
+                let (permission, result) = match command {
+                    PermissionCommand::Refresh => continue,
                     PermissionCommand::Allow(permission, app, on) => {
-                        allow(&store, permission, &app, on)
+                        (permission, allow(&store, permission, &app, on))
                     }
-                    PermissionCommand::Forget(_, app) => forget(&store, &app),
+                    PermissionCommand::Forget(permission, app) => {
+                        (permission, forget(&store, &app))
+                    }
                 };
                 if let Err(error) = result {
-                    updates.send(unexpected(error));
+                    updates.send(pane_failed(
+                        permission.pane(),
+                        "permission-change-failed",
+                        error,
+                    ));
                 }
             }
             if !updates.send(Update::Permissions(read_all(&store))) {

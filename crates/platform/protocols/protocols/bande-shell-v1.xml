@@ -553,7 +553,7 @@
     </event>
   </interface>
 
-  <interface name="bande_app_v1" version="6">
+  <interface name="bande_app_v1" version="7">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -586,8 +586,8 @@
     <request name="place_window">
       <description summary="tile one of the app's windows">
         Places the toplevel as the window menu's Move and Resize items do, with
-        the same animation and tiled states as dragging the window to a screen
-        edge or pressing Super+Arrows. Restore undoes tiling and zoom. Zoom,
+        the same animation as dragging the window to a screen edge or pressing
+        Super+Arrows. Restore undoes tiling and zoom. Zoom,
         full screen and minimise use xdg_toplevel's own requests. Ignored for a
         toplevel of another client and in full screen.
       </description>
@@ -757,6 +757,19 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="open" type="uint"/>
+    </event>
+
+    <event name="window_tiled" since="7">
+      <description summary="a window took or left a tile">
+        Sent with tiled 1 when the toplevel was tiled and with tiled 0 when it
+        stopped being tiled: it was moved away, resized by the user, zoomed or
+        restored. A tile is only a shape: the window keeps its rounded corners,
+        resize edges and xdg_toplevel states, without xdg_toplevel's tiled
+        states. While tiled, Restore in place_window has something to return to
+        and the app should keep the size it is configured to.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="tiled" type="uint"/>
     </event>
   </interface>
   <interface name="bande_app_control_v1" version="1">

@@ -284,7 +284,14 @@ fn pressing_return_in_the_print_dialog_sends_the_document_to_the_printer() {
     listener.set_nonblocking(true).unwrap();
     let dialog = Path::new(env!("CARGO_BIN_EXE_bande-printd")).with_file_name("bande-file-chooser");
     let mut dialog = Command::new(dialog)
-        .args(["--print", "--app-id", "org.example.App", "--title", "Test", "--document"])
+        .args([
+            "--print",
+            "--app-id",
+            "org.example.App",
+            "--title",
+            "Test",
+            "--document",
+        ])
         .arg(&document)
         .env("DBUS_SESSION_BUS_ADDRESS", bus.address())
         .env("WAYLAND_DISPLAY", &socket)

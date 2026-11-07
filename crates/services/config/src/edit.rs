@@ -19,6 +19,7 @@ pub enum Setting {
     ReopenApps(bool),
     ReopenAppsAfterCrash(bool),
     AutomaticUpdates(bool),
+    UpdateCheckEvery(Option<Duration>),
     LockMessage(String),
     ShowPreviews(bool),
     Clock(ClockFormat),
@@ -119,6 +120,12 @@ impl Setting {
                 None,
                 "automatic-updates",
                 on.then_some(KdlValue::Bool(true)),
+            ),
+            Self::UpdateCheckEvery(every) => set(
+                &mut document,
+                None,
+                "update-check-every",
+                every.map(|every| duration(every).into()),
             ),
             Self::Clock(format) => set(
                 &mut document,

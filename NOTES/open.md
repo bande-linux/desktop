@@ -61,8 +61,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   compositor until then; needs reverse engineering of the firmware's calls).
 - Apple hardware: Night Light gamma on the DCP; overlay planes and direct scanout; the
   `VK_KHR_external_semaphore_fd` release path and dma-buf modifiers on Honeykrisp; the GPU
-  fence wait each frame; input-to-photon latency with a camera; swapping or moving the only
-  display (review: the last display is never removed).
+  fence wait each frame; input-to-photon latency with a camera; swapping or moving the only display, unplugging it and
+  plugging it back (`NOTES/plans/displays.md`).
 - Software (apps repo): install and remove a Debian app; catalogue icons once
   `apt-config-icons` is installed.
 - The `bande-shell` installed before `a458c1b9` polls `/proc/pressure/memory` itself and spins one
@@ -84,8 +84,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   Asahi.
 - The lock screen ignores logind's `Unlock` (`loginctl unlock-session`): honour it or not.
 - Naming: the clash with Debian's `bande` DNS resolver packages; the `org.bande.*` domain.
-- Product: a welcome assistant; an audio player (Totem or Rhythmbox); which UI languages first.
-- Files: tags; Connect to Server.
+- Product: a welcome assistant; which UI languages first.
+- Files: tags.
 - Title-bar toolbars stay at 100 % at large text sizes.
 - The unused private `set_corner_radius` request: keep or remove.
 - Debian policy: make the greeter opt-in instead of taking over greetd.

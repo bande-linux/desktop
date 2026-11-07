@@ -61,6 +61,7 @@ sevenz-rust2 = { version = "=0.24.2", default-features = false, features = ["aes
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 skrifa = "=0.44.0"
+spellbook = "=0.4.2"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tantivy = { version = "=0.25.0", default-features = false, features = ["mmap", "lz4-compression"] }
 tar = "=0.4.46"

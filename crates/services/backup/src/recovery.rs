@@ -206,7 +206,7 @@ fn recreate_excluded_folders(target: &Path) -> io::Result<()> {
 
 fn rebuild_boot(target: &Path) {
     const SCRIPT: &str = r#"for pseudo in proc sys dev run; do mount --rbind "/$pseudo" "$1/$pseudo"; done
-chroot "$1" /bin/sh -c 'command -v update-initramfs >/dev/null && update-initramfs -u -k all; command -v update-grub >/dev/null && update-grub'"#;
+chroot "$1" /bin/sh -c 'if command -v update-initramfs >/dev/null; then update-initramfs -u -k all; elif command -v dracut >/dev/null; then dracut --regenerate-all --force; fi; command -v update-grub >/dev/null && update-grub'"#;
     let done = Command::new("unshare")
         .args([
             "--mount",

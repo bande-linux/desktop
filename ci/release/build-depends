@@ -2,6 +2,7 @@ build-essential
 rustup
 pkg-config
 libxkbcommon-dev
+libx11-data
 libgbm-dev
 libinput-dev
 libseat-dev

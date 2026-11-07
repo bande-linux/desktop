@@ -729,6 +729,7 @@ impl SettingsView {
             List::Ethernet => self.ethernet_rows(),
             List::Vpns => self.vpn_rows(),
             List::Languages => self.language_rows(),
+            List::AppLanguages => self.app_language_rows(),
             List::Regions => self.region_rows(),
             List::DefaultApps => self.default_app_rows(),
             List::Clipboard => self.clipboard_rows(),

@@ -16,10 +16,10 @@ use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder}
 use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, ServerAnswer, ServerRequest, Show, ShowRequest,
-    SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places,
-    list_columns_file, recent_folders_file as recent_folders_file_in, rows, serve_file_manager,
-    settings_view, sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks,
-    with_place_shown, without_bookmark,
+    SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
+    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
+    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
+    without_bookmark,
 };
 use bande_fs::{History, Running, Trash};
 use bande_inbox::{Inbox, Outbox};

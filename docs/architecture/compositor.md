@@ -327,6 +327,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `xdg_activation_v1` | Focus-stealing prevention | P0 | implemented |
 | `ext-foreign-toplevel-list-v1` | Window list for the taskbar | P0 | implemented, shell clients only |
 | `zwp_text_input_v3` / `input_method_v2` / `virtual_keyboard_v1` | Input methods (CJK) | P0 | implemented, open to every client outside the lock screen |
+| `zxdg_exporter_v2` / `zxdg_importer_v2` | Attach another process's dialog to its app window (portal dialogs) | P1 | implemented |
 | `zxdg_decoration_manager_v1` | Decoration negotiation (server-side unless the client asks for client-side) | P1 | implemented |
 | `org_kde_kwin_appmenu_manager` | Where a third-party window's dbusmenu lives, for the menu button in our title bar | P1 | implemented |
 | `gtk_shell1` / `gtk_surface1` | Version 1 with only the `global_menu_bar` capability, as Mutter offers it: a GTK 3 or GTK 4 `GtkApplicationWindow` stops drawing its menu bar and gives its `org.gtk.Menus` menu bar, `org.gtk.Actions` paths and unique bus name with `set_dbus_properties`, which becomes the window's menu address; windows without a menu bar send none and are unchanged. Version 1 keeps GTK's own edge constraints and title-bar gestures | P1 | implemented |

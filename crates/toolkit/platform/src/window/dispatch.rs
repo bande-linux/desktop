@@ -13,6 +13,12 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_list_v1::ExtForeignToplevelListV1;
 use wayland_protocols::xdg::activation::v1::client::xdg_activation_v1::XdgActivationV1;
+use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
+use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::{self, ZxdgExportedV2};
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_imported_v2::ZxdgImportedV2;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_importer_v2::ZxdgImporterV2;
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::{self, XdgToplevel};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::{self, XdgWmBase};
@@ -75,6 +81,15 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "xdg_toplevel_tag_manager_v1" => {
                     state.toplevel_tag = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zxdg_exporter_v2" => {
+                    state.exporter = Some(registry.bind(name, 1, handle, ()));
+                }
+                "zxdg_importer_v2" => {
+                    state.importer = Some(registry.bind(name, 1, handle, ()));
+                }
+                "xdg_wm_dialog_v1" => {
+                    state.dialogs = Some(registry.bind(name, 1, handle, ()));
                 }
                 "xdg_toplevel_drag_manager_v1" => {
                     state.toplevel_drag = Some(registry.bind(name, 1, handle, ()));
@@ -215,6 +230,21 @@ impl Dispatch<XdgToplevel, ()> for State {
     }
 }
 
+impl Dispatch<ZxdgExportedV2, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZxdgExportedV2,
+        event: zxdg_exported_v2::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zxdg_exported_v2::Event::Handle { handle } = event {
+            state.exported_handle = Some(handle);
+        }
+    }
+}
+
 impl Dispatch<ZwlrLayerSurfaceV1, ()> for State {
     fn event(
         state: &mut Self,
@@ -277,6 +307,11 @@ delegate_noop!(State: ignore WlSurface);
 delegate_noop!(State: ignore ZwlrLayerShellV1);
 delegate_noop!(State: ignore XdgActivationV1);
 delegate_noop!(State: ignore XdgToplevelTagManagerV1);
+delegate_noop!(State: ignore ZxdgExporterV2);
+delegate_noop!(State: ignore ZxdgImporterV2);
+delegate_noop!(State: ignore ZxdgImportedV2);
+delegate_noop!(State: ignore XdgWmDialogV1);
+delegate_noop!(State: ignore XdgDialogV1);
 delegate_noop!(State: ignore wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1);
 delegate_noop!(State: ignore wayland_protocols::xdg::toplevel_drag::v1::client::xdg_toplevel_drag_v1::XdgToplevelDragV1);
 delegate_noop!(State: ignore WlDataDeviceManager);

@@ -365,6 +365,49 @@ fn a_window_that_resizes_itself_keeps_its_top_left_and_is_remembered_at_its_new_
     assert_eq!(server.windows()[0].geometry().unwrap().loc, top_left);
 }
 
+#[test]
+fn another_process_dialog_opens_over_the_window_it_is_attached_to() {
+    let mut server = headless(1200, 900);
+    let bytes = RED.repeat(600 * 500);
+    let mut app = TestClient::connect(&mut server);
+    app.show_window(
+        &mut server,
+        &ShmImage {
+            width: 600,
+            height: 500,
+            stride: 2400,
+            format: Format::Xrgb8888,
+            bytes: &bytes,
+        },
+    );
+    app.set_app_id(&mut server, 0, "org.example.Editor");
+    let handle = app.export_window(&mut server, 0);
+
+    let bytes = BLUE.repeat(200 * 100);
+    let mut dialogs = TestClient::connect(&mut server);
+    dialogs.show_window_attached_to(
+        &mut server,
+        &ShmImage {
+            width: 200,
+            height: 100,
+            stride: 800,
+            format: Format::Xrgb8888,
+            bytes: &bytes,
+        },
+        &handle,
+    );
+    dialogs.set_app_id(&mut server, 0, "org.bande.FileChooser");
+    roundtrip(&mut server, &mut [&mut app, &mut dialogs]);
+
+    let (parent_x, _, parent_width, _) = frame_of(&server, "org.example.Editor");
+    let (x, _, width, _) = frame_of(&server, "org.bande.FileChooser");
+    assert_eq!(x + width / 2, parent_x + parent_width / 2);
+    let mut plain = TestClient::window(&mut server, "org.example.Other");
+    roundtrip(&mut server, &mut [&mut plain]);
+    let (other_x, _, other_width, _) = frame_of(&server, "org.example.Other");
+    assert_ne!(other_x + other_width / 2, parent_x + parent_width / 2);
+}
+
 fn take_configured_sizes(server: &mut Compositor, clients: &mut [&mut TestClient]) {
     roundtrip(server, clients);
     for client in clients.iter_mut() {

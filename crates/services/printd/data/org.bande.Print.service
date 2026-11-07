@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.bande.Print
+Exec=/usr/bin/bande-printd
+SystemdService=bande-printd.service

@@ -2,6 +2,7 @@ mod access;
 mod account;
 mod app_chooser;
 mod launcher;
+mod print;
 
 use std::cell::Cell;
 use std::ffi::OsString;
@@ -13,6 +14,7 @@ use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use bande_app_settings::{Stored, settings_folder};
+use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_file_chooser::{
     Chooser, ChooserView, Finished, Icons, L10N, initial_folder, remember, remembered_folder,
 };
@@ -26,8 +28,8 @@ use bande_xdg::{
     data_dirs, replace_file, state_home, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
-    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, SET_WALLPAPER, SHARE_ACCOUNT, encode,
-    parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
+    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, PRINT, SET_WALLPAPER, SHARE_ACCOUNT,
+    encode, parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
 };
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
 
@@ -36,6 +38,7 @@ const WINDOW_SIZE: (u32, u32) = (820, 520);
 const UNAVAILABLE: u8 = 2;
 const PREVIEW_SIZE: f64 = 36.0;
 const SET: &str = "set";
+const WAYLAND_PARENT: &str = "wayland:";
 
 struct FileDialog {
     view: ChooserView,
@@ -196,6 +199,9 @@ fn run(dialog: Dialog) -> ExitCode {
             return ExitCode::from(UNAVAILABLE);
         }
     };
+    if let Some(handle) = dialog.parent_window.strip_prefix(WAYLAND_PARENT) {
+        window.attach_to(handle);
+    }
     let view = ChooserView::new(
         chooser,
         places,
@@ -274,6 +280,15 @@ fn main() -> ExitCode {
                 tracing::error!("{}", error.0);
                 ExitCode::from(UNAVAILABLE)
             }
+        };
+    }
+    if mode == PRINT {
+        return print::run(arguments);
+    }
+    if mode == WORKER_FLAG {
+        return match arguments.get(1) {
+            Some(path) => bande_content::pdf::worker::run(Path::new(path)),
+            None => ExitCode::from(UNAVAILABLE),
         };
     }
     if mode == CHOOSE_APP {

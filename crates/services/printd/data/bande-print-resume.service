@@ -1,0 +1,10 @@
+[Unit]
+Description=Send documents still waiting to print
+ConditionDirectoryNotEmpty=%S/bande/print-queue
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/busctl --user call org.bande.Print /org/bande/Print org.bande.Print Jobs
+
+[Install]
+WantedBy=default.target

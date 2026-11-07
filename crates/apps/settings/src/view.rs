@@ -104,11 +104,11 @@ pub(crate) enum Intent {
     WifiManual(bool),
     OpenPrinter(String),
     DefaultPrinter(String),
-    AddPrinter(bande_printers::NearbyPrinter),
     PrinterAddress(String),
     AddPrinterAddress,
     InstallPrinting,
-    CancelJob(i32),
+    CancelJob(u32),
+    CancelQueuedJob(i32),
     PausePrinter((String, bool)),
     AskPassword(bool),
     PasswordEntry(usize, String),
@@ -250,8 +250,7 @@ pub struct SettingsView {
     pub(crate) other: Option<Other>,
     pub(crate) wifi_manual: bool,
     pub(crate) printers: Option<PrintersState>,
-    pub(crate) nearby_printers: Option<Vec<bande_printers::NearbyPrinter>>,
-    pub(crate) adding: Option<String>,
+    pub(crate) adding_printer: bool,
     pub(crate) installing_printing: bool,
     pub(crate) printer_address: String,
     pub(crate) accounts: Option<Vec<Account>>,
@@ -345,8 +344,7 @@ impl SettingsView {
             other: None,
             wifi_manual: false,
             printers: None,
-            nearby_printers: None,
-            adding: None,
+            adding_printer: false,
             installing_printing: false,
             printer_address: String::new(),
             accounts: None,
@@ -612,10 +610,7 @@ impl SettingsView {
                 (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
-            Update::Printers(_)
-            | Update::NearbyPrinters(_)
-            | Update::PrinterAdded(..)
-            | Update::PrintingInstalled => (
+            Update::Printers(_) | Update::PrinterAdded(..) | Update::PrintingInstalled => (
                 Some(PaneId::Printers),
                 &[SettingId::Printers, SettingId::NearbyPrinters],
             ),
@@ -789,17 +784,13 @@ impl SettingsView {
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
             Update::Printers(printers) => {
-                if let Some(Detail::Printer(name)) = &self.detail
-                    && !printers
-                        .printers
-                        .iter()
-                        .any(|printer| printer.name == *name)
+                if let Some(Detail::Printer(id)) = &self.detail
+                    && !printers.printers.iter().any(|printer| printer.id == *id)
                 {
                     self.detail = None;
                 }
                 self.printers = Some(printers);
             }
-            Update::NearbyPrinters(nearby) => self.nearby_printers = Some(nearby),
             Update::PrintingInstalled => self.installing_printing = false,
             Update::Accounts(accounts, managed) => self.take_accounts(accounts, managed),
             Update::PictureChosen(login, image) => self.picture_chosen(login, image),
@@ -808,16 +799,10 @@ impl SettingsView {
             Update::RevealedPassword(path, secret) => self.keychain.revealed = Some((path, secret)),
             Update::CopiedPassword(secret) => self.commands.push(Command::CopySecret(secret)),
             Update::Password(outcome) => self.password_changed(outcome),
-            Update::PrinterAdded(uri, added) => {
-                if self.adding.as_ref() == Some(&uri) {
-                    self.adding = None;
-                    if added
-                        && self
-                            .printer_address_target()
-                            .is_some_and(|target| target.uri == uri)
-                    {
-                        self.printer_address.clear();
-                    }
+            Update::PrinterAdded(added) => {
+                self.adding_printer = false;
+                if added {
+                    self.printer_address.clear();
                 }
             }
         }
@@ -1414,22 +1399,22 @@ impl SettingsView {
                     self.commands
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
                 }
-                Intent::AddPrinter(printer) => {
-                    self.adding = Some(printer.uri.clone());
-                    self.commands
-                        .push(Command::Printers(PrinterCommand::Add(printer)));
-                }
                 Intent::InstallPrinting => {
                     self.installing_printing = true;
                     self.commands
                         .push(Command::Printers(PrinterCommand::InstallPrinting));
                 }
                 Intent::AddPrinterAddress => {
-                    if let Some(printer) = self.printer_address_target() {
-                        self.adding = Some(printer.uri.clone());
+                    let address = self.printer_address.trim().to_owned();
+                    if !address.is_empty() {
+                        self.adding_printer = true;
                         self.commands
-                            .push(Command::Printers(PrinterCommand::Add(printer)));
+                            .push(Command::Printers(PrinterCommand::AddAddress(address)));
                     }
+                }
+                Intent::CancelQueuedJob(job) => {
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::CancelQueued(job)));
                 }
                 Intent::CancelJob(job) => {
                     self.commands

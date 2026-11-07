@@ -442,6 +442,11 @@ made again.
   The same helper writes the login keyboard: `layout(variant)` codes checked against xkb's
   `evdev.lst`, written to `/etc/default/keyboard` (`/etc/vconsole.conf` is Debian's symlink to it),
   then a udev `change` for input devices and `setupcon --force --save` for the console.
+- Settings ▸ Language & Region ▸ Apps gives an app its own language, kept as `<app id>=<code>` lines
+  in `$XDG_CONFIG_HOME/bande/app-languages`. `spawn_detached` reads that file and sets `LANGUAGE` for
+  the app it starts, so it applies at the app's next start. It keeps the session's value in
+  `BANDE_SESSION_LANGUAGE` and restores it for any other app that app launches. `bande-l10n` and
+  gettext honour `LANGUAGE` under every locale except plain `C`/`POSIX`.
 - Services bound to `graphical-session.target` start then: PipeWire, WirePlumber,
   `bande-config`, `bande-power`, `bande-sound`, `bande-tray`, `bande-indexer`, `bande-automount`,
   `bande-polkit-agent`. `bande-notify`, `bande-spell` (spelling; exits after a minute idle) and

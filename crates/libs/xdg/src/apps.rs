@@ -40,6 +40,12 @@ impl FileTypes {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenWithChoice {
+    pub id: String,
+    pub name: String,
+}
+
 pub struct Apps {
     types: FileTypes,
     associations: MimeApps,
@@ -132,8 +138,25 @@ impl Apps {
         self.default_for(&self.mime_for(path))
     }
 
-    pub fn apps_for_path(&self, path: &Path) -> Vec<&DesktopEntry> {
-        self.apps_for(&self.mime_for(path))
+    pub fn apps_for_files(&self, files: &[PathBuf]) -> Vec<&DesktopEntry> {
+        let mut mimes = files.iter().map(|file| self.mime_for(file));
+        let Some(first) = mimes.next() else {
+            return Vec::new();
+        };
+        if first == DIRECTORY || !mimes.all(|mime| mime == first) {
+            return Vec::new();
+        }
+        self.apps_for(&first)
+    }
+
+    pub fn open_with_choices(&self, files: &[PathBuf]) -> Vec<OpenWithChoice> {
+        self.apps_for_files(files)
+            .into_iter()
+            .map(|app| OpenWithChoice {
+                id: app.id.clone(),
+                name: app.name.clone(),
+            })
+            .collect()
     }
 
     pub fn set_default(&mut self, mime: &str, app: &DesktopEntry) -> io::Result<()> {

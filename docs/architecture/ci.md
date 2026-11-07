@@ -34,7 +34,7 @@ Only these run in CI alone:
 
 Each change only has to compile: `desktop-check <worktree> -p <crate>` runs `cargo fmt` and
 `cargo check --all-targets` through the build queue, `build-run`, which runs anything heavy on the
-next free build machine (`~/bande-linux/builders`, a list; the mini is the last resort; a machine
+next free compute node (the mini or one in `~/bande-linux/builders`, a list, all equal; a machine
 that goes away re-queues the job and never counts as a failure). Finished branches are queued
 with `desktop-enqueue <branch>`; the merge train (`desktop-train`) merges the queued branches onto `main`, runs `desktop-gate` on the
 batch and pushes `main` when it is green. `desktop-gate <worktree>` is `ci/release/verify.sh

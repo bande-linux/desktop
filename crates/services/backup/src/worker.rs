@@ -607,7 +607,8 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
         note_overdue(shared, &state);
         return;
     }
-    if !forced && state.last_success + HOUR > now() + EARLY_START {
+    let waiting_for_room = state.problem == problem::DISK_FULL && state.full_at + DAY > now();
+    if !forced && (waiting_for_room || state.last_success + HOUR > now() + EARLY_START) {
         shared.set_phase(phase::IDLE);
         return;
     }
@@ -705,11 +706,11 @@ impl Run<'_> {
         for _ in 0..SPACE_ATTEMPTS {
             let space = self.refresh_space();
             let reserve = disk::reserved_for(space.total);
-            if space.available < reserve && !self.make_room() {
-                self.shared.set_phase(phase::IDLE);
-                self.shared
-                    .change(|state| state.problem = problem::DISK_FULL.to_owned());
-                return Saved::No;
+            if space.available < reserve
+                && !self.make_room()
+                && self.refresh_space().available < reserve
+            {
+                return self.report_full();
             }
             match self.attempt(reserve) {
                 Attempt::Saved => return Saved::Yes,
@@ -719,10 +720,7 @@ impl Run<'_> {
                 }
                 Attempt::OutOfRoom => {
                     if !self.make_room() {
-                        self.shared.set_phase(phase::IDLE);
-                        self.shared
-                            .change(|state| state.problem = problem::DISK_FULL.to_owned());
-                        return Saved::No;
+                        return self.report_full();
                     }
                 }
                 Attempt::CannotOpen => {
@@ -738,6 +736,7 @@ impl Run<'_> {
                 }
             }
         }
+        tracing::error!("the backup did not fit after removing old versions");
         self.shared.set_phase(phase::IDLE);
         note_failure(self.shared);
         Saved::No
@@ -857,7 +856,6 @@ impl Run<'_> {
         self.shared.set_phase(phase::TIDYING);
         let snapshots = self.snapshots();
         let removable = snapshots.len().saturating_sub(1);
-        let before = self.refresh_space().available;
         if removable > 0 {
             let oldest = removable.div_ceil(4);
             let mut args = vec!["forget".to_owned()];
@@ -879,8 +877,18 @@ impl Run<'_> {
             tracing::warn!("cannot prune the backups: {error}");
             return false;
         }
-        let after = self.refresh_space();
-        after.available > before || after.available >= disk::reserved_for(after.total)
+        self.refresh_space();
+        removable > 0
+    }
+
+    fn report_full(&self) -> Saved {
+        tracing::warn!("the backup disk is too small");
+        self.shared.set_phase(phase::IDLE);
+        self.shared.change(|state| {
+            state.problem = problem::DISK_FULL.to_owned();
+            state.full_at = now();
+        });
+        Saved::No
     }
 
     fn tidy(&self) {
@@ -962,8 +970,23 @@ impl Run<'_> {
             Exit::Failed if disk::is_present(&self.disk.uuid) && !self.stopper().is_stopping() => {
                 tracing::error!("the backups are damaged: {}", finished.output);
                 self.heal(&finished.output);
+                self.check_everything_after_damage();
+                self.shared.change(|state| state.last_check = now());
             }
             other => tracing::warn!("restic check: {other:?} {}", finished.output),
+        }
+    }
+
+    fn check_everything_after_damage(&self) {
+        match self
+            .repository
+            .run(self.stopper(), &["check", "--read-data"])
+        {
+            Ok(finished) if finished.exit == Exit::Failed && !self.stopper().is_stopping() => {
+                self.heal(&finished.output);
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!("cannot verify the backups: {error}"),
         }
     }
 

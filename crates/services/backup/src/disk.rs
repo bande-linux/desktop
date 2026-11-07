@@ -30,13 +30,6 @@ pub fn is_present(uuid: &str) -> bool {
     device(uuid).exists()
 }
 
-pub fn mount_type(filesystem: &str) -> &str {
-    match filesystem {
-        "ntfs" => "ntfs3",
-        other => other,
-    }
-}
-
 fn is_mounted(path: &Path) -> bool {
     let Ok(mounts) = fs::read_to_string("/proc/self/mounts") else {
         return false;
@@ -56,7 +49,7 @@ pub fn mount(disk: &ChosenDisk) -> io::Result<PathBuf> {
         return Ok(mount_point);
     }
     let status = Command::new("mount")
-        .args(["-t", mount_type(&disk.filesystem), "-o", MOUNT_OPTIONS])
+        .args(["-t", disk.filesystem.as_str(), "-o", MOUNT_OPTIONS])
         .arg(device(&disk.uuid))
         .arg(&mount_point)
         .status()?;
@@ -86,12 +79,7 @@ pub fn peek(uuid: &str, filesystem: &str) -> io::Result<bool> {
     let mount_point = Path::new(RUN_DIR).join("peek");
     fs::create_dir_all(&mount_point)?;
     let status = Command::new("mount")
-        .args([
-            "-t",
-            mount_type(filesystem),
-            "-o",
-            "ro,nosuid,nodev,noexec,noatime",
-        ])
+        .args(["-t", filesystem, "-o", "ro,nosuid,nodev,noexec,noatime"])
         .arg(device(uuid))
         .arg(&mount_point)
         .status()?;

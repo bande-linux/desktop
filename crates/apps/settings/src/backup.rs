@@ -390,7 +390,9 @@ impl SettingsView {
                 }))),
             )));
         }
-        rows.push(self.backup_stop_row(status));
+        if self.backup.confirming_stop {
+            rows.push(self.backup_stop_row(status));
+        }
         rows
     }
 
@@ -482,7 +484,11 @@ impl SettingsView {
         } else {
             status.disk_name.clone()
         };
-        let mut row = Row::new(Text::new(&L10N.tr("backup-disk-row"), Tone::Primary), None);
+        let stop = self.backup_button(&L10N.tr("backup-stop"), BackupIntent::AskStop(true));
+        let mut row = Row::new(
+            Text::new(&L10N.tr("backup-disk-row"), Tone::Primary),
+            Some(stop),
+        );
         let versions = L10N.tr_args("backup-versions", [("count", status.versions.into())]);
         let detail = if status.oldest > 0 {
             let oldest = L10N.tr_args("backup-oldest", [("when", when(status.oldest).into())]);
@@ -495,29 +501,25 @@ impl SettingsView {
     }
 
     fn backup_stop_row(&mut self, status: &Status) -> Box<dyn Widget> {
-        if self.backup.confirming_stop {
-            let cancel = self.backup_button(&L10N.tr("cancel"), BackupIntent::AskStop(false));
-            let stop = self.backup_button(
-                &L10N.tr("backup-stop-confirm"),
-                BackupIntent::Command(BackupCommand::StopUsing),
-            );
-            let buttons = Stack::new(Axis::Horizontal, Spacing::S as f32, 0.0, vec![cancel, stop]);
-            return boxed(
-                Row::new(
-                    Text::new(
-                        &L10N.tr_args(
-                            "backup-stop-question",
-                            [("disk", status.disk_name.clone().into())],
-                        ),
-                        Tone::Primary,
+        let cancel = self.backup_button(&L10N.tr("cancel"), BackupIntent::AskStop(false));
+        let stop = self.backup_button(
+            &L10N.tr("backup-stop-confirm"),
+            BackupIntent::Command(BackupCommand::StopUsing),
+        );
+        let buttons = Stack::new(Axis::Horizontal, Spacing::S as f32, 0.0, vec![cancel, stop]);
+        boxed(
+            Row::new(
+                Text::new(
+                    &L10N.tr_args(
+                        "backup-stop-question",
+                        [("disk", status.disk_name.clone().into())],
                     ),
-                    Some(boxed(buttons)),
-                )
-                .detail(Text::new(&L10N.tr("backup-stop-detail"), Tone::Muted).caption())
-                .highlighted(true),
-            );
-        }
-        let stop = self.backup_button(&L10N.tr("backup-stop"), BackupIntent::AskStop(true));
-        boxed(Row::new(Text::new("", Tone::Primary), Some(stop)))
+                    Tone::Primary,
+                ),
+                Some(boxed(buttons)),
+            )
+            .detail(Text::new(&L10N.tr("backup-stop-detail"), Tone::Muted).caption())
+            .highlighted(true),
+        )
     }
 }

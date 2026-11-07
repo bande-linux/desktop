@@ -110,7 +110,7 @@ impl FilesView {
         }
     }
 
-    pub fn step_backup(&mut self, older: bool) {
+    pub(crate) fn step_backup(&mut self, older: bool) {
         let Some(folder) = self.browser.current_folder() else {
             return;
         };

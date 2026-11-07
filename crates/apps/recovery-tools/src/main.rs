@@ -22,6 +22,7 @@ use zeroize::Zeroizing;
 const APP_ID: &str = "org.bande.RecoveryTools";
 const ENGINE: &str = "/usr/libexec/bande-install";
 const INSTALLED_ROOT: &str = "/dev/disk/by-label/BANDE-ROOT";
+const LIVE_DEVICE: &str = "/run/bande-live/device";
 const WINDOW_SIZE: (u32, u32) = (620, 640);
 const FIELD_FONT: f32 = 13.0;
 const LIST_HEIGHT: f32 = 240.0;
@@ -107,6 +108,16 @@ struct Device {
     rm: bool,
 }
 
+fn running_disk() -> Option<String> {
+    let partition = std::fs::read_to_string(LIVE_DEVICE).ok()?;
+    let output = Command::new("lsblk")
+        .args(["-ndo", "PKNAME", partition.trim()])
+        .output()
+        .ok()?;
+    let parent = String::from_utf8_lossy(&output.stdout);
+    Some(format!("/dev/{}", parent.trim()))
+}
+
 fn disks() -> Vec<(String, String)> {
     let output = Command::new("lsblk")
         .args(["--json", "--nodeps", "-o", "PATH,SIZE,MODEL,TYPE,RM"])
@@ -115,9 +126,11 @@ fn disks() -> Vec<(String, String)> {
         .ok()
         .and_then(|output| serde_json::from_slice::<Devices>(&output.stdout).ok())
         .map_or_else(Vec::new, |devices| devices.blockdevices);
+    let running = running_disk();
     devices
         .into_iter()
         .filter(|device| device.kind == "disk" && !device.rm)
+        .filter(|device| running.as_deref() != Some(device.path.as_str()))
         .map(|device| {
             let name = format!(
                 "{} {} ({})",

@@ -6,7 +6,13 @@ new=$2
 user=tester
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 LANGUAGE=
 failures=0
-trap 'echo "FAILED: stopped at line $LINENO with status $?"' ERR
+monitor=$(mktemp)
+report() {
+    journalctl -b --no-pager -q | grep -E 'bande-|pipewire|update-finish|[Ww]atchdog|core-dump|getty' |
+        grep -v runuser | tail -n 200 | cut -c1-200
+    cut -c1-200 "$monitor" | tail -n 20
+}
+trap 'echo "FAILED: stopped at line $LINENO with status $?"; report' ERR
 
 say() { echo "== $*"; }
 pass() { echo "ok: $*"; }
@@ -34,6 +40,7 @@ wait_until() {
 
 pid_of() { pgrep -u "$user" -o -x "${1:0:15}" || true; }
 running() { [ -n "$(pid_of "$1")" ]; }
+stayed() { [ -n "$2" ] && [ "$(pid_of "$1")" = "$2" ]; }
 restarted() { local now; now=$(pid_of "$1"); [ -n "$now" ] && [ "$now" != "$2" ]; }
 running_sum() { sha256sum "/proc/$1/exe" | cut -d' ' -f1; }
 
@@ -97,7 +104,6 @@ new_shell=$(packaged_sum bande-shell bande-shell "$new")
 check "the shell is the old build before the update" is_build bande-shell "$old_shell"
 compositor=$(pid_of bande-compositor)
 
-monitor=$(mktemp)
 as_user env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
     dbus-monitor --session "interface='org.freedesktop.Notifications',member='Notify'" > "$monitor" 2>&1 &
 watcher=$!
@@ -109,16 +115,16 @@ check "the new shell is installed" [ "$(sha256sum /usr/bin/bande-shell | cut -d'
 wait_until "the settings service moves to the new build" 30 is_build bande-config "$new_config"
 told() { grep -q "Log out to finish updating" "$monitor"; }
 wait_until "the user is told to log out to finish" 30 told
-check "the update did not end the session" [ "$(pid_of bande-compositor)" = "$compositor" ]
+check "the update did not end the session" stayed bande-compositor "$compositor"
 
 say "the shell crashes after the update"
 shell=$(pid_of bande-shell)
-kill -9 "$shell"
+kill -9 "$shell" || true
 wait_until "the shell comes back" 30 restarted bande-shell "$shell"
 wait_until "the shell that came back is the session's own build" 5 is_build bande-shell "$old_shell"
 shell=$(pid_of bande-shell)
 sleep 15
-check "the shell stays up" [ "$(pid_of bande-shell)" = "$shell" ]
+check "the shell stays up" stayed bande-shell "$shell"
 
 say "the screen locks after the update"
 loginctl lock-sessions
@@ -126,8 +132,8 @@ wait_until "the lock screen starts" 30 running bande-lock
 wait_until "the lock screen is the session's own build" 5 is_build bande-lock "$old_lock"
 lock=$(pid_of bande-lock)
 sleep 12
-check "the lock screen stays up" [ "$(pid_of bande-lock)" = "$lock" ]
-kill -9 "$lock"
+check "the lock screen stays up" stayed bande-lock "$lock"
+kill -9 "$lock" || true
 wait_until "a killed lock screen comes back" 30 restarted bande-lock "$lock"
 wait_until "the lock screen that came back is the session's own build" 5 is_build bande-lock "$old_lock"
 check "the held lock screen keeps its process name" [ "$(cat "/proc/$(pid_of bande-lock)/comm")" = bande-lock ]
@@ -151,8 +157,7 @@ if journalctl --user-unit bande-compositor.service --no-pager -q | grep -E 'mess
 fi
 
 if [ "$failures" -ne 0 ]; then
-    journalctl -b --no-pager -q | grep -E 'bande-|pipewire|update-finish' | grep -v runuser | tail -n 150 | cut -c1-200
-    cut -c1-200 "$monitor" | tail -n 40
+    report
     echo "$failures checks failed"
     exit 1
 fi

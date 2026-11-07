@@ -1,0 +1,9 @@
+[Unit]
+Description=Move session services to the installed packages and say what still needs a logout
+After=graphical-session.target
+
+[Service]
+KillMode=process
+Type=oneshot
+Slice=session.slice
+ExecStart=/usr/bin/bande-settings --finish-update

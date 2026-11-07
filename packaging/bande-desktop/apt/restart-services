@@ -16,4 +16,6 @@ done | sort -u | while read -r unit; do
     *) systemctl try-restart --no-block "$unit" ;;
     esac
 done
+mkdir -p /run/bande-desktop
+touch /run/bande-desktop/packages-installed
 exit 0

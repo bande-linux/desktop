@@ -188,8 +188,10 @@ impl Pack {
         let entries = bytes
             .get(end + 3..end + 3 + usize::from(count) * 4)
             .ok_or_else(|| invalid("truncated record"))?
-            .chunks_exact(4)
-            .map(|offset| u32::from_le_bytes([offset[0], offset[1], offset[2], offset[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|offset| u32::from_le_bytes(*offset))
             .collect();
         bytes.truncate(end);
         Ok((bytes, entries))

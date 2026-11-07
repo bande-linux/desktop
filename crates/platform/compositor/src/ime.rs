@@ -118,6 +118,18 @@ impl InputMethodHandler for State {
 pub(crate) struct Refused;
 
 impl State {
+    pub(crate) fn release_input_method_grab(&mut self) {
+        let Some(keyboard) = self.seat.get_keyboard() else {
+            return;
+        };
+        if keyboard
+            .grab_start_data()
+            .is_some_and(|grab| grab.focus.is_none())
+        {
+            keyboard.unset_grab(self);
+        }
+    }
+
     pub(crate) fn input_method_must_not_see_keys(&self) -> bool {
         if self.is_locked() {
             return true;

@@ -222,6 +222,9 @@ impl State {
                 self.display_handle
                     .backend_handle()
                     .kill_client(client.id(), DisconnectReason::ConnectionClosed);
+                if access == Access::ReadKeys {
+                    self.release_input_method_grab();
+                }
             }
         }
     }

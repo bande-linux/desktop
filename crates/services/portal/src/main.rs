@@ -16,6 +16,7 @@ use xdg_desktop_portal_bande::file_chooser::FileChooser;
 use xdg_desktop_portal_bande::gtk::GtkHomes;
 use xdg_desktop_portal_bande::inhibit::Inhibit;
 use xdg_desktop_portal_bande::notification::Notification;
+use xdg_desktop_portal_bande::print::Print;
 use xdg_desktop_portal_bande::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_bande::screenshot::Screenshot;
 use xdg_desktop_portal_bande::secret::Secret;
@@ -79,6 +80,7 @@ fn serve() -> zbus::Result<Connection> {
         )?;
         server.at(OBJECT_PATH, AppChooser::new(dialogs.clone()))?;
         server.at(OBJECT_PATH, Email)?;
+        server.at(OBJECT_PATH, Print::new(dialogs.clone()))?;
         server.at(
             OBJECT_PATH,
             Secret {

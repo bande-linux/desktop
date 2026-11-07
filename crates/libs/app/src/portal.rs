@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
@@ -11,6 +12,20 @@ const FILE_CHOOSER: &str = "org.freedesktop.portal.FileChooser";
 const REQUEST: &str = "org.freedesktop.portal.Request";
 
 pub type Filter = (String, Vec<(u32, String)>);
+
+static KEY_WINDOW: Mutex<Option<String>> = Mutex::new(None);
+
+pub(crate) fn remember_key_window(handle: Option<&str>) {
+    *KEY_WINDOW.lock().unwrap_or_else(PoisonError::into_inner) = handle.map(str::to_owned);
+}
+
+pub fn parent_window() -> String {
+    KEY_WINDOW
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .map_or_else(String::new, |handle| format!("wayland:{handle}"))
+}
 
 fn request_path(connection: &Connection, token: &str) -> Option<OwnedObjectPath> {
     let sender = connection
@@ -38,7 +53,7 @@ fn ask(
     let chooser = Proxy::new(session, PORTAL, PORTAL_PATH, FILE_CHOOSER)?;
     options.insert("handle_token", Value::from(token.clone()));
     options.insert("modal", Value::from(true));
-    let _: OwnedObjectPath = chooser.call(method, &("", title, options))?;
+    let _: OwnedObjectPath = chooser.call(method, &(parent_window(), title, options))?;
     let Some(response) = responses.next() else {
         return Ok(None);
     };

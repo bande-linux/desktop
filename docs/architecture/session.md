@@ -130,8 +130,10 @@ graph LR
   bookmarks and volumes in a sidebar (from Files), a path bar from the home folder, a sortable
   Name, Date Modified and Size list with type-to-jump, folder icons from the accent icon
   theme, the app's filters as a pop-up, Save As with the name selected up to its extension,
-  "Replace?" before overwriting, New Folder when saving or choosing folders, `Alt+Up` and
-  `Alt+Down` to move up and into folders, and the last folder remembered per app in
+  "Replace?" before overwriting, New Folder when saving or choosing folders, Show Hidden Files
+  (`Ctrl+H`, starting from the setting in Files, for this dialog only) with hidden items dimmed
+  as in Files, `Alt+Up` and `Alt+Down` to move up and into folders, and the last folder
+  remembered per app in
   `$XDG_STATE_HOME/bande/file-chooser-folders`. Choices are answered with their initial
   values, and the dialog is not yet parented to the app window (xdg-foreign).
 - `org.freedesktop.impl.portal.Access`: the permission questions behind the Screenshot,

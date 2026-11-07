@@ -256,6 +256,7 @@ impl SettingsView {
             | PaneId::Mouse
             | PaneId::Trackpad
             | PaneId::Apps
+            | PaneId::LockScreen
             | PaneId::PrivacySecurity
             | PaneId::Passwords
             | PaneId::Camera

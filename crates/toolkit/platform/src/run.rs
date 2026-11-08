@@ -392,12 +392,14 @@ pub fn run_surfaces(app: &mut impl Surfaces) -> Result<(), WindowError> {
             }
         }
         if readiness.spelling {
-            crate::spelling::deliver();
+            let shown_changed = crate::spelling::deliver();
             for surface in surfaces(app) {
                 let Some(index) = position(app, &surface) else {
                     continue;
                 };
-                app.windows_mut()[index].request_redraw();
+                if shown_changed {
+                    app.windows_mut()[index].request_redraw();
+                }
                 app.event(index, WindowEvent::SpellingAnswered);
             }
         }

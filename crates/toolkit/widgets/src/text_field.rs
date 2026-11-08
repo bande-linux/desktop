@@ -351,10 +351,11 @@ impl Widget for TextField {
         self.editor.select_all();
     }
 
-    fn spelling_answered(&mut self) {
+    fn spelling_answered(&mut self) -> bool {
         let revision = self.editor.revision();
         self.editor.spelling_answered();
         self.changed(revision);
+        self.editor.revision() != revision
     }
 
     fn context_menu(&mut self, cx: &mut Context, _point: Point) -> Option<Menu> {

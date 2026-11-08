@@ -46,29 +46,38 @@ pub fn install_spelling(send: impl Fn(SpellRequest) + 'static) {
     STATE.with_borrow_mut(|state| state.send = Some(Box::new(send)));
 }
 
-pub fn receive_spelling(reply: SpellReply) {
+pub fn receive_spelling(reply: SpellReply) -> bool {
     STATE.with_borrow_mut(|state| match reply {
         SpellReply::Checked(results) => {
-            state.generation += 1;
+            let mut wrong = false;
             for (word, right) in results {
+                wrong |= !right;
                 state.asked.remove(&word);
                 state.verdicts.insert(word, right);
             }
+            if wrong {
+                state.generation += 1;
+            }
+            wrong
         }
         SpellReply::Suggested(word, suggestions) => {
             state.suggestions.insert(word, suggestions);
+            false
         }
         SpellReply::Corrected(word, correction) => {
             state.corrections.insert(word, correction);
+            false
         }
         SpellReply::Rules(rules, replacements) => {
             state.rules = rules;
             state.replacements = replacements;
+            true
         }
         SpellReply::Failed(words) => {
             for word in words {
                 state.asked.remove(&word);
             }
+            false
         }
         SpellReply::Changed => {
             state.generation += 1;
@@ -81,14 +90,16 @@ pub fn receive_spelling(reply: SpellReply) {
             {
                 send(SpellRequest::Rules);
             }
+            true
         }
         SpellReply::Absent => {
             state.send = None;
             state.generation += 1;
             state.verdicts.clear();
             state.asked.clear();
+            true
         }
-    });
+    })
 }
 
 pub(crate) fn generation() -> u64 {

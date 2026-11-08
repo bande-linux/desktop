@@ -11,6 +11,10 @@ const FAILED_FRAME_RETRY: Duration = Duration::from_millis(250);
 const RESTART_DISPLAY_AFTER: Duration = Duration::from_secs(3);
 const GIVE_UP_AFTER: Duration = Duration::from_secs(15);
 const MEASURED_GRACE: Duration = Duration::from_secs(1);
+const JANK_WINDOW: Duration = Duration::from_secs(10);
+const JANK_PERCENT: u64 = 5;
+const LONG_FRAME: Duration = Duration::from_millis(250);
+const JANK_REPORT_GAP: Duration = Duration::from_secs(60 * 60);
 
 const REMEMBERED_RENDERS: usize = 16;
 const TYPICAL_RENDER_WEIGHT: f64 = 0.1;
@@ -301,6 +305,82 @@ pub struct Poll {
     pub presented: Option<Vblank>,
 }
 
+#[derive(Default)]
+struct Jank {
+    since: Option<Duration>,
+    next: Option<u64>,
+    frames: u64,
+    missed: u64,
+    slowest_render: Duration,
+    longest_gap: u64,
+    reported_at: Option<Duration>,
+}
+
+struct Rendered {
+    vblank: Vblank,
+    started: Duration,
+    done: Duration,
+    refresh: Duration,
+}
+
+impl Jank {
+    fn reset(&mut self, since: Option<Duration>) {
+        *self = Self {
+            since,
+            reported_at: self.reported_at,
+            ..Self::default()
+        };
+    }
+
+    fn frame(&mut self, animating: bool, frame: &Rendered) -> Option<(&'static str, String)> {
+        if !animating {
+            self.reset(None);
+            return None;
+        }
+        let since = *self.since.get_or_insert(frame.started);
+        let render = frame.done.saturating_sub(frame.started);
+        self.slowest_render = self.slowest_render.max(render);
+        let late = u64::from(frame.done > frame.vblank.time);
+        let skipped = self
+            .next
+            .map_or(0, |next| frame.vblank.sequence.saturating_sub(next));
+        self.next = Some(frame.vblank.sequence + late + 1);
+        self.frames += 1 + skipped + late;
+        self.missed += skipped + late;
+        self.longest_gap = self.longest_gap.max(1 + skipped + late);
+        let long =
+            frame.refresh * u32::try_from(1 + skipped + late).unwrap_or(u32::MAX) > LONG_FRAME;
+        let window_over = frame.started.saturating_sub(since) >= JANK_WINDOW;
+        let janky = long || (window_over && self.missed * 100 > self.frames * JANK_PERCENT);
+        let due = self
+            .reported_at
+            .is_none_or(|at| frame.started.saturating_sub(at) >= JANK_REPORT_GAP);
+        let report = (janky && due).then(|| {
+            let cause = if self.slowest_render > frame.refresh {
+                "compositor-render"
+            } else {
+                "compositor-schedule"
+            };
+            let detail = format!(
+                r#"{{"frames":{},"missed_frames":{},"slowest_render_ms":{},"longest_frame_ms":{},"refresh_ms":{:.2}}}"#,
+                self.frames,
+                self.missed,
+                self.slowest_render.as_millis(),
+                (frame.refresh * u32::try_from(self.longest_gap).unwrap_or(u32::MAX)).as_millis(),
+                frame.refresh.as_secs_f64() * 1000.0,
+            );
+            (cause, detail)
+        });
+        if report.is_some() {
+            self.reported_at = Some(frame.started);
+        }
+        if janky || window_over {
+            self.reset(Some(frame.started));
+        }
+        report
+    }
+}
+
 pub struct FrameScheduler {
     clock: FrameClock,
     phase: Phase,
@@ -310,6 +390,7 @@ pub struct FrameScheduler {
     asleep_until: Option<Duration>,
     committed: Option<Commit>,
     waiting_since: Option<Duration>,
+    jank: Jank,
 }
 
 impl FrameScheduler {
@@ -323,6 +404,7 @@ impl FrameScheduler {
             asleep_until: None,
             committed: None,
             waiting_since: None,
+            jank: Jank::default(),
         }
     }
 
@@ -424,6 +506,17 @@ impl FrameScheduler {
                         self.phase = Phase::Backoff(started + FAILED_FRAME_RETRY);
                     })?;
                     now = clock();
+                    let rendered = Rendered {
+                        vblank,
+                        started,
+                        done: now,
+                        refresh: self.clock.refresh(),
+                    };
+                    if let Some((cause, detail)) =
+                        self.jank.frame(compositor.is_animating(), &rendered)
+                    {
+                        bande_log::fault::report_with("jank", cause, &detail);
+                    }
                     self.clock.record_render(
                         deadline,
                         started,

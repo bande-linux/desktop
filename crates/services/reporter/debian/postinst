@@ -2,7 +2,7 @@
 set -e
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
 	systemd-tmpfiles --create bande-reporter.conf >/dev/null || true
-	for unit in bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service ; do
+	for unit in bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service bande-reporter-resources.service ; do
 		deb-systemd-helper unmask $unit >/dev/null || true
 		if deb-systemd-helper --quiet was-enabled $unit ; then
 			deb-systemd-helper enable $unit >/dev/null || true
@@ -12,6 +12,6 @@ if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-decon
 	done
 	if [ -d /run/systemd/system ] ; then
 		systemctl --system daemon-reload >/dev/null || true
-		deb-systemd-invoke start bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service >/dev/null || true
+		deb-systemd-invoke start bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service bande-reporter-resources.service >/dev/null || true
 	fi
 fi

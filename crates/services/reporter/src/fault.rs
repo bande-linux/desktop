@@ -211,7 +211,7 @@ fn kernel_states(pid: &str) -> String {
         .collect()
 }
 
-fn user_stacks(pid: &str) -> String {
+pub(crate) fn user_stacks(pid: &str) -> String {
     let Ok(mut child) = Command::new("eu-stack")
         .args(["-p", pid, "-m", "-b", "-n", "48"])
         .stdin(Stdio::null())

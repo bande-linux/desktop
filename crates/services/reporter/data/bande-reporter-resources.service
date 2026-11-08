@@ -1,0 +1,26 @@
+[Unit]
+Description=Bande reports of programs that use too much CPU, wake too often or write too much
+After=systemd-journald.service
+
+[Service]
+ExecStart=/usr/libexec/bande-reporter resources
+Restart=on-failure
+RestartSec=30s
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=64M
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE
+LockPersonality=yes
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectHome=tmpfs
+BindReadOnlyPaths=-/run/user
+ProtectKernelModules=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bande/reports
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

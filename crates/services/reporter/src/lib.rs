@@ -6,6 +6,7 @@ pub mod elfcore;
 pub mod facts;
 pub mod fault;
 pub mod hang;
+pub mod resources;
 pub mod scrub;
 pub mod send;
 pub mod serve;

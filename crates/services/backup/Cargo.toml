@@ -50,6 +50,7 @@ assets = [
     ["target/release/bande-backup-restore", "usr/libexec/", "755"],
     ["target/release/bande-backup-alerts", "usr/libexec/", "755"],
     ["data/bande-backup-alerts.service", "usr/lib/systemd/user/", "644"],
+    ["data/bande-backup-alerts.path", "usr/lib/systemd/user/", "644"],
     ["data/bande-backup.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-backup.timer", "usr/lib/systemd/system/", "644"],
     ["data/org.bande.Backup.conf", "usr/share/dbus-1/system.d/", "644"],

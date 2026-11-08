@@ -10,6 +10,7 @@ use zbus::zvariant::{OwnedValue, Type, Value};
 use zbus::{MatchRule, message};
 
 pub const BUS_NAME: &str = "org.bande.Backup";
+pub const ALERT_FILE: &str = "/run/bande-backup-alert";
 pub const OBJECT_PATH: &str = "/org/bande/Backup";
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type, Value, OwnedValue)]

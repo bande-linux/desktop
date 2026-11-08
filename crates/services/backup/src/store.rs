@@ -57,6 +57,7 @@ pub struct State {
     pub interrupted: bool,
     pub problem: String,
     pub damaged_at: u64,
+    pub problem_since: u64,
     pub full_at: u64,
     pub oldest: u64,
     pub versions: u32,
@@ -117,6 +118,31 @@ pub fn ensure_key() -> io::Result<PathBuf> {
 fn getrandom_fill(buffer: &mut [u8]) -> io::Result<()> {
     let mut file = File::open("/dev/urandom")?;
     io::Read::read_exact(&mut file, buffer)
+}
+
+const READABLE: u32 = 0o644;
+
+pub fn write_alert(problem: &str, name: &str, since: u64) {
+    let path = Path::new(crate::client::ALERT_FILE);
+    if problem.is_empty() {
+        if let Err(error) = fs::remove_file(path)
+            && error.kind() != io::ErrorKind::NotFound
+        {
+            tracing::warn!("cannot clear the backup alert: {error}");
+        }
+        return;
+    }
+    let text = format!("{problem}\n{since}\n{name}\n");
+    if fs::read_to_string(path).is_ok_and(|known| known == text) {
+        return;
+    }
+    let temporary = path.with_extension("new");
+    let written = fs::write(&temporary, &text)
+        .and_then(|()| fs::set_permissions(&temporary, fs::Permissions::from_mode(READABLE)))
+        .and_then(|()| fs::rename(&temporary, path));
+    if let Err(error) = written {
+        tracing::warn!("cannot write the backup alert: {error}");
+    }
 }
 
 pub fn share_password() -> String {

@@ -25,3 +25,16 @@ fn a_drive_plugged_in_while_the_session_is_locked_is_mounted_only_after_unlockin
     let mounted = mounts.recv_timeout(Duration::from_secs(5));
     assert_eq!(mounted.as_deref(), Ok(USB));
 }
+
+#[test]
+fn a_drive_is_mounted_when_udisks_starts_after_automount() {
+    let bus = SessionBus::start().expect("dbus-daemon");
+    let _logind = FakeLogind::start(&bus).expect("logind");
+    let connection = bus.connect().expect("automount connection");
+    let _automounter = Automounter::start(&connection, &connection).expect("automounter");
+
+    let udisks = FakeUdisks::start(&bus).expect("udisks");
+    let mounts = udisks.plug_in(USB).expect("plug in");
+    let mounted = mounts.recv_timeout(Duration::from_secs(5));
+    assert_eq!(mounted.as_deref(), Ok(USB));
+}

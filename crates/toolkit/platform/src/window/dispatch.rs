@@ -291,6 +291,7 @@ impl Dispatch<WlCallback, ()> for State {
     ) {
         if let wl_callback::Event::Done { .. } = event {
             state.frame_pending = false;
+            state.frame_done = true;
         }
     }
 }

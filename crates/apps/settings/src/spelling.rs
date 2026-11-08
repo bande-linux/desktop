@@ -21,7 +21,7 @@ const OBJECT_PATH: &str = "/org/bande/Spell";
 const SWITCHES: [(&str, bande_l10n::Text); 6] = [
     ("spelling", text!("Check spelling")),
     ("autocorrect", text!("Correct spelling automatically")),
-    ("capitalise", text!("Capitalise words automatically")),
+    ("capitalise", text!("Capitalize words automatically")),
     ("double-space", text!("Add period with double-space")),
     ("smart-quotes", text!("Use smart quotes and dashes")),
     ("links", text!("Show web and email addresses as links")),

@@ -966,8 +966,8 @@ pub fn show(request: &PrintRequest) -> ExitCode {
     let sides_id = sides_popup.id();
     let color_signals = Rc::clone(&signals);
     let color = SegmentedControl::new(
-        &tr!("Colour"),
-        &[tr!("Colour"), tr!("Black & White")],
+        &tr!("Color"),
+        &[tr!("Color"), tr!("Black & White")],
         Some(0),
         move |index| push(&color_signals, Signal::Color(index == 0)),
     );
@@ -981,7 +981,7 @@ pub fn show(request: &PrintRequest) -> ExitCode {
             FormLine::Row(tr!("Paper"), Box::new(paper_popup)),
             FormLine::Row(tr!("Orientation"), Box::new(orientation)),
             FormLine::Row(tr!("Two-sided"), Box::new(sides_popup)),
-            FormLine::Row(tr!("Colour"), Box::new(color)),
+            FormLine::Row(tr!("Color"), Box::new(color)),
         ],
     );
     let panel_x = width - PANEL_WIDTH - MARGIN;

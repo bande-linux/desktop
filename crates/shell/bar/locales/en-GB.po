@@ -9,3 +9,17 @@ msgstr ""
 
 msgid "Control Center"
 msgstr "Control Centre"
+
+msgid "Trash"
+msgstr "Bin"
+
+msgid "Permanently erase the item in the Trash?"
+msgid_plural "Permanently erase the {count} items in the Trash?"
+msgstr[0] "Permanently erase the item in the Bin?"
+msgstr[1] "Permanently erase the {count} items in the Bin?"
+
+msgid "Empty Trash"
+msgstr "Empty Bin"
+
+msgid "Empty Trash…"
+msgstr "Empty Bin…"

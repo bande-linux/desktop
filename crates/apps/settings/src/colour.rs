@@ -54,8 +54,8 @@ fn reason(error: &IccError) -> String {
     match error {
         IccError::TooShort => tr!("it is too short to be an ICC profile"),
         IccError::NotADisplayProfile => tr!("it is not a display profile"),
-        IccError::NotRgb => tr!("it does not describe RGB colours"),
-        IccError::NotXyz => tr!("its colours are not described in XYZ"),
+        IccError::NotRgb => tr!("it does not describe RGB colors"),
+        IccError::NotXyz => tr!("its colors are not described in XYZ"),
         IccError::LookupTables => {
             tr!("it uses lookup tables, and only matrix-and-curve profiles are supported")
         }
@@ -72,10 +72,10 @@ pub(crate) enum Added {
 
 pub(crate) fn add(session: &Connection) -> Added {
     let filter = (
-        tr!("Colour profiles"),
+        tr!("Color profiles"),
         vec![(0u32, "*.icc".to_owned()), (0u32, "*.icm".to_owned())],
     );
-    let chosen = match choose_file(session, &tr!("Choose a Colour Profile"), Some(filter)) {
+    let chosen = match choose_file(session, &tr!("Choose a Color Profile"), Some(filter)) {
         Ok(Some(chosen)) => chosen,
         Ok(None) => return Added::Cancelled,
         Err(error) => return Added::Refused(error.to_string()),

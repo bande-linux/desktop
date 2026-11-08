@@ -221,7 +221,7 @@ impl PaneId {
             Self::Bluetooth => tr!("Connect headphones, keyboards and other devices"),
             Self::Network => tr!("Wired connections and VPNs"),
             Self::Appearance => {
-                tr!("Light, dark or automatic, accent colour, wallpaper and text size")
+                tr!("Light, dark or automatic, accent color, wallpaper and text size")
             }
             Self::Bar => tr!("Where the taskbar sits and how it behaves"),
             Self::Notifications => tr!("Banners and Notification Center"),
@@ -230,7 +230,7 @@ impl PaneId {
                 tr!("Make the screen, sound, keyboard and pointer easier to use")
             }
             Self::Displays => tr!("Arrangement, resolution and size of each display"),
-            Self::NightLight => tr!("Warmer colours after dark"),
+            Self::NightLight => tr!("Warmer colors after dark"),
             Self::Sound => tr!("Output, input and sound effects"),
             Self::Keyboard => tr!("Input sources, key repeat and modifier keys"),
             Self::KeyboardShortcuts => tr!("The keys that work everywhere on the desktop"),
@@ -1007,7 +1007,7 @@ fn desktop_panes() -> Vec<Pane> {
                     None,
                     vec![setting(
                         SettingId::Accent,
-                        tr!("Accent colour"),
+                        tr!("Accent color"),
                         tr!("accent, highlight, selection, color, colour, folders, tint"),
                         Kind::Swatches(keyword_choices(vec![
                             (tr!("Ultramarine"), "ultramarine"),
@@ -1447,7 +1447,7 @@ fn displays_pane() -> Pane {
                     ),
                     setting(
                         SettingId::ColourProfile,
-                        tr!("Colour profile"),
+                        tr!("Color profile"),
                         tr!("colour, color, profile, icc, srgb, p3, wide gamut, calibration"),
                         Kind::ColourProfiles,
                     ),

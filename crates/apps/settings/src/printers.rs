@@ -567,7 +567,7 @@ impl SettingsView {
         } else if self.forgetting.as_ref() == Some(&forget) {
             actions.push(self.confirm_row(
                 &tr!("Remove “{name}”?", name = printer.name.clone()),
-                &tr!("Documents waiting for it are cancelled. You can add it again later."),
+                &tr!("Documents waiting for it are canceled. You can add it again later."),
                 &tr!("Remove"),
             ));
         } else {

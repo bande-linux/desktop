@@ -6,7 +6,7 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::Duration;
 
-use bande_packages::{Client, Info, Mode};
+use bande_packages::Client;
 
 use bande_volumes::udisks::{BLOCK, DRIVE, FILESYSTEM, Objects, PARTITION, SWAPSPACE};
 use zbus::blocking::Connection;
@@ -109,18 +109,9 @@ fn check_place(url: &str, user: &str, share_password: &str) -> String {
 fn install_package(package: &str) -> Result<(), String> {
     let system = Connection::system().map_err(|error| error.to_string())?;
     let client = Client::new(&system);
-    let ids: Vec<String> = client
-        .resolve(&[package.to_owned()])
-        .map_err(|error| error.to_string())?
-        .into_iter()
-        .filter(|found| found.info == Info::Available)
-        .map(|found| found.id)
-        .collect();
-    if !ids.is_empty() {
-        client
-            .install(&ids, Mode::Apply, &|_| {})
-            .map_err(|error| error.to_string())?;
-    }
+    client
+        .install_missing(&[package])
+        .map_err(|error| error.to_string())?;
     if package == "nfs-common" {
         let quiet = Process::new("systemctl")
             .args(["disable", "--now", "rpcbind.socket", "rpcbind.service"])

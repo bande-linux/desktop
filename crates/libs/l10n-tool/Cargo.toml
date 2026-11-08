@@ -1,0 +1,16 @@
+[package]
+name = "bande-l10n-tool"
+description = "Checks translations against the code's English and writes each program's gettext catalogs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-l10n-source = { workspace = true, features = ["syntax"] }
+proc-macro2.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

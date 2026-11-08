@@ -1,0 +1,18 @@
+[package]
+name = "bande-l10n-source"
+description = "Catalog format, plural rules and placeholders shared by Bande's localisation, its macros and its tool"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[features]
+syntax = ["dep:proc-macro2", "dep:syn"]
+
+[dependencies]
+proc-macro2 = { workspace = true, optional = true, features = ["span-locations"] }
+syn = { workspace = true, optional = true }
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "bande-l10n"
-description = "Fluent localisation for Bande programs"
+description = "Bande programs in the user's language: English keys looked up in gettext catalogs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,9 +9,8 @@ repository.workspace = true
 
 [dependencies]
 bande-l10n-macros.workspace = true
-fluent-bundle.workspace = true
+bande-l10n-source.workspace = true
 tracing.workspace = true
-unic-langid.workspace = true
 
 [lints]
 workspace = true

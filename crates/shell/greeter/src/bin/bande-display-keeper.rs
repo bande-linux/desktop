@@ -191,9 +191,11 @@ fn run(card: &str) -> io::Result<()> {
     let path = Path::new("/dev/dri").join(card);
     let file = OpenOptions::new().read(true).write(true).open(path)?;
     let mut resources = CardResources::default();
-    ioctl(&file, DRM_IOCTL_MODE_GETRESOURCES, &mut resources)?;
-    if resources.connector_count == 0 {
-        return Ok(());
+    match ioctl(&file, DRM_IOCTL_MODE_GETRESOURCES, &mut resources) {
+        Err(error) if error.raw_os_error() == Some(libc::EOPNOTSUPP) => return Ok(()),
+        Err(error) => return Err(error),
+        Ok(()) if resources.connector_count == 0 => return Ok(()),
+        Ok(()) => {}
     }
     if let Err(error) = ioctl(&file, DRM_IOCTL_DROP_MASTER, std::ptr::null_mut::<u8>())
         && error.raw_os_error() != Some(libc::EINVAL)

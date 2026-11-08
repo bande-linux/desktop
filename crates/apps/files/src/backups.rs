@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use bande_backup::client::{
-    Browsing, CannotBrowse, VERSIONS_ROOT, in_version, live_path, version_times,
+    Browsing, CannotBrowse, in_version, is_version_path, live_path, version_times,
 };
 use bande_datetime::{DateFormats, local_zone};
 use bande_fs::{Action, Purpose, Task};
@@ -48,7 +48,7 @@ impl FilesView {
     pub(crate) fn in_backup(&self) -> bool {
         self.browser
             .current_folder()
-            .is_some_and(|folder| folder.starts_with(VERSIONS_ROOT))
+            .is_some_and(|folder| is_version_path(&folder))
     }
 
     pub(crate) fn browse_backups(&mut self) {

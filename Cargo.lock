@@ -489,6 +489,7 @@ dependencies = [
  "bande-l10n",
  "bande-log",
  "bande-notify",
+ "bande-packages",
  "bande-volumes",
  "bande-xdg",
  "blocking",

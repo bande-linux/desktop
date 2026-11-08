@@ -4,12 +4,13 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
+use bande_volumes::force_unmount;
 use serde::Serialize;
 
 use crate::disk::{self, REPOSITORIES};
 use crate::restic::{Exit, Progress, Repository, Stopper};
 use crate::source::{self, EXCLUDED};
-use crate::store::SecretFile;
+use crate::store::{Destination, SecretFile};
 
 const KEPT_FROM_THE_NEW_SYSTEM: [&str; 3] = ["/etc/fstab", "/etc/crypttab", "/etc/kernel/cmdline"];
 const OPEN_TO_ALL: u32 = 0o1777;
@@ -17,7 +18,7 @@ const SYSTEM_FOLDER: u32 = 0o755;
 const WRONG_PASSWORD: u8 = 2;
 const SOME_FILES_LOST: u8 = 3;
 const FAILED: u8 = 1;
-const USAGE: &str = "usage: bande-backup-restore list | restore --uuid UUID --filesystem TYPE --machine ID --target DIR [--keep PATH]... [--time UNIX-SECONDS]\n";
+const USAGE: &str = "usage: bande-backup-restore list | restore (--uuid UUID --filesystem TYPE | --url URL [--user NAME]) --machine ID --target DIR [--keep PATH]... [--time UNIX-SECONDS]\n";
 const MOUNT_OPTIONS: &str = "ro,nosuid,nodev,noexec,noatime";
 
 #[derive(Serialize)]
@@ -99,6 +100,8 @@ fn list() -> io::Result<Vec<Found>> {
 }
 
 struct RestoreRequest {
+    url: Option<String>,
+    user: String,
     uuid: String,
     filesystem: String,
     machine: String,
@@ -109,6 +112,8 @@ struct RestoreRequest {
 
 fn parse(args: &[String]) -> Option<RestoreRequest> {
     let mut request = RestoreRequest {
+        url: None,
+        user: String::new(),
         uuid: String::new(),
         filesystem: String::new(),
         machine: String::new(),
@@ -120,6 +125,8 @@ fn parse(args: &[String]) -> Option<RestoreRequest> {
     while let Some(flag) = args.next() {
         let value = args.next()?.clone();
         match flag.as_str() {
+            "--url" => request.url = Some(value),
+            "--user" => request.user = value,
             "--uuid" => request.uuid = value,
             "--filesystem" => request.filesystem = value,
             "--machine" => request.machine = value,
@@ -129,8 +136,8 @@ fn parse(args: &[String]) -> Option<RestoreRequest> {
             _ => return None,
         }
     }
-    let complete = !request.uuid.is_empty()
-        && !request.filesystem.is_empty()
+    let complete = (request.url.is_some()
+        || (!request.uuid.is_empty() && !request.filesystem.is_empty()))
         && !request.machine.is_empty()
         && request.target.is_absolute()
         && request.target.parent().is_some();
@@ -199,7 +206,7 @@ fn recreate_excluded_folders(target: &Path) -> io::Result<()> {
 
 fn rebuild_boot(target: &Path) {
     const SCRIPT: &str = r#"for pseudo in proc sys dev run; do mount --rbind "/$pseudo" "$1/$pseudo"; done
-chroot "$1" /bin/sh -c 'command -v update-initramfs >/dev/null && update-initramfs -u -k all; command -v update-grub >/dev/null && update-grub'"#;
+chroot "$1" /bin/sh -c 'if command -v update-initramfs >/dev/null; then update-initramfs -u -k all; elif command -v dracut >/dev/null; then dracut --regenerate-all --force; fi; command -v update-grub >/dev/null && update-grub'"#;
     let done = Command::new("unshare")
         .args([
             "--mount",
@@ -220,60 +227,97 @@ chroot "$1" /bin/sh -c 'command -v update-initramfs >/dev/null && update-initram
     }
 }
 
-fn restore(request: &RestoreRequest, password: &str) -> Result<Exit, io::Error> {
+fn restore_from(repository: &Repository, request: &RestoreRequest) -> io::Result<Exit> {
+    let stopper = Stopper::default();
+    match repository.opens(&stopper)? {
+        Exit::Done => {}
+        other => return Ok(other),
+    }
+    let snapshot = snapshot_at(repository, &request.machine, request.time)?;
+    let kept = stash(&request.target, &request.keep);
+    let mut args = vec![
+        "restore".to_owned(),
+        snapshot,
+        "--json".to_owned(),
+        "--no-cache".to_owned(),
+        "--no-lock".to_owned(),
+        "--delete".to_owned(),
+        "--verify".to_owned(),
+        "--target".to_owned(),
+        request.target.to_string_lossy().into_owned(),
+    ];
+    for path in EXCLUDED
+        .iter()
+        .map(|path| (*path).to_owned())
+        .chain(mounts_below(&request.target))
+        .chain(request.keep.iter().cloned())
+    {
+        args.push("--exclude".to_owned());
+        args.push(path);
+    }
+    let finished = repository.follow_progress(&stopper, &args, |progress: Progress| {
+        println!("{{\"percent\":{:.4}}}", progress.percent_done);
+        if let Err(error) = io::stdout().flush() {
+            tracing::warn!("cannot report progress: {error}");
+        }
+    })?;
+    if finished.exit != Exit::Done {
+        tracing::error!("restic restore: {}", finished.output);
+        eprintln!("{}", finished.output);
+    }
+    for (path, bytes) in &kept {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, bytes)?;
+    }
+    recreate_excluded_folders(&request.target)?;
+    rebuild_boot(&request.target);
+    Ok(finished.exit)
+}
+
+fn restore(request: &RestoreRequest, share_password: &str, password: &str) -> io::Result<Exit> {
     let secret = SecretFile::new(password)?;
-    with_mount(&request.uuid, &request.filesystem, |mount_point| {
-        let repository = Repository::new(
-            mount_point.join(REPOSITORIES).join(&request.machine),
-            secret.path(),
-        );
-        let stopper = Stopper::default();
-        match repository.opens(&stopper)? {
-            Exit::Done => {}
-            other => return Ok(other),
-        }
-        let snapshot = snapshot_at(&repository, &request.machine, request.time)?;
-        let kept = stash(&request.target, &request.keep);
-        let mut args = vec![
-            "restore".to_owned(),
-            snapshot,
-            "--json".to_owned(),
-            "--no-cache".to_owned(),
-            "--no-lock".to_owned(),
-            "--delete".to_owned(),
-            "--verify".to_owned(),
-            "--target".to_owned(),
-            request.target.to_string_lossy().into_owned(),
-        ];
-        for path in EXCLUDED
-            .iter()
-            .map(|path| (*path).to_owned())
-            .chain(mounts_below(&request.target))
-            .chain(request.keep.iter().cloned())
-        {
-            args.push("--exclude".to_owned());
-            args.push(path);
-        }
-        let finished = repository.follow_progress(&stopper, &args, |progress: Progress| {
-            println!("{{\"percent\":{:.4}}}", progress.percent_done);
-            if let Err(error) = io::stdout().flush() {
-                tracing::warn!("cannot report progress: {error}");
-            }
+    let Some(url) = &request.url else {
+        return with_mount(&request.uuid, &request.filesystem, |mount_point| {
+            let repository = Repository::new(
+                mount_point.join(REPOSITORIES).join(&request.machine),
+                secret.path(),
+            );
+            restore_from(&repository, request)
         })?;
-        if finished.exit != Exit::Done {
-            tracing::error!("restic restore: {}", finished.output);
-            eprintln!("{}", finished.output);
-        }
-        for (path, bytes) in &kept {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(path, bytes)?;
-        }
-        recreate_excluded_folders(&request.target)?;
-        rebuild_boot(&request.target);
-        Ok(finished.exit)
-    })?
+    };
+    let place =
+        disk::parse_network(url).ok_or_else(|| io::Error::other("not a network address"))?;
+    let destination = Destination::Network {
+        url: url.clone(),
+        user: request.user.clone(),
+        name: url.clone(),
+    };
+    disk::prepare_run_dir()?;
+    let mount_point = Path::new(disk::RUN_DIR).join("recovery");
+    fs::create_dir_all(&mount_point)?;
+    if !destination.is_rest() {
+        place.mount_at(&mount_point, &request.user, share_password)?;
+    }
+    let environment = if destination.is_rest() {
+        vec![
+            ("RESTIC_REST_USERNAME", request.user.clone()),
+            ("RESTIC_REST_PASSWORD", share_password.to_owned()),
+        ]
+    } else {
+        vec![("GODEBUG", "asyncpreemptoff=1".to_owned())]
+    };
+    let repository = Repository::new(
+        destination.repository_location(&mount_point, &request.machine),
+        secret.path(),
+    )
+    .with_environment(environment);
+    let result = restore_from(&repository, request);
+    if !destination.is_rest() {
+        force_unmount(&mount_point);
+    }
+    result
 }
 
 pub fn main(args: Vec<String>) -> ExitCode {
@@ -300,7 +344,20 @@ pub fn main(args: Vec<String>) -> ExitCode {
                 eprintln!("{error}");
                 return ExitCode::from(FAILED);
             }
-            match restore(&request, password.trim_end_matches('\n')) {
+            let mut share_password = String::new();
+            if request.url.is_some() {
+                share_password.clone_from(&password);
+                password.clear();
+                if let Err(error) = io::stdin().lock().read_line(&mut password) {
+                    eprintln!("{error}");
+                    return ExitCode::from(FAILED);
+                }
+            }
+            match restore(
+                &request,
+                share_password.trim_end_matches('\n'),
+                password.trim_end_matches('\n'),
+            ) {
                 Ok(Exit::Done) => ExitCode::SUCCESS,
                 Ok(Exit::WrongPassword) => ExitCode::from(WRONG_PASSWORD),
                 Ok(Exit::Failed | Exit::SomeFilesUnreadable) => ExitCode::from(SOME_FILES_LOST),

@@ -371,6 +371,7 @@ pub enum Action {
     PasteClip(u64),
     RemoveClip(u64),
     ClearClips,
+    Move,
     Close,
 }
 

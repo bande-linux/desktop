@@ -23,6 +23,7 @@ use crate::window::Window;
 #[derive(Debug, Clone, Copy)]
 enum Operation {
     Move { origin: Point<i32, Logical> },
+    Layer { origin: Point<i32, Logical> },
     Detach,
     Resize(ResizeEdge),
 }
@@ -42,6 +43,7 @@ enum Undo {
         restore: Option<Rectangle<i32, Logical>>,
     },
     Resize,
+    Layer(Option<Point<i32, Logical>>),
 }
 
 pub(crate) struct HeldWindow {
@@ -220,6 +222,30 @@ impl State {
         }
     }
 
+    pub(crate) fn request_layer_move(
+        &mut self,
+        surface: &WlSurface,
+        seat: &WlSeat,
+        serial: Serial,
+    ) {
+        let Some(mut start) = self.grab_start(seat, serial, surface) else {
+            return;
+        };
+        if let Some(pointer) = self.seat.get_pointer() {
+            start.location = pointer.current_location();
+        }
+        let Some((origin, remembered)) = self.begin_layer_move(surface) else {
+            return;
+        };
+        self.start_grab(
+            start,
+            surface,
+            Operation::Layer { origin },
+            Undo::Layer(remembered),
+            serial,
+        );
+    }
+
     pub(crate) fn request_resize(
         &mut self,
         surface: &WlSurface,
@@ -327,7 +353,7 @@ impl State {
             undo,
             edge: match operation {
                 Operation::Resize(edge) => Some(edge),
-                Operation::Move { .. } | Operation::Detach => None,
+                Operation::Move { .. } | Operation::Layer { .. } | Operation::Detach => None,
             },
         });
         self.reload_cursor();
@@ -378,6 +404,7 @@ impl State {
                 self.resize_to(surface, Point::default());
                 self.end_resize(surface);
             }
+            Undo::Layer(remembered) => self.put_layer_back(surface, remembered),
             Undo::Move {
                 placement,
                 workspace,
@@ -451,6 +478,9 @@ impl PointerGrab<State> for WindowGrab {
             Some((surface, Operation::Move { origin })) => {
                 data.move_window_to(surface, *origin + delta);
                 data.track_snap(surface, event.location, event.time);
+            }
+            Some((surface, Operation::Layer { origin })) => {
+                data.move_layer_to(surface, *origin + delta);
             }
             Some((surface, Operation::Resize(_))) => data.resize_to(surface, delta),
             Some((_, Operation::Detach)) | None => {}
@@ -579,6 +609,7 @@ impl PointerGrab<State> for WindowGrab {
         match operation {
             Operation::Resize(_) => data.end_resize(surface),
             Operation::Move { .. } => data.finish_move(surface),
+            Operation::Layer { .. } => data.remember_layer_places(),
             Operation::Detach => {}
         }
     }

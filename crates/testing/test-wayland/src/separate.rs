@@ -76,6 +76,7 @@ pub fn act_as_separate_app() -> bool {
         queue,
         globals,
         windows: Vec::new(),
+        panel: None,
     };
     for order in std::io::stdin().lock().lines() {
         let order = order.expect("order");

@@ -6,6 +6,7 @@ use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
 use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Offer, Placement};
 use bande_protocols::client::bande_shell_v1::{self, BandeShellV1, SessionEnd};
 use wayland_client::protocol::wl_registry::WlRegistry;
+use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
@@ -30,7 +31,8 @@ const LOOK_UP_ID: &str = "org.bande.Lookup";
 const LOOK_UP_PATH: &str = "/org/bande/Lookup";
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
-pub(crate) const SHELL_VERSION: u32 = 6;
+pub(crate) const MOVE_LAYER_SINCE: u32 = 7;
+pub(crate) const SHELL_VERSION: u32 = 7;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -246,8 +248,17 @@ impl Window {
         self.flush()
     }
 
-    pub fn set_scrim(&mut self, opacity: f32) -> Result<(), WindowError> {
-        self.shell()?.set_scrim(&self.surface, f64::from(opacity));
+    pub fn dismiss_on_press_outside(&mut self) -> Result<(), WindowError> {
+        self.shell()?.dismiss_on_press_outside(&self.surface);
+        self.flush()
+    }
+
+    pub(crate) fn move_layer(&self, seat: &WlSeat, serial: u32) -> Result<(), WindowError> {
+        let shell = self.shell()?;
+        if shell.version() < MOVE_LAYER_SINCE {
+            return Err(WindowError::Missing("bande_shell_v1 move_layer"));
+        }
+        shell.move_layer(&self.surface, seat, serial);
         Ok(())
     }
 
@@ -501,9 +512,9 @@ impl Dispatch<BandeShellV1, ()> for State {
         match event {
             bande_shell_v1::Event::Ping { serial } => shell.pong(serial),
             bande_shell_v1::Event::ShowLauncher => state.events.push(WindowEvent::ShowLauncher),
-            bande_shell_v1::Event::ScrimPressed { surface } => {
+            bande_shell_v1::Event::PressedOutside { surface } => {
                 if state.own_surface.as_ref() == Some(&surface) {
-                    state.events.push(WindowEvent::ScrimPressed);
+                    state.events.push(WindowEvent::PressedOutside);
                 }
             }
             bande_shell_v1::Event::OpenLauncher {

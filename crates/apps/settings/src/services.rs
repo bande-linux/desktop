@@ -567,7 +567,7 @@ pub fn follow_bluetooth(
         tracing::warn!("cannot pair from Settings: {error}");
     }
     let (sender, receiver) = mpsc::channel();
-    let bluetooth = Bluetooth::new(system);
+    let bluetooth = Bluetooth::new(&crate::follow::waiting_system(system));
     let bus = system.clone();
     spawn("bluetooth-worker", move || {
         let shown = Arc::new(AtomicU64::new(0));

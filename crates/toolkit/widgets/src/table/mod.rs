@@ -1070,6 +1070,9 @@ impl Table {
                 .is_some_and(|key| self.expanded.contains(key));
             return self.set_expanded(cx, row, !expanded, pointer.modifiers.alt);
         }
+        if pointer.button == PointerButton::Secondary && self.sidebar {
+            return index.is_some();
+        }
         if pointer.button == PointerButton::Secondary {
             let on_selection =
                 index.is_some_and(|index| self.selected.get(index).copied().unwrap_or(false));
@@ -1626,8 +1629,16 @@ impl Widget for Table {
         heading.button.as_ref().map(|button| button.name.as_str())
     }
 
-    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
-        self.menu_keys = self.selection();
+    fn context_menu(&mut self, cx: &mut Context, point: Point) -> Option<Menu> {
+        self.menu_keys = match self.sidebar {
+            true => self
+                .row_under(cx, point)
+                .and_then(|index| self.key_at(index))
+                .map(str::to_owned)
+                .into_iter()
+                .collect(),
+            false => self.selection(),
+        };
         (self.menu)(&self.menu_keys)
     }
 

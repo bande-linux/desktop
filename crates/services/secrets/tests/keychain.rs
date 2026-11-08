@@ -294,6 +294,74 @@ fn an_unlock_that_is_cancelled_or_cannot_be_asked_opens_nothing() {
     assert!(collection_locked(&client));
 }
 
+const ORDINARY_CLIENT: &str = "BANDE_SECRETS_TEST_LOGIN_SOCKET";
+
+fn send_login_message(socket: &Path) -> Vec<u8> {
+    let mut stream = UnixStream::connect(socket).unwrap();
+    let password = PASSWORD.as_bytes();
+    let mut message = vec![1];
+    message.extend_from_slice(&(password.len() as u32).to_le_bytes());
+    message.extend_from_slice(password);
+    let _ = stream.write_all(&message);
+    let _ = stream.shutdown(std::net::Shutdown::Write);
+    let mut answer = Vec::new();
+    let _ = stream.read_to_end(&mut answer);
+    answer
+}
+
+fn send_as_an_ordinary_process(socket: &Path) -> Vec<u8> {
+    if !rustix::process::geteuid().is_root() {
+        return send_login_message(socket);
+    }
+    use std::os::unix::process::CommandExt;
+    let nobody = 65534;
+    let place = tempfile::tempdir().unwrap();
+    std::fs::set_permissions(place.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(
+        socket.parent().unwrap(),
+        std::fs::Permissions::from_mode(0o711),
+    )
+    .unwrap();
+    std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o666)).unwrap();
+    let client = place.path().join("client");
+    std::fs::copy(std::env::current_exe().unwrap(), &client).unwrap();
+    std::fs::set_permissions(&client, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let output = std::process::Command::new(&client)
+        .args([
+            "--exact",
+            "an_ordinary_process_sends_a_login_message",
+            "--nocapture",
+        ])
+        .env(ORDINARY_CLIENT, socket)
+        .current_dir("/")
+        .gid(nobody)
+        .uid(nobody)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let (_, answer) = stdout
+        .split_once("answer:[")
+        .expect("the ordinary process reports its answer");
+    let (answer, _) = answer.split_once(']').unwrap();
+    answer
+        .split(',')
+        .filter(|byte| !byte.is_empty())
+        .map(|byte| byte.parse().unwrap())
+        .collect()
+}
+
+#[test]
+fn an_ordinary_process_sends_a_login_message() {
+    let Some(socket) = std::env::var_os(ORDINARY_CLIENT) else {
+        return;
+    };
+    assert!(!rustix::process::geteuid().is_root());
+    let answer = send_login_message(Path::new(&socket));
+    let answer: Vec<String> = answer.iter().map(u8::to_string).collect();
+    println!("answer:[{}]", answer.join(","));
+}
+
 #[test]
 fn only_root_can_pass_a_login_password_and_a_wrong_old_password_changes_nothing() {
     let bus = SessionBus::start().unwrap();
@@ -315,15 +383,7 @@ fn only_root_can_pass_a_login_password_and_a_wrong_old_password_changes_nothing(
         )
         .detach();
 
-    let mut stream = UnixStream::connect(&socket).unwrap();
-    let password = PASSWORD.as_bytes();
-    let mut message = vec![1];
-    message.extend_from_slice(&(password.len() as u32).to_le_bytes());
-    message.extend_from_slice(password);
-    let _ = stream.write_all(&message);
-    let _ = stream.shutdown(std::net::Shutdown::Write);
-    let mut answer = Vec::new();
-    let _ = stream.read_to_end(&mut answer);
+    let answer = send_as_an_ordinary_process(&socket);
     assert!(answer.is_empty(), "an ordinary process gets no answer");
     let client = bus.connect().unwrap();
     assert!(collection_locked(&client));

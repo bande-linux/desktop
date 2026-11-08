@@ -12,6 +12,7 @@ use crate::config::Config;
 use crate::spool::{MANIFEST, STATE, Status, Stored};
 
 const PATH: &str = "/v1/reports";
+const CHECKINS: &str = "/v1/checkins";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(120);
 const ANSWER_LIMIT: u64 = 64 * 1024;
@@ -19,6 +20,7 @@ const LONGEST_RETRY_AFTER: u64 = 24 * 60 * 60;
 
 pub enum Outcome {
     Stored,
+    NotSupported,
     BadFormat,
     Unauthorized,
     TooLarge,
@@ -132,6 +134,7 @@ fn outcome_of(answer: &str) -> io::Result<Outcome> {
             Outcome::BadFormat
         }
         401 | 403 => Outcome::Unauthorized,
+        404 => Outcome::NotSupported,
         413 => Outcome::TooLarge,
         _ => Outcome::Later(wait),
     })
@@ -141,9 +144,10 @@ fn post(
     config: &Config,
     target: &Target,
     key: &str,
-    boundary: &str,
+    request: (&str, &str),
     body: &[u8],
 ) -> io::Result<String> {
+    let (path, headers) = request;
     let timeouts = Timeouts {
         connect: CONNECT_TIMEOUT,
         transfer: TRANSFER_TIMEOUT,
@@ -152,7 +156,7 @@ fn post(
         bande_https::connect(&target.host, target.port, config.ca.as_deref(), timeouts)?;
     write!(
         stream,
-        "POST {PATH} HTTP/1.1\r\nHost: {}:{}\r\nAuthorization: Bearer {key}\r\nContent-Type: multipart/form-data; boundary={boundary}\r\nContent-Encoding: gzip\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "POST {path} HTTP/1.1\r\nHost: {}:{}\r\nAuthorization: Bearer {key}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
         target.host,
         target.port,
         body.len()
@@ -186,7 +190,11 @@ pub fn send(config: &Config, report: &Stored) -> Outcome {
                 return Outcome::BadFormat;
             }
         };
-        let outcome = post(config, &target, key, &boundary(&report.id), &body)
+        let headers = format!(
+            "Content-Type: multipart/form-data; boundary={}\r\nContent-Encoding: gzip\r\n",
+            boundary(&report.id)
+        );
+        let outcome = post(config, &target, key, (PATH, &headers), &body)
             .and_then(|answer| outcome_of(&answer));
         match outcome {
             Ok(Outcome::TooLarge) => match names.last() {
@@ -196,6 +204,27 @@ pub fn send(config: &Config, report: &Stored) -> Outcome {
             Ok(outcome) => return outcome,
             Err(error) => return Outcome::NoRoute(error),
         }
+    }
+}
+
+pub fn checkin(config: &Config, payload: &Value) -> Outcome {
+    let Some(target) = config
+        .server()
+        .and_then(|(endpoint, key)| Some((parse_endpoint(endpoint)?, key)))
+    else {
+        return Outcome::Unauthorized;
+    };
+    let (target, key) = target;
+    let body = match serde_json::to_vec(payload) {
+        Ok(body) => body,
+        Err(error) => return Outcome::NoRoute(error.into()),
+    };
+    let headers = "Content-Type: application/json\r\n";
+    match post(config, &target, key, (CHECKINS, headers), &body)
+        .and_then(|answer| outcome_of(&answer))
+    {
+        Ok(outcome) => outcome,
+        Err(error) => Outcome::NoRoute(error),
     }
 }
 

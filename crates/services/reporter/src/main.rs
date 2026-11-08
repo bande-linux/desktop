@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
+use bande_reporter::checkin;
 use bande_reporter::config::Config;
 use bande_reporter::send::{self, Outcome};
 use bande_reporter::spool::{Attachment, Spool, Status};
@@ -29,7 +30,58 @@ enum Pause {
     UntilConfigChanges,
 }
 
+fn check_in(spool: &Spool, config: &Config, retry: Duration) -> Option<Pause> {
+    if !spool.checkin_waiting() {
+        return None;
+    }
+    if config.sends_automatically() {
+        for day in checkin::due_days(spool.root()) {
+            let payload = match checkin::payload(spool, day) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    tracing::warn!("cannot make the daily check-in: {error}");
+                    break;
+                }
+            };
+            if checkin::is_empty(&payload) {
+                if let Err(error) = checkin::sent(spool.root(), day) {
+                    tracing::warn!("cannot note the check-in for {day}: {error}");
+                    break;
+                }
+                continue;
+            }
+            let recorded = match send::checkin(config, &payload) {
+                Outcome::Stored => checkin::sent(spool.root(), day),
+                Outcome::BadFormat | Outcome::TooLarge => {
+                    tracing::warn!("the server refused the check-in for {day}");
+                    checkin::sent(spool.root(), day)
+                }
+                Outcome::NotSupported => {
+                    if let Err(error) = checkin::not_yet_supported(spool.root()) {
+                        tracing::warn!("cannot note when to check in again: {error}");
+                    }
+                    break;
+                }
+                Outcome::Unauthorized => return Some(Pause::UntilConfigChanges),
+                Outcome::Later(wait) => return Some(Pause::Server(wait.unwrap_or(retry))),
+                Outcome::NoRoute(_) => return Some(Pause::Network),
+            };
+            if let Err(error) = recorded {
+                tracing::warn!("cannot note the check-in for {day}: {error}");
+                break;
+            }
+        }
+    }
+    if let Err(error) = spool.unqueue_checkin() {
+        tracing::warn!("cannot take the check-in out of the outbox: {error}");
+    }
+    None
+}
+
 fn attempt(spool: &Spool, config: &Config, waiting: &[String], retry: Duration) -> Pause {
+    if let Some(pause) = check_in(spool, config, retry) {
+        return pause;
+    }
     for id in waiting {
         let Ok(report) = spool.read(id) else {
             settle(spool, id, Status::Rejected);
@@ -46,6 +98,7 @@ fn attempt(spool: &Spool, config: &Config, waiting: &[String], retry: Duration) 
                 return Pause::UntilConfigChanges;
             }
             Outcome::Later(wait) => return Pause::Server(wait.unwrap_or(retry)),
+            Outcome::NotSupported => return Pause::Server(retry),
             Outcome::NoRoute(error) => {
                 if matches!(
                     error.kind(),
@@ -77,7 +130,7 @@ fn run_sender(paths: &Paths) -> Result<(), Box<dyn Error>> {
     let mut retry = FIRST_RETRY;
     loop {
         let waiting = spool.waiting()?;
-        if waiting.is_empty() {
+        if waiting.is_empty() && !spool.checkin_waiting() {
             return Ok(());
         }
         let config = match Config::load(&paths.config) {

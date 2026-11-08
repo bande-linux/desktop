@@ -417,6 +417,9 @@ msgstr "Nya rapporter skickas till den inställda servern. Namn, adresser och fi
 msgid "Reports stay on this computer unless you send one."
 msgstr "Rapporterna stannar på den här datorn om du inte skickar någon."
 
+msgid "Once a day it also sends how long the computer was used, and nothing else: {checkin}"
+msgstr "En gång om dagen skickas också hur länge datorn användes, och inget annat: {checkin}"
+
 msgid "Reports stay on this computer. No server is configured."
 msgstr "Rapporterna stannar på den här datorn. Ingen server är inställd."
 

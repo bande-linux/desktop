@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 
 use bande_packages::{Client, Info, Mode};
@@ -173,7 +173,8 @@ pub fn follow_printers(
     let bus = system.clone();
     spawn("printers-worker", move || {
         let cups = Cups::new();
-        let watching = Arc::new(AtomicU64::new(0));
+        let watching = Arc::new(AtomicBool::new(false));
+        let mut cups_followed = false;
         let mut watch = None;
         let service = |work: &dyn Fn(&PrintClient<'_>) -> zbus::Result<()>| {
             PrintClient::new(&commands_session)
@@ -186,20 +187,22 @@ pub fn follow_printers(
         for command in receiver {
             let result = match command {
                 PrinterCommand::Watch(on) => {
-                    let generation = watching.fetch_add(1, Ordering::Relaxed) + 1;
+                    watching.store(on, Ordering::Relaxed);
                     if on {
-                        let current = Arc::clone(&watching);
-                        if let Ok(rule) = MatchRule::builder()
-                            .msg_type(message::Type::Signal)
-                            .interface(SPOOLER)
-                            .map(|builder| builder.build())
+                        if !cups_followed
+                            && let Ok(rule) = MatchRule::builder()
+                                .msg_type(message::Type::Signal)
+                                .interface(SPOOLER)
+                                .map(|builder| builder.build())
                         {
+                            cups_followed = true;
+                            let shown = Arc::clone(&watching);
                             signals(
                                 &bus,
                                 rule,
                                 changed.clone(),
-                                |_| Some(()),
-                                move || current.load(Ordering::Relaxed) == generation,
+                                move |_| shown.load(Ordering::Relaxed).then_some(()),
+                                || true,
                             );
                         }
                         if watch.is_none() {

@@ -1227,11 +1227,13 @@ impl Window {
                 (true, Some(WindowEvent::AppearanceChanged(appearance)))
             }
             WindowEvent::SpellingAnswered => {
-                ui.spelling_answered();
-                if let Some((menu, at)) = ui.take_menu_request() {
+                let edited = ui.spelling_answered();
+                let menu = ui.take_menu_request();
+                let shown = menu.is_some();
+                if let Some((menu, at)) = menu {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
-                (true, None)
+                (edited || shown, None)
             }
             WindowEvent::CapsLock(on) => {
                 ui.context().caps_lock = on;

@@ -8,6 +8,8 @@ bande-search-choice-none = Använd ingen sökmotor just nu
 
 bande-newtab-title = Ny flik
 bande-newtab-empty = Webbplatserna du besöker mest visas här.
+bande-newtab-favorites = Favoriter
+bande-newtab-frequent = Ofta besökta
 
 bande-rights-title = Dina rättigheter
 bande-rights-licence = { -brand-product-name } är fri programvara, byggd på källkoden till Mozilla Firefox. Det mesta av den omfattas av Mozilla Public License 2.0. Hela listan över licenser finns på <a data-l10n-name="licence">about:license</a>, och källkoden till våra ändringar finns på <a data-l10n-name="source">github.com/bande-linux/web</a>.

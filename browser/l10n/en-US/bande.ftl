@@ -8,6 +8,8 @@ bande-search-choice-none = Don’t use a search engine for now
 
 bande-newtab-title = New Tab
 bande-newtab-empty = The sites you visit most will appear here.
+bande-newtab-favorites = Favorites
+bande-newtab-frequent = Frequently Visited
 
 bande-rights-title = Your rights
 bande-rights-licence = { -brand-product-name } is free software, based on Mozilla Firefox source code. Most of it is under the Mozilla Public License 2.0. The full list of licences is at <a data-l10n-name="licence">about:license</a>, and the source of our changes is at <a data-l10n-name="source">github.com/bande-linux/web</a>.

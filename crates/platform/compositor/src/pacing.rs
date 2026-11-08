@@ -11,6 +11,7 @@ const RECENT: usize = 4;
 const PERCENTILE: usize = 95;
 const WAKE_PERCENTILE: usize = 99;
 const TYPICAL_PERCENTILE: usize = 50;
+const FIRST_WAKE_ALLOWANCE: Duration = Duration::from_millis(1);
 
 const FIRST_LEAD_SHARE: f64 = 0.35;
 const LEAD_CEILING_SHARE: f64 = 0.5;
@@ -181,8 +182,16 @@ impl RenderPrediction {
         self.renders
             .percentile(PERCENTILE)
             .max(self.renders.recent_max(RECENT))
-            + self.wake_delays.percentile(WAKE_PERCENTILE)
+            + self.wake_allowance()
             + self.pad
+    }
+
+    fn wake_allowance(&self) -> Duration {
+        if self.wake_delays.filled == 0 {
+            FIRST_WAKE_ALLOWANCE
+        } else {
+            self.wake_delays.percentile(WAKE_PERCENTILE)
+        }
     }
 
     fn typical(&self) -> Duration {
@@ -266,10 +275,12 @@ pub struct FramePacing {
 
 impl FramePacing {
     pub fn new(origin: Duration, refresh: Duration) -> Self {
+        let mut lead = CommitLead::default();
+        lead.start(refresh);
         Self {
             vsync: VsyncEstimate::new(origin, refresh),
             prediction: RenderPrediction::default(),
-            lead: CommitLead::default(),
+            lead,
             flips_seen: false,
             window_frames: 0,
             window_misses: 0,
@@ -297,6 +308,11 @@ impl FramePacing {
 
     pub fn start_for(&self, slot: Duration) -> Duration {
         slot.saturating_sub(self.prediction.budget() + self.lead.get())
+    }
+
+    pub fn first_startable_slot(&self, now: Duration) -> (u64, Duration) {
+        self.vsync
+            .slot_after(now + self.prediction.typical() + self.lead.get())
     }
 
     pub fn latest_start_for(&self, slot: Duration) -> Duration {

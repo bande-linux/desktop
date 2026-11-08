@@ -285,7 +285,6 @@ impl Table {
     }
 
     pub fn set_rows(&mut self, rows: Vec<Row>) {
-        self.headings.clear();
         let kept = self.remembered();
         let mut lines = Vec::with_capacity(rows.len());
         flatten(rows, 0, &mut lines);

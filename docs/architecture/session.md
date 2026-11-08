@@ -515,6 +515,13 @@ made again.
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.
+- **Service outages**: the bar, Control Center and Settings tell a stopped service from missing
+  hardware (`bande_bus::Reading`: present, absent, unavailable). A failed UPower,
+  NetworkManager or BlueZ read counts as absent only when the kernel has no battery
+  (`/sys/class/power_supply`, system scope), Wi-Fi radio (`/sys/class/ieee80211`) or Bluetooth
+  adapter (`/sys/class/bluetooth`); otherwise the item stays with a short reason. The bar and Settings
+  follow each service's `NameOwnerChanged` and recover when it starts; Control Center reads
+  afresh whenever it opens.
 - **Removable media**: `org.freedesktop.UDisks2` mounts USB drives and posts notifications
   with an eject action.
   - Implemented in `crates/services/automount` (`bande-automount`, a session service): every

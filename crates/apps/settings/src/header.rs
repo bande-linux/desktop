@@ -129,7 +129,11 @@ impl SettingsView {
 
     pub(crate) fn summary(&self, pane: &Pane) -> String {
         let live = match pane.id {
-            PaneId::Wifi => self.wifi.as_ref().map(|wifi| {
+            PaneId::Wifi if self.wifi.is_unavailable() => Some(L10N.tr("service-stopped")),
+            PaneId::Bluetooth if self.bluetooth.is_unavailable() => {
+                Some(L10N.tr("service-stopped"))
+            }
+            PaneId::Wifi => self.wifi.present().map(|wifi| {
                 match wifi.networks.iter().find(|network| network.current) {
                     _ if !wifi.enabled => L10N.tr("off"),
                     Some(network) => {
@@ -138,7 +142,7 @@ impl SettingsView {
                     None => L10N.tr("not-connected"),
                 }
             }),
-            PaneId::Bluetooth => self.bluetooth.as_ref().map(|bluetooth| {
+            PaneId::Bluetooth => self.bluetooth.present().map(|bluetooth| {
                 let connected = bluetooth
                     .paired
                     .iter()
@@ -306,7 +310,20 @@ impl SettingsView {
 
     pub(crate) fn notice(&mut self, pane: &Pane) -> Option<Box<dyn Widget>> {
         let name = pane.name.clone();
-        let (heading, line) = if !self.available(pane.id) {
+        let stopped = match pane.id {
+            PaneId::Wifi => self.wifi.is_unavailable().then_some("wifi-service-stopped"),
+            PaneId::Bluetooth => self
+                .bluetooth
+                .is_unavailable()
+                .then_some("bluetooth-service-stopped"),
+            _ => None,
+        };
+        let (heading, line) = if let Some(reason) = stopped {
+            (
+                L10N.tr_args("unavailable", [("pane", name.into())]),
+                L10N.tr(reason),
+            )
+        } else if !self.available(pane.id) {
             (
                 L10N.tr_args("unavailable", [("pane", name.clone().into())]),
                 L10N.tr_args("unavailable-hint", [("pane", name.into())]),

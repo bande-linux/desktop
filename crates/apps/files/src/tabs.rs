@@ -58,9 +58,10 @@ pub(crate) fn location_title(location: &Location) -> String {
         Location::Trash => L10N.tr("trash"),
         Location::Recents => L10N.tr("recents"),
         Location::Network => L10N.tr("network"),
-        Location::Server(url) => url
+        Location::Server { name, .. } if !name.is_empty() => name.clone(),
+        Location::Server { address, .. } => address
             .split_once("://")
-            .map_or(url.as_str(), |(_, host)| host)
+            .map_or(address.as_str(), |(_, host)| host)
             .to_owned(),
         Location::Search(folder) => L10N.tr_args(
             "search-title",
@@ -101,7 +102,7 @@ impl SavedTab {
         match &self.location {
             Location::Folder(folder) => bande_volumes::quick_is_dir(folder),
             Location::Trash | Location::Recents | Location::Search(_) | Location::Network => true,
-            Location::Server(_) => false,
+            Location::Server { .. } => false,
         }
     }
 }

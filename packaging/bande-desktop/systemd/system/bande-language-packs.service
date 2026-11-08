@@ -8,3 +8,4 @@ Type=oneshot
 ExecStart=/usr/libexec/bande-desktop/language-packs
 Nice=10
 IOSchedulingClass=idle
+LogLevelMax=notice

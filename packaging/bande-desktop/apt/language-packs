@@ -22,12 +22,15 @@ in_use() {
     done
 }
 
-available=$(apt-cache pkgnames | grep -- '-l10n-' | sort -u || true)
+packs_in_archive() { apt-cache pkgnames | grep -- '-l10n-' | sort -u || true; }
 if [ "${1:-}" = --every-language ]; then
+    available=$(packs_in_archive)
     tags=$(sed -n 's/^bande-desktop-l10n-//p' <<< "$available")
 else
     tags=$(in_use | tr -d "\"'" | tr ':' '\n' | sed 's/[.@].*//' | tr 'A-Z_' 'a-z-' |
         grep -vx -e '' -e c -e posix | sort -u || true)
+    [ -n "$tags" ] || exit 0
+    available=$(packs_in_archive)
 fi
 [ -n "$tags" ] && [ -n "$available" ] || exit 0
 
@@ -50,11 +53,14 @@ missing() {
 
 mapfile -t packs < <(missing)
 while [ ${#packs[@]} -gt 0 ]; do
-    echo "installing ${packs[*]}"
-    "${apt[@]}" install "${packs[@]}" > /dev/null
+    echo "<5>installing ${packs[*]}"
+    if ! failed=$("${apt[@]}" install "${packs[@]}" 2>&1 > /dev/null); then
+        echo "<4>could not install ${packs[*]}: ${failed##*$'\n'}"
+        exit 1
+    fi
     tried=" ${packs[*]} "
     mapfile -t packs < <(missing)
     for pack in "${packs[@]}"; do
-        [[ $tried != *" $pack "* ]] || { echo "$pack did not install" >&2; exit 1; }
+        [[ $tried != *" $pack "* ]] || { echo "<4>$pack did not install"; exit 1; }
     done
 done

@@ -150,6 +150,8 @@ pub(crate) enum Intent {
     KeyboardAccess(String, bool),
     Spelling(crate::spelling::SpellingCommand),
     Battery(BatteryCommand),
+    EditReplacement(Option<String>),
+    ReplacementText(crate::spelling::ReplacementField, String),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -311,9 +313,10 @@ pub struct SettingsView {
     pub(crate) permissions: Grants,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
     pub(crate) spelling: crate::spelling::SpellingState,
+    pub(crate) replacing: Option<crate::spelling::Replacing>,
     pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
-    stale: bool,
+    pub(crate) stale: bool,
     rebuilt: bool,
     pub(crate) focus_next: Option<Anchor>,
     reveal_pending: bool,
@@ -417,6 +420,7 @@ impl SettingsView {
             permissions: Vec::new(),
             keyboard_access: Vec::new(),
             spelling: Default::default(),
+            replacing: None,
             security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
@@ -1018,7 +1022,7 @@ impl SettingsView {
         })
     }
 
-    fn anchor_focused(&self, wanted: &Anchor) -> bool {
+    pub(crate) fn anchor_focused(&self, wanted: &Anchor) -> bool {
         let focus = self.ui.focus();
         self.anchors
             .iter()
@@ -1119,7 +1123,23 @@ impl SettingsView {
         let editing = self
             .focused_setting()
             .filter(|setting| self.drafts.contains_key(setting));
+        let replacing = self.replacing.is_some() && self.replacement_focused();
         let handled = match event {
+            Event::Key {
+                key: Key::Enter, ..
+            } if replacing => {
+                self.commit_replacement();
+                self.invalidate();
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && replacing => {
+                self.cancel_replacement();
+                self.invalidate();
+                true
+            }
             Event::Key {
                 key: Key::Enter, ..
             } if editing.is_some() => {
@@ -1304,6 +1324,9 @@ impl SettingsView {
 
     pub fn settle(&mut self) -> bool {
         self.rebuilt = false;
+        if self.replacing.is_some() && !self.replacement_focused() {
+            self.commit_replacement();
+        }
         self.process_intents();
         let focused = self.focused_setting();
         if self.drafts.keys().any(|setting| Some(*setting) != focused) {
@@ -1373,6 +1396,10 @@ impl SettingsView {
                 self.printer_address = address;
                 continue;
             }
+            if let Intent::ReplacementText(field, text) = intent {
+                self.type_replacement(field, text);
+                continue;
+            }
             self.stale = true;
             match intent {
                 Intent::Draft(..) | Intent::OtherName(..) | Intent::PrinterAddress(..) => {}
@@ -1439,6 +1466,8 @@ impl SettingsView {
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Spelling(command) => self.change_spelling(command),
                 Intent::Battery(command) => self.commands.push(Command::Battery(command)),
+                Intent::EditReplacement(original) => self.edit_replacement(original),
+                Intent::ReplacementText(..) => {}
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;

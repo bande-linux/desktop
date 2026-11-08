@@ -197,7 +197,8 @@ pub fn text_of_report(spool: &Spool, id: &str) -> io::Result<String> {
     Ok(text)
 }
 
-pub fn ask_for_collection() -> io::Result<()> {
+pub fn ask_for_collection(failed_unit: &str) -> io::Result<()> {
     let mut stream = UnixStream::connect(SOCKET)?;
-    stream.write_all(b"{\"op\":\"collect\"}\n")
+    let request = serde_json::json!({"op": "collect", "unit": failed_unit});
+    stream.write_all(format!("{request}\n").as_bytes())
 }

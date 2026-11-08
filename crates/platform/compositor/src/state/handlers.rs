@@ -415,7 +415,7 @@ impl SecurityContextHandler for State {
                         .filter(|_| context.sandbox_engine.is_some())
                         .map(crate::trust::Claimant::Sandboxed),
                     sandboxed: true,
-                    process,
+                    process: process.map(OnceLock::from).unwrap_or_default(),
                     ..ClientState::default()
                 };
                 if let Err(error) = state

@@ -10,7 +10,7 @@ use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
 use crate::shell::{is_shell, toplevel_names};
-use crate::state::{Compositor, State};
+use crate::state::{Compositor, State, client_pid};
 
 const APPS_NAME: &str = "org.bande.Apps";
 const PATH: &str = "/org/bande/Apps";
@@ -138,12 +138,7 @@ impl State {
                 .app_states
                 .sandboxes
                 .entry(id.clone())
-                .or_insert_with(|| {
-                    client
-                        .get_credentials(&self.display_handle)
-                        .ok()
-                        .and_then(|credentials| sandbox_of(credentials.pid))
-                })
+                .or_insert_with(|| client_pid(&client).and_then(sandbox_of))
                 .clone();
             present.push(id);
             let app_id = toplevel_names(surface).1;

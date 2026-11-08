@@ -986,5 +986,6 @@ where
             .chain(menu_wait)
             .chain(force_quit_wait)
             .min();
+        compositor.flush_clients()?;
     }
 }

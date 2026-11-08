@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 
 use jiff::Timestamp;
 use ring::digest::{SHA256, digest};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use rustix::process::{Pid, PidfdFlags, PidfdGetfdFlags, pidfd_getfd, pidfd_open};
 use serde_json::{Map, Value, json};
 
 use crate::config::Config;
@@ -18,6 +20,7 @@ use crate::stacks::{Stacks, parse_eu_stack};
 
 const PARTIAL: &str = "partial";
 const SNAPSHOTS: usize = 3;
+const IDLE_WAIT: &str = "do_epoll_wait";
 const SNAPSHOT_GAP: Duration = Duration::from_secs(1);
 const EU_STACK_PATIENCE: Duration = Duration::from_secs(8);
 const EU_STACK_CHECK: Duration = Duration::from_millis(50);
@@ -300,7 +303,49 @@ pub fn partial_snapshots(spool_root: &Path) -> Vec<(String, String)> {
     found
 }
 
-pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Option<u64>) {
+fn waits_with_nothing_ready(pid: &str) -> bool {
+    let read = |name: &str| {
+        fs::read_to_string(format!("/proc/{pid}/task/{pid}/{name}")).unwrap_or_default()
+    };
+    if read("wchan").trim() != IDLE_WAIT {
+        return false;
+    }
+    let Some(epoll) = read("syscall")
+        .split(' ')
+        .nth(1)
+        .and_then(|fd| i32::from_str_radix(fd.trim_start_matches("0x"), 16).ok())
+    else {
+        return false;
+    };
+    let Some(process) = pid
+        .parse()
+        .ok()
+        .and_then(Pid::from_raw)
+        .and_then(|pid| pidfd_open(pid, PidfdFlags::empty()).ok())
+    else {
+        return false;
+    };
+    let Ok(epoll) = pidfd_getfd(&process, epoll, PidfdGetfdFlags::empty()) else {
+        return false;
+    };
+    let mut fds = [PollFd::new(&epoll, PollFlags::IN)];
+    let now = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    poll(&mut fds, Some(&now)).is_ok_and(|ready| ready == 0)
+}
+
+fn main_thread_waited_throughout(pid: &str, snapshots: &str) -> bool {
+    let main = format!("thread {pid} ");
+    snapshots
+        .lines()
+        .filter(|line| line.starts_with(&main))
+        .all(|line| line.contains(&format!("wchan={IDLE_WAIT} ")))
+}
+
+pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Option<u64>) -> bool {
+    let idle_at_first = waits_with_nothing_ready(pid);
     let first = kernel_states(pid);
     let partial = format!("{}-{pid}", fault.kind);
     let header = format!(
@@ -312,6 +357,9 @@ pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Op
         tracing::debug!("cannot save the first snapshot: {error}");
     }
     let snapshots = format!("--- snapshot 0\n{first}{}", later_snapshots(pid));
+    let idle = idle_at_first
+        && main_thread_waited_throughout(pid, &snapshots)
+        && waits_with_nothing_ready(pid);
     let eu = user_stacks(pid);
     let main_tid = pid.parse().unwrap_or(0);
     fault.stacks = parse_eu_stack(&eu, main_tid);
@@ -339,6 +387,7 @@ pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Op
     if let Err(error) = fs::remove_file(done) {
         tracing::debug!("cannot remove a finished snapshot: {error}");
     }
+    idle
 }
 
 pub fn stuck_tasks() -> String {

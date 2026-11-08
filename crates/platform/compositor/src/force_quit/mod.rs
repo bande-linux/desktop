@@ -179,7 +179,7 @@ fn window_scene(content: Vec<Item>, palette: &Palette) -> Scene {
 fn relaunch_shell(client: &Client, unresponsive: bool) {
     let Some(process) = client
         .get_data::<ClientState>()
-        .and_then(|state| state.process.as_ref())
+        .and_then(|state| state.process.get())
     else {
         return;
     };
@@ -276,7 +276,7 @@ impl State {
                         .find_map(|client| {
                             client
                                 .get_data::<ClientState>()
-                                .and_then(|state| state.process.as_ref()?.name())
+                                .and_then(|state| state.process.get()?.name())
                         })
                         .unwrap_or_else(|| tr!("Untitled App")),
                 };
@@ -418,7 +418,7 @@ impl State {
         if state.role.is_some() {
             return;
         }
-        let Some(process) = state.process.as_ref() else {
+        let Some(process) = state.process.get() else {
             tracing::warn!("cannot tell which process runs {}", app_ids.join(", "));
             return;
         };

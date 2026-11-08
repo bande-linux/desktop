@@ -3,6 +3,7 @@ mod ring;
 
 use std::io;
 use std::path::Path;
+use std::sync::OnceLock;
 
 use tracing_subscriber::filter::{FilterFn, LevelFilter, Targets};
 use tracing_subscriber::fmt;
@@ -22,6 +23,20 @@ const HOLDS_PASSWORDS: [&str; 6] = [
 ];
 const UNPREFIXED_TARGETS: [&str; 2] = ["pam_bande_secrets", "xdg_desktop_portal_bande"];
 const DBUS_TARGET: &str = "zbus";
+const PACKAGED: &str = "/usr";
+const LOCALLY_BUILT: &str = "/usr/local";
+const OWN_PROGRAM: &str = "/proc/self/exe";
+
+pub fn is_installed_program(path: &Path) -> bool {
+    path.starts_with(PACKAGED) && !path.starts_with(LOCALLY_BUILT)
+}
+
+pub(crate) fn runs_installed() -> bool {
+    static INSTALLED: OnceLock<bool> = OnceLock::new();
+    *INSTALLED.get_or_init(|| {
+        std::fs::read_link(OWN_PROGRAM).is_ok_and(|path| is_installed_program(&path))
+    })
+}
 
 fn name_process(identifier: &str) {
     if let Ok(name) = std::ffi::CString::new(identifier)
@@ -41,7 +56,7 @@ pub fn init_quieting(identifier: &str, chatty: &[&str]) {
         targets(std::env::var(FILTER_VARIABLE).ok().as_deref()),
         |filter, target| filter.with_target(*target, LevelFilter::WARN),
     );
-    let in_memory = (!HOLDS_PASSWORDS.contains(&identifier))
+    let in_memory = (runs_installed() && !HOLDS_PASSWORDS.contains(&identifier))
         .then(|| ring::Ring::open(identifier).ok())
         .flatten()
         .map(|ring| {

@@ -26,14 +26,21 @@ const UNDUMPABLE: [&str; 5] = [
     "bande-secrets",
 ];
 
+fn is_installed(entry: &Entry, field: &str) -> bool {
+    entry
+        .field(field)
+        .is_some_and(|path| bande_log::is_installed_program(Path::new(&path)))
+}
+
 fn is_reported(entry: &Entry) -> bool {
     if entry.field("MESSAGE_ID").as_deref() == Some(journal::COREDUMP_MESSAGE) {
-        return entry.field("COREDUMP_COMM").is_some() || entry.field("COREDUMP_EXE").is_some();
+        return is_installed(entry, "COREDUMP_EXE");
     }
     if entry.field("TARGET").as_deref() == Some(journal::PANIC_TARGET) {
-        return entry
-            .field("SYSLOG_IDENTIFIER")
-            .is_some_and(|program| UNDUMPABLE.contains(&program.as_str()));
+        return is_installed(entry, "_EXE")
+            && entry
+                .field("SYSLOG_IDENTIFIER")
+                .is_some_and(|program| UNDUMPABLE.contains(&program.as_str()));
     }
     let Some(result) = entry.field("UNIT_RESULT") else {
         return false;

@@ -18,7 +18,7 @@ use smithay::wayland::text_input::TextInputSeat;
 
 use crate::menu_button::{ACTIVE_MENUS_SINCE, menu_address};
 use crate::session::SessionRole;
-use crate::state::{ClientState, State, is_mapped};
+use crate::state::{ClientState, State, client_pid, is_mapped};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
 pub(crate) const SHELL_VERSION: u32 = 7;
@@ -411,8 +411,7 @@ impl State {
     }
 
     fn app_process(&self, surface: &WlSurface) -> Option<i32> {
-        let credentials = surface.client()?.get_credentials(&self.display_handle);
-        credentials.ok().map(|credentials| credentials.pid)
+        client_pid(&surface.client()?)
     }
 
     fn announce_app_process(&self, surface: &WlSurface, app_id: &str) {

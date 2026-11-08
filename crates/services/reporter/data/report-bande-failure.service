@@ -1,8 +1,0 @@
-[Unit]
-Description=Ask for a report of a failed Bande service
-OnFailure=
-DefaultDependencies=no
-
-[Service]
-Type=oneshot
-ExecStart=/usr/libexec/bande-reporter collect-failures

@@ -20,7 +20,7 @@ use smithay::utils::Rectangle;
 use smithay::wayland::xdg_activation::XdgActivationTokenData;
 
 use crate::shell::{is_shell, toplevel_names};
-use crate::state::{Compositor, State};
+use crate::state::{Compositor, State, client_pid};
 
 const SESSION_ENDING_SINCE: u32 = 9;
 const STATE_WRITE_PAUSE: Duration = Duration::from_secs(1);
@@ -241,12 +241,7 @@ impl State {
         let now: Vec<(String, i32)> = self
             .windowless_apps()
             .into_iter()
-            .map(|(client, app_id)| {
-                let pid = client
-                    .get_credentials(&self.display_handle)
-                    .map_or(0, |credentials| credentials.pid);
-                (app_id, pid)
-            })
+            .map(|(client, app_id)| (app_id, client_pid(&client).unwrap_or(0)))
             .collect();
         if now == self.announced_windowless {
             return;

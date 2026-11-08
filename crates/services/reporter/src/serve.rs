@@ -20,7 +20,10 @@ use crate::diagnose::diagnose;
 use crate::fault::{Fault, capture_hang};
 use crate::spool::{MANIFEST, STATE, Spool, Status};
 
-const COLLECTOR: &str = "bande-crash-reports@failed.service";
+const FAILED: &str = "failed";
+const LONGEST_UNIT: usize = 200;
+const NOT_INSTALLED: &str = "only installed programs leave fault reports";
+const FROM_INSTALLED_PROGRAMS: [&str; 2] = ["fault", "count"];
 const FIRST_LISTEN_FD: i32 = 3;
 const IDLE_EXIT: Duration = Duration::from_secs(30);
 const REQUEST_LIMIT: u64 = 16 * 1024;
@@ -37,6 +40,8 @@ const SESSION_KINDS: [&str; 7] = [
     "wake-failure",
 ];
 const CAPTURE_KINDS: [&str; 4] = ["app-hang", "force-quit", "compositor-stall", "shell-stall"];
+const GUARDED_KINDS: [&str; 3] = ["app-hang", "compositor-stall", "shell-stall"];
+const IDLE_HANG_DROPPED: &str = "idle-hang-dropped";
 
 fn is_administrator(uid: u32) -> bool {
     if uid == 0 {
@@ -68,14 +73,30 @@ fn process_owner(pid: &str) -> Option<u32> {
     fs::metadata(format!("/proc/{pid}")).ok().map(|m| m.uid())
 }
 
-fn program_of(pid: &str) -> Option<String> {
-    let path = fs::read_link(format!("/proc/{pid}/exe")).ok()?;
-    path.file_name()?.to_str().map(str::to_owned)
+fn executable(pid: &str) -> Option<PathBuf> {
+    fs::read_link(format!("/proc/{pid}/exe")).ok()
 }
 
-fn start_collector() -> std::io::Result<()> {
+fn runs_elsewhere(executable: Option<&Path>) -> bool {
+    executable.is_some_and(|path| !bande_log::is_installed_program(path))
+}
+
+fn collector(failed_unit: Option<&str>) -> String {
+    let instance = failed_unit
+        .filter(|unit| {
+            !unit.is_empty()
+                && unit.len() <= LONGEST_UNIT
+                && unit
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.@:".contains(&byte))
+        })
+        .map_or_else(|| FAILED.to_owned(), |unit| format!("user-{unit}"));
+    format!("bande-crash-reports@{instance}.service")
+}
+
+fn start_collector(failed_unit: Option<&str>) -> std::io::Result<()> {
     let status = Command::new("systemctl")
-        .args(["start", "--no-block", COLLECTOR])
+        .args(["start", "--no-block", &collector(failed_unit)])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -84,6 +105,11 @@ fn start_collector() -> std::io::Result<()> {
         return Err(std::io::Error::other("cannot start the collector"));
     }
     Ok(())
+}
+
+struct Peer {
+    uid: u32,
+    elsewhere: bool,
 }
 
 struct Service {
@@ -120,7 +146,15 @@ impl Service {
             if peer != 0 && process_owner(pid) != Some(peer) {
                 return Err("that process belongs to someone else".into());
             }
-            fault.program = program_of(pid);
+            let executable = executable(pid);
+            if runs_elsewhere(executable.as_deref()) {
+                return Err(NOT_INSTALLED.into());
+            }
+            fault.program = executable
+                .as_deref()
+                .and_then(Path::file_name)
+                .and_then(|name| name.to_str())
+                .map(str::to_owned);
             fault.pid = Some(pid.clone());
         }
         if let Some(Value::Object(detail)) = request.get("detail") {
@@ -131,13 +165,17 @@ impl Service {
                 self.captures.fetch_sub(1, Ordering::SeqCst);
                 return Err("too many captures at once".into());
             }
-            capture_hang(
+            let idle = capture_hang(
                 &mut fault,
                 &self.spool_root,
                 &pid,
                 request.get("seconds").and_then(Value::as_u64),
             );
             self.captures.fetch_sub(1, Ordering::SeqCst);
+            if idle && GUARDED_KINDS.contains(&kind) {
+                counters::count(&self.spool_root, IDLE_HANG_DROPPED);
+                return Err("the process was waiting idle in its event loop".into());
+            }
         } else {
             fault.signature_text = field(request, "reason").map(str::to_owned);
         }
@@ -224,9 +262,14 @@ impl Service {
         })
     }
 
-    fn handle(&self, request: &Map<String, Value>, peer: u32) -> Result<Value, Box<dyn Error>> {
+    fn handle(&self, request: &Map<String, Value>, peer: &Peer) -> Result<Value, Box<dyn Error>> {
         let id = field(request, "id").unwrap_or_default();
-        match field(request, "op").unwrap_or_default() {
+        let op = field(request, "op").unwrap_or_default();
+        if FROM_INSTALLED_PROGRAMS.contains(&op) && peer.elsewhere {
+            return Err(NOT_INSTALLED.into());
+        }
+        let peer = peer.uid;
+        match op {
             "fault" => self.fault(request, peer),
             "count" => {
                 counters::count(&self.spool_root, field(request, "name").unwrap_or_default());
@@ -236,7 +279,7 @@ impl Service {
             "read" => self.read(id, peer),
             "status" => Ok(self.status()),
             "collect" => {
-                start_collector()?;
+                start_collector(field(request, "unit"))?;
                 Ok(json!({}))
             }
             "diagnose" => {
@@ -280,7 +323,13 @@ impl Service {
     }
 
     fn connection(&self, stream: UnixStream) -> std::io::Result<()> {
-        let peer = socket_peercred(&stream)?.uid.as_raw();
+        let credentials = socket_peercred(&stream)?;
+        let peer = Peer {
+            uid: credentials.uid.as_raw(),
+            elsewhere: runs_elsewhere(
+                executable(&credentials.pid.as_raw_nonzero().to_string()).as_deref(),
+            ),
+        };
         stream.set_read_timeout(Some(REQUEST_PATIENCE))?;
         stream.set_write_timeout(Some(REQUEST_PATIENCE))?;
         let mut line = String::new();
@@ -288,7 +337,7 @@ impl Service {
         let answer = serde_json::from_str(&line)
             .map_err(|error| error.to_string())
             .and_then(|request: Map<String, Value>| {
-                self.handle(&request, peer)
+                self.handle(&request, &peer)
                     .map_err(|error| error.to_string())
             });
         let answer = match answer {

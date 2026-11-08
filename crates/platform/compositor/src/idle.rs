@@ -129,7 +129,7 @@ impl Compositor {
                 next = Some(next.map_or(due, |next| next.min(due)));
             }
         }
-        if told && let Err(error) = self.flush() {
+        if told && let Err(error) = self.flush_clients() {
             tracing::warn!("cannot tell the idle watchers: {error}");
         }
         next

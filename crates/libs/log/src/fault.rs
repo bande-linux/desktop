@@ -35,6 +35,9 @@ fn escaped(text: &str) -> String {
 }
 
 fn send(request: String, wait: Option<Duration>) -> io::Result<()> {
+    if !crate::runs_installed() {
+        return Ok(());
+    }
     let mut stream = UnixStream::connect(SOCKET)?;
     stream.write_all(request.as_bytes())?;
     stream.write_all(b"\n")?;
@@ -91,12 +94,19 @@ pub fn count(name: &str) {
 
 pub fn action(name: &str) {
     static RING: OnceLock<Option<Ring>> = OnceLock::new();
-    if let Some(ring) = RING.get_or_init(|| Ring::open(ACTIONS).ok()) {
+    if let Some(ring) = RING.get_or_init(|| {
+        crate::runs_installed()
+            .then(|| Ring::open(ACTIONS).ok())
+            .flatten()
+    }) {
         ring.note(name);
     }
 }
 
 pub fn write_session_facts(json: &str) {
+    if !crate::runs_installed() {
+        return;
+    }
     let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") else {
         return;
     };

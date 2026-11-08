@@ -4,8 +4,8 @@ use std::io;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use smithay::backend::allocator::Buffer;
@@ -382,7 +382,7 @@ impl Compositor {
             claimant: process
                 .as_ref()
                 .and_then(|process| crate::trust::verified_program(process.pid())),
-            process,
+            process: process.map(OnceLock::from).unwrap_or_default(),
             ..ClientState::default()
         };
         self.display.handle().insert_client(stream, Arc::new(state))
@@ -535,7 +535,7 @@ impl Compositor {
         self.display.flush_clients()
     }
 
-    pub(crate) fn flush_clients(&mut self) -> io::Result<()> {
+    pub fn flush_clients(&mut self) -> io::Result<()> {
         self.display.flush_clients()
     }
 
@@ -571,10 +571,6 @@ impl Compositor {
     pub fn usable_area(&self) -> Rectangle<i32, Logical> {
         self.state.usable_area(0)
     }
-
-    pub(crate) fn flush(&mut self) -> io::Result<()> {
-        self.display.flush_clients()
-    }
 }
 
 #[derive(Default)]
@@ -584,7 +580,15 @@ pub(crate) struct ClientState {
     pub(crate) claimant: Option<crate::trust::Claimant>,
     pub(crate) sandboxed: bool,
     pub(crate) departed: AtomicBool,
-    pub(crate) process: Option<crate::force_quit::Process>,
+    pub(crate) process: OnceLock<crate::force_quit::Process>,
+}
+
+pub(crate) fn client_pid(client: &Client) -> Option<i32> {
+    client
+        .get_data::<ClientState>()?
+        .process
+        .get()
+        .map(crate::force_quit::Process::pid)
 }
 
 impl ClientData for ClientState {

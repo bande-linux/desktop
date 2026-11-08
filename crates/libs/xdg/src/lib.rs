@@ -31,7 +31,8 @@ pub use entry::{
 pub use file::{replace_file, replace_private_file, sync_folder};
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
 pub use identity::{
-    app_for_identity, app_name, find_app, find_app_for_process, running_app, write_launcher,
+    app_for_identity, app_name, find_app, find_app_for_process, notifying_app, notifying_app_name,
+    running_app, write_launcher,
 };
 pub use launch::{
     ACTIVATION_TOKEN, ExecError, LaunchError, OpenError, TERMINAL, TERMINAL_APP_ID,

@@ -682,16 +682,17 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
         Failure::OutOfMemory => ("app-out-of-memory", "app-out-of-memory-body"),
     };
     let request = Request {
-        app_name: entry.map_or(app_id, DesktopEntry::app_id),
+        app_name: &app,
         replaces_id: 0,
         app_icon: entry
             .and_then(|entry| entry.icon.as_deref())
             .unwrap_or_default(),
-        summary: &L10N.tr_args(summary, [("app", app.into())]),
+        summary: &L10N.tr_args(summary, [("app", app.clone().into())]),
         body: &L10N.tr(body),
         actions: &[],
         urgency: Urgency::Normal,
         sound: None,
+        desktop_entry: entry.map(DesktopEntry::app_id),
     };
     let told = bus.and_then(|bus| notify(&bus, &request));
     if let Err(error) = told {
@@ -712,6 +713,7 @@ fn tell_task_stopped(bus: &Connection, unit: &str) {
         actions: &[],
         urgency: Urgency::Normal,
         sound: None,
+        desktop_entry: None,
     };
     if let Err(error) = notify(bus, &request) {
         tracing::warn!("cannot tell that {unit} ran out of memory: {error}");

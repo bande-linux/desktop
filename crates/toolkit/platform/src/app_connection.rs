@@ -92,6 +92,10 @@ impl AppConnection {
         self.link.app.is_some()
     }
 
+    pub fn is_kept(&self) -> bool {
+        self.kept
+    }
+
     pub fn keep_running(&mut self) {
         if let Some(app) = self.link.app.as_ref().filter(|_| !self.kept) {
             app.keep_running(self.app_id.clone());

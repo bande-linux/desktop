@@ -27,7 +27,6 @@ use crate::diagnostics::{Diagnostics, DiagnosticsCommand, follow_diagnostics};
 use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
-use crate::lookup::{LookUpCommand, LookUpState, follow_look_up};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 use crate::passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
@@ -97,7 +96,6 @@ pub enum Update {
     Permissions(Grants),
     KeyboardAccess(Vec<KeyboardAccess>),
     Spelling(SpellingState),
-    LookUp(LookUpState),
     Security(SecurityStatus),
     Printers(PrintersState),
     Sharing(SharingState),
@@ -137,7 +135,6 @@ pub enum Command {
     Permission(PermissionCommand),
     KeyboardAccess(String, bool),
     Spelling(SpellingCommand),
-    LookUp(LookUpCommand),
     Printers(PrinterCommand),
     Sharing(SharingCommand),
     Users(UsersCommand),
@@ -414,7 +411,6 @@ pub struct Services {
     permissions: Sender<PermissionCommand>,
     keyboard_access: Sender<(String, bool)>,
     spelling: Sender<SpellingCommand>,
-    look_up: Sender<LookUpCommand>,
     passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
@@ -462,7 +458,6 @@ impl Services {
             permissions: follow_permissions(session, updates.clone()),
             keyboard_access: follow_keyboard_access(updates.clone()),
             spelling: follow_spelling(updates.clone()),
-            look_up: follow_look_up(updates.clone()),
             _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
@@ -514,7 +509,6 @@ impl Services {
             Command::Permission(command) => self.permissions.send(command).is_ok(),
             Command::KeyboardAccess(line, on) => self.keyboard_access.send((line, on)).is_ok(),
             Command::Spelling(command) => self.spelling.send(command).is_ok(),
-            Command::LookUp(command) => self.look_up.send(command).is_ok(),
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Sharing(command) => self.sharing.send(command).is_ok(),

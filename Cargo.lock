@@ -720,6 +720,7 @@ dependencies = [
 name = "bande-dict"
 version = "0.1.9"
 dependencies = [
+ "bande-l10n",
  "bande-xdg",
  "tempfile",
  "tracing",
@@ -978,6 +979,7 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-dict",
+ "bande-graphics",
  "bande-https",
  "bande-inbox",
  "bande-l10n",
@@ -1331,7 +1333,6 @@ dependencies = [
  "bande-colour",
  "bande-config",
  "bande-datetime",
- "bande-dict",
  "bande-edid",
  "bande-fs",
  "bande-keyboard",

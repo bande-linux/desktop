@@ -28,7 +28,7 @@ pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
     data_dirs, find_executable, handlers, own_code_replaced, own_executable, runs_replaced_code,
 };
-pub use file::{replace_file, sync_folder};
+pub use file::{replace_file, replace_private_file, sync_folder};
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
 pub use identity::{
     app_for_identity, app_name, find_app, find_app_for_process, running_app, write_launcher,

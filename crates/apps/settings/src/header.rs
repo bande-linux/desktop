@@ -338,7 +338,7 @@ impl SettingsView {
                         tr!("Turn on Bluetooth to connect headphones, keyboards and more.")
                     }
                     PaneId::NightLight => {
-                        tr!("Turn on Night Light to make the colours warmer at night.")
+                        tr!("Turn on Night Light to make the colors warmer at night.")
                     }
                     _ => String::new(),
                 },

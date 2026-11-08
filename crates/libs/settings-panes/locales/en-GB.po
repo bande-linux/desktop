@@ -7,5 +7,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Light, dark or automatic, accent color, wallpaper and text size"
+msgstr "Light, dark or automatic, accent colour, wallpaper and text size"
+
 msgid "Banners and Notification Center"
 msgstr "Banners and Notification Centre"
+
+msgid "Warmer colors after dark"
+msgstr "Warmer colours after dark"
+
+msgid "Accent color"
+msgstr "Accent colour"
+
+msgid "Color profile"
+msgstr "Colour profile"

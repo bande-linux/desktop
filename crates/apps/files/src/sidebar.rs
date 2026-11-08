@@ -246,7 +246,7 @@ pub fn rows(
             .into_iter()
             .filter(|place| !hidden.contains(&place.location)),
     );
-    let mut rows = vec![Row::Heading(tr!("Favourites"))];
+    let mut rows = vec![Row::Heading(tr!("Favorites"))];
     rows.extend(favourites.into_iter().map(Row::Place));
     rows.push(Row::Heading(tr!("Locations")));
     rows.extend(

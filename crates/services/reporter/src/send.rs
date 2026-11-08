@@ -9,7 +9,7 @@ use jiff::Timestamp;
 use serde_json::{Value, json};
 
 use crate::config::Config;
-use crate::spool::{MANIFEST, Stored};
+use crate::spool::{MANIFEST, STATE, Status, Stored};
 
 const PATH: &str = "/v1/reports";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -50,14 +50,16 @@ fn boundary(id: &str) -> String {
 fn body_of(report: &Stored, without: &[String]) -> io::Result<(Vec<u8>, Vec<String>)> {
     let mut manifest = report.manifest.clone();
     manifest.insert("occurrences".to_owned(), json!(report.occurrences));
+    manifest.remove("owner_uid");
     let mut attachments: Vec<(String, Vec<u8>)> = Vec::new();
     for entry in fs::read_dir(&report.path)?.flatten() {
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
-        if name != MANIFEST
+        if report.status != Status::Sent
+            && name != MANIFEST
             && !name.starts_with('.')
-            && name != "state.json"
+            && name != STATE
             && !without.contains(&name)
         {
             attachments.push((name.clone(), fs::read(entry.path())?));
@@ -125,7 +127,10 @@ fn outcome_of(answer: &str) -> io::Result<Outcome> {
         .and_then(retry_after);
     Ok(match status {
         200 | 201 => Outcome::Stored,
-        400 => Outcome::BadFormat,
+        400 => {
+            tracing::warn!("the server says the report is malformed: {answer}");
+            Outcome::BadFormat
+        }
         401 | 403 => Outcome::Unauthorized,
         413 => Outcome::TooLarge,
         _ => Outcome::Later(wait),

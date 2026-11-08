@@ -14,7 +14,7 @@ MAX_ENTRIES_PER_FORM = 40
 FOLKETS = "https://folkets-lexikon.csc.kth.se/folkets/"
 OEWN = "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.zip"
 CC_BY_40 = "Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
-KAIKKI = "https://kaikki.org/dictionary/Swedish/kaikki.org-dictionary-Swedish.jsonl"
+KAIKKI = "https://kaikki.org/dictionary/{name}/kaikki.org-dictionary-{name}.jsonl"
 CC_BY_SA_25 = "Creative Commons Attribution-ShareAlike 2.5, https://creativecommons.org/licenses/by-sa/2.5/"
 CC_BY_SA_40 = "Creative Commons Attribution-ShareAlike 4.0, https://creativecommons.org/licenses/by-sa/4.0/"
 ENGLISH_RULES = (
@@ -174,8 +174,8 @@ def folkets_entries(sources):
     return found
 
 
-def wiktionary_entries(sources):
-    path = fetch(KAIKKI, sources / "kaikki-sv.jsonl")
+def wiktionary_entries(sources, language, name):
+    path = fetch(KAIKKI.format(name=name), sources / f"kaikki-{language}.jsonl")
     found = []
     for line in open(path, encoding="utf8"):
         item = json.loads(line)
@@ -190,12 +190,32 @@ def wiktionary_entries(sources):
         if target:
             lines.insert(0, ("O", clean(target)))
         forms = {item["word"].lower()} | {form.get("form", "").lower() for form in item.get("forms", [])}
-        keys = [f"sv:{form}" for form in sorted(forms) if form and "\t" not in form]
+        keys = [f"{language}:{form}" for form in sorted(forms) if form and "\t" not in form]
         found.append((keys, item["word"], item.get("pos", ""), lines))
     return found
 
 
 PACKS = {
+    "bande-dict-en-wiktionary": {
+        "packs": [
+            {
+                "file": "wiktionary-en",
+                "entries": lambda sources: wiktionary_entries(sources, "en", "English"),
+                "meta": {
+                    "id": "wiktionary-en",
+                    "name": "English Wiktionary",
+                    "attribution": "Wiktionary via kaikki.org, CC BY-SA 4.0",
+                    "languages": "en",
+                    "definitions.en": "en",
+                    "kind.en": "definition",
+                    "priority": "10",
+                    "default": "off",
+                },
+            },
+        ],
+        "summary": "English words from Wiktionary for Dictionary",
+        "licence": f"Wiktionary contributors, extracted by kaikki.org (wiktextract).\n{CC_BY_SA_40}\nConverted to the Bande pack format.\n",
+    },
     "bande-dict-en": {
         "packs": [
             {
@@ -271,7 +291,7 @@ PACKS = {
         "packs": [
             {
                 "file": "wiktionary-sv",
-                "entries": wiktionary_entries,
+                "entries": lambda sources: wiktionary_entries(sources, "sv", "Swedish"),
                 "meta": {
                     "id": "wiktionary-sv",
                     "name": "Svenska ord (Wiktionary)",

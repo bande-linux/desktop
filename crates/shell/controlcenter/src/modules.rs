@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use accesskit::{Action, ActionRequest, Node, Role, Toggled};
-use bande_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring};
 use bande_toolkit::{
     Image, Item, Palette, Paragraph, Point, Radius, Rect, Scheme, Shape, Spacing, TextAlign,
     TextRole, TextStyle,
@@ -285,11 +285,7 @@ impl Widget for Tile {
         };
         module_surface(palette, self.frame, ink, items);
         if cx.is_focused(self.id) {
-            focus_ring_for(
-                &cx.palette,
-                Shape::rounded(self.frame, MODULE_RADIUS),
-                items,
-            );
+            focus_ring(cx, Shape::rounded(self.frame, MODULE_RADIUS), items);
         }
         let disc = self.disc();
         items.push(Item::Fill {

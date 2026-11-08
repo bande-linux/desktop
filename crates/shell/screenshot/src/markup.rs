@@ -4,7 +4,7 @@ use std::rc::Rc;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_graphics::Path;
 use bande_l10n::tr;
-use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring};
 use bande_toolkit::{
     Color, CpuRenderer, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Scheme, Shape,
     Snapshot, TextAlign, TextStyle, TextSystem,
@@ -451,7 +451,7 @@ impl Widget for Toolbar {
                 paragraph: label.clone(),
             });
             if focused && index == self.cursor {
-                focus_ring_for(&cx.palette, Shape::rounded(*frame, Radius::S), items);
+                focus_ring(cx, Shape::rounded(*frame, Radius::S), items);
             }
         }
     }

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_l10n::tr;
-use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring};
 use bande_toolkit::{
     Color, Elevation, Item, Paragraph, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole,
     TextStyle,
@@ -374,7 +374,7 @@ impl Widget for Palette {
                 }
             }
             if focused && index == self.cursor {
-                focus_ring_for(&cx.palette, Shape::rounded(frame, SEGMENT_RADIUS), items);
+                focus_ring(cx, Shape::rounded(frame, SEGMENT_RADIUS), items);
             }
         }
     }

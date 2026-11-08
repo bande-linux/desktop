@@ -34,7 +34,7 @@ bande-test-wayland.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter"
+depends = "$auto, fonts-inter, fonts-manrope"
 extended-description = """\
 The dialogs of xdg-desktop-portal-bande: the Bande Open and Save dialogs \
 (favourite places and volumes in a sidebar, a path bar, a sortable list \

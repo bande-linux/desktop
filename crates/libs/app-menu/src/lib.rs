@@ -19,6 +19,10 @@ pub const REDO_ALIAS: &str = "Ctrl+Y";
 pub const FULL_SCREEN: &str = "F11";
 const ROOT: i32 = 0;
 
+mod status_item;
+
+pub use status_item::{STATUS_ACTIVATE, StatusItem};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standard {
     Hide,
@@ -456,19 +460,28 @@ impl From<io::Error> for Error {
 
 pub struct AppMenu {
     connection: Connection,
+    path: &'static str,
     menus: Arc<Mutex<Menus>>,
     actions: Inbox<String>,
 }
 
 impl AppMenu {
     pub fn serve(connection: Connection, entries: Vec<Entry>) -> Result<Self, Error> {
+        Self::serve_at(connection, MENU_PATH, entries)
+    }
+
+    fn serve_at(
+        connection: Connection,
+        path: &'static str,
+        entries: Vec<Entry>,
+    ) -> Result<Self, Error> {
         let actions = Inbox::new()?;
         let menus = Arc::new(Mutex::new(Menus {
             revision: 1,
             entries,
         }));
         connection.object_server().at(
-            MENU_PATH,
+            path,
             DBusMenu {
                 menus: Arc::clone(&menus),
                 actions: actions.outbox(),
@@ -476,6 +489,7 @@ impl AppMenu {
         )?;
         Ok(Self {
             connection,
+            path,
             menus,
             actions,
         })
@@ -493,7 +507,7 @@ impl AppMenu {
         };
         self.connection.emit_signal(
             None::<&str>,
-            MENU_PATH,
+            self.path,
             INTERFACE,
             "LayoutUpdated",
             &(revision, ROOT),

@@ -9,7 +9,7 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Transform};
 use smithay::reexports::rustix::ioctl;
 
 use crate::{
-    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DeviceExport, Export, MappedExport, Program, Rect,
+    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DeviceExport, MappedExport, Program, Rect,
     RenderError, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier,
     disjoint,
 };
@@ -481,13 +481,16 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .renderer
             .targets
             .get(&self.target)
-            .and_then(|target| target.export.as_ref());
+            .and_then(|target| target.export.as_ref())
+            .map(|export| (export.device, export.trusted));
         let mut readbacks = Vec::new();
-        if let Some(Export::OnDevice(device)) = export {
-            let device = *device;
-            self.record_output(&device, &drawn);
-        } else if export.is_some() {
-            for rect in drawn {
+        let mut converted = None;
+        if let Some((Some(device), _)) = export {
+            converted = self.record_output(&device, &drawn);
+        }
+        let verifying = matches!(export, Some((Some(_), false)));
+        if matches!(export, Some((None, _))) || verifying {
+            for &rect in &drawn {
                 let bytes = rect.area() as usize * BYTES_PER_PIXEL;
                 let (index, offset) = self.renderer.reserve(bytes)?;
                 readbacks.push(Readback {
@@ -496,16 +499,22 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     offset,
                 });
             }
-            self.record_readbacks(&readbacks);
+            self.record_readbacks(converted.unwrap_or(self.image), &readbacks);
         }
         unsafe {
             self.renderer
                 .device
                 .end_command_buffer(self.renderer.command_buffer)
         }?;
+        if verifying {
+            self.mark_output(&readbacks)?;
+        }
         self.renderer.submit_and_wait()?;
         self.renderer.retire_unused_blur_chains();
-        let written = self.write_back(&readbacks);
+        let written = match verifying {
+            true => self.verify_output(&readbacks),
+            false => self.write_back(&readbacks),
+        };
         self.renderer.recycle_staging();
         if let Some(target) = self.renderer.targets.get_mut(&self.target) {
             target.rendered = true;
@@ -513,9 +522,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         written
     }
 
-    fn record_output(&mut self, export: &DeviceExport, drawn: &[Rect]) {
+    fn record_output(&mut self, export: &DeviceExport, drawn: &[Rect]) -> Option<vk::Image> {
         if drawn.is_empty() {
-            return;
+            return None;
         }
         let Some(colour) = self.renderer.output_colour else {
             self.record_output_copy(export, self.image, drawn);
@@ -526,7 +535,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 TRANSFER_SOURCE,
                 ATTACHMENT,
             );
-            return;
+            return None;
         };
         match self.convert_output(colour, drawn) {
             Ok(scratch) => {
@@ -538,6 +547,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     blur::SAMPLED,
                     ATTACHMENT,
                 );
+                Some(scratch)
             }
             Err(error) => {
                 tracing::warn!("showing colours unconverted: {error}");
@@ -550,6 +560,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     TRANSFER_SOURCE,
                     ATTACHMENT,
                 );
+                None
             }
         }
     }
@@ -671,13 +682,16 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         }
     }
 
-    fn record_readbacks(&self, readbacks: &[Readback]) {
+    fn record_readbacks(&self, source: vk::Image, readbacks: &[Readback]) {
         if readbacks.is_empty() {
             return;
         }
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
-        barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
+        let own = source == self.image;
+        if own {
+            barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
+        }
         for readback in readbacks {
             let rect = readback.rect;
             let region = vk::BufferImageCopy::default()
@@ -696,14 +710,16 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             unsafe {
                 device.cmd_copy_image_to_buffer(
                     commands,
-                    self.image,
+                    source,
                     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                     self.renderer.staging[readback.staging].buffer,
                     slice::from_ref(&region),
                 );
             }
         }
-        barrier(device, commands, self.image, TRANSFER_SOURCE, ATTACHMENT);
+        if own {
+            barrier(device, commands, self.image, TRANSFER_SOURCE, ATTACHMENT);
+        }
         let host_read = vk::MemoryBarrier2::default()
             .src_stage_mask(vk::PipelineStageFlags2::COPY)
             .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
@@ -726,9 +742,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         else {
             return Ok(());
         };
-        let Export::Mapped(export) = export else {
-            return Ok(());
-        };
+        let export = &export.mapped;
         if readbacks.is_empty() {
             return Ok(());
         }
@@ -738,29 +752,84 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         copied
     }
 
+    fn mapped(&self) -> Option<&MappedExport> {
+        self.renderer
+            .targets
+            .get(&self.target)
+            .and_then(|target| target.export.as_ref())
+            .map(|export| &export.mapped)
+    }
+
+    fn mark_output(&self, readbacks: &[Readback]) -> Result<(), RenderError> {
+        let Some(export) = self.mapped() else {
+            return Ok(());
+        };
+        dma_buf_sync(export, DMA_BUF_SYNC_START)?;
+        let marked = rows_of(export, readbacks).map(|rows| {
+            for (_, destination, length) in rows {
+                unsafe {
+                    std::ptr::write_bytes(export.mapping.add(destination), UNWRITTEN, length)
+                };
+            }
+        });
+        dma_buf_sync(export, DMA_BUF_SYNC_END)?;
+        marked
+    }
+
+    fn verify_output(&mut self, readbacks: &[Readback]) -> Result<(), RenderError> {
+        let Some(export) = self.mapped() else {
+            return Ok(());
+        };
+        dma_buf_sync(export, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ)?;
+        let arrived = rows_of(export, readbacks).map(|rows| {
+            rows.into_iter().all(|(source, destination, length)| {
+                let staging = self.renderer.staging[source.0].mapped;
+                unsafe {
+                    slice::from_raw_parts(staging.add(source.1), length)
+                        == slice::from_raw_parts(export.mapping.add(destination), length)
+                }
+            })
+        });
+        dma_buf_sync(export, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ)?;
+        if arrived? {
+            if let Some(export) = self
+                .renderer
+                .targets
+                .get_mut(&self.target)
+                .and_then(|target| target.export.as_mut())
+            {
+                export.trusted = true;
+            }
+            return Ok(());
+        }
+        tracing::warn!(
+            "the GPU's copy did not reach the display buffer; copying frames on the CPU"
+        );
+        let device = self
+            .renderer
+            .targets
+            .get_mut(&self.target)
+            .and_then(|target| target.export.as_mut())
+            .and_then(|export| export.device.take());
+        if let Some(device) = device {
+            self.renderer.destroy_imported(&device.imported);
+        }
+        self.renderer.output_on_device = false;
+        self.write_back(readbacks)
+    }
+
     fn copy_readbacks(
         &self,
         export: &MappedExport,
         readbacks: &[Readback],
     ) -> Result<(), RenderError> {
-        for readback in readbacks {
-            let rect = readback.rect;
-            let row_bytes = rect.width.unsigned_abs() as usize * BYTES_PER_PIXEL;
-            let source = self.renderer.staging[readback.staging].mapped;
-            for row in 0..rect.height.unsigned_abs() as usize {
-                let destination = export.offset
-                    + (rect.y.unsigned_abs() as usize + row) * export.stride
-                    + rect.x.unsigned_abs() as usize * BYTES_PER_PIXEL;
-                if destination + row_bytes > export.length {
-                    return Err(RenderError::BufferOutOfBounds);
-                }
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        source.add(readback.offset + row * row_bytes),
-                        export.mapping.add(destination),
-                        row_bytes,
-                    );
-                }
+        for (source, destination, length) in rows_of(export, readbacks)? {
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    self.renderer.staging[source.0].mapped.add(source.1),
+                    export.mapping.add(destination),
+                    length,
+                );
             }
         }
         Ok(())
@@ -773,6 +842,33 @@ struct Readback {
     offset: usize,
 }
 
+const UNWRITTEN: u8 = 0xa5;
+
+type Row = ((usize, usize), usize, usize);
+
+fn rows_of(export: &MappedExport, readbacks: &[Readback]) -> Result<Vec<Row>, RenderError> {
+    let mut rows = Vec::new();
+    for readback in readbacks {
+        let rect = readback.rect;
+        let length = rect.width.unsigned_abs() as usize * BYTES_PER_PIXEL;
+        for row in 0..rect.height.unsigned_abs() as usize {
+            let destination = export.offset
+                + (rect.y.unsigned_abs() as usize + row) * export.stride
+                + rect.x.unsigned_abs() as usize * BYTES_PER_PIXEL;
+            if destination + length > export.length {
+                return Err(RenderError::BufferOutOfBounds);
+            }
+            rows.push((
+                (readback.staging, readback.offset + row * length),
+                destination,
+                length,
+            ));
+        }
+    }
+    Ok(rows)
+}
+
+const DMA_BUF_SYNC_READ: u64 = 1;
 const DMA_BUF_SYNC_WRITE: u64 = 2;
 const DMA_BUF_SYNC_START: u64 = DMA_BUF_SYNC_WRITE;
 const DMA_BUF_SYNC_END: u64 = 4 | DMA_BUF_SYNC_WRITE;

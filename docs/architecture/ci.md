@@ -46,7 +46,8 @@ directories, so it never D-Bus-activates the services installed on the machine.
 
 ## GitHub CI
 
-The only workflow, `release.yml`, runs on version tags (`vX.Y.Z`) and on manual dispatch, never
+Besides `dict.yml`, which builds the dictionary packs from a `dict-YYYYMMDD` tag (see
+[lookup.md](lookup.md)), the one workflow, `release.yml`, runs on version tags (`vX.Y.Z`) and on manual dispatch, never
 on pushes or pull requests. It runs on GitHub-hosted runners (`ubuntu-24.04-arm` and
 `ubuntu-24.04`), every job in a `debian:testing` container that installs what it needs with
 `ci/apt-install.sh` (build libraries in `ci/release/build-depends`) and the toolchain pinned in

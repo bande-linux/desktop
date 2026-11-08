@@ -174,9 +174,9 @@ impl Editor {
         let elsewhere = self.blocks.iter().enumerate().any(|(paragraph, block)| {
             mentions(&block.text, &word)
                 && spelling::words(&block.text).into_iter().any(|range| {
-                block.text[range.clone()].eq_ignore_ascii_case(&word)
-                    && !(paragraph == start.paragraph && range.start == start.offset)
-            })
+                    block.text[range.clone()].eq_ignore_ascii_case(&word)
+                        && !(paragraph == start.paragraph && range.start == start.offset)
+                })
         });
         if !elsewhere && spelling::ask_correction(&word, sentence_start) {
             self.pending = Some(Pending { start, end, word });

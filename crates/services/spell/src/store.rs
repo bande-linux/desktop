@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 
 pub(crate) struct Store {
@@ -13,17 +13,6 @@ pub(crate) struct Store {
 }
 
 const LANGUAGES_KEY: &str = "languages";
-
-fn write_atomically(path: &Path, contents: &str) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let temporary = path.with_extension("new");
-    let mut file = fs::File::create(&temporary)?;
-    file.write_all(contents.as_bytes())?;
-    file.sync_all()?;
-    fs::rename(temporary, path)
-}
 
 impl Store {
     pub(crate) fn open(config: &Path, data: &Path) -> Self {
@@ -81,7 +70,7 @@ impl Store {
         for (from, to) in all {
             contents.push_str(&format!("{from}\t{to}\n"));
         }
-        write_atomically(&self.replacements_path, &contents)
+        bande_xdg::replace_file(&self.replacements_path, &contents)
     }
 
     pub(crate) fn save_settings(&self) -> io::Result<()> {
@@ -89,7 +78,7 @@ impl Store {
         for (key, value) in &self.options {
             contents.push_str(&format!("{key} = {value}\n"));
         }
-        write_atomically(&self.settings_path, &contents)
+        bande_xdg::replace_file(&self.settings_path, &contents)
     }
 
     pub(crate) fn save_learned(&self) -> io::Result<()> {
@@ -98,6 +87,6 @@ impl Store {
             contents.push_str(word);
             contents.push('\n');
         }
-        write_atomically(&self.learned_path, &contents)
+        bande_xdg::replace_file(&self.learned_path, &contents)
     }
 }

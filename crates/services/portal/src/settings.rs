@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
-use bande_config::{ACCENTS, Accent, Style};
+use bande_config::{ACCENTS, Accent, CURSOR_THEME, Style};
 use bande_design::{Color, Scheme, Typeface};
 use bande_wallpaper::{Choice, Variant};
 use jiff::tz::TimeZone;
@@ -98,20 +98,6 @@ pub fn icon_theme(accent: Accent) -> String {
     match (accent, letters.next()) {
         (Accent::Ultramarine, _) | (_, None) => ICON_THEME.to_owned(),
         (_, Some(first)) => format!("{ICON_THEME}-{}{}", first.to_uppercase(), letters.as_str()),
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CursorSettings {
-    pub theme: String,
-}
-
-impl CursorSettings {
-    pub fn from_environment() -> Self {
-        let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
-        Self {
-            theme: var("XCURSOR_THEME").unwrap_or_else(|| "DMZ-Black".to_owned()),
-        }
     }
 }
 
@@ -280,7 +266,7 @@ impl Reader {
 
 type Namespaces = Vec<(&'static str, Vec<(&'static str, OwnedValue)>)>;
 
-fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
+fn namespaces(look: Look) -> Namespaces {
     let owned = |values: Vec<(&'static str, Value<'_>)>| {
         values
             .into_iter()
@@ -341,7 +327,7 @@ fn namespaces(look: Look, cursor: &CursorSettings) -> Namespaces {
                 ),
                 ("enable-animations", Value::from(!look.reduce_motion)),
                 ("icon-theme", Value::from(icon_theme(look.accent))),
-                ("cursor-theme", Value::from(cursor.theme.as_str())),
+                ("cursor-theme", Value::from(CURSOR_THEME)),
                 (
                     "cursor-size",
                     Value::from(i32::try_from(look.cursor_size).unwrap_or(i32::MAX)),
@@ -374,11 +360,11 @@ fn matches(namespace: &str, filters: &[String]) -> bool {
         })
 }
 
-fn signal_changes(connection: &Connection, old: Look, new: Look, cursor: &CursorSettings) {
+fn signal_changes(connection: &Connection, old: Look, new: Look) {
     let Ok(emitter) = SignalEmitter::new(connection.inner(), OBJECT_PATH) else {
         return;
     };
-    let before: HashMap<_, _> = namespaces(old, cursor)
+    let before: HashMap<_, _> = namespaces(old)
         .into_iter()
         .flat_map(|(namespace, values)| {
             values
@@ -386,7 +372,7 @@ fn signal_changes(connection: &Connection, old: Look, new: Look, cursor: &Cursor
                 .map(move |(key, value)| ((namespace, key), value))
         })
         .collect();
-    for (namespace, values) in namespaces(new, cursor) {
+    for (namespace, values) in namespaces(new) {
         for (key, value) in values {
             if before.get(&(namespace, key)) != Some(&value) {
                 let _ = zbus::block_on(Settings::setting_changed(
@@ -454,14 +440,12 @@ fn follow_zone(system: &Connection, wake: mpsc::Sender<Option<TimeZone>>) -> zbu
 
 pub struct Settings {
     look: Arc<Mutex<Look>>,
-    cursor: CursorSettings,
 }
 
 impl Settings {
     pub fn serve(
         connection: &Connection,
         system: Option<&Connection>,
-        cursor: CursorSettings,
         gtk_homes: Option<gtk::GtkHomes>,
     ) -> zbus::Result<()> {
         let changes = PropertiesProxy::builder(connection)
@@ -484,7 +468,6 @@ impl Settings {
             OBJECT_PATH,
             Settings {
                 look: Arc::clone(&look),
-                cursor: cursor.clone(),
             },
         )?;
         let (wake, woken) = mpsc::channel();
@@ -521,7 +504,7 @@ impl Settings {
                     style_gtk(new);
                 }
                 if old != new {
-                    signal_changes(&connection, old, new, &cursor);
+                    signal_changes(&connection, old, new);
                 }
             }
         });
@@ -530,7 +513,7 @@ impl Settings {
 
     fn current(&self) -> Namespaces {
         let look = *self.look.lock().unwrap_or_else(PoisonError::into_inner);
-        namespaces(look, &self.cursor)
+        namespaces(look)
     }
 }
 

@@ -1,17 +1,30 @@
+use std::collections::HashSet;
 use std::env;
-use std::ffi::OsString;
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::os::unix::fs::symlink;
+use std::path::Path;
 
+use bande_config::{CURSOR_THEME, DEFAULT_CURSOR_SIZE};
+use bande_graphics::{Color, CpuRenderer, DrawError, Scene};
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
 use smithay::input::pointer::CursorIcon;
 use smithay::utils::{Physical, Point, Transform};
 
-pub const ARROW_WIDTH: i32 = 11;
-pub const ARROW_HEIGHT: i32 = 17;
-pub const ARROW_FILL: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
-pub const ARROW_OUTLINE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
+use crate::cursor_set::{self, CANVAS, LEGACY_NAMES, SHAPES};
+
+const ARROW_WIDTH: i32 = 11;
+const ARROW_HEIGHT: i32 = 17;
+const ARROW_FILL: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
+const ARROW_OUTLINE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
+const XCURSOR_SIZES: [u32; 6] = [24, 32, 48, 64, 96, 128];
+const XCURSOR_HEADER: u32 = 16;
+const XCURSOR_VERSION: u32 = 0x0001_0000;
+const XCURSOR_IMAGE: u32 = 0xfffd_0002;
+const XCURSOR_IMAGE_HEADER: u32 = 36;
+const XCURSOR_IMAGE_VERSION: u32 = 1;
+const XCURSOR_TOC_ENTRY: u32 = 12;
 
 fn inside(x: i32, y: i32) -> bool {
     (0..ARROW_WIDTH).contains(&x) && (0..ARROW_HEIGHT).contains(&y) && x * 3 <= y * 2
@@ -42,20 +55,8 @@ pub(crate) fn arrow() -> MemoryRenderBuffer {
     )
 }
 
-const XCURSOR_MAGIC: &[u8; 4] = b"Xcur";
-const XCURSOR_IMAGE: u32 = 0xfffd_0002;
-const XCURSOR_IMAGE_HEADER: usize = 36;
-const XCURSOR_TOC_ENTRY: usize = 12;
-const XCURSOR_MAX_SIDE: u32 = 0x7fff;
-const THEME_INHERITANCE_DEPTH: usize = 16;
-const DEFAULT_CURSOR_THEME: &str = "DMZ-Black";
-const SYSTEM_CURSOR_THEME: &str = "default";
-pub const DEFAULT_CURSOR_SIZE: u32 = 24;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CursorTheme {
-    pub search_path: Vec<PathBuf>,
-    pub name: String,
     pub size: u32,
 }
 
@@ -65,32 +66,18 @@ pub(crate) struct Cursor {
     pub(crate) hotspot: Point<i32, Physical>,
 }
 
-struct XcursorImage {
-    nominal: u32,
-    width: u32,
-    height: u32,
+struct Image {
+    side: u32,
     hotspot: (u32, u32),
-    pixels: Vec<u8>,
+    rgba: Vec<u8>,
 }
 
 impl CursorTheme {
     pub fn from_environment() -> Self {
-        let var = |name: &str| env::var_os(name).filter(|value| !value.is_empty());
-        let search_path = match var("XCURSOR_PATH") {
-            Some(path) => env::split_paths(&path).collect(),
-            None => default_search_path(
-                var("HOME").map(PathBuf::from),
-                var("XDG_DATA_HOME").map(PathBuf::from),
-                var("XDG_DATA_DIRS"),
-            ),
-        };
         Self {
-            search_path,
-            name: var("XCURSOR_THEME")
-                .and_then(|name| name.into_string().ok())
-                .unwrap_or_else(|| DEFAULT_CURSOR_THEME.to_owned()),
-            size: var("XCURSOR_SIZE")
-                .and_then(|size| size.to_str()?.parse().ok())
+            size: env::var("XCURSOR_SIZE")
+                .ok()
+                .and_then(|size| size.parse().ok())
                 .filter(|size| *size > 0)
                 .unwrap_or(DEFAULT_CURSOR_SIZE),
         }
@@ -98,155 +85,127 @@ impl CursorTheme {
 
     pub(crate) fn builtin() -> Self {
         Self {
-            search_path: Vec::new(),
-            name: DEFAULT_CURSOR_THEME.to_owned(),
             size: DEFAULT_CURSOR_SIZE,
         }
     }
 
-    pub(crate) fn load(&self, icon: CursorIcon, scale: f64) -> Option<Cursor> {
-        let pixel_size = (f64::from(self.size) * scale).round() as u32;
-        std::iter::once(icon.name())
-            .chain(icon.alt_names().iter().copied())
-            .find_map(|name| self.find(name))
-            .and_then(|file| fs::read(file).ok())
-            .and_then(|bytes| best_image(parse_xcursor(&bytes), pixel_size))
-            .map(|image| Cursor {
+    pub fn name(&self) -> &'static str {
+        CURSOR_THEME
+    }
+
+    pub(crate) fn draw(&self, icon: CursorIcon, scale: f64) -> Option<Cursor> {
+        let side = (f64::from(self.size) * scale).round().max(1.0) as u32;
+        match render(icon, side) {
+            Ok(image) => Some(Cursor {
                 buffer: MemoryRenderBuffer::from_slice(
-                    &image.pixels,
-                    Fourcc::Argb8888,
-                    (image.width as i32, image.height as i32),
+                    &image.rgba,
+                    Fourcc::Abgr8888,
+                    (image.side as i32, image.side as i32),
                     1,
                     Transform::Normal,
                     None,
                 ),
                 hotspot: (image.hotspot.0 as i32, image.hotspot.1 as i32).into(),
-            })
-    }
-
-    fn find(&self, cursor: &str) -> Option<PathBuf> {
-        self.find_in(&self.name, cursor)
-            .or_else(|| self.find_in(SYSTEM_CURSOR_THEME, cursor))
-    }
-
-    fn find_in(&self, name: &str, cursor: &str) -> Option<PathBuf> {
-        let mut pending = vec![name.to_owned()];
-        let mut visited = Vec::new();
-        while visited.len() < THEME_INHERITANCE_DEPTH && !pending.is_empty() {
-            let theme = pending.remove(0);
-            if visited.contains(&theme) {
-                continue;
+            }),
+            Err(error) => {
+                tracing::warn!(
+                    "cannot draw the {} pointer at {side} px: {error}",
+                    icon.name()
+                );
+                None
             }
-            let directories: Vec<PathBuf> = self
-                .search_path
-                .iter()
-                .map(|directory| directory.join(&theme))
-                .collect();
-            if let Some(file) = directories
-                .iter()
-                .map(|directory| directory.join("cursors").join(cursor))
-                .find(|file| file.is_file())
-            {
-                return Some(file);
-            }
-            if let Some(inherits) = directories
-                .iter()
-                .find_map(|directory| fs::read_to_string(directory.join("index.theme")).ok())
-                .map(|index| inherited_themes(&index))
-            {
-                pending.extend(inherits);
-            }
-            visited.push(theme);
-        }
-        None
-    }
-}
-
-fn default_search_path(
-    home: Option<PathBuf>,
-    data_home: Option<PathBuf>,
-    data_dirs: Option<OsString>,
-) -> Vec<PathBuf> {
-    let data_dirs = data_dirs.unwrap_or_else(|| "/usr/local/share:/usr/share".into());
-    data_home
-        .or_else(|| Some(home.as_ref()?.join(".local/share")))
-        .map(|data_home| data_home.join("icons"))
-        .into_iter()
-        .chain(home.map(|home| home.join(".icons")))
-        .chain(env::split_paths(&data_dirs).map(|directory| directory.join("icons")))
-        .chain(std::iter::once(PathBuf::from("/usr/share/pixmaps")))
-        .collect()
-}
-
-fn inherited_themes(index: &str) -> Vec<String> {
-    let mut in_icon_theme = false;
-    for line in index.lines().map(str::trim) {
-        if line.starts_with('[') {
-            in_icon_theme = line == "[Icon Theme]";
-        } else if let Some(value) = line
-            .strip_prefix("Inherits")
-            .and_then(|rest| rest.trim_start().strip_prefix('='))
-            .filter(|_| in_icon_theme)
-        {
-            return value
-                .split([',', ';'])
-                .map(str::trim)
-                .filter(|theme| !theme.is_empty())
-                .map(str::to_owned)
-                .collect();
         }
     }
-    Vec::new()
 }
 
-fn word(bytes: &[u8], offset: usize) -> Option<u32> {
-    let end = offset.checked_add(4)?;
-    Some(u32::from_le_bytes(bytes.get(offset..end)?.try_into().ok()?))
-}
-
-fn parse_xcursor(bytes: &[u8]) -> Vec<XcursorImage> {
-    if bytes.get(..4) != Some(XCURSOR_MAGIC) {
-        return Vec::new();
-    }
-    let (Some(header), Some(entries)) = (word(bytes, 4), word(bytes, 12)) else {
-        return Vec::new();
+fn render(icon: CursorIcon, side: u32) -> Result<Image, DrawError> {
+    let drawing = cursor_set::drawing(icon);
+    let scale = f64::from(side) / f64::from(CANVAS);
+    let side = bande_graphics::pixels(CANVAS, scale);
+    let scene = Scene {
+        width: CANVAS,
+        height: CANVAS,
+        background: Color::TRANSPARENT,
+        items: drawing.items,
     };
-    (0..(entries as usize).min(bytes.len() / XCURSOR_TOC_ENTRY))
-        .filter_map(|entry| {
-            let at = (header as usize).checked_add(entry.checked_mul(XCURSOR_TOC_ENTRY)?)?;
-            (word(bytes, at)? == XCURSOR_IMAGE).then_some(())?;
-            parse_image(bytes, word(bytes, at + 8)? as usize)
-        })
-        .collect()
-}
-
-fn parse_image(bytes: &[u8], at: usize) -> Option<XcursorImage> {
-    let field = |index: usize| word(bytes, at.checked_add(index * 4)?);
-    if field(1)? != XCURSOR_IMAGE {
-        return None;
-    }
-    let (width, height) = (field(4)?, field(5)?);
-    let hotspot = (field(6)?, field(7)?);
-    let valid = (1..=XCURSOR_MAX_SIDE).contains(&width)
-        && (1..=XCURSOR_MAX_SIDE).contains(&height)
-        && hotspot.0 < width
-        && hotspot.1 < height;
-    let start = at.checked_add(XCURSOR_IMAGE_HEADER)?;
-    let length = (width as usize * height as usize).checked_mul(4)?;
-    let pixels = bytes.get(start..start.checked_add(length)?)?.to_vec();
-    valid.then_some(XcursorImage {
-        nominal: field(2)?,
-        width,
-        height,
-        hotspot,
-        pixels,
+    let mut rgba = vec![0; side as usize * side as usize * 4];
+    CpuRenderer::new().render_into(&scene, scale, &mut rgba)?;
+    let place = |at: f32| ((f64::from(at) * scale).round() as u32).min(side - 1);
+    Ok(Image {
+        side,
+        hotspot: (place(drawing.hotspot.x), place(drawing.hotspot.y)),
+        rgba,
     })
 }
 
-fn best_image(images: Vec<XcursorImage>, size: u32) -> Option<XcursorImage> {
-    let best = images
-        .iter()
-        .map(|image| image.nominal)
-        .min_by_key(|nominal| nominal.abs_diff(size))?;
-    images.into_iter().find(|image| image.nominal == best)
+pub fn write_cursor_theme(directory: &Path) -> io::Result<()> {
+    let cursors = directory.join("cursors");
+    fs::create_dir_all(&cursors)?;
+    fs::write(
+        directory.join("index.theme"),
+        format!("[Icon Theme]\nName={CURSOR_THEME}\nComment=The pointers of the Bande desktop\n"),
+    )?;
+    let mut written = HashSet::new();
+    for icon in SHAPES {
+        let images = XCURSOR_SIZES
+            .iter()
+            .map(|size| render(icon, *size).map(|image| (*size, image)))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(io::Error::other)?;
+        fs::write(cursors.join(icon.name()), xcursor(&images))?;
+        written.insert(icon.name());
+    }
+    let aliases = LEGACY_NAMES.into_iter().chain(
+        SHAPES
+            .iter()
+            .flat_map(|icon| icon.alt_names().iter().map(move |alias| (*alias, *icon))),
+    );
+    for (alias, icon) in aliases {
+        if written.insert(alias) {
+            symlink(icon.name(), cursors.join(alias))?;
+        }
+    }
+    Ok(())
+}
+
+fn word(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn xcursor(images: &[(u32, Image)]) -> Vec<u8> {
+    let mut bytes = b"Xcur".to_vec();
+    word(&mut bytes, XCURSOR_HEADER);
+    word(&mut bytes, XCURSOR_VERSION);
+    word(&mut bytes, images.len() as u32);
+    let mut position = XCURSOR_HEADER + XCURSOR_TOC_ENTRY * images.len() as u32;
+    for (nominal, image) in images {
+        word(&mut bytes, XCURSOR_IMAGE);
+        word(&mut bytes, *nominal);
+        word(&mut bytes, position);
+        position += XCURSOR_IMAGE_HEADER + 4 * image.side * image.side;
+    }
+    for (nominal, image) in images {
+        for value in [
+            XCURSOR_IMAGE_HEADER,
+            XCURSOR_IMAGE,
+            *nominal,
+            XCURSOR_IMAGE_VERSION,
+            image.side,
+            image.side,
+            image.hotspot.0,
+            image.hotspot.1,
+            0,
+        ] {
+            word(&mut bytes, value);
+        }
+        bytes.extend(
+            image
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .flat_map(|[red, green, blue, alpha]| [*blue, *green, *red, *alpha]),
+        );
+    }
+    bytes
 }

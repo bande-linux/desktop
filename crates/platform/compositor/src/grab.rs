@@ -2,7 +2,7 @@ use bande_spring::Spring;
 use smithay::input::Seat;
 use smithay::input::SeatHandler;
 use smithay::input::pointer::{
-    AxisFrame, ButtonEvent, Focus, GestureHoldBeginEvent, GestureHoldEndEvent,
+    AxisFrame, ButtonEvent, CursorIcon, Focus, GestureHoldBeginEvent, GestureHoldEndEvent,
     GesturePinchBeginEvent, GesturePinchEndEvent, GesturePinchUpdateEvent, GestureSwipeBeginEvent,
     GestureSwipeEndEvent, GestureSwipeUpdateEvent, GrabStartData, MotionEvent, PointerGrab,
     PointerInnerHandle, RelativeMotionEvent,
@@ -22,7 +22,7 @@ use crate::tile::Tile;
 enum Operation {
     Move { origin: Point<i32, Logical> },
     Detach,
-    Resize,
+    Resize(ResizeEdge),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +45,7 @@ enum Undo {
 pub(crate) struct HeldWindow {
     surface: WlSurface,
     undo: Undo,
+    cursor: CursorIcon,
 }
 
 pub(crate) struct WindowGrab {
@@ -78,6 +79,29 @@ fn edge_toward(window: Rectangle<i32, Logical>, point: Point<i32, Logical>) -> R
         (0, -1) => ResizeEdge::Top,
         (0, 1) => ResizeEdge::Bottom,
         _ => ResizeEdge::BottomRight,
+    }
+}
+
+pub(crate) fn resize_cursor(edge: ResizeEdge) -> CursorIcon {
+    match edge {
+        ResizeEdge::Top => CursorIcon::NResize,
+        ResizeEdge::Bottom => CursorIcon::SResize,
+        ResizeEdge::Left => CursorIcon::WResize,
+        ResizeEdge::Right => CursorIcon::EResize,
+        ResizeEdge::TopLeft => CursorIcon::NwResize,
+        ResizeEdge::TopRight => CursorIcon::NeResize,
+        ResizeEdge::BottomLeft => CursorIcon::SwResize,
+        ResizeEdge::BottomRight => CursorIcon::SeResize,
+        _ => CursorIcon::Default,
+    }
+}
+
+impl Operation {
+    fn cursor(self) -> CursorIcon {
+        match self {
+            Operation::Resize(edge) => resize_cursor(edge),
+            Operation::Move { .. } | Operation::Detach => CursorIcon::Default,
+        }
     }
 }
 
@@ -166,7 +190,13 @@ impl State {
             return;
         };
         if self.begin_resize(surface, edges) {
-            self.start_grab(start, surface, Operation::Resize, Undo::Resize, serial);
+            self.start_grab(
+                start,
+                surface,
+                Operation::Resize(edges),
+                Undo::Resize,
+                serial,
+            );
         }
     }
 
@@ -202,7 +232,13 @@ impl State {
             location: self.pointer_location,
         };
         let serial = SERIAL_COUNTER.next_serial();
-        self.start_grab(start, surface, Operation::Resize, Undo::Resize, serial);
+        self.start_grab(
+            start,
+            surface,
+            Operation::Resize(edges),
+            Undo::Resize,
+            serial,
+        );
     }
 
     pub(crate) fn drag_from_anywhere(&mut self, surface: &WlSurface, button: u32) {
@@ -245,10 +281,18 @@ impl State {
             held: Some((surface.clone(), operation)),
         };
         pointer.set_grab(self, grab, serial, Focus::Clear);
+        let cursor = operation.cursor();
+        self.load_named_cursor(cursor);
         self.held_window = Some(HeldWindow {
             surface: surface.clone(),
             undo,
+            cursor,
         });
+        self.needs_redraw = true;
+    }
+
+    pub(crate) fn held_cursor(&self) -> Option<CursorIcon> {
+        self.held_window.as_ref().map(|held| held.cursor)
     }
 
     pub(crate) fn holds_cancellable_grab(&self) -> bool {
@@ -361,7 +405,7 @@ impl PointerGrab<State> for WindowGrab {
                 data.move_window_to(surface, *origin + delta);
                 data.track_snap(surface, event.location, event.time);
             }
-            Some((surface, Operation::Resize)) => data.resize_to(surface, delta),
+            Some((surface, Operation::Resize(_))) => data.resize_to(surface, delta),
             Some((_, Operation::Detach)) | None => {}
         }
     }
@@ -484,8 +528,9 @@ impl PointerGrab<State> for WindowGrab {
         if data.held_window.take().is_none() {
             return;
         }
+        data.needs_redraw = true;
         match operation {
-            Operation::Resize => data.end_resize(surface),
+            Operation::Resize(_) => data.end_resize(surface),
             Operation::Move { .. } => data.finish_move(surface),
             Operation::Detach => {}
         }

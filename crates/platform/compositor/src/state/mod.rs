@@ -635,14 +635,14 @@ impl State {
         let theme = &self.cursor_theme;
         self.named_cursors
             .entry(icon)
-            .or_insert_with(|| theme.load(icon, scale));
+            .or_insert_with(|| theme.draw(icon, scale));
     }
 
     pub(crate) fn reload_cursor(&mut self) {
         if let CursorImageStatus::Named(icon) = self.cursor_status {
             self.load_named_cursor(icon);
         }
-        if let Some(icon) = self.drag_cursor() {
+        if let Some(icon) = self.owned_cursor() {
             self.load_named_cursor(icon);
         }
     }

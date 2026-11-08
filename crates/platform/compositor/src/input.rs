@@ -418,6 +418,7 @@ impl Compositor {
             state.assist_pointer(location);
         }
         if state.window_menu_pointer(location) || state.force_quit_pointer(location) {
+            state.point_at_frame(None, false);
             if let Some(pointer) = state.seat.get_pointer() {
                 pointer.motion(
                     state,

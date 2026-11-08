@@ -16,6 +16,7 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle, Transform};
 
+use crate::grab::resize_cursor;
 use crate::label::Labels;
 use crate::menu_button::menu_address;
 use crate::scene::Piece;
@@ -37,16 +38,7 @@ impl Zone {
     fn cursor(self) -> CursorIcon {
         match self {
             Self::Control(_) | Self::TitleBar => CursorIcon::Default,
-            Self::Resize(edge) => match edge {
-                ResizeEdge::Top => CursorIcon::NResize,
-                ResizeEdge::Bottom => CursorIcon::SResize,
-                ResizeEdge::Left => CursorIcon::WResize,
-                ResizeEdge::Right => CursorIcon::EResize,
-                ResizeEdge::TopLeft => CursorIcon::NwResize,
-                ResizeEdge::TopRight => CursorIcon::NeResize,
-                ResizeEdge::BottomLeft => CursorIcon::SwResize,
-                ResizeEdge::BottomRight => CursorIcon::SeResize,
-            },
+            Self::Resize(edge) => resize_cursor(protocol_edge(edge)),
         }
     }
 }
@@ -258,12 +250,26 @@ impl State {
         match pointed {
             Some((_, zone)) => {
                 if previous.map(|(_, zone)| zone.cursor()) != Some(zone.cursor()) {
-                    self.show_cursor(zone.cursor());
+                    self.load_named_cursor(zone.cursor());
+                    self.needs_redraw = true;
                 }
             }
             None if previous.is_some() && !over_surface => self.show_cursor(CursorIcon::Default),
             None => {}
         }
+    }
+
+    pub(crate) fn frame_cursor(&self) -> Option<CursorIcon> {
+        self.decorations
+            .pointed
+            .as_ref()
+            .map(|(_, zone)| zone.cursor())
+    }
+
+    pub(crate) fn owned_cursor(&self) -> Option<CursorIcon> {
+        self.drag_cursor()
+            .or_else(|| self.held_cursor())
+            .or_else(|| self.frame_cursor())
     }
 
     pub(crate) fn show_cursor(&mut self, icon: CursorIcon) {

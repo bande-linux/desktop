@@ -304,6 +304,13 @@ impl Compositor {
         (elements, drawn, icon)
     }
 
+    pub fn shown_cursor(&self) -> Option<&'static str> {
+        match self.state.drawn_cursor() {
+            CursorImageStatus::Named(icon) => Some(icon.name()),
+            CursorImageStatus::Hidden | CursorImageStatus::Surface(_) => None,
+        }
+    }
+
     pub(crate) fn cursor_elements(
         &self,
         renderer: &mut VulkanRenderer,
@@ -314,20 +321,7 @@ impl Compositor {
             return Vec::new();
         }
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
-        let busy = CursorImageStatus::Named(CursorIcon::Wait);
-        let dragging = state.drag_cursor().map(CursorImageStatus::Named);
-        let over_hung_app = state
-            .seat
-            .get_pointer()
-            .and_then(|pointer| pointer.current_focus())
-            .and_then(|surface| surface.client())
-            .is_some_and(|owner| state.watchdog.is_unresponsive(&owner.id()));
-        let status = match &dragging {
-            Some(dragging) => dragging,
-            None if over_hung_app => &busy,
-            None => &state.cursor_status,
-        };
-        match status {
+        match &state.drawn_cursor() {
             CursorImageStatus::Hidden => Vec::new(),
             CursorImageStatus::Surface(surface) => {
                 let hotspot = with_states(surface, |states| {
@@ -374,6 +368,20 @@ impl Compositor {
 }
 
 impl State {
+    fn drawn_cursor(&self) -> CursorImageStatus {
+        let over_hung_app = self
+            .seat
+            .get_pointer()
+            .and_then(|pointer| pointer.current_focus())
+            .and_then(|surface| surface.client())
+            .is_some_and(|owner| self.watchdog.is_unresponsive(&owner.id()));
+        match self.owned_cursor() {
+            Some(icon) => CursorImageStatus::Named(icon),
+            None if over_hung_app => CursorImageStatus::Named(CursorIcon::Wait),
+            None => self.cursor_status.clone(),
+        }
+    }
+
     pub(crate) fn placed_layers(
         &self,
         screen: usize,

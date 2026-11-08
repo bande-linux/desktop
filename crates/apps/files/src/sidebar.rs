@@ -10,7 +10,6 @@ pub enum PlaceKind {
     Standard,
     Bookmark,
     Volume,
-    Server,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +62,7 @@ fn bookmark(line: &str) -> Option<Place> {
 
 const RECENTS: &str = "recents";
 const TRASH: &str = "trash";
+const NETWORK: &str = "network";
 const VOLUMES: &str = "volumes";
 const HIDDEN: char = '-';
 
@@ -105,6 +105,15 @@ fn recents() -> Place {
         name: L10N.tr("recents"),
         location: Location::Recents,
         icon: "document-open-recent",
+        kind: PlaceKind::Standard,
+    }
+}
+
+fn network() -> Place {
+    Place {
+        name: L10N.tr("network"),
+        location: Location::Network,
+        icon: "network-workgroup",
         kind: PlaceKind::Standard,
     }
 }
@@ -187,6 +196,7 @@ fn token(location: &Location) -> Option<String> {
     match location {
         Location::Recents => Some(RECENTS.to_owned()),
         Location::Server(_) => None,
+        Location::Network => Some(NETWORK.to_owned()),
         Location::Trash => Some(TRASH.to_owned()),
         Location::Folder(path) => Some(file_uri(path)),
         Location::Search(_) => None,
@@ -197,6 +207,7 @@ fn location(token: &str) -> Option<Location> {
     match token.trim() {
         RECENTS => Some(Location::Recents),
         TRASH => Some(Location::Trash),
+        NETWORK => Some(Location::Network),
         uri => bookmark(uri).map(|place| place.location),
     }
 }
@@ -238,26 +249,12 @@ pub fn rows(
     let mut rows = vec![Row::Heading(L10N.tr("sidebar-favourites"))];
     rows.extend(favourites.into_iter().map(Row::Place));
     rows.push(Row::Heading(L10N.tr("sidebar-locations")));
-    if !hidden.contains(&Location::Trash) {
-        rows.push(Row::Place(trash()));
-    }
-    rows
-}
-
-pub fn with_nearby(rows: &[Row], nearby: &[(String, String)]) -> Vec<Row> {
-    let mut rows = rows.to_vec();
-    if nearby.is_empty() {
-        return rows;
-    }
-    rows.push(Row::Heading(L10N.tr("sidebar-network")));
-    rows.extend(nearby.iter().map(|(name, url)| {
-        Row::Place(Place {
-            name: name.clone(),
-            location: Location::Server(url.clone()),
-            icon: "network-workgroup",
-            kind: PlaceKind::Server,
-        })
-    }));
+    rows.extend(
+        [network(), trash()]
+            .into_iter()
+            .filter(|place| !hidden.contains(&place.location))
+            .map(Row::Place),
+    );
     rows
 }
 
@@ -335,7 +332,10 @@ pub fn with_volumes(
         .collect::<Vec<_>>();
     let at = rows
         .iter()
-        .position(|row| matches!(row, Row::Place(place) if place.location == Location::Trash))
+        .position(|row| {
+            matches!(row, Row::Place(place)
+                if matches!(place.location, Location::Network | Location::Trash))
+        })
         .unwrap_or(rows.len());
     rows.splice(
         at..at,

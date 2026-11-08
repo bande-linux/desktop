@@ -36,6 +36,7 @@ pub(crate) struct Formats {
     dates: HashMap<u64, Rc<str>>,
     dash: Option<Rc<str>>,
     alias: Option<Rc<str>>,
+    server: Option<(Option<Image>, Rc<str>)>,
 }
 
 const NAME_SIZE: f32 = 13.0;
@@ -825,6 +826,14 @@ impl FilesView {
         entry: &Entry,
         formats: &mut Formats,
     ) -> (Option<Image>, Rc<str>) {
+        if entry.server_address().is_some() {
+            if let Some(known) = &formats.server {
+                return known.clone();
+            }
+            let known = (self.entry_icon(entry, 32), Rc::from(L10N.tr("kind-server")));
+            formats.server = Some(known.clone());
+            return known;
+        }
         let folder = entry.is_folder();
         let type_key = type_key(&entry.name, folder);
         match formats.types.get(type_key.as_ref()) {
@@ -848,6 +857,13 @@ impl FilesView {
     }
 
     pub(crate) fn known_kind(&self, entry: &Entry) -> Option<Rc<str>> {
+        if entry.server_address().is_some() {
+            return self
+                .table_formats
+                .server
+                .as_ref()
+                .map(|(_, kind)| kind.clone());
+        }
         match entry.link {
             true => self.table_formats.alias.clone(),
             false => self
@@ -861,7 +877,7 @@ impl FilesView {
     fn table_row(&mut self, entry: &Entry, scope: Option<&Path>, formats: &mut Formats) -> Row {
         let folder = entry.is_folder();
         let (icon, kind) = self.entry_kind(entry, formats);
-        let size = match folder {
+        let size = match folder || entry.server_address().is_some() {
             true => formats
                 .dash
                 .get_or_insert_with(|| Rc::from("\u{2014}"))

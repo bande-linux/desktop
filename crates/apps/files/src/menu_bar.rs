@@ -200,6 +200,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 plain("menu-downloads", "go:downloads"),
                 shortcut("menu-home", "Alt+Home"),
                 plain("recents", "go:recents"),
+                shortcut("network", "Shift+Ctrl+K"),
                 Entry::separator(),
                 submenu("menu-recent-folders", recent_entries(recent_folders)),
                 shortcut("menu-go-to-folder", "Ctrl+L"),

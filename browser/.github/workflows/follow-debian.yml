@@ -142,7 +142,14 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: bande-debs-${{ matrix.arch }}
-          path: ${{ runner.temp }}/out/*.deb
+          path: ${{ runner.temp }}/out/*_${{ matrix.arch }}.deb
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'arm64'
+        with:
+          name: bande-debs-all
+          path: ${{ runner.temp }}/out/*_all.deb
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v7

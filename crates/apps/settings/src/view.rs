@@ -257,6 +257,7 @@ pub struct SettingsView {
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) crash_reports: Vec<CrashReport>,
+    pub(crate) crash_report_text: Option<(PathBuf, String)>,
     pub(crate) storage: Option<Storage>,
     pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
@@ -287,6 +288,7 @@ pub struct SettingsView {
     pub(crate) password_message: Option<String>,
     pub(crate) software: SoftwareState,
     pub(crate) software_checked: Option<i64>,
+    pub(crate) software_hint: Option<String>,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
     pub(crate) locale: Option<LocaleState>,
@@ -362,6 +364,7 @@ impl SettingsView {
             pointing: PointingDevices::default(),
             about: None,
             crash_reports: Vec::new(),
+            crash_report_text: None,
             storage: None,
             backup: BackupView::default(),
             drafts: HashMap::new(),
@@ -392,6 +395,7 @@ impl SettingsView {
             password_message: None,
             software: SoftwareState::Unknown,
             software_checked: None,
+            software_hint: None,
             network: None,
             manual_ipv4: false,
             locale: None,
@@ -647,7 +651,7 @@ impl SettingsView {
                 &[SettingId::StorageUsage, SettingId::LargeFiles],
             ),
             Update::Backup(_) => (Some(PaneId::Backup), &[SettingId::BackupStatus]),
-            Update::Software(_) | Update::SoftwareChecked(_) => {
+            Update::Software(_) | Update::SoftwareChecked(_) | Update::SoftwareHint(_) => {
                 (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
@@ -760,6 +764,7 @@ impl SettingsView {
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Software(state) => self.software = state,
             Update::SoftwareChecked(at) => self.software_checked = at,
+            Update::SoftwareHint(hint) => self.software_hint = hint,
             Update::Locale(locale) => self.locale = locale,
             Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
@@ -813,6 +818,7 @@ impl SettingsView {
                 self.availability_changed();
             }
             Update::CrashReports(reports) => self.crash_reports = reports,
+            Update::CrashReportText(path, text) => self.crash_report_text = Some((path, text)),
             Update::CrashReportsChanged => self
                 .commands
                 .push(Command::CrashReports(CrashReportCommand::Refresh)),
@@ -1478,6 +1484,10 @@ impl SettingsView {
                 Intent::JoinOther(password) => self.join_other(password),
                 Intent::WifiManual(manual) => self.set_wifi_manual(manual),
                 Intent::OpenCrashReport(path) => {
+                    self.commands
+                        .push(Command::CrashReports(CrashReportCommand::Read(
+                            path.clone(),
+                        )));
                     self.detail = Some(Detail::CrashReport(path));
                     self.clear_failure();
                     self.focus_next = Some(Anchor::Back);
@@ -1863,7 +1873,12 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
-            PaneId::LanguageTime | PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
+            PaneId::Keyboard if on => {
+                self.commands
+                    .push(Command::Spelling(crate::spelling::SpellingCommand::Read));
+                Command::Locale(LocaleCommand::Read)
+            }
+            PaneId::LanguageTime if on => Command::Locale(LocaleCommand::Read),
             _ => return,
         };
         self.commands.push(command);

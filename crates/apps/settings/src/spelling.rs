@@ -36,6 +36,7 @@ pub struct SpellingState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SpellingCommand {
+    Read,
     Switch(String, bool),
     Dictionary(String, bool),
     Forget(String),
@@ -104,6 +105,7 @@ fn get_dictionary(locale: &str) -> Result<(), Box<dyn std::error::Error>> {
 
 fn apply(proxy: &Proxy<'_>, command: SpellingCommand, state: &SpellingState) -> zbus::Result<()> {
     match command {
+        SpellingCommand::Read => Ok(()),
         SpellingCommand::Switch(name, on) => proxy.call("SetOption", &(name, on)),
         SpellingCommand::Forget(word) => proxy.call("Forget", &(word,)),
         SpellingCommand::Dictionary(name, on) => {
@@ -161,10 +163,7 @@ pub fn follow_spelling(updates: Updates) -> Sender<SpellingCommand> {
                 }
             }
         });
-        let mut state = read(&proxy).unwrap_or_default();
-        if !updates.send(Update::Spelling(state.clone())) {
-            return;
-        }
+        let mut state = SpellingState::default();
         while let Ok(command) = receiver.recv() {
             if let Err(error) = apply(&proxy, command, &state) {
                 tracing::warn!("cannot change spelling: {error}");

@@ -1861,7 +1861,12 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
-            PaneId::LanguageTime | PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
+            PaneId::Keyboard if on => {
+                self.commands
+                    .push(Command::Spelling(crate::spelling::SpellingCommand::Read));
+                Command::Locale(LocaleCommand::Read)
+            }
+            PaneId::LanguageTime if on => Command::Locale(LocaleCommand::Read),
             _ => return,
         };
         self.commands.push(command);

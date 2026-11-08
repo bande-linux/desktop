@@ -1,0 +1,8 @@
+[Unit]
+Description=Bande spelling service
+
+[Service]
+Type=dbus
+BusName=org.bande.Spell
+ExecStart=/usr/libexec/bande-spell
+NoNewPrivileges=yes

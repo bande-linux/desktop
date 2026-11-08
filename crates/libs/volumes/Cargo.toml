@@ -8,7 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
-rustix = { workspace = true, features = ["event", "process"] }
+rustix = { workspace = true, features = ["event", "mount", "process"] }
 tracing.workspace = true
 zbus.workspace = true
 

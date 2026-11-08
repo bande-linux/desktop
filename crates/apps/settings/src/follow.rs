@@ -444,7 +444,7 @@ impl Services {
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
             diagnostics: follow_diagnostics(updates.clone()),
-            backup: system.map(|system| follow_backup(system, updates.clone())),
+            backup: system.map(|system| follow_backup(session, system, updates.clone())),
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),

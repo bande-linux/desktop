@@ -50,7 +50,11 @@ pub(crate) fn data_stamp() -> Vec<Option<SystemTime>> {
     data_directories()
         .iter()
         .flat_map(|directory| [directory.join("hunspell"), directory.join("bande/text")])
-        .map(|path| fs::metadata(path).and_then(|metadata| metadata.modified()).ok())
+        .map(|path| {
+            fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+        })
         .collect()
 }
 

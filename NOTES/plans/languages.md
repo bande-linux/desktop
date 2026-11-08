@@ -30,7 +30,7 @@ Audit gap 17. Plan only; nothing here is built yet. Screen readers and X11 are o
 
 ## Translations
 
-**Compiled in, in each package.** `bande_l10n::translations!("domain")` includes every `locales/<lang>/<domain>.ftl` it finds at compile time, so a language is a directory and no code names one; `ci/l10n-complete` lists the languages the check holds complete. Only the requested language is parsed, at start. A library's strings travel with the binary that links it, so an app pinned to an older toolkit always has matching strings, and the login window needs no file access. All languages stay under about 8 MB across the suite. This replaces the earlier files in `/usr/share`, which ran into ownership trouble for strings in statically linked libraries.
+**Compiled in, in each package.** `bande_l10n::translations!("domain")` includes every `locales/<lang>/<domain>.ftl` it finds at compile time, so a language is a directory and no code names one; `ci/l10n-complete` lists the languages the check holds complete. Only the requested language is parsed, at start. A library's strings travel with the binary that links it, so an app pinned to an older toolkit always has matching strings, and the login window needs no file access. All languages stay under about 8 MB across the suite. This replaces the earlier files in `/usr/share`, which ran into ownership trouble for strings in statically linked libraries. To be replaced by language packs: English stays built in and other languages become separate packages, see [language-packs.md](language-packs.md).
 
 **Source layout.** `locales/sv/` next to `locales/en-US/` in each crate, so a string and its translations move together.
 
@@ -119,7 +119,7 @@ Red underline by the theme. The context menu gets suggestions, Ignore and Learn;
 
 1. **Translation source:** LLM draft, with you reading Swedish in daily use. Recommended. Alternatives: pay a translator, or a platform now.
 2. **Which languages after Swedish:** recommend none until Swedish has been lived with for a few weeks; then German, French and Spanish.
-3. **In the package or as language packs:** in the package, recommended; 8 MB at most and no version coupling.
+3. **In the package or as language packs:** superseded by [language-packs.md](language-packs.md).
 4. **New crate `spellbook`:** recommended if the larger lists agree.
 5. **Autocorrect:** build the undoable design below, off by default in Swedish until the measurement passes, recommended.
 8. **Look Up:** build it, after spelling and in the order given, with the data below, recommended.

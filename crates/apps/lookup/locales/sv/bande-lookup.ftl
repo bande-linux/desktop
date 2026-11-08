@@ -8,3 +8,5 @@ pos-noun = substantiv
 pos-verb = verb
 pos-adj = adjektiv
 pos-adv = adverb
+wikipedia = Wikipedia (på nätet)
+wikipedia-attribution = Wikipedia, CC BY-SA 4.0. Hämtat från nätet.

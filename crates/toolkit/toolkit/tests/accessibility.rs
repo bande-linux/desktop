@@ -39,6 +39,10 @@ impl App for Greeting {
         self.greeted.get()
     }
 
+    fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.ui.accessibility())
     }

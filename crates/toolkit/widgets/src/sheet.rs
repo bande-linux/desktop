@@ -126,6 +126,10 @@ impl Alert {
         }
     }
 
+    pub fn set_message(&mut self, message: &str) {
+        message.clone_into(&mut self.message);
+    }
+
     pub fn icon(self, icon: Image) -> Self {
         Self {
             icon: Some(icon),

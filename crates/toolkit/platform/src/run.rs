@@ -41,9 +41,7 @@ pub trait App {
         self.should_close(window)
     }
 
-    fn animating(&self) -> bool {
-        false
-    }
+    fn animating(&self) -> bool;
 
     fn text_input_area(&self) -> Option<Rect> {
         None
@@ -89,9 +87,7 @@ pub trait Surfaces {
 
     fn tick(&mut self, _now: Instant) {}
 
-    fn animating(&self, _index: usize) -> bool {
-        false
-    }
+    fn animating(&self, index: usize) -> bool;
 
     fn accessibility(&self, _index: usize) -> Option<TreeUpdate> {
         None

@@ -735,6 +735,10 @@ impl App for StatusClient {
         now.into_iter().chain(self.apps.deadline()).min()
     }
 
+    fn animating(&self) -> bool {
+        false
+    }
+
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.bar.accessibility())
     }

@@ -810,13 +810,16 @@ dependencies = [
 name = "bande-graphics"
 version = "0.1.9"
 dependencies = [
+ "ash",
  "bande-design",
  "fontique",
  "image",
  "libc",
+ "libloading",
  "parley",
  "pollster",
  "resvg",
+ "serde_json",
  "skrifa 0.44.0",
  "tracing",
  "vello_cpu",
@@ -1597,6 +1600,7 @@ dependencies = [
  "bande-l10n",
  "bande-notify",
  "bande-volumes",
+ "bande-watch",
  "rustix 1.1.6",
  "tempfile",
  "tracing",

@@ -11,7 +11,7 @@ use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, clock_menu, input_source_menu,
-    sound_menu, system_menu, unavailable_menu, wifi_menu,
+    sound_menu, system_menu, unavailable_menu, wifi_menu, without_settings,
 };
 use crate::rail::{Slot, TaskbarView, display_edge};
 use bande_config::{BUS_NAME, BarEdge, OBJECT_PATH};
@@ -169,6 +169,13 @@ impl StatusClient {
         let command: Vec<String> = command.iter().map(|part| (*part).to_owned()).collect();
         if let Err(error) = spawn_detached(app_id, &command, None, token.as_deref()) {
             tracing::warn!("cannot start {}: {error}", command.join(" "));
+        }
+    }
+
+    fn with_installed(&self, menu: Menu) -> Menu {
+        match find_app(self.apps.entries(), SETTINGS) {
+            Some(_) => menu,
+            None => without_settings(menu),
         }
     }
 
@@ -387,6 +394,7 @@ impl StatusClient {
             _ => None,
         };
         if let Some(menu) = local {
+            let menu = self.with_installed(menu);
             self.bar.set_open(Some(slot));
             report(
                 "open the menu",
@@ -491,12 +499,12 @@ impl StatusClient {
             report(
                 "open the clock menu",
                 window.show_menu(
-                    clock_menu(
+                    self.with_installed(clock_menu(
                         self.clock_mark == ClockMark::Quiet,
                         &self.clock_app,
                         &self.dates,
                         find_app(self.apps.entries(), CLOCK_APP).is_some(),
-                    ),
+                    )),
                     self.bar.menu_placement(anchor),
                 ),
             );

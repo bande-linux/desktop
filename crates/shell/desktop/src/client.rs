@@ -491,7 +491,11 @@ impl DesktopSurface {
             };
             items_menu(&selection)
         } else {
-            desktop_menu(self.view.desktop().sort(), window.clipboard_has_uris())
+            desktop_menu(
+                self.view.desktop().sort(),
+                window.clipboard_has_uris(),
+                bande_xdg::is_installed(SETTINGS_APP),
+            )
         };
         if let Err(error) = window.show_menu(menu, MenuPlacement::AtPoint(at)) {
             tracing::warn!("cannot show the menu: {error}");

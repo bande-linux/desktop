@@ -1623,6 +1623,7 @@ dependencies = [
  "bande-bus",
  "bande-inbox",
  "bande-l10n",
+ "bande-log",
  "bande-notify",
  "bande-volumes",
  "bande-watch",

@@ -2,11 +2,13 @@
 # language-packs [--every-language]: install the language pack of every installed package for each
 # language in use (the system's and each person's locale.conf, and the per-app languages), or for
 # every language the archive has packs for. A pack is <package>-l10n-<language>-<region>, else
-# <package>-l10n-<language>, the names Debian uses too. It first waits for the apt or PackageKit run
-# that changed the packages to end, and repeats until nothing is missing.
+# <package>-l10n-<language>, the names Debian uses too. It runs after dpkg has finished (apt's
+# DPkg::Post-Invoke touches the path its unit watches), decides from dpkg's final state, exits at once
+# and silently when nothing is missing, and only then waits for apt or PackageKit to let go of the
+# lock. It logs only what it installs.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
-apt=(apt-get -q -y --no-install-recommends -o DPkg::Lock::Timeout=1800)
+apt=(apt-get -qq -y --no-install-recommends -o DPkg::Lock::Timeout=1800 -o Dpkg::Use-Pty=0)
 
 settings() {
     sed -n 's/^\(LANG\|LANGUAGE\|LC_ALL\|LC_MESSAGES\)=//p' "$@" 2>/dev/null || true
@@ -46,10 +48,13 @@ missing() {
         }' <(printf '%s\n' "$available") <(printf '%s\n' "$installed") <(printf '%s\n' "$installed")
 }
 
-"${apt[@]}" install > /dev/null
 mapfile -t packs < <(missing)
 while [ ${#packs[@]} -gt 0 ]; do
     echo "installing ${packs[*]}"
-    "${apt[@]}" install "${packs[@]}"
+    "${apt[@]}" install "${packs[@]}" > /dev/null
+    tried=" ${packs[*]} "
     mapfile -t packs < <(missing)
+    for pack in "${packs[@]}"; do
+        [[ $tried != *" $pack "* ]] || { echo "$pack did not install" >&2; exit 1; }
+    done
 done

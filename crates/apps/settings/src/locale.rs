@@ -14,6 +14,8 @@ pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_lo
 
 const HELPER: &str = "/usr/libexec/bande-locale-helper";
 const LANGUAGE_PACKS: &str = "bande-language-packs.service";
+const PACKS: &str = "bande-desktop-l10n-";
+const OWN_CATALOGS: &str = "bande-settings";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
 const PKEXEC_DISMISSED: i32 = 126;
@@ -48,9 +50,24 @@ pub struct LocaleState {
     pub region: Option<String>,
     pub pending: Option<SettingId>,
     pub login_sources: Vec<String>,
+    pub translations: Vec<String>,
+    pub packs: Packs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Packs {
+    #[default]
+    Ready,
+    Fetching,
+    Offline,
 }
 
 impl LocaleState {
+    pub fn translated(&self, code: &str) -> bool {
+        let tongue = tongue(code);
+        matches!(tongue.as_str(), "c" | "posix") || self.translations.contains(&tongue)
+    }
+
     pub fn territory(&self) -> Option<&str> {
         let code = base(self.region.as_deref().unwrap_or(&self.language));
         code.split_once('_').map(|(_, territory)| territory)
@@ -236,6 +253,8 @@ fn read(locale: &LocaleProxyBlocking<'_>, available: &[AvailableLocale]) -> Opti
         language,
         region,
         pending: None,
+        translations: translations(),
+        packs: Packs::Ready,
         login_sources: login_codes(
             &locale.x11_layout().unwrap_or_default(),
             &locale.x11_variant().unwrap_or_default(),
@@ -332,7 +351,25 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             };
             match outcome {
                 Ok(()) => match write_user_file(&contents) {
-                    Ok(()) if setting == SettingId::Language => fetch_language_packs(),
+                    Ok(()) if setting == SettingId::Language => {
+                        if let Some(mut state) = read(&locale, available) {
+                            state.packs = Packs::Fetching;
+                            updates.send(Update::Locale(Some(state)));
+                        }
+                        let fetched = fetch_language_packs();
+                        if let Some(mut state) = read(&locale, available) {
+                            let wanted = tongue(needed);
+                            let installed = installed_catalogs().contains(&wanted);
+                            state.packs =
+                                if fetched && installed || !state.translations.contains(&wanted) {
+                                    Packs::Ready
+                                } else {
+                                    Packs::Offline
+                                };
+                            updates.send(Update::Locale(Some(state)));
+                            continue;
+                        }
+                    }
                     Ok(()) => {}
                     Err(error) => {
                         tracing::warn!("cannot write the language choice: {error}");
@@ -352,21 +389,48 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
     sender
 }
 
-pub(crate) fn fetch_language_packs() {
-    let started = bande_bus::system().and_then(|system| {
-        system
-            .call_method(
-                Some("org.freedesktop.systemd1"),
-                "/org/freedesktop/systemd1",
-                Some("org.freedesktop.systemd1.Manager"),
-                "StartUnit",
-                &(LANGUAGE_PACKS, "replace"),
-            )
-            .map(drop)
-    });
-    if let Err(error) = started {
-        tracing::warn!("cannot fetch the language packs: {error}");
+pub(crate) fn fetch_language_packs() -> bool {
+    let fetched = bande_bus::system()
+        .map_err(Into::into)
+        .and_then(|system| crate::software::versions::run_unit(&system, LANGUAGE_PACKS));
+    fetched
+        .inspect_err(|error| tracing::warn!("cannot fetch the language packs: {error}"))
+        .is_ok()
+}
+
+fn tongue(code: &str) -> String {
+    code.split(['_', '-', '.', '@'])
+        .next()
+        .unwrap_or(code)
+        .to_lowercase()
+}
+
+fn installed_catalogs() -> Vec<String> {
+    std::fs::read_dir(std::path::Path::new(bande_l10n::CATALOGS).join(OWN_CATALOGS))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            name.strip_suffix(".mo").map(tongue)
+        })
+        .collect()
+}
+
+fn translations() -> Vec<String> {
+    let mut found = installed_catalogs();
+    match Command::new("apt-cache").args(["pkgnames", PACKS]).output() {
+        Ok(output) => found.extend(
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter_map(|name| name.strip_prefix(PACKS))
+                .map(tongue),
+        ),
+        Err(error) => tracing::warn!("cannot list the language packs: {error}"),
     }
+    found.sort();
+    found.dedup();
+    found
 }
 
 #[cfg(test)]

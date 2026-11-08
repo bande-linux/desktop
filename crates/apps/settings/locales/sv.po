@@ -713,6 +713,12 @@ msgstr "Ställer in {name}…"
 msgid "Language"
 msgstr "Språk"
 
+msgid "Getting Bande in {name}…"
+msgstr "Hämtar Bande på {name}…"
+
+msgid "Bande in {name} is fetched when this computer is online."
+msgstr "Bande på {name} hämtas när datorn är ansluten till internet."
+
 msgid "Bande's own apps stay in English for now; other apps use this language."
 msgstr "Bandes egna appar förblir på engelska tills vidare, andra appar använder det här språket."
 

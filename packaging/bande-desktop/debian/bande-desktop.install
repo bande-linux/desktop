@@ -25,3 +25,4 @@ apt/language-packs usr/libexec/bande-desktop/
 systemd/system/bande-language-packs.service usr/lib/systemd/system/
 systemd/system/bande-language-packs.path usr/lib/systemd/system/
 polkit/50-bande-language-packs.rules usr/share/polkit-1/rules.d/
+NetworkManager/90-bande-language-packs usr/lib/NetworkManager/dispatcher.d/

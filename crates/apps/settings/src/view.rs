@@ -1058,7 +1058,9 @@ impl SettingsView {
             (Some((Picker::Language, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
+                .map(|locale| {
+                    locale_matches(&locale.available, &locale.translations, query, PICK_RESULTS)
+                })
                 .unwrap_or_default(),
             (Some((Picker::Region, query)), _) if query.trim().is_empty() => {
                 vec![SAME_AS_LANGUAGE.to_owned()]
@@ -1066,7 +1068,7 @@ impl SettingsView {
             (Some((Picker::Region, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
+                .map(|locale| locale_matches(&locale.available, &[], query, PICK_RESULTS))
                 .unwrap_or_default(),
             (Some((Picker::Zone, query)), Some(time)) => {
                 zone_matches(&time.zones, query, PICK_RESULTS)
@@ -1075,7 +1077,12 @@ impl SettingsView {
                 .locale
                 .as_ref()
                 .map(|locale| {
-                    let mut matches = locale_matches(&locale.available, query, PICK_RESULTS + 1);
+                    let mut matches = locale_matches(
+                        &locale.available,
+                        &locale.translations,
+                        query,
+                        PICK_RESULTS + 1,
+                    );
                     matches.retain(|code| !same_locale(code, DEFAULT_LOCALE));
                     matches.truncate(PICK_RESULTS);
                     matches

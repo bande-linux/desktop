@@ -57,7 +57,11 @@ pub(crate) fn location_title(location: &Location) -> String {
     match location {
         Location::Trash => L10N.tr("trash"),
         Location::Recents => L10N.tr("recents"),
-        Location::Server(url) => url.clone(),
+        Location::Network => L10N.tr("network"),
+        Location::Server(url) => url
+            .split_once("://")
+            .map_or(url.as_str(), |(_, host)| host)
+            .to_owned(),
         Location::Search(folder) => L10N.tr_args(
             "search-title",
             [(
@@ -96,7 +100,7 @@ impl SavedTab {
     pub fn still_there(&self) -> bool {
         match &self.location {
             Location::Folder(folder) => bande_volumes::quick_is_dir(folder),
-            Location::Trash | Location::Recents | Location::Search(_) => true,
+            Location::Trash | Location::Recents | Location::Search(_) | Location::Network => true,
             Location::Server(_) => false,
         }
     }
@@ -120,14 +124,16 @@ impl FilesView {
     }
 
     fn park(&mut self, browser: Browser) -> Tab {
-        Tab {
+        let parked = Tab {
             browser: std::mem::replace(&mut self.browser, browser),
             mode: self.mode,
             icon_size: self.icon_size,
             shown_root: self.shown_root.take(),
             grid_scroll: std::mem::take(&mut self.grid_scroll),
             scrolls: std::mem::take(&mut self.scrolls),
-        }
+        };
+        self.browser.set_network(self.network.clone());
+        parked
     }
 
     fn leave_tab(&mut self) {

@@ -703,7 +703,3 @@ replace-remove = Remove Text Replacement
 replace-columns = Replace, With
 replacement = { $from }, replaced with { $to }
 replacements-none = No text replacements yet.
-look-up-first = Use First
-look-up-install = Install
-look-up-wikipedia = Wikipedia
-look-up-wikipedia-online = Off by default. When on, every word you look up is sent to Wikipedia online.

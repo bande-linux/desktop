@@ -61,9 +61,9 @@ impl SettingsView {
                 .about
                 .as_ref()
                 .map(|about| available_of(about.available, about.capacity)),
-            PaneId::CrashReports => Some(L10N.tr_args(
-                "crash-report-count",
-                [("count", self.crash_reports.len().into())],
+            PaneId::Diagnostics => Some(L10N.tr_args(
+                "report-count",
+                [("count", self.diagnostics.reports.len().into())],
             )),
             PaneId::NightLight => self.night_light_summary(),
             PaneId::Camera

@@ -59,8 +59,19 @@ Measured behaviours the design rests on:
 - **Keys:** a random machine key in `/var/lib/bande-backup/key` runs the backups, unattended. The
   person's password is a second restic key, for restoring when the machine is gone. A key on the
   machine alone would make the backup useless in the case it exists for.
-- **Disk:** any non-startup filesystem, kept as it is; a `BandeBackups/<machine-id>` folder on it. Mounted privately under
-  `/run/bande-backup/disk` only during work, so it never blocks eject between runs.
+- **Disk:** any non-startup filesystem, kept as it is; a `BandeBackups/<machine-id>` folder on it. Mounted under
+  `/run/bande-backup/disk` only during work. Eject during a backup asks the service to let go: the backup stops
+  cleanly and resumes next time. A blank or foreign disk can be erased from Settings after a warning naming
+  the whole drive and what is on it: UDisks makes a GPT disk with one ext4 partition.
+- **Network:** `smb://` and `nfs://` are mounted by the service with the same soft options as Connect to Server,
+  because there may be no session and the share password can't come from a person's keychain; the password
+  sits in `/var/lib/bande-backup/share-password` (0400). restic's rest server is used directly (`rest:https://...`);
+  `sftp:` isn't offered, as it has no unattended sign-in for root. A server that goes silent: a TCP probe on each
+  progress line stops restic, a forced unmount clears the mount, and it counts as a disk that is away.
+- **Local snapshots:** while the destination is away, paused or waiting for power, the hourly run on a btrfs install
+  takes a read-only snapshot of `/home` in `/.snapshots/home/local-<time>`, keeping 24 hours, and deletes them early
+  when `/home` is under 5% free. Files lists them with the backups, bound read-only under
+  `/run/bande-backup-local/versions`.
 - **What:** every local filesystem except caches, trash, temp and journals, one-file-system. Excludes
   `CACHEDIR.TAG` folders.
 - **Snapshots:** on btrfs, a read-only snapshot in `/.snapshots/home/` (the part of the layout that
@@ -76,7 +87,4 @@ Measured behaviours the design rests on:
   `fix-first-run` calls it.
 
 ## Left to do
-Service, Settings, alerts, Files and the restore tool are built. Still open:
 - `fix-first-run` calls `bande-backup-restore` from Recovery and adds the package to the image.
-- A network location (restic's sftp and rest), erasing a blank disk, a list of excluded folders,
-  hourly local btrfs snapshots of home while the disk is away.

@@ -163,6 +163,9 @@ impl DesktopSurface {
         let spare = self.wallpaper_key(other);
         self.wallpapers
             .retain(|key, _| *key == wanted || Some(key) == spare.as_ref());
+        if let Some(spare_layer) = spare.as_ref().and_then(|key| self.wallpapers.get(key)) {
+            spare_layer.image.release_pixels();
+        }
         match self.wallpapers.get(&wanted) {
             Some(layer) => {
                 if self.view.wallpaper_key() != Some(&wanted) {

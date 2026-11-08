@@ -53,12 +53,13 @@ pub enum PaneId {
     About,
     Storage,
     SoftwareUpdate,
+    Diagnostics,
+    SendReport,
     Backup,
-    CrashReports,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 34] = [
+    const KEYWORDS: [(Self, &'static str); 35] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
@@ -91,8 +92,9 @@ impl PaneId {
         (Self::About, "about"),
         (Self::Storage, "storage"),
         (Self::SoftwareUpdate, "software-update"),
+        (Self::Diagnostics, "diagnostics"),
+        (Self::SendReport, "send-report"),
         (Self::Backup, "backup"),
-        (Self::CrashReports, "crash-reports"),
     ];
 
     pub fn group(self) -> Option<Group> {
@@ -129,7 +131,8 @@ impl PaneId {
             | Self::Location
             | Self::Storage
             | Self::SoftwareUpdate
-            | Self::CrashReports => None,
+            | Self::Diagnostics
+            | Self::SendReport => None,
         }
     }
 
@@ -167,7 +170,8 @@ impl PaneId {
             Self::Storage => "drive-harddisk-symbolic",
             Self::Backup => "document-open-recent-symbolic",
             Self::SoftwareUpdate => "view-refresh-symbolic",
-            Self::CrashReports => "dialog-warning-symbolic",
+            Self::Diagnostics => "dialog-warning-symbolic",
+            Self::SendReport => "dialog-warning-symbolic",
         }
     }
 
@@ -187,7 +191,8 @@ impl PaneId {
 
     pub fn parent(self) -> Option<Self> {
         match self {
-            Self::Storage | Self::SoftwareUpdate | Self::CrashReports => Some(Self::About),
+            Self::Storage | Self::SoftwareUpdate | Self::SendReport => Some(Self::About),
+            Self::Diagnostics => Some(Self::PrivacySecurity),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
             Self::NightLight => Some(Self::Displays),
             Self::Camera
@@ -310,8 +315,10 @@ pub enum SettingId {
     Region,
     StoragePage,
     SoftwareUpdatePage,
-    CrashReportsPage,
-    CrashReportList,
+    DiagnosticsPage,
+    DiagnosticsList,
+    SendReportPage,
+    SendReportForm,
     ShortcutsPage,
     Spelling,
     LookUp,
@@ -387,7 +394,8 @@ pub enum List {
     Shortcuts,
     About,
     Storage,
-    CrashReports,
+    Diagnostics,
+    SendReport,
     LargeFiles,
     Backup,
     Clock,
@@ -1511,6 +1519,10 @@ fn system_panes() -> Vec<Pane> {
                     ],
                 ),
                 section(
+                    Some(L10N.tr("diagnostics-section")),
+                    vec![page(SettingId::DiagnosticsPage, PaneId::Diagnostics)],
+                ),
+                section(
                     Some(L10N.tr("keyboard-access")),
                     vec![list(
                         SettingId::KeyboardAccess,
@@ -1571,13 +1583,24 @@ fn system_panes() -> Vec<Pane> {
         ),
         about_pane(),
         pane(
-            PaneId::CrashReports,
+            PaneId::SendReport,
             vec![section(
                 None,
                 vec![list(
-                    SettingId::CrashReportList,
-                    "crash-report-list",
-                    List::CrashReports,
+                    SettingId::SendReportForm,
+                    "send-report-form",
+                    List::SendReport,
+                )],
+            )],
+        ),
+        pane(
+            PaneId::Diagnostics,
+            vec![section(
+                None,
+                vec![list(
+                    SettingId::DiagnosticsList,
+                    "diagnostics-list",
+                    List::Diagnostics,
                 )],
             )],
         ),
@@ -1813,7 +1836,7 @@ fn about_pane() -> Pane {
                 vec![
                     page(SettingId::StoragePage, PaneId::Storage),
                     page(SettingId::SoftwareUpdatePage, PaneId::SoftwareUpdate),
-                    page(SettingId::CrashReportsPage, PaneId::CrashReports),
+                    page(SettingId::SendReportPage, PaneId::SendReport),
                 ],
             ),
         ],

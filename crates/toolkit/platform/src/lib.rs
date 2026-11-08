@@ -39,4 +39,5 @@ pub use shell::{Anchor, AppWindow};
 pub use window::{
     ACTIVATION_TOKEN_VARIABLE, Edges, FramePath, KeyboardFocus, LayerKind, LayerOptions,
     RENDERER_VARIABLE, Role, Sizing, ToplevelState, Window, WindowError, WindowEvent,
+    skip_absent_vulkan_drivers,
 };

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 
 use bande_toolkit::ui::{Button, TextField, Toggle};
-use zbus::blocking::{Connection, Proxy};
+use zbus::blocking::Proxy;
 
 use crate::L10N;
 use crate::follow::{Command, Update, Updates, spawn};
@@ -141,7 +141,7 @@ pub fn follow_spelling(updates: Updates) -> Sender<SpellingCommand> {
     let (sender, receiver) = mpsc::channel();
     let watcher = updates.clone();
     spawn("spelling", move || {
-        let connected = Connection::session().and_then(|connection| {
+        let connected = bande_bus::session().and_then(|connection| {
             let proxy = Proxy::new(&connection, BUS_NAME, OBJECT_PATH, BUS_NAME)?;
             Ok((connection, proxy))
         });

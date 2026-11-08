@@ -471,7 +471,7 @@ impl fmt::Debug for GlyphRun {
 
 impl PartialEq for GlyphRun {
     fn eq(&self, other: &Self) -> bool {
-        self.font_blob_id() == other.font_blob_id()
+        self.font_id() == other.font_id()
             && self.font.index == other.font.index
             && self.size == other.size
             && self.color == other.color
@@ -509,10 +509,6 @@ impl GlyphRun {
 
     pub fn font_index(&self) -> u32 {
         self.font.index
-    }
-
-    pub(crate) fn font_blob_id(&self) -> u64 {
-        self.font.data.id()
     }
 
     pub fn font_id(&self) -> u64 {

@@ -29,6 +29,7 @@ tracing.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true
+bande-packages.workspace = true
 bande-volumes.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
@@ -36,6 +37,7 @@ zbus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "admin"
+recommends = "btrfs-progs, e2fsprogs"
 depends = "$auto, restic (>= 0.18), fuse3, systemd (>= 257), dbus-system-bus | dbus, polkitd, udisks2"
 extended-description = """\
 Keeps hourly, daily and weekly versions of the whole computer on an external \
@@ -48,6 +50,7 @@ assets = [
     ["target/release/bande-backup-restore", "usr/libexec/", "755"],
     ["target/release/bande-backup-alerts", "usr/libexec/", "755"],
     ["data/bande-backup-alerts.service", "usr/lib/systemd/user/", "644"],
+    ["data/bande-backup-alerts.path", "usr/lib/systemd/user/", "644"],
     ["data/bande-backup.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-backup.timer", "usr/lib/systemd/system/", "644"],
     ["data/org.bande.Backup.conf", "usr/share/dbus-1/system.d/", "644"],

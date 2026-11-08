@@ -115,7 +115,7 @@ impl GlyphOutlines {
 
 fn font_key(run: &GlyphRun) -> FontKey {
     FontKey {
-        blob: run.font_blob_id(),
+        blob: run.font_id(),
         index: run.font_index(),
     }
 }

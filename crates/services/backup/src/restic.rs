@@ -49,6 +49,7 @@ pub enum StopReason {
     NoSpace,
     OnBattery,
     Reconfigured,
+    Released,
 }
 
 #[derive(Debug, Default)]
@@ -168,6 +169,7 @@ pub struct Repository {
     pub path: PathBuf,
     pub password_file: PathBuf,
     wrapper: Vec<String>,
+    environment: Vec<(&'static str, String)>,
 }
 
 pub struct Finished {
@@ -181,6 +183,7 @@ impl Repository {
             path,
             password_file: password_file.to_path_buf(),
             wrapper: Vec::new(),
+            environment: Vec::new(),
         }
     }
 
@@ -189,6 +192,11 @@ impl Repository {
             wrapper,
             ..self.clone()
         }
+    }
+
+    pub fn with_environment(mut self, environment: Vec<(&'static str, String)>) -> Self {
+        self.environment = environment;
+        self
     }
 
     pub fn process(&self) -> Command {
@@ -205,6 +213,7 @@ impl Repository {
             .env("RESTIC_PASSWORD_FILE", &self.password_file)
             .env("RESTIC_CACHE_DIR", CACHE)
             .env("RESTIC_PROGRESS_FPS", PROGRESS_PER_SECOND)
+            .envs(self.environment.iter().map(|(name, value)| (*name, value)))
             .stdin(Stdio::null());
         command
     }

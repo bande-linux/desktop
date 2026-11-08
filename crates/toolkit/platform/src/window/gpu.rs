@@ -12,6 +12,68 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Proxy};
 
 pub const RENDERER_VARIABLE: &str = "BANDE_RENDERER";
+const DRIVER_FILTER: &str = "VK_LOADER_DRIVERS_DISABLE";
+const RENDER_NODES: &str = "/sys/class/drm";
+const VIRTUAL_GPU: &str = "virtio_gpu";
+const MESA_DRIVERS: [(&str, &[&str]); 13] = [
+    ("asahi", &["asahi"]),
+    ("radeon", &["amdgpu", "radeon"]),
+    ("intel", &["i915", "xe"]),
+    ("intel_hasvk", &["i915"]),
+    ("nouveau", &["nouveau"]),
+    ("freedreno", &["msm"]),
+    ("panfrost", &["panfrost", "panthor"]),
+    ("broadcom", &["v3d"]),
+    ("powervr_mesa", &["pvr"]),
+    ("virtio", &["virtio_gpu"]),
+    ("gfxstream_vk", &["virtio_gpu"]),
+    ("lvp", &[]),
+    ("dzn", &[]),
+];
+
+fn render_node_drivers() -> Vec<String> {
+    std::fs::read_dir(RENDER_NODES)
+        .map(|nodes| {
+            nodes
+                .flatten()
+                .filter(|node| node.file_name().to_string_lossy().starts_with("renderD"))
+                .filter_map(|node| std::fs::read_link(node.path().join("device/driver")).ok())
+                .filter_map(|driver| Some(driver.file_name()?.to_string_lossy().into_owned()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Keeps the Vulkan loader from opening Mesa drivers for hardware that isn't here, the CPU one
+/// included, when a hardware render node exists: windows never draw with them. Other vendors'
+/// drivers are left alone. Call before any thread starts.
+pub fn skip_absent_vulkan_drivers() {
+    if std::env::var_os(RENDERER_VARIABLE).is_some() {
+        return;
+    }
+    let present = render_node_drivers();
+    let served = |kernel: &[&str]| {
+        kernel
+            .iter()
+            .any(|driver| present.iter().any(|seen| seen == driver))
+    };
+    let hardware = MESA_DRIVERS
+        .iter()
+        .any(|(_, kernel)| !kernel.contains(&VIRTUAL_GPU) && served(kernel));
+    if !hardware {
+        return;
+    }
+    let absent: Vec<String> = MESA_DRIVERS
+        .iter()
+        .filter(|(_, kernel)| !served(kernel))
+        .map(|(name, _)| format!("{name}_icd.*"))
+        .collect();
+    let filter = match std::env::var(DRIVER_FILTER) {
+        Ok(existing) if !existing.is_empty() => format!("{existing},{}", absent.join(",")),
+        _ => absent.join(","),
+    };
+    unsafe { std::env::set_var(DRIVER_FILTER, filter) };
+}
 
 pub(super) struct GpuSurface {
     gpu: Arc<GpuDevice>,

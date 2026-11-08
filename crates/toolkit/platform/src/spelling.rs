@@ -83,9 +83,11 @@ pub(crate) fn deliver() -> bool {
         .replies
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    replies
-        .try_iter()
-        .fold(false, |shown, reply| receive_spelling(reply) || shown)
+    let mut shown_changed = false;
+    for reply in replies.try_iter() {
+        shown_changed |= receive_spelling(reply);
+    }
+    shown_changed
 }
 
 fn is_absent(error: zbus::Error) -> bool {

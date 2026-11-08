@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 use bande_l10n::tr;
-use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
+use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring};
 use bande_toolkit::{
     Image, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
     TextSystem,
@@ -406,7 +406,7 @@ impl Widget for NowPlaying {
             }
         }
         if cx.is_focused(self.id) {
-            focus_ring_for(&cx.palette, Shape::rounded(self.frame, Radius::S), items);
+            focus_ring(cx, Shape::rounded(self.frame, Radius::S), items);
         }
         let Some((elapsed, remaining, fraction)) = &self.times else {
             return;

@@ -19,6 +19,7 @@ pub struct Slider {
     range: (f64, f64),
     step: f64,
     on_change: Box<dyn FnMut(f64)>,
+    on_release: Option<Box<dyn FnMut(f64)>>,
     dragging: bool,
     ticks: usize,
     knob: Animated,
@@ -49,6 +50,7 @@ impl Slider {
             range,
             step,
             on_change: Box::new(on_change),
+            on_release: None,
             dragging: false,
             ticks: 0,
             knob: Animated::new(fraction(value, range)),
@@ -58,6 +60,27 @@ impl Slider {
 
     pub fn ticks(self, ticks: usize) -> Self {
         Self { ticks, ..self }
+    }
+
+    pub fn on_release(self, on_release: impl FnMut(f64) + 'static) -> Self {
+        Self {
+            on_release: Some(Box::new(on_release)),
+            ..self
+        }
+    }
+
+    fn release(&mut self) {
+        if let Some(on_release) = &mut self.on_release {
+            on_release(self.value);
+        }
+    }
+
+    fn step(&mut self, cx: &Context, value: f64) {
+        let before = self.value;
+        self.set(cx, value, true);
+        if self.value != before {
+            self.release();
+        }
     }
 
     pub fn value(&self) -> f64 {
@@ -227,16 +250,23 @@ impl Widget for Slider {
             Event::PointerMove(pointer) if self.dragging => {
                 self.set(cx, self.value_at(pointer.position), self.has_detents());
             }
-            Event::PointerUp(pointer) if pointer.is_primary() => self.dragging = false,
-            Event::PointerLeave if self.dragging => self.dragging = false,
+            Event::PointerUp(pointer) if pointer.is_primary() => {
+                if std::mem::take(&mut self.dragging) {
+                    self.release();
+                }
+            }
+            Event::PointerLeave if self.dragging => {
+                self.dragging = false;
+                self.release();
+            }
             Event::Key {
                 key: Key::Right | Key::Up,
                 ..
-            } => self.set(cx, self.value + self.interval(), true),
+            } => self.step(cx, self.value + self.interval()),
             Event::Key {
                 key: Key::Left | Key::Down,
                 ..
-            } => self.set(cx, self.value - self.interval(), true),
+            } => self.step(cx, self.value - self.interval()),
             _ => return false,
         }
         true
@@ -244,11 +274,9 @@ impl Widget for Slider {
 
     fn perform(&mut self, cx: &mut Context, request: &ActionRequest) -> bool {
         match (request.action, &request.data) {
-            (Action::Increment, _) => self.set(cx, self.value + self.interval(), true),
-            (Action::Decrement, _) => self.set(cx, self.value - self.interval(), true),
-            (Action::SetValue, Some(ActionData::NumericValue(value))) => {
-                self.set(cx, *value, true);
-            }
+            (Action::Increment, _) => self.step(cx, self.value + self.interval()),
+            (Action::Decrement, _) => self.step(cx, self.value - self.interval()),
+            (Action::SetValue, Some(ActionData::NumericValue(value))) => self.step(cx, *value),
             _ => return false,
         }
         true

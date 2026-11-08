@@ -111,6 +111,7 @@ pub enum Change {
     Bluetooth(bool),
     DoNotDisturb(bool),
     Volume(f32),
+    VolumeReleased,
     Brightness(String, f32),
     KeyboardBrightness(f32),
     ChooseNetwork,
@@ -152,18 +153,21 @@ fn slider(
     value: f32,
     changes: &Changes,
     change: impl Fn(f32) -> Change + 'static,
+    released: Option<Change>,
 ) -> Vec<Box<dyn Widget>> {
-    let changes = Rc::clone(changes);
-    vec![
-        Box::new(Caption::new(label)),
-        Box::new(Slider::new(
-            label,
-            f64::from(value),
-            (0.0, 1.0),
-            LEVEL_STEP,
-            move |value| changes.borrow_mut().push(change(value as f32)),
-        )),
-    ]
+    let changing = Rc::clone(changes);
+    let mut slider = Slider::new(
+        label,
+        f64::from(value),
+        (0.0, 1.0),
+        LEVEL_STEP,
+        move |value| changing.borrow_mut().push(change(value as f32)),
+    );
+    if let Some(released) = released {
+        let changes = Rc::clone(changes);
+        slider = slider.on_release(move |_| changes.borrow_mut().push(released.clone()));
+    }
+    vec![Box::new(Caption::new(label)), Box::new(slider)]
 }
 
 fn module(rows: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
@@ -275,6 +279,7 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
             light.level,
             changes,
             move |level| Change::Brightness(connector.clone(), level),
+            None,
         ));
     }
     if let Some(level) = status.keyboard_brightness {
@@ -283,6 +288,7 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
             level,
             changes,
             Change::KeyboardBrightness,
+            None,
         ));
     }
     if !brightness.is_empty() {
@@ -290,7 +296,13 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
     }
     let mut sound = Vec::new();
     if let Some(volume) = status.volume {
-        sound.extend(slider(&L10N.tr("sound"), volume, changes, Change::Volume));
+        sound.extend(slider(
+            &L10N.tr("sound"),
+            volume,
+            changes,
+            Change::Volume,
+            Some(Change::VolumeReleased),
+        ));
         if status.outputs.len() > 1 {
             sound.push(pop_up(
                 &L10N.tr("output"),

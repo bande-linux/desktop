@@ -48,6 +48,7 @@ impl Crate {
 
 pub struct Program {
     pub name: String,
+    pub package: Option<String>,
     closure: BTreeSet<String>,
 }
 
@@ -192,6 +193,7 @@ impl Workspace {
                 }
                 let program = Program {
                     name: name.to_owned(),
+                    package: owner.cloned(),
                     closure,
                 };
                 let has_keys = crates

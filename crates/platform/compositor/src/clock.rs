@@ -173,16 +173,8 @@ impl FrameClock {
     pub fn frame_for(&self, now: Duration) -> Vblank {
         match &self.timing {
             Timing::Measured(pacing) => {
-                let (sequence, time) = pacing.slot_after(now);
-                if now <= pacing.latest_start_for(time) {
-                    Vblank { sequence, time }
-                } else {
-                    let sequence = sequence + 1;
-                    Vblank {
-                        sequence,
-                        time: pacing.slot(sequence),
-                    }
-                }
+                let (sequence, time) = pacing.first_startable_slot(now);
+                Vblank { sequence, time }
             }
             Timing::Classic(classic) => classic.frame_for(now),
         }
@@ -756,6 +748,31 @@ mod tests {
             1
         );
         Ok(())
+    }
+
+    #[test]
+    fn renders_longer_than_a_refresh_aim_at_a_slot_they_can_still_start_for() {
+        let refresh = Duration::from_secs_f64(1.0 / 74.99);
+        for render in [5, 14, 30, 60] {
+            let mut clock = FrameClock::measured(Duration::from_secs(1), refresh);
+            clock.flipped(
+                Vblank {
+                    sequence: 0,
+                    time: Duration::from_secs(1),
+                },
+                None,
+            );
+            clock.record_render(
+                Duration::ZERO,
+                Duration::ZERO,
+                Duration::from_millis(render),
+                true,
+            );
+            let now = Duration::from_millis(1_005);
+            let frame = clock.frame_for(now);
+            assert!(clock.latest_start(frame) >= now, "{render} ms");
+            assert!(frame.time < now + refresh * 2 + Duration::from_millis(render));
+        }
     }
 
     #[test]

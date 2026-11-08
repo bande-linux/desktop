@@ -310,6 +310,11 @@ impl FramePacing {
         slot.saturating_sub(self.prediction.budget() + self.lead.get())
     }
 
+    pub fn first_startable_slot(&self, now: Duration) -> (u64, Duration) {
+        self.vsync
+            .slot_after(now + self.prediction.typical() + self.lead.get())
+    }
+
     pub fn latest_start_for(&self, slot: Duration) -> Duration {
         slot.saturating_sub(self.prediction.typical() + self.lead.get())
     }

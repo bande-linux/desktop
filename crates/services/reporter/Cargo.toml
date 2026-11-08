@@ -22,6 +22,7 @@ tracing.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66), elfutils"
+replaces = "bande-scripts (<< 0.1.2~)"
 extended-description = """\
 Keeps a small report of each fault in a root-only folder. Reports leave the \
 computer only if sending is switched on and a server is configured; nothing is \

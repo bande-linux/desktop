@@ -104,7 +104,7 @@ pub use bande_graphics::{
     Captured, Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase,
     ScrollSource, SurfaceId, SurfaceScaling, past_drag_slop,
 };
-pub use control::{focus_ring, focus_ring_for};
+pub use control::{focus_ring, focus_ring_for, row_fill};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragAction {
@@ -172,6 +172,7 @@ pub struct Context {
     pub caps_lock: bool,
     pub display_scale: f64,
     focus: Option<WidgetId>,
+    focus_visible: bool,
     now: Instant,
     start: Instant,
     animating: cell::Cell<bool>,
@@ -221,6 +222,7 @@ impl Context {
             caps_lock: false,
             display_scale: 1.0,
             focus: None,
+            focus_visible: false,
             now: Instant::now(),
             start: Instant::now(),
             animating: cell::Cell::new(false),
@@ -290,6 +292,10 @@ impl Context {
 
     pub fn is_focused(&self, id: WidgetId) -> bool {
         self.focus == Some(id)
+    }
+
+    pub fn focus_visible(&self) -> bool {
+        self.focus_visible
     }
 
     pub fn control_height(&self, size: ControlSize) -> f32 {
@@ -830,6 +836,21 @@ impl Ui {
         if matches!(event, Event::PointerDown(_) | Event::Key { .. }) {
             self.deferred_menu = None;
         }
+        let focus_visible = self.cx.focus_visible;
+        match event {
+            Event::PointerDown(_) => self.cx.focus_visible = false,
+            Event::Key { modifiers, .. }
+                if !modifiers.control && !modifiers.logo && !modifiers.alt =>
+            {
+                self.cx.focus_visible = true;
+            }
+            _ => {}
+        }
+        let shown = focus_visible != self.cx.focus_visible && self.cx.focus.is_some();
+        shown | self.dispatch(event)
+    }
+
+    fn dispatch(&mut self, event: &Event) -> bool {
         match event {
             Event::PointerDown(pointer) => {
                 let hovered = self.hover(Some(pointer));
@@ -1257,6 +1278,7 @@ impl Ui {
 
     fn hover(&mut self, pointer: Option<&Pointer>) -> bool {
         self.pointer = pointer.map(|pointer| pointer.position);
+        let deepest = self.hovered.last().copied();
         let mut path = Vec::new();
         if let Some(pointer) = pointer {
             hit_path(self.active(), pointer.position, &mut path);
@@ -1286,6 +1308,11 @@ impl Ui {
         if let Some(pointer) = pointer {
             for id in entered {
                 changed |= self.deliver(id, &Event::PointerEnter(*pointer));
+            }
+            if let Some(deepest) =
+                deepest.filter(|id| self.hovered.contains(id) && self.hovered.last() != Some(id))
+            {
+                changed |= self.deliver(deepest, &Event::PointerMove(*pointer));
             }
         }
         changed

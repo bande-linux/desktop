@@ -1,5 +1,5 @@
 use accesskit::{Action, ActionRequest, Node, Role};
-use bande_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId};
+use bande_toolkit::ui::{Context, Event, Key, Size, Widget, WidgetId, focus_ring};
 use bande_toolkit::{Item, Point, Rect, Shape};
 
 use crate::widgets::{Text, Tone};
@@ -9,7 +9,6 @@ const PADDING: f32 = 24.0;
 const RADIUS: f32 = 6.0;
 const MAIN_MARK: f32 = 5.0;
 const ALIGN: i32 = 48;
-const FOCUS_RING: f32 = 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Area {
@@ -276,11 +275,7 @@ impl Widget for Arrangement {
                 });
             }
             if selected && cx.is_focused(self.id) {
-                items.push(Item::Stroke {
-                    shape: Shape::rounded(rect.inset(-FOCUS_RING), RADIUS + FOCUS_RING),
-                    width: FOCUS_RING,
-                    paint: cx.palette.accent.with_alpha(128).into(),
-                });
+                focus_ring(cx, Shape::rounded(rect, RADIUS), items);
             }
             let label = &self.labels[index];
             let size = label.size();

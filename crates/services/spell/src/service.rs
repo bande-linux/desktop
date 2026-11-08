@@ -150,7 +150,8 @@ impl Engine {
         let active = self.catalog.active.as_deref().unwrap_or_default();
         for name in active {
             if !self.loaded.contains_key(name)
-                && let Some(dictionary) = self.catalog.installed.get(name).and_then(|path| load(path))
+                && let Some(dictionary) =
+                    self.catalog.installed.get(name).and_then(|path| load(path))
             {
                 self.loaded.insert(name.clone(), dictionary);
             }

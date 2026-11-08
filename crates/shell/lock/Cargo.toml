@@ -32,7 +32,7 @@ zeroize.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, libpam0g, libpam-runtime"
+depends = "$auto, fonts-inter, fonts-manrope, libpam0g, libpam-runtime"
 recommends = "bande-shell"
 assets = [
     ["target/release/bande-lock", "usr/bin/", "755"],

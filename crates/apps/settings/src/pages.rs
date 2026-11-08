@@ -127,10 +127,7 @@ fn choice_control(
 impl SettingsView {
     fn offered(&self, id: SettingId) -> Option<Vec<String>> {
         match id {
-            SettingId::PowerMode => self
-                .battery
-                .as_ref()
-                .map(|battery| battery.profiles.clone()),
+            SettingId::PowerMode => self.power.as_ref().map(|power| power.offered().to_vec()),
             _ => None,
         }
     }
@@ -578,6 +575,9 @@ impl SettingsView {
     }
 
     fn setting_rows(&mut self, setting: &Setting, matched: Option<&SettingHit>) -> Widgets {
+        if !self.offers(setting.id) {
+            return Vec::new();
+        }
         let mut rows = match setting.kind {
             Kind::List(List::Shortcuts) => self.shortcut_cards(),
             Kind::List(list) if list != List::InputLevel => self.list_rows(list),
@@ -595,6 +595,11 @@ impl SettingsView {
             Kind::Text
                 if matches!(setting.id, SettingId::FocusFrom | SettingId::FocusTo)
                     && self.values.get(&SettingId::FocusScheduled) != Some(&Value::Flag(true)) =>
+            {
+                Vec::new()
+            }
+            _ if setting.id == SettingId::BarGap
+                && self.values.get(&SettingId::BarFloating) != Some(&Value::Flag(true)) =>
             {
                 Vec::new()
             }
@@ -813,6 +818,7 @@ impl SettingsView {
             List::TimeZones => self.zone_rows(),
             List::LoginItems => self.login_rows(),
             List::BatteryHistory => self.battery_rows(),
+            List::PowerStatus => self.power_status_rows(),
             List::NotificationApps => self.notification_app_rows(),
             List::SoftwareUpdates => self.software_rows(),
             List::Ethernet => self.ethernet_rows(),
@@ -1110,13 +1116,21 @@ impl SettingsView {
                 .is_some_and(|bluetooth| bluetooth.powered),
             SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
             SettingId::DateAndTime | SettingId::TimeZone => self.time.is_some(),
-            SettingId::PowerMode | SettingId::LowPowerOnBattery => self
-                .battery
-                .as_ref()
-                .is_some_and(|battery| !battery.profiles.is_empty()),
-            SettingId::BatteryLevel | SettingId::LidOnPower => self.battery.is_some(),
             _ => true,
         })
+    }
+
+    fn offers(&self, id: SettingId) -> bool {
+        let power = self.power.as_ref();
+        let battery = power.is_some_and(|power| power.battery.is_some());
+        let modes = power.is_some_and(|power| !power.offered().is_empty());
+        match id {
+            SettingId::BatteryLevel => battery,
+            SettingId::PowerMode => modes,
+            SettingId::LowPowerOnBattery => modes && battery,
+            SettingId::LidOnPower => power.is_some_and(|power| power.lid),
+            _ => true,
+        }
     }
 
     fn pairing_card(&mut self) -> Option<Widgets> {

@@ -806,7 +806,7 @@ Time Machine's behaviour on a Debian engine; the choice is in `NOTES/plans/backu
 (`org.bande.Backup`), root because a whole-system restore needs every file. It runs `restic` as a child
 and talks to it through exit codes and `--json`. A timer that exists once a disk is chosen, a udev rule
 for a new disk or mains power, and D-Bus start it; it exits after a minute with nothing to do.
-`bande-backup-alerts` is a session service that turns the service's `problem` into one notification.
+`bande-backup-alerts` runs only when there is something to say: the service writes its problem to the world-readable `/run/bande-backup-alert`, a user path unit starts the program when that file changes (and once at login), and it posts one notification per problem and exits once it is answered or closed.
 `bande-backup-restore` is for the recovery environment, without a bus.
 
 A repository is `BandeBackups/<machine-id>` on any filesystem on any drive but the startup one, or on an SMB or NFS

@@ -142,6 +142,18 @@ impl Shared {
     }
 
     fn publish(&self) {
+        let (problem, name, since) = {
+            let state = locked(&self.state);
+            (
+                state.problem.clone(),
+                state
+                    .destination
+                    .as_ref()
+                    .map_or_else(String::new, |destination| destination.name().to_owned()),
+                state.problem_since,
+            )
+        };
+        store::write_alert(&problem, &name, since);
         if let Some(bus) = locked(&self.bus).as_ref() {
             emit_status(bus);
         }
@@ -160,7 +172,11 @@ impl Shared {
     fn change(&self, change: impl FnOnce(&mut State)) {
         {
             let mut state = locked(&self.state);
+            let problem_before = state.problem.clone();
             change(&mut state);
+            if state.problem != problem_before {
+                state.problem_since = now();
+            }
             if let Err(error) = store::save(&state) {
                 tracing::error!("cannot save the backup state: {error}");
             }
@@ -905,8 +921,15 @@ impl Run<'_> {
             None => self.repository.clone(),
         };
         let finished = reader.follow_progress(self.stopper(), &args, |progress| {
+            if self.stopper().is_stopping() {
+                return;
+            }
             if !destination.is_present() {
                 self.stopper().stop(StopReason::DiskGone);
+                self.shared.set_phase(phase::DISK_AWAY);
+                if destination.is_network() {
+                    disk::unmount();
+                }
                 return;
             }
             let space = self.refresh_space();

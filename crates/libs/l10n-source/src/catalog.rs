@@ -57,22 +57,19 @@ impl Catalog {
         catalog.count = count;
         catalog.originals = originals;
         catalog.translations = translations;
-        if let Some(header) = catalog
-            .find(None, "")
-            .and_then(|forms| forms.first().map(|header| header.to_string()))
-        {
-            let field = |name: &str| {
-                header.lines().find_map(|line| {
-                    let (field, value) = line.split_once(':')?;
-                    (field.trim() == name).then(|| value.trim().to_owned())
-                })
-            };
-            if let Some(rule) = field("Plural-Forms") {
-                catalog.plural = PluralRule::parse(&rule)?;
-            }
-            catalog.development = field(DEVELOPMENT_HEADER).as_deref() == Some("yes");
+        if let Some(rule) = catalog.header("Plural-Forms") {
+            catalog.plural = PluralRule::parse(&rule)?;
         }
+        catalog.development = catalog.header(DEVELOPMENT_HEADER).as_deref() == Some("yes");
         Ok(catalog)
+    }
+
+    pub fn header(&self, name: &str) -> Option<String> {
+        let header = self.find(None, "")?.first()?.to_string();
+        header.lines().find_map(|line| {
+            let (field, value) = line.split_once(':')?;
+            (field.trim() == name).then(|| value.trim().to_owned())
+        })
     }
 
     pub fn is_development(&self) -> bool {

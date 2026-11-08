@@ -598,6 +598,11 @@ impl SettingsView {
             {
                 Vec::new()
             }
+            _ if setting.id == SettingId::BarGap
+                && self.values.get(&SettingId::BarFloating) != Some(&Value::Flag(true)) =>
+            {
+                Vec::new()
+            }
             _ if setting.id == SettingId::TrackpadDragging
                 && self.values.get(&SettingId::TrackpadTapToClick) != Some(&Value::Flag(true)) =>
             {

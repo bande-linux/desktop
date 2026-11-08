@@ -55,9 +55,7 @@ Package names use lower case, `bande-desktop-l10n-en-gb`, as `firefox-esr-l10n-s
 
 ## Translation-only releases
 
-- Tag `l10n-YYYYMMDD` (`.N` for a second one that day) on `main` in either repo. `release.yml` then builds only the packs, with no `cargo build`, and publishes.
-- Version `<last release>+l10nYYYYMMDD`: `0.9.0+l10n20261110` sorts above `0.9.0` and below `0.9.1`. `ci/deb/version.sh` keeps counting only `v` tags.
-- Normal releases and `<app>-v` tags build their packs too.
+Desktop done (`docs/architecture/ci.md`): `l10n-YYYYMMDD` tags build only the packs, at `<last release>+l10nYYYYMMDD`. Left: the APT repository taking those runs (as it takes `dict.yml`), and the apps repo's equivalent.
 
 ## Measured
 
@@ -81,7 +79,7 @@ The language packs are 65 KB (`sv`) and 3 KB (`en-GB`) as `.deb`.
 1. **Desktop** (done, `l10n-catalogs`): the runtime, macros and tool; every desktop crate moved from Fluent ids to English keys, with `sv.po` and `en-GB.po`; `en.mo` in each package; the `bande-desktop-l10n-sv` and `-en-gb` packs; `ci/check-l10n.py` replaced. Settings' language list reads the installed catalogs.
 2. **Installing on demand:** the `bande-packages` rule, Settings, Software, the update check, setup and images.
 3. **Apps repo:** the pin moves to stage 1, every app converted, `en.mo` in each app's package, per-app packs, the shared tool in the gate.
-4. **Translation-only releases.**
+4. **Translation-only releases** (desktop done; the APT repository and apps left).
 5. **Browser:** Settings and the rule pick up `bande-browser-l10n-*`.
 
 **Stages 1 and 3 reach the owner's mini together, with their packs.** The desktop release and the app releases built on it go in one `apt` run that also installs `bande-desktop-l10n-sv` and every installed app's `bande-<app>-l10n-sv`; otherwise a Swedish session shows English. Until stage 2 does this by itself, main installs the packs by hand with each such release.

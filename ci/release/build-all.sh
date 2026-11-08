@@ -11,12 +11,7 @@ mkdir -p "$out"
     DEB_VERSION_OVERRIDE=$version debian/rules clean)
 mv packaging/*_"${version}"_all.deb "$out/"
 rm -f packaging/*.buildinfo packaging/*.changes
-target=${CARGO_TARGET_DIR:-target}
-cargo build --release --locked --package=bande-l10n-tool
-rm -rf "$target/l10n"
-"$target/release/bande-l10n-tool" pack "$target/l10n"
-"$target/release/bande-l10n-tool" debs "$target/l10n" "$out" "$version" bande-desktop \
-    packaging/bande-desktop/debian/copyright
+ci/release/build-packs.sh "$out" "$version"
 ls -l "$out"
 deb() { echo "$out/$1_$2_all.deb"; }
 field() { dpkg-deb --field "$(deb "$1" "$version")" "$2"; }

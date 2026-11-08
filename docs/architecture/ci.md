@@ -59,7 +59,9 @@ a new one is declared in the change that adds it; the `install` job checks that 
 ## GitHub CI
 
 Besides `dict.yml`, which builds the dictionary packs from a `dict-YYYYMMDD` tag (see
-[lookup.md](lookup.md)), the one workflow, `release.yml`, runs on version tags (`vX.Y.Z`) and on manual dispatch, never
+[lookup.md](lookup.md)), and `l10n.yml`, which builds only the language packs from an
+`l10n-YYYYMMDD` tag (`.N` for another the same day) at `<last release>+l10nYYYYMMDD`
+(`ci/release/build-packs.sh`), so a corrected translation ships without a release, the one workflow, `release.yml`, runs on version tags (`vX.Y.Z`) and on manual dispatch, never
 on pushes or pull requests. It runs on GitHub-hosted runners (`ubuntu-24.04-arm` and
 `ubuntu-24.04`), every job in a `debian:testing` container that installs what it needs with
 `ci/apt-install.sh` (build libraries in `ci/release/build-depends`) and the toolchain pinned in

@@ -34,7 +34,7 @@ zbus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, pipewire, gstreamer1.0-tools, gstreamer1.0-pipewire, gstreamer1.0-plugins-good"
+depends = "$auto, bande-icon-theme, pipewire, gstreamer1.0-tools, gstreamer1.0-pipewire, gstreamer1.0-plugins-good"
 recommends = "gstreamer1.0-plugins-ugly"
 extended-description = """\
 The screenshot tool of the Bande desktop. Super+Shift+3 saves a picture \

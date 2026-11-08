@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use crate::L10N;
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
-use crate::battery::{BatteryCommand, BatteryState};
+use crate::battery::{BatteryCommand, PowerState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
 use crate::follow::{Command, Update};
@@ -149,6 +149,7 @@ pub(crate) enum Intent {
     Grant(Permission, String, bool),
     KeyboardAccess(String, bool),
     Spelling(crate::spelling::SpellingCommand),
+    Battery(BatteryCommand),
     EditReplacement(Option<String>),
     ReplacementText(crate::spelling::ReplacementField, String),
     Passwords(PasswordCommand),
@@ -274,7 +275,8 @@ pub struct SettingsView {
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
     pub(crate) language_app: Option<String>,
-    pub(crate) battery: Option<BatteryState>,
+    pub(crate) power: Option<PowerState>,
+    pub(crate) sleeps: bool,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
     pub(crate) detail: Option<Detail>,
     pub(crate) other: Option<Other>,
@@ -380,7 +382,8 @@ impl SettingsView {
             picking: None,
             login: None,
             language_app: None,
-            battery: None,
+            power: None,
+            sleeps: true,
             notification_apps: None,
             detail: None,
             other: None,
@@ -642,9 +645,10 @@ impl SettingsView {
                     SettingId::AppVolumes,
                 ],
             ),
-            Update::Battery(_) => (
+            Update::Power(_) => (
                 Some(PaneId::Power),
                 &[
+                    SettingId::PowerStatus,
                     SettingId::BatteryLevel,
                     SettingId::PowerMode,
                     SettingId::LowPowerOnBattery,
@@ -806,8 +810,8 @@ impl SettingsView {
                 }
                 self.network = Some(network);
             }
-            Update::Battery(battery) => {
-                match battery.as_ref().and_then(|battery| battery.profile.clone()) {
+            Update::Power(power) => {
+                match power.as_ref().and_then(|power| power.profile.clone()) {
                     Some(profile) => {
                         self.values
                             .insert(SettingId::PowerMode, Value::Keyword(profile));
@@ -816,9 +820,10 @@ impl SettingsView {
                         self.values.remove(&SettingId::PowerMode);
                     }
                 }
-                self.battery = battery;
+                self.power = power;
             }
             Update::CannotSleep => {
+                self.sleeps = false;
                 bande_settings_panes::without_sleep(&mut self.panes);
                 self.availability_changed();
             }
@@ -1460,6 +1465,7 @@ impl SettingsView {
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Spelling(command) => self.change_spelling(command),
+                Intent::Battery(command) => self.commands.push(Command::Battery(command)),
                 Intent::EditReplacement(original) => self.edit_replacement(original),
                 Intent::ReplacementText(..) => {}
                 Intent::Passwords(command) => self.password_command(command),

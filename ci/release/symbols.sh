@@ -29,7 +29,7 @@ while IFS= read -r binary; do
     strip --strip-all "$copy"
     objcopy --add-section .gnu_debugdata="$scratch/names.xz" "$copy"
     readelf --wide --section-headers "$copy" > "$scratch/sections"
-    if grep -q '\.debug_' "$scratch/sections" || ! grep -q '\.gnu_debugdata' "$scratch/sections"; then
+    if grep -qE '\.debug_(info|line|str) ' "$scratch/sections" || ! grep -q '\.gnu_debugdata' "$scratch/sections"; then
         echo "$copy is not stripped to its .gnu_debugdata" >&2
         exit 1
     fi

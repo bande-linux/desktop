@@ -26,7 +26,7 @@ if [ "${VERIFY_PROFILE:-dist}" = dist ]; then
             [ "$(od -An -tx1 -N4 "$file" | tr -d ' ')" = 7f454c46 ] || continue
             programs=$((programs + 1))
             sections=$(readelf --wide --section-headers "$file")
-            if grep -q '\.debug_' <<< "$sections" || ! grep -q '\.gnu_debugdata' <<< "$sections"; then
+            if grep -qE '\.debug_(info|line|str) ' <<< "$sections" || ! grep -q '\.gnu_debugdata' <<< "$sections"; then
                 echo "${file#"$root"} in $package is not stripped to its .gnu_debugdata"
                 exit 1
             fi

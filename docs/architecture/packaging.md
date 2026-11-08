@@ -87,7 +87,8 @@ profiles. Sizes are in [performance.md](performance.md).
   languages with a pack (installed or in the APT index) first, says while Bande's text is being
   fetched, and says when it will come once the computer is online. Settings starts
   the service when a language changes (a polkit rule lets an active local user start this one
-  unit), and the setup assistant at its end. The images install the packs of every language
+  unit) and follows the job's `JobRemoved` signal on its own thread, so region and keyboard
+  changes never wait behind apt's lock; the setup assistant starts it at its end. The images install the packs of every language
   (`language-packs --every-language`), so a first start in any language works offline.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the

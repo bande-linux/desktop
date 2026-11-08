@@ -1094,9 +1094,7 @@ impl TaskbarState {
         for slot in &mut self.slots {
             let launching =
                 matches!(&slot.key, Key::App(app_id) if self.launching.contains_key(app_id));
-            let dotted = !slot.leaving
-                && Some(&slot.key) != self.framed.as_ref()
-                && (slot.running() || launching);
+            let dotted = !slot.leaving && (slot.running() || launching);
             slot.dot.animate_at(
                 now,
                 reduce_motion,

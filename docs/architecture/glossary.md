@@ -13,7 +13,7 @@ Bande follows them. "In code" is what the code calls the part today.
 | Taskbar icons | The app icons of the Taskbar: kept apps, a hairline, running apps, then the Trash; there is no separate Dock | Dock | `Taskbar`, `TaskbarLayout` |
 | Kept apps / running apps | The two groups of the Taskbar icons: apps kept in the Taskbar, and running apps that are not | Keep in Dock / recent apps | `kept`, `running` |
 | Focus frame | The accent frame around the icon of the active app, with or without windows | none (the Dock marks no active app) | `paint_frame`, `framed` |
-| Running dot | The small grey square beside an app that runs but is not active | indicator for open apps | `RUNNING_DOT` |
+| Running dot | The small grey square beside every app that runs, the active one too | indicator for open apps | `RUNNING_DOT` |
 | Badge, progress, attention ring | A count, a progress bar, or a pulsing orange ring on an app's icon | badge, bounce | `LauncherEntry`, `attention` |
 | Icon menu | The menu on an app icon's right click: windows, Open, actions, Keep in Taskbar, Hide, Quit | Dock menu | taskbar menus |
 | More apps | The "+N" cell when the icons do not fit | none | `more`, `more-apps` |

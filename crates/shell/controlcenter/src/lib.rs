@@ -13,6 +13,7 @@ use std::time::Duration;
 use bande_audio::{Level, VolumeKey};
 use bande_l10n::Localizer;
 use bande_status::brightness::DisplayLevel;
+use bande_status::status::Reading;
 use bande_toolkit::ui::{
     Axis, Context, LevelIndicator, Menu, MenuItem, PopUpButton, Size, Slider, Stack, Ui, Widget,
 };
@@ -36,6 +37,8 @@ pub const EDGE: f32 = 8.0;
 pub const HUD_DURATION: Duration = Duration::from_millis(1500);
 pub const SEGMENTS: usize = 16;
 const PADDING: f32 = Spacing::M as f32;
+const WIFI_UNAVAILABLE_SYMBOL: &str = "network-wireless-no-route-symbolic";
+const BLUETOOTH_UNAVAILABLE_SYMBOL: &str = "bluetooth-disconnected-symbolic";
 const GAP: f32 = Spacing::S as f32;
 const SEGMENT_GAP: f32 = 2.0;
 const SEGMENT_HEIGHT: f32 = 6.0;
@@ -78,10 +81,10 @@ pub fn slide_from(anchor: Option<Anchor>, distance: f32) -> Point {
 
 #[derive(Debug, Clone, Default)]
 pub struct Status {
-    pub wifi: Option<bool>,
+    pub wifi: Reading<bool>,
     pub network: Option<String>,
     pub sign_in: bool,
-    pub bluetooth: Option<bool>,
+    pub bluetooth: Reading<bool>,
     pub do_not_disturb: bool,
     pub volume: Option<f32>,
     pub outputs: Vec<Choice>,
@@ -183,9 +186,27 @@ fn on_off(on: bool) -> String {
     L10N.tr(if on { "on" } else { "off" })
 }
 
+fn unavailable_tile(title: &str, symbol: &'static str, toggle: fn(bool) -> Change) -> TileSpec {
+    TileSpec {
+        title: L10N.tr(title),
+        detail: L10N.tr("unavailable"),
+        symbol,
+        on: false,
+        toggle,
+        details: None,
+    }
+}
+
 fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
     let mut specs = Vec::new();
-    if let Some(on) = status.wifi {
+    if status.wifi.is_unavailable() {
+        specs.push(unavailable_tile(
+            "wifi",
+            WIFI_UNAVAILABLE_SYMBOL,
+            Change::Wifi,
+        ));
+    }
+    if let Reading::Present(on) = status.wifi {
         specs.push(TileSpec {
             title: L10N.tr("wifi"),
             detail: match (&status.network, on) {
@@ -204,7 +225,14 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             details: Some(Change::ChooseNetwork),
         });
     }
-    if let Some(on) = status.bluetooth {
+    if status.bluetooth.is_unavailable() {
+        specs.push(unavailable_tile(
+            "bluetooth",
+            BLUETOOTH_UNAVAILABLE_SYMBOL,
+            Change::Bluetooth,
+        ));
+    }
+    if let Reading::Present(on) = status.bluetooth {
         specs.push(TileSpec {
             title: L10N.tr("bluetooth"),
             detail: on_off(on),

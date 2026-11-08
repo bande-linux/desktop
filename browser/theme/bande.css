@@ -30,8 +30,8 @@
   --toolbar-bgcolor: var(--bande-chassis) !important;
   --toolbar-color: var(--bande-ink) !important;
   --toolbarbutton-icon-fill: var(--bande-ink2) !important;
-  --toolbarbutton-border-radius: 6px !important !important;
-  --chrome-content-separator-color: transparent !important !important;
+  --toolbarbutton-border-radius: 6px !important;
+  --chrome-content-separator-color: transparent !important;
   --toolbarseparator-color: var(--bande-hairline) !important;
   --urlbar-box-bgcolor: var(--bande-well) !important;
   --urlbar-box-focus-bgcolor: var(--bande-sheet) !important;
@@ -41,19 +41,19 @@
   --toolbar-field-focus-background-color: var(--bande-sheet) !important;
   --toolbar-field-color: var(--bande-ink) !important;
   --toolbar-field-focus-color: var(--bande-ink) !important;
-  --toolbar-field-border-color: transparent !important !important;
+  --toolbar-field-border-color: transparent !important;
   --focus-outline-color: var(--bande-accent) !important;
   --tab-selected-bgcolor: var(--bande-sheet) !important;
   --tab-selected-textcolor: var(--bande-ink) !important;
   --tab-hover-background-color: var(--bande-well) !important;
-  --tab-border-radius: 8px !important !important;
+  --tab-border-radius: 8px !important;
   --arrowpanel-background: var(--bande-overlay) !important;
   --arrowpanel-color: var(--bande-ink) !important;
   --arrowpanel-border-color: var(--bande-hairline) !important;
-  --arrowpanel-border-radius: 10px !important !important;
+  --arrowpanel-border-radius: 10px !important;
   --panel-background: var(--bande-overlay) !important;
   --panel-color: var(--bande-ink) !important;
-  --font-family-system: Inter, sans-serif !important !important;
+  --font-family-system: Inter, sans-serif !important;
 }
 
 #navigator-toolbox { border-bottom: none; }

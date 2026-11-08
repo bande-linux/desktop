@@ -109,7 +109,9 @@ impl Workspace {
                     .parent()?
                     .to_owned();
                 let keys = keys_of(&folder.join("src"), &mut problems);
-                let local = package["id"].as_str().is_some_and(|id| member_ids.contains(id));
+                let local = package["id"]
+                    .as_str()
+                    .is_some_and(|id| member_ids.contains(id));
                 Some(Crate {
                     name,
                     folder,

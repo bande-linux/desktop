@@ -206,24 +206,38 @@ impl Stacks {
             .unwrap_or_default()
     }
 
+    fn frames_json(&self, frames: &[ParsedFrame]) -> Vec<Value> {
+        frames
+            .iter()
+            .map(|frame| {
+                json!({
+                    "symbol": frame.symbol,
+                    "module": frame.module,
+                    "build_id": self.build_id_of(&frame.module),
+                    "offset": frame.offset,
+                })
+            })
+            .collect()
+    }
+
+    pub fn faulting_frames_json(&self) -> Vec<Value> {
+        self.threads
+            .iter()
+            .find(|thread| thread.crashed)
+            .map(|thread| self.frames_json(&thread.frames))
+            .unwrap_or_default()
+    }
+
     pub fn threads_json(&self) -> Value {
         Value::Array(
             self.threads
                 .iter()
                 .map(|thread| {
-                    let frames: Vec<Value> = thread
-                        .frames
-                        .iter()
-                        .map(|frame| {
-                            json!({
-                                "symbol": frame.symbol,
-                                "module": frame.module,
-                                "build_id": self.build_id_of(&frame.module),
-                                "offset": frame.offset,
-                            })
-                        })
-                        .collect();
-                    json!({"id": thread.id, "faulting": thread.crashed, "frames": frames})
+                    json!({
+                        "id": thread.id,
+                        "faulting": thread.crashed,
+                        "frames": self.frames_json(&thread.frames),
+                    })
                 })
                 .collect(),
         )

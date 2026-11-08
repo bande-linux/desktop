@@ -71,8 +71,17 @@ pub fn report(kind: &str, reason: &str) {
     ));
 }
 
-pub fn report_hang_of(kind: &str, pid: u32, seconds: u64) {
-    send_in_background(hang_request(kind, pid, seconds));
+pub fn report_hang_of(kind: &str, pid: u32, seconds: u64, hang: u64) {
+    send_in_background(format!(
+        r#"{{"op":"fault","kind":"{}","pid":{pid},"seconds":{seconds},"hang":{hang}}}"#,
+        escaped(kind)
+    ));
+}
+
+pub fn hang_over(pid: u32, hang: u64, seconds: f64, recovered: bool) {
+    send_in_background(format!(
+        r#"{{"op":"hang-over","pid":{pid},"hang":{hang},"seconds":{seconds:.1},"recovered":{recovered}}}"#
+    ));
 }
 
 fn hang_request(kind: &str, pid: u32, seconds: u64) -> String {

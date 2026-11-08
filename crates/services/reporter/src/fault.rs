@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc::Receiver;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -13,17 +14,18 @@ use serde_json::{Map, Value, json};
 
 use crate::config::Config;
 use crate::facts;
+use crate::hang::{self, HangEnd, Sampler};
 use crate::scrub::Scrubber;
 use crate::signature::{Frame, signature};
 use crate::spool::{Attachment, Spool};
 use crate::stacks::{Stacks, parse_eu_stack};
 
 const PARTIAL: &str = "partial";
-const SNAPSHOTS: usize = 3;
 const IDLE_WAIT: &str = "do_epoll_wait";
-const SNAPSHOT_GAP: Duration = Duration::from_secs(1);
-const EU_STACK_PATIENCE: Duration = Duration::from_secs(8);
-const EU_STACK_CHECK: Duration = Duration::from_millis(50);
+const SAMPLE_GAP: Duration = Duration::from_millis(500);
+const SAMPLE_PATIENCE: Duration = Duration::from_secs(2);
+const EU_STACK_CHECK: Duration = Duration::from_millis(20);
+const UNSAMPLED_PEERS: [&str; 1] = ["bande-compositor"];
 const NETWORK_FILESYSTEMS: [(&str, &str); 7] = [
     ("cifs", "smb"),
     ("smb3", "smb"),
@@ -205,18 +207,9 @@ fn kernel_states(pid: &str) -> String {
         .collect()
 }
 
-fn later_snapshots(pid: &str) -> String {
-    let mut text = String::new();
-    for snapshot in 1..SNAPSHOTS {
-        sleep(SNAPSHOT_GAP);
-        text.push_str(&format!("--- snapshot {snapshot}\n{}", kernel_states(pid)));
-    }
-    text
-}
-
 fn user_stacks(pid: &str) -> String {
     let Ok(mut child) = Command::new("eu-stack")
-        .args(["-p", pid, "-m", "-b", "-s", "-n", "48"])
+        .args(["-p", pid, "-m", "-b", "-n", "48"])
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .stdout(Stdio::piped())
@@ -228,7 +221,7 @@ fn user_stacks(pid: &str) -> String {
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
-            Ok(None) if started.elapsed() < EU_STACK_PATIENCE => sleep(EU_STACK_CHECK),
+            Ok(None) if started.elapsed() < SAMPLE_PATIENCE => sleep(EU_STACK_CHECK),
             _ => {
                 if let Err(error) = child.kill() {
                     tracing::debug!("cannot stop eu-stack: {error}");
@@ -350,15 +343,24 @@ fn waits_with_nothing_ready(pid: &str) -> bool {
     poll(&mut fds, Some(&now)).is_ok_and(|ready| ready == 0)
 }
 
-fn main_thread_waited_throughout(pid: &str, snapshots: &str) -> bool {
-    let main = format!("thread {pid} ");
-    snapshots
-        .lines()
-        .filter(|line| line.starts_with(&main))
-        .all(|line| line.contains(&format!("wchan={IDLE_WAIT} ")))
+fn main_thread_waits_idle(pid: &str) -> bool {
+    fs::read_to_string(format!("/proc/{pid}/task/{pid}/wchan"))
+        .is_ok_and(|wchan| wchan.trim() == IDLE_WAIT)
 }
 
-pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Option<u64>) -> bool {
+pub struct Capture {
+    pub idle: bool,
+    pub end: Option<HangEnd>,
+}
+
+pub fn capture_hang(
+    fault: &mut Fault,
+    spool_root: &Path,
+    pid: &str,
+    seconds: Option<u64>,
+    sample_for: Duration,
+    ends: Option<&Receiver<HangEnd>>,
+) -> Capture {
     let idle_at_first = waits_with_nothing_ready(pid);
     let first = kernel_states(pid);
     let partial = format!("{}-{pid}", fault.kind);
@@ -370,13 +372,55 @@ pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Op
     if let Err(error) = write_partial(spool_root, &partial, &header) {
         tracing::debug!("cannot save the first snapshot: {error}");
     }
-    let snapshots = format!("--- snapshot 0\n{first}{}", later_snapshots(pid));
-    let idle = idle_at_first
-        && main_thread_waited_throughout(pid, &snapshots)
-        && waits_with_nothing_ready(pid);
-    let eu = user_stacks(pid);
-    let main_tid = pid.parse().unwrap_or(0);
-    fault.stacks = parse_eu_stack(&eu, main_tid);
+    let main_tid: u32 = pid.parse().unwrap_or(0);
+    let blocker = hang::blocker_of(main_tid);
+    let sampled_blocker = blocker
+        .as_ref()
+        .filter(|blocker| !UNSAMPLED_PEERS.contains(&blocker.program.as_str()));
+    let mut own = Sampler::new(main_tid);
+    let mut theirs = sampled_blocker.map(|blocker| Sampler::new(blocker.pid));
+    let mut main_idle = true;
+    let mut end = None;
+    let started = Instant::now();
+    loop {
+        main_idle &= main_thread_waits_idle(pid);
+        own.add(parse_eu_stack(&user_stacks(pid), u64::from(main_tid)));
+        if let (Some(blocker), Some(sampler)) = (sampled_blocker, theirs.as_mut()) {
+            let peer = blocker.pid.to_string();
+            sampler.add(parse_eu_stack(&user_stacks(&peer), u64::from(blocker.pid)));
+        }
+        if started.elapsed() + SAMPLE_GAP > sample_for
+            || !Path::new(&format!("/proc/{pid}")).exists()
+        {
+            break;
+        }
+        match ends.map(|ends| ends.recv_timeout(SAMPLE_GAP)) {
+            Some(Ok(ended)) => {
+                end = Some(ended);
+                break;
+            }
+            Some(Err(_)) => {}
+            None => sleep(SAMPLE_GAP),
+        }
+    }
+    let snapshots = format!("--- first\n{first}--- last\n{}", kernel_states(pid));
+    let idle = idle_at_first && main_idle && waits_with_nothing_ready(pid);
+    fault.stacks = own.heaviest();
+    let interval = SAMPLE_GAP.as_millis();
+    let mut tree = own.tree("hang-tree", None, interval);
+    if let Some(blocker) = &blocker {
+        let stacks = theirs.as_mut().map(Sampler::heaviest).unwrap_or_default();
+        fault.detail.insert(
+            "blocked_on".to_owned(),
+            hang::blocked_on_json(blocker, &stacks),
+        );
+        if let Some(sampler) = theirs.as_mut().filter(|sampler| sampler.samples() > 0) {
+            tree.push_str(&sampler.tree("blocked-on", Some(blocker.via), interval));
+        }
+    }
+    if own.samples() > 0 {
+        push_text(&mut fault.attachments, "hang-tree.txt", tree);
+    }
     if let Some(protocol) = network_filesystem_in(&snapshots) {
         fault.kind = "mount-stall".to_owned();
         fault.detail.insert("protocol".to_owned(), json!(protocol));
@@ -401,7 +445,7 @@ pub fn capture_hang(fault: &mut Fault, spool_root: &Path, pid: &str, seconds: Op
     if let Err(error) = fs::remove_file(done) {
         tracing::debug!("cannot remove a finished snapshot: {error}");
     }
-    idle
+    Capture { idle, end }
 }
 
 pub fn stuck_tasks() -> String {

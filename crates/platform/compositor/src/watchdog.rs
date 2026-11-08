@@ -12,7 +12,8 @@ use smithay::wayland::shell::xdg::ShellClient;
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, State, client_pid};
 
-pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(3);
+pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(2);
+const MICROHANG_AFTER: Duration = Duration::from_millis(250);
 pub(crate) const PING_SINCE: u32 = 2;
 const PING_INTERVAL: Duration = Duration::from_secs(1);
 const QUIT_PATIENCE: Duration = Duration::from_secs(10);
@@ -22,6 +23,39 @@ const REPORT_HANG_AFTER: Duration = Duration::from_secs(10);
 enum Pinged {
     App(ShellClient),
     Shell(BandeShellV1),
+}
+
+impl Ping {
+    fn hang_token(&self) -> u64 {
+        u64::try_from(self.sent.as_millis()).unwrap_or(u64::MAX)
+    }
+
+    fn reported_pid(&self) -> Option<u32> {
+        u32::try_from(self.pid).ok().filter(|pid| *pid > 0)
+    }
+
+    fn microhang_counter(&self) -> String {
+        match self.pinged {
+            Pinged::App(_) if !self.app_id.is_empty() => format!("microhang:{}", self.app_id),
+            Pinged::App(_) => "microhang:app".to_owned(),
+            Pinged::Shell(_) => "microhang:shell".to_owned(),
+        }
+    }
+
+    fn measure_answer(&mut self, now: Duration) {
+        if !std::mem::take(&mut self.answered) {
+            return;
+        }
+        let waited = now.saturating_sub(self.sent);
+        if waited >= MICROHANG_AFTER {
+            bande_log::fault::count(&self.microhang_counter());
+        }
+        if self.reported
+            && let Some(pid) = self.reported_pid()
+        {
+            bande_log::fault::hang_over(pid, self.hang_token(), waited.as_secs_f64(), true);
+        }
+    }
 }
 
 impl Pinged {
@@ -40,6 +74,7 @@ struct Ping {
     app_id: String,
     sent: Duration,
     pending: bool,
+    answered: bool,
     unresponsive: bool,
     given_up: bool,
     reported: bool,
@@ -144,6 +179,7 @@ impl State {
             return;
         };
         ping.pending = false;
+        ping.answered = true;
         ping.given_up = false;
         if std::mem::take(&mut ping.unresponsive) {
             announce(
@@ -207,6 +243,7 @@ impl State {
                 app_id: toplevel_names(window.toplevel.wl_surface()).1,
                 sent: now,
                 pending: true,
+                answered: false,
                 unresponsive: false,
                 given_up: false,
                 reported: false,
@@ -234,6 +271,7 @@ impl State {
                 app_id: String::new(),
                 sent: now,
                 pending: true,
+                answered: false,
                 unresponsive: false,
                 given_up: false,
                 reported: false,
@@ -245,12 +283,27 @@ impl State {
         let shells = &self.shell_resources;
         let controls = &self.app_control_resources;
         let mut changed = false;
+        for ping in &mut self.watchdog.pings {
+            ping.measure_answer(now);
+        }
         self.watchdog.pings.retain(|ping| {
             let alive = ping.pinged.alive();
             let quiet = !ping.pending && now >= ping.sent + PING_INTERVAL;
             if !alive && ping.unresponsive {
                 announce(shells, controls, ping, true);
                 changed = true;
+            }
+            if !alive
+                && ping.pending
+                && ping.reported
+                && let Some(pid) = ping.reported_pid()
+            {
+                bande_log::fault::hang_over(
+                    pid,
+                    ping.hang_token(),
+                    now.saturating_sub(ping.sent).as_secs_f64(),
+                    false,
+                );
             }
             alive && !quiet
         });
@@ -269,7 +322,7 @@ impl State {
                 waiting_for_apps && ping.unresponsive && now >= ping.sent + QUIT_PATIENCE;
             if ping.unresponsive && !ping.reported && now >= ping.sent + REPORT_HANG_AFTER {
                 ping.reported = true;
-                if let Some(pid) = u32::try_from(ping.pid).ok().filter(|pid| *pid > 0) {
+                if let Some(pid) = ping.reported_pid() {
                     let kind = match ping.pinged {
                         Pinged::App(_) => "app-hang",
                         Pinged::Shell(_) => "shell-stall",
@@ -278,6 +331,7 @@ impl State {
                         kind,
                         pid,
                         now.saturating_sub(ping.sent).as_secs(),
+                        ping.hang_token(),
                     );
                 }
             }

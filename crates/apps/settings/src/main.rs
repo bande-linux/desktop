@@ -132,6 +132,17 @@ fn frame_regions(text: TextSize) -> FrameRegions {
     }
 }
 
+fn open_arguments(view: &mut SettingsView, arguments: &[String]) {
+    if let Some(keyword) = arguments.first() {
+        select_pane(view, keyword);
+    }
+    if let Some(report) = arguments.get(1)
+        && arguments.first().map(String::as_str) == Some(PaneId::Diagnostics.keyword())
+    {
+        view.show_report_of(report);
+    }
+}
+
 fn select_pane(view: &mut SettingsView, keyword: &str) {
     match PaneId::from_keyword(keyword) {
         Some(pane) => view.select_pane(pane),
@@ -175,9 +186,7 @@ fn open_main(
             if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
                 view.hide_screen_reader();
             }
-            if let Some(keyword) = arguments.first() {
-                select_pane(&mut view, keyword);
-            }
+            open_arguments(&mut view, arguments);
             if let Some(displays) = displays {
                 view.set_displays(displays.list());
             }
@@ -279,11 +288,8 @@ impl Program for Settings {
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
-        if let (Some(keyword), Some(view)) = (
-            arguments.first(),
-            settings_view(cx, self.main, &mut self.parked),
-        ) {
-            select_pane(view, keyword);
+        if let Some(view) = settings_view(cx, self.main, &mut self.parked) {
+            open_arguments(view, &arguments);
         }
         if self.main.is_none() {
             self.reopen(cx);

@@ -30,3 +30,9 @@ msgstr "En bakgrundsuppgift stoppades eftersom minnet höll på att ta slut"
 
 msgid "Your computer ran out of memory and stopped {unit} to keep everything else working."
 msgstr "Datorn fick slut på minne och stoppade {unit} så att allt annat fortsätter fungera."
+
+msgid "Reopen"
+msgstr "Öppna igen"
+
+msgid "Show Report"
+msgstr "Visa rapport"

@@ -222,6 +222,25 @@ pub fn of_entry(entry: &Entry) -> Result<(), Box<dyn Error>> {
     }
 }
 
+pub fn failed_boot(entry: &str, failed_tries: u32, booted: &str) -> Result<(), Box<dyn Error>> {
+    let spool = Spool::open(Path::new(SPOOL))?;
+    let scrubber = Scrubber::for_this_computer();
+    let mut fault = Fault::new("failed-boot");
+    fault.program = Some("boot".to_owned());
+    fault.signature_text = Some(entry.to_owned());
+    fault.detail.insert("entry".to_owned(), json!(entry));
+    fault
+        .detail
+        .insert("failed_tries".to_owned(), json!(failed_tries));
+    fault
+        .detail
+        .insert("booted_entry".to_owned(), json!(booted));
+    fault.boot = Some(PREVIOUS_BOOT.to_owned());
+    previous_boot_tail(&mut fault, &scrubber, Path::new(SPOOL));
+    fault.store(&spool, &config(), Path::new(SPOOL))?;
+    Ok(())
+}
+
 pub fn of_previous_boot(saved_kernel_log: &str, time: Timestamp) -> Result<(), Box<dyn Error>> {
     let spool = Spool::open(Path::new(SPOOL))?;
     let scrubber = Scrubber::for_this_computer();

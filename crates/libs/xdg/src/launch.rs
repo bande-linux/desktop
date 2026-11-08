@@ -453,6 +453,7 @@ pub fn spawn_detached(
     let app = (!app_id.is_empty()).then(|| Supervised {
         app_id: app_id.to_owned(),
         started: Instant::now(),
+        program: None,
     });
     match process.spawn() {
         Ok(child) => {
@@ -472,6 +473,7 @@ pub fn spawn_detached(
 struct Supervised {
     app_id: String,
     started: Instant,
+    program: Option<String>,
 }
 
 enum Watch {
@@ -566,10 +568,16 @@ impl<C: Fn() -> zbus::Result<Connection>> Watcher<C> {
 
     fn take(&mut self, watch: Watch) {
         let (child, app) = match watch {
-            Watch::NotOpened(app_id) => return tell(self.bus(), &app_id, Failure::NotOpened),
+            Watch::NotOpened(app_id) => {
+                return tell(self.bus(), &app_id, Failure::NotOpened, None);
+            }
             Watch::Child(child, app) => (child, app),
         };
-        if let Some(app) = &app {
+        let mut app = app;
+        if let Some(app) = &mut app {
+            app.program = std::fs::read_link(format!("/proc/{}/exe", child.id()))
+                .ok()
+                .and_then(|path| path.file_name()?.to_str().map(str::to_owned));
             let placed = self
                 .bus()
                 .and_then(|bus| place_in_scope(&bus, &app.app_id, child.id()));
@@ -603,7 +611,7 @@ impl<C: Fn() -> zbus::Result<Connection>> Watcher<C> {
                 && let Some(failure) = failure(status, app.started.elapsed())
             {
                 tracing::warn!("{} ended with {status}", app.app_id);
-                tell(self.bus(), &app.app_id, failure);
+                tell(self.bus(), &app.app_id, failure, app.program.as_deref());
             }
         }
     }
@@ -633,6 +641,12 @@ const UNIT_INTERFACES: [&str; 2] = [
     "org.freedesktop.systemd1.Service",
 ];
 const OOM_KILL: &str = "oom-kill";
+const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
+const REOPEN_ACTION: &str = "reopen";
+const SHOW_REPORT_ACTION: &str = "show-report";
+const SETTINGS_APP: &str = "org.bande.Settings";
+const SETTINGS_PROGRAM: &str = "bande-settings";
+const DIAGNOSTICS_PANE: &str = "diagnostics";
 const APP_STOP_TIMEOUT_USEC: u64 = 5_000_000;
 
 fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
@@ -668,7 +682,57 @@ fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> 
     Ok(())
 }
 
-fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
+fn notice_signals(bus: &Connection) -> zbus::Result<MessageIterator> {
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .interface(NOTIFICATIONS)?
+        .build();
+    MessageIterator::for_match_rule(rule, bus, None)
+}
+
+fn follow_crash_notice(
+    signals: MessageIterator,
+    id: u32,
+    entry: Option<DesktopEntry>,
+    program: String,
+) {
+    for signal in signals.flatten() {
+        let header = signal.header();
+        let body = signal.body();
+        match header.member().map(|member| member.as_str()) {
+            Some("ActionInvoked") => {
+                let Ok((invoked, key)) = body.deserialize::<(u32, String)>() else {
+                    continue;
+                };
+                if invoked != id {
+                    continue;
+                }
+                if key == REOPEN_ACTION
+                    && let Some(entry) = &entry
+                    && let Err(error) = launch(entry, None)
+                {
+                    tracing::warn!("cannot reopen {}: {error}", entry.app_id());
+                }
+                if key == SHOW_REPORT_ACTION {
+                    let command = [SETTINGS_PROGRAM, DIAGNOSTICS_PANE, &program];
+                    if let Err(error) = spawn_detached(SETTINGS_APP, &command, None, None) {
+                        tracing::warn!("cannot show the report of {program}: {error}");
+                    }
+                }
+            }
+            Some("NotificationClosed")
+                if body
+                    .deserialize::<(u32, u32)>()
+                    .is_ok_and(|(closed, _)| closed == id) =>
+            {
+                return;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure, program: Option<&str>) {
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),
@@ -692,6 +756,13 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
             ),
         ),
     };
+    let reopen = tr!("Reopen");
+    let show_report = tr!("Show Report");
+    let program = program.filter(|_| failure == Failure::Crashed);
+    let crash_actions = [
+        (REOPEN_ACTION, reopen.as_str()),
+        (SHOW_REPORT_ACTION, show_report.as_str()),
+    ];
     let request = Request {
         app_name: &app,
         replaces_id: 0,
@@ -700,14 +771,33 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
             .unwrap_or_default(),
         summary: &summary,
         body: &body,
-        actions: &[],
+        actions: if program.is_some() {
+            &crash_actions
+        } else {
+            &[]
+        },
         urgency: Urgency::Normal,
         sound: None,
         desktop_entry: entry.map(DesktopEntry::app_id),
     };
-    let told = bus.and_then(|bus| notify(&bus, &request));
-    if let Err(error) = told {
-        tracing::warn!("cannot tell that {app_id} failed: {error}");
+    let told = bus.and_then(|bus| {
+        let signals = program.map(|_| notice_signals(&bus)).transpose()?;
+        let id = notify(&bus, &request)?;
+        Ok((id, signals))
+    });
+    match told {
+        Ok((id, Some(signals))) => {
+            let entry = entry.cloned();
+            let program = program.unwrap_or_default().to_owned();
+            let followed = thread::Builder::new()
+                .name("crash-notice".to_owned())
+                .spawn(move || follow_crash_notice(signals, id, entry, program));
+            if let Err(error) = followed {
+                tracing::warn!("the crash notice of {app_id} cannot be clicked: {error}");
+            }
+        }
+        Ok(_) => {}
+        Err(error) => tracing::warn!("cannot tell that {app_id} failed: {error}"),
     }
 }
 
@@ -775,7 +865,7 @@ fn watch_oom_kills(bus: &Connection) -> zbus::Result<()> {
             .or(ids.last().map(String::as_str));
         bande_log::fault::report_oom(&unit, app_id);
         match app_id {
-            Some(app_id) => tell(Ok(bus.clone()), app_id, Failure::OutOfMemory),
+            Some(app_id) => tell(Ok(bus.clone()), app_id, Failure::OutOfMemory, None),
             None => tell_task_stopped(bus, &unit),
         }
     }

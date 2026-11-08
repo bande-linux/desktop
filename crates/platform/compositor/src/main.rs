@@ -426,6 +426,7 @@ fn run_drm(
                 Sleep::Ended => {
                     if let Err(error) = app.output.wake() {
                         tracing::warn!("cannot wake the displays and input: {error}");
+                        bande_log::fault::report("wake-failure", "displays-and-input");
                     }
                     if app.output.session_active() {
                         reactivate(app);

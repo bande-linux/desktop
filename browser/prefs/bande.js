@@ -172,6 +172,8 @@ pref("pdfjs.enableAltText", false);
 pref("pdfjs.enableGuessAltText", false);
 // Accounts: stay out of the way until asked for
 pref("identity.fxaccounts.toolbar.enabled", false);
+// The Bookmarks Toolbar is the favorites bar, shown in every window
+pref("browser.toolbars.bookmarks.visibility", "always");
 // Debian
 pref("distribution.searchplugins.defaultLocale", "en-US");
 pref("spellchecker.dictionary_path", "/usr/share/hunspell");

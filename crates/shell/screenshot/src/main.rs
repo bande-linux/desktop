@@ -1361,7 +1361,6 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
-    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-screenshot");
     let arguments: Vec<String> = std::env::args().collect();
     let outcome = match arguments.as_slice() {

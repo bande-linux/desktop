@@ -501,6 +501,29 @@ impl Client {
             .applied())
     }
 
+    pub fn install_missing(&self, names: &[&str]) -> Result<(), Error> {
+        let wanted: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
+        let found = self.resolve(&wanted)?;
+        let ids: Vec<String> = names
+            .iter()
+            .filter(|name| {
+                !found
+                    .iter()
+                    .any(|package| package.name == **name && package.info == Info::Installed)
+            })
+            .filter_map(|name| {
+                found
+                    .iter()
+                    .find(|package| package.name == *name && package.info == Info::Available)
+            })
+            .map(|package| package.id.clone())
+            .collect();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        self.install(&ids, Mode::Apply, &|_| {}).map(drop)
+    }
+
     pub fn resolve_installed(&self, name: &str) -> Result<Vec<Package>, Error> {
         Ok(self
             .run(

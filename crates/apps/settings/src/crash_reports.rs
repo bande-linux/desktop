@@ -33,6 +33,7 @@ pub struct CrashReport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CrashReportCommand {
     Refresh,
+    Read(PathBuf),
     Delete(PathBuf),
 }
 
@@ -103,6 +104,13 @@ pub fn follow_crash_reports(updates: Updates) -> Sender<CrashReportCommand> {
         for command in receiver {
             match command {
                 CrashReportCommand::Refresh => watch_folders(),
+                CrashReportCommand::Read(path) => {
+                    let text = fs::read_to_string(&path).unwrap_or_default();
+                    if !updates.send(Update::CrashReportText(path, text)) {
+                        return;
+                    }
+                    continue;
+                }
                 CrashReportCommand::Delete(path) => {
                     if let Err(error) = fs::remove_file(&path) {
                         updates.send(pane_failed(
@@ -160,8 +168,17 @@ impl SettingsView {
         let Some(Detail::CrashReport(path)) = self.detail.clone() else {
             return None;
         };
-        let text = fs::read_to_string(&path).ok()?;
-        let report = read_header(&path)?;
+        let report = self
+            .crash_reports
+            .iter()
+            .find(|report| report.path == path)?
+            .clone();
+        let text = self
+            .crash_report_text
+            .as_ref()
+            .filter(|(read, _)| *read == path)
+            .map(|(_, text)| text.clone())
+            .unwrap_or_default();
         let mut page: Vec<Box<dyn Widget>> =
             self.back_button(PaneId::CrashReports).into_iter().collect();
         let mut copy = intent(&self.intents, Intent::CopyCrashReport);

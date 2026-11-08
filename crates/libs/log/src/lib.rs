@@ -20,6 +20,8 @@ const HOLDS_PASSWORDS: [&str; 6] = [
     "bande-secrets",
     "bande-secrets-prompt",
 ];
+const UNPREFIXED_TARGETS: [&str; 2] = ["pam_bande_secrets", "xdg_desktop_portal_bande"];
+const DBUS_TARGET: &str = "zbus";
 
 fn name_process(identifier: &str) {
     if let Ok(name) = std::ffi::CString::new(identifier)
@@ -119,5 +121,14 @@ fn is_journal_stream(journal_stream: Option<&str>, device: u64, inode: u64) -> b
 fn targets(directives: Option<&str>) -> Targets {
     directives
         .and_then(|directives| directives.parse().ok())
-        .unwrap_or_else(|| Targets::new().with_default(LevelFilter::INFO))
+        .unwrap_or_else(quiet_dependencies)
+}
+
+fn quiet_dependencies() -> Targets {
+    UNPREFIXED_TARGETS.iter().chain([&OWN_TARGETS]).fold(
+        Targets::new()
+            .with_default(LevelFilter::WARN)
+            .with_target(DBUS_TARGET, LevelFilter::ERROR),
+        |filter, target| filter.with_target(*target, LevelFilter::INFO),
+    )
 }

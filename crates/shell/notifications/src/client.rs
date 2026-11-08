@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
@@ -17,7 +17,7 @@ use bande_toolkit::{
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
-    find_icon, launch, path_from_file_uri, running_app,
+    find_icon, launch, notifying_app, notifying_app_name, path_from_file_uri, running_app,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -68,9 +68,18 @@ fn image_named(name: &str, directories: &[PathBuf]) -> Option<Image> {
     path.and_then(|path| Image::load(&path, ICON_PIXELS))
 }
 
+fn installed_apps() -> Vec<DesktopEntry> {
+    applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    )
+}
+
 fn sender_lookup(
-    entries: Vec<DesktopEntry>,
+    mut entries: Vec<DesktopEntry>,
 ) -> impl FnMut(&bande_notify::Notification, &str) -> Sender {
+    let mut unknown: HashSet<String> = HashSet::new();
     let mut icons: HashMap<String, Option<Image>> = HashMap::new();
     let mut pictures: HashMap<u32, (Picture, Option<Image>)> = HashMap::new();
     let directories = data_dirs();
@@ -104,24 +113,17 @@ fn sender_lookup(
                 }
             }
         });
-        let entry = find_app(&entries, group).or_else(|| {
-            entries
-                .iter()
-                .find(|entry| entry.name.eq_ignore_ascii_case(&notification.app_name))
-        });
-        let name = entry.map_or_else(
-            || {
-                if notification.app_name.is_empty() {
-                    group.to_owned()
-                } else {
-                    notification.app_name.clone()
-                }
-            },
-            |entry| entry.name.clone(),
-        );
+        if notifying_app(&entries, group, &notification.app_name).is_none()
+            && unknown.len() < MAX_CACHED_PICTURES
+            && unknown.insert(group.to_owned())
+        {
+            entries = installed_apps();
+        }
+        let entry = notifying_app(&entries, group, &notification.app_name);
+        let name = notifying_app_name(&entries, group, &notification.app_name);
         let icon = [
-            Some(notification.app_icon.as_str()).filter(|icon| !icon.is_empty()),
             entry.and_then(|entry| entry.icon.as_deref()),
+            Some(notification.app_icon.as_str()).filter(|icon| !icon.is_empty()),
         ]
         .into_iter()
         .flatten()
@@ -393,11 +395,7 @@ impl Notifications {
         text: TextSystem,
         session: Option<&Connection>,
     ) -> std::io::Result<Self> {
-        let entries = applications(
-            &data_dirs(),
-            Locale::from_env().as_ref(),
-            &current_desktops(),
-        );
+        let entries = installed_apps();
         let inbox = Inbox::new()?;
         let (outgoing, requests) = mpsc::channel();
         if let Some(connection) = session {

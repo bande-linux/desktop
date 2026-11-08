@@ -9,8 +9,8 @@ repository.workspace = true
 
 [dependencies]
 bande-log.workspace = true
+bande-reporter.workspace = true
 jiff.workspace = true
-rustc-demangle.workspace = true
 rustix = { workspace = true, features = ["fs"] }
 serde_json.workspace = true
 tracing.workspace = true
@@ -20,11 +20,11 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66), systemd-coredump, libdw1t64"
 extended-description = """\
-Writes one dated text report for every crash, every hang that was stopped, \
-every failed session service, every kernel panic and every restart without a \
-clean shutdown, with a stack trace and the last log lines. Settings shows the \
-reports. They stay on this computer: the service has no network at all, and it \
-runs only after a failure, at boot and at login."""
+Keeps a report of every crash, every hang that was stopped, every failed session \
+service, every kernel panic and every restart without a clean shutdown, with a \
+stack trace and the last log lines. Settings shows the reports. This service has \
+no network at all; a report leaves the computer only if sending is switched on, \
+through bande-reporter. It runs only after a failure, at boot and at login."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-crash-reports", "usr/libexec/", "755"],

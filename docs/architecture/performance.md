@@ -56,7 +56,7 @@ Measured 2026-11-01. Idle at the login window on the mini (installed dist packag
 2–4 MB and asleep in `epoll` with no timer; the compositor wakes only for its systemd watchdog.
 Under `bande-footprint` on the CPU path the shell holds about 78 MiB anonymous memory and the
 greeter about 26 MiB. Hidden windows drop their renderer after 30 s, decoded wallpapers are freed
-once uploaded, and animations, sampling and timers run only while something on screen needs
+once uploaded (the other appearance's at once, redrawn from the cache when shown), and animations, sampling and timers run only while something on screen needs
 them, so an idle process should not wake at all. A redraw whose scene is unchanged commits nothing,
 so a D-Bus change that does not alter what is shown wakes only the client, never the
 compositor; the status hub forwards Wi-Fi signal changes only when the shown level changes.

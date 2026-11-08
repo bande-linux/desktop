@@ -543,7 +543,10 @@ impl NetworkManager {
         let outcome = |state: u32, reason: u32| match state {
             ACTIVE_STATE_ACTIVATED => Some(JoinOutcome::Joined),
             ACTIVE_STATE_DEACTIVATED => Some(match reason {
-                ACTIVE_REASON_NO_SECRETS | ACTIVE_REASON_LOGIN_FAILED => JoinOutcome::WrongPassword,
+                ACTIVE_REASON_NO_SECRETS | ACTIVE_REASON_LOGIN_FAILED => {
+                    bande_log::fault::count("wifi-wrong-password");
+                    JoinOutcome::WrongPassword
+                }
                 reason => JoinOutcome::Failed { reason },
             }),
             _ => None,

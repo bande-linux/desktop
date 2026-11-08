@@ -794,7 +794,8 @@ impl SettingsView {
             List::Shortcuts => Vec::new(),
             List::About => self.about_rows(),
             List::Storage => self.storage_rows(),
-            List::CrashReports => self.crash_report_rows(),
+            List::Diagnostics => self.diagnostics_rows(),
+            List::SendReport => self.send_report_rows(),
             List::LargeFiles => self.large_file_rows(),
             List::Backup => self.backup_rows(),
             List::Clock => self.clock_rows(),
@@ -1310,8 +1311,8 @@ impl SettingsView {
         {
             return self.page(network);
         }
-        if pane.id == PaneId::CrashReports
-            && let Some(report) = self.crash_report_page()
+        if pane.id == PaneId::Diagnostics
+            && let Some(report) = self.report_page()
         {
             return self.page(report);
         }

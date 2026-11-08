@@ -559,7 +559,8 @@ pub fn follow_users(
 ) -> Sender<UsersCommand> {
     let (sender, receiver) = mpsc::channel();
     let changed = follow_accounts(system.cloned(), updates.clone());
-    let (session, system) = (session.clone(), system.cloned());
+    let session = session.clone();
+    let system = system.map(crate::follow::waiting_system);
     spawn("users-worker", move || {
         let mut chosen: Option<(String, RgbaImage)> = None;
         for command in receiver {

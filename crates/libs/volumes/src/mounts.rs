@@ -1,6 +1,30 @@
+use rustix::mount::{UnmountFlags, unmount};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, Once, PoisonError};
+
+pub const NFS_SOFT_OPTIONS: &str = "softerr,softreval,timeo=30,retrans=2,retry=0,nosuid,nodev";
+pub const SMB_SOFT_OPTIONS: &str = "soft,echo_interval=5,actimeo=1,nosuid,nodev";
+const DETACH_LIMIT: std::time::Duration = std::time::Duration::from_secs(3);
+
+pub fn force_unmount(point: &Path) {
+    let detaching = point.to_owned();
+    let (done, detached) = std::sync::mpsc::channel();
+    let spawned = std::thread::Builder::new().spawn(move || {
+        let flags = UnmountFlags::FORCE | UnmountFlags::DETACH | UnmountFlags::NOFOLLOW;
+        if let Err(error) = unmount(&detaching, flags) {
+            tracing::warn!("cannot unmount {}: {error}", detaching.display());
+        }
+        let _ = done.send(());
+    });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot unmount {}: {error}", point.display());
+        return;
+    }
+    if detached.recv_timeout(DETACH_LIMIT).is_err() {
+        tracing::warn!("{} is still detaching", point.display());
+    }
+}
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 

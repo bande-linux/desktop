@@ -215,8 +215,8 @@ fn rename(hostname: &HostnameProxyBlocking<'_>, name: &str) -> zbus::Result<()> 
 
 pub fn follow_about(system: &Connection, updates: Updates) -> Sender<AboutCommand> {
     let (sender, receiver) = mpsc::channel();
-    let system = system.clone();
     let reader = system.clone();
+    let system = crate::follow::waiting_system(system);
     let feed = updates.clone();
     spawn("about", move || {
         let follow = || -> zbus::Result<()> {

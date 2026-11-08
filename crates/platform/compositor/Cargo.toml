@@ -24,6 +24,7 @@ bande-datetime.workspace = true
 bande-colour.workspace = true
 bande-edid.workspace = true
 bande-graphics.workspace = true
+resvg.workspace = true
 bande-inbox.workspace = true
 bande-keyboard.workspace = true
 bande-l10n.workspace = true
@@ -45,7 +46,7 @@ wayland-client.workspace = true
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, bande-icon-theme, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd, pkexec, xkb-data, fonts-inter, fonts-manrope"
-recommends = "bande-clipboard, bande-shell, bande-lock, bande-screenshot, bande-files, bande-settings, dmz-cursor-theme"
+recommends = "bande-clipboard, bande-shell, bande-lock, bande-screenshot, bande-files, bande-settings"
 suggests = "fcitx5"
 extended-description = """\
 Wayland compositor for the Bande desktop session, built on Smithay. It runs \
@@ -63,6 +64,8 @@ assets = [
     ["data/50-bande-ptrace.conf", "usr/lib/sysctl.d/", "644"],
     ["data/50-bande-resolved.conf", "usr/lib/systemd/resolved.conf.d/", "644"],
     ["data/org.bande.consent.policy", "usr/share/polkit-1/actions/", "644"],
+    ["target/release/cursors/Bande-Cursors/index.theme", "usr/share/icons/Bande-Cursors/", "644"],
+    { source = "target/release/cursors/Bande-Cursors/cursors/*", dest = "usr/share/icons/Bande-Cursors/cursors/", mode = "644", preserve_symlinks = true },
 ]
 
 [lints]

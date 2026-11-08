@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" data-hotspot="12 12">
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0.6" stdDeviation="0.6" flood-color="#000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <g fill="#fff" stroke="#fff" stroke-width="1.8" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8.6"/>
+    </g>
+    <g fill="#1C1C1E">
+      <circle cx="12" cy="12" r="8.6"/>
+    </g>
+    <line x1="12.00" y1="8.90" x2="12.00" y2="5.81" stroke="#fff" stroke-opacity="0.125" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="14.19" y1="9.81" x2="16.38" y2="7.62" stroke="#fff" stroke-opacity="0.250" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="15.10" y1="12.00" x2="18.19" y2="12.00" stroke="#fff" stroke-opacity="0.375" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="14.19" y1="14.19" x2="16.38" y2="16.38" stroke="#fff" stroke-opacity="0.500" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="12.00" y1="15.10" x2="12.00" y2="18.19" stroke="#fff" stroke-opacity="0.625" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="9.81" y1="14.19" x2="7.62" y2="16.38" stroke="#fff" stroke-opacity="0.750" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="8.90" y1="12.00" x2="5.81" y2="12.00" stroke="#fff" stroke-opacity="0.875" stroke-width="1.7" stroke-linecap="round"/>
+    <line x1="9.81" y1="9.81" x2="7.62" y2="7.62" stroke="#fff" stroke-opacity="1.000" stroke-width="1.7" stroke-linecap="round"/>
+  </g>
+</svg>

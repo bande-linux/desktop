@@ -539,7 +539,7 @@ made again.
     `CanPowerOff` (USB disks), else nothing more; a disk image's loop device is deleted when this
     user set it up. A failure is reported to the caller, not only logged.
 - **Theme propagation**: GTK 3 and 4 (the Settings portal, with `GTK_USE_PORTAL=1` for GTK 3), Qt (`QT_QPA_PLATFORMTHEME`) and
-  cursor themes (`XCURSOR_THEME`, `XCURSOR_SIZE`) follow the desktop's appearance.
+  the pointer (`XCURSOR_THEME=Bande-Cursors`, `XCURSOR_SIZE`) follow the desktop's appearance.
 
 ## D-Bus integration
 

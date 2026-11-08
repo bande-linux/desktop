@@ -371,7 +371,7 @@ impl SettingsView {
                 let (width, height) = display.resolutions().first().copied()?;
                 let looks = |percent: u32| {
                     L10N.tr_args(
-                        "text-size-looks-like",
+                        "display-text-size-looks-like",
                         [
                             ("width", (width * 100 / percent as i32).into()),
                             ("height", (height * 100 / percent as i32).into()),
@@ -380,14 +380,14 @@ impl SettingsView {
                 };
                 let last = SCALES.len() - 1;
                 let mut choices: Vec<(String, Value)> = vec![(
-                    L10N.tr("text-size-default"),
+                    L10N.tr("display-text-size-default"),
                     Value::Keyword(AUTOMATIC.to_owned()),
                 )];
                 choices.extend(SCALES.iter().enumerate().map(|(index, &percent)| {
                     let label = match index {
-                        0 => L10N.tr_args("text-size-larger", [("size", looks(percent).into())]),
+                        0 => L10N.tr_args("display-text-size-larger", [("size", looks(percent).into())]),
                         index if index == last => {
-                            L10N.tr_args("text-size-more-space", [("size", looks(percent).into())])
+                            L10N.tr_args("display-text-size-more-space", [("size", looks(percent).into())])
                         }
                         _ => looks(percent),
                     };

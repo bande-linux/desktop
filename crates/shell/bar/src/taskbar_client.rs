@@ -118,6 +118,7 @@ pub struct Taskbar {
     active: Option<String>,
     release_at: Option<Instant>,
     unresponsive: Vec<String>,
+    windowed: Vec<String>,
     keep: Option<Sender<Vec<String>>>,
     autostart: Option<PathBuf>,
     bus: Inbox<BusEvent>,
@@ -926,6 +927,19 @@ impl App for Taskbar {
                 self.follow_windows(window);
                 let running = &self.running;
                 self.unresponsive.retain(|app_id| running.contains(app_id));
+                let windowed: Vec<String> = self
+                    .windows
+                    .iter()
+                    .filter(|(window_app, _)| !window.app_windows(window_app).is_empty())
+                    .map(|(_, identity)| identity.clone())
+                    .collect();
+                let before = std::mem::replace(&mut self.windowed, windowed);
+                for app_id in before
+                    .iter()
+                    .filter(|app_id| !self.windowed.contains(app_id))
+                {
+                    self.state.borrow_mut().windows_closed(app_id);
+                }
                 self.sync();
                 self.show_active();
                 window.request_redraw();
@@ -1103,6 +1117,7 @@ impl Taskbar {
             active: None,
             release_at: None,
             unresponsive: Vec::new(),
+            windowed: Vec::new(),
             keep: session.map(|session| bus::keep_writer(session.clone())),
             autostart: autostart_dir(config_home, home),
             bus: inbox,

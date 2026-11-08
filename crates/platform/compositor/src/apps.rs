@@ -140,6 +140,9 @@ impl State {
     }
 
     pub(crate) fn request_attention(&self, app_id: String) {
+        if app_id == self.active_app {
+            return;
+        }
         self.each_shell(|shell| shell.attention_requested(app_id.clone()));
     }
 }

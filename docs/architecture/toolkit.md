@@ -176,12 +176,13 @@ writes a hex value, a corner radius or a font name of its own.
     compositor). A fixed floating window ignores configure sizes, so its own size wins. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
   only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. Before
-  any thread starts, `bande_app::run` and the shell set `VK_LOADER_DRIVERS_DISABLE` for the Mesa
+  any thread starts, `bande_app::run`, the shell, the lock screen, the greeter, the screenshot
+  tool and the file chooser set `VK_LOADER_DRIVERS_DISABLE` for the Mesa
   Vulkan drivers whose kernel driver has no render node here, lavapipe included, when a hardware
   render node exists (not on a VM's `virtio_gpu`, and not when `BANDE_RENDERER` is set); other
   vendors' drivers are untouched. On the M2 that cuts a window's Vulkan start from about 40 to
   17 ms and its resident memory by 4 MB anonymous and 47 MB file-backed (LLVM is no longer
-  mapped). Programs an app starts inherit the setting. A
+  mapped); the shell drops from 153 to 83 MiB. Programs an app starts inherit the setting. A
   window whose background is opaque declares its window rectangle as its opaque region, so
   the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `bande-bench` starts
   to measure.

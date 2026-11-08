@@ -4,13 +4,13 @@ if [ -d /run/systemd/system ] ; then
 	systemctl --system daemon-reload >/dev/null || true
 fi
 if [ "$1" = "remove" ] && [ -x "/usr/bin/deb-systemd-helper" ] ; then
-	for unit in bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service ; do
+	for unit in bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service bande-reporter-resources.service ; do
 		deb-systemd-helper mask $unit >/dev/null || true
 	done
 fi
 if [ "$1" = "purge" ] ; then
 	if [ -x "/usr/bin/deb-systemd-helper" ] ; then
-		for unit in bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service ; do
+		for unit in bande-reporter-send.path bande-reporter.socket bande-reporter-watch.service bande-reporter-resources.service ; do
 			deb-systemd-helper purge $unit >/dev/null || true
 			deb-systemd-helper unmask $unit >/dev/null || true
 		done

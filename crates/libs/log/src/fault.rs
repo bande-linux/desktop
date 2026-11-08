@@ -71,6 +71,15 @@ pub fn report(kind: &str, reason: &str) {
     ));
 }
 
+pub fn report_with(kind: &str, reason: &str, detail: &str) {
+    send_in_background(format!(
+        r#"{{"op":"fault","kind":"{}","reason":"{}","pid":{},"detail":{detail}}}"#,
+        escaped(kind),
+        escaped(reason),
+        std::process::id(),
+    ));
+}
+
 pub fn report_hang_of(
     kind: &str,
     pid: u32,

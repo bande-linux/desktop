@@ -33,8 +33,9 @@ const REQUEST_LIMIT: u64 = 16 * 1024;
 const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
 const MOST_CAPTURES: usize = 2;
 const ADMIN_GROUP: &str = "sudo";
-const SESSION_KINDS: [&str; 8] = [
+const SESSION_KINDS: [&str; 9] = [
     "oom",
+    "jank",
     "app-hang",
     "force-quit",
     "compositor-stall",

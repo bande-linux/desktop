@@ -353,7 +353,13 @@ impl Compositor {
             });
         }
         let mut child = command.spawn()?;
-        if let Err(error) = self.wake_when_exited(&child) {
+        if let Err(error) = self.wake_when_exited(&child).and_then(|()| {
+            let process = crate::force_quit::Process::of_child(&child)?;
+            if let Some(state) = client.get_data::<ClientState>() {
+                let _ = state.process.set(process);
+            }
+            Ok(())
+        }) {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);

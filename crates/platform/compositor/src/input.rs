@@ -371,7 +371,7 @@ impl Compositor {
             ),
             _ => return Ok(()),
         }
-        self.flush()
+        self.flush_clients()
     }
 
     pub fn scroll(&mut self, frame: AxisFrame) {

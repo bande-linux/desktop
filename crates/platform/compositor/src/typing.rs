@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 
-use crate::state::State;
+use crate::state::{State, client_pid};
 
 const TYPING_PAUSE: Duration = Duration::from_millis(1500);
 const MAX_ANCESTRY: usize = 64;
@@ -39,12 +39,7 @@ impl State {
         {
             return false;
         }
-        let pid = |surface: &WlSurface| {
-            surface
-                .client()
-                .and_then(|client| client.get_credentials(&self.display_handle).ok())
-                .map(|credentials| credentials.pid)
-        };
+        let pid = |surface: &WlSurface| client_pid(&surface.client()?);
         match (pid(surface), pid(focused)) {
             (Some(opening), Some(typing)) => opening != typing && !descends_from(opening, typing),
             _ => true,

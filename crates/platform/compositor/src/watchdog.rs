@@ -10,7 +10,7 @@ use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::shell::xdg::ShellClient;
 
 use crate::shell::toplevel_names;
-use crate::state::{Compositor, State};
+use crate::state::{Compositor, State, client_pid};
 
 pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(3);
 pub(crate) const PING_SINCE: u32 = 2;
@@ -198,9 +198,7 @@ impl State {
             if client.send_ping(SERIAL_COUNTER.next_serial()).is_err() {
                 continue;
             }
-            let pid = owner
-                .get_credentials(&self.display_handle)
-                .map_or(0, |credentials| credentials.pid);
+            let pid = client_pid(&owner).unwrap_or(0);
             pinged.insert(id.clone());
             self.watchdog.pings.push(Ping {
                 owner: id,
@@ -227,9 +225,7 @@ impl State {
                 continue;
             }
             shell.ping(SERIAL_COUNTER.next_serial().into());
-            let pid = owner
-                .get_credentials(&self.display_handle)
-                .map_or(0, |credentials| credentials.pid);
+            let pid = client_pid(&owner).unwrap_or(0);
             pinged.insert(id.clone());
             self.watchdog.pings.push(Ping {
                 owner: id,
@@ -273,7 +269,7 @@ impl State {
                 waiting_for_apps && ping.unresponsive && now >= ping.sent + QUIT_PATIENCE;
             if ping.unresponsive && !ping.reported && now >= ping.sent + REPORT_HANG_AFTER {
                 ping.reported = true;
-                if let Ok(pid) = u32::try_from(ping.pid) {
+                if let Some(pid) = u32::try_from(ping.pid).ok().filter(|pid| *pid > 0) {
                     let kind = match ping.pinged {
                         Pinged::App(_) => "app-hang",
                         Pinged::Shell(_) => "shell-stall",

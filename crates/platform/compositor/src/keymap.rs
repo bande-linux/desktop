@@ -238,7 +238,7 @@ impl State {
 impl Compositor {
     pub fn apply_keyboard_settings(&mut self, settings: KeyboardSettings) {
         self.state.apply_keyboard_settings(settings);
-        if let Err(error) = self.flush() {
+        if let Err(error) = self.flush_clients() {
             tracing::warn!("cannot send the keyboard settings: {error}");
         }
     }

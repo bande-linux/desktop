@@ -323,7 +323,9 @@ when they reach the screen is Bande's own.
   start again.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
-  and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`.
+  and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`. The loop
+  flushes its clients before every sleep, so a ping never waits for other traffic, and a client
+  the compositor started over a socket pair is known by its child's pid, not the socket's.
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
   grey (24 %), the pointer over them is the `wait` cursor, and shell clients get
   `bande_shell_v1.app_responding(pid, app_id, 0)` so the taskbar can mark it; the compositor's

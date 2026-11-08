@@ -3,13 +3,14 @@ use std::io;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::process::Child;
 use std::time::Duration;
 
 use bande_xdg::unit_app_ids;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::io::Errno;
 use rustix::net::sockopt::socket_peercred;
-use rustix::process::{PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
+use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 
 const PROC: &str = "/proc";
 const CGROUPS: &str = "/sys/fs/cgroup";
@@ -46,6 +47,14 @@ impl Process {
         let pidfd = peer_pidfd(stream).or_else(|| pidfd_open(pid, PidfdFlags::empty()).ok())?;
         Some(Self {
             pidfd,
+            pid: pid.as_raw_nonzero().get(),
+        })
+    }
+
+    pub(crate) fn of_child(child: &Child) -> io::Result<Self> {
+        let pid = Pid::from_child(child);
+        Ok(Self {
+            pidfd: pidfd_open(pid, PidfdFlags::empty())?,
             pid: pid.as_raw_nonzero().get(),
         })
     }

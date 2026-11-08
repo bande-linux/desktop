@@ -7,7 +7,7 @@ local gate call it, so CI holds no check the gate skips:
 
 | Stage | What it runs |
 |---|---|
-| `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland) and `ci/check-apps.sh` |
+| `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland) `ci/check-apps.sh` and `ci/check-runtime-deps.py` |
 | `test` | the workspace tests on the hermetic bus with lavapipe |
 | `all` | `ci/release/build-all.sh`: the `bande-desktop` metapackage, its relations and `lintian` |
 | `debs` | `ci/release/build-debs.sh`, `ci/release/check-debs.sh`, `ci/release/smoke.sh` |
@@ -43,6 +43,18 @@ that changes `[workspace.package] version` builds them with `dist`, as the relea
 scripts live in `~/bande-linux/bin` on the build machine, outside this repository. The tests and
 why they exist are in [`../quality/tests.md`](../quality/tests.md). A test bus lists no service
 directories, so it never D-Bus-activates the services installed on the machine.
+
+## Runtime dependencies
+
+`ci/runtime-deps` lists every program the desktop runs (`Command::new`) and every system path it
+reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
+`required` (Debian priority required), `depends` (the package that runs or reads it, or for a
+shared library one package using it, declares it in Depends), `optional` (the code checks
+first and shows the user why a feature is off) or `image` (put in place by the `images`
+repository's system images, not by a package). `ci/check-runtime-deps.py` in `lint` fails on a
+path or program missing from the list and on a `depends` entry its package does not declare, so
+a new one is declared in the change that adds it; the `install` job checks that every
+`required` and `depends` entry is on a system installed with `--no-install-recommends`.
 
 ## GitHub CI
 

@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use bande_toolkit::{
     Image, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
@@ -8,7 +9,7 @@ use bande_toolkit::{
 };
 
 use crate::media::{Command, Playback, Player};
-use crate::{Change, Changes, L10N};
+use crate::{Change, Changes};
 
 const ART: f32 = 48.0;
 const ART_RADIUS: f32 = Radius::S;
@@ -189,12 +190,13 @@ impl NowPlaying {
     }
 
     fn label(&self, control: Control) -> String {
-        L10N.tr(match control {
-            Control::Previous => "previous-track",
-            Control::Next => "next-track",
-            Control::PlayPause if self.playing() => "pause",
-            Control::PlayPause => "play",
+        (match control {
+            Control::Previous => text!("Previous"),
+            Control::Next => text!("Next"),
+            Control::PlayPause if self.playing() => text!("Pause"),
+            Control::PlayPause => text!("Play"),
         })
+        .tr()
     }
 
     fn control_rect(&self, index: usize) -> Rect {
@@ -435,7 +437,7 @@ impl Widget for NowPlaying {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Group);
-        node.set_label(L10N.tr("now-playing"));
+        node.set_label(tr!("Now Playing"));
         let description = [
             &self.player.title,
             &self.player.artist,
@@ -475,7 +477,7 @@ impl Widget for NowPlaying {
             .collect();
         if let Some((position, length)) = self.position(cx.now()) {
             let mut node = Node::new(Role::Slider);
-            node.set_label(L10N.tr("playback-position"));
+            node.set_label(tr!("Position"));
             node.set_value(clock(position));
             node.set_numeric_value(position.as_secs_f64());
             node.set_min_numeric_value(0.0);

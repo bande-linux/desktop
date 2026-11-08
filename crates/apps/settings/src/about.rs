@@ -1,14 +1,14 @@
 use std::path::Path;
 use std::sync::mpsc::{self, Sender};
 
-use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::storage::disk;
 use bande_settings_panes::SettingId;
+use zbus::blocking::Connection;
+use zbus::blocking::fdo::PropertiesProxy;
 
 const HOSTNAME: &str = "org.freedesktop.hostname1";
 const HOSTNAME_PATH: &str = "/org/freedesktop/hostname1";
@@ -93,12 +93,10 @@ pub fn chip_name(compatible: &str, cpuinfo: &str) -> String {
         None => std::env::consts::ARCH.to_owned(),
     };
     if cores > 1 {
-        L10N.tr_args(
-            "about-chip-cores",
-            [
-                ("family", family.into()),
-                ("cores", cores.to_string().into()),
-            ],
+        tr!(
+            "{family} ({cores} cores)",
+            family = family,
+            cores = cores.to_string()
         )
     } else {
         family
@@ -250,7 +248,11 @@ pub fn follow_about(system: &Connection, updates: Updates) -> Sender<AboutComman
             match command {
                 AboutCommand::Rename(name) => {
                     if let Err(error) = rename(&hostname, &name) {
-                        updates.send(failed(SettingId::ComputerName, &error, "service-hostname"));
+                        updates.send(failed(
+                            SettingId::ComputerName,
+                            &error,
+                            text!("The computer name service"),
+                        ));
                         updates.send(Update::About(read_about(&hostname)));
                     }
                 }

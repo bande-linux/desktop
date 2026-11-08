@@ -1,11 +1,5 @@
-use std::collections::HashMap;
-use std::os::fd::BorrowedFd;
-use std::path::{Path, PathBuf};
-use std::sync::mpsc::Sender;
-use std::thread;
-use std::time::{Duration, Instant};
+use bande_l10n::{tr, trn};
 
-use crate::L10N;
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::rail::{BarForm, bar_zone, surface_size};
@@ -28,6 +22,12 @@ use bande_xdg::{
     find_app_for_process, find_icon, launch_with_arguments, opens_at_login, path_from_file_uri,
     set_open_at_login, write_launcher,
 };
+use std::collections::HashMap;
+use std::os::fd::BorrowedFd;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
+use std::thread;
+use std::time::{Duration, Instant};
 use zbus::blocking::Connection;
 
 const FILES: &str = "org.bande.Files";
@@ -508,14 +508,18 @@ impl Taskbar {
             .map_or(0, |trash| trash.trash.items().len());
         let items = vec![
             MenuItem::new(
-                &L10N.tr_args("empty-trash-question", [("count", (count as i64).into())]),
+                &trn!(
+                    "Permanently erase the item in the Trash?",
+                    "Permanently erase the {count} items in the Trash?",
+                    count = (count as i64)
+                ),
                 MENU_CANCEL,
             )
             .enabled(false),
-            MenuItem::new(&L10N.tr("empty-trash-warning"), MENU_CANCEL).enabled(false),
+            MenuItem::new(&tr!("You can’t undo this."), MENU_CANCEL).enabled(false),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("menu-cancel"), MENU_CANCEL),
-            MenuItem::new(&L10N.tr("menu-empty-trash"), MENU_CONFIRM_EMPTY),
+            MenuItem::new(&tr!("Cancel"), MENU_CANCEL),
+            MenuItem::new(&tr!("Empty Trash"), MENU_CONFIRM_EMPTY),
         ];
         match window.show_menu(Menu::new(items), MenuPlacement::AtPoint(at)) {
             Ok(()) => {
@@ -558,10 +562,9 @@ impl Taskbar {
                 })
                 .collect(),
             MenuTarget::Trash => vec![
-                MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN),
+                MenuItem::new(&tr!("Open"), MENU_OPEN),
                 MenuItem::separator(),
-                MenuItem::new(&L10N.tr("menu-empty-trash-ask"), MENU_EMPTY_TRASH)
-                    .enabled(self.trash_full()),
+                MenuItem::new(&tr!("Empty Trash…"), MENU_EMPTY_TRASH).enabled(self.trash_full()),
             ],
             MenuTarget::App(app_id) => {
                 let installed = self.entry(app_id).is_some();
@@ -576,7 +579,7 @@ impl Taskbar {
                             shown.title.clone()
                         };
                         let title = if shown.minimized {
-                            L10N.tr_args("menu-minimized-window", [("title", title.into())])
+                            tr!("◇ {title}", title = title)
                         } else {
                             title
                         };
@@ -589,7 +592,7 @@ impl Taskbar {
                         items.push(MenuItem::separator());
                     }
                 } else {
-                    items.push(MenuItem::new(&L10N.tr("menu-open"), MENU_OPEN).enabled(installed));
+                    items.push(MenuItem::new(&tr!("Open"), MENU_OPEN).enabled(installed));
                     items.push(MenuItem::separator());
                 }
                 let actions = self
@@ -606,24 +609,24 @@ impl Taskbar {
                     items.push(MenuItem::separator());
                 }
                 let options = Menu::new(vec![
-                    MenuItem::new(&L10N.tr("menu-keep"), MENU_KEEP)
+                    MenuItem::new(&tr!("Keep in Taskbar"), MENU_KEEP)
                         .checked(self.kept.contains(app_id))
                         .enabled(self.can_keep(window, app_id)),
-                    MenuItem::new(&L10N.tr("menu-login"), MENU_LOGIN)
+                    MenuItem::new(&tr!("Open at Login"), MENU_LOGIN)
                         .checked(self.opens_at_login(app_id))
                         .enabled(installed && self.autostart.is_some()),
                     MenuItem::separator(),
-                    MenuItem::new(&L10N.tr("menu-show"), MENU_SHOW).enabled(installed),
+                    MenuItem::new(&tr!("Show in Files"), MENU_SHOW).enabled(installed),
                 ]);
-                items.push(MenuItem::submenu(&L10N.tr("menu-options"), options));
+                items.push(MenuItem::submenu(&tr!("Options"), options));
                 if running {
                     items.push(MenuItem::separator());
-                    items.push(MenuItem::new(&L10N.tr("menu-hide"), MENU_HIDE));
-                    let force_quit = MenuItem::new(&L10N.tr("menu-force-quit"), MENU_FORCE_QUIT);
+                    items.push(MenuItem::new(&tr!("Hide"), MENU_HIDE));
+                    let force_quit = MenuItem::new(&tr!("Force Quit"), MENU_FORCE_QUIT);
                     items.push(if self.unresponsive.contains(app_id) {
                         force_quit
                     } else {
-                        MenuItem::new(&L10N.tr("menu-quit"), MENU_QUIT).alternate(force_quit)
+                        MenuItem::new(&tr!("Quit"), MENU_QUIT).alternate(force_quit)
                     });
                 }
                 items

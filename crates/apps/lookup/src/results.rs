@@ -1,10 +1,10 @@
+use bande_l10n::tr;
+
+use crate::online;
 use bande_dict::{Choices, Hit, Pack};
 use bande_inbox::Outbox;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Label, Stack, Widget};
-
-use crate::L10N;
-use crate::online;
 
 pub type Answer = Result<Vec<Hit>, String>;
 
@@ -22,7 +22,9 @@ pub fn enabled_sources() -> (Vec<Pack>, Vec<String>) {
 pub fn find(word: &str, hint: Option<String>, online: bool, answers: &Outbox<Answer>) {
     let (sources, languages) = enabled_sources();
     if sources.is_empty() {
-        answers.send(Err(L10N.tr("no-sources")));
+        answers.send(Err(tr!(
+            "No sources are turned on. Choose them in Dictionary Settings."
+        )));
         return;
     }
     let word_languages: Vec<String> = hint.into_iter().chain(languages).collect();
@@ -61,7 +63,10 @@ pub fn merge(answer: &mut Option<Answer>, arrived: Vec<Answer>) {
 
 fn part_of_speech(pos: &str) -> String {
     match pos {
-        "noun" | "verb" | "adj" | "adv" => L10N.tr(&format!("pos-{pos}")),
+        "noun" => tr!("noun"),
+        "verb" => tr!("verb"),
+        "adj" => tr!("adjective"),
+        "adv" => tr!("adverb"),
         other => other.to_owned(),
     }
 }
@@ -80,12 +85,10 @@ pub fn compact(hits: &[Hit]) -> Vec<&Hit> {
 fn hit_widgets(hit: &Hit) -> Vec<Box<dyn Widget>> {
     let mut widgets: Vec<Box<dyn Widget>> = vec![Box::new(Label::new(&hit.source).secondary())];
     if let Some((first, ending)) = &hit.derived {
-        let note = L10N.tr_args(
-            "derived",
-            [
-                ("first", first.as_str().into()),
-                ("ending", ending.as_str().into()),
-            ],
+        let note = tr!(
+            "Not listed. Last part only: {first} + {ending}",
+            first = first.as_str(),
+            ending = ending.as_str()
         );
         widgets.push(Box::new(Label::new(&note).secondary()));
     }
@@ -97,7 +100,7 @@ fn hit_widgets(hit: &Hit) -> Vec<Box<dyn Widget>> {
         widgets.push(Box::new(Label::new(&title).secondary()));
         for line in &entry.lines {
             let text = match line.kind {
-                'O' => L10N.tr_args("form-of", [("word", line.text.as_str().into())]),
+                'O' => tr!("Form of {word}", word = line.text.as_str()),
                 _ => line.text.clone(),
             };
             widgets.push(Box::new(Label::new(&text)));
@@ -113,7 +116,7 @@ pub fn shown(word: &str, answer: Option<&Answer>, hits: Vec<&Hit>) -> Box<dyn Wi
         None => {}
         Some(Err(message)) => parts.push(Box::new(Label::new(message).secondary())),
         Some(Ok(all)) if all.is_empty() => {
-            let message = L10N.tr_args("no-entries", [("word", word.into())]);
+            let message = tr!("No entries for “{word}”.", word = word);
             parts.push(Box::new(Label::new(&message).secondary()));
         }
         Some(Ok(_)) => {

@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use bande_l10n::{text, tr};
+
+use crate::symbols::{Symbol, Symbols, snap};
+use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bande_config::BarEdge;
 use bande_datetime::DateFormats;
@@ -13,10 +17,6 @@ use bande_toolkit::{
 };
 use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
-
-use crate::L10N;
-use crate::symbols::{Symbol, Symbols, snap};
-use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 
 const EDGE_PADDING: f32 = 24.0;
 pub const BAR_MARGIN: f32 = 8.0;
@@ -199,17 +199,17 @@ pub fn in_use(capturing: &[Capture]) -> Vec<String> {
         .iter()
         .map(|capture| {
             let id = match capture.senses.as_slice() {
-                [Sense::Microphone] => "in-use-microphone",
-                [Sense::Camera] => "in-use-camera",
-                _ => "in-use-microphone-and-camera",
+                [Sense::Microphone] => text!("{app} is using the microphone"),
+                [Sense::Camera] => text!("{app} is using the camera"),
+                _ => text!("{app} is using the microphone and camera"),
             };
-            L10N.tr_args(id, [("app", capture.name.clone().into())])
+            id.tr_args(&[("app", &capture.name.clone() as &dyn std::fmt::Display)])
         })
         .collect()
 }
 
 fn control_center_label(status: &Status) -> String {
-    let mut parts = vec![L10N.tr("control-center")];
+    let mut parts = vec![tr!("Control Center")];
     parts.extend(in_use(&status.capturing));
     parts.join(", ")
 }
@@ -592,10 +592,7 @@ impl TaskbarView {
                         .battery
                         .filter(|_| slot == Slot::Battery && self.battery_percentage)
                         .map(|battery| {
-                            let text = L10N.tr_args(
-                                "battery-percent",
-                                [("percent", battery.percent.round().into())],
-                            );
+                            let text = tr!("{percent}%", percent = battery.percent.round());
                             self.paragraph(
                                 &text,
                                 TextStyle::new(PERCENT_SIZE, ink)
@@ -767,39 +764,36 @@ impl TaskbarView {
 
     fn describe(&self, slot: Slot) -> String {
         match slot {
-            Slot::BandeMenu | Slot::Search => L10N.tr("launcher"),
+            Slot::BandeMenu | Slot::Search => tr!("Search"),
             Slot::StatusItem(index) => self
                 .tray
                 .get(index)
                 .map(|(title, _)| title.clone())
                 .unwrap_or_default(),
-            Slot::MoreStatusItems => L10N.tr("more-status-items"),
+            Slot::MoreStatusItems => tr!("More status items"),
             Slot::InputSource => self
                 .status
                 .input_sources
                 .current()
-                .map(|source| L10N.tr_args("input-source", [("name", source.name.clone().into())]))
+                .map(|source| tr!("Input source: {name}", name = source.name.clone()))
                 .unwrap_or_default(),
-            Slot::Bluetooth => L10N.tr("bluetooth"),
-            Slot::Sound => L10N.tr("sound"),
-            Slot::Wifi => L10N.tr("wifi"),
+            Slot::Bluetooth => tr!("Bluetooth"),
+            Slot::Sound => tr!("Sound"),
+            Slot::Wifi => tr!("Wi-Fi"),
             Slot::Battery => self.status.battery.map_or_else(String::new, |battery| {
-                L10N.tr_args(
-                    "battery-level",
-                    [("percent", battery.percent.round().into())],
-                )
+                tr!("Battery {percent}%", percent = battery.percent.round())
             }),
             Slot::ControlCenter => control_center_label(&self.status),
             Slot::Clock => {
                 let clock = format!("{} {}", self.clock.time, self.clock.day);
                 match self.clock_mark {
                     ClockMark::Clear => clock,
-                    ClockMark::Unread => L10N.tr_args("clock-unread", [("time", clock.into())]),
-                    ClockMark::Quiet => L10N.tr_args("clock-quiet", [("time", clock.into())]),
+                    ClockMark::Unread => tr!("{time}, unread notifications", time = clock),
+                    ClockMark::Quiet => tr!("{time}, Do Not Disturb", time = clock),
                 }
             }
             Slot::Workspace(index) => {
-                L10N.tr_args("workspace", [("number", (index as i64 + 1).into())])
+                tr!("Desktop {number}", number = (index as i64 + 1))
             }
         }
     }
@@ -953,7 +947,7 @@ impl TaskbarView {
     pub fn accessibility(&self) -> TreeUpdate {
         let root_id = NodeId(NODE_BASE - 1);
         let mut root = AccessNode::new(Role::Group);
-        root.set_label(L10N.tr("status-area"));
+        root.set_label(tr!("Status items"));
         let mut nodes = Vec::new();
         for (index, (slot, rect)) in self.slots.iter().enumerate() {
             if matches!(

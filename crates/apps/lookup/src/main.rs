@@ -8,31 +8,27 @@ use std::cell::Cell;
 use std::path::Path;
 use std::process::ExitCode;
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use std::os::fd::BorrowedFd;
 
 use bande_app::{Cx, Info, Keys, Kind, Program, Settings, View, WindowId};
 use bande_inbox::Inbox;
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_toolkit::{Appearance, Scene, Window, WindowEvent};
 
 use crate::panel::{LANGUAGE_ARGUMENT, PANEL_SIZE, Panel};
 use crate::sources::{SETTINGS_SIZE, sources_window};
 use crate::window::{DictionaryWindow, WINDOW_SIZE};
 
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-lookup")));
-
 static INFO: Info = Info {
     id: "org.bande.Lookup",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Dictionary"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Dictionary Settings"),
         size: SETTINGS_SIZE,
         view: sources_window,
     }),
@@ -174,12 +170,9 @@ impl Program for Lookup {
 
     fn reopen(&mut self, cx: &mut Cx<Self>) {
         self.give_up_at = None;
-        let opened = cx.open(
-            Kind::Main,
-            &L10N.tr("app-name"),
-            WINDOW_SIZE,
-            |appearance| Pane::Dictionary(DictionaryWindow::new(appearance, "")),
-        );
+        let opened = cx.open(Kind::Main, &tr!("Dictionary"), WINDOW_SIZE, |appearance| {
+            Pane::Dictionary(DictionaryWindow::new(appearance, ""))
+        });
         if let Err(error) = opened {
             tracing::warn!("cannot open Dictionary: {error}");
         }

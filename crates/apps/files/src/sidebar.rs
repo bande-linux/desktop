@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use bande_xdg::{UserDir, file_uri, path_from_file_uri, user_dir};
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::browser::Location;
+use bande_xdg::{UserDir, file_uri, path_from_file_uri, user_dir};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaceKind {
@@ -97,12 +97,12 @@ pub(crate) fn system_disk_name() -> String {
         .ok()
         .as_deref()
         .and_then(pretty_hostname)
-        .unwrap_or_else(|| L10N.tr("internal-disk"))
+        .unwrap_or_else(|| tr!("Internal"))
 }
 
 fn recents() -> Place {
     Place {
-        name: L10N.tr("recents"),
+        name: tr!("Recents"),
         location: Location::Recents,
         icon: "document-open-recent",
         kind: PlaceKind::Standard,
@@ -111,7 +111,7 @@ fn recents() -> Place {
 
 fn trash() -> Place {
     Place {
-        name: L10N.tr("trash"),
+        name: tr!("Trash"),
         location: Location::Trash,
         icon: "user-trash",
         kind: PlaceKind::Standard,
@@ -235,9 +235,9 @@ pub fn rows(
             .into_iter()
             .filter(|place| !hidden.contains(&place.location)),
     );
-    let mut rows = vec![Row::Heading(L10N.tr("sidebar-favourites"))];
+    let mut rows = vec![Row::Heading(tr!("Favourites"))];
     rows.extend(favourites.into_iter().map(Row::Place));
-    rows.push(Row::Heading(L10N.tr("sidebar-locations")));
+    rows.push(Row::Heading(tr!("Locations")));
     if !hidden.contains(&Location::Trash) {
         rows.push(Row::Place(trash()));
     }
@@ -249,7 +249,7 @@ pub fn with_nearby(rows: &[Row], nearby: &[(String, String)]) -> Vec<Row> {
     if nearby.is_empty() {
         return rows;
     }
-    rows.push(Row::Heading(L10N.tr("sidebar-network")));
+    rows.push(Row::Heading(tr!("Network")));
     rows.extend(nearby.iter().map(|(name, url)| {
         Row::Place(Place {
             name: name.clone(),

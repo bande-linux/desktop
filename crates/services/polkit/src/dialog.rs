@@ -2,6 +2,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
+use bande_l10n::tr;
+
+use crate::agent::{Answer, Identity, Notice};
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, TreeId};
 use bande_toolkit::ui::{
     Animated, BUTTON_HEIGHT, Button, Context, Event, FreeLayout, Key, Modifiers, PopUpButton,
@@ -12,9 +15,6 @@ use bande_toolkit::{
     TextRole, TextStyle, TextSystem,
 };
 use zeroize::Zeroizing;
-
-use crate::L10N;
-use crate::agent::{Answer, Identity, Notice};
 
 const WIDTH: f32 = 400.0;
 const PADDING: f32 = 24.0;
@@ -55,7 +55,10 @@ impl Prompt {
     }
 
     fn asking(&self) -> String {
-        L10N.tr_args("enter-password", [("user", self.name().into())])
+        tr!(
+            "Enter the password for {user} to allow this.",
+            user = self.name()
+        )
     }
 }
 
@@ -107,7 +110,7 @@ struct Authorization {
 impl Authorization {
     fn new(prompt: Prompt, shared: Rc<RefCell<Shared>>) -> (Self, WidgetId) {
         let submitted = Rc::clone(&shared);
-        let field = SecureField::new(&L10N.tr("password"), FIELD_FONT, move |secret| {
+        let field = SecureField::new(&tr!("Password"), FIELD_FONT, move |secret| {
             submitted
                 .borrow_mut()
                 .choices
@@ -115,14 +118,14 @@ impl Authorization {
         });
         let field_id = field.id();
         let cancelled = Rc::clone(&shared);
-        let cancel = Button::new(&L10N.tr("cancel"), move || {
+        let cancel = Button::new(&tr!("Cancel"), move || {
             let mut shared = cancelled.borrow_mut();
             shared.choices.push(Choice::Cancel);
             shared.closed = true;
         })
         .cancel();
         let requested = Rc::clone(&shared);
-        let authenticate = Button::new(&L10N.tr("authenticate"), move || {
+        let authenticate = Button::new(&tr!("Authenticate"), move || {
             requested.borrow_mut().submit = true;
         })
         .primary();
@@ -145,7 +148,7 @@ impl Authorization {
                 .unwrap_or_default();
             let switched = Rc::clone(&shared);
             children.push(Box::new(PopUpButton::new(
-                &L10N.tr("user"),
+                &tr!("User"),
                 &names,
                 selected,
                 move |index| {
@@ -510,7 +513,7 @@ impl Dialog {
                 self.answer();
             }
             Message::Notice(Notice::WrongPassword) => {
-                self.set_note(Some(Note::Error(L10N.tr("wrong-password"))));
+                self.set_note(Some(Note::Error(tr!("Incorrect password. Try again."))));
                 self.clear_field();
                 self.ui
                     .update_widget::<Authorization>(self.dialog, |dialog, cx| dialog.shake(cx));

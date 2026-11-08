@@ -7,6 +7,7 @@ use std::sync::mpsc::RecvTimeoutError;
 
 use bande_audio::{Audio, Direction, Level, Meter};
 use bande_bluetooth::{Bluetooth, PairingPrompt, change_rules, register_agent, shown_change};
+use bande_l10n::text;
 use bande_network::{
     ConnectionChange, JoinOutcome, ManualIpv4, NetworkManager, Security, WifiLink, set_strength,
     strength_signal,
@@ -66,7 +67,7 @@ pub enum BluetoothCommand {
 fn report<E: std::fmt::Display>(
     updates: &Updates,
     pane: PaneId,
-    what: &str,
+    what: bande_l10n::Text,
     result: Result<(), E>,
 ) {
     if let Err(error) = result {
@@ -209,7 +210,7 @@ pub fn follow_audio(session: &Connection, updates: Updates) -> Sender<AudioComma
                 report(
                     &updates,
                     PaneId::Sound,
-                    "sound-change-failed",
+                    text!("Couldn't change the sound settings."),
                     run_audio(&audio, command),
                 );
             }
@@ -408,41 +409,41 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                 NetworkCommand::Power(on) => report(
                     &updates,
                     PaneId::Wifi,
-                    "wifi-power-failed",
+                    text!("Couldn't turn Wi-Fi on or off."),
                     network.set_wifi_enabled(on),
                 ),
                 NetworkCommand::ConfigureEthernet(manual) => {
                     report(
                         &updates,
                         PaneId::Network,
-                        "network-change-failed",
+                        text!("Couldn't change the network settings."),
                         network.configure_ethernet(manual.as_ref()),
                     );
                 }
                 NetworkCommand::ConnectVpn(path) => report(
                     &updates,
                     PaneId::Network,
-                    "vpn-connect-failed",
+                    text!("Couldn't connect to the VPN."),
                     network.connect_vpn(&path),
                 ),
                 NetworkCommand::RemoveVpn(path) => report(
                     &updates,
                     PaneId::Network,
-                    "vpn-remove-failed",
+                    text!("Couldn't remove the VPN."),
                     network.remove_vpn(&path),
                 ),
                 NetworkCommand::DisconnectVpn(path) => {
                     report(
                         &updates,
                         PaneId::Network,
-                        "vpn-disconnect-failed",
+                        text!("Couldn't disconnect from the VPN."),
                         network.disconnect_vpn(&path),
                     );
                 }
                 NetworkCommand::Forget(ssid) => report(
                     &updates,
                     PaneId::Wifi,
-                    "wifi-forget-failed",
+                    text!("Couldn't forget this network."),
                     network.forget(&ssid),
                 ),
                 NetworkCommand::SignIn => match network.sign_in_page() {
@@ -454,7 +455,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     report(
                         &updates,
                         pane,
-                        "network-change-failed",
+                        text!("Couldn't change the network settings."),
                         network.change_connection(&path, &change),
                     );
                 }
@@ -579,9 +580,10 @@ pub fn follow_bluetooth(
         let shown = Arc::new(AtomicU64::new(0));
         for command in receiver {
             let (what, result) = match command {
-                BluetoothCommand::Power(on) => {
-                    ("bluetooth-power-failed", bluetooth.set_powered(on))
-                }
+                BluetoothCommand::Power(on) => (
+                    text!("Couldn't turn Bluetooth on or off."),
+                    bluetooth.set_powered(on),
+                ),
                 BluetoothCommand::Discover(on) => {
                     let generation = shown.fetch_add(1, Ordering::Relaxed) + 1;
                     if on {
@@ -602,19 +604,22 @@ pub fn follow_bluetooth(
                     }
                     continue;
                 }
-                BluetoothCommand::Connect(device) => {
-                    ("bluetooth-connect-failed", bluetooth.connect(&device))
-                }
-                BluetoothCommand::Disconnect(device) => {
-                    ("bluetooth-disconnect-failed", bluetooth.disconnect(&device))
-                }
-                BluetoothCommand::Forget(device) => {
-                    ("bluetooth-forget-failed", bluetooth.forget(&device))
-                }
+                BluetoothCommand::Connect(device) => (
+                    text!("Couldn't connect to this device."),
+                    bluetooth.connect(&device),
+                ),
+                BluetoothCommand::Disconnect(device) => (
+                    text!("Couldn't disconnect this device."),
+                    bluetooth.disconnect(&device),
+                ),
+                BluetoothCommand::Forget(device) => (
+                    text!("Couldn't forget this device."),
+                    bluetooth.forget(&device),
+                ),
                 BluetoothCommand::Pair(device) => {
                     let result = bluetooth.pair(&device);
                     updates.send(Update::Pairing(None));
-                    ("bluetooth-pair-failed", result)
+                    (text!("Couldn't pair with this device."), result)
                 }
             };
             report(&updates, PaneId::Bluetooth, what, result);

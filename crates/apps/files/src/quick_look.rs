@@ -1,11 +1,11 @@
+use bande_l10n::tr;
+
+use crate::view::{FilesView, Hit, Request};
 use bande_fs::Entry;
 use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::Rect;
 use bande_toolkit::ui::{Key, Modifiers};
-
-use crate::L10N;
-use crate::view::{FilesView, Hit, Request};
 
 const ICON_PIXELS: u32 = 256;
 const FOLDER_MIME: &str = "inode/directory";
@@ -37,7 +37,7 @@ impl FilesView {
 
     fn subject(&mut self, entry: Entry) -> Subject {
         let (mime, kind) = match entry.is_folder() {
-            true => (FOLDER_MIME.to_owned(), L10N.tr("folder")),
+            true => (FOLDER_MIME.to_owned(), tr!("Folder")),
             false => {
                 let mime = self.apps.mime_for(&entry.path);
                 let kind = self.apps.kind(&mime);

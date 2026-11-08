@@ -2,14 +2,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
+use bande_l10n::tr;
 use bande_network::{JoinOutcome, Network, NetworkManager};
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
-
-use crate::L10N;
 
 const NETWORK_MANAGER: &str = "org.freedesktop.NetworkManager";
 const NETWORK_MANAGER_PATH: &str = "/org/freedesktop/NetworkManager";
@@ -24,8 +23,8 @@ fn lock(shown: &Mutex<Option<u32>>) -> MutexGuard<'_, Option<u32>> {
 
 fn sign_in_summary(network: Option<&str>) -> String {
     match network {
-        Some(network) => L10N.tr_args("sign-in-to", [("network", network.to_owned().into())]),
-        None => L10N.tr("sign-in-to-network"),
+        Some(network) => tr!("Sign in to {network}", network = network.to_owned()),
+        None => tr!("Sign in to the network"),
     }
 }
 
@@ -36,12 +35,12 @@ pub fn join_network(network: &NetworkManager, found: &Network) {
         Err(error) => error.to_string(),
     };
     tracing::warn!("cannot join {}: {reason}", found.name());
-    let summary = L10N.tr_args("join-failed", [("network", found.name().into())]);
+    let summary = tr!("Could not join {network}", network = found.name());
     let posted = Connection::session().and_then(|session| {
         client::notify(
             &session,
             &Request {
-                app_name: &L10N.tr("network"),
+                app_name: &tr!("Network"),
                 replaces_id: 0,
                 app_icon: NETWORK_ICON,
                 summary: &summary,
@@ -91,15 +90,15 @@ impl Portal {
             return;
         }
         let summary = sign_in_summary(current_network(&self.network).as_deref());
-        let sign_in = L10N.tr("sign-in");
+        let sign_in = tr!("Sign In");
         let posted = client::notify(
             &self.session,
             &Request {
-                app_name: &L10N.tr("network"),
+                app_name: &tr!("Network"),
                 replaces_id: shown.unwrap_or(0),
                 app_icon: NETWORK_ICON,
                 summary: &summary,
-                body: &L10N.tr("sign-in-body"),
+                body: &tr!("This network asks you to sign in before you can use the internet."),
                 actions: &[(SIGN_IN_ACTION, &sign_in)],
                 urgency: Urgency::Normal,
                 sound: None,

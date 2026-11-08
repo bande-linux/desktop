@@ -17,9 +17,10 @@ use accesskit::TreeUpdate;
 use bande_app_settings::{Stored, settings_folder};
 use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_file_chooser::{
-    Chooser, ChooserView, Finished, Icons, L10N, initial_folder, remember, remembered_folder,
+    Chooser, ChooserView, Finished, Icons, initial_folder, remember, remembered_folder,
 };
 use bande_files::{FilesSettings, rows, sidebar_file, with_volumes};
+use bande_l10n::tr;
 use bande_toolkit::ui::Alert;
 use bande_toolkit::{App, Image, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 use bande_volumes::{media_roots, mounted_volumes, volume_icon};
@@ -140,9 +141,9 @@ fn title(dialog: &Dialog) -> String {
             Mode::Open {
                 directory: false, ..
             },
-        ) => L10N.tr("title-open"),
-        (true, Mode::Open { .. } | Mode::SaveMany { .. }) => L10N.tr("title-choose-folder"),
-        (true, Mode::Save { .. }) => L10N.tr("title-save"),
+        ) => tr!("Open"),
+        (true, Mode::Open { .. } | Mode::SaveMany { .. }) => tr!("Choose a Folder"),
+        (true, Mode::Save { .. }) => tr!("Save"),
     }
 }
 
@@ -248,12 +249,12 @@ fn confirm_wallpaper(picture: &Path, app_id: &str) -> ExitCode {
     let asked = bande_toolkit::ask("wallpaper-confirmation", |window| {
         let pixels = (PREVIEW_SIZE * window.scale().max(2.0)).ceil() as u32;
         let alert = Alert::new(
-            &L10N.tr_args("wallpaper-title", [("picture", name.into())]),
-            &L10N.tr_args("wallpaper-message", [("app", app.into())]),
+            &tr!("Use “{picture}” as your desktop picture?", picture = name),
+            &tr!("{app} wants to change your desktop picture.", app = app),
             move |action| chosen.set(action == SET),
         )
-        .cancel(&L10N.tr("button-cancel"), "cancel")
-        .primary(&L10N.tr("button-set-wallpaper"), SET);
+        .cancel(&tr!("Cancel"), "cancel")
+        .primary(&tr!("Set Desktop Picture"), SET);
         let preview = bande_wallpaper::render(picture, Fit::Fill, pixels, pixels)
             .ok()
             .and_then(|picture| Image::from_rgba(picture.width, picture.height, picture.rgba));

@@ -7,7 +7,7 @@ use std::process::ExitCode;
 use std::rc::Rc;
 
 use accesskit::TreeUpdate;
-use bande_file_chooser::L10N;
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     Alert, Axis, Bounded, Cell, Column, Context, FreeLayout, Row, SearchField, Stack, Table, Ui,
     Widget, WidgetId,
@@ -243,17 +243,17 @@ fn alert(offer: &Offer, signals: &Signals, choosing: bool) -> Alert {
         .filter(|name| !name.is_empty());
     let (title, message) = match (choosing, name) {
         (true, Some(name)) => (
-            L10N.tr_args("choose-app-title", [("name", name.into())]),
+            tr!("Choose an app to open “{name}”:", name = name),
             String::new(),
         ),
-        (true, None) => (L10N.tr("choose-app-title-unnamed"), String::new()),
+        (true, None) => (tr!("Choose an app to open this item:"), String::new()),
         (false, Some(name)) => (
-            L10N.tr_args("choose-app-none", [("name", name.into())]),
-            L10N.tr("choose-app-none-message"),
+            tr!("No app on this computer can open “{name}”.", name = name),
+            tr!("Install an app that opens this kind of item, then try again."),
         ),
         (false, None) => (
-            L10N.tr("choose-app-none-unnamed"),
-            L10N.tr("choose-app-none-message"),
+            tr!("No app on this computer can open this item."),
+            tr!("Install an app that opens this kind of item, then try again."),
         ),
     };
     let answers = Rc::clone(signals);
@@ -268,9 +268,9 @@ fn alert(offer: &Offer, signals: &Signals, choosing: bool) -> Alert {
     });
     match choosing {
         true => alert
-            .cancel(&L10N.tr("button-cancel"), "cancel")
-            .primary(&L10N.tr("button-open"), OPEN),
-        false => alert.primary(&L10N.tr("button-ok"), "cancel"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Open"), OPEN),
+        false => alert.primary(&tr!("OK"), "cancel"),
     }
 }
 
@@ -299,11 +299,11 @@ pub fn choose(offer: &Offer) -> ExitCode {
     ui.set_appearance(appearance);
     let signals = Signals::default();
     let (activate, search) = (Rc::clone(&signals), Rc::clone(&signals));
-    let table = Table::new(vec![Column::new(&L10N.tr("column-name"), 300.0).flexible()])
+    let table = Table::new(vec![Column::new(&tr!("Name"), 300.0).flexible()])
         .without_header()
         .on_activate(move |_| push(&activate, Signal::Open));
     let table_id = table.id();
-    let field = SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+    let field = SearchField::new(&tr!("Search"), "", move |text| {
         push(&search, Signal::Search(text.to_owned()))
     });
     let field_id = field.id();

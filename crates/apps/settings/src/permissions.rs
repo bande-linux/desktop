@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Sender};
 
-use bande_settings_panes::{PaneId, Permission};
-use bande_toolkit::ui::Toggle;
-use bande_xdg::{DesktopEntry, Locale, app_name, applications, current_desktops, data_dirs};
-use zbus::blocking::Connection;
-use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedValue;
+use bande_l10n::{text, tr, trn};
 
-use crate::L10N;
 use crate::failure::pane_failed;
 use crate::follow::{Command, Update, Updates, spawn};
 use crate::forget::Forget;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
+use bande_settings_panes::{PaneId, Permission};
+use bande_toolkit::ui::Toggle;
+use bande_xdg::{DesktopEntry, Locale, app_name, applications, current_desktops, data_dirs};
+use zbus::blocking::Connection;
+use zbus::proxy::CacheProperties;
+use zbus::zvariant::OwnedValue;
 
 type AppPermissions = HashMap<String, Vec<String>>;
 
@@ -110,7 +110,7 @@ fn allowed(permission: Permission, values: &[String]) -> bool {
 
 fn app_label(entries: &[DesktopEntry], app: &str) -> String {
     if app.is_empty() {
-        L10N.tr("other-apps")
+        tr!("Other apps")
     } else {
         app_name(entries, app)
     }
@@ -254,7 +254,7 @@ pub fn follow_permissions(session: &Connection, updates: Updates) -> Sender<Perm
                 if let Err(error) = result {
                     updates.send(pane_failed(
                         permission.pane(),
-                        "permission-change-failed",
+                        text!("Couldn't change this app's permission."),
                         error,
                     ));
                 }
@@ -281,15 +281,23 @@ impl SettingsView {
 
     pub(crate) fn grant_summary(&self, pane: PaneId) -> Option<String> {
         let count = self.grants(Permission::of(pane)?).len();
-        Some(L10N.tr_args("app-count", [("count", count.into())]))
+        Some(match count {
+            0 => tr!(context = "count", "None"),
+            count => trn!("1 app", "{count} apps", count = count),
+        })
     }
 
     pub(crate) fn permission_rows(&mut self, permission: Permission) -> Widgets {
         let grants = self.grants(permission).to_vec();
         if grants.is_empty() {
-            return vec![muted_row(
-                &L10N.tr(&format!("{}-none", permission.pane().keyword())),
-            )];
+            let none = match permission {
+                Permission::Camera => tr!("No app has asked to use the camera yet."),
+                Permission::Microphone => tr!("No app has asked to use the microphone yet."),
+                Permission::Screenshots => tr!("No app has asked to take screenshots yet."),
+                Permission::ScreenSharing => tr!("No app remembers what it may share."),
+                Permission::Location => tr!("No app has asked for your location yet."),
+            };
+            return vec![muted_row(&none)];
         }
         let mut rows = Vec::new();
         for grant in grants {
@@ -298,7 +306,10 @@ impl SettingsView {
                 Permission::ScreenSharing => {
                     let target = Forget::Share(grant.app.clone());
                     if self.forgetting.as_ref() == Some(&target) {
-                        let row = self.forget_row(&grant.name, &L10N.tr("forget-share-warning"));
+                        let row = self.forget_row(
+                            &grant.name,
+                            &tr!("It asks again before it shares your screen or a window."),
+                        );
                         rows.push(row);
                         continue;
                     }

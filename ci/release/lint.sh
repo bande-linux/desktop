@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 cargo fmt --all --check
-ci/check-l10n.py crates
+cargo run --locked --quiet --package bande-l10n-tool -- check ci/l10n-complete
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
 forbid() {

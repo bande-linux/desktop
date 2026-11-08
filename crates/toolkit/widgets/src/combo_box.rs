@@ -1,12 +1,12 @@
 use accesskit::{Action, ActionRequest, HasPopup, Node, Role};
 use bande_graphics::{Item, Point, Rect};
+use bande_l10n::tr;
 
 use super::control::chevron_down;
 use super::{
     Context, Cursor, DragAction, Event, Key, Menu, MenuItem, Parts, Size, TextField, Widget,
     WidgetId,
 };
-use crate::L10N;
 
 const BUTTON_WIDTH: f32 = 26.0;
 const MENU_GAP: f32 = 4.0;
@@ -105,7 +105,7 @@ impl Widget for ComboBox {
         let button = self.button();
         let id = self.id().part(BUTTON_PART);
         let mut node = Node::new(Role::Button);
-        node.set_label(L10N.tr("show-choices"));
+        node.set_label(tr!("Show Choices"));
         node.add_action(Action::Click);
         node.set_bounds(accesskit::Rect {
             x0: f64::from(button.x),

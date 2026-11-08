@@ -1,16 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
+use bande_l10n::text;
+
+use crate::browser::Location;
+use crate::controls::Press;
+use crate::view::{FilesView, Hit};
 use bande_fs::Entry;
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::ui::{Key, Modifiers, Pointer, Scroll, ScrollPhase, ScrollSource, ScrollState};
 use bande_toolkit::{
     Color, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
-
-use crate::L10N;
-use crate::browser::Location;
-use crate::controls::Press;
-use crate::view::{FilesView, Hit};
 
 const PADDING: f32 = 14.0;
 const ICON_PAD: f32 = 6.0;
@@ -735,10 +735,11 @@ impl FilesView {
             true => self.palette.ink,
             false => self.palette.ink2,
         };
-        let title = L10N.tr(match collapsed {
-            true => "group-show-all",
-            false => "group-show-less",
-        });
+        let title = (match collapsed {
+            true => text!("Show All"),
+            false => text!("Show Less"),
+        })
+        .tr();
         let paragraph = self.text().paragraph(
             &title,
             TextStyle::new(LABEL_SIZE, color).weight(TextStyle::MEDIUM),

@@ -1,18 +1,18 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use bande_app::{TabDrop, move_tab};
-use bande_toolkit::ui::{
-    Pointer, ScrollState, TabAction, TabLabel, TabStripLayout, TabsShown, frame_time,
-};
-use bande_toolkit::{Item, Point};
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::browser::{Browser, Location};
 use crate::controls::Press;
 use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{FilesView, Hit, Request};
 use crate::views::ViewMode;
+use bande_app::{TabDrop, move_tab};
+use bande_toolkit::ui::{
+    Pointer, ScrollState, TabAction, TabLabel, TabStripLayout, TabsShown, frame_time,
+};
+use bande_toolkit::{Item, Point};
 
 pub const TAB_BAR_HEIGHT: f32 = 36.0;
 const TAB_INSET: f32 = 4.0;
@@ -55,15 +55,12 @@ impl CarriedTab {
 
 pub(crate) fn location_title(location: &Location) -> String {
     match location {
-        Location::Trash => L10N.tr("trash"),
-        Location::Recents => L10N.tr("recents"),
+        Location::Trash => tr!("Trash"),
+        Location::Recents => tr!("Recents"),
         Location::Server(url) => url.clone(),
-        Location::Search(folder) => L10N.tr_args(
-            "search-title",
-            [(
-                "folder",
-                location_title(&Location::Folder(folder.clone())).into(),
-            )],
+        Location::Search(folder) => tr!(
+            "Searching “{folder}”",
+            folder = location_title(&Location::Folder(folder.clone())),
         ),
         Location::Folder(folder) => folder.file_name().map_or_else(
             || folder.display().to_string(),

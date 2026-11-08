@@ -2,6 +2,15 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
+use crate::backdrop::{Backdrop, Layer};
+use crate::menus::Command;
+use crate::model::{
+    Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, Slot, SortBy,
+    icon_bounds, label_bounds,
+};
+use crate::places::Layouts;
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bande_fs::same_volume;
 use bande_quick_look::QuickLookLink;
@@ -13,15 +22,6 @@ use bande_toolkit::{
     Appearance, Color, DragAction, DragIcon, Elevation, Image, Item as SceneItem, Palette,
     Paragraph, Point, Radius, Rect, Scene, Scheme, Shape, TextAlign, TextStyle, TextSystem,
 };
-
-use crate::L10N;
-use crate::backdrop::{Backdrop, Layer};
-use crate::menus::Command;
-use crate::model::{
-    Bounds, Desktop, Direction, Grid, Item, Kind, LABEL_WIDTH, Positions, Slot, SortBy,
-    icon_bounds, label_bounds,
-};
-use crate::places::Layouts;
 use bande_xdg::path_from_file_uri;
 
 const LABEL_SIZE: f32 = 12.0;
@@ -1427,7 +1427,7 @@ impl DesktopView {
 
     pub fn accessibility(&self) -> TreeUpdate {
         let mut root = Node::new(Role::Window);
-        root.set_label(L10N.tr("desktop"));
+        root.set_label(tr!("Desktop"));
         let mut nodes = Vec::new();
         let mut focus = ROOT_NODE;
         let mut children = Vec::new();

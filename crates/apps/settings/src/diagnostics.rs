@@ -5,17 +5,17 @@ use std::path::Path;
 use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
-use bande_settings_panes::PaneId;
-use bande_toolkit::ui::{Axis, Button, Stack, TextField, TextView, Toggle, Widget};
-use bande_toolkit::{Spacing, TextRole};
-use serde_json::{Value, json};
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::pages::{boxed, muted_row};
 use crate::view::{Detail, Intent, SettingsView, intent};
 use crate::widgets::{Card, Header, Row, Text, Tone};
+use bande_settings_panes::PaneId;
+use bande_toolkit::ui::{Axis, Button, Stack, TextField, TextView, Toggle, Widget};
+use bande_toolkit::{Spacing, TextRole};
+use serde_json::{Value, json};
 
 const SOCKET: &str = "/run/bande/report.sock";
 const ANSWER_PATIENCE: Duration = Duration::from_secs(60);
@@ -150,7 +150,7 @@ pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
         let failed = |error: io::Error| {
             updates.send(pane_failed(
                 PaneId::Diagnostics,
-                "diagnostics-failed",
+                text!("That could not be done."),
                 error,
             ));
         };
@@ -223,33 +223,37 @@ pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
 }
 
 fn kind_label(kind: &str) -> String {
-    L10N.tr(match kind {
-        "crash" | "panic" => "fault-crash",
-        "not-responding" | "app-hang" | "force-quit" => "fault-not-responding",
-        "compositor-stall" | "shell-stall" => "fault-desktop-stall",
-        "failed-unit" => "fault-failed-service",
-        "kernel-panic" | "kernel-oops" | "kernel-warning" | "lockup" | "hung-task" => {
-            "fault-kernel"
+    (match kind {
+        "crash" | "panic" => text!("Crash"),
+        "not-responding" | "app-hang" | "force-quit" => {
+            text!("Not responding")
         }
-        "unexpected-restart" => "fault-unexpected-restart",
-        "oom" => "fault-memory",
-        "gpu-reset" | "gpu-error" => "fault-graphics",
-        "display-failure" | "display-error" => "fault-display",
-        "sleep-failed" | "wake-failure" => "fault-sleep",
-        "storage-error" => "fault-storage",
-        "mount-stall" => "fault-network-drive",
-        "manual" => "fault-manual",
-        _ => "fault-other",
+        "compositor-stall" | "shell-stall" => text!("Desktop stalled"),
+        "failed-unit" => text!("Failed to run"),
+        "kernel-panic" | "kernel-oops" | "kernel-warning" | "lockup" | "hung-task" => {
+            text!("Kernel problem")
+        }
+        "unexpected-restart" => text!("Unexpected restart"),
+        "oom" => text!("Out of memory"),
+        "gpu-reset" | "gpu-error" => text!("Graphics problem"),
+        "display-failure" | "display-error" => text!("Display problem"),
+        "sleep-failed" | "wake-failure" => text!("Sleep or wake problem"),
+        "storage-error" => text!("Disk problem"),
+        "mount-stall" => text!("Network drive stalled"),
+        "manual" => text!("Report by hand"),
+        _ => text!("Problem"),
     })
+    .tr()
 }
 
 fn status_label(status: &str) -> String {
-    L10N.tr(match status {
-        "sent" => "report-sent",
-        "waiting" => "report-waiting",
-        "rejected" => "report-rejected",
-        _ => "report-local",
+    (match status {
+        "sent" => text!("Sent"),
+        "waiting" => text!("Waiting to send"),
+        "rejected" => text!("Refused by the server"),
+        _ => text!("On this computer"),
     })
+    .tr()
 }
 
 impl SettingsView {
@@ -258,30 +262,28 @@ impl SettingsView {
         let configured = self.diagnostics.configured;
         let set = intent(&self.intents, Intent::SetSendingReports);
         let toggle = Toggle::new(
-            &L10N.tr("reports-send-automatically"),
+            &tr!("Send reports automatically"),
             self.diagnostics.sending,
             set,
         );
         rows.push(boxed(toggle));
-        rows.push(muted_row(&L10N.tr(if self.diagnostics.sending {
-            "reports-state-sending"
+        rows.push(muted_row(&(if self.diagnostics.sending {
+            text!("New reports are sent to the configured server. Names, addresses and file names are removed first.")
         } else if configured {
-            "reports-state-local"
+            text!("Reports stay on this computer unless you send one.")
         } else {
-            "reports-state-no-server"
-        })));
+            text!("Reports stay on this computer. No server is configured.")
+        }).tr()));
         if self.diagnostics.reports.is_empty() {
-            rows.push(muted_row(&L10N.tr("no-reports")));
+            rows.push(muted_row(&tr!("Nothing has gone wrong")));
         }
         for report in self.diagnostics.reports.clone() {
             let mut open = intent(&self.intents, Intent::OpenReport);
             let id = report.id.clone();
-            let title = L10N.tr_args(
-                "report-title",
-                [
-                    ("program", report.program.clone().into()),
-                    ("kind", kind_label(&report.kind).into()),
-                ],
+            let title = tr!(
+                "{program}: {kind}",
+                program = report.program.clone(),
+                kind = kind_label(&report.kind)
             );
             let detail = format!("{} · {}", report.time, status_label(&report.status));
             let row = Row::new(
@@ -298,15 +300,17 @@ impl SettingsView {
     pub(crate) fn send_report_rows(&mut self) -> Vec<Box<dyn Widget>> {
         let mut draft = intent(&self.intents, Intent::DraftReportDescription);
         let description = TextField::new(
-            &L10N.tr("report-description"),
+            &tr!("What happened? (optional)"),
             &self.diagnostics.description,
             move |text| draft(text.to_owned()),
         );
         let mut create = intent(&self.intents, Intent::CreateReport);
         vec![
-            muted_row(&L10N.tr("report-intro")),
+            muted_row(&tr!(
+                "This gathers the logs of this boot and the one before, including anything left from a freeze or restart. You read it before it goes."
+            )),
             boxed(description),
-            boxed(Button::new(&L10N.tr("report-create"), move || create(()))),
+            boxed(Button::new(&tr!("Prepare Report"), move || create(()))),
         ]
     }
 
@@ -330,27 +334,26 @@ impl SettingsView {
             self.back_button(PaneId::Diagnostics).into_iter().collect();
         let mut copy = intent(&self.intents, Intent::CopyReport);
         let copied = text.clone();
-        let mut buttons: Vec<Box<dyn Widget>> =
-            vec![boxed(Button::new(&L10N.tr("report-copy"), move || {
-                copy(copied.clone())
-            }))];
+        let mut buttons: Vec<Box<dyn Widget>> = vec![boxed(Button::new(&tr!("Copy"), move || {
+            copy(copied.clone())
+        }))];
         if self.diagnostics.configured && report.status != "sent" {
             let mut send = intent(&self.intents, Intent::SendReport);
             let target = id.clone();
-            buttons.push(boxed(Button::new(&L10N.tr("report-send-now"), move || {
+            buttons.push(boxed(Button::new(&tr!("Send Now"), move || {
                 send(target.clone());
             })));
         }
         if !self.diagnostics.configured {
             let mut save = intent(&self.intents, Intent::SaveReport);
             let target = (id.clone(), text.clone());
-            buttons.push(boxed(Button::new(&L10N.tr("report-save"), move || {
+            buttons.push(boxed(Button::new(&tr!("Save to File"), move || {
                 save(target.clone());
             })));
         }
         let mut delete = intent(&self.intents, Intent::DeleteReport);
         let target = id.clone();
-        buttons.push(boxed(Button::new(&L10N.tr("report-delete"), move || {
+        buttons.push(boxed(Button::new(&tr!("Delete"), move || {
             delete(target.clone());
         })));
         let ink = self.palette().ink;
@@ -363,15 +366,12 @@ impl SettingsView {
                 kind_label(&report.kind),
                 report.time,
                 status_label(&report.status),
-                L10N.tr_args("report-id", [("id", report.id.clone().into())]),
+                tr!("Report {id}", id = report.id.clone()),
                 self.diagnostics
                     .saved
                     .as_ref()
                     .map_or_else(String::new, |path| {
-                        format!(
-                            " · {}",
-                            L10N.tr_args("report-saved", [("path", path.clone().into())])
-                        )
+                        format!(" · {}", tr!("Saved as {path}", path = path.clone()))
                     }),
             ),
             Some(boxed(Stack::new(

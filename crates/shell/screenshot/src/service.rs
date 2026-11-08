@@ -5,6 +5,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use bande_inbox::Outbox;
+use bande_l10n::tr;
 use zbus::blocking::Connection;
 use zbus::message::Header;
 use zbus::zvariant::{OwnedValue, Value};
@@ -14,7 +15,7 @@ use bande_toolkit::Snapshot;
 use crate::cast::Cast;
 use crate::engine::{Engine, Shot, Source};
 use crate::indicator::{Activity, Indicator};
-use crate::{L10N, shrunk};
+use crate::shrunk;
 
 pub const BUS_NAME: &str = "org.bande.Screenshot";
 pub const PATH: &str = "/org/bande/Screenshot";
@@ -130,7 +131,7 @@ impl Casting {
                 let title = match (several, display.description.is_empty()) {
                     (true, false) => display.description.clone(),
                     (true, true) => display.name.clone(),
-                    (false, _) => L10N.tr("entire-screen"),
+                    (false, _) => tr!("Entire Screen"),
                 };
                 choices.push(Choice {
                     id: format!("{MONITOR_PREFIX}{}", display.name),
@@ -181,7 +182,7 @@ impl Casting {
     pub fn open(&self, id: &str, cursor: bool, shared: bool) -> Option<(u32, u32, u32)> {
         let source = source_of(id)?;
         let stream = self.next_stream.fetch_add(1, Ordering::Relaxed);
-        let (cast, started) = Cast::new(&L10N.tr("stream-name")).ok()?;
+        let (cast, started) = Cast::new(&tr!("Bande Screen Sharing")).ok()?;
         self.engine.stream(stream, source, cursor, cast.pool());
         let Some(started) = Cast::started(&started) else {
             self.engine.stop(stream);
@@ -201,11 +202,15 @@ impl Casting {
         let mut indicator = lock(&self.indicator);
         if indicator.is_none() {
             let casting = Arc::downgrade(self);
-            match Indicator::show(Activity::Sharing, &L10N.tr("sharing-screen"), move || {
-                if let Some(casting) = casting.upgrade() {
-                    casting.stop_all();
-                }
-            }) {
+            match Indicator::show(
+                Activity::Sharing,
+                &tr!("Sharing your screen. Click to stop."),
+                move || {
+                    if let Some(casting) = casting.upgrade() {
+                        casting.stop_all();
+                    }
+                },
+            ) {
                 Ok(shown) => *indicator = Some(shown),
                 Err(error) => tracing::warn!("cannot show the sharing indicator: {error}"),
             }

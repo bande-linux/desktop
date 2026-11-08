@@ -5,6 +5,10 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::thread;
 
+use bande_l10n::{text, tr};
+
+use crate::session::SessionRole;
+use crate::state::{ClientState, State};
 use rustix::fs::inotify;
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
@@ -12,10 +16,6 @@ use smithay::reexports::wayland_server::Client;
 use smithay::reexports::wayland_server::backend::DisconnectReason;
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
-
-use crate::L10N;
-use crate::session::SessionRole;
-use crate::state::{ClientState, State};
 
 const CONSENT_DIRECTORY: &str = "/var/lib/bande/consent";
 const ASKED_FILE: &str = "bande/consent-asked";
@@ -135,23 +135,23 @@ fn tell_person(session: Connection, access: Access, program: String) {
             return;
         };
         let message = match access {
-            Access::ReadKeys => "consent-read-keys",
-            Access::TypeKeys => "consent-type-keys",
+            Access::ReadKeys => text!("{program} wants to read what you type."),
+            Access::TypeKeys => text!("{program} wants to type for you."),
         };
         let body = format!(
             "{}\n{}",
-            L10N.tr_args(message, [("program", program.as_str().into())]),
-            L10N.tr("consent-where")
+            message.tr_args(&[("program", &program.as_str() as &dyn std::fmt::Display)]),
+            tr!("It stays off until you allow it in Privacy & Security.")
         );
-        let open = L10N.tr("consent-open");
+        let open = tr!("Open Settings");
         let hints: HashMap<&str, Value<'_>> = HashMap::new();
         let shown: zbus::Result<u32> = notifications.call(
             "Notify",
             &(
-                L10N.tr("consent-title"),
+                tr!("Privacy & Security"),
                 0u32,
                 "changes-prevent-symbolic",
-                L10N.tr("consent-title"),
+                tr!("Privacy & Security"),
                 body,
                 vec!["default", open.as_str()],
                 hints,

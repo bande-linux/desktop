@@ -3,26 +3,27 @@ use std::path::PathBuf;
 use bande_app::Menus;
 use bande_app_menu::{Entry, key_item};
 use bande_files::{
-    FilesView, GROUPS, L10N, ListColumn, group_action, list_column_action, list_column_move_action,
+    FilesView, GROUPS, ListColumn, group_action, list_column_action, list_column_move_action,
     list_column_title,
 };
 use bande_fs::SortBy;
+use bande_l10n::{Text, text, tr};
 
-fn shortcut(message: &str, keys: &str) -> Entry {
-    key_item(&L10N.tr(message), keys)
+fn shortcut(message: Text, keys: &str) -> Entry {
+    key_item(&message.tr(), keys)
 }
 
-fn plain(message: &str, action: &str) -> Entry {
-    Entry::item(&L10N.tr(message), action)
+fn plain(message: Text, action: &str) -> Entry {
+    Entry::item(&message.tr(), action)
 }
 
-fn submenu(message: &str, entries: Vec<Entry>) -> Entry {
-    Entry::submenu(&L10N.tr(message), entries)
+fn submenu(message: Text, entries: Vec<Entry>) -> Entry {
+    Entry::submenu(&message.tr(), entries)
 }
 
-fn titled(title: Option<String>, message: &str, keys: &str) -> Entry {
+fn titled(title: Option<String>, message: Text, keys: &str) -> Entry {
     let enabled = title.is_some();
-    key_item(&title.unwrap_or_else(|| L10N.tr(message)), keys).enabled(enabled)
+    key_item(&title.unwrap_or_else(|| message.tr()), keys).enabled(enabled)
 }
 
 pub const NEW_WINDOW: &str = "new-window";
@@ -43,8 +44,7 @@ fn recent_entries(recent_folders: &[PathBuf]) -> Vec<Entry> {
         .collect::<Vec<_>>();
     entries.push(Entry::separator());
     entries.push(
-        Entry::item(&L10N.tr("menu-clear-menu"), CLEAR_RECENT_FOLDERS)
-            .enabled(!recent_folders.is_empty()),
+        Entry::item(&tr!("Clear Menu"), CLEAR_RECENT_FOLDERS).enabled(!recent_folders.is_empty()),
     );
     entries
 }
@@ -54,7 +54,7 @@ fn group_entries(view: &FilesView) -> Vec<Entry> {
     GROUPS
         .iter()
         .map(|(group, message)| {
-            Entry::item(&L10N.tr(message), group_action(*group)).radio(*group == current)
+            Entry::item(&message.tr(), group_action(*group)).radio(*group == current)
         })
         .collect()
 }
@@ -62,13 +62,13 @@ fn group_entries(view: &FilesView) -> Vec<Entry> {
 fn sort_entries(view: &FilesView) -> Vec<Entry> {
     let current = view.browser().sort().by;
     [
-        ("column-name", "sort:name", SortBy::Name),
-        ("column-kind", "sort:kind", SortBy::Kind),
-        ("column-modified", "sort:modified", SortBy::Modified),
-        ("column-size", "sort:size", SortBy::Size),
+        (text!("Name"), "sort:name", SortBy::Name),
+        (text!("Kind"), "sort:kind", SortBy::Kind),
+        (text!("Date Modified"), "sort:modified", SortBy::Modified),
+        (text!("Size"), "sort:size", SortBy::Size),
     ]
     .into_iter()
-    .map(|(message, action, by)| Entry::item(&L10N.tr(message), action).radio(by == current))
+    .map(|(message, action, by)| Entry::item(&message.tr(), action).radio(by == current))
     .collect()
 }
 
@@ -84,9 +84,12 @@ fn column_entries(view: &FilesView) -> Vec<Entry> {
     if shown.len() > 1 {
         entries.push(Entry::separator());
     }
-    let moved = |column: ListColumn, by: isize, message: &str| {
+    let moved = |column: ListColumn, by: isize, message: Text| {
         Entry::item(
-            &L10N.tr_args(message, [("column", list_column_title(column).into())]),
+            &message.tr_args(&[(
+                "column",
+                &list_column_title(column) as &dyn std::fmt::Display,
+            )]),
             &list_column_move_action(column, by),
         )
     };
@@ -94,13 +97,13 @@ fn column_entries(view: &FilesView) -> Vec<Entry> {
         shown
             .iter()
             .skip(1)
-            .map(|column| moved(*column, -1, "menu-move-column-left")),
+            .map(|column| moved(*column, -1, text!("Move {column} Left"))),
     );
     entries.extend(
         shown
             .iter()
             .take(shown.len().saturating_sub(1))
-            .map(|column| moved(*column, 1, "menu-move-column-right")),
+            .map(|column| moved(*column, 1, text!("Move {column} Right"))),
     );
     entries
 }
@@ -108,8 +111,8 @@ fn column_entries(view: &FilesView) -> Vec<Entry> {
 pub fn windowless_menus() -> Menus {
     Menus {
         menus: vec![submenu(
-            "menu-file",
-            vec![Entry::item(&L10N.tr("menu-new-window"), NEW_WINDOW).shortcut("Ctrl+N")],
+            text!("File"),
+            vec![Entry::item(&tr!("New Window"), NEW_WINDOW).shortcut("Ctrl+N")],
         )],
         window: Vec::new(),
     }
@@ -118,100 +121,100 @@ pub fn windowless_menus() -> Menus {
 pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
     let menus = vec![
         submenu(
-            "menu-file",
+            text!("File"),
             vec![
-                shortcut("menu-new-window", "Ctrl+N"),
-                shortcut("menu-new-tab", "Ctrl+T"),
-                shortcut("menu-new-folder", "Shift+Ctrl+N"),
-                shortcut("menu-open", "Ctrl+O"),
+                shortcut(text!("New Window"), "Ctrl+N"),
+                shortcut(text!("New Tab"), "Ctrl+T"),
+                shortcut(text!("New Folder"), "Shift+Ctrl+N"),
+                shortcut(text!("Open"), "Ctrl+O"),
                 Entry::separator(),
-                shortcut("menu-get-info", "Ctrl+I"),
-                Entry::item(&L10N.tr("menu-browse-backups"), "browse-backups")
+                shortcut(text!("Get Info"), "Ctrl+I"),
+                Entry::item(&tr!("Browse Backups…"), "browse-backups")
                     .enabled(bande_files::backups_installed()),
-                shortcut("menu-rename", "F2"),
-                Entry::item(&L10N.tr("menu-duplicate"), "duplicate"),
-                Entry::item(&L10N.tr("menu-make-alias"), "make-alias"),
-                shortcut("menu-add-to-sidebar", "Ctrl+D"),
-                Entry::item(&L10N.tr("menu-open-in-terminal"), "open-in-terminal")
+                shortcut(text!("Rename"), "F2"),
+                Entry::item(&tr!("Duplicate"), "duplicate"),
+                Entry::item(&tr!("Make Alias"), "make-alias"),
+                shortcut(text!("Add to Sidebar"), "Ctrl+D"),
+                Entry::item(&tr!("Open in Terminal"), "open-in-terminal")
                     .enabled(view.terminal_installed()),
-                Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
+                Entry::item(&tr!("Compress"), "compress"),
                 Entry::separator(),
-                shortcut("menu-move-to-trash", "Delete"),
-                shortcut("menu-delete-immediately", "Shift+Delete"),
+                shortcut(text!("Move to Trash"), "Delete"),
+                shortcut(text!("Delete Immediately…"), "Shift+Delete"),
                 Entry::separator(),
-                plain("menu-eject", "eject-current"),
-                shortcut("menu-find", "Ctrl+F"),
+                plain(text!("Eject"), "eject-current"),
+                shortcut(text!("Find"), "Ctrl+F"),
                 Entry::separator(),
                 bande_app_menu::print_item(view.can_print()),
             ],
         ),
         submenu(
-            "menu-edit",
+            text!("Edit"),
             vec![
-                titled(view.undo_title(), "menu-undo", "Ctrl+Z"),
-                titled(view.redo_title(), "menu-redo", "Shift+Ctrl+Z"),
+                titled(view.undo_title(), text!("Undo"), "Ctrl+Z"),
+                titled(view.redo_title(), text!("Redo"), "Shift+Ctrl+Z"),
                 Entry::separator(),
-                shortcut("menu-cut", "Ctrl+X"),
-                shortcut("menu-copy", "Ctrl+C"),
-                shortcut("menu-copy-path", "Shift+Ctrl+C"),
-                shortcut("menu-paste", "Ctrl+V"),
-                plain("menu-move-item-here", "move-here"),
-                shortcut("menu-select-all", "Ctrl+A"),
+                shortcut(text!("Cut"), "Ctrl+X"),
+                shortcut(text!("Copy"), "Ctrl+C"),
+                shortcut(text!("Copy as Pathname"), "Shift+Ctrl+C"),
+                shortcut(text!("Paste"), "Ctrl+V"),
+                plain(text!("Move Item Here"), "move-here"),
+                shortcut(text!("Select All"), "Ctrl+A"),
             ],
         ),
         submenu(
-            "menu-view",
+            text!("View"),
             vec![
-                shortcut("menu-as-icons", "Ctrl+1"),
-                shortcut("menu-as-list", "Ctrl+2"),
-                plain("menu-as-columns", "columns"),
-                plain("menu-as-gallery", "gallery"),
+                shortcut(text!("as Icons"), "Ctrl+1"),
+                shortcut(text!("as List"), "Ctrl+2"),
+                plain(text!("as Columns"), "columns"),
+                plain(text!("as Gallery"), "gallery"),
                 Entry::separator(),
-                Entry::item(&L10N.tr("menu-use-groups"), "use-groups")
+                Entry::item(&tr!("Use Groups"), "use-groups")
                     .radio(view.browser().groups().is_some()),
-                submenu("menu-group-by", group_entries(view)),
-                submenu("menu-sort-by", sort_entries(view)),
-                submenu("menu-columns", column_entries(view)),
+                submenu(text!("Group By"), group_entries(view)),
+                submenu(text!("Sort By"), sort_entries(view)),
+                submenu(text!("Columns"), column_entries(view)),
                 Entry::separator(),
-                shortcut("menu-bigger-icons", "Ctrl+="),
-                shortcut("menu-smaller-icons", "Ctrl+-"),
+                shortcut(text!("Bigger Icons"), "Ctrl+="),
+                shortcut(text!("Smaller Icons"), "Ctrl+-"),
                 Entry::separator(),
                 shortcut(
                     match view.browser().shows_hidden() {
-                        true => "menu-hide-hidden-files",
-                        false => "menu-show-hidden-files",
+                        true => text!("Hide Hidden Files"),
+                        false => text!("Show Hidden Files"),
                     },
                     "Ctrl+H",
                 ),
-                plain("menu-status-bar", "toggle-status-bar"),
-                shortcut("menu-quick-look", "Space"),
-                plain("menu-quick-look-full-screen", "quick-look-full-screen"),
+                plain(text!("Show or Hide Status Bar"), "toggle-status-bar"),
+                shortcut(text!("Quick Look"), "Space"),
+                plain(text!("Quick Look in Full Screen"), "quick-look-full-screen"),
             ],
         ),
         submenu(
-            "menu-go",
+            text!("Go"),
             vec![
-                shortcut("menu-back", "Alt+Left"),
-                shortcut("menu-forward", "Alt+Right"),
-                shortcut("menu-enclosing-folder", "Alt+Up"),
+                shortcut(text!("Back"), "Alt+Left"),
+                shortcut(text!("Forward"), "Alt+Right"),
+                shortcut(text!("Enclosing Folder"), "Alt+Up"),
                 Entry::separator(),
-                plain("menu-desktop", "go:desktop"),
-                plain("menu-documents", "go:documents"),
-                plain("menu-downloads", "go:downloads"),
-                shortcut("menu-home", "Alt+Home"),
-                plain("recents", "go:recents"),
+                plain(text!("Desktop"), "go:desktop"),
+                plain(text!("Documents"), "go:documents"),
+                plain(text!("Downloads"), "go:downloads"),
+                shortcut(text!("Home"), "Alt+Home"),
+                plain(text!("Recents"), "go:recents"),
                 Entry::separator(),
-                submenu("menu-recent-folders", recent_entries(recent_folders)),
-                shortcut("menu-go-to-folder", "Ctrl+L"),
-                shortcut("menu-connect-to-server", "Ctrl+K"),
+                submenu(text!("Recent Folders"), recent_entries(recent_folders)),
+                shortcut(text!("Go to Folder…"), "Ctrl+L"),
+                shortcut(text!("Connect to Server…"), "Ctrl+K"),
             ],
         ),
     ];
     Menus {
         menus,
         window: vec![
-            shortcut("menu-previous-tab", "Ctrl+PgUp"),
-            shortcut("menu-next-tab", "Ctrl+PgDn"),
+            shortcut(text!("Show Previous Tab"), "Ctrl+PgUp"),
+            shortcut(text!("Show Next Tab"), "Ctrl+PgDn"),
         ],
     }
 }

@@ -45,10 +45,6 @@ mod view;
 mod widgets;
 mod wifi;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
 pub use backup::{BackupCommand, BackupUpdate};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
@@ -81,6 +77,3 @@ pub use time::{
 };
 pub use view::SettingsView;
 pub use widgets::{bucket_levels, sidebar_width};
-
-pub const TRANSLATIONS: &[(&str, &str)] = bande_l10n::translations!("bande-settings");
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(TRANSLATIONS));

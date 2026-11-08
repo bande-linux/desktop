@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use bande_l10n::text;
 use bande_settings_panes::SettingId;
 use bande_status::brightness::{LevelRequest, follow_levels, level_requests};
 use zbus::blocking::Connection;
@@ -15,7 +16,11 @@ pub fn follow_brightness(session: &Connection, updates: Updates) -> Option<Sende
         tracing::warn!("cannot follow the brightness: {error}");
     }
     level_requests(session, move |error| {
-        updates.send(failed(SettingId::Brightness, &error, "service-brightness"));
+        updates.send(failed(
+            SettingId::Brightness,
+            &error,
+            text!("The brightness service"),
+        ));
     })
     .inspect_err(|error| tracing::warn!("cannot set the brightness: {error}"))
     .ok()

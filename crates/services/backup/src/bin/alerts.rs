@@ -1,29 +1,55 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::LazyLock;
 
 use bande_backup::client::{ALERT_FILE, problem};
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-backup")));
-
 const OPEN: &str = "open-settings";
 const SETTINGS: &str = "org.bande.Settings";
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 
-fn texts(kind: &str) -> Option<(&'static str, &'static str)> {
+fn texts(kind: &str, disk: &str) -> Option<(String, String)> {
     match kind {
-        problem::OVERDUE => Some(("overdue-title", "overdue-body")),
-        problem::DISK_FULL => Some(("disk-full-title", "disk-full-body")),
-        problem::DAMAGED => Some(("damaged-title", "damaged-body")),
-        problem::CANNOT_OPEN => Some(("cannot-open-title", "cannot-open-body")),
-        problem::FAILING => Some(("failing-title", "failing-body")),
+        problem::OVERDUE => Some((
+            tr!("No backup for two weeks"),
+            tr!(
+                "Connect {disk} to back up this computer again.",
+                disk = disk
+            ),
+        )),
+        problem::DISK_FULL => Some((
+            tr!("The backup disk is too small"),
+            tr!(
+                "{disk} has no more room, even with the oldest backups removed. Use a larger disk.",
+                disk = disk
+            ),
+        )),
+        problem::DAMAGED => Some((
+            tr!("Damage found on the backup disk"),
+            tr!(
+                "Some older versions on {disk} were lost. Backups go on, but the disk may be failing.",
+                disk = disk
+            ),
+        )),
+        problem::CANNOT_OPEN => Some((
+            tr!("Can't open the backups"),
+            tr!(
+                "The backups on {disk} are missing or use another password.",
+                disk = disk
+            ),
+        )),
+        problem::FAILING => Some((
+            tr!("Backups keep failing"),
+            tr!(
+                "The last few backups to {disk} did not finish.",
+                disk = disk
+            ),
+        )),
         _ => None,
     }
 }
@@ -78,7 +104,7 @@ fn run() -> zbus::Result<()> {
     let kind = lines.next().unwrap_or_default();
     let since = lines.next().unwrap_or_default();
     let disk = lines.next().unwrap_or_default().to_owned();
-    let Some((title, body)) = texts(kind) else {
+    let Some((title, body)) = texts(kind, &disk) else {
         return Ok(());
     };
     let told = format!("{kind} {since}");
@@ -92,15 +118,15 @@ fn run() -> zbus::Result<()> {
     }
     let session = Connection::session()?;
     let signals = signals(&session)?;
-    let open = L10N.tr("open-settings");
+    let open = tr!("Open Backup Settings");
     let id = client::notify(
         &session,
         &Request {
-            app_name: &L10N.tr("backup"),
+            app_name: &tr!("Backup"),
             replaces_id: 0,
             app_icon: "drive-harddisk",
-            summary: &L10N.tr(title),
-            body: &L10N.tr_args(body, [("disk", disk.into())]),
+            summary: &title,
+            body: &body,
             actions: &[(OPEN, &open)],
             urgency: Urgency::Normal,
             sound: None,

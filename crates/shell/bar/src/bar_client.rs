@@ -1,7 +1,5 @@
-use std::os::fd::BorrowedFd;
-use std::time::Instant;
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::rail::{BAR_MARGIN, BarForm, bar_outline, bar_zone, edge_band, owns_node, surface_size};
 use crate::taskbar_client::anchor;
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
@@ -11,6 +9,8 @@ use bande_toolkit::{
     App, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Radius, Rect, Role, Scene, Shape,
     Window, WindowEvent,
 };
+use std::os::fd::BorrowedFd;
+use std::time::Instant;
 
 use crate::status_client::StatusClient;
 use crate::taskbar_client::Taskbar;
@@ -220,7 +220,7 @@ impl App for BarClient {
         let apps = self.taskbar.accessibility()?;
         let status = self.status.accessibility()?;
         let mut root = Node::new(AccessRole::Toolbar);
-        root.set_label(L10N.tr("taskbar"));
+        root.set_label(tr!("Taskbar"));
         root.set_children(
             [&status, &apps]
                 .into_iter()

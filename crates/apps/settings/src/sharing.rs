@@ -3,16 +3,16 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 
-use bande_app::choose_file;
-use bande_packages::{Client, Info, Mode};
-use bande_toolkit::ui::{Button, SecureField, Toggle, Widget};
-use zbus::blocking::Connection;
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::follow::{Update, Updates, spawn};
 use crate::pages::{FIELD_SIZE, Widgets, boxed, submit};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
+use bande_app::choose_file;
+use bande_packages::{Client, Info, Mode};
+use bande_toolkit::ui::{Button, SecureField, Toggle, Widget};
+use zbus::blocking::Connection;
 
 const HELPER: &str = "/usr/libexec/bande-sharing-helper";
 const PKEXEC: &str = "/usr/bin/pkexec";
@@ -191,7 +191,7 @@ fn run(command: SharingCommand, system: Option<&Connection>, session: Option<&Co
         SharingCommand::Remove(name) => helper(&["remove", &name], None),
         SharingCommand::AddFolder => {
             let chosen = session.and_then(|session| {
-                choose_file(session, &L10N.tr("sharing-choose-folder"), None)
+                choose_file(session, &tr!("Choose a folder to share"), None)
                     .inspect_err(|error| tracing::warn!("cannot choose a folder: {error}"))
                     .ok()
                     .flatten()
@@ -233,38 +233,42 @@ impl SettingsView {
         };
         let mut rows = Vec::new();
         if state.failed {
-            rows.push(crate::pages::muted_row(&L10N.tr("sharing-failed")));
+            rows.push(crate::pages::muted_row(&tr!(
+                "That change didn’t go through."
+            )));
         }
         if state.ssh_installed {
             let mut change = intent(&self.intents, Intent::Sharing);
-            let toggle = Toggle::new(
-                &L10N.tr("sharing-remote-login"),
-                state.remote_login,
-                move |on| {
-                    change(SharingCommand::RemoteLogin(on));
-                },
-            );
+            let toggle = Toggle::new(&tr!("Remote Login"), state.remote_login, move |on| {
+                change(SharingCommand::RemoteLogin(on));
+            });
             let row = Row::new(
-                Text::new(&L10N.tr("sharing-remote-login"), Tone::Primary),
+                Text::new(&tr!("Remote Login"), Tone::Primary),
                 Some(boxed(toggle)),
             )
-            .detail(Text::new(&L10N.tr("sharing-remote-login-detail"), Tone::Muted).caption());
+            .detail(
+                Text::new(
+                    &tr!("Others with an account on this computer can sign in with SSH"),
+                    Tone::Muted,
+                )
+                .caption(),
+            );
             rows.push(self.item_row("remote-login".to_owned(), row));
         }
         if !state.samba_installed {
             let mut install = intent(&self.intents, Intent::Sharing);
-            let mut button = Button::new(&L10N.tr("sharing-install"), move || {
+            let mut button = Button::new(&tr!("Install"), move || {
                 install(SharingCommand::InstallSamba);
             });
             button.set_enabled(!self.installing_samba);
             let detail = match self.installing_samba {
-                true => L10N.tr("sharing-installing"),
-                false => L10N.tr("sharing-install-detail"),
+                true => tr!("Installing…"),
+                false => tr!("Samba, from the Debian archive"),
             };
             self.anchors
                 .push((Anchor::Item("install-samba".to_owned()), button.id()));
             let row = Row::new(
-                Text::new(&L10N.tr("sharing-file-sharing"), Tone::Primary),
+                Text::new(&tr!("File Sharing"), Tone::Primary),
                 Some(boxed(button)),
             )
             .detail(Text::new(&detail, Tone::Muted).caption());
@@ -272,24 +276,26 @@ impl SettingsView {
             return rows;
         }
         let mut change = intent(&self.intents, Intent::Sharing);
-        let toggle = Toggle::new(
-            &L10N.tr("sharing-file-sharing"),
-            state.file_sharing,
-            move |on| {
-                change(SharingCommand::FileSharing(on));
-            },
-        );
+        let toggle = Toggle::new(&tr!("File Sharing"), state.file_sharing, move |on| {
+            change(SharingCommand::FileSharing(on));
+        });
         let row = Row::new(
-            Text::new(&L10N.tr("sharing-file-sharing"), Tone::Primary),
+            Text::new(&tr!("File Sharing"), Tone::Primary),
             Some(boxed(toggle)),
         )
-        .detail(Text::new(&L10N.tr("sharing-file-sharing-detail"), Tone::Muted).caption());
+        .detail(
+            Text::new(
+                &tr!("Other computers on this network can open the folders you share"),
+                Tone::Muted,
+            )
+            .caption(),
+        );
         rows.push(self.item_row("file-sharing".to_owned(), row));
         if !state.file_sharing {
             return rows;
         }
         let field = SecureField::new(
-            &L10N.tr("sharing-password"),
+            &tr!("New password"),
             FIELD_SIZE,
             submit(&self.intents, |text| {
                 Intent::Sharing(SharingCommand::Password(text))
@@ -299,28 +305,27 @@ impl SettingsView {
             .push((Anchor::Item("sharing-password".to_owned()), field.id()));
         rows.push(boxed(
             Row::new(
-                Text::new(&L10N.tr("sharing-password-label"), Tone::Primary),
+                Text::new(&tr!("Sharing password"), Tone::Primary),
                 Some(boxed(field)),
             )
-            .detail(Text::new(&L10N.tr("sharing-password-detail"), Tone::Muted).caption()),
+            .detail(Text::new(&tr!("Others use your account name and this password to connect. Press Return to set it."), Tone::Muted).caption()),
         ));
         for share in &state.shares {
             let mut remove = intent(&self.intents, Intent::Sharing);
             let name = share.name.clone();
-            let button: Box<dyn Widget> =
-                boxed(Button::new(&L10N.tr("sharing-remove"), move || {
-                    remove(SharingCommand::Remove(name.clone()));
-                }));
+            let button: Box<dyn Widget> = boxed(Button::new(&tr!("Remove"), move || {
+                remove(SharingCommand::Remove(name.clone()));
+            }));
             let row = Row::new(Text::new(&share.name, Tone::Primary), Some(button))
                 .detail(Text::new(&share.path.display().to_string(), Tone::Muted).caption());
             rows.push(self.item_row(format!("share:{}", share.name), row));
         }
         let mut add = intent(&self.intents, Intent::Sharing);
-        let button = Button::new(&L10N.tr("sharing-add"), move || {
+        let button = Button::new(&tr!("Add Folder…"), move || {
             add(SharingCommand::AddFolder);
         });
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("sharing-folders"), Tone::Primary),
+            Text::new(&tr!("Shared folders"), Tone::Primary),
             Some(boxed(button)),
         )));
         rows

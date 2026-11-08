@@ -1,25 +1,63 @@
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-use bande_fs::{Action, Answer, Failure, Problem, Purpose, Resolution, Shortfall, format_size};
-use bande_toolkit::ui::Alert;
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::browser::Location;
 use crate::prompt::{Kind, Prompt};
 use crate::sidebar::system_disk_name;
 use crate::tabs::location_title;
 use crate::view::{FilesView, Sheet};
+use bande_fs::{Action, Answer, Failure, Problem, Purpose, Resolution, Shortfall, format_size};
+use bande_toolkit::ui::Alert;
 
-fn action_key(purpose: Purpose) -> &'static str {
+fn failure_title(name: &str, purpose: Purpose) -> String {
     match purpose {
-        Purpose::Do(Action::Copy) => "copy",
-        Purpose::Do(Action::Move) => "move",
-        Purpose::Do(Action::Duplicate) => "duplicate",
-        Purpose::Do(Action::Trash) => "trash",
-        Purpose::Do(Action::PutBack) => "put-back",
-        Purpose::Erase => "delete",
-        _ => "other",
+        Purpose::Do(Action::Copy) => tr!("“{name}” couldn’t be copied.", name = name),
+        Purpose::Do(Action::Move) => tr!("“{name}” couldn’t be moved.", name = name),
+        Purpose::Do(Action::Duplicate) => tr!("“{name}” couldn’t be duplicated.", name = name),
+        Purpose::Do(Action::Trash) => tr!("“{name}” couldn’t be moved to the Trash.", name = name),
+        Purpose::Do(Action::PutBack) => tr!("“{name}” couldn’t be put back.", name = name),
+        Purpose::Erase => tr!("“{name}” couldn’t be deleted.", name = name),
+        _ => tr!("“{name}” couldn’t be changed.", name = name),
+    }
+}
+
+fn shortfall_title(purpose: Purpose, item: Option<&str>, volume: &str, size: &str) -> String {
+    match (purpose, item) {
+        (Purpose::Do(Action::Move), Some(name)) => tr!(
+            "“{name}” can’t be moved because “{volume}” needs {size} more space.",
+            name = name,
+            volume = volume,
+            size = size
+        ),
+        (Purpose::Do(Action::Duplicate), Some(name)) => tr!(
+            "“{name}” can’t be duplicated because “{volume}” needs {size} more space.",
+            name = name,
+            volume = volume,
+            size = size
+        ),
+        (_, Some(name)) => tr!(
+            "“{name}” can’t be copied because “{volume}” needs {size} more space.",
+            name = name,
+            volume = volume,
+            size = size
+        ),
+        (Purpose::Do(Action::Move), None) => tr!(
+            "The items can’t be moved because “{volume}” needs {size} more space.",
+            volume = volume,
+            size = size
+        ),
+        (Purpose::Do(Action::Duplicate), None) => tr!(
+            "The items can’t be duplicated because “{volume}” needs {size} more space.",
+            volume = volume,
+            size = size
+        ),
+        (_, None) => tr!(
+            "The items can’t be copied because “{volume}” needs {size} more space.",
+            volume = volume,
+            size = size
+        ),
     }
 }
 
@@ -32,20 +70,21 @@ fn item_name(path: &Path) -> String {
 
 pub(crate) fn failure_sentence(failure: &Failure) -> String {
     match failure.problem() {
-        Problem::Permission => L10N.tr("failure-permission"),
-        Problem::ReadOnly => L10N.tr("failure-read-only"),
-        Problem::NoSpace => L10N.tr("failure-no-space"),
-        Problem::NameTooLong => L10N.tr("failure-name-too-long"),
-        Problem::NameInvalid => L10N.tr("failure-name-invalid"),
-        Problem::TooLarge => L10N.tr("failure-too-large"),
-        Problem::DeviceGone => L10N.tr("failure-device-gone"),
-        Problem::ServerGone => L10N.tr("failure-server-gone"),
-        Problem::DiskError => L10N.tr("failure-disk-error"),
-        Problem::Missing => L10N.tr("failure-missing"),
-        Problem::Other => L10N.tr_args(
-            "failure-other",
-            [("error", failure.error.to_string().into())],
+        Problem::Permission => tr!("You don’t have permission."),
+        Problem::ReadOnly => tr!("The volume is read-only."),
+        Problem::NoSpace => tr!("The disk is full."),
+        Problem::NameTooLong => tr!("The name is too long."),
+        Problem::NameInvalid => tr!("The name isn’t allowed on this disk."),
+        Problem::TooLarge => tr!("The item is too large for the format of this disk."),
+        Problem::DeviceGone => tr!("The disk was disconnected."),
+        Problem::ServerGone => tr!(
+            "The server stopped responding. Nothing was left under the real name. Try again when it’s back."
         ),
+        Problem::DiskError => tr!(
+            "The disk couldn’t be read or written. It may have been disconnected or be damaged."
+        ),
+        Problem::Missing => tr!("The item or its folder no longer exists."),
+        Problem::Other => tr!("{error}", error = failure.error.to_string()),
     }
 }
 
@@ -82,49 +121,44 @@ impl FilesView {
             self.present_no_trash(&name, several);
             return;
         }
-        let title = L10N.tr_args(
-            "failure-title",
-            [
-                ("name", item_name(&failure.path).into()),
-                ("action", action_key(running.purpose).into()),
-            ],
-        );
+        let title = failure_title(&item_name(&failure.path), running.purpose);
         let detail = failure_sentence(failure);
         let (several, retryable) = (running.items > 1, failure.retryable());
-        let mut prompt = Prompt::new(&title, &detail, self.choice()).button(
-            &L10N.tr("stop"),
-            "stop",
-            Kind::Cancel,
-        );
+        let mut prompt =
+            Prompt::new(&title, &detail, self.choice()).button(&tr!("Stop"), "stop", Kind::Cancel);
         if several {
-            prompt = prompt.button(&L10N.tr("skip-all"), "skip-all", Kind::Other);
+            prompt = prompt.button(&tr!("Skip All"), "skip-all", Kind::Other);
         }
         let skip = match retryable {
             true => Kind::Other,
             false => Kind::Primary,
         };
-        prompt = prompt.button(&L10N.tr("skip"), "skip", skip);
+        prompt = prompt.button(&tr!("Skip"), "skip", skip);
         if retryable {
-            prompt = prompt.button(&L10N.tr("try-again"), "retry", Kind::Primary);
+            prompt = prompt.button(&tr!("Try Again"), "retry", Kind::Primary);
         }
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::Failure, cancel);
     }
 
     fn present_no_trash(&mut self, name: &str, several: bool) {
-        let title = L10N.tr_args("no-trash-title", [("name", name.to_owned().into())]);
-        let mut prompt = Prompt::new(&title, &L10N.tr("no-trash-detail"), self.choice()).button(
-            &L10N.tr("stop"),
-            "stop",
-            Kind::Cancel,
+        let title = tr!(
+            "“{name}” can’t be moved to the Trash.",
+            name = name.to_owned()
         );
+        let mut prompt = Prompt::new(
+            &title,
+            &tr!("This disk has no Trash you can use. Delete it now? This can’t be undone."),
+            self.choice(),
+        )
+        .button(&tr!("Stop"), "stop", Kind::Cancel);
         if several {
             prompt = prompt
-                .button(&L10N.tr("skip-all"), "skip-all", Kind::Other)
-                .button(&L10N.tr("delete-all"), "delete-all", Kind::Other);
+                .button(&tr!("Skip All"), "skip-all", Kind::Other)
+                .button(&tr!("Delete All"), "delete-all", Kind::Other);
         }
-        prompt = prompt.button(&L10N.tr("skip"), "skip", Kind::Other).button(
-            &L10N.tr("delete"),
+        prompt = prompt.button(&tr!("Skip"), "skip", Kind::Other).button(
+            &tr!("Delete"),
             "delete",
             Kind::Primary,
         );
@@ -134,16 +168,16 @@ impl FilesView {
 
     pub(crate) fn present_busy(&mut self, quitting: bool) {
         let leave = match quitting {
-            true => "stop-and-quit",
-            false => "stop-and-close",
+            true => text!("Stop and Quit"),
+            false => text!("Stop and Close"),
         };
         let prompt = Prompt::new(
-            &L10N.tr("busy-title"),
-            &L10N.tr("busy-detail"),
+            &tr!("Files is still working."),
+            &tr!("Items already finished stay where they are. The item in progress is discarded, and its original is not touched."),
             self.choice(),
         )
-        .button(&L10N.tr(leave), "stop", Kind::Other)
-        .button(&L10N.tr("keep-running"), "keep", Kind::Cancel);
+        .button(&leave.tr(), "stop", Kind::Other)
+        .button(&tr!("Keep Going"), "keep", Kind::Cancel);
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::Busy { quitting }, cancel);
     }
@@ -171,28 +205,17 @@ impl FilesView {
     pub(crate) fn present_shortfall(&mut self, purpose: Purpose, shortfall: &Shortfall) {
         let volume = volume_name(&shortfall.destination);
         let size = format_size(shortfall.needed);
-        let action = action_key(purpose);
-        let title = match shortfall.sources.as_slice() {
-            [source] => L10N.tr_args(
-                "no-space-item",
-                [
-                    ("name", item_name(source).into()),
-                    ("action", action.into()),
-                    ("volume", volume.into()),
-                    ("size", size.into()),
-                ],
-            ),
-            _ => L10N.tr_args(
-                "no-space-items",
-                [
-                    ("action", action.into()),
-                    ("volume", volume.into()),
-                    ("size", size.into()),
-                ],
-            ),
+        let item = match shortfall.sources.as_slice() {
+            [source] => Some(item_name(source)),
+            _ => None,
         };
-        let alert = Alert::new(&title, &L10N.tr("no-space-detail"), self.choice())
-            .primary(&L10N.tr("ok"), "ok");
+        let title = shortfall_title(purpose, item.as_deref(), &volume, &size);
+        let alert = Alert::new(
+            &title,
+            &tr!("Nothing was written. Make room on the disk and try again."),
+            self.choice(),
+        )
+        .primary(&tr!("OK"), "ok");
         self.show_sheet(alert, Sheet::NoSpace, None);
     }
 }

@@ -2,7 +2,7 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 
-use crate::L10N;
+use bande_l10n::tr;
 
 const NAME_MARK: &str = "\u{F0000}";
 
@@ -72,14 +72,12 @@ fn with_name(template: &str, name: &OsStr) -> OsString {
 
 pub fn duplicate_name(folder: &Path, name: impl AsRef<OsStr>, is_dir: bool) -> PathBuf {
     let (stem, extension) = split_os_extension(name.as_ref(), is_dir);
-    let first = L10N.tr_args("copy-name", [("name", NAME_MARK.into())]);
+    let first = tr!("{name} copy", name = NAME_MARK);
     let later = (2u64..).map(|number| {
-        L10N.tr_args(
-            "copy-name-numbered",
-            [
-                ("name", NAME_MARK.into()),
-                ("number", number.to_string().into()),
-            ],
+        tr!(
+            "{name} copy {number}",
+            name = NAME_MARK,
+            number = number.to_string()
         )
     });
     free(
@@ -118,54 +116,56 @@ impl ExtensionChange {
     pub fn title(&self) -> String {
         let (from, to) = (self.from.clone(), self.to.clone());
         match (from, to) {
-            (Some(from), Some(to)) => L10N.tr_args(
-                "extension-change-title",
-                [("from", from.into()), ("to", to.into())],
+            (Some(from), Some(to)) => tr!(
+                "Are you sure you want to change the extension from “{from}” to “{to}”?",
+                from = from,
+                to = to
             ),
-            (None, to) => L10N.tr_args(
-                "extension-add-title",
-                [("extension", to.unwrap_or_default().into())],
+            (None, to) => tr!(
+                "Are you sure you want to add the extension “{extension}” to the end of the name?",
+                extension = to.unwrap_or_default()
             ),
             (Some(from), None) => {
-                L10N.tr_args("extension-remove-title", [("extension", from.into())])
+                tr!(
+                    "Are you sure you want to remove the extension “{extension}”?",
+                    extension = from
+                )
             }
         }
     }
 
     pub fn detail() -> String {
-        L10N.tr("extension-detail")
+        tr!("If you make this change, your document may open in a different app.")
     }
 
     pub fn keep(&self) -> String {
         match (&self.from, &self.to) {
             (Some(from), Some(_)) => {
-                L10N.tr_args("extension-keep", [("extension", from.clone().into())])
+                tr!("Keep {extension}", extension = from.clone())
             }
-            (None, _) => L10N.tr("extension-dont-add"),
-            (Some(_), None) => L10N.tr("extension-dont-remove"),
+            (None, _) => tr!("Don’t Add"),
+            (Some(_), None) => tr!("Keep"),
         }
     }
 
     pub fn change(&self) -> String {
         match (&self.from, &self.to) {
             (Some(_), Some(to)) => {
-                L10N.tr_args("extension-use", [("extension", to.clone().into())])
+                tr!("Use {extension}", extension = to.clone())
             }
-            (None, _) => L10N.tr("extension-add"),
-            (Some(_), None) => L10N.tr("extension-remove"),
+            (None, _) => tr!("Add"),
+            (Some(_), None) => tr!("Remove"),
         }
     }
 }
 
 pub fn alias_name(folder: &Path, name: &OsStr) -> PathBuf {
-    let first = L10N.tr_args("alias-name", [("name", NAME_MARK.into())]);
+    let first = tr!("{name} alias", name = NAME_MARK);
     let later = (2u64..).map(|number| {
-        L10N.tr_args(
-            "alias-name-numbered",
-            [
-                ("name", NAME_MARK.into()),
-                ("number", number.to_string().into()),
-            ],
+        tr!(
+            "{name} alias {number}",
+            name = NAME_MARK,
+            number = number.to_string()
         )
     });
     free(
@@ -186,7 +186,7 @@ pub fn keep_both_name(folder: &Path, name: impl AsRef<OsStr>, is_dir: bool) -> P
 }
 
 pub fn untitled_folder(folder: &Path) -> PathBuf {
-    let name = L10N.tr("untitled-folder");
+    let name = tr!("untitled folder");
     free(
         folder,
         std::iter::once(name.clone())

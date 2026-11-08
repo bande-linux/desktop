@@ -6,6 +6,7 @@ use bande_content::pdf::protocol::Use;
 use bande_content::pdf::session::Phase;
 use bande_content::{Block, Tone};
 use bande_fs::{format_date, format_size};
+use bande_l10n::{tr, trn};
 use bande_toolkit::{
     Color, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Shape,
     TextAlign, TextRole, TextStyle, TextSystem, Transform,
@@ -16,7 +17,7 @@ use parley::{Alignment, AlignmentOptions, FontFamily, FontFamilyName, StylePrope
 use crate::content::{CodeView, DocumentView, FontView, Picture, Shown};
 use crate::pdf::{GAP, PdfView, render};
 use crate::worker::SAMPLE_WIDTH;
-use crate::{Hit, L10N, MIN_SIZE, QuickLook, Resizing, Subject};
+use crate::{Hit, MIN_SIZE, QuickLook, Resizing, Subject};
 
 const HEADER: f32 = 44.0;
 const PADDING: f32 = 16.0;
@@ -243,7 +244,7 @@ impl Painter<'_> {
             paint: palette.focus.into(),
         });
         let (shown, color) = match typed {
-            0 => (L10N.tr("password"), palette.ink3),
+            0 => (tr!("Password"), palette.ink3),
             count => ("\u{2022}".repeat(count), palette.ink),
         };
         let paragraph =
@@ -257,7 +258,7 @@ impl Painter<'_> {
             paragraph,
         });
         let label = self.paragraph(
-            &L10N.tr("unlock"),
+            &tr!("Unlock"),
             TextStyle::role(TextRole::Body, palette.on_accent).weight(TextStyle::MEDIUM),
             None,
         );
@@ -287,7 +288,7 @@ impl Painter<'_> {
         if retry {
             let style = TextStyle::role(TextRole::Callout, palette.danger_text);
             self.centered(
-                &L10N.tr("pdf-wrong-password"),
+                &tr!("The password is incorrect"),
                 style,
                 area,
                 top - BUTTON + 4.0,
@@ -300,29 +301,22 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
     let entry = &subject.entry;
     let modified = entry
         .modified
-        .map(|time| L10N.tr_args("modified", [("date", format_date(time).into())]))
+        .map(|time| tr!("Modified {date}", date = format_date(time)))
         .unwrap_or_default();
     let size = match shown {
         Shown::Folder { items, bytes } => {
-            let items = L10N.tr_args("item-count", [("count", (*items).into())]);
+            let items = trn!("1 item", "{count} items", count = (*items));
             match bytes {
-                Some(bytes) => L10N.tr_args(
-                    "items-and-size",
-                    [
-                        ("items", items.into()),
-                        ("size", format_size(*bytes).into()),
-                    ],
-                ),
+                Some(bytes) => tr!("{items}, {size}", items = items, size = format_size(*bytes)),
                 None => items,
             }
         }
         Shown::Archive(contents) => {
-            let unpacked = L10N.tr_args(
-                "unpacked",
-                [
-                    ("count", contents.items.into()),
-                    ("size", format_size(contents.bytes).into()),
-                ],
+            let unpacked = trn!(
+                "1 item, {size} unpacked",
+                "{count} items, {size} unpacked",
+                count = contents.items,
+                size = format_size(contents.bytes)
             );
             return vec![
                 subject.kind.clone(),
@@ -331,8 +325,10 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
                 modified,
             ];
         }
-        Shown::Pdf(pdf) if pdf.phase() == Phase::Failed => L10N.tr("pdf-failed"),
-        Shown::Pdf(pdf) if matches!(pdf.phase(), Phase::Locked { .. }) => L10N.tr("pdf-locked"),
+        Shown::Pdf(pdf) if pdf.phase() == Phase::Failed => tr!("This document cannot be shown"),
+        Shown::Pdf(pdf) if matches!(pdf.phase(), Phase::Locked { .. }) => {
+            tr!("This document is locked")
+        }
         _ if entry.is_folder() => String::new(),
         _ => format_size(entry.size),
     };
@@ -544,7 +540,7 @@ impl QuickLook {
             button(painter, left, "view-grid-symbolic", Hit::IndexSheet, self);
             left += BUTTON + 8.0;
             let counter = painter.paragraph(
-                &L10N.tr_args("position", [("at", at.into()), ("count", count.into())]),
+                &tr!("{at} of {count}", at = at, count = count),
                 TextStyle::role(TextRole::Callout, palette.ink2).tabular(),
                 None,
             );
@@ -558,7 +554,7 @@ impl QuickLook {
         let mut right = panel.x + panel.width - 10.0;
         if let Some(app) = self.subject().and_then(|subject| subject.app.clone()) {
             let label = painter.paragraph(
-                &L10N.tr_args("open-with", [("app", app.name.into())]),
+                &tr!("Open with {app}", app = app.name),
                 TextStyle::role(TextRole::Body, palette.ink).weight(TextStyle::MEDIUM),
                 None,
             );

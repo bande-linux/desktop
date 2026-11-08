@@ -6,10 +6,10 @@ use std::time::Instant;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
+use bande_l10n::tr;
 use bande_settings::{
-    Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
-    SoftwareCommand, UDEV_DATA, UpdateNotice, announce_log_out, announce_updates, feed,
-    sidebar_width,
+    Command, Displays, Feed, PaneId, PointingDevices, Services, SettingsView, SoftwareCommand,
+    UDEV_DATA, UpdateNotice, announce_log_out, announce_updates, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::{
@@ -28,7 +28,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("title"),
+    name: || tr!("System Settings"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -156,26 +156,31 @@ fn open_main(
     arguments: &[String],
     displays: Option<&Displays>,
 ) -> Result<WindowId, bande_toolkit::WindowError> {
-    cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
-        if let Some(mut pane) = parked {
-            pane.0.set_appearance(appearance);
-            pane.0.set_on_screen(true);
-            return pane;
-        }
-        let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
-        view.set_appearance(appearance);
-        view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
-        if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
-            view.hide_screen_reader();
-        }
-        if let Some(keyword) = arguments.first() {
-            select_pane(&mut view, keyword);
-        }
-        if let Some(displays) = displays {
-            view.set_displays(displays.list());
-        }
-        Pane(view)
-    })
+    cx.open(
+        Kind::Main,
+        &tr!("System Settings"),
+        WINDOW_SIZE,
+        |appearance| {
+            if let Some(mut pane) = parked {
+                pane.0.set_appearance(appearance);
+                pane.0.set_on_screen(true);
+                return pane;
+            }
+            let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
+            view.set_appearance(appearance);
+            view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
+            if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
+                view.hide_screen_reader();
+            }
+            if let Some(keyword) = arguments.first() {
+                select_pane(&mut view, keyword);
+            }
+            if let Some(displays) = displays {
+                view.set_displays(displays.list());
+            }
+            Pane(view)
+        },
+    )
 }
 
 impl Settings {
@@ -253,7 +258,7 @@ impl Program for Settings {
             ));
         }
         Menus {
-            menus: vec![Entry::submenu(&L10N.tr("menu-view"), panes)],
+            menus: vec![Entry::submenu(&tr!("View"), panes)],
             window: Vec::new(),
         }
     }

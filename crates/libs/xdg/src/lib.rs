@@ -13,13 +13,6 @@ mod reopen;
 mod units;
 mod uri;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-xdg")));
-
 pub use app_languages::{app_language, app_languages, set_app_language};
 pub use apps::{Apps, FileTypes, OpenWithChoice};
 pub use autostart::{autostart_dir, opens_at_login, set_open_at_login};

@@ -8,11 +8,9 @@ mod worker;
 
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
-use std::sync::LazyLock;
 use std::time::Instant;
 
 use bande_fs::Entry;
-use bande_l10n::Localizer;
 use bande_toolkit::ui::{Animated, Cursor, Event, Key, Modifiers, Spring};
 use bande_toolkit::{Image, Point, Rect, ResizeEdge, Window};
 use bande_xdg::{DesktopEntry, state_home};
@@ -22,9 +20,6 @@ use crate::loader::Loader;
 
 pub use panel::{Link, Panel, QuickLookLink};
 pub use worker::serve_worker;
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-quick-look")));
 
 const SIZE_FILE: &str = "bande/quick-look-size";
 const DEFAULT_SIZE: (f32, f32) = (720.0, 540.0);

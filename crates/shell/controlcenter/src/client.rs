@@ -6,9 +6,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
 use crate::media::{self, Command, Playback, Player, Players};
 use crate::{
-    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, L10N, PANEL_WIDTH, Status,
+    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, PANEL_WIDTH, Status,
     chooser_menu, display_title, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
 };
 use accesskit::TreeUpdate;
@@ -503,17 +505,19 @@ impl ControlCenter {
                 self.dismiss(window);
             }
             Change::Power => {
-                let user = [("user", full_name().into())];
                 let mut items = Vec::new();
                 if self.can_sleep {
-                    items.push(MenuItem::new(&L10N.tr("sleep"), &format!("{SESSION}sleep")));
+                    items.push(MenuItem::new(&tr!("Sleep"), &format!("{SESSION}sleep")));
                     items.push(MenuItem::separator());
                 }
                 items.extend([
-                    MenuItem::new(&L10N.tr("restart"), &format!("{SESSION}restart")),
-                    MenuItem::new(&L10N.tr("shut-down"), &format!("{SESSION}shut-down")),
+                    MenuItem::new(&tr!("Restart…"), &format!("{SESSION}restart")),
+                    MenuItem::new(&tr!("Shut Down…"), &format!("{SESSION}shut-down")),
                     MenuItem::separator(),
-                    MenuItem::new(&L10N.tr_args("log-out", user), &format!("{SESSION}log-out")),
+                    MenuItem::new(
+                        &tr!("Log Out {user}…", user = full_name()),
+                        &format!("{SESSION}log-out"),
+                    ),
                 ]);
                 report(
                     "open the power menu",

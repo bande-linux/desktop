@@ -11,6 +11,11 @@ mkdir -p "$out"
     DEB_VERSION_OVERRIDE=$version debian/rules clean)
 mv "packaging/bande-desktop_${version}_all.deb" "$out/"
 rm -f packaging/*.buildinfo packaging/*.changes
+target=${CARGO_TARGET_DIR:-target}
+cargo build --release --locked --package=bande-l10n-tool
+rm -rf "$target/l10n"
+"$target/release/bande-l10n-tool" pack "$target/l10n"
+ci/release/build-l10n.sh "$target/l10n" "$out" "$version" bande-desktop bande-desktop
 ls -l "$out"
 deb() { echo "$out/$1_$2_all.deb"; }
 field() { dpkg-deb --field "$(deb "$1" "$version")" "$2"; }
@@ -39,6 +44,14 @@ while read -r package; do
     relation Recommends "$package" || { echo "bande-desktop does not recommend $package"; exit 1; }
     ! grep -qxF "$package" ci/release/packages || { echo "$package is built here, not a default app"; exit 1; }
 done < <(grep -E '^[a-z0-9]' packaging/bande-desktop/default-apps)
+
+echo "== a language pack holds only catalogs, one per program"
+for pack in "$out"/bande-desktop-l10n-*_all.deb; do
+    [ "$(dpkg-deb --field "$pack" Section)" = localization ]
+    ! dpkg-deb --contents "$pack" | awk '{print $6}' | grep -v -e '^\./usr/share/bande/l10n/' -e '^\./usr/share/doc/' -e '^\./$' -e '^\./usr/$' -e '^\./usr/share/$' -e '^\./usr/share/bande/$'
+done
+pack=$(deb bande-desktop-l10n-sv "$version")
+dpkg-deb --contents "$pack" | grep -q ' ./usr/share/bande/l10n/bande-settings/sv.mo$'
 
 echo "== lintian"
 lintian=(lintian --fail-on "error,warning")

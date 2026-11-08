@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::BorrowedFd;
-use std::sync::{Arc, LazyLock, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::{Action, keys_of};
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedValue, Structure, Value};
 
@@ -18,9 +18,6 @@ pub const REDO: &str = "Shift+Ctrl+Z";
 pub const REDO_ALIAS: &str = "Ctrl+Y";
 pub const FULL_SCREEN: &str = "F11";
 const ROOT: i32 = 0;
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-app-menu")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standard {
@@ -100,8 +97,7 @@ impl ShellAction {
 pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> Entry {
     let about = Entry {
         version: Some(version.to_owned()),
-        ..Entry::item(&L10N.tr_args("about-app", [("app", app.into())]), "")
-            .shell_action(ShellAction::About)
+        ..Entry::item(&tr!("About {app}", app = app), "").shell_action(ShellAction::About)
     };
     let mut entries = vec![about, Entry::separator()];
     if !items.is_empty() {
@@ -109,33 +105,29 @@ pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> E
         entries.push(Entry::separator());
     }
     entries.extend([
-        Entry::item(
-            &L10N.tr_args("hide-app", [("app", app.into())]),
-            Standard::Hide.action(),
-        )
-        .shell_action(ShellAction::Hide),
-        Entry::item(&L10N.tr("hide-others"), "").shell_action(ShellAction::HideOthers),
-        Entry::item(&L10N.tr("show-all"), "").shell_action(ShellAction::ShowAll),
+        Entry::item(&tr!("Hide {app}", app = app), Standard::Hide.action())
+            .shell_action(ShellAction::Hide),
+        Entry::item(&tr!("Hide Others"), "").shell_action(ShellAction::HideOthers),
+        Entry::item(&tr!("Show All"), "").shell_action(ShellAction::ShowAll),
         Entry::separator(),
-        Entry::item(
-            &L10N.tr_args("quit-app", [("app", app.into())]),
-            Standard::Quit.action(),
-        )
-        .shortcut(quit),
+        Entry::item(&tr!("Quit {app}", app = app), Standard::Quit.action()).shortcut(quit),
     ]);
     Entry::submenu(app, entries)
 }
 
 pub fn window_submenu(items: Vec<Entry>, zoomable: bool, full_screen: Option<bool>) -> Entry {
     let full_screen_label = match full_screen {
-        Some(true) => L10N.tr("exit-full-screen"),
-        _ => L10N.tr("enter-full-screen"),
+        Some(true) => tr!("Exit Full Screen"),
+        _ => tr!("Enter Full Screen"),
     };
     let mut entries = vec![
-        Entry::item(&L10N.tr("minimize"), Standard::Minimize.action())
+        Entry::item(&tr!("Minimize"), Standard::Minimize.action())
             .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
-        Entry::item(&L10N.tr("zoom"), Standard::Zoom.action())
-            .enabled(zoomable && full_screen != Some(true)),
+        Entry::item(
+            &tr!(context = "window menu", "Zoom"),
+            Standard::Zoom.action(),
+        )
+        .enabled(zoomable && full_screen != Some(true)),
         Entry::item(&full_screen_label, Standard::FullScreen.action())
             .shortcut(FULL_SCREEN)
             .enabled(full_screen.is_some()),
@@ -144,7 +136,7 @@ pub fn window_submenu(items: Vec<Entry>, zoomable: bool, full_screen: Option<boo
         entries.push(Entry::separator());
         entries.extend(items);
     }
-    Entry::submenu(&L10N.tr("window"), entries)
+    Entry::submenu(&tr!("Window"), entries)
 }
 
 pub fn key_item(label: &str, shortcut: &str) -> Entry {
@@ -153,36 +145,36 @@ pub fn key_item(label: &str, shortcut: &str) -> Entry {
 
 pub fn edit_submenu(extra: Vec<Entry>) -> Entry {
     let mut entries = vec![
-        key_item(&L10N.tr("undo"), "Ctrl+Z"),
-        key_item(&L10N.tr("redo"), REDO),
+        key_item(&tr!("Undo"), "Ctrl+Z"),
+        key_item(&tr!("Redo"), REDO),
         Entry::separator(),
-        key_item(&L10N.tr("cut"), "Ctrl+X"),
-        key_item(&L10N.tr("copy"), "Ctrl+C"),
-        key_item(&L10N.tr("paste"), "Ctrl+V"),
-        key_item(&L10N.tr("select-all"), "Ctrl+A"),
+        key_item(&tr!("Cut"), "Ctrl+X"),
+        key_item(&tr!("Copy"), "Ctrl+C"),
+        key_item(&tr!("Paste"), "Ctrl+V"),
+        key_item(&tr!("Select All"), "Ctrl+A"),
     ];
     if !extra.is_empty() {
         entries.push(Entry::separator());
         entries.extend(extra);
     }
-    Entry::submenu(&L10N.tr("edit"), entries)
+    Entry::submenu(&tr!("Edit"), entries)
 }
 
 pub const PRINT: &str = "print";
 pub const PRINT_SHORTCUT: &str = "Ctrl+P";
 
 pub fn print_item(enabled: bool) -> Entry {
-    Entry::item(&L10N.tr("print"), PRINT)
+    Entry::item(&tr!("Print…"), PRINT)
         .shortcut(PRINT_SHORTCUT)
         .enabled(enabled)
 }
 
 pub fn settings(shortcut: &str) -> Entry {
-    Entry::item(&L10N.tr("settings"), Standard::Settings.action()).shortcut(shortcut)
+    Entry::item(&tr!("Settings…"), Standard::Settings.action()).shortcut(shortcut)
 }
 
 pub fn close_window(shortcut: &str) -> Entry {
-    Entry::item(&L10N.tr("close-window"), Standard::CloseWindow.action()).shortcut(shortcut)
+    Entry::item(&tr!("Close Window"), Standard::CloseWindow.action()).shortcut(shortcut)
 }
 
 pub fn shortcut_action(menus: &[Entry], pressed: &dyn Fn(&str) -> bool) -> Option<String> {

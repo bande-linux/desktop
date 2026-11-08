@@ -1,17 +1,8 @@
 use std::rc::Rc;
 use std::time::Instant;
 
-use bande_audio::Direction;
-use bande_bluetooth::Kind as DeviceKind;
-use bande_config::{ACCENTS, MAX_INPUT_SOURCES};
-use bande_keyboard::{Action, shortcuts_in};
-use bande_toolkit::ui::{
-    Axis, Button, Label, LevelIndicator, PopUpButton, ScrollView, SearchField, SecureField,
-    SegmentedControl, Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
-};
-use bande_toolkit::{Scheme, Spacing, TextRole};
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::arrangement::{Area, Arrangement, Screen};
 use crate::follow::Command;
 use crate::forget::Forget;
@@ -27,11 +18,20 @@ use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Swatch, Swatches, Text,
     Thumbnail, Thumbnails, Tone,
 };
+use bande_audio::Direction;
+use bande_bluetooth::Kind as DeviceKind;
 use bande_config::Placement;
+use bande_config::{ACCENTS, MAX_INPUT_SOURCES};
+use bande_keyboard::{Action, shortcuts_in};
 use bande_settings_panes::SettingHit;
 use bande_settings_panes::{
     AUTOMATIC, Choice, Kind, List, MAX_SEGMENTS, PaneId, SCALES, Section, Setting, SettingId, Value,
 };
+use bande_toolkit::ui::{
+    Axis, Button, Label, LevelIndicator, PopUpButton, ScrollView, SearchField, SecureField,
+    SegmentedControl, Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
+};
+use bande_toolkit::{Scheme, Spacing, TextRole};
 
 const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
@@ -319,7 +319,7 @@ impl SettingsView {
                 }
                 let labels: Vec<String> = rates
                     .iter()
-                    .map(|rate| L10N.tr_args("hertz", [("value", (*rate).into())]))
+                    .map(|rate| tr!("{value} Hz", value = (*rate)))
                     .collect();
                 let selected = match value {
                     Some(Value::Number(rate)) => {
@@ -355,10 +355,7 @@ impl SettingsView {
                 let labels: Vec<String> = sizes
                     .iter()
                     .map(|(width, height)| {
-                        L10N.tr_args(
-                            "resolution",
-                            [("width", (*width).into()), ("height", (*height).into())],
-                        )
+                        tr!("{width} × {height}", width = (*width), height = (*height))
                     })
                     .collect();
                 let selected = match value {
@@ -377,29 +374,21 @@ impl SettingsView {
                 let display = scope?;
                 let (width, height) = display.resolutions().first().copied()?;
                 let looks = |percent: u32| {
-                    L10N.tr_args(
-                        "display-text-size-looks-like",
-                        [
-                            ("width", (width * 100 / percent as i32).into()),
-                            ("height", (height * 100 / percent as i32).into()),
-                        ],
+                    tr!(
+                        "Looks like {width} × {height}",
+                        width = width * 100 / percent as i32,
+                        height = height * 100 / percent as i32
                     )
                 };
                 let last = SCALES.len() - 1;
-                let mut choices: Vec<(String, Value)> = vec![(
-                    L10N.tr("display-text-size-default"),
-                    Value::Keyword(AUTOMATIC.to_owned()),
-                )];
+                let mut choices: Vec<(String, Value)> =
+                    vec![(tr!("Default"), Value::Keyword(AUTOMATIC.to_owned()))];
                 choices.extend(SCALES.iter().enumerate().map(|(index, &percent)| {
                     let label = match index {
-                        0 => L10N.tr_args(
-                            "display-text-size-larger",
-                            [("size", looks(percent).into())],
-                        ),
-                        index if index == last => L10N.tr_args(
-                            "display-text-size-more-space",
-                            [("size", looks(percent).into())],
-                        ),
+                        0 => tr!("Larger Text ({size})", size = looks(percent)),
+                        index if index == last => {
+                            tr!("More Space ({size})", size = looks(percent))
+                        }
                         _ => looks(percent),
                     };
                     (label, Value::Number(percent))
@@ -416,16 +405,16 @@ impl SettingsView {
             }
             Kind::ColourProfiles => {
                 let mut choices: Vec<(String, String)> = [
-                    ("colour-profile-display", bande_colour::DISPLAY),
-                    ("colour-profile-srgb", bande_colour::SRGB),
-                    ("colour-profile-display-p3", bande_colour::DISPLAY_P3),
-                    ("colour-profile-none", bande_colour::UNMANAGED),
+                    (tr!("This display"), bande_colour::DISPLAY),
+                    (tr!("sRGB"), bande_colour::SRGB),
+                    (tr!("Display P3"), bande_colour::DISPLAY_P3),
+                    (tr!("None (show colours as sent)"), bande_colour::UNMANAGED),
                 ]
                 .into_iter()
-                .map(|(label, value)| (L10N.tr(label), value.to_owned()))
+                .map(|(label, value)| (label, value.to_owned()))
                 .collect();
                 choices.extend(self.colour_profiles.iter().cloned());
-                choices.push((L10N.tr("colour-profile-add"), ADD_COLOUR_PROFILE.to_owned()));
+                choices.push((tr!("Add Profile…"), ADD_COLOUR_PROFILE.to_owned()));
                 let selected = match &value {
                     Some(Value::Keyword(current)) => {
                         choices.iter().position(|(_, choice)| choice == current)
@@ -450,14 +439,14 @@ impl SettingsView {
                     return None;
                 }
                 let mut choices = vec![
-                    (L10N.tr("use-main"), USE_MAIN.to_owned()),
-                    (L10N.tr("use-extended"), USE_EXTENDED.to_owned()),
+                    (tr!("Main display"), USE_MAIN.to_owned()),
+                    (tr!("Extended"), USE_EXTENDED.to_owned()),
                 ];
                 for other in &others {
                     let label = if others.len() == 1 {
-                        L10N.tr("use-mirror")
+                        tr!("Mirror")
                     } else {
-                        L10N.tr_args("use-mirror-of", [("display", other.name().into())])
+                        tr!("Mirror {display}", display = other.name())
                     };
                     choices.push((label, format!("{MIRROR_PREFIX}{}", other.identity)));
                 }
@@ -507,8 +496,8 @@ impl SettingsView {
             true => self.control(setting, scope)?,
             false => {
                 let shown = match self.values.get(&setting.id)? {
-                    Value::Flag(true) => L10N.tr("on"),
-                    Value::Flag(false) => L10N.tr("off"),
+                    Value::Flag(true) => tr!("On"),
+                    Value::Flag(false) => tr!("Off"),
                     Value::Text(text) => text.clone(),
                     _ => return None,
                 };
@@ -541,17 +530,17 @@ impl SettingsView {
         let display_off = seconds(SettingId::DisplayOffAfter)?;
         let note = match id {
             SettingId::ScreenSaverAfter => (display_off > 0 && display_off <= seconds(id)?)
-                .then_some("saver-after-display-off"),
+                .then_some(text!("The display turns off first, so the screen saver doesn't start.")),
             SettingId::SleepAfter => {
                 let sleep = seconds(id)?;
-                (sleep > 0 && sleep < display_off).then_some("sleep-before-display-off")
+                (sleep > 0 && sleep < display_off).then_some(text!("The computer stays awake until the display turns off."))
             }
             SettingId::RequirePasswordAfter => (display_off == 0
                 && seconds(SettingId::ScreenSaverAfter)? == 0)
-                .then_some("never-locks-when-inactive"),
+                .then_some(text!("The screen saver and the display are both set to Never, so the screen locks only when you lock it or the computer sleeps.")),
             _ => None,
         };
-        note.map(|note| L10N.tr(note))
+        note.map(|note| note.tr())
     }
 
     fn page_row(
@@ -613,9 +602,10 @@ impl SettingsView {
         }
         let note = match self.errors.get(&setting.id) {
             Some(error) => Some(Text::new(error, Tone::Danger)),
-            None if !self.allowed(setting.id) => {
-                Some(Text::new(&L10N.tr("administrator-only"), Tone::Muted))
-            }
+            None if !self.allowed(setting.id) => Some(Text::new(
+                &tr!("Only an administrator can change this."),
+                Tone::Muted,
+            )),
             None => None,
         };
         rows.extend(
@@ -640,9 +630,9 @@ impl SettingsView {
         };
         if devices.is_empty() {
             return vec![muted_row(&if paired {
-                L10N.tr("no-devices")
+                tr!("No devices paired yet")
             } else {
-                L10N.tr("searching-devices")
+                tr!("Looking for devices…")
             })];
         }
         devices
@@ -653,47 +643,41 @@ impl SettingsView {
                     false => kind_noun(device.kind),
                 };
                 if self.forgetting.as_ref() == Some(&Forget::Device(device.address.clone())) {
-                    return self.forget_row(&name, &L10N.tr("forget-device-warning"));
+                    return self.forget_row(
+                        &name,
+                        &tr!("It is unpaired and must be paired again before it can connect."),
+                    );
                 }
                 let busy = self.busy.contains(&device.address);
                 let (status, action, make): (String, String, fn(String) -> Intent) =
                     match (paired, device.connected) {
-                        (true, true) => (
-                            L10N.tr("connected"),
-                            L10N.tr("disconnect"),
-                            Intent::Disconnect,
-                        ),
-                        (true, false) => (
-                            L10N.tr("not-connected"),
-                            L10N.tr("connect"),
-                            Intent::Connect,
-                        ),
-                        (false, _) => (String::new(), L10N.tr("pair"), Intent::Pair),
+                        (true, true) => (tr!("Connected"), tr!("Disconnect"), Intent::Disconnect),
+                        (true, false) => (tr!("Not connected"), tr!("Connect"), Intent::Connect),
+                        (false, _) => (String::new(), tr!("Pair"), Intent::Pair),
                     };
                 let status = if busy {
                     if paired {
-                        L10N.tr("connecting")
+                        tr!("Connecting…")
                     } else {
-                        L10N.tr("pairing")
+                        tr!("Pairing…")
                     }
                 } else {
                     status
                 };
                 let status = match device.battery {
-                    Some(level) if paired && !busy => L10N.tr_args(
-                        "status-with-battery",
-                        [("status", status.into()), ("level", level.into())],
+                    Some(level) if paired && !busy => tr!(
+                        "{status} · Battery {level}%",
+                        status = status,
+                        level = level
                     ),
                     _ => status,
                 };
                 let status = match device.named {
                     true => status,
-                    false => L10N.tr_args(
-                        "unnamed-device-status",
-                        [
-                            ("address", device.address.clone().into()),
-                            ("status", status.into()),
-                        ],
+                    false => tr!(
+                        "{address} · {status}",
+                        address = device.address.clone(),
+                        status = status
                     ),
                 };
                 let control = (!busy).then(|| {
@@ -734,7 +718,7 @@ impl SettingsView {
             Direction::Input => (audio.inputs, audio.default_input),
         };
         if devices.is_empty() {
-            return vec![muted_row(&L10N.tr("no-sound-devices"))];
+            return vec![muted_row(&tr!("No devices"))];
         }
         devices
             .into_iter()
@@ -760,7 +744,7 @@ impl SettingsView {
             return Vec::new();
         };
         if audio.apps.is_empty() {
-            return vec![muted_row(&L10N.tr("no-apps-playing"))];
+            return vec![muted_row(&tr!("No apps are playing sound"))];
         }
         audio
             .apps
@@ -771,7 +755,7 @@ impl SettingsView {
                     Intent::AppVolume(name.clone(), volume)
                 });
                 let slider = Slider::new(
-                    &L10N.tr_args("app-volume", [("app", app.name.clone().into())]),
+                    &tr!("{app} volume", app = app.name.clone()),
                     f64::from(if app.level.muted {
                         0.0
                     } else {
@@ -836,20 +820,20 @@ impl SettingsView {
         for (shown, title, tooltip, make) in [
             (
                 index > 0,
-                L10N.tr("move-up"),
-                L10N.tr("move-up-tooltip"),
+                tr!("↑"),
+                tr!("Move up in the list"),
                 Intent::MoveSource(index, true),
             ),
             (
                 index + 1 < count,
-                L10N.tr("move-down"),
-                L10N.tr("move-down-tooltip"),
+                tr!("↓"),
+                tr!("Move down in the list"),
                 Intent::MoveSource(index, false),
             ),
             (
                 count > 1,
-                L10N.tr("remove"),
-                L10N.tr("remove-tooltip"),
+                tr!("Remove"),
+                tr!("Stop using this input source"),
                 Intent::RemoveSource(index),
             ),
         ] {
@@ -895,34 +879,39 @@ impl SettingsView {
             Some((_, query)) => rows.extend(self.source_search_rows(&query)),
             None if count < MAX_INPUT_SOURCES => {
                 let mut add = intent(&self.intents, |()| Intent::Pick(Some(Picker::InputSource)));
-                let button = Button::new(&L10N.tr("add-input-source"), move || add(()));
+                let button = Button::new(&tr!("Add Input Source…"), move || add(()));
                 self.anchors
                     .push((Anchor::Setting(SettingId::InputSources, None), button.id()));
                 rows.push(boxed(Row::new(
-                    Text::new(&L10N.tr("more-input-sources"), Tone::Muted).caption(),
+                    Text::new(
+                        &tr!("Type in more than one language or layout"),
+                        Tone::Muted,
+                    )
+                    .caption(),
                     Some(boxed(button)),
                 )));
             }
-            None => rows.push(muted_row(
-                &L10N.tr_args("input-sources-full", [("count", MAX_INPUT_SOURCES.into())]),
-            )),
+            None => rows.push(muted_row(&tr!(
+                "Up to {count} input sources can be used",
+                count = MAX_INPUT_SOURCES
+            ))),
         }
         rows
     }
 
     fn login_layouts_row(&mut self, sources: &[String], login: &[String]) -> Box<dyn Widget> {
         if sources == login {
-            return muted_row(&L10N.tr("login-layouts-same"));
+            return muted_row(&tr!("The login screen uses these layouts"));
         }
         let button = (!self.refused.contains(&Privilege::Locale)).then(|| {
             let codes = sources.to_vec();
             let mut send = intent(&self.intents, Intent::Locale);
-            boxed(Button::new(&L10N.tr("use-at-login"), move || {
+            boxed(Button::new(&tr!("Use at Login Screen"), move || {
                 send(LocaleCommand::LoginKeyboard(codes.clone()))
             }))
         });
         boxed(Row::new(
-            Text::new(&L10N.tr("login-layouts-differ"), Tone::Muted).caption(),
+            Text::new(&tr!("The login screen uses other layouts"), Tone::Muted).caption(),
             button,
         ))
     }
@@ -949,28 +938,28 @@ impl SettingsView {
 
     fn source_search_rows(&mut self, query: &str) -> Widgets {
         let field = SearchField::new(
-            &L10N.tr("search-layouts"),
+            &tr!("Search layouts"),
             query,
             submit(&self.intents, Intent::PickQuery),
         );
         self.anchors.push((Anchor::Picker, field.id()));
         let mut cancel = intent(&self.intents, |()| Intent::Pick(None));
         let mut rows = vec![boxed(Row::new(
-            Text::new(&L10N.tr("add-input-source"), Tone::Primary),
+            Text::new(&tr!("Add Input Source…"), Tone::Primary),
             Some(boxed(Stack::new(
                 Axis::Horizontal,
                 Spacing::S as f32,
                 0.0,
                 vec![
                     boxed(field),
-                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                    boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
                 ],
             ))),
         ))];
         let typed = !query.trim().is_empty();
         let matches = self.pick_results();
         if typed && matches.is_empty() {
-            rows.push(muted_row(&L10N.tr("no-layouts")));
+            rows.push(muted_row(&tr!("No keyboard layout matches")));
         }
         for code in matches {
             let name = self.layouts().name(&code);
@@ -982,7 +971,7 @@ impl SettingsView {
             rows.push(self.item_row(format!("add:{code}"), row));
         }
         if !typed {
-            rows.push(muted_row(&L10N.tr("layout-hint")));
+            rows.push(muted_row(&tr!("Type a language, country or layout name")));
         }
         rows
     }
@@ -1088,11 +1077,11 @@ impl SettingsView {
         self.anchors
             .push((Anchor::Setting(setting.id, None), grid.id()));
         let mut choose = intent(&self.intents, |()| Intent::ChoosePicture);
-        let add = Button::new(&L10N.tr("add-picture"), move || choose(()));
+        let add = Button::new(&tr!("Add Picture…"), move || choose(()));
         vec![
             boxed(grid),
             boxed(Row::new(
-                Text::new(&L10N.tr("own-picture"), Tone::Primary),
+                Text::new(&tr!("Your own picture"), Tone::Primary),
                 Some(boxed(add)),
             )),
         ]
@@ -1137,32 +1126,37 @@ impl SettingsView {
         };
         let (text, control) = match question {
             Question::Confirm { device, code } => (
-                L10N.tr_args(
-                    "confirm-code",
-                    [("device", device.into()), ("code", code.into())],
+                tr!(
+                    "Does {device} show the code {code}?",
+                    device = device,
+                    code = code
                 ),
-                Some(buttons(&self.intents, &L10N.tr("cancel"), &L10N.tr("pair"))),
+                Some(buttons(&self.intents, &tr!("Cancel"), &tr!("Pair"))),
             ),
             Question::Authorize { device } => (
-                L10N.tr_args("authorize-device", [("device", device.into())]),
-                Some(buttons(&self.intents, &L10N.tr("deny"), &L10N.tr("allow"))),
+                tr!("Allow {device} to connect?", device = device),
+                Some(buttons(&self.intents, &tr!("Deny"), &tr!("Allow"))),
             ),
             Question::Show { device, code } => (
-                L10N.tr_args(
-                    "type-code",
-                    [("device", device.into()), ("code", code.into())],
+                tr!(
+                    "Type {code} on {device}, then press Return on it.",
+                    device = device,
+                    code = code
                 ),
                 None,
             ),
             Question::Pin { device } => {
                 let field = SecureField::new(
-                    &L10N.tr("pin"),
+                    &tr!("PIN"),
                     FIELD_SIZE,
                     submit(&self.intents, |pin| Intent::Answer(Answer::Pin(pin))),
                 );
                 self.anchors.push((Anchor::Password, field.id()));
                 (
-                    L10N.tr_args("enter-pin", [("device", device.into())]),
+                    tr!(
+                        "Enter the PIN for {device} and press Return.",
+                        device = device
+                    ),
                     Some(boxed(field)),
                 )
             }
@@ -1181,7 +1175,7 @@ impl SettingsView {
             }
         }
         Some(vec![
-            boxed(Caption::new(Text::label(&L10N.tr("pairing-request")))),
+            boxed(Caption::new(Text::label(&tr!("Pairing request")))),
             boxed(Card::new(vec![boxed(
                 Row::new(Text::new(&text, Tone::Primary), control).highlighted(true),
             )])),
@@ -1199,8 +1193,8 @@ impl SettingsView {
             Spacing::S as f32,
             0.0,
             vec![
-                button(&self.intents, &L10N.tr("revert"), false),
-                button(&self.intents, &L10N.tr("keep"), true),
+                button(&self.intents, &tr!("Revert"), false),
+                button(&self.intents, &tr!("Keep"), true),
             ],
         ));
         let focus = buttons
@@ -1209,11 +1203,14 @@ impl SettingsView {
             .map_or(buttons.id(), |button| button.id());
         self.anchors
             .push((Anchor::Item(KEEP_ANCHOR.to_owned()), focus));
-        let countdown = L10N.tr_args("reverting-in", [("seconds", self.seconds_left().into())]);
+        let countdown = tr!(
+            "The previous settings come back in {seconds} s.",
+            seconds = self.seconds_left()
+        );
         Some(vec![boxed(Card::new(vec![
             boxed(
                 Row::new(
-                    Text::new(&L10N.tr("keep-display-settings"), Tone::Primary).semibold(),
+                    Text::new(&tr!("Keep these display settings?"), Tone::Primary).semibold(),
                     Some(buttons),
                 )
                 .highlighted(true),
@@ -1257,16 +1254,18 @@ impl SettingsView {
         let mut send = intent(&self.intents, |(identity, position)| {
             Intent::Arrange(identity, position)
         });
-        let canvas = Arrangement::new(&L10N.tr("arrangement"), screens, move |index, position| {
+        let canvas = Arrangement::new(&tr!("Arrangement"), screens, move |index, position| {
             if let Some(identity) = identities.get(index) {
                 send((identity.clone(), position));
             }
         });
         Some(vec![
-            boxed(Caption::new(Text::label(&L10N.tr("arrangement")))),
+            boxed(Caption::new(Text::label(&tr!("Arrangement")))),
             boxed(Card::new(vec![boxed(canvas)])),
             boxed(Caption::new(Text::new(
-                &L10N.tr("arrangement-hint"),
+                &tr!(
+                    "Drag the displays to match how they stand on your desk. The white bar marks the main display."
+                ),
                 Tone::Muted,
             ))),
         ])
@@ -1427,19 +1426,20 @@ impl SettingsView {
 }
 
 fn kind_noun(kind: DeviceKind) -> String {
-    L10N.tr(match kind {
-        DeviceKind::Mouse => "device-mouse",
-        DeviceKind::Keyboard => "device-keyboard",
-        DeviceKind::Tablet => "device-tablet",
-        DeviceKind::GameController => "device-game-controller",
-        DeviceKind::Headphones => "device-headphones",
-        DeviceKind::Headset => "device-headset",
-        DeviceKind::Speaker => "device-speaker",
-        DeviceKind::Phone => "device-phone",
-        DeviceKind::Computer => "device-computer",
-        DeviceKind::Camera => "device-camera",
-        DeviceKind::Printer => "device-printer",
-        DeviceKind::Display => "device-display",
-        DeviceKind::Other => "unknown-device",
+    (match kind {
+        DeviceKind::Mouse => text!("Mouse"),
+        DeviceKind::Keyboard => text!("Keyboard"),
+        DeviceKind::Tablet => text!("Tablet"),
+        DeviceKind::GameController => text!("Game controller"),
+        DeviceKind::Headphones => text!("Headphones"),
+        DeviceKind::Headset => text!("Headset"),
+        DeviceKind::Speaker => text!("Speaker"),
+        DeviceKind::Phone => text!("Phone"),
+        DeviceKind::Computer => text!("Computer"),
+        DeviceKind::Camera => text!("Camera"),
+        DeviceKind::Printer => text!("Printer"),
+        DeviceKind::Display => text!("Display"),
+        DeviceKind::Other => text!("Unknown device"),
     })
+    .tr()
 }

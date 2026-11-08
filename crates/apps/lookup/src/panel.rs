@@ -2,13 +2,13 @@ use std::cell::Cell;
 use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 
+use bande_l10n::tr;
+
+use crate::results::{self, Answer};
 use bande_app::View;
 use bande_inbox::Inbox;
 use bande_toolkit::ui::{Axis, Button, Context, Event, Key, Label, ScrollView, Stack, Ui, Widget};
 use bande_toolkit::{Appearance, Scene, Spacing, TextSystem, Window, WindowEvent};
-
-use crate::L10N;
-use crate::results::{self, Answer};
 
 pub const PANEL_SIZE: (u32, u32) = (420, 340);
 pub const LANGUAGE_ARGUMENT: &str = "--language=";
@@ -78,7 +78,7 @@ impl Panel {
         ];
         if more {
             let more = self.expanded.clone();
-            parts.push(Box::new(Button::new(&L10N.tr("more"), move || {
+            parts.push(Box::new(Button::new(&tr!("More"), move || {
                 more.set(true);
             })));
         }

@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeUpdate};
-use bande_toolkit::Rect;
-use bande_toolkit::ui::{access_rect, group_heading};
+use bande_l10n::text;
 
-use crate::L10N;
 use crate::tabs::location_title;
 use crate::view::{FilesView, Hit};
 use crate::views::ViewMode;
+use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeUpdate};
+use bande_toolkit::Rect;
+use bande_toolkit::ui::{access_rect, group_heading};
 
 const KIND_SHIFT: u32 = 30;
 const COLUMN_SHIFT: u32 = 22;
@@ -199,10 +199,13 @@ impl FilesView {
             Part::Toggle(section) => {
                 let (_, title) = self.group_cache.cached().get(section)?;
                 let mut node = Node::new(Role::Button);
-                node.set_label(L10N.tr(match self.grid_scroll.shows_all(title) {
-                    true => "group-show-less",
-                    false => "group-show-all",
-                }));
+                node.set_label(
+                    (match self.grid_scroll.shows_all(title) {
+                        true => text!("Show Less"),
+                        false => text!("Show All"),
+                    })
+                    .tr(),
+                );
                 node.add_action(Action::Click);
                 node
             }

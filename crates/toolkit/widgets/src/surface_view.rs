@@ -5,10 +5,11 @@ use bande_graphics::{
     Captured, Cursor, Item, Paragraph, Point, Radius, Rect, Shape, Spacing, SurfaceId,
     SurfaceScaling, TextAlign, TextRole, TextStyle, surface_area,
 };
+use bande_l10n::tr;
 
 use super::{
-    Animated, Context, Event, L10N, PointerButton, PointerCapture, ScrollSource, Size, Spring,
-    Widget, WidgetId, shortcut_label,
+    Animated, Context, Event, PointerButton, PointerCapture, ScrollSource, Size, Spring, Widget,
+    WidgetId, shortcut_label,
 };
 
 pub const RELEASE_CHORD: &str = "Ctrl+Alt";
@@ -198,9 +199,9 @@ impl Widget for SurfaceView {
             }
         }
         if self.hint_text.is_none() && (self.hint_until.is_some() || cx.sample(&self.hint) > 0.0) {
-            let text = L10N.tr_args(
-                "release-capture",
-                [("chord", shortcut_label(RELEASE_CHORD).into())],
+            let text = tr!(
+                "Press {chord} to release",
+                chord = shortcut_label(RELEASE_CHORD)
             );
             let style = TextStyle::role(TextRole::Callout, cx.palette.chassis);
             self.hint_text = Some(cx.text.paragraph(&text, style, None, TextAlign::Start));
@@ -251,9 +252,9 @@ impl Widget for SurfaceView {
         let mut node = Node::new(Role::Canvas);
         node.set_label(self.label.clone());
         if self.captured {
-            node.set_description(L10N.tr_args(
-                "release-capture",
-                [("chord", shortcut_label(RELEASE_CHORD).into())],
+            node.set_description(tr!(
+                "Press {chord} to release",
+                chord = shortcut_label(RELEASE_CHORD)
             ));
         }
         node

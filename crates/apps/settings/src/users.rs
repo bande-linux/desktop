@@ -7,10 +7,19 @@ use std::time::{Duration, Instant};
 
 use std::sync::mpsc::{self, Sender};
 
+use bande_l10n::{text, tr};
 use bande_status::accounts::{ACCOUNTS, ADMINISTRATOR, Accounts, STANDARD, account};
 use std::cell::Cell;
 use std::rc::Rc;
 
+use crate::crypt::crypted;
+use crate::failure::{explained, not_responding};
+use crate::follow::{Command, Update, Updates, spawn};
+use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row};
+use crate::pictures::choose_picture;
+use crate::services::{SETTLE, signals};
+use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
+use crate::widgets::{Avatar, Card, Header, PictureCrop, Row, Text, Tone};
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_toolkit::ui::{
     Axis, Button, Label, PopUpButton, ScrollState, SecureField, Slider, Stack, TextField, Toggle,
@@ -26,16 +35,6 @@ use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
 use zbus::blocking::Connection;
 use zbus::{MatchRule, message};
 use zeroize::Zeroizing;
-
-use crate::L10N;
-use crate::crypt::crypted;
-use crate::failure::{explained, not_responding};
-use crate::follow::{Command, Update, Updates, spawn};
-use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row};
-use crate::pictures::choose_picture;
-use crate::services::{SETTLE, signals};
-use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
-use crate::widgets::{Avatar, Card, Header, PictureCrop, Row, Text, Tone};
 
 const PASSWD: &str = "/usr/bin/passwd";
 const STEP: Duration = Duration::from_secs(15);
@@ -229,8 +228,13 @@ fn logged_in(system: &Connection) -> zbus::Result<Vec<u32>> {
 }
 
 fn refuse_logged_in(system: &Connection, uid: u32) -> Result<(), String> {
-    let users = logged_in(system)
-        .map_err(|error| explained(&error, "service-login", "account-change-failed"))?;
+    let users = logged_in(system).map_err(|error| {
+        explained(
+            &error,
+            text!("The login service"),
+            text!("Couldn't change this account."),
+        )
+    })?;
     if !users.contains(&uid) {
         return Ok(());
     }
@@ -238,7 +242,10 @@ fn refuse_logged_in(system: &Connection, uid: u32) -> Result<(), String> {
         .into_iter()
         .find(|account| account.uid == uid)
         .map_or_else(|| uid.to_string(), |account| account.name);
-    Err(L10N.tr_args("delete-user-logged-in", [("name", name.into())]))
+    Err(tr!(
+        "{name} is logged in. To delete this user, they must log out first.",
+        name = name
+    ))
 }
 
 pub fn managed_accounts(system: Option<&Connection>) -> (Vec<Account>, bool) {
@@ -480,7 +487,13 @@ fn set_picture(system: &Connection, login: &str, encoded: &[u8]) -> Result<(), S
     let file = tempfile_in(&folder, encoded).map_err(|error| error.to_string())?;
     let result = account(system, login)
         .and_then(|user| user.set_icon_file(&file.to_string_lossy()))
-        .map_err(|error| explained(&error, "service-accounts", "account-change-failed"));
+        .map_err(|error| {
+            explained(
+                &error,
+                text!("The accounts service"),
+                text!("Couldn't change this account."),
+            )
+        });
     if let Err(error) = std::fs::remove_file(&file) {
         tracing::warn!("cannot remove {}: {error}", file.display());
     }
@@ -500,8 +513,13 @@ fn tempfile_in(folder: &Path, contents: &[u8]) -> io::Result<PathBuf> {
 }
 
 fn create(system: &Connection, new: &NewAccount) -> Result<(), String> {
-    let refused =
-        |error: zbus::Error| explained(&error, "service-accounts", "account-change-failed");
+    let refused = |error: zbus::Error| {
+        explained(
+            &error,
+            text!("The accounts service"),
+            text!("Couldn't change this account."),
+        )
+    };
     let crypted = crypted(&new.password)?;
     let kind = if new.admin { ADMINISTRATOR } else { STANDARD };
     let path = Accounts::new(system)
@@ -571,11 +589,7 @@ pub fn follow_users(
                     Ok(())
                 }
                 UsersCommand::ChoosePicture(login) => {
-                    match choose_picture(
-                        &session,
-                        &L10N.tr("choose-account-picture"),
-                        &PICTURE_TYPES,
-                    ) {
+                    match choose_picture(&session, &tr!("Choose a Picture"), &PICTURE_TYPES) {
                         Ok(Some(path)) => {
                             let shown = working_copy(&path).and_then(|copy| {
                                 let shown =
@@ -591,14 +605,18 @@ pub fn follow_users(
                                 }
                                 Err(error) => {
                                     tracing::warn!("{}: {error}", path.display());
-                                    Err(L10N.tr("picture-unreadable"))
+                                    Err(tr!(
+                                        "That picture can't be opened. Choose a JPEG or PNG picture."
+                                    ))
                                 }
                             }
                         }
                         Ok(None) => Ok(()),
-                        Err(error) => {
-                            Err(explained(&error, "service-files", "picture-choose-failed"))
-                        }
+                        Err(error) => Err(explained(
+                            &error,
+                            text!("The file chooser"),
+                            text!("Couldn't open the file chooser."),
+                        )),
                     }
                 }
                 UsersCommand::SavePicture(login, crop) => match (&system, chosen.take()) {
@@ -610,7 +628,11 @@ pub fn follow_users(
                     account(system, &login)
                         .and_then(|user| user.set_real_name(name.trim()))
                         .map_err(|error| {
-                            explained(&error, "service-accounts", "account-change-failed")
+                            explained(
+                                &error,
+                                text!("The accounts service"),
+                                text!("Couldn't change this account."),
+                            )
                         })
                 }),
                 UsersCommand::Administrator(login, on) => {
@@ -620,13 +642,17 @@ pub fn follow_users(
                                 user.set_account_type(if on { ADMINISTRATOR } else { STANDARD })
                             })
                             .map_err(|error| {
-                                explained(&error, "service-accounts", "account-change-failed")
+                                explained(
+                                    &error,
+                                    text!("The accounts service"),
+                                    text!("Couldn't change this account."),
+                                )
                             })
                     })
                 }
                 UsersCommand::Create(new) => {
                     let created = system.as_ref().map_or_else(
-                        || Err(not_responding("service-accounts")),
+                        || Err(not_responding(text!("The accounts service"))),
                         |system| create(system, &new),
                     );
                     updates.send(Update::AccountCreated(created.clone().err()));
@@ -638,7 +664,11 @@ pub fn follow_users(
                         Accounts::new(system)
                             .and_then(|accounts| accounts.delete_user(i64::from(uid), remove_files))
                             .map_err(|error| {
-                                explained(&error, "service-accounts", "account-change-failed")
+                                explained(
+                                    &error,
+                                    text!("The accounts service"),
+                                    text!("Couldn't change this account."),
+                                )
                             })
                     })
                 }
@@ -666,6 +696,11 @@ pub(crate) struct PasswordForm {
 }
 
 const PASSWORD_FIELDS: [&str; 3] = ["password-current", "password-new", "password-verify"];
+const PASSWORD_LABELS: [bande_l10n::Text; 3] = [
+    text!("Current password"),
+    text!("New password"),
+    text!("Verify"),
+];
 const NEW_PASSWORD_FIELDS: [&str; 2] = ["password-account-new", "password-account-verify"];
 const NEW_NAME: &str = "new-account-name";
 const NEW_LOGIN: &str = "new-account-login";
@@ -691,17 +726,18 @@ pub(crate) struct NewAccountForm {
 
 impl SettingsView {
     fn account_detail(account: &Account) -> String {
-        let kind = L10N.tr(if account.admin {
-            "account-admin"
+        let kind = (if account.admin {
+            text!("Administrator")
         } else {
-            "account-standard"
-        });
+            text!("Standard")
+        })
+        .tr();
         format!("{} · {kind}", account.login)
     }
 
     fn account_title(account: &Account) -> String {
         if account.you {
-            L10N.tr_args("account-you", [("name", account.name.clone().into())])
+            tr!("{name} (you)", name = account.name.clone())
         } else {
             account.name.clone()
         }
@@ -729,11 +765,14 @@ impl SettingsView {
                 Some(form) => rows.extend(self.new_account_rows(&form)),
                 None => {
                     let mut ask = intent(&self.intents, |()| Intent::AskNewAccount(true));
-                    let button = Button::new(&L10N.tr("add-user-ellipsis"), move || ask(()));
+                    let button = Button::new(&tr!("Add User…"), move || ask(()));
                     self.anchors
                         .push((Anchor::Item("add-user".to_owned()), button.id()));
                     rows.push(boxed(Row::new(
-                        Text::new(&L10N.tr("add-user-hint"), Tone::Primary),
+                        Text::new(
+                            &tr!("Add a person who can log in to this computer"),
+                            Tone::Primary,
+                        ),
                         Some(boxed(button)),
                     )));
                 }
@@ -745,38 +784,40 @@ impl SettingsView {
     fn new_account_rows(&mut self, form: &NewAccountForm) -> Widgets {
         let mut rows = Vec::new();
         let mut name = intent(&self.intents, Intent::NewAccountName);
-        let field = TextField::new(
-            &L10N.tr("full-name-placeholder"),
-            &form.full_name,
-            move |text| name(text.to_owned()),
-        )
+        let field = TextField::new(&tr!("Full name"), &form.full_name, move |text| {
+            name(text.to_owned())
+        })
         .without_text_checking();
         self.anchors
             .push((Anchor::Item(NEW_NAME.to_owned()), field.id()));
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("full-name"), Tone::Primary),
+            Text::new(&tr!("Full name"), Tone::Primary),
             Some(boxed(field)),
         )));
         let mut login = intent(&self.intents, Intent::NewAccountLogin);
-        let field = TextField::new(
-            &L10N.tr("account-name-placeholder"),
-            &form.login,
-            move |text| login(text.to_owned()),
-        )
+        let field = TextField::new(&tr!("Account name"), &form.login, move |text| {
+            login(text.to_owned())
+        })
         .without_text_checking();
         self.anchors
             .push((Anchor::Item(NEW_LOGIN.to_owned()), field.id()));
         rows.push(boxed(
             Row::new(
-                Text::new(&L10N.tr("account-name"), Tone::Primary),
+                Text::new(&tr!("Account name"), Tone::Primary),
                 Some(boxed(field)),
             )
-            .detail(Text::new(&L10N.tr("account-name-detail"), Tone::Muted).caption()),
+            .detail(
+                Text::new(
+                    &tr!("The name of the home folder; it can't be changed later."),
+                    Tone::Muted,
+                )
+                .caption(),
+            ),
         ));
-        let kinds = [L10N.tr("account-standard"), L10N.tr("account-admin")];
+        let kinds = [tr!("Standard"), tr!("Administrator")];
         let mut admin = intent(&self.intents, Intent::NewAccountAdmin);
         let menu = PopUpButton::new(
-            &L10N.tr("account-type"),
+            &tr!("Account type"),
             &kinds,
             usize::from(form.admin),
             move |index| admin(index == 1),
@@ -784,15 +825,16 @@ impl SettingsView {
         self.anchors
             .push((Anchor::Item("new-account-type".to_owned()), menu.id()));
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("account-type"), Tone::Primary),
+            Text::new(&tr!("Account type"), Tone::Primary),
             Some(boxed(menu)),
         )));
         for (step, anchor) in NEW_PASSWORD_FIELDS.iter().enumerate() {
-            let label = L10N.tr(if step == 0 {
-                "password"
+            let label = (if step == 0 {
+                text!("Password")
             } else {
-                "password-verify"
-            });
+                text!("Verify")
+            })
+            .tr();
             let mut entry = intent(&self.intents, move |text: String| {
                 Intent::NewAccountPassword(step, text)
             });
@@ -806,16 +848,18 @@ impl SettingsView {
             )));
         }
         let detail = match (&form.error, form.busy) {
-            (_, true) => L10N.tr("account-creating"),
+            (_, true) => tr!("Creating the account…"),
             (Some(error), false) => error.clone(),
-            (None, false) => L10N.tr("account-steps"),
+            (None, false) => tr!(
+                "Press Return after each password field to create the account, or Escape to cancel"
+            ),
         };
         let mut cancel = intent(&self.intents, |()| Intent::AskNewAccount(false));
         rows.push(boxed(
             Row::new(
                 Text::new(&detail, Tone::Muted).caption(),
                 Some(boxed(
-                    Button::new(&L10N.tr("cancel"), move || cancel(())).cancel(),
+                    Button::new(&tr!("Cancel"), move || cancel(())).cancel(),
                 )),
             )
             .highlighted(form.error.is_some()),
@@ -846,28 +890,39 @@ impl SettingsView {
         ));
         if managed {
             let mut rows = self.account_picture_rows(&account);
-            rows.push(self.manual_field(SettingId::FullName, "full-name", "full-name-placeholder"));
+            rows.push(self.manual_field(
+                SettingId::FullName,
+                text!("Full name"),
+                text!("Full name"),
+            ));
             let control: Box<dyn Widget> = if account.you {
-                boxed(Label::new(&L10N.tr(if account.admin {
-                    "account-admin"
-                } else {
-                    "account-standard"
-                })))
+                boxed(Label::new(
+                    &(if account.admin {
+                        text!("Administrator")
+                    } else {
+                        text!("Standard")
+                    })
+                    .tr(),
+                ))
             } else {
                 let mut set = intent(&self.intents, |(login, on)| {
                     Intent::Administrator(login, on)
                 });
                 let target = login.clone();
-                let toggle =
-                    Toggle::new(&L10N.tr("account-administer"), account.admin, move |on| {
-                        set((target.clone(), on))
-                    });
+                let toggle = Toggle::new(
+                    &tr!("Allow this user to administer this computer"),
+                    account.admin,
+                    move |on| set((target.clone(), on)),
+                );
                 self.anchors
                     .push((Anchor::Item("account-administer".to_owned()), toggle.id()));
                 boxed(toggle)
             };
             rows.push(boxed(Row::new(
-                Text::new(&L10N.tr("account-administer"), Tone::Primary),
+                Text::new(
+                    &tr!("Allow this user to administer this computer"),
+                    Tone::Primary,
+                ),
                 Some(control),
             )));
             page.push(boxed(Card::new(rows)));
@@ -876,11 +931,11 @@ impl SettingsView {
             let mut rows = Vec::new();
             if self.password.is_none() {
                 let mut ask = intent(&self.intents, |()| Intent::AskPassword(true));
-                let button = Button::new(&L10N.tr("change-password-ellipsis"), move || ask(()));
+                let button = Button::new(&tr!("Change Password…"), move || ask(()));
                 self.anchors
                     .push((Anchor::Item("change-password".to_owned()), button.id()));
                 rows.push(boxed(Row::new(
-                    Text::new(&L10N.tr("password"), Tone::Primary),
+                    Text::new(&tr!("Password"), Tone::Primary),
                     Some(boxed(button)),
                 )));
             } else {
@@ -903,17 +958,17 @@ impl SettingsView {
             .filter(|edit| edit.login == account.login)
         else {
             let mut choose = intent(&self.intents, |()| Intent::ChooseAccountPicture);
-            let button = Button::new(&L10N.tr("choose-ellipsis"), move || choose(()));
+            let button = Button::new(&tr!("Choose…"), move || choose(()));
             self.anchors
                 .push((Anchor::Item("account-picture".to_owned()), button.id()));
             return vec![boxed(Row::new(
-                Text::new(&L10N.tr("account-picture"), Tone::Primary),
+                Text::new(&tr!("Picture"), Tone::Primary),
                 Some(boxed(button)),
             ))];
         };
         let mut moved = intent(&self.intents, |()| Intent::PictureMoved);
         let crop = PictureCrop::new(
-            &L10N.tr("account-picture-crop"),
+            &tr!("Picture, drag to move and scroll to zoom"),
             edit.image.clone(),
             Rc::clone(&edit.crop),
             move || moved(()),
@@ -922,7 +977,7 @@ impl SettingsView {
             .push((Anchor::Item("account-picture-crop".to_owned()), crop.id()));
         let shared = Rc::clone(&edit.crop);
         let zoom = Slider::new(
-            &L10N.tr("account-picture-zoom"),
+            &tr!("Zoom"),
             f64::from(edit.crop.get().zoom),
             (1.0, f64::from(MAX_ZOOM)),
             0.0,
@@ -935,23 +990,27 @@ impl SettingsView {
         );
         let mut cancel = intent(&self.intents, |()| Intent::KeepPicture(false));
         let mut save = intent(&self.intents, |()| Intent::KeepPicture(true));
-        let save = Button::new(&L10N.tr("save"), move || save(()));
+        let save = Button::new(&tr!("Save"), move || save(()));
         self.anchors
             .push((Anchor::Item("account-picture-save".to_owned()), save.id()));
         vec![
             boxed(crop),
             boxed(Row::new(
-                Text::new(&L10N.tr("account-picture-zoom"), Tone::Primary),
+                Text::new(&tr!("Zoom"), Tone::Primary),
                 Some(boxed(zoom)),
             )),
             boxed(Row::new(
-                Text::new(&L10N.tr("account-picture-hint"), Tone::Muted).caption(),
+                Text::new(
+                    &tr!("Drag the picture to choose what shows in the circle."),
+                    Tone::Muted,
+                )
+                .caption(),
                 Some(boxed(Stack::new(
                     Axis::Horizontal,
                     Spacing::S as f32,
                     0.0,
                     vec![
-                        boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                        boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
                         boxed(save.primary()),
                     ],
                 ))),
@@ -962,20 +1021,20 @@ impl SettingsView {
     fn delete_account_row(&mut self, account: &Account) -> Box<dyn Widget> {
         if !self.deleting_account || account.logged_in {
             let mut ask = intent(&self.intents, |()| Intent::AskDeleteAccount(true));
-            let mut button = Button::new(&L10N.tr("delete-user-ellipsis"), move || ask(()));
+            let mut button = Button::new(&tr!("Delete User…"), move || ask(()));
             button.set_enabled(!account.logged_in);
             self.anchors
                 .push((Anchor::Item("delete-user".to_owned()), button.id()));
             let row = Row::new(
-                Text::new(&L10N.tr("delete-user-hint"), Tone::Primary),
+                Text::new(&tr!("Delete this user"), Tone::Primary),
                 Some(boxed(button)),
             );
             return boxed(if account.logged_in {
                 row.detail(
                     Text::new(
-                        &L10N.tr_args(
-                            "delete-user-logged-in",
-                            [("name", account.name.clone().into())],
+                        &tr!(
+                            "{name} is logged in. To delete this user, they must log out first.",
+                            name = account.name.clone()
                         ),
                         Tone::Muted,
                     )
@@ -989,16 +1048,13 @@ impl SettingsView {
         let mut cancel = intent(&self.intents, |()| Intent::AskDeleteAccount(false));
         let mut keep = intent(&self.intents, move |()| Intent::DeleteAccount(uid, false));
         let mut remove = intent(&self.intents, move |()| Intent::DeleteAccount(uid, true));
-        let keep = Button::new(&L10N.tr("delete-user-keep-home"), move || keep(()));
+        let keep = Button::new(&tr!("Keep Home Folder"), move || keep(()));
         self.anchors
             .push((Anchor::Item(DELETE_CONFIRM.to_owned()), keep.id()));
         boxed(
             Row::new(
                 Text::new(
-                    &L10N.tr_args(
-                        "delete-user-question",
-                        [("name", account.name.clone().into())],
-                    ),
+                    &tr!("Delete “{name}”?", name = account.name.clone()),
                     Tone::Primary,
                 ),
                 Some(boxed(Stack::new(
@@ -1006,10 +1062,10 @@ impl SettingsView {
                     Spacing::S as f32,
                     0.0,
                     vec![
-                        boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                        boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
                         boxed(keep),
                         boxed(
-                            Button::new(&L10N.tr("delete-user-remove-home"), move || remove(()))
+                            Button::new(&tr!("Delete Home Folder"), move || remove(()))
                                 .primary(),
                         ),
                     ],
@@ -1017,10 +1073,7 @@ impl SettingsView {
             )
             .detail(
                 Text::new(
-                    &L10N.tr_args(
-                        "delete-user-warning",
-                        [("login", account.login.clone().into())],
-                    ),
+                    &tr!("Keep the home folder to keep their files in /home/{login}, or delete it and everything in it.", login = account.login.clone()),
                     Tone::Muted,
                 )
                 .caption(),
@@ -1203,17 +1256,25 @@ impl SettingsView {
         let text = Zeroizing::new(text);
         let login = form.login.trim().to_owned();
         let problem = if form.full_name.trim().is_empty() {
-            Some(("account-name-needed", NEW_NAME))
+            Some((text!("Type the person's full name."), NEW_NAME))
         } else if !valid_login(&login) {
-            Some(("account-name-invalid", NEW_LOGIN))
+            Some((
+                text!(
+                    "Use lowercase letters, digits, - and _ for the account name, starting with a letter."
+                ),
+                NEW_LOGIN,
+            ))
         } else if existing.contains(&login) {
-            Some(("account-name-taken", NEW_LOGIN))
+            Some((
+                text!("That account name is already used. Choose another one."),
+                NEW_LOGIN,
+            ))
         } else {
             None
         };
         let next = match step {
             0 if text.is_empty() => {
-                form.error = Some(L10N.tr("password-empty"));
+                form.error = Some(tr!("Type a new password."));
                 NEW_PASSWORD_FIELDS[0]
             }
             0 => {
@@ -1223,16 +1284,16 @@ impl SettingsView {
             }
             _ => match (&form.password, problem) {
                 (None, _) => {
-                    form.error = Some(L10N.tr("password-empty"));
+                    form.error = Some(tr!("Type a new password."));
                     NEW_PASSWORD_FIELDS[0]
                 }
                 (Some(password), _) if *password != text => {
                     form.password = None;
-                    form.error = Some(L10N.tr("account-password-mismatch"));
+                    form.error = Some(tr!("The passwords don't match. Type the password again."));
                     NEW_PASSWORD_FIELDS[0]
                 }
                 (Some(_), Some((error, field))) => {
-                    form.error = Some(L10N.tr(error));
+                    form.error = Some(error.tr());
                     field
                 }
                 (Some(password), None) => {
@@ -1275,8 +1336,8 @@ impl SettingsView {
             return Vec::new();
         };
         let mut rows = Vec::new();
-        for (step, anchor) in PASSWORD_FIELDS.iter().enumerate() {
-            let label = L10N.tr(anchor);
+        for (step, (anchor, label)) in PASSWORD_FIELDS.iter().zip(PASSWORD_LABELS).enumerate() {
+            let label = label.tr();
             let mut entry = intent(&self.intents, move |text: String| {
                 Intent::PasswordEntry(step, text)
             });
@@ -1290,15 +1351,17 @@ impl SettingsView {
             )));
         }
         let detail = match (&form.error, form.busy) {
-            (_, true) => L10N.tr("password-changing"),
+            (_, true) => tr!("Changing the password…"),
             (Some(error), false) => error.clone(),
-            (None, false) => L10N.tr("password-steps"),
+            (None, false) => {
+                tr!("Press Return after each field to change the password, or Escape to cancel")
+            }
         };
         let mut cancel = intent(&self.intents, |()| Intent::AskPassword(false));
         rows.push(boxed(Row::new(
             Text::new(&detail, Tone::Muted).caption(),
             Some(boxed(
-                Button::new(&L10N.tr("cancel"), move || cancel(())).cancel(),
+                Button::new(&tr!("Cancel"), move || cancel(())).cancel(),
             )),
         )));
         rows
@@ -1331,7 +1394,7 @@ impl SettingsView {
                 Some(1)
             }
             1 if text.is_empty() => {
-                form.error = Some(L10N.tr("password-empty"));
+                form.error = Some(tr!("Type a new password."));
                 Some(1)
             }
             1 => {
@@ -1350,12 +1413,14 @@ impl SettingsView {
                     None
                 }
                 (None, _) => {
-                    form.error = Some(L10N.tr("password-current-needed"));
+                    form.error = Some(tr!("Type your current password first."));
                     Some(0)
                 }
                 _ => {
                     form.new = None;
-                    form.error = Some(L10N.tr("password-mismatch"));
+                    form.error = Some(tr!(
+                        "The new passwords don't match. Type the new password again."
+                    ));
                     Some(1)
                 }
             },
@@ -1368,7 +1433,9 @@ impl SettingsView {
     pub(crate) fn password_changed(&mut self, outcome: PasswordOutcome) {
         let Some(form) = self.password.as_mut() else {
             if outcome == PasswordOutcome::Changed {
-                self.password_message = Some(L10N.tr("password-changed"));
+                self.password_message = Some(tr!(
+                    "Your password was changed. Use it the next time you log in or unlock."
+                ));
             }
             return;
         };
@@ -1376,28 +1443,30 @@ impl SettingsView {
         let (error, field) = match outcome {
             PasswordOutcome::Changed => {
                 self.password = None;
-                self.password_message = Some(L10N.tr("password-changed"));
+                self.password_message = Some(tr!(
+                    "Your password was changed. Use it the next time you log in or unlock."
+                ));
                 self.focus_next = Some(Anchor::Item("change-password".to_owned()));
                 return;
             }
             PasswordOutcome::WrongPassword => {
                 form.current = None;
-                (L10N.tr("password-wrong"), 0)
+                (tr!("The current password is not correct."), 0)
             }
             PasswordOutcome::Rejected(reason) if !reason.is_empty() => {
                 form.new = None;
                 (
-                    L10N.tr_args("password-rejected", [("reason", reason.into())]),
+                    tr!("That password can't be used: {reason}", reason = reason),
                     1,
                 )
             }
             PasswordOutcome::Rejected(_) => {
                 form.new = None;
-                (L10N.tr("password-weak"), 1)
+                (tr!("That password is too weak. Choose a longer one."), 1)
             }
             PasswordOutcome::Failed(reason) => {
                 tracing::warn!("passwd: {reason}");
-                (L10N.tr("password-change-failed"), 0)
+                (tr!("Couldn't change the password."), 0)
             }
         };
         form.error = Some(error);

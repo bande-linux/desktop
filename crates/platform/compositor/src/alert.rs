@@ -2,15 +2,15 @@ use std::cell::RefCell;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use bande_l10n::tr;
+
+use crate::label::{Label, LabelStyle, Look};
+use crate::state::{Compositor, OutputElement, State};
 use bande_graphics::{Scheme, TextRole};
 use bande_render::VulkanRenderer;
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
 use smithay::utils::{Logical, Point};
-
-use crate::L10N;
-use crate::label::{Label, LabelStyle, Look};
-use crate::state::{Compositor, OutputElement, State};
 
 const ALERT_STYLE: LabelStyle = LabelStyle {
     role: TextRole::BodyStrong,
@@ -167,12 +167,13 @@ fn start_failure(executable: &Path, error: &io::Error) -> String {
         .to_string_lossy()
         .into_owned();
     let reason = match error.kind() {
-        io::ErrorKind::NotFound => L10N.tr("start-failure-missing"),
-        io::ErrorKind::PermissionDenied => L10N.tr("start-failure-denied"),
-        _ => L10N.tr_args("start-failure-other", [("error", error.to_string().into())]),
+        io::ErrorKind::NotFound => tr!("it is not installed"),
+        io::ErrorKind::PermissionDenied => tr!("it may not be run"),
+        _ => tr!("of an error: {error}", error = error.to_string()),
     };
-    L10N.tr_args(
-        "start-failure",
-        [("name", name.into()), ("reason", reason.into())],
+    tr!(
+        "{name} could not start because {reason}.",
+        name = name,
+        reason = reason
     )
 }

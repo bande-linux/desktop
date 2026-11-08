@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use accesskit::TreeUpdate;
 use bande_fs::Trash;
 use bande_inbox::{Inbox, Outbox};
+use bande_l10n::{Text, text, tr};
 use bande_screenshot::area::{AreaOutcome, AreaSelection, Region, crop};
 use bande_screenshot::color::ColorPicker;
 use bande_screenshot::engine::{Display, Engine, EngineEvent, Frame, Shot, Source, WindowInfo};
@@ -24,7 +25,7 @@ use bande_screenshot::record::{Container, Recording};
 use bande_screenshot::service::{self, Casting, SCREEN_ID, UiRequest};
 use bande_screenshot::shadow::with_shadow;
 use bande_screenshot::thumbnail::{self, Thumbnail, ThumbnailAction};
-use bande_screenshot::{Failure, L10N, app_name, free_path, png, recording_stem, save, shrunk};
+use bande_screenshot::{Failure, app_name, free_path, png, recording_stem, save, shrunk};
 use bande_toolkit::ui::{Alert, Context, FreeLayout, Menu, MenuItem, Size, Ui, Widget, frame_time};
 use bande_toolkit::{
     App, Color, DragAction, DragIcon, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions,
@@ -570,7 +571,7 @@ impl Screenshots {
         let (title, detail) = failure.message();
         self.present(
             window,
-            Alert::new(&title, &detail, move |_| dismissed.set(true)).primary(&L10N.tr("ok"), "ok"),
+            Alert::new(&title, &detail, move |_| dismissed.set(true)).primary(&tr!("OK"), "ok"),
         );
         self.thumbnail = None;
         self.mode = Mode::Notice(read);
@@ -604,7 +605,7 @@ impl Screenshots {
                 let outbox = self.outbox.clone();
                 let indicator = Indicator::show(
                     Activity::Recording,
-                    &L10N.tr("recording-screen"),
+                    &tr!("Recording the screen. Click to stop."),
                     move || {
                         outbox.send(UiRequest::StopRecording);
                     },
@@ -684,21 +685,21 @@ impl Screenshots {
 
     fn options_menu(&self) -> Menu {
         let options = self.options;
-        let destination = |title: &str, action: &str, chosen: Destination| {
-            MenuItem::new(&L10N.tr(title), action).checked(options.destination == chosen)
+        let destination = |title: Text, action: &str, chosen: Destination| {
+            MenuItem::new(&title.tr(), action).checked(options.destination == chosen)
         };
         let mut items = vec![
-            MenuItem::new(&L10N.tr("save-to"), "").enabled(false),
-            destination("desktop", "save-desktop", Destination::Desktop),
-            destination("pictures", "save-pictures", Destination::Pictures),
-            destination("clipboard", "save-clipboard", Destination::Clipboard),
+            MenuItem::new(&tr!("Save to"), "").enabled(false),
+            destination(text!("Desktop"), "save-desktop", Destination::Desktop),
+            destination(text!("Pictures"), "save-pictures", Destination::Pictures),
+            destination(text!("Clipboard"), "save-clipboard", Destination::Clipboard),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("timer"), "").enabled(false),
+            MenuItem::new(&tr!("Timer"), "").enabled(false),
         ];
         for seconds in TIMERS {
             let title = match seconds {
-                0 => L10N.tr("timer-none"),
-                _ => L10N.tr_args("timer-seconds", [("seconds", seconds.into())]),
+                0 => tr!("None"),
+                _ => tr!("{seconds} Seconds", seconds = seconds),
             };
             items.push(
                 MenuItem::new(&title, &format!("timer-{seconds}"))
@@ -707,7 +708,7 @@ impl Screenshots {
         }
         items.push(MenuItem::separator());
         items.push(
-            MenuItem::new(&L10N.tr("show-pointer"), "show-pointer").checked(options.show_pointer),
+            MenuItem::new(&tr!("Show Mouse Pointer"), "show-pointer").checked(options.show_pointer),
         );
         Menu::new(items)
     }
@@ -794,16 +795,16 @@ impl Screenshots {
                 if ask {
                     let allowed = Rc::new(Cell::new(None));
                     let choice = Rc::clone(&allowed);
-                    let name = app_name(&app_id).unwrap_or_else(|| L10N.tr("an-app"));
+                    let name = app_name(&app_id).unwrap_or_else(|| tr!("An app"));
                     self.present(
                         window,
                         Alert::new(
-                            &L10N.tr_args("allow-screenshot", [("app", name.into())]),
-                            &L10N.tr("allow-screenshot-detail"),
+                            &tr!("Allow {app} to take a screenshot?", app = name),
+                            &tr!("It will see everything on your screen right now."),
                             move |action| choice.set(Some(action == "allow")),
                         )
-                        .cancel(&L10N.tr("deny"), "deny")
-                        .primary(&L10N.tr("allow"), "allow"),
+                        .cancel(&tr!("Don’t Allow"), "deny")
+                        .primary(&tr!("Allow"), "allow"),
                     );
                     self.enter_keeping_ui(
                         window,

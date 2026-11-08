@@ -2,6 +2,7 @@ use std::sync::mpsc::{self, Sender};
 
 use bande_datetime::daylight::{Place, place_of};
 use bande_datetime::timedate::{TimedateProxyBlocking, timedate_changes};
+use bande_l10n::text;
 use jiff::Timestamp;
 use jiff::civil::DateTime;
 use jiff::tz::TimeZone;
@@ -153,7 +154,7 @@ pub fn follow_time(system: &Connection, updates: Updates) -> Sender<TimeCommand>
                 TimeCommand::Set(_) => SettingId::DateAndTime,
             };
             if let Err(error) = run(&timedate, command) {
-                updates.send(failed(setting, &error, "service-time"));
+                updates.send(failed(setting, &error, text!("The date and time service")));
                 updates.send(Update::Time(read(&timedate, &mut zones)));
             }
         }

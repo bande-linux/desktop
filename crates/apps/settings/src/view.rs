@@ -4,18 +4,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
-use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
-use bande_audio::{Direction, Snapshot, meter_level};
-use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
-use bande_toolkit::ui::{
-    Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
-    WidgetId,
-};
-use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
-use jiff::Zoned;
-use std::time::{Duration, Instant};
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, BatteryState};
@@ -44,12 +34,22 @@ use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersCommand};
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
+use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
+use bande_audio::{Direction, Snapshot, meter_level};
+use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
 use bande_keyboard::Layouts;
 use bande_settings_panes::{
     AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
 };
 use bande_settings_panes::{PaneHit, search};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
+use bande_toolkit::ui::{
+    Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
+    WidgetId,
+};
+use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
+use jiff::Zoned;
+use std::time::{Duration, Instant};
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
@@ -332,7 +332,7 @@ impl SettingsView {
     pub fn new(palette: Palette, text: TextSystem) -> Self {
         let intents: Intents = Rc::default();
         let queries = Rc::clone(&intents);
-        let field = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
+        let field = SearchField::new(&tr!("Search"), "", move |query: &str| {
             queries.borrow_mut().push(Intent::Query(query.to_owned()));
         });
         let search = field.id();
@@ -935,14 +935,17 @@ impl SettingsView {
                 self.other = None;
             }
             Joined::WrongPassword => {
-                self.join.error = Some(L10N.tr("wrong-password"));
+                self.join.error = Some(tr!("The password is not correct. Try again."));
                 if self.other.is_none() {
                     self.join.asking = Some(ssid);
                 }
                 self.focus_next = Some(Anchor::Password);
             }
             Joined::Failed(reason) => {
-                self.join.error = Some(L10N.tr_args("join-failed", [("reason", reason.into())]));
+                self.join.error = Some(tr!(
+                    "Could not join the network: {reason}.",
+                    reason = reason
+                ));
             }
         }
     }
@@ -1955,9 +1958,7 @@ impl SettingsView {
 
     pub(crate) fn text_size_label(&self) -> Option<String> {
         match self.values.get(&SettingId::TextSize)? {
-            Value::Number(percent) => {
-                Some(L10N.tr_args("text-size-percent", [("percent", (*percent).into())]))
-            }
+            Value::Number(percent) => Some(tr!("{percent}%", percent = (*percent))),
             _ => None,
         }
     }
@@ -2052,7 +2053,9 @@ impl SettingsView {
                                 bande_network::ConnectionChange::Dns(servers),
                             )));
                     }
-                    (_, None) => self.fail_here(L10N.tr("dns-invalid")),
+                    (_, None) => self.fail_here(tr!(
+                        "Enter DNS servers as IPv4 addresses, such as 1.1.1.1, 9.9.9.9."
+                    )),
                     _ => self.clear_failure(),
                 }
                 return;
@@ -2074,7 +2077,7 @@ impl SettingsView {
                             manual,
                         ))));
                 }
-                None => self.fail_here(L10N.tr("manual-address-invalid")),
+                None => self.fail_here(tr!("Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.")),
             }
             return;
         }
@@ -2092,7 +2095,7 @@ impl SettingsView {
                     }
                 }
                 None => {
-                    self.errors.insert(id, L10N.tr("night-time-invalid"));
+                    self.errors.insert(id, tr!("Enter a time such as 22:00."));
                 }
             }
             return;
@@ -2109,7 +2112,7 @@ impl SettingsView {
                     self.commands.push(Command::Time(TimeCommand::Set(at)));
                 }
                 None => {
-                    self.errors.insert(id, L10N.tr("manual-time-invalid"));
+                    self.errors.insert(id, tr!("Type the date and time as year-month-day hours:minutes, such as 2026-10-30 14:05."));
                 }
             }
             return;

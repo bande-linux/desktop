@@ -1,12 +1,7 @@
 use std::rc::Rc;
 
-use bande_network::VpnState;
-use bande_settings_panes::{Group, Pane, PaneId, Value};
-use bande_toolkit::ui::{ScrollView, Toggle, Widget};
-use bande_toolkit::{Color, Image, TextRole};
-use bande_xdg::{ICON_THEMES, find_icon};
+use bande_l10n::{tr, trn};
 
-use crate::L10N;
 use crate::pages::{Widgets, boxed};
 use crate::power::charge_text;
 use crate::software::SoftwareState;
@@ -16,6 +11,11 @@ use crate::widgets::{
     Column, HEADER_SYMBOL, Header, NOTICE_SYMBOL, Notice, SIDEBAR_SYMBOL, SidebarLabel, SidebarRow,
     Text, Tone,
 };
+use bande_network::VpnState;
+use bande_settings_panes::{Group, Pane, PaneId, Value};
+use bande_toolkit::ui::{ScrollView, Toggle, Widget};
+use bande_toolkit::{Color, Image, TextRole};
+use bande_xdg::{ICON_THEMES, find_icon};
 
 const SYMBOL_DENSITY: f32 = 2.0;
 const ATTENTION_SYMBOL: &str = "view-refresh-symbolic";
@@ -42,9 +42,11 @@ impl SettingsView {
 
     pub(crate) fn attention(&self) -> Option<String> {
         match &self.software {
-            SoftwareState::Available(packages) if !packages.is_empty() => {
-                Some(L10N.tr_args("updates-available", [("count", packages.len().into())]))
-            }
+            SoftwareState::Available(packages) if !packages.is_empty() => Some(trn!(
+                "1 update is available",
+                "{count} updates are available",
+                count = packages.len()
+            )),
             SoftwareState::Unknown => self.software_hint.clone(),
             state => state.pending(),
         }
@@ -131,11 +133,11 @@ impl SettingsView {
         let live = match pane.id {
             PaneId::Wifi => self.wifi.as_ref().map(|wifi| {
                 match wifi.networks.iter().find(|network| network.current) {
-                    _ if !wifi.enabled => L10N.tr("off"),
+                    _ if !wifi.enabled => tr!("Off"),
                     Some(network) => {
-                        L10N.tr_args("connected-to", [("network", network.name().into())])
+                        tr!("Connected to “{network}”", network = network.name())
                     }
-                    None => L10N.tr("not-connected"),
+                    None => tr!("Not connected"),
                 }
             }),
             PaneId::Bluetooth => self.bluetooth.as_ref().map(|bluetooth| {
@@ -145,10 +147,14 @@ impl SettingsView {
                     .filter(|device| device.connected)
                     .count();
                 match (bluetooth.powered, connected) {
-                    (false, _) => L10N.tr("off"),
-                    (true, 0) => L10N.tr("on"),
+                    (false, _) => tr!("Off"),
+                    (true, 0) => tr!("On"),
                     (true, count) => {
-                        L10N.tr_args("on-devices-connected", [("count", count.into())])
+                        trn!(
+                            "On · 1 device connected",
+                            "On · {count} devices connected",
+                            count = count
+                        )
                     }
                 }
             }),
@@ -157,9 +163,9 @@ impl SettingsView {
                     .ethernet
                     .iter()
                     .map(|ethernet| match (ethernet.connected, ethernet.cable) {
-                        (true, _) => L10N.tr("ethernet-connected"),
-                        (false, true) => L10N.tr("ethernet-not-connected"),
-                        (false, false) => L10N.tr("no-cable"),
+                        (true, _) => tr!("Ethernet connected"),
+                        (false, true) => tr!("Ethernet not connected"),
+                        (false, false) => tr!("No cable"),
                     })
                     .collect();
                 parts.extend(
@@ -167,9 +173,7 @@ impl SettingsView {
                         .vpns
                         .iter()
                         .filter(|vpn| vpn.state == VpnState::Connected)
-                        .map(|vpn| {
-                            L10N.tr_args("vpn-connected", [("vpn", vpn.name.clone().into())])
-                        }),
+                        .map(|vpn| tr!("VPN “{vpn}” connected", vpn = vpn.name.clone())),
                 );
                 (!parts.is_empty()).then(|| parts.join(" · "))
             }),
@@ -178,36 +182,29 @@ impl SettingsView {
             PaneId::Users => self.accounts.as_ref().and_then(|accounts| {
                 let you = accounts.iter().find(|account| account.you)?;
                 Some(if you.name == you.login {
-                    L10N.tr_args("users-you-login", [("login", you.login.clone().into())])
+                    tr!("Logged in as {login}", login = you.login.clone())
                 } else {
-                    L10N.tr_args(
-                        "users-you",
-                        [
-                            ("name", you.name.clone().into()),
-                            ("login", you.login.clone().into()),
-                        ],
+                    tr!(
+                        "Logged in as {name} ({login})",
+                        name = you.name.clone(),
+                        login = you.login.clone()
                     )
                 })
             }),
             PaneId::Displays => match self.displays.as_slice() {
                 [] => None,
                 [display] => Some(display.name()),
-                displays => Some(L10N.tr_args("display-count", [("count", displays.len().into())])),
+                displays => Some(tr!("{count} displays", count = displays.len())),
             },
             PaneId::Sound => self.audio.as_ref().and_then(|audio| {
                 let output = audio.default_output()?;
                 let percent = (output.level.volume * 100.0).round();
                 Some(match output.level.muted {
-                    true => L10N.tr_args(
-                        "output-muted",
-                        [("output", output.description.clone().into())],
-                    ),
-                    false => L10N.tr_args(
-                        "output-level",
-                        [
-                            ("output", output.description.clone().into()),
-                            ("percent", percent.into()),
-                        ],
+                    true => tr!("{output} · Muted", output = output.description.clone()),
+                    false => tr!(
+                        "{output} · {percent}%",
+                        output = output.description.clone(),
+                        percent = percent
                     ),
                 })
             }),
@@ -219,19 +216,18 @@ impl SettingsView {
                     .map(|(first, layouts)| layouts.name(first));
                 name.map(|name| match sources.len() {
                     1 => name,
-                    count => L10N.tr_args(
-                        "input-source-count",
-                        [("source", name.into()), ("count", count.into())],
+                    count => tr!(
+                        "{source} · {count} input sources",
+                        source = name,
+                        count = count
                     ),
                 })
             }
             PaneId::Power => self.battery.as_ref().map(|battery| {
-                L10N.tr_args(
-                    "battery-summary",
-                    [
-                        ("percent", battery.percent.round().into()),
-                        ("charge", charge_text(battery.charge).into()),
-                    ],
+                tr!(
+                    "{percent}% · {charge}",
+                    percent = battery.percent.round(),
+                    charge = charge_text(battery.charge)
                 )
             }),
             PaneId::LanguageTime => {
@@ -299,23 +295,39 @@ impl SettingsView {
     pub(crate) fn no_match(&mut self) -> Box<dyn Widget> {
         let faint = self.palette().ink3;
         let symbol = self.symbol(SEARCH_SYMBOL, NOTICE_SYMBOL, faint);
-        let heading = L10N.tr_args("no-match", [("query", self.query.trim().to_owned().into())]);
-        boxed(Notice::new(symbol, &heading, &L10N.tr("no-match-hint")))
+        let heading = tr!(
+            "No settings match “{query}”",
+            query = self.query.trim().to_owned()
+        );
+        boxed(Notice::new(
+            symbol,
+            &heading,
+            &tr!("Try another word, such as “sleep” or “wallpaper”."),
+        ))
     }
 
     pub(crate) fn notice(&mut self, pane: &Pane) -> Option<Box<dyn Widget>> {
         let name = pane.name.clone();
         let (heading, line) = if !self.available(pane.id) {
             (
-                L10N.tr_args("unavailable", [("pane", name.clone().into())]),
-                L10N.tr_args("unavailable-hint", [("pane", name.into())]),
+                tr!("{pane} isn't available", pane = name.clone()),
+                tr!("Its device or service isn't responding."),
             )
         } else if let Some(master) = pane.master
             && self.values.get(&master) == Some(&Value::Flag(false))
         {
             (
-                L10N.tr_args("pane-off", [("pane", name.into())]),
-                L10N.tr(&format!("{}-off-hint", pane.id.keyword())),
+                tr!("{pane} is off", pane = name),
+                match pane.id {
+                    PaneId::Wifi => tr!("Turn on Wi-Fi to see networks nearby."),
+                    PaneId::Bluetooth => {
+                        tr!("Turn on Bluetooth to connect headphones, keyboards and more.")
+                    }
+                    PaneId::NightLight => {
+                        tr!("Turn on Night Light to make the colours warmer at night.")
+                    }
+                    _ => String::new(),
+                },
             )
         } else {
             return None;

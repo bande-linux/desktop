@@ -1,31 +1,39 @@
-use bande_network::VpnState;
-use bande_settings_panes::{SettingId, Value};
-use bande_toolkit::Spacing;
-use bande_toolkit::ui::{Axis, Button, SegmentedControl, Stack, TextField, Widget};
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::forget::Forget;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::services::NetworkCommand;
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
+use bande_network::VpnState;
+use bande_settings_panes::{SettingId, Value};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, SegmentedControl, Stack, TextField, Widget};
 
-const MANUAL_FIELDS: [(SettingId, &str, &str); 3] = [
+const MANUAL_FIELDS: [(SettingId, bande_l10n::Text, bande_l10n::Text); 3] = [
     (
         SettingId::EthernetAddress,
-        "ip-address",
-        "ip-address-placeholder",
+        text!("IP address"),
+        text!("192.168.1.20/24"),
     ),
-    (SettingId::EthernetRouter, "router", "router-placeholder"),
-    (SettingId::EthernetDns, "dns-servers", "dns-placeholder"),
+    (
+        SettingId::EthernetRouter,
+        text!("Router"),
+        text!("192.168.1.1"),
+    ),
+    (
+        SettingId::EthernetDns,
+        text!("DNS servers"),
+        text!("1.1.1.1, 9.9.9.9"),
+    ),
 ];
 
 impl SettingsView {
     pub(crate) fn manual_field(
         &mut self,
         id: SettingId,
-        label: &str,
-        placeholder: &str,
+        label: bande_l10n::Text,
+        placeholder: bande_l10n::Text,
     ) -> Box<dyn Widget> {
         let text = self
             .drafts
@@ -36,13 +44,11 @@ impl SettingsView {
                 _ => String::new(),
             });
         let mut draft = intent(&self.intents, move |text: String| Intent::Draft(id, text));
-        let field = TextField::new(&L10N.tr(placeholder), &text, move |text| {
-            draft(text.to_owned())
-        })
-        .without_text_checking();
+        let field = TextField::new(&placeholder.tr(), &text, move |text| draft(text.to_owned()))
+            .without_text_checking();
         self.anchors.push((Anchor::Setting(id, None), field.id()));
         boxed(Row::new(
-            Text::new(&L10N.tr(label), Tone::Primary),
+            Text::new(&label.tr(), Tone::Primary),
             Some(boxed(field)),
         ))
     }
@@ -52,30 +58,30 @@ impl SettingsView {
             return Vec::new();
         };
         let Some(ethernet) = network.ethernet else {
-            return vec![muted_row(&L10N.tr("no-ethernet"))];
+            return vec![muted_row(&tr!("No Ethernet port"))];
         };
         let status = if !ethernet.managed {
-            L10N.tr("ethernet-unmanaged")
+            tr!("Set up by the system, outside NetworkManager")
         } else if !ethernet.cable {
-            L10N.tr("cable-unplugged")
+            tr!("Cable unplugged")
         } else if ethernet.connected {
             match &ethernet.addressing.address {
                 Some(address) => {
-                    L10N.tr_args("connected-as", [("address", address.clone().into())])
+                    tr!("Connected as {address}", address = address.clone())
                 }
-                None => L10N.tr("connected"),
+                None => tr!("Connected"),
             }
         } else {
-            L10N.tr("not-connected")
+            tr!("Not connected")
         };
         let mut detail = Vec::new();
         if let Some(router) = &ethernet.addressing.router {
-            detail.push(L10N.tr_args("router-is", [("address", router.clone().into())]));
+            detail.push(tr!("Router {address}", address = router.clone()));
         }
         if !ethernet.addressing.dns.is_empty() {
-            detail.push(L10N.tr_args(
-                "dns-is",
-                [("servers", ethernet.addressing.dns.join(", ").into())],
+            detail.push(tr!(
+                "DNS {servers}",
+                servers = ethernet.addressing.dns.join(", ")
             ));
         }
         let mut row = Row::new(Text::new(&status, Tone::Primary), None);
@@ -86,10 +92,10 @@ impl SettingsView {
         if !ethernet.managed {
             return rows;
         }
-        let labels = [L10N.tr("ipv4-automatic"), L10N.tr("ipv4-manual")];
+        let labels = [tr!("Automatically"), tr!("Manually")];
         let choose = intent(&self.intents, |index: usize| Intent::ManualIpv4(index == 1));
         let segmented = SegmentedControl::new(
-            &L10N.tr("configure-ipv4"),
+            &tr!("Configure IPv4"),
             &labels,
             Some(usize::from(self.manual_ipv4)),
             choose,
@@ -97,7 +103,7 @@ impl SettingsView {
         self.anchors
             .push((Anchor::Setting(SettingId::Ethernet, None), segmented.id()));
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("configure-ipv4"), Tone::Primary),
+            Text::new(&tr!("Configure IPv4"), Tone::Primary),
             Some(boxed(segmented)),
         )));
         if self.manual_ipv4 {
@@ -107,8 +113,8 @@ impl SettingsView {
         } else if ethernet.connection.is_some() {
             rows.push(self.manual_field(
                 SettingId::EthernetDns,
-                "dns-servers",
-                "dns-automatic-placeholder",
+                text!("DNS servers"),
+                text!("Automatic"),
             ));
         }
         rows
@@ -123,27 +129,27 @@ impl SettingsView {
             let (status, action, command): (String, String, fn(String) -> NetworkCommand) =
                 match vpn.state {
                     VpnState::Connected => (
-                        L10N.tr("connected"),
-                        L10N.tr("disconnect"),
+                        tr!("Connected"),
+                        tr!("Disconnect"),
                         NetworkCommand::DisconnectVpn,
                     ),
                     VpnState::Connecting => (
-                        L10N.tr("connecting"),
-                        L10N.tr("disconnect"),
+                        tr!("Connecting…"),
+                        tr!("Disconnect"),
                         NetworkCommand::DisconnectVpn,
                     ),
                     VpnState::Off => (
-                        L10N.tr("not-connected"),
-                        L10N.tr("connect"),
+                        tr!("Not connected"),
+                        tr!("Connect"),
                         NetworkCommand::ConnectVpn,
                     ),
                 };
             let forget = Forget::Vpn(vpn.path.clone());
             if self.forgetting.as_ref() == Some(&forget) {
                 rows.push(self.confirm_row(
-                    &L10N.tr_args("vpn-remove-question", [("name", vpn.name.clone().into())]),
-                    &L10N.tr("vpn-remove-warning"),
-                    &L10N.tr("remove"),
+                    &tr!("Remove the VPN “{name}”?", name = vpn.name.clone()),
+                    &tr!("Its settings and keys are deleted. Import the configuration again to use it."),
+                    &tr!("Remove"),
                 ));
                 continue;
             }
@@ -153,7 +159,7 @@ impl SettingsView {
             let mut ask = intent(&self.intents, move |()| {
                 Intent::AskForget(Some(forget.clone()))
             });
-            let remove = Button::new(&L10N.tr("remove-ellipsis"), move || ask(()));
+            let remove = Button::new(&tr!("Remove…"), move || ask(()));
             let row = Row::new(
                 Text::new(&vpn.name, Tone::Primary),
                 Some(boxed(Stack::new(
@@ -167,11 +173,15 @@ impl SettingsView {
             rows.push(self.item_row(format!("vpn:{}", vpn.path), row));
         }
         let mut import = intent(&self.intents, |()| Intent::ImportVpn);
-        let button = Button::new(&L10N.tr("import-vpn"), move || import(()));
+        let button = Button::new(&tr!("Import Configuration…"), move || import(()));
         self.anchors
             .push((Anchor::Setting(SettingId::Vpns, None), button.id()));
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("import-vpn-hint"), Tone::Muted).caption(),
+            Text::new(
+                &tr!("Add a WireGuard (.conf) or OpenVPN (.ovpn) file"),
+                Tone::Muted,
+            )
+            .caption(),
             Some(boxed(button)),
         )));
         rows

@@ -111,7 +111,3 @@ pub use session::{
 pub use state::{Compositor, OutputElement, REFRESH, ScanoutDevice};
 pub use watchdog::UNRESPONSIVE_AFTER;
 pub use window::Window;
-
-static L10N: std::sync::LazyLock<bande_l10n::Localizer> = std::sync::LazyLock::new(|| {
-    bande_l10n::Localizer::new(bande_l10n::translations!("bande-compositor"))
-});

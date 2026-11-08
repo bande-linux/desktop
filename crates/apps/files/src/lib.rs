@@ -30,10 +30,6 @@ mod trouble;
 mod view;
 mod views;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use backups::backups_installed;
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
@@ -60,6 +56,3 @@ pub use views::{
     FolderView, ListColumn, SIDEBAR_FILE, ViewMemory, ViewMode, list_columns_file,
     recent_folders_file, sidebar_file, status_bar_file, views_file,
 };
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-files")));

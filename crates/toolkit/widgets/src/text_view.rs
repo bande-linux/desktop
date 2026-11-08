@@ -33,6 +33,7 @@ impl TextView {
     pub fn new(placeholder: &str, text: &str, on_change: impl FnMut(&str) + 'static) -> Self {
         let mut editor = Editor::new(text, FONT_SIZE, true);
         editor.select(0..0);
+        editor.set_spelling(true);
         Self {
             id: WidgetId::next(),
             placeholder: placeholder.to_owned(),
@@ -53,6 +54,11 @@ impl TextView {
             on_change: None,
             ..Self::new("", text, |_| {})
         }
+    }
+
+    pub fn without_text_checking(mut self) -> Self {
+        self.editor.set_spelling(false);
+        self
     }
 
     pub fn read_only(mut self) -> Self {
@@ -83,6 +89,7 @@ impl TextView {
     }
 
     pub fn set_font(&mut self, monospace: bool, size: f32) {
+        self.editor.set_spelling(!monospace);
         let typeface = match monospace {
             true => Typeface::Monospace,
             false => Typeface::Interface,
@@ -354,8 +361,29 @@ impl Widget for TextView {
         true
     }
 
-    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
-        Some(self.editor.menu())
+    fn spelling_answered(&mut self) -> bool {
+        let revision = self.editor.revision();
+        self.editor.spelling_answered();
+        self.changed(revision);
+        self.editor.revision() != revision
+    }
+
+    fn context_menu(&mut self, cx: &mut Context, _point: Point) -> Option<Menu> {
+        Some(self.editor.context_menu(cx))
+    }
+
+    fn selected_text(&self) -> Option<String> {
+        self.editor
+            .has_selection()
+            .then(|| self.editor.selected_text())
+    }
+
+    fn word_at(&mut self, cx: &mut Context, point: Point) -> Option<String> {
+        let origin = self.origin();
+        Some(self.editor.word_at(
+            &mut cx.text,
+            Point::new(point.x - origin.x, point.y - origin.y),
+        ))
     }
 
     fn menu_action(&mut self, cx: &mut Context, action: &str) -> bool {

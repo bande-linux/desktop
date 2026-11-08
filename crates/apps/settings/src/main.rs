@@ -221,7 +221,7 @@ impl Program for Settings {
             .ok();
         let (feed, updates) = feed()?;
         let services = Services::start(&session, system.as_ref(), &updates);
-        services.send(Command::Software(SoftwareCommand::Open));
+        services.send(Command::Software(SoftwareCommand::Glance));
         let displays = Displays::connect();
         let main = match arguments.is_empty() {
             true => None,

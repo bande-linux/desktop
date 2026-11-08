@@ -427,6 +427,17 @@ impl Dispatch<BandeAppV1, ()> for State {
                     state.needs_redraw = true;
                 }
             }
+            bande_app_v1::Request::SetPopover { toplevel }
+                if toplevel.client() == resource.client() =>
+            {
+                if let Some(index) = state
+                    .windows
+                    .iter()
+                    .position(|window| window.toplevel.xdg_toplevel() == &toplevel)
+                {
+                    state.windows[index].popover = true;
+                }
+            }
             bande_app_v1::Request::SetPanelOrigin {
                 toplevel,
                 owner,
@@ -532,6 +543,10 @@ impl GlobalDispatch<BandeAppControlV1, ()> for State {
         let control = data_init.init(resource, ());
         state.announce_unresponsive(None, Some(&control));
         state.app_control_resources.push(control);
+    }
+
+    fn can_view(client: Client, _global_data: &()) -> bool {
+        !crate::trust::is_sandboxed(&client)
     }
 }
 

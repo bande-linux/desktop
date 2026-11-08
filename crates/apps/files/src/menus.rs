@@ -13,6 +13,7 @@ pub enum Command {
     OpenWith(String),
     OpenWithOther,
     QuickLook,
+    LookUp,
     Info,
     BrowseBackups,
     RestoreFromBackup,
@@ -71,6 +72,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("open-with-other", Command::OpenWithOther),
     ("open-place-in-new-tab", Command::OpenPlaceInNewTab),
     ("quick-look", Command::QuickLook),
+    ("look-up", Command::LookUp),
     ("info", Command::Info),
     ("rename", Command::Rename),
     ("duplicate", Command::Duplicate),
@@ -271,6 +273,10 @@ pub fn items_menu(selection: &Selection) -> Menu {
         _ => L10N.tr_args("menu-compress-items", [("count", count.into())]),
     };
     items.push(MenuItem::new(&compress, action(&Command::Compress)));
+    if count == 1 {
+        let look_up = L10N.tr_args("menu-look-up", [("name", selection.name.clone().into())]);
+        items.push(MenuItem::new(&look_up, action(&Command::LookUp)));
+    }
     items.push(item("menu-cut", &Command::Cut).shortcut("Ctrl+X"));
     let copy_path = match count {
         1 => L10N.tr_args(

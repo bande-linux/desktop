@@ -69,7 +69,7 @@ use crate::popup::{Fading, MenuPlacement, Menus};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::Input;
-use crate::shell::{PANEL_SINCE, Shell};
+use crate::shell::{PANEL_SINCE, POPOVER_SINCE, Shell};
 use crate::text_input::TextInput;
 
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
@@ -104,6 +104,12 @@ pub enum Role {
         session: Option<WindowInSession>,
     },
     Panel {
+        title: String,
+        app_id: String,
+        tag: String,
+        session: Option<WindowInSession>,
+    },
+    Popover {
         title: String,
         app_id: String,
         tag: String,
@@ -150,11 +156,21 @@ impl Role {
         }
     }
 
+    pub fn popover(title: &str, app_id: &str) -> Self {
+        Self::Popover {
+            title: title.to_owned(),
+            app_id: app_id.to_owned(),
+            tag: String::new(),
+            session: None,
+        }
+    }
+
     pub fn tagged(mut self, window_tag: &str) -> Self {
         if let Self::Toplevel { tag, .. }
         | Self::Dialog { tag, .. }
         | Self::Utility { tag, .. }
-        | Self::Panel { tag, .. } = &mut self
+        | Self::Panel { tag, .. }
+        | Self::Popover { tag, .. } = &mut self
         {
             *tag = window_tag.to_owned();
         }
@@ -165,7 +181,8 @@ impl Role {
         if let Self::Toplevel { session, .. }
         | Self::Dialog { session, .. }
         | Self::Utility { session, .. }
-        | Self::Panel { session, .. } = &mut self
+        | Self::Panel { session, .. }
+        | Self::Popover { session, .. } = &mut self
         {
             *session = window;
         }
@@ -175,6 +192,7 @@ impl Role {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WindowEvent {
+    SpellingAnswered,
     Input(Event),
     Focus(bool),
     CloseRequested,
@@ -184,6 +202,7 @@ pub enum WindowEvent {
     MenuClosed,
     Pasted(String),
     PastedTransfer(Transfer),
+    ClipboardChanged,
     Drag(DragEvent),
     ShowLauncher,
     ScrimPressed,
@@ -499,6 +518,7 @@ impl Window {
         shared_appearance: Option<Rc<RefCell<AppearanceWatch>>>,
         output: Option<String>,
     ) -> Result<Self, WindowError> {
+        crate::spelling::start();
         let fresh = shared_appearance.is_none();
         let appearance = match shared_appearance {
             Some(appearance) => appearance,
@@ -527,8 +547,9 @@ impl Window {
         }
         let mut chrome = None;
         let panel = matches!(role, Role::Panel { .. });
+        let popover = matches!(role, Role::Popover { .. });
         let (titled, fixed) = match &role {
-            Role::Dialog { .. } => (false, true),
+            Role::Dialog { .. } | Role::Popover { .. } => (false, true),
             Role::Utility { .. } => (true, true),
             Role::Panel { .. } => (false, false),
             Role::Toplevel { .. } | Role::Layer(_) | Role::Lock => (true, false),
@@ -557,6 +578,12 @@ impl Window {
                 app_id,
                 tag,
                 session,
+            }
+            | Role::Popover {
+                title,
+                app_id,
+                tag,
+                session,
             } => {
                 let wm_base = state
                     .wm_base
@@ -574,6 +601,14 @@ impl Window {
                     .filter(|app| panel && app.version() >= PANEL_SINCE)
                 {
                     app.set_panel(&toplevel);
+                }
+                if let Some(app) = state
+                    .shell
+                    .app
+                    .as_ref()
+                    .filter(|app| popover && app.version() >= POPOVER_SINCE)
+                {
+                    app.set_popover(&toplevel);
                 }
                 if let Some(manager) = state.toplevel_tag.take() {
                     if !tag.is_empty() {
@@ -1133,6 +1168,11 @@ impl Window {
                 if let Some((menu, at)) = ui.take_menu_request() {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
+                if let Some(link) = ui.take_link_request()
+                    && let Err(error) = bande_xdg::open(&link, None)
+                {
+                    tracing::warn!("cannot open a link: {error}");
+                }
                 if let Some(request) = ui.take_clipboard_request() {
                     self.serve_clipboard(request)?;
                 }
@@ -1147,6 +1187,9 @@ impl Window {
                     )?;
                 }
                 self.set_cursor(ui.cursor());
+                if let Some(text) = ui.take_look_up_request() {
+                    self.look_up(text);
+                }
                 let unhandled = match input {
                     Event::Key { .. } if !changed => Some(WindowEvent::Input(input)),
                     _ => None,
@@ -1164,6 +1207,9 @@ impl Window {
                     if ui.take_emoji_picker_request() {
                         self.show_emoji_picker()?;
                     }
+                    if let Some(text) = ui.take_look_up_request() {
+                        self.look_up(text);
+                    }
                     (true, None)
                 }
                 false => (false, Some(WindowEvent::MenuAction(action))),
@@ -1179,6 +1225,15 @@ impl Window {
             WindowEvent::AppearanceChanged(appearance) => {
                 ui.set_appearance(appearance);
                 (true, Some(WindowEvent::AppearanceChanged(appearance)))
+            }
+            WindowEvent::SpellingAnswered => {
+                let edited = ui.spelling_answered();
+                let menu = ui.take_menu_request();
+                let shown = menu.is_some();
+                if let Some((menu, at)) = menu {
+                    self.show_menu(menu, MenuPlacement::AtPoint(at))?;
+                }
+                (edited || shown, None)
             }
             WindowEvent::CapsLock(on) => {
                 ui.context().caps_lock = on;

@@ -61,13 +61,18 @@ pub enum Kind {
     Dialog(&'static str),
     Utility(&'static str),
     Panel(&'static str),
+    Popover(&'static str),
 }
 
 impl Kind {
     pub fn tag(self) -> &'static str {
         match self {
             Self::Main => "main",
-            Self::Secondary(tag) | Self::Dialog(tag) | Self::Utility(tag) | Self::Panel(tag) => tag,
+            Self::Secondary(tag)
+            | Self::Dialog(tag)
+            | Self::Utility(tag)
+            | Self::Panel(tag)
+            | Self::Popover(tag) => tag,
         }
     }
 }
@@ -86,6 +91,10 @@ pub trait View {
     fn set_appearance(&mut self, appearance: Appearance);
 
     fn set_active(&mut self, _active: bool) {}
+
+    fn keys(&self) -> Option<Keys> {
+        None
+    }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         Vec::new()
@@ -205,6 +214,10 @@ pub trait Program: Sized + 'static {
     }
 
     fn tick(&mut self, _cx: &mut Cx<Self>, _now: Instant) {}
+
+    fn waits_for_activation() -> bool {
+        false
+    }
 
     fn runs_in_background() -> bool {
         false

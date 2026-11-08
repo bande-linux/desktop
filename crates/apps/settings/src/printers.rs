@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 
 use bande_packages::{Client, Info, Mode};
@@ -126,39 +126,44 @@ fn sentence(error: &bande_printers::Error) -> String {
     }
 }
 
-fn watch_print_service(
-    changed: Sender<()>,
-    current: Arc<AtomicU64>,
-    generation: u64,
-) -> zbus::Result<()> {
-    let session = Connection::session()?;
+fn watch_print_service(changed: Sender<()>) -> zbus::Result<Connection> {
+    let session = bande_bus::session()?;
     let client = PrintClient::new(&session)?;
     let changes = client.changes()?;
     client.watch()?;
     let _ = changed.send(());
-    for _ in changes {
-        if current.load(Ordering::Relaxed) != generation {
-            break;
+    spawn("printers-service", move || {
+        for _ in changes {
+            let _ = changed.send(());
         }
-        let _ = changed.send(());
-    }
-    Ok(())
+    });
+    Ok(session)
 }
 
-pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterCommand> {
+fn stop_watching(watch: &mut Option<Connection>) {
+    if let Some(session) = watch.take()
+        && let Err(error) = session.close()
+    {
+        tracing::debug!("cannot close the print service watch: {error}");
+    }
+}
+
+pub fn follow_printers(
+    system: &Connection,
+    session: &Connection,
+    updates: Updates,
+) -> Sender<PrinterCommand> {
     let (sender, receiver) = mpsc::channel();
     let (changed, changes) = mpsc::channel::<()>();
     let reader = updates.clone();
     let reading = system.clone();
+    let session = session.clone();
+    let commands_session = session.clone();
     spawn("printers", move || {
-        let session = Connection::session();
         while changes.recv().is_ok() {
             std::thread::sleep(SETTLE);
             changes.try_iter().count();
-            let Ok(session) = session.as_ref() else {
-                continue;
-            };
-            if let Some(state) = read(session, &Cups::new(), &reading)
+            if let Some(state) = read(&session, &Cups::new(), &reading)
                 && !reader.send(Update::Printers(state))
             {
                 break;
@@ -168,10 +173,12 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
     let bus = system.clone();
     spawn("printers-worker", move || {
         let cups = Cups::new();
-        let watching = Arc::new(AtomicU64::new(0));
+        let watching = Arc::new(AtomicBool::new(false));
+        let mut cups_followed = false;
+        let mut watch = None;
         let service = |work: &dyn Fn(&PrintClient<'_>) -> zbus::Result<()>| {
-            Connection::session()
-                .and_then(|session| work(&PrintClient::new(&session)?))
+            PrintClient::new(&commands_session)
+                .and_then(|client| work(&client))
                 .map_err(|error| {
                     tracing::warn!("the print service refused: {error}");
                     L10N.tr("printer-change-failed")
@@ -180,28 +187,33 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
         for command in receiver {
             let result = match command {
                 PrinterCommand::Watch(on) => {
-                    let generation = watching.fetch_add(1, Ordering::Relaxed) + 1;
+                    watching.store(on, Ordering::Relaxed);
                     if on {
-                        let current = Arc::clone(&watching);
-                        if let Ok(rule) = MatchRule::builder()
-                            .msg_type(message::Type::Signal)
-                            .interface(SPOOLER)
-                            .map(|builder| builder.build())
+                        if !cups_followed
+                            && let Ok(rule) = MatchRule::builder()
+                                .msg_type(message::Type::Signal)
+                                .interface(SPOOLER)
+                                .map(|builder| builder.build())
                         {
+                            cups_followed = true;
+                            let shown = Arc::clone(&watching);
                             signals(
                                 &bus,
                                 rule,
                                 changed.clone(),
-                                |_| Some(()),
-                                move || current.load(Ordering::Relaxed) == generation,
+                                move |_| shown.load(Ordering::Relaxed).then_some(()),
+                                || true,
                             );
                         }
-                        let (notify, current) = (changed.clone(), Arc::clone(&watching));
-                        spawn("printers-service", move || {
-                            if let Err(error) = watch_print_service(notify, current, generation) {
-                                tracing::warn!("cannot follow the print service: {error}");
-                            }
-                        });
+                        if watch.is_none() {
+                            watch = watch_print_service(changed.clone())
+                                .inspect_err(|error| {
+                                    tracing::warn!("cannot follow the print service: {error}");
+                                })
+                                .ok();
+                        }
+                    } else {
+                        stop_watching(&mut watch);
                     }
                     Ok(())
                 }
@@ -396,7 +408,8 @@ impl SettingsView {
             &L10N.tr("printer-address-placeholder"),
             &self.printer_address,
             move |text| address(text.to_owned()),
-        );
+        )
+        .without_text_checking();
         self.anchors
             .push((Anchor::Item("printer-address".to_owned()), field.id()));
         let mut add = intent(&self.intents, |()| Intent::AddPrinterAddress);

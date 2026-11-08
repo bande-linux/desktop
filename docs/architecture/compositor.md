@@ -94,8 +94,9 @@ when they reach the screen is Bande's own.
   move request. Full screen removes the well. The rule is the app id plus client-side, so a build
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
 - **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers, and NV12 for
-  video (one dmabuf for both planes, BT.709 limited range; its planes are copied to two textures
-  and converted in the `video` shader), with the
+  video (one dmabuf for both planes, BT.709 limited range, converted in the `video` shader; on a
+  real GPU that reports importing LINEAR NV12, its planes are sampled in place when stride and offsets are multiples of 16, and
+  otherwise copied to two textures), with the
   LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
   of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
   `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its
@@ -106,9 +107,10 @@ when they reach the screen is Bande's own.
   yet verified on Apple hardware.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
-  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into GBM
-  buffers that the renderer binds as dma-bufs (copied out from its own image, so lavapipe and
-  `kms_swrast` work); `--headless` keeps the offscreen output for CI and the bench. udev change
+  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into
+  dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
+  drawn regions copied out, by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
+  otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. udev change
   events probe the connectors again, so plugging a display in or out takes effect without
   restarting the session. A connector that goes away is held as lost for three seconds before it
   counts as gone, so a monitor's own hotplug pulse (many pulse it about 0.6 s after waking, which
@@ -165,24 +167,19 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
-  and controls, Refresh rate, Rotation and Variable refresh rate. Every change is written to
+  and controls, Refresh rate, Rotation and Match colours to this display. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 
-- **Frame pacing.** Frames are paced by a vblank clock (virtual at 120 Hz in the headless
-  backend; on DRM re-anchored to each page flip at the mode's refresh, advertised as the
-  `wl_output` mode). A commit is latched into the frame whose deadline it arrives before: the
-  vblank minus the longest time from deadline to finished render over the last 16 frames
-  (capped at one refresh, so a vblank is always reachable), minus 1 ms. The longest rather than
-  a percentile is deliberate: heavier content, such as the overview opening, then misses at
-  most one vblank instead of several while a percentile catches up, and on a loaded machine
-  wake-up jitter is what makes frames late. When a wake-up is so late that the typical render
-  time (a moving average) no longer fits before the planned vblank, the frame is drawn at once
-  for the next vblank it can reach, with animations sampled for that vblank, so it is not shown
-  one refresh stale and the scheduler does not sleep (and risk waking late) again. Frame callbacks and `wp_presentation` feedback (vblank time, refresh, sequence, `vsync`)
-  are taken when the frame is latched and sent at its vblank (on DRM, at the page-flip event
-  with its time and sequence); a superseded commit's feedback is discarded, and a render that
-  overruns its vblank is presented at the next one.
+- **Colour.** A display whose EDID gives primaries more than 0.02 from sRGB's, and does not say
+  its default colour space is sRGB, has its frames converted from sRGB to its own primaries
+  (D65 white kept, sRGB transfer both ways) by a shader that writes the damaged regions to a
+  scratch image the GPU then copies to the display buffer. While a display converts, nothing is
+  scanned out directly or put on a plane, as a client buffer would skip the conversion. "Match
+  colours to this display" (on by default, `match-colours false` in the display's settings) turns
+  it off for a display whose EDID is wrong or that is set to its own sRGB mode. A CPU renderer does
+  not convert.
+- **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us (1 ms until one is measured; a wake too late for its slot is measured too), plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh, again on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (a driver like Apple's DCP drops anything under about 2.3 ms before the flip to the next refresh), and is lowered slowly afterwards to follow changes. A frame aims at the first slot its typical render and the lead still fit before, so renders longer than a refresh aim further ahead; a wake-up past the start time still goes if that holds, and otherwise takes the next such slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays at its start. If no frame can start within a second, the output falls back to classic timing and says so in the log. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. The default is still the classic rule (the longest of the last 16 frames plus 1 ms); the measured timing above runs only with `BANDE_FRAME_TIMING=learned` until it is measured again on real displays. Frame callbacks are taken when a frame is latched and go out once it is committed, so a client gets the time up to the next frame's start, not what is left after the flip. A client whose time from callback to commit is known (its 95th percentile over at least 8 frames, `frame_callbacks.rs`) gets its callback that long plus 0.5 ms before the next frame starts, so it reads the latest input and its frame is shown at once; a client that misses the latch this way goes back to the early callback for a second. No timer exists unless a callback is waiting. `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`, on DRM also `hw_completion`) is sent at the page-flip event, or the vblank on headless; a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's
   scheduler before it latches a frame). Animations are closed-form springs, so every display
@@ -378,7 +375,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `gtk_shell1` / `gtk_surface1` | Version 1 with only the `global_menu_bar` capability, as Mutter offers it: a GTK 3 or GTK 4 `GtkApplicationWindow` stops drawing its menu bar and gives its `org.gtk.Menus` menu bar, `org.gtk.Actions` paths and unique bus name with `set_dbus_properties`, which becomes the window's menu address; windows without a menu bar send none and are unchanged. Version 1 keeps GTK's own edge constraints and title-bar gestures | P1 | implemented |
 | `org_kde_kwin_server_decoration_manager` | Decoration negotiation for GTK 3 and GTK 4 (default server-side, client-side for header-bar windows) | P1 | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
-| `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers; a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
+| `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers and LINEAR ARGB8888 dmabufs (copied by the GPU, offered when the renderer knows its render node); a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
 | `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | P1 | implemented, shell clients only |
 | `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | implemented |

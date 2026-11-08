@@ -573,7 +573,7 @@
     </event>
   </interface>
 
-  <interface name="bande_app_v1" version="9">
+  <interface name="bande_app_v1" version="10">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -815,12 +815,24 @@
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
       <arg name="offer" type="uint" enum="offer"/>
     </request>
+
+    <request name="set_popover" since="10">
+      <description summary="make one of the app's windows a popover at the pointer">
+        Makes the toplevel a transient popover, as Look Up on a Mac: it maps
+        at the pointer, kept inside the usable area, stays in front of other
+        windows and takes the keyboard as usual. It is not listed as a window
+        of its own to other clients and is not saved for resume. Lasts until
+        the window closes. Must be sent before the first commit. Ignored for
+        a toplevel of another client.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+    </request>
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for Activity Monitor">
-      Offered to every client. It carries only what an app may already do to
-      another app of the same user, politely: ask it to quit and learn whether
-      it answers. It lists no windows and types no text. A client that binds
+      Offered to every client outside a sandbox. It carries only what an app
+      may already do to another app of the same user, politely: ask it to quit
+      and learn whether it answers. It lists no windows and types no text. A client that binds
       it receives app_responding until it destroys it.
     </description>
 

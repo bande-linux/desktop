@@ -181,7 +181,7 @@ pub struct DisplaySettings {
     pub refresh_rate: Option<f64>,
     pub scale: Option<f64>,
     pub rotation: Option<Rotation>,
-    pub variable_refresh_rate: Option<bool>,
+    pub match_colours: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1672,7 +1672,7 @@ impl Parser<'_> {
                     display.refresh_rate = Some(self.number_in(child, REFRESH_RATE_RANGE)?)
                 }
                 "rotation" => display.rotation = Some(self.rotation(child)?),
-                "variable-refresh-rate" => display.variable_refresh_rate = Some(self.flag(child)?),
+                "match-colours" => display.match_colours = Some(self.flag(child)?),
                 _ => return Err(self.unknown_child(node.name().value(), child)),
             }
             Ok(())

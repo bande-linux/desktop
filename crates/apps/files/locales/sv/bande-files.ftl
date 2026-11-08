@@ -371,3 +371,4 @@ menu-share = Dela
 menu-share-mail = E-post
 menu-share-to = Kopiera till { $place }
 failure-server-gone = Servern slutade svara. Ingenting lämnades kvar under det riktiga namnet. Försök igen när den är tillbaka.
+menu-look-up = Slå upp ”{ $name }”

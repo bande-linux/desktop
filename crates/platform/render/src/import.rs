@@ -18,10 +18,12 @@ use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::shm::with_buffer_contents;
 
 use crate::{
-    BYTES_PER_PIXEL, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS, TextureImage,
-    VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque, linear_formats,
-    target_format,
+    BYTES_PER_PIXEL, Image, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS,
+    TextureImage, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque,
+    linear_formats, target_format,
 };
+
+const GPU_LINEAR_ALIGNMENT: u32 = 16;
 
 pub(crate) struct PlaneLayout<'a> {
     pub(crate) fd: BorrowedFd<'a>,
@@ -159,6 +161,7 @@ impl VulkanRenderer {
             TextureImage {
                 image,
                 readable: false,
+                imported: false,
             },
         );
         Ok(VulkanTexture {
@@ -191,6 +194,7 @@ impl VulkanRenderer {
             TextureImage {
                 image,
                 readable: false,
+                imported: false,
             },
         );
         Ok(VulkanTexture {
@@ -278,12 +282,132 @@ impl VulkanRenderer {
         Ok(())
     }
 
+    fn sampled_video(
+        &mut self,
+        dmabuf: &Dmabuf,
+        luma: &PlaneLayout<'_>,
+        chroma: &PlaneLayout<'_>,
+    ) -> Result<VulkanTexture, RenderError> {
+        let size = dmabuf.size();
+        let file = File::from(luma.fd.try_clone_to_owned()?);
+        let layouts = [luma, chroma].map(|plane| vk::SubresourceLayout {
+            offset: u64::from(plane.offset),
+            row_pitch: u64::from(plane.stride),
+            ..Default::default()
+        });
+        let image = self.import_video_image(size.w, size.h, &layouts, file)?;
+        let (chroma_width, chroma_height) = chroma_size(size.w, size.h);
+        let views = self
+            .plane_view(
+                image.image,
+                vk::Format::R8_UNORM,
+                vk::ImageAspectFlags::PLANE_0,
+            )
+            .and_then(|luma_view| {
+                self.plane_view(
+                    image.image,
+                    vk::Format::R8G8_UNORM,
+                    vk::ImageAspectFlags::PLANE_1,
+                )
+                .map(|chroma_view| (luma_view, chroma_view))
+                .inspect_err(|_| unsafe { self.device.destroy_image_view(luma_view, None) })
+            });
+        let (luma_view, chroma_view) = match views {
+            Ok(views) => views,
+            Err(error) => {
+                self.destroy_image(&image);
+                return Err(error);
+            }
+        };
+        let chroma_id = self.next_id();
+        self.textures.insert(
+            chroma_id,
+            TextureImage {
+                image: Image {
+                    image: vk::Image::null(),
+                    memory: vk::DeviceMemory::null(),
+                    view: chroma_view,
+                    width: chroma_width,
+                    height: chroma_height,
+                },
+                readable: true,
+                imported: true,
+            },
+        );
+        let id = self.next_id();
+        self.textures.insert(
+            id,
+            TextureImage {
+                image: Image {
+                    view: luma_view,
+                    ..image
+                },
+                readable: false,
+                imported: true,
+            },
+        );
+        Ok(VulkanTexture {
+            _owned: Arc::new(self.owned(Resource::Texture(id))),
+            id,
+            chroma: Some(Arc::new(VulkanTexture {
+                _owned: Arc::new(self.owned(Resource::Texture(chroma_id))),
+                id: chroma_id,
+                chroma: None,
+                renderer: self.id,
+                width: chroma_width,
+                height: chroma_height,
+                format: Fourcc::R8,
+            })),
+            renderer: self.id,
+            width: size.w,
+            height: size.h,
+            format: Fourcc::Nv12,
+        })
+    }
+
+    fn sample_video_directly(
+        &mut self,
+        dmabuf: &Dmabuf,
+        luma: &PlaneLayout<'_>,
+        chroma: &PlaneLayout<'_>,
+    ) -> Option<VulkanTexture> {
+        if !self.samples_video {
+            return None;
+        }
+        if ![luma, chroma].iter().all(|plane| {
+            plane.offset.is_multiple_of(GPU_LINEAR_ALIGNMENT)
+                && plane.stride.is_multiple_of(GPU_LINEAR_ALIGNMENT)
+        }) {
+            return None;
+        }
+        let weak = dmabuf.weak();
+        if let Some(texture) = self.dmabuf_textures.get(&weak).cloned() {
+            self.video_acquires.push(texture.id);
+            return Some(texture);
+        }
+        match self.sampled_video(dmabuf, luma, chroma) {
+            Ok(texture) => {
+                self.dmabuf_textures.insert(weak, texture.clone());
+                self.video_acquires.push(texture.id);
+                Some(texture)
+            }
+            Err(error) => {
+                tracing::warn!("copying video frames: {error}");
+                self.samples_video = false;
+                None
+            }
+        }
+    }
+
     fn import_video_into(
         &mut self,
         dmabuf: &Dmabuf,
         surface: Option<&SurfaceData>,
     ) -> Result<VulkanTexture, RenderError> {
         let (luma, chroma) = video_layout(dmabuf)?;
+        if let Some(texture) = self.sample_video_directly(dmabuf, &luma, &chroma) {
+            return Ok(texture);
+        }
         let size = dmabuf.size();
         let (chroma_width, chroma_height) = chroma_size(size.w, size.h);
         let weak = dmabuf.weak();

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::ops::Range;
 
 use bande_graphics::{Color, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
@@ -18,12 +19,19 @@ const AVERAGE_ADVANCE: f32 = 0.55;
 const KEPT_LAYOUTS: usize = 1024;
 const TAB_SPACES: f32 = 4.0;
 
+pub(super) struct Misspelled {
+    pub(super) generation: u64,
+    pub(super) skipped: Option<usize>,
+    pub(super) ranges: Vec<Range<usize>>,
+}
+
 pub(super) struct Block {
     pub(super) text: String,
     pub(super) layout: Option<Paragraph>,
     pub(super) runs: Runs,
     pub(super) paragraph: ParagraphAttributes,
     pub(super) marker: Option<Paragraph>,
+    pub(super) misspelled: RefCell<Option<Misspelled>>,
     height: Option<f32>,
     used: u64,
 }
@@ -40,6 +48,7 @@ impl Block {
             runs,
             paragraph,
             marker: None,
+            misspelled: RefCell::new(None),
             height: None,
             used: 0,
         }
@@ -288,6 +297,7 @@ impl Editor {
             }
             block.height = Some(height);
             block.layout = Some(built);
+            block.misspelled = RefCell::new(None);
             block.marker = marker;
             self.laid_out += 1;
         }

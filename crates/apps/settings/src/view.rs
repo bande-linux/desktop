@@ -267,6 +267,7 @@ pub struct SettingsView {
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
     pub(crate) storage: Option<Storage>,
+    pub(crate) files_installed: bool,
     pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
@@ -284,7 +285,8 @@ pub struct SettingsView {
     pub(crate) wifi_manual: bool,
     pub(crate) printers: Option<PrintersState>,
     pub(crate) sharing: Option<SharingState>,
-    pub(crate) installing_samba: bool,
+    pub(crate) installing_sharing: bool,
+    pub(crate) installing_vpn_plugin: bool,
     pub(crate) adding_printer: bool,
     pub(crate) installing_printing: bool,
     pub(crate) printer_address: String,
@@ -374,6 +376,7 @@ impl SettingsView {
             about: None,
             diagnostics: Diagnostics::default(),
             storage: None,
+            files_installed: false,
             backup: BackupView::default(),
             drafts: HashMap::new(),
             confirming_empty_trash: false,
@@ -391,7 +394,8 @@ impl SettingsView {
             wifi_manual: false,
             printers: None,
             sharing: None,
-            installing_samba: false,
+            installing_sharing: false,
+            installing_vpn_plugin: false,
             adding_printer: false,
             installing_printing: false,
             printer_address: String::new(),
@@ -540,6 +544,13 @@ impl SettingsView {
         edit(&mut sources);
         if !sources.is_empty() && sources.len() <= MAX_INPUT_SOURCES {
             self.change(SettingId::InputSources, Value::Codes(sources));
+        }
+    }
+
+    pub fn set_files_installed(&mut self, installed: bool) {
+        if self.files_installed != installed {
+            self.files_installed = installed;
+            self.invalidate();
         }
     }
 
@@ -866,8 +877,9 @@ impl SettingsView {
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
+            Update::InstallingVpnPlugin(installing) => self.installing_vpn_plugin = installing,
             Update::Sharing(state) => {
-                self.installing_samba = false;
+                self.installing_sharing = false;
                 self.sharing = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
@@ -1574,7 +1586,10 @@ impl SettingsView {
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
                 }
                 Intent::Sharing(command) => {
-                    self.installing_samba |= command == SharingCommand::InstallSamba;
+                    self.installing_sharing |= matches!(
+                        command,
+                        SharingCommand::InstallSamba | SharingCommand::InstallResolved
+                    );
                     self.commands.push(Command::Sharing(command));
                 }
                 Intent::InstallPrinting => {

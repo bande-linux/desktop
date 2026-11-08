@@ -99,6 +99,7 @@ pub struct Status {
     pub artwork: Option<Image>,
     pub players: Vec<Choice>,
     pub person: Option<String>,
+    pub settings: bool,
     pub icon_dirs: Vec<PathBuf>,
 }
 
@@ -295,6 +296,7 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
         controls.push(Box::new(person::PersonRow::new(
             name,
             &status.icon_dirs,
+            status.settings,
             changes,
         )));
     }

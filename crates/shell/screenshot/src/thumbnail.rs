@@ -94,15 +94,18 @@ impl Thumbnail {
         self.hovered || self.pressed.is_some() || self.menu_open
     }
 
-    pub fn menu(&self) -> Menu {
+    pub fn menu(&self, files: bool) -> Menu {
         let open = match self.video {
             true => "thumbnail-play",
             false => "thumbnail-markup",
         };
-        let mut items = vec![
-            MenuItem::new(&L10N.tr(open), OPEN),
-            MenuItem::new(&L10N.tr("thumbnail-show-in-files"), SHOW_IN_FILES),
-        ];
+        let mut items = vec![MenuItem::new(&L10N.tr(open), OPEN)];
+        if files {
+            items.push(MenuItem::new(
+                &L10N.tr("thumbnail-show-in-files"),
+                SHOW_IN_FILES,
+            ));
+        }
         if !self.video {
             items.push(MenuItem::new(&L10N.tr("copy"), COPY));
         }

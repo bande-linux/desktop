@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 
 use bande_app::choose_file;
-use bande_packages::{Client, Info, Mode};
+use bande_packages::Client;
 use bande_toolkit::ui::{Button, SecureField, Toggle, Widget};
 use zbus::blocking::Connection;
 
@@ -17,6 +17,8 @@ use crate::widgets::{Row, Text, Tone};
 const HELPER: &str = "/usr/libexec/bande-sharing-helper";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const SAMBA: &str = "samba";
+const RESOLVED: &str = "systemd-resolved";
+const RESOLVED_DAEMON: &str = "/usr/lib/systemd/systemd-resolved";
 const SMBD: &str = "/usr/sbin/smbd";
 const SSHD: &str = "/usr/sbin/sshd";
 const NET: &str = "/usr/bin/net";
@@ -32,6 +34,7 @@ pub struct Share {
 pub struct SharingState {
     pub samba_installed: bool,
     pub ssh_installed: bool,
+    pub resolved_installed: bool,
     pub file_sharing: bool,
     pub remote_login: bool,
     pub shares: Vec<Share>,
@@ -44,6 +47,7 @@ pub enum SharingCommand {
     FileSharing(bool),
     RemoteLogin(bool),
     InstallSamba,
+    InstallResolved,
     AddFolder,
     Remove(String),
     Password(String),
@@ -89,6 +93,7 @@ fn read_state() -> SharingState {
     SharingState {
         samba_installed,
         ssh_installed: Path::new(SSHD).exists(),
+        resolved_installed: Path::new(RESOLVED_DAEMON).exists(),
         file_sharing: samba_installed && service_active("smbd.service"),
         remote_login: service_active("ssh.service"),
         shares: match samba_installed {
@@ -122,18 +127,13 @@ fn helper(arguments: &[&str], input: Option<&str>) -> bool {
     child.wait().is_ok_and(|status| status.success())
 }
 
-fn install_samba(system: &Connection) -> Result<(), bande_packages::Error> {
-    let client = Client::new(system);
-    let ids: Vec<String> = client
-        .resolve(&[SAMBA.to_owned()])?
-        .into_iter()
-        .filter(|package| package.info == Info::Available)
-        .map(|package| package.id)
-        .collect();
-    if ids.is_empty() {
-        return Ok(());
-    }
-    client.install(&ids, Mode::Apply, &|_| {}).map(drop)
+fn install(system: Option<&Connection>, package: &str) -> bool {
+    system.is_some_and(|system| {
+        Client::new(system)
+            .install_missing(&[package])
+            .inspect_err(|error| tracing::warn!("cannot install {package}: {error}"))
+            .is_ok()
+    })
 }
 
 fn share_name_for(path: &Path, taken: &[Share]) -> String {
@@ -182,11 +182,8 @@ fn run(command: SharingCommand, system: Option<&Connection>, session: Option<&Co
             ],
             None,
         ),
-        SharingCommand::InstallSamba => system.is_some_and(|system| {
-            install_samba(system)
-                .inspect_err(|error| tracing::warn!("cannot install Samba: {error}"))
-                .is_ok()
-        }),
+        SharingCommand::InstallSamba => install(system, SAMBA),
+        SharingCommand::InstallResolved => install(system, RESOLVED),
         SharingCommand::Password(password) => helper(&["password"], Some(&password)),
         SharingCommand::Remove(name) => helper(&["remove", &name], None),
         SharingCommand::AddFolder => {
@@ -256,8 +253,8 @@ impl SettingsView {
             let mut button = Button::new(&L10N.tr("sharing-install"), move || {
                 install(SharingCommand::InstallSamba);
             });
-            button.set_enabled(!self.installing_samba);
-            let detail = match self.installing_samba {
+            button.set_enabled(!self.installing_sharing);
+            let detail = match self.installing_sharing {
                 true => L10N.tr("sharing-installing"),
                 false => L10N.tr("sharing-install-detail"),
             };
@@ -287,6 +284,9 @@ impl SettingsView {
         rows.push(self.item_row("file-sharing".to_owned(), row));
         if !state.file_sharing {
             return rows;
+        }
+        if !state.resolved_installed {
+            rows.push(self.unadvertised_row());
         }
         let field = SecureField::new(
             &L10N.tr("sharing-password"),
@@ -324,5 +324,26 @@ impl SettingsView {
             Some(boxed(button)),
         )));
         rows
+    }
+
+    fn unadvertised_row(&mut self) -> Box<dyn Widget> {
+        let mut install = intent(&self.intents, Intent::Sharing);
+        let mut button = Button::new(&L10N.tr("sharing-install"), move || {
+            install(SharingCommand::InstallResolved);
+        });
+        button.set_enabled(!self.installing_sharing);
+        let detail = match self.installing_sharing {
+            true => L10N.tr("sharing-installing"),
+            false => L10N.tr("sharing-unadvertised-detail"),
+        };
+        self.anchors
+            .push((Anchor::Item("install-resolved".to_owned()), button.id()));
+        boxed(
+            Row::new(
+                Text::new(&L10N.tr("sharing-unadvertised"), Tone::Primary),
+                Some(boxed(button)),
+            )
+            .detail(Text::new(&detail, Tone::Muted).caption()),
+        )
     }
 }

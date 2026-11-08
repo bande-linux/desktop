@@ -17,11 +17,15 @@ use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_datetime::ClockChanges;
 use bande_datetime::timedate::zone_changes;
 use bande_inbox::Inbox;
+use bande_log::fault::StallWatch;
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
+use smithay::reexports::calloop::{
+    self, EventIterator, EventSource, Poll, Readiness, Token, TokenFactory,
+};
 use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction};
 use smithay::reexports::drm::control::crtc;
 use smithay::utils::{Clock, Monotonic, Size};
@@ -31,6 +35,8 @@ use zbus::blocking::fdo::PropertiesProxy;
 
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
+const COMPOSITOR_STALL: &str = "compositor-stall";
+const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
 const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);
@@ -49,6 +55,46 @@ struct App<O> {
     buses: Buses,
     displays: Option<DisplaysHandle>,
     loop_handle: LoopHandle<'static, App<O>>,
+}
+
+struct StallSource(StallWatch, Duration);
+
+impl EventSource for StallSource {
+    type Event = ();
+    type Metadata = ();
+    type Ret = ();
+    type Error = std::io::Error;
+    const NEEDS_EXTRA_LIFECYCLE_EVENTS: bool = true;
+
+    fn process_events<F>(
+        &mut self,
+        _: Readiness,
+        _: Token,
+        _: F,
+    ) -> Result<PostAction, Self::Error> {
+        Ok(PostAction::Continue)
+    }
+
+    fn register(&mut self, _: &mut Poll, _: &mut TokenFactory) -> calloop::Result<()> {
+        Ok(())
+    }
+
+    fn reregister(&mut self, _: &mut Poll, _: &mut TokenFactory) -> calloop::Result<()> {
+        Ok(())
+    }
+
+    fn unregister(&mut self, _: &mut Poll) -> calloop::Result<()> {
+        Ok(())
+    }
+
+    fn before_sleep(&mut self) -> calloop::Result<Option<(Readiness, Token)>> {
+        self.0.idle();
+        Ok(None)
+    }
+
+    fn before_handle_events(&mut self, _: EventIterator<'_>) {
+        self.0.busy(self.1);
+    }
 }
 
 fn publish_displays<O: FrameOutput>(app: &mut App<O>) {
@@ -795,6 +841,15 @@ where
             (Some(Greeter::start(&mut app.compositor)), None)
         }
     };
+    match StallWatch::start(COMPOSITOR_STALL, STALL_LIMIT) {
+        Ok(watch) => {
+            event_loop
+                .handle()
+                .insert_source(StallSource(watch, STALL_LIMIT), |(), (), _| {})?;
+        }
+        Err(error) => tracing::warn!("cannot watch the event loop for stalls: {error}"),
+    }
+    bande_log::fault::write_session_facts(&app.compositor.session_facts());
     let _keyboard_watch = keyboard_watch.take();
     let mut timeout = None;
     let mut recovery = FrameRecovery::default();
@@ -833,6 +888,7 @@ where
         }
         if app.compositor.take_outputs_refitted() {
             publish_displays(&mut app);
+            bande_log::fault::write_session_facts(&app.compositor.session_facts());
         }
         let App {
             compositor,
@@ -893,6 +949,7 @@ where
             RecoveryStep::Wait => {}
             RecoveryStep::RestartDisplay => {
                 tracing::error!("no frame reached the display for a while; restarting it");
+                bande_log::fault::report("display-failure", "no-frame-restart");
                 if let Err(error) = output.restart_display() {
                     return Err(format!("cannot restart the display: {}", error.into()).into());
                 }
@@ -900,6 +957,7 @@ where
                 frame_wake = Some(now());
             }
             RecoveryStep::GiveUp => {
+                bande_log::fault::report("display-failure", "no-frame-gave-up");
                 if session == Session::Greeter {
                     restart_the_computer(app.buses.system.as_ref());
                 }

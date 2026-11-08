@@ -1,3 +1,6 @@
+pub mod fault;
+mod ring;
+
 use std::io;
 use std::path::Path;
 
@@ -8,7 +11,16 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 const FILTER_VARIABLE: &str = "RUST_LOG";
 const PANIC_TARGET: &str = "panic";
-const OWN_TARGETS: [&str; 3] = ["bande", "pam_bande_secrets", "xdg_desktop_portal_bande"];
+const OWN_TARGETS: &str = "bande";
+const HOLDS_PASSWORDS: [&str; 6] = [
+    "bande-clipboard",
+    "bande-greeter",
+    "bande-lock",
+    "bande-polkit-agent",
+    "bande-secrets",
+    "bande-secrets-prompt",
+];
+const UNPREFIXED_TARGETS: [&str; 2] = ["pam_bande_secrets", "xdg_desktop_portal_bande"];
 const DBUS_TARGET: &str = "zbus";
 
 fn name_process(identifier: &str) {
@@ -29,9 +41,23 @@ pub fn init_quieting(identifier: &str, chatty: &[&str]) {
         targets(std::env::var(FILTER_VARIABLE).ok().as_deref()),
         |filter, target| filter.with_target(*target, LevelFilter::WARN),
     );
-    let journal = tracing_journald::layer()
-        .ok()
-        .map(|journal| journal.with_syslog_identifier(identifier.to_owned()));
+    let in_memory = (!HOLDS_PASSWORDS.contains(&identifier))
+        .then(|| ring::Ring::open(identifier).ok())
+        .flatten()
+        .map(|ring| {
+            let filter = chatty.iter().fold(
+                Targets::new()
+                    .with_default(LevelFilter::INFO)
+                    .with_target(OWN_TARGETS, LevelFilter::DEBUG),
+                |filter, target| filter.with_target(*target, LevelFilter::WARN),
+            );
+            ring::RingLayer(ring).with_filter(filter)
+        });
+    let journal = tracing_journald::layer().ok().map(|journal| {
+        journal
+            .with_syslog_identifier(identifier.to_owned())
+            .with_filter(filter.clone())
+    });
     let journaled = journal.is_some();
     let stderr_is_journal = stderr_is_journal();
     let stderr_is_console =
@@ -41,9 +67,10 @@ pub fn init_quieting(identifier: &str, chatty: &[&str]) {
             .with_writer(io::stderr)
             .with_ansi(io::IsTerminal::is_terminal(&io::stderr()))
             .with_filter(FilterFn::new(|metadata| metadata.target() != PANIC_TARGET))
+            .with_filter(filter)
     });
     if tracing_subscriber::registry()
-        .with(filter)
+        .with(in_memory)
         .with(journal)
         .with(stderr)
         .try_init()
@@ -98,7 +125,7 @@ fn targets(directives: Option<&str>) -> Targets {
 }
 
 fn quiet_dependencies() -> Targets {
-    OWN_TARGETS.iter().fold(
+    UNPREFIXED_TARGETS.iter().chain([&OWN_TARGETS]).fold(
         Targets::new()
             .with_default(LevelFilter::WARN)
             .with_target(DBUS_TARGET, LevelFilter::ERROR),

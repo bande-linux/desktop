@@ -3,6 +3,7 @@ use std::io;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::time::Duration;
 
 use bande_xdg::unit_app_ids;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
@@ -13,6 +14,7 @@ use rustix::process::{PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 const PROC: &str = "/proc";
 const CGROUPS: &str = "/sys/fs/cgroup";
 const KILL_FILE: &str = "cgroup.kill";
+const HANG_REPORT_PATIENCE: Duration = Duration::from_secs(6);
 const DUMP_PATIENCE: Timespec = Timespec {
     tv_sec: 8,
     tv_nsec: 0,
@@ -90,10 +92,14 @@ impl Process {
     fn dump_then_kill(&self, scope: Option<&str>) -> io::Result<()> {
         let pidfd = self.pidfd.as_fd().try_clone_to_owned()?;
         let scope = scope.map(str::to_owned);
-        pidfd_send_signal(&self.pidfd, Signal::QUIT)?;
+        let pid = self.pid.cast_unsigned();
         std::thread::Builder::new()
             .name("stop-hung-app".to_owned())
             .spawn(move || {
+                bande_log::fault::report_hang_and_wait("force-quit", pid, 0, HANG_REPORT_PATIENCE);
+                if let Err(error) = pidfd_send_signal(&pidfd, Signal::QUIT) {
+                    tracing::debug!("cannot ask a hung app to dump: {error}");
+                }
                 let mut fds = [PollFd::new(&pidfd, PollFlags::IN)];
                 if let Err(error) = poll(&mut fds, Some(&DUMP_PATIENCE)) {
                     tracing::debug!("cannot wait for a hung app to dump: {error}");

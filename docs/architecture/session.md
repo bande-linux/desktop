@@ -795,19 +795,12 @@ what the one before could not save. What happens for each:
   apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
   the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
   ([behaviour](behaviour.md)).
-- **The record**: every failure leaves one dated text report, which stays on this computer unless [sending](fault-reports.md) is switched on, and Settings shows which applies.
-  `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
+- **The record**: every failure leaves one report, which stays on this computer unless sending is switched on, and Settings ▸ Privacy & Security ▸ Diagnostics shows which applies ([fault reports](fault-reports.md)). `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
   2 GB in all, 4 GB of disk kept free; `DefaultLimitCORE=infinity` for both managers, since the soft limit is
   otherwise 0 and no dump is stored; dumps go after two weeks). The programs that hold passwords
   (`bande-lock`, `bande-greeter`, `bande-polkit`, `bande-secrets`, `bande-clipboard`) are not dumpable, so
-  only their panic text is recorded. `bande-crash-reports@.service` is a oneshot with no network, started
-  when each `systemd-coredump@` finishes, at boot and at each login, so nothing runs between failures. From a cursor into the
-  journal it writes reports of crashes (with the stack trace, panic text and the user's last log lines),
-  failed Bande services, a kernel panic that `systemd-pstore` saved and a boot that never reached
-  `shutdown.target`. They go to `/var/lib/bande/crash-reports/<uid>/`, owned by that user, or `system/` for
-  the `sudo` group, newest 200 each. Force Quit of a not-responding app and the keyboard's last resort send
-  `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Settings ▸ General ▸ About ▸ Crash Reports
-  lists them, with Copy and Delete. Symbols are in [packaging](packaging.md).
+  only their panic text is recorded. Force Quit of a not-responding app and the keyboard's last resort send
+  `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Symbols are in [packaging](packaging.md).
 
 ## Backups
 
@@ -844,6 +837,10 @@ Every 7 days, Every 31 days; unset is When available). With an interval, the dai
 opened pane fetch nothing until that long has passed since PackageKit's last refresh, and Check Now
 always fetches. Security updates follow the same interval.
 
+Each check, from the daily timer or the pane, leaves its outcome in
+`$XDG_STATE_HOME/bande/software-badge`; Settings shows the sidebar's update line from that file at
+launch and starts PackageKit only when the Software Update pane opens or a check is due (a
+restart-to-update outcome lasts until the next boot, a count until dpkg's status changes).
 Software Update checks through PackageKit (`bande-packages`) and classifies each update by name
 and by PackageKit's `GetUpdateDetail` restart answer. **Offline** (installed at the next restart):
 `libc6`, `systemd`, `libsystemd0`, `udev`, `dbus*`, the running kernel's own packages

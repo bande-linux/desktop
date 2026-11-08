@@ -1,5 +1,14 @@
 pub mod config;
+pub mod counters;
+pub mod diagnose;
+pub mod elfcore;
+pub mod facts;
+pub mod fault;
+pub mod scrub;
 pub mod send;
+pub mod serve;
 pub mod signature;
 pub mod spool;
+pub mod stacks;
 pub mod wait;
+pub mod watch;

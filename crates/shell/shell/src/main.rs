@@ -8,6 +8,7 @@ use bande_desktop_surface::{CONFIRM_DELETE_FLAG, CONFIRM_EXTENSION_FLAG, EJECT_F
 use bande_status::session::Ending;
 
 fn main() -> ExitCode {
+    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-shell");
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     if let Some(code) = bande_quick_look::serve_worker(&arguments) {

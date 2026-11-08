@@ -1,3 +1,4 @@
 [D-BUS Service]
 Name=org.bande.Spell
 Exec=/usr/libexec/bande-spell
+SystemdService=bande-spell.service

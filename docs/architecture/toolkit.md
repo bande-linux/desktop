@@ -175,7 +175,9 @@ writes a hex value, a corner radius or a font name of its own.
     full-screen one keeps the size it was given (a fixed one is then released to floating by the
     compositor). A fixed floating window ignores configure sizes, so its own size wins. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
-  only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. Before
+  only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. After a GPU frame that
+  uploaded images, the frame callback's arrival polls the device without waiting, so wgpu frees
+  the upload's staging memory then rather than at the next frame, which may never come. Before
   any thread starts, `bande_app::run`, the shell, the lock screen, the greeter, the screenshot
   tool and the file chooser set `VK_LOADER_DRIVERS_DISABLE` for the Mesa
   Vulkan drivers whose kernel driver has no render node here, lavapipe included, when a hardware

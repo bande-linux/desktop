@@ -336,6 +336,7 @@ pub(crate) struct State {
     closed: bool,
     pub(crate) toplevel: ToplevelState,
     frame_pending: bool,
+    frame_done: bool,
     pub(crate) events: Vec<WindowEvent>,
     pub(crate) own_surface: Option<WlSurface>,
     pub(crate) popup_surfaces: Vec<WlSurface>,
@@ -1096,7 +1097,16 @@ impl Window {
 
     pub fn dispatch(&mut self) -> Result<(), WindowError> {
         self.queue.blocking_dispatch(&mut self.state)?;
+        self.release_uploads();
         Ok(())
+    }
+
+    fn release_uploads(&mut self) {
+        if std::mem::take(&mut self.state.frame_done)
+            && let Gpu::Ready(gpu) = &mut self.gpu
+        {
+            gpu.release_uploads();
+        }
     }
 
     pub(crate) fn has_events(&self) -> bool {
@@ -1105,6 +1115,7 @@ impl Window {
 
     pub(crate) fn dispatch_pending(&mut self) -> Result<(), WindowError> {
         self.queue.dispatch_pending(&mut self.state)?;
+        self.release_uploads();
         Ok(())
     }
 

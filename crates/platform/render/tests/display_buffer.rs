@@ -3,6 +3,7 @@
 use std::fs::File;
 use std::io::Read;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::sync::Arc;
 
 use bande_render::VulkanRenderer;
 use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
@@ -100,7 +101,17 @@ fn a_converted_frame_reaches_the_display_buffer() {
         return;
     };
     let mut renderer = VulkanRenderer::new().expect("Vulkan renderer");
-    renderer.set_output_colour(Some([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]));
+    let swap = [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]];
+    let halve: Arc<[[u8; 3]]> = (0..4096)
+        .map(|index| {
+            let level = (index as f32 / 4095.0 * 127.0).round() as u8;
+            [level, level, level]
+        })
+        .collect();
+    renderer.set_output_colour(Some(bande_render::OutputColour {
+        matrix: swap,
+        encode: Some(halve),
+    }));
     let whole = [Rectangle::<i32, Physical>::from_size(SIZE.into())];
     let mut framebuffer = renderer.bind(&mut dmabuf).unwrap();
     let mut frame = renderer
@@ -112,6 +123,6 @@ fn a_converted_frame_reaches_the_display_buffer() {
     drop(frame.finish().unwrap());
 
     let converts = !renderer.device_info().software;
-    let expected = if converts { [0, 255, 0] } else { [255, 0, 0] };
+    let expected = if converts { [0, 127, 0] } else { [255, 0, 0] };
     assert_eq!(pixel(&mut memory, 100, 50), expected);
 }

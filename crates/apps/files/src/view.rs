@@ -1947,8 +1947,10 @@ impl FilesView {
     }
 
     pub(crate) fn open(&mut self) {
-        if let Some(url) = self.browser.chosen_server() {
-            self.connect_to(url);
+        if let Some(server) = self.browser.chosen_server()
+            && let Some(url) = server.server_address()
+        {
+            self.connect_to(url.to_owned(), server.name.clone());
             return;
         }
         let selection = self

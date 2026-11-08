@@ -42,6 +42,7 @@ use bande_xdg::{
     state_home, user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
@@ -437,7 +438,7 @@ struct Files {
     mounts: Option<Inbox<()>>,
     nearby_inbox: Option<Inbox<ServersSeen>>,
     nearby: ServersSeen,
-    network_watch: Option<mpsc::Sender<bool>>,
+    network_watch: Option<mpsc::Sender<NetworkWatch>>,
     watching_network: bool,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
@@ -743,7 +744,7 @@ impl Files {
         }
         self.watching_network = wanted;
         if let Some(watch) = &self.network_watch
-            && watch.send(wanted).is_err()
+            && watch.send(NetworkWatch::Wanted(wanted)).is_err()
         {
             tracing::warn!("cannot look for servers on the network");
         }
@@ -1618,13 +1619,36 @@ fn watch_network_with_mounts() -> zbus::Result<Connection> {
     Ok(session)
 }
 
-fn network_watch() -> Option<mpsc::Sender<bool>> {
-    let (watch, wanted) = mpsc::channel::<bool>();
+enum NetworkWatch {
+    Wanted(bool),
+    MountsStarted,
+}
+
+fn follow_mounts_service(watch: &mpsc::Sender<NetworkWatch>) -> zbus::Result<()> {
+    let session = Connection::session()?;
+    let bus = DBusProxy::new(&session)?;
+    for change in bus.receive_name_owner_changed_with_args(&[(0, MOUNTS_SERVICE)])? {
+        let started = change.args().is_ok_and(|args| args.new_owner().is_some());
+        if started && watch.send(NetworkWatch::MountsStarted).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn network_watch() -> Option<mpsc::Sender<NetworkWatch>> {
+    let (watch, events) = mpsc::channel();
     let spawned = std::thread::Builder::new()
         .name("network watch".to_owned())
         .spawn(move || {
+            let mut wanted = false;
             let mut _watching = None;
-            for wanted in wanted {
+            for event in events {
+                match event {
+                    NetworkWatch::Wanted(on) => wanted = on,
+                    NetworkWatch::MountsStarted if !wanted => continue,
+                    NetworkWatch::MountsStarted => {}
+                }
                 _watching = wanted.then(watch_network_with_mounts).and_then(|watching| {
                     watching
                         .inspect_err(|error| {
@@ -1637,6 +1661,17 @@ fn network_watch() -> Option<mpsc::Sender<bool>> {
     if let Err(error) = spawned {
         tracing::warn!("cannot look for servers on the network: {error}");
         return None;
+    }
+    let restarts = watch.clone();
+    let following = std::thread::Builder::new()
+        .name("mounts service".to_owned())
+        .spawn(move || {
+            if let Err(error) = follow_mounts_service(&restarts) {
+                tracing::warn!("cannot follow the mounts service: {error}");
+            }
+        });
+    if let Err(error) = following {
+        tracing::warn!("cannot follow the mounts service: {error}");
     }
     Some(watch)
 }

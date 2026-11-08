@@ -109,7 +109,9 @@ fn the_network_folder_lists_computers_whose_shares_connect_when_opened() {
     };
     press(&mut view, Key::Down, false);
     assert_eq!(
-        view.browser().chosen_server().as_deref(),
+        view.browser()
+            .chosen_server()
+            .and_then(|server| server.server_address()),
         Some("smb://nas.local")
     );
     assert!(view.browser().selection().is_empty());
@@ -140,8 +142,12 @@ fn the_network_folder_lists_computers_whose_shares_connect_when_opened() {
     });
     assert_eq!(
         *view.browser().root(),
-        Location::Server("smb://nas.local".to_owned())
+        Location::Server {
+            address: "smb://nas.local".to_owned(),
+            name: "Studio NAS".to_owned(),
+        }
     );
+    assert_eq!(view.title(), "Studio NAS");
     let shares: Vec<_> = view.browser().columns()[0]
         .entries
         .iter()

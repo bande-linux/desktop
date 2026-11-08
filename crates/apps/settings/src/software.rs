@@ -168,7 +168,7 @@ fn explain(failure: &Failure) -> String {
             tr!("There isn't enough free space. Free up some space and try again.")
         }
         ErrorCode::NotAuthorized => tr!("Only an administrator can change this."),
-        ErrorCode::Cancelled => tr!("The update was cancelled."),
+        ErrorCode::Cancelled => tr!("The update was canceled."),
         _ => tr!("Something went wrong. Try again later."),
     }
 }

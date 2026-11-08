@@ -405,7 +405,7 @@ impl SettingsView {
                     (tr!("This display"), bande_colour::DISPLAY),
                     (tr!("sRGB"), bande_colour::SRGB),
                     (tr!("Display P3"), bande_colour::DISPLAY_P3),
-                    (tr!("None (show colours as sent)"), bande_colour::UNMANAGED),
+                    (tr!("None (show colors as sent)"), bande_colour::UNMANAGED),
                 ]
                 .into_iter()
                 .map(|(label, value)| (label, value.to_owned()))

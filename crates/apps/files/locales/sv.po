@@ -830,7 +830,7 @@ msgstr "Behåll mappar överst vid sortering efter namn"
 msgid "Internal"
 msgstr "Intern"
 
-msgid "Favourites"
+msgid "Favorites"
 msgstr "Favoriter"
 
 msgid "Locations"

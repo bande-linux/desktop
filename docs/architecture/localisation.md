@@ -1,6 +1,6 @@
 # Localisation
 
-Code is written in English, the development language (`[workspace.metadata.l10n]` in
+Code is written in US English, the development language, as on macOS (`[workspace.metadata.l10n]` in
 `Cargo.toml`), and the English is the key, as `String(localized:)` is on macOS:
 
 - `tr!("Open File…")`, `tr!("{app} quit unexpectedly", app = name)`;
@@ -16,7 +16,7 @@ literals, never built at run time.
 that executable. `bande-l10n-tool pack` writes them: `en.mo` from the code's keys (marked
 `X-Bande-Development: yes`), shipped in the program's own package, and one tree per other language
 for the language packs ([packaging.md](packaging.md)). Translators edit `crates/**/locales/<lang>.po`;
-a regional file (`en-GB.po`) lists only what differs from its language.
+a regional file lists only what differs from its language: `en-GB.po` holds macOS's British English, the spelling (Colour, Centre, Minimise) and the words (Bin for Trash).
 
 **Lookup** (`bande-l10n`). A program reads its folder once, on its first string, and takes the
 first language in `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG` that has a catalog there (`pt-BR`,

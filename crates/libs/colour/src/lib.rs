@@ -112,7 +112,7 @@ impl fmt::Display for IccError {
         match self {
             Self::TooShort => write!(f, "the file is too short to be an ICC profile"),
             Self::NotADisplayProfile => write!(f, "it is not a display profile"),
-            Self::NotRgb => write!(f, "it does not describe RGB colours"),
+            Self::NotRgb => write!(f, "it does not describe RGB colors"),
             Self::NotXyz => write!(f, "its connection space is not XYZ"),
             Self::LookupTables => {
                 write!(

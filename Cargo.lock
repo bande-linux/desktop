@@ -978,6 +978,7 @@ version = "0.1.9"
 dependencies = [
  "accesskit",
  "bande-app",
+ "bande-bus",
  "bande-dict",
  "bande-graphics",
  "bande-https",
@@ -985,7 +986,9 @@ dependencies = [
  "bande-l10n",
  "bande-toolkit",
  "bande-xdg",
+ "flate2",
  "serde_json",
+ "tempfile",
  "tracing",
 ]
 

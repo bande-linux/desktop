@@ -18,7 +18,8 @@ pub enum Location {
     Trash,
     Recents,
     Search(PathBuf),
-    Server(String),
+    Network,
+    Server { address: String, name: String },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -297,6 +298,8 @@ pub struct Browser {
     single: bool,
     found: Vec<PathBuf>,
     recents: Vec<PathBuf>,
+    network: Vec<Entry>,
+    shares: Vec<Entry>,
     lister: Option<Lister>,
     nesting: bool,
     expanded: BTreeSet<PathBuf>,
@@ -325,6 +328,8 @@ impl Browser {
             sort: Sort::default(),
             single: false,
             found: Vec::new(),
+            network: Vec::new(),
+            shares: Vec::new(),
             recents: Vec::new(),
             lister: Lister::new()
                 .inspect_err(|error| {
@@ -343,7 +348,16 @@ impl Browser {
             Location::Folder(folder) => self.read_folder(folder),
             Location::Trash => Contents::listed(list_trash(&self.trash, self.order())),
             Location::Recents => Contents::listed(entries(&self.recents)),
-            Location::Server(_) => Contents::listed(Vec::new()),
+            Location::Server { .. } => {
+                let mut shares = self.shares.clone();
+                sort(&mut shares, self.order());
+                Contents::listed(shares)
+            }
+            Location::Network => {
+                let mut servers = self.network.clone();
+                sort(&mut servers, self.order());
+                Contents::listed(servers)
+            }
             Location::Search(_) => {
                 let mut found = entries(&self.found);
                 sort(&mut found, self.order());
@@ -468,6 +482,31 @@ impl Browser {
         self.reload_where(|location| matches!(location, Location::Search(_)));
     }
 
+    pub fn set_network(&mut self, network: Vec<Entry>) {
+        if network != self.network {
+            self.network = network;
+            self.reload_where(|location| *location == Location::Network);
+        }
+    }
+
+    pub fn show_shares(&mut self, server: Location, shares: Vec<Entry>) {
+        self.shares = shares;
+        match *self.root() == server {
+            true => self.reload_where(|location| *location == server),
+            false => self.go(server),
+        }
+    }
+
+    pub fn shows_network(&self) -> bool {
+        *self.root() == Location::Network
+    }
+
+    pub fn chosen_server(&self) -> Option<&Entry> {
+        self.active_column()
+            .selected_entry()
+            .filter(|entry| entry.server_address().is_some())
+    }
+
     pub fn set_recents(&mut self, recents: Vec<PathBuf>) {
         if recents != self.recents {
             self.recents = recents;
@@ -516,10 +555,13 @@ impl Browser {
         (column.marked.len() <= 1)
             .then(|| column.selected_entry())
             .flatten()
+            .filter(|entry| entry.server_address().is_none())
     }
 
     pub fn selection(&self) -> Vec<&Entry> {
-        self.active_column().selection()
+        let mut selection = self.active_column().selection();
+        selection.retain(|entry| entry.server_address().is_none());
+        selection
     }
 
     pub fn selected_paths(&self) -> Vec<PathBuf> {
@@ -1008,7 +1050,10 @@ impl Browser {
             .flat_map(|column| match &column.location {
                 Location::Folder(folder) => vec![folder.clone()],
                 Location::Trash => self.trash_info_dirs(),
-                Location::Recents | Location::Search(_) | Location::Server(_) => Vec::new(),
+                Location::Recents
+                | Location::Search(_)
+                | Location::Network
+                | Location::Server { .. } => Vec::new(),
             })
             .collect::<Vec<_>>();
         watched.extend(self.open_subfolders());
@@ -1240,7 +1285,7 @@ impl Browser {
         self.reload_where(|location| match location {
             Location::Folder(folder) => changed.contains(folder),
             Location::Trash => trash_changed,
-            Location::Server(_) => false,
+            Location::Network | Location::Server { .. } => false,
             Location::Recents | Location::Search(_) => true,
         });
     }

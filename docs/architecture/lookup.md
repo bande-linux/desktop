@@ -34,6 +34,18 @@ separated by spaces).
 Matching within a source: the forms table, then the source's `rules.<language>`, then for a
 compounding language the longest known ending ("husvagns + ägare", marked as derived).
 
+## Adding dictionaries
+
+Dictionary Settings ▸ Add Dictionary… (the file chooser portal), or a file dropped on the window,
+imports a StarDict dictionary (`.ifo` with `.idx` or `.idx.gz` and `.dict` or `.dict.dz`, an
+optional `.syn`) or a dictd one (`.index` with `.dict` or `.dict.dz`), or a tarball of either
+(unpacked with `tar`). It is converted on a worker thread into a pack in
+`~/.local/share/bande/dict/`, serving any language (`*`); markup is reduced to text. A DICT server
+(`dict://host[:port]/database`, RFC 2229, unencrypted) is checked and added as a `.source` with
+`protocol=dict`. An unsupported or broken file gets a message naming it. Apple `.dictionary`
+bundles are not imported: their `Body.data` format is undocumented and changes between macOS
+versions, and the dictionaries Apple ships are licensed for macOS only.
+
 ## Pack format
 
 All integers are little-endian `u32` unless noted; offsets are from the start of the file.
@@ -52,7 +64,7 @@ Metadata keys: `id`, `name`, `attribution` (shown under each section), `language
 `default`, `rules.<language>` (`pos:ending:replacement` items tried on the first word when a form is
 not in the table, kept only when the base has that part of speech), `compound.<language>`
 (shortest ending to try). A `.source` file adds `protocol` and `url` (`{language}` and `{word}` are
-filled in); the protocol known today is `wikimedia-summary`. Line kinds: `D` definition,
+filled in); the protocols are `wikimedia-summary` and `dict`. Line kinds: `D` definition,
 `T` translation, `S` synonyms, `E` example, `O` form of another word of the pack. Parts of speech
 `noun`, `verb`, `adj` and `adv` are translated; any other is shown as it is.
 

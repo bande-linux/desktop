@@ -385,10 +385,14 @@ impl SettingsView {
                 )];
                 choices.extend(SCALES.iter().enumerate().map(|(index, &percent)| {
                     let label = match index {
-                        0 => L10N.tr_args("display-text-size-larger", [("size", looks(percent).into())]),
-                        index if index == last => {
-                            L10N.tr_args("display-text-size-more-space", [("size", looks(percent).into())])
-                        }
+                        0 => L10N.tr_args(
+                            "display-text-size-larger",
+                            [("size", looks(percent).into())],
+                        ),
+                        index if index == last => L10N.tr_args(
+                            "display-text-size-more-space",
+                            [("size", looks(percent).into())],
+                        ),
                         _ => looks(percent),
                     };
                     (label, Value::Number(percent))

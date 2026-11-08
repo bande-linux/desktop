@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bande_reporter::config::Config;
@@ -76,6 +76,7 @@ fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Er
     fault.owner = entry.number("COREDUMP_UID").filter(|uid| *uid != 0);
     fault.pid = Some(pid.clone());
     fault.program = Some(program);
+    fault.executable = entry.field("COREDUMP_EXE").map(PathBuf::from);
     fault.detail.insert("signal".to_owned(), json!(signal));
     fault.detail.insert(
         "unit".to_owned(),

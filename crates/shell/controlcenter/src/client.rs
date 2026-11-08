@@ -763,6 +763,9 @@ impl ControlCenter {
         let up = matches!(key, BrightnessKey::DisplayUp | BrightnessKey::KeyboardUp);
         let hud = match key {
             BrightnessKey::DisplayDown | BrightnessKey::DisplayUp => {
+                if !self.lights.iter().any(|light| light.connector == output) {
+                    self.request_light(LevelRequest::Refresh);
+                }
                 let Some(light) = self
                     .lights
                     .iter()

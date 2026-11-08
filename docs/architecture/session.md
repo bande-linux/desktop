@@ -120,26 +120,28 @@ graph LR
   Idle time comes from the compositor's `ext-idle-notify-v1`, one notification per policy
   threshold, sent as soon as it is due. The compositor follows `Lock` on the session's own
   logind object path (from `GetSession("auto")`; logind never signals on `session/auto`).
-  Dimming lowers every display: the backlight to a quarter of its level, every other display
-  by the compositor's colour transform (no DDC write), and restores them on activity.
+  Dimming lowers every display with real brightness control to a quarter of its level (the
+  backlight, or the monitor over DDC) and restores them on activity; others are left as they are.
 - **Display brightness**: `bande-power` owns one model for all displays, `org.bande.Brightness`
   (`Displays`: connector, name and level per display; `SetLevel`; `Refresh`), so Settings and
-  Control Center show one bar per connected display and never block on hardware. The displays
-  come from the compositor's `org.bande.Displays` (`Connected`, `SetDim`). Each has its own
-  worker thread, idle until asked, and one of three controls:
+  Control Center show one bar per display and never block on hardware. Brightness only ever
+  changes the display's own light, never a software darkening: `Displays` lists only displays
+  with real control, so one without gets no bar, in Settings, Control Center or the brightness
+  keys. The connected displays come from the compositor's `org.bande.Displays` (`Connected`).
+  Each has its own worker thread, idle until asked, and one of two controls:
   the backlight through logind's `Session.SetBrightness` for an internal panel (`eDP`, `LVDS`,
-  `DSI`); VCP 0x10 over DDC/CI when the monitor answers; otherwise the compositor's CRTC gamma
-  ramp or CTM, multiplied with night light, down to a fifth so the screen never goes black.
+  `DSI`), or VCP 0x10 over DDC/CI when the monitor answers.
   DDC is native (`ddc.rs`, `/dev/i2c-N` from the connector's `ddc` link or `i2c-N` child):
   bars move at once, writes go to the monitor at most every 250 ms with the last level always
   sent and unchanged values skipped, because a monitor's memory wears and its bus is slow.
   A monitor keeps its own level: it is read on connect and when a brightness view opens, never
   written on connect. A plugged-in monitor is asked again after 1, 3 and 8 s, since many answer
-  late; one that never answers, or stops answering, is dimmed by the compositor instead, and its
-  level is kept per display in `$XDG_STATE_HOME/bande/brightness`. Access: `bande-power` ships
+  late, and again whenever the connected displays change, a brightness view opens or a
+  brightness key is pressed on it; its bar appears once it answers and goes when it stops
+  answering. Access: `bande-power` ships
   `i2c-dev` in `modules-load.d` and a udev rule giving the active session `uaccess` to I2C
   adapters of PCI display controllers only, never other buses. Apple's `appledrm` exposes no
-  DDC adapter, so external displays on a Mac use the compositor control.
+  DDC adapter, so external displays on a Mac have no brightness bar.
 
 ### XDG desktop portal backend (`xdg-desktop-portal-bande`)
 

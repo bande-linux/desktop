@@ -1123,7 +1123,6 @@ dependencies = [
  "bande-log",
  "bande-notify",
  "bande-sound",
- "bande-xdg",
  "rustix 1.1.6",
  "tracing",
  "wayland-client",

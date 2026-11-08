@@ -486,6 +486,7 @@ fn with_drive(objects: &Objects, paths: &[String], drive: &str, choice: DiskChoi
         }
     }
     labels.sort();
+    labels.dedup();
     DiskChoice {
         block,
         drive_size,

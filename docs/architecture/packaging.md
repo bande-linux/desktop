@@ -71,13 +71,19 @@ profiles. Sizes are in [performance.md](performance.md).
   own package carries its English catalog, `en.mo`, through the cargo-deb asset
   `target/release/l10n/development/<program>/*`, which `bande-l10n-tool check` requires. See
   [localisation.md](localisation.md).
-  Packs follow by themselves: whenever dpkg's status changes (`bande-language-packs.path`),
+  Packs follow by themselves: after each apt or PackageKit run (the `DPkg::Post-Invoke` stamp
+  `/run/bande-desktop/packages-installed`, watched by `bande-language-packs.path`),
   `bande-language-packs.service` runs `/usr/libexec/bande-desktop/language-packs`. For each
   language in use (`/etc/locale.conf`, each person's `~/.config/locale.conf` and per-app
   languages) and each installed package `P`, it installs `P-l10n-<lang>-<region>`, else
   `P-l10n-<lang>`, when the archive has it and it is missing; Debian's own packs (Firefox ESR,
-  LibreOffice) come the same way. It waits for the dpkg lock, so it runs once apt or PackageKit
-  has finished, and an upgrade, a new app or a new language each brings its packs. Settings starts
+  LibreOffice) come the same way. It decides from dpkg's final state, exits at once and silently
+  when nothing is missing, and only to install waits for apt or PackageKit to release the lock; it
+  logs only what it installs. An upgrade, a new app or a new language each brings its packs.
+  A run that failed, offline, runs again when NetworkManager reports a connection
+  (`/usr/lib/NetworkManager/dispatcher.d/90-bande-language-packs`). Settings ▸ Language puts the
+  languages with a pack (installed or in the APT index) first, says while Bande's text is being
+  fetched, and says when it will come once the computer is online. Settings starts
   the service when a language changes (a polkit rule lets an active local user start this one
   unit), and the setup assistant at its end. The images install the packs of every language
   (`language-packs --every-language`), so a first start in any language works offline.

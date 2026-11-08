@@ -80,7 +80,7 @@ pub fn went_back() -> Option<i64> {
     text.lines().last()?.split('\t').nth(1)?.parse().ok()
 }
 
-fn run_unit(system: &Connection, unit: &str) -> Result<(), Error> {
+pub(crate) fn run_unit(system: &Connection, unit: &str) -> Result<(), Error> {
     let rule = MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
         .sender(SYSTEMD)?

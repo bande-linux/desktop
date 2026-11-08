@@ -162,7 +162,9 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
             };
             let language = matches!(command, LoginCommand::SetLanguage(..));
             match run(&dir, apps, command) {
-                Ok(()) if language => crate::locale::fetch_language_packs(),
+                Ok(()) if language => {
+                    crate::locale::fetch_language_packs();
+                }
                 Ok(()) => {}
                 Err(error) => {
                     updates.send(pane_failed(pane, failure, error));

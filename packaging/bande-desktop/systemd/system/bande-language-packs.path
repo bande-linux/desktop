@@ -1,8 +1,8 @@
 [Unit]
-Description=Bring language packs when packages change
+Description=Bring language packs after apt or PackageKit changes packages
 
 [Path]
-PathChanged=/var/lib/dpkg/status
+PathChanged=/run/bande-desktop/packages-installed
 Unit=bande-language-packs.service
 
 [Install]

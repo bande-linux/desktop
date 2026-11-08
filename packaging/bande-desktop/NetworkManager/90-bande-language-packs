@@ -1,0 +1,7 @@
+#!/bin/sh
+case "$2" in
+up | connectivity-change) ;;
+*) exit 0 ;;
+esac
+systemctl is-failed --quiet bande-language-packs.service || exit 0
+exec systemctl start --no-block bande-language-packs.service

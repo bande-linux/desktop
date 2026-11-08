@@ -4,7 +4,7 @@ use bande_settings_panes::SettingId;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, SearchField, Stack, Widget};
 
-use crate::locale::{AvailableLocale, LocaleState, locale_label};
+use crate::locale::{AvailableLocale, LocaleState, Packs, locale_label};
 use crate::pages::{Widgets, boxed, muted_row, submit};
 use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
@@ -18,10 +18,30 @@ fn sample() -> Option<jiff::Zoned> {
         .ok()
 }
 
-pub fn locale_matches(available: &[AvailableLocale], query: &str, limit: usize) -> Vec<String> {
+pub fn locale_matches(
+    available: &[AvailableLocale],
+    translated: &[String],
+    query: &str,
+    limit: usize,
+) -> Vec<String> {
+    let in_bande = |locale: &AvailableLocale| {
+        let tongue = locale
+            .code
+            .split(['_', '.', '@'])
+            .next()
+            .unwrap_or_default();
+        translated
+            .iter()
+            .any(|language| language.eq_ignore_ascii_case(tongue))
+    };
     let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
     let Some(first) = words.first() else {
-        return Vec::new();
+        return available
+            .iter()
+            .filter(|locale| in_bande(locale))
+            .take(limit)
+            .map(|locale| locale.code.clone())
+            .collect();
     };
     let query = words.join(" ");
     let mut ranked: Vec<(u8, &AvailableLocale)> = available
@@ -48,21 +68,12 @@ pub fn locale_matches(available: &[AvailableLocale], query: &str, limit: usize) 
             Some((rank, locale))
         })
         .collect();
-    ranked.sort_by_key(|(rank, _)| *rank);
+    ranked.sort_by_key(|(rank, locale)| (*rank, !in_bande(locale)));
     ranked
         .into_iter()
         .take(limit)
         .map(|(_, locale)| locale.code.clone())
         .collect()
-}
-
-pub fn translated(language: &str) -> bool {
-    let tongue = language.split(['_', '.', '@']).next().unwrap_or(language);
-    tongue == "C"
-        || tongue == "POSIX"
-        || bande_l10n::installed_languages()
-            .iter()
-            .any(|tag| tag.split('-').next() == Some(tongue))
 }
 
 impl SettingsView {
@@ -113,9 +124,9 @@ impl SettingsView {
                 .on_activate(move || choose(chosen.clone()));
             rows.push(self.item_row(format!("locale:{code}"), row));
         }
-        if query.trim().is_empty() {
+        if query.trim().is_empty() && results.is_empty() {
             rows.push(muted_row(&tr!("Type a language or country name")));
-        } else if results.is_empty() {
+        } else if !query.trim().is_empty() && results.is_empty() {
             rows.push(muted_row(&tr!("No language matches")));
         }
         rows
@@ -152,7 +163,16 @@ impl SettingsView {
                 )
             }
         };
-        if !translated(&locale.language) {
+        let name = locale_label(&locale.available, &locale.language);
+        match locale.packs {
+            Packs::Fetching => rows.push(muted_row(&tr!("Getting Bande in {name}…", name = name))),
+            Packs::Offline => rows.push(muted_row(&tr!(
+                "Bande in {name} is fetched when this computer is online.",
+                name = name
+            ))),
+            Packs::Ready => {}
+        }
+        if !locale.translated(&locale.language) {
             rows.push(boxed(Row::new(
                 Text::new(
                     &tr!("Bande's own apps stay in English for now; other apps use this language."),

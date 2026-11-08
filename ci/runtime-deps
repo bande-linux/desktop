@@ -9,6 +9,7 @@
 /usr/share/zoneinfo/zone.tab tzdata required
 getent libc-bin required
 tar tar required
+apt-cache apt required
 timeout coreutils required
 mount mount required
 umount mount required

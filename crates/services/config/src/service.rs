@@ -405,8 +405,11 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result
                         .ok_or_else(mismatch)?,
                 )
             }
-            "match-colours" => {
-                display.match_colours = Some(bool::try_from(value).map_err(|_| mismatch())?)
+            "colour-profile" => {
+                display.colour_profile = Some(
+                    String::try_from(value.try_clone().map_err(|_| mismatch())?)
+                        .map_err(|_| mismatch())?,
+                )
             }
             _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
@@ -1354,10 +1357,11 @@ impl ConfigInterface {
                             .and_then(|rotation| owned(rotation.degrees().into())),
                     ),
                     (
-                        "match-colours",
+                        "colour-profile",
                         display
-                            .match_colours
-                            .and_then(|enabled| owned(enabled.into())),
+                            .colour_profile
+                            .as_deref()
+                            .and_then(|profile| owned(profile.into())),
                     ),
                 ]
                 .into_iter()

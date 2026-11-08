@@ -89,7 +89,6 @@ impl OutputConfig {
             scale: automatic_scale(mode.size, self.physical_size_mm),
             transform: Transform::Normal,
             position: Point::default(),
-            match_colours: true,
         })
     }
 }
@@ -100,7 +99,6 @@ pub struct OutputSettings {
     pub scale: f64,
     pub transform: Transform,
     pub position: Point<i32, Logical>,
-    pub match_colours: bool,
 }
 
 impl OutputSettings {
@@ -121,6 +119,7 @@ pub(crate) struct Screen {
     pub(crate) workspaces: Workspaces,
     pub(crate) redraw: bool,
     pub(crate) mirror: Option<String>,
+    pub(crate) colour_profile: Option<String>,
     pub(crate) parked: bool,
     pub(crate) fitted_to: Rectangle<i32, Logical>,
     pub(crate) latched_feedback: Vec<PresentationFeedbackCallback>,
@@ -159,6 +158,7 @@ impl Screen {
             workspaces: Workspaces::default(),
             redraw: true,
             mirror: None,
+            colour_profile: None,
             parked: false,
             fitted_to: Rectangle::default(),
             latched_feedback: Vec::new(),

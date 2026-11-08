@@ -517,7 +517,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         if drawn.is_empty() {
             return;
         }
-        let Some(colour) = self.renderer.output_colour else {
+        let Some(colour) = self.renderer.output_colour.clone() else {
             self.record_output_copy(export, self.image, drawn);
             barrier(
                 &self.renderer.device,
@@ -584,6 +584,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         barrier(device, commands, scratch.0, blur::DISCARDED, blur::DRAWN);
         self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
         self.push_texture(self.target_view);
+        let table = self
+            .renderer
+            .encode_table
+            .as_ref()
+            .filter(|_| colour.encode.is_some())
+            .and_then(|(_, texture)| self.renderer.textures.get(&texture.id))
+            .map(|table| table.image.view);
+        self.push_chroma(table.unwrap_or(self.target_view));
+        let matrix = colour.matrix;
         let row = |values: [f32; 3]| RoundedRect {
             x: values[0],
             y: values[1],
@@ -592,10 +601,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         };
         self.draw_quad(
             &Quad {
-                color: [colour[0][0], colour[0][1], colour[0][2], 0.0],
+                color: [matrix[0][0], matrix[0][1], matrix[0][2], 0.0],
                 destination: self.bounds,
-                clip: row(colour[1]),
-                caster: row(colour[2]),
+                clip: row(matrix[1]),
+                caster: row(matrix[2]),
+                alpha: if table.is_some() { 1.0 } else { 0.0 },
                 ..Quad::default()
             },
             drawn,

@@ -5,6 +5,7 @@ mod battery;
 mod brightness;
 mod client;
 mod clock;
+mod colour;
 mod consent;
 mod crash_reports;
 mod crypt;

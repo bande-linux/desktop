@@ -31,12 +31,14 @@ const VENDORS: [(&str, &str); 24] = [
 ];
 
 const SRGB_DEFAULT: u8 = 1 << 2;
+const UNDEFINED_GAMMA: u8 = 0xff;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Primaries {
     pub red: (u16, u16),
     pub green: (u16, u16),
     pub blue: (u16, u16),
+    pub white: (u16, u16),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +48,7 @@ pub struct Edid {
     pub serial: String,
     pub primaries: Primaries,
     pub default_is_srgb: bool,
+    pub gamma: Option<u16>,
 }
 
 fn primaries(block: &[u8]) -> Primaries {
@@ -57,6 +60,7 @@ fn primaries(block: &[u8]) -> Primaries {
         red: (coordinate(27, first, 6), coordinate(28, first, 4)),
         green: (coordinate(29, first, 2), coordinate(30, first, 0)),
         blue: (coordinate(31, second, 6), coordinate(32, second, 4)),
+        white: (coordinate(33, second, 2), coordinate(34, second, 0)),
     }
 }
 
@@ -100,6 +104,7 @@ pub fn parse(block: &[u8]) -> Option<Edid> {
         serial,
         primaries: primaries(block),
         default_is_srgb: block[24] & SRGB_DEFAULT != 0,
+        gamma: (block[23] != UNDEFINED_GAMMA).then(|| u16::from(block[23]) + 100),
     })
 }
 

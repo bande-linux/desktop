@@ -176,7 +176,17 @@ fn display_colour(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f
         dot(quad.clip.xyz, linear),
         dot(quad.caster.xyz, linear),
     );
-    return vec4<f32>(srgb_encode(converted), 1.0);
+    if quad.alpha < 0.5 {
+        return vec4<f32>(srgb_encode(converted), 1.0);
+    }
+    let width = f32(textureDimensions(chroma).x);
+    let at = (sqrt(clamp(converted, vec3<f32>(0.0), vec3<f32>(1.0))) * (width - 1.0) + 0.5) / width;
+    return vec4<f32>(
+        textureSampleLevel(chroma, filtered, vec2<f32>(at.r, 0.5), 0.0).r,
+        textureSampleLevel(chroma, filtered, vec2<f32>(at.g, 0.5), 0.0).g,
+        textureSampleLevel(chroma, filtered, vec2<f32>(at.b, 0.5), 0.0).b,
+        1.0,
+    );
 }
 
 @fragment

@@ -38,6 +38,7 @@ use crate::render::background;
 use crate::scanout::ScanoutExporter;
 use crate::screen::{OutputConfig, OutputMode};
 use crate::state::{Compositor, REFRESH, ScanoutDevice};
+use bande_colour::Profile;
 use bande_render::OutputColour;
 
 pub type DrmBackendError = Box<dyn Error>;
@@ -62,7 +63,8 @@ struct Head {
     relink_wanted: bool,
     flip_pending: bool,
     refused: bool,
-    display_colour: Option<OutputColour>,
+    display_profile: Option<Profile>,
+    output_colour: Option<(Option<String>, Option<OutputColour>)>,
     converting: bool,
 }
 
@@ -522,9 +524,10 @@ impl DrmBackend {
             relink_wanted: false,
             flip_pending: false,
             refused: false,
-            display_colour: edid_of(&self.device, info.handle())
+            display_profile: edid_of(&self.device, info.handle())
                 .as_ref()
-                .and_then(crate::colour::srgb_to_display),
+                .and_then(crate::colour::edid_profile),
+            output_colour: None,
             converting: false,
         }))
     }
@@ -1025,12 +1028,25 @@ impl DrmBackend {
                     .into(),
                 transform: settings.transform,
             });
-        let conversion = head.display_colour.filter(|_| settings.match_colours);
+        let chosen = compositor.colour_profile(output).map(str::to_owned);
+        if head
+            .output_colour
+            .as_ref()
+            .is_none_or(|(current, _)| *current != chosen)
+        {
+            let conversion =
+                crate::colour::conversion(chosen.as_deref(), head.display_profile.as_ref());
+            head.output_colour = Some((chosen, conversion));
+        }
+        let conversion = head
+            .output_colour
+            .as_ref()
+            .and_then(|(_, conversion)| conversion.clone());
         if conversion.is_some() != head.converting {
             head.converting = conversion.is_some();
             head.compositor.reset_buffers();
         }
-        self.renderer.set_output_colour(conversion);
+        self.renderer.set_output_colour(conversion.clone());
         let flags = match conversion {
             Some(_) => FrameFlags::empty(),
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,

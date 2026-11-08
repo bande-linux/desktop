@@ -26,7 +26,6 @@ async-process = "=2.5.0"
 blocking = "=1.6.2"
 bzip2 = "=0.6.1"
 flate2 = "=1.1.10"
-fluent-bundle = "=0.16.0"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 futures-lite = "=2.6.1"
 hayro = "=0.8.0"
@@ -48,6 +47,8 @@ parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
 png = "=0.18.1"
 pollster = "=1.0.1"
+proc-macro2 = "=1.0.107"
+quote = "=1.0.47"
 raw-window-handle = "=0.6.2"
 quick-xml = "=0.41.0"
 ring = "=0.17.14"
@@ -62,6 +63,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 skrifa = "=0.44.0"
 spellbook = "=0.4.2"
+syn = "=2.0.119"
 smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tantivy = { version = "=0.25.0", default-features = false, features = ["mmap", "lz4-compression"] }
 tar = "=0.4.46"
@@ -69,7 +71,6 @@ tempfile = "=3.27.0"
 tracing = "=0.1.44"
 tracing-journald = "=0.3.2"
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["ansi", "fmt", "registry", "std", "tracing-log"] }
-unic-langid = "=0.9.6"
 vello_cpu = "=0.3.0"
 vello_gpu = { version = "=0.3.0", default-features = false, features = ["wgpu", "text"] }
 wayland-backend = { version = "=0.3.17", features = ["log"] }
@@ -121,6 +122,7 @@ bande-keyring = { path = "crates/libs/keyring" }
 bande-keyboard = { path = "crates/libs/keyboard" }
 bande-l10n-macros = { path = "crates/libs/l10n-macros" }
 bande-l10n = { path = "crates/libs/l10n" }
+bande-l10n-source = { path = "crates/libs/l10n-source" }
 bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
@@ -174,3 +176,6 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 debug = "line-tables-only"
+
+[workspace.metadata.l10n]
+development-language = "en"

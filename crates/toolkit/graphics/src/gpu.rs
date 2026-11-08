@@ -71,7 +71,10 @@ impl GpuDevice {
             }
             return Ok((gpu, surface));
         }
-        let instance = vulkan_instance();
+        let instance = (!allow_software)
+            .then(crate::vulkan::hardware_instance)
+            .flatten()
+            .unwrap_or_else(vulkan_instance);
         let surface = unsafe { instance.create_surface_unsafe(target) }
             .map_err(|error| DrawError::Gpu(error.to_string()))?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

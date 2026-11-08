@@ -16,6 +16,11 @@ const PSTORE_ARCHIVE: &str = "/var/lib/systemd/pstore";
 const CHECKED_BOOT: &str = "checked-boot";
 const PSTORE_SEEN: &str = "pstore-seen";
 const PSTORE_FILE_LIMIT: u64 = 256 * 1024;
+const ESP_FOLDERS: [&str; 3] = ["/boot/efi", "/efi", "/boot"];
+const FAILED_BOOTS_SEEN: &str = "failed-boots-seen";
+const LOADER_ENTRY_SELECTED: &str =
+    "/sys/firmware/efi/efivars/LoaderEntrySelected-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f";
+const EFIVAR_ATTRIBUTES: usize = 4;
 const REPORTED_RESULTS: [&str; 4] = ["exit-code", "timeout", "watchdog", "oom-kill"];
 const WATCHED_SYSTEM_UNITS: [&str; 2] = ["greetd.service", "systemd-suspend.service"];
 const UNDUMPABLE: [&str; 5] = [
@@ -112,6 +117,69 @@ fn replace_state(name: &str, contents: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn counted_entry(name: &str) -> Option<(&str, u32, u32)> {
+    let (entry, counter) = name.strip_suffix(".conf")?.rsplit_once('+')?;
+    let (left, done) = counter.split_once('-')?;
+    Some((entry, left.parse().ok()?, done.parse().ok()?))
+}
+
+fn selected_entry() -> String {
+    let bytes = fs::read(LOADER_ENTRY_SELECTED).unwrap_or_default();
+    let units: Vec<u16> = bytes
+        .get(EFIVAR_ATTRIBUTES..)
+        .unwrap_or_default()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
+        .take_while(|unit| *unit != 0)
+        .collect();
+    let id = String::from_utf16_lossy(&units);
+    let file = format!("{}.conf", id.trim_end_matches(".conf"));
+    counted_entry(&file).map_or_else(
+        || file.trim_end_matches(".conf").to_owned(),
+        |(entry, ..)| entry.to_owned(),
+    )
+}
+
+fn check_failed_boots() -> Result<(), Box<dyn Error>> {
+    let Some(folder) = ESP_FOLDERS
+        .iter()
+        .map(|esp| Path::new(esp).join("loader/entries"))
+        .find(|folder| folder.is_dir())
+    else {
+        return Ok(());
+    };
+    let selected = selected_entry();
+    let seen = read_state(FAILED_BOOTS_SEEN).unwrap_or_default();
+    let mut names: Vec<String> = fs::read_dir(&folder)?
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .collect();
+    names.sort();
+    let mut failed = String::new();
+    for name in names {
+        let Some((entry, left, done)) = counted_entry(&name) else {
+            continue;
+        };
+        let failed_tries = if entry == selected {
+            done.saturating_sub(1)
+        } else if left == 0 {
+            done
+        } else {
+            0
+        };
+        if failed_tries == 0 {
+            continue;
+        }
+        failed.push_str(&format!("{name}\n"));
+        if !seen.lines().any(|line| line == name) {
+            structured::failed_boot(entry, failed_tries, &selected)?;
+        }
+    }
+    replace_state(FAILED_BOOTS_SEEN, &failed)
+}
+
 fn check_previous_boot() -> Result<(), Box<dyn Error>> {
     let boot = fs::read_to_string(BOOT_ID)?;
     if read_state(CHECKED_BOOT).as_deref() == Some(boot.as_str()) {
@@ -122,6 +190,9 @@ fn check_previous_boot() -> Result<(), Box<dyn Error>> {
     if !panics.is_empty() || !journal::previous_boot_ended_cleanly() {
         let time = journal::previous_boot_end().unwrap_or_else(Timestamp::now);
         structured::of_previous_boot(&kernel_log(&panics), time)?;
+    }
+    if let Err(error) = check_failed_boots() {
+        tracing::warn!("cannot check for failed boots: {error}");
     }
     if !panics.is_empty() {
         let mut seen = seen;

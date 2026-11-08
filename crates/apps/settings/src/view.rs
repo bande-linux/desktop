@@ -266,6 +266,7 @@ pub struct SettingsView {
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
+    report_wanted: Option<String>,
     pub(crate) storage: Option<Storage>,
     pub(crate) files_installed: bool,
     pub(crate) backup: BackupView,
@@ -375,6 +376,7 @@ impl SettingsView {
             pointing: PointingDevices::default(),
             about: None,
             diagnostics: Diagnostics::default(),
+            report_wanted: None,
             storage: None,
             files_installed: false,
             backup: BackupView::default(),
@@ -848,6 +850,16 @@ impl SettingsView {
                 let open = self.diagnostics.open.take();
                 self.diagnostics = diagnostics;
                 self.diagnostics.open = open;
+                if let Some(wanted) = self.report_wanted.take()
+                    && let Some(id) = self
+                        .diagnostics
+                        .reports
+                        .iter()
+                        .find(|report| report.id == wanted || report.program == wanted)
+                        .map(|report| report.id.clone())
+                {
+                    self.open_report(id);
+                }
             }
             Update::DiagnosticsReport(id, text) => self.diagnostics.open = Some((id, text)),
             Update::ReportCreated(id) => {
@@ -1553,14 +1565,7 @@ impl SettingsView {
                 }
                 Intent::JoinOther(password) => self.join_other(password),
                 Intent::WifiManual(manual) => self.set_wifi_manual(manual),
-                Intent::OpenReport(id) => {
-                    self.commands
-                        .push(Command::Diagnostics(DiagnosticsCommand::Read(id.clone())));
-                    self.detail = Some(Detail::Report(id));
-                    self.clear_failure();
-                    self.focus_next = Some(Anchor::Back);
-                    *self.scroll.borrow_mut() = ScrollState::default();
-                }
+                Intent::OpenReport(id) => self.open_report(id),
                 Intent::CopyReport(text) => self.commands.push(Command::CopyText(text)),
                 Intent::DeleteReport(id) => {
                     self.detail = None;
@@ -1884,6 +1889,21 @@ impl SettingsView {
         self.focus_next = Some(Anchor::Item(String::from_utf8_lossy(&ssid).into_owned()));
         self.commands
             .push(Command::Network(NetworkCommand::Join(network, password)));
+    }
+
+    fn open_report(&mut self, id: String) {
+        self.commands
+            .push(Command::Diagnostics(DiagnosticsCommand::Read(id.clone())));
+        self.detail = Some(Detail::Report(id));
+        self.clear_failure();
+        self.focus_next = Some(Anchor::Back);
+        *self.scroll.borrow_mut() = ScrollState::default();
+    }
+
+    pub fn show_report_of(&mut self, wanted: &str) {
+        self.report_wanted = Some(wanted.to_owned());
+        self.commands
+            .push(Command::Diagnostics(DiagnosticsCommand::Refresh));
     }
 
     pub fn pane_keyword(&self) -> &'static str {

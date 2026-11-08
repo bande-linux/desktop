@@ -13,7 +13,7 @@ use serde_json::json;
 use crate::config::Config;
 use crate::counters;
 use crate::facts;
-use crate::fault::{Fault, mount_stall_details, push_text, stuck_tasks};
+use crate::fault::{Fault, attach_device_dumps, mount_stall_details, push_text, stuck_tasks};
 use crate::scrub::Scrubber;
 use crate::spool::Spool;
 
@@ -203,6 +203,9 @@ fn report(
     }
     if pending.kind == "oom" {
         oom_details(lines, &mut fault);
+    }
+    if pending.kind == "gpu-error" {
+        attach_device_dumps(&mut fault);
     }
     let log = lines.iter().cloned().collect::<Vec<_>>().join("\n");
     push_text(&mut fault.attachments, "kernel.txt", scrubber.text(&log));

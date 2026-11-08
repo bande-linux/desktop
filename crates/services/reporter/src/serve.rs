@@ -19,7 +19,7 @@ use crate::config::{self, Config};
 use crate::counters;
 use crate::diagnose::diagnose;
 use crate::facts;
-use crate::fault::{Fault, capture_hang};
+use crate::fault::{Fault, attach_device_dumps, capture_hang};
 use crate::hang::{HangEnd, HangEnds};
 use crate::spool::{MANIFEST, STATE, Spool, Status};
 
@@ -188,6 +188,9 @@ impl Service {
                 .detail
                 .entry("termination")
                 .or_insert_with(|| json!("force-quit"));
+        }
+        if kind == "gpu-reset" {
+            attach_device_dumps(&mut fault);
         }
         if kind == "oom" {
             self.oom(&mut fault, request)?;

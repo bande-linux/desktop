@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Receiver;
@@ -21,6 +21,8 @@ use crate::spool::{Attachment, Spool};
 use crate::stacks::{Stacks, parse_eu_stack};
 
 const PARTIAL: &str = "partial";
+const DEVCOREDUMPS: &str = "/sys/class/devcoredump";
+const DEVICE_DUMP_LIMIT: u64 = 8 * 1024 * 1024;
 const IDLE_WAIT: &str = "do_epoll_wait";
 const SAMPLE_GAP: Duration = Duration::from_millis(500);
 const SAMPLE_PATIENCE: Duration = Duration::from_secs(2);
@@ -446,6 +448,33 @@ pub fn capture_hang(
         tracing::debug!("cannot remove a finished snapshot: {error}");
     }
     Capture { idle, end }
+}
+
+pub fn attach_device_dumps(fault: &mut Fault) {
+    let Ok(dumps) = fs::read_dir(DEVCOREDUMPS) else {
+        return;
+    };
+    for dump in dumps.flatten() {
+        let path = dump.path();
+        let driver = fs::read_link(path.join("failing_device/driver"))
+            .ok()
+            .and_then(|driver| driver.file_name()?.to_str().map(str::to_owned))
+            .unwrap_or_else(|| "device".to_owned());
+        let mut bytes = Vec::new();
+        let read = File::open(path.join("data"))
+            .and_then(|data| data.take(DEVICE_DUMP_LIMIT).read_to_end(&mut bytes));
+        if let Err(error) = read {
+            tracing::debug!("cannot read a device core dump: {error}");
+            continue;
+        }
+        fault.attachments.push(Attachment {
+            name: format!("devcoredump-{driver}.bin"),
+            bytes,
+        });
+        if let Err(error) = fs::write(path.join("data"), b"1") {
+            tracing::debug!("cannot release a device core dump: {error}");
+        }
+    }
 }
 
 pub fn stuck_tasks() -> String {

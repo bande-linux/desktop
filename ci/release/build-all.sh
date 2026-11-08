@@ -48,7 +48,10 @@ done < <(grep -E '^[a-z0-9]' packaging/bande-desktop/default-apps)
 echo "== a language pack holds only catalogs, one per program"
 for pack in "$out"/bande-desktop-l10n-*_all.deb; do
     [ "$(dpkg-deb --field "$pack" Section)" = localization ]
-    ! dpkg-deb --contents "$pack" | awk '{print $6}' | grep -v -e '^\./usr/share/bande/l10n/' -e '^\./usr/share/doc/' -e '^\./$' -e '^\./usr/$' -e '^\./usr/share/$' -e '^\./usr/share/bande/$'
+    if dpkg-deb --contents "$pack" | awk '{print $6}' | grep -v -e '^\./usr/share/bande/l10n/' -e '^\./usr/share/doc/' -e '^\./$' -e '^\./usr/$' -e '^\./usr/share/$' -e '^\./usr/share/bande/$'; then
+        echo "$pack holds more than catalogs"
+        exit 1
+    fi
 done
 pack=$(deb bande-desktop-l10n-sv "$version")
 dpkg-deb --contents "$pack" | grep -q ' ./usr/share/bande/l10n/bande-settings/sv.mo$'

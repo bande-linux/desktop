@@ -82,7 +82,7 @@ pub(crate) fn run<P: Program>(
     if plain_launch && !asked && !cx.resume.has_main_window() {
         program.reopen(&mut cx);
     }
-    if cx.windows.is_empty() && !background {
+    if cx.windows.is_empty() && !background && !P::waits_for_activation() {
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
@@ -156,7 +156,10 @@ impl<P: Program> Runner<P> {
             if self.cx.quitting && !self.cx.resume.session_ending && P::runs_in_background() {
                 self.run_in_background();
             }
-            if self.cx.quitting || !self.cx.link.keeps_running() {
+            let served = P::waits_for_activation()
+                && self.cx.has_opened_a_window()
+                && self.cx.windows.is_empty();
+            if self.cx.quitting || served || !self.cx.link.keeps_running() {
                 self.leave();
                 return Ok(());
             }
@@ -418,7 +421,12 @@ impl<P: Program> Runner<P> {
 
     fn key(&mut self, index: usize, window: WindowId, input: Event) {
         let settings = self.cx.info.settings.is_some();
-        if let Some(standard) = self.cx.info.keys.standard(&input, settings) {
+        let keys = self.cx.views[index]
+            .1
+            .view_ref()
+            .keys()
+            .unwrap_or(self.cx.info.keys);
+        if let Some(standard) = keys.standard(&input, settings) {
             return self.perform(Some(window), standard.action());
         }
         if self.deliver(index, window, WindowEvent::Input(input.clone())) {

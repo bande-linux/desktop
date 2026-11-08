@@ -12,9 +12,9 @@ bande-log.workspace = true
 flate2.workspace = true
 jiff.workspace = true
 ring.workspace = true
+bande-https.workspace = true
 rustc-demangle.workspace = true
 rustix = { workspace = true, features = ["fs", "net", "stdio"] }
-rustls.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 

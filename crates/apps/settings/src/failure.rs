@@ -36,14 +36,6 @@ pub(crate) fn not_responding(service: &str) -> String {
     L10N.tr_args("not-responding", [("service", L10N.tr(service).into())])
 }
 
-pub(crate) fn detail(error: &zbus::Error) -> Option<String> {
-    match error {
-        zbus::Error::MethodError(_, description, _) => description.clone(),
-        zbus::Error::FDO(error) => error.description().map(str::to_owned),
-        _ => None,
-    }
-}
-
 pub(crate) fn explained_with(
     error: &zbus::Error,
     service: &str,

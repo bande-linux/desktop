@@ -48,6 +48,7 @@ assets = [
     ["target/release/bande-unlock", "usr/libexec/", "755"],
     ["target/release/bande-unlock-assets", "usr/libexec/", "755"],
     ["data/bande-unlock-script", "usr/libexec/", "755"],
+    ["data/bande-greeter-session", "usr/libexec/", "755"],
     ["data/bande-unlock.hook", "usr/share/initramfs-tools/hooks/bande-unlock", "755"],
     ["data/bande-unlock-assets.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-unlock-assets.path", "usr/lib/systemd/system/", "644"],

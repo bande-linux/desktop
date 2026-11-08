@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::thread;
+use zbus::zvariant::Value;
 
 use bande_protocols::client::bande_app_control_v1::{self, BandeAppControlV1};
 use bande_protocols::client::bande_app_v1::{self, BandeAppV1, Offer, Placement};
@@ -23,6 +25,9 @@ use crate::window::{State, Window, WindowError, WindowEvent};
 pub(crate) const END_SESSION_SINCE: u32 = 3;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
+pub(crate) const POPOVER_SINCE: u32 = 10;
+const LOOK_UP_ID: &str = "org.bande.Lookup";
+const LOOK_UP_PATH: &str = "/org/bande/Lookup";
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
 pub(crate) const SHELL_VERSION: u32 = 6;
@@ -310,6 +315,33 @@ impl Window {
             .ok_or(WindowError::Missing("xdg_activation_v1"))?
             .activate(token.to_owned(), &self.surface);
         self.flush()
+    }
+
+    pub fn look_up(&mut self, text: String) {
+        let token = self
+            .activation_token(LOOK_UP_ID)
+            .inspect_err(|error| tracing::warn!("no activation token for Look Up: {error}"))
+            .ok();
+        thread::spawn(move || {
+            let mut platform = HashMap::new();
+            if let Some(token) = &token {
+                platform.insert("activation-token", Value::from(token.as_str()));
+            }
+            let asked = bande_bus::session().and_then(|session| {
+                session
+                    .call_method(
+                        Some(LOOK_UP_ID),
+                        LOOK_UP_PATH,
+                        Some("org.freedesktop.Application"),
+                        "Open",
+                        &(vec![text], platform),
+                    )
+                    .map(drop)
+            });
+            if let Err(error) = asked {
+                tracing::warn!("cannot start Look Up: {error}");
+            }
+        });
     }
 
     pub fn activation_token(&mut self, app_id: &str) -> Result<String, WindowError> {

@@ -1,0 +1,12 @@
+app-name = Look Up
+no-entries = No entries for “{ $word }”.
+no-packs = No dictionaries are installed. Add them in Settings.
+derived = Not listed. Last part only: { $first } + { $ending }
+more = More
+form-of = Form of { $word }
+pos-noun = noun
+pos-verb = verb
+pos-adj = adjective
+pos-adv = adverb
+wikipedia = Wikipedia (online)
+wikipedia-attribution = Wikipedia, CC BY-SA 4.0. Looked up online.

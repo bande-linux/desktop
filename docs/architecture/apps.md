@@ -43,5 +43,11 @@ the app id as the bus name; `org.freedesktop.Application` (`Activate`, `Open` wi
 derives from the app id; `<package> --version`; the state (`$XDG_STATE_HOME/bande/`) and config
 (`$XDG_CONFIG_HOME/bande/`) paths.
 
+## Services and popovers
+A program whose `Program::waits_for_activation` says so (Look Up) is started by D-Bus with no
+window, waits for its first request and exits once its last window has closed. `Kind::Popover`
+opens a window at the pointer that takes the keyboard, has no title bar or menu button and is not
+resumed, kept running or listed as a window. See [lookup.md](lookup.md).
+
 ## Printing
 An app with a document puts `bande_app_menu::print_item(enabled)` in its File menu and handles the action `bande_app_menu::PRINT` with `bande_app::print(title, id, Document)`: `Document::Pages` lays out pages for a `PageSetup` on a worker thread (with `bande_app::flow` for flowing text, or `Page::draw` with scene items), `Document::File` prints an existing PDF. The print dialog itself is `bande-file-chooser --print`; see `behaviour.md`.

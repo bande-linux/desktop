@@ -5,10 +5,10 @@ use smithay::desktop::layer_map_for_output;
 use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Subpixel};
 use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::reexports::wayland_server::backend::GlobalId;
-use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
 use smithay::utils::{Clock, Logical, Monotonic, Physical, Point, Raw, Rectangle, Size, Transform};
 use smithay::wayland::presentation::PresentationFeedbackCallback;
 
+use crate::frame_callbacks::{DueCallback, LatchedCallback};
 use crate::state::{REFRESH, State};
 use crate::window::Window;
 use crate::workspace::Workspaces;
@@ -89,6 +89,7 @@ impl OutputConfig {
             scale: automatic_scale(mode.size, self.physical_size_mm),
             transform: Transform::Normal,
             position: Point::default(),
+            match_colours: true,
         })
     }
 }
@@ -99,6 +100,7 @@ pub struct OutputSettings {
     pub scale: f64,
     pub transform: Transform,
     pub position: Point<i32, Logical>,
+    pub match_colours: bool,
 }
 
 impl OutputSettings {
@@ -122,7 +124,8 @@ pub(crate) struct Screen {
     pub(crate) parked: bool,
     pub(crate) fitted_to: Rectangle<i32, Logical>,
     pub(crate) latched_feedback: Vec<PresentationFeedbackCallback>,
-    pub(crate) latched_frame_callbacks: Vec<WlCallback>,
+    pub(crate) latched_frame_callbacks: Vec<LatchedCallback>,
+    pub(crate) due_callbacks: Vec<DueCallback>,
     pub(crate) latched_releases: Vec<Buffer>,
 }
 
@@ -160,6 +163,7 @@ impl Screen {
             fitted_to: Rectangle::default(),
             latched_feedback: Vec::new(),
             latched_frame_callbacks: Vec::new(),
+            due_callbacks: Vec::new(),
             latched_releases: Vec::new(),
         };
         screen.apply(settings);
@@ -185,7 +189,10 @@ impl Screen {
         }
         let millis = Clock::<Monotonic>::new().now().as_millis();
         for callback in self.latched_frame_callbacks {
-            callback.done(millis);
+            callback.send(millis);
+        }
+        for callback in self.due_callbacks {
+            callback.send_now(millis);
         }
     }
 

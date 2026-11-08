@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+bande-l10n-macros.workspace = true
 fluent-bundle.workspace = true
 tracing.workspace = true
 unic-langid.workspace = true

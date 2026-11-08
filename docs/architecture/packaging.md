@@ -19,11 +19,13 @@ profiles. Sizes are in [performance.md](performance.md).
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
   `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
-  `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
+  `bande-settings`, `bande-file-chooser`, `bande-lookup`). The Look Up dictionary packs
+  (`bande-dict-en`, `bande-dict-sv`, `bande-dict-sv-wiktionary`) are made from their source data
+  by `packaging/dict/build.py`, not from this tree's code; see [lookup.md](lookup.md). Package names stay `bande-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)). Crates in `ci/release/bundled` build with them and ship inside another package
   (`bande-secrets-prompt` in `bande-secrets`). Packages in `ci/release/arch-variants` build
   with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `bande-shell` installs the one
@@ -95,7 +97,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` recommends
   `dmz-cursor-theme`, whose `DMZ-Black` is the default pointer (`XCURSOR_THEME` unset), with the
   system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
-  (Software Update), power-profiles-daemon (Power) and depends on `locales`, so localed can
+  (Software Update), power-profiles-daemon (Power) and depends on `locales`, so its helper can
   generate any language picked in Settings;
 - `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders

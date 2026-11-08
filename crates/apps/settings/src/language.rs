@@ -165,6 +165,59 @@ impl SettingsView {
         rows
     }
 
+    pub(crate) fn app_language_rows(&mut self) -> Widgets {
+        let (Some(login), Some(locale)) = (self.login.clone(), self.locale.clone()) else {
+            return Vec::new();
+        };
+        match self.picking.clone() {
+            Some((Picker::AppLanguage, query)) => {
+                let name = self
+                    .language_app
+                    .as_ref()
+                    .and_then(|id| login.apps.iter().find(|app| app.id == *id))
+                    .map(|app| app.name.clone())
+                    .unwrap_or_default();
+                let title = L10N.tr_args("choose-app-language", [("name", name.into())]);
+                return self.locale_search(&locale, &title, &query);
+            }
+            Some((Picker::LanguageApp, query)) => {
+                return self.app_search(&L10N.tr("add-login-item"), &query, &login.apps);
+            }
+            _ => {}
+        }
+        let mut rows: Widgets = Vec::new();
+        for (app, code) in &login.languages {
+            let mut change = intent(&self.intents, Intent::ChangeAppLanguage);
+            let mut remove = intent(&self.intents, Intent::RemoveAppLanguage);
+            let (changed, removed) = (app.id.clone(), app.id.clone());
+            let controls = Stack::new(
+                Axis::Horizontal,
+                Spacing::S as f32,
+                0.0,
+                vec![
+                    boxed(Button::new(&L10N.tr("change-ellipsis"), move || {
+                        change(changed.clone())
+                    })),
+                    boxed(Button::new(&L10N.tr("remove"), move || {
+                        remove(removed.clone())
+                    })),
+                ],
+            );
+            let row = Row::new(Text::new(&app.name, Tone::Primary), Some(boxed(controls)))
+                .detail(Text::new(&locale_label(&locale.available, code), Tone::Muted).caption());
+            rows.push(self.item_row(format!("app-language:{}", app.id), row));
+        }
+        let mut add = intent(&self.intents, |()| Intent::Pick(Some(Picker::LanguageApp)));
+        let button = Button::new(&L10N.tr("add-login-item"), move || add(()));
+        self.anchors
+            .push((Anchor::Setting(SettingId::AppLanguages, None), button.id()));
+        rows.push(boxed(Row::new(
+            Text::new(&L10N.tr("app-languages-hint"), Tone::Muted).caption(),
+            Some(boxed(button)),
+        )));
+        rows
+    }
+
     pub(crate) fn region_rows(&mut self) -> Widgets {
         let Some(locale) = self.locale.clone() else {
             return Vec::new();

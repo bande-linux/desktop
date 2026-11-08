@@ -217,6 +217,7 @@ impl State {
         let client = window.surface().client();
         window.toplevel.parent().is_none()
             && !window.panel
+            && !window.popover
             && client.as_ref().is_some_and(|client| !is_shell(client))
             && !self.manages_own_session(client.as_ref())
     }

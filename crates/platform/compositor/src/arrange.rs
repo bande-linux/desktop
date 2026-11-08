@@ -62,6 +62,7 @@ fn settings_for(head: &OutputConfig, display: &DisplaySettings) -> Option<Output
             .unwrap_or_else(|| automatic_scale(mode.size, head.physical_size_mm)),
         transform: transform(display.rotation),
         position: Point::default(),
+        match_colours: display.match_colours.unwrap_or(true),
     })
 }
 

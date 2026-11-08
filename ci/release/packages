@@ -8,6 +8,7 @@ bande-recovery
 bande-reporter
 bande-crash-reports
 bande-sound
+bande-spell
 xdg-desktop-portal-bande
 bande-file-chooser
 bande-recovery-tools
@@ -22,5 +23,6 @@ bande-shell
 bande-lock
 bande-screenshot
 bande-files
+bande-lookup
 bande-settings
 bande-greeter

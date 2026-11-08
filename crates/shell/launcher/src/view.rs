@@ -722,6 +722,7 @@ impl Launcher {
         let field = TextField::new(&L10N.tr("search"), "", move |query| {
             changed.borrow_mut().model.set_query(query);
         })
+        .without_text_checking()
         .borderless(FIELD_SIZE);
         let field_id = field.id();
         let preview = PreviewPane::new(state.clone());

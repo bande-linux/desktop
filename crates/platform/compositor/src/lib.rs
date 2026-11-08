@@ -12,6 +12,7 @@ mod capture;
 mod capture_shell;
 mod cascade;
 mod clock;
+mod colour;
 mod constraint;
 mod cursor;
 mod decoration;
@@ -25,6 +26,7 @@ mod environment;
 mod family;
 mod force_quit;
 mod frame;
+mod frame_callbacks;
 mod gesture;
 mod grab;
 mod idle;
@@ -43,6 +45,7 @@ mod motion;
 mod night;
 mod output_power;
 mod overview;
+mod pacing;
 mod pointing;
 mod popup;
 mod recall;
@@ -73,8 +76,7 @@ pub use appearance::{SystemAppearance, follow_appearance};
 pub use assistive::follow_alerts;
 pub use bande_render::{DeviceInfo, RenderError};
 pub use clock::{
-    FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, SAFETY_MARGIN,
-    Submission, Vblank,
+    FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, Submission, Vblank,
 };
 pub use cursor::{
     ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,

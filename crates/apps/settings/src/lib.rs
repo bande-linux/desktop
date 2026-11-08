@@ -18,6 +18,7 @@ mod header;
 mod language;
 mod locale;
 mod login;
+mod lookup;
 mod network;
 mod night;
 mod notifications;
@@ -34,6 +35,7 @@ mod security_status;
 mod services;
 mod sharing;
 mod software;
+mod spelling;
 mod state;
 mod storage;
 mod time;
@@ -55,9 +57,7 @@ pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
-pub use locale::{
-    AvailableLocale, LocaleCommand, LocaleState, assignments, parse_assignments, supported_locales,
-};
+pub use locale::{AvailableLocale, LocaleCommand, LocaleState, supported_locales};
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
 pub use night::{clock_text, night_summary};
 pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifications};

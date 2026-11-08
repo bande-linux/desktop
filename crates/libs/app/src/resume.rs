@@ -161,7 +161,7 @@ impl Resume {
         link: &AppConnection,
         kind: Kind,
     ) -> Option<WindowInSession> {
-        if matches!(kind, Kind::Dialog(_) | Kind::Panel(_)) {
+        if matches!(kind, Kind::Dialog(_) | Kind::Panel(_) | Kind::Popover(_)) {
             return None;
         }
         let restoring = self.opening.is_some();

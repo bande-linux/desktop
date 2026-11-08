@@ -602,6 +602,9 @@ impl FilesView {
         if let Some((menu, at)) = self.ui.take_menu_request() {
             self.requests.push(Request::ShowMenu { menu, at });
         }
+        if let Some(text) = self.ui.take_look_up_request() {
+            self.requests.push(Request::LookUp(text));
+        }
         if self.ui.take_emoji_picker_request() {
             self.requests.push(Request::ShowEmojiPicker);
         }
@@ -1184,6 +1187,7 @@ impl FilesView {
             .map(str::to_owned);
         self.cancel_rename();
         let mut field = TextField::new("", &shown, |_| {})
+            .without_text_checking()
             .in_place(NAME_SIZE)
             .padding(FIELD_INSET);
         field.select(match hidden_extension {
@@ -1359,7 +1363,8 @@ impl FilesView {
         let send = sender(&self.signals);
         let mut field = TextField::new("", &current, move |text| {
             send(Signal::GoTo(text.to_owned()));
-        });
+        })
+        .without_text_checking();
         field.select(0..current.len());
         let prompt = Prompt::new(&L10N.tr("go-to-title"), "", self.choice())
             .accessory(field)

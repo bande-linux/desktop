@@ -871,7 +871,9 @@ always the user's: Restart Now / Later, Log Out / Later; Restart Now and Log Out
 `bande_app_v1.end_session`, the Bande menu's confirmation, so every app is asked to quit first. A pending restart is remembered with the
 boot id in `$XDG_STATE_HOME/bande/restart-pending` (or `/run/reboot-required`), and the daily user
 timer (also 3 minutes after login) reminds about it, about a prepared offline update, or posts a
-notification when updates are waiting. Offline results are read once after the restart; Settings
+notification when updates are waiting. Offline results are read once after the restart, only
+when PackageKit's results file exists, so an error reading them shows as an error, not as no
+results; Settings
 refreshes the cache when it is older than an hour. An apt "dpkg was interrupted" failure shows
 "Finish Installing", which runs PackageKit's `RepairSystem`. While dpkg runs, packagekitd holds
 a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress.

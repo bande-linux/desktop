@@ -70,6 +70,7 @@ pub(crate) enum Intent {
     KeepDisplays(bool),
     Default(Direction, String),
     AppVolume(String, f32),
+    VolumeFeedback,
     Join(Vec<u8>),
     Password(String),
     CancelJoin,
@@ -149,7 +150,6 @@ pub(crate) enum Intent {
     KeyboardAccess(String, bool),
     Spelling(crate::spelling::SpellingCommand),
     Battery(BatteryCommand),
-    LookUp(crate::lookup::LookUpCommand),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -311,7 +311,6 @@ pub struct SettingsView {
     pub(crate) permissions: Grants,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
     pub(crate) spelling: crate::spelling::SpellingState,
-    pub(crate) look_up: crate::lookup::LookUpState,
     pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
     stale: bool,
@@ -418,7 +417,6 @@ impl SettingsView {
             permissions: Vec::new(),
             keyboard_access: Vec::new(),
             spelling: Default::default(),
-            look_up: Default::default(),
             security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
@@ -864,7 +862,6 @@ impl SettingsView {
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
             Update::Spelling(state) => self.spelling = state,
-            Update::LookUp(state) => self.look_up = state,
             Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
                 if let Some(Detail::Printer(id)) = &self.detail
@@ -1442,7 +1439,6 @@ impl SettingsView {
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Spelling(command) => self.change_spelling(command),
                 Intent::Battery(command) => self.commands.push(Command::Battery(command)),
-                Intent::LookUp(command) => self.commands.push(Command::LookUp(command)),
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;
@@ -1670,6 +1666,9 @@ impl SettingsView {
                 Intent::AppVolume(name, volume) => {
                     self.commands
                         .push(Command::Audio(AudioCommand::App(name, volume)));
+                }
+                Intent::VolumeFeedback => {
+                    self.commands.push(Command::Audio(AudioCommand::Feedback))
                 }
                 Intent::Join(ssid) => self.start_join(ssid, None),
                 Intent::Password(password) => {

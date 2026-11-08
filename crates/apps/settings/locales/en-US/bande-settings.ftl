@@ -713,7 +713,3 @@ spelling-links = Show web and email addresses as links
 replace-from = Replace
 replace-to = With
 replace-add = Add Replacement
-look-up-first = Use First
-look-up-install = Install
-look-up-wikipedia = Wikipedia
-look-up-wikipedia-online = Off by default. When on, every word you look up is sent to Wikipedia online.

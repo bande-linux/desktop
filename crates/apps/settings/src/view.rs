@@ -70,6 +70,7 @@ pub(crate) enum Intent {
     KeepDisplays(bool),
     Default(Direction, String),
     AppVolume(String, f32),
+    VolumeFeedback,
     Join(Vec<u8>),
     Password(String),
     CancelJoin,
@@ -1659,6 +1660,9 @@ impl SettingsView {
                 Intent::AppVolume(name, volume) => {
                     self.commands
                         .push(Command::Audio(AudioCommand::App(name, volume)));
+                }
+                Intent::VolumeFeedback => {
+                    self.commands.push(Command::Audio(AudioCommand::Feedback))
                 }
                 Intent::Join(ssid) => self.start_join(ssid, None),
                 Intent::Password(password) => {

@@ -297,13 +297,20 @@ impl SettingsView {
                 let Some(Value::Fraction(level)) = value else {
                     return None;
                 };
-                boxed(Slider::new(
+                let slider = Slider::new(
                     &setting.label,
                     f64::from(level),
                     (0.0, 1.0),
                     VOLUME_STEP,
                     move |level| set(Value::Fraction(level as f32)),
-                ))
+                );
+                match id {
+                    SettingId::OutputVolume => {
+                        let mut feedback = intent(&self.intents, |()| Intent::VolumeFeedback);
+                        boxed(slider.on_release(move |_| feedback(())))
+                    }
+                    _ => boxed(slider),
+                }
             }
             Kind::RefreshRates => {
                 let rates = scope?.refresh_rates();

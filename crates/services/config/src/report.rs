@@ -142,6 +142,7 @@ impl ErrorNotifier {
                 actions: &[(EDIT_ACTION, &open_in_editor)],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         match reply {

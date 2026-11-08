@@ -115,6 +115,7 @@ impl SpaceWatch {
                 actions: &[(MANAGE_STORAGE, &manage)],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         match posted {

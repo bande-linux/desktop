@@ -104,6 +104,9 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
   (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
   import), `xkb-data` and `locales`, so its helper can generate any language picked in Settings;
+  the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
+  and `systemd-resolved` are from Sharing (resolved announces shares but also takes over DNS, so
+  it is never pulled in silently);
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
 - `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;

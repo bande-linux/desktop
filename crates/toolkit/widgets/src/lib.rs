@@ -345,7 +345,9 @@ pub trait Widget: Any {
         None
     }
 
-    fn spelling_answered(&mut self) {}
+    fn spelling_answered(&mut self) -> bool {
+        false
+    }
 
     fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
         None
@@ -1073,18 +1075,17 @@ impl Ui {
         self.menu_request = Some((menu, point));
     }
 
-    pub fn spelling_answered(&mut self) {
-        if let Some(id) = self.cx.focus
-            && let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id)
-        {
-            widget.spelling_answered();
-        }
+    pub fn spelling_answered(&mut self) -> bool {
+        let edited = self.cx.focus.is_some_and(|id| {
+            lookup_in(&mut self.root, &mut self.sheet, id)
+                .is_some_and(|widget| widget.spelling_answered())
+        });
         let Some((id, point)) = self.deferred_menu else {
-            return;
+            return edited;
         };
         let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
             self.deferred_menu = None;
-            return;
+            return edited;
         };
         self.cx.menu_awaits_suggestions = false;
         let menu = widget.context_menu(&mut self.cx, point);
@@ -1094,6 +1095,7 @@ impl Ui {
                 self.show_menu(id, menu, point);
             }
         }
+        edited
     }
 
     pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {

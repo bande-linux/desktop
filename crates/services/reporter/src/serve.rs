@@ -155,6 +155,7 @@ impl Service {
                 .and_then(Path::file_name)
                 .and_then(|name| name.to_str())
                 .map(str::to_owned);
+            fault.executable = executable;
             fault.pid = Some(pid.clone());
         }
         if let Some(Value::Object(detail)) = request.get("detail") {

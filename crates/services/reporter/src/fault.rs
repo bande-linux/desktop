@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -37,6 +37,7 @@ const NETWORK_FILESYSTEMS: [(&str, &str); 7] = [
 pub struct Fault {
     pub kind: String,
     pub program: Option<String>,
+    pub executable: Option<PathBuf>,
     pub owner: Option<u32>,
     pub pid: Option<String>,
     pub detail: Map<String, Value>,
@@ -54,6 +55,7 @@ impl Fault {
         Self {
             kind: kind.to_owned(),
             program: None,
+            executable: None,
             owner: None,
             pid: None,
             detail: Map::new(),
@@ -89,6 +91,10 @@ impl Fault {
         spool_root: &Path,
     ) -> io::Result<String> {
         let scrubber = Scrubber::for_this_computer();
+        self.signature_text = self
+            .signature_text
+            .as_deref()
+            .map(|text| scrubber.text(text));
         let mut manifest = Map::new();
         let signature = match &config.signature_tag {
             Some(tag) => format!("{tag}-{}", self.signature()),
@@ -103,6 +109,7 @@ impl Fault {
         manifest.insert("threads".to_owned(), self.stacks.threads_json());
         manifest.insert("images".to_owned(), self.stacks.images_json());
         manifest.insert("panic_location".to_owned(), json!(self.panic_location));
+        manifest.insert("signature_text".to_owned(), json!(self.signature_text));
         manifest.insert("counters".to_owned(), facts::counters_of(spool_root));
         let this_boot = facts::boot_id();
         match self.boot.as_deref().map(facts::boot_id_of) {
@@ -117,6 +124,13 @@ impl Fault {
             }
         }
         manifest.extend(facts::machine());
+        if let Some(version) = self
+            .executable
+            .as_deref()
+            .and_then(facts::package_version_of)
+        {
+            manifest.insert("desktop_version".to_owned(), json!(version));
+        }
         if let Some(uid) = self.owner {
             facts::session(uid, &mut manifest);
         }

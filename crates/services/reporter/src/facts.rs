@@ -79,6 +79,22 @@ fn package_versions() -> Value {
     Value::Object(packages)
 }
 
+pub fn package_version_of(executable: &Path) -> Option<String> {
+    let path = executable.to_str()?.trim_end_matches(" (deleted)");
+    let owners = command_text("dpkg-query", &["-S", path]);
+    let (packages, _) = owners.lines().next()?.split_once(": ")?;
+    installed_version(packages.split(", ").next()?)
+}
+
+pub fn installed_version(package: &str) -> Option<String> {
+    let status = command_text(
+        "dpkg-query",
+        &["-W", "-f", "${db:Status-Abbrev} ${Version}", package],
+    );
+    let version = status.strip_prefix("ii ")?.trim();
+    (!version.is_empty()).then(|| version.to_owned())
+}
+
 fn memory() -> Value {
     let text = fs::read_to_string("/proc/meminfo").unwrap_or_default();
     let mut memory = Map::new();

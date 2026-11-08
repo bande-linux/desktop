@@ -7,6 +7,8 @@ use jiff::Timestamp;
 use rustix::fs::statvfs;
 use serde_json::{Map, Value, json};
 
+use crate::facts;
+
 const REPORTS: &str = "reports";
 const OUTBOX: &str = "outbox";
 const STAGING: &str = "tmp";
@@ -16,6 +18,7 @@ pub const STATE: &str = "state.json";
 const UUID_SOURCE: &str = "/proc/sys/kernel/random/uuid";
 const OS_RELEASE: &str = "/etc/os-release";
 const KERNEL_RELEASE: &str = "/proc/sys/kernel/osrelease";
+const DESKTOP_PACKAGE: &str = "bande-desktop";
 
 const KEEP_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const KEEP_REPORTS: usize = 200;
@@ -155,6 +158,11 @@ impl Spool {
         manifest
             .entry("os_version")
             .or_insert_with(|| json!(os_version()));
+        if !manifest.contains_key("desktop_version")
+            && let Some(version) = facts::installed_version(DESKTOP_PACKAGE)
+        {
+            manifest.insert("desktop_version".to_owned(), json!(version));
+        }
         manifest
             .entry("build_ids")
             .or_insert_with(|| Value::Array(Vec::new()));

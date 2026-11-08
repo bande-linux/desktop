@@ -128,43 +128,32 @@ pub fn parse_coredump(message: &str, crashed_tid: Option<u64>) -> Stacks {
     stacks
 }
 
-fn parse_eu_frame(line: &str, images: &mut Vec<Image>) -> Option<ParsedFrame> {
+fn parse_eu_frame(line: &str) -> Option<ParsedFrame> {
     let rest = line.trim_start().strip_prefix('#')?;
     let mut parts = rest.split_whitespace();
     let _number = parts.next()?;
     let address = parts.next()?;
     let address = u64::from_str_radix(address.trim_start_matches("0x"), 16).ok()?;
-    let mut symbol = None;
-    let mut module = String::new();
-    let mut build_id = None;
     let mut words = parts.peekable();
-    if let Some(word) = words.peek()
-        && *word != "-"
-    {
-        symbol = Some(readable((*word).split('+').next().unwrap_or(word)));
-        words.next();
-    }
-    while let Some(word) = words.next() {
-        match word {
-            "-" => module = base_name(words.next().unwrap_or_default()).to_owned(),
-            _ if word.len() >= 16 && word.bytes().all(|b| b.is_ascii_hexdigit()) => {
-                build_id = Some(word.to_owned());
-            }
-            _ => {}
-        }
-    }
-    if !module.is_empty() && !images.iter().any(|image| image.name == module) {
-        images.push(Image {
-            name: module.clone(),
-            build_id,
-            package: None,
-        });
-    }
+    let symbol = words
+        .next_if(|word| *word != "-")
+        .map(|word| readable(word.split('+').next().unwrap_or(word)));
+    let module = match (words.next(), words.next()) {
+        (Some("-"), Some(path)) => base_name(path).to_owned(),
+        _ => String::new(),
+    };
     Some(ParsedFrame {
         symbol,
         module,
         offset: address,
     })
+}
+
+fn parse_eu_place(line: &str) -> Option<(String, u64)> {
+    let (build_id, place) = line.trim().strip_prefix('[')?.split_once("]@")?;
+    let (_, offset) = place.split_once('+')?;
+    let offset = u64::from_str_radix(offset.trim().trim_start_matches("0x"), 16).ok()?;
+    Some((build_id.to_owned(), offset))
 }
 
 pub fn parse_eu_stack(text: &str, main_tid: u64) -> Stacks {
@@ -179,11 +168,31 @@ pub fn parse_eu_stack(text: &str, main_tid: u64) -> Stacks {
                 crashed: id == main_tid,
                 frames: Vec::new(),
             });
-        } else if let Some(frame) = parse_eu_frame(line, &mut stacks.images)
+        } else if let Some(frame) = parse_eu_frame(line)
             && let Some(thread) = stacks.threads.last_mut()
         {
             thread.frames.push(frame);
+        } else if let Some((build_id, offset)) = parse_eu_place(line)
+            && let Some(frame) = stacks
+                .threads
+                .last_mut()
+                .and_then(|thread| thread.frames.last_mut())
+            && !frame.module.is_empty()
+        {
+            frame.offset = offset;
+            if !stacks.images.iter().any(|image| image.name == frame.module) {
+                stacks.images.push(Image {
+                    name: frame.module.clone(),
+                    build_id: (!build_id.is_empty()).then_some(build_id),
+                    package: None,
+                });
+            }
         }
+    }
+    for thread in &mut stacks.threads {
+        thread.frames.retain(|frame| {
+            !frame.module.is_empty() && stacks.images.iter().any(|image| image.name == frame.module)
+        });
     }
     stacks
 }
@@ -209,6 +218,7 @@ impl Stacks {
                             json!({
                                 "symbol": frame.symbol,
                                 "module": frame.module,
+                                "build_id": self.build_id_of(&frame.module),
                                 "offset": frame.offset,
                             })
                         })
@@ -234,6 +244,13 @@ impl Stacks {
         )
     }
 
+    fn build_id_of(&self, module: &str) -> Option<&str> {
+        self.images
+            .iter()
+            .find(|image| image.name == module)
+            .and_then(|image| image.build_id.as_deref())
+    }
+
     pub fn build_ids(&self) -> Value {
         Value::Array(
             self.images
@@ -247,7 +264,19 @@ impl Stacks {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_coredump;
+    use super::{parse_coredump, parse_eu_stack};
+
+    #[test]
+    fn eu_stack_frames_keep_the_offset_in_their_module() {
+        let text = "PID 7 - process\nTID 7:\n#0  0x00007fffbe3a1b5c clock_nanosleep - /usr/lib/aarch64-linux-gnu/libc.so.6\n    [405d95c1]@0x7fffbe2e0000+0xc1b5b\n#1  0x000055555cd26f88 - /usr/bin/sleep\n    [53c7c062]@0x55555cd20000+0x6f87\n    src/sleep.c:42\n#2  0x0000000000001234\n";
+        let stacks = parse_eu_stack(text, 7);
+        let frames = &stacks.threads[0].frames;
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].offset, 0xc1b5b);
+        assert_eq!(frames[1].module, "sleep");
+        assert_eq!(frames[1].offset, 0x6f87);
+        assert_eq!(stacks.build_id_of("libc.so.6"), Some("405d95c1"));
+    }
 
     #[test]
     fn a_systemd_coredump_message_becomes_threads_and_images() {

@@ -56,7 +56,12 @@ fn body_of(report: &Stored, without: &[String]) -> io::Result<(Vec<u8>, Vec<Stri
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
-        if name != MANIFEST && !name.starts_with('.') && name != STATE && !without.contains(&name) {
+        if report.status != Status::Sent
+            && name != MANIFEST
+            && !name.starts_with('.')
+            && name != STATE
+            && !without.contains(&name)
+        {
             attachments.push((name.clone(), fs::read(entry.path())?));
         }
     }

@@ -30,7 +30,7 @@ use crate::widgets::{
 use bande_config::Placement;
 use bande_settings_panes::SettingHit;
 use bande_settings_panes::{
-    AUTOMATIC, Choice, Kind, List, MAX_SEGMENTS, PaneId, Section, Setting, SettingId, Value,
+    AUTOMATIC, Choice, Kind, List, MAX_SEGMENTS, PaneId, SCALES, Section, Setting, SettingId, Value,
 };
 
 const PAGE_PADDING: f32 = Spacing::XL as f32;
@@ -154,6 +154,9 @@ impl SettingsView {
     ) -> Option<(Box<dyn Widget>, WidgetId)> {
         let id = setting.id;
         let value = match scope {
+            Some(_) if id == SettingId::ShowAllResolutions => {
+                Some(Value::Flag(self.show_all_resolutions))
+            }
             Some(display) if id == SettingId::Brightness => self
                 .display_levels
                 .iter()
@@ -363,6 +366,41 @@ impl SettingsView {
                     }
                 })
             }
+            Kind::TextSizes => {
+                let display = scope?;
+                let (width, height) = display.resolutions().first().copied()?;
+                let looks = |percent: u32| {
+                    L10N.tr_args(
+                        "text-size-looks-like",
+                        [
+                            ("width", (width * 100 / percent as i32).into()),
+                            ("height", (height * 100 / percent as i32).into()),
+                        ],
+                    )
+                };
+                let last = SCALES.len() - 1;
+                let mut choices: Vec<(String, Value)> =
+                    vec![(L10N.tr("text-size-default"), Value::Keyword(AUTOMATIC.to_owned()))];
+                choices.extend(SCALES.iter().enumerate().map(|(index, &percent)| {
+                    let label = match index {
+                        0 => L10N.tr_args("text-size-larger", [("size", looks(percent).into())]),
+                        index if index == last => {
+                            L10N.tr_args("text-size-more-space", [("size", looks(percent).into())])
+                        }
+                        _ => looks(percent),
+                    };
+                    (label, Value::Number(percent))
+                }));
+                let selected = value
+                    .as_ref()
+                    .and_then(|value| choices.iter().position(|(_, choice)| choice == value));
+                let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
+                choice_control(&setting.label, &labels, selected, move |index| {
+                    if let Some((_, value)) = choices.get(index) {
+                        set(value.clone());
+                    }
+                })
+            }
             Kind::ColourProfiles => {
                 let mut choices: Vec<(String, String)> = [
                     ("colour-profile-display", bande_colour::DISPLAY),
@@ -449,6 +487,9 @@ impl SettingsView {
         scope: Option<&Display>,
         matched: Option<&SettingHit>,
     ) -> Option<Box<dyn Widget>> {
+        if setting.id == SettingId::DisplayResolution && !self.show_all_resolutions {
+            return None;
+        }
         let (control, focus) = match self.allowed(setting.id) {
             true => self.control(setting, scope)?,
             false => {

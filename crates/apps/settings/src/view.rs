@@ -248,6 +248,7 @@ pub struct SettingsView {
     pub(crate) pairing: Option<Question>,
     pub(crate) pictures: Vec<(String, Pair)>,
     pub(crate) colour_profiles: Vec<(String, String)>,
+    pub(crate) show_all_resolutions: bool,
     pub(crate) thumbnails: HashMap<Pair, Option<Image>>,
     pub(crate) query: String,
     pub(crate) hits: Vec<PaneHit>,
@@ -352,6 +353,7 @@ impl SettingsView {
             pairing: None,
             pictures: Vec::new(),
             colour_profiles: Vec::new(),
+            show_all_resolutions: false,
             thumbnails: HashMap::new(),
             query: String::new(),
             hits: Vec::new(),
@@ -2226,6 +2228,11 @@ impl SettingsView {
     }
 
     fn change_display(&mut self, identity: String, id: SettingId, value: Value) {
+        if let (SettingId::ShowAllResolutions, Value::Flag(shown)) = (id, &value) {
+            self.show_all_resolutions = *shown;
+            self.invalidate();
+            return;
+        }
         let mut display = self
             .display_settings
             .get(&identity)

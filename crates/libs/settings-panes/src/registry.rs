@@ -254,6 +254,7 @@ pub enum SettingId {
     DisplayScale,
     RefreshRate,
     ColourProfile,
+    ShowAllResolutions,
     DisplayRotation,
     ScreenSaverAfter,
     DisplayOffAfter,
@@ -472,6 +473,7 @@ pub enum Kind {
     RefreshRates,
     Resolutions,
     ColourProfiles,
+    TextSizes,
     DisplayUses,
     Pictures,
     Swatches(Vec<Choice>),
@@ -493,6 +495,7 @@ impl Kind {
             | Self::RefreshRates
             | Self::Resolutions
             | Self::ColourProfiles
+            | Self::TextSizes
             | Self::DisplayUses
             | Self::Pictures
             | Self::Text
@@ -715,15 +718,6 @@ const REPEAT_RATES: [u32; 9] = [2, 5, 10, 15, 20, 25, 30, 45, 60];
 const REPEAT_DELAYS: [u32; 8] = [2000, 1500, 1000, 800, 600, 450, 300, 200];
 pub const POINTER_SPEEDS: u32 = 10;
 
-fn scale_choices() -> Vec<Choice> {
-    let mut choices = keyword_choices(vec![(L10N.tr("scale-automatic"), AUTOMATIC)]);
-    choices.extend(SCALES.iter().map(|&percent| Choice {
-        label: L10N.tr_args("percent", [("value", percent.into())]),
-        value: Value::Number(percent),
-    }));
-    choices
-}
-
 fn rotation_choices() -> Vec<Choice> {
     std::iter::once(Choice {
         label: L10N.tr("rotation-standard"),
@@ -742,7 +736,7 @@ const BAR_SIZES: (u32, u32) = (32, 56);
 const NIGHT_WARMTH: (u32, u32) = (0, 100);
 pub const TEXT_SIZES: [u32; 5] = [100, 125, 150, 175, 200];
 
-const SCALES: [u32; 5] = [100, 125, 150, 175, 200];
+pub const SCALES: [u32; 5] = [200, 175, 150, 125, 100];
 
 fn list(id: SettingId, name: &str, list: List) -> Setting {
     setting(
@@ -1135,16 +1129,17 @@ fn displays_pane() -> Pane {
                         Kind::DisplayUses,
                     ),
                     setting(
+                        SettingId::DisplayScale,
+                        L10N.tr("display-scale"),
+                        L10N.tr("display-scale-keywords"),
+                        Kind::TextSizes,
+                    ),
+                    switch(SettingId::ShowAllResolutions, "show-all-resolutions"),
+                    setting(
                         SettingId::DisplayResolution,
                         L10N.tr("display-resolution"),
                         L10N.tr("display-resolution-keywords"),
                         Kind::Resolutions,
-                    ),
-                    setting(
-                        SettingId::DisplayScale,
-                        L10N.tr("display-scale"),
-                        L10N.tr("display-scale-keywords"),
-                        choice(scale_choices()),
                     ),
                     setting(
                         SettingId::RefreshRate,

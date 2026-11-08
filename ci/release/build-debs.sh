@@ -25,8 +25,11 @@ built=$target/$profile
 rm -rf "$built/cursors" "$built/l10n"
 "$built/bande-cursor-theme" "$built/cursors/Bande-Cursors"
 "$built/bande-l10n-tool" pack "$built/l10n"
+packaged=$target
 if [ "$profile" = dist ]; then
-    ci/release/symbols.sh "$target/$profile" "$target/debian-symbols" "$version"
+    packaged=$target/stripped
+    ci/release/symbols.sh "$built" "$packaged/$profile" "$target/debian-symbols" "$version"
+    cp -a "$built/cursors" "$built/l10n" "$packaged/$profile/"
     strip=(--no-strip)
 fi
 for package in "${packages[@]}"; do
@@ -34,6 +37,6 @@ for package in "${packages[@]}"; do
     if grep -qx "$package" ci/release/arch-variants; then
         variant=(--variant "$architecture")
     fi
-    cargo deb --profile "$profile" --no-build --locked --package "$package" "${variant[@]}" "${compression[@]}" "${strip[@]}" --deb-version "$version"
+    CARGO_TARGET_DIR=$packaged cargo deb --output "$target/debian" --profile "$profile" --no-build --locked --package "$package" "${variant[@]}" "${compression[@]}" "${strip[@]}" --deb-version "$version"
 done
 ls -l "$target/debian"

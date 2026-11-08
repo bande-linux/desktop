@@ -801,6 +801,7 @@ fn run_assistant() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-setup");
     match run_assistant() {
         Ok(()) => ExitCode::SUCCESS,

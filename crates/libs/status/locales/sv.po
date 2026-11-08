@@ -1,0 +1,107 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Sign in to {network}"
+msgstr "Logga in på {network}"
+
+msgid "Sign in to the network"
+msgstr "Logga in på nätverket"
+
+msgid "Could not join {network}"
+msgstr "Det gick inte att ansluta till {network}"
+
+msgid "Network"
+msgstr "Nätverk"
+
+msgid "Sign In"
+msgstr "Logga in"
+
+msgid "This network asks you to sign in before you can use the internet."
+msgstr "Nätverket kräver att du loggar in innan du kan använda internet."
+
+msgid "Are you sure you want to restart your computer now?"
+msgstr "Vill du verkligen starta om datorn nu?"
+
+msgid "Are you sure you want to shut down your computer now?"
+msgstr "Vill du verkligen stänga av datorn nu?"
+
+msgid "Are you sure you want to quit all apps and log out now?"
+msgstr "Vill du verkligen avsluta alla appar och logga ut nu?"
+
+msgid "The computer restarts automatically in {seconds} seconds."
+msgstr "Datorn startar om automatiskt om {seconds} sekunder."
+
+msgid "The computer shuts down automatically in {seconds} seconds."
+msgstr "Datorn stängs av automatiskt om {seconds} sekunder."
+
+msgid "You are logged out automatically in {seconds} seconds."
+msgstr "Du loggas ut automatiskt om {seconds} sekunder."
+
+msgid "Restart"
+msgstr "Starta om"
+
+msgid "Shut Down"
+msgstr "Stäng av"
+
+msgid "Log Out"
+msgstr "Logga ut"
+
+msgid "{app} is keeping your computer from restarting."
+msgstr "{app} hindrar datorn från att starta om."
+
+msgid "{app} is keeping your computer from shutting down."
+msgstr "{app} hindrar datorn från att stängas av."
+
+msgid "{app} is keeping you from logging out."
+msgstr "{app} hindrar dig från att logga ut."
+
+msgid "Restart Anyway"
+msgstr "Starta om ändå"
+
+msgid "Shut Down Anyway"
+msgstr "Stäng av ändå"
+
+msgid "Log Out Anyway"
+msgstr "Logga ut ändå"
+
+msgid "Restarting…"
+msgstr "Startar om…"
+
+msgid "Shutting Down…"
+msgstr "Stänger av…"
+
+msgid "Logging Out…"
+msgstr "Loggar ut…"
+
+msgid "Your computer could not restart."
+msgstr "Det gick inte att starta om datorn."
+
+msgid "Your computer could not shut down."
+msgstr "Det gick inte att stänga av datorn."
+
+msgid "You could not be logged out."
+msgstr "Det gick inte att logga ut."
+
+msgid "Something is keeping your computer from restarting."
+msgstr "Något hindrar datorn från att starta om."
+
+msgid "Something is keeping your computer from shutting down."
+msgstr "Något hindrar datorn från att stängas av."
+
+msgid "{who}: {why}"
+msgstr "{who}: {why}"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
+msgid "Quitting apps…"
+msgstr "Avslutar appar…"
+
+msgid "{gigabytes} GB"
+msgstr "{gigabytes} GB"

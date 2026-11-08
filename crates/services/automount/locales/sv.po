@@ -1,0 +1,59 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Untitled"
+msgstr "Namnlös"
+
+msgid "Eject “{label}” before disconnecting it, or files on it may be damaged."
+msgstr "Mata ut ”{label}” innan du kopplar från den, annars kan filer på den skadas."
+
+msgid "Disks"
+msgstr "Skivor"
+
+msgid "Disk Not Ejected Properly"
+msgstr "Skivan matades inte ut på rätt sätt"
+
+msgid "Server Connection Interrupted"
+msgstr "Serveranslutningen avbröts"
+
+msgid "“{name}” isn’t responding. Files on it can’t be reached until it’s back."
+msgstr "”{name}” svarar inte. Filer på den går inte att komma åt förrän den är tillbaka."
+
+msgid "Disconnect"
+msgstr "Koppla från"
+
+msgid "Server Disconnected"
+msgstr "Servern är frånkopplad"
+
+msgid "“{name}” stopped responding. It will reconnect by itself when it’s back."
+msgstr "”{name}” slutade svara. Den ansluter igen av sig själv när den är tillbaka."
+
+msgid "Server password for {server}"
+msgstr "Serverlösenord för {server}"
+
+msgid "The connection to “{name}” ended."
+msgstr "Anslutningen till ”{name}” avslutades."
+
+msgid "Unlock “{name}”, choose File transfer on it if it asks, then plug it in again."
+msgstr "Lås upp ”{name}”, välj Filöverföring på den om den frågar och anslut den sedan igen."
+
+msgid "Unlock Your Device"
+msgstr "Lås upp enheten"
+
+msgid "Manage Storage…"
+msgstr "Hantera lagring…"
+
+msgid "Storage"
+msgstr "Lagring"
+
+msgid "Your disk is almost full"
+msgstr "Skivan är nästan full"
+
+msgid "Only {free} is left. Make room by removing files you no longer need."
+msgstr "Bara {free} är kvar. Frigör utrymme genom att ta bort filer du inte längre behöver."

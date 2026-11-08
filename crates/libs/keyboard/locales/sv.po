@@ -1,0 +1,107 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Windows"
+msgstr "Fönster"
+
+msgid "Apps"
+msgstr "Appar"
+
+msgid "Workspaces"
+msgstr "Arbetsytor"
+
+msgid "Screenshots"
+msgstr "Skärmbilder"
+
+msgid "Accessibility"
+msgstr "Hjälpmedel"
+
+msgid "System"
+msgstr "System"
+
+msgid "Close the window"
+msgstr "Stäng fönstret"
+
+msgid "Minimize the window"
+msgstr "Minimera fönstret"
+
+msgid "Tile the window to a side (any arrow key)"
+msgstr "Placera fönstret på ena sidan (valfri piltangent)"
+
+msgid "Move the window to the display beside (any arrow key)"
+msgstr "Flytta fönstret till intilliggande skärm (valfri piltangent)"
+
+msgid "Switch apps (hold Alt to choose)"
+msgstr "Byt app (håll ned Alt för att välja)"
+
+msgid "Switch apps backwards"
+msgstr "Byt app bakåt"
+
+msgid "Open Terminal"
+msgstr "Öppna Terminal"
+
+msgid "Previous workspace"
+msgstr "Föregående arbetsyta"
+
+msgid "Next workspace"
+msgstr "Nästa arbetsyta"
+
+msgid "Show all windows"
+msgstr "Visa alla fönster"
+
+msgid "Show the desktop"
+msgstr "Visa skrivbordet"
+
+msgid "Capture the screen"
+msgstr "Ta en bild av skärmen"
+
+msgid "Capture an area"
+msgstr "Ta en bild av ett område"
+
+msgid "Screenshot and recording options"
+msgstr "Alternativ för skärmbild och inspelning"
+
+msgid "Search and open apps"
+msgstr "Sök och öppna appar"
+
+msgid "Show what you copied recently"
+msgstr "Visa det du nyligen kopierat"
+
+msgid "Show emoji and symbols"
+msgstr "Visa emojier och symboler"
+
+msgid "Open or close the Notification Center"
+msgstr "Öppna eller stäng Notiscentret"
+
+msgid "Open or close Control Center"
+msgstr "Öppna eller stäng Kontrollcenter"
+
+msgid "Lock Screen"
+msgstr "Låsskärm"
+
+msgid "Force Quit"
+msgstr "Tvinga avslut"
+
+msgid "Restart the desktop (press twice)"
+msgstr "Starta om skrivbordet (tryck två gånger)"
+
+msgid "Switch to a text console (F1 to F12)"
+msgstr "Växla till en textkonsol (F1 till F12)"
+
+msgid "Turn zoom on or off"
+msgstr "Slå på eller av zoom"
+
+msgid "Zoom in"
+msgstr "Zooma in"
+
+msgid "Zoom out"
+msgstr "Zooma ut"
+
+msgid "Turn the screen reader on or off"
+msgstr "Slå på eller av skärmläsaren"

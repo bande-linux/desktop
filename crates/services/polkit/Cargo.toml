@@ -37,6 +37,7 @@ maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-polkit-agent", "usr/bin/", "755"],
     ["data/bande-polkit-agent.service", "usr/lib/systemd/user/", "644"],
+    ["target/release/l10n/development/bande-polkit-agent/*", "usr/share/bande/l10n/bande-polkit-agent/", "644"],
 ]
 
 [lints]

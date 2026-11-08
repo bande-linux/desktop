@@ -45,6 +45,7 @@ assets = [
     ["data/bande-ddc.conf", "usr/lib/modules-load.d/", "644"],
     ["data/logind.conf", "usr/lib/systemd/logind.conf.d/bande-power.conf", "644"],
     ["data/sleep.conf", "usr/lib/systemd/sleep.conf.d/bande-power.conf", "644"],
+    ["target/release/l10n/development/bande-power/*", "usr/share/bande/l10n/bande-power/", "644"],
 ]
 
 [lints]

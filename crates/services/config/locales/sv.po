@@ -1,0 +1,37 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "{file} has an error"
+msgstr "{file} innehåller ett fel"
+
+msgid "{file} has {count} errors"
+msgstr "{file} innehåller {count} fel"
+
+msgid "One more line has an error."
+msgid_plural "{count} more lines have errors."
+msgstr[0] "Ytterligare en rad innehåller ett fel."
+msgstr[1] "Ytterligare {count} rader innehåller fel."
+
+msgid "{detail} Every other setting is in effect."
+msgstr "{detail} Alla andra inställningar gäller."
+
+msgid "{file} cannot be read"
+msgstr "Det gick inte att läsa {file}"
+
+msgid "{error}."
+msgstr "{error}."
+
+msgid "{detail} The previous settings stay in effect."
+msgstr "{detail} De tidigare inställningarna gäller fortfarande."
+
+msgid "Open in Editor"
+msgstr "Öppna i redigerare"
+
+msgid "Line {line}, column {column}: {message}."
+msgstr "Rad {line}, kolumn {column}: {message}."

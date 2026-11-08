@@ -70,7 +70,7 @@ fn plural_rule(po: &File) -> Result<PluralRule, String> {
 }
 
 fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<String>> {
-    let mut problems = workspace.problems.clone();
+    let mut problems = [workspace.problems.clone(), workspace.packaging.clone()].concat();
     let mut counts = BTreeMap::<String, (usize, usize)>::new();
     let mut chosen = BTreeMap::<(String, String), (String, Vec<String>)>::new();
     for language in workspace.languages() {

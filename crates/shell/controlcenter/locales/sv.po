@@ -1,0 +1,98 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Sleep"
+msgstr "Vila"
+
+msgid "Restart…"
+msgstr "Starta om…"
+
+msgid "Shut Down…"
+msgstr "Stäng av…"
+
+msgid "Log Out {user}…"
+msgstr "Logga ut {user}…"
+
+msgid "On"
+msgstr "På"
+
+msgid "Off"
+msgstr "Av"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Sign in required"
+msgstr "Inloggning krävs"
+
+msgid "Not Connected"
+msgstr "Ej ansluten"
+
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
+msgid "Do Not Disturb"
+msgstr "Stör ej"
+
+msgid "Microphone"
+msgstr "Mikrofon"
+
+msgid "Muted"
+msgstr "Ljud av"
+
+msgid "Keyboard Brightness"
+msgstr "Tangentbordsljusstyrka"
+
+msgid "Sound"
+msgstr "Ljud"
+
+msgid "Output"
+msgstr "Utgång"
+
+msgid "Input Level"
+msgstr "Ingångsnivå"
+
+msgid "Input"
+msgstr "Ingång"
+
+msgid "Playing From"
+msgstr "Spelas från"
+
+msgid "Display"
+msgstr "Skärm"
+
+msgid "Sound (muted)"
+msgstr "Ljud (avstängt)"
+
+msgid "Previous"
+msgstr "Föregående"
+
+msgid "Next"
+msgstr "Nästa"
+
+msgid "Pause"
+msgstr "Pausa"
+
+msgid "Play"
+msgstr "Spela upp"
+
+msgid "Now Playing"
+msgstr "Spelas nu"
+
+msgid "Position"
+msgstr "Position"
+
+msgid "Lock Screen"
+msgstr "Låsskärm"
+
+msgid "Sleep, Restart or Shut Down"
+msgstr "Vila, starta om eller stäng av"
+
+msgid "System Settings"
+msgstr "Systeminställningar"

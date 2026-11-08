@@ -1,0 +1,65 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Dictionary"
+msgstr "Ordbok"
+
+msgid "Dictionary Settings"
+msgstr "Inställningar för Ordbok"
+
+msgid "More"
+msgstr "Mer"
+
+msgid "No sources are turned on. Choose them in Dictionary Settings."
+msgstr "Inga källor är påslagna. Välj dem i inställningarna för Ordbok."
+
+msgid "noun"
+msgstr "substantiv"
+
+msgid "verb"
+msgstr "verb"
+
+msgid "adjective"
+msgstr "adjektiv"
+
+msgid "adverb"
+msgstr "adverb"
+
+msgid "Not listed. Last part only: {first} + {ending}"
+msgstr "Finns inte med. Bara sista delen: {first} + {ending}"
+
+msgid "Form of {word}"
+msgstr "Form av {word}"
+
+msgid "No entries for “{word}”."
+msgstr "Inget hittades för ”{word}”."
+
+msgid "All languages"
+msgstr "Alla språk"
+
+msgid "{languages}. Online: every word you look up is sent to {name}."
+msgstr "{languages}. På nätet: varje ord du slår upp skickas till {name}."
+
+msgid "{languages}. Added by you."
+msgstr "{languages}. Tillagd av dig."
+
+msgid "Look Up and Dictionary show results from the sources turned on here, in this order."
+msgstr "Slå upp och Ordbok visar resultat från källorna som är påslagna här, i den här ordningen."
+
+msgid "Move Up"
+msgstr "Flytta upp"
+
+msgid "Move Down"
+msgstr "Flytta ned"
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "Search"
+msgstr "Sök"

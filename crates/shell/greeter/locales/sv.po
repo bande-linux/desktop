@@ -1,0 +1,116 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Light"
+msgstr "Ljust"
+
+msgid "Dark"
+msgstr "Mörkt"
+
+msgid "Automatic"
+msgstr "Automatiskt"
+
+msgid "Full name"
+msgstr "Fullständigt namn"
+
+msgid "Account name"
+msgstr "Kontonamn"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Verify password"
+msgstr "Verifiera lösenord"
+
+msgid "Encrypt this disk with your password"
+msgstr "Kryptera den här skivan med ditt lösenord"
+
+msgid "Without the password or the recovery key, no one can read this disk, and neither can you. You type the password each time the computer starts, on a built-in or USB keyboard: Bluetooth keyboards do not work that early."
+msgstr "Utan lösenordet eller återställningsnyckeln kan ingen läsa den här skivan, inte ens du. Du skriver lösenordet varje gång datorn startar, på ett inbyggt tangentbord eller ett USB-tangentbord: Bluetooth-tangentbord fungerar inte så tidigt."
+
+msgid "Write this key down and keep it safe. It is shown only once, and it is the only way in if you forget your password."
+msgstr "Skriv ned nyckeln och förvara den säkert. Den visas bara en gång och är den enda vägen in om du glömmer ditt lösenord."
+
+msgid "Wi-Fi password"
+msgstr "Wi-Fi-lösenord"
+
+msgid "Join"
+msgstr "Anslut"
+
+msgid "Appearance"
+msgstr "Utseende"
+
+msgid "Your files, account and settings stay on this computer. Bande contacts the internet only to check the clock, to check for a working connection and to get software updates."
+msgstr "Dina filer, ditt konto och dina inställningar stannar på den här datorn. Bande kontaktar internet bara för att kontrollera klockan, för att kontrollera att anslutningen fungerar och för att hämta programuppdateringar."
+
+msgid "Install updates automatically"
+msgstr "Installera uppdateringar automatiskt"
+
+msgid "Setting up your desktop."
+msgstr "Ställer in ditt skrivbord."
+
+msgid "Language"
+msgstr "Språk"
+
+msgid "Keyboard"
+msgstr "Tangentbord"
+
+msgid "Your Account"
+msgstr "Ditt konto"
+
+msgid "Recovery Key"
+msgstr "Återställningsnyckel"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Privacy"
+msgstr "Integritet"
+
+msgid "Getting Ready"
+msgstr "Gör i ordning"
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "Finish"
+msgstr "Slutför"
+
+msgid "Skip"
+msgstr "Hoppa över"
+
+msgid "Continue"
+msgstr "Fortsätt"
+
+msgid "Enter a name, and an account name of lowercase letters and digits."
+msgstr "Ange ett namn och ett kontonamn som består av små bokstäver och siffror."
+
+msgid "Enter a password."
+msgstr "Ange ett lösenord."
+
+msgid "The passwords do not match."
+msgstr "Lösenorden stämmer inte överens."
+
+msgid "That step did not work. Try again, or restart this computer."
+msgstr "Det steget fungerade inte. Försök igen eller starta om datorn."
+
+msgid "Enter your password to unlock this computer"
+msgstr "Ange ditt lösenord för att låsa upp den här datorn"
+
+msgid "That password didn't work. Try again."
+msgstr "Lösenordet fungerade inte. Försök igen."
+
+msgid "Enter your recovery key"
+msgstr "Ange din återställningsnyckel"
+
+msgid "Tab: recovery key · Control+Space: keyboard layout"
+msgstr "Tab: återställningsnyckel · Control+Blanksteg: tangentbordslayout"
+
+msgid "Signing in is not available right now."
+msgstr "Det går inte att logga in just nu."

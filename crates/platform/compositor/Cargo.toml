@@ -63,6 +63,7 @@ assets = [
     ["data/50-bande-ptrace.conf", "usr/lib/sysctl.d/", "644"],
     ["data/50-bande-resolved.conf", "usr/lib/systemd/resolved.conf.d/", "644"],
     ["data/org.bande.consent.policy", "usr/share/polkit-1/actions/", "644"],
+    ["target/release/l10n/development/bande-compositor/*", "usr/share/bande/l10n/bande-compositor/", "644"],
 ]
 
 [lints]

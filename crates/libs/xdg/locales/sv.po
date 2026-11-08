@@ -1,0 +1,32 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "{app} could not be opened"
+msgstr "Det gick inte att öppna {app}"
+
+msgid "It quit while opening. Try again, or reinstall it if this keeps happening."
+msgstr "Appen avslutades under start. Försök igen, eller installera om den om det fortsätter."
+
+msgid "{app} quit unexpectedly"
+msgstr "{app} avslutades oväntat"
+
+msgid "Click to open it again."
+msgstr "Klicka för att öppna den igen."
+
+msgid "{app} was closed because memory ran low"
+msgstr "{app} stängdes eftersom minnet höll på att ta slut"
+
+msgid "Your computer ran out of memory and closed it to keep everything else working. Click to open it again."
+msgstr "Datorn fick slut på minne och stängde appen så att allt annat fortsätter fungera. Klicka för att öppna den igen."
+
+msgid "A background task was stopped because memory ran low"
+msgstr "En bakgrundsuppgift stoppades eftersom minnet höll på att ta slut"
+
+msgid "Your computer ran out of memory and stopped {unit} to keep everything else working."
+msgstr "Datorn fick slut på minne och stoppade {unit} så att allt annat fortsätter fungera."

@@ -1,0 +1,56 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "The printer is out of paper."
+msgstr "Skrivaren har slut på papper."
+
+msgid "The paper is jammed."
+msgstr "Papperet har fastnat."
+
+msgid "The printer needs paper."
+msgstr "Skrivaren behöver papper."
+
+msgid "The printer is out of toner."
+msgstr "Skrivaren har slut på toner."
+
+msgid "The printer is out of ink."
+msgstr "Skrivaren har slut på bläck."
+
+msgid "A door on the printer is open."
+msgstr "En lucka på skrivaren är öppen."
+
+msgid "The printer's cover is open."
+msgstr "Skrivarens lock är öppet."
+
+msgid "The printer is paused."
+msgstr "Skrivaren är pausad."
+
+msgid "Printing"
+msgstr "Utskrift"
+
+msgid "“{title}” did not print"
+msgstr "”{title}” skrevs inte ut"
+
+msgid "The document was lost before it could be sent."
+msgstr "Dokumentet försvann innan det hann skickas."
+
+msgid "That printer is no longer known."
+msgstr "Skrivaren är inte längre känd."
+
+msgid "The printer's identity has changed, so the document was not sent. If the printer was replaced or reset, remove it in Settings ▸ Printers and try again."
+msgstr "Skrivarens identitet har ändrats, så dokumentet skickades inte. Om skrivaren har bytts ut eller återställts tar du bort den i Inställningar ▸ Skrivare och försöker igen."
+
+msgid "Waiting for the printer to come back"
+msgstr "Väntar på att skrivaren ska komma tillbaka"
+
+msgid "The printer cannot take this kind of document."
+msgstr "Skrivaren kan inte ta emot den här typen av dokument."
+
+msgid "The printer is busy"
+msgstr "Skrivaren är upptagen"

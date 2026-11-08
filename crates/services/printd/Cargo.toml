@@ -43,6 +43,7 @@ assets = [
     ["data/org.bande.Print.service", "usr/share/dbus-1/services/", "644"],
     ["data/bande-printd.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-print-resume.service", "usr/lib/systemd/user/", "644"],
+    ["target/release/l10n/development/bande-printd/*", "usr/share/bande/l10n/bande-printd/", "644"],
 ]
 maintainer-scripts = "debian/"
 

@@ -1,0 +1,38 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "{percent}%"
+msgstr "{percent} %"
+
+msgid "Locked. {name}"
+msgstr "Låst. {name}"
+
+msgid "Input source {name}"
+msgstr "Inmatningskälla {name}"
+
+msgid "User {index} of {count}. Up and Down choose another."
+msgstr "Användare {index} av {count}. Upp och Ned väljer en annan."
+
+msgid "Battery {percent}%"
+msgstr "Batteri {percent} %"
+
+msgid "Enter Password"
+msgstr "Ange lösenord"
+
+msgid "Checking the password"
+msgstr "Kontrollerar lösenordet"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Sleep"
+msgstr "Vila"
+
+msgid "Incorrect password. Try again."
+msgstr "Fel lösenord. Försök igen."

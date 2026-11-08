@@ -1,0 +1,26 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Enter the password for {user} to allow this."
+msgstr "Ange lösenordet för {user} för att tillåta detta."
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Authenticate"
+msgstr "Autentisera"
+
+msgid "User"
+msgstr "Användare"
+
+msgid "Incorrect password. Try again."
+msgstr "Fel lösenord. Försök igen."

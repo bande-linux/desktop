@@ -37,6 +37,7 @@ recommends = "bande-shell"
 assets = [
     ["target/release/bande-lock", "usr/bin/", "755"],
     ["data/bande-lock.pam", "etc/pam.d/bande-lock", "644"],
+    ["target/release/l10n/development/bande-lock/*", "usr/share/bande/l10n/bande-lock/", "644"],
 ]
 extended-description = """\
 The lock screen of the Bande desktop. Super+L, or the session \

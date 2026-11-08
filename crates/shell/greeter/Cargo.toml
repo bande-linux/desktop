@@ -57,6 +57,11 @@ assets = [
     ["data/60-bande-display-keeper.rules", "usr/lib/udev/rules.d/", "644"],
     ["data/config.toml", "usr/share/bande-greeter/greetd-config.toml", "644"],
     ["data/greetd.service.conf", "usr/lib/systemd/system/greetd.service.d/bande.conf", "644"],
+    ["target/release/l10n/development/bande-display-keeper/*", "usr/share/bande/l10n/bande-display-keeper/", "644"],
+    ["target/release/l10n/development/bande-greeter/*", "usr/share/bande/l10n/bande-greeter/", "644"],
+    ["target/release/l10n/development/bande-setup/*", "usr/share/bande/l10n/bande-setup/", "644"],
+    ["target/release/l10n/development/bande-unlock/*", "usr/share/bande/l10n/bande-unlock/", "644"],
+    ["target/release/l10n/development/bande-unlock-assets/*", "usr/share/bande/l10n/bande-unlock-assets/", "644"],
 ]
 
 [lints]

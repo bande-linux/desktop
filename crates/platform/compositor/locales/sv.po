@@ -1,0 +1,155 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Turn on Sticky Keys?"
+msgstr "Vill du slå på Tröga tangenter?"
+
+msgid "You pressed Shift five times. Sticky Keys let you press modifier keys one at a time, so Shift then A types a capital A."
+msgstr "Du tryckte på Skift fem gånger. Med Tröga tangenter kan du trycka på modifieringstangenter en i taget, så Skift och sedan A skriver ett stort A."
+
+msgid "Turn On"
+msgstr "Slå på"
+
+msgid "Turn off Sticky Keys?"
+msgstr "Vill du slå av Tröga tangenter?"
+
+msgid "You pressed Shift five times while Sticky Keys are on."
+msgstr "Du tryckte på Skift fem gånger medan Tröga tangenter är på."
+
+msgid "Turn Off"
+msgstr "Slå av"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Accessibility"
+msgstr "Hjälpmedel"
+
+msgid "it is not installed"
+msgstr "den inte är installerad"
+
+msgid "it may not be run"
+msgstr "den inte får köras"
+
+msgid "of an error: {error}"
+msgstr "ett fel inträffade: {error}"
+
+msgid "{name} could not start because {reason}."
+msgstr "{name} kunde inte startas eftersom {reason}."
+
+msgid "Taskbar & Desktop"
+msgstr "Aktivitetsfält och skrivbord"
+
+msgid "Untitled App"
+msgstr "Namnlös app"
+
+msgid "Force Quit Apps"
+msgstr "Tvinga appar att avsluta"
+
+msgid "{name} (Not Responding)"
+msgstr "{name} (svarar inte)"
+
+msgid "Force Quit"
+msgstr "Tvinga avslut"
+
+msgid "Relaunch"
+msgstr "Starta om"
+
+msgid "If an app does not respond for a while, select its name and click Force Quit. If the whole desktop stops responding, press Shift+Ctrl+Alt+Esc twice to restart it."
+msgstr "Om en app inte svarar på ett tag markerar du dess namn och klickar på Tvinga avslut. Om hela skrivbordet slutar svara trycker du på Skift+Ctrl+Alt+Esc två gånger för att starta om det."
+
+msgid "You can open this window with Ctrl+Alt+Esc."
+msgstr "Du kan öppna det här fönstret med Ctrl+Alt+Esc."
+
+msgid "No apps are open."
+msgstr "Inga appar är öppna."
+
+msgid "Do you want to force “{name}” to quit?"
+msgstr "Vill du tvinga ”{name}” att avsluta?"
+
+msgid "Do you want to force the {count} selected apps to quit?"
+msgstr "Vill du tvinga de {count} markerade apparna att avsluta?"
+
+msgid "You will lose any unsaved changes."
+msgstr "Ändringar som inte har sparats går förlorade."
+
+msgid "Remember the open apps to reopen them at the next login"
+msgstr "Kom ihåg öppna appar och öppna dem igen vid nästa inloggning"
+
+msgid "App Switcher"
+msgstr "Appbytare"
+
+msgid "Windows"
+msgstr "Fönster"
+
+msgid "{program} wants to read what you type."
+msgstr "{program} vill läsa det du skriver."
+
+msgid "{program} wants to type for you."
+msgstr "{program} vill skriva åt dig."
+
+msgid "It stays off until you allow it in Privacy & Security."
+msgstr "Det är avstängt tills du tillåter det i Integritet och säkerhet."
+
+msgid "Open Settings"
+msgstr "Öppna Inställningar"
+
+msgid "Privacy & Security"
+msgstr "Integritet och säkerhet"
+
+msgid "Left"
+msgstr "Vänster"
+
+msgid "Right"
+msgstr "Höger"
+
+msgid "Top Left"
+msgstr "Överst till vänster"
+
+msgid "Top Right"
+msgstr "Överst till höger"
+
+msgid "Bottom Left"
+msgstr "Nederst till vänster"
+
+msgid "Bottom Right"
+msgstr "Nederst till höger"
+
+msgid "Fill"
+msgstr "Fyll"
+
+msgid "Move to Next Display"
+msgstr "Flytta till nästa skärm"
+
+msgid "Return to Previous Size"
+msgstr "Återgå till tidigare storlek"
+
+msgid "Desktop {number}"
+msgstr "Skrivbord {number}"
+
+msgid "New Desktop"
+msgstr "Nytt skrivbord"
+
+msgid "Minimize"
+msgstr "Minimera"
+
+msgid "Unzoom"
+msgstr "Zooma tillbaka"
+
+msgid "Zoom"
+msgstr "Zooma"
+
+msgid "Move & Resize"
+msgstr "Flytta och ändra storlek"
+
+msgid "Move to Desktop"
+msgstr "Flytta till skrivbord"
+
+msgid "Close"
+msgstr "Stäng"

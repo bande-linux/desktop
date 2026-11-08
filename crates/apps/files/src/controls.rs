@@ -19,9 +19,9 @@ use bande_fs::{
     Entry, ExtensionChange, Sort, SortBy, format_date, format_list_date, format_size, is_hidden,
 };
 use bande_toolkit::ui::{
-    Alert, Cell, Column, Event, FreeLayout, Key, Menu, MenuItem, Modifiers, Pointer, PointerButton,
-    Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle, Widget,
-    WidgetId,
+    Alert, Cell, Column, Event, FreeLayout, Heading, Key, Menu, MenuItem, Modifiers, Pointer,
+    PointerButton, Row, SLIDER_HEIGHT, Size, Slider, Sort as TableSort, Table, TextField, Toggle,
+    Widget, WidgetId,
 };
 use bande_toolkit::{Image, Point, Rect};
 
@@ -997,7 +997,11 @@ impl FilesView {
             }
         }
         self.table_synced = Some((revision, edits));
-        let headings = self.groups().to_vec();
+        let headings = self
+            .groups()
+            .iter()
+            .map(|(start, title)| Heading::new(*start, title.as_str()))
+            .collect();
         if let Some(table) = self.table() {
             table.set_headings(headings);
         }

@@ -249,7 +249,13 @@ writes a hex value, a corner radius or a font name of its own.
   glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
-  group; a selection run never spans a heading. `Row::dimmed` tones a row down one ink step
+  group; a selection run never spans a heading. In a `Table::sidebar` the headings are source-list
+  section titles instead (`Label` in `ink3`, no hairline, clicks on them select nothing), and
+  `Heading::button(symbol, name, command)` puts a 20 pt symbol button at the trailing edge (the
+  symbol in `ink2`, a `well` fill on hover, the name as its tooltip and accessible label) that
+  reports `command` to `Table::on_heading_button`, as the + beside a source list's section does.
+  `Cell::badge(tint)` draws the cell's text as a capsule: `Callout` medium in the tint on the tint
+  at 16 %, `on_accent` on a lit row, for a status or tag. `Row::dimmed` tones a row down one ink step
   with its icons at `Palette::DIMMED_ALPHA`, for normally hidden files. `Column::movable`
   columns can be dragged along the header: the whole column lifts and follows the pointer,
   neighbours slide aside on `standard`, Escape puts it back, and a click without a drag still

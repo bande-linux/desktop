@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 tracing.workspace = true
+bande-l10n.workspace = true
 bande-xdg.workspace = true
 
 [dev-dependencies]

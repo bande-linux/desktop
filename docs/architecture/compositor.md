@@ -86,6 +86,22 @@ when they reach the screen is Bande's own.
   no room outside, so the compositor takes a 3 pt band inside it before any client
   (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
+- **Pointers.** As on macOS, apps ask for a pointer by kind and the compositor draws it from
+  Bande's own set, so none can be missing. Each pointer is one SVG in
+  `crates/platform/compositor/data/cursors/` (24 × 24, its hotspot in `data-hotspot` on the root),
+  drawn in macOS's manner but our own: a slim black arrow with a white rim and a soft shadow,
+  white hands with black outlines, an I-beam, slim two-way resize arrows, wall-bar one-way
+  arrows, badges for menu, copy, alias, help and not allowed, a dark spinner. `cursor_set.rs`
+  maps every `wp_cursor_shape_v1` kind to a drawing; the compositor embeds the SVGs and renders
+  them with resvg at the exact pointer size and scale, once per kind and scale, and falls back
+  to a tiny built-in arrow (logged) only if rendering fails. At package build time
+  `bande-cursor-theme` renders the same sources into the Xcursor theme `Bande-Cursors` (CSS and
+  X11 names, 24 to 128 px) for clients that load cursors themselves; the session exports it as
+  `XCURSOR_THEME` and the portal as `cursor-theme`. While the pointer is on a frame zone of ours,
+  or a move or resize holds a window (from our edges or `xdg_toplevel.move`/`resize`), the
+  compositor's pointer wins over the client's: the arrow for a move, the edge's two-way arrow
+  for a resize, or as on macOS a one-way arrow against a wall bar when the window is at its
+  minimum or maximum size and that edge can only move one way.
 - **Controls over the Browser's own row.** A client-side window of `org.bande.Browser` keeps its
   tabs in its top row and has no title bar of ours; the compositor draws only the control well
   (`WindowControls` in `bande-graphics`) over the first 78 pt of a 48 pt row, in front of the
@@ -309,7 +325,7 @@ when they reach the screen is Bande's own.
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
   and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`.
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
-  grey (24 %), the pointer over them is the theme's `wait` cursor, and shell clients get
+  grey (24 %), the pointer over them is the `wait` cursor, and shell clients get
   `bande_shell_v1.app_responding(pid, app_id, 0)` so the taskbar can mark it; the compositor's
   own Force Quit window (`force_quit/`) marks it in its list. The answer, or the app's exit,
   lifts the veil and sends `responding 1`.
@@ -383,7 +399,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers and LINEAR ARGB8888 dmabufs (copied by the GPU, offered when the renderer knows its render node); a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
 | `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | P1 | implemented, shell clients only |
-| `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
+| `wp_cursor_shape_v1` | Cursor shapes, drawn from Bande's own set | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | implemented |

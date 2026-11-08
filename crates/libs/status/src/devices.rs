@@ -2,9 +2,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
-use bande_bluetooth::{Bluetooth as BlueZ, shown_change};
+use bande_bluetooth::{Bluetooth as BlueZ, adapter_in_kernel, shown_change};
 use bande_inbox::{Inbox, Outbox};
-use bande_network::{NetworkManager, set_strength, strength_signal};
+use bande_network::{NetworkManager, set_strength, strength_signal, wifi_in_kernel};
 use serde::Deserialize;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
@@ -14,7 +14,7 @@ use zbus::zvariant::{OwnedObjectPath, Type};
 use zbus::{MatchRule, Message, message};
 
 use crate::session::{Ending, Inhibitor, Refusal};
-use crate::status::{Battery, Bluetooth, Gadget, Power, Wifi};
+use crate::status::{Battery, Bluetooth, Gadget, Power, Reading, Wifi};
 use crate::{Command, Update};
 
 const SOURCES: [(Source, &str); 3] = [
@@ -28,6 +28,7 @@ const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const UPOWER_CHARGING: u32 = 1;
 const UPOWER_FULL: u32 = 4;
 const UPOWER_BATTERY: u32 = 2;
+const KERNEL_POWER_SUPPLIES: &str = "/sys/class/power_supply";
 
 #[zbus::proxy(
     interface = "org.freedesktop.UPower.Device",
@@ -169,56 +170,82 @@ pub fn battery_of(state: u32, percent: f64, to_empty: i64, to_full: i64) -> Batt
     Battery { percent, power }
 }
 
-pub fn battery(system: &Connection) -> Option<Battery> {
+pub fn battery_in_kernel() -> bool {
+    let Ok(supplies) = std::fs::read_dir(KERNEL_POWER_SUPPLIES) else {
+        return false;
+    };
+    supplies.flatten().any(|supply| {
+        let read = |name: &str| std::fs::read_to_string(supply.path().join(name));
+        read("type").is_ok_and(|kind| kind.trim() == "Battery")
+            && read("scope")
+                .ok()
+                .is_none_or(|scope| scope.trim() != "Device")
+    })
+}
+
+fn display_battery(system: &Connection) -> zbus::Result<Option<Battery>> {
     let device = DisplayDevice::builder(system)
         .cache_properties(CacheProperties::No)
-        .build()
-        .ok()?;
-    if !device.is_present().ok()? || device.kind().ok()? != UPOWER_BATTERY {
-        return None;
+        .build()?;
+    if !device.is_present()? || device.kind()? != UPOWER_BATTERY {
+        return Ok(None);
     }
-    Some(battery_of(
+    Ok(Some(battery_of(
         device.state().unwrap_or(0),
-        device.percentage().ok()?,
+        device.percentage()?,
         device.time_to_empty().unwrap_or(0),
         device.time_to_full().unwrap_or(0),
-    ))
+    )))
 }
 
-fn wifi(network: &NetworkManager) -> Option<Wifi> {
-    if !network.has_wifi().ok()? {
-        return None;
+pub fn battery(system: &Connection) -> Reading<Battery> {
+    Reading::from_answer("UPower", display_battery(system), battery_in_kernel)
+}
+
+fn read_wifi(network: &NetworkManager) -> bande_network::Result<Option<Wifi>> {
+    if !network.has_wifi()? {
+        return Ok(None);
     }
-    let enabled = network.wifi_enabled().ok()?;
-    Some(Wifi {
+    let enabled = network.wifi_enabled()?;
+    let networks = if enabled {
+        match network.networks() {
+            Err(bande_network::Error::NoWifiDevice) => return Ok(None),
+            networks => networks?,
+        }
+    } else {
+        Vec::new()
+    };
+    Ok(Some(Wifi {
         enabled,
-        networks: if enabled {
-            network.networks().unwrap_or_default()
-        } else {
-            Vec::new()
-        },
+        networks,
         sign_in: matches!(network.sign_in_page(), Ok(Some(_))),
-    })
+    }))
 }
 
-fn bluetooth(bluez: &BlueZ) -> Option<Bluetooth> {
-    let radio = bluez.radio().ok()??;
-    Some(Bluetooth {
-        powered: radio.powered,
-        devices: radio
-            .paired
-            .into_iter()
-            .map(|device| Gadget {
-                address: device.address,
-                name: device.name,
-                connected: device.connected,
-                battery: device.battery,
-            })
-            .collect(),
-    })
+fn wifi(network: &NetworkManager) -> Reading<Wifi> {
+    Reading::from_answer("NetworkManager", read_wifi(network), wifi_in_kernel)
 }
 
-pub type Devices = (Option<Battery>, Option<Wifi>, Option<Bluetooth>);
+fn bluetooth(bluez: &BlueZ) -> Reading<Bluetooth> {
+    let radio = bluez.radio().map(|radio| {
+        radio.map(|radio| Bluetooth {
+            powered: radio.powered,
+            devices: radio
+                .paired
+                .into_iter()
+                .map(|device| Gadget {
+                    address: device.address,
+                    name: device.name,
+                    connected: device.connected,
+                    battery: device.battery,
+                })
+                .collect(),
+        })
+    });
+    Reading::from_answer("BlueZ", radio, adapter_in_kernel)
+}
+
+pub type Devices = (Reading<Battery>, Reading<Wifi>, Reading<Bluetooth>);
 
 #[derive(Debug, PartialEq)]
 pub enum Control {
@@ -480,7 +507,7 @@ fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outb
                     continue;
                 }
                 Control::Strength(access_point, strength) => {
-                    if let Some(wifi) = devices.1.as_mut() {
+                    if let Some(wifi) = devices.1.present_mut() {
                         set_strength(&mut wifi.networks, &access_point, strength);
                     }
                     continue;
@@ -508,9 +535,8 @@ fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outb
 
 fn looks_alike(devices: &Devices, shown: &Devices) -> bool {
     let wifi = match (&devices.1, &shown.1) {
-        (Some(wifi), Some(shown)) => wifi.looks_like(shown),
-        (None, None) => true,
-        _ => false,
+        (Reading::Present(wifi), Reading::Present(shown)) => wifi.looks_like(shown),
+        (wifi, shown) => wifi == shown,
     };
     wifi && devices.0 == shown.0 && devices.2 == shown.2
 }

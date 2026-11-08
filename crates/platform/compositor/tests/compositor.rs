@@ -12,7 +12,7 @@ use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_W,
 };
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
+    BLUE, ConstraintAdjustment, PopupRequest, RED, ResizeEdge, SeparateApp, ShmImage, TestClient,
     act_as_separate_app, chord, grant_consent, headless, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
@@ -70,6 +70,53 @@ fn the_browser_row_gives_the_well_to_the_compositor_and_the_rest_to_the_browser(
     roundtrip(&mut server, &mut [&mut browser]);
     assert_eq!(browser.buttons().len(), 2);
     assert!(server.windows()[0].is_minimized());
+}
+
+#[test]
+fn a_window_edge_keeps_the_resize_pointer_while_it_is_dragged() {
+    let mut server = headless(560, 520);
+    let bytes = RED.repeat(320 * 200);
+    let mut browser = TestClient::connect(&mut server);
+    browser.use_seat(&mut server);
+    browser.show_window(
+        &mut server,
+        &ShmImage {
+            width: 320,
+            height: 200,
+            stride: 1280,
+            format: Format::Xrgb8888,
+            bytes: &bytes,
+        },
+    );
+    browser.set_app_id(&mut server, 0, "org.bande.Browser");
+    roundtrip(&mut server, &mut [&mut browser]);
+    let rect = server.windows()[0].geometry().expect("mapped");
+    let middle = f64::from(rect.loc.y + rect.size.h / 2);
+    let right = f64::from(rect.loc.x + rect.size.w);
+    server.move_pointer_to((right - 100.0, middle).into(), 0);
+    roundtrip(&mut server, &mut [&mut browser]);
+    server.move_pointer_to((right + 3.0, middle).into(), 0);
+    assert_eq!(server.shown_cursor(), Some("ew-resize"));
+    server.press_button(BTN_LEFT, true, 0);
+    server.move_pointer_to((right + 40.0, middle).into(), 0);
+    roundtrip(&mut server, &mut [&mut browser]);
+    assert_eq!(server.shown_cursor(), Some("ew-resize"));
+    server.press_button(BTN_LEFT, false, 0);
+
+    let mut server = headless(560, 520);
+    let mut editor = TestClient::window(&mut server, "org.example.Editor");
+    let rect = server.windows()[0].geometry().expect("mapped");
+    let centre = rect.loc.to_f64() + rect.size.downscale(2).to_point().to_f64();
+    server.move_pointer_to(centre, 0);
+    server.press_button(BTN_LEFT, true, 0);
+    roundtrip(&mut server, &mut [&mut editor]);
+    editor.start_resize(&mut server, 0, ResizeEdge::Right);
+    server.move_pointer_to((centre.x + 20.0, centre.y).into(), 0);
+    roundtrip(&mut server, &mut [&mut editor]);
+    assert_eq!(server.shown_cursor(), Some("ew-resize"));
+    server.press_button(BTN_LEFT, false, 0);
+    roundtrip(&mut server, &mut [&mut editor]);
+    assert_eq!(server.shown_cursor(), Some("default"));
 }
 
 #[test]

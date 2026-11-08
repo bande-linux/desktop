@@ -8,6 +8,7 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use bande_app::choose_file;
+use bande_bus::Reading;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
 use bande_l10n::{text, tr};
@@ -61,10 +62,10 @@ pub enum Update {
     DisplayLevels(Vec<DisplayLevel>),
     Arrangements(Vec<Vec<Placement>>),
     Audio(Option<bande_audio::Snapshot>),
-    Wifi(Option<WifiState>),
+    Wifi(Reading<WifiState>),
     Network(NetworkState),
     Joined(Vec<u8>, Joined),
-    Bluetooth(Option<BluetoothState>),
+    Bluetooth(Reading<BluetoothState>),
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
     ColourProfiles(Vec<(String, String)>),

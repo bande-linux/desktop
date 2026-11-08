@@ -32,7 +32,7 @@ trait Bus {
 
 pub fn cursor_environment(cursor: &CursorTheme) -> [(&'static str, String); 2] {
     [
-        ("XCURSOR_THEME", cursor.name.clone()),
+        ("XCURSOR_THEME", cursor.name().to_owned()),
         ("XCURSOR_SIZE", cursor.size.to_string()),
     ]
 }

@@ -20,7 +20,7 @@ use xdg_desktop_portal_bande::print::Print;
 use xdg_desktop_portal_bande::screencast::{ScreenCast, close_sessions_streaming};
 use xdg_desktop_portal_bande::screenshot::Screenshot;
 use xdg_desktop_portal_bande::secret::Secret;
-use xdg_desktop_portal_bande::settings::{CursorSettings, Settings};
+use xdg_desktop_portal_bande::settings::Settings;
 use xdg_desktop_portal_bande::wallpaper::{BACKGROUNDS, Wallpaper};
 use xdg_desktop_portal_bande::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
@@ -54,7 +54,6 @@ fn serve() -> zbus::Result<Connection> {
     Settings::serve(
         &connection,
         system.as_ref(),
-        CursorSettings::from_environment(),
         config_home()
             .zip(data_home())
             .map(|(config, data)| GtkHomes { config, data }),

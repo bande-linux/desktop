@@ -22,6 +22,10 @@ cargo build --profile "$profile" --locked "${packages[@]/#/--package=}" "${bundl
 rm -rf "$target/$profile/l10n"
 "$target/$profile/bande-l10n-tool" pack "$target/$profile/l10n"
 architecture=$(dpkg --print-architecture)
+built=$target/$profile
+[ "$profile" = dev ] && built=$target/debug
+rm -rf "$built/cursors"
+"$built/bande-cursor-theme" "$built/cursors/Bande-Cursors"
 if [ "$profile" = dist ]; then
     ci/release/symbols.sh "$target/$profile" "$target/debian-symbols" "$version"
     strip=(--no-strip)

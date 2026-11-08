@@ -96,7 +96,7 @@ impl SettingsView {
             }
             Some(Forget::Device(address)) => self
                 .bluetooth
-                .as_ref()
+                .present()
                 .and_then(|bluetooth| {
                     bluetooth
                         .paired

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use bande_l10n::{tr, trn};
+use bande_l10n::{text, tr, trn};
 use bande_network::VpnState;
 use bande_settings_panes::{Group, Pane, PaneId, Value};
 use bande_toolkit::ui::{ScrollView, Toggle, Widget};
@@ -131,7 +131,9 @@ impl SettingsView {
 
     pub(crate) fn summary(&self, pane: &Pane) -> String {
         let live = match pane.id {
-            PaneId::Wifi => self.wifi.as_ref().map(|wifi| {
+            PaneId::Wifi if self.wifi.is_unavailable() => Some(tr!("Not available")),
+            PaneId::Bluetooth if self.bluetooth.is_unavailable() => Some(tr!("Not available")),
+            PaneId::Wifi => self.wifi.present().map(|wifi| {
                 match wifi.networks.iter().find(|network| network.current) {
                     _ if !wifi.enabled => tr!("Off"),
                     Some(network) => {
@@ -140,7 +142,7 @@ impl SettingsView {
                     None => tr!("Not connected"),
                 }
             }),
-            PaneId::Bluetooth => self.bluetooth.as_ref().map(|bluetooth| {
+            PaneId::Bluetooth => self.bluetooth.present().map(|bluetooth| {
                 let connected = bluetooth
                     .paired
                     .iter()
@@ -309,7 +311,18 @@ impl SettingsView {
 
     pub(crate) fn notice(&mut self, pane: &Pane) -> Option<Box<dyn Widget>> {
         let name = pane.name.clone();
-        let (heading, line) = if !self.available(pane.id) {
+        let stopped = match pane.id {
+            PaneId::Wifi => self.wifi.is_unavailable().then_some(text!(
+                "The network service isn't running, so Wi-Fi can't be shown or changed."
+            )),
+            PaneId::Bluetooth => self.bluetooth.is_unavailable().then_some(text!(
+                "The Bluetooth service isn't running, so Bluetooth can't be shown or changed."
+            )),
+            _ => None,
+        };
+        let (heading, line) = if let Some(reason) = stopped {
+            (tr!("{pane} isn't available", pane = name), reason.tr())
+        } else if !self.available(pane.id) {
             (
                 tr!("{pane} isn't available", pane = name.clone()),
                 tr!("Its device or service isn't responding."),

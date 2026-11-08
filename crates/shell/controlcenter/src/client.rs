@@ -15,15 +15,16 @@ use crate::{
 };
 use accesskit::TreeUpdate;
 use bande_audio::{Audio, Level, Meter, meter_level};
-use bande_bluetooth::Bluetooth;
+use bande_bluetooth::{Bluetooth, adapter_in_kernel};
 use bande_inbox::{Inbox, Outbox};
-use bande_network::NetworkManager;
+use bande_network::{NetworkManager, wifi_in_kernel};
 use bande_notify::client::NotificationCenter;
 use bande_power::logind::own_session;
 use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
 use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
 use bande_status::captive::open_page;
 use bande_status::session::full_name;
+use bande_status::status::Reading;
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
@@ -86,10 +87,10 @@ pub struct ControlCenter {
 
 #[derive(Debug, Clone, Default)]
 struct Connected {
-    wifi: Option<bool>,
+    wifi: Reading<bool>,
     network: Option<String>,
     sign_in: bool,
-    bluetooth: Option<bool>,
+    bluetooth: Reading<bool>,
     do_not_disturb: bool,
 }
 
@@ -98,24 +99,26 @@ fn read_connected(
     bluetooth: Option<&Bluetooth>,
     session: Option<&Connection>,
 ) -> Connected {
-    let wifi = network.and_then(|network| {
-        network
+    let wifi = network.map_or(Reading::Absent, |network| {
+        let enabled = network
             .has_wifi()
-            .ok()
-            .filter(|has| *has)
-            .and_then(|_| network.wifi_enabled().ok())
+            .and_then(|has| has.then(|| network.wifi_enabled()).transpose());
+        Reading::from_answer("NetworkManager", enabled, wifi_in_kernel)
     });
     Connected {
-        wifi,
         network: network
-            .filter(|_| wifi == Some(true))
+            .filter(|_| wifi == Reading::Present(true))
             .and_then(|network| network.networks().ok())
             .and_then(|networks| networks.into_iter().find(|found| found.current))
             .map(|current| current.name()),
         sign_in: network.is_some_and(|network| matches!(network.sign_in_page(), Ok(Some(_)))),
-        bluetooth: bluetooth
-            .and_then(|bluetooth| bluetooth.radio().ok().flatten())
-            .map(|radio| radio.powered),
+        wifi,
+        bluetooth: bluetooth.map_or(Reading::Absent, |bluetooth| {
+            let powered = bluetooth
+                .radio()
+                .map(|radio| radio.map(|radio| radio.powered));
+            Reading::from_answer("BlueZ", powered, adapter_in_kernel)
+        }),
         do_not_disturb: session
             .and_then(|session| NotificationCenter::new(session).ok())
             .and_then(|center| center.do_not_disturb().ok())

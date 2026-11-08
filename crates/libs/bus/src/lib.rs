@@ -1,6 +1,9 @@
 pub mod accounts;
 pub mod logind;
 pub mod portal_settings;
+mod reading;
+
+pub use reading::Reading;
 
 use std::time::Duration;
 

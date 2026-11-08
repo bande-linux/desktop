@@ -3,8 +3,25 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
+use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
+use bande_audio::{Direction, Snapshot, meter_level};
+use bande_bus::Reading;
+use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
+use bande_keyboard::Layouts;
 use bande_l10n::tr;
+use bande_settings_panes::{
+    AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
+};
+use bande_settings_panes::{PaneHit, search};
+use bande_status::brightness::{DisplayLevel, LevelRequest};
+use bande_toolkit::ui::{
+    Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
+    WidgetId,
+};
+use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
+use jiff::Zoned;
 
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
@@ -34,22 +51,6 @@ use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersCommand};
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
-use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
-use bande_audio::{Direction, Snapshot, meter_level};
-use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
-use bande_keyboard::Layouts;
-use bande_settings_panes::{
-    AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
-};
-use bande_settings_panes::{PaneHit, search};
-use bande_status::brightness::{DisplayLevel, LevelRequest};
-use bande_toolkit::ui::{
-    Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
-    WidgetId,
-};
-use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
-use jiff::Zoned;
-use std::time::{Duration, Instant};
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
@@ -249,9 +250,9 @@ pub struct SettingsView {
     pub(crate) keep: Option<Keep>,
     pub(crate) audio: Option<Snapshot>,
     pub(crate) input_level: Rc<Cell<f32>>,
-    pub(crate) wifi: Option<WifiState>,
+    pub(crate) wifi: Reading<WifiState>,
     pub(crate) join: Join,
-    pub(crate) bluetooth: Option<BluetoothState>,
+    pub(crate) bluetooth: Reading<BluetoothState>,
     pub(crate) busy: Vec<String>,
     pub(crate) pairing: Option<Question>,
     pub(crate) pictures: Vec<(String, Pair)>,
@@ -358,9 +359,9 @@ impl SettingsView {
             keep: None,
             audio: None,
             input_level: Rc::default(),
-            wifi: None,
+            wifi: Reading::Absent,
             join: Join::default(),
-            bluetooth: None,
+            bluetooth: Reading::Absent,
             busy: Vec::new(),
             pairing: None,
             pictures: Vec::new(),
@@ -719,12 +720,14 @@ impl SettingsView {
             Update::Arrangements(arrangements) => self.arrangements = arrangements,
             Update::Audio(snapshot) => self.apply_audio(snapshot),
             Update::Wifi(wifi) => {
-                if let Some(wifi) = &wifi {
-                    self.values
-                        .insert(SettingId::WifiPower, Value::Flag(wifi.enabled));
-                }
+                match wifi.present() {
+                    Some(wifi) => self
+                        .values
+                        .insert(SettingId::WifiPower, Value::Flag(wifi.enabled)),
+                    None => self.values.remove(&SettingId::WifiPower),
+                };
                 if let Some(Detail::Network(ssid)) = &self.detail
-                    && !wifi.as_ref().is_some_and(|wifi| {
+                    && !wifi.present().is_some_and(|wifi| {
                         wifi.enabled && wifi.known.iter().any(|known| known.ssid == *ssid)
                     })
                 {
@@ -734,7 +737,10 @@ impl SettingsView {
             }
             Update::Joined(ssid, outcome) => self.joined(ssid, outcome),
             Update::Bluetooth(bluetooth) => {
-                if let Some(bluetooth) = &bluetooth {
+                if bluetooth.present().is_none() {
+                    self.values.remove(&SettingId::BluetoothPower);
+                }
+                if let Some(bluetooth) = bluetooth.present() {
                     self.values
                         .insert(SettingId::BluetoothPower, Value::Flag(bluetooth.powered));
                     let connection = |state: Option<&BluetoothState>, address: &str| {
@@ -744,7 +750,7 @@ impl SettingsView {
                             .find(|device| device.address == address)
                             .map(|device| device.connected)
                     };
-                    let before = self.bluetooth.as_ref();
+                    let before = self.bluetooth.present();
                     self.busy.retain(|address| {
                         connection(before, address) == connection(Some(bluetooth), address)
                     });
@@ -981,8 +987,8 @@ impl SettingsView {
 
     pub(crate) fn available(&self, pane: PaneId) -> bool {
         match pane {
-            PaneId::Wifi => self.wifi.is_some(),
-            PaneId::Bluetooth => self.bluetooth.is_some(),
+            PaneId::Wifi => !self.wifi.is_absent(),
+            PaneId::Bluetooth => !self.bluetooth.is_absent(),
             PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
@@ -1830,7 +1836,7 @@ impl SettingsView {
         address: String,
         command: fn(bande_bluetooth::Device) -> BluetoothCommand,
     ) {
-        let device = self.bluetooth.as_ref().and_then(|bluetooth| {
+        let device = self.bluetooth.present().and_then(|bluetooth| {
             bluetooth
                 .paired
                 .iter()
@@ -1847,7 +1853,7 @@ impl SettingsView {
     fn start_join(&mut self, ssid: Vec<u8>, password: Option<String>) {
         let Some(network) = self
             .wifi
-            .as_ref()
+            .present()
             .and_then(|wifi| wifi.networks.iter().find(|network| network.ssid == ssid))
             .cloned()
         else {

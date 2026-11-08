@@ -464,6 +464,7 @@ impl Compositor {
             },
         );
         pointer.frame(state);
+        state.reload_cursor();
     }
 
     pub fn press_button(&mut self, button: u32, pressed: bool, time: u32) {

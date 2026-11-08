@@ -24,6 +24,7 @@ bande-datetime.workspace = true
 bande-colour.workspace = true
 bande-edid.workspace = true
 bande-graphics.workspace = true
+resvg.workspace = true
 bande-inbox.workspace = true
 bande-keyboard.workspace = true
 bande-l10n.workspace = true

@@ -250,7 +250,8 @@ writes a hex value, a corner radius or a font name of its own.
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
   group; a selection run never spans a heading. In a `Table::sidebar` the headings are source-list
-  section titles instead (`Label` in `ink3`, no hairline, clicks on them select nothing), and
+  section titles instead (`Label` in `ink3`, no hairline, clicks on them select nothing; a right click on a row
+  opens the menu for that row without selecting it), and
   `Heading::button(symbol, name, command)` puts a 20 pt symbol button at the trailing edge (the
   symbol in `ink2`, a `well` fill on hover, the name as its tooltip and accessible label) that
   reports `command` to `Table::on_heading_button`, as the + beside a source list's section does.

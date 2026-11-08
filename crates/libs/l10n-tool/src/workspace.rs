@@ -37,6 +37,7 @@ pub struct Crate {
     pub name: String,
     pub folder: PathBuf,
     pub keys: Vec<Key>,
+    pub local: bool,
 }
 
 impl Crate {
@@ -85,6 +86,12 @@ impl Workspace {
             .collect::<BTreeMap<_, _>>();
         let mut problems = Vec::new();
         let mut packaging = Vec::new();
+        let member_ids = metadata["workspace_members"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect::<BTreeSet<_>>();
         let mut crates = packages
             .iter()
             .filter(|package| {
@@ -102,7 +109,13 @@ impl Workspace {
                     .parent()?
                     .to_owned();
                 let keys = keys_of(&folder.join("src"), &mut problems);
-                Some(Crate { name, folder, keys })
+                let local = package["id"].as_str().is_some_and(|id| member_ids.contains(id));
+                Some(Crate {
+                    name,
+                    folder,
+                    keys,
+                    local,
+                })
             })
             .collect::<Vec<_>>();
         crates.sort_by(|left, right| left.name.cmp(&right.name));

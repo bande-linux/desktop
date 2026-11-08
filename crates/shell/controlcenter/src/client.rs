@@ -465,6 +465,7 @@ impl ControlCenter {
                     report("set the volume", audio.set_level(output, level));
                 }
             }
+            Change::VolumeReleased => self.volume_feedback(),
             Change::Brightness(connector, level) => self.set_light(connector, level),
             Change::KeyboardBrightness(level) => self.set_keyboard_light(level),
             Change::InputMuted(muted) => {
@@ -713,16 +714,20 @@ impl ControlCenter {
         self.reveal(window, true);
     }
 
+    fn volume_feedback(&self) {
+        if let Some(session) = &self.session {
+            bande_sound::play(session, bande_sound::Sound::VolumeChange.name());
+        }
+    }
+
     fn volume_key(&mut self, window: &mut Window, key: VolumeKey, fine: bool) {
         let (Some(audio), Some(key)) = (&self.audio, audio_key(key)) else {
             return;
         };
         match audio.press(key, fine) {
             Ok(level) => {
-                if !level.muted
-                    && let Some(session) = &self.session
-                {
-                    bande_sound::play(session, "audio-volume-change");
+                if !level.muted {
+                    self.volume_feedback();
                 }
                 self.show_hud(window, Hud::Volume(level));
             }

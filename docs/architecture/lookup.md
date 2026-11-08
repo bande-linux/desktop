@@ -1,39 +1,41 @@
-# Look Up
+# Dictionary and Look Up
 
-`bande-lookup` (`crates/apps/lookup`) shows what a word means in a popover at the pointer. It is
-started by D-Bus (`org.bande.Lookup`, `org.freedesktop.Application.Open`) with the text as the
-argument and optionally `--language=<tag>` first, and exits when the popover closes (Esc or focus
-lost). If no request arrives within 30 seconds of starting it exits. Nothing runs at idle.
+`bande-lookup` (`crates/apps/lookup`, app id `org.bande.Lookup`, shown as Dictionary) is both the
+Dictionary app and Look Up, as Dictionary.app is on a Mac:
 
-The popover is `Kind::Popover` in `bande-app`, `bande_app_v1.set_popover` in the compositor: it maps
-at the pointer, takes the keyboard, is on top, is not in the Taskbar and is not resumed. Lookups run
-on a worker thread and go online only for Wikipedia.
+- **Dictionary window**: a search field; local sources answer as you type, online sources once
+  typing pauses.
+- **Look Up**: started by D-Bus (`org.freedesktop.Application.Open` with the text, optionally
+  `--language=<tag>` first) from a text field's or label's menu, Files, Terminal, the Browser or
+  `Ctrl+Super+D`. It shows a popover at the pointer (`Kind::Popover`, `bande_app_v1.set_popover`)
+  and exits when it closes (Esc or focus lost) unless the Dictionary window was opened. If no
+  request arrives within 30 seconds of a D-Bus start it exits. Nothing runs at idle.
+- **Dictionary Settings**: the sources as rows, each checkable and ordered (Move Up, Move Down),
+  with its languages and, for an online source, that each word looked up is sent there. Look Up
+  and Dictionary show one section per enabled source with a hit, in this order; the popover shows
+  the first section and the first of each other kind, and More shows them all.
 
-## Languages
+Lookups run on worker threads. Online sources are asked only when they are enabled.
 
-No language and no pack is named in the code. Every installed pack is asked, in every language it
-covers; adding German means installing a pack. Entries are never merged: each pack and language
-with a hit is its own named section. The popover shows the best section and the best of each other
-kind (a thesaurus, say), and More shows every section. Sections are ranked by exact headword over
-inflected form over compound part, then definitions in the UI language, then kind (definition,
-translation, thesaurus), then the user's order or else the pack's priority, then the word's
-language (the hint, then the user's languages). A section identical to one above is hidden.
+## Sources
 
-## Settings and Wikipedia
+A source is a file in `<XDG data dir>/bande/dict/`: a `.bdict` pack (offline data) or a `.source`
+file (an online source: the same metadata, no data). The first with an `id` wins. Packaged sources
+are in `/usr/share`, the user's own in `~/.local/share`; they are treated the same, and the user's
+can be removed in Settings.
 
-Settings ▸ Language & Time ▸ Look Up lists the installed packs (on or off, "Use First" sets the
-user's order) and the `bande-dict-*` packages PackageKit can install. The choices are in
-`$XDG_CONFIG_HOME/bande/lookup` (`off=`, `order=`, `wikipedia=on|off`) and read on every lookup.
-The code for packs and choices is `bande-dict` (`crates/libs/dict`).
+No language and no source is named in the code. A source is on by default when it serves one of
+the user's languages (their language list and their region's language), unless it says
+`default=on|off`. The default order puts sources whose text is in the user's languages first, then
+definitions before translations, thesauruses and encyclopedias, then the source's `priority`. The
+user's choices are in `$XDG_CONFIG_HOME/bande/dictionary.conf` (`order=`, `on=`, `off=`, ids
+separated by spaces).
 
-Wikipedia is off by default; Settings says that, when on, every word looked up goes online. Then
-the page summary (`https://<language>.wikipedia.org/api/rest_v1/page/summary/<word>`, over
-`bande-https`) is added as its own section after the local ones, in the language of the best local
-section, else the first of the user's languages.
+Matching within a source: the forms table, then the source's `rules.<language>`, then for a
+compounding language the longest known ending ("husvagns + ägare", marked as derived).
 
 ## Pack format
 
-Packs are found at runtime in `<XDG data dir>/bande/dict/*.bdict`; the first pack with an `id` wins.
 All integers are little-endian `u32` unless noted; offsets are from the start of the file.
 
 | Part | Content |
@@ -44,26 +46,26 @@ All integers are little-endian `u32` unless noted; offsets are from the start of
 | Form record | key `<language>:<lowercase form>`, a zero byte, `u16` entry count, entry offsets best first |
 | Entry | length, then UTF-8 lines: word, part of speech, then `<kind>\t<text>` |
 
-Metadata keys: `id`, `name`, `attribution` (shown in the panel), `languages` (space separated tags),
-`definitions.<language>` (the language its text is written in), `kind.<language>` (`definition`,
-`translation`, `thesaurus`), `priority` (higher first),
-`rules.<language>` (`pos:ending:replacement` items tried on the first word when a form is not in
-the table, kept only when the base has that part of speech), `compound.<language>` (shortest ending
-to try; present means the language compounds and the longest known ending is shown, marked as
-derived). Line kinds: `D` definition, `T` translation, `S` synonyms, `E` example, `O` form of
-another word of the pack. Parts of speech `noun`, `verb`, `adj` and `adv` are translated by the
-panel; any other is shown as it is.
+Metadata keys: `id`, `name`, `attribution` (shown under each section), `languages` (tags, or `*`),
+`definitions.<language>` (the language the text is written in), `kind.<language>` (`definition`,
+`translation`, `thesaurus`, `encyclopedia`; `*` for every language), `priority` (higher first),
+`default`, `rules.<language>` (`pos:ending:replacement` items tried on the first word when a form is
+not in the table, kept only when the base has that part of speech), `compound.<language>`
+(shortest ending to try). A `.source` file adds `protocol` and `url` (`{language}` and `{word}` are
+filled in); the protocol known today is `wikimedia-summary`. Line kinds: `D` definition,
+`T` translation, `S` synonyms, `E` example, `O` form of another word of the pack. Parts of speech
+`noun`, `verb`, `adj` and `adv` are translated; any other is shown as it is.
 
-A form's entries are ordered by the builder, so `ran` reaches only the verb `run`, and WordNet's
-entries follow its sense counts.
-
-## Packs
+## Packaged sources
 
 `packaging/dict/build.py <version> <sources> <out> [package...]` downloads the source data and makes
 the packs and `.deb`s with their licence files:
 
-| Package | Source | Licence |
+| Package | Sources | Licence |
 | --- | --- | --- |
-| `bande-dict-en` | WordNet | Princeton's, with notice |
-| `bande-dict-sv` | Folkets lexikon, both ways | CC BY-SA 2.5 |
-| `bande-dict-sv-wiktionary` | Swedish words from Wiktionary through kaikki.org | CC BY-SA |
+| `bande-dict-en` | English Dictionary and English Thesaurus, from Open English WordNet 2025 | CC BY 4.0 |
+| `bande-dict-sv` | Folkets lexikon (Swedish↔English); Svenska synonymer (Synlex, from Debian's `mythes-sv`) | CC BY-SA 2.5; Synlex's own free licence |
+| `bande-dict-sv-wiktionary` | Svenska ord: Swedish words from Wiktionary through kaikki.org | CC BY-SA 4.0 |
+
+`bande-lookup` ships `wikipedia.source` (Wikipedia, every language, on by default; the row says that
+each word looked up is sent to Wikipedia).

@@ -1,0 +1,8 @@
+id=wikipedia
+name=Wikipedia
+attribution=Wikipedia, CC BY-SA 4.0
+languages=*
+kind.*=encyclopedia
+protocol=wikimedia-summary
+url=https://{language}.wikipedia.org/api/rest_v1/page/summary/{word}
+default=on

@@ -12,6 +12,8 @@ import xml.etree.ElementTree as ET
 MAGIC = b"BDICT1\n\0"
 MAX_ENTRIES_PER_FORM = 40
 FOLKETS = "https://folkets-lexikon.csc.kth.se/folkets/"
+OEWN = "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.zip"
+CC_BY_40 = "Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
 KAIKKI = "https://kaikki.org/dictionary/Swedish/kaikki.org-dictionary-Swedish.jsonl"
 CC_BY_SA_25 = "Creative Commons Attribution-ShareAlike 2.5, https://creativecommons.org/licenses/by-sa/2.5/"
 CC_BY_SA_40 = "Creative Commons Attribution-ShareAlike 4.0, https://creativecommons.org/licenses/by-sa/4.0/"
@@ -62,48 +64,86 @@ def fetch(url, path):
     return path
 
 
-def wordnet_entries(sources):
-    root = sources / "wordnet"
+def wordnet(sources):
+    root = sources / "oewn"
     if not root.exists():
         root.mkdir()
-        subprocess.run(["apt-get", "download", "wordnet-base"], cwd=root, check=True)
-        deb = next(root.glob("wordnet-base_*.deb"))
-        subprocess.run(["dpkg-deb", "-x", str(deb), "."], cwd=root, check=True)
-    data = root / "usr/share/wordnet"
-    forms, found = {}, []
-    for pos, name in (("noun", "noun"), ("verb", "verb"), ("adj", "adj"), ("adv", "adv")):
+        archive = fetch(OEWN, root / "oewn.zip")
+        subprocess.run(["unzip", "-q", str(archive)], cwd=root, check=True)
+    data = next(path for path in root.glob("oewn*") if path.is_dir())
+    forms, dictionary, thesaurus = {}, [], []
+    for pos in ("noun", "verb", "adj", "adv"):
         synsets = {}
-        for line in open(data / f"data.{name}", encoding="latin1"):
-            if line.startswith("  "):
+        for line in open(data / f"data.{pos}", encoding="utf8"):
+            if line.startswith("  ") or "|" not in line:
                 continue
             head, gloss = line.split("|", 1)
             parts = head.split()
             count = int(parts[3], 16)
             words = [parts[4 + 2 * i].split("(")[0].replace("_", " ") for i in range(count)]
             synsets[parts[0]] = (words, clean(gloss))
-        for line in open(data / f"index.{name}", encoding="latin1"):
-            if line.startswith("  "):
+        for line in open(data / f"index.{pos}", encoding="utf8"):
+            if line.startswith("  ") or not line.strip():
                 continue
             parts = line.split()
             word = parts[0].replace("_", " ")
             senses = int(parts[2])
-            lines = []
+            meanings, synonyms = [], []
             for offset in parts[-senses:]:
                 words, gloss = synsets[offset]
-                lines.append(("D", gloss))
+                meanings.append(("D", gloss))
                 others = [other for other in words if other.lower() != word]
                 if others:
-                    lines.append(("S", ", ".join(others)))
-            found.append(([f"en:{word}"], word, pos, lines, int(parts[-senses - 1])))
-            forms[(pos, word)] = found[-1][0]
-        for line in open(data / f"{name}.exc", encoding="latin1"):
+                    meanings.append(("S", ", ".join(others)))
+                    synonyms.append(("S", ", ".join(others)))
+            keys = [f"en:{word}"]
+            weight = int(parts[-senses - 1])
+            dictionary.append((keys, word, pos, meanings, weight))
+            if synonyms:
+                thesaurus.append((keys, word, pos, synonyms, weight))
+            forms[(pos, word)] = keys
+        for line in open(data / f"{pos}.exc", encoding="utf8"):
+            if not line.strip():
+                continue
             form, *bases = line.split()
             for base in bases:
                 known = forms.get((pos, base.replace("_", " ")))
                 if known is not None:
                     known.append(f"en:{form.replace('_', ' ')}")
-    found.sort(key=lambda entry: -entry[4])
-    return [entry[:4] for entry in found]
+    for found in (dictionary, thesaurus):
+        found.sort(key=lambda entry: -entry[4])
+    return [entry[:4] for entry in dictionary], [entry[:4] for entry in thesaurus]
+
+
+def wordnet_dictionary(sources):
+    return wordnet(sources)[0]
+
+
+def wordnet_thesaurus(sources):
+    return wordnet(sources)[1]
+
+
+def synlex_entries(sources):
+    root = sources / "mythes-sv"
+    if not root.exists():
+        root.mkdir()
+        subprocess.run(["apt-get", "download", "mythes-sv"], cwd=root, check=True)
+        deb = next(root.glob("mythes-sv_*.deb"))
+        subprocess.run(["dpkg-deb", "-x", str(deb), "."], cwd=root, check=True)
+    lines = open(next(root.glob("usr/share/mythes/th_sv_SE*.dat")), encoding="latin1").read().splitlines()[1:]
+    found, at = [], 0
+    while at < len(lines):
+        word, count = lines[at].rsplit("|", 1)
+        meanings = []
+        for meaning in lines[at + 1 : at + 1 + int(count)]:
+            pos, *synonyms = meaning.split("|")
+            synonyms = [synonym for synonym in synonyms if synonym and synonym.lower() != word.lower()]
+            if synonyms:
+                meanings.append(("S", ", ".join(synonyms)))
+        at += 1 + int(count)
+        if meanings:
+            found.append(([f"sv:{word.lower()}"], word, "", meanings))
+    return found
 
 
 def folkets_entries(sources):
@@ -157,60 +197,100 @@ def wiktionary_entries(sources):
 
 PACKS = {
     "bande-dict-en": {
-        "file": "wordnet",
-        "entries": wordnet_entries,
-        "meta": {
-            "id": "wordnet",
-            "name": "WordNet",
-            "attribution": "WordNet 3.0, Princeton University. Free with notice.",
-            "languages": "en",
-            "definitions.en": "en",
-            "kind.en": "definition",
-            "priority": "20",
-            "rules.en": ENGLISH_RULES,
-        },
-        "summary": "English dictionary for Look Up (WordNet)",
-        "licence": "WordNet 3.0 Copyright 2006 by Princeton University. See https://wordnet.princeton.edu/license-and-commercial-use\nThe licence text from Debian's wordnet-base follows.\n\n",
-        "licence_file": "wordnet/usr/share/doc/wordnet-base/copyright",
+        "packs": [
+            {
+                "file": "oewn-dictionary",
+                "entries": wordnet_dictionary,
+                "meta": {
+                    "id": "oewn-dictionary",
+                    "name": "English Dictionary (Open English WordNet)",
+                    "attribution": "Open English WordNet 2025, CC BY 4.0",
+                    "languages": "en",
+                    "definitions.en": "en",
+                    "kind.en": "definition",
+                    "priority": "20",
+                    "rules.en": ENGLISH_RULES,
+                },
+            },
+            {
+                "file": "oewn-thesaurus",
+                "entries": wordnet_thesaurus,
+                "meta": {
+                    "id": "oewn-thesaurus",
+                    "name": "English Thesaurus (Open English WordNet)",
+                    "attribution": "Open English WordNet 2025, CC BY 4.0",
+                    "languages": "en",
+                    "definitions.en": "en",
+                    "kind.en": "thesaurus",
+                    "priority": "20",
+                    "rules.en": ENGLISH_RULES,
+                },
+            },
+        ],
+        "summary": "English dictionary and thesaurus for Dictionary (Open English WordNet)",
+        "licence": f"Open English WordNet 2025, https://en-word.net/\n{CC_BY_40}\nConverted to the Bande pack format.\n",
     },
     "bande-dict-sv": {
-        "file": "folkets",
-        "entries": folkets_entries,
-        "meta": {
-            "id": "folkets",
-            "name": "Folkets lexikon",
-            "attribution": "Folkets lexikon, CC BY-SA 2.5",
-            "languages": "sv en",
-            "definitions.sv": "sv",
-            "definitions.en": "sv",
-            "kind.sv": "translation",
-            "kind.en": "translation",
-            "priority": "10",
-            "compound.sv": "3",
-        },
-        "summary": "Swedish-English dictionary for Look Up (Folkets lexikon)",
-        "licence": f"Folkets lexikon, KTH, https://folkets-lexikon.csc.kth.se/\n{CC_BY_SA_25}\nConverted to the Bande pack format.\n",
+        "packs": [
+            {
+                "file": "folkets",
+                "entries": folkets_entries,
+                "meta": {
+                    "id": "folkets",
+                    "name": "Folkets lexikon",
+                    "attribution": "Folkets lexikon, KTH, CC BY-SA 2.5",
+                    "languages": "sv en",
+                    "definitions.sv": "sv",
+                    "definitions.en": "sv",
+                    "kind.sv": "translation",
+                    "kind.en": "translation",
+                    "priority": "10",
+                    "compound.sv": "3",
+                },
+            },
+            {
+                "file": "synlex",
+                "entries": synlex_entries,
+                "meta": {
+                    "id": "synlex",
+                    "name": "Svenska synonymer (Synlex)",
+                    "attribution": "Folkets synonymlexikon Synlex, Viggo Kann, KTH",
+                    "languages": "sv",
+                    "definitions.sv": "sv",
+                    "kind.sv": "thesaurus",
+                    "priority": "10",
+                    "compound.sv": "3",
+                },
+            },
+        ],
+        "summary": "Swedish-English dictionary and Swedish thesaurus for Dictionary (Folkets lexikon, Synlex)",
+        "licence": f"Folkets lexikon, KTH, https://folkets-lexikon.csc.kth.se/\n{CC_BY_SA_25}\n\nSynlex, Folkets synonymlexikon, 2009 Viggo Kann, KTH, as packaged in Debian's mythes-sv; its copyright file follows.\nConverted to the Bande pack format.\n\n",
+        "licence_file": "mythes-sv/usr/share/doc/mythes-sv/copyright",
     },
     "bande-dict-sv-wiktionary": {
-        "file": "wiktionary-sv",
-        "entries": wiktionary_entries,
-        "meta": {
-            "id": "wiktionary-sv",
-            "name": "Wiktionary",
-            "attribution": "Wiktionary via kaikki.org, CC BY-SA",
-            "languages": "sv",
-            "definitions.sv": "en",
-            "kind.sv": "definition",
-            "priority": "20",
-            "compound.sv": "3",
-        },
-        "summary": "Swedish words from Wiktionary for Look Up",
+        "packs": [
+            {
+                "file": "wiktionary-sv",
+                "entries": wiktionary_entries,
+                "meta": {
+                    "id": "wiktionary-sv",
+                    "name": "Svenska ord (Wiktionary)",
+                    "attribution": "Wiktionary via kaikki.org, CC BY-SA 4.0",
+                    "languages": "sv",
+                    "definitions.sv": "en",
+                    "kind.sv": "definition",
+                    "priority": "20",
+                    "compound.sv": "3",
+                },
+            },
+        ],
+        "summary": "Swedish words from Wiktionary for Dictionary",
         "licence": f"Wiktionary contributors, extracted by kaikki.org (wiktextract).\n{CC_BY_SA_40}\nConverted to the Bande pack format.\n",
     },
 }
 
 
-def debian_arch_all_deb(package, spec, pack, version, out):
+def debian_arch_all_deb(package, spec, packs, version, out):
     root = out / f"{package}.root"
     shutil.rmtree(root, ignore_errors=True)
     folder = root / "usr/share/bande/dict"
@@ -218,12 +298,13 @@ def debian_arch_all_deb(package, spec, pack, version, out):
     folder.mkdir(parents=True)
     docs.mkdir(parents=True)
     (root / "DEBIAN").mkdir()
-    shutil.copy(pack, folder)
+    for pack in packs:
+        shutil.copy(pack, folder)
     (docs / "copyright").write_text(spec["licence"])
     (root / "DEBIAN/control").write_text(
         f"Package: {package}\nVersion: {version}\nArchitecture: all\n"
         f"Maintainer: Mikael Hug <mikaelhug@gmail.com>\nSection: text\nPriority: optional\n"
-        f"Installed-Size: {pack.stat().st_size // 1024}\nDescription: {spec['summary']}\n"
+        f"Installed-Size: {sum(pack.stat().st_size for pack in packs) // 1024}\nDescription: {spec['summary']}\n"
     )
     deb = out / f"{package}_{version}_all.deb"
     subprocess.run(["dpkg-deb", "--root-owner-group", "-Zxz", "-b", str(root), str(deb)], check=True)
@@ -237,13 +318,16 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     for package in sys.argv[4:] or PACKS:
         spec = PACKS[package]
-        pack = out / f"{spec['file']}.bdict"
-        write_pack(pack, spec["meta"], spec["entries"](sources))
+        packs = []
+        for part in spec["packs"]:
+            pack = out / f"{part['file']}.bdict"
+            write_pack(pack, part["meta"], part["entries"](sources))
+            packs.append(pack)
         if "licence_file" in spec:
             spec["licence"] += (sources / spec["licence_file"]).read_text()
-        deb = debian_arch_all_deb(package, spec, pack, version, out)
-        print(package, pack.stat().st_size // 1000000, "MB pack,", deb.stat().st_size // 1000000, "MB deb")
-
+        deb = debian_arch_all_deb(package, spec, packs, version, out)
+        size = sum(pack.stat().st_size for pack in packs) // 1000000
+        print(package, size, "MB packs,", deb.stat().st_size // 1000000, "MB deb")
 
 if __name__ == "__main__":
     main()

@@ -3,14 +3,14 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use spellbook::Dictionary;
 use zbus::object_server::SignalEmitter;
 
 use crate::dictionaries::{
-    bande_data_home, best_for, data_directories, input_source_language, installed, language_data,
-    language_of, load,
+    bande_data_home, best_for, data_directories, data_stamp, input_source_language, installed,
+    language_data, language_of, load,
 };
 use crate::store::Store;
 
@@ -18,20 +18,51 @@ pub const BUS_NAME: &str = "org.bande.Spell";
 pub const OBJECT_PATH: &str = "/org/bande/Spell";
 const IDLE_EXIT: Duration = Duration::from_secs(60);
 
+#[derive(Default)]
+struct Catalog {
+    stamp: Option<Vec<Option<SystemTime>>>,
+    installed: BTreeMap<String, PathBuf>,
+    active: Option<Vec<String>>,
+    rules: HashMap<String, HashMap<String, String>>,
+}
+
 pub struct Engine {
     store: Store,
     region: Option<String>,
     system_language: Option<String>,
     input_languages: Vec<String>,
     loaded: HashMap<String, Dictionary>,
-    variants: HashMap<String, Dictionary>,
+    variants: HashMap<String, Option<Dictionary>>,
     preferred: Vec<String>,
     common: HashMap<String, HashSet<String>>,
+    catalog: Catalog,
 }
 
 impl Engine {
-    fn active(&self) -> Vec<String> {
-        let everything = installed();
+    fn refresh(&mut self) {
+        let stamp = data_stamp();
+        if self.catalog.stamp.as_ref() != Some(&stamp) {
+            self.loaded.clear();
+            self.variants.clear();
+            self.common.clear();
+            self.catalog = Catalog {
+                stamp: Some(stamp),
+                installed: installed(),
+                ..Catalog::default()
+            };
+        }
+        if self.catalog.active.is_none() {
+            let active = self.wanted_dictionaries();
+            self.loaded.retain(|name, _| active.contains(name));
+            self.catalog.active = Some(active);
+        }
+    }
+
+    fn languages_changed(&mut self) {
+        self.catalog.active = None;
+    }
+
+    fn wanted_dictionaries(&self) -> Vec<String> {
         let wanted: Vec<String> = if self.store.languages.is_empty() {
             self.system_language
                 .iter()
@@ -44,13 +75,29 @@ impl Engine {
         };
         let mut active = Vec::new();
         for language in wanted {
-            if let Some(name) = best_for(&language, self.region_for(&language), &everything)
-                && !active.contains(&name)
+            if let Some(name) = best_for(
+                &language,
+                self.region_for(&language),
+                &self.catalog.installed,
+            ) && !active.contains(&name)
             {
                 active.push(name);
             }
         }
         active
+    }
+
+    fn active(&mut self) -> &[String] {
+        self.refresh();
+        self.catalog.active.as_deref().unwrap_or_default()
+    }
+
+    fn language_rules(&mut self, language: &str) -> &HashMap<String, String> {
+        self.refresh();
+        self.catalog
+            .rules
+            .entry(language.to_owned())
+            .or_insert_with(|| language_data(language))
     }
 
     fn region_for(&self, language: &str) -> Option<&str> {
@@ -61,14 +108,14 @@ impl Engine {
             .or(self.region.as_deref())
     }
 
-    pub fn missing(&self) -> Vec<String> {
-        let everything = installed();
+    pub fn missing(&mut self) -> Vec<String> {
+        self.refresh();
         let mut missing = Vec::new();
-        for name in self.active() {
-            let language = language_of(&name).to_owned();
-            if let Some(region) = self.region_for(&language) {
+        for name in self.catalog.active.iter().flatten() {
+            let language = language_of(name);
+            if let Some(region) = self.region_for(language) {
                 let wanted = format!("{language}_{region}");
-                if !everything.contains_key(&wanted) && !missing.contains(&wanted) {
+                if !self.catalog.installed.contains_key(&wanted) && !missing.contains(&wanted) {
                     missing.push(wanted);
                 }
             }
@@ -77,20 +124,19 @@ impl Engine {
     }
 
     fn valid_in_a_variant(&mut self, word: &str) -> bool {
-        let active = self.active();
+        self.refresh();
+        let active = self.catalog.active.as_deref().unwrap_or_default();
         let languages: Vec<&str> = active.iter().map(|name| language_of(name)).collect();
-        for (name, path) in installed() {
-            if active.contains(&name) || !languages.contains(&language_of(&name)) {
+        for (name, path) in &self.catalog.installed {
+            if active.contains(name) || !languages.contains(&language_of(name)) {
                 continue;
             }
-            if !self.variants.contains_key(&name)
-                && let Some(dictionary) = load(&path)
-            {
-                self.variants.insert(name.clone(), dictionary);
-            }
-            if self
+            let variant = self
                 .variants
-                .get(&name)
+                .entry(name.clone())
+                .or_insert_with(|| load(path));
+            if variant
+                .as_ref()
                 .is_some_and(|dictionary| dictionary.check(word))
             {
                 return true;
@@ -100,12 +146,12 @@ impl Engine {
     }
 
     fn dictionaries(&mut self) -> Vec<&Dictionary> {
-        let active = self.active();
-        let everything = installed();
-        self.loaded.retain(|name, _| active.contains(name));
-        for name in &active {
+        self.refresh();
+        let active = self.catalog.active.as_deref().unwrap_or_default();
+        for name in active {
             if !self.loaded.contains_key(name)
-                && let Some(dictionary) = everything.get(name).and_then(|path| load(path))
+                && let Some(dictionary) =
+                    self.catalog.installed.get(name).and_then(|path| load(path))
             {
                 self.loaded.insert(name.clone(), dictionary);
             }
@@ -163,11 +209,10 @@ impl Engine {
             return String::new();
         }
         let typed = word.to_lowercase();
-        self.dictionaries();
         let mut candidates: Vec<(String, bool)> = Vec::new();
-        for name in self.active() {
-            let language = language_of(&name).to_owned();
-            let rules = language_data(&language);
+        for name in self.active().to_vec() {
+            let language = language_of(&name);
+            let rules = self.language_rules(language);
             let long_enough = rules
                 .get("autocorrect-min-length")
                 .and_then(|value| value.parse::<usize>().ok())
@@ -175,15 +220,15 @@ impl Engine {
             let enabled = rules
                 .get("autocorrect")
                 .is_some_and(|value| value == "true");
-            if self.common_words(&language).contains(&typed) {
+            if self.common_words(language).contains(&typed) {
                 return String::new();
             }
-            let common = self.common_words(&language).clone();
             let Some(dictionary) = self.loaded.get(&name) else {
                 continue;
             };
             let mut suggestions = Vec::new();
             dictionary.suggest(word, &mut suggestions);
+            let common = self.common_words(language);
             for suggestion in suggestions {
                 if one_edit_apart(word, &suggestion) {
                     let strong = common.contains(&suggestion.to_lowercase());
@@ -277,10 +322,10 @@ impl Spell {
     }
 
     fn rules(&self) -> (HashMap<String, String>, HashMap<String, String>) {
-        let engine = self.engine();
-        let mut rules = language_data("en");
-        if let Some(language) = &engine.system_language {
-            rules.extend(language_data(language));
+        let mut engine = self.engine();
+        let mut rules = engine.language_rules("en").clone();
+        if let Some(language) = engine.system_language.clone() {
+            rules.extend(engine.language_rules(&language).clone());
         }
         for name in ["capitalise", "double-space", "smart-quotes", "links"] {
             let on = engine.store.options.get(name).copied().unwrap_or(true);
@@ -355,11 +400,12 @@ impl Spell {
     }
 
     fn languages(&self) -> (Vec<String>, Vec<String>, Vec<String>) {
-        let engine = self.engine();
+        let mut engine = self.engine();
+        let active = engine.active().to_vec();
         (
             engine.store.languages.clone(),
-            engine.active(),
-            installed().into_keys().collect(),
+            active,
+            engine.catalog.installed.keys().cloned().collect(),
         )
     }
 
@@ -375,6 +421,7 @@ impl Spell {
         {
             let mut engine = self.engine();
             engine.store.languages = languages;
+            engine.languages_changed();
             saved(engine.store.save_settings())?;
         }
         Self::changed(&emitter).await?;
@@ -447,6 +494,7 @@ impl Engine {
                 .map(|code| code.split(['.', '@']).next().unwrap_or(code).to_owned())
                 .collect(),
             common: HashMap::new(),
+            catalog: Catalog::default(),
         })
     }
 }

@@ -73,9 +73,9 @@ pub(crate) fn fd() -> Option<BorrowedFd<'static>> {
     DELIVERY.get().map(|delivery| delivery.woken.as_fd())
 }
 
-pub(crate) fn deliver() {
+pub(crate) fn deliver() -> bool {
     let Some(delivery) = DELIVERY.get() else {
-        return;
+        return false;
     };
     let mut drained = [0; 64];
     while matches!((&delivery.woken).read(&mut drained), Ok(read) if read > 0) {}
@@ -83,9 +83,11 @@ pub(crate) fn deliver() {
         .replies
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
+    let mut shown_changed = false;
     for reply in replies.try_iter() {
-        receive_spelling(reply);
+        shown_changed |= receive_spelling(reply);
     }
+    shown_changed
 }
 
 fn is_absent(error: zbus::Error) -> bool {

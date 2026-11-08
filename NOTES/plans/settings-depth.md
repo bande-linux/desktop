@@ -64,9 +64,15 @@ corners. Missing: Mission Control options (group windows by app, switch to a
 space with open windows), "click wallpaper to reveal desktop", default web browser lives in
 Apps already.
 
-**Displays.** Has: brightness, resolution, scaling, refresh rate, rotation,
-arrangement with a revert countdown, mirroring, Night Light (Night Shift) with schedule and
-warmth. Missing: colour profile, HDR (blocked on the kernel), "optimise for" on mirroring.
+**Displays.** Has: brightness (DDC/CI where the monitor answers), Use as, text size shown as
+macOS's scaled resolutions (Larger Text to More Space) with Show all resolutions, refresh rate,
+rotation, colour profile (This display from EDID, sRGB, Display P3, None, added ICC matrix
+profiles), arrangement with a revert countdown, mirroring, Night Light (Night Shift) with
+schedule and warmth. Missing: a calibration assistant (gamma and white point saved as an ICC
+profile, from memory of macOS's Display Calibrator Assistant), HDR (needs `Colorspace` and
+`HDR_OUTPUT_METADATA` on the connector, FP16 composition and tone mapping; only on drivers that
+have them), "optimise for" on mirroring. True Tone and auto-brightness are left out: no light
+sensor.
 
 **Wallpaper.** Has: bundled light/dark pairs, choose a picture, fill or fit. Missing: a
 solid colour, a folder that rotates, "show on all spaces" is moot.

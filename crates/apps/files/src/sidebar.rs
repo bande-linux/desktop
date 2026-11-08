@@ -195,7 +195,7 @@ fn defaults(home: &Path, user_dirs: Option<&str>, bookmarks: Option<&str>) -> Ve
 fn token(location: &Location) -> Option<String> {
     match location {
         Location::Recents => Some(RECENTS.to_owned()),
-        Location::Server(_) => None,
+        Location::Server { .. } => None,
         Location::Network => Some(NETWORK.to_owned()),
         Location::Trash => Some(TRASH.to_owned()),
         Location::Folder(path) => Some(file_uri(path)),

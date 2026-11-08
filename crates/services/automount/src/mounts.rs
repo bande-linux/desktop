@@ -305,6 +305,7 @@ impl Mounts {
             .object_server()
             .at(MOUNTS_PATH, MountsInterface(mounts.clone(), discovery))?;
         session.request_name(MOUNTS_SERVICE)?;
+        mounts.announce();
         Ok(mounts)
     }
 

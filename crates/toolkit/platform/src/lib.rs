@@ -18,13 +18,6 @@ mod spelling;
 mod text_input;
 mod window;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-toolkit-platform")));
-
 pub use app_connection::{AppConnection, AppRequest, WindowInSession};
 pub use bande_graphics::ResizeEdge;
 pub use bande_protocols::client::bande_shell_v1::{

@@ -37,11 +37,11 @@ mod type_select;
 
 use std::any::Any;
 use std::cell;
-use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
+use bande_l10n::tr;
 
 pub use bande_spring::Spring;
 pub use bounded::Bounded;
@@ -91,12 +91,8 @@ pub use type_select::TypeSelect;
 
 pub type Animated = bande_spring::Animated<Instant>;
 
-use bande_l10n::Localizer;
-
 const LOOK_UP_ACTION: &str = "look-up-word";
 const LOOK_UP_LONGEST: usize = 100;
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-widgets")));
 
 use bande_graphics::{
     Appearance, Color, ControlSize, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle,
@@ -1065,7 +1061,7 @@ impl Ui {
             if !menu.items.is_empty() {
                 menu.items.insert(0, MenuItem::separator());
             }
-            let title = L10N.tr_args("look-up", [("word", text.as_str().into())]);
+            let title = tr!("Look Up “{word}”", word = text.as_str());
             menu.items.insert(
                 0,
                 MenuItem::new(&title, LOOK_UP_ACTION).shortcut("Ctrl+Super+D"),

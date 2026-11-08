@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::time::SystemTime;
 
+use bande_l10n::text;
+
+use crate::listing::Entry;
 use bande_xdg::{Apps, MimeDatabase, config_dirs, data_dirs};
 use jiff::tz::TimeZone;
 use jiff::{Span, Timestamp, Zoned};
-
-use crate::L10N;
-use crate::listing::Entry;
 
 pub const ARCHIVES: &[&str] = &[
     "application/zip",
@@ -319,42 +319,42 @@ impl Group {
     pub fn title(self) -> String {
         let message = match self {
             Self::Kind(kind) => match kind {
-                KindGroup::Applications => "group-applications",
-                KindGroup::Archives => "group-archives",
-                KindGroup::DiskImages => "group-disk-images",
-                KindGroup::Documents => "group-documents",
-                KindGroup::Folders => "group-folders",
-                KindGroup::Images => "group-images",
-                KindGroup::Movies => "group-movies",
-                KindGroup::Music => "group-music",
-                KindGroup::PdfDocuments => "group-pdf-documents",
-                KindGroup::Presentations => "group-presentations",
-                KindGroup::Spreadsheets => "group-spreadsheets",
-                KindGroup::Other => "group-other",
+                KindGroup::Applications => text!("Applications"),
+                KindGroup::Archives => text!("Archives"),
+                KindGroup::DiskImages => text!("Disk Images"),
+                KindGroup::Documents => text!("Documents"),
+                KindGroup::Folders => text!("Folders"),
+                KindGroup::Images => text!("Images"),
+                KindGroup::Movies => text!("Movies"),
+                KindGroup::Music => text!("Music"),
+                KindGroup::PdfDocuments => text!("PDF Documents"),
+                KindGroup::Presentations => text!("Presentations"),
+                KindGroup::Spreadsheets => text!("Spreadsheets"),
+                KindGroup::Other => text!("Other"),
             },
             Self::Application(AppGroup::Named(name)) => return name.to_owned(),
-            Self::Application(AppGroup::Other) => "group-other",
+            Self::Application(AppGroup::Other) => text!("Other"),
             Self::Date(date) => match date {
-                DateGroup::Today => "group-today",
-                DateGroup::Yesterday => "group-yesterday",
-                DateGroup::PreviousWeek => "group-previous-week",
-                DateGroup::PreviousMonth => "group-previous-month",
+                DateGroup::Today => text!("Today"),
+                DateGroup::Yesterday => text!("Yesterday"),
+                DateGroup::PreviousWeek => text!("Previous 7 Days"),
+                DateGroup::PreviousMonth => text!("Previous 30 Days"),
                 DateGroup::Month(Reverse(month)) => {
                     return crate::DATES.month_name(month);
                 }
                 DateGroup::Year(Reverse(year)) => return year.to_string(),
-                DateGroup::Undated => "group-undated",
+                DateGroup::Undated => text!("No Date"),
             },
             Self::Size(size) => match size {
-                SizeGroup::OverGigabyte => "group-over-gigabyte",
-                SizeGroup::HundredsOfMegabytes => "group-hundreds-of-megabytes",
-                SizeGroup::Megabytes => "group-megabytes",
-                SizeGroup::HundredsOfKilobytes => "group-hundreds-of-kilobytes",
-                SizeGroup::UnderHundredKilobytes => "group-under-hundred-kilobytes",
-                SizeGroup::Empty => "group-empty",
-                SizeGroup::Folders => "group-folders",
+                SizeGroup::OverGigabyte => text!("Over 1 GB"),
+                SizeGroup::HundredsOfMegabytes => text!("100 MB to 1 GB"),
+                SizeGroup::Megabytes => text!("1 MB to 100 MB"),
+                SizeGroup::HundredsOfKilobytes => text!("100 KB to 1 MB"),
+                SizeGroup::UnderHundredKilobytes => text!("Less than 100 KB"),
+                SizeGroup::Empty => text!("Zero bytes"),
+                SizeGroup::Folders => text!("Folders"),
             },
         };
-        L10N.tr(message)
+        message.tr()
     }
 }

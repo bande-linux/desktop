@@ -2,13 +2,13 @@ use std::cell::{Cell, RefCell};
 use std::fs;
 use std::rc::Rc;
 
+use bande_l10n::{Text, text, tr};
+
+use crate::panel::ui_with;
 use bande_app::View;
 use bande_dict::{Choices, Pack};
 use bande_toolkit::ui::{Axis, Button, CheckState, Checkbox, Label, ScrollView, Stack, Ui, Widget};
 use bande_toolkit::{Appearance, Scene, Spacing, TextSystem, Window, WindowEvent};
-
-use crate::L10N;
-use crate::panel::ui_with;
 
 pub const SETTINGS_SIZE: (u32, u32) = (520, 460);
 const ANY_LANGUAGE: &str = "*";
@@ -50,7 +50,7 @@ fn languages_of(source: &Pack) -> String {
         .iter()
         .any(|language| language == ANY_LANGUAGE)
     {
-        true => L10N.tr("source-any-language"),
+        true => tr!("All languages"),
         false => source.languages.join(", "),
     }
 }
@@ -58,25 +58,23 @@ fn languages_of(source: &Pack) -> String {
 fn detail(source: &Pack) -> String {
     let languages = languages_of(source);
     if source.online.is_some() {
-        return L10N.tr_args(
-            "source-online",
-            [
-                ("languages", languages.into()),
-                ("name", source.name.as_str().into()),
-            ],
+        return tr!(
+            "{languages}. Online: every word you look up is sent to {name}.",
+            languages = languages,
+            name = source.name.as_str()
         );
     }
     match source.is_users() {
-        true => L10N.tr_args("source-yours", [("languages", languages.into())]),
+        true => tr!("{languages}. Added by you.", languages = languages),
         false => languages,
     }
 }
 
 impl SourcesWindow {
-    fn button(&self, label: &str, change: Change) -> Box<dyn Widget> {
+    fn button(&self, label: Text, change: Change) -> Box<dyn Widget> {
         let slot = self.change.clone();
         let changed = self.changed.clone();
-        Box::new(Button::new(&L10N.tr(label), move || {
+        Box::new(Button::new(&label.tr(), move || {
             *slot.borrow_mut() = Some(change.clone());
             changed.set(true);
         }))
@@ -87,7 +85,7 @@ impl SourcesWindow {
         let sources = self.choices.arrange(bande_dict::installed(), &languages);
         let last = sources.len().saturating_sub(1);
         let mut rows: Vec<Box<dyn Widget>> =
-            vec![Box::new(Label::new(&L10N.tr("sources-intro")).secondary())];
+            vec![Box::new(Label::new(&tr!("Look Up and Dictionary show results from the sources turned on here, in this order.")).secondary())];
         for (index, source) in sources.iter().enumerate() {
             let on = self.choices.enabled(source, &languages);
             let id = source.id.clone();
@@ -103,13 +101,13 @@ impl SourcesWindow {
             });
             let mut controls: Vec<Box<dyn Widget>> = Vec::new();
             if index > 0 {
-                controls.push(self.button("source-move-up", Change::Move(index, index - 1)));
+                controls.push(self.button(text!("Move Up"), Change::Move(index, index - 1)));
             }
             if index < last {
-                controls.push(self.button("source-move-down", Change::Move(index, index + 1)));
+                controls.push(self.button(text!("Move Down"), Change::Move(index, index + 1)));
             }
             if source.is_users() {
-                controls.push(self.button("source-remove", Change::Remove(source.id.clone())));
+                controls.push(self.button(text!("Remove"), Change::Remove(source.id.clone())));
             }
             rows.push(Box::new(Stack::new(
                 Axis::Vertical,

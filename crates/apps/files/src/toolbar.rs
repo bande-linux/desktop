@@ -1,13 +1,13 @@
+use bande_l10n::{Text, text, tr};
+
+use crate::controls::{Signal, sender};
+use crate::view::FilesView;
+use crate::views::ViewMode;
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, SEGMENTED_HEIGHT, SearchField, SegmentedControl, TEXT_FIELD_HEIGHT,
     WidgetId,
 };
 use bande_toolkit::{HEADER_LEADING, Header, Rect, WINDOW_HEADER_HEIGHT};
-
-use crate::L10N;
-use crate::controls::{Signal, sender};
-use crate::view::FilesView;
-use crate::views::ViewMode;
 
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const TITLE_GAP: f32 = 12.0;
@@ -53,12 +53,8 @@ impl FilesView {
     }
 
     pub(crate) fn insert_toolbar(&mut self) {
-        let back = self.symbol_button("go-previous-symbolic", &L10N.tr("menu-back"), Signal::Back);
-        let forward = self.symbol_button(
-            "go-next-symbolic",
-            &L10N.tr("menu-forward"),
-            Signal::Forward,
-        );
+        let back = self.symbol_button("go-previous-symbolic", &tr!("Back"), Signal::Back);
+        let forward = self.symbol_button("go-next-symbolic", &tr!("Forward"), Signal::Forward);
         self.toolbar.back = self.insert(back);
         self.toolbar.forward = self.insert(forward);
         let view = self.view_control_widget();
@@ -70,20 +66,20 @@ impl FilesView {
 
     pub(crate) fn search_field_widget(&self) -> SearchField {
         let send = sender(&self.signals);
-        SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+        SearchField::new(&tr!("Search"), "", move |text| {
             send(Signal::Search(text.to_owned()));
         })
     }
 
     fn view_control_widget(&mut self) -> SegmentedControl {
         let send = sender(&self.signals);
-        let choices: [(&[&str], &str); 4] = [
-            (&["view-grid-symbolic"], "view-icons"),
-            (&["view-list-symbolic"], "view-list"),
-            (&["view-column-symbolic"], "view-columns"),
+        let choices: [(&[&str], Text); 4] = [
+            (&["view-grid-symbolic"], text!("Icons")),
+            (&["view-list-symbolic"], text!("List")),
+            (&["view-column-symbolic"], text!("Columns")),
             (
                 &["view-gallery-symbolic", "view-paged-symbolic"],
-                "view-gallery",
+                text!("Gallery"),
             ),
         ];
         let symbols = choices
@@ -91,16 +87,16 @@ impl FilesView {
             .map(|(icon, title)| {
                 self.icons
                     .first(icon, SYMBOL_PIXELS)
-                    .map(|image| (image, L10N.tr(title)))
+                    .map(|image| (image, title.tr()))
             })
             .collect::<Option<Vec<_>>>();
         let selected = ViewMode::ALL.iter().position(|mode| *mode == self.mode);
-        let label = L10N.tr("view-label");
+        let label = tr!("View");
         let select = move |index| send(Signal::View(index));
         match symbols {
             Some(symbols) => SegmentedControl::symbols(&label, symbols, selected, select),
             None => {
-                let titles = choices.map(|(_, title)| L10N.tr(title));
+                let titles = choices.map(|(_, title)| title.tr());
                 SegmentedControl::new(&label, &titles, selected, select)
             }
         }

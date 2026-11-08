@@ -2,10 +2,9 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use bande_fs::ExtensionChange;
+use bande_l10n::{tr, trn};
 use bande_toolkit::WindowError;
 use bande_toolkit::ui::Alert;
-
-use crate::L10N;
 
 pub const CONFIRM_DELETE_FLAG: &str = "--confirm-delete";
 pub const EJECT_FAILED_FLAG: &str = "--eject-failed";
@@ -17,12 +16,16 @@ pub fn confirm_delete(count: usize) -> Result<bool, WindowError> {
     let chosen = confirmed.clone();
     bande_toolkit::ask("desktop-confirmation", |_| {
         Alert::new(
-            &L10N.tr_args("delete-title", [("count", count.into())]),
-            &L10N.tr("cannot-undo"),
+            &trn!(
+                "Delete this item immediately?",
+                "Delete these {count} items immediately?",
+                count = count
+            ),
+            &tr!("You can’t undo this action."),
             move |action| chosen.set(action == "delete"),
         )
-        .cancel(&L10N.tr("cancel"), "cancel")
-        .primary(&L10N.tr("delete"), "delete")
+        .cancel(&tr!("Cancel"), "cancel")
+        .primary(&tr!("Delete"), "delete")
     })?;
     Ok(confirmed.get())
 }
@@ -47,18 +50,18 @@ pub fn eject_failed(name: &str, busy: bool, message: &str) -> Result<bool, Windo
         let choose = move |action: &str| chosen.set(action == FORCE_EJECT);
         match busy {
             true => Alert::new(
-                &L10N.tr_args("eject-busy", [("name", name.to_owned().into())]),
-                &L10N.tr("eject-busy-detail"),
+                &tr!("The disk “{name}” wasn’t ejected because one or more programs may be using it.", name = name.to_owned()),
+                &tr!("To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."),
                 choose,
             )
-            .other(&L10N.tr("force-eject"), FORCE_EJECT)
-            .primary(&L10N.tr("ok"), "ok"),
+            .other(&tr!("Force Eject"), FORCE_EJECT)
+            .primary(&tr!("OK"), "ok"),
             false => Alert::new(
-                &L10N.tr_args("eject-failed", [("name", name.to_owned().into())]),
+                &tr!("The disk “{name}” couldn’t be ejected.", name = name.to_owned()),
                 message,
                 choose,
             )
-            .primary(&L10N.tr("ok"), "ok"),
+            .primary(&tr!("OK"), "ok"),
         }
     })?;
     Ok(forced.get())

@@ -2,6 +2,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
 
+use bande_l10n::{Text, text, tr};
+
+use crate::browser::Location;
+use crate::sidebar::{hidden_places, standard_places, volumes_hidden, with_place_shown};
+use crate::view::home;
+use crate::views::{ViewMode, sidebar_file};
 use bande_app::choose_file;
 use bande_app_settings::{Shared, Stored, flag, pairs, settings_folder};
 use bande_toolkit::ui::{
@@ -9,12 +15,6 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{Appearance, TextSystem};
 use bande_xdg::{UserDir, read_user_dirs, replace_file, state_home, user_dir};
-
-use crate::L10N;
-use crate::browser::Location;
-use crate::sidebar::{hidden_places, standard_places, volumes_hidden, with_place_shown};
-use crate::view::home;
-use crate::views::{ViewMode, sidebar_file};
 
 pub const SETTINGS_SIZE: (u32, u32) = (500, 560);
 pub const DEFAULT_SPRING_DELAY: u32 = 900;
@@ -54,15 +54,15 @@ impl StartFolder {
         }
     }
 
-    fn message(self) -> &'static str {
+    fn message(self) -> Text {
         match self {
-            Self::Home => "settings-home",
-            Self::Desktop => "menu-desktop",
-            Self::Documents => "menu-documents",
-            Self::Downloads => "menu-downloads",
-            Self::Recents => "recents",
-            Self::Last => "settings-last-folder",
-            Self::Other => "settings-other-folder",
+            Self::Home => text!("Home"),
+            Self::Desktop => text!("Desktop"),
+            Self::Documents => text!("Documents"),
+            Self::Downloads => text!("Downloads"),
+            Self::Recents => text!("Recents"),
+            Self::Last => text!("Last Folder"),
+            Self::Other => text!("Other…"),
         }
     }
 
@@ -219,23 +219,23 @@ impl Stored for FilesSettings {
 
 fn toggle(
     settings: &Shared<FilesSettings>,
-    message: &str,
+    message: Text,
     on: bool,
     set: fn(&mut FilesSettings, bool),
 ) -> FormLine {
     let shared = settings.clone();
-    let label = L10N.tr(message);
+    let label = message.tr();
     let control = Toggle::new(&label, on, move |on| set(&mut shared.borrow_mut(), on));
     FormLine::Row(label, Box::new(control))
 }
 
 fn choice(
-    message: &str,
+    message: Text,
     choices: &[String],
     selected: usize,
     control: impl FnOnce(&str, &[String], usize) -> Box<dyn Widget>,
 ) -> FormLine {
-    let label = L10N.tr(message);
+    let label = message.tr();
     let widget = control(&label, choices, selected);
     FormLine::Row(label, widget)
 }
@@ -257,14 +257,14 @@ fn sidebar_lines() -> Vec<FormLine> {
     let layout = fs::read_to_string(&file).ok();
     let hidden = hidden_places(layout.as_deref());
     let user_dirs = read_user_dirs();
-    let mut lines = vec![FormLine::Heading(L10N.tr("settings-sidebar"))];
+    let mut lines = vec![FormLine::Heading(tr!("Show in Sidebar"))];
     for place in standard_places(&home, user_dirs.as_deref()) {
         let shown = !hidden.contains(&place.location);
         lines.push(place_toggle(&file, place.name, Some(place.location), shown));
     }
     lines.push(place_toggle(
         &file,
-        L10N.tr("settings-external-disks"),
+        tr!("External disks"),
         None,
         !volumes_hidden(layout.as_deref()),
     ));
@@ -275,7 +275,7 @@ fn choose_new_window_folder(previous: FilesSettings) {
     let Some(folder) = settings_folder() else {
         return;
     };
-    let title = L10N.tr("settings-choose-new-window-folder");
+    let title = tr!("Choose the folder new windows show");
     let spawned = thread::Builder::new()
         .name("new window folder".to_owned())
         .spawn(move || {
@@ -304,7 +304,7 @@ fn new_window_line(settings: &Shared<FilesSettings>) -> FormLine {
     let standard = StartFolder::ALL.len();
     let mut folders: Vec<String> = StartFolder::ALL
         .iter()
-        .map(|folder| L10N.tr(folder.message()))
+        .map(|folder| (folder.message()).tr())
         .collect();
     let chosen = current.new_window_folder.as_ref().map(|folder| {
         folder.file_name().map_or_else(
@@ -314,7 +314,7 @@ fn new_window_line(settings: &Shared<FilesSettings>) -> FormLine {
     });
     let other = standard + usize::from(chosen.is_some());
     folders.extend(chosen);
-    folders.push(L10N.tr(StartFolder::Other.message()));
+    folders.push((StartFolder::Other.message()).tr());
     let selected = match current.new_window {
         StartFolder::Other => standard,
         shown => StartFolder::ALL
@@ -324,7 +324,7 @@ fn new_window_line(settings: &Shared<FilesSettings>) -> FormLine {
     };
     let shared = settings.clone();
     choice(
-        "settings-new-window",
+        text!("New windows show"),
         &folders,
         selected,
         |label, choices, selected| {
@@ -349,11 +349,11 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
     let new_window = new_window_line(settings);
     let views: Vec<String> = ViewMode::ALL
         .iter()
-        .map(|mode| L10N.tr(mode.message()))
+        .map(|mode| (mode.message()).tr())
         .collect();
     let shared = settings.clone();
     let default_view = choice(
-        "settings-default-view",
+        text!("Default view"),
         &views,
         ViewMode::ALL
             .iter()
@@ -371,10 +371,10 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
             ))
         },
     );
-    let scopes = [L10N.tr("settings-current-folder"), L10N.tr("settings-home")];
+    let scopes = [tr!("Current Folder"), tr!("Home")];
     let shared = settings.clone();
     let search_in = choice(
-        "settings-search-in",
+        text!("Search in"),
         &scopes,
         usize::from(current.search_home),
         |label, choices, selected| {
@@ -387,7 +387,7 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
         },
     );
     let shared = settings.clone();
-    let label = L10N.tr("settings-spring-delay");
+    let label = tr!("Spring-loading delay");
     let spring_delay = FormLine::Row(
         label.clone(),
         Box::new(Slider::new(
@@ -401,26 +401,26 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
             move |seconds| shared.borrow_mut().spring_delay = (seconds * 1000.0).round() as u32,
         )),
     );
-    let heading = |message: &str| FormLine::Heading(L10N.tr(message));
+    let heading = |message: Text| FormLine::Heading(message.tr());
     let mut lines = vec![
-        heading("settings-general"),
+        heading(text!("General")),
         new_window,
         default_view,
         toggle(
             settings,
-            "settings-show-hidden",
+            text!("Show hidden files"),
             current.show_hidden,
             |settings, on| settings.show_hidden = on,
         ),
         toggle(
             settings,
-            "settings-desktop-disks",
+            text!("Show external disks on the desktop"),
             current.desktop_disks,
             |settings, on| settings.desktop_disks = on,
         ),
         toggle(
             settings,
-            "settings-spring-loading",
+            text!("Spring-loaded folders"),
             current.spring_loading,
             |settings, on| settings.spring_loading = on,
         ),
@@ -428,40 +428,40 @@ fn form(settings: &Shared<FilesSettings>) -> Form {
     ];
     lines.extend(sidebar_lines());
     lines.extend([
-        heading("settings-advanced"),
+        heading(text!("Advanced")),
         toggle(
             settings,
-            "settings-show-extensions",
+            text!("Show all filename extensions"),
             current.show_extensions,
             |settings, on| settings.show_extensions = on,
         ),
         toggle(
             settings,
-            "settings-warn-extension-change",
+            text!("Show warning before changing an extension"),
             current.warn_extension_change,
             |settings, on| settings.warn_extension_change = on,
         ),
         toggle(
             settings,
-            "settings-warn-empty-trash",
+            text!("Show warning before emptying the Trash"),
             current.warn_empty_trash,
             |settings, on| settings.warn_empty_trash = on,
         ),
         toggle(
             settings,
-            "settings-purge-trash",
+            text!("Remove items from the Trash after 30 days"),
             current.purge_trash,
             |settings, on| settings.purge_trash = on,
         ),
         toggle(
             settings,
-            "settings-folders-first",
+            text!("Keep folders on top when sorting by name"),
             current.folders_first,
             |settings, on| settings.folders_first = on,
         ),
         search_in,
     ]);
-    Form::new(&L10N.tr("settings-title"), lines)
+    Form::new(&tr!("Files Settings"), lines)
 }
 
 pub fn settings_view(appearance: Appearance, settings: &Shared<FilesSettings>) -> Ui {

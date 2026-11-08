@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use bande_config::{Search, SearchCategory};
+use bande_l10n::{text, tr};
 use bande_search::{FileHit, FileResults, Found, Query, Usage, calculate, fold, recent_files};
 use bande_xdg::path_from_file_uri;
 
@@ -202,7 +203,7 @@ impl Clip {
                 .map(|name| name.to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
                 .join(", "),
-            Kind::CopiedImage => crate::L10N.tr("copied-image"),
+            Kind::CopiedImage => tr!("Image"),
             _ => self
                 .text
                 .lines()
@@ -243,23 +244,25 @@ impl SystemCommand {
     }
 
     pub fn title(self) -> String {
-        crate::L10N.tr(match self {
-            Self::LockScreen => "command-lock-screen",
-            Self::Sleep => "command-sleep",
-            Self::LogOut => "command-log-out",
-            Self::Restart => "command-restart",
-            Self::ShutDown => "command-shut-down",
+        (match self {
+            Self::LockScreen => text!("Lock Screen"),
+            Self::Sleep => text!("Sleep"),
+            Self::LogOut => text!("Log Out…"),
+            Self::Restart => text!("Restart…"),
+            Self::ShutDown => text!("Shut Down…"),
         })
+        .tr()
     }
 
     fn keywords(self) -> String {
-        crate::L10N.tr(match self {
-            Self::LockScreen => "command-lock-screen-keywords",
-            Self::Sleep => "command-sleep-keywords",
-            Self::LogOut => "command-log-out-keywords",
-            Self::Restart => "command-restart-keywords",
-            Self::ShutDown => "command-shut-down-keywords",
+        (match self {
+            Self::LockScreen => text!("lock away"),
+            Self::Sleep => text!("suspend standby"),
+            Self::LogOut => text!("logout signout exit"),
+            Self::Restart => text!("reboot"),
+            Self::ShutDown => text!("shutdown poweroff power off turn"),
         })
+        .tr()
     }
 }
 

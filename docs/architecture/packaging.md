@@ -61,6 +61,12 @@ profiles. Sizes are in [performance.md](performance.md).
   them has an installation candidate in Debian testing. Installing it adds "Bande" to the sessions a
   display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
   the desktop, a login and sound and nothing else; the images install it that way.
+- **Language packs** (`ci/release/build-l10n.sh`, architecture `all`, section `localization`):
+  `bande-desktop-l10n-<lang>` (`sv`, `en-gb`) holds one catalog per program of this tree,
+  `/usr/share/bande/l10n/<program>/<lang>.mo`, and enhances `bande-desktop`. Each program's
+  own package carries its English catalog, `en.mo`, through the cargo-deb asset
+  `target/release/l10n/development/<program>/*`, which `bande-l10n-tool check` requires. See
+  [localisation.md](localisation.md).
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.

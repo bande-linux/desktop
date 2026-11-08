@@ -5,7 +5,6 @@ mod user;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role, TreeId, TreeUpdate};
@@ -13,7 +12,7 @@ use bande_bar::symbols::{
     Symbol, Symbols, battery_items, natural_size, place_symbol, snap, wifi_symbol,
 };
 pub use bande_datetime::DateFormats;
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_spring::State;
 pub use bande_status::devices::PowerAction;
 use bande_status::session::Ending;
@@ -35,9 +34,6 @@ pub use bande_wallpaper::Variant;
 pub use devices::Devices;
 pub use pam::{AuthError, authenticate};
 pub use user::{User, current as current_user, display_name};
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-lock")));
 
 pub const PAM_SERVICE: &str = "bande-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);
@@ -219,10 +215,7 @@ impl Widget for LockView {
             .as_ref()
             .map(|name| paragraph(name, TextStyle::role(TextRole::Callout, palette.ink), cx));
         self.percent = model.battery.map(|battery| {
-            let percent = L10N.tr_args(
-                "battery-percent",
-                [("percent", battery.percent.round().into())],
-            );
+            let percent = tr!("{percent}%", percent = battery.percent.round());
             paragraph(
                 &percent,
                 TextStyle::role(TextRole::Callout, palette.ink),
@@ -340,24 +333,22 @@ impl Widget for LockView {
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Window);
         let model = self.model.borrow();
-        let locked = L10N.tr_args("locked", [("name", model.name.as_str().into())]);
+        let locked = tr!("Locked. {name}", name = model.name.as_str());
         let input_source = model
             .input_source
             .as_ref()
-            .map(|name| L10N.tr_args("input-source", [("name", name.as_str().into())]));
+            .map(|name| tr!("Input source {name}", name = name.as_str()));
         let (current, count) = model.position;
         let position = (count > 1).then(|| {
-            L10N.tr_args(
-                "user-position",
-                [("index", (current + 1).into()), ("count", count.into())],
+            tr!(
+                "User {index} of {count}. Up and Down choose another.",
+                index = (current + 1),
+                count = count
             )
         });
-        let battery = model.battery.map(|battery| {
-            L10N.tr_args(
-                "battery-level",
-                [("percent", battery.percent.round().into())],
-            )
-        });
+        let battery = model
+            .battery
+            .map(|battery| tr!("Battery {percent}%", percent = battery.percent.round()));
         let label = [
             Some(locked),
             position,
@@ -762,7 +753,7 @@ impl LockScreen {
             power_labels: Vec::new(),
         }));
         let submitted = model.clone();
-        let field = SecureField::new(&L10N.tr("enter-password"), FIELD_FONT, move |password| {
+        let field = SecureField::new(&tr!("Enter Password"), FIELD_FONT, move |password| {
             let mut model = submitted.borrow_mut();
             if model.checking.is_none() && !password.is_empty() {
                 model.checking = Some(model.now);
@@ -777,7 +768,7 @@ impl LockScreen {
             model: model.clone(),
             children: vec![
                 Box::new(field),
-                Box::new(ProgressBar::new(&L10N.tr("checking"), None)),
+                Box::new(ProgressBar::new(&tr!("Checking the password"), None)),
             ],
             paragraphs: None,
             input_source: None,
@@ -839,7 +830,7 @@ impl LockScreen {
         let mut titles = Vec::new();
         let row: Vec<Button> = match asking.and_then(PowerAction::ending) {
             Some(ending) => vec![
-                self.power_button(&L10N.tr("cancel"), PowerPress::Cancel)
+                self.power_button(&tr!("Cancel"), PowerPress::Cancel)
                     .cancel(),
                 self.power_button(&ending.button(), PowerPress::Confirm)
                     .primary(),
@@ -849,9 +840,7 @@ impl LockScreen {
                 powers
                     .into_iter()
                     .map(|power| {
-                        let title = power
-                            .ending()
-                            .map_or_else(|| L10N.tr("sleep"), Ending::button);
+                        let title = power.ending().map_or_else(|| tr!("Sleep"), Ending::button);
                         titles.push(title.clone());
                         self.power_symbol(power, &title, ink)
                     })
@@ -993,7 +982,7 @@ impl LockScreen {
     pub fn ask(&mut self, prompt: Option<&str>) {
         let placeholder = prompt
             .map(|prompt| prompt.trim().trim_end_matches(':').to_owned())
-            .unwrap_or_else(|| L10N.tr("enter-password"));
+            .unwrap_or_else(|| tr!("Enter Password"));
         if let Some(field) = self.ui.widget_as::<SecureField>(self.field) {
             field.set_placeholder(&placeholder);
         }
@@ -1110,7 +1099,7 @@ impl LockScreen {
 
     pub fn reject_password(&mut self, at: Instant) {
         self.reject(at);
-        self.set_message(Some(L10N.tr("wrong-password")));
+        self.set_message(Some(tr!("Incorrect password. Try again.")));
     }
 
     pub fn set_backdrop(&mut self, image: Image, now: Instant) {

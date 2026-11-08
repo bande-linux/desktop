@@ -1,10 +1,5 @@
-use std::cell::Cell;
-use std::os::fd::BorrowedFd;
-use std::rc::Rc;
-use std::thread;
-use std::time::{Duration, Instant};
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::status_client::report;
 use bande_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use bande_inbox::Inbox;
@@ -22,6 +17,11 @@ use bande_xdg::{
     find_icon, forget_saved_windows, listed_apps, reopen_file, reopen_listed_apps,
     take_apps_to_reopen,
 };
+use std::cell::Cell;
+use std::os::fd::BorrowedFd;
+use std::rc::Rc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 pub const DIALOGS: &str = "org.bande.MenuBar";
 const ABOUT_SIZE: (u32, u32) = (280, 190);
@@ -65,7 +65,7 @@ fn confirmation_ui(
             _ => Choice::Cancel,
         })
     };
-    let cancel = L10N.tr("button-cancel");
+    let cancel = tr!("Cancel");
     let alert = match session.stage() {
         Stage::Asking { .. } => Alert::new(
             &ending.question(),
@@ -78,7 +78,11 @@ fn confirmation_ui(
                 true => CheckState::On,
                 false => CheckState::Off,
             };
-            Checkbox::new(&L10N.tr("reopen-windows"), state, move |on| reopen.set(on))
+            Checkbox::new(
+                &tr!("Reopen windows when logging back in"),
+                state,
+                move |on| reopen.set(on),
+            )
         })
         .primary(&ending.button(), CONFIRM)
         .cancel(&cancel, CANCEL),
@@ -316,12 +320,15 @@ fn reopen_question_ui(
     let names: Vec<String> = apps.iter().map(|app| app_name(app)).collect();
     let answer = Rc::clone(answer);
     let alert = Alert::new(
-        &L10N.tr("reopen-question"),
-        &L10N.tr_args("reopen-explanation", [("apps", names.join(", ").into())]),
+        &tr!("Reopen your apps?"),
+        &tr!(
+            "Your last session ended unexpectedly. These apps were open: {apps}.",
+            apps = names.join(", ")
+        ),
         move |action: &str| answer.set(Some(action == CONFIRM)),
     )
-    .primary(&L10N.tr("reopen-button"), CONFIRM)
-    .cancel(&L10N.tr("do-not-reopen-button"), CANCEL);
+    .primary(&tr!("Reopen"), CONFIRM)
+    .cancel(&tr!("Don't Reopen"), CANCEL);
     let mut ui = Ui::new(
         Box::new(alert),
         bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
@@ -406,7 +413,7 @@ pub fn run_reopen_question() -> Result<(), Box<dyn std::error::Error>> {
     let answer = Rc::new(Cell::new(None));
     let mut ui = reopen_question_ui(&apps, &answer, Appearance::default());
     let size = fitted(&mut ui);
-    let mut window = Window::open(Role::dialog(&L10N.tr("reopen-question"), DIALOGS), size)?;
+    let mut window = Window::open(Role::dialog(&tr!("Reopen your apps?"), DIALOGS), size)?;
     report("keep the dialog in front", window.set_keep_on_top(true));
     let mut question = ReopenQuestion {
         ui,
@@ -465,17 +472,17 @@ fn about_ui(facts: &Facts, appearance: Appearance) -> Ui {
     let row =
         |label: &str, value: &str| FormLine::Row(label.to_owned(), Box::new(Label::new(value)));
     let mut lines = vec![FormLine::Wide(Box::new(Label::heading(&facts.name)))];
-    lines.push(row(&L10N.tr("about-system"), &facts.system));
+    lines.push(row(&tr!("System"), &facts.system));
     if !facts.chip.is_empty() {
-        lines.push(row(&L10N.tr("about-chip"), &facts.chip));
+        lines.push(row(&tr!("Chip"), &facts.chip));
     }
-    lines.push(row(&L10N.tr("about-memory"), &facts.memory));
+    lines.push(row(&tr!("Memory"), &facts.memory));
     lines.push(row(
-        &L10N.tr("about-desktop"),
+        &tr!("Desktop"),
         &format!("Bande {}", env!("CARGO_PKG_VERSION")),
     ));
     let mut ui = Ui::new(
-        Box::new(Form::new(&L10N.tr("about-title"), lines)),
+        Box::new(Form::new(&tr!("About This Computer"), lines)),
         bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
     );
     ui.set_appearance(appearance);
@@ -499,7 +506,10 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         size: (0, 0),
     };
     about.refit();
-    let mut window = Window::open(Role::utility(&L10N.tr("about-title"), DIALOGS), about.size)?;
+    let mut window = Window::open(
+        Role::utility(&tr!("About This Computer"), DIALOGS),
+        about.size,
+    )?;
     about.ui = about_ui(&facts, window.appearance());
     about.refit();
     bande_toolkit::run(&mut window, &mut about)?;
@@ -528,10 +538,7 @@ impl App for AppAbout {
         );
         let version = centred(
             &mut self.text,
-            &L10N.tr_args(
-                "about-app-version",
-                [("version", self.version.clone().into())],
-            ),
+            &tr!("Version {version}", version = self.version.clone()),
             TextStyle::new(ABOUT_VERSION_SIZE, self.palette.ink2),
         );
         let mut items = Vec::new();
@@ -590,10 +597,7 @@ pub fn run_about_app(app_id: &str, version: &str) -> Result<(), Box<dyn std::err
         .as_ref()
         .map_or_else(|| app_id.to_owned(), |entry| entry.name.clone());
     let mut window = Window::open(
-        Role::utility(
-            &L10N.tr_args("about-app-title", [("app", name.clone().into())]),
-            DIALOGS,
-        ),
+        Role::utility(&tr!("About {app}", app = name.clone()), DIALOGS),
         ABOUT_SIZE,
     )?;
     let pixels = (f64::from(ABOUT_ICON) * window.scale().max(2.0)).round() as u32;

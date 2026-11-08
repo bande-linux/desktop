@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{Animated, Event, Menu, MenuItem, Spring, past_drag_slop};
 use bande_toolkit::{
     Color, Elevation, Image, Item, Palette, Point, Radius, Rect, Scene, Scheme, Shape,
 };
-
-use crate::L10N;
 
 const MOST_WIDTH: f32 = 192.0;
 const MOST_HEIGHT: f32 = 128.0;
@@ -96,21 +95,21 @@ impl Thumbnail {
 
     pub fn menu(&self) -> Menu {
         let open = match self.video {
-            true => "thumbnail-play",
-            false => "thumbnail-markup",
+            true => text!("Open"),
+            false => text!("Open in Markup"),
         };
         let mut items = vec![
-            MenuItem::new(&L10N.tr(open), OPEN),
-            MenuItem::new(&L10N.tr("thumbnail-show-in-files"), SHOW_IN_FILES),
+            MenuItem::new(&open.tr(), OPEN),
+            MenuItem::new(&tr!("Show in Files"), SHOW_IN_FILES),
         ];
         if !self.video {
-            items.push(MenuItem::new(&L10N.tr("copy"), COPY));
+            items.push(MenuItem::new(&tr!("Copy"), COPY));
         }
         items.extend([
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("thumbnail-trash"), TRASH),
+            MenuItem::new(&tr!("Move to Trash"), TRASH),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("close"), CLOSE),
+            MenuItem::new(&tr!("Close"), CLOSE),
         ]);
         Menu::new(items)
     }

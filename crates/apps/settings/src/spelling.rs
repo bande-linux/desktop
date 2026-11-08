@@ -3,24 +3,24 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Sender};
 
-use bande_toolkit::ui::{Button, TextField, Toggle};
-use zbus::blocking::Proxy;
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::follow::{Command, Update, Updates, spawn};
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
+use bande_toolkit::ui::{Button, TextField, Toggle};
+use zbus::blocking::Proxy;
 
 const BUS_NAME: &str = "org.bande.Spell";
 const OBJECT_PATH: &str = "/org/bande/Spell";
-const SWITCHES: [(&str, &str); 6] = [
-    ("spelling", "spelling-check"),
-    ("autocorrect", "spelling-autocorrect"),
-    ("capitalise", "spelling-capitalise"),
-    ("double-space", "spelling-double-space"),
-    ("smart-quotes", "spelling-smart-quotes"),
-    ("links", "spelling-links"),
+const SWITCHES: [(&str, bande_l10n::Text); 6] = [
+    ("spelling", text!("Check spelling")),
+    ("autocorrect", text!("Correct spelling automatically")),
+    ("capitalise", text!("Capitalise words automatically")),
+    ("double-space", text!("Add period with double-space")),
+    ("smart-quotes", text!("Use smart quotes and dashes")),
+    ("links", text!("Show web and email addresses as links")),
 ];
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -182,7 +182,7 @@ impl SettingsView {
         let state = self.spelling.clone();
         let mut rows: Widgets = Vec::new();
         for (name, label) in SWITCHES {
-            let label = L10N.tr(label);
+            let label = label.tr();
             let on = state.options.get(name).copied().unwrap_or(true);
             let set = intent(&self.intents, move |on| {
                 Intent::Spelling(SpellingCommand::Switch(name.to_owned(), on))
@@ -210,15 +210,12 @@ impl SettingsView {
             let mut act = intent(&self.intents, move |()| {
                 Intent::Spelling(SpellingCommand::GetDictionary(wanted.clone()))
             });
-            let button = boxed(Button::new(
-                &L10N.tr("spelling-get-dictionary"),
-                move || act(()),
-            ));
+            let button = boxed(Button::new(&tr!("Get Dictionary"), move || act(())));
             rows.push(boxed(Row::new(
                 Text::new(
-                    &L10N.tr_args(
-                        "spelling-missing-dictionary",
-                        [("name", name.clone().into())],
+                    &tr!(
+                        "The {name} dictionary matches your region but isn't installed.",
+                        name = name.clone()
                     ),
                     Tone::Primary,
                 ),
@@ -226,14 +223,14 @@ impl SettingsView {
             )));
         }
         if state.learned.is_empty() {
-            rows.push(muted_row(&L10N.tr("spelling-learned-none")));
+            rows.push(muted_row(&tr!("No learned words yet.")));
         }
         for word in &state.learned {
             let forgotten = word.clone();
             let mut act = intent(&self.intents, move |()| {
                 Intent::Spelling(SpellingCommand::Forget(forgotten.clone()))
             });
-            let button = boxed(Button::new(&L10N.tr("remove"), move || act(())));
+            let button = boxed(Button::new(&tr!("Remove"), move || act(())));
             rows.push(boxed(Row::new(
                 Text::new(word, Tone::Primary),
                 Some(button),
@@ -244,7 +241,7 @@ impl SettingsView {
             let mut act = intent(&self.intents, move |()| {
                 Intent::Spelling(SpellingCommand::SetReplacement(removed.clone(), None))
             });
-            let button = boxed(Button::new(&L10N.tr("remove"), move || act(())));
+            let button = boxed(Button::new(&tr!("Remove"), move || act(())));
             rows.push(boxed(Row::new(
                 Text::new(&format!("{from} → {to}"), Tone::Primary),
                 Some(button),
@@ -252,11 +249,11 @@ impl SettingsView {
         }
         let entry = Rc::new(RefCell::new((String::new(), String::new())));
         let (from_entry, to_entry, add_entry) = (entry.clone(), entry.clone(), entry);
-        let from = TextField::new(&L10N.tr("replace-from"), "", move |text| {
+        let from = TextField::new(&tr!("Replace"), "", move |text| {
             text.clone_into(&mut from_entry.borrow_mut().0);
         })
         .without_text_checking();
-        let to = TextField::new(&L10N.tr("replace-to"), "", move |text| {
+        let to = TextField::new(&tr!("With"), "", move |text| {
             text.clone_into(&mut to_entry.borrow_mut().1);
         })
         .without_text_checking();
@@ -266,7 +263,7 @@ impl SettingsView {
         });
         rows.push(boxed(from));
         rows.push(boxed(to));
-        rows.push(boxed(Button::new(&L10N.tr("replace-add"), move || act(()))));
+        rows.push(boxed(Button::new(&tr!("Add Replacement"), move || act(()))));
         rows
     }
 

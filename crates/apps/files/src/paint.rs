@@ -1,7 +1,17 @@
+use bande_l10n::{Text, text, tr, trn};
 use bande_volumes::{on_connected_volume, quick_is_dir};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::browser::Location;
+use crate::gallery::strip_size;
+use crate::sidebar::{PlaceKind, Row};
+use crate::toolbar::TOOLBAR_HEIGHT;
+use crate::view::{
+    COLUMN_WIDTH, ColumnPreview, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PREVIEW_WIDTH,
+    PROGRESS_HEIGHT, ROW_HEIGHT, SIDEBAR_WIDTH,
+};
+use crate::views::ViewMode;
 use bande_content::Preview;
 use bande_fs::{Entry, Purpose, format_civil_date, format_date, format_size, is_hidden};
 use bande_thumbnails::ThumbnailSize;
@@ -12,17 +22,6 @@ use bande_toolkit::{
     Color, Cut, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Shape,
     TextAlign, TextRole, TextStyle, shortened,
 };
-
-use crate::L10N;
-use crate::browser::Location;
-use crate::gallery::strip_size;
-use crate::sidebar::{PlaceKind, Row};
-use crate::toolbar::TOOLBAR_HEIGHT;
-use crate::view::{
-    COLUMN_WIDTH, ColumnPreview, FilesView, Hit, INSPECTOR_WIDTH, PATH_BAR_HEIGHT, PREVIEW_WIDTH,
-    PROGRESS_HEIGHT, ROW_HEIGHT, SIDEBAR_WIDTH,
-};
-use crate::views::ViewMode;
 
 const ROW_INSET: f32 = 4.0;
 const NAME_SIZE: f32 = 13.0;
@@ -470,16 +469,14 @@ impl FilesView {
         let (title, subtitle) = match &shown.entry {
             Some(entry) => (
                 self.shown_name(entry).to_owned(),
-                L10N.tr_args(
-                    "kind-and-size",
-                    [
-                        ("kind", shown.kind.clone().into()),
-                        ("size", format_size(entry.size).into()),
-                    ],
+                tr!(
+                    "{kind} · {size}",
+                    kind = shown.kind.clone(),
+                    size = format_size(entry.size)
                 ),
             ),
             None => (
-                L10N.tr_args("item-count", [("count", shown.count.into())]),
+                trn!("{count} item", "{count} items", count = shown.count),
                 format_size(shown.bytes),
             ),
         };
@@ -500,10 +497,10 @@ impl FilesView {
         y += 14.0;
         let mut facts = Vec::new();
         if let Some(created) = shown.created {
-            facts.push((L10N.tr("info-created"), format_date(created)));
+            facts.push((tr!("Created"), format_date(created)));
         }
         if let Some(modified) = shown.entry.as_ref().and_then(|entry| entry.modified) {
-            facts.push((L10N.tr("info-modified"), format_date(modified)));
+            facts.push((tr!("Modified"), format_date(modified)));
         }
         for (label, value) in facts {
             let label = self.text().paragraph(
@@ -531,7 +528,7 @@ impl FilesView {
         }
         if shown.entry.is_some() {
             y += 10.0;
-            let title = L10N.tr("more-info");
+            let title = tr!("More Info");
             let width = self
                 .paragraph(&title, NAME_SIZE, primary, TextStyle::MEDIUM)
                 .width()
@@ -687,7 +684,7 @@ impl FilesView {
         });
         let mut segments = Vec::new();
         if self.browser.in_trash() {
-            segments.push((L10N.tr("trash"), None, "user-trash"));
+            segments.push((tr!("Trash"), None, "user-trash"));
         }
         if let Some(path) = self.shown_path().filter(|_| !self.browser.in_trash()) {
             let home = std::env::var_os("HOME").map(PathBuf::from);
@@ -806,12 +803,13 @@ impl FilesView {
         let count = column.entries.len();
         let selected = column.marked.len();
         let items = if selected > 1 {
-            L10N.tr_args(
-                "selected-count",
-                [("selected", selected.into()), ("count", count.into())],
+            tr!(
+                "{selected} of {count} selected",
+                selected = selected,
+                count = count
             )
         } else {
-            L10N.tr_args("item-count", [("count", count.into())])
+            trn!("{count} item", "{count} items", count = count)
         };
         let free = column
             .folder()
@@ -822,9 +820,10 @@ impl FilesView {
                     .map(|stats| stats.f_bavail * stats.f_frsize),
             });
         match free {
-            Some(bytes) => L10N.tr_args(
-                "status-free",
-                [("items", items.into()), ("free", format_size(bytes).into())],
+            Some(bytes) => tr!(
+                "{items}, {free} available",
+                items = items,
+                free = format_size(bytes)
             ),
             None => items,
         }
@@ -843,19 +842,7 @@ impl FilesView {
             .map(|(index, running)| {
                 let progress = running.progress.clone();
                 let total = progress.items_total.max(running.items as u64);
-                let message = match running.purpose {
-                    Purpose::Do(action) => format!("progress-{}", action_id(action)),
-                    Purpose::Undo(_) => "progress-undo".to_owned(),
-                    Purpose::Redo(_) => "progress-redo".to_owned(),
-                    Purpose::Erase => "progress-erase".to_owned(),
-                };
-                let label = L10N.tr_args(
-                    &message,
-                    [
-                        ("done", progress.items_done.min(total).into()),
-                        ("total", total.into()),
-                    ],
-                );
+                let label = progress_label(running.purpose, progress.items_done.min(total), total);
                 let fraction = if progress.bytes_total > 0 {
                     progress.bytes_done as f32 / progress.bytes_total as f32
                 } else if total > 0 {
@@ -864,12 +851,10 @@ impl FilesView {
                     0.0
                 };
                 let detail = (progress.bytes_total > 0).then(|| {
-                    L10N.tr_args(
-                        "progress-bytes",
-                        [
-                            ("done", format_size(progress.bytes_done).into()),
-                            ("total", format_size(progress.bytes_total).into()),
-                        ],
+                    tr!(
+                        "{done} of {total}",
+                        done = format_size(progress.bytes_done),
+                        total = format_size(progress.bytes_total)
                     )
                 });
                 (index, label, detail, fraction.clamp(0.0, 1.0))
@@ -992,8 +977,8 @@ impl FilesView {
         y += preview_area.height + 12.0;
         let title = match info.entries.as_slice() {
             [entry] => self.shown_name(entry).to_owned(),
-            [] => L10N.tr("no-selection"),
-            entries => L10N.tr_args("item-count", [("count", entries.len().into())]),
+            [] => tr!("No selection"),
+            entries => trn!("{count} item", "{count} items", count = entries.len()),
         };
         let title = self.text().paragraph(
             &title,
@@ -1027,33 +1012,32 @@ impl FilesView {
             [entry] => {
                 let size = if entry.is_folder() {
                     match info.folder_size {
-                        Some((items, bytes)) => L10N.tr_args(
-                            "folder-size",
-                            [("size", format_size(bytes).into()), ("count", items.into())],
+                        Some((items, bytes)) => trn!(
+                            "{size} for {count} item",
+                            "{size} for {count} items",
+                            count = items,
+                            size = format_size(bytes)
                         ),
-                        None => L10N.tr("calculating"),
+                        None => tr!("Calculating…"),
                     }
                 } else {
                     format_size(entry.size)
                 };
                 if self.shown_name(entry) != entry.name && entry.trashed.is_some() {
-                    facts.push((L10N.tr("info-name"), entry.name.clone()));
+                    facts.push((tr!("Name & Extension"), entry.name.clone()));
                 }
-                facts.push((L10N.tr("info-size"), size));
+                facts.push((tr!("Size"), size));
                 if let Some((width, height)) = info.pixels {
                     facts.push((
-                        L10N.tr("info-dimensions"),
-                        L10N.tr_args(
-                            "info-pixels",
-                            [("width", width.into()), ("height", height.into())],
-                        ),
+                        tr!("Dimensions"),
+                        tr!("{width} × {height}", width = width, height = height),
                     ));
                 }
                 if let Some(created) = crate::view::created_at(entry.created, entry.modified) {
-                    facts.push((L10N.tr("info-created"), format_date(created)));
+                    facts.push((tr!("Created"), format_date(created)));
                 }
                 if let Some(modified) = entry.modified {
-                    facts.push((L10N.tr("info-modified"), format_date(modified)));
+                    facts.push((tr!("Modified"), format_date(modified)));
                 }
                 let location = match &entry.trashed {
                     Some(item) => item
@@ -1068,28 +1052,28 @@ impl FilesView {
                         .unwrap_or_default(),
                 };
                 let location_label = if entry.trashed.is_some() {
-                    L10N.tr("info-original-location")
+                    tr!("Put back to")
                 } else {
-                    L10N.tr("info-where")
+                    tr!("Where")
                 };
                 facts.push((location_label, location));
                 if let Some(item) = &entry.trashed
                     && let Some(deleted) = item.deleted
                 {
-                    facts.push((L10N.tr("info-deleted"), format_civil_date(deleted)));
+                    facts.push((tr!("Deleted"), format_civil_date(deleted)));
                 }
                 let editable = self
                     .inspector_controls
                     .as_ref()
                     .is_some_and(|controls| !controls.access.is_empty());
                 if let Some(mode) = info.mode.filter(|_| !editable) {
-                    facts.push((L10N.tr("info-permissions"), permissions(mode)));
+                    facts.push((tr!("Permissions"), permissions(mode)));
                 }
                 if entry.link
                     && !on_connected_volume(&entry.path)
                     && let Ok(target) = std::fs::read_link(&entry.path)
                 {
-                    facts.push((L10N.tr("info-link"), target.display().to_string()));
+                    facts.push((tr!("Points to"), target.display().to_string()));
                 }
             }
             entries if entries.len() > 1 => {
@@ -1098,7 +1082,7 @@ impl FilesView {
                     .filter(|entry| !entry.is_folder())
                     .map(|entry| entry.size)
                     .sum::<u64>();
-                facts.push((L10N.tr("info-size"), format_size(bytes)));
+                facts.push((tr!("Size"), format_size(bytes)));
             }
             _ => {}
         }
@@ -1132,7 +1116,7 @@ impl FilesView {
             y += 10.0;
             let ink = self.palette.ink3;
             let heading = self.text().paragraph(
-                &L10N.tr("open-with"),
+                &tr!("Open with"),
                 TextStyle::role(TextRole::Label, ink),
                 None,
                 TextAlign::Start,
@@ -1149,7 +1133,7 @@ impl FilesView {
                     content.push(self.fill(row, Radius::S, self.palette.accent_soft));
                 }
                 let name = if info.default.as_deref() == Some(app.id.as_str()) {
-                    L10N.tr_args("default-app", [("app", app.name.clone().into())])
+                    tr!("{app} (default)", app = app.name.clone())
                 } else {
                     app.name.clone()
                 };
@@ -1158,7 +1142,7 @@ impl FilesView {
                 y += 24.0;
             }
             y += 8.0;
-            let open = self.button(&L10N.tr("open"), Point::new(inner.x, y), true, &mut content);
+            let open = self.button(&tr!("Open"), Point::new(inner.x, y), true, &mut content);
             self.hits.push((open, Hit::OpenWithChosen));
             let chosen_is_default = info
                 .chosen
@@ -1166,7 +1150,7 @@ impl FilesView {
                 .is_some_and(|app| info.default.as_deref() == Some(app.id.as_str()));
             if !chosen_is_default {
                 let change = self.button(
-                    &L10N.tr("use-for-all"),
+                    &tr!("Use for All"),
                     Point::new(open.x + open.width + 8.0, y),
                     false,
                     &mut content,
@@ -1197,10 +1181,10 @@ impl FilesView {
         self.info = Some(info);
     }
 
-    fn inspector_heading(&mut self, message: &str, inner: Rect, y: f32, items: &mut Vec<Item>) {
+    fn inspector_heading(&mut self, message: Text, inner: Rect, y: f32, items: &mut Vec<Item>) {
         let ink = self.palette.ink3;
         let heading = self.text().paragraph(
-            &L10N.tr(message),
+            &message.tr(),
             TextStyle::role(TextRole::Label, ink),
             None,
             TextAlign::Start,
@@ -1236,7 +1220,7 @@ impl FilesView {
             return y;
         };
         y += 10.0;
-        self.inspector_heading("name-and-extension", inner, y, items);
+        self.inspector_heading(text!("Name & Extension"), inner, y, items);
         y += 22.0;
         let mut frames = vec![(field, Rect::new(inner.x, y, inner.width, TEXT_FIELD_HEIGHT))];
         y += TEXT_FIELD_HEIGHT + 8.0;
@@ -1265,12 +1249,12 @@ impl FilesView {
         }
         let (primary, muted) = (self.palette.ink, self.palette.ink2);
         y += 10.0;
-        self.inspector_heading("sharing-permissions", inner, y, items);
+        self.inspector_heading(text!("Sharing & Permissions"), inner, y, items);
         y += 22.0;
         let mut frames = Vec::new();
         if let Some((id, _)) = runnable {
             let label = self.text().paragraph(
-                &L10N.tr("allow-running"),
+                &tr!("Allow running as a program"),
                 TextStyle::new(NAME_SIZE, primary),
                 Some(inner.width - SWITCH_SIZE.width - 12.0),
                 TextAlign::Start,
@@ -1387,18 +1371,62 @@ impl FilesView {
     }
 }
 
-fn action_id(action: bande_fs::Action) -> &'static str {
-    match action {
-        bande_fs::Action::Copy => "copy",
-        bande_fs::Action::Move => "move",
-        bande_fs::Action::Duplicate => "duplicate",
-        bande_fs::Action::Rename => "rename",
-        bande_fs::Action::NewFolder
-        | bande_fs::Action::NewDocument
-        | bande_fs::Action::MakeAlias => "new-folder",
-        bande_fs::Action::Trash => "trash",
-        bande_fs::Action::PutBack => "put-back",
-        bande_fs::Action::Compress => "compress",
-        bande_fs::Action::Extract => "extract",
+fn progress_label(purpose: Purpose, done: u64, total: u64) -> String {
+    use bande_fs::Action;
+    match purpose {
+        Purpose::Do(Action::Copy) => tr!(
+            "Copying {done} of {total} items",
+            done = done,
+            total = total
+        ),
+        Purpose::Do(Action::Move) => {
+            tr!("Moving {done} of {total} items", done = done, total = total)
+        }
+        Purpose::Do(Action::Duplicate) => {
+            tr!(
+                "Duplicating {done} of {total} items",
+                done = done,
+                total = total
+            )
+        }
+        Purpose::Do(Action::Rename) => tr!("Renaming"),
+        Purpose::Do(Action::NewFolder | Action::NewDocument | Action::MakeAlias) => {
+            tr!("Creating a folder")
+        }
+        Purpose::Do(Action::Trash) => {
+            tr!(
+                "Moving {done} of {total} items to the Trash",
+                done = done,
+                total = total
+            )
+        }
+        Purpose::Do(Action::PutBack) => {
+            tr!(
+                "Putting back {done} of {total} items",
+                done = done,
+                total = total
+            )
+        }
+        Purpose::Do(Action::Compress) => {
+            tr!(
+                "Compressing {done} of {total} items",
+                done = done,
+                total = total
+            )
+        }
+        Purpose::Do(Action::Extract) => {
+            tr!(
+                "Extracting {done} of {total} items",
+                done = done,
+                total = total
+            )
+        }
+        Purpose::Undo(_) => tr!("Undoing"),
+        Purpose::Redo(_) => tr!("Redoing"),
+        Purpose::Erase => tr!(
+            "Deleting {done} of {total} items",
+            done = done,
+            total = total
+        ),
     }
 }

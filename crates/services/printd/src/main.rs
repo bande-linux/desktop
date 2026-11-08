@@ -8,10 +8,9 @@ mod store;
 
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::{Arc, LazyLock, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use bande_content::pdf::protocol::WORKER_FLAG;
-use bande_l10n::Localizer;
 use bande_printers::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -19,9 +18,6 @@ use zbus::fdo::RequestNameFlags;
 
 use crate::queue::Spool;
 use crate::service::Service;
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-printd")));
 
 pub const CUPS_MEDIA: [&str; 3] = [
     "iso_a4_210x297mm",

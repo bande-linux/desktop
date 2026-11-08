@@ -1,3 +1,8 @@
+use bande_l10n::{tr, trn};
+
+use crate::model::{Clip, Hit, Kind, Target};
+use crate::rows::{centered, fitted, icon_items};
+use crate::view::{ICON_SIZE, Shared};
 use accesskit::{Node, Role};
 use bande_content::Preview;
 use bande_fs::{format_date, format_size};
@@ -5,11 +10,6 @@ use bande_toolkit::ui::{Context, Size, Widget, WidgetId};
 use bande_toolkit::{
     Image, Item, Palette, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
 };
-
-use crate::L10N;
-use crate::model::{Clip, Hit, Kind, Target};
-use crate::rows::{centered, fitted, icon_items};
-use crate::view::{ICON_SIZE, Shared};
 
 const PREVIEW_PADDING: f32 = 20.0;
 const PREVIEW_VISUAL: f32 = 150.0;
@@ -20,31 +20,41 @@ const INFO_LINE: f32 = 18.0;
 const CLIP_VISUAL: f32 = 200.0;
 
 fn ago(seconds: u64) -> String {
-    let (id, count) = match seconds {
-        0..60 => return L10N.tr("just-now"),
-        60..3600 => ("minutes-ago", seconds / 60),
-        3600..86400 => ("hours-ago", seconds / 3600),
-        _ => ("days-ago", seconds / 86400),
-    };
-    L10N.tr_args(id, [("count", count.into())])
+    match seconds {
+        0..60 => tr!("Just now"),
+        60..3600 => trn!(
+            "{count} minute ago",
+            "{count} minutes ago",
+            count = seconds / 60
+        ),
+        3600..86400 => trn!(
+            "{count} hour ago",
+            "{count} hours ago",
+            count = seconds / 3600
+        ),
+        _ => trn!(
+            "{count} day ago",
+            "{count} days ago",
+            count = seconds / 86400
+        ),
+    }
 }
 
 fn clip_description(clip: &Clip, content: Option<&Preview<Image>>) -> String {
     match clip.kind() {
-        Kind::CopiedFiles => L10N.tr_args("file-count", [("count", clip.paths().len().into())]),
+        Kind::CopiedFiles => trn!("{count} file", "{count} files", count = clip.paths().len()),
         Kind::CopiedImage => match content {
-            Some(Preview::Image(image)) => L10N.tr_args(
-                "image-size",
-                [
-                    ("width", image.width().into()),
-                    ("height", image.height().into()),
-                ],
+            Some(Preview::Image(image)) => tr!(
+                "Image · {width} × {height}",
+                width = image.width(),
+                height = image.height()
             ),
-            _ => L10N.tr("copied-image"),
+            _ => tr!("Image"),
         },
-        _ => L10N.tr_args(
-            "character-count",
-            [("count", clip.text.chars().count().into())],
+        _ => trn!(
+            "{count} character",
+            "{count} characters",
+            count = clip.text.chars().count()
         ),
     }
 }
@@ -249,7 +259,7 @@ impl PreviewPane {
             let subtitle = match (&hit.target, &clip) {
                 (Target::Path(path), _) => Some(state.catalog.kind(path, hit.kind == Kind::Folder)),
                 (Target::Settings(_), _) => {
-                    hit.detail.clone().or_else(|| Some(L10N.tr("settings")))
+                    hit.detail.clone().or_else(|| Some(tr!("System Settings")))
                 }
                 (Target::Clip(_), Some(clip)) => Some(clip_description(clip, content)),
                 _ => hit.detail.clone(),
@@ -270,43 +280,47 @@ impl PreviewPane {
                 if let Some(loaded) = loaded {
                     match loaded.content {
                         Preview::Folder { items } => lines.push((
-                            L10N.tr("info-items"),
-                            L10N.tr_args("item-count", [("count", items.into())]),
+                            tr!("Items"),
+                            trn!("{count} item", "{count} items", count = items),
                         )),
-                        _ => lines.push((L10N.tr("info-size"), format_size(loaded.entry.size))),
+                        _ => lines.push((tr!("Size"), format_size(loaded.entry.size))),
                     }
                     if let Some(modified) = loaded.entry.modified {
-                        lines.push((L10N.tr("info-modified"), format_date(modified)));
+                        lines.push((tr!("Modified"), format_date(modified)));
                     }
                 }
                 if let Some(parent) = &hit.detail {
-                    lines.push((L10N.tr("info-where"), parent.clone()));
+                    lines.push((tr!("Where"), parent.clone()));
                 }
                 Self::info(cx, frame, &mut y, &lines, &mut self.items);
             }
             if let Some(clip) = &clip {
                 let lines = [(
-                    L10N.tr("info-copied"),
+                    tr!("Copied"),
                     ago(state.model.now().saturating_sub(clip.copied)),
                 )];
                 Self::info(cx, frame, &mut y, &lines, &mut self.items);
             }
         }
         let hint = if key.copied {
-            L10N.tr("hint-copied")
+            tr!("Copied")
         } else {
             match hit.kind {
-                Kind::Calculation => L10N.tr("hint-calculation"),
-                Kind::Application => L10N.tr("hint-application"),
-                Kind::Setting => L10N.tr("hint-setting"),
-                Kind::Command => L10N.tr("hint-command"),
-                Kind::Emoji => L10N.tr("hint-emoji-copy"),
-                Kind::CopiedText if state.model.inserts => L10N.tr("hint-clip-insert"),
-                Kind::CopiedText | Kind::CopiedImage | Kind::CopiedFiles => {
-                    L10N.tr("hint-clip-copy")
+                Kind::Calculation => tr!("Return or Ctrl+C to copy"),
+                Kind::Application => tr!("Return to open"),
+                Kind::Setting => tr!("Return to open in System Settings"),
+                Kind::Command => tr!("Return to choose"),
+                Kind::Emoji => tr!("Return to copy, then paste with Ctrl+V"),
+                Kind::CopiedText if state.model.inserts => {
+                    tr!("Return to paste · Delete to remove")
                 }
-                Kind::Folder | Kind::Document => L10N.tr("hint-file"),
-                Kind::Mail | Kind::Event | Kind::Contact => L10N.tr("hint-item"),
+                Kind::CopiedText | Kind::CopiedImage | Kind::CopiedFiles => {
+                    tr!("Return to copy, then paste with Ctrl+V · Delete to remove")
+                }
+                Kind::Folder | Kind::Document => {
+                    tr!("Return to open · Ctrl+Return to show in Files · Ctrl+C to copy path")
+                }
+                Kind::Mail | Kind::Event | Kind::Contact => tr!("Return opens it in its app"),
             }
         };
         let color = if key.copied {
@@ -364,7 +378,7 @@ impl Widget for PreviewPane {
     fn access(&self, _cx: &Context) -> Node {
         let state = self.state.borrow();
         let mut node = Node::new(Role::Group);
-        node.set_label(L10N.tr("preview"));
+        node.set_label(tr!("Preview"));
         if let Some(hit) = state.model.selection() {
             node.set_description(hit.title.clone());
         }

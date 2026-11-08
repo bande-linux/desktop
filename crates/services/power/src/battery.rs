@@ -1,11 +1,10 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
+use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::Connection;
-
-use crate::L10N;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Alert {
@@ -61,20 +60,26 @@ impl BatteryNotifier {
             }
             return Ok(());
         };
-        let percentage = [("percentage", percentage.round().into())];
+        let percentage = percentage.round();
         let (summary, body, urgency) = match alert {
             Alert::Low => (
-                L10N.tr("low-battery"),
-                L10N.tr_args("low-battery-body", percentage),
+                tr!("Low Battery"),
+                tr!(
+                    "{percentage}% of the battery remains. Connect to power soon.",
+                    percentage = percentage
+                ),
                 Urgency::Normal,
             ),
             Alert::Critical => (
-                L10N.tr("critical-battery"),
-                L10N.tr_args("critical-battery-body", percentage),
+                tr!("Battery Critically Low"),
+                tr!(
+                    "{percentage}% of the battery remains. Connect to power now, or the computer will sleep.",
+                    percentage = percentage
+                ),
                 Urgency::Critical,
             ),
         };
-        let app_name = L10N.tr("app-name");
+        let app_name = tr!("Power");
         let id = client::notify(
             &self.session,
             &Request {

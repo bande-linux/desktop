@@ -5,6 +5,15 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Instant, SystemTime};
 
+use bande_l10n::{text, tr, trn};
+
+use crate::browser::{Location, RowEdit};
+use crate::prompt::{Kind, Prompt};
+use crate::tabs::location_title;
+use crate::view::{
+    COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME, Sheet,
+};
+use crate::views::{ICON_SIZES, ListColumn, ViewMode, save_list_columns};
 use accesskit::{Action, ActionRequest, TreeId};
 use bande_fs::{
     Entry, ExtensionChange, Sort, SortBy, format_date, format_list_date, format_size, is_hidden,
@@ -15,15 +24,6 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{Image, Point, Rect};
-
-use crate::L10N;
-use crate::browser::{Location, RowEdit};
-use crate::prompt::{Kind, Prompt};
-use crate::tabs::location_title;
-use crate::view::{
-    COLUMN_WIDTH, FilesView, PATH_BAR_HEIGHT, ROW_HEIGHT, Rename, Request, SLOW_CLICK_RENAME, Sheet,
-};
-use crate::views::{ICON_SIZES, ListColumn, ViewMode, save_list_columns};
 
 pub(crate) const COLUMN_ACTION: &str = "column:";
 pub(crate) const COLUMN_LEFT_ACTION: &str = "column-left:";
@@ -149,20 +149,21 @@ fn nested_rows(rows: Vec<Row>, depths: &[u8]) -> Vec<Row> {
 }
 
 pub fn list_column_title(column: ListColumn) -> String {
-    L10N.tr(match column {
-        ListColumn::Modified => "column-modified",
-        ListColumn::Created => "column-created",
-        ListColumn::Size => "column-size",
-        ListColumn::Kind => "column-kind",
+    (match column {
+        ListColumn::Modified => text!("Date Modified"),
+        ListColumn::Created => text!("Date Created"),
+        ListColumn::Size => text!("Size"),
+        ListColumn::Kind => text!("Kind"),
     })
+    .tr()
 }
 
 fn table_columns(found: bool, shown: &[ListColumn]) -> Vec<Column> {
     let mut columns = match found {
-        false => vec![Column::new(&L10N.tr("column-name"), 280.0).flexible()],
+        false => vec![Column::new(&tr!("Name"), 280.0).flexible()],
         true => vec![
-            Column::new(&L10N.tr("column-name"), 200.0).flexible(),
-            Column::new(&L10N.tr("column-where"), 170.0).unsortable(),
+            Column::new(&tr!("Name"), 200.0).flexible(),
+            Column::new(&tr!("Where"), 170.0).unsortable(),
         ],
     };
     columns.extend(shown.iter().map(|column| {
@@ -231,18 +232,11 @@ pub(crate) fn columns_menu(shown: &[ListColumn], clicked: Option<ListColumn>) ->
     {
         items.push(MenuItem::separator());
         items.push(
-            MenuItem::new(
-                &L10N.tr("column-move-left"),
-                &list_column_move_action(column, -1),
-            )
-            .enabled(at > 0),
+            MenuItem::new(&tr!("Move Left"), &list_column_move_action(column, -1)).enabled(at > 0),
         );
         items.push(
-            MenuItem::new(
-                &L10N.tr("column-move-right"),
-                &list_column_move_action(column, 1),
-            )
-            .enabled(at + 1 < shown.len()),
+            MenuItem::new(&tr!("Move Right"), &list_column_move_action(column, 1))
+                .enabled(at + 1 < shown.len()),
         );
     }
     Menu::new(items)
@@ -833,7 +827,7 @@ impl FilesView {
                 self.entry_icon(entry, 32),
                 formats
                     .alias
-                    .get_or_insert_with(|| Rc::from(L10N.tr("kind-alias")))
+                    .get_or_insert_with(|| Rc::from(tr!("Alias")))
                     .clone(),
             ),
             _ => {
@@ -1258,7 +1252,7 @@ impl FilesView {
         }
         let send = sender(&self.signals);
         let slider = Slider::new(
-            &L10N.tr("icon-size"),
+            &tr!("Icon size"),
             f64::from(self.icon_size),
             (f64::from(ICON_SIZES.0), f64::from(ICON_SIZES.1)),
             8.0,
@@ -1276,22 +1270,23 @@ impl FilesView {
         let choose = self.choice();
         let alert = match &sheet {
             Sheet::EmptyTrash => Alert::new(
-                &L10N.tr("empty-trash-title"),
-                &L10N.tr("cannot-undo"),
+                &tr!("Are you sure you want to permanently erase the items in the Trash?"),
+                &tr!("You can’t undo this action."),
                 choose,
             )
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .primary(&L10N.tr("empty-trash"), "confirm"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Empty Trash"), "confirm"),
             Sheet::DeleteImmediately { paths, items } => Alert::new(
-                &L10N.tr_args(
-                    "delete-title",
-                    [("count", (paths.len() + items.len()).into())],
+                &trn!(
+                    "Delete this item immediately?",
+                    "Delete these {count} items immediately?",
+                    count = (paths.len() + items.len())
                 ),
-                &L10N.tr("cannot-undo"),
+                &tr!("You can’t undo this action."),
                 choose,
             )
-            .cancel(&L10N.tr("cancel"), "cancel")
-            .primary(&L10N.tr("delete"), "confirm"),
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Delete"), "confirm"),
             Sheet::ChangeExtension { change, .. } => {
                 Alert::new(&change.title(), &ExtensionChange::detail(), choose)
                     .cancel(&change.keep(), "cancel")
@@ -1305,18 +1300,18 @@ impl FilesView {
                 let name = location_title(&Location::Folder(volume.clone()));
                 match busy {
                     true => Alert::new(
-                        &L10N.tr_args("eject-busy", [("name", name.into())]),
-                        &L10N.tr("eject-busy-detail"),
+                        &tr!("The disk “{name}” wasn’t ejected because one or more programs may be using it.", name = name),
+                        &tr!("To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."),
                         choose,
                     )
-                    .other(&L10N.tr("force-eject"), "force")
-                    .primary(&L10N.tr("ok"), "ok"),
+                    .other(&tr!("Force Eject"), "force")
+                    .primary(&tr!("OK"), "ok"),
                     false => Alert::new(
-                        &L10N.tr_args("eject-failed", [("name", name.into())]),
+                        &tr!("The disk “{name}” couldn’t be ejected.", name = name),
                         message,
                         choose,
                     )
-                    .primary(&L10N.tr("ok"), "ok"),
+                    .primary(&tr!("OK"), "ok"),
                 }
             }
             Sheet::Conflict { .. }
@@ -1366,10 +1361,10 @@ impl FilesView {
         })
         .without_text_checking();
         field.select(0..current.len());
-        let prompt = Prompt::new(&L10N.tr("go-to-title"), "", self.choice())
+        let prompt = Prompt::new(&tr!("Go to the folder:"), "", self.choice())
             .accessory(field)
-            .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-            .button(&L10N.tr("go"), "go", Kind::Primary);
+            .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+            .button(&tr!("Go"), "go", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::GoTo(current), cancel);
     }
@@ -1400,31 +1395,32 @@ impl FilesView {
                 })
                 .unwrap_or_default()
         };
-        let detail = L10N.tr_args(
-            "conflict-detail",
-            [
-                ("existing", describe(&conflict.target).into()),
-                ("new", describe(&conflict.source).into()),
-            ],
+        let detail = tr!(
+            "Existing: {existing}\nNew: {new}",
+            existing = describe(&conflict.target),
+            new = describe(&conflict.source)
         );
         let mut prompt = Prompt::new(
-            &L10N.tr_args("conflict-title", [("name", name.into())]),
+            &tr!(
+                "An item named “{name}” already exists in this location.",
+                name = name
+            ),
             &detail,
             self.choice(),
         );
         if several {
             let send = sender(&self.signals);
-            let label = L10N.tr("apply-to-all");
+            let label = tr!("Apply to all");
             prompt = prompt.toggle(
                 &label,
                 Toggle::new(&label, false, move |on| send(Signal::ApplyToAll(on))),
             );
         }
         let prompt = prompt
-            .button(&L10N.tr("skip"), "skip", Kind::Other)
-            .button(&L10N.tr("replace"), "replace", Kind::Other)
-            .button(&L10N.tr("stop"), "stop", Kind::Cancel)
-            .button(&L10N.tr("keep-both"), "keep-both", Kind::Primary);
+            .button(&tr!("Skip"), "skip", Kind::Other)
+            .button(&tr!("Replace"), "replace", Kind::Other)
+            .button(&tr!("Stop"), "stop", Kind::Cancel)
+            .button(&tr!("Keep Both"), "keep-both", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(
             prompt,

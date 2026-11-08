@@ -2,10 +2,10 @@ use std::os::fd::OwnedFd;
 use std::sync::mpsc;
 use std::thread;
 
-use zbus::blocking::Connection;
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::logind;
+use zbus::blocking::Connection;
 
 pub const POWER_SAVER: &str = "power-saver";
 const KEEP_RUNNING: &str = "keep-running";
@@ -129,8 +129,8 @@ pub fn follow(system: &Connection, session: &Connection) -> zbus::Result<()> {
                     lid_hold = logind::inhibit(
                         &system,
                         "handle-lid-switch",
-                        &L10N.tr("app-name"),
-                        &L10N.tr("keep-running-with-lid-closed"),
+                        &tr!("Power"),
+                        &tr!("Keep running with the lid closed while on power"),
                         "block",
                     )
                     .inspect_err(|error| tracing::warn!("cannot keep running: {error}"))

@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, Sender};
 
+use bande_l10n::text;
 use bande_status::history::charge_history;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
@@ -164,7 +165,11 @@ pub fn follow_battery(system: &Connection, updates: Updates) -> Sender<BatteryCo
         for command in receiver {
             let BatteryCommand::Profile(profile) = command;
             if let Err(error) = profiles.set_active_profile(&profile) {
-                updates.send(failed(SettingId::PowerMode, &error, "service-power"));
+                updates.send(failed(
+                    SettingId::PowerMode,
+                    &error,
+                    text!("The power mode service"),
+                ));
                 updates.send(Update::Battery(read(&system)));
             }
         }

@@ -4,12 +4,11 @@ use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 use std::rc::Rc;
-use std::sync::LazyLock;
 
 use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Program, View, WindowId};
 use bande_inbox::{Inbox, Outbox};
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_toolkit::ui::{
     Axis, Bounded, Button, Cell, Column, Context, Label, Row, SecureField, Stack, Table, Ui,
     Widget, WidgetId,
@@ -27,14 +26,11 @@ const WINDOW_SIZE: (u32, u32) = (620, 640);
 const FIELD_FONT: f32 = 13.0;
 const LIST_HEIGHT: f32 = 240.0;
 
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-recovery-tools")));
-
 static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Recovery"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -281,54 +277,58 @@ impl Tools {
         self.password = None;
         match self.page.clone() {
             Page::Home => {
-                let mut rows = vec![boxed(Label::heading(&L10N.tr("home")))];
+                let mut rows = vec![boxed(Label::heading(&tr!("What do you want to do?")))];
                 if Path::new(INSTALLED_ROOT).exists() {
                     rows.push(self.row(
-                        &L10N.tr("reinstall"),
-                        &L10N.tr("reinstall-detail"),
+                        &tr!("Reinstall Bande"),
+                        &tr!("Installs a fresh system. Your files and accounts stay."),
                         Intent::AskPassword(Purpose::Reinstall),
                     ));
                     rows.push(self.row(
-                        &L10N.tr("versions"),
-                        &L10N.tr("versions-detail"),
+                        &tr!("Restore a Previous Version"),
+                        &tr!(
+                            "Go back to the system as it was on an earlier date. Your files stay."
+                        ),
                         Intent::AskPassword(Purpose::Versions),
                     ));
                     rows.push(self.row(
-                        &L10N.tr("backup"),
-                        &L10N.tr("backup-detail"),
+                        &tr!("Restore from Backup"),
+                        &tr!("Bring back your files from a backup disk."),
                         Intent::ChooseBackup,
                     ));
                 }
                 rows.push(self.row(
-                    &L10N.tr("install"),
-                    &L10N.tr("install-detail"),
+                    &tr!("Install Bande"),
+                    &tr!("Erases a disk and installs Bande on it."),
                     Intent::ChooseDisk,
                 ));
                 rows.push(self.row(
-                    &L10N.tr("disks"),
-                    &L10N.tr("disks-detail"),
+                    &tr!("Disks"),
+                    &tr!("Check, format and partition disks."),
                     Intent::Launch("bande-disks"),
                 ));
                 rows.push(self.row(
-                    &L10N.tr("terminal"),
-                    &L10N.tr("terminal-detail"),
+                    &tr!("Terminal"),
+                    &tr!("Work at the command line."),
                     Intent::Launch("bande-terminal"),
                 ));
-                rows.push(boxed(self.button(&L10N.tr("restart"), Intent::Restart)));
+                rows.push(boxed(self.button(&tr!("Restart"), Intent::Restart)));
                 rows
             }
             Page::Disks => vec![
-                boxed(Label::heading(&L10N.tr("choose-disk"))),
+                boxed(Label::heading(&tr!("Choose a Disk"))),
                 self.list(&disks(), Intent::Disk),
-                boxed(Label::new(&L10N.tr("erase-warning"))),
+                boxed(Label::new(&tr!(
+                    "This erases everything on the selected disk."
+                ))),
                 boxed(Stack::new(
                     Axis::Horizontal,
                     Spacing::S as f32,
                     0.0,
                     vec![
-                        boxed(self.button(&L10N.tr("back"), Intent::Home)),
+                        boxed(self.button(&tr!("Back"), Intent::Home)),
                         boxed(
-                            self.button(&L10N.tr("erase"), Intent::Install)
+                            self.button(&tr!("Erase and Install"), Intent::Install)
                                 .destructive(),
                         ),
                     ],
@@ -336,28 +336,28 @@ impl Tools {
             ],
             Page::Password(_) => {
                 let intents = Rc::clone(&self.intents);
-                let field = SecureField::new(&L10N.tr("password"), FIELD_FONT, move |_| {
+                let field = SecureField::new(&tr!("Disk password"), FIELD_FONT, move |_| {
                     intents.borrow_mut().push(Intent::Submit);
                 });
                 self.password = Some(field.id());
                 vec![
-                    boxed(Label::heading(&L10N.tr("password-title"))),
+                    boxed(Label::heading(&tr!("Enter the Disk Password"))),
                     boxed(field),
                     boxed(Stack::new(
                         Axis::Horizontal,
                         Spacing::S as f32,
                         0.0,
                         vec![
-                            boxed(self.button(&L10N.tr("back"), Intent::Home)),
-                            boxed(self.button(&L10N.tr("continue"), Intent::Submit).primary()),
+                            boxed(self.button(&tr!("Back"), Intent::Home)),
+                            boxed(self.button(&tr!("Continue"), Intent::Submit).primary()),
                         ],
                     )),
                 ]
             }
             Page::Versions => vec![
-                boxed(Label::heading(&L10N.tr("versions"))),
+                boxed(Label::heading(&tr!("Restore a Previous Version"))),
                 self.list(&self.versions.clone(), Intent::Version),
-                boxed(self.button(&L10N.tr("back"), Intent::Home)),
+                boxed(self.button(&tr!("Back"), Intent::Home)),
             ],
             Page::Backups => {
                 let rows: Vec<(String, String)> = self
@@ -366,23 +366,23 @@ impl Tools {
                     .map(|backup| (backup.uuid.clone(), backup.name.clone()))
                     .collect();
                 vec![
-                    boxed(Label::heading(&L10N.tr("backup"))),
+                    boxed(Label::heading(&tr!("Restore from Backup"))),
                     self.list(&rows, Intent::Backup),
-                    boxed(self.button(&L10N.tr("back"), Intent::Home)),
+                    boxed(self.button(&tr!("Back"), Intent::Home)),
                 ]
             }
             Page::BackupPassword => {
                 let intents = Rc::clone(&self.intents);
-                let field = SecureField::new(&L10N.tr("backup-password"), FIELD_FONT, move |_| {
+                let field = SecureField::new(&tr!("Backup password"), FIELD_FONT, move |_| {
                     intents.borrow_mut().push(Intent::SubmitBackup);
                 });
                 self.password = Some(field.id());
                 let mut rows = vec![
-                    boxed(Label::heading(&L10N.tr("backup-password-title"))),
+                    boxed(Label::heading(&tr!("Enter the Backup's Password"))),
                     boxed(field),
                 ];
                 if needs_password() {
-                    let disk = SecureField::new(&L10N.tr("password"), FIELD_FONT, |_| {});
+                    let disk = SecureField::new(&tr!("Disk password"), FIELD_FONT, |_| {});
                     self.disk_password = Some(disk.id());
                     rows.push(boxed(disk));
                 } else {
@@ -393,24 +393,26 @@ impl Tools {
                     Spacing::S as f32,
                     0.0,
                     vec![
-                        boxed(self.button(&L10N.tr("back"), Intent::Home)),
+                        boxed(self.button(&tr!("Back"), Intent::Home)),
                         boxed(
-                            self.button(&L10N.tr("continue"), Intent::SubmitBackup)
+                            self.button(&tr!("Continue"), Intent::SubmitBackup)
                                 .primary(),
                         ),
                     ],
                 )));
                 rows
             }
-            Page::Working(step) => vec![boxed(Label::heading(&L10N.tr(&format!("step-{step}"))))],
+            Page::Working(step) => vec![boxed(Label::heading(&step_title(step.as_str())))],
             Page::Finished(warning) => vec![
-                boxed(Label::heading(&L10N.tr("step-done"))),
+                boxed(Label::heading(&tr!(
+                    "Finished. Restart to use your computer."
+                ))),
                 boxed(Label::new(warning.as_deref().unwrap_or_default())),
-                boxed(self.button(&L10N.tr("restart"), Intent::Restart).primary()),
+                boxed(self.button(&tr!("Restart"), Intent::Restart).primary()),
             ],
             Page::Failed(message) => vec![
                 boxed(Label::heading(&message)),
-                boxed(self.button(&L10N.tr("back"), Intent::Home)),
+                boxed(self.button(&tr!("Back"), Intent::Home)),
             ],
         }
     }
@@ -593,32 +595,27 @@ struct Recovery {
 impl Recovery {
     fn open(&mut self, cx: &mut Cx<Self>) -> Result<(), bande_app::Error> {
         let inbox = Inbox::new().map_err(|error| error.to_string())?;
-        let window = cx.open(
-            Kind::Main,
-            &L10N.tr("app-name"),
-            WINDOW_SIZE,
-            |appearance| {
-                let mut tools = Tools {
-                    ui: new_ui(
-                        Box::new(Stack::new(Axis::Vertical, 0.0, 0.0, Vec::new())),
-                        appearance,
-                    ),
-                    intents: Rc::default(),
-                    inbox,
-                    page: Page::Home,
+        let window = cx.open(Kind::Main, &tr!("Recovery"), WINDOW_SIZE, |appearance| {
+            let mut tools = Tools {
+                ui: new_ui(
+                    Box::new(Stack::new(Axis::Vertical, 0.0, 0.0, Vec::new())),
                     appearance,
-                    disk: None,
-                    versions: Vec::new(),
-                    password: None,
-                    secret: Zeroizing::new(String::new()),
-                    disk_password: None,
-                    backups: Vec::new(),
-                    backup: None,
-                };
-                tools.present();
-                Pane(tools)
-            },
-        )?;
+                ),
+                intents: Rc::default(),
+                inbox,
+                page: Page::Home,
+                appearance,
+                disk: None,
+                versions: Vec::new(),
+                password: None,
+                secret: Zeroizing::new(String::new()),
+                disk_password: None,
+                backups: Vec::new(),
+                backup: None,
+            };
+            tools.present();
+            Pane(tools)
+        })?;
         self.window = Some(window);
         Ok(())
     }
@@ -643,6 +640,19 @@ impl Program for Recovery {
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, _view: Pane) {
         self.window = None;
+    }
+}
+
+fn step_title(step: &str) -> String {
+    match step {
+        "partition" => tr!("Preparing the disk"),
+        "recovery" => tr!("Copying the recovery system"),
+        "format" => tr!("Formatting"),
+        "copy" => tr!("Copying the system"),
+        "boot" => tr!("Setting up startup"),
+        "done" => tr!("Finished. Restart to use your computer."),
+        "restore" => tr!("Restoring your backup"),
+        other => other.to_owned(),
     }
 }
 

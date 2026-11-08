@@ -1,14 +1,14 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use bande_l10n::tr;
+
+use crate::service::Choice;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for,
 };
 use bande_toolkit::{Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
-
-use crate::L10N;
-use crate::service::Choice;
 
 const PADDING: f32 = 20.0;
 const TITLE_GAP: f32 = 16.0;
@@ -232,7 +232,7 @@ impl Widget for Grid {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::ListBox);
-        node.set_label(L10N.tr("share-sources"));
+        node.set_label(tr!("Screens and windows"));
         if self.multiple {
             node.set_multiselectable();
         }
@@ -348,7 +348,7 @@ impl Picker {
                 let label = match (choice.title.is_empty(), choice.app_id.is_empty()) {
                     (false, _) => choice.title,
                     (true, false) => choice.app_id,
-                    (true, true) => L10N.tr("untitled-window"),
+                    (true, true) => tr!("Untitled Window"),
                 };
                 Tile {
                     label,
@@ -371,16 +371,16 @@ impl Picker {
             frame: Rect::default(),
         };
         let cancelled = Rc::clone(&outcome);
-        let cancel = Button::new(&L10N.tr("cancel"), move || {
+        let cancel = Button::new(&tr!("Cancel"), move || {
             if cancelled.borrow().is_none() {
                 *cancelled.borrow_mut() = Some(None);
             }
         })
         .cancel();
-        let share_button = Button::new(&L10N.tr("share"), move || share()).primary();
+        let share_button = Button::new(&tr!("Share"), move || share()).primary();
         let title = match app_name {
-            Some(name) => L10N.tr_args("share-with", [("app", name.to_owned().into())]),
-            None => L10N.tr("share-with-an-app"),
+            Some(name) => tr!("Choose what to share with {app}", app = name.to_owned()),
+            None => tr!("Choose what to share"),
         };
         (
             Self {

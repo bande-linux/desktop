@@ -2,6 +2,7 @@ use std::os::fd::OwnedFd;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
+use bande_l10n::tr;
 use smithay::reexports::calloop::channel::Sender;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
@@ -100,7 +101,7 @@ pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus
         let delay = manager.inhibit(
             "shutdown",
             "Bande",
-            &crate::L10N.tr("remember-apps-before-shutdown"),
+            &tr!("Remember the open apps to reopen them at the next login"),
             "delay",
         )?;
         Ok(delay.into())

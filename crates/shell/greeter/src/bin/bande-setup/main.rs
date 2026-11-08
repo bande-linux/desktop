@@ -4,7 +4,6 @@ use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
 use std::process::{Command, ExitCode, Stdio};
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
@@ -12,8 +11,8 @@ use bande_bus::accounts::{suggested_login, valid_login};
 use bande_greeter::{Login, Step as LoginStep, read_message, write_message};
 use bande_inbox::{Inbox, Outbox};
 use bande_keyboard::Layouts;
-use bande_l10n::Localizer;
 use bande_l10n::system::{AvailableLocale, read_supported};
+use bande_l10n::{Text, text, tr};
 use bande_lock::{BackdropSource, Look, Variant, load_backdrop};
 use bande_network::{JoinOutcome, Network, NetworkManager};
 use bande_toolkit::ui::{
@@ -33,9 +32,6 @@ const CARD_HEIGHT: f32 = 560.0;
 const LIST_HEIGHT: f32 = 300.0;
 const FIELD_FONT: f32 = 13.0;
 const SCAN_TIME: Duration = Duration::from_secs(6);
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-setup")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -154,10 +150,10 @@ struct Assistant {
     signed_in: bool,
 }
 
-const LOOKS: [(&str, &str); 3] = [
-    ("look-light", "light"),
-    ("look-dark", "dark"),
-    ("look-automatic", "automatic"),
+const LOOKS: [(Text, &str); 3] = [
+    (text!("Light"), "light"),
+    (text!("Dark"), "dark"),
+    (text!("Automatic"), "automatic"),
 ];
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -230,13 +226,13 @@ impl Assistant {
             }
             Page::Account => {
                 let full_name =
-                    TextField::new(&L10N.tr("full-name"), &self.answers.full_name, |_| {})
+                    TextField::new(&tr!("Full name"), &self.answers.full_name, |_| {})
                         .without_text_checking();
-                let login = TextField::new(&L10N.tr("account-name"), &self.answers.login, |_| {})
+                let login = TextField::new(&tr!("Account name"), &self.answers.login, |_| {})
                     .without_text_checking();
-                let password = SecureField::new(&L10N.tr("password"), FIELD_FONT, |_| {});
+                let password = SecureField::new(&tr!("Password"), FIELD_FONT, |_| {});
                 let intents = Rc::clone(&self.intents);
-                let verify = SecureField::new(&L10N.tr("verify"), FIELD_FONT, move |_| {
+                let verify = SecureField::new(&tr!("Verify password"), FIELD_FONT, move |_| {
                     intents.borrow_mut().push(Intent::Continue);
                 });
                 self.fields = vec![full_name.id(), login.id(), password.id(), verify.id()];
@@ -249,19 +245,19 @@ impl Assistant {
                 if self.can_encrypt {
                     let intents = Rc::clone(&self.intents);
                     rows.push(switch(
-                        &L10N.tr("encrypt-disk"),
+                        &tr!("Encrypt this disk with your password"),
                         self.answers.encrypt,
                         move |on| intents.borrow_mut().push(Intent::EncryptDisk(on)),
                     ));
                     rows.push(boxed(
-                        Label::new(&L10N.tr("encrypt-disk-detail")).secondary(),
+                        Label::new(&tr!("Without the password or the recovery key, no one can read this disk, and neither can you. You type the password each time the computer starts, on a built-in or USB keyboard: Bluetooth keyboards do not work that early.")).secondary(),
                     ));
                 }
                 rows
             }
             Page::RecoveryKey => vec![
                 boxed(Label::new(self.recovery_key.as_deref().unwrap_or_default())),
-                boxed(Label::new(&L10N.tr("recovery-key-detail")).secondary()),
+                boxed(Label::new(&tr!("Write this key down and keep it safe. It is shown only once, and it is the only way in if you forget your password.")).secondary()),
             ],
             Page::Wifi => {
                 let rows = self
@@ -272,19 +268,19 @@ impl Assistant {
                 let selected = self.answers.network.clone().unwrap_or_default();
                 let list = self.list(rows, &selected, Intent::Network);
                 let intents = Rc::clone(&self.intents);
-                let password = SecureField::new(&L10N.tr("wifi-password"), FIELD_FONT, move |_| {
+                let password = SecureField::new(&tr!("Wi-Fi password"), FIELD_FONT, move |_| {
                     intents.borrow_mut().push(Intent::Join);
                 });
                 self.fields = vec![password.id()];
-                let join = Button::new(&L10N.tr("join"), self.intent(Intent::Join));
+                let join = Button::new(&tr!("Join"), self.intent(Intent::Join));
                 vec![list, boxed(password), boxed(join)]
             }
             Page::Look => {
                 let intents = Rc::clone(&self.intents);
-                let titles = LOOKS.map(|(id, _)| L10N.tr(id));
+                let titles = LOOKS.map(|(id, _)| id.tr());
                 vec![boxed(
                     SegmentedControl::new(
-                        &L10N.tr("look"),
+                        &tr!("Appearance"),
                         &titles,
                         Some(self.answers.look),
                         move |index| {
@@ -297,30 +293,30 @@ impl Assistant {
             Page::Privacy => {
                 let intents = Rc::clone(&self.intents);
                 vec![
-                    boxed(Label::new(&L10N.tr("privacy-detail"))),
+                    boxed(Label::new(&tr!("Your files, account and settings stay on this computer. Bande contacts the internet only to check the clock, to check for a working connection and to get software updates."))),
                     switch(
-                        &L10N.tr("automatic-updates"),
+                        &tr!("Install updates automatically"),
                         self.answers.automatic_updates,
                         move |on| intents.borrow_mut().push(Intent::AutomaticUpdates(on)),
                     ),
                 ]
             }
-            Page::Finishing => vec![boxed(Label::new(&L10N.tr("finishing")).secondary())],
+            Page::Finishing => vec![boxed(Label::new(&tr!("Setting up your desktop.")).secondary())],
         }
     }
 
     fn present(&mut self) {
         let id = match self.page {
-            Page::Language => "language",
-            Page::Keyboard => "keyboard",
-            Page::Account => "account",
-            Page::RecoveryKey => "recovery-key",
-            Page::Wifi => "wifi",
-            Page::Look => "look",
-            Page::Privacy => "privacy",
-            Page::Finishing => "finishing-title",
+            Page::Language => text!("Language"),
+            Page::Keyboard => text!("Keyboard"),
+            Page::Account => text!("Your Account"),
+            Page::RecoveryKey => text!("Recovery Key"),
+            Page::Wifi => text!("Wi-Fi"),
+            Page::Look => text!("Appearance"),
+            Page::Privacy => text!("Privacy"),
+            Page::Finishing => text!("Getting Ready"),
         };
-        let mut column: Vec<Box<dyn Widget>> = vec![boxed(Label::heading(&L10N.tr(id)))];
+        let mut column: Vec<Box<dyn Widget>> = vec![boxed(Label::heading(&id.tr()))];
         column.extend(self.content());
         if let Some(message) = &self.message {
             column.push(boxed(Label::new(message)));
@@ -329,17 +325,14 @@ impl Assistant {
         if self.page != Page::Finishing {
             let mut buttons: Vec<Box<dyn Widget>> = Vec::new();
             if !matches!(self.page, Page::Language | Page::RecoveryKey) {
-                buttons.push(boxed(Button::new(
-                    &L10N.tr("back"),
-                    self.intent(Intent::Back),
-                )));
+                buttons.push(boxed(Button::new(&tr!("Back"), self.intent(Intent::Back))));
             }
             let forward = match self.page {
-                Page::Privacy => "finish",
-                Page::Wifi if self.answers.network.is_none() => "skip",
-                _ => "continue",
+                Page::Privacy => text!("Finish"),
+                Page::Wifi if self.answers.network.is_none() => text!("Skip"),
+                _ => text!("Continue"),
             };
-            let mut next = Button::new(&L10N.tr(forward), self.intent(Intent::Continue)).primary();
+            let mut next = Button::new(&forward.tr(), self.intent(Intent::Continue)).primary();
             next.set_enabled(!self.working);
             focus = focus.or(Some(next.id()));
             buttons.push(boxed(next));
@@ -427,15 +420,17 @@ impl Assistant {
         self.answers.full_name = full_name;
         self.answers.login = login;
         let problem = if !valid_login(&self.answers.login) || self.answers.full_name.is_empty() {
-            Some("invalid-name")
+            Some(text!(
+                "Enter a name, and an account name of lowercase letters and digits."
+            ))
         } else if password.is_empty() {
-            Some("empty-password")
+            Some(text!("Enter a password."))
         } else if *password != *verify {
-            Some("password-mismatch")
+            Some(text!("The passwords do not match."))
         } else {
             None
         };
-        self.message = problem.map(|id| L10N.tr(id));
+        self.message = problem.map(|id| id.tr());
         self.answers.password = password;
         problem.is_none()
     }
@@ -618,7 +613,9 @@ impl Assistant {
             }
             Reply::Failed(error) => {
                 tracing::warn!("setup step failed: {error}");
-                self.message = Some(L10N.tr("step-failed"));
+                self.message = Some(tr!(
+                    "That step did not work. Try again, or restart this computer."
+                ));
                 if self.page == Page::Finishing {
                     self.page = Page::Privacy;
                 }

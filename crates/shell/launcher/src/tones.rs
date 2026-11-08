@@ -1,10 +1,10 @@
+use bande_l10n::tr;
+
+use crate::rows::{SKIN_TONES, tone_name};
+use crate::view::Shared;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{Context, Event, Size, Widget, WidgetId};
 use bande_toolkit::{Color, Item, Rect, Shape};
-
-use crate::L10N;
-use crate::rows::{SKIN_TONES, tone_name};
-use crate::view::Shared;
 
 const SWATCH: f32 = 14.0;
 const SPACING: f32 = 8.0;
@@ -93,7 +93,7 @@ impl Widget for Tones {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::RadioGroup);
-        node.set_label(L10N.tr("skin-tone"));
+        node.set_label(tr!("Skin Tone"));
         node.set_value(tone_name(self.state.borrow().model.skin_tone));
         node.add_action(Action::Increment);
         node.add_action(Action::Decrement);

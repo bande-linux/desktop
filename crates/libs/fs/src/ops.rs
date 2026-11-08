@@ -12,19 +12,18 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
 use bande_xdg::sync_folder;
 use rustix::fs::{XattrFlags, fgetxattr, flistxattr, fsetxattr, fstatfs};
 use rustix::io::Errno;
 
 mod archive;
 
-pub use archive::{Contents, Format, Refusal, archive_contents, archive_path, can_extract};
-
-use crate::L10N;
 use crate::listing::same_volume;
 use crate::naming::{alias_name, duplicate_name, keep_both_name, untitled_folder};
 use crate::partial::{Anchor, partial_path};
 use crate::trash::{Trash, TrashItem, erase, forget, remove_all, restore_to};
+pub use archive::{Contents, Format, Refusal, archive_contents, archive_path, can_extract};
 
 const CHUNK: u64 = 8 * 1024 * 1024;
 const FLUSH_EVERY: u64 = 64 * 1024 * 1024;
@@ -425,9 +424,10 @@ fn folder_contains(folder: &Path, inner: &Path) -> bool {
 
 fn link_refused(error: io::Error) -> io::Error {
     match error.raw_os_error().map(Errno::from_raw_os_error) {
-        Some(Errno::PERM | Errno::NOTSUP) => {
-            io::Error::new(io::ErrorKind::Unsupported, L10N.tr("no-links"))
-        }
+        Some(Errno::PERM | Errno::NOTSUP) => io::Error::new(
+            io::ErrorKind::Unsupported,
+            tr!("This disk can’t store links."),
+        ),
         _ => error,
     }
 }

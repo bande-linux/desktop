@@ -2,13 +2,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use bande_toolkit::{
     Color, Elevation, Item, Paragraph, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole,
     TextStyle,
 };
-
-use crate::L10N;
 
 const HEIGHT: f32 = 52.0;
 const SEGMENT: f32 = 44.0;
@@ -39,13 +38,14 @@ impl Mode {
     }
 
     fn label(self) -> String {
-        L10N.tr(match self {
-            Self::Screen => "capture-entire-screen",
-            Self::Window => "capture-window",
-            Self::Area => "capture-area",
-            Self::RecordScreen => "record-entire-screen",
-            Self::RecordArea => "record-area",
+        (match self {
+            Self::Screen => text!("Capture Entire Screen"),
+            Self::Window => text!("Capture Selected Window"),
+            Self::Area => text!("Capture Selected Portion"),
+            Self::RecordScreen => text!("Record Entire Screen"),
+            Self::RecordArea => text!("Record Selected Portion"),
         })
+        .tr()
     }
 }
 
@@ -116,17 +116,17 @@ impl Palette {
 
     fn label(&self, segment: Segment) -> String {
         match segment {
-            Segment::Close => L10N.tr("close"),
+            Segment::Close => tr!("Close"),
             Segment::Mode(mode) => mode.label(),
-            Segment::Options => L10N.tr("options"),
+            Segment::Options => tr!("Options"),
             Segment::Go => self.go_title(),
         }
     }
 
     fn go_title(&self) -> String {
         match self.mode.records() {
-            true => L10N.tr("record"),
-            false => L10N.tr("capture"),
+            true => tr!("Record"),
+            false => tr!("Capture"),
         }
     }
 
@@ -222,7 +222,7 @@ impl Widget for Palette {
     fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
         let style = TextStyle::role(TextRole::Body, cx.palette.ink);
         let options = cx.text.paragraph(
-            &format!("{} ▾", L10N.tr("options")),
+            &format!("{} ▾", tr!("Options")),
             style,
             None,
             TextAlign::Start,
@@ -382,7 +382,7 @@ impl Widget for Palette {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Toolbar);
-        node.set_label(L10N.tr("capture-options"));
+        node.set_label(tr!("Screenshot and recording"));
         node
     }
 

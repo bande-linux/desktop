@@ -3,9 +3,8 @@ use std::path::{Path, PathBuf};
 
 use bande_app::choose_file;
 use bande_colour::{IccError, PROFILE_FOLDER, Profile};
+use bande_l10n::{text, tr};
 use zbus::blocking::Connection;
-
-use crate::L10N;
 
 const SYSTEM_FOLDER: &str = "color/icc";
 
@@ -52,15 +51,18 @@ pub(crate) fn installed() -> Vec<(String, String)> {
 }
 
 fn reason(error: &IccError) -> String {
-    L10N.tr(match error {
-        IccError::TooShort => "icc-too-short",
-        IccError::NotADisplayProfile => "icc-not-display",
-        IccError::NotRgb => "icc-not-rgb",
-        IccError::NotXyz => "icc-not-xyz",
-        IccError::LookupTables => "icc-lookup-tables",
-        IccError::MissingTag(_) => "icc-missing-tag",
-        IccError::UnsupportedCurve => "icc-unsupported-curve",
+    (match error {
+        IccError::TooShort => text!("it is too short to be an ICC profile"),
+        IccError::NotADisplayProfile => text!("it is not a display profile"),
+        IccError::NotRgb => text!("it does not describe RGB colours"),
+        IccError::NotXyz => text!("its colours are not described in XYZ"),
+        IccError::LookupTables => {
+            text!("it uses lookup tables, and only matrix-and-curve profiles are supported")
+        }
+        IccError::MissingTag(_) => text!("it is missing its colorants or tone curves"),
+        IccError::UnsupportedCurve => text!("it uses a tone curve that isn't supported"),
     })
+    .tr()
 }
 
 pub(crate) enum Added {
@@ -71,10 +73,10 @@ pub(crate) enum Added {
 
 pub(crate) fn add(session: &Connection) -> Added {
     let filter = (
-        L10N.tr("colour-profiles"),
+        tr!("Colour profiles"),
         vec![(0u32, "*.icc".to_owned()), (0u32, "*.icm".to_owned())],
     );
-    let chosen = match choose_file(session, &L10N.tr("choose-colour-profile"), Some(filter)) {
+    let chosen = match choose_file(session, &tr!("Choose a Colour Profile"), Some(filter)) {
         Ok(Some(chosen)) => chosen,
         Ok(None) => return Added::Cancelled,
         Err(error) => return Added::Refused(error.to_string()),
@@ -84,9 +86,10 @@ pub(crate) fn add(session: &Connection) -> Added {
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     let refused = |why: String| {
-        Added::Refused(L10N.tr_args(
-            "colour-profile-refused",
-            [("file", name.clone().into()), ("reason", why.into())],
+        Added::Refused(tr!(
+            "{file} can't be used: {reason}.",
+            file = name,
+            reason = why
         ))
     };
     let bytes = match fs::read(&chosen) {
@@ -97,7 +100,7 @@ pub(crate) fn add(session: &Connection) -> Added {
         return refused(reason(&error));
     }
     let Some(folder) = bande_xdg::data_home().map(|home| home.join(PROFILE_FOLDER)) else {
-        return refused(L10N.tr("icc-no-home"));
+        return refused(tr!("there is no folder to keep it in"));
     };
     let stored = folder.join(&name);
     match fs::create_dir_all(&folder).and_then(|()| fs::write(&stored, &bytes)) {

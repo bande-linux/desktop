@@ -1,5 +1,10 @@
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
+use crate::label::Labels;
+use crate::motion::{Look, Motion, Tick};
+use crate::state::{Compositor, OutputElement, State};
 use bande_graphics::{
     Key, Modifiers, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST, Palette, Scheme, TextSize,
     TextSystem, WINDOW_HEADER_HEIGHT, WindowControl,
@@ -25,11 +30,6 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Serial, Size};
 use smithay::wayland::shell::xdg::PositionerState;
-
-use crate::L10N;
-use crate::label::Labels;
-use crate::motion::{Look, Motion, Tick};
-use crate::state::{Compositor, OutputElement, State};
 
 const RESTING_MENU_STAYS: Duration = Duration::from_millis(300);
 const BELOW_GAP: i32 = 4;
@@ -258,23 +258,23 @@ impl State {
         let window = &self.windows[index];
         let zoomed = window.has_state(xdg_toplevel::State::Maximized);
         let resizable = !window.fixed_size();
-        let tile = |key: &str| {
-            item(L10N.tr(key), key)
-                .layout(placement_layout(key))
+        let tile = |title: String, action: &str| {
+            item(title, action)
+                .layout(placement_layout(action))
                 .enabled(resizable)
         };
         let mut items = vec![
-            tile("place-left")
+            tile(tr!("Left"), "place-left")
                 .shortcut(&keys_for(Action::TileWindow, BoundKey::Left).unwrap_or_default()),
-            tile("place-right")
+            tile(tr!("Right"), "place-right")
                 .shortcut(&keys_for(Action::TileWindow, BoundKey::Right).unwrap_or_default()),
             MenuItem::separator(),
-            tile("place-top-left"),
-            tile("place-top-right"),
-            tile("place-bottom-left"),
-            tile("place-bottom-right"),
+            tile(tr!("Top Left"), "place-top-left"),
+            tile(tr!("Top Right"), "place-top-right"),
+            tile(tr!("Bottom Left"), "place-bottom-left"),
+            tile(tr!("Bottom Right"), "place-bottom-right"),
             MenuItem::separator(),
-            tile("place-fill").enabled(!zoomed && resizable),
+            tile(tr!("Fill"), "place-fill").enabled(!zoomed && resizable),
         ];
         let displays = self
             .screens
@@ -283,14 +283,14 @@ impl State {
             .count();
         if displays > 1 {
             items.push(
-                item(L10N.tr("place-next-display"), "place-next-display").shortcut(
+                item(tr!("Move to Next Display"), "place-next-display").shortcut(
                     &keys_for(Action::MoveWindowToDisplay, BoundKey::Right).unwrap_or_default(),
                 ),
             );
         }
         items.extend([
             MenuItem::separator(),
-            item(L10N.tr("place-restore"), "place-restore")
+            item(tr!("Return to Previous Size"), "place-restore")
                 .enabled(window.tile.is_some() || zoomed),
         ]);
         items
@@ -307,7 +307,7 @@ impl State {
                     .is_some_and(|id| !workspaces.is_full_screen(id))
             })
             .map(|position| {
-                let title = L10N.tr_args("desktop-number", [("number", (position + 1).into())]);
+                let title = tr!("Desktop {number}", number = (position + 1));
                 item(title, &format!("desktop-{position}"))
                     .checked(Some(position) == current)
                     .enabled(Some(position) != current)
@@ -316,7 +316,7 @@ impl State {
         items.extend([
             MenuItem::separator(),
             item(
-                L10N.tr("new-desktop"),
+                tr!("New Desktop"),
                 &format!("desktop-{}", workspaces.count()),
             ),
         ]);
@@ -326,28 +326,24 @@ impl State {
     fn window_menu(&self, index: usize) -> Menu {
         let zoomed = self.windows[index].has_state(xdg_toplevel::State::Maximized);
         Menu::new(vec![
-            item(L10N.tr("minimize"), "minimize")
+            item(tr!("Minimize"), "minimize")
                 .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             item(
                 match zoomed {
-                    true => L10N.tr("unzoom"),
-                    false => L10N.tr("zoom"),
+                    true => tr!("Unzoom"),
+                    false => tr!("Zoom"),
                 },
                 "zoom",
             )
             .enabled(!self.windows[index].fixed_size()),
             MenuItem::separator(),
+            MenuItem::submenu(&tr!("Move & Resize"), Menu::new(self.tiling_items(index))),
             MenuItem::submenu(
-                &L10N.tr("move-and-resize"),
-                Menu::new(self.tiling_items(index)),
-            ),
-            MenuItem::submenu(
-                &L10N.tr("move-to-desktop"),
+                &tr!("Move to Desktop"),
                 Menu::new(self.desktop_items(index)),
             ),
             MenuItem::separator(),
-            item(L10N.tr("close"), "close")
-                .shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
+            item(tr!("Close"), "close").shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
         ])
     }
 

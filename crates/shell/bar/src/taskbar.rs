@@ -4,6 +4,9 @@ use std::f32::consts::TAU;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use bande_l10n::{tr, trn};
+
+use crate::rail::{BarForm, cross_margin, edge_band, zone_margin};
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_config::{BAR_ICON_SIZE_RANGE, BarEdge};
 use bande_taskbar_model::{LauncherEntry, LauncherUpdate};
@@ -11,9 +14,6 @@ use bande_toolkit::ui::{
     Animated, Context, Cursor, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
     past_drag_slop,
 };
-
-use crate::L10N;
-use crate::rail::{BarForm, cross_margin, edge_band, zone_margin};
 use bande_toolkit::{
     Appearance, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme,
     Shape, TextAlign, TextStyle, TextSystem,
@@ -1296,7 +1296,7 @@ impl TaskbarState {
                 .find(|slot| &slot.key == key)
                 .and_then(|slot| slot.app.as_ref())
                 .map_or_else(|| app_id.clone(), |app| app.name.clone()),
-            _ => L10N.tr("trash"),
+            _ => tr!("Trash"),
         }
     }
 
@@ -1347,7 +1347,7 @@ impl TaskbarState {
 
     fn prepare_more(&mut self, cx: &mut Context) {
         if let Some(more) = &mut self.more {
-            let label = L10N.tr_args("more-apps", [("count", (more.hidden.len() as i64).into())]);
+            let label = tr!("+{count}", count = (more.hidden.len() as i64));
             let color = cx.palette.ink;
             if more
                 .text
@@ -1428,7 +1428,7 @@ impl TaskbarState {
                 .is_none_or(|(color, _)| *color != inverse)
         {
             let paragraph = cx.text.paragraph(
-                &L10N.tr("remove"),
+                &tr!("Remove"),
                 TextStyle::new(REMOVE_TEXT, inverse).weight(TextStyle::SEMIBOLD),
                 None,
                 TextAlign::Start,
@@ -1986,26 +1986,26 @@ impl Widget for Tile {
         if let Key::App(app_id) = &self.key {
             let slot = state.slots.iter().find(|slot| slot.key == self.key);
             if state.launching.contains_key(app_id) {
-                details.push(L10N.tr("opening"));
+                details.push(tr!("opening"));
             } else if slot.is_some_and(Slot::running) {
-                details.push(L10N.tr("running"));
+                details.push(tr!("running"));
             }
             if state.framed.as_ref() == Some(&self.key) {
-                details.push(L10N.tr("active"));
+                details.push(tr!("active"));
             }
             let launcher = state.launcher.get(app_id).copied().unwrap_or_default();
             if let Some(count) = launcher.badge() {
-                details.push(L10N.tr_args("badge", [("count", count.into())]));
+                details.push(tr!("{count} new", count = count));
             }
             if let Some(progress) = launcher.progress() {
                 let percent = (progress * 100.0).round() as i64;
-                details.push(L10N.tr_args("progress", [("percent", percent.into())]));
+                details.push(tr!("{percent} % done", percent = percent));
             }
             if state.attention.contains_key(app_id) {
-                details.push(L10N.tr("attention"));
+                details.push(tr!("needs attention"));
             }
         } else if state.trash.is_full {
-            details.push(L10N.tr("trash-full"));
+            details.push(tr!("contains items"));
         }
         if !details.is_empty() {
             node.set_description(details.join(", "));
@@ -2133,7 +2133,11 @@ impl Widget for MoreTile {
         let state = self.state.borrow();
         let count = state.more.as_ref().map_or(0, |more| more.hidden.len());
         let mut node = Node::new(Role::Button);
-        node.set_label(L10N.tr_args("more-apps-name", [("count", (count as i64).into())]));
+        node.set_label(trn!(
+            "One more app",
+            "{count} more apps",
+            count = (count as i64)
+        ));
         node.add_action(Action::Click);
         node
     }
@@ -2226,7 +2230,7 @@ impl Widget for Taskbar {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Toolbar);
-        node.set_label(L10N.tr("taskbar"));
+        node.set_label(tr!("Taskbar"));
         node
     }
 

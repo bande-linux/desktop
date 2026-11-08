@@ -3,11 +3,10 @@ mod card;
 mod client;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use bande_datetime::{DateFormats, Month};
-use bande_l10n::Localizer;
+use bande_l10n::{text, tr};
 use bande_notify::{Notification, Presentation, Stack};
 use bande_spring::rubber_band;
 use bande_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for, past_drag_slop};
@@ -32,9 +31,6 @@ fn until_midnight() -> Option<Duration> {
         .ok()?;
     Duration::try_from(wall.duration_until(&midnight)).ok()
 }
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-notifications")));
 
 pub const BANNER_WIDTH: f32 = 344.0;
 pub const CENTER_WIDTH: f32 = 368.0;
@@ -415,7 +411,7 @@ impl Screen {
         let palette = self.palette;
         let mut rows = Vec::new();
         let title = self.text.paragraph(
-            &L10N.tr("notification-center"),
+            &tr!("Notifications"),
             TextStyle::role(TextRole::Heading, palette.ink),
             None,
             TextAlign::Start,
@@ -424,7 +420,7 @@ impl Screen {
         let stacks = self.presentation.center.clone();
         let clear_all = (!stacks.is_empty()).then(|| {
             let label = self.text.paragraph(
-                &L10N.tr("clear-all"),
+                &tr!("Clear All"),
                 TextStyle::role(TextRole::BodyStrong, palette.accent_text),
                 None,
                 TextAlign::Start,
@@ -439,17 +435,21 @@ impl Screen {
             (label, rect)
         });
         let status = if self.presentation.screen_shared {
-            Some("screen-shared")
+            Some(text!(
+                "Your screen is being shared. Notifications arrive here silently."
+            ))
         } else if self.presentation.full_screen {
-            Some("full-screen")
+            Some(text!(
+                "An app is full screen. Notifications arrive here silently."
+            ))
         } else {
-            self.presentation
-                .do_not_disturb
-                .then_some("do-not-disturb-on")
+            self.presentation.do_not_disturb.then_some(text!(
+                "Do Not Disturb is on. Notifications arrive here silently."
+            ))
         };
         let status = status.map(|status| {
             self.text.paragraph(
-                &L10N.tr(status),
+                &status.tr(),
                 TextStyle::role(TextRole::Callout, palette.ink2),
                 Some(inner),
                 TextAlign::Start,
@@ -484,7 +484,7 @@ impl Screen {
         y += height + GAP;
         if stacks.is_empty() {
             let empty = self.text.paragraph(
-                &L10N.tr("no-notifications"),
+                &tr!("No Notifications"),
                 TextStyle::role(TextRole::Body, palette.ink3),
                 Some(inner),
                 TextAlign::Center,
@@ -508,7 +508,7 @@ impl Screen {
                     TextAlign::Start,
                 );
                 let label = self.text.paragraph(
-                    &L10N.tr("show-less"),
+                    &tr!("Show Less"),
                     TextStyle::role(TextRole::BodyStrong, palette.accent_text),
                     None,
                     TextAlign::Start,

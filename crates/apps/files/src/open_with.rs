@@ -1,15 +1,15 @@
 use std::path::PathBuf;
 
+use bande_l10n::tr;
+
+use crate::controls::{Signal, sender};
+use crate::prompt::{Kind, Prompt};
+use crate::view::{FilesView, Request, Sheet};
 use bande_toolkit::ui::{
     Axis, Bounded, Cell, CheckState, Checkbox, Column, Row, SearchField, Stack, Table, Widget,
     WidgetId,
 };
 use bande_xdg::DesktopEntry;
-
-use crate::L10N;
-use crate::controls::{Signal, sender};
-use crate::prompt::{Kind, Prompt};
-use crate::view::{FilesView, Request, Sheet};
 
 const LIST_HEIGHT: f32 = 240.0;
 const SPACING: f32 = 10.0;
@@ -74,17 +74,17 @@ impl FilesView {
             sender(&self.signals),
             sender(&self.signals),
         );
-        let mut table = Table::new(vec![Column::new(&L10N.tr("column-name"), 300.0).flexible()])
+        let mut table = Table::new(vec![Column::new(&tr!("Name"), 300.0).flexible()])
             .without_header()
             .on_activate(move |_| activate(Signal::OpenWithActivate));
         table.set_rows(rows);
         table.select(&first_key.into_iter().collect::<Vec<_>>());
         let table_id = table.id();
-        let field = SearchField::new(&L10N.tr("search-placeholder"), "", move |text| {
+        let field = SearchField::new(&tr!("Search"), "", move |text| {
             search(Signal::OpenWithSearch(text.to_owned()));
         });
         let field_id = field.id();
-        let checkbox = Checkbox::new(&L10N.tr("always-open-with"), CheckState::Off, move |on| {
+        let checkbox = Checkbox::new(&tr!("Always Open With"), CheckState::Off, move |on| {
             always(Signal::OpenWithAlways(on));
         });
         let accessory = Stack::new(
@@ -98,22 +98,19 @@ impl FilesView {
             ],
         );
         let title = match files.as_slice() {
-            [file] => L10N.tr_args(
-                "open-with-title",
-                [(
-                    "name",
-                    file.file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
-                        .unwrap_or_default()
-                        .into(),
-                )],
+            [file] => tr!(
+                "Choose an app to open “{name}”:",
+                name = file
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default()
             ),
-            _ => L10N.tr_args("open-with-items-title", [("count", files.len().into())]),
+            _ => tr!("Choose an app to open {count} items:", count = files.len()),
         };
         let prompt = Prompt::new(&title, "", self.choice())
             .accessory(accessory)
-            .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-            .button(&L10N.tr("open"), "open", Kind::Primary);
+            .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+            .button(&tr!("Open"), "open", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(
             prompt,
@@ -162,9 +159,10 @@ impl FilesView {
         if open_with.always
             && let Err(error) = self.apps.set_default(&open_with.mime, &app)
         {
-            self.show_notice(
-                L10N.tr_args("error-default-app", [("error", error.to_string().into())]),
-            );
+            self.show_notice(tr!(
+                "The default app couldn’t be changed: {error}",
+                error = error.to_string()
+            ));
         }
         self.requests.push(Request::Open {
             app: Box::new(app),

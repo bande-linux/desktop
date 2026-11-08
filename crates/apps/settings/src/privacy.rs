@@ -1,14 +1,14 @@
 use std::path::Path;
 
-use bande_toolkit::Spacing;
-use bande_toolkit::ui::{Axis, Button, Stack, Widget};
-use zbus::blocking::Connection;
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 use bande_settings_panes::SettingId;
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, Stack, Widget};
+use zbus::blocking::Connection;
 
 const CLIPBOARD: &str = "org.bande.Clipboard";
 const CLIPBOARD_PATH: &str = "/org/bande/Clipboard";
@@ -24,7 +24,7 @@ impl SettingsView {
         if self.confirming_clear_clipboard {
             let mut cancel = intent(&self.intents, |()| Intent::AskClearClipboard(false));
             let mut clear = intent(&self.intents, |()| Intent::ClearClipboard);
-            let erase = Button::new(&L10N.tr("clear"), move || clear(()));
+            let erase = Button::new(&tr!("Clear"), move || clear(()));
             self.anchors
                 .push((Anchor::Item(CONFIRM.to_owned()), erase.id()));
             let buttons = Stack::new(
@@ -32,29 +32,41 @@ impl SettingsView {
                 Spacing::S as f32,
                 0.0,
                 vec![
-                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                    boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
                     boxed(erase.primary()),
                 ],
             );
             return vec![boxed(
                 Row::new(
-                    Text::new(&L10N.tr("clear-clipboard-question"), Tone::Primary),
+                    Text::new(&tr!("Clear the clipboard history?"), Tone::Primary),
                     Some(boxed(buttons)),
                 )
-                .detail(Text::new(&L10N.tr("clear-clipboard-warning"), Tone::Muted).caption())
+                .detail(
+                    Text::new(
+                        &tr!("Everything you copied earlier is forgotten."),
+                        Tone::Muted,
+                    )
+                    .caption(),
+                )
                 .highlighted(true),
             )];
         }
         let mut ask = intent(&self.intents, |()| Intent::AskClearClipboard(true));
-        let button = Button::new(&L10N.tr("clear-clipboard-ellipsis"), move || ask(()));
+        let button = Button::new(&tr!("Clear History…"), move || ask(()));
         self.anchors
             .push((Anchor::Item(ASK.to_owned()), button.id()));
         vec![boxed(
             Row::new(
-                Text::new(&L10N.tr("clipboard-history"), Tone::Primary),
+                Text::new(&tr!("Clipboard history"), Tone::Primary),
                 Some(boxed(button)),
             )
-            .detail(Text::new(&L10N.tr("clipboard-history-hint"), Tone::Muted).caption()),
+            .detail(
+                Text::new(
+                    &tr!("What you copied earlier, ready to paste again"),
+                    Tone::Muted,
+                )
+                .caption(),
+            ),
         )]
     }
 }
@@ -64,7 +76,9 @@ impl SettingsView {
         let excluded = self.excluded_folders();
         let mut rows: Widgets = Vec::new();
         if excluded.is_empty() {
-            rows.push(muted_row(&L10N.tr("no-excluded-folders")));
+            rows.push(muted_row(&tr!(
+                "Every folder in your home folder is searched"
+            )));
         }
         for folder in excluded {
             let name = Path::new(&folder).file_name().map_or_else(
@@ -73,20 +87,24 @@ impl SettingsView {
             );
             let mut include = intent(&self.intents, Intent::IncludeFolder);
             let path = folder.clone();
-            let button = Button::new(&L10N.tr("remove"), move || include(path.clone()))
-                .tooltip(&L10N.tr("include-folder-tooltip"));
+            let button = Button::new(&tr!("Remove"), move || include(path.clone()))
+                .tooltip(&tr!("Search this folder again"));
             let row = Row::new(Text::new(&name, Tone::Primary), Some(boxed(button)))
                 .detail(Text::new(&folder, Tone::Muted).caption());
             rows.push(self.item_row(format!("excluded:{folder}"), row));
         }
         let mut add = intent(&self.intents, |()| Intent::ExcludeFolder);
-        let button = Button::new(&L10N.tr("exclude-folder"), move || add(()));
+        let button = Button::new(&tr!("Add Folder…"), move || add(()));
         self.anchors.push((
             Anchor::Setting(SettingId::SearchExcluded, None),
             button.id(),
         ));
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("exclude-folder-hint"), Tone::Muted).caption(),
+            Text::new(
+                &tr!("Files in these folders never appear in search"),
+                Tone::Muted,
+            )
+            .caption(),
             Some(boxed(button)),
         )));
         rows

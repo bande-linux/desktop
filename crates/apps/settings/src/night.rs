@@ -1,10 +1,10 @@
+use bande_l10n::{text, tr};
+
+use crate::view::SettingsView;
 use bande_datetime::daylight::{Place, Sky, sky, within_daily};
 use bande_settings_panes::{SettingId, Value};
 use jiff::Zoned;
 use jiff::civil::Time;
-
-use crate::L10N;
-use crate::view::SettingsView;
 
 pub const CUSTOM: &str = "custom";
 
@@ -28,7 +28,7 @@ pub fn night_summary(
     place: Option<Place>,
 ) -> String {
     if !on {
-        return L10N.tr("off");
+        return tr!("Off");
     }
     let scheduled = match custom {
         Some((from, to)) => time(from)
@@ -37,16 +37,18 @@ pub fn night_summary(
         None => sky(now, place).map(|(sky, next)| (sky == Sky::Night, next)),
     };
     let Some((night, next)) = scheduled else {
-        return L10N.tr("on");
+        return tr!("On");
     };
     let until = next
         .to_zoned(now.time_zone().clone())
         .strftime("%H:%M")
         .to_string();
-    L10N.tr_args(
-        if night { "on-until" } else { "off-until" },
-        [("time", until.into())],
-    )
+    (if night {
+        text!("On until {time}")
+    } else {
+        text!("Off until {time}")
+    })
+    .tr_args(&[("time", &until as &dyn std::fmt::Display)])
 }
 
 impl SettingsView {
@@ -68,13 +70,15 @@ impl SettingsView {
             })
             .flatten();
         match (on, scheduled) {
-            (true, Some((true, _, to))) => {
-                Some(L10N.tr_args("do-not-disturb-until", [("time", to.to_owned().into())]))
-            }
-            (true, _) => Some(L10N.tr("do-not-disturb-on")),
-            (false, Some((false, from, _))) => {
-                Some(L10N.tr_args("do-not-disturb-at", [("time", from.to_owned().into())]))
-            }
+            (true, Some((true, _, to))) => Some(tr!(
+                "Do Not Disturb is on until {time}",
+                time = to.to_owned()
+            )),
+            (true, _) => Some(tr!("Do Not Disturb is on")),
+            (false, Some((false, from, _))) => Some(tr!(
+                "Do Not Disturb turns on at {time}",
+                time = from.to_owned()
+            )),
             (false, _) => None,
         }
     }

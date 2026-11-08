@@ -15,6 +15,7 @@ use bande_bluetooth::register_agent;
 use bande_config::{Config, config_path};
 use bande_controlcenter::ControlCenter;
 use bande_desktop_surface::{DesktopSurface, QuickLookSurface, quick_look_role};
+use bande_l10n::tr;
 use bande_launcher::LauncherShell;
 use bande_notifications::Notifications;
 use bande_quick_look::QuickLookLink;
@@ -170,7 +171,7 @@ impl Context {
                 Ok((bar.surfaces, Some(bar.restart)))
             }
             Place::LowMemory => {
-                let title = bande_bar::L10N.tr("low-memory-window");
+                let title = tr!("Low Memory");
                 let mut window =
                     beside.open_beside(Role::dialog(&title, DIALOGS), LOW_MEMORY_SIZE)?;
                 window.share_fonts(&self.text);

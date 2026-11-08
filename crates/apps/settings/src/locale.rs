@@ -3,12 +3,12 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, OnceLock};
 
-use zbus::blocking::Connection;
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use bande_settings_panes::{PaneId, SettingId};
+use zbus::blocking::Connection;
 
 pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_locales};
 
@@ -74,7 +74,7 @@ pub(crate) fn same_locale(a: &str, b: &str) -> bool {
 
 pub(crate) fn locale_label(available: &[AvailableLocale], code: &str) -> String {
     if same_locale(code, DEFAULT_LOCALE) {
-        return L10N.tr("locale-default");
+        return tr!("English (no country)");
     }
     available
         .iter()
@@ -157,13 +157,14 @@ fn run_helper(arguments: &[String]) -> Result<(), HelperFailure> {
 fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLocale]) -> String {
     let name = locale_label(available, code);
     match failure {
-        HelperFailure::NotAllowed => L10N.tr("administrator-only"),
-        HelperFailure::UnknownValue => L10N.tr_args("locale-unavailable", [("name", name.into())]),
+        HelperFailure::NotAllowed => tr!("Only an administrator can change this."),
+        HelperFailure::UnknownValue => tr!("{name} can't be used on this computer.", name = name),
         HelperFailure::Failed(reason) => {
             tracing::warn!("locale helper: {reason}");
-            L10N.tr_args(
-                "locale-not-set-up",
-                [("name", name.into()), ("reason", reason.into())],
+            tr!(
+                "Couldn't set up {name}. {reason}",
+                name = name,
+                reason = reason
             )
         }
     }
@@ -171,11 +172,11 @@ fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLoca
 
 fn keyboard_failure(failure: HelperFailure) -> String {
     match failure {
-        HelperFailure::NotAllowed => L10N.tr("administrator-only"),
-        HelperFailure::UnknownValue => L10N.tr("couldnt-change"),
+        HelperFailure::NotAllowed => tr!("Only an administrator can change this."),
+        HelperFailure::UnknownValue => tr!("Couldn't make this change."),
         HelperFailure::Failed(reason) => {
             tracing::warn!("locale helper: {reason}");
-            L10N.tr("couldnt-change")
+            tr!("Couldn't make this change.")
         }
     }
 }
@@ -295,7 +296,11 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 Err(error) => {
                     updates.send(Update::PaneFailed(
                         PaneId::LanguageTime,
-                        explained(&error, "service-locale", "locale-read-failed"),
+                        explained(
+                            &error,
+                            text!("The language service"),
+                            text!("Couldn't read the current language and region."),
+                        ),
                     ));
                     updates.send(Update::Locale(read(&locale, available)));
                     continue;
@@ -328,7 +333,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 Ok(()) => {
                     if let Err(error) = write_user_file(&contents) {
                         tracing::warn!("cannot write the language choice: {error}");
-                        updates.send(Update::Failed(setting, L10N.tr("couldnt-change")));
+                        updates.send(Update::Failed(setting, tr!("Couldn't make this change.")));
                     }
                 }
                 Err(failure) => {

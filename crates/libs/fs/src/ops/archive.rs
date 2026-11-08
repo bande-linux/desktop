@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use bande_l10n::{text, tr};
 use bzip2::read::MultiBzDecoder;
 use bzip2::write::BzEncoder;
 use flate2::read::MultiGzDecoder;
@@ -20,7 +21,6 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
 use super::{Change, Failure, Halt, Worker, claim, free_space, rename_new};
-use crate::L10N;
 use bande_xdg::sync_folder;
 
 use crate::naming::keep_both_name;
@@ -164,13 +164,17 @@ impl Refusal {
 impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let id = match self {
-            Self::NeedsPassword => "refusal-needs-password",
-            Self::WrongPassword => "refusal-wrong-password",
-            Self::Outside => "refusal-outside",
-            Self::Bomb => "refusal-bomb",
-            Self::TooLarge => "refusal-too-large",
+            Self::NeedsPassword => text!("The archive is protected by a password."),
+            Self::WrongPassword => text!("The password is incorrect."),
+            Self::Outside => {
+                text!("The archive tries to put an item outside the folder it expands into.")
+            }
+            Self::Bomb => text!(
+                "The archive expands to more than a thousand times its size, as a decompression bomb does."
+            ),
+            Self::TooLarge => text!("There isn’t enough free space for the expanded items."),
         };
-        f.write_str(&L10N.tr(id))
+        f.write_str(&id.tr())
     }
 }
 
@@ -199,7 +203,7 @@ fn free_path(folder: &Path, name: &str, is_dir: bool) -> PathBuf {
 pub fn archive_path(sources: &[PathBuf], folder: &Path, format: Format) -> Option<PathBuf> {
     let name = match sources {
         [only] => only.file_name()?.to_string_lossy().into_owned(),
-        _ => L10N.tr("archive-name"),
+        _ => tr!("Archive"),
     };
     Some(free_path(
         folder,

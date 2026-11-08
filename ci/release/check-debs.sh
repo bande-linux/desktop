@@ -32,6 +32,10 @@ for package in "${packages[@]}"; do
 done
 field bande-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
 
+echo "== each program carries its English catalog"
+contains bande-files usr/share/bande/l10n/bande-files/en.mo
+contains bande-shell usr/share/bande/l10n/bande-shell/en.mo
+
 echo "== the notification daemon is D-Bus activatable"
 root=$(extract bande-notify)
 service="$root/usr/share/dbus-1/services/org.bande.Notify.service"

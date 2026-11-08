@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use bande_graphics::Image;
+use bande_l10n::tr;
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
     find_icon,
@@ -19,7 +20,6 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 
 use self::layout::{Layout, fitted, lay_out, step, thumbnail_tile};
-use crate::L10N;
 use crate::access::Announcer;
 use crate::motion::{Look, Motion, Tick};
 use crate::overview::real_rect;
@@ -603,7 +603,7 @@ impl State {
         let selected = session.selected;
         let (title, items) = match session.mode {
             Mode::Apps => (
-                L10N.tr("app-switcher"),
+                tr!("App Switcher"),
                 session.apps.iter().map(|app| app.name.clone()).collect(),
             ),
             Mode::Windows { .. } => {
@@ -619,7 +619,7 @@ impl State {
                         }
                     })
                     .collect::<Vec<_>>();
-                (L10N.tr("window-switcher"), items)
+                (tr!("Windows"), items)
             }
         };
         self.switcher.announcer.announce(&title, &items, selected);

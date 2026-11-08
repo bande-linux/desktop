@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 
 use bande_app::choose_file;
+use bande_l10n::{text, tr};
 use bande_wallpaper::{Fit, Picture, render};
 use zbus::blocking::Connection;
 
+use crate::SettingsClient;
 use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
-use crate::{L10N, SettingsClient};
 use bande_settings_panes::{PaneId, SettingId, Value as SettingValue};
 
 pub const THUMBNAIL_SIZE: (u32, u32) = (288, 180);
@@ -104,7 +105,7 @@ pub(crate) fn choose_picture(
     types: &[&str],
 ) -> zbus::Result<Option<PathBuf>> {
     let filter = (
-        L10N.tr("pictures"),
+        tr!("Pictures"),
         types
             .iter()
             .map(|mime| (1u32, (*mime).to_owned()))
@@ -142,12 +143,12 @@ pub fn follow_pictures(
                 }
                 PictureCommand::Choose => {
                     let chosen =
-                        match choose_picture(&session, &L10N.tr("choose-picture"), &IMAGE_TYPES) {
+                        match choose_picture(&session, &tr!("Choose a Wallpaper"), &IMAGE_TYPES) {
                             Ok(chosen) => chosen,
                             Err(error) => {
                                 updates.send(pane_failed(
                                     PaneId::Appearance,
-                                    "picture-choose-failed",
+                                    text!("Couldn't open the file chooser."),
                                     error,
                                 ));
                                 continue;
@@ -168,7 +169,7 @@ pub fn follow_pictures(
                     if let Err(error) = result {
                         updates.send(pane_failed(
                             PaneId::Appearance,
-                            "wallpaper-set-failed",
+                            text!("Couldn't set this picture as the wallpaper."),
                             error,
                         ));
                     }

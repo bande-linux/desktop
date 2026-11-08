@@ -12,6 +12,7 @@ bande-bus.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-bar.workspace = true
+bande-l10n.workspace = true
 bande-bluetooth.workspace = true
 bande-config.workspace = true
 bande-controlcenter.workspace = true

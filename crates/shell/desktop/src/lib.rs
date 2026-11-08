@@ -7,10 +7,6 @@ mod places;
 mod quick_look;
 mod view;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use backdrop::{Key as WallpaperKey, Layer, Luma};
 pub use client::{DesktopSurface, confirm, confirm_extension, report_eject_failure, role};
 pub use confirm::{CONFIRM_DELETE_FLAG, CONFIRM_EXTENSION_FLAG, EJECT_FAILED_FLAG, confirm_delete};
@@ -22,6 +18,3 @@ pub use model::{
 pub use places::{Layouts, format_layouts, layouts_path, parse_layouts, save_layouts};
 pub use quick_look::{QuickLookSurface, quick_look_role};
 pub use view::{Artwork, DesktopView, Request, fitted_label};
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-desktop-surface")));

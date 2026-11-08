@@ -7,15 +7,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, OnceLock};
 use std::thread;
 
-use bande_app::choose_file;
-use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
-use bande_keyboard::Layouts;
-use bande_status::devices::can_sleep;
-use bande_toolkit::SessionEnd;
-use zbus::blocking::Connection;
-use zbus::blocking::fdo::PropertiesProxy;
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
 use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
 use crate::battery::{BatteryCommand, BatteryState, follow_battery};
@@ -46,10 +39,17 @@ use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiS
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
+use bande_app::choose_file;
+use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
+use bande_keyboard::Layouts;
 use bande_network::import_vpn;
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
+use bande_status::devices::can_sleep;
+use bande_toolkit::SessionEnd;
 use bande_watch::FolderWatch;
+use zbus::blocking::Connection;
+use zbus::blocking::fdo::PropertiesProxy;
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -293,7 +293,8 @@ pub fn follow_notifications(session: &Connection, updates: Updates) {
 }
 
 fn exclude_folder(session: &Connection) -> zbus::Result<()> {
-    let Some(folder) = choose_file(session, &L10N.tr("choose-excluded-folder"), None)? else {
+    let Some(folder) = choose_file(session, &tr!("Choose a Folder to Keep Out of Search"), None)?
+    else {
         return Ok(());
     };
     let client = SettingsClient::connect(session)?;
@@ -367,12 +368,17 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                 };
                 if let Err(error) = result {
                     updates.send(match restore.first() {
-                        Some(setting) => {
-                            Update::Failed(*setting, sentence(&error, "service-desktop"))
-                        }
+                        Some(setting) => Update::Failed(
+                            *setting,
+                            sentence(&error, text!("The desktop settings service")),
+                        ),
                         None => Update::PaneFailed(
                             PaneId::Displays,
-                            explained(&error, "service-desktop", "displays-change-failed"),
+                            explained(
+                                &error,
+                                text!("The desktop settings service"),
+                                text!("Couldn't change the displays."),
+                            ),
                         ),
                     });
                     updates.send(Update::Values(client.read(&restore)));
@@ -543,7 +549,7 @@ impl Services {
                     if let Err(error) = clear_clipboard(&session) {
                         updates.send(pane_failed(
                             PaneId::PrivacySecurity,
-                            "clipboard-clear-failed",
+                            text!("Couldn't clear the clipboard history."),
                             error,
                         ));
                     }
@@ -570,7 +576,11 @@ impl Services {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("exclude-folder", move || {
                     if let Err(error) = exclude_folder(&session) {
-                        updates.send(pane_failed(PaneId::Search, "search-exclude-failed", error));
+                        updates.send(pane_failed(
+                            PaneId::Search,
+                            text!("Couldn't add this folder to the excluded folders."),
+                            error,
+                        ));
                     }
                 });
                 true
@@ -580,9 +590,9 @@ impl Services {
                 spawn("import-vpn", move || {
                     let chosen = choose_file(
                         &session,
-                        &L10N.tr("import-vpn-title"),
+                        &tr!("Import a VPN Configuration"),
                         Some((
-                            L10N.tr("vpn-files"),
+                            tr!("VPN configurations"),
                             vec![(0, "*.conf".to_owned()), (0, "*.ovpn".to_owned())],
                         )),
                     );
@@ -592,7 +602,11 @@ impl Services {
                         Err(error) => Err(error.to_string()),
                     };
                     if let Err(error) = imported {
-                        updates.send(pane_failed(PaneId::Network, "vpn-import-failed", error));
+                        updates.send(pane_failed(
+                            PaneId::Network,
+                            text!("Couldn't import this VPN file."),
+                            error,
+                        ));
                     }
                 });
                 true

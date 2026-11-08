@@ -3,6 +3,10 @@ use std::os::fd::BorrowedFd;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
+use crate::panel::ui_with;
+use crate::results::{self, Answer};
 use accesskit::{Node, Role};
 use bande_app::View;
 use bande_graphics::{Item, Rect};
@@ -11,10 +15,6 @@ use bande_toolkit::ui::{
     Axis, Context, ScrollView, SearchField, Size, Stack, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Scene, Spacing, TextSystem, Window, WindowEvent};
-
-use crate::L10N;
-use crate::panel::ui_with;
-use crate::results::{self, Answer};
 
 pub const WINDOW_SIZE: (u32, u32) = (560, 520);
 const ONLINE_AFTER: Duration = Duration::from_millis(600);
@@ -78,7 +78,7 @@ impl DictionaryWindow {
     pub fn new(appearance: Appearance, word: &str) -> Self {
         let query = Rc::new(RefCell::new(word.to_owned()));
         let typed = query.clone();
-        let search = SearchField::new(&L10N.tr("search-placeholder"), word, move |text| {
+        let search = SearchField::new(&tr!("Search"), word, move |text| {
             text.clone_into(&mut typed.borrow_mut());
         });
         let results: Slot = Rc::new(RefCell::new(None));

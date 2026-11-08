@@ -15,17 +15,13 @@ pub mod thumbnail;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_toolkit::Snapshot;
 use bande_xdg::{Locale, applications, current_desktops, data_dirs, find_app};
 use image::imageops::FilterType;
 use image::{ImageBuffer, ImageFormat, Rgba};
 use jiff::civil::DateTime;
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-screenshot")));
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Failure {
@@ -38,17 +34,27 @@ pub enum Failure {
 impl Failure {
     pub fn message(&self) -> (String, String) {
         match self {
-            Self::NoRecorder => (L10N.tr("cannot-record"), L10N.tr("no-recorder")),
-            Self::ScreenUnavailable => (L10N.tr("cannot-record"), L10N.tr("screen-unavailable")),
+            Self::NoRecorder => (
+                tr!("Screen recording is not available"),
+                tr!(
+                    "Install gstreamer1.0-pipewire, gstreamer1.0-plugins-good and gstreamer1.0-plugins-ugly to record the screen."
+                ),
+            ),
+            Self::ScreenUnavailable => (
+                tr!("Screen recording is not available"),
+                tr!("The screen could not be captured. Try again in a moment."),
+            ),
             Self::RecordingFailed => (
-                L10N.tr("recording-failed"),
-                L10N.tr("recording-failed-detail"),
+                tr!("The recording could not be saved"),
+                tr!(
+                    "Something went wrong while recording. Check that there is enough free disk space and try again."
+                ),
             ),
             Self::NotSaved(dir) => (
-                L10N.tr("cannot-save"),
-                L10N.tr_args(
-                    "cannot-save-detail",
-                    [("folder", dir.display().to_string().into())],
+                tr!("The screenshot could not be saved"),
+                tr!(
+                    "Bande could not write to {folder}. Choose another place in the options, or check the folder’s permissions.",
+                    folder = dir.display().to_string()
                 ),
             ),
         }
@@ -65,20 +71,23 @@ pub fn app_name(app_id: &str) -> Option<String> {
 }
 
 pub fn file_stem(taken: DateTime) -> String {
-    stem("file-name", taken)
+    let (date, time) = stamp(taken);
+    tr!("Screenshot {date} at {time}", date = date, time = time)
 }
 
 pub fn recording_stem(taken: DateTime) -> String {
-    stem("recording-name", taken)
+    let (date, time) = stamp(taken);
+    tr!(
+        "Screen Recording {date} at {time}",
+        date = date,
+        time = time
+    )
 }
 
-fn stem(id: &str, taken: DateTime) -> String {
-    L10N.tr_args(
-        id,
-        [
-            ("date", taken.strftime("%Y-%m-%d").to_string().into()),
-            ("time", taken.strftime("%H.%M.%S").to_string().into()),
-        ],
+fn stamp(taken: DateTime) -> (String, String) {
+    (
+        taken.strftime("%Y-%m-%d").to_string(),
+        taken.strftime("%H.%M.%S").to_string(),
     )
 }
 

@@ -7,12 +7,11 @@ use bande_graphics::{
     Appearance, Image, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
     TextSystem, grown_line,
 };
+use bande_l10n::{text, tr};
 use bande_widgets::{
     Alert, BUTTON_HEIGHT, Button, Cell, Column, Context, Event, FreeLayout, Key, Row, Size, Table,
     Ui, Widget, WidgetId,
 };
-
-use crate::L10N;
 
 pub(crate) const CONTENT: (f32, f32) = (400.0, 400.0);
 const PADDING: f32 = 16.0;
@@ -41,10 +40,7 @@ impl Listed {
     pub(crate) fn label(&self) -> String {
         match self.responding {
             true => self.name.clone(),
-            false => L10N.tr_args(
-                "force-quit-not-responding",
-                [("name", self.name.clone().into())],
-            ),
+            false => tr!("{name} (Not Responding)", name = self.name.clone()),
         }
     }
 }
@@ -84,20 +80,18 @@ impl ForceQuitView {
         let signals = Signals::default();
         let selection = signals.clone();
         let activation = signals.clone();
-        let table = Table::new(vec![
-            Column::new(&L10N.tr("force-quit-title"), 200.0).flexible(),
-        ])
-        .without_header()
-        .on_selection(move |keys| selection.borrow_mut().push(Signal::Selected(keys.to_vec())))
-        .on_activate(move |_| activation.borrow_mut().push(Signal::Ask));
+        let table = Table::new(vec![Column::new(&tr!("Force Quit Apps"), 200.0).flexible()])
+            .without_header()
+            .on_selection(move |keys| selection.borrow_mut().push(Signal::Selected(keys.to_vec())))
+            .on_activate(move |_| activation.borrow_mut().push(Signal::Ask));
         let asking = signals.clone();
-        let mut button = Button::new(&L10N.tr("force-quit-button"), move || {
+        let mut button = Button::new(&tr!("Force Quit"), move || {
             asking.borrow_mut().push(Signal::Ask);
         })
         .primary();
         button.set_enabled(false);
         let mut cx = Context::new(text, appearance.palette());
-        let width = [L10N.tr("force-quit-relaunch"), L10N.tr("force-quit-button")]
+        let width = [tr!("Relaunch"), tr!("Force Quit")]
             .iter()
             .map(|title| {
                 button.set_title(title);
@@ -175,13 +169,13 @@ impl ForceQuitView {
             .retain(|signal| !matches!(signal, Signal::Selected(_)));
         let enabled = !keys.is_empty();
         let title = match keys.as_slice() {
-            [key] if key == SHELL_KEY => "force-quit-relaunch",
-            _ => "force-quit-button",
+            [key] if key == SHELL_KEY => text!("Relaunch"),
+            _ => text!("Force Quit"),
         };
         self.selected = keys;
         if let Some(button) = self.ui.widget_as::<Button>(self.button.0) {
             button.set_enabled(enabled);
-            button.set_title(&L10N.tr(title));
+            button.set_title(&title.tr());
         }
     }
 
@@ -234,19 +228,21 @@ impl ForceQuitView {
         let text = &mut self.ui.context().text;
         let hint = paragraph(
             text,
-            &L10N.tr("force-quit-hint"),
+            &tr!(
+                "If an app does not respond for a while, select its name and click Force Quit. If the whole desktop stops responding, press Shift+Ctrl+Alt+Esc twice to restart it."
+            ),
             TextStyle::role(TextRole::Callout, palette.ink2),
             text_width,
         );
         let caption = paragraph(
             text,
-            &L10N.tr("force-quit-shortcut-hint"),
+            &tr!("You can open this window with Ctrl+Alt+Esc."),
             TextStyle::role(TextRole::Callout, palette.ink3),
             caption_width.max(0.0),
         );
         let empty = empty.then(|| {
             text.paragraph(
-                &L10N.tr("force-quit-empty"),
+                &tr!("No apps are open."),
                 TextStyle::role(TextRole::Body, palette.ink2),
                 Some(text_width),
                 TextAlign::Center,
@@ -310,8 +306,14 @@ impl ForceQuitView {
             .collect();
         let title = match names.as_slice() {
             [] => return None,
-            [name] => L10N.tr_args("force-quit-confirm", [("name", (*name).to_owned().into())]),
-            _ => L10N.tr_args("force-quit-confirm-many", [("count", names.len().into())]),
+            [name] => tr!(
+                "Do you want to force “{name}” to quit?",
+                name = (*name).to_owned()
+            ),
+            _ => tr!(
+                "Do you want to force the {count} selected apps to quit?",
+                count = names.len()
+            ),
         };
         let icon = match keys.as_slice() {
             [key] => self
@@ -324,13 +326,13 @@ impl ForceQuitView {
         let signals = self.signals.clone();
         let alert = Alert::new(
             &title,
-            &L10N.tr("force-quit-confirm-message"),
+            &tr!("You will lose any unsaved changes."),
             move |choice| {
                 signals.borrow_mut().push(Signal::Chosen(choice.to_owned()));
             },
         )
-        .primary(&L10N.tr("force-quit-button"), FORCE_QUIT)
-        .cancel(&L10N.tr("force-quit-cancel"), CANCEL);
+        .primary(&tr!("Force Quit"), FORCE_QUIT)
+        .cancel(&tr!("Cancel"), CANCEL);
         let alert = match icon {
             Some(icon) => alert.icon(icon),
             None => alert,
@@ -391,8 +393,8 @@ impl ForceQuitView {
         let mut update = self.ui.accessibility();
         if let Some((_, root)) = update.nodes.first_mut() {
             root.set_role(Role::Dialog);
-            root.set_label(L10N.tr("force-quit-title"));
-            root.set_description(L10N.tr("force-quit-hint"));
+            root.set_label(tr!("Force Quit Apps"));
+            root.set_description(tr!("If an app does not respond for a while, select its name and click Force Quit. If the whole desktop stops responding, press Shift+Ctrl+Alt+Esc twice to restart it."));
         }
         update
     }

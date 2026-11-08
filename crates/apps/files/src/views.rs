@@ -1,3 +1,4 @@
+use bande_l10n::{Text, text};
 use bande_xdg::replace_file;
 use std::collections::HashSet;
 use std::fs;
@@ -35,12 +36,12 @@ impl ViewMode {
         Self::ALL.into_iter().find(|mode| mode.name() == name)
     }
 
-    pub(crate) fn message(self) -> &'static str {
+    pub(crate) fn message(self) -> Text {
         match self {
-            Self::Icons => "view-icons",
-            Self::List => "view-list",
-            Self::Columns => "view-columns",
-            Self::Gallery => "view-gallery",
+            Self::Icons => text!("Icons"),
+            Self::List => text!("List"),
+            Self::Columns => text!("Columns"),
+            Self::Gallery => text!("Gallery"),
         }
     }
 }

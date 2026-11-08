@@ -1,4 +1,5 @@
 use bande_datetime::DateFormats;
+use bande_l10n::{tr, trn};
 use bande_notify::Notification;
 use bande_toolkit::ui::focus_ring_for;
 use bande_toolkit::{
@@ -6,8 +7,6 @@ use bande_toolkit::{
     Spacing, TextAlign, TextRole, TextStyle, TextSystem,
 };
 use jiff::Zoned;
-
-use crate::L10N;
 
 pub const RADIUS: f32 = Radius::XL;
 const PADDING_X: f32 = Spacing::L as f32;
@@ -69,10 +68,10 @@ pub fn age_label(arrived: &Zoned, now: &Zoned, dates: &DateFormats) -> String {
         .until(now.date())
         .map_or(0, |span| span.get_days());
     match (minutes, days) {
-        (0, _) => L10N.tr("age-now"),
-        (1..60, _) => L10N.tr_args("age-minutes", [("count", minutes.into())]),
-        (_, ..=0) => L10N.tr_args("age-hours", [("count", (minutes / 60).into())]),
-        (_, 1) => L10N.tr("age-yesterday"),
+        (0, _) => tr!("now"),
+        (1..60, _) => tr!("{count} min ago", count = minutes),
+        (_, ..=0) => trn!("1 hour ago", "{count} hours ago", count = (minutes / 60)),
+        (_, 1) => tr!("Yesterday"),
         (_, 2..7) => dates.weekday(arrived),
         _ => dates.date(arrived, arrived.year() != now.year()),
     }
@@ -176,7 +175,11 @@ impl Card {
         });
         let more = (count > 1).then(|| {
             let paragraph = text.paragraph(
-                &L10N.tr_args("more", [("count", (count - 1).into())]),
+                &trn!(
+                    "1 more notification",
+                    "{count} more notifications",
+                    count = (count - 1)
+                ),
                 TextStyle::role(TextRole::Callout, palette.ink3),
                 Some(text_width),
                 TextAlign::Start,

@@ -4,11 +4,10 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::path::Path;
 use std::process::ExitCode;
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_l10n::Localizer;
+use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{Alert, Context, FreeLayout, SecureField, Ui, Widget, WidgetId};
 use bande_toolkit::{
     App, Color, Edges, KeyboardFocus, LayerKind, LayerOptions, Role, Scene, TextSystem, Window,
@@ -21,9 +20,6 @@ use zeroize::Zeroizing;
 
 const NAMESPACE: &str = "bande-secrets-prompt";
 const FIELD_FONT: f32 = 13.0;
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-secrets-prompt")));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -44,7 +40,7 @@ struct Request {
 
 fn app_name(identity: Option<&str>) -> String {
     let Some(identity) = identity else {
-        return L10N.tr("an-app");
+        return tr!("An app");
     };
     let entries = handlers(
         &data_dirs(),
@@ -123,43 +119,65 @@ fn reply(line: &str) -> bool {
 impl Prompt {
     fn texts(&self, note: Option<String>) -> (String, String) {
         let request = &self.request;
-        let app = || request.app.clone().into();
-        let keychain = || request.keychain.clone().into();
+        let app = || request.app.clone();
+        let keychain = || request.keychain.clone();
         let (title, message) = match (request.mode, self.first.is_some()) {
             (Mode::Unlock, _) => (
-                L10N.tr_args("unlock-title", [("app", app()), ("keychain", keychain())]),
-                L10N.tr("unlock-message"),
+                tr!(
+                    "“{app}” wants to use the “{keychain}” keychain.",
+                    app = app(),
+                    keychain = keychain()
+                ),
+                tr!("Enter the keychain password."),
             ),
             (Mode::Allow, _) => (
-                L10N.tr_args(
-                    "allow-title",
-                    [
-                        ("app", app()),
-                        ("count", request.items.len().into()),
-                        (
-                            "item",
-                            request.items.first().cloned().unwrap_or_default().into(),
-                        ),
-                    ],
+                trn!(
+                    "“{app}” wants to use your confidential information stored in “{item}” in your keychain.",
+                    "“{app}” wants to use {count} passwords stored in your keychain.",
+                    count = request.items.len(),
+                    app = app(),
+                    item = request.items.first().cloned().unwrap_or_default(),
                 ),
-                L10N.tr_args("allow-message", [("keychain", keychain())]),
+                tr!(
+                    "To allow this, enter the “{keychain}” keychain password.",
+                    keychain = keychain()
+                ),
             ),
             (Mode::Create, false) => (
-                L10N.tr_args("create-title", [("app", app()), ("keychain", keychain())]),
-                L10N.tr("create-message"),
+                tr!(
+                    "“{app}” wants to create a new keychain, “{keychain}”.",
+                    app = app(),
+                    keychain = keychain()
+                ),
+                tr!("Choose a password for the new keychain."),
             ),
             (Mode::Create, true) => (
-                L10N.tr_args("create-title", [("app", app()), ("keychain", keychain())]),
-                L10N.tr("verify-message"),
+                tr!(
+                    "“{app}” wants to create a new keychain, “{keychain}”.",
+                    app = app(),
+                    keychain = keychain()
+                ),
+                tr!("Enter the password again to verify it."),
             ),
-            (Mode::UpdateLogin, _) => (L10N.tr("login-title"), L10N.tr("login-message")),
+            (Mode::UpdateLogin, _) => (
+                tr!("Your login keychain was not unlocked with your login password."),
+                tr!(
+                    "Enter the keychain’s old password to update it to your login password, or create a new keychain. The old keychain is kept."
+                ),
+            ),
             (Mode::Reveal, _) => (
-                L10N.tr_args("reveal-title", [("app", app())]),
-                L10N.tr_args("allow-message", [("keychain", keychain())]),
+                tr!("“{app}” wants to show your saved passwords.", app = app()),
+                tr!(
+                    "To allow this, enter the “{keychain}” keychain password.",
+                    keychain = keychain()
+                ),
             ),
             (Mode::Network, _) => (
-                L10N.tr_args("network-title", [("network", keychain())]),
-                L10N.tr("network-message"),
+                tr!(
+                    "The network “{network}” requires a password.",
+                    network = keychain()
+                ),
+                tr!("Enter the password to join it."),
             ),
         };
         match note {
@@ -173,8 +191,8 @@ impl Prompt {
         let choice = Rc::clone(&self.choice);
         let submitted = Rc::clone(&self.choice);
         let placeholder = match self.first {
-            Some(_) => L10N.tr("verify"),
-            None => L10N.tr("password"),
+            Some(_) => tr!("Verify"),
+            None => tr!("Password"),
         };
         let field = SecureField::new(&placeholder, FIELD_FONT, move |_| {
             submitted
@@ -188,25 +206,25 @@ impl Prompt {
         .accessory(field);
         let alert = match self.request.mode {
             Mode::Unlock => alert
-                .cancel(&L10N.tr("cancel"), "cancel")
-                .primary(&L10N.tr("ok"), "allow"),
+                .cancel(&tr!("Cancel"), "cancel")
+                .primary(&tr!("OK"), "allow"),
             Mode::Allow => alert
-                .other(&L10N.tr("always-allow"), "always")
-                .cancel(&L10N.tr("deny"), "cancel")
-                .primary(&L10N.tr("allow"), "allow"),
+                .other(&tr!("Always Allow"), "always")
+                .cancel(&tr!("Deny"), "cancel")
+                .primary(&tr!("Allow"), "allow"),
             Mode::Create => alert
-                .cancel(&L10N.tr("cancel"), "cancel")
-                .primary(&L10N.tr("create"), "allow"),
+                .cancel(&tr!("Cancel"), "cancel")
+                .primary(&tr!("Create"), "allow"),
             Mode::Reveal => alert
-                .cancel(&L10N.tr("cancel"), "cancel")
-                .primary(&L10N.tr("allow"), "allow"),
+                .cancel(&tr!("Cancel"), "cancel")
+                .primary(&tr!("Allow"), "allow"),
             Mode::Network => alert
-                .cancel(&L10N.tr("cancel"), "cancel")
-                .primary(&L10N.tr("join"), "allow"),
+                .cancel(&tr!("Cancel"), "cancel")
+                .primary(&tr!("Join"), "allow"),
             Mode::UpdateLogin => alert
-                .other(&L10N.tr("new-keychain"), "new")
-                .cancel(&L10N.tr("not-now"), "cancel")
-                .primary(&L10N.tr("update-password"), "allow"),
+                .other(&tr!("Create New Keychain"), "new")
+                .cancel(&tr!("Not Now"), "cancel")
+                .primary(&tr!("Update Password"), "allow"),
         };
         self.ui.present_dialog(alert);
         self.stage = Stage::Asking;
@@ -241,7 +259,7 @@ impl Prompt {
                 if self.request.mode == Mode::Create && self.first.as_ref() != Some(&secret) =>
             {
                 self.first = None;
-                self.present(Some(L10N.tr("mismatch")));
+                self.present(Some(tr!("The passwords don’t match. Try again.")));
             }
             "allow" | "always" => {
                 let line = Zeroizing::new(format!("{action}\t{}\n", secret.as_str()));
@@ -268,7 +286,7 @@ impl Prompt {
         match line {
             "wrong" if self.stage == Stage::Waiting => {
                 self.first = None;
-                self.present(Some(L10N.tr("wrong-password")));
+                self.present(Some(tr!("The password you entered is incorrect.")));
             }
             _ => self.stage = Stage::Done,
         }

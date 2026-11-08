@@ -63,14 +63,14 @@ prepare() {
     mapfile -t wanted < <(packages "$stage" | xargs -n1)
     if [ $setup = 1 ]; then
         ci/apt-install.sh "${wanted[@]}"
-        [ "$stage" = all ] || command -v rustup > /dev/null || ci/apt-install.sh rustup
-        [ "$stage" = all ] || ci/release/toolchain.sh
+        command -v rustup > /dev/null || ci/apt-install.sh rustup
+        ci/release/toolchain.sh
         return
     fi
     for package in "${wanted[@]}"; do
         [ "$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null)" = installed ] || missing+=("$package")
     done
-    [ "$stage" = all ] || command -v rustup > /dev/null || missing+=(rustup)
+    command -v rustup > /dev/null || missing+=(rustup)
     [ ${#missing[@]} -eq 0 ] ||
         { echo "verify.sh: the $stage stage needs ${missing[*]}; install them (ci/apt-install.sh does)" >&2; exit 1; }
 }

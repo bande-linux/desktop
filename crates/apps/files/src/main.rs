@@ -15,7 +15,7 @@ use bande_app::{
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_backup::client::{Browsing, CannotBrowse, open_browser};
 use bande_files::{
-    BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
+    BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, ServersSeen,
     Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
     recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
@@ -24,6 +24,7 @@ use bande_files::{
 };
 use bande_fs::{History, Running, Trash};
 use bande_inbox::{Inbox, Outbox};
+use bande_l10n::tr;
 use bande_quick_look::{Action, Panel, QuickLookLink, remembered_size, serve_worker};
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
@@ -52,10 +53,10 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Files"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Files Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -982,7 +983,7 @@ impl Files {
         let size = (width.round() as u32, height.round() as u32);
         match cx.open(
             Kind::Panel(QUICK_LOOK),
-            &L10N.tr("menu-quick-look"),
+            &tr!("Quick Look"),
             size,
             |appearance| {
                 Pane::QuickLook(Box::new(QuickLookPane {

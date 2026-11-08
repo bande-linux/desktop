@@ -1,11 +1,10 @@
 use std::io;
 use std::sync::mpsc::{self, Sender};
 
+use bande_l10n::{text, tr};
+use bande_settings_panes::PaneId;
 use bande_toolkit::ui::{Label, PopUpButton, Widget};
 use bande_xdg::{Apps, config_dirs, data_dirs};
-
-use crate::L10N;
-use bande_settings_panes::PaneId;
 
 use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
@@ -139,7 +138,11 @@ pub fn follow_default_apps(updates: Updates) -> Sender<DefaultAppCommand> {
             if let DefaultAppCommand::Choose(role, id) = command
                 && let Err(error) = choose_default(apps, role, &id)
             {
-                updates.send(pane_failed(PaneId::Apps, "default-app-failed", error));
+                updates.send(pane_failed(
+                    PaneId::Apps,
+                    text!("Couldn't change the default app."),
+                    error,
+                ));
             }
             if !updates.send(Update::DefaultApps(default_apps(apps))) {
                 break;
@@ -149,19 +152,32 @@ pub fn follow_default_apps(updates: Updates) -> Sender<DefaultAppCommand> {
     sender
 }
 
+fn role_label(role: &str) -> String {
+    match role {
+        "web-browser" => tr!("Web browser"),
+        "mail" => tr!("Mail"),
+        "music" => tr!("Music"),
+        "video" => tr!("Video"),
+        "pictures" => tr!("Pictures"),
+        "pdf" => tr!("PDF"),
+        "text" => tr!("Text"),
+        other => other.to_owned(),
+    }
+}
+
 impl SettingsView {
     pub(crate) fn default_app_rows(&mut self) -> Widgets {
         let Some(defaults) = self.default_apps.clone() else {
-            return vec![muted_row(&L10N.tr("looking-for-apps"))];
+            return vec![muted_row(&tr!("Looking for apps…"))];
         };
         defaults
             .into_iter()
             .map(|role| {
-                let label = L10N.tr(&format!("role-{}", role.role));
+                let label = role_label(role.role);
                 if role.apps.is_empty() {
                     return boxed(Row::new(
                         Text::new(&label, Tone::Primary),
-                        Some(boxed(Label::new(&L10N.tr("no-app-installed")))),
+                        Some(boxed(Label::new(&tr!("No app installed")))),
                     ));
                 }
                 let ids: Vec<String> = role.apps.iter().map(|app| app.id.clone()).collect();

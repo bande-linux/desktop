@@ -2,10 +2,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
+use bande_l10n::{tr, trn};
 use bande_xdg::{replace_file, state_home};
 
 use super::{CHECK_SLACK, Reboot, SoftwareState};
-use crate::L10N;
 
 const FILE: &str = "bande/software-badge";
 const PACKAGES: &str = "/var/lib/dpkg/status";
@@ -108,17 +108,21 @@ pub(crate) fn glance(every: Option<Duration>, restart_pending: bool) -> Glance {
         return Glance::Due;
     }
     if restart_pending {
-        return Glance::Known(Some(L10N.tr("restart-to-finish")));
+        return Glance::Known(Some(tr!("Restart to finish updating")));
     }
     let packages_changed = modified(PACKAGES)
         .zip(checked)
         .is_some_and(|(packages, checked)| packages > checked);
     Glance::Known(match remembered {
-        Remembered::RestartToUpdate if boot == boot_id() => Some(L10N.tr("restart-to-update")),
-        Remembered::Interrupted if !packages_changed => Some(L10N.tr("updates-interrupted")),
-        Remembered::Available(count) if !packages_changed => {
-            Some(L10N.tr_args("updates-available", [("count", count.into())]))
+        Remembered::RestartToUpdate if boot == boot_id() => Some(tr!("Restart to install updates")),
+        Remembered::Interrupted if !packages_changed => {
+            Some(tr!("Updates didn't finish installing"))
         }
+        Remembered::Available(count) if !packages_changed => Some(trn!(
+            "1 update is available",
+            "{count} updates are available",
+            count = count
+        )),
         _ => None,
     })
 }

@@ -1,6 +1,10 @@
 use bande_fs::Action;
+use bande_l10n::{text, tr};
 use std::path::PathBuf;
 
+use crate::controls::{Signal, sender};
+use crate::servers::ServerDone;
+use crate::view::{FilesView, Rename};
 use bande_fs::{
     Access, Class, Entry, access, runnable, set_extension_hidden, set_mode, with_access,
     with_runnable,
@@ -8,11 +12,6 @@ use bande_fs::{
 use bande_toolkit::ui::{
     CheckState, Checkbox, Key, Modifiers, PopUpButton, TextField, Toggle, WidgetId,
 };
-
-use crate::L10N;
-use crate::controls::{Signal, sender};
-use crate::servers::ServerDone;
-use crate::view::{FilesView, Rename};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct HideChoice {
@@ -52,22 +51,24 @@ fn check(on: bool) -> CheckState {
 }
 
 pub(crate) fn class_title(class: Class) -> String {
-    L10N.tr(match class {
-        Class::Owner => "access-you",
-        Class::Group => "access-group",
-        Class::Others => "access-everyone",
+    (match class {
+        Class::Owner => text!("You"),
+        Class::Group => text!("Group"),
+        Class::Others => text!("Everyone"),
     })
+    .tr()
 }
 
 fn access_titles() -> Vec<String> {
     Access::ALL
         .iter()
         .map(|access| {
-            L10N.tr(match access {
-                Access::ReadWrite => "access-read-write",
-                Access::ReadOnly => "access-read-only",
-                Access::NoAccess => "access-none",
+            (match access {
+                Access::ReadWrite => text!("Read & Write"),
+                Access::ReadOnly => text!("Read only"),
+                Access::NoAccess => text!("No Access"),
             })
+            .tr()
         })
         .collect()
 }
@@ -98,7 +99,7 @@ impl FilesView {
 
     fn hide_checkbox(&mut self, wanted: HideChoice) -> WidgetId {
         let send = sender(&self.signals);
-        let mut checkbox = Checkbox::new(&L10N.tr("hide-extension"), check(wanted.on), move |on| {
+        let mut checkbox = Checkbox::new(&tr!("Hide extension"), check(wanted.on), move |on| {
             send(Signal::HideExtension(on));
         });
         checkbox.set_enabled(wanted.enabled);
@@ -237,17 +238,22 @@ impl FilesView {
                 self.browser.refresh(folders.as_slice());
                 self.selection_changed();
             }
-            Err(error) => self.show_notice(
-                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-            ),
+            Err(error) => self.show_notice(tr!(
+                "The operation couldn’t be completed: {error}",
+                error = error.to_string()
+            )),
         }
     }
 
     fn runnable_toggle(&mut self, on: bool) -> WidgetId {
         let send = sender(&self.signals);
-        self.insert(Toggle::new(&L10N.tr("allow-running"), on, move |on| {
-            send(Signal::Runnable(on));
-        }))
+        self.insert(Toggle::new(
+            &tr!("Allow running as a program"),
+            on,
+            move |on| {
+                send(Signal::Runnable(on));
+            },
+        ))
     }
 
     fn access_pop_up(&mut self, class: Class, shown: Access) -> WidgetId {
@@ -349,9 +355,10 @@ impl FilesView {
                     info.mode = Some(changed);
                 }
             }
-            Err(error) => self.show_notice(
-                L10N.tr_args("error-permissions", [("error", error.to_string().into())]),
-            ),
+            Err(error) => self.show_notice(tr!(
+                "The permissions couldn’t be changed: {error}",
+                error = error.to_string()
+            )),
         }
         self.sync_inspector_controls();
     }

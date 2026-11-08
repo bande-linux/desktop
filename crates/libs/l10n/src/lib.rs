@@ -11,6 +11,7 @@ pub use bande_l10n_macros::{text, tr, trn};
 
 pub const CATALOGS: &str = "/usr/share/bande/l10n";
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
+const REGION_VARIABLES: [&str; 4] = ["LC_ALL", "LC_TIME", "LC_MEASUREMENT", "LANG"];
 
 static PROGRAM: LazyLock<Catalogs> = LazyLock::new(|| {
     Catalogs::open(
@@ -79,6 +80,7 @@ pub fn translate_plural(
 
 struct Catalogs {
     folder: PathBuf,
+    installed: Vec<String>,
     chain: Vec<(String, OnceLock<Option<Catalog>>)>,
     others: Vec<String>,
     development: OnceLock<Option<Catalog>>,
@@ -103,6 +105,7 @@ impl Catalogs {
             .collect();
         Self {
             folder: folder.to_owned(),
+            installed,
             chain,
             others,
             development: OnceLock::new(),
@@ -181,8 +184,8 @@ fn installed_in(folder: &Path) -> Vec<String> {
     languages
 }
 
-pub fn installed_languages(program: &str) -> Vec<String> {
-    installed_in(&Path::new(CATALOGS).join(program))
+pub fn installed_languages() -> &'static [String] {
+    &PROGRAM.installed
 }
 
 fn parent(tag: &str) -> Option<&str> {
@@ -202,6 +205,16 @@ pub fn preferred_languages() -> Vec<String> {
         .into_iter()
         .filter_map(|tag| tag.split('-').next().map(str::to_owned))
         .collect()
+}
+
+pub fn region_language() -> Option<String> {
+    let locale = REGION_VARIABLES
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))?;
+    if matches!(locale.as_str(), "C" | "POSIX") || locale.starts_with("C.") {
+        return None;
+    }
+    language_of_locale(&locale).and_then(|tag| tag.split('-').next().map(str::to_owned))
 }
 
 fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<String> {

@@ -1,14 +1,14 @@
 use std::fs;
 use std::path::Path;
 
-use bande_watch::{Changes, FolderWatch};
-use zbus::blocking::Connection;
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::follow::{Update, Updates};
 use crate::pages::{Widgets, boxed};
 use crate::view::SettingsView;
 use crate::widgets::{Row, Text, Tone};
+use bande_watch::{Changes, FolderWatch};
+use zbus::blocking::Connection;
 
 const DISK_DIRECTORY: &str = "/run/bande-disk-encryption";
 const DISK_STATUS: &str = "/run/bande-disk-encryption/status";
@@ -94,31 +94,35 @@ impl SettingsView {
     pub(crate) fn security_status_rows(&mut self) -> Widgets {
         let status = self.security;
         let disk_detail = match status.disk {
-            DiskEncryption::Plain => L10N.tr("disk-encryption-plain"),
-            DiskEncryption::Off => L10N.tr("disk-encryption-off"),
-            DiskEncryption::Encrypting(percent) => L10N.tr_args(
-                "disk-encryption-encrypting",
-                [("percent", percent.to_string().into())],
+            DiskEncryption::Plain => tr!(
+                "Off. Anyone with this computer can read your files. Turning it on needs a new install."
             ),
-            DiskEncryption::On => L10N.tr("disk-encryption-on"),
+            DiskEncryption::Off => tr!("Off. Anyone with this computer can read your files."),
+            DiskEncryption::Encrypting(percent) => tr!(
+                "Encrypting, {percent}% done. Your files are not fully protected until this finishes.",
+                percent = percent.to_string()
+            ),
+            DiskEncryption::On => {
+                tr!("On. Your files can only be read with your password or recovery key.")
+            }
         };
         let remote_detail = if status.remote_login {
-            L10N.tr("remote-login-on")
+            tr!("On. Others on your network can try to sign in over SSH.")
         } else {
-            L10N.tr("remote-login-off")
+            tr!("Off.")
         };
         vec![
             boxed(
-                Row::new(Text::new(&L10N.tr("disk-encryption"), Tone::Primary), None)
+                Row::new(Text::new(&tr!("Disk encryption"), Tone::Primary), None)
                     .detail(Text::new(&disk_detail, Tone::Muted).caption()),
             ),
             boxed(
-                Row::new(Text::new(&L10N.tr("remote-login"), Tone::Primary), None)
+                Row::new(Text::new(&tr!("Remote Login"), Tone::Primary), None)
                     .detail(Text::new(&remote_detail, Tone::Muted).caption()),
             ),
             boxed(
-                Row::new(Text::new(&L10N.tr("native-apps"), Tone::Primary), None)
-                    .detail(Text::new(&L10N.tr("native-apps-reach"), Tone::Muted).caption()),
+                Row::new(Text::new(&tr!("Apps you install"), Tone::Primary), None)
+                    .detail(Text::new(&tr!("Apps from Flatpak are sandboxed. Other programs run with your full access to your files, and nothing here can contain them, so only run programs you trust."), Tone::Muted).caption()),
             ),
         ]
     }

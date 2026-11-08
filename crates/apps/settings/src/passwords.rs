@@ -2,6 +2,14 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::mpsc::{self, Sender};
 
+use bande_l10n::{text, tr};
+
+use crate::failure::{kind, not_responding, unresponsive};
+use crate::follow::{Command, Update, Updates, spawn};
+use crate::forget::Forget;
+use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row, submit};
+use crate::view::{Anchor, Intent, SettingsView, intent};
+use crate::widgets::{Row, Text, Tone};
 use bande_settings_panes::PaneId;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, SearchField, SecureField, Stack, Widget};
@@ -14,14 +22,6 @@ use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::message::Type;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use zeroize::Zeroizing;
-
-use crate::L10N;
-use crate::failure::{kind, not_responding, unresponsive};
-use crate::follow::{Command, Update, Updates, spawn};
-use crate::forget::Forget;
-use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row, submit};
-use crate::view::{Anchor, Intent, SettingsView, intent};
-use crate::widgets::{Row, Text, Tone};
 
 const SECRETS: &str = "org.freedesktop.secrets";
 const SECRETS_PATH: &str = "/org/freedesktop/secrets";
@@ -77,14 +77,14 @@ pub struct Keychain {
 
 type WireSecret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
 
-fn keychain_failure(what: &str, error: &zbus::Error) -> Update {
-    tracing::warn!("{what}: {error}");
+fn keychain_failure(what: bande_l10n::Text, error: &zbus::Error) -> Update {
+    tracing::warn!("{what:?}: {error}");
     let failure = if unresponsive(error) {
-        not_responding("service-keychain")
+        not_responding(text!("The keychain"))
     } else if NO_LONGER_OPEN.contains(&kind(error).as_str()) {
-        L10N.tr("passwords-locked-again")
+        tr!("The keychain locked. Unlock it again to continue.")
     } else {
-        L10N.tr(what)
+        what.tr()
     };
     Update::PaneFailed(PaneId::Passwords, failure)
 }
@@ -101,13 +101,13 @@ fn app_of(entries: &[DesktopEntry], attributes: &HashMap<String, String>) -> Str
         };
     }
     if attributes.get("xdg:schema").map(String::as_str) == Some(NETWORK_SCHEMA) {
-        return L10N.tr("password-network");
+        return tr!("Network");
     }
     attributes
         .get("application")
         .or_else(|| attributes.get("xdg:schema"))
         .map(|app| app_name(entries, app))
-        .unwrap_or_else(|| L10N.tr("password-unknown-app"))
+        .unwrap_or_else(|| tr!("Unknown app"))
 }
 
 struct Client {
@@ -373,17 +373,24 @@ pub fn follow_passwords(
                 Ok(open) => open,
                 Err(error) => {
                     unlocked = false;
-                    updates.send(keychain_failure("passwords-unavailable", &error));
+                    updates.send(keychain_failure(
+                        text!("Couldn't open the keychain."),
+                        &error,
+                    ));
                     updates.send(Update::Passwords(false, Vec::new()));
                     continue;
                 }
             };
             let what = match &command {
-                PasswordCommand::Unlock => "passwords-unlock-failed",
-                PasswordCommand::Reveal(_) | PasswordCommand::Copy(_) => "password-read-failed",
-                PasswordCommand::Change(..) => "password-save-failed",
-                PasswordCommand::Delete(_) => "password-delete-failed",
-                PasswordCommand::Refresh | PasswordCommand::Lock => "passwords-list-failed",
+                PasswordCommand::Unlock => text!("Couldn't show the keychain prompt."),
+                PasswordCommand::Reveal(_) | PasswordCommand::Copy(_) => {
+                    text!("Couldn't read this password.")
+                }
+                PasswordCommand::Change(..) => text!("Couldn't save the new password."),
+                PasswordCommand::Delete(_) => text!("Couldn't delete this password."),
+                PasswordCommand::Refresh | PasswordCommand::Lock => {
+                    text!("Couldn't list your saved passwords.")
+                }
             };
             let result = match command {
                 PasswordCommand::Unlock => open.reveal().map(|revealed| unlocked = revealed),
@@ -408,7 +415,10 @@ pub fn follow_passwords(
             let items = match unlocked {
                 true => open.items().unwrap_or_else(|error| {
                     unlocked = false;
-                    updates.send(keychain_failure("passwords-list-failed", &error));
+                    updates.send(keychain_failure(
+                        text!("Couldn't list your saved passwords."),
+                        &error,
+                    ));
                     Vec::new()
                 }),
                 false => Vec::new(),
@@ -485,33 +495,39 @@ impl SettingsView {
             let mut unlock = intent(&self.intents, |()| {
                 Intent::Passwords(PasswordCommand::Unlock)
             });
-            let button = Button::new(&L10N.tr("passwords-unlock"), move || unlock(()));
+            let button = Button::new(&tr!("Unlock…"), move || unlock(()));
             self.anchors
                 .push((Anchor::Item("passwords-unlock".to_owned()), button.id()));
             return vec![boxed(
                 Row::new(
-                    Text::new(&L10N.tr("passwords-locked"), Tone::Primary),
+                    Text::new(&tr!("Your passwords are locked."), Tone::Primary),
                     Some(boxed(button)),
                 )
-                .detail(Text::new(&L10N.tr("passwords-locked-detail"), Tone::Muted).caption()),
+                .detail(
+                    Text::new(
+                        &tr!("Enter your keychain password to see, copy, change or delete them."),
+                        Tone::Muted,
+                    )
+                    .caption(),
+                ),
             )];
         }
         let field = SearchField::new(
-            &L10N.tr("passwords-search"),
+            &tr!("Website, account or app"),
             &self.keychain.query,
             submit(&self.intents, Intent::PasswordQuery),
         );
         self.anchors.push((Anchor::Picker, field.id()));
         let mut lock = intent(&self.intents, |()| Intent::Passwords(PasswordCommand::Lock));
         let mut rows = vec![boxed(Row::new(
-            Text::new(&L10N.tr("passwords-unlocked"), Tone::Primary),
+            Text::new(&tr!("Search passwords"), Tone::Primary),
             Some(boxed(Stack::new(
                 Axis::Horizontal,
                 Spacing::S as f32,
                 0.0,
                 vec![
                     boxed(field),
-                    boxed(Button::new(&L10N.tr("passwords-lock"), move || lock(()))),
+                    boxed(Button::new(&tr!("Lock"), move || lock(()))),
                 ],
             ))),
         ))];
@@ -523,13 +539,14 @@ impl SettingsView {
             .cloned()
             .collect::<Vec<_>>();
         if items.is_empty() {
-            rows.push(muted_row(&L10N.tr(
-                if self.keychain.query.trim().is_empty() {
-                    "passwords-none"
+            rows.push(muted_row(
+                &(if self.keychain.query.trim().is_empty() {
+                    text!("No saved passwords.")
                 } else {
-                    "passwords-no-match"
-                },
-            )));
+                    text!("No passwords match.")
+                })
+                .tr(),
+            ));
         }
         for item in items {
             rows.push(self.keychain_row(item));
@@ -541,12 +558,9 @@ impl SettingsView {
         let target = Forget::Password(item.path.clone());
         if self.forgetting.as_ref() == Some(&target) {
             return self.confirm_row(
-                &L10N.tr_args(
-                    "password-delete-question",
-                    [("name", item.label.clone().into())],
-                ),
-                &L10N.tr("password-delete-warning"),
-                &L10N.tr("password-delete"),
+                &tr!("Delete “{name}”?", name = item.label.clone()),
+                &tr!("The app that saved it will ask for the password again."),
+                &tr!("Delete"),
             );
         }
         let anchor = format!("password:{}", item.path);
@@ -558,7 +572,7 @@ impl SettingsView {
                     Concealed(Zeroizing::new(password)),
                 ))
             });
-            let field = SecureField::new(&L10N.tr("password-new"), FIELD_SIZE, move |password| {
+            let field = SecureField::new(&tr!("New password"), FIELD_SIZE, move |password| {
                 change(password.to_owned())
             });
             self.anchors.push((Anchor::Password, field.id()));
@@ -569,7 +583,7 @@ impl SettingsView {
                 0.0,
                 vec![
                     boxed(field),
-                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                    boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
                 ],
             );
             return boxed(
@@ -605,23 +619,21 @@ impl SettingsView {
             0.0,
             vec![
                 button(
-                    &L10N.tr(if revealed.is_some() {
-                        "password-hide"
+                    &(if revealed.is_some() {
+                        text!("Hide")
                     } else {
-                        "password-show"
-                    }),
+                        text!("Show")
+                    })
+                    .tr(),
                     Box::new(move || show(())),
                 ),
-                button(&L10N.tr("password-copy"), Box::new(move || copied(()))),
-                button(&L10N.tr("password-change"), Box::new(move || changing(()))),
+                button(&tr!("Copy"), Box::new(move || copied(()))),
+                button(&tr!("Change…"), Box::new(move || changing(()))),
                 {
                     let mut ask = intent(&self.intents, move |()| {
                         Intent::AskForget(Some(target.clone()))
                     });
-                    button(
-                        &L10N.tr("password-delete-ellipsis"),
-                        Box::new(move || ask(())),
-                    )
+                    button(&tr!("Delete…"), Box::new(move || ask(())))
                 },
             ],
         );

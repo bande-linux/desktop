@@ -1,4 +1,5 @@
-use crate::L10N;
+use bande_l10n::tr;
+
 use crate::battery::Charge;
 use crate::pages::{Widgets, boxed};
 use crate::view::SettingsView;
@@ -7,26 +8,23 @@ use crate::widgets::{LevelHistory, Row, Text, Tone};
 fn duration(minutes: u32) -> String {
     let (hours, minutes) = (minutes / 60, minutes % 60);
     if hours == 0 {
-        L10N.tr_args("duration-minutes", [("minutes", minutes.into())])
+        tr!("{minutes} min", minutes = minutes)
     } else {
-        L10N.tr_args(
-            "duration-hours-minutes",
-            [("hours", hours.into()), ("minutes", minutes.into())],
-        )
+        tr!("{hours} h {minutes} min", hours = hours, minutes = minutes)
     }
 }
 
 pub fn charge_text(charge: Charge) -> String {
     match charge {
-        Charge::Full => L10N.tr("battery-charged"),
+        Charge::Full => tr!("Charged"),
         Charge::Charging {
             minutes: Some(minutes),
-        } => L10N.tr_args("battery-until-full", [("time", duration(minutes).into())]),
-        Charge::Charging { minutes: None } => L10N.tr("battery-charging"),
+        } => tr!("Charging, {time} until full", time = duration(minutes)),
+        Charge::Charging { minutes: None } => tr!("Charging"),
         Charge::Discharging {
             minutes: Some(minutes),
-        } => L10N.tr_args("battery-remaining", [("time", duration(minutes).into())]),
-        Charge::Discharging { minutes: None } => L10N.tr("battery-on-battery"),
+        } => tr!("On battery, {time} left", time = duration(minutes)),
+        Charge::Discharging { minutes: None } => tr!("On battery"),
     }
 }
 
@@ -35,23 +33,16 @@ impl SettingsView {
         let Some(battery) = self.battery.clone() else {
             return Vec::new();
         };
-        let percent = L10N.tr_args(
-            "battery-percent",
-            [("percent", battery.percent.round().into())],
-        );
+        let percent = tr!("{percent}%", percent = battery.percent.round());
         let mut rows = vec![boxed(
             Row::new(Text::new(&percent, Tone::Primary), None)
                 .detail(Text::new(&charge_text(battery.charge), Tone::Muted).caption()),
         )];
         if battery.history.len() > 1 {
             rows.push(boxed(LevelHistory::new(
-                &L10N.tr("battery-history"),
+                &tr!("Battery level over the last 24 hours"),
                 battery.history,
-                [
-                    L10N.tr("hours-ago-24"),
-                    L10N.tr("hours-ago-12"),
-                    L10N.tr("now"),
-                ],
+                [tr!("24 hours ago"), tr!("12 hours ago"), tr!("Now")],
             )));
         }
         rows

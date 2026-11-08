@@ -5,12 +5,12 @@ use std::rc::Rc;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Instant;
 
+use bande_l10n::tr;
+
+use crate::dialogs::{DIALOGS, alert_scene, fitted};
 use bande_bluetooth::PairingPrompt;
 use bande_toolkit::ui::{Alert, Event, Key, TextField, Ui, Widget};
 use bande_toolkit::{App, Appearance, Rect, Role, Scene, TextSystem, Window, WindowEvent};
-
-use crate::L10N;
-use crate::dialogs::{DIALOGS, alert_scene, fitted};
 
 pub const PAIR_FLAG: &str = "--pair";
 
@@ -56,41 +56,37 @@ impl Question {
 
     fn text(&self) -> String {
         match self {
-            Self::Confirm { device, code } => L10N.tr_args(
-                "pair-confirm-code",
-                [
-                    ("device", device.clone().into()),
-                    ("code", code.clone().into()),
-                ],
+            Self::Confirm { device, code } => tr!(
+                "Does {device} show the code {code}?",
+                device = device.clone(),
+                code = code.clone()
             ),
             Self::Authorize { device } => {
-                L10N.tr_args("pair-authorize", [("device", device.clone().into())])
+                tr!("Allow {device} to connect?", device = device.clone())
             }
-            Self::Show { device, code } => L10N.tr_args(
-                "pair-type-code",
-                [
-                    ("device", device.clone().into()),
-                    ("code", code.clone().into()),
-                ],
+            Self::Show { device, code } => tr!(
+                "Type {code} on {device}, then press Return on it.",
+                device = device.clone(),
+                code = code.clone()
             ),
             Self::Pin { device } => {
-                L10N.tr_args("pair-enter-pin", [("device", device.clone().into())])
+                tr!("Enter the PIN for {device}.", device = device.clone())
             }
         }
     }
 
     fn answer_button(&self) -> Option<String> {
         match self {
-            Self::Confirm { .. } | Self::Pin { .. } => Some(L10N.tr("pair")),
-            Self::Authorize { .. } => Some(L10N.tr("pair-allow")),
+            Self::Confirm { .. } | Self::Pin { .. } => Some(tr!("Pair")),
+            Self::Authorize { .. } => Some(tr!("Allow")),
             Self::Show { .. } => None,
         }
     }
 
     fn decline_button(&self) -> String {
         match self {
-            Self::Authorize { .. } => L10N.tr("pair-deny"),
-            Self::Confirm { .. } | Self::Show { .. } | Self::Pin { .. } => L10N.tr("button-cancel"),
+            Self::Authorize { .. } => tr!("Deny"),
+            Self::Confirm { .. } | Self::Show { .. } | Self::Pin { .. } => tr!("Cancel"),
         }
     }
 }
@@ -274,7 +270,7 @@ impl Dialog {
         let mut field = None;
         if asks_pin {
             let typed = Rc::clone(&pin);
-            let input = TextField::new(&L10N.tr("pair-pin"), "", move |text| {
+            let input = TextField::new(&tr!("PIN"), "", move |text| {
                 *typed.borrow_mut() = text.to_owned();
             })
             .without_text_checking();
@@ -307,7 +303,7 @@ pub fn run_pairing(arguments: &[&str]) -> Result<bool, Box<dyn std::error::Error
     let question = Question::from_arguments(arguments)
         .ok_or_else(|| format!("unknown pairing question {arguments:?}"))?;
     let size = Dialog::new(&question, Appearance::default()).size;
-    let mut window = Window::open(Role::dialog(&L10N.tr("pairing-request"), DIALOGS), size)?;
+    let mut window = Window::open(Role::dialog(&tr!("Pairing Request"), DIALOGS), size)?;
     let mut dialog = Dialog::new(&question, window.appearance());
     bande_toolkit::run(&mut window, &mut dialog)?;
     Ok(dialog.choice.get() == Choice::Accept)

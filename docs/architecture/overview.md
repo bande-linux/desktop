@@ -190,7 +190,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   `arrangement` (one per set of displays). Every setting is optional and has a default.
   ```kdl
   appearance "dark"             // "dark" (default) | "light" | "automatic"
-  bar { edge "left"; size 40; auto-hide #false; floating #true }   // edge "left" | "bottom" | "right" | "top"
+  bar { edge "left"; size 40; auto-hide #false; floating #true; gap 8 }   // edge "left" | "bottom" | "right" | "top"
   idle { screen-saver-after "5m"; display-off-after "10m"; require-password-after "immediately" }   // or "never"; suspend-after follows the display unless set
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }

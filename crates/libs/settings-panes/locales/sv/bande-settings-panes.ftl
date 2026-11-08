@@ -1,4 +1,7 @@
 spelling = Stavning
+text-replacements = Textersättningar
+text-replacements-keywords = textersättning, ersätt, förkortning, genväg, expandera, textsnutt
+text-replacements-note = När du skriver ersätts texten till vänster med texten till höger.
 wifi = Wi-Fi
 wifi-keywords = trådlöst, wlan, internet, nätverk
 wifi-power-keywords = på, av, flygplansläge

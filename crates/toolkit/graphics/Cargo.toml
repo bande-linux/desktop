@@ -8,12 +8,15 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+ash = { workspace = true, optional = true }
 fontique.workspace = true
 image.workspace = true
 libc.workspace = true
+libloading = { workspace = true, optional = true }
 parley.workspace = true
 pollster = { workspace = true, optional = true }
 resvg.workspace = true
+serde_json = { workspace = true, optional = true }
 skrifa.workspace = true
 tracing.workspace = true
 bande-design.workspace = true
@@ -22,7 +25,14 @@ vello_gpu = { workspace = true, optional = true }
 wgpu = { workspace = true, optional = true }
 
 [features]
-gpu = ["dep:pollster", "dep:vello_gpu", "dep:wgpu"]
+gpu = [
+    "dep:ash",
+    "dep:libloading",
+    "dep:pollster",
+    "dep:serde_json",
+    "dep:vello_gpu",
+    "dep:wgpu",
+]
 
 [lints]
 workspace = true

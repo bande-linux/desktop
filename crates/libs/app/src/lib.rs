@@ -239,7 +239,6 @@ pub fn run<P: Program>(info: &'static Info) -> ExitCode {
         println!("{} {}", info.package, info.version);
         return ExitCode::SUCCESS;
     }
-    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init(info.package);
     let arguments = arguments.into_iter().map(argument_text).collect();
     match runner::run::<P>(info, arguments, None) {

@@ -9,7 +9,7 @@ mkdir -p "$out"
 (cd packaging/bande-desktop &&
     DEB_VERSION_OVERRIDE=$version dpkg-buildpackage -b -us -uc &&
     DEB_VERSION_OVERRIDE=$version debian/rules clean)
-mv "packaging/bande-desktop_${version}_all.deb" "$out/"
+mv packaging/*_"${version}"_all.deb "$out/"
 rm -f packaging/*.buildinfo packaging/*.changes
 ls -l "$out"
 deb() { echo "$out/$1_$2_all.deb"; }

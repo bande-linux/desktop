@@ -24,6 +24,10 @@ if grep -rnE '\.actions\b|Desktop Action|DesktopAction' crates/apps/files/src cr
     echo "no application adds entries to the context menus of Files or the desktop: see docs/architecture/behaviour.md"
     exit 1
 fi
+if grep -rnE --include='*.rs' '\b(set_var|remove_var|setenv|putenv|unsetenv)\(' crates | grep -vE '^crates/testing/|/tests/'; then
+    echo "no program changes its own environment: every child would inherit it; set a child's variables on its Command"
+    exit 1
+fi
 ci/check-apps.sh
 ci/release/check-protocols.py
 echo "lint passed"

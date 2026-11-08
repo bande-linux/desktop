@@ -49,6 +49,7 @@ pub fn join_network(network: &NetworkManager, found: &Network) {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         )
     });
@@ -102,6 +103,7 @@ impl Portal {
                 actions: &[(SIGN_IN_ACTION, &sign_in)],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         match posted {

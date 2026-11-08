@@ -86,6 +86,7 @@ impl BatteryNotifier {
                 actions: &[],
                 urgency,
                 sound: Some("battery-low"),
+                desktop_entry: None,
             },
         )?;
         *shown = Some((alert, id));

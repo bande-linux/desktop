@@ -440,7 +440,7 @@ impl Services {
             connection: session.clone(),
             updates: updates.clone(),
             session: worker(session, updates.clone()),
-            audio: follow_audio(updates.clone()),
+            audio: follow_audio(session, updates.clone()),
             network: system.map(|system| follow_network(system, updates.clone())),
             bluetooth: system.map(|system| follow_bluetooth(system, updates.clone())),
             pictures: follow_pictures(session, bande_xdg::data_dirs(), updates.clone()),

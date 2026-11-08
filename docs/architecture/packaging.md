@@ -71,6 +71,16 @@ profiles. Sizes are in [performance.md](performance.md).
   own package carries its English catalog, `en.mo`, through the cargo-deb asset
   `target/release/l10n/development/<program>/*`, which `bande-l10n-tool check` requires. See
   [localisation.md](localisation.md).
+  Packs follow by themselves: whenever dpkg's status changes (`bande-language-packs.path`),
+  `bande-language-packs.service` runs `/usr/libexec/bande-desktop/language-packs`. For each
+  language in use (`/etc/locale.conf`, each person's `~/.config/locale.conf` and per-app
+  languages) and each installed package `P`, it installs `P-l10n-<lang>-<region>`, else
+  `P-l10n-<lang>`, when the archive has it and it is missing; Debian's own packs (Firefox ESR,
+  LibreOffice) come the same way. It waits for the dpkg lock, so it runs once apt or PackageKit
+  has finished, and an upgrade, a new app or a new language each brings its packs. Settings starts
+  the service when a language changes (a polkit rule lets an active local user start this one
+  unit), and the setup assistant at its end. The images install the packs of every language
+  (`language-packs --every-language`), so a first start in any language works offline.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.

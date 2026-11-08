@@ -49,9 +49,7 @@ Package names use lower case, `bande-desktop-l10n-en-gb`, as `firefox-esr-l10n-s
 
 ## Installing on demand
 
-- One rule in `bande-packages`: for each chosen language and each installed package `P`, install `P-l10n-<lang>-<region>` if it exists, else `P-l10n-<lang>`. Debian's own packs (LibreOffice, Firefox ESR) come with it.
-- Settings ▸ Language lists first the languages with a desktop pack in the APT index or installed. Choosing one writes `locale.conf`, runs the rule with progress, and offers Log Out. Offline, the language is set and the page says the text is fetched when online.
-- Software runs the rule when it installs an app, and the update check after updating. The setup assistant, installer and images run it for the language chosen at setup. A per-app language installs that app's pack.
+Done (`docs/architecture/packaging.md`): `bande-desktop`'s `bande-language-packs.path` runs `language-packs` after every package change, installing each installed package's pack for every language in use; Settings starts it when a language changes, setup when the language is chosen, and the images carry every language's packs. Left: Settings ▸ Language listing languages by the packs in the APT index (it lists installed catalogs), with progress and the offline note.
 
 ## Translation-only releases
 
@@ -77,7 +75,7 @@ The language packs are 65 KB (`sv`) and 3 KB (`en-GB`) as `.deb`.
 ## Stages
 
 1. **Desktop** (done, `l10n-catalogs`): the runtime, macros and tool; every desktop crate moved from Fluent ids to English keys, with `sv.po` and `en-GB.po`; `en.mo` in each package; the `bande-desktop-l10n-sv` and `-en-gb` packs; `ci/check-l10n.py` replaced. Settings' language list reads the installed catalogs.
-2. **Installing on demand:** the `bande-packages` rule, Settings, Software, the update check, setup and images.
+2. **Installing on demand** (done but for the language list's APT index and progress).
 3. **Apps repo:** the pin moves to stage 1, every app converted, `en.mo` in each app's package, per-app packs, the shared tool in the gate.
 4. **Translation-only releases** (desktop done; the APT repository and apps left).
 5. **Browser:** Settings and the rule pick up `bande-browser-l10n-*`.

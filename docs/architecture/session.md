@@ -491,7 +491,11 @@ made again.
     connection leaves the bus. The Taskbar is the host (`org.kde.StatusNotifierHost-<pid>`): it
     shows each item that is not `Passive` by its icon name or pixmap; a click opens the item's
     `com.canonical.dbusmenu` menu below it (or calls `Activate` when it has none), a secondary
-    click calls `Activate`. Our own apps use the same menu format for their app menus: an app
+    click calls `Activate`. An app shows an item of its own with `bande_app_menu::StatusItem`:
+    an icon name and an `Entry` menu like its app menus, under the well-known name
+    `org.kde.StatusNotifierItem-<pid>-1`, registered again whenever the watcher returns;
+    dropping it releases the name, which takes the item off the Taskbar. `Activate` arrives
+    as the action `STATUS_ACTIVATE`. Our own apps use the same menu format for their app menus: an app
     owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/bande/MenuBar`;
     the App menu of a window's menu button shows that tree (the first top-level
     submenu as the app row; a

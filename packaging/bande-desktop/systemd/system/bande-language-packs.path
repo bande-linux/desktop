@@ -1,0 +1,9 @@
+[Unit]
+Description=Bring language packs when packages change
+
+[Path]
+PathChanged=/var/lib/dpkg/status
+Unit=bande-language-packs.service
+
+[Install]
+WantedBy=paths.target

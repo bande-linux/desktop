@@ -63,6 +63,7 @@ pub struct Cell {
     pub label: bool,
     pub tabular: bool,
     pub cut: Cut,
+    pub badge: Option<Color>,
 }
 
 impl Cell {
@@ -76,6 +77,7 @@ impl Cell {
             label: false,
             tabular: false,
             cut: Cut::End,
+            badge: None,
         }
     }
 
@@ -107,6 +109,13 @@ impl Cell {
     pub fn tabular(self) -> Self {
         Self {
             tabular: true,
+            ..self
+        }
+    }
+
+    pub fn badge(self, tint: Color) -> Self {
+        Self {
+            badge: Some(tint),
             ..self
         }
     }
@@ -154,6 +163,41 @@ impl Row {
             ..self
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Heading {
+    pub start: usize,
+    pub title: String,
+    pub button: Option<HeadingButton>,
+}
+
+impl Heading {
+    pub fn new(start: usize, title: impl Into<String>) -> Self {
+        Self {
+            start,
+            title: title.into(),
+            button: None,
+        }
+    }
+
+    pub fn button(self, symbol: Image, name: &str, command: &str) -> Self {
+        Self {
+            button: Some(HeadingButton {
+                symbol,
+                name: name.to_owned(),
+                command: command.to_owned(),
+            }),
+            ..self
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeadingButton {
+    pub symbol: Image,
+    pub name: String,
+    pub command: String,
 }
 
 #[derive(Debug)]

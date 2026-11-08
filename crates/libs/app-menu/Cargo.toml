@@ -11,6 +11,8 @@ repository.workspace = true
 bande-inbox.workspace = true
 bande-keyboard.workspace = true
 bande-l10n.workspace = true
+futures-lite.workspace = true
+tracing.workspace = true
 zbus.workspace = true
 
 [lints]

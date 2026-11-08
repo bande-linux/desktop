@@ -13,6 +13,7 @@ use zbus::blocking::Connection;
 pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_locales};
 
 const HELPER: &str = "/usr/libexec/bande-locale-helper";
+const LANGUAGE_PACKS: &str = "bande-language-packs.service";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
 const PKEXEC_DISMISSED: i32 = 126;
@@ -330,12 +331,14 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 other => other,
             };
             match outcome {
-                Ok(()) => {
-                    if let Err(error) = write_user_file(&contents) {
+                Ok(()) => match write_user_file(&contents) {
+                    Ok(()) if setting == SettingId::Language => fetch_language_packs(),
+                    Ok(()) => {}
+                    Err(error) => {
                         tracing::warn!("cannot write the language choice: {error}");
                         updates.send(Update::Failed(setting, tr!("Couldn't make this change.")));
                     }
-                }
+                },
                 Err(failure) => {
                     updates.send(Update::Failed(
                         setting,
@@ -347,6 +350,23 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
         }
     });
     sender
+}
+
+pub(crate) fn fetch_language_packs() {
+    let started = bande_bus::system().and_then(|system| {
+        system
+            .call_method(
+                Some("org.freedesktop.systemd1"),
+                "/org/freedesktop/systemd1",
+                Some("org.freedesktop.systemd1.Manager"),
+                "StartUnit",
+                &(LANGUAGE_PACKS, "replace"),
+            )
+            .map(drop)
+    });
+    if let Err(error) = started {
+        tracing::warn!("cannot fetch the language packs: {error}");
+    }
 }
 
 #[cfg(test)]

@@ -81,7 +81,9 @@ pub use surface_view::{RELEASE_CHORD, SurfaceInput, SurfaceView};
 pub use tab_strip::{
     TAB_HEIGHT, TabAction, TabLabel, TabStrip, TabStripLayout, TabTarget, TabsShown,
 };
-pub use table::{Cell, Column, ROW_HEIGHT, Row, Sort, Table, access_rect, group_heading};
+pub use table::{
+    Cell, Column, Heading, HeadingButton, ROW_HEIGHT, Row, Sort, Table, access_rect, group_heading,
+};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};

@@ -24,6 +24,8 @@ use crate::view::{
 };
 use crate::views::ViewMode;
 
+const COMPUTER_ICONS: [&str; 2] = ["computer", "network-server"];
+const SHARE_ICONS: [&str; 1] = ["folder-remote"];
 const ROW_INSET: f32 = 4.0;
 const NAME_SIZE: f32 = 13.0;
 const SMALL_SIZE: f32 = 11.0;
@@ -88,6 +90,12 @@ pub(crate) fn fitted(area: Rect, image: &Image) -> Rect {
     centred(area, (width * scale).round(), (height * scale).round())
 }
 
+fn is_share(address: &str) -> bool {
+    address
+        .split_once("://")
+        .is_some_and(|(_, rest)| rest.trim_end_matches('/').contains('/'))
+}
+
 impl FilesView {
     fn paragraph(&mut self, text: &str, size: f32, color: Color, weight: f32) -> Paragraph {
         self.text().paragraph(
@@ -137,6 +145,13 @@ impl FilesView {
     pub(crate) fn entry_icon(&mut self, entry: &Entry, pixels: u32) -> Option<Image> {
         if entry.is_folder() {
             return self.icons.first(&["folder"], pixels);
+        }
+        if let Some(address) = entry.server_address() {
+            let names: &[&str] = match is_share(address) {
+                true => &SHARE_ICONS,
+                false => &COMPUTER_ICONS,
+            };
+            return self.icons.first(names, pixels);
         }
         let target = entry
             .link

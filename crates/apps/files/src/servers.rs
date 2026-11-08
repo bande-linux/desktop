@@ -5,7 +5,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use bande_fs::{Action, Change, Purpose, RenameError, Task};
+use bande_fs::{Action, Change, Entry, Purpose, RenameError, Task};
 use bande_inbox::Inbox;
 use bande_volumes::{SavedServer, load_saved_servers, on_connected_volume};
 use bande_xdg::{DesktopEntry, file_uri};
@@ -60,6 +60,14 @@ pub enum ServerField {
     Remember(bool),
     Reconnect(bool),
     Share(usize),
+}
+
+fn share_url(server: &str, share: &str) -> String {
+    format!(
+        "{}/{}",
+        server.trim_end_matches('/'),
+        share.replace('%', "%25").replace(' ', "%20")
+    )
 }
 
 const MAIL_SCHEME: &str = "x-scheme-handler/mailto";
@@ -258,10 +266,38 @@ impl FilesView {
     }
 
     pub(crate) fn connect_to(&mut self, url: String) {
-        self.start_connecting(ServerRequest {
-            url,
-            ..ServerRequest::default()
-        });
+        let request = match &self.shares_of {
+            Some(server) if url.starts_with(&format!("{}/", server.url.trim_end_matches('/'))) => {
+                ServerRequest {
+                    url,
+                    ..server.clone()
+                }
+            }
+            _ => ServerRequest {
+                url,
+                ..ServerRequest::default()
+            },
+        };
+        self.start_connecting(request);
+    }
+
+    fn show_shares(&mut self, request: ServerRequest, shares: Vec<String>) {
+        let browsing = matches!(self.browser.root(), Location::Network | Location::Server(_));
+        if !browsing || shares.is_empty() {
+            self.ask_share(request, shares);
+            return;
+        }
+        let entries = shares
+            .into_iter()
+            .map(|share| {
+                let url = share_url(&request.url, &share);
+                Entry::server(share, url)
+            })
+            .collect();
+        self.browser
+            .show_shares(Location::Server(request.url.clone()), entries);
+        self.shares_of = Some(request);
+        self.selection_changed();
     }
 
     pub(crate) fn server_field(&mut self, field: ServerField) {
@@ -319,11 +355,7 @@ impl FilesView {
                 chosen,
             } if action == "connect" => {
                 if let Some(share) = shares.get(chosen) {
-                    request.url = format!(
-                        "{}/{}",
-                        request.url.trim_end_matches('/'),
-                        share.replace('%', "%25").replace(' ', "%20")
-                    );
+                    request.url = share_url(&request.url, share);
                     self.start_connecting(request);
                 }
             }
@@ -387,7 +419,7 @@ impl FilesView {
             "connected" => self.go(Location::Folder(first.into())),
             "password" => self.ask_server_password(request, &first, false),
             "refused" => self.ask_server_password(request, &first, true),
-            "shares" => self.ask_share(request, details),
+            "shares" => self.show_shares(request, details),
             "host-key" => self.ask_host_key(request, first),
             "host-key-changed" => self.server_failed(
                 request,

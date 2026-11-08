@@ -34,6 +34,7 @@ impl FilesView {
             Location::Trash => L10N.tr("trash-empty"),
             Location::Recents => L10N.tr("recents-empty"),
             Location::Server(_) => L10N.tr("empty-folder"),
+            Location::Network => L10N.tr("network-empty"),
             Location::Search(scope) => {
                 let searching = self.searching.as_ref().filter(|shown| shown.answered)?;
                 L10N.tr_args(

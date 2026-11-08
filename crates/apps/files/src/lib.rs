@@ -47,7 +47,7 @@ pub use servers::{ServerAnswer, ServerRequest, ServersSeen};
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
-    standard_places, volumes_hidden, with_bookmarks, with_nearby, with_place_shown, with_volumes,
+    standard_places, volumes_hidden, with_bookmarks, with_place_shown, with_volumes,
     without_bookmark,
 };
 pub use tabs::{CarriedTab, SavedTab, TAB_BAR_HEIGHT};

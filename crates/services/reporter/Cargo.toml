@@ -14,7 +14,7 @@ jiff.workspace = true
 ring.workspace = true
 bande-https.workspace = true
 rustc-demangle.workspace = true
-rustix = { workspace = true, features = ["fs", "net", "stdio"] }
+rustix = { workspace = true, features = ["fs", "net", "stdio", "thread"] }
 serde_json.workspace = true
 tracing.workspace = true
 
@@ -43,6 +43,7 @@ assets = [
     ["data/bande-reporter.socket", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter-watch.service", "usr/lib/systemd/system/", "644"],
+    ["data/bande-reporter-resources.service", "usr/lib/systemd/system/", "644"],
     ["data/bande-reporter.tmpfiles", "usr/lib/tmpfiles.d/bande-reporter.conf", "644"],
 ]
 

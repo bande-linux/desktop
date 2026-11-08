@@ -152,6 +152,9 @@ build-run <worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the
    architectures.
 5. Check: `curl -s https://bande-linux.github.io/apt/dists/rolling/main/binary-amd64/Packages`
    lists `bande-compositor` at the new version for `amd64`, and the same for `arm64`.
+6. On the mini, `send-symbols --tag vX.Y.Z` sends that run's `bande-debug-symbols` debs to the
+   log server with `ci/release/upload-symbols.sh`, which is on the LAN where GitHub cannot reach
+   it. `rebuild-desktop` sends the symbols of each build it installs the same way.
 
 A published version is never moved or deleted. A bad release is fixed forward with the next
 patch version; a tag whose run failed before apt published it may be deleted and pushed again.

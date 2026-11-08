@@ -1409,6 +1409,7 @@ dependencies = [
  "bande-config",
  "bande-l10n",
  "bande-log",
+ "bande-xdg",
  "spellbook",
  "tracing",
  "zbus",

@@ -91,17 +91,20 @@ nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` 
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
 `xdg-user-dirs`, which the Bande packages that use them declare:
 
-- `bande-shell` recommends NetworkManager (network menu) with Debian's connectivity check
-  (captive portals), UPower (battery), BlueZ (Bluetooth), PipeWire and WirePlumber (volume),
+- `bande-shell` depends on NetworkManager (network menu), UPower (battery) and BlueZ
+  (Bluetooth), since without them the bar would read as a computer without that hardware, and
+  recommends Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
   `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
   only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` recommends
   `dmz-cursor-theme`, whose `DMZ-Black` is the default pointer (`XCURSOR_THEME` unset), with the
   system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
-  (Software Update), power-profiles-daemon (Power) and depends on `locales`, so its helper can
-  generate any language picked in Settings;
+  (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
+  import), `xkb-data` and `locales`, so its helper can generate any language picked in Settings;
+- every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
+  for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
 - `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
-- `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
-  for screen recording;
+- `bande-screenshot` depends on `gst-launch-1.0`, `pipewiresrc` and the VP8 encoder, so screen
+  recording always works, and recommends the H.264 encoder for MP4;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
@@ -116,6 +119,9 @@ login managers, the buses, logind, getty, `user@`, polkit, PackageKit, networkin
 container managers; it does nothing in a chroot or without systemd. It then touches
 `/run/bande-desktop/packages-installed`, which makes each logged-in user's
 `bande-update-finish.path` deal with the session's own processes ([Software Update](session.md)).
+
+Every program the desktop runs and every system file it reads by path is listed in
+`ci/runtime-deps` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.

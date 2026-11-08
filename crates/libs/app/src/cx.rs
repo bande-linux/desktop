@@ -47,6 +47,8 @@ pub struct Cx<P: Program> {
     background: bool,
     pub(crate) resume: Resume,
     pub(crate) installs: OnceCell<Option<InstallWatch>>,
+    pub(crate) activation: Option<String>,
+    pub(crate) raised: bool,
 }
 
 impl<P: Program> Cx<P> {
@@ -71,6 +73,8 @@ impl<P: Program> Cx<P> {
             background,
             resume,
             installs: OnceCell::new(),
+            activation: None,
+            raised: false,
         }
     }
 
@@ -184,6 +188,8 @@ impl<P: Program> Cx<P> {
         let Some(index) = self.index(window) else {
             return;
         };
+        self.raised = true;
+        let token = token.or_else(|| self.activation.take());
         let id = self.info.id;
         let window = &mut self.windows[index];
         let token = match token {

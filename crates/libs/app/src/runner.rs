@@ -462,6 +462,8 @@ impl<P: Program> Runner<P> {
 
     fn activated(&mut self, request: Request) {
         self.cx.resume.touch();
+        self.cx.activation = request.token;
+        self.cx.raised = false;
         let newest = self.cx.views.last().map(|(id, _)| *id);
         if !request.arguments.is_empty() {
             let directory = request.directory.as_deref().unwrap_or(Path::new("/"));
@@ -476,9 +478,12 @@ impl<P: Program> Runner<P> {
             .last()
             .map(|(id, _)| *id)
             .filter(|id| Some(*id) != newest);
-        if let Some(window) = opened.or_else(|| self.cx.focused()) {
-            self.cx.raise(window, request.token);
+        if !self.cx.raised
+            && let Some(window) = opened.or_else(|| self.cx.focused())
+        {
+            self.cx.raise(window, None);
         }
+        self.cx.activation = None;
     }
 
     fn focus(&mut self, index: usize, window: WindowId, focused: bool) {

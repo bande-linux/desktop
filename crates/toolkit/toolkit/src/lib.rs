@@ -15,6 +15,6 @@ pub use bande_toolkit_platform::{
     LayerOptions, MediaKey, MenuPlacement, Panel, RENDERER_VARIABLE, ResizeEdge, Role, SHEET_INSET,
     SessionEnd, ShmLayout, Sizing, SurfaceBuffer, Surfaces, ToplevelState, Transfer, VolumeKey,
     WINDOW_HEADER_HEIGHT, Window, WindowDrag, WindowError, WindowEvent, WindowInSession, run,
-    run_surfaces,
+    run_surfaces, skip_absent_vulkan_drivers,
 };
 pub use bande_widgets as ui;

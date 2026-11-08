@@ -509,7 +509,13 @@ impl TaskbarState {
     }
 
     pub fn request_attention(&mut self, app_id: &str, now: Instant) {
-        self.attention.insert(app_id.to_owned(), now);
+        if self.active.as_deref() != Some(app_id) {
+            self.attention.insert(app_id.to_owned(), now);
+        }
+    }
+
+    pub fn windows_closed(&mut self, app_id: &str) {
+        self.attention.remove(app_id);
     }
 
     pub fn set_rail(&mut self, rail: TaskbarLayout) {
@@ -517,11 +523,13 @@ impl TaskbarState {
     }
 
     pub fn set_active(&mut self, app_id: Option<&str>) {
+        if let Some(app_id) = app_id {
+            self.attention.remove(app_id);
+        }
         self.active = app_id.map(str::to_owned);
     }
 
     pub fn activated(&mut self, app_id: &str) {
-        self.attention.remove(app_id);
         if let Some(state) = self.launcher.get_mut(app_id) {
             state.urgent = false;
         }
@@ -532,7 +540,7 @@ impl TaskbarState {
         let mut entry = before;
         entry.merge(update);
         if entry.urgent && !before.urgent {
-            self.attention.insert(app_id.to_owned(), now);
+            self.request_attention(app_id, now);
         }
         if !entry.urgent && before.urgent {
             self.attention.remove(app_id);
@@ -1718,14 +1726,6 @@ impl TaskbarState {
             });
         } else {
             items.extend(icon_items);
-        }
-        if self.attention.contains_key(app_id) {
-            let ring = rect.inset(-3.0);
-            items.push(Item::Stroke {
-                shape: Shape::rounded(ring, ring.width * OUTLINE_ROUNDNESS),
-                width: 2.0,
-                paint: cx.palette.warning.into(),
-            });
         }
         self.paint_dot(cx, base, cx.sample(&slot.dot), items);
         let entry = self.launcher.get(app_id).copied().unwrap_or_default();

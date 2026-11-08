@@ -830,8 +830,9 @@ system: `bande-system prepare`, started through `bande-system-prepare.service`, 
 copy that boots at the next restart, and a boot that never shows the login window falls back by
 itself. Settings lists the versions under Previous Versions and restores one through
 `bande-system-restore@<id>.service`. Without that layout the offline path below applies. The
-compositor sends `READY=1` to `/run/bande/login-ready` when it first shows the login window or the
-desktop; `bande-boot-health.service` waits for it on a counted boot. `NOTES/plans/update-safety.md`
+compositor sends `READY=1` to `/run/bande/login-ready` once the first frame with the login window or
+the desktop has been flipped onto a display, so a boot that only draws black is not called good;
+`bande-boot-health.service` waits for it on a counted boot. `NOTES/plans/update-safety.md`
 has the design.
 
 How often it checks is `update-check-every` in `config.kdl` (Settings: When available, Every day,

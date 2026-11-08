@@ -505,11 +505,7 @@ impl Compositor {
                 state.swallowed_button = Some(button);
                 return;
             }
-            if let Some(Target::Scrim(owner)) = &target {
-                state.scrim_pressed(owner);
-                state.swallowed_button = Some(button);
-                return;
-            }
+            state.press_outside(under.as_ref().map(|(surface, _)| surface));
             if state.popup_grab.is_none() {
                 match target.as_ref().and_then(Target::frame) {
                     Some(pointed) => {

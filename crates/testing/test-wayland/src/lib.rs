@@ -10,6 +10,7 @@ mod drive;
 mod foreign;
 mod ime;
 pub mod keys;
+mod layer;
 mod lock;
 mod seat;
 mod separate;
@@ -80,6 +81,7 @@ struct Globals {
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
     exported_handle: Option<String>,
+    pressed_outside: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,6 +100,7 @@ pub struct TestClient {
     queue: EventQueue<Globals>,
     globals: Globals,
     windows: Vec<(WlSurface, XdgSurface, XdgToplevel)>,
+    panel: Option<layer::Panel>,
 }
 
 impl TestClient {
@@ -116,6 +119,7 @@ impl TestClient {
             queue,
             globals: Globals::default(),
             windows: Vec::new(),
+            panel: None,
         };
         client.exchange(server);
         client

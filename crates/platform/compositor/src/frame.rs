@@ -156,21 +156,20 @@ fn protocol_edge(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
 pub(crate) enum Target {
     Surface(WlSurface, Point<f64, Logical>),
     Frame(WlSurface, Zone),
-    Scrim(WlSurface),
 }
 
 impl Target {
     pub(crate) fn surface(&self) -> Option<(WlSurface, Point<f64, Logical>)> {
         match self {
             Target::Surface(surface, at) => Some((surface.clone(), *at)),
-            Target::Frame(..) | Target::Scrim(_) => None,
+            Target::Frame(..) => None,
         }
     }
 
     pub(crate) fn frame(&self) -> Option<(WlSurface, Zone)> {
         match self {
             Target::Frame(surface, zone) => Some((surface.clone(), *zone)),
-            Target::Surface(..) | Target::Scrim(_) => None,
+            Target::Surface(..) => None,
         }
     }
 }
@@ -218,7 +217,6 @@ impl State {
                         outer_band(window, location)
                             .map(|zone| Target::Frame(window.surface().clone(), zone))
                     }),
-                Placed::Scrim(owner, _) => Some(Target::Scrim(owner)),
                 Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
             })
     }

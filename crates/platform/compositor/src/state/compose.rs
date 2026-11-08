@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use super::{Compositor, OutputElement, State, is_mapped};
+use super::{Compositor, OutputElement, State};
 use crate::cursor_set::Pointer;
 use crate::element::ScreenElement;
 use smithay::backend::renderer::Renderer as _;
@@ -33,6 +33,7 @@ enum Band {
 }
 
 struct Layers<'m> {
+    state: &'m State,
     map: &'m LayerMap,
     origin: Point<i32, Logical>,
     screen: usize,
@@ -41,16 +42,13 @@ struct Layers<'m> {
 impl Layers<'_> {
     fn push(&self, placed: &mut Vec<Placed<'_>>, layer: Layer) {
         for mapped in self.map.layers_on(layer).rev() {
-            let Some(geometry) = self.map.layer_geometry(mapped) else {
+            let Some(location) = self.state.layer_location(self.screen, self.map, mapped) else {
                 continue;
             };
             let surface = mapped.wl_surface();
-            let at = self.origin + geometry.loc;
+            let at = self.origin + location;
             placed.extend(popup_surfaces(surface, at));
             placed.push(Placed::Surface(surface.clone(), at));
-            if crate::effect::scrim(surface).is_some() && is_mapped(surface) {
-                placed.push(Placed::Scrim(surface.clone(), self.screen));
-            }
         }
     }
 }
@@ -90,7 +88,6 @@ pub(crate) enum Placed<'a> {
     Closing(&'a Closing),
     Overview(usize),
     Backdrop(usize),
-    Scrim(WlSurface, usize),
 }
 
 type Composed<E = ScreenElement> = (
@@ -288,17 +285,6 @@ impl Compositor {
                         renderer.reduced_effects(),
                     ));
                 }
-                Placed::Scrim(owner, screen) => {
-                    if let Some(scrim) = crate::effect::scrim(&owner) {
-                        elements.extend(self.state.dim_screen(
-                            screen,
-                            scale,
-                            renderer.reduced_effects(),
-                            scrim.ids,
-                            scrim.opacity,
-                        ));
-                    }
-                }
             }
         }
         tie_blurs_to_what_lies_below(&mut elements, scale);
@@ -401,8 +387,8 @@ impl State {
         map.layers_on(layer)
             .rev()
             .filter_map(|mapped| {
-                let geometry = map.layer_geometry(mapped)?;
-                Some((mapped.wl_surface().clone(), origin + geometry.loc))
+                let location = self.layer_location(screen, &map, mapped)?;
+                Some((mapped.wl_surface().clone(), origin + location))
             })
             .collect()
     }
@@ -416,11 +402,11 @@ impl State {
     }
 
     pub(crate) fn layer_origin(&self, surface: &WlSurface) -> Option<Point<i32, Logical>> {
-        let screen = &self.screens[self.layer_screen(surface)?];
-        let map = layer_map_for_output(&screen.output);
+        let screen = self.layer_screen(surface)?;
+        let map = layer_map_for_output(&self.screens[screen].output);
         let layer = map.layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)?;
-        let geometry = map.layer_geometry(layer)?;
-        Some(screen.settings.position + geometry.loc)
+        let location = self.layer_location(screen, &map, layer)?;
+        Some(self.screens[screen].settings.position + location)
     }
 
     pub(crate) fn stack(&self, screen: usize) -> Vec<(WlSurface, Point<i32, Logical>)> {
@@ -431,10 +417,7 @@ impl State {
                 Placed::Window(_, window) => {
                     Some((window.surface().clone(), window.surface_origin()))
                 }
-                Placed::Closing(_)
-                | Placed::Overview(_)
-                | Placed::Backdrop(_)
-                | Placed::Scrim(..) => None,
+                Placed::Closing(_) | Placed::Overview(_) | Placed::Backdrop(_) => None,
             })
             .collect()
     }
@@ -491,6 +474,7 @@ impl State {
         let name = self.screens[screen].name();
         let map = layer_map_for_output(&self.screens[screen].output);
         let layers = Layers {
+            state: self,
             map: &map,
             origin: self.screens[screen].settings.position,
             screen,

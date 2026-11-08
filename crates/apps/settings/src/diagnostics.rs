@@ -43,6 +43,7 @@ pub struct Diagnostics {
     pub reports: Vec<Report>,
     pub sending: bool,
     pub configured: bool,
+    pub checkin: Option<String>,
     pub open: Option<(String, String)>,
     pub description: String,
     pub saved: Option<String>,
@@ -115,6 +116,19 @@ fn load() -> io::Result<Diagnostics> {
         reports,
         sending: flag("sending"),
         configured: flag("configured"),
+        checkin: status
+            .get("checkin")
+            .and_then(Value::as_object)
+            .map(|checkin| {
+                checkin
+                    .iter()
+                    .map(|(name, value)| match value {
+                        Value::String(text) => format!("{name}: {text}"),
+                        other => format!("{name}: {other}"),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" · ")
+            }),
         open: None,
         description: String::new(),
         saved: None,
@@ -272,6 +286,12 @@ impl SettingsView {
         } else {
             tr!("Reports stay on this computer. No server is configured.")
         }));
+        if let Some(checkin) = self.diagnostics.checkin.clone() {
+            rows.push(muted_row(&tr!(
+                "Once a day it also sends how long the computer was used, and nothing else: {checkin}",
+                checkin = checkin
+            )));
+        }
         if self.diagnostics.reports.is_empty() {
             rows.push(muted_row(&tr!("Nothing has gone wrong")));
         }

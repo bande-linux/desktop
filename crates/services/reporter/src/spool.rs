@@ -18,7 +18,8 @@ pub const STATE: &str = "state.json";
 const UUID_SOURCE: &str = "/proc/sys/kernel/random/uuid";
 const OS_RELEASE: &str = "/etc/os-release";
 const KERNEL_RELEASE: &str = "/proc/sys/kernel/osrelease";
-const DESKTOP_PACKAGE: &str = "bande-desktop";
+pub const DESKTOP_PACKAGE: &str = "bande-desktop";
+const CHECKIN: &str = "checkin";
 
 const KEEP_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const KEEP_REPORTS: usize = 200;
@@ -89,7 +90,7 @@ fn new_uuid() -> io::Result<String> {
     Ok(fs::read_to_string(UUID_SOURCE)?.trim().to_owned())
 }
 
-fn os_version() -> String {
+pub fn os_version() -> String {
     let release = fs::read_to_string(OS_RELEASE).unwrap_or_default();
     let name = release
         .lines()
@@ -135,7 +136,24 @@ impl Spool {
         Ok(self.root.join(REPORTS).join(id))
     }
 
-    fn install_id(&self) -> io::Result<String> {
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub fn queue_checkin(&self) -> io::Result<()> {
+        write_synced(&self.outbox().join(CHECKIN), b"")?;
+        sync_folder(&self.outbox())
+    }
+
+    pub fn checkin_waiting(&self) -> bool {
+        self.outbox().join(CHECKIN).exists()
+    }
+
+    pub fn unqueue_checkin(&self) -> io::Result<()> {
+        self.unqueue(CHECKIN)
+    }
+
+    pub fn install_id(&self) -> io::Result<String> {
         let path = self.root.join(INSTALL_ID);
         match fs::read_to_string(&path) {
             Ok(id) if !id.trim().is_empty() => return Ok(id.trim().to_owned()),
@@ -260,6 +278,9 @@ impl Spool {
         let mut waiting: Vec<(SystemTime, String)> = Vec::new();
         for entry in fs::read_dir(self.outbox())?.flatten() {
             let name = entry.file_name();
+            if name == CHECKIN {
+                continue;
+            }
             match name.to_str().filter(|name| is_plain_name(name)) {
                 Some(name) => {
                     if let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified())
@@ -377,7 +398,7 @@ impl Spool {
         for id in self.waiting()? {
             self.unqueue(&id)?;
         }
-        Ok(())
+        self.unqueue_checkin()
     }
 
     pub fn prune(&self) {

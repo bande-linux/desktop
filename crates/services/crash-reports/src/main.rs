@@ -148,6 +148,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             tracing::warn!("cannot keep a fault report: {error}");
         }
     }
+    structured::queue_checkin_if_due();
     Ok(())
 }
 

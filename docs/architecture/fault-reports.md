@@ -27,6 +27,8 @@ ca = /path/to/ca.pem
 
 `ca` is optional; without it the system's roots are used. The file never goes in a package or a public repo.
 
+A daily check-in rides on the same sender: at boot, at login, when `serve` starts and when sending is switched on, an `outbox/checkin` marker is added if a day is due, and the sender posts it with the reports (see Protocol). Settings ▸ Diagnostics shows its exact contents. It carries no content of any kind.
+
 `bande-reporter-send.path` starts `bande-reporter-send.service` while `outbox/` has anything in it, and the service exits when `outbox/` is empty, so nothing runs between faults. While reports wait it sleeps in `poll`. It wakes on a deadline, on a network change (rtnetlink) or when the settings folder changes.
 
 `POST <endpoint>/v1/reports` with `Authorization: Bearer <key>`: `multipart/form-data` with `Content-Encoding: gzip` on the whole body, a part named `manifest` (`application/json`) first, then parts named `attachment`, each with a `filename`. The report's id makes a resend harmless.
@@ -94,7 +96,7 @@ The symbol may hold spaces; the last field is always the module and offset. Oute
 
 ### Check-in
 
-`POST <endpoint>/v1/checkins`, the same key, JSON: `{machine, os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers, `active_hours` a number with one decimal, `sessions` and `boots` counts. At most one a day, only while sending is on. 200 or 201: done; 404: the server does not know check-ins yet, tried again the next day; anything else follows the table above.
+`POST <endpoint>/v1/checkins`, the same key, JSON: `{machine, os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers; `active_hours` (one decimal) the time that day a desktop session (logind class `user`, type `wayland`) was open and the computer awake; `sessions` the desktop sessions started and `boots` the boots that day, all from the journal. Only while sending is on: the first covers yesterday, later ones each day since the last, at most 7, and days with no use are skipped; switching sending off forgets where it was. 200 or 201: done; 404: the server does not know check-ins yet, tried again a day later; anything else follows the table above.
 
 ### Symbols
 

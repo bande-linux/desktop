@@ -35,6 +35,7 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 
 const JOIN: &str = "join:";
+const SETTINGS_APP: &str = "org.bande.Settings";
 const SESSION: &str = "session:";
 const ARTWORK_PIXELS: u32 = 128;
 const ARTWORKS_KEPT: usize = 16;
@@ -355,6 +356,7 @@ impl ControlCenter {
                         .is_some_and(|player| artwork_key(player) == *key)
                 })
                 .and_then(|(_, image)| image.clone()),
+            settings: bande_xdg::is_installed(SETTINGS_APP),
             players: self
                 .players
                 .all()
@@ -426,7 +428,7 @@ impl ControlCenter {
             return;
         };
         if found.security.needs_password() && !found.known {
-            self.launch(window, "org.bande.Settings", &["bande-settings", "wifi"]);
+            self.launch(window, SETTINGS_APP, &["bande-settings", "wifi"]);
             self.dismiss(window);
             return;
         }
@@ -521,7 +523,7 @@ impl ControlCenter {
                 );
             }
             Change::Settings => {
-                self.launch(window, "org.bande.Settings", &["bande-settings"]);
+                self.launch(window, SETTINGS_APP, &["bande-settings"]);
                 self.dismiss(window);
             }
             Change::Player(bus_name) => {

@@ -215,6 +215,8 @@ pub trait Program: Sized + 'static {
 
     fn tick(&mut self, _cx: &mut Cx<Self>, _now: Instant) {}
 
+    fn installed_changed(&mut self, _cx: &mut Cx<Self>) {}
+
     fn waits_for_activation() -> bool {
         false
     }

@@ -5,6 +5,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
@@ -436,6 +437,8 @@ struct Files {
     mounts: Option<Inbox<()>>,
     nearby_inbox: Option<Inbox<ServersSeen>>,
     nearby: ServersSeen,
+    network_watch: Option<mpsc::Sender<bool>>,
+    watching_network: bool,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -728,6 +731,21 @@ impl Files {
                 pane.view.set_nearby(list.clone());
                 window.request_redraw();
             }
+        }
+    }
+
+    fn watch_network(&mut self, cx: &mut Cx<Self>) {
+        let wanted = browser_windows(cx)
+            .into_iter()
+            .any(|id| browser(cx, id).is_some_and(|(_, pane)| pane.view.browser().shows_network()));
+        if wanted == self.watching_network {
+            return;
+        }
+        self.watching_network = wanted;
+        if let Some(watch) = &self.network_watch
+            && watch.send(wanted).is_err()
+        {
+            tracing::warn!("cannot look for servers on the network");
         }
     }
 
@@ -1282,6 +1300,8 @@ impl Program for Files {
                 .inspect_err(|error| tracing::warn!("cannot wait for backups: {error}"))
                 .ok(),
             nearby: ServersSeen::default(),
+            network_watch: network_watch(),
+            watching_network: false,
             ejects: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
                 .ok(),
@@ -1428,6 +1448,7 @@ impl Program for Files {
             shown.request_redraw();
         }
         self.place_quick_look(cx, window);
+        self.watch_network(cx);
         cx.refresh_menus();
     }
 
@@ -1441,6 +1462,7 @@ impl Program for Files {
         if let Pane::Browser(mut closed) = view {
             self.hand_over_operations(cx, closed.view.take_operations());
         }
+        self.watch_network(cx);
         self.remember_recent_folders();
     }
 
@@ -1582,6 +1604,41 @@ fn nearby_changes() -> Option<Inbox<ServersSeen>> {
         tracing::warn!("cannot follow nearby servers: {error}");
     }
     Some(inbox)
+}
+
+fn watch_network_with_mounts() -> zbus::Result<Connection> {
+    let session = Connection::session()?;
+    session.call_method(
+        Some(MOUNTS_SERVICE),
+        MOUNTS_PATH,
+        Some(MOUNTS_INTERFACE),
+        "Watch",
+        &(),
+    )?;
+    Ok(session)
+}
+
+fn network_watch() -> Option<mpsc::Sender<bool>> {
+    let (watch, wanted) = mpsc::channel::<bool>();
+    let spawned = std::thread::Builder::new()
+        .name("network watch".to_owned())
+        .spawn(move || {
+            let mut _watching = None;
+            for wanted in wanted {
+                _watching = wanted.then(watch_network_with_mounts).and_then(|watching| {
+                    watching
+                        .inspect_err(|error| {
+                            tracing::warn!("cannot look for servers on the network: {error}")
+                        })
+                        .ok()
+                });
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot look for servers on the network: {error}");
+        return None;
+    }
+    Some(watch)
 }
 
 fn mount_changes() -> Option<Inbox<()>> {

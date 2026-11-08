@@ -837,6 +837,10 @@ Every 7 days, Every 31 days; unset is When available). With an interval, the dai
 opened pane fetch nothing until that long has passed since PackageKit's last refresh, and Check Now
 always fetches. Security updates follow the same interval.
 
+Each check, from the daily timer or the pane, leaves its outcome in
+`$XDG_STATE_HOME/bande/software-badge`; Settings shows the sidebar's update line from that file at
+launch and starts PackageKit only when the Software Update pane opens or a check is due (a
+restart-to-update outcome lasts until the next boot, a count until dpkg's status changes).
 Software Update checks through PackageKit (`bande-packages`) and classifies each update by name
 and by PackageKit's `GetUpdateDetail` restart answer. **Offline** (installed at the next restart):
 `libc6`, `systemd`, `libsystemd0`, `udev`, `dbus*`, the running kernel's own packages

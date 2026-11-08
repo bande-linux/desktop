@@ -603,6 +603,9 @@ msgstr "Inga stora filer i din hemmapp"
 msgid "Show in Files"
 msgstr "Visa i Filer"
 
+msgid "Not available"
+msgstr "Inte tillgängligt"
+
 msgid "Off"
 msgstr "Av"
 
@@ -661,6 +664,12 @@ msgstr "Inga inställningar matchar ”{query}”"
 
 msgid "Try another word, such as “sleep” or “wallpaper”."
 msgstr "Försök med ett annat ord, till exempel ”vila” eller ”skrivbordsbild”."
+
+msgid "The network service isn't running, so Wi-Fi can't be shown or changed."
+msgstr "Nätverkstjänsten körs inte, så Wi-Fi kan inte visas eller ändras."
+
+msgid "The Bluetooth service isn't running, so Bluetooth can't be shown or changed."
+msgstr "Bluetooth-tjänsten körs inte, så Bluetooth kan inte visas eller ändras."
 
 msgid "{pane} isn't available"
 msgstr "{pane} är inte tillgänglig"
@@ -1270,6 +1279,9 @@ msgstr "Strömkälla"
 
 msgid "Power modes aren't available because the power profiles service isn't installed."
 msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofiler inte är installerad."
+
+msgid "Power modes aren't available because the power profiles service isn't responding."
+msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofiler inte svarar."
 
 msgid "This computer doesn't offer power modes."
 msgstr "Den här datorn har inga strömlägen."

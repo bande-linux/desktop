@@ -25,6 +25,9 @@ msgstr "På"
 msgid "Off"
 msgstr "Av"
 
+msgid "Unavailable"
+msgstr "Inte tillgängligt"
+
 msgid "Wi-Fi"
 msgstr "Wi-Fi"
 

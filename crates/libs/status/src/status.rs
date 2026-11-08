@@ -2,6 +2,7 @@ use std::time::Duration;
 
 #[cfg(feature = "audio")]
 pub use bande_audio::{Capture, Sense};
+pub use bande_bus::Reading;
 use bande_network::Network;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -104,10 +105,10 @@ impl InputSources {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Status {
-    pub battery: Option<Battery>,
-    pub wifi: Option<Wifi>,
+    pub battery: Reading<Battery>,
+    pub wifi: Reading<Wifi>,
     pub sound: Option<Sound>,
-    pub bluetooth: Option<Bluetooth>,
+    pub bluetooth: Reading<Bluetooth>,
     pub input_sources: InputSources,
     #[cfg(feature = "audio")]
     pub capturing: Vec<Capture>,

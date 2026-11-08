@@ -138,6 +138,14 @@ pub fn system_menu(user: &str, frontmost: Option<&str>, can_sleep: bool) -> Menu
     Menu::new(items)
 }
 
+pub fn unavailable_menu(reason: String, settings_title: String, pane: &str) -> Menu {
+    Menu::new(vec![
+        note(&reason),
+        MenuItem::separator(),
+        settings(settings_title, pane),
+    ])
+}
+
 pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
     let mut items = vec![note(&tr!(
         "Battery {percent}%",

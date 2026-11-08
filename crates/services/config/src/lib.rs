@@ -41,6 +41,7 @@ pub const ZOOM_RANGE: (f64, f64) = (1.0, 16.0);
 pub const TEXT_SIZE_RANGE: (u32, u32) = (100, 200);
 pub const CURSOR_SIZE_RANGE: (u32, u32) = (24, 128);
 pub const DEFAULT_CURSOR_SIZE: u32 = 24;
+pub const CURSOR_THEME: &str = "Bande-Cursors";
 pub const SYSTEM_KEYBOARDS: [&str; 2] = ["/etc/vconsole.conf", "/etc/default/keyboard"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

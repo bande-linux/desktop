@@ -111,6 +111,9 @@ impl SettingsView {
             Profiles::Missing => rows.push(muted_row(&tr!(
                 "Power modes aren't available because the power profiles service isn't installed."
             ))),
+            Profiles::Stopped => rows.push(muted_row(&tr!(
+                "Power modes aren't available because the power profiles service isn't responding."
+            ))),
             Profiles::Offered(names) if names.is_empty() => {
                 rows.push(muted_row(&tr!("This computer doesn't offer power modes.")));
             }

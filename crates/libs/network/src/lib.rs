@@ -37,6 +37,7 @@ const INTERFACE_NAME: &str = "interface-name";
 const ACCESS_POINT: &str = "org.freedesktop.NetworkManager.AccessPoint";
 const STRENGTH: &str = "Strength";
 const LAST_SEEN: &str = "LastSeen";
+const KERNEL_RADIOS: &str = "/sys/class/ieee80211";
 
 #[derive(Debug)]
 pub enum Error {
@@ -80,6 +81,10 @@ impl From<zbus::fdo::Error> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub fn wifi_in_kernel() -> bool {
+    std::fs::read_dir(KERNEL_RADIOS).is_ok_and(|mut radios| radios.next().is_some())
+}
 
 fn refused(error: zbus::Error) -> Error {
     match error {
@@ -383,22 +388,27 @@ impl NetworkManager {
         let saved = self.saved_wifi()?;
         let mut networks: Vec<Network> = Vec::new();
         for path in wireless.get_all_access_points()? {
-            let point = AccessPointProxyBlocking::builder(&self.bus)
-                .path(path.clone())?
-                .build()?;
-            let ssid = point.ssid()?;
-            if ssid.is_empty() {
+            let read = || -> zbus::Result<Option<Network>> {
+                let point = AccessPointProxyBlocking::builder(&self.bus)
+                    .path(path.clone())?
+                    .build()?;
+                let ssid = point.ssid()?;
+                if ssid.is_empty() {
+                    return Ok(None);
+                }
+                let strength = point.strength()?;
+                Ok(Some(Network {
+                    strength,
+                    security: Security::of(point.flags()?, point.wpa_flags()?, point.rsn_flags()?),
+                    known: saved.iter().any(|(saved, _)| *saved == ssid),
+                    current: path == active,
+                    ssid,
+                    access_point: path.clone(),
+                    access_points: vec![(path.clone(), strength)],
+                }))
+            };
+            let Ok(Some(network)) = read() else {
                 continue;
-            }
-            let strength = point.strength()?;
-            let network = Network {
-                strength,
-                security: Security::of(point.flags()?, point.wpa_flags()?, point.rsn_flags()?),
-                known: saved.iter().any(|(saved, _)| *saved == ssid),
-                current: path == active,
-                ssid,
-                access_point: path.clone(),
-                access_points: vec![(path, strength)],
             };
             match networks.iter_mut().find(|seen| seen.ssid == network.ssid) {
                 Some(seen) => {

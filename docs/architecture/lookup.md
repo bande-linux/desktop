@@ -71,9 +71,13 @@ filled in); the protocols are `wikimedia-summary` and `dict`. Line kinds: `D` de
 ## Packaged sources
 
 `packaging/dict/build.py <version> <sources> <out> [package...]` makes the packs and `.deb`s, with
-their licence files, from the source data pinned by checksum in `packaging/dict/sources`; a source
-that changed upstream stops the build. A release: `build.py --pin <sources>` refreshes the pins,
-commit that to `main`, then push the tag `dict-YYYYMMDD` (the packages' version). `dict.yml` builds
+their licence files, from the source data pinned by SHA-256 in `packaging/dict/sources`. The build fetches each source
+from our own copy first (through the GitHub API, then the release download URL), the `<sha256>.xz` assets of the `dict-sources` release of
+`bande-linux/desktop` (named by content, so they are only ever added),
+and from the upstream URL only when ours lacks it; a file that does not match its pin stops the
+build, so an upstream outage or a file replaced in place cannot change or break a release. To
+take new upstream data: `build.py --pin <sources>` downloads it, rewrites the pins and leaves
+`<sha256>.xz` copies to add to `dict-sources` (`gh release upload dict-sources <files>`); commit the pins to `main`, then push the tag `dict-YYYYMMDD` (the packages' version). `dict.yml` builds
 them from that tag and uploads `bande-debs-all`, which the APT archive's `look.yml` picks up and
 publishes to `main`, as it does the desktop's releases.
 

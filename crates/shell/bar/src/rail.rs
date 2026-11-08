@@ -1,14 +1,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use bande_l10n::{text, tr};
-
-use crate::symbols::{Symbol, Symbols, snap};
-use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bande_config::{Bar, BarEdge, DEFAULT_BAR_GAP};
 use bande_datetime::DateFormats;
-use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves, wifi_quarter};
+use bande_l10n::{text, tr};
+use bande_status::status::{Battery, Capture, Reading, Sense, Status, speaker_waves, wifi_quarter};
 use bande_status::unread::ClockMark;
 use bande_toolkit::ui::PointerButton;
 use bande_toolkit::{
@@ -17,6 +14,9 @@ use bande_toolkit::{
 };
 use bande_xdg::{ICON_THEMES, find_icon};
 use jiff::Zoned;
+
+use crate::symbols::{Symbol, Symbols, snap};
+use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 
 const EDGE_PADDING: f32 = 24.0;
 pub const BAR_MARGIN: f32 = 8.0;
@@ -52,6 +52,9 @@ const HOVER_ALPHA: u8 = 18;
 const OPEN_ALPHA: u8 = 30;
 const NODE_BASE: u64 = 1 << 40;
 const CONTROL_CENTER_GLYPH: &str = "bande-control-center-symbolic";
+const BATTERY_UNAVAILABLE_GLYPH: &str = "battery-missing-symbolic";
+const WIFI_UNAVAILABLE_GLYPH: &str = "network-wireless-no-route-symbolic";
+const BLUETOOTH_UNAVAILABLE_GLYPH: &str = "bluetooth-disconnected-symbolic";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
@@ -275,7 +278,15 @@ fn day_style(palette: Palette, scale: f32) -> TextStyle {
     TextStyle::new(DAY_SIZE * scale, palette.ink2)
 }
 
-fn battery_glyph(battery: Battery) -> String {
+fn battery_glyph(battery: &Reading<Battery>) -> Option<String> {
+    match battery {
+        Reading::Present(battery) => Some(battery_level_glyph(*battery)),
+        Reading::Unavailable => Some(BATTERY_UNAVAILABLE_GLYPH.to_owned()),
+        Reading::Absent => None,
+    }
+}
+
+fn battery_level_glyph(battery: Battery) -> String {
     let level = ((battery.percent / 10.0).round() * 10.0).clamp(0.0, 100.0) as u32;
     let suffix = match battery.power {
         bande_status::status::Power::Full if level == 100 => "-charged",
@@ -286,7 +297,11 @@ fn battery_glyph(battery: Battery) -> String {
 }
 
 fn wifi_glyph(status: &Status) -> Option<String> {
-    let wifi = status.wifi.as_ref()?;
+    let wifi = match &status.wifi {
+        Reading::Present(wifi) => wifi,
+        Reading::Unavailable => return Some(WIFI_UNAVAILABLE_GLYPH.to_owned()),
+        Reading::Absent => return None,
+    };
     let name = match wifi.current() {
         _ if !wifi.enabled => "network-wireless-disabled",
         None => "network-wireless-offline",
@@ -313,7 +328,11 @@ fn sound_glyph(status: &Status) -> Option<String> {
 }
 
 fn bluetooth_glyph(status: &Status) -> Option<String> {
-    let bluetooth = status.bluetooth.as_ref()?;
+    let bluetooth = match &status.bluetooth {
+        Reading::Present(bluetooth) => bluetooth,
+        Reading::Unavailable => return Some(BLUETOOTH_UNAVAILABLE_GLYPH.to_owned()),
+        Reading::Absent => return None,
+    };
     Some(
         if !bluetooth.powered {
             "bluetooth-disabled-symbolic"
@@ -406,7 +425,7 @@ impl TaskbarView {
             (Slot::Wifi, wifi_glyph(&self.status)),
             (Slot::Sound, sound_glyph(&self.status)),
             (Slot::Bluetooth, bluetooth_glyph(&self.status)),
-            (Slot::Battery, self.status.battery.map(battery_glyph)),
+            (Slot::Battery, battery_glyph(&self.status.battery)),
         ]
     }
 
@@ -636,6 +655,8 @@ impl TaskbarView {
                     let percent = self
                         .status
                         .battery
+                        .present()
+                        .copied()
                         .filter(|_| slot == Slot::Battery && self.battery_percentage)
                         .map(|battery| {
                             let text = tr!("{percent}%", percent = battery.percent.round());
@@ -831,9 +852,15 @@ impl TaskbarView {
             Slot::Bluetooth => tr!("Bluetooth"),
             Slot::Sound => tr!("Sound"),
             Slot::Wifi => tr!("Wi-Fi"),
-            Slot::Battery => self.status.battery.map_or_else(String::new, |battery| {
-                tr!("Battery {percent}%", percent = battery.percent.round())
-            }),
+            Slot::Battery => match self.status.battery {
+                Reading::Present(battery) => {
+                    tr!("Battery {percent}%", percent = battery.percent.round())
+                }
+                Reading::Unavailable => {
+                    tr!("Battery status unavailable — the power service isn't running")
+                }
+                Reading::Absent => String::new(),
+            },
             Slot::ControlCenter => control_center_label(&self.status),
             Slot::Clock => {
                 let clock = format!("{} {}", self.clock.time, self.clock.day);

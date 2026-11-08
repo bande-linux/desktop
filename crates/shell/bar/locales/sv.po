@@ -265,6 +265,9 @@ msgstr "Inmatningskälla: {name}"
 msgid "Sound"
 msgstr "Ljud"
 
+msgid "Battery status unavailable — the power service isn't running"
+msgstr "Batteristatus är inte tillgänglig – strömtjänsten körs inte"
+
 msgid "{time}, unread notifications"
 msgstr "{time}, olästa notiser"
 
@@ -276,6 +279,15 @@ msgstr "Skrivbord {number}"
 
 msgid "Status items"
 msgstr "Statusobjekt"
+
+msgid "Power Settings…"
+msgstr "Ströminställningar…"
+
+msgid "Wi-Fi unavailable — the network service isn't running"
+msgstr "Wi-Fi är inte tillgängligt – nätverkstjänsten körs inte"
+
+msgid "Bluetooth unavailable — the Bluetooth service isn't running"
+msgstr "Bluetooth är inte tillgängligt – Bluetooth-tjänsten körs inte"
 
 msgid "Trash"
 msgstr "Papperskorg"

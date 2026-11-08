@@ -1,4 +1,4 @@
-# name sha256 url: the source data, checked by build.py; refreshed by build.py --pin
+# name sha256 url: the source data, checked by build.py, fetched from our copy (MIRROR) first; refreshed by build.py --pin
 oewn-2025.zip 73355e48f8117a24ca9ebc23ed75b35434e6cd21cc9dd3984e80aff5a5f63636 https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.zip
 mythes-sv.deb 07b96d598ebba95e61f94197bb590f49983c2314a6fc9099dcf3a76592b92af1 https://snapshot.debian.org/archive/debian/20260827T022640Z/pool/main/libr/libreoffice-dictionaries/mythes-sv_26.8.0.3-1_all.deb
 folkets_sv_en_public.xml b4b135e9f0e540e259c8c5363248541f095533d4a1f1443e3f559c3410b7674f https://folkets-lexikon.csc.kth.se/folkets/folkets_sv_en_public.xml

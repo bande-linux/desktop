@@ -56,6 +56,10 @@ def clean(text):
 
 
 PINS = pathlib.Path(__file__).with_name("sources")
+PINS_HEADER = "# name sha256 url: the source data, checked by build.py, fetched from our copy (MIRROR) first; refreshed by build.py --pin\n"
+MIRROR_RELEASE = "dict-sources"
+MIRROR = f"https://github.com/bande-linux/desktop/releases/download/{MIRROR_RELEASE}/"
+MIRROR_API = f"https://api.github.com/repos/bande-linux/desktop/releases/tags/{MIRROR_RELEASE}"
 
 
 def pins():
@@ -75,21 +79,48 @@ def digest(path):
     return hashed.hexdigest()
 
 
-def download(url, path):
-    subprocess.run(
-        ["curl", "-fsSL", "--retry", "5", "--retry-all-errors", "--retry-delay", "20", "-o", str(path), url],
-        check=True,
+def download(url, path, *headers):
+    command = ["curl", "-fsSL", "--retry", "5", "--retry-all-errors", "--retry-delay", "20"]
+    for header in headers:
+        command += ["-H", header]
+    return subprocess.run([*command, "-o", str(path), url], check=False).returncode == 0
+
+
+def mirror_assets(sources):
+    listing = sources / "mirror.json"
+    if not listing.exists() and not download(MIRROR_API, listing, "Accept: application/vnd.github+json"):
+        return {}
+    return {asset["name"]: asset["url"] for asset in json.loads(listing.read_text()).get("assets", [])}
+
+
+def from_mirror(sources, sha256, path):
+    packed = path.with_name(f"{path.name}.xz")
+    name = f"{sha256}.xz"
+    asset = mirror_assets(sources).get(name)
+    fetched = (asset is not None and download(asset, packed, "Accept: application/octet-stream")) or download(
+        MIRROR + name, packed
     )
+    if not fetched:
+        return False
+    with open(path, "wb") as plain:
+        unpacked = subprocess.run(["xz", "-dc", str(packed)], stdout=plain, check=False).returncode == 0
+    packed.unlink()
+    return unpacked
 
 
 def source(sources, name):
     sha256, url = pins()[name]
     path = sources / name
-    if not path.exists():
-        download(url, path)
+    if path.exists() and digest(path) == sha256:
+        return path
+    if from_mirror(sources, sha256, path) and digest(path) == sha256:
+        return path
+    print(f"{name}: not in our copy at {MIRROR}, fetching {url}", file=sys.stderr)
+    if not download(url, path):
+        sys.exit(f"cannot fetch {name} from our copy or {url}")
     found = digest(path)
     if found != sha256:
-        sys.exit(f"{name} changed upstream: {found}, pinned {sha256}; check it and run build.py --pin")
+        sys.exit(f"{name} changed upstream: {found}, pinned {sha256}; check it, run build.py --pin and add it to our copy")
     return path
 
 
@@ -99,9 +130,14 @@ def pin(sources):
     for name, (_, url) in pins().items():
         path = sources / name
         path.unlink(missing_ok=True)
-        download(url, path)
-        lines.append(f"{name} {digest(path)} {url}")
-    PINS.write_text("# name sha256 url: the source data, checked by build.py; refreshed by build.py --pin\n" + "\n".join(lines) + "\n")
+        if not download(url, path):
+            sys.exit(f"cannot fetch {url}")
+        sha256 = digest(path)
+        with open(sources / f"{sha256}.xz", "wb") as packed:
+            subprocess.run(["xz", "-T0", "-6", "-c", str(path)], stdout=packed, check=True)
+        lines.append(f"{name} {sha256} {url}")
+    PINS.write_text(PINS_HEADER + "\n".join(lines) + "\n")
+    print(f"Upload the new {sources}/<sha256>.xz files to the {MIRROR_RELEASE} release, then commit packaging/dict/sources")
 
 
 def wordnet(sources):

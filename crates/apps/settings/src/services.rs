@@ -1,21 +1,22 @@
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use std::sync::mpsc::RecvTimeoutError;
-
 use bande_audio::{Audio, Direction, Level, Meter};
-use bande_bluetooth::{Bluetooth, PairingPrompt, change_rules, register_agent, shown_change};
+use bande_bluetooth::{
+    Bluetooth, PairingPrompt, adapter_in_kernel, change_rules, register_agent, shown_change,
+};
+use bande_bus::Reading;
 use bande_l10n::text;
 use bande_network::{
     ConnectionChange, JoinOutcome, ManualIpv4, NetworkManager, Security, WifiLink, set_strength,
-    strength_signal,
+    strength_signal, wifi_in_kernel,
 };
+use bande_settings_panes::PaneId;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, Message, message};
-
-use bande_settings_panes::PaneId;
 
 use crate::failure::pane_failed;
 use crate::follow::Update;
@@ -26,6 +27,8 @@ pub(crate) const SETTLE: Duration = Duration::from_millis(200);
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const ANSWER_WAIT: Duration = Duration::from_secs(60);
 const NETWORK_MANAGER: &str = "/org/freedesktop/NetworkManager";
+const NETWORK_MANAGER_SERVICE: &str = "org.freedesktop.NetworkManager";
+const BUS: &str = "org.freedesktop.DBus";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioCommand {
@@ -258,7 +261,7 @@ pub(crate) fn signals<T: Send + 'static>(
     });
 }
 
-fn follow_state(
+pub(crate) fn follow_state(
     name: &str,
     updates: Updates,
     changed: Receiver<()>,
@@ -279,26 +282,31 @@ fn follow_state(
     });
 }
 
-fn read_wifi(network: &NetworkManager) -> Option<WifiState> {
-    if !network.has_wifi().ok()? {
-        return None;
+fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiState>> {
+    if !network.has_wifi()? {
+        return Ok(None);
     }
-    let enabled = network.wifi_enabled().ok()?;
+    let enabled = network.wifi_enabled()?;
     let (networks, link) = if enabled {
-        (
-            network.networks().unwrap_or_default(),
-            network.wifi_link().unwrap_or_default(),
-        )
+        let networks = match network.networks() {
+            Err(bande_network::Error::NoWifiDevice) => return Ok(None),
+            networks => networks?,
+        };
+        (networks, network.wifi_link().unwrap_or_default())
     } else {
         (Vec::new(), WifiLink::default())
     };
-    Some(WifiState {
+    Ok(Some(WifiState {
         enabled,
         networks,
-        known: network.known_networks().unwrap_or_default(),
+        known: network.known_networks()?,
         link,
         sign_in: enabled && matches!(network.sign_in_page(), Ok(Some(_))),
-    })
+    }))
+}
+
+fn read_wifi(network: &NetworkManager) -> Reading<WifiState> {
+    Reading::from_answer("NetworkManager", wifi_state(network), wifi_in_kernel)
 }
 
 enum NetworkChange {
@@ -319,7 +327,7 @@ fn network_change(message: &Message) -> Option<NetworkChange> {
 fn follow_wifi(reader: NetworkManager, updates: Updates, changes: Receiver<NetworkChange>) {
     spawn("network", move || {
         let mut wifi = read_wifi(&reader);
-        let publish = |wifi: &Option<WifiState>| {
+        let publish = |wifi: &Reading<WifiState>| {
             updates.send(Update::Wifi(wifi.clone()))
                 && updates.send(Update::Network(read_network(&reader)))
         };
@@ -341,7 +349,7 @@ fn follow_wifi(reader: NetworkManager, updates: Updates, changes: Receiver<Netwo
                 continue;
             }
             let mut moved = false;
-            if let Some(state) = wifi.as_mut() {
+            if let Some(state) = wifi.present_mut() {
                 for change in batch {
                     if let NetworkChange::Strength(access_point, strength) = change {
                         moved |= set_strength(&mut state.networks, &access_point, strength);
@@ -374,6 +382,17 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
         Ok(MatchRule::builder()
             .msg_type(message::Type::Signal)
             .path(NETWORK_MANAGER)?
+            .build())
+    }) {
+        signals(system, rule, changed.clone(), network_change, || true);
+    }
+    if let Some(rule) = rule(|| {
+        Ok(MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .sender(BUS)?
+            .interface(BUS)?
+            .member("NameOwnerChanged")?
+            .add_arg(NETWORK_MANAGER_SERVICE)?
             .build())
     }) {
         signals(system, rule, changed.clone(), network_change, || true);
@@ -489,12 +508,8 @@ fn joined(result: bande_network::Result<JoinOutcome>) -> Joined {
     }
 }
 
-fn read_bluetooth(bluetooth: &Bluetooth) -> Option<BluetoothState> {
-    bluetooth
-        .radio()
-        .inspect_err(|error| tracing::debug!("cannot read Bluetooth: {error}"))
-        .ok()
-        .flatten()
+fn read_bluetooth(bluetooth: &Bluetooth) -> Reading<BluetoothState> {
+    Reading::from_answer("BlueZ", bluetooth.radio(), adapter_in_kernel)
 }
 
 struct Prompt {

@@ -20,8 +20,8 @@ use crate::pictures::{Pair, PictureCommand, expand};
 use crate::privilege::Privilege;
 use crate::state::{Answer, Display, Question};
 use crate::view::{
-    Anchor, Intent, Intents, MIRROR_PREFIX, PICK_RESULTS, Picker, SettingsView, USE_EXTENDED,
-    USE_MAIN, intent,
+    ADD_COLOUR_PROFILE, Anchor, Intent, Intents, MIRROR_PREFIX, PICK_RESULTS, Picker, SettingsView,
+    USE_EXTENDED, USE_MAIN, intent,
 };
 use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Swatch, Swatches, Text,
@@ -81,7 +81,12 @@ fn display_value(
                 .map(|rate| rate.round() as u32)
                 .or_else(|| display.current.map(|mode| mode.hertz()))?,
         ),
-        SettingId::MatchColours => Value::Flag(output.match_colours.unwrap_or(true)),
+        SettingId::ColourProfile => Value::Keyword(
+            output
+                .colour_profile
+                .clone()
+                .unwrap_or_else(|| bande_colour::DISPLAY.to_owned()),
+        ),
         SettingId::DisplayResolution => {
             let (width, height) = output.resolution.or_else(|| {
                 let mode = display.current?;
@@ -156,7 +161,7 @@ impl SettingsView {
                 .map(|shown| Value::Fraction(shown.level)),
             Some(display) => display_value(
                 display,
-                self.display_settings.get(&display.identity).copied(),
+                self.display_settings.get(&display.identity).cloned(),
                 id,
             ),
             None => self.values.get(&id).cloned(),
@@ -355,6 +360,31 @@ impl SettingsView {
                 choice_control(&setting.label, &labels, selected, move |index| {
                     if let Some((width, height)) = sizes.get(index) {
                         set(Value::Keyword(format!("{width}x{height}")));
+                    }
+                })
+            }
+            Kind::ColourProfiles => {
+                let mut choices: Vec<(String, String)> = [
+                    ("colour-profile-display", bande_colour::DISPLAY),
+                    ("colour-profile-srgb", bande_colour::SRGB),
+                    ("colour-profile-display-p3", bande_colour::DISPLAY_P3),
+                    ("colour-profile-none", bande_colour::UNMANAGED),
+                ]
+                .into_iter()
+                .map(|(label, value)| (L10N.tr(label), value.to_owned()))
+                .collect();
+                choices.extend(self.colour_profiles.iter().cloned());
+                choices.push((L10N.tr("colour-profile-add"), ADD_COLOUR_PROFILE.to_owned()));
+                let selected = match &value {
+                    Some(Value::Keyword(current)) => {
+                        choices.iter().position(|(_, choice)| choice == current)
+                    }
+                    _ => None,
+                };
+                let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
+                choice_control(&setting.label, &labels, selected, move |index| {
+                    if let Some((_, value)) = choices.get(index) {
+                        set(Value::Keyword(value.clone()));
                     }
                 })
             }

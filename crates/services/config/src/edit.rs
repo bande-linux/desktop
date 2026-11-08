@@ -574,10 +574,11 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
                 .map(|rotation| vec![pixels(rotation.degrees())]),
         ),
         (
-            "match-colours",
+            "colour-profile",
             display
-                .match_colours
-                .map(|enabled| vec![KdlValue::Bool(enabled)]),
+                .colour_profile
+                .as_ref()
+                .map(|profile| vec![KdlValue::String(profile.clone())]),
         ),
     ];
     let position = document.nodes().iter().position(|node| {

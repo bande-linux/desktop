@@ -573,12 +573,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-colour"
+version = "0.1.7"
+
+[[package]]
 name = "bande-compositor"
 version = "0.1.7"
 dependencies = [
  "accesskit",
  "accesskit_unix",
  "bande-bus",
+ "bande-colour",
  "bande-config",
  "bande-datetime",
  "bande-edid",
@@ -1301,6 +1306,7 @@ dependencies = [
  "bande-backup",
  "bande-bluetooth",
  "bande-bus",
+ "bande-colour",
  "bande-config",
  "bande-datetime",
  "bande-edid",

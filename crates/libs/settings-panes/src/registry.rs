@@ -253,7 +253,7 @@ pub enum SettingId {
     DisplayResolution,
     DisplayScale,
     RefreshRate,
-    MatchColours,
+    ColourProfile,
     DisplayRotation,
     ScreenSaverAfter,
     DisplayOffAfter,
@@ -469,6 +469,7 @@ pub enum Kind {
     },
     RefreshRates,
     Resolutions,
+    ColourProfiles,
     DisplayUses,
     Pictures,
     Swatches(Vec<Choice>),
@@ -489,6 +490,7 @@ impl Kind {
             | Self::Range { .. }
             | Self::RefreshRates
             | Self::Resolutions
+            | Self::ColourProfiles
             | Self::DisplayUses
             | Self::Pictures
             | Self::Text
@@ -1154,7 +1156,12 @@ fn displays_pane() -> Pane {
                         L10N.tr("display-rotation-keywords"),
                         choice(rotation_choices()),
                     ),
-                    switch(SettingId::MatchColours, "match-colours"),
+                    setting(
+                        SettingId::ColourProfile,
+                        L10N.tr("colour-profile"),
+                        L10N.tr("colour-profile-keywords"),
+                        Kind::ColourProfiles,
+                    ),
                 ],
             ),
         ],

@@ -20,7 +20,8 @@ use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::{Buffer, Format, Fourcc, Modifier};
 use smithay::backend::renderer::sync::SyncPoint;
 use smithay::backend::renderer::{
-    Bind, ContextId, DebugFlags, Offscreen, Renderer, RendererSuper, Texture, TextureFilter,
+    Bind, ContextId, DebugFlags, ImportMem, Offscreen, Renderer, RendererSuper, Texture,
+    TextureFilter,
 };
 use smithay::reexports::rustix::mm;
 use smithay::utils::{Buffer as BufferCoords, Physical, Size, Transform};
@@ -265,7 +266,11 @@ impl Drop for MappedExport {
     }
 }
 
-pub type OutputColour = [[f32; 3]; 3];
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputColour {
+    pub matrix: [[f32; 3]; 3],
+    pub encode: Option<Arc<[[u8; 3]]>>,
+}
 
 struct Target {
     image: Image,
@@ -327,6 +332,7 @@ pub struct VulkanRenderer {
     samples_video: bool,
     video_acquires: Vec<u64>,
     output_colour: Option<OutputColour>,
+    encode_table: Option<(Arc<[[u8; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
     memory: vk::PhysicalDeviceMemoryProperties,
     info: DeviceInfo,
@@ -628,6 +634,7 @@ impl VulkanRenderer {
             samples_video: chosen.samples_video,
             video_acquires: Vec::new(),
             output_colour: None,
+            encode_table: None,
             colour_scratch: HashMap::new(),
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
             reduced_effects: chosen.info.software,
@@ -851,6 +858,31 @@ impl VulkanRenderer {
     }
 
     pub fn set_output_colour(&mut self, colour: Option<OutputColour>) {
+        let table = colour.as_ref().and_then(|colour| colour.encode.clone());
+        if let Some(table) = table
+            && self
+                .encode_table
+                .as_ref()
+                .is_none_or(|(loaded, _)| !Arc::ptr_eq(loaded, &table))
+        {
+            let pixels: Vec<u8> = table
+                .iter()
+                .flat_map(|[red, green, blue]| [*blue, *green, *red, u8::MAX])
+                .collect();
+            match self.import_memory(
+                &pixels,
+                Fourcc::Argb8888,
+                (table.len() as i32, 1).into(),
+                false,
+            ) {
+                Ok(texture) => self.encode_table = Some((table, texture)),
+                Err(error) => {
+                    tracing::warn!("showing colours unconverted: {error}");
+                    self.output_colour = None;
+                    return;
+                }
+            }
+        }
         self.output_colour = colour;
     }
 

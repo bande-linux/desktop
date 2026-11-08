@@ -105,6 +105,7 @@ bande-datetime = { path = "crates/libs/datetime" }
 bande-design = { path = "crates/toolkit/design" }
 bande-desktop-surface = { path = "crates/shell/desktop" }
 bande-taskbar-model = { path = "crates/libs/taskbar-model" }
+bande-colour = { path = "crates/libs/colour" }
 bande-edid = { path = "crates/libs/edid" }
 bande-files = { path = "crates/apps/files" }
 bande-lookup = { path = "crates/apps/lookup" }

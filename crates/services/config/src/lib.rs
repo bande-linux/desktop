@@ -175,13 +175,13 @@ impl Rotation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DisplaySettings {
     pub resolution: Option<(u32, u32)>,
     pub refresh_rate: Option<f64>,
     pub scale: Option<f64>,
     pub rotation: Option<Rotation>,
-    pub match_colours: Option<bool>,
+    pub colour_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -944,7 +944,7 @@ impl Config {
     }
 
     pub fn display(&self, identity: &str) -> DisplaySettings {
-        self.displays.get(identity).copied().unwrap_or_default()
+        self.displays.get(identity).cloned().unwrap_or_default()
     }
 }
 
@@ -1672,7 +1672,7 @@ impl Parser<'_> {
                     display.refresh_rate = Some(self.number_in(child, REFRESH_RATE_RANGE)?)
                 }
                 "rotation" => display.rotation = Some(self.rotation(child)?),
-                "match-colours" => display.match_colours = Some(self.flag(child)?),
+                "colour-profile" => display.colour_profile = Some(self.string(child)?),
                 _ => return Err(self.unknown_child(node.name().value(), child)),
             }
             Ok(())

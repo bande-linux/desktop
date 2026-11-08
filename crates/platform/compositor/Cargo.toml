@@ -21,6 +21,7 @@ bande-bus.workspace = true
 bande-watch.workspace = true
 bande-config.workspace = true
 bande-datetime.workspace = true
+bande-colour.workspace = true
 bande-edid.workspace = true
 bande-graphics.workspace = true
 bande-inbox.workspace = true

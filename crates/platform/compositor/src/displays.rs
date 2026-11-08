@@ -449,6 +449,9 @@ impl State {
         for display in &arranged {
             if let Some(screen) = self.screen_named(&display.name) {
                 self.configure_screen(screen, display.settings);
+                self.screens[screen]
+                    .colour_profile
+                    .clone_from(&display.colour_profile);
             }
         }
         if let Some(main) = arranged
@@ -525,6 +528,12 @@ impl State {
 impl Compositor {
     pub fn outputs(&self) -> Vec<String> {
         self.state.screens.iter().map(Screen::name).collect()
+    }
+
+    pub fn colour_profile(&self, output: &str) -> Option<&str> {
+        self.state
+            .screen_named(output)
+            .and_then(|screen| self.state.screens[screen].colour_profile.as_deref())
     }
 
     pub fn output_settings(&self, output: &str) -> Option<OutputSettings> {

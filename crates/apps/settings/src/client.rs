@@ -301,9 +301,10 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
             .get("rotation")
             .and_then(|value| u32::try_from(value).ok())
             .and_then(Rotation::from_degrees),
-        match_colours: settings
-            .get("match-colours")
-            .and_then(|value| bool::try_from(value).ok()),
+        colour_profile: settings
+            .get("colour-profile")
+            .and_then(|value| value.try_clone().ok())
+            .and_then(|value| String::try_from(value).ok()),
     }
 }
 
@@ -458,8 +459,8 @@ impl SettingsClient {
         if let Some(rotation) = display.rotation {
             settings.insert("rotation", rotation.degrees().into());
         }
-        if let Some(enabled) = display.match_colours {
-            settings.insert("match-colours", enabled.into());
+        if let Some(profile) = &display.colour_profile {
+            settings.insert("colour-profile", profile.as_str().into());
         }
         self.config.set_display(identity, settings)
     }

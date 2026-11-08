@@ -54,6 +54,7 @@ use bande_status::brightness::{DisplayLevel, LevelRequest};
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
 pub(crate) const USE_MAIN: &str = "main";
+pub(crate) const ADD_COLOUR_PROFILE: &str = "add";
 pub(crate) const USE_EXTENDED: &str = "extended";
 pub(crate) const MIRROR_PREFIX: &str = "mirror:";
 
@@ -245,6 +246,7 @@ pub struct SettingsView {
     pub(crate) busy: Vec<String>,
     pub(crate) pairing: Option<Question>,
     pub(crate) pictures: Vec<(String, Pair)>,
+    pub(crate) colour_profiles: Vec<(String, String)>,
     pub(crate) thumbnails: HashMap<Pair, Option<Image>>,
     pub(crate) query: String,
     pub(crate) hits: Vec<PaneHit>,
@@ -347,6 +349,7 @@ impl SettingsView {
             busy: Vec::new(),
             pairing: None,
             pictures: Vec::new(),
+            colour_profiles: Vec::new(),
             thumbnails: HashMap::new(),
             query: String::new(),
             hits: Vec::new(),
@@ -643,6 +646,9 @@ impl SettingsView {
                 (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
+            Update::ColourProfiles(_) | Update::ColourProfileAdded(..) => {
+                (None, &[SettingId::ColourProfile])
+            }
             Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
             Update::Printers(_) | Update::PrinterAdded(..) | Update::PrintingInstalled => (
                 Some(PaneId::Printers),
@@ -723,6 +729,10 @@ impl SettingsView {
                 self.pairing = question;
             }
             Update::Pictures(pictures) => self.pictures = pictures,
+            Update::ColourProfiles(profiles) => self.colour_profiles = profiles,
+            Update::ColourProfileAdded(identity, profile) => {
+                self.change_display(identity, SettingId::ColourProfile, Value::Keyword(profile));
+            }
             Update::Thumbnail(pair, picture) => {
                 let image = Image::from_rgba(picture.width, picture.height, picture.rgba);
                 self.thumbnails.insert(pair, image);
@@ -2111,7 +2121,7 @@ impl SettingsView {
         };
         if !keep {
             self.display_settings
-                .insert(pending.identity.clone(), pending.previous);
+                .insert(pending.identity.clone(), pending.previous.clone());
             self.commands
                 .push(Command::Display(pending.identity, pending.previous));
         }
@@ -2214,9 +2224,9 @@ impl SettingsView {
         let mut display = self
             .display_settings
             .get(&identity)
-            .copied()
+            .cloned()
             .unwrap_or_default();
-        let previous = display;
+        let previous = display.clone();
         let mut confirm = false;
         match (id, value) {
             (SettingId::Brightness, Value::Fraction(level)) => {
@@ -2252,14 +2262,18 @@ impl SettingsView {
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
             }
-            (SettingId::MatchColours, Value::Flag(on)) => {
-                display.match_colours = (!on).then_some(false);
+            (SettingId::ColourProfile, Value::Keyword(profile)) => {
+                if profile == ADD_COLOUR_PROFILE {
+                    self.commands.push(Command::AddColourProfile(identity));
+                    return;
+                }
+                display.colour_profile = (profile != bande_colour::DISPLAY).then_some(profile);
             }
             _ => return,
         }
         if confirm && display != previous {
             let previous = match &self.keep {
-                Some(keep) if keep.identity == identity => keep.previous,
+                Some(keep) if keep.identity == identity => keep.previous.clone(),
                 _ => previous,
             };
             self.keep_displays(true);
@@ -2269,7 +2283,8 @@ impl SettingsView {
                 until: Instant::now() + KEEP_DISPLAY_SETTINGS,
             });
         }
-        self.display_settings.insert(identity.clone(), display);
+        self.display_settings
+            .insert(identity.clone(), display.clone());
         self.commands.push(Command::Display(identity, display));
     }
 

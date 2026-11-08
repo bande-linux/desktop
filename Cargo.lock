@@ -432,6 +432,8 @@ dependencies = [
  "bande-inbox",
  "bande-keyboard",
  "bande-l10n",
+ "futures-lite",
+ "tracing",
  "zbus",
 ]
 

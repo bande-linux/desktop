@@ -160,8 +160,13 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
                     text!("Couldn't change the apps that open at login."),
                 ),
             };
-            if let Err(error) = run(&dir, apps, command) {
-                updates.send(pane_failed(pane, failure, error));
+            let language = matches!(command, LoginCommand::SetLanguage(..));
+            match run(&dir, apps, command) {
+                Ok(()) if language => crate::locale::fetch_language_packs(),
+                Ok(()) => {}
+                Err(error) => {
+                    updates.send(pane_failed(pane, failure, error));
+                }
             }
             let state = LoginItems {
                 items: login_items(&dir, apps),

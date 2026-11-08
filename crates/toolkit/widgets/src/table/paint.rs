@@ -7,7 +7,7 @@ use bande_graphics::{
 };
 
 use super::model::{Cell, Line};
-use super::{CELL_PADDING, Glide, ICON_SIZE, Table};
+use super::{CELL_PADDING, Glide, HEADING_BASELINE, ICON_SIZE, Table};
 use crate::{Animated, Context, Spring};
 
 const SELECTION_INSET: (f32, f32) = (4.0, 1.0);
@@ -15,6 +15,12 @@ const ICON_GAP: f32 = 6.0;
 const TEXT_SIZE: f32 = 13.0;
 const FLOATING_SHADOW: f32 = 0.18;
 const FLOATING_BLUR: f32 = 8.0;
+const BADGE_PADDING: f32 = 7.0;
+const BADGE_RISE: f32 = 1.0;
+const BADGE_FILL: f32 = 0.16;
+const LIT_BADGE_FILL: f32 = 0.22;
+const HOVER_INK: f32 = 0.08;
+const PRESSED_INK: f32 = 0.16;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct TextKey {
@@ -25,6 +31,7 @@ pub(super) struct TextKey {
     label: bool,
     tabular: bool,
     cut: Cut,
+    badge: bool,
 }
 
 impl Table {
@@ -55,7 +62,7 @@ impl Table {
     ) -> TextKey {
         let cell = &line.cells[column];
         let selected = self.selected.get(index).copied().unwrap_or(false);
-        let color = match (lit, cell.tint, cell.label, cell.muted) {
+        let color = match (lit, cell.badge.or(cell.tint), cell.label, cell.muted) {
             (true, _, _, _) => cx.palette.on_accent,
             (false, Some(tint), _, _) => tint,
             (false, None, true, _) => cx.palette.ink3,
@@ -65,7 +72,12 @@ impl Table {
             (false, None, false, false) => cx.palette.ink,
         };
         let indent = if column == 0 { self.indent(line) } else { 0.0 };
-        let width = widths[column] - 2.0 * CELL_PADDING - self.icon_space(column, cell) - indent;
+        let badge = match cell.badge {
+            Some(_) => 2.0 * BADGE_PADDING,
+            None => 0.0,
+        };
+        let width =
+            widths[column] - 2.0 * CELL_PADDING - self.icon_space(column, cell) - indent - badge;
         let width = width.max(0.0);
         TextKey {
             text: cell.text.clone(),
@@ -75,6 +87,7 @@ impl Table {
             label: cell.label,
             tabular: cell.tabular || self.columns[column].numeric,
             cut: cell.cut,
+            badge: cell.badge.is_some(),
         }
     }
 
@@ -117,9 +130,11 @@ impl Table {
                 let paragraph = match old.remove(&key) {
                     Some(paragraph) => paragraph,
                     None => {
-                        let style = match key.label {
-                            true => TextStyle::role(TextRole::Label, key.color),
-                            false => TextStyle::new(TEXT_SIZE, key.color),
+                        let style = match (key.label, key.badge) {
+                            (true, _) => TextStyle::role(TextRole::Label, key.color),
+                            (false, true) => TextStyle::role(TextRole::Callout, key.color)
+                                .weight(TextStyle::MEDIUM),
+                            (false, false) => TextStyle::new(TEXT_SIZE, key.color),
                         };
                         let style = match key.tabular {
                             true => style.tabular(),
@@ -252,6 +267,41 @@ impl Table {
         let Some(paragraph) = texts.get(&key) else {
             return;
         };
+        if let Some(tint) = cell.badge {
+            let width = paragraph.width() + 2.0 * BADGE_PADDING;
+            let height = paragraph.height() + 2.0 * BADGE_RISE;
+            if self.columns[column].numeric {
+                text_x = x + widths[column] - CELL_PADDING - width;
+            }
+            let capsule = Rect::new(
+                text_x,
+                y + ((self.row_height() - height) / 2.0).round(),
+                width,
+                height,
+            );
+            let fill = match lit {
+                true => cx.palette.on_accent.with_opacity(LIT_BADGE_FILL),
+                false => tint.with_opacity(BADGE_FILL),
+            };
+            let badge = vec![
+                Item::Fill {
+                    shape: Shape::rounded(capsule, height / 2.0),
+                    paint: fill.into(),
+                },
+                Item::Text {
+                    origin: Point::new(capsule.x + BADGE_PADDING, capsule.y + BADGE_RISE),
+                    paragraph: paragraph.clone(),
+                },
+            ];
+            match cell.dimmed {
+                true => items.push(Item::Opacity {
+                    alpha: Palette::DIMMED_ALPHA,
+                    items: badge,
+                }),
+                false => items.extend(badge),
+            }
+            return;
+        }
         if self.columns[column].numeric {
             text_x = x + widths[column] - CELL_PADDING - paragraph.width();
         }
@@ -441,22 +491,53 @@ impl Table {
             return;
         };
         let to = self.shown.get(last).copied().unwrap_or(usize::MAX);
-        for ((start, _), paragraph) in self.headings.iter().zip(&self.heading_texts) {
-            if *start < *from || *start > to {
+        for (heading, (entry, paragraph)) in
+            self.headings.iter().zip(&self.heading_texts).enumerate()
+        {
+            if entry.start < *from || entry.start > to {
                 continue;
             }
-            let Ok(index) = self.shown.binary_search(start) else {
+            let Some(bounds) = self.heading_bounds(heading, offset) else {
                 continue;
             };
-            let top = body.y + self.row_top(index) - self.row_height() - offset;
-            let bottom = top + self.row_height();
+            let bottom = bounds.y + bounds.height;
             items.push(Item::Text {
                 origin: Point::new(
                     body.x + CELL_PADDING,
-                    (bottom - paragraph.height() - 5.0).round(),
+                    (bottom - paragraph.height() - HEADING_BASELINE).round(),
                 ),
                 paragraph: paragraph.clone(),
             });
+            if let Some((symbol, button)) = self
+                .heading_symbols
+                .get(heading)
+                .and_then(Option::as_ref)
+                .zip(self.heading_button_bounds(heading, offset))
+            {
+                let ink = match (self.heading_press, self.heading_hover) {
+                    (Some(pressed), _) if pressed == heading => Some(PRESSED_INK),
+                    (_, Some(hovered)) if hovered == heading => Some(HOVER_INK),
+                    _ => None,
+                };
+                if let Some(ink) = ink {
+                    items.push(Item::Fill {
+                        shape: Shape::rounded(button, Radius::XS),
+                        paint: cx.palette.well.mix(cx.palette.ink, ink).into(),
+                    });
+                }
+                symbol.paint(
+                    Rect::new(
+                        button.x + (button.width - ICON_SIZE) / 2.0,
+                        button.y + (button.height - ICON_SIZE) / 2.0,
+                        ICON_SIZE,
+                        ICON_SIZE,
+                    ),
+                    items,
+                );
+            }
+            if self.sidebar {
+                continue;
+            }
             items.push(Item::Fill {
                 shape: Shape::rect(Rect::new(
                     body.x + CELL_PADDING,

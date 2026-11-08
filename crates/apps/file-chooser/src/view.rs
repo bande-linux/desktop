@@ -11,8 +11,8 @@ use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_files::{Place, Row as SidebarRow};
 use bande_fs::{Entry, SortBy, format_date, format_size, is_hidden};
 use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, CheckState, Checkbox, Column, Context, Cursor, Event, Key, Label,
-    Modifiers, PopUpButton, Row, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui,
+    Alert, Axis, Button, Cell, CheckState, Checkbox, Column, Context, Cursor, Event, Heading, Key,
+    Label, Modifiers, PopUpButton, Row, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui,
     Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
@@ -540,22 +540,24 @@ impl ChooserView {
     fn sidebar(&mut self) -> Table {
         let intents = Rc::clone(&self.intents);
         let current = format!("{PLACE_PREFIX}{}", self.chooser.folder().display());
-        let rows: Vec<Row> = self
-            .places
-            .clone()
-            .iter()
-            .enumerate()
-            .filter_map(|(index, row)| match row {
-                SidebarRow::Heading(title) => Some(Row::new(
-                    format!("heading:{index}"),
-                    vec![Cell::new(title.as_str()).muted().label()],
-                )),
-                SidebarRow::Place(place) => place_key(place).map(|key| {
-                    let icon = self.icons.first(&[place.icon.to_owned()]);
-                    Row::new(key, vec![Cell::new(place.name.as_str()).icon(icon)])
-                }),
-            })
-            .collect();
+        let mut rows = Vec::new();
+        let mut headings = Vec::new();
+        for row in self.places.clone().iter() {
+            match row {
+                SidebarRow::Heading(title) => {
+                    headings.push(Heading::new(rows.len(), title.as_str()))
+                }
+                SidebarRow::Place(place) => {
+                    if let Some(key) = place_key(place) {
+                        let icon = self.icons.first(&[place.icon.to_owned()]);
+                        rows.push(Row::new(
+                            key,
+                            vec![Cell::new(place.name.as_str()).icon(icon)],
+                        ));
+                    }
+                }
+            }
+        }
         let mut table = Table::new(vec![Column::new("", SIDEBAR_WIDTH).flexible()])
             .without_header()
             .sidebar()
@@ -565,6 +567,7 @@ impl ChooserView {
                 }
             });
         table.set_rows(rows);
+        table.set_headings(headings);
         table.select(&[current]);
         table
     }

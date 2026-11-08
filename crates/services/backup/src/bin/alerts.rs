@@ -58,13 +58,12 @@ fn wait_for_answer(signals: MessageIterator, id: u32) {
                     return;
                 }
             }
-            Some("NotificationClosed") => {
+            Some("NotificationClosed")
                 if body
                     .deserialize::<(u32, u32)>()
-                    .is_ok_and(|(closed, _)| closed == id)
-                {
-                    return;
-                }
+                    .is_ok_and(|(closed, _)| closed == id) =>
+            {
+                return;
             }
             _ => {}
         }

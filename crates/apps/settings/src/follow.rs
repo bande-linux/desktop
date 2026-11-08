@@ -439,7 +439,7 @@ impl Services {
             _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
-            printers: system.map(|system| follow_printers(system, updates.clone())),
+            printers: system.map(|system| follow_printers(system, session, updates.clone())),
             sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())

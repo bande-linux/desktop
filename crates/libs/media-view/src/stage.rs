@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
+use bande_l10n::{text, tr};
 use bande_media::{FailureKind, Playback};
 use bande_toolkit::ui::{
     Context, Event, Key, Modifiers, Parts, Size, SurfaceScaling, Widget, WidgetId,
@@ -10,7 +11,7 @@ use bande_toolkit::{
     TextStyle, TextSystem,
 };
 
-use crate::{L10N, Session};
+use crate::Session;
 
 const BAR_HEIGHT: f32 = 44.0;
 const BAR_WIDTH: f32 = 560.0;
@@ -305,7 +306,7 @@ impl Stage {
         });
         self.hint_text = (!self.session.is_loaded()).then(|| {
             text.paragraph(
-                &L10N.tr("nothing-open"),
+                &tr!("Open an audio or video file to play it."),
                 TextStyle::role(TextRole::Body, palette.ink2),
                 Some(frame.width - 2.0 * BAR_INSET),
                 TextAlign::Center,
@@ -337,20 +338,29 @@ impl Stage {
             )
         });
         let failure = self.session.failure().map(|kind| match kind {
-            FailureKind::Unsupported => ("unsupported-title", "unsupported-detail"),
-            FailureKind::Unreadable => ("unreadable-title", "unreadable-detail"),
-            FailureKind::Failed => ("failed-title", "failed-detail"),
+            FailureKind::Unsupported => (
+                text!("This file can't be played"),
+                text!("Bande has no decoder for its format."),
+            ),
+            FailureKind::Unreadable => (
+                text!("This file can't be opened"),
+                text!("It may have been moved, or you may not have permission to read it."),
+            ),
+            FailureKind::Failed => (
+                text!("Playback stopped"),
+                text!("The player ran into a problem with this file."),
+            ),
         });
         self.failure_text = failure.map_or_else(Vec::new, |(title, detail)| {
             vec![
                 text.paragraph(
-                    &L10N.tr(title),
+                    &title.tr(),
                     TextStyle::role(TextRole::Heading, palette.ink),
                     Some(frame.width - 2.0 * BAR_INSET),
                     TextAlign::Center,
                 ),
                 text.paragraph(
-                    &L10N.tr(detail),
+                    &detail.tr(),
                     TextStyle::role(TextRole::Body, palette.ink2),
                     Some(frame.width - 2.0 * BAR_INSET),
                     TextAlign::Center,
@@ -724,7 +734,7 @@ impl Widget for StageWidget {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Video);
-        node.set_label(L10N.tr("media-controls"));
+        node.set_label(tr!("Playback controls"));
         node
     }
 
@@ -750,14 +760,14 @@ impl Widget for StageWidget {
         let layout = &self.stage.layout;
         let session = self.stage.session();
         let mut play = Node::new(Role::Button);
-        play.set_label(L10N.tr(match session.is_playing() {
-            true => "pause",
-            false => "play",
-        }));
+        play.set_label(match session.is_playing() {
+            true => tr!("Pause"),
+            false => tr!("Play"),
+        });
         play.add_action(Action::Click);
         play.set_bounds(Self::part_bounds(layout.play));
         let mut timeline = Node::new(Role::Slider);
-        timeline.set_label(L10N.tr("timeline"));
+        timeline.set_label(tr!("Timeline"));
         timeline.set_min_numeric_value(0.0);
         timeline.set_max_numeric_value(
             session
@@ -769,7 +779,7 @@ impl Widget for StageWidget {
         timeline.add_action(Action::SetValue);
         timeline.set_bounds(Self::part_bounds(layout.track));
         let mut volume = Node::new(Role::Slider);
-        volume.set_label(L10N.tr("volume"));
+        volume.set_label(tr!("Volume"));
         volume.set_min_numeric_value(0.0);
         volume.set_max_numeric_value(1.0);
         volume.set_numeric_value(session.volume());

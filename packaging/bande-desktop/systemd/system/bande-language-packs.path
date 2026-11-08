@@ -1,0 +1,9 @@
+[Unit]
+Description=Bring language packs after apt or PackageKit changes packages
+
+[Path]
+PathChanged=/run/bande-desktop/packages-installed
+Unit=bande-language-packs.service
+
+[Install]
+WantedBy=paths.target

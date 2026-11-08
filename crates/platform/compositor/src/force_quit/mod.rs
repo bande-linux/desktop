@@ -10,6 +10,7 @@ use bande_graphics::{
     Appearance, Color, Elevation, FRAME_HEADER_HEIGHT, Item, Key, Modifiers, Palette, Pointer,
     PointerButton, Radius, Rect, Scene, Scroll, Shape, TextAlign, title_style,
 };
+use bande_l10n::tr;
 use bande_render::VulkanRenderer;
 use bande_widgets::Event;
 use smithay::backend::renderer::element::Kind;
@@ -24,7 +25,6 @@ use smithay::utils::{Logical, Point, Rectangle, Size};
 
 pub(crate) use self::kill::Process;
 use self::view::{CONTENT, Effect, ForceQuitView, Listed, SHELL_KEY};
-use crate::L10N;
 use crate::shell::toplevel_names;
 use crate::state::{ClientState, Compositor, OutputElement, State};
 
@@ -268,7 +268,7 @@ impl State {
             .map(|candidate| {
                 let app = self.switcher.app(&candidate.app_id, &candidate.title);
                 let name = match (candidate.key == SHELL_KEY, app.name.is_empty()) {
-                    (true, _) => L10N.tr("force-quit-shell"),
+                    (true, _) => tr!("Taskbar & Desktop"),
                     (false, false) => app.name,
                     (false, true) => candidate
                         .clients
@@ -278,7 +278,7 @@ impl State {
                                 .get_data::<ClientState>()
                                 .and_then(|state| state.process.as_ref()?.name())
                         })
-                        .unwrap_or_else(|| L10N.tr("force-quit-untitled")),
+                        .unwrap_or_else(|| tr!("Untitled App")),
                 };
                 let icon = app
                     .icon
@@ -583,7 +583,7 @@ impl State {
         let header = FRAME_HEADER_HEIGHT as f32;
         let text = labels.get_mut().text();
         let title = text.paragraph(
-            &L10N.tr("force-quit-title"),
+            &tr!("Force Quit Apps"),
             title_style(&palette, true),
             Some(CONTENT.0),
             TextAlign::Center,

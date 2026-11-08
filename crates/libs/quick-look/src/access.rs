@@ -3,9 +3,10 @@ use std::time::Instant;
 use accesskit::{
     Action as AccessAction, ActionRequest, Live, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate,
 };
+use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
 
-use crate::{Hit, L10N, QuickLook};
+use crate::{Hit, QuickLook};
 
 const ROOT: NodeId = NodeId(1);
 const FIRST: u64 = 2;
@@ -22,26 +23,26 @@ fn bounds(rect: Rect) -> accesskit::Rect {
 impl QuickLook {
     fn label(&self, hit: Hit) -> Option<String> {
         let id = match hit {
-            Hit::Close => "close",
-            Hit::FullScreen if self.full_screen => "exit-full-screen",
-            Hit::FullScreen => "full-screen",
-            Hit::Previous => "previous",
-            Hit::Next => "next",
-            Hit::IndexSheet => "index-sheet",
-            Hit::Rotate => "rotate",
-            Hit::Copy => "copy",
-            Hit::Unlock => "unlock",
+            Hit::Close => text!("Close"),
+            Hit::FullScreen if self.full_screen => text!("Exit Full Screen"),
+            Hit::FullScreen => text!("Full Screen"),
+            Hit::Previous => text!("Previous"),
+            Hit::Next => text!("Next"),
+            Hit::IndexSheet => text!("Index Sheet"),
+            Hit::Rotate => text!("Rotate Left"),
+            Hit::Copy => text!("Copy"),
+            Hit::Unlock => text!("Unlock"),
             Hit::Open => {
                 let app = self.subject()?.app.as_ref()?.name.clone();
-                return Some(L10N.tr_args("open-with", [("app", app.into())]));
+                return Some(tr!("Open with {app}", app = app));
             }
             Hit::Tile(index) => return Some(self.subjects.get(index)?.entry.name.clone()),
             Hit::Thumbnail(page) => {
-                return Some(L10N.tr_args("page", [("number", (page + 1).into())]));
+                return Some(tr!("Page {number}", number = (page + 1)));
             }
             Hit::Resize(_) | Hit::Header | Hit::Panel => return None,
         };
-        Some(L10N.tr(id))
+        Some(id.tr())
     }
 
     fn controls(&self) -> Vec<(Rect, Hit, String)> {
@@ -53,15 +54,13 @@ impl QuickLook {
 
     pub fn accessibility(&self) -> TreeUpdate {
         let mut root = Node::new(Role::Dialog);
-        root.set_label(L10N.tr("quick-look"));
+        root.set_label(tr!("Quick Look"));
         root.set_live(Live::Polite);
         if let Some(subject) = self.subject() {
             let mut description = format!("{}, {}", subject.entry.name, subject.kind);
             if let Some((at, count)) = self.position() {
                 description.push_str(", ");
-                description.push_str(
-                    &L10N.tr_args("position", [("at", at.into()), ("count", count.into())]),
-                );
+                description.push_str(&tr!("{at} of {count}", at = at, count = count));
             }
             root.set_description(description);
         }

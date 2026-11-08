@@ -4,15 +4,14 @@ pub mod discovery;
 pub mod health;
 pub mod mounts;
 mod mounts_bus;
-pub mod server;
+pub use bande_volumes::server;
 pub mod space;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use bande_volumes::udisks::{BLOCK, Change, FILESYSTEM, Objects, UDISKS, Udisks};
@@ -21,9 +20,6 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, message};
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-automount")));
 
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 const LOGIN1: &str = "org.freedesktop.login1";
@@ -98,7 +94,7 @@ impl Volume {
             .into_iter()
             .map(|key| objects.text(path, BLOCK, key))
             .find(|label| !label.is_empty())
-            .unwrap_or_else(|| L10N.tr("untitled"));
+            .unwrap_or_else(|| tr!("Untitled"));
         Some(Self {
             label,
             automount: flag("HintAuto") && !flag("HintIgnore") && !flag("HintSystem"),
@@ -261,12 +257,12 @@ impl Automounter {
         if !volume.mounted {
             return;
         }
-        let body = L10N.tr_args(
-            "not-ejected-body",
-            [("label", volume.label.as_str().into())],
+        let body = tr!(
+            "Eject “{label}” before disconnecting it, or files on it may be damaged.",
+            label = volume.label.as_str()
         );
-        let app_name = L10N.tr("app-name");
-        let summary = L10N.tr("not-ejected");
+        let app_name = tr!("Disks");
+        let summary = tr!("Disk Not Ejected Properly");
         let posted = client::notify(
             &self.session,
             &Request {
@@ -278,6 +274,7 @@ impl Automounter {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         if let Err(error) = posted {

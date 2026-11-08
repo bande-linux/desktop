@@ -32,6 +32,17 @@ for package in "${packages[@]}"; do
 done
 field bande-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
 
+echo "== the compositor ships the Bande pointers under their CSS and X11 names"
+root=$(extract bande-compositor)
+for name in default pointer text e-resize nwse-resize col-resize left_ptr right_side top_left_corner hand2 xterm; do
+    head -c 4 "$root/usr/share/icons/Bande-Cursors/cursors/$name" | grep -q Xcur
+done
+grep -qx 'Name=Bande-Cursors' "$root/usr/share/icons/Bande-Cursors/index.theme"
+
+echo "== each program carries its English catalog"
+contains bande-files usr/share/bande/l10n/bande-files/en.mo
+contains bande-shell usr/share/bande/l10n/bande-shell/en.mo
+
 echo "== the notification daemon is D-Bus activatable"
 root=$(extract bande-notify)
 service="$root/usr/share/dbus-1/services/org.bande.Notify.service"

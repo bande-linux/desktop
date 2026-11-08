@@ -6,22 +6,25 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
 use crate::media::{self, Command, Playback, Player, Players};
 use crate::{
-    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, L10N, PANEL_WIDTH, Status,
+    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, PANEL_WIDTH, Status,
     chooser_menu, display_title, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
 };
 use accesskit::TreeUpdate;
 use bande_audio::{Audio, Level, Meter, meter_level};
-use bande_bluetooth::Bluetooth;
+use bande_bluetooth::{Bluetooth, adapter_in_kernel};
 use bande_inbox::{Inbox, Outbox};
-use bande_network::NetworkManager;
+use bande_network::{NetworkManager, wifi_in_kernel};
 use bande_notify::client::NotificationCenter;
 use bande_power::logind::own_session;
 use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
 use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
 use bande_status::captive::open_page;
 use bande_status::session::full_name;
+use bande_status::status::Reading;
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
@@ -35,6 +38,7 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 
 const JOIN: &str = "join:";
+const SETTINGS_APP: &str = "org.bande.Settings";
 const SESSION: &str = "session:";
 const ARTWORK_PIXELS: u32 = 128;
 const ARTWORKS_KEPT: usize = 16;
@@ -83,10 +87,10 @@ pub struct ControlCenter {
 
 #[derive(Debug, Clone, Default)]
 struct Connected {
-    wifi: Option<bool>,
+    wifi: Reading<bool>,
     network: Option<String>,
     sign_in: bool,
-    bluetooth: Option<bool>,
+    bluetooth: Reading<bool>,
     do_not_disturb: bool,
 }
 
@@ -95,24 +99,26 @@ fn read_connected(
     bluetooth: Option<&Bluetooth>,
     session: Option<&Connection>,
 ) -> Connected {
-    let wifi = network.and_then(|network| {
-        network
+    let wifi = network.map_or(Reading::Absent, |network| {
+        let enabled = network
             .has_wifi()
-            .ok()
-            .filter(|has| *has)
-            .and_then(|_| network.wifi_enabled().ok())
+            .and_then(|has| has.then(|| network.wifi_enabled()).transpose());
+        Reading::from_answer("NetworkManager", enabled, wifi_in_kernel)
     });
     Connected {
-        wifi,
         network: network
-            .filter(|_| wifi == Some(true))
+            .filter(|_| wifi == Reading::Present(true))
             .and_then(|network| network.networks().ok())
             .and_then(|networks| networks.into_iter().find(|found| found.current))
             .map(|current| current.name()),
         sign_in: network.is_some_and(|network| matches!(network.sign_in_page(), Ok(Some(_)))),
-        bluetooth: bluetooth
-            .and_then(|bluetooth| bluetooth.radio().ok().flatten())
-            .map(|radio| radio.powered),
+        wifi,
+        bluetooth: bluetooth.map_or(Reading::Absent, |bluetooth| {
+            let powered = bluetooth
+                .radio()
+                .map(|radio| radio.map(|radio| radio.powered));
+            Reading::from_answer("BlueZ", powered, adapter_in_kernel)
+        }),
         do_not_disturb: session
             .and_then(|session| NotificationCenter::new(session).ok())
             .and_then(|center| center.do_not_disturb().ok())
@@ -355,6 +361,7 @@ impl ControlCenter {
                         .is_some_and(|player| artwork_key(player) == *key)
                 })
                 .and_then(|(_, image)| image.clone()),
+            settings: bande_xdg::is_installed(SETTINGS_APP),
             players: self
                 .players
                 .all()
@@ -426,7 +433,7 @@ impl ControlCenter {
             return;
         };
         if found.security.needs_password() && !found.known {
-            self.launch(window, "org.bande.Settings", &["bande-settings", "wifi"]);
+            self.launch(window, SETTINGS_APP, &["bande-settings", "wifi"]);
             self.dismiss(window);
             return;
         }
@@ -465,6 +472,7 @@ impl ControlCenter {
                     report("set the volume", audio.set_level(output, level));
                 }
             }
+            Change::VolumeReleased => self.volume_feedback(),
             Change::Brightness(connector, level) => self.set_light(connector, level),
             Change::KeyboardBrightness(level) => self.set_keyboard_light(level),
             Change::InputMuted(muted) => {
@@ -502,17 +510,19 @@ impl ControlCenter {
                 self.dismiss(window);
             }
             Change::Power => {
-                let user = [("user", full_name().into())];
                 let mut items = Vec::new();
                 if self.can_sleep {
-                    items.push(MenuItem::new(&L10N.tr("sleep"), &format!("{SESSION}sleep")));
+                    items.push(MenuItem::new(&tr!("Sleep"), &format!("{SESSION}sleep")));
                     items.push(MenuItem::separator());
                 }
                 items.extend([
-                    MenuItem::new(&L10N.tr("restart"), &format!("{SESSION}restart")),
-                    MenuItem::new(&L10N.tr("shut-down"), &format!("{SESSION}shut-down")),
+                    MenuItem::new(&tr!("Restart…"), &format!("{SESSION}restart")),
+                    MenuItem::new(&tr!("Shut Down…"), &format!("{SESSION}shut-down")),
                     MenuItem::separator(),
-                    MenuItem::new(&L10N.tr_args("log-out", user), &format!("{SESSION}log-out")),
+                    MenuItem::new(
+                        &tr!("Log Out {user}…", user = full_name()),
+                        &format!("{SESSION}log-out"),
+                    ),
                 ]);
                 report(
                     "open the power menu",
@@ -520,7 +530,7 @@ impl ControlCenter {
                 );
             }
             Change::Settings => {
-                self.launch(window, "org.bande.Settings", &["bande-settings"]);
+                self.launch(window, SETTINGS_APP, &["bande-settings"]);
                 self.dismiss(window);
             }
             Change::Player(bus_name) => {
@@ -713,16 +723,20 @@ impl ControlCenter {
         self.reveal(window, true);
     }
 
+    fn volume_feedback(&self) {
+        if let Some(session) = &self.session {
+            bande_sound::play(session, bande_sound::Sound::VolumeChange.name());
+        }
+    }
+
     fn volume_key(&mut self, window: &mut Window, key: VolumeKey, fine: bool) {
         let (Some(audio), Some(key)) = (&self.audio, audio_key(key)) else {
             return;
         };
         match audio.press(key, fine) {
             Ok(level) => {
-                if !level.muted
-                    && let Some(session) = &self.session
-                {
-                    bande_sound::play(session, "audio-volume-change");
+                if !level.muted {
+                    self.volume_feedback();
                 }
                 self.show_hud(window, Hud::Volume(level));
             }

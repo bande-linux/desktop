@@ -4,6 +4,18 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Instant;
 
+use bande_l10n::{text, tr};
+
+use crate::emoji::EMOJI;
+use crate::model::{
+    Action as LauncherAction, AppInfo, Clip, Heading, Hit, Kind, Mode, Model, PaneInfo, Target,
+};
+use crate::preview::PreviewPane;
+use crate::rows::{
+    CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, fitted,
+    hit_menu,
+};
+use crate::tones::{TONES_WIDTH, Tones};
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_config::Search;
 use bande_content::Preview;
@@ -18,18 +30,6 @@ use bande_toolkit::{
     Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole,
     TextStyle, TextSystem,
 };
-
-use crate::L10N;
-use crate::emoji::EMOJI;
-use crate::model::{
-    Action as LauncherAction, AppInfo, Clip, Heading, Hit, Kind, Mode, Model, PaneInfo, Target,
-};
-use crate::preview::PreviewPane;
-use crate::rows::{
-    CELL_HEIGHT, Choice, Form, GLYPH_HEIGHT, ROW_HEIGHT, apply_menu_action, centered, fitted,
-    hit_menu,
-};
-use crate::tones::{TONES_WIDTH, Tones};
 
 pub const CARD_WIDTH: f32 = 720.0;
 pub const ICON_SIZE: u32 = 64;
@@ -97,41 +97,42 @@ struct Card {
 }
 
 fn heading_text(heading: Heading) -> String {
-    L10N.tr(match heading {
-        Heading::TopHit => "top-hit",
-        Heading::Applications => "applications",
-        Heading::Settings => "settings",
-        Heading::System => "system",
-        Heading::Folders => "folders",
-        Heading::Documents => "documents",
-        Heading::Mail => "mail",
-        Heading::Events => "events",
-        Heading::Contacts => "contacts",
-        Heading::RecentApps => "recent-apps",
-        Heading::RecentDocuments => "recent-documents",
-        Heading::AllApps => "all-apps",
-        Heading::FrequentlyUsed => "frequently-used",
+    (match heading {
+        Heading::TopHit => text!("Top Hit"),
+        Heading::Applications => text!("Applications"),
+        Heading::Settings => text!("System Settings"),
+        Heading::System => text!("System"),
+        Heading::Folders => text!("Folders"),
+        Heading::Documents => text!("Documents"),
+        Heading::Mail => text!("Mail"),
+        Heading::Events => text!("Events"),
+        Heading::Contacts => text!("Contacts"),
+        Heading::RecentApps => text!("Recent Apps"),
+        Heading::RecentDocuments => text!("Recent Documents"),
+        Heading::AllApps => text!("All Apps"),
+        Heading::FrequentlyUsed => text!("Frequently Used"),
         Heading::EmojiGroup(group) => match EMOJI.groups.get(group).copied() {
-            Some("smileys-emotion") => "emoji-smileys-emotion",
-            Some("people-body") => "emoji-people-body",
-            Some("animals-nature") => "emoji-animals-nature",
-            Some("food-drink") => "emoji-food-drink",
-            Some("travel-places") => "emoji-travel-places",
-            Some("activities") => "emoji-activities",
-            Some("objects") => "emoji-objects",
-            Some("symbols") => "emoji-symbols",
-            Some("flags") => "emoji-flags",
-            _ => "emoji-characters",
+            Some("smileys-emotion") => text!("Smileys & Emotion"),
+            Some("people-body") => text!("People & Body"),
+            Some("animals-nature") => text!("Animals & Nature"),
+            Some("food-drink") => text!("Food & Drink"),
+            Some("travel-places") => text!("Travel & Places"),
+            Some("activities") => text!("Activities"),
+            Some("objects") => text!("Objects"),
+            Some("symbols") => text!("Symbols"),
+            Some("flags") => text!("Flags"),
+            _ => text!("Characters"),
         },
     })
+    .tr()
 }
 
 fn placeholder(mode: Mode) -> String {
-    L10N.tr(match mode {
-        Mode::Search => "search",
-        Mode::Emoji => "search-emoji",
-        Mode::Clipboard => "search-clipboard",
-    })
+    match mode {
+        Mode::Search => tr!("Search"),
+        Mode::Emoji => tr!("Search Emoji & Symbols"),
+        Mode::Clipboard => tr!("Search Clipboard History"),
+    }
 }
 
 const FIELD: usize = 0;
@@ -192,11 +193,11 @@ impl Card {
         let state = self.state.borrow();
         let muted = TextStyle::role(TextRole::Callout, cx.palette.ink2);
         let hint = cx.text.paragraph(
-            &L10N.tr(if state.model.inserts {
-                "hint-emoji-insert"
+            &if state.model.inserts {
+                tr!("Return to insert")
             } else {
-                "hint-emoji-copy"
-            }),
+                tr!("Return to copy, then paste with Ctrl+V")
+            },
             muted,
             None,
             TextAlign::Start,
@@ -412,11 +413,11 @@ impl Widget for Card {
                 model.mode == Mode::Clipboard && model.query.trim().is_empty()
             };
             let message = cx.text.paragraph(
-                &L10N.tr(if empty_history {
-                    "clipboard-empty"
+                &if empty_history {
+                    tr!("Things you copy appear here")
                 } else {
-                    "no-results"
-                }),
+                    tr!("No Results")
+                },
                 TextStyle::role(TextRole::Heading, cx.palette.ink3),
                 None,
                 TextAlign::Start,
@@ -576,7 +577,7 @@ impl Widget for Card {
 
     fn access(&self, cx: &Context) -> Node {
         let mut node = Node::new(Role::Dialog);
-        node.set_label(L10N.tr("launcher"));
+        node.set_label(tr!("Launcher"));
         self.scroll.describe(cx, &mut node);
         node
     }
@@ -719,7 +720,7 @@ impl Launcher {
             screen_height: 0.0,
         }));
         let changed = state.clone();
-        let field = TextField::new(&L10N.tr("search"), "", move |query| {
+        let field = TextField::new(&tr!("Search"), "", move |query| {
             changed.borrow_mut().model.set_query(query);
         })
         .without_text_checking()

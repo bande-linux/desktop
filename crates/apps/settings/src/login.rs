@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 
+use bande_l10n::text;
 use bande_xdg::{
     DesktopEntry, Locale, app_languages, applications, autostart_dir, current_desktops, data_dirs,
     opens_at_login, set_app_language, set_open_at_login,
@@ -150,11 +151,24 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
             }
             let apps = apps.get_or_insert_with(load);
             let (pane, failure) = match command {
-                LoginCommand::SetLanguage(..) => (PaneId::LanguageTime, "app-language-failed"),
-                _ => (PaneId::Apps, "login-item-failed"),
+                LoginCommand::SetLanguage(..) => (
+                    PaneId::LanguageTime,
+                    text!("Couldn't change the app's language."),
+                ),
+                _ => (
+                    PaneId::Apps,
+                    text!("Couldn't change the apps that open at login."),
+                ),
             };
-            if let Err(error) = run(&dir, apps, command) {
-                updates.send(pane_failed(pane, failure, error));
+            let language = matches!(command, LoginCommand::SetLanguage(..));
+            match run(&dir, apps, command) {
+                Ok(()) if language => {
+                    crate::locale::fetch_language_packs(|_| {});
+                }
+                Ok(()) => {}
+                Err(error) => {
+                    updates.send(pane_failed(pane, failure, error));
+                }
             }
             let state = LoginItems {
                 items: login_items(&dir, apps),

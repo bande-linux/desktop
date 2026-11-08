@@ -3,13 +3,12 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_graphics::Path;
+use bande_l10n::tr;
 use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use bande_toolkit::{
     Color, CpuRenderer, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Scheme, Shape,
     Snapshot, TextAlign, TextStyle, TextSystem,
 };
-
-use crate::L10N;
 
 const INK: Color = Color::hex(0xff3b30);
 const HIGHLIGHT: Color = Color::hex(0xffd60a).with_alpha(0x66);
@@ -301,17 +300,17 @@ const COMMANDS: [Command; 9] = [
 ];
 
 fn title(command: Command) -> String {
-    L10N.tr(match command {
-        Command::Tool(Tool::Crop) => "crop",
-        Command::Tool(Tool::Arrow) => "arrow",
-        Command::Tool(Tool::Rectangle) => "rectangle",
-        Command::Tool(Tool::Text) => "text",
-        Command::Tool(Tool::Highlight) => "highlight",
-        Command::Undo => "undo",
-        Command::Delete => "delete",
-        Command::Copy => "copy",
-        Command::Done => "done",
-    })
+    match command {
+        Command::Tool(Tool::Crop) => tr!("Crop"),
+        Command::Tool(Tool::Arrow) => tr!("Arrow"),
+        Command::Tool(Tool::Rectangle) => tr!("Rectangle"),
+        Command::Tool(Tool::Text) => tr!("Text"),
+        Command::Tool(Tool::Highlight) => tr!("Highlight"),
+        Command::Undo => tr!("Undo"),
+        Command::Delete => tr!("Delete"),
+        Command::Copy => tr!("Copy"),
+        Command::Done => tr!("Done"),
+    }
 }
 
 pub type Commanded = Rc<RefCell<Vec<Command>>>;
@@ -459,7 +458,7 @@ impl Widget for Toolbar {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Toolbar);
-        node.set_label(L10N.tr("markup"));
+        node.set_label(tr!("Markup"));
         node
     }
 

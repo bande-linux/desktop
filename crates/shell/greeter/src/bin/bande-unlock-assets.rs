@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use bande_config::read_system_input_sources;
-use bande_greeter::L10N;
+use bande_l10n::{Text, text};
 use bande_toolkit::{
     Color, CpuRenderer, Item, Point, Scene, TextAlign, TextRole, TextStyle, TextSystem,
 };
@@ -20,11 +20,11 @@ const ALT_GRAPHICS: u32 = 2;
 const WIDEST: f32 = 560.0;
 const MAGIC: &[u8; 4] = b"BUA1";
 const LANGUAGE_FALLBACK: &str = "C.UTF-8";
-const MESSAGES: [&str; 4] = [
-    "unlock-disk",
-    "unlock-wrong",
-    "unlock-recovery",
-    "unlock-hints",
+const MESSAGES: [Text; 4] = [
+    text!("Enter your password to unlock this computer"),
+    text!("That password didn't work. Try again."),
+    text!("Enter your recovery key"),
+    text!("Tab: recovery key · Control+Space: keyboard layout"),
 ];
 
 fn word(output: &mut Vec<u8>, value: u32) {
@@ -184,7 +184,7 @@ fn write_assets(path: &Path) -> io::Result<()> {
     let mut renderer = CpuRenderer::default();
     for scale in [1.0, 2.0] {
         for message in MESSAGES {
-            let (width, height, alpha) = bitmap(&mut text, &mut renderer, &L10N.tr(message), scale)
+            let (width, height, alpha) = bitmap(&mut text, &mut renderer, &message.tr(), scale)
                 .ok_or_else(|| io::Error::other("cannot draw the unlock text"))?;
             word(&mut output, width);
             word(&mut output, height);

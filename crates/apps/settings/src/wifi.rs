@@ -1,3 +1,4 @@
+use bande_l10n::{text, tr};
 use bande_network::{ConnectionChange, KnownNetwork, Network, PrivateAddress, Security};
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_toolkit::ui::{
@@ -5,7 +6,6 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{Spacing, TextRole};
 
-use crate::L10N;
 use crate::forget::Forget;
 use crate::general::info_row;
 use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row, submit};
@@ -13,26 +13,36 @@ use crate::services::NetworkCommand;
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Signal, Text, Tone};
 
-pub(crate) const WIFI_FIELDS: [(SettingId, &str, &str); 3] = [
+pub(crate) const WIFI_FIELDS: [(SettingId, bande_l10n::Text, bande_l10n::Text); 3] = [
     (
         SettingId::WifiAddress,
-        "ip-address",
-        "ip-address-placeholder",
+        text!("IP address"),
+        text!("192.168.1.20/24"),
     ),
-    (SettingId::WifiRouter, "router", "router-placeholder"),
-    (SettingId::WifiDns, "dns-servers", "dns-placeholder"),
+    (SettingId::WifiRouter, text!("Router"), text!("192.168.1.1")),
+    (
+        SettingId::WifiDns,
+        text!("DNS servers"),
+        text!("1.1.1.1, 9.9.9.9"),
+    ),
 ];
 
-pub(crate) const HIDDEN_SECURITY: [(Security, &str); 3] = [
-    (Security::Open, "security-none"),
-    (Security::Personal { sae_only: false }, "security-wpa2"),
-    (Security::Personal { sae_only: true }, "security-wpa3"),
+pub(crate) const HIDDEN_SECURITY: [(Security, bande_l10n::Text); 3] = [
+    (Security::Open, text!("None")),
+    (
+        Security::Personal { sae_only: false },
+        text!("WPA2 Personal"),
+    ),
+    (
+        Security::Personal { sae_only: true },
+        text!("WPA3 Personal"),
+    ),
 ];
 
-const PRIVATE_ADDRESS: [(PrivateAddress, &str); 3] = [
-    (PrivateAddress::Off, "private-address-off"),
-    (PrivateAddress::Fixed, "private-address-fixed"),
-    (PrivateAddress::Rotating, "private-address-rotating"),
+const PRIVATE_ADDRESS: [(PrivateAddress, bande_l10n::Text); 3] = [
+    (PrivateAddress::Off, text!("Off")),
+    (PrivateAddress::Fixed, text!("Fixed")),
+    (PrivateAddress::Rotating, text!("Rotating")),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,7 +67,7 @@ fn ssid_text(ssid: &[u8]) -> String {
 impl SettingsView {
     fn nearby(&self, ssid: &[u8]) -> Option<&Network> {
         self.wifi
-            .as_ref()?
+            .present()?
             .networks
             .iter()
             .find(|network| network.ssid == ssid)
@@ -66,35 +76,33 @@ impl SettingsView {
     fn known_status(&self, known: &KnownNetwork) -> String {
         let nearby = self.nearby(&known.ssid);
         let current = nearby.is_some_and(|network| network.current);
-        if current && self.wifi.as_ref().is_some_and(|wifi| wifi.sign_in) {
-            L10N.tr("sign-in-required")
+        if current && self.wifi.present().is_some_and(|wifi| wifi.sign_in) {
+            tr!("Connected · sign in to use the internet")
         } else if current {
-            L10N.tr("connected")
+            tr!("Connected")
         } else if self.join.joining.as_ref() == Some(&known.ssid) {
-            L10N.tr("joining")
+            tr!("Joining…")
         } else if nearby.is_none() {
-            L10N.tr("not-in-range")
+            tr!("Not in range")
         } else if !known.auto_join {
-            L10N.tr("auto-join-off")
+            tr!("Saved · Auto-Join off")
         } else {
-            L10N.tr("saved")
+            tr!("Saved")
         }
     }
 
     fn details_button(&self, ssid: &[u8]) -> Box<dyn Widget> {
         let mut open = intent(&self.intents, Intent::OpenNetwork);
         let ssid = ssid.to_vec();
-        boxed(Button::new(&L10N.tr("details-ellipsis"), move || {
-            open(ssid.clone())
-        }))
+        boxed(Button::new(&tr!("Details…"), move || open(ssid.clone())))
     }
 
     pub(crate) fn known_network_rows(&mut self) -> Widgets {
-        let Some(wifi) = self.wifi.clone() else {
+        let Some(wifi) = self.wifi.present().cloned() else {
             return Vec::new();
         };
         if wifi.known.is_empty() {
-            return vec![muted_row(&L10N.tr("no-known-networks"))];
+            return vec![muted_row(&tr!("Networks you join are remembered here"))];
         }
         let mut known = wifi.known.clone();
         known.sort_by_key(|network| {
@@ -114,7 +122,7 @@ impl SettingsView {
                 let mut sign_in =
                     intent(&self.intents, |()| Intent::Network(NetworkCommand::SignIn));
                 controls.push(boxed(
-                    Button::new(&L10N.tr("sign-in-ellipsis"), move || sign_in(())).primary(),
+                    Button::new(&tr!("Sign In…"), move || sign_in(())).primary(),
                 ));
             }
             controls.push(self.details_button(&network.ssid));
@@ -146,7 +154,7 @@ impl SettingsView {
 
     fn password_row(&mut self, name: &str) -> Box<dyn Widget> {
         let field = SecureField::new(
-            &L10N.tr("password"),
+            &tr!("Password"),
             FIELD_SIZE,
             submit(&self.intents, Intent::Password),
         );
@@ -155,11 +163,11 @@ impl SettingsView {
             .join
             .error
             .clone()
-            .unwrap_or_else(|| L10N.tr("password-hint"));
+            .unwrap_or_else(|| tr!("Press Return to join or Escape to cancel"));
         boxed(
             Row::new(
                 Text::new(
-                    &L10N.tr_args("password-for", [("network", name.to_owned().into())]),
+                    &tr!("Password for “{network}”", network = name.to_owned()),
                     Tone::Primary,
                 ),
                 Some(boxed(field)),
@@ -169,7 +177,7 @@ impl SettingsView {
     }
 
     pub(crate) fn network_rows(&mut self) -> Widgets {
-        let Some(wifi) = self.wifi.clone() else {
+        let Some(wifi) = self.wifi.present().cloned() else {
             return Vec::new();
         };
         let mut rows = Vec::new();
@@ -180,7 +188,7 @@ impl SettingsView {
             .filter(|network| !network.known)
             .collect();
         if !scanned {
-            rows.push(muted_row(&L10N.tr("searching-networks")));
+            rows.push(muted_row(&tr!("Looking for networks…")));
         }
         for network in others {
             let name = network.name();
@@ -192,7 +200,7 @@ impl SettingsView {
                 ))),
             );
             if self.join.joining.as_ref() == Some(&network.ssid) {
-                row = row.detail(Text::new(&L10N.tr("joining"), Tone::Muted).caption());
+                row = row.detail(Text::new(&tr!("Joining…"), Tone::Muted).caption());
             }
             let mut join = intent(&self.intents, Intent::Join);
             let ssid = network.ssid.clone();
@@ -209,69 +217,70 @@ impl SettingsView {
     fn other_rows(&mut self) -> Widgets {
         let Some(other) = self.other.clone() else {
             let mut ask = intent(&self.intents, |()| Intent::AskOther(true));
-            let button = Button::new(&L10N.tr("other-network-ellipsis"), move || ask(()));
+            let button = Button::new(&tr!("Other…"), move || ask(()));
             self.anchors
                 .push((Anchor::Item("other-network".to_owned()), button.id()));
             return vec![boxed(Row::new(
-                Text::new(&L10N.tr("other-network-hint"), Tone::Muted).caption(),
+                Text::new(
+                    &tr!("Join a network that does not show its name"),
+                    Tone::Muted,
+                )
+                .caption(),
                 Some(boxed(button)),
             ))];
         };
         let mut rename = intent(&self.intents, Intent::OtherName);
-        let field = TextField::new(&L10N.tr("network-name"), &other.name, move |text| {
+        let field = TextField::new(&tr!("Network name"), &other.name, move |text| {
             rename(text.to_owned())
         })
         .without_text_checking();
         self.anchors
             .push((Anchor::Setting(SettingId::OtherNetwork, None), field.id()));
         let mut rows = vec![boxed(Row::new(
-            Text::new(&L10N.tr("network-name"), Tone::Primary),
+            Text::new(&tr!("Network name"), Tone::Primary),
             Some(boxed(field)),
         ))];
         let labels: Vec<String> = HIDDEN_SECURITY
             .iter()
-            .map(|(_, label)| L10N.tr(label))
+            .map(|(_, label)| label.tr())
             .collect();
         let selected = HIDDEN_SECURITY
             .iter()
             .position(|(security, _)| *security == other.security);
         let choose = intent(&self.intents, Intent::OtherSecurity);
-        let segmented = SegmentedControl::new(&L10N.tr("security"), &labels, selected, choose);
+        let segmented = SegmentedControl::new(&tr!("Security"), &labels, selected, choose);
         self.anchors
             .push((Anchor::Item("other-security".to_owned()), segmented.id()));
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("security"), Tone::Primary),
+            Text::new(&tr!("Security"), Tone::Primary),
             Some(boxed(segmented)),
         )));
         let joining = self.join.joining.as_deref() == Some(other.name.trim().as_bytes());
         let detail = if joining {
-            L10N.tr("joining")
+            tr!("Joining…")
         } else {
-            self.join
-                .error
-                .clone()
-                .unwrap_or_else(|| L10N.tr("other-network-detail"))
+            self.join.error.clone().unwrap_or_else(|| {
+                tr!("Press Return in the password field to join, or Escape to cancel")
+            })
         };
         let mut cancel = intent(&self.intents, |()| Intent::AskOther(false));
         let mut buttons = vec![boxed(
-            Button::new(&L10N.tr("cancel"), move || cancel(())).cancel(),
+            Button::new(&tr!("Cancel"), move || cancel(())).cancel(),
         )];
         if other.security.needs_password() {
             let field = SecureField::new(
-                &L10N.tr("password"),
+                &tr!("Password"),
                 FIELD_SIZE,
                 submit(&self.intents, |password| Intent::JoinOther(Some(password))),
             );
             self.anchors.push((Anchor::Password, field.id()));
             rows.push(boxed(Row::new(
-                Text::new(&L10N.tr("password"), Tone::Primary),
+                Text::new(&tr!("Password"), Tone::Primary),
                 Some(boxed(field)),
             )));
         } else {
             let mut join = intent(&self.intents, |()| Intent::JoinOther(None));
-            buttons.push(boxed(
-                Button::new(&L10N.tr("join"), move || join(())).primary(),
-            ));
+            buttons.push(boxed(Button::new(&tr!("Join"), move || join(())).primary()));
         }
         rows.push(boxed(Row::new(
             Text::new(&detail, Tone::Muted).caption(),
@@ -287,7 +296,8 @@ impl SettingsView {
 
     fn wifi_switch(
         &mut self,
-        label: &str,
+        anchor: &str,
+        (label, detail): (String, String),
         on: bool,
         path: &str,
         change: fn(bool) -> ConnectionChange,
@@ -300,15 +310,12 @@ impl SettingsView {
                 change(on),
             ))
         });
-        let toggle = Toggle::new(&L10N.tr(label), on, set);
+        let toggle = Toggle::new(&label, on, set);
         self.anchors
-            .push((Anchor::Item(label.to_owned()), toggle.id()));
+            .push((Anchor::Item(anchor.to_owned()), toggle.id()));
         boxed(
-            Row::new(
-                Text::new(&L10N.tr(label), Tone::Primary),
-                Some(boxed(toggle)),
-            )
-            .detail(Text::new(&L10N.tr(&format!("{label}-detail")), Tone::Muted).caption()),
+            Row::new(Text::new(&label, Tone::Primary), Some(boxed(toggle)))
+                .detail(Text::new(&detail, Tone::Muted).caption()),
         )
     }
 
@@ -316,7 +323,7 @@ impl SettingsView {
         let Some(Detail::Network(ssid)) = self.detail.clone() else {
             return None;
         };
-        let wifi = self.wifi.clone()?;
+        let wifi = self.wifi.present().cloned()?;
         let known = wifi.known.iter().find(|known| known.ssid == ssid)?.clone();
         let current = self.nearby(&ssid).is_some_and(|network| network.current);
         let name = known.name();
@@ -333,12 +340,20 @@ impl SettingsView {
         let mut choices = vec![
             self.wifi_switch(
                 "auto-join",
+                (
+                    tr!("Auto-Join"),
+                    tr!("Join this network on its own when it is in range"),
+                ),
                 known.auto_join,
                 &known.path,
                 ConnectionChange::AutoJoin,
             ),
             self.wifi_switch(
                 "low-data-mode",
+                (
+                    tr!("Low Data Mode"),
+                    tr!("Marks the network as metered, so apps hold back large downloads"),
+                ),
                 known.low_data,
                 &known.path,
                 ConnectionChange::LowData,
@@ -346,7 +361,7 @@ impl SettingsView {
         ];
         let labels: Vec<String> = PRIVATE_ADDRESS
             .iter()
-            .map(|(_, label)| L10N.tr(label))
+            .map(|(_, label)| label.tr())
             .collect();
         let selected = PRIVATE_ADDRESS
             .iter()
@@ -363,44 +378,50 @@ impl SettingsView {
             ))
         });
         let segmented =
-            SegmentedControl::new(&L10N.tr("private-address"), &labels, selected, choose);
+            SegmentedControl::new(&tr!("Private Wi-Fi address"), &labels, selected, choose);
         self.anchors
             .push((Anchor::Item("private-address".to_owned()), segmented.id()));
         choices.push(boxed(
             Row::new(
-                Text::new(&L10N.tr("private-address"), Tone::Primary),
+                Text::new(&tr!("Private Wi-Fi address"), Tone::Primary),
                 Some(boxed(segmented)),
             )
-            .detail(Text::new(&L10N.tr("private-address-detail"), Tone::Muted).caption()),
+            .detail(
+                Text::new(
+                    &tr!("A private address makes this computer harder to track across networks"),
+                    Tone::Muted,
+                )
+                .caption(),
+            ),
         ));
         page.push(boxed(Card::new(choices)));
         if current {
             let link = &wifi.link;
             let mut rows = Vec::new();
             if let Some(address) = &link.addressing.address {
-                rows.push(info_row(&L10N.tr("ip-address"), address));
+                rows.push(info_row(&tr!("IP address"), address));
             }
             if let Some(router) = &link.addressing.router {
-                rows.push(info_row(&L10N.tr("router"), router));
+                rows.push(info_row(&tr!("Router"), router));
             }
             if !link.addressing.dns.is_empty() {
                 rows.push(info_row(
-                    &L10N.tr("dns-servers"),
+                    &tr!("DNS servers"),
                     &link.addressing.dns.join(", "),
                 ));
             }
             if !link.hardware.is_empty() {
-                rows.push(info_row(&L10N.tr("wifi-address"), &link.hardware));
+                rows.push(info_row(&tr!("Wi-Fi address"), &link.hardware));
             }
             if !rows.is_empty() {
-                page.push(boxed(Caption::new(Text::label(&L10N.tr("connection")))));
+                page.push(boxed(Caption::new(Text::label(&tr!("Connection")))));
                 page.push(boxed(Card::new(rows)));
             }
         }
-        let labels = [L10N.tr("ipv4-automatic"), L10N.tr("ipv4-manual")];
+        let labels = [tr!("Automatically"), tr!("Manually")];
         let mut choose = intent(&self.intents, Intent::WifiManual);
         let segmented = SegmentedControl::new(
-            &L10N.tr("configure-ipv4"),
+            &tr!("Configure IPv4"),
             &labels,
             Some(usize::from(self.wifi_manual)),
             move |index| choose(index == 1),
@@ -408,7 +429,7 @@ impl SettingsView {
         self.anchors
             .push((Anchor::Item("wifi-ipv4".to_owned()), segmented.id()));
         let mut addressing = vec![boxed(Row::new(
-            Text::new(&L10N.tr("configure-ipv4"), Tone::Primary),
+            Text::new(&tr!("Configure IPv4"), Tone::Primary),
             Some(boxed(segmented)),
         ))];
         if self.wifi_manual {
@@ -418,20 +439,23 @@ impl SettingsView {
         } else {
             addressing.push(self.manual_field(
                 SettingId::WifiDns,
-                "dns-servers",
-                "dns-automatic-placeholder",
+                text!("DNS servers"),
+                text!("Automatic"),
             ));
         }
-        page.push(boxed(Caption::new(Text::label(&L10N.tr("tcp-ip")))));
+        page.push(boxed(Caption::new(Text::label(&tr!("TCP/IP")))));
         page.push(boxed(Card::new(addressing)));
         let forget = if self.forgetting.as_ref() == Some(&Forget::Network(ssid.clone())) {
-            self.forget_row(&name, &L10N.tr("forget-network-warning"))
+            self.forget_row(
+                &name,
+                &tr!("Its password is removed and Bande no longer joins it on its own."),
+            )
         } else {
             let button = self.forget_button(Forget::Network(ssid.clone()));
             self.anchors
                 .push((Anchor::Item(ssid_text(&ssid)), button.id()));
             boxed(Row::new(
-                Text::new(&L10N.tr("forget-network"), Tone::Primary),
+                Text::new(&tr!("Forget This Network"), Tone::Primary),
                 Some(button),
             ))
         };
@@ -442,7 +466,7 @@ impl SettingsView {
     pub(crate) fn open_network(&mut self, ssid: Vec<u8>) {
         let known = self
             .wifi
-            .as_ref()
+            .present()
             .and_then(|wifi| wifi.known.iter().find(|known| known.ssid == ssid))
             .cloned();
         let Some(known) = known else {
@@ -450,7 +474,7 @@ impl SettingsView {
         };
         let link = self
             .wifi
-            .as_ref()
+            .present()
             .filter(|_| self.nearby(&ssid).is_some_and(|network| network.current))
             .map(|wifi| wifi.link.addressing.clone())
             .unwrap_or_default();
@@ -493,7 +517,7 @@ impl SettingsView {
         let Some(Detail::Network(ssid)) = &self.detail else {
             return;
         };
-        let Some(path) = self.wifi.as_ref().and_then(|wifi| {
+        let Some(path) = self.wifi.present().and_then(|wifi| {
             wifi.known
                 .iter()
                 .find(|known| known.ssid == *ssid)
@@ -524,17 +548,17 @@ impl SettingsView {
                     NetworkCommand::ChangeConnection(PaneId::Wifi, path, change),
                 ));
             }
-            None => self.fail_here(L10N.tr(if self.wifi_manual {
-                "manual-address-invalid"
+            None => self.fail_here(if self.wifi_manual {
+                tr!("Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.")
             } else {
-                "dns-invalid"
-            })),
+                tr!("Enter DNS servers as IPv4 addresses, such as 1.1.1.1, 9.9.9.9.")
+            }),
         }
     }
 
     pub(crate) fn set_wifi_manual(&mut self, manual: bool) {
         self.wifi_manual = manual;
-        let dns = match self.wifi.as_ref() {
+        let dns = match self.wifi.present() {
             Some(wifi) if manual => wifi.link.addressing.dns.join(", "),
             _ => String::new(),
         };
@@ -549,7 +573,7 @@ impl SettingsView {
         };
         if let Some(known) = self
             .wifi
-            .as_ref()
+            .present()
             .and_then(|wifi| wifi.known.iter().find(|known| known.ssid == *ssid))
             .filter(|known| known.manual.is_some())
         {
@@ -569,7 +593,7 @@ impl SettingsView {
         };
         let name = other.name.trim().to_owned();
         if name.is_empty() {
-            self.join.error = Some(L10N.tr("network-name-needed"));
+            self.join.error = Some(tr!("Type the name of the network to join."));
             self.focus_next = Some(Anchor::Setting(SettingId::OtherNetwork, None));
             return;
         }

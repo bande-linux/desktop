@@ -1,0 +1,239 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Don’t Allow"
+msgstr "Tillåt inte"
+
+msgid "Allow"
+msgstr "Tillåt"
+
+msgid "{app} asks who you are."
+msgstr "{app} frågar vem du är."
+
+msgid "Share your name and picture with {app}?"
+msgstr "Vill du dela ditt namn och din bild med {app}?"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Share"
+msgstr "Dela"
+
+msgid "Choose an app to open “{name}”:"
+msgstr "Välj en app för att öppna ”{name}”:"
+
+msgid "Choose an app to open this item:"
+msgstr "Välj en app för att öppna det här objektet:"
+
+msgid "No app on this computer can open “{name}”."
+msgstr "Ingen app på den här datorn kan öppna ”{name}”."
+
+msgid "Install an app that opens this kind of item, then try again."
+msgstr "Installera en app som kan öppna den här typen av objekt och försök sedan igen."
+
+msgid "No app on this computer can open this item."
+msgstr "Ingen app på den här datorn kan öppna det här objektet."
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Add this web app to Applications?"
+msgstr "Vill du lägga till den här webbappen i Appar?"
+
+msgid "{app} wants to add a web app you can open from the Launcher."
+msgstr "{app} vill lägga till en webbapp som du kan öppna från startaren."
+
+msgid "Add this app to Applications?"
+msgstr "Vill du lägga till den här appen i Appar?"
+
+msgid "{app} wants to add an app you can open from the Launcher."
+msgstr "{app} vill lägga till en app som du kan öppna från startaren."
+
+msgid "Add"
+msgstr "Lägg till"
+
+msgid "Choose a Folder"
+msgstr "Välj en mapp"
+
+msgid "Save"
+msgstr "Spara"
+
+msgid "Use “{picture}” as your desktop picture?"
+msgstr "Vill du använda ”{picture}” som skrivbordsbild?"
+
+msgid "{app} wants to change your desktop picture."
+msgstr "{app} vill ändra din skrivbordsbild."
+
+msgid "Set Desktop Picture"
+msgstr "Använd som skrivbordsbild"
+
+msgid "A4"
+msgstr "A4"
+
+msgid "A3"
+msgstr "A3"
+
+msgid "A5"
+msgstr "A5"
+
+msgid "US Letter"
+msgstr "US Letter"
+
+msgid "US Legal"
+msgstr "US Legal"
+
+msgid "Long edge"
+msgstr "Långsidan"
+
+msgid "Short edge"
+msgstr "Kortsidan"
+
+msgid "Off"
+msgstr "Av"
+
+msgid "No printers found"
+msgstr "Inga skrivare hittades"
+
+msgid "{name} (offline)"
+msgstr "{name} (offline)"
+
+msgid "No preview"
+msgstr "Ingen förhandsvisning"
+
+msgid "Page {page} of {total}"
+msgstr "Sida {page} av {total}"
+
+msgid "The app prepares its pages after you press Print"
+msgstr "Appen förbereder sina sidor när du trycker på Skriv ut"
+
+msgid "Save as PDF"
+msgstr "Spara som PDF"
+
+msgid "The app could not lay out its pages."
+msgstr "Appen kunde inte layouta sina sidor."
+
+msgid "The document could not be handed to the print service."
+msgstr "Det gick inte att lämna över dokumentet till utskriftstjänsten."
+
+msgid "The PDF could not be saved."
+msgstr "Det gick inte att spara PDF-filen."
+
+msgid "Print “{title}”"
+msgstr "Skriv ut ”{title}”"
+
+msgid "Previous page"
+msgstr "Föregående sida"
+
+msgid "Next page"
+msgstr "Nästa sida"
+
+msgid "Printer"
+msgstr "Skrivare"
+
+msgid "Looking for printers…"
+msgstr "Söker efter skrivare…"
+
+msgid "Copies"
+msgstr "Kopior"
+
+msgid "All"
+msgstr "Alla"
+
+msgid "Paper"
+msgstr "Papper"
+
+msgid "Orientation"
+msgstr "Orientering"
+
+msgid "Portrait"
+msgstr "Stående"
+
+msgid "Landscape"
+msgstr "Liggande"
+
+msgid "Two-sided"
+msgstr "Dubbelsidig"
+
+msgid "Color"
+msgstr "Färg"
+
+msgid "Black & White"
+msgstr "Svartvitt"
+
+msgid "Print options"
+msgstr "Utskriftsalternativ"
+
+msgid "Pages"
+msgstr "Sidor"
+
+msgid "Print"
+msgstr "Skriv ut"
+
+msgid "Save as PDF…"
+msgstr "Spara som PDF…"
+
+msgid "Name of the new folder:"
+msgstr "Namn på den nya mappen:"
+
+msgid "untitled folder"
+msgstr "namnlös mapp"
+
+msgid "Create"
+msgstr "Skapa"
+
+msgid "Go to the folder:"
+msgstr "Gå till mappen:"
+
+msgid "Go"
+msgstr "Gå"
+
+msgid "Choose"
+msgstr "Välj"
+
+msgid "Date Modified"
+msgstr "Ändringsdatum"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Show"
+msgstr "Visa"
+
+msgid "New Folder"
+msgstr "Ny mapp"
+
+msgid "Show Hidden Files"
+msgstr "Visa dolda filer"
+
+msgid "Save As:"
+msgstr "Spara som:"
+
+msgid "The folder “{path}” can’t be found."
+msgstr "Mappen ”{path}” hittades inte."
+
+msgid "Check the spelling of the path. Start with ~ for your home folder or / for the whole disk."
+msgstr "Kontrollera stavningen av sökvägen. Börja med ~ för din hemmapp eller / för hela skivan."
+
+msgid "“{name}” already exists. Do you want to replace it?"
+msgstr "”{name}” finns redan. Vill du ersätta den?"
+
+msgid "A file with the same name already exists in this folder. Replacing it overwrites its current contents."
+msgstr "En fil med samma namn finns redan i den här mappen. Om du ersätter den skrivs dess nuvarande innehåll över."
+
+msgid "Replace"
+msgstr "Ersätt"

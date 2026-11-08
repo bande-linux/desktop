@@ -1,6 +1,8 @@
+use std::cell::OnceCell;
 use std::path::PathBuf;
 
 use bande_toolkit::{AppConnection, Appearance, Role, Window, WindowError};
+use bande_xdg::InstallWatch;
 use zbus::blocking::Connection;
 
 use crate::resume::Resume;
@@ -44,6 +46,7 @@ pub struct Cx<P: Program> {
     session: Option<Connection>,
     background: bool,
     pub(crate) resume: Resume,
+    pub(crate) installs: OnceCell<Option<InstallWatch>>,
 }
 
 impl<P: Program> Cx<P> {
@@ -67,6 +70,7 @@ impl<P: Program> Cx<P> {
             session,
             background,
             resume,
+            installs: OnceCell::new(),
         }
     }
 
@@ -110,16 +114,19 @@ impl<P: Program> Cx<P> {
             Kind::Dialog(_) => Role::dialog(title, self.info.id),
             Kind::Utility(_) => Role::utility(title, self.info.id),
             Kind::Panel(_) => Role::panel(title, self.info.id),
+            Kind::Popover(_) => Role::popover(title, self.info.id),
         }
         .tagged(kind.tag())
         .in_session(self.resume.next_window(&self.link, kind));
-        self.link.keep_running();
+        if !matches!(kind, Kind::Popover(_)) {
+            self.link.keep_running();
+        }
         let mut window = match self.windows.first() {
             Some(beside) => beside.open_beside(role, size)?,
             None => self.link.open(role, size)?,
         };
         let panel = matches!(kind, Kind::Panel(_));
-        window.set_menu_button(!panel);
+        window.set_menu_button(!panel && !matches!(kind, Kind::Popover(_)));
         window.export();
         let id = WindowId(self.next);
         self.next += 1;
@@ -188,6 +195,10 @@ impl<P: Program> Cx<P> {
         }
     }
 
+    pub(crate) fn has_opened_a_window(&self) -> bool {
+        self.next > 0
+    }
+
     pub fn quit(&mut self) {
         self.quitting = true;
     }
@@ -235,6 +246,15 @@ impl<P: Program> Cx<P> {
         self.shown()
             .filter(|(_, content)| matches!(content, Content::App(_)))
             .map(|(id, _)| *id)
+    }
+
+    pub fn installed(&self, app_id: &str) -> bool {
+        self.installs.get_or_init(|| {
+            InstallWatch::start()
+                .inspect_err(|error| tracing::warn!("cannot follow installed apps: {error}"))
+                .ok()
+        });
+        bande_xdg::is_installed(app_id)
     }
 
     pub fn refresh_menus(&mut self) {

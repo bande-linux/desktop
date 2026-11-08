@@ -86,6 +86,22 @@ when they reach the screen is Bande's own.
   no room outside, so the compositor takes a 3 pt band inside it before any client
   (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
+- **Pointers.** As on macOS, apps ask for a pointer by kind and the compositor draws it from
+  Bande's own set, so none can be missing. Each pointer is one SVG in
+  `crates/platform/compositor/data/cursors/` (24 × 24, its hotspot in `data-hotspot` on the root),
+  drawn in macOS's manner but our own: a slim black arrow with a white rim and a soft shadow,
+  white hands with black outlines, an I-beam, slim two-way resize arrows, wall-bar one-way
+  arrows, badges for menu, copy, alias, help and not allowed, a dark spinner. `cursor_set.rs`
+  maps every `wp_cursor_shape_v1` kind to a drawing; the compositor embeds the SVGs and renders
+  them with resvg at the exact pointer size and scale, once per kind and scale, and falls back
+  to a tiny built-in arrow (logged) only if rendering fails. At package build time
+  `bande-cursor-theme` renders the same sources into the Xcursor theme `Bande-Cursors` (CSS and
+  X11 names, 24 to 128 px) for clients that load cursors themselves; the session exports it as
+  `XCURSOR_THEME` and the portal as `cursor-theme`. While the pointer is on a frame zone of ours,
+  or a move or resize holds a window (from our edges or `xdg_toplevel.move`/`resize`), the
+  compositor's pointer wins over the client's: the arrow for a move, the edge's two-way arrow
+  for a resize, or as on macOS a one-way arrow against a wall bar when the window is at its
+  minimum or maximum size and that edge can only move one way.
 - **Controls over the Browser's own row.** A client-side window of `org.bande.Browser` keeps its
   tabs in its top row and has no title bar of ours; the compositor draws only the control well
   (`WindowControls` in `bande-graphics`) over the first 78 pt of a 48 pt row, in front of the
@@ -109,7 +125,7 @@ when they reach the screen is Bande's own.
   `--drm-device`) through a libseat session and drives every connected connector on its own
   CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into
   dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
-  drawn regions copied out, by the GPU when the device is a real one that can import the buffer,
+  drawn regions copied out, by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
   otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. udev change
   events probe the connectors again, so plugging a display in or out takes effect without
   restarting the session. A connector that goes away is held as lost for three seconds before it
@@ -166,20 +182,26 @@ when they reach the screen is Bande's own.
   display, aligning tops, bottoms or centres within 48 pt, and never onto another display; with
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
-  display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
-  and controls, Refresh rate, Rotation and Match colours to this display. Every change is written to
+  display, Extended, Mirror), Size of text and controls (Default, then Larger Text to More Space, each
+  shown as the size the desktop looks like at the native resolution, as macOS lists scaled
+  resolutions), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation and Colour profile. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 
-- **Colour.** A display whose EDID gives primaries more than 0.02 from sRGB's, and does not say
-  its default colour space is sRGB, has its frames converted from sRGB to its own primaries
-  (D65 white kept, sRGB transfer both ways) by a shader that writes the damaged regions to a
+- **Colour.** Each display has a colour profile (`colour-profile` in its settings, Settings ▸
+  Displays ▸ Colour profile, as macOS's list): "This display" (the default) builds a profile from
+  the EDID's primaries, white point and gamma, unless the EDID says the default colour space is
+  sRGB or its primaries are within 0.02 of sRGB's; "sRGB" and "None (show colours as sent)" leave
+  frames alone; "Display P3"; and any ICC matrix-and-curve display profile in
+  `$XDG_DATA_HOME/icc` or `color/icc` under the data directories ("Add Profile…" copies one there
+  after checking it; LUT-based or non-display profiles are refused with the reason). A profile
+  that differs from sRGB converts frames: a shader decodes sRGB, applies the matrix to the
+  display's primaries (relative, white kept, Bradford-adapted through D50) and encodes with the
+  profile's own tone curves through a 4096-entry table, on the damaged regions only, into a
   scratch image the GPU then copies to the display buffer. While a display converts, nothing is
-  scanned out directly or put on a plane, as a client buffer would skip the conversion. "Match
-  colours to this display" (on by default, `match-colours false` in the display's settings) turns
-  it off for a display whose EDID is wrong or that is set to its own sRGB mode. A CPU renderer does
-  not convert.
-- **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us, plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (a driver like Apple's DCP drops anything under about 2.3 ms before the flip to the next refresh), and is lowered slowly afterwards to follow changes. A wake-up past the start time still goes if its typical render fits before the lead, and otherwise takes the next slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays 0. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. `BANDE_FRAME_TIMING=classic` restores the former rule (the longest of the last 16 frames plus 1 ms). Frame callbacks are taken when a frame is latched and go out once it is committed, so a client gets the time up to the next frame's start, not what is left after the flip. A client whose time from callback to commit is known (its 95th percentile over at least 8 frames, `frame_callbacks.rs`) gets its callback that long plus 0.5 ms before the next frame starts, so it reads the latest input and its frame is shown at once; a client that misses the latch this way goes back to the early callback for a second. No timer exists unless a callback is waiting. `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`, on DRM also `hw_completion`) is sent at the page-flip event, or the vblank on headless; a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
+  scanned out directly or put on a plane. With Apple's `appledrm.srgb_surfaces` set, "This
+  display" leaves the conversion to the display engine. A CPU renderer does not convert.
+- **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us (1 ms until one is measured; a wake too late for its slot is measured too), plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh, again on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (a driver like Apple's DCP drops anything under about 2.3 ms before the flip to the next refresh), and is lowered slowly afterwards to follow changes. A frame aims at the first slot its typical render and the lead still fit before, so renders longer than a refresh aim further ahead; a wake-up past the start time still goes if that holds, and otherwise takes the next such slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays at its start. If no frame can start within a second, the output falls back to classic timing and says so in the log. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. The default is still the classic rule (the longest of the last 16 frames plus 1 ms); the measured timing above runs only with `BANDE_FRAME_TIMING=learned` until it is measured again on real displays. Frame callbacks are taken when a frame is latched and go out once it is committed, so a client gets the time up to the next frame's start, not what is left after the flip. A client whose time from callback to commit is known (its 95th percentile over at least 8 frames, `frame_callbacks.rs`) gets its callback that long plus 0.5 ms before the next frame starts, so it reads the latest input and its frame is shown at once; a client that misses the latch this way goes back to the early callback for a second. No timer exists unless a callback is waiting. `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`, on DRM also `hw_completion`) is sent at the page-flip event, or the vblank on headless; a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's
   scheduler before it latches a frame). Animations are closed-form springs, so every display
@@ -303,7 +325,7 @@ when they reach the screen is Bande's own.
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
   and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`.
   An app that has not answered after 3 s is not responding: its windows are veiled in a soft
-  grey (24 %), the pointer over them is the theme's `wait` cursor, and shell clients get
+  grey (24 %), the pointer over them is the `wait` cursor, and shell clients get
   `bande_shell_v1.app_responding(pid, app_id, 0)` so the taskbar can mark it; the compositor's
   own Force Quit window (`force_quit/`) marks it in its list. The answer, or the app's exit,
   lifts the veil and sends `responding 1`.
@@ -377,7 +399,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | P1 | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | P1 | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers and LINEAR ARGB8888 dmabufs (copied by the GPU, offered when the renderer knows its render node); a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
 | `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | P1 | implemented, shell clients only |
-| `wp_cursor_shape_v1` | Cursor shapes from the theme | P1 | implemented |
+| `wp_cursor_shape_v1` | Cursor shapes, drawn from Bande's own set | P1 | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | P1 | implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | P1 | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | P2 | implemented |

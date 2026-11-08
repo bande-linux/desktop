@@ -1,3 +1,10 @@
+use bande_l10n::{tr, trn};
+
+use crate::pages::{Widgets, boxed};
+use crate::software::versions::{self, Condition, Version};
+use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage, restart_hint};
+use crate::view::{Anchor, Intent, SettingsView, intent};
+use crate::widgets::{Row, Text, Tone};
 use bande_datetime::DateFormats;
 use bande_fs::format_size;
 use bande_packages::Class;
@@ -6,13 +13,6 @@ use bande_toolkit::ui::{Axis, Button, Label, ProgressBar, Spinner, Stack, Widget
 use bande_toolkit::{SessionEnd, Spacing};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-
-use crate::L10N;
-use crate::pages::{Widgets, boxed};
-use crate::software::versions::{self, Condition, Version};
-use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage, restart_hint};
-use crate::view::{Anchor, Intent, SettingsView, intent};
-use crate::widgets::{Row, Text, Tone};
 
 const LISTED_UPDATES: usize = 12;
 
@@ -42,7 +42,7 @@ impl SettingsView {
     }
 
     fn later_buttons(&mut self, title: &str, ending: SessionEnd, need: Need) -> Box<dyn Widget> {
-        let later = self.software_button(&L10N.tr("later"), Intent::Later(need), false);
+        let later = self.software_button(&tr!("Later"), Intent::Later(need), false);
         let now = self.software_button(title, Intent::EndSession(ending), true);
         boxed(Stack::new(
             Axis::Horizontal,
@@ -68,12 +68,16 @@ impl SettingsView {
         let mut rows = Vec::new();
         if count > 0 {
             let check = self.software_button(
-                &L10N.tr("check-now"),
+                &tr!("Check Now"),
                 Intent::Software(SoftwareCommand::Check),
                 false,
             );
             rows.push(self.status_row(
-                &L10N.tr_args("updates-were-installed", [("count", count.into())]),
+                &trn!(
+                    "1 update was installed",
+                    "{count} updates were installed",
+                    count = count
+                ),
                 Some(system),
                 Some(check),
             ));
@@ -81,23 +85,29 @@ impl SettingsView {
         if let Some(reboot) = reboot {
             let (title, detail) = match reboot {
                 Reboot::Finish => (
-                    L10N.tr("restart-to-finish"),
-                    L10N.tr("restart-to-finish-hint"),
+                    tr!("Restart to finish updating"),
+                    tr!("Some updates take effect after a restart"),
                 ),
                 Reboot::Install(count) => (
-                    L10N.tr_args("restart-to-install", [("count", count.into())]),
+                    trn!(
+                        "Restart to install 1 update",
+                        "Restart to install {count} updates",
+                        count = count
+                    ),
                     restart_hint(),
                 ),
             };
             let buttons =
-                self.later_buttons(&L10N.tr("restart-now"), SessionEnd::Restart, Need::Reboot);
+                self.later_buttons(&tr!("Restart Now"), SessionEnd::Restart, Need::Reboot);
             rows.push(self.status_row(&title, Some(&detail), Some(buttons)));
         }
         if logout {
-            let buttons = self.later_buttons(&L10N.tr("log-out"), SessionEnd::LogOut, Need::LogOut);
+            let buttons = self.later_buttons(&tr!("Log Out"), SessionEnd::LogOut, Need::LogOut);
             rows.push(self.status_row(
-                &L10N.tr("log-out-to-finish"),
-                Some(&L10N.tr("log-out-to-finish-hint")),
+                &tr!("Log out to finish updating the desktop"),
+                Some(&tr!(
+                    "The desktop keeps running its old version until you log out"
+                )),
                 Some(buttons),
             ));
         }
@@ -105,16 +115,17 @@ impl SettingsView {
             let listed = if first.is_empty() {
                 last.clone()
             } else {
-                L10N.tr_args(
-                    "apps-and",
-                    [
-                        ("apps", first.join(", ").into()),
-                        ("last", last.clone().into()),
-                    ],
+                tr!(
+                    "{apps} and {last}",
+                    apps = first.join(", "),
+                    last = last.clone()
                 )
             };
             rows.push(self.status_row(
-                &L10N.tr_args("reopen-apps", [("apps", listed.into())]),
+                &tr!(
+                    "Quit and reopen {apps} to use the new versions",
+                    apps = listed
+                ),
                 None,
                 None,
             ));
@@ -130,10 +141,7 @@ impl SettingsView {
                 let size =
                     (package.size > 0).then(|| boxed(Label::new(&format_size(package.size))));
                 let version = match package.class {
-                    Class::Flatpak => L10N.tr_args(
-                        "flatpak-version",
-                        [("version", package.version.clone().into())],
-                    ),
+                    Class::Flatpak => tr!("{version} · Flatpak", version = package.version.clone()),
                     _ => package.version.clone(),
                 };
                 boxed(
@@ -145,9 +153,9 @@ impl SettingsView {
         if packages.len() > LISTED_UPDATES {
             rows.push(boxed(Row::new(
                 Text::new(
-                    &L10N.tr_args(
-                        "more-updates",
-                        [("count", (packages.len() - LISTED_UPDATES).into())],
+                    &tr!(
+                        "and {count} more",
+                        count = (packages.len() - LISTED_UPDATES)
                     ),
                     Tone::Muted,
                 ),
@@ -162,20 +170,19 @@ impl SettingsView {
             .map(|at| dates.long_date(&at.to_zoned(TimeZone::system())))
             .unwrap_or_default();
         let detail = match version.condition {
-            Condition::Failed => L10N.tr("version-failed"),
-            _ if version.changed > 0 => L10N.tr_args(
-                "version-changed",
-                [
-                    ("count", version.changed.into()),
-                    ("names", version.names.clone().into()),
-                ],
+            Condition::Failed => tr!("This version couldn't start"),
+            _ if version.changed > 0 => trn!(
+                "1 update: {names}",
+                "{count} updates: {names}",
+                count = version.changed,
+                names = version.names.clone()
             ),
-            _ => L10N.tr("version-kept"),
+            _ => tr!("Copy kept before a change"),
         };
         let control = match version.running {
-            true => boxed(Label::new(&L10N.tr("version-running"))),
+            true => boxed(Label::new(&tr!("Running now"))),
             false => self.software_button(
-                &L10N.tr("version-restore"),
+                &tr!("Restore"),
                 Intent::Software(SoftwareCommand::Restore(version.id)),
                 false,
             ),
@@ -190,8 +197,8 @@ impl SettingsView {
         }
         let dates = DateFormats::from_env();
         let mut rows = vec![self.status_row(
-            &L10N.tr("previous-versions"),
-            Some(&L10N.tr("previous-versions-hint")),
+            &tr!("Previous Versions"),
+            Some(&tr!("Bring back an earlier system. Your files, accounts, passwords and Wi-Fi networks stay as they are now")),
             None,
         )];
         for version in found
@@ -206,11 +213,7 @@ impl SettingsView {
     fn last_check_row(&mut self) -> Option<Box<dyn Widget>> {
         let checked = Timestamp::from_second(self.software_checked?).ok()?;
         let date = DateFormats::from_env().long_date(&checked.to_zoned(TimeZone::system()));
-        Some(self.status_row(
-            &L10N.tr_args("last-checked", [("date", date.into())]),
-            None,
-            None,
-        ))
+        Some(self.status_row(&tr!("Last checked {date}", date = date), None, None))
     }
 
     pub(crate) fn software_rows(&mut self) -> Widgets {
@@ -228,35 +231,46 @@ impl SettingsView {
             .unwrap_or_default();
         match self.software.clone() {
             SoftwareState::Unknown | SoftwareState::Checking => vec![self.status_row(
-                &L10N.tr("checking-updates"),
+                &tr!("Checking for updates…"),
                 None,
-                Some(boxed(Spinner::new(&L10N.tr("checking-updates")))),
+                Some(boxed(Spinner::new(&tr!("Checking for updates…")))),
             )],
             SoftwareState::UpToDate => {
                 let check = self.software_button(
-                    &L10N.tr("check-now"),
+                    &tr!("Check Now"),
                     Intent::Software(SoftwareCommand::Check),
                     false,
                 );
-                vec![self.status_row(&L10N.tr("up-to-date"), Some(&system), Some(check))]
+                vec![self.status_row(
+                    &tr!("Your computer is up to date"),
+                    Some(&system),
+                    Some(check),
+                )]
             }
             SoftwareState::Available(packages) => {
                 let total: u64 = packages.iter().map(|package| package.size).sum();
-                let size = [("size", format_size(total).into())];
+                let size = format_size(total);
                 let restarts = packages.iter().any(Package::needs_restart);
                 let detail = match (total > 0, restarts) {
-                    (true, true) => L10N.tr_args("download-size-restart", size),
-                    (true, false) => L10N.tr_args("download-size", size),
-                    (false, true) => L10N.tr("updates-need-restart"),
+                    (true, true) => tr!(
+                        "{size} to download. Some updates need a restart.",
+                        size = size
+                    ),
+                    (true, false) => tr!("{size} to download", size = size),
+                    (false, true) => tr!("Some updates need a restart"),
                     (false, false) => system,
                 };
                 let download = self.software_button(
-                    &L10N.tr("update-now"),
+                    &tr!("Update Now"),
                     Intent::Software(SoftwareCommand::Update(packages.clone())),
                     true,
                 );
                 let mut rows = vec![self.status_row(
-                    &L10N.tr_args("updates-available", [("count", packages.len().into())]),
+                    &trn!(
+                        "1 update is available",
+                        "{count} updates are available",
+                        count = packages.len()
+                    ),
                     Some(&detail),
                     Some(download),
                 )];
@@ -264,23 +278,27 @@ impl SettingsView {
                 rows
             }
             SoftwareState::Downloading { percent } => vec![self.progress_row(
-                &L10N.tr("downloading-updates"),
-                &L10N.tr("downloading-hint"),
+                &tr!("Downloading updates…"),
+                &tr!("You can keep working while updates download"),
                 percent,
             )],
             SoftwareState::Installing { percent } => vec![self.progress_row(
-                &L10N.tr("installing-updates"),
-                &L10N.tr("installing-hint"),
+                &tr!("Installing updates…"),
+                &tr!("You can keep working while updates install"),
                 percent,
             )],
             SoftwareState::Prepared(count) => {
                 let restart = self.software_button(
-                    &L10N.tr("restart-now"),
+                    &tr!("Restart Now"),
                     Intent::EndSession(SessionEnd::Restart),
                     true,
                 );
                 vec![self.status_row(
-                    &L10N.tr_args("restart-to-install", [("count", count.into())]),
+                    &trn!(
+                        "Restart to install 1 update",
+                        "Restart to install {count} updates",
+                        count = count
+                    ),
                     Some(&restart_hint()),
                     Some(restart),
                 )]
@@ -293,29 +311,31 @@ impl SettingsView {
             } => self.installed_rows(count, reboot, logout, &apps, &system),
             SoftwareState::Interrupted => {
                 let finish = self.software_button(
-                    &L10N.tr("finish-installing"),
+                    &tr!("Finish Installing"),
                     Intent::Software(SoftwareCommand::Repair),
                     true,
                 );
                 vec![self.status_row(
-                    &L10N.tr("updates-interrupted"),
-                    Some(&L10N.tr("updates-interrupted-hint")),
+                    &tr!("Updates didn't finish installing"),
+                    Some(&tr!(
+                        "Finish installing them before you install anything else"
+                    )),
                     Some(finish),
                 )]
             }
             SoftwareState::Unavailable => vec![self.status_row(
-                &L10N.tr("updates-unavailable"),
-                Some(&L10N.tr("updates-unavailable-hint")),
+                &tr!("Updates aren't available on this computer"),
+                Some(&tr!("Install the packagekit package")),
                 None,
             )],
             SoftwareState::Failed { during, reason } => {
                 let title = match during {
-                    Stage::Check => L10N.tr("updates-failed"),
-                    Stage::Download => L10N.tr("download-failed"),
-                    Stage::Install => L10N.tr("install-failed"),
+                    Stage::Check => tr!("Could not check for updates"),
+                    Stage::Download => tr!("Could not download updates"),
+                    Stage::Install => tr!("Could not install updates"),
                 };
                 let retry = self.software_button(
-                    &L10N.tr("try-again"),
+                    &tr!("Try Again"),
                     Intent::Software(SoftwareCommand::Check),
                     false,
                 );

@@ -7,12 +7,12 @@ mod person;
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::time::Duration;
 
 use bande_audio::{Level, VolumeKey};
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_status::brightness::DisplayLevel;
+use bande_status::status::Reading;
 use bande_toolkit::ui::{
     Axis, Context, LevelIndicator, Menu, MenuItem, PopUpButton, Size, Slider, Stack, Ui, Widget,
 };
@@ -27,15 +27,14 @@ pub use client::{ControlCenter, role};
 use media::{Command, Player};
 pub use now_playing::clock;
 
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-controlcenter")));
-
 pub const HUD_SIZE: (f32, f32) = (232.0, 64.0);
 pub const PANEL_WIDTH: f32 = 344.0;
 pub const EDGE: f32 = 8.0;
 pub const HUD_DURATION: Duration = Duration::from_millis(1500);
 pub const SEGMENTS: usize = 16;
 const PADDING: f32 = Spacing::M as f32;
+const WIFI_UNAVAILABLE_SYMBOL: &str = "network-wireless-no-route-symbolic";
+const BLUETOOTH_UNAVAILABLE_SYMBOL: &str = "bluetooth-disconnected-symbolic";
 const GAP: f32 = Spacing::S as f32;
 const SEGMENT_GAP: f32 = 2.0;
 const SEGMENT_HEIGHT: f32 = 6.0;
@@ -78,10 +77,10 @@ pub fn slide_from(anchor: Option<Anchor>, distance: f32) -> Point {
 
 #[derive(Debug, Clone, Default)]
 pub struct Status {
-    pub wifi: Option<bool>,
+    pub wifi: Reading<bool>,
     pub network: Option<String>,
     pub sign_in: bool,
-    pub bluetooth: Option<bool>,
+    pub bluetooth: Reading<bool>,
     pub do_not_disturb: bool,
     pub volume: Option<f32>,
     pub outputs: Vec<Choice>,
@@ -96,6 +95,7 @@ pub struct Status {
     pub artwork: Option<Image>,
     pub players: Vec<Choice>,
     pub person: Option<String>,
+    pub settings: bool,
     pub icon_dirs: Vec<PathBuf>,
 }
 
@@ -111,6 +111,7 @@ pub enum Change {
     Bluetooth(bool),
     DoNotDisturb(bool),
     Volume(f32),
+    VolumeReleased,
     Brightness(String, f32),
     KeyboardBrightness(f32),
     ChooseNetwork,
@@ -152,18 +153,21 @@ fn slider(
     value: f32,
     changes: &Changes,
     change: impl Fn(f32) -> Change + 'static,
+    released: Option<Change>,
 ) -> Vec<Box<dyn Widget>> {
-    let changes = Rc::clone(changes);
-    vec![
-        Box::new(Caption::new(label)),
-        Box::new(Slider::new(
-            label,
-            f64::from(value),
-            (0.0, 1.0),
-            LEVEL_STEP,
-            move |value| changes.borrow_mut().push(change(value as f32)),
-        )),
-    ]
+    let changing = Rc::clone(changes);
+    let mut slider = Slider::new(
+        label,
+        f64::from(value),
+        (0.0, 1.0),
+        LEVEL_STEP,
+        move |value| changing.borrow_mut().push(change(value as f32)),
+    );
+    if let Some(released) = released {
+        let changes = Rc::clone(changes);
+        slider = slider.on_release(move |_| changes.borrow_mut().push(released.clone()));
+    }
+    vec![Box::new(Caption::new(label)), Box::new(slider)]
 }
 
 fn module(rows: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
@@ -176,18 +180,36 @@ fn module(rows: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
 }
 
 fn on_off(on: bool) -> String {
-    L10N.tr(if on { "on" } else { "off" })
+    if on { tr!("On") } else { tr!("Off") }
+}
+
+fn unavailable_tile(title: String, symbol: &'static str, toggle: fn(bool) -> Change) -> TileSpec {
+    TileSpec {
+        title,
+        detail: tr!("Unavailable"),
+        symbol,
+        on: false,
+        toggle,
+        details: None,
+    }
 }
 
 fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
     let mut specs = Vec::new();
-    if let Some(on) = status.wifi {
+    if status.wifi.is_unavailable() {
+        specs.push(unavailable_tile(
+            tr!("Wi-Fi"),
+            WIFI_UNAVAILABLE_SYMBOL,
+            Change::Wifi,
+        ));
+    }
+    if let Reading::Present(on) = status.wifi {
         specs.push(TileSpec {
-            title: L10N.tr("wifi"),
+            title: tr!("Wi-Fi"),
             detail: match (&status.network, on) {
-                (_, true) if status.sign_in => L10N.tr("sign-in-required"),
+                (_, true) if status.sign_in => tr!("Sign in required"),
                 (Some(network), true) => network.clone(),
-                (None, true) => L10N.tr("not-connected"),
+                (None, true) => tr!("Not Connected"),
                 (_, false) => on_off(false),
             },
             symbol: if on {
@@ -200,9 +222,16 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             details: Some(Change::ChooseNetwork),
         });
     }
-    if let Some(on) = status.bluetooth {
+    if status.bluetooth.is_unavailable() {
+        specs.push(unavailable_tile(
+            tr!("Bluetooth"),
+            BLUETOOTH_UNAVAILABLE_SYMBOL,
+            Change::Bluetooth,
+        ));
+    }
+    if let Reading::Present(on) = status.bluetooth {
         specs.push(TileSpec {
-            title: L10N.tr("bluetooth"),
+            title: tr!("Bluetooth"),
             detail: on_off(on),
             symbol: if on {
                 "bluetooth-active-symbolic"
@@ -215,7 +244,7 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
         });
     }
     specs.push(TileSpec {
-        title: L10N.tr("do-not-disturb"),
+        title: tr!("Do Not Disturb"),
         detail: on_off(status.do_not_disturb),
         symbol: if status.do_not_disturb {
             "notifications-disabled-symbolic"
@@ -228,12 +257,8 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
     });
     if let Some(muted) = status.input_muted {
         specs.push(TileSpec {
-            title: L10N.tr("microphone"),
-            detail: if muted {
-                L10N.tr("muted")
-            } else {
-                on_off(true)
-            },
+            title: tr!("Microphone"),
+            detail: if muted { tr!("Muted") } else { on_off(true) },
             symbol: if muted {
                 "microphone-disabled-symbolic"
             } else {
@@ -263,6 +288,7 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
         controls.push(Box::new(person::PersonRow::new(
             name,
             &status.icon_dirs,
+            status.settings,
             changes,
         )));
     }
@@ -275,14 +301,16 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
             light.level,
             changes,
             move |level| Change::Brightness(connector.clone(), level),
+            None,
         ));
     }
     if let Some(level) = status.keyboard_brightness {
         brightness.extend(slider(
-            &L10N.tr("keyboard-brightness"),
+            &tr!("Keyboard Brightness"),
             level,
             changes,
             Change::KeyboardBrightness,
+            None,
         ));
     }
     if !brightness.is_empty() {
@@ -290,10 +318,16 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
     }
     let mut sound = Vec::new();
     if let Some(volume) = status.volume {
-        sound.extend(slider(&L10N.tr("sound"), volume, changes, Change::Volume));
+        sound.extend(slider(
+            &tr!("Sound"),
+            volume,
+            changes,
+            Change::Volume,
+            Some(Change::VolumeReleased),
+        ));
         if status.outputs.len() > 1 {
             sound.push(pop_up(
-                &L10N.tr("output"),
+                &tr!("Output"),
                 &status.outputs,
                 status.output.as_deref(),
                 changes,
@@ -302,14 +336,14 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
         }
     }
     if status.input_muted.is_some() {
-        sound.push(Box::new(Caption::new(&L10N.tr("input-level"))));
+        sound.push(Box::new(Caption::new(&tr!("Input Level"))));
         sound.push(Box::new(LevelIndicator::new(
-            &L10N.tr("input-level"),
+            &tr!("Input Level"),
             Rc::clone(&status.input_level),
         )));
         if status.inputs.len() > 1 {
             sound.push(pop_up(
-                &L10N.tr("input"),
+                &tr!("Input"),
                 &status.inputs,
                 status.input.as_deref(),
                 changes,
@@ -328,7 +362,7 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
         ))];
         if status.players.len() > 1 {
             playing.push(pop_up(
-                &L10N.tr("player"),
+                &tr!("Playing From"),
                 &status.players,
                 Some(&player.bus_name),
                 changes,
@@ -357,7 +391,7 @@ pub fn chooser_menu(choices: &[(String, String, bool)]) -> Menu {
 
 pub fn display_title(light: &DisplayLevel, all: &[DisplayLevel]) -> String {
     match all.len() {
-        0 | 1 => L10N.tr("display"),
+        0 | 1 => tr!("Display"),
         _ => light.name.clone(),
     }
 }
@@ -372,10 +406,10 @@ pub enum Hud {
 impl Hud {
     fn title(&self) -> String {
         match self {
-            Self::Volume(Level { muted: true, .. }) => L10N.tr("sound-muted"),
-            Self::Volume(_) => L10N.tr("sound"),
+            Self::Volume(Level { muted: true, .. }) => tr!("Sound (muted)"),
+            Self::Volume(_) => tr!("Sound"),
             Self::Display(title, _) => title.clone(),
-            Self::Keyboard(_) => L10N.tr("keyboard-brightness"),
+            Self::Keyboard(_) => tr!("Keyboard Brightness"),
         }
     }
 

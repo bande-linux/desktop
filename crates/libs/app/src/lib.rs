@@ -61,13 +61,18 @@ pub enum Kind {
     Dialog(&'static str),
     Utility(&'static str),
     Panel(&'static str),
+    Popover(&'static str),
 }
 
 impl Kind {
     pub fn tag(self) -> &'static str {
         match self {
             Self::Main => "main",
-            Self::Secondary(tag) | Self::Dialog(tag) | Self::Utility(tag) | Self::Panel(tag) => tag,
+            Self::Secondary(tag)
+            | Self::Dialog(tag)
+            | Self::Utility(tag)
+            | Self::Panel(tag)
+            | Self::Popover(tag) => tag,
         }
     }
 }
@@ -209,6 +214,12 @@ pub trait Program: Sized + 'static {
     }
 
     fn tick(&mut self, _cx: &mut Cx<Self>, _now: Instant) {}
+
+    fn installed_changed(&mut self, _cx: &mut Cx<Self>) {}
+
+    fn waits_for_activation() -> bool {
+        false
+    }
 
     fn runs_in_background() -> bool {
         false

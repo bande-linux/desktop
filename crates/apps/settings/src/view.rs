@@ -3,24 +3,31 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use bande_audio::{Direction, Snapshot, meter_level};
+use bande_bus::Reading;
 use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
+use bande_keyboard::Layouts;
+use bande_l10n::tr;
+use bande_settings_panes::{
+    AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
+};
+use bande_settings_panes::{PaneHit, search};
+use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
     WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
 use jiff::Zoned;
-use std::time::{Duration, Instant};
 
-use crate::L10N;
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
-use crate::battery::{BatteryCommand, BatteryState};
-use crate::crash_reports::{CrashReport, CrashReportCommand};
+use crate::battery::{BatteryCommand, PowerState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
+use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
 use crate::language::{SAME_AS_LANGUAGE, locale_matches};
@@ -44,16 +51,11 @@ use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersCommand};
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
-use bande_keyboard::Layouts;
-use bande_settings_panes::{
-    AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
-};
-use bande_settings_panes::{PaneHit, search};
-use bande_status::brightness::{DisplayLevel, LevelRequest};
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
 pub(crate) const USE_MAIN: &str = "main";
+pub(crate) const ADD_COLOUR_PROFILE: &str = "add";
 pub(crate) const USE_EXTENDED: &str = "extended";
 pub(crate) const MIRROR_PREFIX: &str = "mirror:";
 
@@ -69,6 +71,7 @@ pub(crate) enum Intent {
     KeepDisplays(bool),
     Default(Direction, String),
     AppVolume(String, f32),
+    VolumeFeedback,
     Join(Vec<u8>),
     Password(String),
     CancelJoin,
@@ -109,9 +112,14 @@ pub(crate) enum Intent {
     JoinOther(Option<String>),
     WifiManual(bool),
     OpenPrinter(String),
-    OpenCrashReport(PathBuf),
-    CopyCrashReport(String),
-    DeleteCrashReport(PathBuf),
+    OpenReport(String),
+    CopyReport(String),
+    DeleteReport(String),
+    SendReport(String),
+    SetSendingReports(bool),
+    DraftReportDescription(String),
+    CreateReport(()),
+    SaveReport((String, String)),
     DefaultPrinter(String),
     Sharing(SharingCommand),
     PrinterAddress(String),
@@ -142,6 +150,9 @@ pub(crate) enum Intent {
     Grant(Permission, String, bool),
     KeyboardAccess(String, bool),
     Spelling(crate::spelling::SpellingCommand),
+    Battery(BatteryCommand),
+    EditReplacement(Option<String>),
+    ReplacementText(crate::spelling::ReplacementField, String),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -226,7 +237,7 @@ pub(crate) enum Detail {
     Network(Vec<u8>),
     Printer(String),
     Account(String),
-    CrashReport(PathBuf),
+    Report(String),
 }
 
 pub struct SettingsView {
@@ -239,12 +250,14 @@ pub struct SettingsView {
     pub(crate) keep: Option<Keep>,
     pub(crate) audio: Option<Snapshot>,
     pub(crate) input_level: Rc<Cell<f32>>,
-    pub(crate) wifi: Option<WifiState>,
+    pub(crate) wifi: Reading<WifiState>,
     pub(crate) join: Join,
-    pub(crate) bluetooth: Option<BluetoothState>,
+    pub(crate) bluetooth: Reading<BluetoothState>,
     pub(crate) busy: Vec<String>,
     pub(crate) pairing: Option<Question>,
     pub(crate) pictures: Vec<(String, Pair)>,
+    pub(crate) colour_profiles: Vec<(String, String)>,
+    pub(crate) show_all_resolutions: bool,
     pub(crate) thumbnails: HashMap<Pair, Option<Image>>,
     pub(crate) query: String,
     pub(crate) hits: Vec<PaneHit>,
@@ -252,8 +265,9 @@ pub struct SettingsView {
     pub(crate) layouts: Option<Layouts>,
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
-    pub(crate) crash_reports: Vec<CrashReport>,
+    pub(crate) diagnostics: Diagnostics,
     pub(crate) storage: Option<Storage>,
+    pub(crate) files_installed: bool,
     pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
@@ -263,14 +277,16 @@ pub struct SettingsView {
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
     pub(crate) language_app: Option<String>,
-    pub(crate) battery: Option<BatteryState>,
+    pub(crate) power: Option<PowerState>,
+    pub(crate) sleeps: bool,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
     pub(crate) detail: Option<Detail>,
     pub(crate) other: Option<Other>,
     pub(crate) wifi_manual: bool,
     pub(crate) printers: Option<PrintersState>,
     pub(crate) sharing: Option<SharingState>,
-    pub(crate) installing_samba: bool,
+    pub(crate) installing_sharing: bool,
+    pub(crate) installing_vpn_plugin: bool,
     pub(crate) adding_printer: bool,
     pub(crate) installing_printing: bool,
     pub(crate) printer_address: String,
@@ -283,6 +299,7 @@ pub struct SettingsView {
     pub(crate) password_message: Option<String>,
     pub(crate) software: SoftwareState,
     pub(crate) software_checked: Option<i64>,
+    pub(crate) software_hint: Option<String>,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
     pub(crate) locale: Option<LocaleState>,
@@ -299,9 +316,10 @@ pub struct SettingsView {
     pub(crate) permissions: Grants,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
     pub(crate) spelling: crate::spelling::SpellingState,
+    pub(crate) replacing: Option<crate::spelling::Replacing>,
     pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
-    stale: bool,
+    pub(crate) stale: bool,
     rebuilt: bool,
     pub(crate) focus_next: Option<Anchor>,
     reveal_pending: bool,
@@ -322,7 +340,7 @@ impl SettingsView {
     pub fn new(palette: Palette, text: TextSystem) -> Self {
         let intents: Intents = Rc::default();
         let queries = Rc::clone(&intents);
-        let field = SearchField::new(&L10N.tr("search"), "", move |query: &str| {
+        let field = SearchField::new(&tr!("Search"), "", move |query: &str| {
             queries.borrow_mut().push(Intent::Query(query.to_owned()));
         });
         let search = field.id();
@@ -341,12 +359,14 @@ impl SettingsView {
             keep: None,
             audio: None,
             input_level: Rc::default(),
-            wifi: None,
+            wifi: Reading::Absent,
             join: Join::default(),
-            bluetooth: None,
+            bluetooth: Reading::Absent,
             busy: Vec::new(),
             pairing: None,
             pictures: Vec::new(),
+            colour_profiles: Vec::new(),
+            show_all_resolutions: false,
             thumbnails: HashMap::new(),
             query: String::new(),
             hits: Vec::new(),
@@ -354,8 +374,9 @@ impl SettingsView {
             layouts: None,
             pointing: PointingDevices::default(),
             about: None,
-            crash_reports: Vec::new(),
+            diagnostics: Diagnostics::default(),
             storage: None,
+            files_installed: false,
             backup: BackupView::default(),
             drafts: HashMap::new(),
             confirming_empty_trash: false,
@@ -365,14 +386,16 @@ impl SettingsView {
             picking: None,
             login: None,
             language_app: None,
-            battery: None,
+            power: None,
+            sleeps: true,
             notification_apps: None,
             detail: None,
             other: None,
             wifi_manual: false,
             printers: None,
             sharing: None,
-            installing_samba: false,
+            installing_sharing: false,
+            installing_vpn_plugin: false,
             adding_printer: false,
             installing_printing: false,
             printer_address: String::new(),
@@ -385,6 +408,7 @@ impl SettingsView {
             password_message: None,
             software: SoftwareState::Unknown,
             software_checked: None,
+            software_hint: None,
             network: None,
             manual_ipv4: false,
             locale: None,
@@ -401,6 +425,7 @@ impl SettingsView {
             permissions: Vec::new(),
             keyboard_access: Vec::new(),
             spelling: Default::default(),
+            replacing: None,
             security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
@@ -522,6 +547,13 @@ impl SettingsView {
         }
     }
 
+    pub fn set_files_installed(&mut self, installed: bool) {
+        if self.files_installed != installed {
+            self.files_installed = installed;
+            self.invalidate();
+        }
+    }
+
     pub fn set_displays(&mut self, displays: Vec<Display>) {
         if self.displays != displays {
             self.displays = displays;
@@ -625,9 +657,10 @@ impl SettingsView {
                     SettingId::AppVolumes,
                 ],
             ),
-            Update::Battery(_) => (
+            Update::Power(_) => (
                 Some(PaneId::Power),
                 &[
+                    SettingId::PowerStatus,
                     SettingId::BatteryLevel,
                     SettingId::PowerMode,
                     SettingId::LowPowerOnBattery,
@@ -639,10 +672,13 @@ impl SettingsView {
                 &[SettingId::StorageUsage, SettingId::LargeFiles],
             ),
             Update::Backup(_) => (Some(PaneId::Backup), &[SettingId::BackupStatus]),
-            Update::Software(_) | Update::SoftwareChecked(_) => {
+            Update::Software(_) | Update::SoftwareChecked(_) | Update::SoftwareHint(_) => {
                 (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
+            Update::ColourProfiles(_) | Update::ColourProfileAdded(..) => {
+                (None, &[SettingId::ColourProfile])
+            }
             Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
             Update::Printers(_) | Update::PrinterAdded(..) | Update::PrintingInstalled => (
                 Some(PaneId::Printers),
@@ -684,12 +720,14 @@ impl SettingsView {
             Update::Arrangements(arrangements) => self.arrangements = arrangements,
             Update::Audio(snapshot) => self.apply_audio(snapshot),
             Update::Wifi(wifi) => {
-                if let Some(wifi) = &wifi {
-                    self.values
-                        .insert(SettingId::WifiPower, Value::Flag(wifi.enabled));
-                }
+                match wifi.present() {
+                    Some(wifi) => self
+                        .values
+                        .insert(SettingId::WifiPower, Value::Flag(wifi.enabled)),
+                    None => self.values.remove(&SettingId::WifiPower),
+                };
                 if let Some(Detail::Network(ssid)) = &self.detail
-                    && !wifi.as_ref().is_some_and(|wifi| {
+                    && !wifi.present().is_some_and(|wifi| {
                         wifi.enabled && wifi.known.iter().any(|known| known.ssid == *ssid)
                     })
                 {
@@ -699,7 +737,10 @@ impl SettingsView {
             }
             Update::Joined(ssid, outcome) => self.joined(ssid, outcome),
             Update::Bluetooth(bluetooth) => {
-                if let Some(bluetooth) = &bluetooth {
+                if bluetooth.present().is_none() {
+                    self.values.remove(&SettingId::BluetoothPower);
+                }
+                if let Some(bluetooth) = bluetooth.present() {
                     self.values
                         .insert(SettingId::BluetoothPower, Value::Flag(bluetooth.powered));
                     let connection = |state: Option<&BluetoothState>, address: &str| {
@@ -709,7 +750,7 @@ impl SettingsView {
                             .find(|device| device.address == address)
                             .map(|device| device.connected)
                     };
-                    let before = self.bluetooth.as_ref();
+                    let before = self.bluetooth.present();
                     self.busy.retain(|address| {
                         connection(before, address) == connection(Some(bluetooth), address)
                     });
@@ -723,6 +764,10 @@ impl SettingsView {
                 self.pairing = question;
             }
             Update::Pictures(pictures) => self.pictures = pictures,
+            Update::ColourProfiles(profiles) => self.colour_profiles = profiles,
+            Update::ColourProfileAdded(identity, profile) => {
+                self.change_display(identity, SettingId::ColourProfile, Value::Keyword(profile));
+            }
             Update::Thumbnail(pair, picture) => {
                 let image = Image::from_rgba(picture.width, picture.height, picture.rgba);
                 self.thumbnails.insert(pair, image);
@@ -745,6 +790,7 @@ impl SettingsView {
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Software(state) => self.software = state,
             Update::SoftwareChecked(at) => self.software_checked = at,
+            Update::SoftwareHint(hint) => self.software_hint = hint,
             Update::Locale(locale) => self.locale = locale,
             Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
@@ -781,8 +827,8 @@ impl SettingsView {
                 }
                 self.network = Some(network);
             }
-            Update::Battery(battery) => {
-                match battery.as_ref().and_then(|battery| battery.profile.clone()) {
+            Update::Power(power) => {
+                match power.as_ref().and_then(|power| power.profile.clone()) {
                     Some(profile) => {
                         self.values
                             .insert(SettingId::PowerMode, Value::Keyword(profile));
@@ -791,16 +837,25 @@ impl SettingsView {
                         self.values.remove(&SettingId::PowerMode);
                     }
                 }
-                self.battery = battery;
+                self.power = power;
             }
             Update::CannotSleep => {
+                self.sleeps = false;
                 bande_settings_panes::without_sleep(&mut self.panes);
                 self.availability_changed();
             }
-            Update::CrashReports(reports) => self.crash_reports = reports,
-            Update::CrashReportsChanged => self
-                .commands
-                .push(Command::CrashReports(CrashReportCommand::Refresh)),
+            Update::Diagnostics(diagnostics) => {
+                let open = self.diagnostics.open.take();
+                self.diagnostics = diagnostics;
+                self.diagnostics.open = open;
+            }
+            Update::DiagnosticsReport(id, text) => self.diagnostics.open = Some((id, text)),
+            Update::ReportCreated(id) => {
+                self.select_pane(PaneId::Diagnostics);
+                self.detail = Some(Detail::Report(id));
+                self.focus_next = Some(Anchor::Back);
+            }
+            Update::ReportSaved(path) => self.diagnostics.saved = Some(path),
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -822,8 +877,9 @@ impl SettingsView {
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
+            Update::InstallingVpnPlugin(installing) => self.installing_vpn_plugin = installing,
             Update::Sharing(state) => {
-                self.installing_samba = false;
+                self.installing_sharing = false;
                 self.sharing = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
@@ -906,14 +962,17 @@ impl SettingsView {
                 self.other = None;
             }
             Joined::WrongPassword => {
-                self.join.error = Some(L10N.tr("wrong-password"));
+                self.join.error = Some(tr!("The password is not correct. Try again."));
                 if self.other.is_none() {
                     self.join.asking = Some(ssid);
                 }
                 self.focus_next = Some(Anchor::Password);
             }
             Joined::Failed(reason) => {
-                self.join.error = Some(L10N.tr_args("join-failed", [("reason", reason.into())]));
+                self.join.error = Some(tr!(
+                    "Could not join the network: {reason}.",
+                    reason = reason
+                ));
             }
         }
     }
@@ -928,8 +987,8 @@ impl SettingsView {
 
     pub(crate) fn available(&self, pane: PaneId) -> bool {
         match pane {
-            PaneId::Wifi => self.wifi.is_some(),
-            PaneId::Bluetooth => self.bluetooth.is_some(),
+            PaneId::Wifi => !self.wifi.is_absent(),
+            PaneId::Bluetooth => !self.bluetooth.is_absent(),
             PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
@@ -953,8 +1012,9 @@ impl SettingsView {
             | PaneId::Users
             | PaneId::Passwords
             | PaneId::Storage
+            | PaneId::Diagnostics
+            | PaneId::SendReport
             | PaneId::Backup
-            | PaneId::CrashReports
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
             PaneId::Mouse => self.pointing.mouse,
@@ -983,7 +1043,7 @@ impl SettingsView {
         })
     }
 
-    fn anchor_focused(&self, wanted: &Anchor) -> bool {
+    pub(crate) fn anchor_focused(&self, wanted: &Anchor) -> bool {
         let focus = self.ui.focus();
         self.anchors
             .iter()
@@ -998,7 +1058,9 @@ impl SettingsView {
             (Some((Picker::Language, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
+                .map(|locale| {
+                    locale_matches(&locale.available, &locale.translations, query, PICK_RESULTS)
+                })
                 .unwrap_or_default(),
             (Some((Picker::Region, query)), _) if query.trim().is_empty() => {
                 vec![SAME_AS_LANGUAGE.to_owned()]
@@ -1006,7 +1068,7 @@ impl SettingsView {
             (Some((Picker::Region, query)), _) => self
                 .locale
                 .as_ref()
-                .map(|locale| locale_matches(&locale.available, query, PICK_RESULTS))
+                .map(|locale| locale_matches(&locale.available, &[], query, PICK_RESULTS))
                 .unwrap_or_default(),
             (Some((Picker::Zone, query)), Some(time)) => {
                 zone_matches(&time.zones, query, PICK_RESULTS)
@@ -1015,7 +1077,12 @@ impl SettingsView {
                 .locale
                 .as_ref()
                 .map(|locale| {
-                    let mut matches = locale_matches(&locale.available, query, PICK_RESULTS + 1);
+                    let mut matches = locale_matches(
+                        &locale.available,
+                        &locale.translations,
+                        query,
+                        PICK_RESULTS + 1,
+                    );
                     matches.retain(|code| !same_locale(code, DEFAULT_LOCALE));
                     matches.truncate(PICK_RESULTS);
                     matches
@@ -1084,7 +1151,23 @@ impl SettingsView {
         let editing = self
             .focused_setting()
             .filter(|setting| self.drafts.contains_key(setting));
+        let replacing = self.replacing.is_some() && self.replacement_focused();
         let handled = match event {
+            Event::Key {
+                key: Key::Enter, ..
+            } if replacing => {
+                self.commit_replacement();
+                self.invalidate();
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && replacing => {
+                self.cancel_replacement();
+                self.invalidate();
+                true
+            }
             Event::Key {
                 key: Key::Enter, ..
             } if editing.is_some() => {
@@ -1269,6 +1352,9 @@ impl SettingsView {
 
     pub fn settle(&mut self) -> bool {
         self.rebuilt = false;
+        if self.replacing.is_some() && !self.replacement_focused() {
+            self.commit_replacement();
+        }
         self.process_intents();
         let focused = self.focused_setting();
         if self.drafts.keys().any(|setting| Some(*setting) != focused) {
@@ -1338,6 +1424,10 @@ impl SettingsView {
                 self.printer_address = address;
                 continue;
             }
+            if let Intent::ReplacementText(field, text) = intent {
+                self.type_replacement(field, text);
+                continue;
+            }
             self.stale = true;
             match intent {
                 Intent::Draft(..) | Intent::OtherName(..) | Intent::PrinterAddress(..) => {}
@@ -1355,7 +1445,7 @@ impl SettingsView {
                             Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
                             Detail::Printer(name) => format!("printer:{name}"),
                             Detail::Account(login) => format!("account:{login}"),
-                            Detail::CrashReport(path) => format!("crash:{}", path.display()),
+                            Detail::Report(id) => format!("report:{id}"),
                         }));
                         self.picture_edit = None;
                         self.deleting_account = false;
@@ -1403,6 +1493,9 @@ impl SettingsView {
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Spelling(command) => self.change_spelling(command),
+                Intent::Battery(command) => self.commands.push(Command::Battery(command)),
+                Intent::EditReplacement(original) => self.edit_replacement(original),
+                Intent::ReplacementText(..) => {}
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;
@@ -1460,18 +1553,37 @@ impl SettingsView {
                 }
                 Intent::JoinOther(password) => self.join_other(password),
                 Intent::WifiManual(manual) => self.set_wifi_manual(manual),
-                Intent::OpenCrashReport(path) => {
-                    self.detail = Some(Detail::CrashReport(path));
+                Intent::OpenReport(id) => {
+                    self.commands
+                        .push(Command::Diagnostics(DiagnosticsCommand::Read(id.clone())));
+                    self.detail = Some(Detail::Report(id));
                     self.clear_failure();
                     self.focus_next = Some(Anchor::Back);
                     *self.scroll.borrow_mut() = ScrollState::default();
                 }
-                Intent::CopyCrashReport(text) => self.commands.push(Command::CopyText(text)),
-                Intent::DeleteCrashReport(path) => {
+                Intent::CopyReport(text) => self.commands.push(Command::CopyText(text)),
+                Intent::DeleteReport(id) => {
                     self.detail = None;
                     self.commands
-                        .push(Command::CrashReports(CrashReportCommand::Delete(path)));
+                        .push(Command::Diagnostics(DiagnosticsCommand::Delete(id)));
                 }
+                Intent::SendReport(id) => self
+                    .commands
+                    .push(Command::Diagnostics(DiagnosticsCommand::Send(id))),
+                Intent::SetSendingReports(on) => self
+                    .commands
+                    .push(Command::Diagnostics(DiagnosticsCommand::SetSending(on))),
+                Intent::DraftReportDescription(text) => self.diagnostics.description = text,
+                Intent::CreateReport(()) => {
+                    let description = std::mem::take(&mut self.diagnostics.description);
+                    self.commands
+                        .push(Command::Diagnostics(DiagnosticsCommand::Create(
+                            description,
+                        )));
+                }
+                Intent::SaveReport((id, text)) => self
+                    .commands
+                    .push(Command::Diagnostics(DiagnosticsCommand::Save(id, text))),
                 Intent::OpenPrinter(name) => {
                     self.detail = Some(Detail::Printer(name));
                     self.forgetting = None;
@@ -1484,7 +1596,10 @@ impl SettingsView {
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
                 }
                 Intent::Sharing(command) => {
-                    self.installing_samba |= command == SharingCommand::InstallSamba;
+                    self.installing_sharing |= matches!(
+                        command,
+                        SharingCommand::InstallSamba | SharingCommand::InstallResolved
+                    );
                     self.commands.push(Command::Sharing(command));
                 }
                 Intent::InstallPrinting => {
@@ -1612,6 +1727,9 @@ impl SettingsView {
                     self.commands
                         .push(Command::Audio(AudioCommand::App(name, volume)));
                 }
+                Intent::VolumeFeedback => {
+                    self.commands.push(Command::Audio(AudioCommand::Feedback))
+                }
                 Intent::Join(ssid) => self.start_join(ssid, None),
                 Intent::Password(password) => {
                     if let Some(ssid) = self.join.asking.clone() {
@@ -1725,7 +1843,7 @@ impl SettingsView {
         address: String,
         command: fn(bande_bluetooth::Device) -> BluetoothCommand,
     ) {
-        let device = self.bluetooth.as_ref().and_then(|bluetooth| {
+        let device = self.bluetooth.present().and_then(|bluetooth| {
             bluetooth
                 .paired
                 .iter()
@@ -1742,7 +1860,7 @@ impl SettingsView {
     fn start_join(&mut self, ssid: Vec<u8>, password: Option<String>) {
         let Some(network) = self
             .wifi
-            .as_ref()
+            .present()
             .and_then(|wifi| wifi.networks.iter().find(|network| network.ssid == ssid))
             .cloned()
         else {
@@ -1773,6 +1891,10 @@ impl SettingsView {
     }
 
     pub fn select_pane(&mut self, pane: PaneId) {
+        if pane == PaneId::Diagnostics {
+            self.commands
+                .push(Command::Diagnostics(DiagnosticsCommand::Refresh));
+        }
         if pane == self.pane {
             return;
         }
@@ -1846,7 +1968,12 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
-            PaneId::LanguageTime | PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
+            PaneId::Keyboard if on => {
+                self.commands
+                    .push(Command::Spelling(crate::spelling::SpellingCommand::Read));
+                Command::Locale(LocaleCommand::Read)
+            }
+            PaneId::LanguageTime if on => Command::Locale(LocaleCommand::Read),
             _ => return,
         };
         self.commands.push(command);
@@ -1894,9 +2021,7 @@ impl SettingsView {
 
     pub(crate) fn text_size_label(&self) -> Option<String> {
         match self.values.get(&SettingId::TextSize)? {
-            Value::Number(percent) => {
-                Some(L10N.tr_args("text-size-percent", [("percent", (*percent).into())]))
-            }
+            Value::Number(percent) => Some(tr!("{percent}%", percent = (*percent))),
             _ => None,
         }
     }
@@ -1991,7 +2116,9 @@ impl SettingsView {
                                 bande_network::ConnectionChange::Dns(servers),
                             )));
                     }
-                    (_, None) => self.fail_here(L10N.tr("dns-invalid")),
+                    (_, None) => self.fail_here(tr!(
+                        "Enter DNS servers as IPv4 addresses, such as 1.1.1.1, 9.9.9.9."
+                    )),
                     _ => self.clear_failure(),
                 }
                 return;
@@ -2013,7 +2140,7 @@ impl SettingsView {
                             manual,
                         ))));
                 }
-                None => self.fail_here(L10N.tr("manual-address-invalid")),
+                None => self.fail_here(tr!("Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.")),
             }
             return;
         }
@@ -2031,7 +2158,7 @@ impl SettingsView {
                     }
                 }
                 None => {
-                    self.errors.insert(id, L10N.tr("night-time-invalid"));
+                    self.errors.insert(id, tr!("Enter a time such as 22:00."));
                 }
             }
             return;
@@ -2048,7 +2175,7 @@ impl SettingsView {
                     self.commands.push(Command::Time(TimeCommand::Set(at)));
                 }
                 None => {
-                    self.errors.insert(id, L10N.tr("manual-time-invalid"));
+                    self.errors.insert(id, tr!("Type the date and time as year-month-day hours:minutes, such as 2026-10-30 14:05."));
                 }
             }
             return;
@@ -2111,7 +2238,7 @@ impl SettingsView {
         };
         if !keep {
             self.display_settings
-                .insert(pending.identity.clone(), pending.previous);
+                .insert(pending.identity.clone(), pending.previous.clone());
             self.commands
                 .push(Command::Display(pending.identity, pending.previous));
         }
@@ -2211,12 +2338,17 @@ impl SettingsView {
     }
 
     fn change_display(&mut self, identity: String, id: SettingId, value: Value) {
+        if let (SettingId::ShowAllResolutions, Value::Flag(shown)) = (id, &value) {
+            self.show_all_resolutions = *shown;
+            self.invalidate();
+            return;
+        }
         let mut display = self
             .display_settings
             .get(&identity)
-            .copied()
+            .cloned()
             .unwrap_or_default();
-        let previous = display;
+        let previous = display.clone();
         let mut confirm = false;
         match (id, value) {
             (SettingId::Brightness, Value::Fraction(level)) => {
@@ -2252,14 +2384,18 @@ impl SettingsView {
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
             }
-            (SettingId::MatchColours, Value::Flag(on)) => {
-                display.match_colours = (!on).then_some(false);
+            (SettingId::ColourProfile, Value::Keyword(profile)) => {
+                if profile == ADD_COLOUR_PROFILE {
+                    self.commands.push(Command::AddColourProfile(identity));
+                    return;
+                }
+                display.colour_profile = (profile != bande_colour::DISPLAY).then_some(profile);
             }
             _ => return,
         }
         if confirm && display != previous {
             let previous = match &self.keep {
-                Some(keep) if keep.identity == identity => keep.previous,
+                Some(keep) if keep.identity == identity => keep.previous.clone(),
                 _ => previous,
             };
             self.keep_displays(true);
@@ -2269,7 +2405,8 @@ impl SettingsView {
                 until: Instant::now() + KEEP_DISPLAY_SETTINGS,
             });
         }
-        self.display_settings.insert(identity.clone(), display);
+        self.display_settings
+            .insert(identity.clone(), display.clone());
         self.commands.push(Command::Display(identity, display));
     }
 

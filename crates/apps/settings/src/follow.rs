@@ -3,27 +3,32 @@ use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use bande_app::choose_file;
+use bande_bus::Reading;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
+use bande_l10n::{text, tr};
+use bande_network::{import_vpn, missing_vpn_plugin};
+use bande_settings_panes::{PaneId, SettingId, Value};
+use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_status::devices::can_sleep;
 use bande_toolkit::SessionEnd;
+use bande_watch::FolderWatch;
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
 use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
-use crate::battery::{BatteryCommand, BatteryState, follow_battery};
+use crate::battery::{BatteryCommand, PowerState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
-use crate::crash_reports::{CrashReport, CrashReportCommand, follow_crash_reports};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
+use crate::diagnostics::{Diagnostics, DiagnosticsCommand, follow_diagnostics};
 use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
@@ -46,10 +51,6 @@ use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiS
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
-use bande_network::import_vpn;
-use bande_settings_panes::{PaneId, SettingId, Value};
-use bande_status::brightness::{DisplayLevel, LevelRequest};
-use bande_watch::FolderWatch;
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
@@ -61,25 +62,30 @@ pub enum Update {
     DisplayLevels(Vec<DisplayLevel>),
     Arrangements(Vec<Vec<Placement>>),
     Audio(Option<bande_audio::Snapshot>),
-    Wifi(Option<WifiState>),
+    Wifi(Reading<WifiState>),
     Network(NetworkState),
     Joined(Vec<u8>, Joined),
-    Bluetooth(Option<BluetoothState>),
+    Bluetooth(Reading<BluetoothState>),
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
+    ColourProfiles(Vec<(String, String)>),
+    ColourProfileAdded(String, String),
     Thumbnail(Pair, bande_wallpaper::Picture),
     About(About),
     Storage(Storage),
+    Diagnostics(Diagnostics),
+    DiagnosticsReport(String, String),
+    ReportCreated(String),
+    ReportSaved(String),
     Backup(BackupUpdate),
-    CrashReports(Vec<CrashReport>),
-    CrashReportsChanged,
     Time(Option<TimeState>),
     Login(LoginItems),
-    Battery(Option<BatteryState>),
+    Power(Option<PowerState>),
     CannotSleep,
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     SoftwareChecked(Option<i64>),
+    SoftwareHint(Option<String>),
     Locale(Option<LocaleState>),
     Layouts(Layouts),
     Pointing(PointingDevices),
@@ -96,6 +102,7 @@ pub enum Update {
     Sharing(SharingState),
     PrinterAdded(bool),
     PrintingInstalled,
+    InstallingVpnPlugin(bool),
     Accounts(Vec<Account>, bool),
     Password(PasswordOutcome),
     PictureChosen(String, bande_toolkit::Image),
@@ -117,8 +124,8 @@ pub enum Command {
     Picture(PictureCommand),
     About(AboutCommand),
     Storage(StorageCommand),
+    Diagnostics(DiagnosticsCommand),
     Backup(BackupCommand),
-    CrashReports(CrashReportCommand),
     CopyText(String),
     Time(TimeCommand),
     Login(LoginCommand),
@@ -138,6 +145,7 @@ pub enum Command {
     EndSession(SessionEnd),
     ImportVpn,
     ExcludeFolder,
+    AddColourProfile(String),
     ClearClipboard,
     Passwords(PasswordCommand),
     CopySecret(Concealed),
@@ -186,6 +194,30 @@ impl Feed {
         while matches!((&self.wake).read(&mut bytes), Ok(read) if read > 0) {}
         self.receiver.try_iter().collect()
     }
+}
+
+fn untimed(
+    bus: &'static OnceLock<Option<Connection>>,
+    open: fn() -> zbus::Result<Connection>,
+    fallback: &Connection,
+) -> Connection {
+    bus.get_or_init(|| {
+        open()
+            .inspect_err(|error| tracing::warn!("cannot open a bus connection: {error}"))
+            .ok()
+    })
+    .clone()
+    .unwrap_or_else(|| fallback.clone())
+}
+
+pub(crate) fn waiting_system(fallback: &Connection) -> Connection {
+    static BUS: OnceLock<Option<Connection>> = OnceLock::new();
+    untimed(&BUS, Connection::system, fallback)
+}
+
+pub(crate) fn waiting_session(fallback: &Connection) -> Connection {
+    static BUS: OnceLock<Option<Connection>> = OnceLock::new();
+    untimed(&BUS, Connection::session, fallback)
 }
 
 pub fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
@@ -263,7 +295,8 @@ pub fn follow_notifications(session: &Connection, updates: Updates) {
 }
 
 fn exclude_folder(session: &Connection) -> zbus::Result<()> {
-    let Some(folder) = choose_file(session, &L10N.tr("choose-excluded-folder"), None)? else {
+    let Some(folder) = choose_file(session, &tr!("Choose a Folder to Keep Out of Search"), None)?
+    else {
         return Ok(());
     };
     let client = SettingsClient::connect(session)?;
@@ -337,12 +370,17 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                 };
                 if let Err(error) = result {
                     updates.send(match restore.first() {
-                        Some(setting) => {
-                            Update::Failed(*setting, sentence(&error, "service-desktop"))
-                        }
+                        Some(setting) => Update::Failed(
+                            *setting,
+                            sentence(&error, text!("The desktop settings service")),
+                        ),
                         None => Update::PaneFailed(
                             PaneId::Displays,
-                            explained(&error, "service-desktop", "displays-change-failed"),
+                            explained(
+                                &error,
+                                text!("The desktop settings service"),
+                                text!("Couldn't change the displays."),
+                            ),
                         ),
                     });
                     updates.send(Update::Values(client.read(&restore)));
@@ -369,8 +407,8 @@ pub struct Services {
     pictures: Sender<PictureCommand>,
     about: Option<Sender<AboutCommand>>,
     storage: Sender<StorageCommand>,
+    diagnostics: Sender<DiagnosticsCommand>,
     backup: Option<Sender<BackupCommand>>,
-    crash_reports: Sender<CrashReportCommand>,
     time: Option<Sender<TimeCommand>>,
     login: Sender<LoginCommand>,
     battery: Option<Sender<BatteryCommand>>,
@@ -402,18 +440,22 @@ impl Services {
             follow_privileges(system, updates.clone());
             hide_sleep_if_unavailable(system, updates.clone());
         }
+        let listed = updates.clone();
+        spawn("colour-profiles", move || {
+            listed.send(Update::ColourProfiles(crate::colour::installed()));
+        });
         Self {
             connection: session.clone(),
             updates: updates.clone(),
             session: worker(session, updates.clone()),
-            audio: follow_audio(updates.clone()),
+            audio: follow_audio(session, updates.clone()),
             network: system.map(|system| follow_network(system, updates.clone())),
             bluetooth: system.map(|system| follow_bluetooth(system, updates.clone())),
             pictures: follow_pictures(session, bande_xdg::data_dirs(), updates.clone()),
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
-            backup: system.map(|system| follow_backup(system, updates.clone())),
-            crash_reports: follow_crash_reports(updates.clone()),
+            diagnostics: follow_diagnostics(updates.clone()),
+            backup: system.map(|system| follow_backup(session, system, updates.clone())),
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
@@ -427,7 +469,7 @@ impl Services {
             _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
-            printers: system.map(|system| follow_printers(system, updates.clone())),
+            printers: system.map(|system| follow_printers(system, session, updates.clone())),
             sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
@@ -461,11 +503,11 @@ impl Services {
                 .as_ref()
                 .is_some_and(|about| about.send(command).is_ok()),
             Command::Storage(command) => self.storage.send(command).is_ok(),
+            Command::Diagnostics(command) => self.diagnostics.send(command).is_ok(),
             Command::Backup(command) => self
                 .backup
                 .as_ref()
                 .is_some_and(|backup| backup.send(command).is_ok()),
-            Command::CrashReports(command) => self.crash_reports.send(command).is_ok(),
             Command::Time(command) => self
                 .time
                 .as_ref()
@@ -509,9 +551,25 @@ impl Services {
                     if let Err(error) = clear_clipboard(&session) {
                         updates.send(pane_failed(
                             PaneId::PrivacySecurity,
-                            "clipboard-clear-failed",
+                            text!("Couldn't clear the clipboard history."),
                             error,
                         ));
+                    }
+                });
+                true
+            }
+            Command::AddColourProfile(identity) => {
+                let (session, updates) = (self.connection.clone(), self.updates.clone());
+                spawn("add-colour-profile", move || {
+                    match crate::colour::add(&session) {
+                        crate::colour::Added::Profile(profile) => {
+                            updates.send(Update::ColourProfiles(crate::colour::installed()));
+                            updates.send(Update::ColourProfileAdded(identity, profile));
+                        }
+                        crate::colour::Added::Refused(reason) => {
+                            updates.send(Update::Failed(SettingId::ColourProfile, reason));
+                        }
+                        crate::colour::Added::Cancelled => {}
                     }
                 });
                 true
@@ -520,7 +578,11 @@ impl Services {
                 let (session, updates) = (self.connection.clone(), self.updates.clone());
                 spawn("exclude-folder", move || {
                     if let Err(error) = exclude_folder(&session) {
-                        updates.send(pane_failed(PaneId::Search, "search-exclude-failed", error));
+                        updates.send(pane_failed(
+                            PaneId::Search,
+                            text!("Couldn't add this folder to the excluded folders."),
+                            error,
+                        ));
                     }
                 });
                 true
@@ -530,19 +592,49 @@ impl Services {
                 spawn("import-vpn", move || {
                     let chosen = choose_file(
                         &session,
-                        &L10N.tr("import-vpn-title"),
+                        &tr!("Import a VPN Configuration"),
                         Some((
-                            L10N.tr("vpn-files"),
+                            tr!("VPN configurations"),
                             vec![(0, "*.conf".to_owned()), (0, "*.ovpn".to_owned())],
                         )),
                     );
-                    let imported = match chosen {
-                        Ok(Some(file)) => import_vpn(&file).map_err(|error| error.to_string()),
-                        Ok(None) => Ok(()),
-                        Err(error) => Err(error.to_string()),
+                    let file = match chosen {
+                        Ok(Some(file)) => file,
+                        Ok(None) => return,
+                        Err(error) => {
+                            updates.send(pane_failed(
+                                PaneId::Network,
+                                text!("Couldn't import this VPN file."),
+                                error,
+                            ));
+                            return;
+                        }
                     };
-                    if let Err(error) = imported {
-                        updates.send(pane_failed(PaneId::Network, "vpn-import-failed", error));
+                    if let Some(package) = missing_vpn_plugin(&file) {
+                        updates.send(Update::InstallingVpnPlugin(true));
+                        let installed = bande_bus::system()
+                            .map_err(|error| error.to_string())
+                            .and_then(|system| {
+                                bande_packages::Client::new(&system)
+                                    .install_missing(&[package])
+                                    .map_err(|error| error.to_string())
+                            });
+                        updates.send(Update::InstallingVpnPlugin(false));
+                        if let Err(error) = installed {
+                            updates.send(pane_failed(
+                                PaneId::Network,
+                                text!("Couldn’t install OpenVPN support, so this VPN file can’t be imported."),
+                                format!("{package}: {error}"),
+                            ));
+                            return;
+                        }
+                    }
+                    if let Err(error) = import_vpn(&file) {
+                        updates.send(pane_failed(
+                            PaneId::Network,
+                            text!("Couldn't import this VPN file."),
+                            error,
+                        ));
                     }
                 });
                 true

@@ -1,14 +1,14 @@
+use bande_l10n::tr;
+
+use crate::pages::{Widgets, boxed, muted_row, submit};
+use crate::time::{MANUAL_FORMAT, zone_offset, zone_place};
+use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
+use crate::widgets::{Row, Text, Tone};
 use bande_settings_panes::SettingId;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, SearchField, Stack, TextField, Widget};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-
-use crate::L10N;
-use crate::pages::{Widgets, boxed, muted_row, submit};
-use crate::time::{MANUAL_FORMAT, zone_offset, zone_place};
-use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
-use crate::widgets::{Row, Text, Tone};
 
 fn zone_detail(region: &str, zone: &str, now: Timestamp) -> String {
     [Some(region.to_owned()), zone_offset(zone, now)]
@@ -37,17 +37,17 @@ impl SettingsView {
             .cloned()
             .unwrap_or_else(|| now.strftime(MANUAL_FORMAT).to_string());
         let mut draft = intent(&self.intents, move |text: String| Intent::Draft(id, text));
-        let field = TextField::new(&L10N.tr("manual-time-placeholder"), &text, move |text| {
+        let field = TextField::new(&tr!("YYYY-MM-DD HH:MM"), &text, move |text| {
             draft(text.to_owned())
         })
         .without_text_checking();
         self.anchors.push((Anchor::Setting(id, None), field.id()));
         vec![boxed(
             Row::new(
-                Text::new(&L10N.tr("date-and-time"), Tone::Primary),
+                Text::new(&tr!("Date and time"), Tone::Primary),
                 Some(boxed(field)),
             )
-            .detail(Text::new(&L10N.tr("manual-time-hint"), Tone::Muted).caption()),
+            .detail(Text::new(&tr!("Press Return to set the clock"), Tone::Muted).caption()),
         )]
     }
 
@@ -64,7 +64,7 @@ impl SettingsView {
             let (city, region) = zone_place(&time.zone);
             let button = self.allowed(SettingId::TimeZone).then(|| {
                 let mut change = intent(&self.intents, |()| Intent::Pick(Some(Picker::Zone)));
-                let button = Button::new(&L10N.tr("change-ellipsis"), move || change(()));
+                let button = Button::new(&tr!("Change…"), move || change(()));
                 self.anchors
                     .push((Anchor::Setting(SettingId::TimeZone, None), button.id()));
                 boxed(button)
@@ -76,31 +76,31 @@ impl SettingsView {
             )];
         };
         let field = SearchField::new(
-            &L10N.tr("search-zones"),
+            &tr!("Search cities"),
             &query,
             submit(&self.intents, Intent::PickQuery),
         );
         self.anchors.push((Anchor::Picker, field.id()));
         let mut cancel = intent(&self.intents, |()| Intent::Pick(None));
         let mut rows = vec![boxed(Row::new(
-            Text::new(&L10N.tr("choose-time-zone"), Tone::Primary),
+            Text::new(&tr!("Choose a time zone"), Tone::Primary),
             Some(boxed(Stack::new(
                 Axis::Horizontal,
                 Spacing::S as f32,
                 0.0,
                 vec![
                     boxed(field),
-                    boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                    boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
                 ],
             ))),
         ))];
         let results = self.pick_results();
         if results.is_empty() {
-            rows.push(muted_row(&L10N.tr(if query.trim().is_empty() {
-                "zone-hint"
+            rows.push(muted_row(&if query.trim().is_empty() {
+                tr!("Type the name of a city near you")
             } else {
-                "no-zones"
-            })));
+                tr!("No time zone matches")
+            }));
         }
         for zone in results {
             let (city, region) = zone_place(&zone);

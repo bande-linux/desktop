@@ -1,6 +1,6 @@
 [package]
 name = "bande-l10n-macros"
-description = "Finds a crate's translations at compile time"
+description = "The tr!, trn! and text! macros: English keys checked at compile time"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,11 @@ repository.workspace = true
 
 [lib]
 proc-macro = true
+
+[dependencies]
+bande-l10n-source = { workspace = true, features = ["syntax"] }
+proc-macro2.workspace = true
+quote.workspace = true
 
 [lints]
 workspace = true

@@ -46,7 +46,7 @@ pub fn open(
     };
     let bar = &config.bar;
     let icon_size = bar.icon_size as f32;
-    let form = BarForm::from_floating(bar.floating);
+    let form = BarForm::of(bar);
     let (role, size) = bar_role(bar.edge, icon_size, form);
     let window = open_window(role, size)?;
     let taskbar = Taskbar::new(

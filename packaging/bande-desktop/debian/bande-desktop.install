@@ -5,6 +5,7 @@ systemd/zram-generator.conf.d usr/lib/systemd/
 systemd/system.conf.d usr/lib/systemd/
 systemd/user.conf.d usr/lib/systemd/
 systemd/coredump.conf.d usr/lib/systemd/
+systemd/journald.conf.d usr/lib/systemd/
 sysctl.d usr/lib/
 systemd/system/dev-zram0.device.d usr/lib/systemd/system/
 systemd/system/user.slice.d usr/lib/systemd/system/
@@ -20,3 +21,8 @@ systemd/user/pipewire.socket.d usr/lib/systemd/user/
 systemd/user/session.slice.d usr/lib/systemd/user/
 systemd/user/wireplumber.service.d usr/lib/systemd/user/
 systemd/user/xdg-desktop-portal.service.d usr/lib/systemd/user/
+apt/language-packs usr/libexec/bande-desktop/
+systemd/system/bande-language-packs.service usr/lib/systemd/system/
+systemd/system/bande-language-packs.path usr/lib/systemd/system/
+polkit/50-bande-language-packs.rules usr/share/polkit-1/rules.d/
+NetworkManager/90-bande-language-packs usr/lib/NetworkManager/dispatcher.d/

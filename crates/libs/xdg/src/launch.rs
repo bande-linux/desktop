@@ -11,6 +11,17 @@ use std::sync::LazyLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
+use crate::app_languages::app_language;
+use crate::apps::Apps;
+use crate::entry::{
+    DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs, find_executable,
+};
+use crate::identity::{app_name, find_app};
+use crate::mimeapps::config_dirs;
+use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
+use crate::uri::{file_uri, path_from_file_uri};
 use bande_inbox::{Inbox, Outbox};
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
@@ -21,17 +32,6 @@ use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{MatchRule, message};
-
-use crate::L10N;
-use crate::app_languages::app_language;
-use crate::apps::Apps;
-use crate::entry::{
-    DesktopAction, DesktopEntry, Locale, applications, current_desktops, data_dirs, find_executable,
-};
-use crate::identity::{app_name, find_app};
-use crate::mimeapps::config_dirs;
-use crate::units::{scope_name, unit_app_ids, unit_of_object_path};
-use crate::uri::{file_uri, path_from_file_uri};
 
 pub const TERMINAL: &str = "bande-terminal";
 pub const TERMINAL_APP_ID: &str = "org.bande.Terminal";
@@ -677,21 +677,33 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure) {
     let entry = find_app(&entries, app_id);
     let app = app_name(&entries, app_id);
     let (summary, body) = match failure {
-        Failure::NotOpened => ("app-not-opened", "app-not-opened-body"),
-        Failure::Crashed => ("app-crashed", "app-crashed-body"),
-        Failure::OutOfMemory => ("app-out-of-memory", "app-out-of-memory-body"),
+        Failure::NotOpened => (
+            tr!("{app} could not be opened", app = app),
+            tr!("It quit while opening. Try again, or reinstall it if this keeps happening."),
+        ),
+        Failure::Crashed => (
+            tr!("{app} quit unexpectedly", app = app),
+            tr!("Click to open it again."),
+        ),
+        Failure::OutOfMemory => (
+            tr!("{app} was closed because memory ran low", app = app),
+            tr!(
+                "Your computer ran out of memory and closed it to keep everything else working. Click to open it again."
+            ),
+        ),
     };
     let request = Request {
-        app_name: entry.map_or(app_id, DesktopEntry::app_id),
+        app_name: &app,
         replaces_id: 0,
         app_icon: entry
             .and_then(|entry| entry.icon.as_deref())
             .unwrap_or_default(),
-        summary: &L10N.tr_args(summary, [("app", app.into())]),
-        body: &L10N.tr(body),
+        summary: &summary,
+        body: &body,
         actions: &[],
         urgency: Urgency::Normal,
         sound: None,
+        desktop_entry: entry.map(DesktopEntry::app_id),
     };
     let told = bus.and_then(|bus| notify(&bus, &request));
     if let Err(error) = told {
@@ -704,14 +716,15 @@ fn tell_task_stopped(bus: &Connection, unit: &str) {
         app_name: "",
         replaces_id: 0,
         app_icon: "",
-        summary: &L10N.tr("task-out-of-memory"),
-        body: &L10N.tr_args(
-            "task-out-of-memory-body",
-            [("unit", unit.to_owned().into())],
+        summary: &tr!("A background task was stopped because memory ran low"),
+        body: &tr!(
+            "Your computer ran out of memory and stopped {unit} to keep everything else working.",
+            unit = unit.to_owned()
         ),
         actions: &[],
         urgency: Urgency::Normal,
         sound: None,
+        desktop_entry: None,
     };
     if let Err(error) = notify(bus, &request) {
         tracing::warn!("cannot tell that {unit} ran out of memory: {error}");

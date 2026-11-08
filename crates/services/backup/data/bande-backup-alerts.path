@@ -1,0 +1,9 @@
+[Unit]
+Description=Bande backup alerts
+PartOf=graphical-session.target
+
+[Path]
+PathChanged=/run/bande-backup-alert
+
+[Install]
+WantedBy=bande-session.target

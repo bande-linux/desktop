@@ -37,11 +37,11 @@ mod type_select;
 
 use std::any::Any;
 use std::cell;
-use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
+use bande_l10n::tr;
 
 pub use bande_spring::Spring;
 pub use bounded::Bounded;
@@ -81,7 +81,9 @@ pub use surface_view::{RELEASE_CHORD, SurfaceInput, SurfaceView};
 pub use tab_strip::{
     TAB_HEIGHT, TabAction, TabLabel, TabStrip, TabStripLayout, TabTarget, TabsShown,
 };
-pub use table::{Cell, Column, ROW_HEIGHT, Row, Sort, Table, access_rect, group_heading};
+pub use table::{
+    Cell, Column, Heading, HeadingButton, ROW_HEIGHT, Row, Sort, Table, access_rect, group_heading,
+};
 pub use text_field::{TEXT_FIELD_HEIGHT, TextField};
 pub use text_view::TextView;
 pub use toggle::{SWITCH_SIZE, Toggle};
@@ -91,10 +93,8 @@ pub use type_select::TypeSelect;
 
 pub type Animated = bande_spring::Animated<Instant>;
 
-use bande_l10n::Localizer;
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-widgets")));
+const LOOK_UP_ACTION: &str = "look-up-word";
+const LOOK_UP_LONGEST: usize = 100;
 
 use bande_graphics::{
     Appearance, Color, ControlSize, Item, Palette, Point, Rect, Scene, TextAlign, TextStyle,
@@ -181,6 +181,7 @@ pub struct Context {
     clipboard: Option<ClipboardRequest>,
     input_method_reset: bool,
     emoji_picker: bool,
+    look_up: Option<String>,
     menu: Option<(Menu, Point)>,
     drag: Option<String>,
     capture: Option<CaptureRequest>,
@@ -229,6 +230,7 @@ impl Context {
             clipboard: None,
             input_method_reset: false,
             emoji_picker: false,
+            look_up: None,
             menu: None,
             drag: None,
             capture: None,
@@ -341,9 +343,19 @@ pub trait Widget: Any {
         None
     }
 
-    fn spelling_answered(&mut self) {}
+    fn spelling_answered(&mut self) -> bool {
+        false
+    }
 
     fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
+        None
+    }
+
+    fn selected_text(&self) -> Option<String> {
+        None
+    }
+
+    fn word_at(&mut self, _cx: &mut Context, _point: Point) -> Option<String> {
         None
     }
 
@@ -398,6 +410,7 @@ pub struct Ui {
     hovered: Vec<WidgetId>,
     pointer: Option<Point>,
     menu_owner: Option<WidgetId>,
+    menu_look_up: Option<String>,
     menu_request: Option<(Menu, Point)>,
     deferred_menu: Option<(WidgetId, Point)>,
     awaiting_paste: bool,
@@ -547,6 +560,7 @@ impl Ui {
             hovered: Vec::new(),
             pointer: None,
             menu_owner: None,
+            menu_look_up: None,
             menu_request: None,
             deferred_menu: None,
             awaiting_paste: false,
@@ -899,6 +913,16 @@ impl Ui {
                 self.show_focus_tooltip();
                 true
             }
+            Event::Key {
+                key: Key::Character('d'),
+                modifiers:
+                    Modifiers {
+                        control: true,
+                        logo: true,
+                        shift: false,
+                        alt: false,
+                    },
+            } => self.look_up_at_pointer(),
             Event::Key { key, modifiers } if opens_menu(*key, *modifiers) => {
                 self.request_keyboard_menu()
             }
@@ -967,15 +991,50 @@ impl Ui {
         }
         let frame = find(active, target).map_or_else(|| active.frame(), |widget| widget.frame());
         let point = Point::new(frame.x, frame.y + frame.height);
-        self.request_menu_along(path, point)
+        let look_up = self.text_to_look_up(&path, None);
+        self.request_menu_along(path, point, look_up)
     }
 
     fn request_menu(&mut self, point: Point) -> bool {
-        self.request_menu_along(self.hovered.clone(), point)
+        let path = self.hovered.clone();
+        let look_up = self.text_to_look_up(&path, Some(point));
+        self.request_menu_along(path, point, look_up)
     }
 
-    fn request_menu_along(&mut self, path: Vec<WidgetId>, point: Point) -> bool {
+    fn text_to_look_up(&mut self, path: &[WidgetId], point: Option<Point>) -> Option<String> {
+        path.iter().rev().find_map(|id| {
+            let widget = lookup_in(&mut self.root, &mut self.sheet, *id)?;
+            widget
+                .selected_text()
+                .or_else(|| widget.word_at(&mut self.cx, point?))
+                .map(|text| text.trim().to_owned())
+                .filter(|text| {
+                    text.chars().any(char::is_alphanumeric)
+                        && text.chars().count() <= LOOK_UP_LONGEST
+                })
+        })
+    }
+
+    fn look_up_at_pointer(&mut self) -> bool {
+        let focused = Vec::from_iter(self.cx.focus);
+        let text = self.text_to_look_up(&focused, None).or_else(|| {
+            let path = self.hovered.clone();
+            self.text_to_look_up(&path, self.pointer)
+        });
+        let found = text.is_some();
+        self.cx.look_up = text;
+        found
+    }
+
+    fn request_menu_along(
+        &mut self,
+        path: Vec<WidgetId>,
+        point: Point,
+        look_up: Option<String>,
+    ) -> bool {
         self.deferred_menu = None;
+        self.menu_look_up = look_up;
+        let innermost = path.last().copied();
         for id in path.into_iter().rev() {
             let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
                 continue;
@@ -985,37 +1044,56 @@ impl Ui {
                 if std::mem::take(&mut self.cx.menu_awaits_suggestions) {
                     self.deferred_menu = Some((id, point));
                 } else {
-                    self.menu_owner = Some(id);
-                    self.menu_request = Some((menu, point));
+                    self.show_menu(id, menu, point);
                 }
                 return true;
             }
         }
-        false
+        match (innermost, self.menu_look_up.is_some()) {
+            (Some(innermost), true) => {
+                self.show_menu(innermost, Menu::new(Vec::new()), point);
+                true
+            }
+            _ => false,
+        }
     }
 
-    pub fn spelling_answered(&mut self) {
-        if let Some(id) = self.cx.focus
-            && let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id)
-        {
-            widget.spelling_answered();
+    fn show_menu(&mut self, owner: WidgetId, mut menu: Menu, point: Point) {
+        if let Some(text) = &self.menu_look_up {
+            if !menu.items.is_empty() {
+                menu.items.insert(0, MenuItem::separator());
+            }
+            let title = tr!("Look Up “{word}”", word = text.as_str());
+            menu.items.insert(
+                0,
+                MenuItem::new(&title, LOOK_UP_ACTION).shortcut("Ctrl+Super+D"),
+            );
         }
+        self.menu_owner = Some(owner);
+        self.menu_request = Some((menu, point));
+    }
+
+    pub fn spelling_answered(&mut self) -> bool {
+        let edited = self.cx.focus.is_some_and(|id| {
+            lookup_in(&mut self.root, &mut self.sheet, id)
+                .is_some_and(|widget| widget.spelling_answered())
+        });
         let Some((id, point)) = self.deferred_menu else {
-            return;
+            return edited;
         };
         let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, id) else {
             self.deferred_menu = None;
-            return;
+            return edited;
         };
         self.cx.menu_awaits_suggestions = false;
         let menu = widget.context_menu(&mut self.cx, point);
         if !std::mem::take(&mut self.cx.menu_awaits_suggestions) {
             self.deferred_menu = None;
             if let Some(menu) = menu {
-                self.menu_owner = Some(id);
-                self.menu_request = Some((menu, point));
+                self.show_menu(id, menu, point);
             }
         }
+        edited
     }
 
     pub fn take_clipboard_request(&mut self) -> Option<ClipboardRequest> {
@@ -1123,6 +1201,10 @@ impl Ui {
         true
     }
 
+    pub fn take_look_up_request(&mut self) -> Option<String> {
+        self.cx.look_up.take()
+    }
+
     pub fn take_emoji_picker_request(&mut self) -> bool {
         std::mem::take(&mut self.cx.emoji_picker)
     }
@@ -1148,6 +1230,10 @@ impl Ui {
         let Some(owner) = self.menu_owner.take() else {
             return false;
         };
+        if action == LOOK_UP_ACTION {
+            self.cx.look_up = self.menu_look_up.take();
+            return true;
+        }
         let Some(widget) = lookup_in(&mut self.root, &mut self.sheet, owner) else {
             return false;
         };

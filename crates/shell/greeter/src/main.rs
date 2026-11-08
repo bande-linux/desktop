@@ -10,10 +10,11 @@ use accesskit::TreeUpdate;
 use bande_config::LOGIN_PICTURES;
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_greeter::{
-    L10N, Login, Rejection, Request, Step, last_user_file, login_picture, login_users,
-    read_message, remember_user, remembered_user, write_message,
+    Login, Rejection, Request, Step, last_user_file, login_picture, login_users, read_message,
+    remember_user, remembered_user, write_message,
 };
 use bande_keyboard::Layouts;
+use bande_l10n::tr;
 use bande_lock::{
     BackdropSource, Devices, Inbox, LockScreen, Look, PICTURE_PIXELS, PowerAction, User, Variant,
     load_backdrop, load_picture,
@@ -184,7 +185,8 @@ impl Greeter {
         self.conversation = None;
         self.screen.ask(None);
         self.screen.reject(frame_time().on_screen());
-        self.screen.set_message(Some(L10N.tr("unavailable")));
+        self.screen
+            .set_message(Some(tr!("Signing in is not available right now.")));
     }
 
     fn cancel_answer(&mut self) {

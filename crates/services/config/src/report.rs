@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
+use bande_l10n::{tr, trn};
 use bande_notify::client::{self, Request};
 use bande_notify::{BUS_NAME as NOTIFICATIONS, OBJECT_PATH as NOTIFICATIONS_PATH, Urgency};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
-use crate::{ConfigError, L10N, ReloadError};
+use crate::{ConfigError, ReloadError};
 
 pub const EDIT_ACTION: &str = "edit";
 
@@ -96,41 +97,51 @@ impl ErrorNotifier {
                 }
                 *reported = messages;
                 let summary = match rest {
-                    [] => L10N.tr_args("has-error", [("file", file.into())]),
-                    _ => L10N.tr_args(
-                        "has-errors",
-                        [("file", file.into()), ("count", problems.len().into())],
+                    [] => tr!("{file} has an error", file = file),
+                    _ => tr!(
+                        "{file} has {count} errors",
+                        file = file,
+                        count = problems.len()
                     ),
                 };
                 let mut detail = located(first);
                 if !rest.is_empty() {
                     detail.push(' ');
-                    detail.push_str(&L10N.tr_args("more-errors", [("count", rest.len().into())]));
+                    detail.push_str(&trn!(
+                        "One more line has an error.",
+                        "{count} more lines have errors.",
+                        count = rest.len()
+                    ));
                 }
                 (
                     summary,
-                    L10N.tr_args("other-settings-apply", [("detail", detail.into())]),
+                    tr!(
+                        "{detail} Every other setting is in effect.",
+                        detail = detail
+                    ),
                 )
             }
             Err(error) => {
                 reported.clear();
                 let (summary, detail) = match error {
-                    ReloadError::Invalid(error) => (
-                        L10N.tr_args("has-error", [("file", file.into())]),
-                        located(error),
-                    ),
+                    ReloadError::Invalid(error) => {
+                        (tr!("{file} has an error", file = file), located(error))
+                    }
                     ReloadError::Read(error) => (
-                        L10N.tr_args("cannot-read", [("file", file.into())]),
-                        L10N.tr_args("read-error", [("error", error.to_string().into())]),
+                        tr!("{file} cannot be read", file = file),
+                        tr!("{error}.", error = error.to_string()),
                     ),
                 };
                 (
                     summary,
-                    L10N.tr_args("previous-settings-stay", [("detail", detail.into())]),
+                    tr!(
+                        "{detail} The previous settings stay in effect.",
+                        detail = detail
+                    ),
                 )
             }
         };
-        let open_in_editor = L10N.tr("open-in-editor");
+        let open_in_editor = tr!("Open in Editor");
         let reply = client::notify(
             &self.connection,
             &Request {
@@ -142,6 +153,7 @@ impl ErrorNotifier {
                 actions: &[(EDIT_ACTION, &open_in_editor)],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         match reply {
@@ -152,12 +164,10 @@ impl ErrorNotifier {
 }
 
 fn located(error: &ConfigError) -> String {
-    L10N.tr_args(
-        "error-at",
-        [
-            ("line", error.line.into()),
-            ("column", error.column.into()),
-            ("message", error.message.as_str().into()),
-        ],
+    tr!(
+        "Line {line}, column {column}: {message}.",
+        line = error.line,
+        column = error.column,
+        message = error.message.as_str()
     )
 }

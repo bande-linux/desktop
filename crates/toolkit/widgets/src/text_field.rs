@@ -351,14 +351,29 @@ impl Widget for TextField {
         self.editor.select_all();
     }
 
-    fn spelling_answered(&mut self) {
+    fn spelling_answered(&mut self) -> bool {
         let revision = self.editor.revision();
         self.editor.spelling_answered();
         self.changed(revision);
+        self.editor.revision() != revision
     }
 
     fn context_menu(&mut self, cx: &mut Context, _point: Point) -> Option<Menu> {
         Some(self.editor.context_menu(cx))
+    }
+
+    fn selected_text(&self) -> Option<String> {
+        self.editor
+            .has_selection()
+            .then(|| self.editor.selected_text())
+    }
+
+    fn word_at(&mut self, cx: &mut Context, point: Point) -> Option<String> {
+        let origin = self.text_origin();
+        Some(self.editor.word_at(
+            &mut cx.text,
+            Point::new(point.x - origin.x, point.y - origin.y),
+        ))
     }
 
     fn menu_action(&mut self, cx: &mut Context, action: &str) -> bool {

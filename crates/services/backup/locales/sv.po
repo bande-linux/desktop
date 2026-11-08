@@ -1,0 +1,44 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "No backup for two weeks"
+msgstr "Ingen säkerhetskopia på två veckor"
+
+msgid "Connect {disk} to back up this computer again."
+msgstr "Anslut {disk} för att säkerhetskopiera datorn igen."
+
+msgid "The backup disk is too small"
+msgstr "Säkerhetskopieringsskivan är för liten"
+
+msgid "{disk} has no more room, even with the oldest backups removed. Use a larger disk."
+msgstr "{disk} har inget mer utrymme, inte ens när de äldsta säkerhetskopiorna tas bort. Använd en större skiva."
+
+msgid "Damage found on the backup disk"
+msgstr "Skada hittades på säkerhetskopieringsskivan"
+
+msgid "Some older versions on {disk} were lost. Backups go on, but the disk may be failing."
+msgstr "Vissa äldre versioner på {disk} gick förlorade. Säkerhetskopieringen fortsätter, men skivan kan vara på väg att gå sönder."
+
+msgid "Can't open the backups"
+msgstr "Det går inte att öppna säkerhetskopiorna"
+
+msgid "The backups on {disk} are missing or use another password."
+msgstr "Säkerhetskopiorna på {disk} saknas eller använder ett annat lösenord."
+
+msgid "Backups keep failing"
+msgstr "Säkerhetskopieringen misslyckas gång på gång"
+
+msgid "The last few backups to {disk} did not finish."
+msgstr "De senaste säkerhetskopiorna till {disk} blev inte klara."
+
+msgid "Open Backup Settings"
+msgstr "Öppna inställningar för säkerhetskopiering"
+
+msgid "Backup"
+msgstr "Säkerhetskopia"

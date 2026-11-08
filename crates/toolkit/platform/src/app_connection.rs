@@ -15,7 +15,7 @@ use crate::seat::key_for;
 use crate::window::{Role, Window, WindowError};
 
 const KEEP_RUNNING_SINCE: u32 = 2;
-const APP_VERSION: u32 = 9;
+const APP_VERSION: u32 = 10;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppRequest {
@@ -90,6 +90,10 @@ impl AppConnection {
 
     pub fn keeps_running(&self) -> bool {
         self.link.app.is_some()
+    }
+
+    pub fn is_kept(&self) -> bool {
+        self.kept
     }
 
     pub fn keep_running(&mut self) {

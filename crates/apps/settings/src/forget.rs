@@ -1,8 +1,5 @@
-use bande_settings_panes::{Permission, SettingId};
-use bande_toolkit::Spacing;
-use bande_toolkit::ui::{Axis, Button, Stack, Widget};
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::follow::Command;
 use crate::pages::boxed;
 use crate::passwords::PasswordCommand;
@@ -11,6 +8,9 @@ use crate::printers::PrinterCommand;
 use crate::services::{BluetoothCommand, NetworkCommand};
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
+use bande_settings_panes::{Permission, SettingId};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, Stack, Widget};
 
 const CONFIRM: &str = "forget-confirm";
 
@@ -29,14 +29,14 @@ impl SettingsView {
         let mut ask = intent(&self.intents, move |()| {
             Intent::AskForget(Some(target.clone()))
         });
-        boxed(Button::new(&L10N.tr("forget-ellipsis"), move || ask(())))
+        boxed(Button::new(&tr!("Forget…"), move || ask(())))
     }
 
     pub(crate) fn forget_row(&mut self, name: &str, warning: &str) -> Box<dyn Widget> {
         self.confirm_row(
-            &L10N.tr_args("forget-question", [("name", name.to_owned().into())]),
+            &tr!("Forget “{name}”?", name = name.to_owned()),
             warning,
-            &L10N.tr("forget"),
+            &tr!("Forget"),
         )
     }
 
@@ -56,7 +56,7 @@ impl SettingsView {
             Spacing::S as f32,
             0.0,
             vec![
-                boxed(Button::new(&L10N.tr("cancel"), move || cancel(())).cancel()),
+                boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
                 boxed(confirm.primary()),
             ],
         );
@@ -96,7 +96,7 @@ impl SettingsView {
             }
             Some(Forget::Device(address)) => self
                 .bluetooth
-                .as_ref()
+                .present()
                 .and_then(|bluetooth| {
                     bluetooth
                         .paired

@@ -491,7 +491,11 @@ made again.
     connection leaves the bus. The Taskbar is the host (`org.kde.StatusNotifierHost-<pid>`): it
     shows each item that is not `Passive` by its icon name or pixmap; a click opens the item's
     `com.canonical.dbusmenu` menu below it (or calls `Activate` when it has none), a secondary
-    click calls `Activate`. Our own apps use the same menu format for their app menus: an app
+    click calls `Activate`. An app shows an item of its own with `bande_app_menu::StatusItem`:
+    an icon name and an `Entry` menu like its app menus, under the well-known name
+    `org.kde.StatusNotifierItem-<pid>-1`, registered again whenever the watcher returns;
+    dropping it releases the name, which takes the item off the Taskbar. `Activate` arrives
+    as the action `STATUS_ACTIVATE`. Our own apps use the same menu format for their app menus: an app
     owns its app id as bus name and exports `com.canonical.dbusmenu` at `/org/bande/MenuBar`;
     the App menu of a window's menu button shows that tree (the first top-level
     submenu as the app row; a
@@ -515,6 +519,13 @@ made again.
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.
+- **Service outages**: the bar, Control Center and Settings tell a stopped service from missing
+  hardware (`bande_bus::Reading`: present, absent, unavailable). A failed UPower,
+  NetworkManager or BlueZ read counts as absent only when the kernel has no battery
+  (`/sys/class/power_supply`, system scope), Wi-Fi radio (`/sys/class/ieee80211`) or Bluetooth
+  adapter (`/sys/class/bluetooth`); otherwise the item stays with a short reason. The bar and Settings
+  follow each service's `NameOwnerChanged` and recover when it starts; Control Center reads
+  afresh whenever it opens.
 - **Removable media**: `org.freedesktop.UDisks2` mounts USB drives and posts notifications
   with an eject action.
   - Implemented in `crates/services/automount` (`bande-automount`, a session service): every
@@ -532,7 +543,7 @@ made again.
     `CanPowerOff` (USB disks), else nothing more; a disk image's loop device is deleted when this
     user set it up. A failure is reported to the caller, not only logged.
 - **Theme propagation**: GTK 3 and 4 (the Settings portal, with `GTK_USE_PORTAL=1` for GTK 3), Qt (`QT_QPA_PLATFORMTHEME`) and
-  cursor themes (`XCURSOR_THEME`, `XCURSOR_SIZE`) follow the desktop's appearance.
+  the pointer (`XCURSOR_THEME=Bande-Cursors`, `XCURSOR_SIZE`) follow the desktop's appearance.
 
 ## D-Bus integration
 
@@ -795,19 +806,12 @@ what the one before could not save. What happens for each:
   apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
   the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
   ([behaviour](behaviour.md)).
-- **The record**: every failure leaves one dated text report, which stays on this computer unless [sending](fault-reports.md) is switched on, and Settings shows which applies.
-  `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
+- **The record**: every failure leaves one report, which stays on this computer unless sending is switched on, and Settings ▸ Privacy & Security ▸ Diagnostics shows which applies ([fault reports](fault-reports.md)). `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
   2 GB in all, 4 GB of disk kept free; `DefaultLimitCORE=infinity` for both managers, since the soft limit is
   otherwise 0 and no dump is stored; dumps go after two weeks). The programs that hold passwords
   (`bande-lock`, `bande-greeter`, `bande-polkit`, `bande-secrets`, `bande-clipboard`) are not dumpable, so
-  only their panic text is recorded. `bande-crash-reports@.service` is a oneshot with no network, started
-  when each `systemd-coredump@` finishes, at boot and at each login, so nothing runs between failures. From a cursor into the
-  journal it writes reports of crashes (with the stack trace, panic text and the user's last log lines),
-  failed Bande services, a kernel panic that `systemd-pstore` saved and a boot that never reached
-  `shutdown.target`. They go to `/var/lib/bande/crash-reports/<uid>/`, owned by that user, or `system/` for
-  the `sudo` group, newest 200 each. Force Quit of a not-responding app and the keyboard's last resort send
-  `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Settings ▸ General ▸ About ▸ Crash Reports
-  lists them, with Copy and Delete. Symbols are in [packaging](packaging.md).
+  only their panic text is recorded. Force Quit of a not-responding app and the keyboard's last resort send
+  `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Symbols are in [packaging](packaging.md).
 
 ## Backups
 
@@ -816,16 +820,18 @@ Time Machine's behaviour on a Debian engine; the choice is in `NOTES/plans/backu
 (`org.bande.Backup`), root because a whole-system restore needs every file. It runs `restic` as a child
 and talks to it through exit codes and `--json`. A timer that exists once a disk is chosen, a udev rule
 for a new disk or mains power, and D-Bus start it; it exits after a minute with nothing to do.
-`bande-backup-alerts` is a session service that turns the service's `problem` into one notification.
+`bande-backup-alerts` runs only when there is something to say: the service writes its problem to the world-readable `/run/bande-backup-alert`, a user path unit starts the program when that file changes (and once at login), and it posts one notification per problem and exits once it is answered or closed.
 `bande-backup-restore` is for the recovery environment, without a bus.
 
-A repository is `BandeBackups/<machine-id>` on any filesystem, on any drive but the startup one. Two restic
+A repository is `BandeBackups/<machine-id>` on any filesystem on any drive but the startup one, or on an SMB or NFS
+share or a restic rest server. Settings can erase a blank or foreign disk to make one. Two restic
 keys open it: a random one in `/var/lib/bande-backup/key` that runs the backups, and the password the person
 chose, for restoring when the machine is gone. The disk is mounted under `/run/bande-backup` only during work.
 
 Settings ▸ Backup holds the choice of disk and the status. Files browses `restic mount` at
 `/run/bande-backup-browse/versions/<time>`, read-only, with each file's old owner and mode enforced by
-the kernel, and restores by copying as the person. Nothing privileged runs on their behalf.
+the kernel, and restores by copying as the person. Nothing privileged runs on their behalf. On btrfs, hourly
+read-only snapshots of `/home` while the destination is away appear beside them.
 
 ## Updates
 
@@ -835,8 +841,9 @@ system: `bande-system prepare`, started through `bande-system-prepare.service`, 
 copy that boots at the next restart, and a boot that never shows the login window falls back by
 itself. Settings lists the versions under Previous Versions and restores one through
 `bande-system-restore@<id>.service`. Without that layout the offline path below applies. The
-compositor sends `READY=1` to `/run/bande/login-ready` when it first shows the login window or the
-desktop; `bande-boot-health.service` waits for it on a counted boot. `NOTES/plans/update-safety.md`
+compositor sends `READY=1` to `/run/bande/login-ready` once the first frame with the login window or
+the desktop has been flipped onto a display, so a boot that only draws black is not called good;
+`bande-boot-health.service` waits for it on a counted boot. `NOTES/plans/update-safety.md`
 has the design.
 
 How often it checks is `update-check-every` in `config.kdl` (Settings: When available, Every day,
@@ -844,6 +851,10 @@ Every 7 days, Every 31 days; unset is When available). With an interval, the dai
 opened pane fetch nothing until that long has passed since PackageKit's last refresh, and Check Now
 always fetches. Security updates follow the same interval.
 
+Each check, from the daily timer or the pane, leaves its outcome in
+`$XDG_STATE_HOME/bande/software-badge`; Settings shows the sidebar's update line from that file at
+launch and starts PackageKit only when the Software Update pane opens or a check is due (a
+restart-to-update outcome lasts until the next boot, a count until dpkg's status changes).
 Software Update checks through PackageKit (`bande-packages`) and classifies each update by name
 and by PackageKit's `GetUpdateDetail` restart answer. **Offline** (installed at the next restart):
 `libc6`, `systemd`, `libsystemd0`, `udev`, `dbus*`, the running kernel's own packages
@@ -871,7 +882,9 @@ always the user's: Restart Now / Later, Log Out / Later; Restart Now and Log Out
 `bande_app_v1.end_session`, the Bande menu's confirmation, so every app is asked to quit first. A pending restart is remembered with the
 boot id in `$XDG_STATE_HOME/bande/restart-pending` (or `/run/reboot-required`), and the daily user
 timer (also 3 minutes after login) reminds about it, about a prepared offline update, or posts a
-notification when updates are waiting. Offline results are read once after the restart; Settings
+notification when updates are waiting. Offline results are read once after the restart, only
+when PackageKit's results file exists, so an error reading them shows as an error, not as no
+results; Settings
 refreshes the cache when it is older than an hour. An apt "dpkg was interrupted" failure shows
 "Finish Installing", which runs PackageKit's `RepairSystem`. While dpkg runs, packagekitd holds
 a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only the progress.

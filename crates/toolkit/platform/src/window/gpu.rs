@@ -30,6 +30,10 @@ pub(super) enum Gpu {
 }
 
 impl GpuSurface {
+    pub(super) fn release_uploads(&mut self) {
+        self.renderer.release_uploads();
+    }
+
     pub(super) fn present(
         &mut self,
         scene: &Scene,

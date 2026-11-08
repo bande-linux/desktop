@@ -6,10 +6,10 @@ use std::time::Instant;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
+use bande_l10n::tr;
 use bande_settings::{
-    Command, Displays, Feed, L10N, PaneId, PointingDevices, Services, SettingsView,
-    SoftwareCommand, UDEV_DATA, UpdateNotice, announce_log_out, announce_updates, feed,
-    sidebar_width,
+    Command, Displays, Feed, PaneId, PointingDevices, Services, SettingsView, SoftwareCommand,
+    UDEV_DATA, UpdateNotice, announce_log_out, announce_updates, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::{
@@ -28,7 +28,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("title"),
+    name: || tr!("System Settings"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -156,26 +156,34 @@ fn open_main(
     arguments: &[String],
     displays: Option<&Displays>,
 ) -> Result<WindowId, bande_toolkit::WindowError> {
-    cx.open(Kind::Main, &L10N.tr("title"), WINDOW_SIZE, |appearance| {
-        if let Some(mut pane) = parked {
-            pane.0.set_appearance(appearance);
-            pane.0.set_on_screen(true);
-            return pane;
-        }
-        let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
-        view.set_appearance(appearance);
-        view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
-        if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
-            view.hide_screen_reader();
-        }
-        if let Some(keyword) = arguments.first() {
-            select_pane(&mut view, keyword);
-        }
-        if let Some(displays) = displays {
-            view.set_displays(displays.list());
-        }
-        Pane(view)
-    })
+    let files = cx.installed(FILES_APP_ID);
+    cx.open(
+        Kind::Main,
+        &tr!("System Settings"),
+        WINDOW_SIZE,
+        |appearance| {
+            if let Some(mut pane) = parked {
+                pane.0.set_appearance(appearance);
+                pane.0.set_on_screen(true);
+                pane.0.set_files_installed(files);
+                return pane;
+            }
+            let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
+            view.set_appearance(appearance);
+            view.set_files_installed(files);
+            view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
+            if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
+                view.hide_screen_reader();
+            }
+            if let Some(keyword) = arguments.first() {
+                select_pane(&mut view, keyword);
+            }
+            if let Some(displays) = displays {
+                view.set_displays(displays.list());
+            }
+            Pane(view)
+        },
+    )
 }
 
 impl Settings {
@@ -215,13 +223,13 @@ impl Program for Settings {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        let session = zbus::blocking::Connection::session()?;
-        let system = zbus::blocking::Connection::system()
+        let session = bande_bus::session()?;
+        let system = bande_bus::system()
             .inspect_err(|error| tracing::warn!("no system bus: {error}"))
             .ok();
         let (feed, updates) = feed()?;
         let services = Services::start(&session, system.as_ref(), &updates);
-        services.send(Command::Software(SoftwareCommand::Open));
+        services.send(Command::Software(SoftwareCommand::Glance));
         let displays = Displays::connect();
         let main = match arguments.is_empty() {
             true => None,
@@ -253,7 +261,7 @@ impl Program for Settings {
             ));
         }
         Menus {
-            menus: vec![Entry::submenu(&L10N.tr("menu-view"), panes)],
+            menus: vec![Entry::submenu(&tr!("View"), panes)],
             window: Vec::new(),
         }
     }
@@ -335,6 +343,16 @@ impl Program for Settings {
         sources
     }
 
+    fn installed_changed(&mut self, cx: &mut Cx<Self>) {
+        let files = cx.installed(FILES_APP_ID);
+        if let Some(view) = settings_view(cx, self.main, &mut self.parked) {
+            view.set_files_installed(files);
+        }
+        if let Some((window, _)) = self.main.and_then(|main| cx.window(main)) {
+            window.request_redraw();
+        }
+    }
+
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
         let updates = match index {
             FEED => self.feed.drain(),
@@ -372,7 +390,7 @@ fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn finish_update() -> Result<(), Box<dyn std::error::Error>> {
-    let session = zbus::blocking::Connection::session()?;
+    let session = bande_bus::session()?;
     if bande_settings::finish_update(&session) {
         start_announcer(ANNOUNCE_LOG_OUT)?;
     }
@@ -397,14 +415,14 @@ fn start_announcer(flag: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn announce_updates_and_open_on_click() -> Result<(), Box<dyn std::error::Error>> {
-    let system = zbus::blocking::Connection::system()?;
+    let system = bande_bus::system()?;
     announce_and_open_on_click(|session| announce_updates(session, &system))
 }
 
 fn announce_and_open_on_click(
     announce: impl FnOnce(&zbus::blocking::Connection) -> zbus::Result<Option<u32>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let session = zbus::blocking::Connection::session()?;
+    let session = bande_bus::session()?;
     let notice = UpdateNotice::listen(&session)?;
     let Some(id) = announce(&session)? else {
         return Ok(());

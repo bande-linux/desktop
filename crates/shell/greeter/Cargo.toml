@@ -32,7 +32,7 @@ zeroize.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, greetd (>= 0.10.3-6), bande-compositor, kbd, pkexec"
+depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-mono, greetd (>= 0.10.3-6), bande-compositor, kbd, pkexec, locales"
 extended-description = """\
 The login window of the Bande desktop: greetd runs it as its greeter \
 inside bande-compositor --greeter, and it lists the people who can \
@@ -57,6 +57,11 @@ assets = [
     ["data/60-bande-display-keeper.rules", "usr/lib/udev/rules.d/", "644"],
     ["data/config.toml", "usr/share/bande-greeter/greetd-config.toml", "644"],
     ["data/greetd.service.conf", "usr/lib/systemd/system/greetd.service.d/bande.conf", "644"],
+    ["target/release/l10n/development/bande-display-keeper/*", "usr/share/bande/l10n/bande-display-keeper/", "644"],
+    ["target/release/l10n/development/bande-greeter/*", "usr/share/bande/l10n/bande-greeter/", "644"],
+    ["target/release/l10n/development/bande-setup/*", "usr/share/bande/l10n/bande-setup/", "644"],
+    ["target/release/l10n/development/bande-unlock/*", "usr/share/bande/l10n/bande-unlock/", "644"],
+    ["target/release/l10n/development/bande-unlock-assets/*", "usr/share/bande/l10n/bande-unlock-assets/", "644"],
 ]
 
 [lints]

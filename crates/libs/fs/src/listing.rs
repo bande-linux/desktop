@@ -7,17 +7,20 @@ use std::path::{Path, PathBuf};
 use std::str::Chars;
 use std::time::{Duration, SystemTime};
 
+use bande_l10n::{tr, trn};
+
 use crate::group::{GroupBy, group_of};
 use crate::partial::{is_partial, sweep};
 
 use crate::trash::{Trash, TrashItem};
 
-use crate::{DATES, L10N};
+use crate::DATES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Folder,
     File,
+    Server,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,8 +101,32 @@ impl Entry {
         }
     }
 
+    pub fn server(name: String, address: String) -> Self {
+        Self {
+            name,
+            path: PathBuf::from(address),
+            kind: Kind::Server,
+            size: 0,
+            modified: None,
+            created: None,
+            added: None,
+            link: false,
+            trashed: None,
+            extension_hidden: None,
+            mode: None,
+            owned: false,
+        }
+    }
+
     pub fn is_folder(&self) -> bool {
         self.kind == Kind::Folder
+    }
+
+    pub fn server_address(&self) -> Option<&str> {
+        match self.kind {
+            Kind::Server => self.path.to_str(),
+            Kind::Folder | Kind::File => None,
+        }
     }
 }
 
@@ -324,12 +351,15 @@ pub fn finder_order(a: &str, b: &str) -> Ordering {
 }
 
 pub fn format_size(bytes: u64) -> String {
+    if bytes == 0 {
+        return tr!("Zero bytes");
+    }
     if bytes < 1_000 {
-        return L10N.tr_args("size-bytes", [("count", bytes.into())]);
+        return trn!("{count} byte", "{count} bytes", count = bytes);
     }
     let kilobytes = (bytes as f64 / 1e3).round();
     if kilobytes < 1e3 {
-        return L10N.tr_args("size-kilobytes", [("value", kilobytes.to_string().into())]);
+        return tr!("{value} KB", value = kilobytes.to_string());
     }
     let units = [(1e6, 1), (1e9, 2), (1e12, 2)];
     let (unit, (scale, decimals)) = units
@@ -341,11 +371,10 @@ pub fn format_size(bytes: u64) -> String {
         .unwrap_or((2, units[2]));
     let value = format!("{:.*}", decimals as usize, bytes as f64 / scale);
     let value = value.trim_end_matches('0').trim_end_matches('.').to_owned();
-    let args = [("value", value.into())];
     match unit {
-        0 => L10N.tr_args("size-megabytes", args),
-        1 => L10N.tr_args("size-gigabytes", args),
-        _ => L10N.tr_args("size-terabytes", args),
+        0 => tr!("{value} MB", value = value),
+        1 => tr!("{value} GB", value = value),
+        _ => tr!("{value} TB", value = value),
     }
 }
 
@@ -364,13 +393,13 @@ pub fn list_date(time: SystemTime, now: SystemTime, zone: &jiff::tz::TimeZone) -
     let clock = DATES.clock_time(&time);
     let day = time.date();
     if day == now.date() {
-        L10N.tr_args("date-today", [("time", clock.into())])
+        tr!("Today, {time}", time = clock)
     } else if now
         .date()
         .yesterday()
         .is_ok_and(|yesterday| yesterday == day)
     {
-        L10N.tr_args("date-yesterday", [("time", clock.into())])
+        tr!("Yesterday, {time}", time = clock)
     } else if day.year() == now.date().year() {
         DATES.date_time(&time, false)
     } else {

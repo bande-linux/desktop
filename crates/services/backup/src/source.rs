@@ -69,7 +69,18 @@ pub fn sources() -> Vec<PathBuf> {
     }
 }
 
-pub fn backup_args(host: &str, sources: &[PathBuf]) -> Vec<String> {
+fn literal_pattern(path: &str) -> String {
+    let mut pattern = String::with_capacity(path.len());
+    for character in path.chars() {
+        if matches!(character, '*' | '?' | '[' | '\\') {
+            pattern.push('\\');
+        }
+        pattern.push(character);
+    }
+    pattern
+}
+
+pub fn backup_args(host: &str, sources: &[PathBuf], excluded: &[String]) -> Vec<String> {
     let mut args = vec![
         "backup".to_owned(),
         "--json".to_owned(),
@@ -81,6 +92,10 @@ pub fn backup_args(host: &str, sources: &[PathBuf]) -> Vec<String> {
     for path in EXCLUDED {
         args.push("--exclude".to_owned());
         args.push(path.to_owned());
+    }
+    for path in excluded {
+        args.push("--exclude".to_owned());
+        args.push(literal_pattern(path));
     }
     args.extend(
         sources
@@ -146,7 +161,7 @@ fn quoted(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 
-fn view_script(sources: &[PathBuf], snapshots: &[PathBuf], disk: &Path) -> String {
+fn view_script(sources: &[PathBuf], snapshots: &[PathBuf]) -> String {
     let view = Path::new(VIEW);
     let shown = |source: &Path| -> PathBuf {
         if snapshots.iter().any(|known| known == source) {
@@ -164,19 +179,13 @@ fn view_script(sources: &[PathBuf], snapshots: &[PathBuf], disk: &Path) -> Strin
             quoted(&inside(source))
         ));
     }
-    for pseudo in ["/dev", "/proc", "/sys", "/var/cache"] {
+    for pseudo in ["/dev", "/proc", "/sys", "/var/cache", "/run"] {
         script.push_str(&format!(
             "mount --rbind {pseudo} {}\n",
             quoted(&inside(Path::new(pseudo)))
         ));
     }
-    let inner_disk = inside(disk);
-    script.push_str(&format!(
-        "mount -t tmpfs -o mode=0700 none {run}\nmkdir -p {disk}\nmount --bind {outer} {disk}\nexec chroot {VIEW} \"$@\"\n",
-        run = quoted(&inside(Path::new("/run"))),
-        disk = quoted(&inner_disk),
-        outer = quoted(disk),
-    ));
+    script.push_str(&format!("exec chroot {VIEW} \"$@\"\n"));
     script
 }
 
@@ -186,7 +195,7 @@ pub struct SnapshotView {
 }
 
 impl SnapshotView {
-    pub fn take(sources: &[PathBuf], disk: &Path) -> Option<Self> {
+    pub fn take(sources: &[PathBuf]) -> Option<Self> {
         let mounts = fs::read_to_string("/proc/self/mounts").ok()?;
         let on_btrfs: Vec<PathBuf> = sources
             .iter()
@@ -207,7 +216,7 @@ impl SnapshotView {
         if taken.is_empty() {
             return None;
         }
-        let script = view_script(sources, &taken, disk);
+        let script = view_script(sources, &taken);
         Some(Self {
             snapshots: taken,
             script,

@@ -1,18 +1,18 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use bande_l10n::{Text, text, tr};
+
+use crate::browser::Location;
+use crate::controls::{Signal, sender};
+use crate::view::{FilesView, Request, home};
 use bande_backup::client::{
-    Browsing, CannotBrowse, VERSIONS_ROOT, in_version, live_path, version_times,
+    Browsing, CannotBrowse, in_version, is_version_path, live_path, version_times,
 };
 use bande_datetime::{DateFormats, local_zone};
 use bande_fs::{Action, Purpose, Task};
 use bande_toolkit::ui::{BUTTON_HEIGHT, Button, WidgetId};
 use bande_toolkit::{Item, Point, Rect, TextAlign, TextRole, TextStyle};
-
-use crate::L10N;
-use crate::browser::Location;
-use crate::controls::{Signal, sender};
-use crate::view::{FilesView, Request, home};
 
 pub const BACKUP_BAR_HEIGHT: f32 = 36.0;
 const BUTTON_WIDTH: f32 = 84.0;
@@ -48,7 +48,7 @@ impl FilesView {
     pub(crate) fn in_backup(&self) -> bool {
         self.browser
             .current_folder()
-            .is_some_and(|folder| folder.starts_with(VERSIONS_ROOT))
+            .is_some_and(|folder| is_version_path(&folder))
     }
 
     pub(crate) fn browse_backups(&mut self) {
@@ -62,11 +62,13 @@ impl FilesView {
             Ok(browsing) => browsing,
             Err(reason) => {
                 let text = match reason {
-                    CannotBrowse::NotInstalled | CannotBrowse::NoDisk => "backups-not-set-up",
-                    CannotBrowse::DiskAway => "backups-disk-away",
-                    CannotBrowse::Failed => "backups-cannot-open",
+                    CannotBrowse::NotInstalled | CannotBrowse::NoDisk => {
+                        text!("Backups aren’t set up. Choose a disk in Settings ▸ Backup.")
+                    }
+                    CannotBrowse::DiskAway => text!("Connect the backup disk to browse backups."),
+                    CannotBrowse::Failed => text!("The backups can’t be opened."),
                 };
-                self.show_notice(L10N.tr(text));
+                self.show_notice(text.tr());
                 return;
             }
         };
@@ -82,18 +84,18 @@ impl FilesView {
             .rev()
             .find(|time| in_version(time, &folder).is_dir())
         else {
-            self.show_notice(L10N.tr("backups-none"));
+            self.show_notice(tr!("There’s no backup of this folder yet."));
             return;
         };
         let target = in_version(time, &folder);
-        let button = |view: &Self, title: &str, signal: Signal| {
+        let button = |view: &Self, title: Text, signal: Signal| {
             let send = sender(&view.signals);
-            Button::new(&L10N.tr(title), move || send(signal.clone()))
+            Button::new(&title.tr(), move || send(signal.clone()))
         };
-        let older = button(self, "backups-older", Signal::BackupStep(true));
-        let newer = button(self, "backups-newer", Signal::BackupStep(false));
-        let restore = button(self, "backups-restore", Signal::BackupRestore).primary();
-        let done = button(self, "backups-done", Signal::BackupDone);
+        let older = button(self, text!("Older"), Signal::BackupStep(true));
+        let newer = button(self, text!("Newer"), Signal::BackupStep(false));
+        let restore = button(self, text!("Restore"), Signal::BackupRestore).primary();
+        let done = button(self, text!("Done"), Signal::BackupDone);
         self.backups = Some(BackupBar {
             _browsing: browsing,
             older: self.insert(older),
@@ -150,11 +152,11 @@ impl FilesView {
                 .find(|path| path.is_dir()),
         };
         let Some(found) = found else {
-            self.show_notice(L10N.tr(if older {
-                "backups-no-older"
+            self.show_notice(if older {
+                tr!("No older version.")
             } else {
-                "backups-no-newer"
-            }));
+                tr!("No newer version.")
+            });
             return;
         };
         if file.is_some() {
@@ -186,7 +188,7 @@ impl FilesView {
         };
         if let Err(error) = std::fs::create_dir_all(&destination) {
             tracing::warn!("cannot restore into {}: {error}", destination.display());
-            self.show_notice(L10N.tr("backups-cannot-restore"));
+            self.show_notice(tr!("The original folder can’t be recreated."));
             return;
         }
         self.start(
@@ -284,7 +286,7 @@ impl FilesView {
             return;
         };
         let area = self.backup_bar_area();
-        let title = L10N.tr_args("backups-from", [("when", shown_time(&time).into())]);
+        let title = tr!("Backup from {when}", when = shown_time(&time));
         let ink = self.palette.ink;
         let label = self.text().paragraph(
             &title,

@@ -73,7 +73,7 @@ use crate::popup::{Fading, MenuPlacement, Menus};
 use crate::presentation::Presentation;
 use crate::scale::{Scaling, SurfaceScale};
 use crate::seat::Input;
-use crate::shell::{PANEL_SINCE, Shell};
+use crate::shell::{PANEL_SINCE, POPOVER_SINCE, Shell};
 use crate::text_input::TextInput;
 
 pub const ACTIVATION_TOKEN_VARIABLE: &str = "XDG_ACTIVATION_TOKEN";
@@ -108,6 +108,12 @@ pub enum Role {
         session: Option<WindowInSession>,
     },
     Panel {
+        title: String,
+        app_id: String,
+        tag: String,
+        session: Option<WindowInSession>,
+    },
+    Popover {
         title: String,
         app_id: String,
         tag: String,
@@ -170,12 +176,22 @@ impl Role {
         }
     }
 
+    pub fn popover(title: &str, app_id: &str) -> Self {
+        Self::Popover {
+            title: title.to_owned(),
+            app_id: app_id.to_owned(),
+            tag: String::new(),
+            session: None,
+        }
+    }
+
     pub fn tagged(mut self, window_tag: &str) -> Self {
         if let Self::Toplevel { tag, .. }
         | Self::Hosted { tag, .. }
         | Self::Dialog { tag, .. }
         | Self::Utility { tag, .. }
-        | Self::Panel { tag, .. } = &mut self
+        | Self::Panel { tag, .. }
+        | Self::Popover { tag, .. } = &mut self
         {
             *tag = window_tag.to_owned();
         }
@@ -187,7 +203,8 @@ impl Role {
         | Self::Hosted { session, .. }
         | Self::Dialog { session, .. }
         | Self::Utility { session, .. }
-        | Self::Panel { session, .. } = &mut self
+        | Self::Panel { session, .. }
+        | Self::Popover { session, .. } = &mut self
         {
             *session = window;
         }
@@ -360,6 +377,7 @@ pub(crate) struct State {
     closed: bool,
     pub(crate) toplevel: ToplevelState,
     frame_pending: bool,
+    frame_done: bool,
     pub(crate) events: Vec<WindowEvent>,
     pub(crate) own_surface: Option<WlSurface>,
     pub(crate) popup_surfaces: Vec<WlSurface>,
@@ -582,8 +600,9 @@ impl Window {
         let mut chrome = None;
         let panel = matches!(role, Role::Panel { .. });
         let hosted = matches!(role, Role::Hosted { .. } | Role::HostedPopup(_));
+        let popover = matches!(role, Role::Popover { .. });
         let (titled, fixed) = match &role {
-            Role::Dialog { .. } => (false, true),
+            Role::Dialog { .. } | Role::Popover { .. } => (false, true),
             Role::Utility { .. } => (true, true),
             Role::Panel { .. } => (false, false),
             Role::Toplevel { .. }
@@ -622,6 +641,12 @@ impl Window {
                 app_id,
                 tag,
                 session,
+            }
+            | Role::Popover {
+                title,
+                app_id,
+                tag,
+                session,
             } => {
                 let wm_base = state
                     .wm_base
@@ -639,6 +664,14 @@ impl Window {
                     .filter(|app| panel && app.version() >= PANEL_SINCE)
                 {
                     app.set_panel(&toplevel);
+                }
+                if let Some(app) = state
+                    .shell
+                    .app
+                    .as_ref()
+                    .filter(|app| popover && app.version() >= POPOVER_SINCE)
+                {
+                    app.set_popover(&toplevel);
                 }
                 if let Some(manager) = state.toplevel_tag.take() {
                     if !tag.is_empty() {
@@ -1150,7 +1183,16 @@ impl Window {
 
     pub fn dispatch(&mut self) -> Result<(), WindowError> {
         self.queue.blocking_dispatch(&mut self.state)?;
+        self.release_uploads();
         Ok(())
+    }
+
+    fn release_uploads(&mut self) {
+        if std::mem::take(&mut self.state.frame_done)
+            && let Gpu::Ready(gpu) = &mut self.gpu
+        {
+            gpu.release_uploads();
+        }
     }
 
     pub(crate) fn has_events(&self) -> bool {
@@ -1159,6 +1201,7 @@ impl Window {
 
     pub(crate) fn dispatch_pending(&mut self) -> Result<(), WindowError> {
         self.queue.dispatch_pending(&mut self.state)?;
+        self.release_uploads();
         Ok(())
     }
 
@@ -1242,6 +1285,9 @@ impl Window {
                     )?;
                 }
                 self.set_cursor(ui.cursor());
+                if let Some(text) = ui.take_look_up_request() {
+                    self.look_up(text);
+                }
                 let unhandled = match input {
                     Event::Key { .. } if !changed => Some(WindowEvent::Input(input)),
                     _ => None,
@@ -1258,6 +1304,9 @@ impl Window {
                 true => {
                     if ui.take_emoji_picker_request() {
                         self.show_emoji_picker()?;
+                    }
+                    if let Some(text) = ui.take_look_up_request() {
+                        self.look_up(text);
                     }
                     (true, None)
                 }
@@ -1276,11 +1325,13 @@ impl Window {
                 (true, Some(WindowEvent::AppearanceChanged(appearance)))
             }
             WindowEvent::SpellingAnswered => {
-                ui.spelling_answered();
-                if let Some((menu, at)) = ui.take_menu_request() {
+                let edited = ui.spelling_answered();
+                let menu = ui.take_menu_request();
+                let shown = menu.is_some();
+                if let Some((menu, at)) = menu {
                     self.show_menu(menu, MenuPlacement::AtPoint(at))?;
                 }
-                (true, None)
+                (edited || shown, None)
             }
             WindowEvent::CapsLock(on) => {
                 ui.context().caps_lock = on;

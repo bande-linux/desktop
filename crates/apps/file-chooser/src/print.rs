@@ -13,6 +13,7 @@ use accesskit::{Node, Role as AccessRole, TreeUpdate};
 use bande_content::pdf::protocol::{Render, Use};
 use bande_content::pdf::session::{Change, Phase, Session};
 use bande_inbox::{Inbox, Outbox};
+use bande_l10n::tr;
 use bande_pdf::{Orientation, PageSetup, Paper, keep_pages};
 use bande_printers::{Capabilities, JobOptions, PrintClient, PrinterInfo};
 use bande_toolkit::ui::{
@@ -30,8 +31,6 @@ use xdg_desktop_portal_bande::file_chooser::{Dialog, FileChooserUi, Mode, Outcom
 use xdg_desktop_portal_bande::print::{DocumentSource, PrintAnswer, PrintRequest};
 use xdg_desktop_portal_bande::request::Cancellation;
 use zbus::blocking::Connection;
-
-use crate::L10N;
 
 const APP_ID: &str = "org.bande.PrintDialog";
 const UNAVAILABLE: u8 = 2;
@@ -216,15 +215,25 @@ struct Dialogue {
 }
 
 fn media_name(keyword: &str) -> String {
-    let id = format!("paper-{}", keyword.replace(['.', '_'], "-"));
-    let name = L10N.tr(&id);
-    if name != id {
-        return name;
+    match keyword {
+        "iso_a4_210x297mm" => tr!("A4"),
+        "iso_a3_297x420mm" => tr!("A3"),
+        "iso_a5_148x210mm" => tr!("A5"),
+        "na_letter_8.5x11in" => tr!("US Letter"),
+        "na_legal_8.5x14in" => tr!("US Legal"),
+        _ => keyword
+            .rsplit('_')
+            .next()
+            .map_or_else(|| keyword.to_owned(), str::to_owned),
     }
-    keyword
-        .rsplit('_')
-        .next()
-        .map_or_else(|| keyword.to_owned(), str::to_owned)
+}
+
+fn side_name(side: &str) -> String {
+    match side {
+        "two-sided-long-edge" => tr!("Long edge"),
+        "two-sided-short-edge" => tr!("Short edge"),
+        _ => tr!("Off"),
+    }
 }
 
 pub fn parse_ranges(text: &str) -> Option<Vec<(i32, i32)>> {
@@ -267,14 +276,14 @@ impl Dialogue {
 
     fn refresh_printers(&mut self) {
         let choices: Vec<String> = match self.printers.is_empty() {
-            true => vec![L10N.tr("no-printers")],
+            true => vec![tr!("No printers found")],
             false => self
                 .printers
                 .iter()
                 .map(|printer| match printer.reachable {
                     true => printer.name.clone(),
                     false => {
-                        L10N.tr_args("printer-offline", [("name", printer.name.clone().into())])
+                        tr!("{name} (offline)", name = printer.name.clone())
                     }
                 })
                 .collect(),
@@ -371,7 +380,7 @@ impl Dialogue {
         let sides: Vec<String> = TWO_SIDED_CHOICES
             .iter()
             .take(if two_sided { 3 } else { 1 })
-            .map(|side| L10N.tr(side))
+            .map(|side| side_name(side))
             .collect();
         if !two_sided {
             self.sides = TWO_SIDED_CHOICES[0].to_owned();
@@ -402,17 +411,15 @@ impl Dialogue {
         sheet.page = self.pages.get(self.shown_page).copied();
         let total = self.pages.len();
         sheet.caption = match total {
-            0 => L10N.tr("preview-unavailable"),
-            _ => L10N.tr_args(
-                "page-of",
-                [
-                    ("page", (self.shown_page + 1).into()),
-                    ("total", total.into()),
-                ],
+            0 => tr!("No preview"),
+            _ => tr!(
+                "Page {page} of {total}",
+                page = (self.shown_page + 1),
+                total = total
             ),
         };
         sheet.hint = match self.source {
-            Source::Later => L10N.tr("preview-later"),
+            Source::Later => tr!("The app prepares its pages after you press Print"),
             _ => String::new(),
         };
         let caption = sheet.caption.clone();
@@ -532,7 +539,7 @@ impl Dialogue {
                 .window_handle
                 .as_ref()
                 .map_or_else(String::new, |handle| format!("{WAYLAND_PARENT}{handle}")),
-            title: L10N.tr("save-as-pdf-title"),
+            title: tr!("Save as PDF"),
             accept_label: None,
             modal: true,
             mode: Mode::Save {
@@ -615,18 +622,22 @@ impl Dialogue {
                         let _ = std::fs::remove_file(path);
                     }
                 }
-                Arrival::LayoutFailed => self.set_message(&L10N.tr("layout-failed")),
+                Arrival::LayoutFailed => {
+                    self.set_message(&tr!("The app could not lay out its pages."))
+                }
                 Arrival::Submitted(Ok(())) => self.answer = Some(ExitCode::from(CHOSEN)),
                 Arrival::Submitted(Err(error)) => {
                     tracing::warn!("cannot hand the document to the print service: {error}");
                     self.busy = false;
-                    self.set_message(&L10N.tr("print-failed"));
+                    self.set_message(&tr!(
+                        "The document could not be handed to the print service."
+                    ));
                 }
                 Arrival::Saved(Ok(true)) => self.answer = Some(ExitCode::from(CHOSEN)),
                 Arrival::Saved(Ok(false)) => {}
                 Arrival::Saved(Err(error)) => {
                     tracing::warn!("cannot save the PDF: {error}");
-                    self.set_message(&L10N.tr("save-failed"));
+                    self.set_message(&tr!("The PDF could not be saved."));
                 }
             }
         }
@@ -653,7 +664,7 @@ impl Dialogue {
             }
         }
         if failed {
-            self.set_message(&L10N.tr("preview-unavailable"));
+            self.set_message(&tr!("No preview"));
         }
         self.refresh_sheet();
         if self.sheet.borrow().image.is_none() {
@@ -843,7 +854,7 @@ fn nav_button(symbol: &str, label: &str, signals: &Signals, step: isize) -> Butt
 }
 
 pub fn show(request: &PrintRequest) -> ExitCode {
-    let title = L10N.tr_args("print-title", [("title", request.title.clone().into())]);
+    let title = tr!("Print “{title}”", title = request.title.clone());
     let mut window = match Window::open(Role::dialog(&title, APP_ID), WINDOW_SIZE) {
         Ok(window) => window,
         Err(error) => {
@@ -881,7 +892,7 @@ pub fn show(request: &PrintRequest) -> ExitCode {
     );
     let nav_y = MARGIN + preview_height + MARGIN / 2.0;
     root.insert(
-        nav_button("◀", &L10N.tr("previous-page"), &signals, -1),
+        nav_button("◀", &tr!("Previous page"), &signals, -1),
         Rect::new(MARGIN, nav_y, NAV_BUTTON_WIDTH, NAV_HEIGHT),
     );
     let nav_label = root.insert(
@@ -894,7 +905,7 @@ pub fn show(request: &PrintRequest) -> ExitCode {
         ),
     );
     root.insert(
-        nav_button("▶", &L10N.tr("next-page"), &signals, 1),
+        nav_button("▶", &tr!("Next page"), &signals, 1),
         Rect::new(
             MARGIN + preview_width - NAV_BUTTON_WIDTH,
             nav_y,
@@ -908,15 +919,15 @@ pub fn show(request: &PrintRequest) -> ExitCode {
         move |index: usize| push(&signals, make(index))
     };
     let printer_popup = PopUpButton::new(
-        &L10N.tr("printer-label"),
-        &[L10N.tr("looking-for-printers")],
+        &tr!("Printer"),
+        &[tr!("Looking for printers…")],
         0,
         on(Signal::Printer),
     );
     let printer_id = printer_popup.id();
     let copies_signals = Rc::clone(&signals);
     let copies = Stepper::new(
-        &L10N.tr("copies-label"),
+        &tr!("Copies"),
         1.0,
         (1.0, LARGEST_COPIES),
         1.0,
@@ -925,12 +936,12 @@ pub fn show(request: &PrintRequest) -> ExitCode {
         },
     );
     let pages_signals = Rc::clone(&signals);
-    let pages = TextField::new(&L10N.tr("pages-all"), "", move |text| {
+    let pages = TextField::new(&tr!("All"), "", move |text| {
         push(&pages_signals, Signal::Pages(text.to_owned()));
     })
     .without_text_checking();
     let paper_popup = PopUpButton::new(
-        &L10N.tr("paper-label"),
+        &tr!("Paper"),
         &Paper::ALL
             .iter()
             .map(|paper| media_name(paper.keyword))
@@ -941,36 +952,36 @@ pub fn show(request: &PrintRequest) -> ExitCode {
     let paper_id = paper_popup.id();
     let landscape_signals = Rc::clone(&signals);
     let orientation = SegmentedControl::new(
-        &L10N.tr("orientation-label"),
-        &[L10N.tr("portrait"), L10N.tr("landscape")],
+        &tr!("Orientation"),
+        &[tr!("Portrait"), tr!("Landscape")],
         Some(0),
         move |index| push(&landscape_signals, Signal::Landscape(index == 1)),
     );
     let sides_popup = PopUpButton::new(
-        &L10N.tr("two-sided-label"),
-        &[L10N.tr(TWO_SIDED_CHOICES[0])],
+        &tr!("Two-sided"),
+        &[side_name(TWO_SIDED_CHOICES[0])],
         0,
         on(Signal::Sides),
     );
     let sides_id = sides_popup.id();
     let color_signals = Rc::clone(&signals);
     let color = SegmentedControl::new(
-        &L10N.tr("color-label"),
-        &[L10N.tr("in-color"), L10N.tr("black-and-white")],
+        &tr!("Color"),
+        &[tr!("Color"), tr!("Black & White")],
         Some(0),
         move |index| push(&color_signals, Signal::Color(index == 0)),
     );
     let color_id = color.id();
     let form = Form::new(
-        &L10N.tr("print-options"),
+        &tr!("Print options"),
         vec![
-            FormLine::Row(L10N.tr("printer-label"), Box::new(printer_popup)),
-            FormLine::Row(L10N.tr("copies-label"), Box::new(copies)),
-            FormLine::Row(L10N.tr("pages-label"), Box::new(pages)),
-            FormLine::Row(L10N.tr("paper-label"), Box::new(paper_popup)),
-            FormLine::Row(L10N.tr("orientation-label"), Box::new(orientation)),
-            FormLine::Row(L10N.tr("two-sided-label"), Box::new(sides_popup)),
-            FormLine::Row(L10N.tr("color-label"), Box::new(color)),
+            FormLine::Row(tr!("Printer"), Box::new(printer_popup)),
+            FormLine::Row(tr!("Copies"), Box::new(copies)),
+            FormLine::Row(tr!("Pages"), Box::new(pages)),
+            FormLine::Row(tr!("Paper"), Box::new(paper_popup)),
+            FormLine::Row(tr!("Orientation"), Box::new(orientation)),
+            FormLine::Row(tr!("Two-sided"), Box::new(sides_popup)),
+            FormLine::Row(tr!("Color"), Box::new(color)),
         ],
     );
     let panel_x = width - PANEL_WIDTH - MARGIN;
@@ -1000,15 +1011,12 @@ pub fn show(request: &PrintRequest) -> ExitCode {
         Rc::clone(&signals),
     );
     let print_button = add_button(
-        Button::new(&L10N.tr("print"), move || {
-            push(&print_signals, Signal::Print)
-        })
-        .primary(),
+        Button::new(&tr!("Print"), move || push(&print_signals, Signal::Print)).primary(),
         100.0,
         100.0,
     );
     add_button(
-        Button::new(&L10N.tr("cancel-print"), move || {
+        Button::new(&tr!("Cancel"), move || {
             push(&cancel_signals, Signal::Cancel)
         })
         .cancel(),
@@ -1017,7 +1025,7 @@ pub fn show(request: &PrintRequest) -> ExitCode {
     );
     if !matches!(request.document, DocumentSource::Later) {
         root.insert(
-            Button::new(&L10N.tr("save-as-pdf"), move || {
+            Button::new(&tr!("Save as PDF…"), move || {
                 push(&pdf_signals, Signal::SaveAsPdf)
             }),
             Rect::new(MARGIN, buttons_y, 150.0, BUTTON_ROW - MARGIN / 2.0),

@@ -17,6 +17,7 @@ pub struct Request<'a> {
     pub actions: &'a [(&'a str, &'a str)],
     pub urgency: Urgency,
     pub sound: Option<&'a str>,
+    pub desktop_entry: Option<&'a str>,
 }
 
 pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u32> {
@@ -29,6 +30,9 @@ pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u3
     let mut hints = HashMap::from([("urgency", urgency)]);
     if let Some(sound) = request.sound {
         hints.insert("sound-name", Value::from(sound));
+    }
+    if let Some(entry) = request.desktop_entry {
+        hints.insert("desktop-entry", Value::from(entry));
     }
     connection
         .call_method(

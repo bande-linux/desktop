@@ -1,5 +1,7 @@
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::thread;
+use std::time::SystemTime;
 
 use smithay::reexports::calloop::channel::Sender;
 use zbus::blocking::Connection;
@@ -86,6 +88,35 @@ pub fn serve_displays(
 }
 
 impl Compositor {
+    pub fn session_facts(&self) -> String {
+        static STARTED: OnceLock<u64> = OnceLock::new();
+        let started = STARTED.get_or_init(|| {
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |since| since.as_secs())
+        });
+        let displays: Vec<String> = self
+            .state
+            .screens
+            .iter()
+            .filter(|screen| !screen.parked)
+            .map(|screen| {
+                let mode = screen
+                    .output
+                    .current_mode()
+                    .map_or_else(String::new, |mode| {
+                        format!("{}x{} {}mHz", mode.size.w, mode.size.h, mode.refresh)
+                    });
+                format!("\"{} {mode} scale {}\"", screen.config.name, screen.scale())
+            })
+            .collect();
+        format!(
+            r#"{{"started":{started},"style":"{}","displays":[{}]}}"#,
+            self.style_keyword(),
+            displays.join(",")
+        )
+    }
+
     pub fn connected_displays(
         &self,
         can_dim: &mut impl FnMut(&str) -> bool,

@@ -1,0 +1,179 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Screen recording is not available"
+msgstr "Skärminspelning är inte tillgänglig"
+
+msgid "Install gstreamer1.0-pipewire, gstreamer1.0-plugins-good and gstreamer1.0-plugins-ugly to record the screen."
+msgstr "Installera gstreamer1.0-pipewire, gstreamer1.0-plugins-good och gstreamer1.0-plugins-ugly för att spela in skärmen."
+
+msgid "The screen could not be captured. Try again in a moment."
+msgstr "Det gick inte att ta en bild av skärmen. Försök igen om en stund."
+
+msgid "The recording could not be saved"
+msgstr "Det gick inte att spara inspelningen"
+
+msgid "Something went wrong while recording. Check that there is enough free disk space and try again."
+msgstr "Något gick fel under inspelningen. Kontrollera att det finns tillräckligt med ledigt skivutrymme och försök igen."
+
+msgid "The screenshot could not be saved"
+msgstr "Det gick inte att spara skärmbilden"
+
+msgid "Bande could not write to {folder}. Choose another place in the options, or check the folder’s permissions."
+msgstr "Bande kunde inte skriva till {folder}. Välj en annan plats i alternativen eller kontrollera mappens behörigheter."
+
+msgid "Screenshot {date} at {time}"
+msgstr "Skärmbild {date} kl. {time}"
+
+msgid "Screen Recording {date} at {time}"
+msgstr "Skärminspelning {date} kl. {time}"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Recording the screen. Click to stop."
+msgstr "Skärmen spelas in. Klicka för att sluta."
+
+msgid "Save to"
+msgstr "Spara i"
+
+msgid "Desktop"
+msgstr "Skrivbord"
+
+msgid "Pictures"
+msgstr "Bilder"
+
+msgid "Clipboard"
+msgstr "Urklipp"
+
+msgid "Timer"
+msgstr "Timer"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "{seconds} Seconds"
+msgstr "{seconds} sekunder"
+
+msgid "Show Mouse Pointer"
+msgstr "Visa muspekaren"
+
+msgid "An app"
+msgstr "En app"
+
+msgid "Allow {app} to take a screenshot?"
+msgstr "Vill du tillåta att {app} tar en skärmbild?"
+
+msgid "It will see everything on your screen right now."
+msgstr "Appen kommer att se allt som finns på skärmen just nu."
+
+msgid "Don’t Allow"
+msgstr "Tillåt inte"
+
+msgid "Allow"
+msgstr "Tillåt"
+
+msgid "Crop"
+msgstr "Beskär"
+
+msgid "Arrow"
+msgstr "Pil"
+
+msgid "Rectangle"
+msgstr "Rektangel"
+
+msgid "Text"
+msgstr "Text"
+
+msgid "Highlight"
+msgstr "Markera"
+
+msgid "Undo"
+msgstr "Ångra"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "Markup"
+msgstr "Markering"
+
+msgid "Capture Entire Screen"
+msgstr "Ta bild av hela skärmen"
+
+msgid "Capture Selected Window"
+msgstr "Ta bild av markerat fönster"
+
+msgid "Capture Selected Portion"
+msgstr "Ta bild av markerat område"
+
+msgid "Record Entire Screen"
+msgstr "Spela in hela skärmen"
+
+msgid "Record Selected Portion"
+msgstr "Spela in markerat område"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Options"
+msgstr "Alternativ"
+
+msgid "Record"
+msgstr "Spela in"
+
+msgid "Capture"
+msgstr "Ta bild"
+
+msgid "Screenshot and recording"
+msgstr "Skärmbild och inspelning"
+
+msgid "Screens and windows"
+msgstr "Skärmar och fönster"
+
+msgid "Untitled Window"
+msgstr "Namnlöst fönster"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Share"
+msgstr "Dela"
+
+msgid "Choose what to share with {app}"
+msgstr "Välj vad du vill dela med {app}"
+
+msgid "Choose what to share"
+msgstr "Välj vad du vill dela"
+
+msgid "Entire Screen"
+msgstr "Hela skärmen"
+
+msgid "Bande Screen Sharing"
+msgstr "Bande skärmdelning"
+
+msgid "Sharing your screen. Click to stop."
+msgstr "Din skärm delas. Klicka för att sluta."
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Open in Markup"
+msgstr "Öppna i Markering"
+
+msgid "Show in Files"
+msgstr "Visa i Filer"
+
+msgid "Move to Trash"
+msgstr "Flytta till papperskorgen"

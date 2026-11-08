@@ -3,7 +3,7 @@ use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use bande_fs::Entry;
+use bande_fs::{Entry, Kind};
 use bande_thumbnails::{Request, ThumbnailSize, Thumbnails};
 use bande_toolkit::Image;
 
@@ -54,7 +54,7 @@ impl Thumbs {
         };
         let files = entries
             .into_iter()
-            .filter(|(entry, _)| !entry.is_folder())
+            .filter(|(entry, _)| entry.kind == Kind::File)
             .collect::<Vec<_>>();
         self.shown = files
             .iter()

@@ -7,7 +7,7 @@ local gate call it, so CI holds no check the gate skips:
 
 | Stage | What it runs |
 |---|---|
-| `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland) and `ci/check-apps.sh` |
+| `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland) `ci/check-apps.sh` and `ci/check-runtime-deps.py` |
 | `test` | the workspace tests on the hermetic bus with lavapipe |
 | `all` | `ci/release/build-all.sh`: the `bande-desktop` metapackage, its relations and `lintian` |
 | `debs` | `ci/release/build-debs.sh`, `ci/release/check-debs.sh`, `ci/release/smoke.sh` |
@@ -44,9 +44,24 @@ scripts live in `~/bande-linux/bin` on the build machine, outside this repositor
 why they exist are in [`../quality/tests.md`](../quality/tests.md). A test bus lists no service
 directories, so it never D-Bus-activates the services installed on the machine.
 
+## Runtime dependencies
+
+`ci/runtime-deps` lists every program the desktop runs (`Command::new`) and every system path it
+reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
+`required` (Debian priority required), `depends` (the package that runs or reads it, or for a
+shared library one package using it, declares it in Depends), `optional` (the code checks
+first and shows the user why a feature is off) or `image` (put in place by the `images`
+repository's system images, not by a package). `ci/check-runtime-deps.py` in `lint` fails on a
+path or program missing from the list and on a `depends` entry its package does not declare, so
+a new one is declared in the change that adds it; the `install` job checks that every
+`required` and `depends` entry is on a system installed with `--no-install-recommends`.
+
 ## GitHub CI
 
-The only workflow, `release.yml`, runs on version tags (`vX.Y.Z`) and on manual dispatch, never
+Besides `dict.yml`, which builds the dictionary packs from a `dict-YYYYMMDD` tag (see
+[lookup.md](lookup.md)), and `l10n.yml`, which builds only the language packs from an
+`l10n-YYYYMMDD` tag (`.N` for another the same day) at `<last release>+l10nYYYYMMDD`
+(`ci/release/build-packs.sh`), so a corrected translation ships without a release, the one workflow, `release.yml`, runs on version tags (`vX.Y.Z`) and on manual dispatch, never
 on pushes or pull requests. It runs on GitHub-hosted runners (`ubuntu-24.04-arm` and
 `ubuntu-24.04`), every job in a `debian:testing` container that installs what it needs with
 `ci/apt-install.sh` (build libraries in `ci/release/build-depends`) and the toolchain pinned in

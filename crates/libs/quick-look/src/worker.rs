@@ -5,14 +5,14 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
+use crate::paint::colored;
 use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_content::{Contents, confine, worker_program};
 use bande_fs::archive_contents;
 use bande_toolkit::{Color, CpuRenderer, Item, Point, Scene, TextStyle, TextSystem};
 use bande_xdg::wait_for_exit;
-
-use crate::L10N;
-use crate::paint::colored;
 
 const FONT_FLAG: &str = "--quick-look-font";
 const ARCHIVE_FLAG: &str = "--quick-look-archive";
@@ -81,7 +81,7 @@ fn font_sample(path: &Path) -> io::Result<Sample> {
         .and_then(|(family, _)| fonts.collection.family_name(*family))
         .map(str::to_owned)
         .ok_or_else(|| io::Error::other("not a font"))?;
-    let sample = L10N.tr("font-sample");
+    let sample = tr!("The quick brown fox jumps over the lazy dog.");
     let mut lines = vec![(family.clone(), 36.0), (ALPHABET.to_owned(), 22.0)];
     lines.extend([12.0, 18.0, 24.0, 36.0, 48.0, 64.0].map(|size| (sample.clone(), size)));
     let mut items = Vec::new();

@@ -1,8 +1,7 @@
 use bande_fs::{GroupBy, SortBy};
+use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::OpenWithChoice;
-
-use crate::L10N;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -13,6 +12,7 @@ pub enum Command {
     OpenWith(String),
     OpenWithOther,
     QuickLook,
+    LookUp,
     Info,
     BrowseBackups,
     RestoreFromBackup,
@@ -50,6 +50,8 @@ pub enum Command {
     RemoveFromSidebar,
     RestoreSidebar,
     Eject,
+    ConnectToServer,
+    ForgetServer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,6 +73,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("open-with-other", Command::OpenWithOther),
     ("open-place-in-new-tab", Command::OpenPlaceInNewTab),
     ("quick-look", Command::QuickLook),
+    ("look-up", Command::LookUp),
     ("info", Command::Info),
     ("rename", Command::Rename),
     ("duplicate", Command::Duplicate),
@@ -117,20 +120,22 @@ const ACTIONS: &[(&str, Command)] = &[
     ("go:documents", Command::GoTo(Destination::Documents)),
     ("go:downloads", Command::GoTo(Destination::Downloads)),
     ("go:recents", Command::GoTo(Destination::Recents)),
+    ("connect-to-server", Command::ConnectToServer),
+    ("forget-server", Command::ForgetServer),
     ("empty-trash", Command::EmptyTrash),
     ("remove-from-sidebar", Command::RemoveFromSidebar),
     ("restore-sidebar", Command::RestoreSidebar),
     ("eject", Command::Eject),
 ];
 
-pub const GROUPS: [(Option<GroupBy>, &str); 7] = [
-    (None, "menu-group-none"),
-    (Some(GroupBy::Kind), "column-kind"),
-    (Some(GroupBy::Application), "menu-group-application"),
-    (Some(GroupBy::Modified), "column-modified"),
-    (Some(GroupBy::Created), "column-created"),
-    (Some(GroupBy::Added), "menu-group-added"),
-    (Some(GroupBy::Size), "column-size"),
+pub const GROUPS: [(Option<GroupBy>, Text); 7] = [
+    (None, text!("None")),
+    (Some(GroupBy::Kind), text!("Kind")),
+    (Some(GroupBy::Application), text!("Application")),
+    (Some(GroupBy::Modified), text!("Date Modified")),
+    (Some(GroupBy::Created), text!("Date Created")),
+    (Some(GroupBy::Added), text!("Date Added")),
+    (Some(GroupBy::Size), text!("Size")),
 ];
 
 pub fn group_action(group: Option<GroupBy>) -> &'static str {
@@ -160,8 +165,8 @@ fn action(command: &Command) -> &'static str {
         .map_or("", |(action, _)| action)
 }
 
-fn item(message: &str, command: &Command) -> MenuItem {
-    MenuItem::new(&L10N.tr(message), action(command))
+fn item(message: Text, command: &Command) -> MenuItem {
+    MenuItem::new(&message.tr(), action(command))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,33 +189,31 @@ pub fn items_menu(selection: &Selection) -> Menu {
     let count = selection.count;
     let mut items = Vec::new();
     if selection.in_backup {
-        items.push(item(
-            "menu-restore-from-backup",
-            &Command::RestoreFromBackup,
-        ));
+        items.push(item(text!("Restore"), &Command::RestoreFromBackup));
         items.push(MenuItem::separator());
-        items.push(item("open", &Command::Open).shortcut("Ctrl+O"));
-        items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
-        items.push(item("menu-copy", &Command::Copy).shortcut("Ctrl+C"));
-        items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+        items.push(item(text!("Open"), &Command::Open).shortcut("Ctrl+O"));
+        items.push(item(text!("Quick Look"), &Command::QuickLook).shortcut("Space"));
+        items.push(item(text!("Copy"), &Command::Copy).shortcut("Ctrl+C"));
+        items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
         return Menu::new(items);
     }
     if selection.trashed {
-        items.push(item("menu-put-back", &Command::PutBack));
+        items.push(item(text!("Put Back"), &Command::PutBack));
         items.push(
-            item("menu-delete-immediately", &Command::DeleteImmediately).shortcut("Shift+Delete"),
+            item(text!("Delete Immediately…"), &Command::DeleteImmediately)
+                .shortcut("Shift+Delete"),
         );
         items.push(MenuItem::separator());
-        items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
-        items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+        items.push(item(text!("Quick Look"), &Command::QuickLook).shortcut("Space"));
+        items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
         return Menu::new(items);
     }
-    items.push(item("open", &Command::Open).shortcut("Ctrl+O"));
+    items.push(item(text!("Open"), &Command::Open).shortcut("Ctrl+O"));
     if selection.folders {
-        items.push(item("menu-open-in-new-tab", &Command::OpenInNewTab));
+        items.push(item(text!("Open in New Tab"), &Command::OpenInNewTab));
     }
     if selection.folders && count == 1 && selection.terminal {
-        items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
+        items.push(item(text!("Open in Terminal"), &Command::OpenInTerminal));
     }
     if selection.files {
         let mut apps = selection
@@ -221,85 +224,77 @@ pub fn items_menu(selection: &Selection) -> Menu {
         if !apps.is_empty() {
             apps.push(MenuItem::separator());
         }
-        apps.push(item("menu-open-with-other", &Command::OpenWithOther));
-        items.push(MenuItem::submenu(
-            &L10N.tr("menu-open-with"),
-            Menu::new(apps),
-        ));
+        apps.push(item(text!("Other…"), &Command::OpenWithOther));
+        items.push(MenuItem::submenu(&tr!("Open With"), Menu::new(apps)));
     }
     items.push(MenuItem::separator());
-    items.push(item("menu-quick-look", &Command::QuickLook).shortcut("Space"));
-    items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+    items.push(item(text!("Quick Look"), &Command::QuickLook).shortcut("Space"));
+    items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
     if selection.can_browse_backups && count == 1 {
-        items.push(item("menu-browse-backups", &Command::BrowseBackups));
+        items.push(item(text!("Browse Backups…"), &Command::BrowseBackups));
     }
     if selection.away {
         items.push(item(
-            "menu-show-in-enclosing-folder",
+            text!("Show in Enclosing Folder"),
             &Command::ShowInEnclosingFolder,
         ));
     }
     let mut targets = Vec::new();
     if selection.mail {
-        targets.push(item("menu-share-mail", &Command::ShareMail));
+        targets.push(item(text!("Mail"), &Command::ShareMail));
     }
     targets.extend(selection.places.iter().map(|place| {
         let name = place.file_name().unwrap_or_default().to_string_lossy();
         MenuItem::new(
-            &L10N.tr_args(
-                "menu-share-to",
-                [("place", name.as_ref().to_owned().into())],
-            ),
+            &tr!("Copy to {place}", place = name.as_ref().to_owned()),
             &format!("{SHARE_TO}{}", place.display()),
         )
     }));
     if !targets.is_empty() {
-        items.push(MenuItem::submenu(
-            &L10N.tr("menu-share"),
-            Menu::new(targets),
-        ));
+        items.push(MenuItem::submenu(&tr!("Share"), Menu::new(targets)));
     }
     items.push(MenuItem::separator());
     let rename = match count {
-        1 => L10N.tr("menu-rename"),
-        _ => L10N.tr_args("menu-rename-items", [("count", count.into())]),
+        1 => tr!("Rename"),
+        _ => tr!("Rename {count} Items…", count = count),
     };
     items.push(MenuItem::new(&rename, action(&Command::Rename)).shortcut("F2"));
-    items.push(item("menu-duplicate", &Command::Duplicate));
+    items.push(item(text!("Duplicate"), &Command::Duplicate));
     let compress = match count {
-        1 => L10N.tr_args("menu-compress", [("name", selection.name.clone().into())]),
-        _ => L10N.tr_args("menu-compress-items", [("count", count.into())]),
+        1 => tr!("Compress “{name}”", name = selection.name.clone()),
+        _ => tr!("Compress {count} Items", count = count),
     };
     items.push(MenuItem::new(&compress, action(&Command::Compress)));
-    items.push(item("menu-cut", &Command::Cut).shortcut("Ctrl+X"));
+    if count == 1 {
+        let look_up = tr!("Look Up “{name}”", name = selection.name.clone());
+        items.push(MenuItem::new(&look_up, action(&Command::LookUp)));
+    }
+    items.push(item(text!("Cut"), &Command::Cut).shortcut("Ctrl+X"));
     let copy_path = match count {
-        1 => L10N.tr_args(
-            "menu-copy-path-of",
-            [("name", selection.name.clone().into())],
-        ),
-        _ => L10N.tr_args("menu-copy-paths", [("count", count.into())]),
+        1 => tr!("Copy “{name}” as Pathname", name = selection.name.clone()),
+        _ => tr!("Copy {count} Items as Pathnames", count = count),
     };
     items.push(
-        item("menu-copy", &Command::Copy)
+        item(text!("Copy"), &Command::Copy)
             .shortcut("Ctrl+C")
             .alternate(
                 MenuItem::new(&copy_path, action(&Command::CopyPath)).shortcut("Shift+Ctrl+C"),
             ),
     );
     if selection.folders {
-        items.push(item("menu-add-to-sidebar", &Command::AddToSidebar).shortcut("Ctrl+D"));
+        items.push(item(text!("Add to Sidebar"), &Command::AddToSidebar).shortcut("Ctrl+D"));
     }
     items.push(MenuItem::separator());
     let trash = if count == 1 {
-        L10N.tr("menu-move-to-trash")
+        tr!("Move to Trash")
     } else {
-        L10N.tr_args("menu-move-items-to-trash", [("count", count.into())])
+        tr!("Move {count} Items to Trash", count = count)
     };
     items.push(
         MenuItem::new(&trash, action(&Command::Trash))
             .shortcut("Delete")
             .alternate(
-                item("menu-delete-immediately", &Command::DeleteImmediately)
+                item(text!("Delete Immediately…"), &Command::DeleteImmediately)
                     .shortcut("Shift+Delete"),
             ),
     );
@@ -318,17 +313,17 @@ pub struct Folder {
 
 pub fn folder_menu(folder: Folder) -> Menu {
     let mut items = if folder.trash {
-        vec![item("menu-empty-trash", &Command::EmptyTrash).enabled(!folder.trash_empty)]
+        vec![item(text!("Empty Trash…"), &Command::EmptyTrash).enabled(!folder.trash_empty)]
     } else {
         vec![
-            item("menu-new-folder", &Command::NewFolder).shortcut("Shift+Ctrl+N"),
-            item("menu-paste", &Command::Paste)
+            item(text!("New Folder"), &Command::NewFolder).shortcut("Shift+Ctrl+N"),
+            item(text!("Paste"), &Command::Paste)
                 .shortcut("Ctrl+V")
                 .enabled(folder.paste),
         ]
     };
     if folder.can_browse_backups && !folder.trash {
-        items.push(item("menu-browse-backups", &Command::BrowseBackups));
+        items.push(item(text!("Browse Backups…"), &Command::BrowseBackups));
     }
     if !folder.trash && !folder.templates.is_empty() {
         let documents = folder
@@ -338,13 +333,13 @@ pub fn folder_menu(folder: Folder) -> Menu {
             .collect();
         items.insert(
             1,
-            MenuItem::submenu(&L10N.tr("menu-new-document"), Menu::new(documents)),
+            MenuItem::submenu(&tr!("New Document"), Menu::new(documents)),
         );
     }
     items.push(MenuItem::separator());
-    items.push(item("menu-get-info", &Command::Info).shortcut("Ctrl+I"));
+    items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
     if !folder.trash && folder.terminal {
-        items.push(item("menu-open-in-terminal", &Command::OpenInTerminal));
+        items.push(item(text!("Open in Terminal"), &Command::OpenInTerminal));
     }
     Menu::new(items)
 }
@@ -357,26 +352,44 @@ pub enum Place {
 }
 
 pub fn place_menu(place: Place) -> Menu {
-    let mut items = vec![item("menu-open-in-new-tab", &Command::OpenPlaceInNewTab)];
+    let mut items = vec![item(text!("Open in New Tab"), &Command::OpenPlaceInNewTab)];
     match place {
         Place::Folder => {}
         Place::Volume => {
             items.push(MenuItem::separator());
-            items.push(item("menu-eject", &Command::Eject));
+            items.push(item(text!("Eject"), &Command::Eject));
         }
         Place::Trash { empty } => {
             items.push(MenuItem::separator());
-            items.push(item("menu-empty-trash", &Command::EmptyTrash).enabled(!empty));
+            items.push(item(text!("Empty Trash…"), &Command::EmptyTrash).enabled(!empty));
         }
     }
     items.push(MenuItem::separator());
     items.push(item(
-        "menu-remove-from-sidebar",
+        text!("Remove from Sidebar"),
         &Command::RemoveFromSidebar,
     ));
     Menu::new(items)
 }
 
+pub fn server_menu(saved: bool) -> Menu {
+    let mut items = vec![item(text!("Open"), &Command::Open).shortcut("Ctrl+O")];
+    if saved {
+        items.push(MenuItem::separator());
+        items.push(item(text!("Forget This Server"), &Command::ForgetServer));
+    }
+    Menu::new(items)
+}
+
+pub fn network_menu() -> Menu {
+    Menu::new(vec![
+        item(text!("Connect to Server…"), &Command::ConnectToServer).shortcut("Ctrl+K"),
+    ])
+}
+
 pub fn sidebar_menu() -> Menu {
-    Menu::new(vec![item("menu-restore-sidebar", &Command::RestoreSidebar)])
+    Menu::new(vec![item(
+        text!("Restore Default Sidebar"),
+        &Command::RestoreSidebar,
+    )])
 }

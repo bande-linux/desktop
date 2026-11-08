@@ -6,6 +6,7 @@ cargo_deb_version=3.8.0
 actionlint_version=1.7.12
 export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
+unset VK_LOADER_DRIVERS_DISABLE VK_LOADER_DRIVERS_SELECT VK_ICD_FILENAMES VK_ADD_DRIVER_FILES
 export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json
 export CARGO_BUILD_RUSTFLAGS="${CARGO_BUILD_RUSTFLAGS:-} --remap-path-prefix=$PWD=/build --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${RUSTUP_HOME:-$HOME/.rustup}=/rustup"
 
@@ -23,7 +24,7 @@ done
 
 packages() {
     case $1 in
-        lint) echo curl ca-certificates shellcheck ;;
+        lint) echo curl ca-certificates shellcheck python3 ;;
         test) echo libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin at-spi2-core libfontconfig1 \
             libwayland-client0 procps fonts-inter ;;
         debs) echo dpkg-dev libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd dbus-user-session ;;
@@ -63,14 +64,14 @@ prepare() {
     mapfile -t wanted < <(packages "$stage" | xargs -n1)
     if [ $setup = 1 ]; then
         ci/apt-install.sh "${wanted[@]}"
-        [ "$stage" = all ] || command -v rustup > /dev/null || ci/apt-install.sh rustup
-        [ "$stage" = all ] || ci/release/toolchain.sh
+        command -v rustup > /dev/null || ci/apt-install.sh rustup
+        ci/release/toolchain.sh
         return
     fi
     for package in "${wanted[@]}"; do
         [ "$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null)" = installed ] || missing+=("$package")
     done
-    [ "$stage" = all ] || command -v rustup > /dev/null || missing+=(rustup)
+    command -v rustup > /dev/null || missing+=(rustup)
     [ ${#missing[@]} -eq 0 ] ||
         { echo "verify.sh: the $stage stage needs ${missing[*]}; install them (ci/apt-install.sh does)" >&2; exit 1; }
 }

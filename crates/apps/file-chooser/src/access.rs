@@ -1,14 +1,13 @@
-use std::cell::{Cell, RefCell};
-use std::io::Write;
-use std::process::ExitCode;
-use std::rc::Rc;
-
-use bande_file_chooser::L10N;
+use bande_l10n::tr;
 use bande_toolkit::Image;
 use bande_toolkit::ui::{Alert, Axis, CheckState, Checkbox, Label, PopUpButton, Stack, Widget};
 use bande_xdg::{
     ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app, find_icon,
 };
+use std::cell::{Cell, RefCell};
+use std::io::Write;
+use std::process::ExitCode;
+use std::rc::Rc;
 use xdg_desktop_portal_bande::access::Question;
 use xdg_desktop_portal_bande::dialog_process::{CANCELLED, CHOSEN, encode_pairs};
 use xdg_desktop_portal_bande::file_chooser::Choice;
@@ -106,11 +105,8 @@ pub fn ask(question: &Question) -> ExitCode {
         let deny = question
             .deny_label
             .clone()
-            .unwrap_or_else(|| L10N.tr("button-deny"));
-        let grant = question
-            .grant_label
-            .clone()
-            .unwrap_or_else(|| L10N.tr("button-allow"));
+            .unwrap_or_else(|| tr!("Don’t Allow"));
+        let grant = question.grant_label.clone().unwrap_or_else(|| tr!("Allow"));
         let mut alert = Alert::new(&question.title, &message, move |action| {
             chosen.set(action == GRANT)
         })

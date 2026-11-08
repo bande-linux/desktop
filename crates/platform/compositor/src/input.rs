@@ -203,6 +203,7 @@ impl State {
     }
 
     fn run_action(&mut self, action: Action, key: Key) {
+        bande_log::fault::action(&format!("{action:?}"));
         if !matches!(
             action,
             Action::TextConsole
@@ -417,6 +418,7 @@ impl Compositor {
             state.assist_pointer(location);
         }
         if state.window_menu_pointer(location) || state.force_quit_pointer(location) {
+            state.point_at_frame(None, false);
             if let Some(pointer) = state.seat.get_pointer() {
                 pointer.motion(
                     state,
@@ -462,6 +464,7 @@ impl Compositor {
             },
         );
         pointer.frame(state);
+        state.reload_cursor();
     }
 
     pub fn press_button(&mut self, button: u32, pressed: bool, time: u32) {

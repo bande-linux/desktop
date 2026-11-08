@@ -5,10 +5,11 @@ mod battery;
 mod brightness;
 mod client;
 mod clock;
+mod colour;
 mod consent;
-mod crash_reports;
 mod crypt;
 mod defaults;
+mod diagnostics;
 mod displays;
 mod failure;
 mod follow;
@@ -44,14 +45,10 @@ mod view;
 mod widgets;
 mod wifi;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
 pub use backup::{BackupCommand, BackupUpdate};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
-pub use battery::{BatteryCommand, BatteryState, Charge, charge_of, follow_battery};
+pub use battery::{BatteryCommand, Charge, PowerState, charge_of, follow_battery};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;
@@ -80,6 +77,3 @@ pub use time::{
 };
 pub use view::SettingsView;
 pub use widgets::{bucket_levels, sidebar_width};
-
-pub const TRANSLATIONS: &[(&str, &str)] = bande_l10n::translations!("bande-settings");
-pub static L10N: LazyLock<Localizer> = LazyLock::new(|| Localizer::new(TRANSLATIONS));

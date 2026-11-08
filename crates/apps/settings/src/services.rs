@@ -1,20 +1,22 @@
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use std::sync::mpsc::RecvTimeoutError;
-
 use bande_audio::{Audio, Direction, Level, Meter};
-use bande_bluetooth::{Bluetooth, PairingPrompt, change_rules, register_agent, shown_change};
+use bande_bluetooth::{
+    Bluetooth, PairingPrompt, adapter_in_kernel, change_rules, register_agent, shown_change,
+};
+use bande_bus::Reading;
+use bande_l10n::text;
 use bande_network::{
     ConnectionChange, JoinOutcome, ManualIpv4, NetworkManager, Security, WifiLink, set_strength,
-    strength_signal,
+    strength_signal, wifi_in_kernel,
 };
+use bande_settings_panes::PaneId;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, Message, message};
-
-use bande_settings_panes::PaneId;
 
 use crate::failure::pane_failed;
 use crate::follow::Update;
@@ -25,6 +27,8 @@ pub(crate) const SETTLE: Duration = Duration::from_millis(200);
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const ANSWER_WAIT: Duration = Duration::from_secs(60);
 const NETWORK_MANAGER: &str = "/org/freedesktop/NetworkManager";
+const NETWORK_MANAGER_SERVICE: &str = "org.freedesktop.NetworkManager";
+const BUS: &str = "org.freedesktop.DBus";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioCommand {
@@ -33,6 +37,7 @@ pub enum AudioCommand {
     Mute(Direction, bool),
     Default(Direction, String),
     App(String, f32),
+    Feedback,
     Listen(bool),
 }
 
@@ -65,7 +70,7 @@ pub enum BluetoothCommand {
 fn report<E: std::fmt::Display>(
     updates: &Updates,
     pane: PaneId,
-    what: &str,
+    what: bande_l10n::Text,
     result: Result<(), E>,
 ) {
     if let Err(error) = result {
@@ -124,7 +129,7 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), bande_audio::Er
                 },
             )
         }
-        AudioCommand::Listen(_) => Ok(()),
+        AudioCommand::Feedback | AudioCommand::Listen(_) => Ok(()),
     }
 }
 
@@ -154,8 +159,9 @@ fn listen(audio: &Audio, listening: Option<Listening>) -> Option<Listening> {
     })
 }
 
-pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
+pub fn follow_audio(session: &Connection, updates: Updates) -> Sender<AudioCommand> {
     let (sender, receiver) = mpsc::channel::<AudioCommand>();
+    let session = session.clone();
     spawn("audio", move || {
         let audio = match Audio::start() {
             Ok(audio) => Arc::new(audio),
@@ -197,13 +203,17 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
                 commands.push(command);
             }
             for command in commands {
-                if let AudioCommand::Listen(on) = command {
-                    wanted = on;
+                match command {
+                    AudioCommand::Listen(on) => wanted = on,
+                    AudioCommand::Feedback => {
+                        bande_sound::play(&session, bande_sound::Sound::VolumeChange.name());
+                    }
+                    _ => {}
                 }
                 report(
                     &updates,
                     PaneId::Sound,
-                    "sound-change-failed",
+                    text!("Couldn't change the sound settings."),
                     run_audio(&audio, command),
                 );
             }
@@ -251,7 +261,7 @@ pub(crate) fn signals<T: Send + 'static>(
     });
 }
 
-fn follow_state(
+pub(crate) fn follow_state(
     name: &str,
     updates: Updates,
     changed: Receiver<()>,
@@ -272,26 +282,31 @@ fn follow_state(
     });
 }
 
-fn read_wifi(network: &NetworkManager) -> Option<WifiState> {
-    if !network.has_wifi().ok()? {
-        return None;
+fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiState>> {
+    if !network.has_wifi()? {
+        return Ok(None);
     }
-    let enabled = network.wifi_enabled().ok()?;
+    let enabled = network.wifi_enabled()?;
     let (networks, link) = if enabled {
-        (
-            network.networks().unwrap_or_default(),
-            network.wifi_link().unwrap_or_default(),
-        )
+        let networks = match network.networks() {
+            Err(bande_network::Error::NoWifiDevice) => return Ok(None),
+            networks => networks?,
+        };
+        (networks, network.wifi_link().unwrap_or_default())
     } else {
         (Vec::new(), WifiLink::default())
     };
-    Some(WifiState {
+    Ok(Some(WifiState {
         enabled,
         networks,
-        known: network.known_networks().unwrap_or_default(),
+        known: network.known_networks()?,
         link,
         sign_in: enabled && matches!(network.sign_in_page(), Ok(Some(_))),
-    })
+    }))
+}
+
+fn read_wifi(network: &NetworkManager) -> Reading<WifiState> {
+    Reading::from_answer("NetworkManager", wifi_state(network), wifi_in_kernel)
 }
 
 enum NetworkChange {
@@ -312,7 +327,7 @@ fn network_change(message: &Message) -> Option<NetworkChange> {
 fn follow_wifi(reader: NetworkManager, updates: Updates, changes: Receiver<NetworkChange>) {
     spawn("network", move || {
         let mut wifi = read_wifi(&reader);
-        let publish = |wifi: &Option<WifiState>| {
+        let publish = |wifi: &Reading<WifiState>| {
             updates.send(Update::Wifi(wifi.clone()))
                 && updates.send(Update::Network(read_network(&reader)))
         };
@@ -334,7 +349,7 @@ fn follow_wifi(reader: NetworkManager, updates: Updates, changes: Receiver<Netwo
                 continue;
             }
             let mut moved = false;
-            if let Some(state) = wifi.as_mut() {
+            if let Some(state) = wifi.present_mut() {
                 for change in batch {
                     if let NetworkChange::Strength(access_point, strength) = change {
                         moved |= set_strength(&mut state.networks, &access_point, strength);
@@ -371,6 +386,17 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
     }) {
         signals(system, rule, changed.clone(), network_change, || true);
     }
+    if let Some(rule) = rule(|| {
+        Ok(MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .sender(BUS)?
+            .interface(BUS)?
+            .member("NameOwnerChanged")?
+            .add_arg(NETWORK_MANAGER_SERVICE)?
+            .build())
+    }) {
+        signals(system, rule, changed.clone(), network_change, || true);
+    }
     follow_wifi(NetworkManager::new(system), updates.clone(), changes);
     let (sender, receiver) = mpsc::channel();
     let network = NetworkManager::new(system);
@@ -402,41 +428,41 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                 NetworkCommand::Power(on) => report(
                     &updates,
                     PaneId::Wifi,
-                    "wifi-power-failed",
+                    text!("Couldn't turn Wi-Fi on or off."),
                     network.set_wifi_enabled(on),
                 ),
                 NetworkCommand::ConfigureEthernet(manual) => {
                     report(
                         &updates,
                         PaneId::Network,
-                        "network-change-failed",
+                        text!("Couldn't change the network settings."),
                         network.configure_ethernet(manual.as_ref()),
                     );
                 }
                 NetworkCommand::ConnectVpn(path) => report(
                     &updates,
                     PaneId::Network,
-                    "vpn-connect-failed",
+                    text!("Couldn't connect to the VPN."),
                     network.connect_vpn(&path),
                 ),
                 NetworkCommand::RemoveVpn(path) => report(
                     &updates,
                     PaneId::Network,
-                    "vpn-remove-failed",
+                    text!("Couldn't remove the VPN."),
                     network.remove_vpn(&path),
                 ),
                 NetworkCommand::DisconnectVpn(path) => {
                     report(
                         &updates,
                         PaneId::Network,
-                        "vpn-disconnect-failed",
+                        text!("Couldn't disconnect from the VPN."),
                         network.disconnect_vpn(&path),
                     );
                 }
                 NetworkCommand::Forget(ssid) => report(
                     &updates,
                     PaneId::Wifi,
-                    "wifi-forget-failed",
+                    text!("Couldn't forget this network."),
                     network.forget(&ssid),
                 ),
                 NetworkCommand::SignIn => match network.sign_in_page() {
@@ -448,7 +474,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     report(
                         &updates,
                         pane,
-                        "network-change-failed",
+                        text!("Couldn't change the network settings."),
                         network.change_connection(&path, &change),
                     );
                 }
@@ -482,12 +508,8 @@ fn joined(result: bande_network::Result<JoinOutcome>) -> Joined {
     }
 }
 
-fn read_bluetooth(bluetooth: &Bluetooth) -> Option<BluetoothState> {
-    bluetooth
-        .radio()
-        .inspect_err(|error| tracing::debug!("cannot read Bluetooth: {error}"))
-        .ok()
-        .flatten()
+fn read_bluetooth(bluetooth: &Bluetooth) -> Reading<BluetoothState> {
+    Reading::from_answer("BlueZ", bluetooth.radio(), adapter_in_kernel)
 }
 
 struct Prompt {
@@ -546,14 +568,13 @@ pub fn follow_bluetooth(
     updates: Updates,
 ) -> (Sender<BluetoothCommand>, Sender<Answer>) {
     let (changed, changes) = mpsc::channel();
-    for rule in rule(change_rules).into_iter().flatten() {
-        signals(
-            system,
-            rule,
-            changed.clone(),
-            |message| shown_change(message).then_some(()),
-            || true,
-        );
+    let (adapters, properties): (Vec<MatchRule<'static>>, Vec<MatchRule<'static>>) =
+        rule(change_rules)
+            .unwrap_or_default()
+            .into_iter()
+            .partition(|rule| rule.interface().is_some());
+    for rule in adapters {
+        signals(system, rule, changed.clone(), |_| Some(()), || true);
     }
     let reader = Bluetooth::new(system);
     follow_state("bluetooth", updates.clone(), changes, move || {
@@ -568,32 +589,52 @@ pub fn follow_bluetooth(
         tracing::warn!("cannot pair from Settings: {error}");
     }
     let (sender, receiver) = mpsc::channel();
-    let bluetooth = Bluetooth::new(system);
+    let bluetooth = Bluetooth::new(&crate::follow::waiting_system(system));
+    let bus = system.clone();
     spawn("bluetooth-worker", move || {
+        let shown = Arc::new(AtomicU64::new(0));
         for command in receiver {
             let (what, result) = match command {
-                BluetoothCommand::Power(on) => {
-                    ("bluetooth-power-failed", bluetooth.set_powered(on))
-                }
+                BluetoothCommand::Power(on) => (
+                    text!("Couldn't turn Bluetooth on or off."),
+                    bluetooth.set_powered(on),
+                ),
                 BluetoothCommand::Discover(on) => {
+                    let generation = shown.fetch_add(1, Ordering::Relaxed) + 1;
+                    if on {
+                        for rule in &properties {
+                            let current = Arc::clone(&shown);
+                            signals(
+                                &bus,
+                                rule.clone(),
+                                changed.clone(),
+                                |message| shown_change(message).then_some(()),
+                                move || current.load(Ordering::Relaxed) == generation,
+                            );
+                        }
+                        let _ = changed.send(());
+                    }
                     if let Err(error) = bluetooth.set_discovering(on) {
                         tracing::debug!("discovery not changed: {error}");
                     }
                     continue;
                 }
-                BluetoothCommand::Connect(device) => {
-                    ("bluetooth-connect-failed", bluetooth.connect(&device))
-                }
-                BluetoothCommand::Disconnect(device) => {
-                    ("bluetooth-disconnect-failed", bluetooth.disconnect(&device))
-                }
-                BluetoothCommand::Forget(device) => {
-                    ("bluetooth-forget-failed", bluetooth.forget(&device))
-                }
+                BluetoothCommand::Connect(device) => (
+                    text!("Couldn't connect to this device."),
+                    bluetooth.connect(&device),
+                ),
+                BluetoothCommand::Disconnect(device) => (
+                    text!("Couldn't disconnect this device."),
+                    bluetooth.disconnect(&device),
+                ),
+                BluetoothCommand::Forget(device) => (
+                    text!("Couldn't forget this device."),
+                    bluetooth.forget(&device),
+                ),
                 BluetoothCommand::Pair(device) => {
                     let result = bluetooth.pair(&device);
                     updates.send(Update::Pairing(None));
-                    ("bluetooth-pair-failed", result)
+                    (text!("Couldn't pair with this device."), result)
                 }
             };
             report(&updates, PaneId::Bluetooth, what, result);

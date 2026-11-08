@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" data-hotspot="5 3">
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0.6" stdDeviation="0.6" flood-color="#000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <g fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round">
+      <path d="M 5.00 3.00 L 5.00 18.60 L 8.60 15.30 L 10.90 20.40 L 12.90 19.50 L 10.60 14.50 L 15.50 14.50 Z"/>
+    </g>
+    <g fill="#000">
+      <path d="M 5.00 3.00 L 5.00 18.60 L 8.60 15.30 L 10.90 20.40 L 12.90 19.50 L 10.60 14.50 L 15.50 14.50 Z"/>
+    </g>
+    <g fill="#fff" stroke="#fff" stroke-width="1.8" stroke-linejoin="round">
+      <circle cx="17.6" cy="17.6" r="4.6"/>
+    </g>
+    <g fill="#1C1C1E">
+      <circle cx="17.6" cy="17.6" r="4.6"/>
+    </g>
+    <line x1="17.60" y1="15.94" x2="17.60" y2="14.29" stroke="#fff" stroke-opacity="0.125" stroke-width="1.0" stroke-linecap="round"/>
+    <line x1="18.77" y1="16.43" x2="19.94" y2="15.26" stroke="#fff" stroke-opacity="0.250" stroke-width="1.0" stroke-linecap="round"/>
+    <line x1="19.26" y1="17.60" x2="20.91" y2="17.60" stroke="#fff" stroke-opacity="0.375" stroke-width="1.0" stroke-linecap="round"/>
+    <line x1="18.77" y1="18.77" x2="19.94" y2="19.94" stroke="#fff" stroke-opacity="0.500" stroke-width="1.0" stroke-linecap="round"/>
+    <line x1="17.60" y1="19.26" x2="17.60" y2="20.91" stroke="#fff" stroke-opacity="0.625" stroke-width="1.0" stroke-linecap="round"/>
+    <line x1="16.43" y1="18.77" x2="15.26" y2="19.94" stroke="#fff" stroke-opacity="0.750" stroke-width="1.0" stroke-linecap="round"/>
+    <line x1="15.94" y1="17.60" x2="14.29" y2="17.60" stroke="#fff" stroke-opacity="0.875" stroke-width="1.0" stroke-linecap="round"/>
+    <line x1="16.43" y1="16.43" x2="15.26" y2="15.26" stroke="#fff" stroke-opacity="1.000" stroke-width="1.0" stroke-linecap="round"/>
+  </g>
+</svg>

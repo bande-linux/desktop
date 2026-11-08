@@ -43,6 +43,7 @@ pub struct Window {
     pub(crate) parent_anchor: Option<Point<i32, Logical>>,
     pub(crate) keep_on_top: bool,
     pub(crate) panel: bool,
+    pub(crate) popover: bool,
     pub(crate) origin: Option<Rectangle<f64, Logical>>,
     pub(crate) frame: Frame,
     pub(crate) menu_button: Option<Rectangle<i32, Logical>>,
@@ -130,6 +131,7 @@ impl Window {
             parent_anchor: None,
             keep_on_top: false,
             panel: false,
+            popover: false,
             origin: None,
             frame: Frame::default(),
             menu_button: None,
@@ -372,6 +374,9 @@ impl State {
             self.dragged_window_at(surface)
                 .or_else(|| self.place_over_parent(index, area))
         };
+        let usable_at_pointer = self
+            .screen_at(self.pointer_location)
+            .map_or(area, |screen| self.usable_area(screen));
         let window = &mut self.windows[index];
         if let Some(geometry) = window.geometry() {
             let acked = window.acked;
@@ -384,6 +389,8 @@ impl State {
                     at
                 } else if let Some(at) = window.recalled.take() {
                     crate::recall::clamp_into(Rectangle::new(at, geometry.size), area).loc
+                } else if window.popover {
+                    popover_location(self.pointer_location, usable_at_pointer, geometry.size)
                 } else if window.panel {
                     Point::from((
                         area.loc.x + (area.size.w - geometry.size.w).max(0) / 2,
@@ -820,4 +827,17 @@ impl State {
         self.windows[index].location = location;
         Some(location)
     }
+}
+
+fn popover_location(
+    pointer: Point<f64, Logical>,
+    area: Rectangle<i32, Logical>,
+    size: Size<i32, Logical>,
+) -> Point<i32, Logical> {
+    let right = area.loc.x + (area.size.w - size.w).max(0);
+    let bottom = area.loc.y + (area.size.h - size.h).max(0);
+    Point::from((
+        (pointer.x as i32).clamp(area.loc.x, right),
+        (pointer.y as i32).clamp(area.loc.y, bottom),
+    ))
 }

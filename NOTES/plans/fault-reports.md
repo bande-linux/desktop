@@ -81,7 +81,7 @@ TN2123 could not be read at Apple (the archive URL redirects). A [mirror](https:
 | Info in memory, written on fault | `tracing` ring per process in `bande-log`, mapped on tmpfs so it outlives the process | Copy. Ring reads debug and up. Journal stays at info, which is small; ring cost is measured |
 | `spindump` on force quit or hang | `/proc/<pid>/task/*/{stack,wchan,syscall,stat}` three times 1 s apart, then `eu-stack -p` for user stacks, bounded | Copy, without 10 s of sampling. Kernel stacks come first because a thread stuck in D state can block a ptrace attach |
 | App hang | Compositor ping timeout | Report if Not Responding lasts 10 s and the person interacted with it, or on Force Quit |
-| WindowServer watchdog | `WatchdogSec=20s`, plus a stall thread armed by the event loop only while it is working | Thread asks the reporter at 10 s, so stacks are taken before the abort at 20 s. Idle stays at zero extra wakeups |
+| WindowServer watchdog | `WatchdogSec=20s`, plus a stall thread armed by the event loop only while it is working | Thread asks the reporter at 6 s, so stacks are taken before the watchdog abort, which can come 10 s into a hang. Idle stays at zero extra wakeups |
 | Kill code `0x8badf00d` | `SIGQUIT` from Force Quit, `SIGABRT` from the watchdog | `termination` field: who ended it and why |
 | `.gpuRestart` | Compositor's device-lost path; `devcoredump`; kernel log | Fault from the compositor; attach `devcd` data when present |
 | Display failures | Compositor's failed-frame and restart path | Fault at the 3 s renderer reset, not per failed frame |
@@ -163,6 +163,16 @@ Kind, signature, id, time, OS and package versions, build ids, install id, arch.
 ### What is never captured
 
 File contents, typed text, window titles, clipboard, stack or heap memory (unless the owner's dev config asks). Home path, username, hostname, addresses, SSIDs and serial numbers are scrubbed from every text before storing, and so are file names outside Bande's own, and quoted text in log lines other than short identifiers. Processes that hold passwords stay undumpable: panic text only. `docs/architecture/fault-reports.md` will state this in full.
+
+### Sending by hand, and after a freeze
+
+Settings ▸ General ▸ About ▸ Send Report… runs the same bundle as `bande-diagnose`, shows what will go, takes a short description and sends now or queues. With no server configured it saves a file. `bande-diagnose --send --describe TEXT` does the same from a terminal, and from Recovery as root if the service cannot be reached. The answer names the report id. The bundle always carries the previous boot's evidence: end of its journal, pstore, core dumps, hang snapshots left behind.
+
+During a total freeze nothing runs, so the record is whatever was on disk or in surviving memory before it:
+
+- The journal is fsynced every 15 s instead of 5 minutes (`SyncIntervalSec`), and at once on a critical message. An idle system logs nothing, so nothing is written.
+- The stall thread and hang capture write their first kernel-stack snapshot to the spool and fsync it before anything slower. If the machine dies mid-capture, the next boot finds the partial snapshot and adds it to the report of that boot.
+- Panics and lockups (`softlockup_panic`, `hardlockup_panic`) go to pstore. The hardware watchdog restarts a kernel that stopped scheduling, and such a restart leaves no pstore record, only the journal up to its last sync and the partial snapshots.
 
 ## Stages
 

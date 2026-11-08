@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+serde_json.workspace = true
 bande-bus.workspace = true
 accesskit.workspace = true
 bande-app.workspace = true
@@ -40,6 +41,7 @@ bande-toolkit.workspace = true
 bande-volumes.workspace = true
 bande-wallpaper.workspace = true
 bande-watch.workspace = true
+bande-colour.workspace = true
 bande-xdg.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
@@ -54,7 +56,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, bande-config, locales"
+depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-mono, bande-config, locales, pkexec, systemd, udev, xkb-data, network-manager"
 extended-description = """\
 System Settings of the Bande desktop in four groups: Connections \
 (Wi-Fi with known networks, per-network details and hidden networks, \
@@ -72,7 +74,7 @@ through PackageKit while the computer runs; only those that need a \
 restart install at the next restart, through PackageKit's offline \
 updates. Settings asks to log out or reopen apps that still run the old \
 version, and never restarts or logs out by itself."""
-recommends = "accountsservice, bande-polkit, cryptsetup-bin, network-manager, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
+recommends = "accountsservice, bande-polkit, cryptsetup-bin, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-settings", "usr/bin/", "755"],
@@ -91,6 +93,9 @@ assets = [
     ["data/org.bande.locale-helper.policy", "usr/share/polkit-1/actions/", "644"],
     ["data/bande-disk-encryption", "usr/libexec/", "755"],
     ["data/bande-disk-encryption.service", "usr/lib/systemd/system/", "644"],
+    ["target/release/l10n/development/bande-locale-helper/*", "usr/share/bande/l10n/bande-locale-helper/", "644"],
+    ["target/release/l10n/development/bande-settings/*", "usr/share/bande/l10n/bande-settings/", "644"],
+    ["target/release/l10n/development/bande-sharing-helper/*", "usr/share/bande/l10n/bande-sharing-helper/", "644"],
 ]
 
 [lints]

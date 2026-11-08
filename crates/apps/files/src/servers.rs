@@ -1,16 +1,16 @@
-use bande_toolkit::ui::{
-    Axis, CheckState, Checkbox, PopUpButton, SecureField, Stack, TextField, Widget,
-};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use bande_fs::{Action, Change, Purpose, RenameError, Task};
+use bande_fs::{Action, Change, Entry, Purpose, RenameError, Task};
 use bande_inbox::Inbox;
+use bande_l10n::tr;
+use bande_toolkit::ui::{
+    Axis, CheckState, Checkbox, PopUpButton, SecureField, Stack, TextField, Widget,
+};
 use bande_volumes::{SavedServer, load_saved_servers, on_connected_volume};
 use bande_xdg::{DesktopEntry, file_uri};
 
-use crate::L10N;
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
 use crate::prompt::{Kind, Prompt};
@@ -23,6 +23,7 @@ const SERVER_REFRESH: Duration = Duration::from_secs(10);
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServerRequest {
     pub url: String,
+    pub name: String,
     pub user: String,
     pub password: String,
     pub remember: bool,
@@ -62,6 +63,14 @@ pub enum ServerField {
     Share(usize),
 }
 
+fn share_url(server: &str, share: &str) -> String {
+    format!(
+        "{}/{}",
+        server.trim_end_matches('/'),
+        share.replace('%', "%25").replace(' ', "%20")
+    )
+}
+
 const MAIL_SCHEME: &str = "x-scheme-handler/mailto";
 const BANDE_MAIL: &str = "org.bande.Mail.desktop";
 
@@ -99,9 +108,10 @@ impl FilesView {
                         self.operations.record(action, changes);
                     }
                     if let Some(error) = failure {
-                        self.show_notice(
-                            L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-                        );
+                        self.show_notice(tr!(
+                            "The operation couldn’t be completed: {error}",
+                            error = error.to_string()
+                        ));
                     }
                     self.browser.reload_connected();
                 }
@@ -223,13 +233,17 @@ impl FilesView {
     fn ask_connect_to(&mut self, request: ServerRequest) {
         let saved = load_saved_servers();
         let send = sender(&self.signals);
-        let address = TextField::new(&L10N.tr("server-address-hint"), &request.url, move |text| {
-            send(Signal::Server(ServerField::Address(text.to_owned())));
-        })
+        let address = TextField::new(
+            &tr!("smb://server/share, nfs://server/export, sftp://server or https://server/dav"),
+            &request.url,
+            move |text| {
+                send(Signal::Server(ServerField::Address(text.to_owned())));
+            },
+        )
         .without_text_checking();
         let send = sender(&self.signals);
         let reconnect = Checkbox::new(
-            &L10N.tr("server-reconnect"),
+            &tr!("Reconnect at login"),
             match request.reconnect {
                 true => CheckState::On,
                 false => CheckState::Off,
@@ -239,7 +253,7 @@ impl FilesView {
         let mut fields: Vec<Box<dyn Widget>> = vec![Box::new(address)];
         if !saved.is_empty() {
             let send = sender(&self.signals);
-            let names: Vec<String> = std::iter::once(L10N.tr("server-recent"))
+            let names: Vec<String> = std::iter::once(tr!("Recent Servers"))
                 .chain(saved.iter().map(|entry| entry.url.clone()))
                 .collect();
             fields.push(Box::new(PopUpButton::new("", &names, 0, move |index| {
@@ -249,19 +263,56 @@ impl FilesView {
             })));
         }
         fields.push(Box::new(reconnect));
-        let prompt = Prompt::new(&L10N.tr("server-connect-title"), "", self.choice())
+        let prompt = Prompt::new(&tr!("Connect to Server"), "", self.choice())
             .accessory(Stack::new(Axis::Vertical, STACK_GAP, 0.0, fields))
-            .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-            .button(&L10N.tr("server-connect"), "connect", Kind::Primary);
+            .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+            .button(&tr!("Connect"), "connect", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::ConnectServer { request, saved }, cancel);
     }
 
-    pub(crate) fn connect_to(&mut self, url: String) {
-        self.start_connecting(ServerRequest {
-            url,
-            ..ServerRequest::default()
-        });
+    pub(crate) fn connect_to(&mut self, url: String, name: String) {
+        let request = match &self.shares_of {
+            Some(server) if url.starts_with(&format!("{}/", server.url.trim_end_matches('/'))) => {
+                ServerRequest {
+                    url,
+                    ..server.clone()
+                }
+            }
+            _ => ServerRequest {
+                url,
+                name,
+                ..ServerRequest::default()
+            },
+        };
+        self.start_connecting(request);
+    }
+
+    fn show_shares(&mut self, request: ServerRequest, shares: Vec<String>) {
+        let browsing = matches!(
+            self.browser.root(),
+            Location::Network | Location::Server { .. }
+        );
+        if !browsing || shares.is_empty() {
+            self.ask_share(request, shares);
+            return;
+        }
+        let entries = shares
+            .into_iter()
+            .map(|share| {
+                let url = share_url(&request.url, &share);
+                Entry::server(share, url)
+            })
+            .collect();
+        self.browser.show_shares(
+            Location::Server {
+                address: request.url.clone(),
+                name: request.name.clone(),
+            },
+            entries,
+        );
+        self.shares_of = Some(request);
+        self.selection_changed();
     }
 
     pub(crate) fn server_field(&mut self, field: ServerField) {
@@ -319,11 +370,7 @@ impl FilesView {
                 chosen,
             } if action == "connect" => {
                 if let Some(share) = shares.get(chosen) {
-                    request.url = format!(
-                        "{}/{}",
-                        request.url.trim_end_matches('/'),
-                        share.replace('%', "%25").replace(' ', "%20")
-                    );
+                    request.url = share_url(&request.url, share);
                     self.start_connecting(request);
                 }
             }
@@ -338,7 +385,7 @@ impl FilesView {
                     request,
                     packages,
                 });
-                self.show_busy(&L10N.tr("server-installing"));
+                self.show_busy(&tr!("Installing what is needed…"));
             }
             Sheet::ServerFailed(request) if action == "retry" => self.start_connecting(request),
             Sheet::ServerBusy => self.server_token += 1,
@@ -347,21 +394,15 @@ impl FilesView {
     }
 
     fn show_busy(&mut self, title: &str) {
-        let prompt = Prompt::new(title, "", self.choice()).button(
-            &L10N.tr("cancel"),
-            "cancel",
-            Kind::Cancel,
-        );
+        let prompt =
+            Prompt::new(title, "", self.choice()).button(&tr!("Cancel"), "cancel", Kind::Cancel);
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::ServerBusy, cancel);
     }
 
     fn start_connecting(&mut self, request: ServerRequest) {
         self.server_token += 1;
-        let title = L10N.tr_args(
-            "server-connecting",
-            [("server", request.url.clone().into())],
-        );
+        let title = tr!("Connecting to {server}…", server = request.url.clone());
         self.requests.push(Request::ConnectServer {
             token: self.server_token,
             request,
@@ -387,31 +428,31 @@ impl FilesView {
             "connected" => self.go(Location::Folder(first.into())),
             "password" => self.ask_server_password(request, &first, false),
             "refused" => self.ask_server_password(request, &first, true),
-            "shares" => self.ask_share(request, details),
+            "shares" => self.show_shares(request, details),
             "host-key" => self.ask_host_key(request, first),
             "host-key-changed" => self.server_failed(
                 request,
-                L10N.tr("server-key-changed"),
-                L10N.tr("server-key-changed-detail"),
+                tr!("The server’s identity has changed."),
+                tr!("This could be an attack, or the server was reinstalled. Ask whoever runs it, and remove its old key from ~/.ssh/known_hosts to connect."),
                 false,
             ),
             "unreachable" => self.server_failed(
                 request,
-                L10N.tr("server-unreachable"),
-                L10N.tr("server-unreachable-detail"),
+                tr!("The server can’t be reached."),
+                tr!("Check the address and that you are on the same network."),
                 true,
             ),
             "no-share" => {
-                self.server_failed(request, L10N.tr("server-no-share"), String::new(), false)
+                self.server_failed(request, tr!("The server has no such shared folder."), String::new(), false)
             }
             "invalid" => self.server_failed(
                 request,
-                L10N.tr("server-invalid"),
-                L10N.tr("server-address-hint"),
+                tr!("That isn’t a server address."),
+                tr!("smb://server/share, nfs://server/export, sftp://server or https://server/dav"),
                 false,
             ),
             "missing" => self.ask_install(request, details),
-            _ => self.server_failed(request, L10N.tr("server-failed"), first, true),
+            _ => self.server_failed(request, tr!("The connection failed."), first, true),
         }
     }
 
@@ -423,30 +464,29 @@ impl FilesView {
             ..request
         };
         let send = sender(&self.signals);
-        let name = TextField::new(&L10N.tr("server-user"), user, move |text| {
+        let name = TextField::new(&tr!("Name"), user, move |text| {
             send(Signal::Server(ServerField::User(text.to_owned())));
         })
         .without_text_checking();
         let edit = sender(&self.signals);
         let submit = sender(&self.signals);
-        let password = SecureField::new(&L10N.tr("server-password"), FIELD_SIZE, move |_: &str| {
+        let password = SecureField::new(&tr!("Password"), FIELD_SIZE, move |_: &str| {
             submit(Signal::SheetDefault);
         })
         .on_edit(move |text: &str| edit(Signal::Server(ServerField::Password(text.to_owned()))));
         let send = sender(&self.signals);
-        let remember = Checkbox::new(&L10N.tr("server-remember"), CheckState::On, move |on| {
-            send(Signal::Server(ServerField::Remember(on)))
-        });
+        let remember = Checkbox::new(
+            &tr!("Remember this password in the keychain"),
+            CheckState::On,
+            move |on| send(Signal::Server(ServerField::Remember(on))),
+        );
         let focus = match user.is_empty() {
             true => name.id(),
             false => password.id(),
         };
-        let title = L10N.tr_args(
-            "server-password-title",
-            [("server", request.url.clone().into())],
-        );
+        let title = tr!("Sign in to {server}", server = request.url.clone());
         let message = match refused {
-            true => L10N.tr("server-password-refused"),
+            true => tr!("The name or password wasn’t accepted."),
             false => String::new(),
         };
         let prompt = Prompt::new(&title, &message, self.choice())
@@ -456,8 +496,8 @@ impl FilesView {
                 0.0,
                 vec![Box::new(name), Box::new(password), Box::new(remember)],
             ))
-            .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-            .button(&L10N.tr("server-connect"), "connect", Kind::Primary);
+            .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+            .button(&tr!("Connect"), "connect", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.sheet_primary = prompt.primary_button();
         self.show_sheet(prompt, Sheet::ServerPassword(request), cancel);
@@ -466,21 +506,26 @@ impl FilesView {
 
     fn ask_share(&mut self, request: ServerRequest, shares: Vec<String>) {
         if shares.is_empty() {
-            self.server_failed(request, L10N.tr("server-no-shares"), String::new(), false);
+            self.server_failed(
+                request,
+                tr!("The server doesn’t share any folders with you."),
+                String::new(),
+                false,
+            );
             return;
         }
         let send = sender(&self.signals);
         let chooser = PopUpButton::new("", &shares, 0, move |index| {
             send(Signal::Server(ServerField::Share(index)));
         });
-        let title = L10N.tr_args(
-            "server-choose-share",
-            [("server", request.url.clone().into())],
+        let title = tr!(
+            "Choose a shared folder on {server}",
+            server = request.url.clone()
         );
         let prompt = Prompt::new(&title, "", self.choice())
             .accessory(chooser)
-            .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-            .button(&L10N.tr("server-connect"), "connect", Kind::Primary);
+            .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+            .button(&tr!("Connect"), "connect", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(
             prompt,
@@ -494,23 +539,29 @@ impl FilesView {
     }
 
     fn ask_host_key(&mut self, request: ServerRequest, key: String) {
-        let title = L10N.tr_args("server-new-key", [("server", request.url.clone().into())]);
-        let detail = L10N.tr_args("server-new-key-detail", [("key", key.clone().into())]);
+        let title = tr!(
+            "This computer hasn’t connected to {server} before.",
+            server = request.url.clone()
+        );
+        let detail = tr!(
+            "Connect only if you trust this server. Its fingerprint is {key}.",
+            key = key.clone()
+        );
         let prompt = Prompt::new(&title, &detail, self.choice())
-            .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-            .button(&L10N.tr("server-connect"), "connect", Kind::Primary);
+            .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+            .button(&tr!("Connect"), "connect", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::ServerHostKey { request, key }, cancel);
     }
 
     fn ask_install(&mut self, request: ServerRequest, packages: Vec<String>) {
         let prompt = Prompt::new(
-            &L10N.tr("server-needs-install"),
-            &L10N.tr("server-needs-install-detail"),
+            &tr!("Connecting to this kind of server needs software that isn’t installed."),
+            &tr!("It’s a small download from the Bande software archive."),
             self.choice(),
         )
-        .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-        .button(&L10N.tr("server-install"), "install", Kind::Primary);
+        .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+        .button(&tr!("Install"), "install", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::ServerInstall { request, packages }, cancel);
     }
@@ -525,9 +576,9 @@ impl FilesView {
         let mut prompt = Prompt::new(&title, &detail, self.choice());
         prompt = match retry {
             true => prompt
-                .button(&L10N.tr("cancel"), "cancel", Kind::Cancel)
-                .button(&L10N.tr("try-again"), "retry", Kind::Primary),
-            false => prompt.button(&L10N.tr("ok"), "ok", Kind::Primary),
+                .button(&tr!("Cancel"), "cancel", Kind::Cancel)
+                .button(&tr!("Try Again"), "retry", Kind::Primary),
+            false => prompt.button(&tr!("OK"), "ok", Kind::Primary),
         };
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::ServerFailed(request), cancel);

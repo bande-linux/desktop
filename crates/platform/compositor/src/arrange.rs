@@ -8,6 +8,7 @@ pub(crate) struct Arranged {
     pub(crate) name: String,
     pub(crate) settings: OutputSettings,
     pub(crate) mirror: Option<String>,
+    pub(crate) colour_profile: Option<String>,
 }
 
 pub(crate) fn identities(heads: &[OutputConfig]) -> Vec<String> {
@@ -62,7 +63,6 @@ fn settings_for(head: &OutputConfig, display: &DisplaySettings) -> Option<Output
             .unwrap_or_else(|| automatic_scale(mode.size, head.physical_size_mm)),
         transform: transform(display.rotation),
         position: Point::default(),
-        match_colours: display.match_colours.unwrap_or(true),
     })
 }
 
@@ -112,6 +112,7 @@ pub(crate) fn arrange(
                 name: head.name.clone(),
                 settings: settings_for(head, &display)?,
                 mirror: None,
+                colour_profile: display.colour_profile.clone(),
             })
         })
         .collect();

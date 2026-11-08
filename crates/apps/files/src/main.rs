@@ -5,6 +5,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
@@ -15,7 +16,7 @@ use bande_app::{
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_backup::client::{Browsing, CannotBrowse, open_browser};
 use bande_files::{
-    BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, L10N, Location, Request, Row,
+    BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, ServersSeen,
     Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
     recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
@@ -24,6 +25,7 @@ use bande_files::{
 };
 use bande_fs::{History, Running, Trash};
 use bande_inbox::{Inbox, Outbox};
+use bande_l10n::tr;
 use bande_quick_look::{Action, Panel, QuickLookLink, remembered_size, serve_worker};
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
@@ -37,9 +39,11 @@ use bande_volumes::{
 };
 use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
-    launch_with_arguments, path_from_file_uri, replace_file, spawn_detached, state_home, user_dir,
+    launch_with_arguments, path_from_file_uri, read_user_dirs, replace_file, spawn_detached,
+    state_home, user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
@@ -51,10 +55,10 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || L10N.tr("app-name"),
+    name: || tr!("Files"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || L10N.tr("settings-title"),
+        title: || tr!("Files Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -435,6 +439,8 @@ struct Files {
     mounts: Option<Inbox<()>>,
     nearby_inbox: Option<Inbox<ServersSeen>>,
     nearby: ServersSeen,
+    network_watch: Option<mpsc::Sender<NetworkWatch>>,
+    watching_network: bool,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -470,7 +476,7 @@ fn sidebar(home: &Path) -> Sidebar {
     let layout = read(Some(layout_file(home)));
     let rows = rows(
         home,
-        read(config_home().map(|config| config.join("user-dirs.dirs"))).as_deref(),
+        read_user_dirs().as_deref(),
         read(bookmarks_file()).as_deref(),
         layout.as_deref(),
     );
@@ -730,6 +736,21 @@ impl Files {
         }
     }
 
+    fn watch_network(&mut self, cx: &mut Cx<Self>) {
+        let wanted = browser_windows(cx)
+            .into_iter()
+            .any(|id| browser(cx, id).is_some_and(|(_, pane)| pane.view.browser().shows_network()));
+        if wanted == self.watching_network {
+            return;
+        }
+        self.watching_network = wanted;
+        if let Some(watch) = &self.network_watch
+            && watch.send(NetworkWatch::Wanted(wanted)).is_err()
+        {
+            tracing::warn!("cannot look for servers on the network");
+        }
+    }
+
     fn open_backups(&self) {
         let Some(outbox) = self.backups.as_ref().map(Inbox::outbox) else {
             return;
@@ -805,8 +826,7 @@ impl Files {
     ) -> Result<WindowId, bande_app::Error> {
         let info = arguments.first().is_some_and(|flag| flag == INFO_FLAG);
         let select = info || arguments.first().is_some_and(|flag| flag == SELECT_FLAG);
-        let user_dirs = config_home()
-            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+        let user_dirs = read_user_dirs();
         let mut targets = arguments
             .iter()
             .skip(usize::from(select))
@@ -873,6 +893,7 @@ impl Files {
         size: (u32, u32),
     ) -> Result<WindowId, bande_app::Error> {
         let title = view.title();
+        view.set_terminal_installed(cx.installed(TERMINAL_APP_ID));
         let carrying = Rc::clone(&self.carrying);
         let window = cx.open(Kind::Main, &title.clone(), size, |appearance| {
             view.set_appearance(appearance);
@@ -889,8 +910,7 @@ impl Files {
     fn new_view(&self, browser: Browser) -> Result<FilesView, bande_app::Error> {
         let sidebar = sidebar(&self.home);
         let apps = Apps::load(data_dirs(), &config_dirs());
-        let user_dirs = config_home()
-            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
+        let user_dirs = read_user_dirs();
         let thumbnails = Thumbnails::for_user(apps.data_dirs());
         let mut view = FilesView::new(
             browser,
@@ -983,7 +1003,7 @@ impl Files {
         let size = (width.round() as u32, height.round() as u32);
         match cx.open(
             Kind::Panel(QUICK_LOOK),
-            &L10N.tr("menu-quick-look"),
+            &tr!("Quick Look"),
             size,
             |appearance| {
                 Pane::QuickLook(Box::new(QuickLookPane {
@@ -1205,6 +1225,7 @@ impl Files {
                 }
                 self.load_sidebars(cx);
             }
+            Request::LookUp(text) => window.look_up(text),
             Request::ShowEmojiPicker => {
                 if let Err(error) = window.show_emoji_picker() {
                     tracing::warn!("cannot show the emoji picker: {error}");
@@ -1282,6 +1303,8 @@ impl Program for Files {
                 .inspect_err(|error| tracing::warn!("cannot wait for backups: {error}"))
                 .ok(),
             nearby: ServersSeen::default(),
+            network_watch: network_watch(),
+            watching_network: false,
             ejects: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
                 .ok(),
@@ -1428,6 +1451,7 @@ impl Program for Files {
             shown.request_redraw();
         }
         self.place_quick_look(cx, window);
+        self.watch_network(cx);
         cx.refresh_menus();
     }
 
@@ -1441,6 +1465,7 @@ impl Program for Files {
         if let Pane::Browser(mut closed) = view {
             self.hand_over_operations(cx, closed.view.take_operations());
         }
+        self.watch_network(cx);
         self.remember_recent_folders();
     }
 
@@ -1494,6 +1519,17 @@ impl Program for Files {
             .chain(self.nearby_inbox.iter().map(Inbox::fd))
             .chain(self.backups.iter().map(Inbox::fd))
             .collect()
+    }
+
+    fn installed_changed(&mut self, cx: &mut Cx<Self>) {
+        let terminal = cx.installed(TERMINAL_APP_ID);
+        let windows: Vec<WindowId> = cx.windows().collect();
+        for id in windows {
+            if let Some((_, pane)) = browser(cx, id) {
+                pane.view.set_terminal_installed(terminal);
+                pane.view.reload_apps();
+            }
+        }
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
@@ -1582,6 +1618,75 @@ fn nearby_changes() -> Option<Inbox<ServersSeen>> {
         tracing::warn!("cannot follow nearby servers: {error}");
     }
     Some(inbox)
+}
+
+fn watch_network_with_mounts() -> zbus::Result<Connection> {
+    let session = Connection::session()?;
+    session.call_method(
+        Some(MOUNTS_SERVICE),
+        MOUNTS_PATH,
+        Some(MOUNTS_INTERFACE),
+        "Watch",
+        &(),
+    )?;
+    Ok(session)
+}
+
+enum NetworkWatch {
+    Wanted(bool),
+    MountsStarted,
+}
+
+fn follow_mounts_service(watch: &mpsc::Sender<NetworkWatch>) -> zbus::Result<()> {
+    let session = Connection::session()?;
+    let bus = DBusProxy::new(&session)?;
+    for change in bus.receive_name_owner_changed_with_args(&[(0, MOUNTS_SERVICE)])? {
+        let started = change.args().is_ok_and(|args| args.new_owner().is_some());
+        if started && watch.send(NetworkWatch::MountsStarted).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn network_watch() -> Option<mpsc::Sender<NetworkWatch>> {
+    let (watch, events) = mpsc::channel();
+    let spawned = std::thread::Builder::new()
+        .name("network watch".to_owned())
+        .spawn(move || {
+            let mut wanted = false;
+            let mut _watching = None;
+            for event in events {
+                match event {
+                    NetworkWatch::Wanted(on) => wanted = on,
+                    NetworkWatch::MountsStarted if !wanted => continue,
+                    NetworkWatch::MountsStarted => {}
+                }
+                _watching = wanted.then(watch_network_with_mounts).and_then(|watching| {
+                    watching
+                        .inspect_err(|error| {
+                            tracing::warn!("cannot look for servers on the network: {error}")
+                        })
+                        .ok()
+                });
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot look for servers on the network: {error}");
+        return None;
+    }
+    let restarts = watch.clone();
+    let following = std::thread::Builder::new()
+        .name("mounts service".to_owned())
+        .spawn(move || {
+            if let Err(error) = follow_mounts_service(&restarts) {
+                tracing::warn!("cannot follow the mounts service: {error}");
+            }
+        });
+    if let Err(error) = following {
+        tracing::warn!("cannot follow the mounts service: {error}");
+    }
+    Some(watch)
 }
 
 fn mount_changes() -> Option<Inbox<()>> {

@@ -11,9 +11,10 @@ use bande_graphics::{
     Color, Cut, Item, Paragraph, Point, Rect, Shape, TextRole, TextStyle, past_drag_slop,
 };
 
-pub use self::model::{Cell, Column, Row, Sort};
+pub use self::model::{Cell, Column, Heading, HeadingButton, Row, Sort};
 use self::model::{Line, flatten};
 use self::paint::TextKey;
+use super::control::Symbol;
 use super::disclosure::chevron;
 use super::reorder::Reorder;
 use super::{
@@ -29,6 +30,9 @@ const RESIZE_GRIP: f32 = 4.0;
 const MIN_COLUMN: f32 = 40.0;
 const INDENT: f32 = 16.0;
 const DISCLOSURE_WIDTH: f32 = 16.0;
+const HEADING_BASELINE: f32 = 5.0;
+const HEADING_BUTTON: f32 = 20.0;
+const HEADING_BUTTON_INSET: f32 = 2.0;
 
 struct Remembered {
     selected: Vec<String>,
@@ -103,9 +107,13 @@ pub struct Table {
     scale: f32,
     pending_reveal: Option<usize>,
     glide: Option<Glide>,
-    headings: Vec<(usize, String)>,
+    headings: Vec<Heading>,
     heading_texts: Vec<Paragraph>,
+    heading_symbols: Vec<Option<Symbol>>,
     heading_style: Option<(Color, u32)>,
+    heading_hover: Option<usize>,
+    heading_press: Option<usize>,
+    on_heading_button: Box<dyn FnMut(&str)>,
 }
 
 struct Glide {
@@ -159,7 +167,11 @@ impl Table {
             glide: None,
             headings: Vec::new(),
             heading_texts: Vec::new(),
+            heading_symbols: Vec::new(),
             heading_style: None,
+            heading_hover: None,
+            heading_press: None,
+            on_heading_button: Box::new(|_| {}),
         }
     }
 
@@ -201,6 +213,13 @@ impl Table {
     pub fn on_activate(self, callback: impl FnMut(&[String]) + 'static) -> Self {
         Self {
             on_activate: Box::new(callback),
+            ..self
+        }
+    }
+
+    pub fn on_heading_button(self, callback: impl FnMut(&str) + 'static) -> Self {
+        Self {
+            on_heading_button: Box::new(callback),
             ..self
         }
     }
@@ -254,16 +273,18 @@ impl Table {
         self.texts.borrow_mut().clear();
     }
 
-    pub fn set_headings(&mut self, headings: Vec<(usize, String)>) {
+    pub fn set_headings(&mut self, headings: Vec<Heading>) {
         if headings != self.headings {
             self.headings = headings;
             self.heading_texts.clear();
+            self.heading_symbols.clear();
+            self.heading_hover = None;
+            self.heading_press = None;
             self.glide = None;
         }
     }
 
     pub fn set_rows(&mut self, rows: Vec<Row>) {
-        self.headings.clear();
         let kept = self.remembered();
         let mut lines = Vec::with_capacity(rows.len());
         flatten(rows, 0, &mut lines);
@@ -609,14 +630,70 @@ impl Table {
 
     fn headings_above(&self, index: usize) -> usize {
         let line = self.shown.get(index).copied().unwrap_or(usize::MAX);
-        self.headings.partition_point(|(start, _)| *start <= line)
+        self.headings
+            .partition_point(|heading| heading.start <= line)
     }
 
     fn heading_of(&self, index: usize) -> Option<usize> {
         let line = self.shown.get(index)?;
         self.headings
-            .binary_search_by_key(line, |(start, _)| *start)
+            .binary_search_by_key(line, |heading| heading.start)
             .ok()
+    }
+
+    fn heading_bounds(&self, heading: usize, offset: f32) -> Option<Rect> {
+        let start = self.headings.get(heading)?.start;
+        let index = self.shown.binary_search(&start).ok()?;
+        let body = self.body();
+        Some(Rect::new(
+            body.x,
+            body.y + self.row_top(index) - self.row_height() - offset,
+            body.width,
+            self.row_height(),
+        ))
+    }
+
+    fn heading_button_bounds(&self, heading: usize, offset: f32) -> Option<Rect> {
+        self.headings.get(heading)?.button.as_ref()?;
+        let bounds = self.heading_bounds(heading, offset)?;
+        let text = self
+            .heading_texts
+            .get(heading)
+            .map_or(bounds.height / 2.0, Paragraph::height);
+        let middle = bounds.y + bounds.height - HEADING_BASELINE - text / 2.0;
+        Some(Rect::new(
+            bounds.x + bounds.width - CELL_PADDING - HEADING_BUTTON + HEADING_BUTTON_INSET,
+            (middle - HEADING_BUTTON / 2.0).round(),
+            HEADING_BUTTON,
+            HEADING_BUTTON,
+        ))
+    }
+
+    fn heading_button_at(&self, point: Point) -> Option<usize> {
+        (0..self.headings.len()).find(|heading| {
+            self.heading_button_bounds(*heading, self.offset)
+                .is_some_and(|bounds| bounds.contains(point))
+        })
+    }
+
+    fn on_heading(&self, point: Point) -> bool {
+        (0..self.headings.len()).any(|heading| {
+            self.heading_bounds(heading, self.offset)
+                .is_some_and(|bounds| bounds.contains(point))
+        })
+    }
+
+    fn press_heading_button(&mut self, heading: usize) -> bool {
+        let Some(command) = self
+            .headings
+            .get(heading)
+            .and_then(|heading| heading.button.as_ref())
+            .map(|button| button.command.clone())
+        else {
+            return false;
+        };
+        (self.on_heading_button)(&command);
+        true
     }
 
     fn heads_group(&self, index: usize) -> bool {
@@ -993,6 +1070,9 @@ impl Table {
                 .is_some_and(|key| self.expanded.contains(key));
             return self.set_expanded(cx, row, !expanded, pointer.modifiers.alt);
         }
+        if pointer.button == PointerButton::Secondary && self.sidebar {
+            return index.is_some();
+        }
         if pointer.button == PointerButton::Secondary {
             let on_selection =
                 index.is_some_and(|index| self.selected.get(index).copied().unwrap_or(false));
@@ -1151,14 +1231,32 @@ impl Table {
     }
 
     fn heading_node(&self, heading: usize, parts: &mut Parts, bounds: Rect) {
-        let Some((_, title)) = self.headings.get(heading) else {
+        let Some(entry) = self.headings.get(heading) else {
             return;
         };
         let id = self
             .id
             .part(u64::from(u32::MAX - 2) - (self.columns.len() + heading) as u64);
+        let mut node = group_heading(&entry.title, bounds);
+        if let Some((button, frame)) = entry
+            .button
+            .as_ref()
+            .zip(self.heading_button_bounds(heading, self.offset))
+        {
+            let button_id = self.heading_button_part(heading);
+            let mut button_node = Node::new(Role::Button);
+            button_node.set_label(button.name.as_str());
+            button_node.add_action(Action::Click);
+            button_node.set_bounds(access_rect(frame));
+            node.set_children(vec![self.id.part(button_id)]);
+            parts.nodes.push((self.id.part(button_id), button_node));
+        }
         parts.children.push(id);
-        parts.nodes.push((id, group_heading(title, bounds)));
+        parts.nodes.push((id, node));
+    }
+
+    fn heading_button_part(&self, heading: usize) -> u64 {
+        u64::from(u32::MAX - 2) - (self.columns.len() + self.headings.len() + heading) as u64
     }
 
     fn row_node(&self, index: usize, row: &Line, parts: &mut Parts, bounds: Rect) {
@@ -1253,14 +1351,34 @@ impl Widget for Table {
         let (first, last) = self.visible_rows(cx);
         self.prepare_texts(cx, first, last);
         let width = (self.frame.width - 2.0 * CELL_PADDING).max(0.0);
-        let heading_style = Some((cx.palette.ink, width.to_bits()));
+        let style = match self.sidebar {
+            true => TextStyle::role(TextRole::Label, cx.palette.ink3),
+            false => TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::SEMIBOLD),
+        };
+        let heading_style = Some((cx.palette.ink2, width.to_bits()));
         if self.heading_texts.len() != self.headings.len() || self.heading_style != heading_style {
             self.heading_style = heading_style;
-            let style = TextStyle::new(13.0, cx.palette.ink).weight(TextStyle::SEMIBOLD);
             self.heading_texts = self
                 .headings
                 .iter()
-                .map(|(_, title)| self.text(&mut cx.text, title, style, width, Cut::End))
+                .map(|heading| {
+                    let room = match heading.button {
+                        Some(_) => width - HEADING_BUTTON,
+                        None => width,
+                    };
+                    self.text(&mut cx.text, &heading.title, style, room.max(0.0), Cut::End)
+                })
+                .collect();
+            self.heading_symbols = self
+                .headings
+                .iter()
+                .map(|heading| {
+                    heading.button.as_ref().map(|button| {
+                        let mut symbol = Symbol::new(button.symbol.clone());
+                        symbol.tint(cx.palette.ink2);
+                        symbol
+                    })
+                })
                 .collect();
         }
         self.titles = self
@@ -1417,6 +1535,11 @@ impl Widget for Table {
     fn perform_part(&mut self, cx: &mut Context, part: u64, request: &ActionRequest) -> bool {
         let stride = self.columns.len() as u64 + 1;
         let header_start = u64::from(u32::MAX - 2) - self.columns.len() as u64;
+        if let Some(heading) =
+            (0..self.headings.len()).find(|heading| self.heading_button_part(*heading) == part)
+        {
+            return request.action == Action::Click && self.press_heading_button(heading);
+        }
         if part > header_start && part <= u64::from(u32::MAX - 2) {
             let column = (u64::from(u32::MAX - 2) - part) as usize;
             return request.action == Action::Click && self.sort_by_column(column);
@@ -1444,20 +1567,42 @@ impl Widget for Table {
                 if self.scroll.pointer(cx, self.body(), event) {
                     return true;
                 }
+                if pointer.is_primary()
+                    && let Some(heading) = self.heading_button_at(pointer.position)
+                {
+                    self.heading_press = Some(heading);
+                    return true;
+                }
+                if self.sidebar && self.on_heading(pointer.position) {
+                    return true;
+                }
                 self.pointer_down(cx, pointer)
             }
             Event::PointerMove(pointer) => {
-                self.scroll.pointer(cx, self.body(), event)
+                let hover = self.heading_button_at(pointer.position);
+                let hovered = hover != self.heading_hover;
+                self.heading_hover = hover;
+                hovered
+                    | self.scroll.pointer(cx, self.body(), event)
                     | self.pointer_move(cx, pointer.position)
+            }
+            Event::PointerUp(pointer) if self.heading_press.is_some() => {
+                let pressed = self.heading_press.take();
+                if pressed.is_some() && pressed == self.heading_button_at(pointer.position) {
+                    pressed.map(|heading| self.press_heading_button(heading));
+                }
+                true
             }
             Event::PointerUp(pointer) => {
                 self.pointer_up(cx, pointer.position) | self.scroll.pointer(cx, self.body(), event)
             }
             Event::PointerLeave => {
+                let hovered = self.heading_hover.take().is_some();
+                self.heading_press = None;
                 if self.drag.take() == Some(Drag::Column) {
                     self.drop_column(cx);
                 }
-                self.scroll.pointer(cx, self.body(), event)
+                hovered | self.scroll.pointer(cx, self.body(), event)
             }
             Event::Key { key, modifiers } => self.key(cx, *key, *modifiers),
             _ => false,
@@ -1479,8 +1624,21 @@ impl Widget for Table {
         }
     }
 
-    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
-        self.menu_keys = self.selection();
+    fn tooltip(&self) -> Option<&str> {
+        let heading = self.headings.get(self.heading_hover?)?;
+        heading.button.as_ref().map(|button| button.name.as_str())
+    }
+
+    fn context_menu(&mut self, cx: &mut Context, point: Point) -> Option<Menu> {
+        self.menu_keys = match self.sidebar {
+            true => self
+                .row_under(cx, point)
+                .and_then(|index| self.key_at(index))
+                .map(str::to_owned)
+                .into_iter()
+                .collect(),
+            false => self.selection(),
+        };
         (self.menu)(&self.menu_keys)
     }
 

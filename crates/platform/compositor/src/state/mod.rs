@@ -14,7 +14,7 @@ use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement
 use smithay::backend::renderer::utils::with_renderer_surface_state;
 use smithay::desktop::{PopupGrab, PopupManager};
 use smithay::input::keyboard::XkbConfig;
-use smithay::input::pointer::{CursorIcon, CursorImageStatus};
+use smithay::input::pointer::CursorImageStatus;
 use smithay::render_elements;
 
 use smithay::input::Seat;
@@ -47,6 +47,7 @@ use bande_render::VulkanRenderer;
 
 use crate::clock::Vblank;
 use crate::cursor::{self, Cursor, CursorTheme};
+use crate::cursor_set::Pointer;
 use crate::element::SurfaceElement;
 use crate::frame_callbacks::LatchedCallback;
 use crate::lock::Lock;
@@ -160,13 +161,14 @@ pub struct State {
     pub(crate) app_states: crate::app_states::AppStates,
     pub(crate) needs_redraw: bool,
     pub(crate) reveal: crate::reveal::Reveal,
+    pub(crate) ready_unannounced: bool,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,
     pub(crate) cursor_owner: Option<ClientId>,
     pub(crate) cursor_theme: CursorTheme,
     cursor_arrow: Cursor,
-    named_cursors: HashMap<CursorIcon, Option<Cursor>>,
+    named_cursors: HashMap<Pointer, Option<Cursor>>,
     cursor_scale: f64,
     pub(crate) held_shortcut_keys: Vec<u32>,
     pub(crate) super_tap: bool,
@@ -210,7 +212,6 @@ impl Compositor {
             scale: 1.0,
             transform: Transform::Normal,
             position: Point::default(),
-            match_colours: true,
         };
         let display = Display::new().map_err(io::Error::other)?;
         let fences = smithay::reexports::calloop::EventLoop::try_new().map_err(io::Error::other)?;
@@ -226,7 +227,7 @@ impl Compositor {
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
-        handle.create_global::<State, BandeAppV1, ()>(9, ());
+        handle.create_global::<State, BandeAppV1, ()>(10, ());
         crate::resume::create_global(&handle);
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
@@ -316,6 +317,7 @@ impl Compositor {
             app_states: crate::app_states::AppStates::default(),
             needs_redraw: false,
             reveal: crate::reveal::Reveal::default(),
+            ready_unannounced: false,
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,
             cursor_status: CursorImageStatus::default_named(),
@@ -625,7 +627,8 @@ fn shm_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
 }
 
 impl State {
-    pub(crate) fn load_named_cursor(&mut self, icon: CursorIcon) {
+    pub(crate) fn load_named_cursor(&mut self, pointer: impl Into<Pointer>) {
+        let pointer = pointer.into();
         let scale = self.screens[self.pointer_screen()].scale();
         if scale != self.cursor_scale {
             self.cursor_scale = scale;
@@ -633,16 +636,16 @@ impl State {
         }
         let theme = &self.cursor_theme;
         self.named_cursors
-            .entry(icon)
-            .or_insert_with(|| theme.load(icon, scale));
+            .entry(pointer)
+            .or_insert_with(|| theme.draw(pointer, scale));
     }
 
     pub(crate) fn reload_cursor(&mut self) {
         if let CursorImageStatus::Named(icon) = self.cursor_status {
             self.load_named_cursor(icon);
         }
-        if let Some(icon) = self.drag_cursor() {
-            self.load_named_cursor(icon);
+        if let Some(pointer) = self.owned_cursor() {
+            self.load_named_cursor(pointer);
         }
     }
 

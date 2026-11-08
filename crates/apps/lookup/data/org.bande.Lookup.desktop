@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dictionary
+Name[sv]=Ordbok
+Comment=Look up words in your dictionaries, thesauruses and Wikipedia
+Comment[sv]=Slå upp ord i dina ordböcker, synonymordböcker och Wikipedia
+Icon=org.bande.Lookup
+Exec=bande-lookup %U
+DBusActivatable=true
+StartupNotify=true
+Categories=Office;Dictionary;

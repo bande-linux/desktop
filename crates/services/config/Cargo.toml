@@ -34,6 +34,7 @@ assets = [
     ["target/release/bande-config", "usr/bin/", "755"],
     ["data/bande-config.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Config.service", "usr/share/dbus-1/services/", "644"],
+    ["target/release/l10n/development/bande-config/*", "usr/share/bande/l10n/bande-config/", "644"],
 ]
 
 [lints]

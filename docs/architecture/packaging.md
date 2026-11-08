@@ -23,13 +23,19 @@ profiles. Sizes are in [performance.md](performance.md).
   `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
-  `bande-settings`, `bande-file-chooser`). Package names stay `bande-*` whatever directory the crate lives in
+  `bande-settings`, `bande-file-chooser`, `bande-lookup`). The Look Up dictionary packs
+  (`bande-dict-en`, `bande-dict-sv`, `bande-dict-sv-wiktionary`) are made from their source data
+  by `packaging/dict/build.py`, not from this tree's code; see [lookup.md](lookup.md). Package names stay `bande-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)). Crates in `ci/release/bundled` build with them and ship inside another package
   (`bande-secrets-prompt` in `bande-secrets`). Packages in `ci/release/arch-variants` build
   with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Control Center and the
-  launcher, together with the Bande wallpapers and icon theme; the crates of those parts are
+  launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
+- **`bande-icon-theme`** (built from `packaging/bande-desktop` with the metapackage,
+  architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
+  package that draws icons depends on it, so a symbol never goes missing because the shell is
+  not installed.
 - **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`, section
   `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
   or `kde-plasma-desktop` do.
@@ -59,6 +65,31 @@ profiles. Sizes are in [performance.md](performance.md).
   them has an installation candidate in Debian testing. Installing it adds "Bande" to the sessions a
   display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
   the desktop, a login and sound and nothing else; the images install it that way.
+- **Language packs** (`bande-l10n-tool debs`, architecture `all`, section `localization`):
+  `bande-desktop-l10n-<lang>` (`sv`, `en-gb`) holds one catalog per program of this tree,
+  `/usr/share/bande/l10n/<program>/<lang>.mo`, and enhances `bande-desktop`. Each program's
+  own package carries its English catalog, `en.mo`, through the cargo-deb asset
+  `target/release/l10n/development/<program>/*`, which `bande-l10n-tool check` requires. See
+  [localisation.md](localisation.md).
+  Packs follow by themselves: after each apt or PackageKit run (the `DPkg::Post-Invoke` stamp
+  `/run/bande-desktop/packages-installed`, watched by `bande-language-packs.path`),
+  `bande-language-packs.service` runs `/usr/libexec/bande-desktop/language-packs`. For each
+  language in use (`/etc/locale.conf`, each person's `~/.config/locale.conf` and per-app
+  languages) and each installed package `P`, it installs `P-l10n-<lang>-<region>`, else
+  `P-l10n-<lang>`, when the archive has it and it is missing; Debian's own packs (Firefox ESR,
+  LibreOffice) come the same way. It decides from dpkg's final state, exits at once and silently
+  when nothing is missing, and only to install waits for apt or PackageKit to release the lock; it
+  logs only what it installs, or why it couldn't (`LogLevelMax=notice` also drops systemd's start
+  and finish lines). A run with nothing missing costs about 0.1 s and 0.1 s of CPU, measured on
+  an arm64 builder; with no language set beyond `C` it skips the archive query. An upgrade, a new app or a new language each brings its packs.
+  A run that failed, offline, runs again when NetworkManager reports a connection
+  (`/usr/lib/NetworkManager/dispatcher.d/90-bande-language-packs`). Settings ▸ Language puts the
+  languages with a pack (installed or in the APT index) first, says while Bande's text is being
+  fetched, and says when it will come once the computer is online. Settings starts
+  the service when a language changes (a polkit rule lets an active local user start this one
+  unit) and follows the job's `JobRemoved` signal on its own thread, so region and keyboard
+  changes never wait behind apt's lock; the setup assistant starts it at its end. The images install the packs of every language
+  (`language-packs --every-language`), so a first start in any language works offline.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.
@@ -89,17 +120,22 @@ nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` 
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
 `xdg-user-dirs`, which the Bande packages that use them declare:
 
-- `bande-shell` recommends NetworkManager (network menu) with Debian's connectivity check
-  (captive portals), UPower (battery), BlueZ (Bluetooth), PipeWire and WirePlumber (volume),
+- `bande-shell` depends on NetworkManager (network menu), UPower (battery) and BlueZ
+  (Bluetooth), since without them the bar would read as a computer without that hardware, and
+  recommends Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
   `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
-  only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` recommends
-  `dmz-cursor-theme`, whose `DMZ-Black` is the default pointer (`XCURSOR_THEME` unset), with the
-  system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
-  (Software Update), power-profiles-daemon (Power) and depends on `locales`, so its helper can
-  generate any language picked in Settings;
+  only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` ships Bande's own
+  pointers, so no cursor theme package comes along (see compositor.md); `bande-settings` adds
+  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
+  import), `xkb-data` and `locales`, so its helper can generate any language picked in Settings;
+  the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
+  and `systemd-resolved` are from Sharing (resolved announces shares but also takes over DNS, so
+  it is never pulled in silently);
+- every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
+  for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
 - `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
-- `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc` and the H.264 and VP8 encoders
-  for screen recording;
+- `bande-screenshot` depends on `gst-launch-1.0`, `pipewiresrc` and the VP8 encoder, so screen
+  recording always works, and recommends the H.264 encoder for MP4;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
@@ -114,6 +150,9 @@ login managers, the buses, logind, getty, `user@`, polkit, PackageKit, networkin
 container managers; it does nothing in a chroot or without systemd. It then touches
 `/run/bande-desktop/packages-installed`, which makes each logged-in user's
 `bande-update-finish.path` deal with the session's own processes ([Software Update](session.md)).
+
+Every program the desktop runs and every system file it reads by path is listed in
+`ci/runtime-deps` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.

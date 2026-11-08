@@ -1,4 +1,4 @@
-use crate::L10N;
+use bande_l10n::tr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Area {
@@ -22,12 +22,12 @@ impl Area {
 
     pub fn title(self) -> String {
         match self {
-            Self::Windows => L10N.tr("area-windows"),
-            Self::Apps => L10N.tr("area-apps"),
-            Self::Workspaces => L10N.tr("area-workspaces"),
-            Self::Screenshots => L10N.tr("area-screenshots"),
-            Self::Accessibility => L10N.tr("area-accessibility"),
-            Self::System => L10N.tr("area-system"),
+            Self::Windows => tr!("Windows"),
+            Self::Apps => tr!("Apps"),
+            Self::Workspaces => tr!("Workspaces"),
+            Self::Screenshots => tr!("Screenshots"),
+            Self::Accessibility => tr!("Accessibility"),
+            Self::System => tr!("System"),
         }
     }
 }
@@ -92,33 +92,35 @@ impl Action {
 
     pub fn label(self) -> String {
         match self {
-            Self::CloseWindow => L10N.tr("close-window"),
-            Self::MinimizeWindow => L10N.tr("minimize-window"),
-            Self::TileWindow => L10N.tr("tile-window"),
-            Self::MoveWindowToDisplay => L10N.tr("move-window-to-display"),
-            Self::NextApp => L10N.tr("next-app"),
-            Self::PreviousApp => L10N.tr("previous-app"),
-            Self::OpenTerminal => L10N.tr("open-terminal"),
-            Self::PreviousWorkspace => L10N.tr("previous-workspace"),
-            Self::NextWorkspace => L10N.tr("next-workspace"),
-            Self::Overview => L10N.tr("overview"),
-            Self::ShowDesktop => L10N.tr("show-desktop"),
-            Self::CaptureScreen => L10N.tr("capture-screen"),
-            Self::CaptureArea => L10N.tr("capture-area"),
-            Self::CaptureOptions => L10N.tr("capture-options"),
-            Self::ShowLauncher => L10N.tr("show-launcher"),
-            Self::ShowClipboardHistory => L10N.tr("show-clipboard-history"),
-            Self::ShowEmojiPicker => L10N.tr("show-emoji-picker"),
-            Self::ShowNotificationCenter => L10N.tr("show-notification-center"),
-            Self::ShowControlCenter => L10N.tr("show-control-center"),
-            Self::LockScreen => L10N.tr("lock-screen"),
-            Self::ForceQuit => L10N.tr("force-quit"),
-            Self::RestartDesktop => L10N.tr("restart-desktop"),
-            Self::TextConsole => L10N.tr("text-console"),
-            Self::ToggleZoom => L10N.tr("toggle-zoom"),
-            Self::ZoomIn => L10N.tr("zoom-in"),
-            Self::ZoomOut => L10N.tr("zoom-out"),
-            Self::ToggleScreenReader => L10N.tr("toggle-screen-reader"),
+            Self::CloseWindow => tr!("Close the window"),
+            Self::MinimizeWindow => tr!("Minimize the window"),
+            Self::TileWindow => tr!("Tile the window to a side (any arrow key)"),
+            Self::MoveWindowToDisplay => {
+                tr!("Move the window to the display beside (any arrow key)")
+            }
+            Self::NextApp => tr!("Switch apps (hold Alt to choose)"),
+            Self::PreviousApp => tr!("Switch apps backwards"),
+            Self::OpenTerminal => tr!("Open Terminal"),
+            Self::PreviousWorkspace => tr!("Previous workspace"),
+            Self::NextWorkspace => tr!("Next workspace"),
+            Self::Overview => tr!("Show all windows"),
+            Self::ShowDesktop => tr!("Show the desktop"),
+            Self::CaptureScreen => tr!("Capture the screen"),
+            Self::CaptureArea => tr!("Capture an area"),
+            Self::CaptureOptions => tr!("Screenshot and recording options"),
+            Self::ShowLauncher => tr!("Search and open apps"),
+            Self::ShowClipboardHistory => tr!("Show what you copied recently"),
+            Self::ShowEmojiPicker => tr!("Show emoji and symbols"),
+            Self::ShowNotificationCenter => tr!("Open or close the Notification Center"),
+            Self::ShowControlCenter => tr!("Open or close Control Center"),
+            Self::LockScreen => tr!("Lock Screen"),
+            Self::ForceQuit => tr!("Force Quit"),
+            Self::RestartDesktop => tr!("Restart the desktop (press twice)"),
+            Self::TextConsole => tr!("Switch to a text console (F1 to F12)"),
+            Self::ToggleZoom => tr!("Turn zoom on or off"),
+            Self::ZoomIn => tr!("Zoom in"),
+            Self::ZoomOut => tr!("Zoom out"),
+            Self::ToggleScreenReader => tr!("Turn the screen reader on or off"),
         }
     }
 }

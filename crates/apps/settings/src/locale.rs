@@ -1,18 +1,21 @@
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use zbus::blocking::Connection;
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use bande_settings_panes::{PaneId, SettingId};
+use zbus::blocking::Connection;
 
 pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_locales};
 
 const HELPER: &str = "/usr/libexec/bande-locale-helper";
+const LANGUAGE_PACKS: &str = "bande-language-packs.service";
+const PACKS: &str = "bande-desktop-l10n-";
+const OWN_CATALOGS: &str = "bande-settings";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
 const PKEXEC_DISMISSED: i32 = 126;
@@ -47,9 +50,60 @@ pub struct LocaleState {
     pub region: Option<String>,
     pub pending: Option<SettingId>,
     pub login_sources: Vec<String>,
+    pub translations: Vec<String>,
+    pub packs: Packs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Packs {
+    #[default]
+    Ready,
+    Fetching,
+    Offline,
+}
+
+#[derive(Default)]
+struct PackWatch {
+    generation: u64,
+    packs: Packs,
+}
+
+type SharedPacks = Arc<Mutex<PackWatch>>;
+
+impl PackWatch {
+    fn begin(&mut self) -> u64 {
+        self.generation += 1;
+        self.packs = Packs::Fetching;
+        self.generation
+    }
+
+    fn finish(&mut self, generation: u64, packs: Packs) -> bool {
+        let current = generation == self.generation;
+        if current {
+            self.packs = packs;
+        }
+        current
+    }
+}
+
+fn packs_now(watch: &SharedPacks) -> Packs {
+    watch.lock().unwrap_or_else(PoisonError::into_inner).packs
+}
+
+fn pack_outcome(fetched: bool, installed: bool, offered: bool) -> Packs {
+    if fetched && installed || !offered {
+        Packs::Ready
+    } else {
+        Packs::Offline
+    }
 }
 
 impl LocaleState {
+    pub fn translated(&self, code: &str) -> bool {
+        let tongue = tongue(code);
+        matches!(tongue.as_str(), "c" | "posix") || self.translations.contains(&tongue)
+    }
+
     pub fn territory(&self) -> Option<&str> {
         let code = base(self.region.as_deref().unwrap_or(&self.language));
         code.split_once('_').map(|(_, territory)| territory)
@@ -74,7 +128,7 @@ pub(crate) fn same_locale(a: &str, b: &str) -> bool {
 
 pub(crate) fn locale_label(available: &[AvailableLocale], code: &str) -> String {
     if same_locale(code, DEFAULT_LOCALE) {
-        return L10N.tr("locale-default");
+        return tr!("English (no country)");
     }
     available
         .iter()
@@ -157,13 +211,14 @@ fn run_helper(arguments: &[String]) -> Result<(), HelperFailure> {
 fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLocale]) -> String {
     let name = locale_label(available, code);
     match failure {
-        HelperFailure::NotAllowed => L10N.tr("administrator-only"),
-        HelperFailure::UnknownValue => L10N.tr_args("locale-unavailable", [("name", name.into())]),
+        HelperFailure::NotAllowed => tr!("Only an administrator can change this."),
+        HelperFailure::UnknownValue => tr!("{name} can't be used on this computer.", name = name),
         HelperFailure::Failed(reason) => {
             tracing::warn!("locale helper: {reason}");
-            L10N.tr_args(
-                "locale-not-set-up",
-                [("name", name.into()), ("reason", reason.into())],
+            tr!(
+                "Couldn't set up {name}. {reason}",
+                name = name,
+                reason = reason
             )
         }
     }
@@ -171,11 +226,11 @@ fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLoca
 
 fn keyboard_failure(failure: HelperFailure) -> String {
     match failure {
-        HelperFailure::NotAllowed => L10N.tr("administrator-only"),
-        HelperFailure::UnknownValue => L10N.tr("couldnt-change"),
+        HelperFailure::NotAllowed => tr!("Only an administrator can change this."),
+        HelperFailure::UnknownValue => tr!("Couldn't make this change."),
         HelperFailure::Failed(reason) => {
             tracing::warn!("locale helper: {reason}");
-            L10N.tr("couldnt-change")
+            tr!("Couldn't make this change.")
         }
     }
 }
@@ -212,12 +267,7 @@ fn user_lines(wanted: &[String], language: &str) -> String {
 
 fn write_user_file(contents: &str) -> std::io::Result<()> {
     let path = user_file().ok_or(std::io::ErrorKind::NotFound)?;
-    if let Some(folder) = path.parent() {
-        std::fs::create_dir_all(folder)?;
-    }
-    let temporary = path.with_extension("conf.new");
-    std::fs::write(&temporary, contents)?;
-    std::fs::rename(temporary, path)
+    bande_xdg::replace_file(&path, contents)
 }
 
 fn generated(code: &str) -> bool {
@@ -232,13 +282,19 @@ fn generated(code: &str) -> bool {
         })
 }
 
-fn read(locale: &LocaleProxyBlocking<'_>, available: &[AvailableLocale]) -> Option<LocaleState> {
+fn read(
+    locale: &LocaleProxyBlocking<'_>,
+    available: &[AvailableLocale],
+    watch: &SharedPacks,
+) -> Option<LocaleState> {
     let (language, region) = parse_assignments(&with_user_choices(locale.locale().ok()?));
     Some(LocaleState {
         available: available.to_vec(),
         language,
         region,
         pending: None,
+        translations: translations(),
+        packs: packs_now(watch),
         login_sources: login_codes(
             &locale.x11_layout().unwrap_or_default(),
             &locale.x11_variant().unwrap_or_default(),
@@ -251,31 +307,27 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
     let reader = system.clone();
     let feed = updates.clone();
     let supported: Arc<OnceLock<Vec<AvailableLocale>>> = Arc::default();
+    let watch = SharedPacks::default();
     let cached = Arc::clone(&supported);
+    let shown_packs = Arc::clone(&watch);
     spawn("locale", move || {
         let available = cached.get_or_init(read_supported);
-        match LocaleProxyBlocking::builder(&reader)
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-        {
+        match locale_proxy(&reader) {
             Ok(locale) => {
-                feed.send(Update::Locale(read(&locale, available)));
+                feed.send(Update::Locale(read(&locale, available, &shown_packs)));
             }
             Err(error) => tracing::warn!("cannot read localed: {error}"),
         }
     });
     let system = system.clone();
     spawn("locale-worker", move || {
-        let Ok(locale) = LocaleProxyBlocking::builder(&system)
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-        else {
+        let Ok(locale) = locale_proxy(&system) else {
             return;
         };
         for command in receiver {
             let available = supported.get_or_init(read_supported);
             if command == LocaleCommand::Read {
-                updates.send(Update::Locale(read(&locale, available)));
+                updates.send(Update::Locale(read(&locale, available, &watch)));
                 continue;
             }
             if let LocaleCommand::LoginKeyboard(codes) = &command {
@@ -287,7 +339,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                         keyboard_failure(failure),
                     ));
                 }
-                updates.send(Update::Locale(read(&locale, available)));
+                updates.send(Update::Locale(read(&locale, available, &watch)));
                 continue;
             }
             let (setting, chosen) = match command {
@@ -300,9 +352,13 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 Err(error) => {
                     updates.send(Update::PaneFailed(
                         PaneId::LanguageTime,
-                        explained(&error, "service-locale", "locale-read-failed"),
+                        explained(
+                            &error,
+                            text!("The language service"),
+                            text!("Couldn't read the current language and region."),
+                        ),
                     ));
-                    updates.send(Update::Locale(read(&locale, available)));
+                    updates.send(Update::Locale(read(&locale, available, &watch)));
                     continue;
                 }
             };
@@ -330,12 +386,16 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 other => other,
             };
             match outcome {
-                Ok(()) => {
-                    if let Err(error) = write_user_file(&contents) {
-                        tracing::warn!("cannot write the language choice: {error}");
-                        updates.send(Update::Failed(setting, L10N.tr("couldnt-change")));
+                Ok(()) => match write_user_file(&contents) {
+                    Ok(()) if setting == SettingId::Language => {
+                        follow_packs(&system, &updates, &watch, available, tongue(needed));
                     }
-                }
+                    Ok(()) => {}
+                    Err(error) => {
+                        tracing::warn!("cannot write the language choice: {error}");
+                        updates.send(Update::Failed(setting, tr!("Couldn't make this change.")));
+                    }
+                },
                 Err(failure) => {
                     updates.send(Update::Failed(
                         setting,
@@ -343,15 +403,106 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                     ));
                 }
             }
-            updates.send(Update::Locale(read(&locale, available)));
+            updates.send(Update::Locale(read(&locale, available, &watch)));
         }
     });
     sender
 }
 
+fn locale_proxy(system: &Connection) -> zbus::Result<LocaleProxyBlocking<'static>> {
+    LocaleProxyBlocking::builder(system)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
+}
+
+fn follow_packs(
+    system: &Connection,
+    updates: &Updates,
+    watch: &SharedPacks,
+    available: &[AvailableLocale],
+    wanted: String,
+) {
+    let generation = watch.lock().unwrap_or_else(PoisonError::into_inner).begin();
+    let system = system.clone();
+    let updates = updates.clone();
+    let watch = Arc::clone(watch);
+    let available = available.to_vec();
+    fetch_language_packs(move |fetched| {
+        let installed = installed_catalogs().contains(&wanted);
+        let offered = installed || translations().contains(&wanted);
+        let current = watch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .finish(generation, pack_outcome(fetched, installed, offered));
+        if current && let Ok(locale) = locale_proxy(&system) {
+            updates.send(Update::Locale(read(&locale, &available, &watch)));
+        }
+    });
+}
+
+pub(crate) fn fetch_language_packs(done: impl FnOnce(bool) + Send + 'static) {
+    spawn("language-packs", move || {
+        let fetched = bande_bus::system()
+            .map_err(Into::into)
+            .and_then(|system| crate::software::versions::run_unit(&system, LANGUAGE_PACKS));
+        done(
+            fetched
+                .inspect_err(|error| tracing::warn!("cannot fetch the language packs: {error}"))
+                .is_ok(),
+        );
+    });
+}
+
+fn tongue(code: &str) -> String {
+    code.split(['_', '-', '.', '@'])
+        .next()
+        .unwrap_or(code)
+        .to_lowercase()
+}
+
+fn installed_catalogs() -> Vec<String> {
+    std::fs::read_dir(std::path::Path::new(bande_l10n::CATALOGS).join(OWN_CATALOGS))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            name.strip_suffix(".mo").map(tongue)
+        })
+        .collect()
+}
+
+fn translations() -> Vec<String> {
+    let mut found = installed_catalogs();
+    match Command::new("apt-cache").args(["pkgnames", PACKS]).output() {
+        Ok(output) => found.extend(
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter_map(|name| name.strip_prefix(PACKS))
+                .map(tongue),
+        ),
+        Err(error) => tracing::warn!("cannot list the language packs: {error}"),
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
 #[cfg(test)]
 mod per_user_tests {
     use super::*;
+
+    #[test]
+    fn a_later_language_choice_owns_the_pack_row() {
+        let mut watch = PackWatch::default();
+        let first = watch.begin();
+        let second = watch.begin();
+        assert!(!watch.finish(first, pack_outcome(true, true, true)));
+        assert_eq!(watch.packs, Packs::Fetching);
+        assert!(watch.finish(second, pack_outcome(false, false, true)));
+        assert_eq!(watch.packs, Packs::Offline);
+        assert_eq!(pack_outcome(false, false, false), Packs::Ready);
+    }
 
     #[test]
     fn the_users_choice_wins_and_clearing_formats_overrides_the_system() {

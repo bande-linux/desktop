@@ -5,10 +5,10 @@ use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
-    ConfigError, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule, InputSource,
-    LidOnPower, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search, SearchCategory,
-    SecondaryClick, Sound, Style, Suspend, Trackpad, WallpaperFit, WallpaperVariant,
-    accent_keyword, same_displays,
+    ConfigError, DEFAULT_BAR_GAP, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule,
+    InputSource, LidOnPower, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search,
+    SearchCategory, SecondaryClick, Sound, Style, Suspend, Trackpad, WallpaperFit,
+    WallpaperVariant, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +31,7 @@ pub enum Setting {
     BarApps(Vec<String>),
     BarAutoHide(bool),
     BarFloating(bool),
+    BarGap(u32),
     BarIconSize(u32),
     IdleScreenSaverAfter(Option<Duration>),
     IdleDisplayOffAfter(Option<Duration>),
@@ -171,6 +172,12 @@ impl Setting {
                 Some("bar"),
                 "floating",
                 (!floating).then_some(KdlValue::Bool(false)),
+            ),
+            Self::BarGap(gap) => set(
+                &mut document,
+                Some("bar"),
+                "gap",
+                (*gap != DEFAULT_BAR_GAP).then_some(KdlValue::Integer((*gap).into())),
             ),
             Self::BarIconSize(size) => set(
                 &mut document,
@@ -574,10 +581,11 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
                 .map(|rotation| vec![pixels(rotation.degrees())]),
         ),
         (
-            "match-colours",
+            "colour-profile",
             display
-                .match_colours
-                .map(|enabled| vec![KdlValue::Bool(enabled)]),
+                .colour_profile
+                .as_ref()
+                .map(|profile| vec![KdlValue::String(profile.clone())]),
         ),
     ];
     let position = document.nodes().iter().position(|node| {

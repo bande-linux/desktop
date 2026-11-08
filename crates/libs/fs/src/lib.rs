@@ -13,8 +13,6 @@ mod watch;
 
 use std::sync::LazyLock;
 
-use bande_l10n::Localizer;
-
 pub use batch::{
     BatchItem, BatchProblem, Numbering, RenameRule, new_name, plan_renames, rename_all,
 };
@@ -44,5 +42,3 @@ pub use watch::{FolderChanges, FolderWatch};
 
 static DATES: LazyLock<bande_datetime::DateFormats> =
     LazyLock::new(bande_datetime::DateFormats::from_env);
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-fs")));

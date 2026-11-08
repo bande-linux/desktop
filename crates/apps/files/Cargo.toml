@@ -39,7 +39,7 @@ tempfile.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+depends = "$auto, bande-icon-theme, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
 The file manager of the Bande desktop: folders open in Miller columns \
 driven by the arrow keys, as in the Finder's column view, and Space shows \
@@ -50,6 +50,7 @@ assets = [
     ["data/org.bande.Files.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Files.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/org.freedesktop.FileManager1.service", "usr/share/dbus-1/services/", "644"],
+    ["target/release/l10n/development/bande-files/*", "usr/share/bande/l10n/bande-files/", "644"],
 ]
 
 [lints]

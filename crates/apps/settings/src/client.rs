@@ -141,6 +141,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_bar_floating(&self, floating: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn bar_gap(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn set_bar_gap(&self, gap: u32) -> zbus::Result<()>;
+    #[zbus(property)]
     fn bar_auto_hide(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_bar_auto_hide(&self, auto_hide: bool) -> zbus::Result<()>;
@@ -301,13 +305,14 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
             .get("rotation")
             .and_then(|value| u32::try_from(value).ok())
             .and_then(Rotation::from_degrees),
-        match_colours: settings
-            .get("match-colours")
-            .and_then(|value| bool::try_from(value).ok()),
+        colour_profile: settings
+            .get("colour-profile")
+            .and_then(|value| value.try_clone().ok())
+            .and_then(|value| String::try_from(value).ok()),
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 78] = [
+pub const CONFIG_SETTINGS: [SettingId; 79] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::Clock24Hour,
@@ -344,6 +349,7 @@ pub const CONFIG_SETTINGS: [SettingId; 78] = [
     SettingId::BarIconSize,
     SettingId::BarAutoHide,
     SettingId::BarFloating,
+    SettingId::BarGap,
     SettingId::BarEdge,
     SettingId::ScreenSaverAfter,
     SettingId::DisplayOffAfter,
@@ -458,8 +464,8 @@ impl SettingsClient {
         if let Some(rotation) = display.rotation {
             settings.insert("rotation", rotation.degrees().into());
         }
-        if let Some(enabled) = display.match_colours {
-            settings.insert("match-colours", enabled.into());
+        if let Some(profile) = &display.colour_profile {
+            settings.insert("colour-profile", profile.as_str().into());
         }
         self.config.set_display(identity, settings)
     }
@@ -569,6 +575,7 @@ impl SettingsClient {
             SettingId::BarIconSize => Value::Number(self.config.bar_icon_size()?),
             SettingId::BarAutoHide => Value::Flag(self.config.bar_auto_hide()?),
             SettingId::BarFloating => Value::Flag(self.config.bar_floating()?),
+            SettingId::BarGap => Value::Number(self.config.bar_gap()?),
             SettingId::BarEdge => Value::Keyword(self.config.bar_edge()?),
             SettingId::ScreenSaverAfter => Value::Seconds(self.config.idle_screen_saver_after()?),
             SettingId::DisplayOffAfter => Value::Seconds(self.config.idle_display_off_after()?),
@@ -716,6 +723,7 @@ impl SettingsClient {
                 self.config.set_wallpaper_fit(keyword)
             }
             (SettingId::BarIconSize, Value::Number(size)) => self.config.set_bar_icon_size(*size),
+            (SettingId::BarGap, Value::Number(gap)) => self.config.set_bar_gap(*gap),
             (SettingId::BarFloating, Value::Flag(floating)) => {
                 self.config.set_bar_floating(*floating)
             }

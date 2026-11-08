@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{self, Read};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 const PRIVATE_BITS: u32 = 0o077;
@@ -11,6 +11,8 @@ pub struct Config {
     pub key: Option<String>,
     pub ca: Option<PathBuf>,
     pub send: bool,
+    pub stack_memory: bool,
+    pub signature_tag: Option<String>,
 }
 
 impl Config {
@@ -46,6 +48,8 @@ impl Config {
                 "key" => config.key = Some(value.to_owned()),
                 "ca" => config.ca = Some(PathBuf::from(value)),
                 "send" => config.send = value == "on",
+                "stack_memory" => config.stack_memory = value == "on",
+                "signature_tag" => config.signature_tag = Some(value.to_owned()),
                 _ => {}
             }
         }
@@ -59,4 +63,28 @@ impl Config {
     pub fn sends_automatically(&self) -> bool {
         self.send && self.server().is_some()
     }
+}
+
+pub fn set_sending(path: &Path, on: bool) -> io::Result<()> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error),
+    };
+    let mut lines: Vec<String> = text
+        .lines()
+        .filter(|line| line.split('=').next().map(str::trim) != Some("send"))
+        .map(str::to_owned)
+        .collect();
+    lines.push(format!("send = {}", if on { "on" } else { "off" }));
+    let staged = path.with_extension("new");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&staged)?;
+    std::io::Write::write_all(&mut file, format!("{}\n", lines.join("\n")).as_bytes())?;
+    file.sync_all()?;
+    std::fs::rename(&staged, path)
 }

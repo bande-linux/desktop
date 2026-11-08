@@ -1,22 +1,31 @@
 use std::path::PathBuf;
 
 use accesskit::{Node, Role};
+use bande_l10n::{Text, text};
 use bande_toolkit::ui::{BUTTON_HEIGHT, Button, Context, Size, Widget, WidgetId};
 use bande_toolkit::{Item, Paragraph, Point, Rect, Shape, Spacing, TextAlign, TextRole, TextStyle};
 
 use crate::modules::symbol;
 use crate::now_playing::fitted;
-use crate::{Change, Changes, L10N};
+use crate::{Change, Changes};
 
 pub const HEIGHT: f32 = 32.0;
 const AVATAR: f32 = 28.0;
 const BUTTON_GAP: f32 = Spacing::XS as f32;
 
-const BUTTONS: [(&str, &str, Change); 3] = [
-    ("lock-screen", "system-lock-screen-symbolic", Change::Lock),
-    ("power", "system-shutdown-symbolic", Change::Power),
+const BUTTONS: [(Text, &str, Change); 3] = [
     (
-        "system-settings",
+        text!("Lock Screen"),
+        "system-lock-screen-symbolic",
+        Change::Lock,
+    ),
+    (
+        text!("Sleep, Restart or Shut Down"),
+        "system-shutdown-symbolic",
+        Change::Power,
+    ),
+    (
+        text!("System Settings"),
         "emblem-system-symbolic",
         Change::Settings,
     ),
@@ -32,14 +41,15 @@ pub struct PersonRow {
 }
 
 impl PersonRow {
-    pub fn new(name: &str, icon_dirs: &[PathBuf], changes: &Changes) -> Self {
+    pub fn new(name: &str, icon_dirs: &[PathBuf], settings: bool, changes: &Changes) -> Self {
         let buttons = BUTTONS
             .iter()
+            .filter(|(_, _, change)| settings || *change != Change::Settings)
             .map(|(label, glyph, change)| {
                 let changes = Changes::clone(changes);
                 let change = change.clone();
                 let push = move || changes.borrow_mut().push(change.clone());
-                let label = L10N.tr(label);
+                let label = label.tr();
                 let button: Box<dyn Widget> = match symbol(glyph, icon_dirs) {
                     Some(image) => Box::new(Button::symbol(image, &label, push)),
                     None => Box::new(Button::new(&label, push)),

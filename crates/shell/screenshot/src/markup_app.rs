@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_fs::Trash;
-use bande_screenshot::L10N;
+use bande_l10n::tr;
 use bande_screenshot::markup::{Command, Commanded, Markup, TOOLBAR_HEIGHT, Toolbar};
 use bande_toolkit::ui::{Context, Event, FreeLayout, Key, Size, Ui, Widget, WidgetId};
 use bande_toolkit::{
@@ -324,7 +324,7 @@ pub fn run(path: &Path) -> Result<(), WindowError> {
     let title = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| L10N.tr("markup"));
+        .unwrap_or_else(|| tr!("Markup"));
     let mut window = Window::open(Role::toplevel(&title, APP_ID), size)?;
     let appearance = window.appearance();
     let markup = Markup::new(width, height);

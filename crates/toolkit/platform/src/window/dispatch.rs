@@ -34,7 +34,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
 };
 
 use super::{State, ToplevelState, WindowEvent};
-use crate::shell::{OFFER_PLACEMENTS_SINCE, SHELL_VERSION};
+use crate::shell::{POPOVER_SINCE, SHELL_VERSION};
 
 impl Dispatch<WlRegistry, ()> for State {
     fn event(
@@ -137,7 +137,7 @@ impl Dispatch<WlRegistry, ()> for State {
                 }
                 "bande_app_v1" => {
                     state.shell.app =
-                        Some(registry.bind(name, version.min(OFFER_PLACEMENTS_SINCE), handle, ()));
+                        Some(registry.bind(name, version.min(POPOVER_SINCE), handle, ()));
                 }
                 "bande_app_control_v1" => {
                     state.shell.app_control_global = Some((registry.clone(), name));
@@ -291,6 +291,7 @@ impl Dispatch<WlCallback, ()> for State {
     ) {
         if let wl_callback::Event::Done { .. } = event {
             state.frame_pending = false;
+            state.frame_done = true;
         }
     }
 }

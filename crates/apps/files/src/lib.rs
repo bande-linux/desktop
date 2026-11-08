@@ -30,10 +30,6 @@ mod trouble;
 mod view;
 mod views;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use backups::backups_installed;
 pub use batch_rename::{BatchRename, RuleKind};
 pub use browser::{Browser, Column, Location, RowEdit};
@@ -47,7 +43,7 @@ pub use servers::{ServerAnswer, ServerRequest, ServersSeen};
 pub use settings::{FilesSettings, SETTINGS_SIZE, StartFolder, settings_view};
 pub use sidebar::{
     BookmarkEdit, Place, PlaceKind, Row, SidebarEdit, favourites, hidden_places, layout_text, rows,
-    standard_places, volumes_hidden, with_bookmarks, with_nearby, with_place_shown, with_volumes,
+    standard_places, volumes_hidden, with_bookmarks, with_place_shown, with_volumes,
     without_bookmark,
 };
 pub use tabs::{CarriedTab, SavedTab, TAB_BAR_HEIGHT};
@@ -60,6 +56,3 @@ pub use views::{
     FolderView, ListColumn, SIDEBAR_FILE, ViewMemory, ViewMode, list_columns_file,
     recent_folders_file, sidebar_file, status_bar_file, views_file,
 };
-
-pub static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-files")));

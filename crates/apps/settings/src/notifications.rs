@@ -1,18 +1,18 @@
 use std::sync::mpsc::{self, Sender};
 
+use bande_l10n::{text, tr};
 use bande_notify::client::NotificationCenter;
+use bande_xdg::{Locale, applications, current_desktops, data_dirs, notifying_app_name};
 use zbus::blocking::Connection;
 
-use bande_settings_panes::PaneId;
-use bande_toolkit::TextRole;
-use bande_toolkit::ui::{Label, SegmentedControl, Toggle, Widget, WidgetId};
-
-use crate::L10N;
 use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Anchor, Intent, Intents, SettingsView, intent};
 use crate::widgets::{Card, HEADER_SYMBOL, Header, Row, Text, Tone};
+use bande_settings_panes::PaneId;
+use bande_toolkit::TextRole;
+use bande_toolkit::ui::{Label, SegmentedControl, Toggle, Widget, WidgetId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppNotifications {
@@ -31,12 +31,17 @@ pub enum NotificationCommand {
 }
 
 fn read(rules: &NotificationCenter<'_>) -> zbus::Result<Vec<AppNotifications>> {
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
     let mut apps: Vec<AppNotifications> = rules
         .get_apps()?
         .into_iter()
         .map(
             |(group, name, allow, banners, in_center, sound)| AppNotifications {
-                name: if name.is_empty() { group.clone() } else { name },
+                name: notifying_app_name(&entries, &group, &name),
                 group,
                 allow,
                 banners,
@@ -71,7 +76,7 @@ pub fn follow_app_notifications(
             {
                 updates.send(pane_failed(
                     PaneId::Notifications,
-                    "notification-change-failed",
+                    text!("Couldn't change the notification settings for this app."),
                     error,
                 ));
             }
@@ -90,16 +95,24 @@ pub fn follow_app_notifications(
 
 const BANNER_STYLES: [&str; 3] = ["temporary", "persistent", "off"];
 
+fn banner_label(style: &str) -> String {
+    match style {
+        "temporary" => tr!("Temporary"),
+        "persistent" => tr!("Persistent"),
+        _ => tr!(context = "banners", "None"),
+    }
+}
+
 fn summary(app: &AppNotifications) -> String {
     if !app.allow {
-        return L10N.tr("notifications-off");
+        return tr!("Off");
     }
-    let banners = L10N.tr(&format!("banners-{}", app.banners));
+    let banners = banner_label(&app.banners);
     match (app.banners.as_str(), app.in_center) {
-        ("off", true) => L10N.tr("center-only"),
-        ("off", false) => L10N.tr("notifications-off"),
-        (_, true) => L10N.tr_args("banners-and-center", [("banners", banners.into())]),
-        (_, false) => L10N.tr_args("banners-only", [("banners", banners.into())]),
+        ("off", true) => tr!("Notification Center only"),
+        ("off", false) => tr!("Off"),
+        (_, true) => tr!("{banners} banners, Notification Center", banners = banners),
+        (_, false) => tr!("{banners} banners", banners = banners),
     }
 }
 
@@ -131,12 +144,12 @@ impl SettingsView {
 
     fn app_rule_rows(&mut self, app: &AppNotifications) -> Widgets {
         let mut allow = rule_setter(&self.intents, app, |app, on| app.allow = on == 1);
-        let toggle = Toggle::new(&L10N.tr("allow-notifications"), app.allow, move |on| {
+        let toggle = Toggle::new(&tr!("Allow notifications"), app.allow, move |on| {
             allow(usize::from(on))
         });
         let focus = toggle.id();
         let mut rows = vec![self.rule_row(
-            &L10N.tr("allow-notifications"),
+            &tr!("Allow notifications"),
             boxed(toggle),
             focus,
             format!("allow:{}", app.group),
@@ -146,7 +159,7 @@ impl SettingsView {
         }
         let labels: Vec<String> = BANNER_STYLES
             .iter()
-            .map(|style| L10N.tr(&format!("banners-{style}")))
+            .map(|style| banner_label(style))
             .collect();
         let selected = BANNER_STYLES.iter().position(|style| *style == app.banners);
         let mut style = rule_setter(&self.intents, app, |app, index| {
@@ -155,34 +168,36 @@ impl SettingsView {
             }
         });
         let segmented =
-            SegmentedControl::new(&L10N.tr("banner-style"), &labels, selected, move |index| {
+            SegmentedControl::new(&tr!("Banner style"), &labels, selected, move |index| {
                 style(index)
             });
         let focus = segmented.id();
         rows.push(self.rule_row(
-            &L10N.tr("banner-style"),
+            &tr!("Banner style"),
             boxed(segmented),
             focus,
             format!("banners:{}", app.group),
         ));
         let mut center = rule_setter(&self.intents, app, |app, on| app.in_center = on == 1);
-        let toggle = Toggle::new(&L10N.tr("show-in-center"), app.in_center, move |on| {
-            center(usize::from(on))
-        });
+        let toggle = Toggle::new(
+            &tr!("Show in Notification Center"),
+            app.in_center,
+            move |on| center(usize::from(on)),
+        );
         let focus = toggle.id();
         rows.push(self.rule_row(
-            &L10N.tr("show-in-center"),
+            &tr!("Show in Notification Center"),
             boxed(toggle),
             focus,
             format!("center:{}", app.group),
         ));
         let mut sound = rule_setter(&self.intents, app, |app, on| app.sound = on == 1);
-        let toggle = Toggle::new(&L10N.tr("play-sound"), app.sound, move |on| {
+        let toggle = Toggle::new(&tr!("Play sound for notifications"), app.sound, move |on| {
             sound(usize::from(on))
         });
         let focus = toggle.id();
         rows.push(self.rule_row(
-            &L10N.tr("play-sound"),
+            &tr!("Play sound for notifications"),
             boxed(toggle),
             focus,
             format!("sound:{}", app.group),
@@ -195,7 +210,9 @@ impl SettingsView {
             return Vec::new();
         };
         if apps.is_empty() {
-            return vec![muted_row(&L10N.tr("no-notification-apps"))];
+            return vec![muted_row(&tr!(
+                "Apps appear here after they send a notification"
+            ))];
         }
         let mut rows = Vec::new();
         for app in apps {

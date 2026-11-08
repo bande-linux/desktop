@@ -2,11 +2,11 @@ use std::ops::Range;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_graphics::{Color, Item, Path, Point, Rect, Shape};
+use bande_l10n::tr;
 
 use super::{
     Context, Cursor, DragAction, Event, Key, Menu, Parts, Size, TextField, Widget, WidgetId,
 };
-use crate::L10N;
 
 const LEADING: f32 = 24.0;
 const TRAILING: f32 = 22.0;
@@ -141,7 +141,7 @@ impl Widget for SearchField {
         if let Some(button) = self.clear_button() {
             let id = self.id().part(CLEAR_PART);
             let mut node = Node::new(Role::Button);
-            node.set_label(L10N.tr("clear-search"));
+            node.set_label(tr!("Clear"));
             node.add_action(Action::Click);
             node.set_bounds(accesskit::Rect {
                 x0: f64::from(button.x),

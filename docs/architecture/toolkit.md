@@ -16,7 +16,7 @@ How it grows to AppKit depth is decided in
   tokens. No Wayland.
 - `bande-widgets` (`crates/toolkit/widgets`): the widget tree and widgets, on graphics only,
   so widget tests need no compositor.
-- **Text checking.** `TextField` and `TextView` ask `bande-spell` (`org.bande.Spell`) through the platform's client thread; nothing runs until text is visible or typed, and an absent service changes nothing. Each language's dictionary variant follows the user's language list, then their region (`en_GB` for a British region when installed, otherwise the language's default from its data file); Settings offers to install the matching one, and autocorrect never changes a word another installed variant of the same language accepts. Red underlines, autocorrect, smart quotes and the other text features live in `editor`; `without_text_checking()` opts a field out, and a monospace `TextView` is out. Language rules are data in `usr/share/bande/text/<tag>`, English as fallback, and Swedish emoji names in `usr/share/bande/emoji/<tag>.tsv`.
+- **Text checking.** `TextField` and `TextView` ask `bande-spell` (`org.bande.Spell`) through the platform's client thread; nothing runs until text is visible or typed, and an absent service changes nothing. Each language's dictionary variant follows the user's language list, then their region (`en_GB` for a British region when installed, otherwise the language's default from its data file); Settings offers to install the matching one, and autocorrect never changes a word another installed variant of the same language accepts. Red underlines, autocorrect, smart quotes and the other text features live in `editor`; `without_text_checking()` opts a field out, and a monospace `TextView` is out. Language rules are data in `usr/share/bande/text/<tag>`, English as fallback, and Swedish emoji names in `usr/share/bande/emoji/<tag>.tsv`. The service lists dictionaries and reads language data once, and again only when their folders change; an answer redraws windows only when an underline or the text can change.
 - `bande-toolkit-platform` (`crates/toolkit/platform`): Wayland windows and roles, seat input,
   clipboard, text input, capture, the run loop, accessibility publication and appearance.
 - `bande-toolkit` (`crates/toolkit/toolkit`): the facade apps depend on; `ui` is
@@ -175,7 +175,17 @@ writes a hex value, a corner radius or a font name of its own.
     full-screen one keeps the size it was given (a fixed one is then released to floating by the
     compositor). A fixed floating window ignores configure sizes, so its own size wins. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
-  only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. A
+  only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. After a GPU frame that
+  uploaded images, the frame callback's arrival polls the device without waiting, so wgpu frees
+  the upload's staging memory then rather than at the next frame, which may never come. When a hardware render
+  node exists and every render node belongs to a Mesa driver (not a VM's `virtio_gpu`, and not
+  when `BANDE_RENDERER` or a `VK_*` driver override is set), the window's Vulkan instance loads
+  only that driver itself and hands it to the loader through `VK_LUNARG_direct_driver_loading`,
+  so the loader opens no other driver, lavapipe and its LLVM included; anything else takes the
+  loader's usual path. No app changes its own environment, so programs it starts inherit nothing
+  from this. On the M2 that cuts a window's Vulkan start from about 40 to
+  17 ms and its resident memory by 4 MB anonymous and 47 MB file-backed (LLVM is no longer
+  mapped); the shell drops from 153 to 83 MiB. A
   window whose background is opaque declares its window rectangle as its opaque region, so
   the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `bande-bench` starts
   to measure.
@@ -239,7 +249,14 @@ writes a hex value, a corner radius or a font name of its own.
   glides to its new rows on `quick`. `Table::set_headings` adds group headings (semibold
   `ink` over a `hairline`, one row tall) above the rows that start each group, as Files' Use
   Groups does, and level 2 heading nodes before those rows so screen readers announce each
-  group; a selection run never spans a heading. `Row::dimmed` tones a row down one ink step
+  group; a selection run never spans a heading. In a `Table::sidebar` the headings are source-list
+  section titles instead (`Label` in `ink3`, no hairline, clicks on them select nothing; a right click on a row
+  opens the menu for that row without selecting it), and
+  `Heading::button(symbol, name, command)` puts a 20 pt symbol button at the trailing edge (the
+  symbol in `ink2`, a `well` fill on hover, the name as its tooltip and accessible label) that
+  reports `command` to `Table::on_heading_button`, as the + beside a source list's section does.
+  `Cell::badge(tint)` draws the cell's text as a capsule: `Callout` medium in the tint on the tint
+  at 16 %, `on_accent` on a lit row, for a status or tag. `Row::dimmed` tones a row down one ink step
   with its icons at `Palette::DIMMED_ALPHA`, for normally hidden files. `Column::movable`
   columns can be dragged along the header: the whole column lifts and follows the pointer,
   neighbours slide aside on `standard`, Escape puts it back, and a click without a drag still

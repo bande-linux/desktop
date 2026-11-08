@@ -1,0 +1,7 @@
+# name sha256 url: the source data, checked by build.py, fetched from our copy (MIRROR) first; refreshed by build.py --pin
+oewn-2025.zip 73355e48f8117a24ca9ebc23ed75b35434e6cd21cc9dd3984e80aff5a5f63636 https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.zip
+mythes-sv.deb 07b96d598ebba95e61f94197bb590f49983c2314a6fc9099dcf3a76592b92af1 https://snapshot.debian.org/archive/debian/20260827T022640Z/pool/main/libr/libreoffice-dictionaries/mythes-sv_26.8.0.3-1_all.deb
+folkets_sv_en_public.xml b4b135e9f0e540e259c8c5363248541f095533d4a1f1443e3f559c3410b7674f https://folkets-lexikon.csc.kth.se/folkets/folkets_sv_en_public.xml
+folkets_en_sv_public.xml 9ca6d026426c1ec2294b0bcb3cb0c074bc44ecafd713fe607715b58f31a379b2 https://folkets-lexikon.csc.kth.se/folkets/folkets_en_sv_public.xml
+kaikki-sv.jsonl 1121d05e5b1fdee55d95d857700bd9f2fec333b9d404877082e83742e7b9df01 https://kaikki.org/dictionary/Swedish/kaikki.org-dictionary-Swedish.jsonl
+kaikki-en.jsonl ce2b80e5ad1132f14cedd2f531a606e1f0c6aeab422d50515e88db13a16a59a7 https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl

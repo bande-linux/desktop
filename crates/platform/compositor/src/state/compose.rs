@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 
 use super::{Compositor, OutputElement, State, is_mapped};
+use crate::cursor_set::Pointer;
 use crate::element::ScreenElement;
 use smithay::backend::renderer::Renderer as _;
 use smithay::backend::renderer::element::Kind as ElementKind;
@@ -304,6 +305,13 @@ impl Compositor {
         (elements, drawn, icon)
     }
 
+    pub fn shown_cursor(&self) -> Option<&'static str> {
+        match self.state.drawn_cursor() {
+            Shown::Pointer(pointer) => Some(pointer.name()),
+            Shown::Hidden | Shown::Surface(_) => None,
+        }
+    }
+
     pub(crate) fn cursor_elements(
         &self,
         renderer: &mut VulkanRenderer,
@@ -314,22 +322,9 @@ impl Compositor {
             return Vec::new();
         }
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
-        let busy = CursorImageStatus::Named(CursorIcon::Wait);
-        let dragging = state.drag_cursor().map(CursorImageStatus::Named);
-        let over_hung_app = state
-            .seat
-            .get_pointer()
-            .and_then(|pointer| pointer.current_focus())
-            .and_then(|surface| surface.client())
-            .is_some_and(|owner| state.watchdog.is_unresponsive(&owner.id()));
-        let status = match &dragging {
-            Some(dragging) => dragging,
-            None if over_hung_app => &busy,
-            None => &state.cursor_status,
-        };
-        match status {
-            CursorImageStatus::Hidden => Vec::new(),
-            CursorImageStatus::Surface(surface) => {
+        match &state.drawn_cursor() {
+            Shown::Hidden => Vec::new(),
+            Shown::Surface(surface) => {
                 let hotspot = with_states(surface, |states| {
                     states
                         .data_map
@@ -347,10 +342,10 @@ impl Compositor {
                     ElementKind::Cursor,
                 )
             }
-            CursorImageStatus::Named(icon) => {
+            Shown::Pointer(pointer) => {
                 let cursor = state
                     .named_cursors
-                    .get(icon)
+                    .get(pointer)
                     .and_then(Option::as_ref)
                     .unwrap_or(&state.cursor_arrow);
                 MemoryRenderBufferRenderElement::from_buffer(
@@ -373,7 +368,29 @@ impl Compositor {
     }
 }
 
+enum Shown {
+    Hidden,
+    Surface(WlSurface),
+    Pointer(Pointer),
+}
+
 impl State {
+    fn drawn_cursor(&self) -> Shown {
+        let over_hung_app = self
+            .seat
+            .get_pointer()
+            .and_then(|pointer| pointer.current_focus())
+            .and_then(|surface| surface.client())
+            .is_some_and(|owner| self.watchdog.is_unresponsive(&owner.id()));
+        match (self.owned_cursor(), &self.cursor_status) {
+            (Some(pointer), _) => Shown::Pointer(pointer),
+            (None, _) if over_hung_app => Shown::Pointer(CursorIcon::Wait.into()),
+            (None, CursorImageStatus::Named(icon)) => Shown::Pointer((*icon).into()),
+            (None, CursorImageStatus::Surface(surface)) => Shown::Surface(surface.clone()),
+            (None, CursorImageStatus::Hidden) => Shown::Hidden,
+        }
+    }
+
     pub(crate) fn placed_layers(
         &self,
         screen: usize,
@@ -462,7 +479,7 @@ impl State {
                     Band::Front
                 } else if window.is_minimized() {
                     Band::Leaving
-                } else if window.keep_on_top || window.panel {
+                } else if window.keep_on_top || window.panel || window.popover {
                     Band::OnTop
                 } else {
                     Band::Rest

@@ -34,7 +34,7 @@ bande-test-wayland.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter"
+depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope"
 extended-description = """\
 The dialogs of xdg-desktop-portal-bande: the Bande Open and Save dialogs \
 (favourite places and volumes in a sidebar, a path bar, a sortable list \
@@ -44,6 +44,7 @@ questions, adding an app or web app to Applications, sharing the account's \
 name and picture, and setting the desktop picture."""
 assets = [
     ["target/release/bande-file-chooser", "usr/libexec/", "755"],
+    ["target/release/l10n/development/bande-file-chooser/*", "usr/share/bande/l10n/bande-file-chooser/", "644"],
 ]
 
 [lints]

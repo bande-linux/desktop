@@ -261,7 +261,7 @@ SMC DC-in updates at 1 Hz and scatters by 1 W. Paired rounds, mode against idle,
 
 ## T. Frame scheduler
 
-Authorised by the owner to be built, in stages, with the kill switch `BANDE_FRAME_TIMING=classic`, which keeps the old rule until the new one has proved itself on the real display. Built: the scheduler, `bande-flip-report`, honest `wp_presentation` and per-surface callback timing (see `compositor.md`). Remaining below.
+Authorised by the owner to be built, in stages, behind `BANDE_FRAME_TIMING=learned`; classic stays the default until the new rule has proved itself on the real display (it left a KVM/llvmpipe session black on 2026-11-07). Built: the scheduler, `bande-flip-report`, honest `wp_presentation` and per-surface callback timing (see `compositor.md`). Remaining below.
 
 **What a user feels:** dragging stops running at half rate. Typing and pointer respond up to a frame sooner. At 144 Hz the desktop actually reaches 144.
 
@@ -300,7 +300,7 @@ Pinned: KWin `1bc2e471`, Mutter `b766717a`, sway `1652c54b`, wlroots `1dedee12`,
 5. **Late input:** a timer wake dispatches all ready sources in one loop pass, including libinput, before `poll` runs **[code]**. So the latch sees the latest input as long as it starts as late as it safely can. Nothing else is needed; a separate thread is later work (K).
 6. **Idle:** no timers unless `wanted`, or a client asked a callback with no damage (one wake at the slot, as niri). Same rule at any rate. Phase holds across idle, since the link runs free.
 7. **Mode change, mixed outputs:** `FrameClock` per output, replaced with the new mode (keeps the render prediction, drops phase and lead). Outputs share one thread until stage 6: a frame on one delays the other; pad handles what's left.
-8. **Repeated misses:** lead and pad raise themselves; if a window of 128 frames still shows over 5 % missed, render one slot later: a fixed pipeline depth would be D. Logged once. `BANDE_FRAME_TIMING=classic` restores the old rule in full.
+8. **Repeated misses:** lead and pad raise themselves; if a window of 128 frames still shows over 5 % missed, render one slot later: a fixed pipeline depth would be D. Logged once. Leaving out `BANDE_FRAME_TIMING=learned` restores the old rule in full.
 
 ### Stages
 
@@ -331,7 +331,7 @@ sudo perf script -i /tmp/flip.data | bande-flip-report
 | Learning misses at start | one lost frame per session | accepted; unnoticeable |
 | Lead too small after a change in load | a few misses | raises at once; `lead` is per output |
 | A hung flip | as today | `FLIP_TIMEOUT`, recovery unchanged |
-| New logic wrong in the field | judder, half rate | `BANDE_FRAME_TIMING=classic`, a session restart away; no kernel change |
+| New logic wrong in the field | judder, half rate | classic is the default; `learned` is opt-in |
 | Sim doesn't match DCP | good sim, bad display | owner's command is the gate, not the sim |
 | Stage 1 changes draw time | moves numbers | learned, not constants; a1e373 told; re-measure once both landed |
 

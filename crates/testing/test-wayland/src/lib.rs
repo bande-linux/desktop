@@ -5,6 +5,7 @@ pub use ime::grant_consent;
 pub use separate::{SeparateApp, act_as_separate_app};
 pub use toplevel::PopupRequest;
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
+pub use wayland_protocols::xdg::shell::client::xdg_toplevel::ResizeEdge;
 mod drive;
 mod foreign;
 mod ime;

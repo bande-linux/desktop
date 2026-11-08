@@ -3,13 +3,13 @@ use std::path::PathBuf;
 use std::process::Command as Process;
 use std::sync::mpsc::{self, Sender};
 
-use bande_toolkit::ui::Toggle;
+use bande_l10n::{text, tr};
 
-use crate::L10N;
 use crate::follow::{Command, Update, Updates, spawn};
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
+use bande_toolkit::ui::Toggle;
 
 const GRANTED_DIRECTORY: &str = "/var/lib/bande/consent";
 const ASKED_FILE: &str = "bande/consent-asked";
@@ -31,11 +31,11 @@ impl KeyboardAccess {
         let (access, _, name) = self.parts()?;
         let program = name.rsplit('/').next().unwrap_or(name);
         let key = match access {
-            "read-keys" => "keyboard-access-reads",
-            "type-keys" => "keyboard-access-types",
+            "read-keys" => text!("{program} can read what you type in text fields"),
+            "type-keys" => text!("{program} can type for you"),
             _ => return None,
         };
-        Some(L10N.tr_args(key, [("program", program.into())]))
+        Some(key.tr_args(&[("program", &program as &dyn std::fmt::Display)]))
     }
 }
 
@@ -109,7 +109,9 @@ pub fn follow_keyboard_access(updates: Updates) -> Sender<(String, bool)> {
 impl SettingsView {
     pub(crate) fn keyboard_access_rows(&mut self) -> Widgets {
         if self.keyboard_access.is_empty() {
-            return vec![muted_row(&L10N.tr("keyboard-access-none"))];
+            return vec![muted_row(&tr!(
+                "No program has asked to read or type your keystrokes. Password fields and the lock screen stay private either way."
+            ))];
         }
         let mut rows: Widgets = Vec::new();
         for access in self.keyboard_access.clone() {

@@ -1,8 +1,8 @@
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
+use bande_l10n::tr;
 
 use super::control::paint_field;
 use super::{Context, Cursor, Event, Key, Size, Widget, WidgetId};
-use crate::L10N;
 use bande_graphics::{
     ControlSize, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
@@ -225,7 +225,7 @@ impl Widget for SecureField {
         let mut node = Node::new(Role::PasswordInput);
         node.set_placeholder(self.placeholder.clone());
         if cx.caps_lock && cx.is_focused(self.id) {
-            node.set_description(L10N.tr("caps-lock-on"));
+            node.set_description(tr!("Caps Lock is on"));
         }
         node.add_action(Action::Focus);
         node.add_action(Action::SetValue);

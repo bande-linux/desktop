@@ -1,8 +1,8 @@
+use bande_l10n::tr;
 use bande_toolkit::ui::{Axis, Button, Stack, Table, WidgetId};
 use bande_toolkit::{ControlSize, Item, Point, Rect, TextAlign, TextRole, TextStyle};
 use bande_volumes::{connected_volume_of, on_connected_volume};
 
-use crate::L10N;
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
 use crate::tabs::location_title;
@@ -19,32 +19,30 @@ impl FilesView {
         let column = self.browser.columns().get(index)?;
         let connected = column.folder().is_some_and(on_connected_volume);
         if column.entries.is_empty() && connected && column.is_listing() {
-            return Some(L10N.tr("server-waiting"));
+            return Some(tr!("Waiting for the server…"));
         }
         if !column.entries.is_empty() || column.is_listing() {
             return None;
         }
         Some(match &column.location {
-            Location::Folder(_) if column.unavailable => L10N.tr("server-not-responding"),
-            Location::Folder(_) if column.denied => L10N.tr_args(
-                "no-permission",
-                [("folder", location_title(&column.location).into())],
+            Location::Folder(_) if column.unavailable => {
+                tr!("The server isn’t responding. Files here can’t be reached right now.")
+            }
+            Location::Folder(_) if column.denied => tr!(
+                "You don’t have permission to see the contents of “{folder}”.",
+                folder = location_title(&column.location)
             ),
-            Location::Folder(_) => L10N.tr("empty-folder"),
-            Location::Trash => L10N.tr("trash-empty"),
-            Location::Recents => L10N.tr("recents-empty"),
-            Location::Server(_) => L10N.tr("empty-folder"),
+            Location::Folder(_) => tr!("Empty Folder"),
+            Location::Trash => tr!("The Trash is empty"),
+            Location::Recents => tr!("Files you open appear here"),
+            Location::Server { .. } => tr!("Empty Folder"),
+            Location::Network => tr!("Computers and servers on your network appear here"),
             Location::Search(scope) => {
                 let searching = self.searching.as_ref().filter(|shown| shown.answered)?;
-                L10N.tr_args(
-                    "no-results",
-                    [
-                        ("text", searching.text.clone().into()),
-                        (
-                            "folder",
-                            location_title(&Location::Folder(scope.clone())).into(),
-                        ),
-                    ],
+                tr!(
+                    "No results for “{text}” in {folder}",
+                    text = searching.text.clone(),
+                    folder = location_title(&Location::Folder(scope.clone())),
                 )
             }
         })
@@ -67,7 +65,7 @@ impl FilesView {
             Some(button) => self.remove(button),
             None => {
                 let send = sender(&self.signals);
-                let button = Button::new(&L10N.tr("search-home"), move || {
+                let button = Button::new(&tr!("Search Home"), move || {
                     send(Signal::Scope(true));
                 })
                 .quiet();
@@ -99,10 +97,10 @@ impl FilesView {
                     GAP,
                     0.0,
                     vec![
-                        Box::new(Button::new(&L10N.tr("try-again"), move || {
+                        Box::new(Button::new(&tr!("Try Again"), move || {
                             again(Signal::TryConnectionAgain);
                         })),
-                        Box::new(Button::new(&L10N.tr("server-disconnect"), move || {
+                        Box::new(Button::new(&tr!("Disconnect"), move || {
                             disconnect(Signal::DisconnectCurrent);
                         })),
                     ],
@@ -155,7 +153,7 @@ impl FilesView {
         let height = self.ui.context().control_height(ControlSize::Regular);
         let ink = self.palette.ink;
         let label = self.text().paragraph(
-            &L10N.tr("search-home"),
+            &tr!("Search Home"),
             TextStyle::role(TextRole::Body, ink),
             None,
             TextAlign::Start,

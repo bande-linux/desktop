@@ -2,12 +2,11 @@ use std::cell::Cell;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::LazyLock;
 use std::sync::mpsc::{self, Sender};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use bande_l10n::Localizer;
+use bande_l10n::tr;
 use bande_toolkit::ui::{Alert, Context, Size, Ui};
 use bande_toolkit::{AppConnection, Appearance, TextSystem, WindowError, WindowInSession};
 use serde::de::DeserializeOwned;
@@ -16,9 +15,6 @@ use serde_json::Value;
 
 use crate::cx::Content;
 use crate::{Cx, Kind, Program, WindowId};
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-app")));
 
 const RESUME_FOLDER: &str = "bande/resume";
 const SAVE_AFTER: Duration = Duration::from_secs(1);
@@ -161,7 +157,7 @@ impl Resume {
         link: &AppConnection,
         kind: Kind,
     ) -> Option<WindowInSession> {
-        if matches!(kind, Kind::Dialog(_) | Kind::Panel(_)) {
+        if matches!(kind, Kind::Dialog(_) | Kind::Panel(_) | Kind::Popover(_)) {
             return None;
         }
         let restoring = self.opening.is_some();
@@ -298,13 +294,17 @@ pub(crate) struct ReopenPrompt;
 impl ReopenPrompt {
     pub(crate) fn open<P: Program>(cx: &mut Cx<P>) -> Result<(), WindowError> {
         let app = (cx.info.name)();
-        let title = L10N.tr_args("reopen-question", [("app", app.into())]);
+        let title = tr!("{app} quit while reopening its windows", app = app);
         let answer = Rc::clone(&cx.resume.answer);
-        let alert = Alert::new(&title, &L10N.tr("reopen-detail"), move |action: &str| {
-            answer.set(Some(action == REOPEN));
-        })
-        .primary(&L10N.tr("reopen-yes"), REOPEN)
-        .cancel(&L10N.tr("reopen-no"), DO_NOT_REOPEN);
+        let alert = Alert::new(
+            &title,
+            &tr!("Reopen them again? If it keeps quitting, choose Don't Reopen."),
+            move |action: &str| {
+                answer.set(Some(action == REOPEN));
+            },
+        )
+        .primary(&tr!("Reopen"), REOPEN)
+        .cancel(&tr!("Don't Reopen"), DO_NOT_REOPEN);
         let appearance = Appearance::default();
         let mut ui = Ui::new(
             Box::new(alert),

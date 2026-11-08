@@ -5,12 +5,11 @@ use std::thread;
 use std::time::Duration;
 
 use bande_fs::format_size;
+use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
-
-use crate::L10N;
 
 pub const CHECK_EVERY: Duration = Duration::from_secs(10 * 60);
 const GIGABYTE: u64 = 1_000_000_000;
@@ -100,21 +99,22 @@ impl SpaceWatch {
     }
 
     fn warn(&self, available: u64) {
-        let manage = L10N.tr("manage-storage");
+        let manage = tr!("Manage Storage…");
         let posted = client::notify(
             &self.session,
             &Request {
-                app_name: &L10N.tr("storage"),
+                app_name: &tr!("Storage"),
                 replaces_id: 0,
                 app_icon: "drive-harddisk",
-                summary: &L10N.tr("disk-almost-full"),
-                body: &L10N.tr_args(
-                    "disk-almost-full-body",
-                    [("free", format_size(available).into())],
+                summary: &tr!("Your disk is almost full"),
+                body: &tr!(
+                    "Only {free} is left. Make room by removing files you no longer need.",
+                    free = format_size(available)
                 ),
                 actions: &[(MANAGE_STORAGE, &manage)],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         match posted {

@@ -1,0 +1,363 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Taskbar"
+msgstr "Aktivitetsfält"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Reopen windows when logging back in"
+msgstr "Öppna fönster igen när du loggar in på nytt"
+
+msgid "Reopen your apps?"
+msgstr "Vill du öppna dina appar igen?"
+
+msgid "Your last session ended unexpectedly. These apps were open: {apps}."
+msgstr "Din senaste session avslutades oväntat. De här apparna var öppna: {apps}."
+
+msgid "Reopen"
+msgstr "Öppna igen"
+
+msgid "Don't Reopen"
+msgstr "Öppna inte igen"
+
+msgid "System"
+msgstr "System"
+
+msgid "Chip"
+msgstr "Chip"
+
+msgid "Memory"
+msgstr "Minne"
+
+msgid "Desktop"
+msgstr "Skrivbord"
+
+msgid "About This Computer"
+msgstr "Om den här datorn"
+
+msgid "Version {version}"
+msgstr "Version {version}"
+
+msgid "About {app}"
+msgstr "Om {app}"
+
+msgid "App"
+msgstr "App"
+
+msgid "Force Quit"
+msgstr "Tvinga avslut"
+
+msgid "Activity Monitor"
+msgstr "Aktivitetskontroll"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Your computer is running low on memory"
+msgstr "Datorn har snart slut på minne"
+
+msgid "Quit apps you are not using to keep everything else fast. These apps are using the most memory:"
+msgstr "Avsluta appar som du inte använder så att allt annat förblir snabbt. De här apparna använder mest minne:"
+
+msgid "No open apps are using much memory."
+msgstr "Inga öppna appar använder särskilt mycket minne."
+
+msgid "Force quit {app}?"
+msgstr "Vill du tvinga {app} att avsluta?"
+
+msgid "Any unsaved changes in it are lost."
+msgstr "Ändringar som inte har sparats går förlorade."
+
+msgid "{name} · ends at {time}"
+msgstr "{name} · slutar {time}"
+
+msgid "{name} · {time}"
+msgstr "{name} · {time}"
+
+msgid "Open Clock"
+msgstr "Öppna Klocka"
+
+msgid "Do Not Disturb"
+msgstr "Stör ej"
+
+msgid "Notifications Settings…"
+msgstr "Notisinställningar…"
+
+msgid "Date & Time Settings…"
+msgstr "Inställningar för datum och tid…"
+
+msgid "Force Quit…"
+msgstr "Tvinga avslut…"
+
+msgid "Force Quit “{app}”"
+msgstr "Tvinga ”{app}” att avsluta"
+
+msgid "System Settings…"
+msgstr "Systeminställningar…"
+
+msgid "Sleep"
+msgstr "Vila"
+
+msgid "Restart…"
+msgstr "Starta om…"
+
+msgid "Shut Down…"
+msgstr "Stäng av…"
+
+msgid "Lock Screen"
+msgstr "Låsskärm"
+
+msgid "Log Out {user}…"
+msgstr "Logga ut {user}…"
+
+msgid "Battery {percent}%"
+msgstr "Batteri {percent} %"
+
+msgid "Fully Charged"
+msgstr "Fulladdat"
+
+msgid "{time} remaining"
+msgstr "{time} kvar"
+
+msgid "{time} until full"
+msgstr "{time} till fulladdat"
+
+msgid "Estimating…"
+msgstr "Uppskattar…"
+
+msgid "Power Source: Power Adapter"
+msgstr "Strömkälla: nätadapter"
+
+msgid "Power Source: Battery"
+msgstr "Strömkälla: batteri"
+
+msgid "Show Percentage"
+msgstr "Visa procent"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Sign in required"
+msgstr "Inloggning krävs"
+
+msgid "Sign In…"
+msgstr "Logga in…"
+
+msgid "Known Networks"
+msgstr "Kända nätverk"
+
+msgid "Other Networks"
+msgstr "Andra nätverk"
+
+msgid "{name} (secured)"
+msgstr "{name} (skyddat)"
+
+msgid "Wi-Fi Settings…"
+msgstr "Wi-Fi-inställningar…"
+
+msgid "Volume {percent}%"
+msgstr "Volym {percent} %"
+
+msgid "Mute"
+msgstr "Ljud av"
+
+msgid "Output"
+msgstr "Utgång"
+
+msgid "Sound Settings…"
+msgstr "Ljudinställningar…"
+
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
+msgid "Devices"
+msgstr "Enheter"
+
+msgid "{name} · {percent}%"
+msgstr "{name} · {percent} %"
+
+msgid "Forget Device"
+msgstr "Glöm enhet"
+
+msgid "Bluetooth Settings…"
+msgstr "Bluetooth-inställningar…"
+
+msgid "Open Keyboard Settings…"
+msgstr "Öppna tangentbordsinställningar…"
+
+msgid "Hide {app}"
+msgstr "Dölj {app}"
+
+msgid "Hide Others"
+msgstr "Dölj övriga"
+
+msgid "Show All"
+msgstr "Visa alla"
+
+msgid "Quit {app}"
+msgstr "Avsluta {app}"
+
+msgid "Type to search"
+msgstr "Skriv för att söka"
+
+msgid "No Results"
+msgstr "Inga resultat"
+
+msgid "Does {device} show the code {code}?"
+msgstr "Visar {device} koden {code}?"
+
+msgid "Allow {device} to connect?"
+msgstr "Vill du tillåta att {device} ansluter?"
+
+msgid "Type {code} on {device}, then press Return on it."
+msgstr "Skriv {code} på {device} och tryck sedan på Retur."
+
+msgid "Enter the PIN for {device}."
+msgstr "Ange PIN-koden för {device}."
+
+msgid "Pair"
+msgstr "Koppla"
+
+msgid "Allow"
+msgstr "Tillåt"
+
+msgid "Deny"
+msgstr "Neka"
+
+msgid "PIN"
+msgstr "PIN-kod"
+
+msgid "Pairing Request"
+msgstr "Begäran om parkoppling"
+
+msgid "{app} is using the microphone"
+msgstr "{app} använder mikrofonen"
+
+msgid "{app} is using the camera"
+msgstr "{app} använder kameran"
+
+msgid "{app} is using the microphone and camera"
+msgstr "{app} använder mikrofonen och kameran"
+
+msgid "Control Center"
+msgstr "Kontrollcenter"
+
+msgid "{percent}%"
+msgstr "{percent} %"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "More status items"
+msgstr "Fler statusobjekt"
+
+msgid "Input source: {name}"
+msgstr "Inmatningskälla: {name}"
+
+msgid "Sound"
+msgstr "Ljud"
+
+msgid "Battery status unavailable — the power service isn't running"
+msgstr "Batteristatus är inte tillgänglig – strömtjänsten körs inte"
+
+msgid "{time}, unread notifications"
+msgstr "{time}, olästa notiser"
+
+msgid "{time}, Do Not Disturb"
+msgstr "{time}, Stör ej"
+
+msgid "Desktop {number}"
+msgstr "Skrivbord {number}"
+
+msgid "Status items"
+msgstr "Statusobjekt"
+
+msgid "Power Settings…"
+msgstr "Ströminställningar…"
+
+msgid "Wi-Fi unavailable — the network service isn't running"
+msgstr "Wi-Fi är inte tillgängligt – nätverkstjänsten körs inte"
+
+msgid "Bluetooth unavailable — the Bluetooth service isn't running"
+msgstr "Bluetooth är inte tillgängligt – Bluetooth-tjänsten körs inte"
+
+msgid "Trash"
+msgstr "Papperskorg"
+
+msgid "+{count}"
+msgstr "+{count}"
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "opening"
+msgstr "öppnas"
+
+msgid "running"
+msgstr "körs"
+
+msgid "active"
+msgstr "aktiv"
+
+msgid "{count} new"
+msgstr "{count} nya"
+
+msgid "{percent} % done"
+msgstr "{percent} % klart"
+
+msgid "needs attention"
+msgstr "kräver uppmärksamhet"
+
+msgid "contains items"
+msgstr "innehåller objekt"
+
+msgid "One more app"
+msgid_plural "{count} more apps"
+msgstr[0] "En app till"
+msgstr[1] "{count} appar till"
+
+msgid "Permanently erase the item in the Trash?"
+msgid_plural "Permanently erase the {count} items in the Trash?"
+msgstr[0] "Vill du radera objektet i papperskorgen permanent?"
+msgstr[1] "Vill du radera de {count} objekten i papperskorgen permanent?"
+
+msgid "You can’t undo this."
+msgstr "Det går inte att ångra."
+
+msgid "Empty Trash"
+msgstr "Töm papperskorgen"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Empty Trash…"
+msgstr "Töm papperskorgen…"
+
+msgid "◇ {title}"
+msgstr "◇ {title}"
+
+msgid "Keep in Taskbar"
+msgstr "Behåll i aktivitetsfältet"
+
+msgid "Open at Login"
+msgstr "Öppna vid inloggning"
+
+msgid "Show in Files"
+msgstr "Visa i Filer"
+
+msgid "Options"
+msgstr "Alternativ"
+
+msgid "Hide"
+msgstr "Dölj"
+
+msgid "Quit"
+msgstr "Avsluta"

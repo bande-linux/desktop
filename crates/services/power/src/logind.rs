@@ -6,9 +6,8 @@ pub use bande_bus::logind::{
     ManagerProxyBlocking, SessionProxyBlocking, follow_blocked, follow_locked_hint, inhibit,
     own_session,
 };
+use bande_l10n::tr;
 use zbus::blocking::Connection;
-
-use crate::L10N;
 
 #[derive(Default)]
 struct LockedHint {
@@ -56,7 +55,7 @@ impl SleepGuard {
                     &system,
                     "sleep",
                     "Bande",
-                    &L10N.tr("lock-before-sleep"),
+                    &tr!("Lock the screen before the computer sleeps"),
                     "delay",
                 )
             }

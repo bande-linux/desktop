@@ -1,4 +1,3 @@
-use bande_inbox::Inbox;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -12,9 +11,11 @@ use bande_app::TabDrop;
 use bande_content::Preview;
 use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, Format,
-    History, Operations, Purpose, RenameError, Resolution, Running, Sort, Step, Task, TrashItem,
-    archive_path, can_extract,
+    History, Kind, Operations, Purpose, RenameError, Resolution, Running, Sort, Step, Task,
+    TrashItem, archive_path, can_extract,
 };
+use bande_inbox::Inbox;
+use bande_l10n::{tr, trn};
 use bande_quick_look::QuickLookLink;
 use bande_search::{Usage, recent_files, recently_used};
 use bande_thumbnails::Thumbnails;
@@ -26,12 +27,8 @@ use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, 
 use bande_volumes::{
     EjectFailure, SavedServer, mounted_volumes, on_connected_volume, quick_is_dir, volume_icon,
 };
+use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri};
 
-use crate::servers::{ServerDone, ServerRequest, ServersSeen};
-use crate::sidebar::with_nearby;
-use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
-
-use crate::L10N;
 use crate::backups::BackupBar;
 use crate::browser::{Browser, Location};
 use crate::controls::{Formats, Press, Signals};
@@ -39,6 +36,7 @@ use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
+use crate::servers::{ServerDone, ServerRequest, ServersSeen};
 use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
 use crate::tabs::{TabSlot, location_title};
@@ -233,6 +231,7 @@ pub enum Request {
     NewWindow,
     OpenTerminal(PathBuf),
     ShowEmojiPicker,
+    LookUp(String),
     PlaySound(&'static str),
     ShowHidden(bool),
 }
@@ -241,6 +240,7 @@ pub struct FilesView {
     pub(crate) browser: Browser,
     pub(crate) sidebar: Vec<Row>,
     pub(crate) apps: Apps,
+    pub(crate) terminal: bool,
     pub(crate) icons: Icons,
     pub(crate) palette: Palette,
     pub(crate) ui: Ui,
@@ -299,9 +299,10 @@ pub struct FilesView {
     pub(crate) server_token: u64,
     pub(crate) server_work: Option<Inbox<ServerDone>>,
     pub(crate) free_on_server: Option<(PathBuf, u64)>,
+    pub(crate) shares_of: Option<ServerRequest>,
     pub(crate) next_refresh: Option<Instant>,
     pub(crate) window_active: bool,
-    nearby: Vec<(String, String)>,
+    pub(crate) network: Vec<Entry>,
     pub(crate) unresponsive: Vec<PathBuf>,
     pub(crate) sheet_primary: Option<WidgetId>,
     pub(crate) favourites: Vec<Row>,
@@ -334,20 +335,34 @@ pub struct FilesView {
 }
 
 fn step_title(step: &Step) -> String {
-    let id = match step.action {
-        Action::Copy => "edit-copy",
-        Action::Move => "edit-move",
-        Action::Duplicate => "edit-duplicate",
-        Action::Rename => "edit-rename",
-        Action::NewFolder => "edit-new-folder",
-        Action::NewDocument => "edit-new-document",
-        Action::Trash => "edit-trash",
-        Action::PutBack => "edit-put-back",
-        Action::Compress => "edit-compress",
-        Action::Extract => "edit-extract",
-        Action::MakeAlias => "edit-make-alias",
-    };
-    L10N.tr_args(id, [("count", step.changes.len().into())])
+    let count = step.changes.len();
+    match step.action {
+        Action::Copy => trn!(
+            "Copy of {count} Item",
+            "Copy of {count} Items",
+            count = count
+        ),
+        Action::Move => trn!(
+            "Move of {count} Item",
+            "Move of {count} Items",
+            count = count
+        ),
+        Action::Duplicate => {
+            trn!(
+                "Duplicate of {count} Item",
+                "Duplicate of {count} Items",
+                count = count
+            )
+        }
+        Action::Rename => tr!(context = "undo", "Rename"),
+        Action::NewFolder => tr!(context = "undo", "New Folder"),
+        Action::NewDocument => tr!(context = "undo", "New Document"),
+        Action::Trash => tr!(context = "undo", "Move to Trash"),
+        Action::PutBack => tr!(context = "undo", "Put Back"),
+        Action::Compress => tr!(context = "undo", "Compress"),
+        Action::Extract => tr!("Extract"),
+        Action::MakeAlias => tr!(context = "undo", "Make Alias"),
+    }
 }
 
 pub(crate) fn home() -> PathBuf {
@@ -355,10 +370,7 @@ pub(crate) fn home() -> PathBuf {
 }
 
 pub(crate) fn user_folder(dir: UserDir) -> PathBuf {
-    let home = home();
-    let user_dirs = bande_xdg::config_home()
-        .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
-    user_dir(&home, user_dirs.as_deref(), dir)
+    bande_xdg::user_folder(&home(), dir)
 }
 
 fn pasted_paths(text: &str) -> Vec<PathBuf> {
@@ -394,6 +406,7 @@ impl FilesView {
             browser,
             sidebar,
             apps,
+            terminal: false,
             icons,
             palette,
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
@@ -452,9 +465,10 @@ impl FilesView {
             server_token: 0,
             server_work: Inbox::new().ok(),
             free_on_server: None,
+            shares_of: None,
             next_refresh: None,
             window_active: true,
-            nearby: Vec::new(),
+            network: Vec::new(),
             unresponsive: Vec::new(),
             sheet_primary: None,
             favourites: Vec::new(),
@@ -526,17 +540,21 @@ impl FilesView {
             .cloned()
             .collect::<Vec<_>>();
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-        let rows = with_volumes(sidebar, &shown, |volume| {
+        with_volumes(sidebar, &shown, |volume| {
             match self.unresponsive.iter().any(|known| known == volume) {
                 true => UNRESPONSIVE_ICON,
                 false => volume_icon(&mountinfo, volume),
             }
-        });
-        with_nearby(&rows, &self.nearby)
+        })
     }
 
     pub fn set_nearby(&mut self, seen: ServersSeen) {
-        self.nearby = seen.nearby;
+        self.network = seen
+            .nearby
+            .into_iter()
+            .map(|(name, url)| Entry::server(name, url))
+            .collect();
+        self.browser.set_network(self.network.clone());
         self.unresponsive = seen.unresponsive;
         self.sidebar = self.with_volumes(&self.favourites, &self.mounted);
         self.menu_place = None;
@@ -1500,10 +1518,6 @@ impl FilesView {
     }
 
     pub fn go(&mut self, location: Location) {
-        if let Location::Server(url) = location {
-            self.connect_to(url);
-            return;
-        }
         self.commit_rename();
         self.end_search();
         self.browser.go(location);
@@ -1630,9 +1644,10 @@ impl FilesView {
             self.browser.reveal(&path);
             self.selection_changed();
         } else {
-            self.show_notice(
-                L10N.tr_args("error-go-to", [("path", path.display().to_string().into())]),
-            );
+            self.show_notice(tr!(
+                "“{path}” can’t be found.",
+                path = path.display().to_string()
+            ));
         }
     }
 
@@ -1761,6 +1776,7 @@ impl FilesView {
             Key::Character('n' | 'N') if command && shift => self.new_folder(),
             Key::Character('l' | 'L') if command && !shift => self.ask_go_to(),
             Key::Character('k' | 'K') if command && !shift => self.ask_connect(),
+            Key::Character('k' | 'K') if command => self.go(Location::Network),
             Key::Character('1') if command => self.set_mode(ViewMode::Icons),
             Key::Character('2') if command => self.set_mode(ViewMode::List),
             Key::Character('=' | '+') if command => self.grow_icons(true),
@@ -1940,13 +1956,20 @@ impl FilesView {
 
     pub(crate) fn start(&mut self, task: Task, purpose: Purpose) {
         if let Err(error) = self.operations.start(task, purpose) {
-            self.show_notice(
-                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-            );
+            self.show_notice(tr!(
+                "The operation couldn’t be completed: {error}",
+                error = error.to_string()
+            ));
         }
     }
 
     pub(crate) fn open(&mut self) {
+        if let Some(server) = self.browser.chosen_server()
+            && let Some(url) = server.server_address()
+        {
+            self.connect_to(url.to_owned(), server.name.clone());
+            return;
+        }
         let selection = self
             .browser
             .selection()
@@ -2036,9 +2059,10 @@ impl FilesView {
                     info.default = Some(app.id.clone());
                 }
             }
-            Err(error) => self.show_notice(
-                L10N.tr_args("error-default-app", [("error", error.to_string().into())]),
-            ),
+            Err(error) => self.show_notice(tr!(
+                "The default app couldn’t be changed: {error}",
+                error = error.to_string()
+            )),
         }
     }
 
@@ -2063,7 +2087,11 @@ impl FilesView {
     }
 
     pub(crate) fn shown_name<'a>(&self, entry: &'a Entry) -> &'a str {
-        let hidden = self.hidden_extension(&entry.name, entry.is_folder(), entry.extension_hidden);
+        let hidden = self.hidden_extension(
+            &entry.name,
+            entry.kind != Kind::File,
+            entry.extension_hidden,
+        );
         &entry.name[..entry.name.len() - hidden.map_or(0, str::len)]
     }
 
@@ -2106,14 +2134,22 @@ impl FilesView {
             Ok(None) => {}
             Err(error) => {
                 let message = match error {
-                    RenameError::Empty => L10N.tr("rename-empty"),
-                    RenameError::ContainsSlash => L10N.tr("rename-slash"),
-                    RenameError::Reserved => L10N.tr("rename-reserved"),
+                    RenameError::Empty => tr!("A name can’t be empty."),
+                    RenameError::ContainsSlash => tr!("A name can’t contain “/”."),
+                    RenameError::Reserved => {
+                        tr!("The names “.” and “..” are reserved by the system.")
+                    }
                     RenameError::Exists => {
-                        L10N.tr_args("rename-exists", [("name", name.to_owned().into())])
+                        tr!(
+                            "The name “{name}” is already taken. Please choose a different name.",
+                            name = name.to_owned()
+                        )
                     }
                     RenameError::Io(error) => {
-                        L10N.tr_args("error-operation", [("error", error.to_string().into())])
+                        tr!(
+                            "The operation couldn’t be completed: {error}",
+                            error = error.to_string()
+                        )
                     }
                 };
                 self.show_notice(message);
@@ -2206,9 +2242,10 @@ impl FilesView {
                 self.operations.record(action, vec![change]);
                 self.start_rename();
             }
-            Err(error) => self.show_notice(
-                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-            ),
+            Err(error) => self.show_notice(tr!(
+                "The operation couldn’t be completed: {error}",
+                error = error.to_string()
+            )),
         }
     }
 
@@ -2261,9 +2298,10 @@ impl FilesView {
             match bande_fs::make_alias(&path) {
                 Ok(change) => changes.push(change),
                 Err(error) => {
-                    self.show_notice(
-                        L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-                    );
+                    self.show_notice(tr!(
+                        "The operation couldn’t be completed: {error}",
+                        error = error.to_string()
+                    ));
                     break;
                 }
             }
@@ -2328,13 +2366,13 @@ impl FilesView {
     pub fn undo_title(&self) -> Option<String> {
         let history = self.operations.history();
         let step = history.next_undo()?;
-        Some(L10N.tr_args("menu-undo-action", [("action", step_title(step).into())]))
+        Some(tr!("Undo {action}", action = step_title(step)))
     }
 
     pub fn redo_title(&self) -> Option<String> {
         let history = self.operations.history();
         let step = history.next_redo()?;
-        Some(L10N.tr_args("menu-redo-action", [("action", step_title(step).into())]))
+        Some(tr!("Redo {action}", action = step_title(step)))
     }
 
     pub fn share_history(&mut self, history: Rc<RefCell<History>>) {
@@ -2388,17 +2426,19 @@ impl FilesView {
 
     fn undo(&mut self) {
         if let Err(error) = self.operations.undo() {
-            self.show_notice(
-                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-            );
+            self.show_notice(tr!(
+                "The operation couldn’t be completed: {error}",
+                error = error.to_string()
+            ));
         }
     }
 
     fn redo(&mut self) {
         if let Err(error) = self.operations.redo() {
-            self.show_notice(
-                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-            );
+            self.show_notice(tr!(
+                "The operation couldn’t be completed: {error}",
+                error = error.to_string()
+            ));
         }
     }
 
@@ -2462,14 +2502,21 @@ impl FilesView {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            self.show_notice(L10N.tr_args(
-                "error-item",
-                [
-                    ("name", name.into()),
-                    ("error", failure.error.to_string().into()),
-                    ("others", (outcome.failures.len() - 1).into()),
-                ],
-            ));
+            let error = failure.error.to_string();
+            self.show_notice(match outcome.failures.len() - 1 {
+                0 => tr!(
+                    "“{name}” couldn’t be handled: {error}",
+                    name = name,
+                    error = error
+                ),
+                others => trn!(
+                    "“{name}” couldn’t be handled: {error} ({others} more)",
+                    "“{name}” couldn’t be handled: {error} ({others} more)",
+                    others = others,
+                    name = name,
+                    error = error
+                ),
+            });
         }
         if matches!(self.sheet, Some(Sheet::Conflict { .. } | Sheet::Failure))
             && self.operations.conflict().is_none()

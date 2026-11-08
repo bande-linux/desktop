@@ -172,7 +172,7 @@ The frame scheduler (`rendering-hard.md` T) learns flip times, render times and 
 
 ## Owner steps
 
-1. **Colour after installing.** Reds and greens will look calmer on the MSI monitor. Compare against the monitor's own sRGB mode; Settings ▸ Displays ▸ Match colours turns it off. Set the monitor back to its wide default first, or it is converted twice.
+1. **Colour after installing.** Reds and greens will look calmer on the MSI monitor. Compare against the monitor's own sRGB mode; Settings ▸ Displays ▸ Colour profile ▸ None turns it off, and sRGB, Display P3 or an added ICC profile replace the EDID's. Set the monitor back to its wide default first, or it is converted twice.
 2. **Optional DCP probe**, only if the coordinator builds a test kernel anyway: `echo 1 | sudo tee /sys/module/appledrm/parameters/srgb_surfaces`, compare, then `echo 0`.
 3. **Latency with a phone.** 240 fps slow motion, framing a key and the screen, in Terminal at 120 Hz. Ten presses; count frames from the key bottoming out to the glyph (each 4.2 ms). Add the same with a mouse button and a menu. The mouse and keyboard's own delay is included, so it compares only against the same run on a Mac. Ten minutes, before and after stage 6.
 4. **After stage 1,** drag a large window in Glass on the real display; the frame numbers need the real path.

@@ -1,6 +1,10 @@
+use std::path::Path;
+
 use zbus::blocking::Connection;
 
 use crate::{Error, ErrorCode, Failure};
+
+const RESULTS: &str = "/var/lib/PackageKit/offline-update-competed";
 
 #[zbus::proxy(
     interface = "org.freedesktop.PackageKit.Offline",
@@ -35,17 +39,18 @@ pub fn trigger(system: &Connection) -> Result<(), Error> {
 }
 
 pub fn results(system: &Connection) -> Result<Option<Results>, Error> {
-    match OfflineProxyBlocking::new(system)?.get_results() {
-        Ok((true, ids, ..)) => Ok(Some(Results::Installed(ids))),
-        Ok((false, _, _, _, code, details)) => Ok(Some(Results::Failed(Failure {
-            code: ErrorCode::from_raw(code),
-            details,
-        }))),
-        Err(error) => match Error::from(error) {
-            Error::Bus(zbus::Error::MethodError(..)) => Ok(None),
-            other => Err(other),
-        },
+    if !Path::new(RESULTS).exists() {
+        return Ok(None);
     }
+    Ok(Some(
+        match OfflineProxyBlocking::new(system)?.get_results()? {
+            (true, ids, ..) => Results::Installed(ids),
+            (false, _, _, _, code, details) => Results::Failed(Failure {
+                code: ErrorCode::from_raw(code),
+                details,
+            }),
+        },
+    ))
 }
 
 pub fn clear_results(system: &Connection) -> Result<(), Error> {

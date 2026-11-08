@@ -1,17 +1,16 @@
 use bande_datetime::DateFormats;
 use bande_keyboard::{Action, keys_of};
+use bande_l10n::{text, tr};
 use bande_toolkit::ui::{Menu, MenuItem};
 use jiff::{Timestamp, Zoned};
 
+use crate::rail::in_use;
 use bande_status::Command;
 use bande_status::clock_app::ClockApp;
 use bande_status::dbusmenu::{Node, command};
 use bande_status::status::{
     Battery, Bluetooth, Capture, InputSources, Power, Sound, Wifi, hours_and_minutes,
 };
-
-use crate::L10N;
-use crate::rail::in_use;
 
 fn item(title: &str, command: &Command) -> MenuItem {
     MenuItem::new(title, &command.action())
@@ -21,11 +20,26 @@ fn note(title: &str) -> MenuItem {
     MenuItem::new(title, "").enabled(false)
 }
 
-fn settings(pane: &str) -> MenuItem {
-    item(
-        &L10N.tr(&format!("{pane}-settings")),
-        &Command::Settings(Some(pane.to_owned())),
-    )
+fn settings(title: String, pane: &str) -> MenuItem {
+    item(&title, &Command::Settings(Some(pane.to_owned())))
+}
+
+pub fn without_settings(menu: Menu) -> Menu {
+    let mut items: Vec<MenuItem> = Vec::new();
+    for mut entry in menu.items {
+        if matches!(Command::parse(&entry.action), Some(Command::Settings(_))) {
+            continue;
+        }
+        if entry.separator && items.last().is_none_or(|last| last.separator) {
+            continue;
+        }
+        entry.submenu = entry.submenu.map(without_settings);
+        items.push(entry);
+    }
+    if items.last().is_some_and(|last| last.separator) {
+        items.pop();
+    }
+    Menu { items, ..menu }
 }
 
 fn clock_time(dates: &DateFormats, at: &Zoned) -> String {
@@ -46,9 +60,10 @@ fn clock_items(clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Vec<Me
         .filter_map(|(name, ends)| {
             let ends = local(*ends)?;
             let time = clock_time(dates, &ends);
-            Some(note(&L10N.tr_args(
-                "clock-timer",
-                [("name", name.clone().into()), ("time", time.into())],
+            Some(note(&tr!(
+                "{name} · ends at {time}",
+                name = name.clone(),
+                time = time
             )))
         })
         .collect();
@@ -63,13 +78,14 @@ fn clock_items(clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Vec<Me
                 clock_time(dates, &at)
             ),
         };
-        items.push(note(&L10N.tr_args(
-            "clock-alarm",
-            [("name", name.clone().into()), ("time", time.into())],
+        items.push(note(&tr!(
+            "{name} · {time}",
+            name = name.clone(),
+            time = time
         )));
     }
     if has_clock {
-        items.push(item(&L10N.tr("open-clock"), &Command::OpenClock));
+        items.push(item(&tr!("Open Clock"), &Command::OpenClock));
     }
     if !items.is_empty() {
         items.push(MenuItem::separator());
@@ -80,84 +96,84 @@ fn clock_items(clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Vec<Me
 pub fn clock_menu(quiet: bool, clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Menu {
     let mut items = clock_items(clock, dates, has_clock);
     items.extend([
-        item(
-            &L10N.tr("do-not-disturb"),
-            &Command::SetDoNotDisturb(!quiet),
-        )
-        .checked(quiet),
+        item(&tr!("Do Not Disturb"), &Command::SetDoNotDisturb(!quiet)).checked(quiet),
         MenuItem::separator(),
-        settings("notifications"),
-        settings("language-time"),
+        settings(tr!("Notifications Settings…"), "notifications"),
+        settings(tr!("Date & Time Settings…"), "language-time"),
     ]);
     Menu::new(items)
 }
 
 pub fn system_menu(user: &str, frontmost: Option<&str>, can_sleep: bool) -> Menu {
-    let force_quit = item(&L10N.tr("force-quit"), &Command::ForceQuit);
+    let force_quit = item(&tr!("Force Quit…"), &Command::ForceQuit);
     let force_quit = match frontmost {
         Some(app) => force_quit.shift_alternate(item(
-            &L10N.tr_args("force-quit-app", [("app", app.to_owned().into())]),
+            &tr!("Force Quit “{app}”", app = app.to_owned()),
             &Command::ForceQuitApp,
         )),
         None => force_quit,
     };
     let mut items = vec![
-        item(&L10N.tr("about"), &Command::About),
+        item(&tr!("About This Computer"), &Command::About),
         MenuItem::separator(),
-        item(&L10N.tr("system-settings"), &Command::Settings(None)),
+        item(&tr!("System Settings…"), &Command::Settings(None)),
         MenuItem::separator(),
         force_quit,
         MenuItem::separator(),
     ];
     if can_sleep {
-        items.push(item(&L10N.tr("sleep"), &Command::Sleep));
+        items.push(item(&tr!("Sleep"), &Command::Sleep));
     }
     items.extend([
-        item(&L10N.tr("restart"), &Command::Restart),
-        item(&L10N.tr("shut-down"), &Command::ShutDown),
+        item(&tr!("Restart…"), &Command::Restart),
+        item(&tr!("Shut Down…"), &Command::ShutDown),
         MenuItem::separator(),
-        item(&L10N.tr("lock-screen"), &Command::LockScreen)
+        item(&tr!("Lock Screen"), &Command::LockScreen)
             .shortcut(&keys_of(Action::LockScreen).unwrap_or_default()),
         item(
-            &L10N.tr_args("log-out", [("user", user.to_owned().into())]),
+            &tr!("Log Out {user}…", user = user.to_owned()),
             &Command::LogOut,
         ),
     ]);
     Menu::new(items)
 }
 
+pub fn unavailable_menu(reason: String, settings_title: String, pane: &str) -> Menu {
+    Menu::new(vec![
+        note(&reason),
+        MenuItem::separator(),
+        settings(settings_title, pane),
+    ])
+}
+
 pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
-    let percent = [("percent", battery.percent.round().into())];
-    let mut items = vec![note(&L10N.tr_args("battery-level", percent))];
+    let mut items = vec![note(&tr!(
+        "Battery {percent}%",
+        percent = battery.percent.round()
+    ))];
     let estimate = match battery.power {
-        Power::Full => L10N.tr("battery-full"),
+        Power::Full => tr!("Fully Charged"),
         Power::Battery {
             remaining: Some(remaining),
-        } => L10N.tr_args(
-            "battery-remaining",
-            [("time", hours_and_minutes(remaining).into())],
-        ),
+        } => tr!("{time} remaining", time = hours_and_minutes(remaining)),
         Power::Charging {
             until_full: Some(until_full),
-        } => L10N.tr_args(
-            "battery-until-full",
-            [("time", hours_and_minutes(until_full).into())],
-        ),
+        } => tr!("{time} until full", time = hours_and_minutes(until_full)),
         Power::Battery { remaining: None } | Power::Charging { until_full: None } => {
-            L10N.tr("battery-estimating")
+            tr!("Estimating…")
         }
     };
     items.push(note(&estimate));
     items.push(MenuItem::separator());
     items.push(note(&if battery.on_adapter() {
-        L10N.tr("power-source-adapter")
+        tr!("Power Source: Power Adapter")
     } else {
-        L10N.tr("power-source-battery")
+        tr!("Power Source: Battery")
     }));
     items.push(MenuItem::separator());
     items.push(
         item(
-            &L10N.tr("show-battery-percentage"),
+            &tr!("Show Percentage"),
             &Command::ShowBatteryPercentage(!percentage_shown),
         )
         .checked(percentage_shown),
@@ -167,11 +183,11 @@ pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
 
 pub fn wifi_menu(wifi: &Wifi) -> Menu {
     let mut items =
-        vec![item(&L10N.tr("wifi"), &Command::SetWifi(!wifi.enabled)).checked(wifi.enabled)];
+        vec![item(&tr!("Wi-Fi"), &Command::SetWifi(!wifi.enabled)).checked(wifi.enabled)];
     if wifi.sign_in {
         items.push(MenuItem::separator());
-        items.push(note(&L10N.tr("sign-in-required")));
-        items.push(item(&L10N.tr("sign-in"), &Command::SignIn));
+        items.push(note(&tr!("Sign in required")));
+        items.push(item(&tr!("Sign In…"), &Command::SignIn));
     }
     if wifi.enabled {
         let mut networks: Vec<_> = wifi.networks.iter().collect();
@@ -180,16 +196,19 @@ pub fn wifi_menu(wifi: &Wifi) -> Menu {
         });
         let known: Vec<_> = networks.iter().filter(|network| network.known).collect();
         let other: Vec<_> = networks.iter().filter(|network| !network.known).collect();
-        for (heading, group) in [("known-networks", known), ("other-networks", other)] {
+        for (heading, group) in [
+            (text!("Known Networks"), known),
+            (text!("Other Networks"), other),
+        ] {
             if group.is_empty() {
                 continue;
             }
             items.push(MenuItem::separator());
-            items.push(note(&L10N.tr(heading)));
+            items.push(note(&heading.tr()));
             for network in group {
                 let mut title = network.name();
                 if network.security.needs_password() && !network.known {
-                    title = L10N.tr_args("secured-network", [("name", title.into())]);
+                    title = tr!("{name} (secured)", name = title);
                 }
                 items.push(
                     item(&title, &Command::Join(network.ssid.clone())).checked(network.current),
@@ -198,12 +217,11 @@ pub fn wifi_menu(wifi: &Wifi) -> Menu {
         }
     }
     items.push(MenuItem::separator());
-    items.push(settings("wifi"));
+    items.push(settings(tr!("Wi-Fi Settings…"), "wifi"));
     Menu::new(items)
 }
 
 pub fn sound_menu(sound: &Sound, capturing: &[Capture]) -> Menu {
-    let percent = [("percent", (f64::from(sound.volume) * 100.0).round().into())];
     let mut items = Vec::new();
     let in_use = in_use(capturing);
     if !in_use.is_empty() {
@@ -211,12 +229,15 @@ pub fn sound_menu(sound: &Sound, capturing: &[Capture]) -> Menu {
         items.push(MenuItem::separator());
     }
     items.extend([
-        note(&L10N.tr_args("volume-level", percent)),
-        item(&L10N.tr("mute"), &Command::SetMuted(!sound.muted)).checked(sound.muted),
+        note(&tr!(
+            "Volume {percent}%",
+            percent = (f64::from(sound.volume) * 100.0).round()
+        )),
+        item(&tr!("Mute"), &Command::SetMuted(!sound.muted)).checked(sound.muted),
     ]);
     if !sound.outputs.is_empty() {
         items.push(MenuItem::separator());
-        items.push(note(&L10N.tr("output")));
+        items.push(note(&tr!("Output")));
         for output in &sound.outputs {
             items.push(
                 item(
@@ -228,29 +249,27 @@ pub fn sound_menu(sound: &Sound, capturing: &[Capture]) -> Menu {
         }
     }
     items.push(MenuItem::separator());
-    items.push(settings("sound"));
+    items.push(settings(tr!("Sound Settings…"), "sound"));
     Menu::new(items)
 }
 
 pub fn bluetooth_menu(bluetooth: &Bluetooth) -> Menu {
     let mut items = vec![
         item(
-            &L10N.tr("bluetooth"),
+            &tr!("Bluetooth"),
             &Command::SetBluetooth(!bluetooth.powered),
         )
         .checked(bluetooth.powered),
     ];
     if bluetooth.powered && !bluetooth.devices.is_empty() {
         items.push(MenuItem::separator());
-        items.push(note(&L10N.tr("devices")));
+        items.push(note(&tr!("Devices")));
         for gadget in &bluetooth.devices {
             let title = match gadget.battery {
-                Some(percent) => L10N.tr_args(
-                    "device-battery",
-                    [
-                        ("name", gadget.name.clone().into()),
-                        ("percent", percent.into()),
-                    ],
+                Some(percent) => tr!(
+                    "{name} · {percent}%",
+                    name = gadget.name.clone(),
+                    percent = percent
                 ),
                 None => gadget.name.clone(),
             };
@@ -265,12 +284,12 @@ pub fn bluetooth_menu(bluetooth: &Bluetooth) -> Menu {
             .map(|gadget| item(&gadget.name, &Command::ForgetGadget(gadget.address.clone())))
             .collect();
         items.push(MenuItem::submenu(
-            &L10N.tr("forget-device"),
+            &tr!("Forget Device"),
             Menu::new(forgettable),
         ));
     }
     items.push(MenuItem::separator());
-    items.push(settings("bluetooth"));
+    items.push(settings(tr!("Bluetooth Settings…"), "bluetooth"));
     Menu::new(items)
 }
 
@@ -284,7 +303,7 @@ pub fn input_source_menu(input: &InputSources) -> Menu {
         })
         .collect();
     items.push(MenuItem::separator());
-    items.push(settings("keyboard"));
+    items.push(settings(tr!("Open Keyboard Settings…"), "keyboard"));
     Menu::new(items)
 }
 
@@ -322,15 +341,14 @@ pub struct AppMenus<'a> {
 }
 
 fn standard_app_menu(name: &str) -> Menu {
-    let app = || [("app", name.to_owned().into())];
     Menu::new(vec![
-        MenuItem::new(&L10N.tr_args("app-about", app()), "").enabled(false),
+        MenuItem::new(&tr!("About {app}", app = name), "").enabled(false),
         MenuItem::separator(),
-        item(&L10N.tr_args("app-hide", app()), &Command::HideApp),
-        item(&L10N.tr("app-hide-others"), &Command::HideOthers),
-        item(&L10N.tr("app-show-all"), &Command::ShowAll),
+        item(&tr!("Hide {app}", app = name), &Command::HideApp),
+        item(&tr!("Hide Others"), &Command::HideOthers),
+        item(&tr!("Show All"), &Command::ShowAll),
         MenuItem::separator(),
-        item(&L10N.tr_args("app-quit", app()), &Command::QuitApp).shortcut("Ctrl+Q"),
+        item(&tr!("Quit {app}", app = name), &Command::QuitApp).shortcut("Ctrl+Q"),
     ])
 }
 
@@ -376,5 +394,5 @@ pub fn cascade(menus: &AppMenus<'_>) -> Menu {
             }
         }
     }
-    Menu::new(items).searchable(&L10N.tr("type-to-search"), &L10N.tr("no-menu-results"))
+    Menu::new(items).searchable(&tr!("Type to search"), &tr!("No Results"))
 }

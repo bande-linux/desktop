@@ -4,12 +4,11 @@ use bande_graphics::{
     Shape, TextAlign, TextStyle, TextSystem, TitleBar, WindowControls, menu_button_area,
     past_drag_slop, resize_zone, shortened, title_style,
 };
+use bande_l10n::tr;
 
 use std::time::Instant;
 
 use bande_widgets::{Animated, Spring};
-
-use crate::L10N;
 
 pub(crate) use bande_graphics::RESIZE_MARGIN;
 pub use bande_graphics::WINDOW_HEADER_HEIGHT;
@@ -34,12 +33,12 @@ pub(crate) fn control_for_node(node: NodeId) -> Option<Control> {
 }
 
 fn control_label(control: Control) -> String {
-    L10N.tr(match control {
-        Control::Close => "close",
-        Control::Minimize => "minimize",
-        Control::Zoom => "zoom",
-        Control::Menu => "menus",
-    })
+    match control {
+        Control::Close => tr!("Close"),
+        Control::Minimize => tr!("Minimize"),
+        Control::Zoom => tr!(context = "window menu", "Zoom"),
+        Control::Menu => tr!("Menus"),
+    }
 }
 
 fn bounds(rect: Rect) -> accesskit::Rect {

@@ -7,12 +7,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use bande_notify::Urgency;
-use bande_notify::client::{self, Request};
-use bande_printers::{Cups, Error, JobInfo, JobOptions, Kind, PrinterInfo, Result};
-use zbus::blocking::Connection;
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::link::{Address, is_identity_change, send_document};
 use crate::mdns::Found;
 use crate::printer::{
@@ -21,6 +17,10 @@ use crate::printer::{
 };
 use crate::raster::write_document;
 use crate::store::{Known, Pins, Printers, StoredJob, queue_folder};
+use bande_notify::Urgency;
+use bande_notify::client::{self, Request};
+use bande_printers::{Cups, Error, JobInfo, JobOptions, Kind, PrinterInfo, Result};
+use zbus::blocking::Connection;
 
 const CUPS_PREFIX: &str = "cups:";
 const PDF_MAGIC: &[u8] = b"%PDF-";
@@ -34,16 +34,19 @@ const IPP_USB: &str = "/usr/sbin/ipp-usb";
 const IPP_USB_PORTS: std::ops::Range<u16> = 60000..60004;
 const BUSY: u16 = 0x0507;
 const FORMAT_REFUSED: u16 = 0x040A;
-const TROUBLES: [&str; 8] = [
-    "media-empty",
-    "media-jam",
-    "media-needed",
-    "toner-empty",
-    "marker-supply-empty",
-    "door-open",
-    "cover-open",
-    "paused",
-];
+fn trouble_message(reason: &str) -> Option<String> {
+    Some(match reason {
+        "media-empty" => tr!("The printer is out of paper."),
+        "media-jam" => tr!("The paper is jammed."),
+        "media-needed" => tr!("The printer needs paper."),
+        "toner-empty" => tr!("The printer is out of toner."),
+        "marker-supply-empty" => tr!("The printer is out of ink."),
+        "door-open" => tr!("A door on the printer is open."),
+        "cover-open" => tr!("The printer's cover is open."),
+        "paused" => tr!("The printer is paused."),
+        _ => return None,
+    })
+}
 
 struct Job {
     stored: StoredJob,
@@ -540,8 +543,8 @@ impl Spool {
     }
 
     fn tell_failure(&self, job: &StoredJob, failure: &str) {
-        let name = L10N.tr("app-name");
-        let summary = L10N.tr_args("job-failed", [("title", job.title.clone().into())]);
+        let name = tr!("Printing");
+        let summary = tr!("“{title}” did not print", title = job.title.clone());
         let sent = client::notify(
             &self.session,
             &Request {
@@ -553,6 +556,7 @@ impl Spool {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         if let Err(error) = sent {
@@ -561,9 +565,11 @@ impl Spool {
     }
 
     fn send_one(&self, job: &StoredJob, cancelled: &AtomicBool) -> std::result::Result<(), String> {
-        let path = document_path(job.id).ok_or_else(|| L10N.tr("job-lost"))?;
+        let path = document_path(job.id)
+            .ok_or_else(|| tr!("The document was lost before it could be sent."))?;
         if let Some(queue) = job.printer.strip_prefix(CUPS_PREFIX) {
-            let document = std::fs::read(&path).map_err(|_| L10N.tr("job-lost"))?;
+            let document = std::fs::read(&path)
+                .map_err(|_| tr!("The document was lost before it could be sent."))?;
             return Cups::new()
                 .print(queue, &job.title, &job.options, &document)
                 .map_err(|error| error.to_string());
@@ -576,30 +582,36 @@ impl Spool {
             }
             let known = self
                 .known(&job.printer)
-                .ok_or_else(|| L10N.tr("printer-gone"))?;
+                .ok_or_else(|| tr!("That printer is no longer known."))?;
             let reached = self.reach(&known);
             let (found, uri) = match reached {
                 Ok(reached) => reached,
                 Err(error) if is_identity_change(&error) => {
-                    return Err(L10N.tr("printer-identity-changed"));
+                    return Err(tr!(
+                        "The printer's identity has changed, so the document was not sent. If the printer was replaced or reset, remove it in Settings ▸ Printers and try again."
+                    ));
                 }
                 Err(error) => {
                     tracing::info!("waiting for {}: {error}", known.name);
-                    self.set_state(job.id, "waiting", L10N.tr("printer-unreachable"));
+                    self.set_state(
+                        job.id,
+                        "waiting",
+                        tr!("Waiting for the printer to come back"),
+                    );
                     self.wait_a_while(wait, &job.printer, cancelled);
                     wait = (wait * 2).min(LONGEST_RETRY);
                     continue;
                 }
             };
             let Some(address) = Address::parse(&uri) else {
-                return Err(L10N.tr("printer-gone"));
+                return Err(tr!("That printer is no longer known."));
             };
             let payload = match raster_only {
                 true => found.raster_plan(&job.options).map(Payload::Raster),
                 false => payload_for(&found, &job.options),
             };
             let Some(payload) = payload else {
-                return Err(L10N.tr("printer-cannot-take-document"));
+                return Err(tr!("The printer cannot take this kind of document."));
             };
             self.set_state(job.id, "sending", String::new());
             let request = print_request(&uri, &job.title, &job.options, &payload);
@@ -620,7 +632,7 @@ impl Spool {
                     if is_cancelled() {
                         return Ok(());
                     }
-                    self.set_state(job.id, "waiting", L10N.tr("printer-busy"));
+                    self.set_state(job.id, "waiting", tr!("The printer is busy"));
                     self.wait_a_while(wait, &job.printer, cancelled);
                     wait = (wait * 2).min(LONGEST_RETRY);
                 }
@@ -675,17 +687,16 @@ impl Spool {
                     let trouble = printer_state_reasons(address, uri, &self.pins)
                         .unwrap_or_default()
                         .into_iter()
-                        .map(|reason| {
-                            reason
-                                .trim_end_matches("-error")
-                                .trim_end_matches("-warning")
-                                .trim_end_matches("-report")
-                                .to_owned()
-                        })
-                        .find(|reason| TROUBLES.contains(&reason.as_str()));
+                        .find_map(|reason| {
+                            trouble_message(
+                                reason
+                                    .trim_end_matches("-error")
+                                    .trim_end_matches("-warning")
+                                    .trim_end_matches("-report"),
+                            )
+                        });
                     match trouble {
-                        Some(trouble) => {
-                            let message = L10N.tr(&format!("trouble-{trouble}"));
+                        Some(message) => {
                             self.set_state(job.id, "stopped", message.clone());
                             if !warned {
                                 warned = true;

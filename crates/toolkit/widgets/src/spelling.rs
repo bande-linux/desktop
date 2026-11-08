@@ -46,29 +46,38 @@ pub fn install_spelling(send: impl Fn(SpellRequest) + 'static) {
     STATE.with_borrow_mut(|state| state.send = Some(Box::new(send)));
 }
 
-pub fn receive_spelling(reply: SpellReply) {
+pub fn receive_spelling(reply: SpellReply) -> bool {
     STATE.with_borrow_mut(|state| match reply {
         SpellReply::Checked(results) => {
-            state.generation += 1;
+            let mut wrong = false;
             for (word, right) in results {
+                wrong |= !right;
                 state.asked.remove(&word);
                 state.verdicts.insert(word, right);
             }
+            if wrong {
+                state.generation += 1;
+            }
+            wrong
         }
         SpellReply::Suggested(word, suggestions) => {
             state.suggestions.insert(word, suggestions);
+            false
         }
         SpellReply::Corrected(word, correction) => {
             state.corrections.insert(word, correction);
+            false
         }
         SpellReply::Rules(rules, replacements) => {
             state.rules = rules;
             state.replacements = replacements;
+            true
         }
         SpellReply::Failed(words) => {
             for word in words {
                 state.asked.remove(&word);
             }
+            false
         }
         SpellReply::Changed => {
             state.generation += 1;
@@ -81,14 +90,16 @@ pub fn receive_spelling(reply: SpellReply) {
             {
                 send(SpellRequest::Rules);
             }
+            true
         }
         SpellReply::Absent => {
             state.send = None;
             state.generation += 1;
             state.verdicts.clear();
             state.asked.clear();
+            true
         }
-    });
+    })
 }
 
 pub(crate) fn generation() -> u64 {
@@ -156,8 +167,21 @@ pub(crate) fn rule(name: &str) -> String {
     STATE.with_borrow(|state| state.rules.get(name).cloned().unwrap_or_default())
 }
 
-pub(crate) fn option(name: &str) -> bool {
-    rule(&format!("{name}-on")) == "true"
+pub(crate) fn rule_has(name: &str, character: char) -> bool {
+    STATE.with_borrow(|state| {
+        state
+            .rules
+            .get(name)
+            .is_some_and(|rule| rule.contains(character))
+    })
+}
+
+fn rule_is(name: &str, value: &str) -> bool {
+    STATE.with_borrow(|state| state.rules.get(name).is_some_and(|rule| rule == value))
+}
+
+pub(crate) fn option(key: &str) -> bool {
+    rule_is(key, "true")
 }
 
 pub(crate) fn replacement(word: &str) -> Option<String> {
@@ -222,7 +246,7 @@ fn eligible(word: &str) -> bool {
 }
 
 pub(crate) fn links(text: &str) -> Vec<Range<usize>> {
-    if rule("links-on") == "false" {
+    if rule_is("links-on", "false") {
         return Vec::new();
     }
     let mut found = Vec::new();
@@ -270,12 +294,12 @@ pub(crate) fn words(text: &str) -> Vec<Range<usize>> {
         }
         let mut word: Option<usize> = None;
         let mut has_digit = false;
-        let characters: Vec<(usize, char)> = body.char_indices().collect();
-        for (index, &(at, character)) in characters.iter().enumerate() {
+        let mut characters = body.char_indices().peekable();
+        while let Some((at, character)) = characters.next() {
             let joined = is_inner_joiner(character)
                 && word.is_some()
                 && characters
-                    .get(index + 1)
+                    .peek()
                     .is_some_and(|(_, next)| next.is_alphabetic());
             if character.is_alphabetic() || character.is_numeric() || joined {
                 has_digit |= character.is_numeric();

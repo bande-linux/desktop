@@ -31,6 +31,7 @@ app here is built this way.
 | In the background | an app whose `Program::runs_in_background` says so (Calendar while its "Show alerts when Calendar is closed" setting is on) can start with `--background` (from its XDG autostart entry) and Quit leaves it running there too, as a Mac's agents (CalendarAgent) keep working behind the app: it has no window and is no running app (not in the Taskbar, Force Quit, the switcher or the apps reopened at login) and its sources and deadlines keep running. `Cx::launched_in_background` tells `Program::start` to open no window. A later launch reaches it through single instance and `Program::reopen` opens its window; from its first window it is an ordinary running app until Quit. `--background` exits at once when the app does not run in the background or is already running |
 | Memory without windows | a closed window takes its renderer with it: the GPU device once no window uses it, glyph and image atlases, the shown scene and the window's text caches; with no window left `bande-app` hands freed heap back (`malloc_trim`). A program keeps a closed window's view (`Program::window_closed`) and shows it again on Reopen: a kept view costs 1–2 MB beyond its data (Terminal, which keeps none, ends 3.4 MB of private memory after its window closes; Mail 5.4, Calendar 4.7 against 2.7 started in the background) and brings back unsent text, selection and scroll in 25–80 ms, so views are kept, not rebuilt, unless one holds large caches of its own, which it drops in `window_closed`. Mesa's Vulkan drivers and LLVM stay loaded once a window has drawn on the GPU: about 9 MB more private memory and 55–60 MB of shared library pages until the app exits. `bande-background` measures it |
 | Appearance | every view gets each change; a view is built with the window's real appearance |
+| Other apps | an action that opens another app (Show in Files, Open in Terminal, Software Update) is left out while that app is not installed, as macOS omits what cannot work: a menu built when it opens asks `bande_xdg::is_installed`; menus and views that stay up ask `Cx::installed`, which follows the XDG `applications` folders with inotify from the first call, rebuilds the menus and calls `Program::installed_changed` when they change |
 | Tabs | a tab dragged out of a window's `TabStrip` floats in a new window that follows the pointer and can be dropped into another window's strip: the view implements `TabHost` (release, adopt, slide, insertion index, grab point), its drag events go through `TabDropTarget`, `move_tab` reorders a window's list and keeps the active tab active, and the program keeps one `TabCarry` that moves the tab between windows and puts it back when the drag is cancelled |
 
 ## Runtime contracts
@@ -42,6 +43,13 @@ the app id as the bus name; `org.freedesktop.Application` (`Activate`, `Open` wi
 `activation-token` and `x-bande-directory` in the platform data) at the path the specification
 derives from the app id; `<package> --version`; the state (`$XDG_STATE_HOME/bande/`) and config
 (`$XDG_CONFIG_HOME/bande/`) paths.
+
+## Services and popovers
+A program whose `Program::waits_for_activation` says so (Dictionary, for Look Up) is started by D-Bus with no
+window, waits for its first request and exits once its last window has closed, unless a window it
+opened asked to keep running. `Kind::Popover`
+opens a window at the pointer that takes the keyboard, has no title bar or menu button and is not
+resumed, kept running or listed as a window. See [lookup.md](lookup.md).
 
 ## Printing
 An app with a document puts `bande_app_menu::print_item(enabled)` in its File menu and handles the action `bande_app_menu::PRINT` with `bande_app::print(title, id, Document)`: `Document::Pages` lays out pages for a `PageSetup` on a worker thread (with `bande_app::flow` for flowing text, or `Page::draw` with scene items), `Document::File` prints an existing PDF. The print dialog itself is `bande-file-chooser --print`; see `behaviour.md`.

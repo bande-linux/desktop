@@ -14,6 +14,7 @@ use accesskit::{
 use bande_graphics::{
     Color, Item, Paint, Point, Rect, Shape, TextSystem, Typeface, past_drag_slop,
 };
+use bande_l10n::tr;
 use parley::{Affinity, Cursor, Selection as Span};
 
 use self::history::{Edit, EditKind, History, Restyle};
@@ -26,7 +27,7 @@ use super::{
     ClipboardRequest, Context, DragAction, Event, Key, Menu, MenuItem, Modifiers, PointerButton,
     WidgetId,
 };
-use crate::{L10N, spelling};
+use crate::spelling;
 
 const CARET_WIDTH: f32 = 1.5;
 const LINE_HEIGHT_RATIO: f32 = 1.21;
@@ -280,6 +281,11 @@ impl Editor {
 
     pub(crate) fn selected_text(&self) -> String {
         self.slice(self.selection.start(), self.selection.end())
+    }
+
+    pub(crate) fn word_at(&mut self, text: &mut TextSystem, point: Point) -> String {
+        let (start, end) = self.unit_at(text, point, Unit::Word);
+        self.slice(start, end)
     }
 
     pub(crate) fn has_selection(&self) -> bool {
@@ -1124,8 +1130,7 @@ impl Editor {
             if at.paragraph == corrected.start.paragraph
                 && (corrected.start.offset..=corrected.end.offset).contains(&at.offset)
             {
-                let title =
-                    L10N.tr_args("change-back", [("word", corrected.original.clone().into())]);
+                let title = tr!("Change Back to “{word}”", word = corrected.original.clone());
                 plain.items.insert(0, MenuItem::separator());
                 plain
                     .items
@@ -1148,14 +1153,11 @@ impl Editor {
             .map(|suggestion| MenuItem::new(suggestion, &format!("{REPLACE_ACTION}{suggestion}")))
             .collect();
         if items.is_empty() {
-            items.push(MenuItem::new(&L10N.tr("no-suggestions"), "no-suggestions").enabled(false));
+            items.push(MenuItem::new(&tr!("No Suggestions"), "no-suggestions").enabled(false));
         }
         items.push(MenuItem::separator());
-        items.push(MenuItem::new(
-            &L10N.tr("ignore-spelling"),
-            "ignore-spelling",
-        ));
-        items.push(MenuItem::new(&L10N.tr("learn-spelling"), "learn-spelling"));
+        items.push(MenuItem::new(&tr!("Ignore Spelling"), "ignore-spelling"));
+        items.push(MenuItem::new(&tr!("Learn Spelling"), "learn-spelling"));
         items.push(MenuItem::separator());
         items.extend(plain.items);
         Menu::new(items)
@@ -1182,30 +1184,35 @@ impl Editor {
     }
 
     pub(crate) fn menu(&self) -> Menu {
-        let item = |key: &str, shortcut: &str, enabled: bool| {
-            MenuItem::new(&L10N.tr(key), key)
+        let item = |title: String, action: &str, shortcut: &str, enabled: bool| {
+            MenuItem::new(&title, action)
                 .shortcut(shortcut)
                 .enabled(enabled)
         };
         let selected = self.has_selection();
         if self.read_only {
             return Menu::new(vec![
-                item("copy", "Ctrl+C", selected),
+                item(tr!("Copy"), "copy", "Ctrl+C", selected),
                 MenuItem::separator(),
-                item("select-all", "Ctrl+A", !self.is_empty()),
+                item(tr!("Select All"), "select-all", "Ctrl+A", !self.is_empty()),
             ]);
         }
         Menu::new(vec![
-            item("undo", "Ctrl+Z", self.can_undo()),
-            item("redo", "Shift+Ctrl+Z", self.can_redo()),
+            item(tr!("Undo"), "undo", "Ctrl+Z", self.can_undo()),
+            item(tr!("Redo"), "redo", "Shift+Ctrl+Z", self.can_redo()),
             MenuItem::separator(),
-            item("cut", "Ctrl+X", selected),
-            item("copy", "Ctrl+C", selected),
-            item("paste", "Ctrl+V", true),
+            item(tr!("Cut"), "cut", "Ctrl+X", selected),
+            item(tr!("Copy"), "copy", "Ctrl+C", selected),
+            item(tr!("Paste"), "paste", "Ctrl+V", true),
             MenuItem::separator(),
-            item("select-all", "Ctrl+A", !self.is_empty()),
+            item(tr!("Select All"), "select-all", "Ctrl+A", !self.is_empty()),
             MenuItem::separator(),
-            item("emoji-and-symbols", "Super+.", true),
+            item(
+                tr!("Emoji & Symbols…"),
+                "emoji-and-symbols",
+                "Super+.",
+                true,
+            ),
         ])
     }
 

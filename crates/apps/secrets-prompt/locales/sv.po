@@ -1,0 +1,91 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "An app"
+msgstr "En app"
+
+msgid "“{app}” wants to use the “{keychain}” keychain."
+msgstr "”{app}” vill använda nyckelringen ”{keychain}”."
+
+msgid "Enter the keychain password."
+msgstr "Ange nyckelringens lösenord."
+
+msgid "“{app}” wants to use your confidential information stored in “{item}” in your keychain."
+msgid_plural "“{app}” wants to use {count} passwords stored in your keychain."
+msgstr[0] "”{app}” vill använda din känsliga information som är lagrad i ”{item}” i din nyckelring."
+msgstr[1] "”{app}” vill använda {count} lösenord som är lagrade i din nyckelring."
+
+msgid "To allow this, enter the “{keychain}” keychain password."
+msgstr "För att tillåta det anger du lösenordet för nyckelringen ”{keychain}”."
+
+msgid "“{app}” wants to create a new keychain, “{keychain}”."
+msgstr "”{app}” vill skapa en ny nyckelring, ”{keychain}”."
+
+msgid "Choose a password for the new keychain."
+msgstr "Välj ett lösenord för den nya nyckelringen."
+
+msgid "Enter the password again to verify it."
+msgstr "Ange lösenordet igen för att verifiera det."
+
+msgid "Your login keychain was not unlocked with your login password."
+msgstr "Din inloggningsnyckelring låstes inte upp med ditt inloggningslösenord."
+
+msgid "Enter the keychain’s old password to update it to your login password, or create a new keychain. The old keychain is kept."
+msgstr "Ange nyckelringens gamla lösenord för att uppdatera det till ditt inloggningslösenord, eller skapa en ny nyckelring. Den gamla nyckelringen sparas."
+
+msgid "“{app}” wants to show your saved passwords."
+msgstr "”{app}” vill visa dina sparade lösenord."
+
+msgid "The network “{network}” requires a password."
+msgstr "Nätverket ”{network}” kräver ett lösenord."
+
+msgid "Enter the password to join it."
+msgstr "Ange lösenordet för att ansluta till det."
+
+msgid "Verify"
+msgstr "Verifiera"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Always Allow"
+msgstr "Tillåt alltid"
+
+msgid "Deny"
+msgstr "Neka"
+
+msgid "Allow"
+msgstr "Tillåt"
+
+msgid "Create"
+msgstr "Skapa"
+
+msgid "Join"
+msgstr "Anslut"
+
+msgid "Create New Keychain"
+msgstr "Skapa ny nyckelring"
+
+msgid "Not Now"
+msgstr "Inte nu"
+
+msgid "Update Password"
+msgstr "Uppdatera lösenord"
+
+msgid "The passwords don’t match. Try again."
+msgstr "Lösenorden stämmer inte överens. Försök igen."
+
+msgid "The password you entered is incorrect."
+msgstr "Lösenordet du angav är fel."

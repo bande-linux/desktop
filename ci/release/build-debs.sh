@@ -17,8 +17,14 @@ fi
 
 echo "Building ${#packages[@]} packages $version for $(dpkg --print-architecture)"
 rm -rf "$target/debian"
-cargo build --profile "$profile" --locked "${packages[@]/#/--package=}" "${bundled[@]/#/--package=}"
+cargo build --profile "$profile" --locked "${packages[@]/#/--package=}" "${bundled[@]/#/--package=}" \
+    --package=bande-l10n-tool
 architecture=$(dpkg --print-architecture)
+built=$target/$profile
+[ "$profile" = dev ] && built=$target/debug
+rm -rf "$built/cursors" "$built/l10n"
+"$built/bande-cursor-theme" "$built/cursors/Bande-Cursors"
+"$built/bande-l10n-tool" pack "$built/l10n"
 if [ "$profile" = dist ]; then
     ci/release/symbols.sh "$target/$profile" "$target/debian-symbols" "$version"
     strip=(--no-strip)

@@ -1,0 +1,11 @@
+[Unit]
+Description=Install the language packs of the languages in use
+Documentation=file:///usr/share/doc/bande-desktop/
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bande-desktop/language-packs
+Nice=10
+IOSchedulingClass=idle
+LogLevelMax=notice

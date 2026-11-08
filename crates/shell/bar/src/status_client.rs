@@ -7,11 +7,13 @@ use std::sync::LazyLock;
 use std::thread;
 use std::time::Instant;
 
+use bande_l10n::tr;
+
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::menus::{
     AppMenus, app_menu, battery_menu, bluetooth_menu, cascade, clock_menu, input_source_menu,
-    sound_menu, system_menu, wifi_menu,
+    sound_menu, system_menu, unavailable_menu, wifi_menu, without_settings,
 };
 use crate::rail::{Slot, TaskbarView, display_edge};
 use bande_config::{BUS_NAME, BarEdge, OBJECT_PATH};
@@ -24,7 +26,7 @@ use bande_status::devices::{Control, SoundControl};
 use bande_status::gtkmenu;
 use bande_status::hub::StatusHub;
 use bande_status::session::full_name;
-use bande_status::status::{InputSource, InputSources};
+use bande_status::status::{InputSource, InputSources, Reading};
 use bande_status::tray::{Errand, TrayIcon, TrayItem};
 use bande_status::unread::{ClockMark, set_do_not_disturb};
 use bande_status::{Command, Update};
@@ -172,6 +174,13 @@ impl StatusClient {
         }
     }
 
+    fn with_installed(&self, menu: Menu) -> Menu {
+        match find_app(self.apps.entries(), SETTINGS) {
+            Some(_) => menu,
+            None => without_settings(menu),
+        }
+    }
+
     fn frontmost_name(&self) -> Option<String> {
         (!self.app_id.is_empty()).then(|| app_name(self.apps.entries(), &self.app_id))
     }
@@ -259,7 +268,7 @@ impl StatusClient {
                     .bar
                     .status()
                     .wifi
-                    .as_ref()
+                    .present()
                     .and_then(|wifi| wifi.networks.iter().find(|network| network.ssid == ssid))
                     .is_some_and(|network| network.security.needs_password() && !network.known);
                 if needs_password {
@@ -356,24 +365,48 @@ impl StatusClient {
                 self.frontmost_name().as_deref(),
                 self.can_sleep,
             )),
-            Slot::Battery => status
-                .battery
-                .as_ref()
-                .map(|battery| battery_menu(battery, self.bar.battery_percentage())),
-            Slot::Wifi => {
-                self.status.control(Control::Scan);
-                status.wifi.as_ref().map(wifi_menu)
-            }
+            Slot::Battery => match &status.battery {
+                Reading::Present(battery) => {
+                    Some(battery_menu(battery, self.bar.battery_percentage()))
+                }
+                Reading::Unavailable => Some(unavailable_menu(
+                    tr!("Battery status unavailable — the power service isn't running"),
+                    tr!("Power Settings…"),
+                    "power",
+                )),
+                Reading::Absent => None,
+            },
+            Slot::Wifi => match &status.wifi {
+                Reading::Present(wifi) => {
+                    self.status.control(Control::Scan);
+                    Some(wifi_menu(wifi))
+                }
+                Reading::Unavailable => Some(unavailable_menu(
+                    tr!("Wi-Fi unavailable — the network service isn't running"),
+                    tr!("Wi-Fi Settings…"),
+                    "wifi",
+                )),
+                Reading::Absent => None,
+            },
             Slot::Sound => status
                 .sound
                 .as_ref()
                 .map(|sound| sound_menu(sound, &status.capturing)),
-            Slot::Bluetooth => status.bluetooth.as_ref().map(bluetooth_menu),
+            Slot::Bluetooth => match &status.bluetooth {
+                Reading::Present(bluetooth) => Some(bluetooth_menu(bluetooth)),
+                Reading::Unavailable => Some(unavailable_menu(
+                    tr!("Bluetooth unavailable — the Bluetooth service isn't running"),
+                    tr!("Bluetooth Settings…"),
+                    "bluetooth",
+                )),
+                Reading::Absent => None,
+            },
             Slot::InputSource => Some(input_source_menu(&status.input_sources)),
             Slot::MoreStatusItems => Some(self.more_menu(&status.input_sources)),
             _ => None,
         };
         if let Some(menu) = local {
+            let menu = self.with_installed(menu);
             self.bar.set_open(Some(slot));
             report(
                 "open the menu",
@@ -478,12 +511,12 @@ impl StatusClient {
             report(
                 "open the clock menu",
                 window.show_menu(
-                    clock_menu(
+                    self.with_installed(clock_menu(
                         self.clock_mark == ClockMark::Quiet,
                         &self.clock_app,
                         &self.dates,
                         find_app(self.apps.entries(), CLOCK_APP).is_some(),
-                    ),
+                    )),
                     self.bar.menu_placement(anchor),
                 ),
             );

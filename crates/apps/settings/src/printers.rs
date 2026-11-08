@@ -1,8 +1,9 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 
-use bande_packages::{Client, Info, Mode};
+use bande_l10n::{text, tr, trn};
+use bande_packages::Client;
 use bande_printers::{
     Cups, Job, JobInfo, JobState, Kind, Mechanism, PrintClient, Printer, PrinterInfo, PrinterState,
     SPOOLER, mechanism_available,
@@ -14,7 +15,6 @@ use bande_toolkit::ui::{Axis, Button, Label, PopUpButton, Stack, TextField, Widg
 use zbus::blocking::Connection;
 use zbus::{MatchRule, message};
 
-use crate::L10N;
 use crate::follow::{Update, Updates, spawn};
 use crate::forget::Forget;
 use crate::general::info_row;
@@ -78,21 +78,7 @@ fn read(session: &Connection, cups: &Cups, system: &Connection) -> Option<Printe
 }
 
 fn install_printing(system: &Connection) -> Result<(), bande_packages::Error> {
-    let client = Client::new(system);
-    let available: Vec<_> = client
-        .resolve(&PRINTING_PACKAGES.map(str::to_owned))?
-        .into_iter()
-        .filter(|package| package.info == Info::Available)
-        .collect();
-    let ids: Vec<String> = PRINTING_PACKAGES
-        .iter()
-        .filter_map(|name| available.iter().find(|package| package.name == *name))
-        .map(|package| package.id.clone())
-        .collect();
-    if ids.is_empty() {
-        return Ok(());
-    }
-    client.install(&ids, Mode::Apply, &|_| {}).map(drop)
+    Client::new(system).install_missing(&PRINTING_PACKAGES)
 }
 
 fn administers_printers() -> bool {
@@ -120,45 +106,52 @@ fn administer<T>(
 fn sentence(error: &bande_printers::Error) -> String {
     tracing::warn!("CUPS: {error}");
     match error {
-        bande_printers::Error::NotAllowed => L10N.tr("printer-forbidden"),
+        bande_printers::Error::NotAllowed => {
+            tr!("Only members of the lpadmin group can change printers.")
+        }
         bande_printers::Error::Refused(_, message) if !message.is_empty() => message.clone(),
-        _ => L10N.tr("printer-change-failed"),
+        _ => tr!("Couldn't change this printer."),
     }
 }
 
-fn watch_print_service(
-    changed: Sender<()>,
-    current: Arc<AtomicU64>,
-    generation: u64,
-) -> zbus::Result<()> {
-    let session = Connection::session()?;
+fn watch_print_service(changed: Sender<()>) -> zbus::Result<Connection> {
+    let session = bande_bus::session()?;
     let client = PrintClient::new(&session)?;
     let changes = client.changes()?;
     client.watch()?;
     let _ = changed.send(());
-    for _ in changes {
-        if current.load(Ordering::Relaxed) != generation {
-            break;
+    spawn("printers-service", move || {
+        for _ in changes {
+            let _ = changed.send(());
         }
-        let _ = changed.send(());
-    }
-    Ok(())
+    });
+    Ok(session)
 }
 
-pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterCommand> {
+fn stop_watching(watch: &mut Option<Connection>) {
+    if let Some(session) = watch.take()
+        && let Err(error) = session.close()
+    {
+        tracing::debug!("cannot close the print service watch: {error}");
+    }
+}
+
+pub fn follow_printers(
+    system: &Connection,
+    session: &Connection,
+    updates: Updates,
+) -> Sender<PrinterCommand> {
     let (sender, receiver) = mpsc::channel();
     let (changed, changes) = mpsc::channel::<()>();
     let reader = updates.clone();
     let reading = system.clone();
+    let session = session.clone();
+    let commands_session = crate::follow::waiting_session(&session);
     spawn("printers", move || {
-        let session = Connection::session();
         while changes.recv().is_ok() {
             std::thread::sleep(SETTLE);
             changes.try_iter().count();
-            let Ok(session) = session.as_ref() else {
-                continue;
-            };
-            if let Some(state) = read(session, &Cups::new(), &reading)
+            if let Some(state) = read(&session, &Cups::new(), &reading)
                 && !reader.send(Update::Printers(state))
             {
                 break;
@@ -168,40 +161,47 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
     let bus = system.clone();
     spawn("printers-worker", move || {
         let cups = Cups::new();
-        let watching = Arc::new(AtomicU64::new(0));
+        let watching = Arc::new(AtomicBool::new(false));
+        let mut cups_followed = false;
+        let mut watch = None;
         let service = |work: &dyn Fn(&PrintClient<'_>) -> zbus::Result<()>| {
-            Connection::session()
-                .and_then(|session| work(&PrintClient::new(&session)?))
+            PrintClient::new(&commands_session)
+                .and_then(|client| work(&client))
                 .map_err(|error| {
                     tracing::warn!("the print service refused: {error}");
-                    L10N.tr("printer-change-failed")
+                    tr!("Couldn't change this printer.")
                 })
         };
         for command in receiver {
             let result = match command {
                 PrinterCommand::Watch(on) => {
-                    let generation = watching.fetch_add(1, Ordering::Relaxed) + 1;
+                    watching.store(on, Ordering::Relaxed);
                     if on {
-                        let current = Arc::clone(&watching);
-                        if let Ok(rule) = MatchRule::builder()
-                            .msg_type(message::Type::Signal)
-                            .interface(SPOOLER)
-                            .map(|builder| builder.build())
+                        if !cups_followed
+                            && let Ok(rule) = MatchRule::builder()
+                                .msg_type(message::Type::Signal)
+                                .interface(SPOOLER)
+                                .map(|builder| builder.build())
                         {
+                            cups_followed = true;
+                            let shown = Arc::clone(&watching);
                             signals(
                                 &bus,
                                 rule,
                                 changed.clone(),
-                                |_| Some(()),
-                                move || current.load(Ordering::Relaxed) == generation,
+                                move |_| shown.load(Ordering::Relaxed).then_some(()),
+                                || true,
                             );
                         }
-                        let (notify, current) = (changed.clone(), Arc::clone(&watching));
-                        spawn("printers-service", move || {
-                            if let Err(error) = watch_print_service(notify, current, generation) {
-                                tracing::warn!("cannot follow the print service: {error}");
-                            }
-                        });
+                        if watch.is_none() {
+                            watch = watch_print_service(changed.clone())
+                                .inspect_err(|error| {
+                                    tracing::warn!("cannot follow the print service: {error}");
+                                })
+                                .ok();
+                        }
+                    } else {
+                        stop_watching(&mut watch);
                     }
                     Ok(())
                 }
@@ -231,14 +231,14 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
                     updates.send(Update::PrintingInstalled);
                     installed.map_err(|error| {
                         tracing::warn!("cannot install printing: {error}");
-                        L10N.tr("printing-install-failed")
+                        tr!("Couldn't install printing support.")
                     })
                 }
                 PrinterCommand::AddAddress(address) => {
                     let added = service(&|client| client.add_address(&address).map(drop));
                     updates.send(Update::PrinterAdded(added.is_ok()));
                     added.map_err(|_| {
-                        L10N.tr_args("printer-add-failed", [("name", address.clone().into())])
+                        tr!("Couldn't add “{name}”. Check that it is turned on and on this network.", name = address.clone())
                     })
                 }
             };
@@ -253,17 +253,17 @@ pub fn follow_printers(system: &Connection, updates: Updates) -> Sender<PrinterC
 
 fn state_text(printer: &PrinterInfo, queue: Option<&Printer>, jobs: usize) -> String {
     let state = match queue.map(|queue| (queue.state, queue.accepting)) {
-        Some((PrinterState::Stopped, _)) => L10N.tr("printer-paused"),
-        Some((PrinterState::Printing, _)) => L10N.tr("printer-printing"),
-        Some((PrinterState::Idle, false)) => L10N.tr("printer-not-accepting"),
-        Some(_) => L10N.tr("printer-idle"),
-        None if !printer.reachable => L10N.tr("printer-offline"),
-        None if jobs > 0 => L10N.tr("printer-printing"),
-        None => L10N.tr("printer-idle"),
+        Some((PrinterState::Stopped, _)) => tr!("Paused"),
+        Some((PrinterState::Printing, _)) => tr!("Printing"),
+        Some((PrinterState::Idle, false)) => tr!("Not accepting documents"),
+        Some(_) => tr!("Idle"),
+        None if !printer.reachable => tr!("Offline"),
+        None if jobs > 0 => tr!("Printing"),
+        None => tr!("Idle"),
     };
     let mut parts = vec![state];
     if jobs > 0 {
-        parts.push(L10N.tr_args("printer-jobs", [("count", jobs.into())]));
+        parts.push(trn!("1 document", "{count} documents", count = jobs));
     }
     if queue.is_some_and(|queue| {
         queue
@@ -271,21 +271,21 @@ fn state_text(printer: &PrinterInfo, queue: Option<&Printer>, jobs: usize) -> St
             .iter()
             .any(|reason| reason.contains("offline"))
     }) {
-        parts.push(L10N.tr("printer-offline"));
+        parts.push(tr!("Offline"));
     }
     if printer.default {
-        parts.push(L10N.tr("printer-default"));
+        parts.push(tr!("Default"));
     }
     parts.join(" · ")
 }
 
 fn job_state(state: JobState) -> String {
-    L10N.tr(match state {
-        JobState::Waiting => "job-waiting",
-        JobState::Held => "job-held",
-        JobState::Printing => "job-printing",
-        JobState::Stopped => "job-stopped",
-    })
+    match state {
+        JobState::Waiting => tr!("Waiting"),
+        JobState::Held => tr!("On hold"),
+        JobState::Printing => tr!("Printing"),
+        JobState::Stopped => tr!("Stopped"),
+    }
 }
 
 impl SettingsView {
@@ -318,25 +318,30 @@ impl SettingsView {
         let state = self.printers.as_ref()?;
         Some(
             match state.printers.iter().find(|printer| printer.default) {
-                _ if state.printers.is_empty() => L10N.tr("no-printers"),
-                Some(default) => L10N.tr_args(
-                    "printers-with-default",
-                    [
-                        ("count", state.printers.len().into()),
-                        ("name", default.name.clone().into()),
-                    ],
+                _ if state.printers.is_empty() => tr!("No printers"),
+                Some(default) => trn!(
+                    "“{name}” is the default printer",
+                    "{count} printers · “{name}” is the default",
+                    count = state.printers.len(),
+                    name = default.name.clone()
                 ),
-                None => L10N.tr_args("printer-count", [("count", state.printers.len().into())]),
+                None => trn!(
+                    "1 printer",
+                    "{count} printers",
+                    count = state.printers.len()
+                ),
             },
         )
     }
 
     pub(crate) fn printer_rows(&mut self) -> Widgets {
         let Some(state) = self.printers.clone() else {
-            return vec![muted_row(&L10N.tr("looking-for-printers"))];
+            return vec![muted_row(&tr!("Looking for printers on this network…"))];
         };
         if state.printers.is_empty() {
-            return vec![muted_row(&L10N.tr("no-printers-hint"))];
+            return vec![muted_row(&tr!(
+                "No printers on this network yet. They appear here as soon as they are found."
+            ))];
         }
         let mut rows = Vec::new();
         for printer in &state.printers {
@@ -371,20 +376,15 @@ impl SettingsView {
             .position(|printer| printer.default)
             .unwrap_or(0);
         let mut choose = intent(&self.intents, Intent::DefaultPrinter);
-        let menu = PopUpButton::new(
-            &L10N.tr("default-printer"),
-            &titles,
-            selected,
-            move |index| {
-                if let Some(id) = ids.get(index) {
-                    choose(id.clone());
-                }
-            },
-        );
+        let menu = PopUpButton::new(&tr!("Default printer"), &titles, selected, move |index| {
+            if let Some(id) = ids.get(index) {
+                choose(id.clone());
+            }
+        });
         self.anchors
             .push((Anchor::Item("default-printer".to_owned()), menu.id()));
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("default-printer"), Tone::Primary),
+            Text::new(&tr!("Default printer"), Tone::Primary),
             Some(boxed(menu)),
         )));
         rows
@@ -393,7 +393,7 @@ impl SettingsView {
     pub(crate) fn add_printer_rows(&mut self) -> Widgets {
         let mut address = intent(&self.intents, Intent::PrinterAddress);
         let field = TextField::new(
-            &L10N.tr("printer-address-placeholder"),
+            &tr!("192.168.1.30 or printer.local"),
             &self.printer_address,
             move |text| address(text.to_owned()),
         )
@@ -401,16 +401,16 @@ impl SettingsView {
         self.anchors
             .push((Anchor::Item("printer-address".to_owned()), field.id()));
         let mut add = intent(&self.intents, |()| Intent::AddPrinterAddress);
-        let mut button = Button::new(&L10N.tr("printer-add"), move || add(()));
+        let mut button = Button::new(&tr!("Add"), move || add(()));
         button.set_enabled(!self.adding_printer);
-        let detail = L10N.tr(if self.adding_printer {
-            "printer-adding"
+        let detail = if self.adding_printer {
+            tr!("Adding…")
         } else {
-            "printer-address-detail"
-        });
+            tr!("For a printer that does not show up: its IP address or host name")
+        };
         let mut rows = vec![boxed(
             Row::new(
-                Text::new(&L10N.tr("printer-address"), Tone::Primary),
+                Text::new(&tr!("Add by address"), Tone::Primary),
                 Some(boxed(Stack::new(
                     Axis::Horizontal,
                     Spacing::S as f32,
@@ -432,18 +432,20 @@ impl SettingsView {
 
     fn install_printing_row(&mut self) -> Box<dyn Widget> {
         let mut install = intent(&self.intents, |()| Intent::InstallPrinting);
-        let mut button = Button::new(&L10N.tr("printing-install"), move || install(()));
+        let mut button = Button::new(&tr!("Install"), move || install(()));
         button.set_enabled(!self.installing_printing);
-        let detail = L10N.tr(if self.installing_printing {
-            "printing-installing"
+        let detail = if self.installing_printing {
+            tr!("Installing…")
         } else {
-            "printing-install-detail"
-        });
+            tr!(
+                "Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
+            )
+        };
         self.anchors
             .push((Anchor::Item("install-printing".to_owned()), button.id()));
         boxed(
             Row::new(
-                Text::new(&L10N.tr("printing-support"), Tone::Primary),
+                Text::new(&tr!("Support for USB and older printers"), Tone::Primary),
                 Some(boxed(button)),
             )
             .detail(Text::new(&detail, Tone::Muted).caption()),
@@ -475,29 +477,29 @@ impl SettingsView {
             .map_or(String::new(), |queue| queue.uri.clone());
         let mut about = Vec::new();
         for (label, value) in [
-            ("printer-kind", &printer.model),
-            ("printer-location", &printer.location),
-            ("printer-uri", &uri),
+            (text!("Kind"), &printer.model),
+            (text!("Location"), &printer.location),
+            (text!("Address"), &uri),
         ] {
             if !value.is_empty() {
-                about.push(info_row(&L10N.tr(label), value));
+                about.push(info_row(&label.tr(), value));
             }
         }
         if !about.is_empty() {
             page.push(boxed(Card::new(about)));
         }
-        page.push(boxed(Caption::new(Text::label(&L10N.tr("print-queue")))));
+        page.push(boxed(Caption::new(Text::label(&tr!("Print Queue")))));
         let mut rows = Vec::new();
         for job in state.jobs.iter().filter(|job| job.printer == id) {
             let mut cancel = intent(&self.intents, Intent::CancelJob);
             let job_id = job.id;
-            let button = Button::new(&L10N.tr("cancel"), move || cancel(job_id));
+            let button = Button::new(&tr!("Cancel"), move || cancel(job_id));
             let detail = match job.message.is_empty() {
-                true => L10N.tr(match job.state.as_str() {
-                    "sending" | "printing" => "job-printing",
-                    "stopped" => "job-stopped",
-                    _ => "job-waiting",
-                }),
+                true => match job.state.as_str() {
+                    "sending" | "printing" => tr!("Printing"),
+                    "stopped" => tr!("Stopped"),
+                    _ => tr!("Waiting"),
+                },
                 false => job.message.clone(),
             };
             let row = Row::new(Text::new(&job.title, Tone::Primary), Some(boxed(button)))
@@ -508,9 +510,9 @@ impl SettingsView {
         for job in state.queue_jobs.iter().filter(|job| job.printer == name) {
             let mut cancel = intent(&self.intents, Intent::CancelQueuedJob);
             let job_id = job.id;
-            let button = Button::new(&L10N.tr("cancel"), move || cancel(job_id));
+            let button = Button::new(&tr!("Cancel"), move || cancel(job_id));
             let title = if job.name.is_empty() {
-                L10N.tr_args("job-number", [("id", job.id.into())])
+                tr!("Document {id}", id = job.id)
             } else {
                 job.name.clone()
             };
@@ -524,7 +526,7 @@ impl SettingsView {
             rows.push(self.item_row(format!("queued:{}", job.id), row));
         }
         if rows.is_empty() {
-            rows.push(muted_row(&L10N.tr("no-jobs")));
+            rows.push(muted_row(&tr!("No documents waiting")));
         }
         page.push(boxed(Card::new(rows)));
         let mut actions = Vec::new();
@@ -533,22 +535,18 @@ impl SettingsView {
             let mut pause = intent(&self.intents, Intent::PausePrinter);
             let target = name.clone();
             let pause_button = Button::new(
-                &L10N.tr(if paused {
-                    "printer-resume"
-                } else {
-                    "printer-pause"
-                }),
+                &if paused { tr!("Resume") } else { tr!("Pause") },
                 move || pause((target.clone(), !paused)),
             );
             self.anchors
                 .push((Anchor::Item("printer-pause".to_owned()), pause_button.id()));
             actions.push(boxed(Row::new(
                 Text::new(
-                    &L10N.tr(if paused {
-                        "printer-paused-hint"
+                    &if paused {
+                        tr!("Printing is paused")
                     } else {
-                        "printer-pause-hint"
-                    }),
+                        tr!("Pause printing")
+                    },
                     Tone::Primary,
                 ),
                 Some(boxed(pause_button)),
@@ -557,11 +555,9 @@ impl SettingsView {
         if !printer.default {
             let mut make = intent(&self.intents, Intent::DefaultPrinter);
             let target = id.clone();
-            let button = Button::new(&L10N.tr("printer-make-default"), move || {
-                make(target.clone())
-            });
+            let button = Button::new(&tr!("Make Default"), move || make(target.clone()));
             actions.push(boxed(Row::new(
-                Text::new(&L10N.tr("printer-default-hint"), Tone::Primary),
+                Text::new(&tr!("Use as the default printer"), Tone::Primary),
                 Some(boxed(button)),
             )));
         }
@@ -570,22 +566,19 @@ impl SettingsView {
         if !removable {
         } else if self.forgetting.as_ref() == Some(&forget) {
             actions.push(self.confirm_row(
-                &L10N.tr_args(
-                    "printer-remove-question",
-                    [("name", printer.name.clone().into())],
-                ),
-                &L10N.tr("printer-remove-warning"),
-                &L10N.tr("remove"),
+                &tr!("Remove “{name}”?", name = printer.name.clone()),
+                &tr!("Documents waiting for it are canceled. You can add it again later."),
+                &tr!("Remove"),
             ));
         } else {
             let mut ask = intent(&self.intents, move |()| {
                 Intent::AskForget(Some(forget.clone()))
             });
-            let button = Button::new(&L10N.tr("remove-ellipsis"), move || ask(()));
+            let button = Button::new(&tr!("Remove…"), move || ask(()));
             self.anchors
                 .push((Anchor::Item(format!("printer:{id}")), button.id()));
             actions.push(boxed(Row::new(
-                Text::new(&L10N.tr("printer-remove-hint"), Tone::Primary),
+                Text::new(&tr!("Remove this printer"), Tone::Primary),
                 Some(boxed(button)),
             )));
         }

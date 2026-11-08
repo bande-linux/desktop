@@ -1,14 +1,14 @@
+use bande_l10n::{text, tr};
+
+use crate::emoji::EMOJI;
+use crate::model::{Hit, Kind, Model, Target};
+use crate::view::Shared;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{Context, Event, Menu, MenuItem, Size, Widget, WidgetId};
 use bande_toolkit::{
     Color, Cut, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextRole,
     TextStyle, shortened,
 };
-
-use crate::L10N;
-use crate::emoji::EMOJI;
-use crate::model::{Hit, Kind, Model, Target};
-use crate::view::Shared;
 
 pub const ROW_HEIGHT: f32 = 32.0;
 pub const CELL_HEIGHT: f32 = 96.0;
@@ -169,14 +169,14 @@ pub fn icon_items(
 }
 
 pub fn tone_name(tone: Option<usize>) -> String {
-    L10N.tr(match tone {
-        None => "tone-default",
-        Some(0) => "tone-light",
-        Some(1) => "tone-medium-light",
-        Some(2) => "tone-medium",
-        Some(3) => "tone-medium-dark",
-        Some(_) => "tone-dark",
-    })
+    match tone {
+        None => tr!("Default"),
+        Some(0) => tr!("Light"),
+        Some(1) => tr!("Medium-Light"),
+        Some(2) => tr!("Medium"),
+        Some(3) => tr!("Medium-Dark"),
+        Some(_) => tr!("Dark"),
+    }
 }
 
 pub const SKIN_TONES: [Option<usize>; 6] = [None, Some(0), Some(1), Some(2), Some(3), Some(4)];
@@ -185,24 +185,24 @@ pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
     let items = match &hit.target {
         Target::Clip(_) => {
             let label = if model.inserts && hit.kind == Kind::CopiedText {
-                "menu-paste"
+                text!("Paste")
             } else {
-                "menu-copy"
+                text!("Copy")
             };
             vec![
-                MenuItem::new(&L10N.tr(label), OPEN).shortcut("Return"),
-                MenuItem::new(&L10N.tr("menu-delete"), REMOVE).shortcut("Delete"),
+                MenuItem::new(&label.tr(), OPEN).shortcut("Return"),
+                MenuItem::new(&tr!("Delete"), REMOVE).shortcut("Delete"),
                 MenuItem::separator(),
-                MenuItem::new(&L10N.tr("menu-clear-history"), CLEAR),
+                MenuItem::new(&tr!("Clear History"), CLEAR),
             ]
         }
         Target::Emoji(character) => {
             let (label, shortcut) = if model.inserts {
-                ("menu-insert", "Return")
+                (text!("Insert"), "Return")
             } else {
-                ("menu-copy", "Return")
+                (text!("Copy"), "Return")
             };
-            let mut items = vec![MenuItem::new(&L10N.tr(label), OPEN).shortcut(shortcut)];
+            let mut items = vec![MenuItem::new(&label.tr(), OPEN).shortcut(shortcut)];
             if EMOJI.has_tones(character) {
                 items.push(MenuItem::separator());
                 for (index, tone) in SKIN_TONES.iter().enumerate() {
@@ -220,16 +220,16 @@ pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
             items
         }
         Target::Value(_) => {
-            vec![MenuItem::new(&L10N.tr("menu-copy"), COPY).shortcut("Ctrl+C")]
+            vec![MenuItem::new(&tr!("Copy"), COPY).shortcut("Ctrl+C")]
         }
         Target::Path(_) => vec![
-            MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return"),
-            MenuItem::new(&L10N.tr("menu-show-in-files"), REVEAL).shortcut("Ctrl+Enter"),
+            MenuItem::new(&tr!("Open"), OPEN).shortcut("Return"),
+            MenuItem::new(&tr!("Show in Files"), REVEAL).shortcut("Ctrl+Enter"),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("menu-copy-path"), COPY).shortcut("Ctrl+C"),
+            MenuItem::new(&tr!("Copy Path"), COPY).shortcut("Ctrl+C"),
         ],
         Target::App(_) | Target::Settings(_) | Target::Command(_) | Target::Item { .. } => {
-            vec![MenuItem::new(&L10N.tr("menu-open"), OPEN).shortcut("Return")]
+            vec![MenuItem::new(&tr!("Open"), OPEN).shortcut("Return")]
         }
     };
     Menu::new(items)

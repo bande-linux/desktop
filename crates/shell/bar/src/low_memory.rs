@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use bande_fs::format_size;
+use bande_l10n::tr;
 use bande_status::memory::{AppMemory, force_quit, heaviest_apps};
 use bande_toolkit::ui::{
     Alert, BUTTON_HEIGHT, Button, Cell, Column, Context, Event, FreeLayout, Key, Row, Size, Table,
@@ -19,8 +20,6 @@ use bande_xdg::{
     find_icon, spawn_detached,
 };
 use zbus::blocking::Connection;
-
-use crate::L10N;
 
 pub const LOW_MEMORY_SIZE: (u32, u32) = (460, 410);
 pub const ACTIVITY_MONITOR: &str = "org.bande.ActivityMonitor";
@@ -101,32 +100,25 @@ impl LowMemoryView {
         let selection = signals.clone();
         let activation = signals.clone();
         let table = Table::new(vec![
-            Column::new(&L10N.tr("low-memory-app"), 200.0).flexible(),
-            Column::new(&L10N.tr("low-memory-used"), MEMORY_COLUMN).numeric(),
+            Column::new(&tr!("App"), 200.0).flexible(),
+            Column::new(&tr!("Memory"), MEMORY_COLUMN).numeric(),
         ])
         .without_header()
         .on_selection(move |keys| selection.borrow_mut().push(Signal::Selected(keys.to_vec())))
         .on_activate(move |_| activation.borrow_mut().push(Signal::ForceQuit));
-        let mut force_quit = Button::new(
-            &L10N.tr("low-memory-force-quit"),
-            sender(&signals, Signal::ForceQuit),
-        )
-        .destructive();
+        let mut force_quit =
+            Button::new(&tr!("Force Quit"), sender(&signals, Signal::ForceQuit)).destructive();
         force_quit.set_enabled(false);
         let mut cx = Context::new(text, palette);
         let table = layout.insert(table, Rect::default());
         let monitor = monitor.then(|| {
             Button::new(
-                &L10N.tr("low-memory-activity-monitor"),
+                &tr!("Activity Monitor"),
                 sender(&signals, Signal::ActivityMonitor),
             )
             .quiet()
         });
-        let close = Button::new(
-            &L10N.tr("low-memory-close"),
-            sender(&signals, Signal::Close),
-        )
-        .cancel();
+        let close = Button::new(&tr!("Close"), sender(&signals, Signal::Close)).cancel();
         let controls = Controls {
             layout: layout.id(),
             table,
@@ -229,19 +221,21 @@ impl LowMemoryView {
         let text = &mut self.ui.context().text;
         let heading = paragraph(
             text,
-            &L10N.tr("low-memory-title"),
+            &tr!("Your computer is running low on memory"),
             TextStyle::role(TextRole::Heading, palette.ink),
             text_width,
         );
         let body = paragraph(
             text,
-            &L10N.tr("low-memory-body"),
+            &tr!(
+                "Quit apps you are not using to keep everything else fast. These apps are using the most memory:"
+            ),
             TextStyle::role(TextRole::Body, palette.ink2),
             text_width,
         );
         let empty = self.apps.is_empty().then(|| {
             text.paragraph(
-                &L10N.tr("low-memory-no-apps"),
+                &tr!("No open apps are using much memory."),
                 TextStyle::role(TextRole::Body, palette.ink2),
                 Some(width_points - 2.0 * PADDING),
                 TextAlign::Center,
@@ -321,12 +315,12 @@ impl LowMemoryView {
         };
         let signals = self.signals.clone();
         let alert = Alert::new(
-            &L10N.tr_args("low-memory-confirm", [("app", app.name.clone().into())]),
-            &L10N.tr("low-memory-confirm-body"),
+            &tr!("Force quit {app}?", app = app.name.clone()),
+            &tr!("Any unsaved changes in it are lost."),
             move |choice| signals.borrow_mut().push(Signal::Chosen(choice.to_owned())),
         )
-        .destructive(&L10N.tr("low-memory-force-quit"), FORCE_QUIT)
-        .cancel(&L10N.tr("button-cancel"), "cancel");
+        .destructive(&tr!("Force Quit"), FORCE_QUIT)
+        .cancel(&tr!("Cancel"), "cancel");
         let alert = match app.icon.as_ref().and_then(|icon| self.icons.get(icon)) {
             Some(icon) => alert.icon(icon.clone()),
             None => alert,

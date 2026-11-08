@@ -10,3 +10,12 @@ endif
 override_dh_gencontrol:
 	debian/default-apps.sh >> debian/bande-desktop.substvars
 	dh_gencontrol -- -v$(DEB_VERSION_OVERRIDE)
+
+override_dh_install:
+	dh_install
+	mkdir -p debian/bande-icon-theme/usr/share/icons
+	cp -R ../../data/icons/Bande ../../data/icons/Bande-* debian/bande-icon-theme/usr/share/icons/
+
+override_dh_installsystemd:
+	dh_installsystemd -pbande-desktop --no-start --no-stop-on-upgrade bande-language-packs.service
+	dh_installsystemd -pbande-desktop bande-language-packs.path

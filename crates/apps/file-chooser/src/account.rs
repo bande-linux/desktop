@@ -2,9 +2,9 @@ use std::cell::Cell;
 use std::process::ExitCode;
 use std::rc::Rc;
 
-use bande_file_chooser::L10N;
-use bande_toolkit::Image;
+use bande_l10n::tr;
 use bande_toolkit::ui::{Alert, Axis, Label, Stack};
+use bande_toolkit::{Color, Image};
 use bande_xdg::{
     ICON_THEMES, Locale, app_name, applications, current_desktops, data_dirs, find_icon,
 };
@@ -14,17 +14,17 @@ use xdg_desktop_portal_bande::dialog_process::{CANCELLED, CHOSEN};
 const SHARE: &str = "share";
 const SPACING: f32 = 4.0;
 const PICTURE_POINTS: f64 = 36.0;
-const FALLBACK_PICTURE: &str = "avatar-default";
+const FALLBACK_PICTURE: &str = "avatar-default-symbolic";
 const UNAVAILABLE: u8 = 2;
 
-fn picture(details: &Details, pixels: u32) -> Option<Image> {
+fn picture(details: &Details, pixels: u32, tint: Color) -> Option<Image> {
     details
         .picture
         .as_deref()
         .and_then(|path| Image::load(path, pixels))
         .or_else(|| {
             find_icon(FALLBACK_PICTURE, pixels, &ICON_THEMES, &data_dirs())
-                .and_then(|path| Image::load(&path, pixels))
+                .and_then(|path| Image::load_symbolic(&path, pixels, tint))
         })
 }
 
@@ -42,9 +42,9 @@ pub fn share(details: &Details) -> ExitCode {
         let message = details
             .reason
             .clone()
-            .unwrap_or_else(|| L10N.tr_args("account-message", [("app", app.clone().into())]));
+            .unwrap_or_else(|| tr!("{app} asks who you are.", app = app.clone()));
         let alert = Alert::new(
-            &L10N.tr_args("account-title", [("app", app.into())]),
+            &tr!("Share your name and picture with {app}?", app = app),
             &message,
             move |action| chosen.set(action == SHARE),
         )
@@ -57,9 +57,9 @@ pub fn share(details: &Details) -> ExitCode {
                 Box::new(Label::new(&details.login).secondary()),
             ],
         ))
-        .cancel(&L10N.tr("button-cancel"), "cancel")
-        .primary(&L10N.tr("button-share"), SHARE);
-        match picture(details, pixels) {
+        .cancel(&tr!("Cancel"), "cancel")
+        .primary(&tr!("Share"), SHARE);
+        match picture(details, pixels, window.appearance().palette().ink2) {
             Some(picture) => alert.icon(picture),
             None => alert,
         }

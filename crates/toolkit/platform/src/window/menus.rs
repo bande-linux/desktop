@@ -2,10 +2,10 @@ use std::time::Instant;
 
 use bande_graphics::{Appearance, Event, Point, Rect, TextSystem};
 use bande_keyboard::{Action, Key, keys_for, keys_of};
+use bande_l10n::tr;
 use bande_widgets::{FrameTime, Menu, MenuItem, MenuOutcome, placement_layout};
 
 use super::{ShellSurface, Window, WindowError, WindowEvent};
-use crate::L10N;
 use crate::popup::{MenuPlacement, Menus, Opening, Parent};
 
 fn menu_text(text: &mut Option<TextSystem>, appearance: Appearance) -> &mut TextSystem {
@@ -18,31 +18,36 @@ impl Window {
     fn move_and_resize_items(&self) -> Vec<MenuItem> {
         let toplevel = self.state.toplevel;
         let resizable = self.is_resizable();
-        let place = |key: &str| MenuItem::new(&L10N.tr(key), key);
-        let tile = |key: &str| place(key).layout(placement_layout(key)).enabled(resizable);
+        let place = |title: String, action: &str| MenuItem::new(&title, action);
+        let tile = |title: String, action: &str| {
+            place(title, action)
+                .layout(placement_layout(action))
+                .enabled(resizable)
+        };
         let mut items = vec![
-            tile("place-left")
+            tile(tr!("Left"), "place-left")
                 .shortcut(&keys_for(Action::TileWindow, Key::Left).unwrap_or_default()),
-            tile("place-right")
+            tile(tr!("Right"), "place-right")
                 .shortcut(&keys_for(Action::TileWindow, Key::Right).unwrap_or_default()),
             MenuItem::separator(),
-            tile("place-top-left"),
-            tile("place-top-right"),
-            tile("place-bottom-left"),
-            tile("place-bottom-right"),
+            tile(tr!("Top Left"), "place-top-left"),
+            tile(tr!("Top Right"), "place-top-right"),
+            tile(tr!("Bottom Left"), "place-bottom-left"),
+            tile(tr!("Bottom Right"), "place-bottom-right"),
             MenuItem::separator(),
-            tile("place-fill").enabled(!toplevel.maximized && resizable),
+            tile(tr!("Fill"), "place-fill").enabled(!toplevel.maximized && resizable),
         ];
         if self.can_place() && self.state.outputs.len() > 1 {
             items.push(
-                place("place-next-display").shortcut(
+                place(tr!("Move to Next Display"), "place-next-display").shortcut(
                     &keys_for(Action::MoveWindowToDisplay, Key::Right).unwrap_or_default(),
                 ),
             );
         }
         items.extend([
             MenuItem::separator(),
-            place("place-restore").enabled(toplevel.tiled || toplevel.maximized),
+            place(tr!("Return to Previous Size"), "place-restore")
+                .enabled(toplevel.tiled || toplevel.maximized),
         ]);
         items
     }
@@ -50,20 +55,24 @@ impl Window {
     pub(super) fn open_window_menu(&mut self, at: Point) -> Result<(), WindowError> {
         let toplevel = self.state.toplevel;
         let mut items = vec![
-            MenuItem::new(&L10N.tr("minimize"), "minimize")
+            MenuItem::new(&tr!("Minimize"), "minimize")
                 .enabled(!toplevel.fullscreen)
                 .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             MenuItem::new(
-                &L10N.tr(if toplevel.maximized { "unzoom" } else { "zoom" }),
+                &if toplevel.maximized {
+                    tr!("Unzoom")
+                } else {
+                    tr!(context = "window menu", "Zoom")
+                },
                 "zoom",
             )
             .enabled(!toplevel.fullscreen && self.is_resizable()),
             MenuItem::new(
-                &L10N.tr(if toplevel.fullscreen {
-                    "exit-full-screen"
+                &if toplevel.fullscreen {
+                    tr!("Exit Full Screen")
                 } else {
-                    "enter-full-screen"
-                }),
+                    tr!("Enter Full Screen")
+                },
                 "full-screen",
             )
             .enabled(toplevel.fullscreen || self.is_resizable())
@@ -73,7 +82,7 @@ impl Window {
         if self.can_place() {
             items.push(
                 MenuItem::submenu(
-                    &L10N.tr("move-and-resize"),
+                    &tr!("Move & Resize"),
                     Menu::new(self.move_and_resize_items()),
                 )
                 .enabled(!toplevel.fullscreen),
@@ -81,17 +90,17 @@ impl Window {
         }
         if self.can_keep_on_top() {
             items.push(
-                MenuItem::new(&L10N.tr("keep-on-top"), "keep-on-top")
+                MenuItem::new(&tr!("Keep on Top"), "keep-on-top")
                     .checked(self.keep_on_top)
                     .enabled(!toplevel.fullscreen),
             );
         }
         items.extend([
-            MenuItem::new(&L10N.tr("move"), "move").enabled(!toplevel.fullscreen),
+            MenuItem::new(&tr!("Move"), "move").enabled(!toplevel.fullscreen),
             MenuItem::separator(),
-            MenuItem::new(&L10N.tr("close"), "close")
+            MenuItem::new(&tr!("Close"), "close")
                 .shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
-            MenuItem::new(&L10N.tr("quit-app"), "quit"),
+            MenuItem::new(&tr!("Quit"), "quit"),
         ]);
         let offset = self.content_offset();
         self.show_menu(

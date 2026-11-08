@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crate::L10N;
+use bande_l10n::tr;
 
 pub const COUNTDOWN: Duration = Duration::from_secs(60);
 pub const QUIT_PATIENCE: Duration = Duration::from_secs(3);
@@ -34,69 +34,80 @@ impl Ending {
     }
 
     pub fn question(self) -> String {
-        L10N.tr(match self {
-            Self::Restart => "confirm-restart",
-            Self::ShutDown => "confirm-shut-down",
-            Self::LogOut => "confirm-log-out",
-        })
+        match self {
+            Self::Restart => tr!("Are you sure you want to restart your computer now?"),
+            Self::ShutDown => tr!("Are you sure you want to shut down your computer now?"),
+            Self::LogOut => tr!("Are you sure you want to quit all apps and log out now?"),
+        }
     }
 
     pub fn countdown(self, left: Duration) -> String {
-        let seconds = [("seconds", left.as_secs().into())];
+        let seconds = left.as_secs();
         match self {
-            Self::Restart => L10N.tr_args("countdown-restart", seconds),
-            Self::ShutDown => L10N.tr_args("countdown-shut-down", seconds),
-            Self::LogOut => L10N.tr_args("countdown-log-out", seconds),
+            Self::Restart => tr!(
+                "The computer restarts automatically in {seconds} seconds.",
+                seconds = seconds
+            ),
+            Self::ShutDown => tr!(
+                "The computer shuts down automatically in {seconds} seconds.",
+                seconds = seconds
+            ),
+            Self::LogOut => tr!(
+                "You are logged out automatically in {seconds} seconds.",
+                seconds = seconds
+            ),
         }
     }
 
     pub fn button(self) -> String {
-        L10N.tr(match self {
-            Self::Restart => "button-restart",
-            Self::ShutDown => "button-shut-down",
-            Self::LogOut => "button-log-out",
-        })
+        match self {
+            Self::Restart => tr!("Restart"),
+            Self::ShutDown => tr!("Shut Down"),
+            Self::LogOut => tr!("Log Out"),
+        }
     }
 
     pub fn blocked(self, app: &str) -> String {
-        let app = [("app", app.to_owned().into())];
         match self {
-            Self::Restart => L10N.tr_args("blocked-restart", app),
-            Self::ShutDown => L10N.tr_args("blocked-shut-down", app),
-            Self::LogOut => L10N.tr_args("blocked-log-out", app),
+            Self::Restart => tr!("{app} is keeping your computer from restarting.", app = app),
+            Self::ShutDown => tr!(
+                "{app} is keeping your computer from shutting down.",
+                app = app
+            ),
+            Self::LogOut => tr!("{app} is keeping you from logging out.", app = app),
         }
     }
 
     pub fn anyway(self) -> String {
-        L10N.tr(match self {
-            Self::Restart => "anyway-restart",
-            Self::ShutDown => "anyway-shut-down",
-            Self::LogOut => "anyway-log-out",
-        })
+        match self {
+            Self::Restart => tr!("Restart Anyway"),
+            Self::ShutDown => tr!("Shut Down Anyway"),
+            Self::LogOut => tr!("Log Out Anyway"),
+        }
     }
 
     pub fn progress(self) -> String {
-        L10N.tr(match self {
-            Self::Restart => "ending-restart",
-            Self::ShutDown => "ending-shut-down",
-            Self::LogOut => "ending-log-out",
-        })
+        match self {
+            Self::Restart => tr!("Restarting…"),
+            Self::ShutDown => tr!("Shutting Down…"),
+            Self::LogOut => tr!("Logging Out…"),
+        }
     }
 
     pub fn failed(self) -> String {
-        L10N.tr(match self {
-            Self::Restart => "failed-restart",
-            Self::ShutDown => "failed-shut-down",
-            Self::LogOut => "failed-log-out",
-        })
+        match self {
+            Self::Restart => tr!("Your computer could not restart."),
+            Self::ShutDown => tr!("Your computer could not shut down."),
+            Self::LogOut => tr!("You could not be logged out."),
+        }
     }
 
     pub fn inhibited(self) -> String {
-        L10N.tr(match self {
-            Self::Restart => "inhibited-restart",
-            Self::ShutDown => "inhibited-shut-down",
-            Self::LogOut => "failed-log-out",
-        })
+        match self {
+            Self::Restart => tr!("Something is keeping your computer from restarting."),
+            Self::ShutDown => tr!("Something is keeping your computer from shutting down."),
+            Self::LogOut => tr!("You could not be logged out."),
+        }
     }
 }
 
@@ -118,12 +129,10 @@ impl Refusal {
             Self::Inhibited(inhibitors) => inhibitors
                 .iter()
                 .map(|inhibitor| {
-                    L10N.tr_args(
-                        "inhibitor",
-                        [
-                            ("who", inhibitor.who.clone().into()),
-                            ("why", inhibitor.why.clone().into()),
-                        ],
+                    tr!(
+                        "{who}: {why}",
+                        who = inhibitor.who.clone(),
+                        why = inhibitor.why.clone()
                     )
                 })
                 .collect::<Vec<_>>()
@@ -134,11 +143,11 @@ impl Refusal {
 }
 
 pub fn try_again() -> String {
-    L10N.tr("try-again")
+    tr!("Try Again")
 }
 
 pub fn quitting_apps() -> String {
-    L10N.tr("quitting-apps")
+    tr!("Quitting apps…")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -316,7 +325,7 @@ pub fn facts(
         name: hostname.trim().to_owned(),
         system,
         chip,
-        memory: L10N.tr_args("memory-gigabytes", [("gigabytes", gigabytes.into())]),
+        memory: tr!("{gigabytes} GB", gigabytes = gigabytes),
     }
 }
 

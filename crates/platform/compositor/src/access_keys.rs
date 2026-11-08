@@ -3,6 +3,9 @@ use std::os::fd::OwnedFd;
 use std::thread;
 use std::time::Duration;
 
+use bande_l10n::tr;
+
+use crate::state::{Compositor, State};
 use bande_config::{Accessibility, BUS_NAME, OBJECT_PATH};
 use rustix::time::{
     Itimerspec, TimerfdClockId, TimerfdFlags, TimerfdTimerFlags, Timespec, timerfd_create,
@@ -12,9 +15,6 @@ use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use zbus::blocking::Connection;
 use zbus::zvariant::Value;
-
-use crate::L10N;
-use crate::state::{Compositor, State};
 
 const SLOW_KEYS_DELAY: Duration = Duration::from_millis(300);
 const BOUNCE_KEYS_DELAY: u32 = 300;
@@ -180,18 +180,20 @@ fn confirm_sticky_keys(session: Connection, turn_on: bool) {
     thread::spawn(move || {
         let (title, body, accept) = if turn_on {
             (
-                L10N.tr("sticky-keys-turn-on-title"),
-                L10N.tr("sticky-keys-turn-on-body"),
-                L10N.tr("sticky-keys-turn-on"),
+                tr!("Turn on Sticky Keys?"),
+                tr!(
+                    "You pressed Shift five times. Sticky Keys let you press modifier keys one at a time, so Shift then A types a capital A."
+                ),
+                tr!("Turn On"),
             )
         } else {
             (
-                L10N.tr("sticky-keys-turn-off-title"),
-                L10N.tr("sticky-keys-turn-off-body"),
-                L10N.tr("sticky-keys-turn-off"),
+                tr!("Turn off Sticky Keys?"),
+                tr!("You pressed Shift five times while Sticky Keys are on."),
+                tr!("Turn Off"),
             )
         };
-        let cancel = L10N.tr("sticky-keys-keep");
+        let cancel = tr!("Cancel");
         let Ok(notifications) = zbus::blocking::Proxy::new(
             &session,
             "org.freedesktop.Notifications",
@@ -207,7 +209,7 @@ fn confirm_sticky_keys(session: Connection, turn_on: bool) {
         let shown: zbus::Result<u32> = notifications.call(
             "Notify",
             &(
-                L10N.tr("accessibility"),
+                tr!("Accessibility"),
                 0u32,
                 "preferences-desktop-accessibility",
                 title,

@@ -1,3 +1,4 @@
+mod badge;
 mod idle;
 mod stale;
 pub mod versions;
@@ -9,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
+use bande_l10n::{text, tr, trn};
 use bande_packages::offline::{self, Results};
 use bande_packages::{
     Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, flatpak,
@@ -21,14 +23,12 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::fdo::RequestNameFlags;
 use zbus::message;
 
-use bande_notify::Urgency;
-use bande_notify::client::{Request, close, notify};
-
-use crate::L10N;
 use crate::client::ConfigProxyBlocking;
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
+use bande_notify::Urgency;
+use bande_notify::client::{Request, close, notify};
 
 const FRESH_SECONDS: u32 = 60 * 60;
 const REBOOT_REQUIRED: &str = "/run/reboot-required";
@@ -118,13 +118,15 @@ impl SoftwareState {
             | Self::Installed {
                 reboot: Some(Reboot::Install(_)),
                 ..
-            } => Some(L10N.tr("restart-to-update")),
+            } => Some(tr!("Restart to install updates")),
             Self::Installed {
                 reboot: Some(Reboot::Finish),
                 ..
-            } => Some(L10N.tr("restart-to-finish")),
-            Self::Installed { logout: true, .. } => Some(L10N.tr("log-out-to-finish")),
-            Self::Interrupted => Some(L10N.tr("updates-interrupted")),
+            } => Some(tr!("Restart to finish updating")),
+            Self::Installed { logout: true, .. } => {
+                Some(tr!("Log out to finish updating the desktop"))
+            }
+            Self::Interrupted => Some(tr!("Updates didn't finish installing")),
             _ => None,
         }
     }
@@ -149,6 +151,7 @@ impl SoftwareState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SoftwareCommand {
+    Glance,
     Open,
     Check,
     Update(Vec<Package>),
@@ -159,12 +162,14 @@ pub enum SoftwareCommand {
 fn explain(failure: &Failure) -> String {
     tracing::warn!("PackageKit: {:?}: {}", failure.code, failure.details);
     match failure.code {
-        ErrorCode::NoNetwork => L10N.tr("updates-no-network"),
-        ErrorCode::Locked => L10N.tr("updates-locked"),
-        ErrorCode::NoSpace => L10N.tr("updates-no-space"),
-        ErrorCode::NotAuthorized => L10N.tr("administrator-only"),
-        ErrorCode::Cancelled => L10N.tr("updates-cancelled"),
-        _ => L10N.tr("updates-went-wrong"),
+        ErrorCode::NoNetwork => tr!("You're offline. Connect to the internet and try again."),
+        ErrorCode::Locked => tr!("Another installation is running. Try again when it finishes."),
+        ErrorCode::NoSpace => {
+            tr!("There isn't enough free space. Free up some space and try again.")
+        }
+        ErrorCode::NotAuthorized => tr!("Only an administrator can change this."),
+        ErrorCode::Cancelled => tr!("The update was canceled."),
+        _ => tr!("Something went wrong. Try again later."),
     }
 }
 
@@ -174,9 +179,13 @@ fn broken(during: Stage, error: &Error) -> SoftwareState {
         Error::Failed(failure) if failure.details.contains(INTERRUPTED) => {
             return SoftwareState::Interrupted;
         }
-        Error::Vanished => L10N.tr("updates-service-stopped"),
+        Error::Vanished => tr!("The update service stopped. Try again in a moment."),
         Error::Failed(failure) => explain(failure),
-        Error::Bus(error) => explained(error, "service-updates", "updates-service-stopped"),
+        Error::Bus(error) => explained(
+            error,
+            text!("Software Update"),
+            text!("The update service stopped. Try again in a moment."),
+        ),
     };
     SoftwareState::Failed { during, reason }
 }
@@ -385,8 +394,8 @@ pub fn finish_update(session: &Connection) -> bool {
 pub fn announce_log_out(session: &Connection) -> zbus::Result<Option<u32>> {
     announce(
         session,
-        &L10N.tr("log-out-to-finish"),
-        &L10N.tr("log-out-to-finish-hint"),
+        &tr!("Log out to finish updating the desktop"),
+        &tr!("The desktop keeps running its old version until you log out"),
     )
 }
 
@@ -451,18 +460,18 @@ fn pulls_offline(client: &Client, ids: &[String]) -> Result<bool, Error> {
 fn flatpak_reason(error: &flatpak::Error) -> String {
     tracing::warn!("cannot update Flatpak apps: {error}");
     let flatpak::Error::Failed(details) = error else {
-        return L10N.tr("updates-went-wrong");
+        return tr!("Something went wrong. Try again later.");
     };
     let details = details.to_lowercase();
     if ["resolve", "connect", "network"]
         .iter()
         .any(|word| details.contains(word))
     {
-        L10N.tr("updates-no-network")
+        tr!("You're offline. Connect to the internet and try again.")
     } else if details.contains("space") {
-        L10N.tr("updates-no-space")
+        tr!("There isn't enough free space. Free up some space and try again.")
     } else {
-        L10N.tr("updates-went-wrong")
+        tr!("Something went wrong. Try again later.")
     }
 }
 
@@ -575,8 +584,8 @@ fn settle(state: SoftwareState) -> SoftwareState {
 }
 
 fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<Option<u32>> {
-    let show = L10N.tr("show-updates");
-    let app_name = L10N.tr("title");
+    let show = tr!("Show Updates");
+    let app_name = tr!("System Settings");
     notify(
         session,
         &Request {
@@ -588,6 +597,7 @@ fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<Opt
             actions: &[("default", &show)],
             urgency: Urgency::Normal,
             sound: None,
+            desktop_entry: Some("org.bande.Settings"),
         },
     )
     .map(Some)
@@ -643,8 +653,10 @@ impl UpdateNotice {
 
 pub(crate) fn restart_hint() -> String {
     match versions::available() {
-        true => L10N.tr("update-ready-hint"),
-        false => L10N.tr("installs-on-restart"),
+        true => tr!(
+            "The update is ready. If it can't start, your computer goes back to this version by itself"
+        ),
+        false => tr!("Updates install while the computer restarts"),
     }
 }
 
@@ -668,8 +680,10 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     if versions::went_back().is_some() && went_back_is_news() {
         return announce(
             session,
-            &L10N.tr("update-went-back"),
-            &L10N.tr("update-went-back-hint"),
+            &tr!("The update couldn't start"),
+            &tr!(
+                "Your computer went back to the previous version. Your files are as you left them"
+            ),
         );
     }
     let finished = finished_offline(system).unwrap_or_else(|error| {
@@ -678,23 +692,31 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     });
     match finished {
         Some(SoftwareState::Installed { count, .. }) => {
-            let summary = L10N.tr_args("updates-were-installed", [("count", count.into())]);
+            let summary = trn!(
+                "1 update was installed",
+                "{count} updates were installed",
+                count = count
+            );
             return announce(session, &summary, "");
         }
         Some(SoftwareState::Failed { reason, .. }) => {
-            return announce(session, &L10N.tr("install-failed"), &reason);
+            return announce(session, &tr!("Could not install updates"), &reason);
         }
         _ => {}
     }
     if let Ok(Some(SoftwareState::Prepared(count))) = waiting_offline(system) {
-        let summary = L10N.tr_args("restart-to-install", [("count", count.into())]);
+        let summary = trn!(
+            "Restart to install 1 update",
+            "Restart to install {count} updates",
+            count = count
+        );
         return announce(session, &summary, &restart_hint());
     }
     if restart_pending() {
         return announce(
             session,
-            &L10N.tr("restart-to-finish"),
-            &L10N.tr("restart-to-finish-hint"),
+            &tr!("Restart to finish updating"),
+            &tr!("Some updates take effect after a restart"),
         );
     }
     if stale::look().logout {
@@ -704,7 +726,9 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     if !check_due(session, &client) {
         return Ok(None);
     }
-    let SoftwareState::Available(packages) = check(&client, Refresh::Always) else {
+    let checked = check(&client, Refresh::Always);
+    badge::remember(&checked);
+    let SoftwareState::Available(packages) = checked else {
         return Ok(None);
     };
     if automatic(session) {
@@ -727,17 +751,31 @@ fn announce_waiting(
     restart: usize,
 ) -> zbus::Result<Option<u32>> {
     let body = match (approve, restart) {
-        (_, 0) => L10N.tr_args("updates-notification-body", [("count", approve.into())]),
-        (0, _) => L10N.tr_args("updates-need-restart-body", [("count", restart.into())]),
-        _ => L10N.tr_args(
-            "updates-some-need-restart-body",
-            [
-                ("count", (approve + restart).into()),
-                ("restart", restart.into()),
-            ],
+        (_, 0) => trn!(
+            "1 update is ready to install.",
+            "{count} updates are ready to install.",
+            count = approve
+        ),
+        (0, _) => trn!(
+            "1 update is ready to install. It needs a restart.",
+            "{count} updates are ready to install. They need a restart.",
+            count = restart
+        ),
+        _ => format!(
+            "{} {}",
+            trn!(
+                "1 update is ready to install.",
+                "{count} updates are ready to install.",
+                count = approve + restart
+            ),
+            trn!(
+                "1 of them needs a restart.",
+                "{count} of them need a restart.",
+                count = restart
+            )
         ),
     };
-    announce(session, &L10N.tr("updates-notification"), &body)
+    announce(session, &tr!("Software updates are available"), &body)
 }
 
 fn automatic(session: &Connection) -> bool {
@@ -819,13 +857,20 @@ fn update_automatically(
         true => None,
         false => Some(settle(update(system, client, &now, &|_| {}))),
     };
+    if let Some(state) = &installed {
+        badge::remember(state);
+    }
     match installed {
         Some(SoftwareState::Failed { reason, .. }) => {
-            announce(session, &L10N.tr("install-failed"), &reason)
+            announce(session, &tr!("Could not install updates"), &reason)
         }
         Some(SoftwareState::Prepared(count)) => announce(
             session,
-            &L10N.tr_args("restart-to-install", [("count", count.into())]),
+            &trn!(
+                "Restart to install 1 update",
+                "Restart to install {count} updates",
+                count = count
+            ),
             &restart_hint(),
         ),
         _ if approve + restart > 0 => announce_waiting(session, approve, restart),
@@ -833,17 +878,21 @@ fn update_automatically(
             reboot: Some(_), ..
         }) => announce(
             session,
-            &L10N.tr("restart-to-finish"),
-            &L10N.tr("restart-to-finish-hint"),
+            &tr!("Restart to finish updating"),
+            &tr!("Some updates take effect after a restart"),
         ),
         Some(SoftwareState::Installed { logout: true, .. }) => announce(
             session,
-            &L10N.tr("log-out-to-finish"),
-            &L10N.tr("log-out-to-finish-hint"),
+            &tr!("Log out to finish updating the desktop"),
+            &tr!("The desktop keeps running its old version until you log out"),
         ),
         Some(SoftwareState::Installed { count, .. }) => announce(
             session,
-            &L10N.tr_args("updates-were-installed", [("count", count.into())]),
+            &trn!(
+                "1 update was installed",
+                "{count} updates were installed",
+                count = count
+            ),
             "",
         ),
         _ => Ok(None),
@@ -862,6 +911,20 @@ pub fn follow_software(
         let client = Client::new(&system);
         for command in receiver {
             let state = match command {
+                SoftwareCommand::Glance => {
+                    match badge::glance(check_interval(&session), restart_pending()) {
+                        badge::Glance::Known(hint) => {
+                            if !updates.send(Update::SoftwareHint(hint)) {
+                                break;
+                            }
+                            continue;
+                        }
+                        badge::Glance::Due => {
+                            updates.send(Update::Software(SoftwareState::Checking));
+                            open_updates(&session, &system, &client)
+                        }
+                    }
+                }
                 SoftwareCommand::Open => {
                     updates.send(Update::Software(SoftwareState::Checking));
                     open_updates(&session, &system, &client)
@@ -908,6 +971,7 @@ pub fn follow_software(
                     }
                 }
             };
+            badge::remember(&state);
             updates.send(Update::SoftwareChecked(last_check(&client)));
             if !updates.send(Update::Software(state)) {
                 break;

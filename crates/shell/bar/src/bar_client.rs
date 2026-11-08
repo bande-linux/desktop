@@ -1,19 +1,21 @@
 use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
-use crate::L10N;
-use crate::rail::{BAR_MARGIN, BarForm, bar_outline, bar_zone, edge_band, owns_node, surface_size};
-use crate::taskbar_client::anchor;
 use accesskit::{Node, NodeId, Role as AccessRole, TreeInfo, TreeUpdate};
 use bande_config::BarEdge;
+use bande_l10n::tr;
 use bande_toolkit::ui::Event;
 use bande_toolkit::{
     App, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Radius, Rect, Role, Scene, Shape,
     Window, WindowEvent,
 };
 
+use crate::rail::{
+    BarForm, bar_outline, bar_zone, cross_margin, edge_band, owns_node, surface_size,
+};
 use crate::status_client::StatusClient;
 use crate::taskbar_client::Taskbar;
+use crate::taskbar_client::anchor;
 
 const BAR_NAMESPACE: &str = "bar";
 const ROOT: NodeId = NodeId(1 << 41);
@@ -29,7 +31,7 @@ pub fn bar_role(edge: BarEdge, icon_size: f32, form: BarForm) -> (Role, (u32, u3
             keyboard: KeyboardFocus::OnDemand,
             namespace: BAR_NAMESPACE.to_owned(),
         }),
-        surface_size(edge, icon_size),
+        surface_size(edge, icon_size, form),
     )
 }
 
@@ -97,7 +99,8 @@ impl BarClient {
         let view = self.status.view_mut();
         let edge = view.edge();
         let outline = bar_outline(edge, view.bar_rect(), view.form()).rect;
-        let hidden = ((view.width() + BAR_MARGIN + HIDDEN_SHADOW) * (1.0 - revealed)).round();
+        let hidden =
+            ((view.width() + cross_margin(view.form()) + HIDDEN_SHADOW) * (1.0 - revealed)).round();
         let (dx, dy) = match edge {
             BarEdge::Left => (-hidden, 0.0),
             BarEdge::Right => (hidden, 0.0),
@@ -135,7 +138,9 @@ impl App for BarClient {
         if revealed < 1.0 {
             let view = self.status.view_mut();
             let edge = view.edge();
-            let hidden = ((view.width() + BAR_MARGIN + HIDDEN_SHADOW) * (1.0 - revealed)).round();
+            let hidden = ((view.width() + cross_margin(view.form()) + HIDDEN_SHADOW)
+                * (1.0 - revealed))
+                .round();
             let offset = match edge {
                 BarEdge::Left => Point::new(-hidden, 0.0),
                 BarEdge::Right => Point::new(hidden, 0.0),
@@ -220,7 +225,7 @@ impl App for BarClient {
         let apps = self.taskbar.accessibility()?;
         let status = self.status.accessibility()?;
         let mut root = Node::new(AccessRole::Toolbar);
-        root.set_label(L10N.tr("taskbar"));
+        root.set_label(tr!("Taskbar"));
         root.set_children(
             [&status, &apps]
                 .into_iter()

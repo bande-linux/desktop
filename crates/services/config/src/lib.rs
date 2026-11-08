@@ -8,11 +8,9 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 use std::time::Duration;
 
 pub use bande_design::Accent;
-use bande_l10n::Localizer;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 
 pub use edit::Setting;
@@ -27,16 +25,15 @@ pub use service::{
 };
 pub use store::{ConfigStore, Loaded, ReloadError};
 
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-config")));
-
 pub const SCALE_RANGE: (f64, f64) = (1.0, 3.0);
 const REFRESH_RATE_RANGE: (f64, f64) = (60.0, 240.0);
 pub const SCREEN_READER: &str = "orca";
 pub const KEY_REPEAT_RATE_RANGE: (u32, u32) = (1, 60);
 pub const KEY_REPEAT_DELAY_RANGE: (u32, u32) = (150, 2000);
-pub const BAR_ICON_SIZE_RANGE: (u32, u32) = (32, 56);
+pub const BAR_ICON_SIZE_RANGE: (u32, u32) = (22, 56);
 pub const DEFAULT_BAR_ICON_SIZE: u32 = 40;
+pub const BAR_GAP_RANGE: (u32, u32) = (0, 24);
+pub const DEFAULT_BAR_GAP: u32 = 8;
 pub const MAX_INPUT_SOURCES: usize = 4;
 pub const POINTER_SPEED_RANGE: (f64, f64) = (-1.0, 1.0);
 pub const ALERT_VOLUME_RANGE: (f64, f64) = (0.0, 1.0);
@@ -44,6 +41,7 @@ pub const ZOOM_RANGE: (f64, f64) = (1.0, 16.0);
 pub const TEXT_SIZE_RANGE: (u32, u32) = (100, 200);
 pub const CURSOR_SIZE_RANGE: (u32, u32) = (24, 128);
 pub const DEFAULT_CURSOR_SIZE: u32 = 24;
+pub const CURSOR_THEME: &str = "Bande-Cursors";
 pub const SYSTEM_KEYBOARDS: [&str; 2] = ["/etc/vconsole.conf", "/etc/default/keyboard"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,13 +173,13 @@ impl Rotation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DisplaySettings {
     pub resolution: Option<(u32, u32)>,
     pub refresh_rate: Option<f64>,
     pub scale: Option<f64>,
     pub rotation: Option<Rotation>,
-    pub match_colours: Option<bool>,
+    pub colour_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -600,6 +598,7 @@ pub struct Bar {
     pub apps: Vec<String>,
     pub auto_hide: bool,
     pub floating: bool,
+    pub gap: u32,
     pub icon_size: u32,
 }
 
@@ -610,6 +609,7 @@ impl Default for Bar {
             apps: DEFAULT_BAR_APPS.map(str::to_owned).to_vec(),
             auto_hide: false,
             floating: true,
+            gap: DEFAULT_BAR_GAP,
             icon_size: DEFAULT_BAR_ICON_SIZE,
         }
     }
@@ -944,7 +944,7 @@ impl Config {
     }
 
     pub fn display(&self, identity: &str) -> DisplaySettings {
-        self.displays.get(identity).copied().unwrap_or_default()
+        self.displays.get(identity).cloned().unwrap_or_default()
     }
 }
 
@@ -1232,6 +1232,7 @@ impl Parser<'_> {
                 "apps" => bar.apps = self.app_ids(child)?,
                 "auto-hide" => bar.auto_hide = self.flag(child)?,
                 "floating" => bar.floating = self.flag(child)?,
+                "gap" => bar.gap = self.integer_in(child, BAR_GAP_RANGE)?,
                 "size" => bar.icon_size = self.integer_in(child, BAR_ICON_SIZE_RANGE)?,
                 _ => return Err(self.unknown_child("bar", child)),
             }
@@ -1672,7 +1673,7 @@ impl Parser<'_> {
                     display.refresh_rate = Some(self.number_in(child, REFRESH_RATE_RANGE)?)
                 }
                 "rotation" => display.rotation = Some(self.rotation(child)?),
-                "match-colours" => display.match_colours = Some(self.flag(child)?),
+                "colour-profile" => display.colour_profile = Some(self.string(child)?),
                 _ => return Err(self.unknown_child(node.name().value(), child)),
             }
             Ok(())

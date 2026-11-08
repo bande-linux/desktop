@@ -2,6 +2,11 @@ use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use bande_l10n::tr;
+
+use crate::controls::{Signal, sender};
+use crate::servers::ServerDone;
+use crate::view::{FilesView, Sheet};
 use accesskit::{Node, Role};
 use bande_fs::{
     Action, BatchItem, BatchProblem, Change, Numbering, RenameRule, new_name, plan_renames,
@@ -11,11 +16,6 @@ use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, Context, PopUpButton, Size, TextField, Widget, WidgetId,
 };
 use bande_toolkit::{Item, Paragraph, Point, Rect, TextAlign, TextRole, TextStyle};
-
-use crate::L10N;
-use crate::controls::{Signal, sender};
-use crate::servers::ServerDone;
-use crate::view::{FilesView, Sheet};
 
 const WIDTH: f32 = 460.0;
 const PADDING: f32 = 20.0;
@@ -91,15 +91,20 @@ impl BatchRename {
 
     fn problem(&self) -> Option<String> {
         if self.kind == RuleKind::Format && self.start.trim().parse::<u64>().is_err() {
-            return Some(L10N.tr("batch-start-number"));
+            return Some(tr!("Start numbers at a whole number."));
         }
         let problem = plan_renames(&self.items, &self.rule()).err()?;
         Some(match problem {
-            BatchProblem::Empty => L10N.tr("rename-empty"),
-            BatchProblem::ContainsSlash => L10N.tr("rename-slash"),
-            BatchProblem::Reserved => L10N.tr("rename-reserved"),
-            BatchProblem::Twice(name) => L10N.tr_args("batch-twice", [("name", name.into())]),
-            BatchProblem::Exists(name) => L10N.tr_args("rename-exists", [("name", name.into())]),
+            BatchProblem::Empty => tr!("A name can’t be empty."),
+            BatchProblem::ContainsSlash => tr!("A name can’t contain “/”."),
+            BatchProblem::Reserved => tr!("The names “.” and “..” are reserved by the system."),
+            BatchProblem::Twice(name) => {
+                tr!("Two items would both be named “{name}”.", name = name)
+            }
+            BatchProblem::Exists(name) => tr!(
+                "The name “{name}” is already taken. Please choose a different name.",
+                name = name
+            ),
         })
     }
 
@@ -112,7 +117,7 @@ impl BatchRename {
             .map(|(position, item)| {
                 let old = name_of(&item.path);
                 let new = new_name(&old, item.folder, &rule, position);
-                L10N.tr_args("batch-example", [("old", old.into()), ("new", new.into())])
+                tr!("{old} → {new}", old = old, new = new)
             })
             .collect()
     }
@@ -125,7 +130,7 @@ fn name_of(path: &Path) -> String {
 }
 
 fn where_titles() -> [String; 2] {
-    [L10N.tr("batch-after-name"), L10N.tr("batch-before-name")]
+    [tr!("after name"), tr!("before name")]
 }
 
 pub(crate) struct RenameSheet {
@@ -378,21 +383,21 @@ impl FilesView {
         match state.kind {
             RuleKind::Replace => vec![
                 (
-                    L10N.tr("batch-find"),
+                    tr!("Find:"),
                     self.rename_field(RenameField::Find, &state.find),
                 ),
                 (
-                    L10N.tr("batch-replace-with"),
+                    tr!("Replace with:"),
                     self.rename_field(RenameField::Replace, &state.replace),
                 ),
             ],
             RuleKind::Add => vec![
                 (
-                    L10N.tr("batch-text"),
+                    tr!("Text:"),
                     self.rename_field(RenameField::Text, &state.text),
                 ),
                 (
-                    L10N.tr("batch-where"),
+                    tr!("Where:"),
                     self.rename_choice(
                         RenameChoice::AddWhere,
                         &where_titles(),
@@ -402,15 +407,15 @@ impl FilesView {
             ],
             RuleKind::Format => vec![
                 (
-                    L10N.tr("batch-format"),
+                    tr!("Format:"),
                     self.rename_choice(
                         RenameChoice::Numbering,
-                        &[L10N.tr("batch-name-index"), L10N.tr("batch-name-counter")],
+                        &[tr!("Name and Index"), tr!("Name and Counter")],
                         usize::from(state.numbering == Numbering::Counter),
                     ),
                 ),
                 (
-                    L10N.tr("batch-where"),
+                    tr!("Where:"),
                     self.rename_choice(
                         RenameChoice::FormatWhere,
                         &where_titles(),
@@ -418,11 +423,11 @@ impl FilesView {
                     ),
                 ),
                 (
-                    L10N.tr("batch-custom-format"),
+                    tr!("Custom Format:"),
                     self.rename_field(RenameField::Name, &state.name),
                 ),
                 (
-                    L10N.tr("batch-start-at"),
+                    tr!("Start numbers at:"),
                     self.rename_field(RenameField::Start, &state.start),
                 ),
             ],
@@ -465,8 +470,8 @@ impl FilesView {
                 }
             })
         };
-        let cancel = button(&L10N.tr("cancel"), "cancel").cancel();
-        let rename = button(&L10N.tr("menu-rename"), "rename").primary();
+        let cancel = button(&tr!("Cancel"), "cancel").cancel();
+        let rename = button(&tr!("Rename"), "rename").primary();
         let (cancel_id, rename_id) = (cancel.id(), rename.id());
         let mut state = BatchRename {
             items,
@@ -481,14 +486,10 @@ impl FilesView {
             start: "1".to_owned(),
             widget: WidgetId::next(),
         };
-        let kinds = [
-            L10N.tr("batch-replace-text"),
-            L10N.tr("batch-add-text"),
-            L10N.tr("batch-format-names"),
-        ];
+        let kinds = [tr!("Replace Text"), tr!("Add Text"), tr!("Format")];
         let mut sheet = RenameSheet {
             id: WidgetId::next(),
-            title: L10N.tr_args("batch-title", [("count", state.items.len().into())]),
+            title: tr!("Rename {count} Items", count = state.items.len()),
             labels: vec![String::new()],
             children: vec![
                 self.rename_choice(RenameChoice::Kind, &kinds, 0),
@@ -612,9 +613,10 @@ impl FilesView {
             .collect::<Vec<_>>();
         self.operations.record(Action::Rename, changes);
         if let Some(error) = error {
-            self.show_notice(
-                L10N.tr_args("error-operation", [("error", error.to_string().into())]),
-            );
+            self.show_notice(tr!(
+                "The operation couldn’t be completed: {error}",
+                error = error.to_string()
+            ));
         }
         let kept = state
             .items

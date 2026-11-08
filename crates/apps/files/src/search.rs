@@ -1,16 +1,16 @@
 use std::path::{Path, PathBuf};
 
-use bande_fs::{ARCHIVES, DOCUMENTS, Recency};
-use bande_search::{FUZZY, FileIndex, FileResults, SearchService};
-use bande_toolkit::ui::{BUTTON_HEIGHT, PopUpButton, SEGMENTED_HEIGHT, SegmentedControl, WidgetId};
-use bande_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
+use bande_l10n::tr;
 
-use crate::L10N;
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
 use crate::tabs::location_title;
 use crate::view::{FilesView, home};
 use crate::views::ViewMode;
+use bande_fs::{ARCHIVES, DOCUMENTS, Recency};
+use bande_search::{FUZZY, FileIndex, FileResults, SearchService};
+use bande_toolkit::ui::{BUTTON_HEIGHT, PopUpButton, SEGMENTED_HEIGHT, SegmentedControl, WidgetId};
+use bande_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
 
 pub const SEARCH_HEIGHT: f32 = 36.0;
 const MAX_FOUND: usize = 2000;
@@ -39,15 +39,15 @@ impl SearchKind {
     ];
 
     fn title(self) -> String {
-        L10N.tr(match self {
-            Self::Any => "kind-any",
-            Self::Folder => "kind-folder",
-            Self::Document => "kind-document",
-            Self::Image => "kind-image",
-            Self::Audio => "kind-audio",
-            Self::Video => "kind-video",
-            Self::Archive => "kind-archive",
-        })
+        match self {
+            Self::Any => tr!("Any Kind"),
+            Self::Folder => tr!("Folder"),
+            Self::Document => tr!("Document"),
+            Self::Image => tr!("Image"),
+            Self::Audio => tr!("Audio"),
+            Self::Video => tr!("Video"),
+            Self::Archive => tr!("Archive"),
+        }
     }
 
     fn matches(self, mime: &str, folder: bool) -> bool {
@@ -67,13 +67,13 @@ impl SearchKind {
 }
 
 fn recency_title(recency: Recency) -> String {
-    L10N.tr(match recency {
-        Recency::AnyTime => "date-any-time",
-        Recency::Today => "date-today-filter",
-        Recency::LastWeek => "date-last-week",
-        Recency::LastMonth => "date-last-month",
-        Recency::ThisYear => "date-this-year",
-    })
+    match recency {
+        Recency::AnyTime => tr!("Any Time"),
+        Recency::Today => tr!("Today"),
+        Recency::LastWeek => tr!("Last 7 Days"),
+        Recency::LastMonth => tr!("Last 30 Days"),
+        Recency::ThisYear => tr!("This Year"),
+    }
 }
 
 pub(crate) struct Searching {
@@ -153,17 +153,14 @@ impl FilesView {
     fn scope_widget(&self, folder: &Path, everywhere: bool) -> SegmentedControl {
         let send = sender(&self.signals);
         let titles = [
-            L10N.tr_args(
-                "search-scope-folder",
-                [(
-                    "folder",
-                    location_title(&Location::Folder(folder.to_path_buf())).into(),
-                )],
+            tr!(
+                "“{folder}”",
+                folder = location_title(&Location::Folder(folder.to_path_buf())),
             ),
-            L10N.tr("search-scope-home"),
+            tr!("Home"),
         ];
         SegmentedControl::new(
-            &L10N.tr("search-scope"),
+            &tr!("Search:"),
             &titles,
             Some(usize::from(everywhere)),
             move |index| send(Signal::Scope(index == 1)),
@@ -188,10 +185,10 @@ impl FilesView {
         let kinds = SearchKind::ALL.map(SearchKind::title);
         let dates = Recency::ALL.map(recency_title);
         (
-            PopUpButton::new(&L10N.tr("search-kind"), &kinds, 0, move |index| {
+            PopUpButton::new(&tr!("Kind"), &kinds, 0, move |index| {
                 kind(Signal::SearchKind(index));
             }),
-            PopUpButton::new(&L10N.tr("search-date"), &dates, 0, move |index| {
+            PopUpButton::new(&tr!("Date Modified"), &dates, 0, move |index| {
                 date(Signal::SearchDate(index));
             }),
         )
@@ -466,7 +463,7 @@ impl FilesView {
         );
         let muted = self.palette.ink2;
         let label = self.text().paragraph(
-            &L10N.tr("search-scope"),
+            &tr!("Search:"),
             TextStyle::new(12.0, muted).weight(TextStyle::SEMIBOLD),
             None,
             TextAlign::Start,

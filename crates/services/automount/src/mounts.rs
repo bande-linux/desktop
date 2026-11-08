@@ -10,6 +10,13 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
+use crate::askpass::{Asked, Askpass, SOCKET_VARIABLE};
+use crate::discovery::Discovery;
+use crate::health::{self, Lost, Shared, follow_network_and_wake, should_retry};
+use crate::mounts_bus::MountsInterface;
+use crate::server::{Protocol, Server};
 use async_io::block_on;
 use bande_keyring::Keyring;
 use bande_notify::Urgency;
@@ -24,13 +31,6 @@ use rustix::process::{Pid, Signal, kill_process};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::object_server::SignalEmitter;
 use zbus::{MatchRule, message};
-
-use crate::L10N;
-use crate::askpass::{Asked, Askpass, SOCKET_VARIABLE};
-use crate::discovery::Discovery;
-use crate::health::{self, Lost, Shared, follow_network_and_wake, should_retry};
-use crate::mounts_bus::MountsInterface;
-use crate::server::{Protocol, Server};
 
 const HELPER: &str = "/usr/libexec/bande-mount-helper";
 const PKEXEC: &str = "/usr/bin/pkexec";
@@ -115,6 +115,7 @@ fn classify(text: &str, user: &str) -> Outcome {
         "401",
         "authentication",
     ]) {
+        bande_log::fault::count("network-share-refused-password");
         return Outcome::NeedsPassword {
             user: user.to_owned(),
             refused: !user.is_empty(),
@@ -299,11 +300,12 @@ impl Mounts {
             mounts.clear_abandoned(&root);
         }
         let announcing = mounts.clone();
-        let discovery = Discovery::start(move || announcing.announce());
+        let discovery = Discovery::new(session.clone(), move || announcing.announce());
         session
             .object_server()
             .at(MOUNTS_PATH, MountsInterface(mounts.clone(), discovery))?;
         session.request_name(MOUNTS_SERVICE)?;
+        mounts.announce();
         Ok(mounts)
     }
 
@@ -362,19 +364,22 @@ impl Mounts {
     pub fn alert_unresponsive(&self, name: &str, point: &Path) -> Option<u32> {
         let id = self.post_alert(
             0,
-            &L10N.tr("server-unresponsive"),
-            &L10N.tr_args("server-unresponsive-body", [("name", name.into())]),
+            &tr!("Server Connection Interrupted"),
+            &tr!(
+                "“{name}” isn’t responding. Files on it can’t be reached until it’s back.",
+                name = name
+            ),
         )?;
         guard(&self.alerts).insert(id, point.to_owned());
         Some(id)
     }
 
     fn post_alert(&self, replaces: u32, summary: &str, body: &str) -> Option<u32> {
-        let disconnect = L10N.tr("server-disconnect");
+        let disconnect = tr!("Disconnect");
         client::notify(
             &self.session,
             &Request {
-                app_name: &L10N.tr("app-name"),
+                app_name: &tr!("Disks"),
                 replaces_id: replaces,
                 app_icon: "folder-remote",
                 summary,
@@ -382,6 +387,7 @@ impl Mounts {
                 actions: &[(ALERT_DISCONNECT, &disconnect)],
                 urgency: Urgency::Critical,
                 sound: None,
+                desktop_entry: None,
             },
         )
         .inspect_err(|error| tracing::warn!("cannot post the alert: {error}"))
@@ -441,6 +447,7 @@ impl Mounts {
     }
 
     pub fn mark_lost(&self, point: &Path, server: &Server, name: &str, alert: Option<u32>) {
+        bande_log::fault::count("network-server-offline");
         let request = guard(&self.known).get(point).map_or_else(
             || ConnectRequest {
                 url: server.url(),
@@ -455,8 +462,11 @@ impl Mounts {
         let alert = alert.and_then(|id| {
             self.post_alert(
                 id,
-                &L10N.tr("server-lost"),
-                &L10N.tr_args("server-lost-body", [("name", name.into())]),
+                &tr!("Server Disconnected"),
+                &tr!(
+                    "“{name}” stopped responding. It will reconnect by itself when it’s back.",
+                    name = name
+                ),
             )
         });
         if let Err(error) = self.disconnect(point) {
@@ -586,7 +596,7 @@ impl Mounts {
             let saved = Keyring::open(KEYRING_APP).and_then(|keyring| {
                 keyring.save(
                     &keychain_key(&server.origin(), user),
-                    &L10N.tr_args("keychain-label", [("server", server.origin().into())]),
+                    &tr!("Server password for {server}", server = server.origin()),
                     &request.password,
                 )
             });
@@ -865,18 +875,19 @@ impl Mounts {
     }
 
     fn notify_lost(&self, name: &str) {
-        let body = L10N.tr_args("connection-lost-body", [("name", name.into())]);
+        let body = tr!("The connection to “{name}” ended.", name = name);
         let posted = client::notify(
             &self.session,
             &Request {
-                app_name: &L10N.tr("app-name"),
+                app_name: &tr!("Disks"),
                 replaces_id: 0,
                 app_icon: "folder-remote",
-                summary: &L10N.tr("connection-lost"),
+                summary: &tr!("Server Disconnected"),
                 body: &body,
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         if let Err(error) = posted {
@@ -885,18 +896,22 @@ impl Mounts {
     }
 
     pub fn notify_device_locked(&self, name: &str) {
-        let body = L10N.tr_args("device-locked-body", [("name", name.into())]);
+        let body = tr!(
+            "Unlock “{name}”, choose File transfer on it if it asks, then plug it in again.",
+            name = name
+        );
         let posted = client::notify(
             &self.session,
             &Request {
-                app_name: &L10N.tr("app-name"),
+                app_name: &tr!("Disks"),
                 replaces_id: 0,
                 app_icon: "phone",
-                summary: &L10N.tr("device-locked"),
+                summary: &tr!("Unlock Your Device"),
                 body: &body,
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         if let Err(error) = posted {

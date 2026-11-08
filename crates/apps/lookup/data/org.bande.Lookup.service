@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.bande.Lookup
+Exec=/usr/bin/bande-lookup --gapplication-service

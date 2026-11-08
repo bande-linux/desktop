@@ -6,18 +6,18 @@ use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_config::{BAR_ICON_SIZE_RANGE, BarEdge};
+use bande_l10n::{tr, trn};
 use bande_taskbar_model::{LauncherEntry, LauncherUpdate};
 use bande_toolkit::ui::{
     Animated, Context, Cursor, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
     past_drag_slop,
 };
-
-use crate::L10N;
-use crate::rail::{BarForm, cross_margin, edge_band, zone_margin};
 use bande_toolkit::{
     Appearance, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme,
     Shape, TextAlign, TextStyle, TextSystem,
 };
+
+use crate::rail::{BarForm, cross_margin, edge_band, sized, zone_margin};
 
 const CROSS_PADDING: f32 = 8.0;
 const SEPARATOR_CELL: f32 = 13.0;
@@ -30,8 +30,8 @@ const LAUNCH_TIMEOUT: Duration = Duration::from_secs(10);
 const LAUNCH_PERIOD: f32 = 1.2;
 const ATTENTION_PULSES: f32 = 2.0;
 const ATTENTION_PERIOD: f32 = 0.6;
-const BADGE_HEIGHT: f32 = 18.0;
-const BADGE_TEXT: f32 = 11.0;
+const BADGE_HEIGHT: (f32, f32) = (14.0, 18.0);
+const BADGE_TEXT: (f32, f32) = (9.0, 11.0);
 const PROGRESS_HEIGHT: f32 = 4.0;
 const HOLD_FOR_MENU: Duration = Duration::from_millis(500);
 const MENU_GAP: f32 = 6.0;
@@ -53,8 +53,7 @@ const FRAME_PLATE: f32 = 36.0;
 const FRAME_PLATE_HOVERED: f32 = 56.0;
 const FRAME_PLATE_PRESSED: f32 = 76.0;
 const OUTLINE_ROUNDNESS: f32 = 0.26;
-const MORE_TEXT: f32 = 13.0;
-const RAIL_WELL_RADIUS: f32 = 10.0;
+const MORE_TEXT: (f32, f32) = (9.0, 13.0);
 pub const WELL_ALPHA: u8 = 14;
 
 #[derive(Debug, Clone)]
@@ -295,7 +294,7 @@ impl TaskbarState {
             edge,
             icon_size,
             scheme: Scheme::default(),
-            form: BarForm::Floating,
+            form: BarForm::default(),
             reduce_motion: false,
             slots: Vec::new(),
             trash: TrashIcons::default(),
@@ -357,6 +356,10 @@ impl TaskbarState {
         self.icon_size = size;
         for slot in &mut self.slots {
             slot.initial = None;
+            slot.badge_text = None;
+        }
+        if let Some(more) = &mut self.more {
+            more.text = None;
         }
         true
     }
@@ -1094,9 +1097,7 @@ impl TaskbarState {
         for slot in &mut self.slots {
             let launching =
                 matches!(&slot.key, Key::App(app_id) if self.launching.contains_key(app_id));
-            let dotted = !slot.leaving
-                && Some(&slot.key) != self.framed.as_ref()
-                && (slot.running() || launching);
+            let dotted = !slot.leaving && (slot.running() || launching);
             slot.dot.animate_at(
                 now,
                 reduce_motion,
@@ -1298,7 +1299,7 @@ impl TaskbarState {
                 .find(|slot| &slot.key == key)
                 .and_then(|slot| slot.app.as_ref())
                 .map_or_else(|| app_id.clone(), |app| app.name.clone()),
-            _ => L10N.tr("trash"),
+            _ => tr!("Trash"),
         }
     }
 
@@ -1349,7 +1350,7 @@ impl TaskbarState {
 
     fn prepare_more(&mut self, cx: &mut Context) {
         if let Some(more) = &mut self.more {
-            let label = L10N.tr_args("more-apps", [("count", (more.hidden.len() as i64).into())]);
+            let label = tr!("+{count}", count = (more.hidden.len() as i64));
             let color = cx.palette.ink;
             if more
                 .text
@@ -1358,7 +1359,8 @@ impl TaskbarState {
             {
                 let paragraph = cx.text.paragraph(
                     &label,
-                    TextStyle::new(MORE_TEXT, color).weight(TextStyle::SEMIBOLD),
+                    TextStyle::new(sized(self.icon_size, MORE_TEXT), color)
+                        .weight(TextStyle::SEMIBOLD),
                     None,
                     TextAlign::Start,
                 );
@@ -1413,7 +1415,7 @@ impl TaskbarState {
                 {
                     let paragraph = cx.text.paragraph(
                         &text,
-                        TextStyle::new(BADGE_TEXT, cx.palette.on_accent)
+                        TextStyle::new(sized(self.icon_size, BADGE_TEXT), cx.palette.on_accent)
                             .weight(TextStyle::SEMIBOLD),
                         None,
                         TextAlign::Start,
@@ -1430,7 +1432,7 @@ impl TaskbarState {
                 .is_none_or(|(color, _)| *color != inverse)
         {
             let paragraph = cx.text.paragraph(
-                &L10N.tr("remove"),
+                &tr!("Remove"),
                 TextStyle::new(REMOVE_TEXT, inverse).weight(TextStyle::SEMIBOLD),
                 None,
                 TextAlign::Start,
@@ -1749,12 +1751,13 @@ impl TaskbarState {
         if badge > 0.0
             && let Some((_, text)) = &slot.badge_text
         {
-            let width = (text.width() + 10.0).max(BADGE_HEIGHT);
+            let height = sized(self.icon_size, BADGE_HEIGHT).round();
+            let width = (text.width() + 10.0).max(height);
             let rest = Rect::new(
                 base.x + base.width - width + 4.0,
                 base.y - 4.0,
                 width,
-                BADGE_HEIGHT,
+                height,
             );
             let pill = scaled(rest, badge);
             let mut badge_items = vec![
@@ -1823,7 +1826,7 @@ impl TaskbarState {
         };
         let icon = self.icon_rect(more.cell);
         items.push(Item::Fill {
-            shape: Shape::rounded(icon, RAIL_WELL_RADIUS),
+            shape: Shape::rounded(icon, icon.width * OUTLINE_ROUNDNESS),
             paint: cx.palette.ink.with_alpha(WELL_ALPHA).into(),
         });
         if let Some((_, _, text)) = &more.text {
@@ -1988,26 +1991,26 @@ impl Widget for Tile {
         if let Key::App(app_id) = &self.key {
             let slot = state.slots.iter().find(|slot| slot.key == self.key);
             if state.launching.contains_key(app_id) {
-                details.push(L10N.tr("opening"));
+                details.push(tr!("opening"));
             } else if slot.is_some_and(Slot::running) {
-                details.push(L10N.tr("running"));
+                details.push(tr!("running"));
             }
             if state.framed.as_ref() == Some(&self.key) {
-                details.push(L10N.tr("active"));
+                details.push(tr!("active"));
             }
             let launcher = state.launcher.get(app_id).copied().unwrap_or_default();
             if let Some(count) = launcher.badge() {
-                details.push(L10N.tr_args("badge", [("count", count.into())]));
+                details.push(tr!("{count} new", count = count));
             }
             if let Some(progress) = launcher.progress() {
                 let percent = (progress * 100.0).round() as i64;
-                details.push(L10N.tr_args("progress", [("percent", percent.into())]));
+                details.push(tr!("{percent} % done", percent = percent));
             }
             if state.attention.contains_key(app_id) {
-                details.push(L10N.tr("attention"));
+                details.push(tr!("needs attention"));
             }
         } else if state.trash.is_full {
-            details.push(L10N.tr("trash-full"));
+            details.push(tr!("contains items"));
         }
         if !details.is_empty() {
             node.set_description(details.join(", "));
@@ -2135,7 +2138,11 @@ impl Widget for MoreTile {
         let state = self.state.borrow();
         let count = state.more.as_ref().map_or(0, |more| more.hidden.len());
         let mut node = Node::new(Role::Button);
-        node.set_label(L10N.tr_args("more-apps-name", [("count", (count as i64).into())]));
+        node.set_label(trn!(
+            "One more app",
+            "{count} more apps",
+            count = (count as i64)
+        ));
         node.add_action(Action::Click);
         node
     }
@@ -2228,7 +2235,7 @@ impl Widget for Taskbar {
 
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::Toolbar);
-        node.set_label(L10N.tr("taskbar"));
+        node.set_label(tr!("Taskbar"));
         node
     }
 

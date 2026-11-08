@@ -20,16 +20,9 @@ mod command;
 
 pub use bande_bus::accounts;
 
-use std::sync::LazyLock;
-
-use bande_l10n::Localizer;
-
 pub use crate::command::Command;
 use crate::dbusmenu::Node;
 use crate::tray::TrayItem;
-
-static L10N: LazyLock<Localizer> =
-    LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-status")));
 
 #[derive(Debug, Clone)]
 pub enum Update {

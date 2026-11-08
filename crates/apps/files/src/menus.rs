@@ -50,6 +50,8 @@ pub enum Command {
     RemoveFromSidebar,
     RestoreSidebar,
     Eject,
+    ConnectToServer,
+    ForgetServer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,6 +120,8 @@ const ACTIONS: &[(&str, Command)] = &[
     ("go:documents", Command::GoTo(Destination::Documents)),
     ("go:downloads", Command::GoTo(Destination::Downloads)),
     ("go:recents", Command::GoTo(Destination::Recents)),
+    ("connect-to-server", Command::ConnectToServer),
+    ("forget-server", Command::ForgetServer),
     ("empty-trash", Command::EmptyTrash),
     ("remove-from-sidebar", Command::RemoveFromSidebar),
     ("restore-sidebar", Command::RestoreSidebar),
@@ -366,6 +370,21 @@ pub fn place_menu(place: Place) -> Menu {
         &Command::RemoveFromSidebar,
     ));
     Menu::new(items)
+}
+
+pub fn server_menu(saved: bool) -> Menu {
+    let mut items = vec![item(text!("Open"), &Command::Open).shortcut("Ctrl+O")];
+    if saved {
+        items.push(MenuItem::separator());
+        items.push(item(text!("Forget This Server"), &Command::ForgetServer));
+    }
+    Menu::new(items)
+}
+
+pub fn network_menu() -> Menu {
+    Menu::new(vec![
+        item(text!("Connect to Server…"), &Command::ConnectToServer).shortcut("Ctrl+K"),
+    ])
 }
 
 pub fn sidebar_menu() -> Menu {

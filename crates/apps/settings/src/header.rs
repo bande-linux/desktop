@@ -1,6 +1,11 @@
 use std::rc::Rc;
 
 use bande_l10n::{tr, trn};
+use bande_network::VpnState;
+use bande_settings_panes::{Group, Pane, PaneId, Value};
+use bande_toolkit::ui::{ScrollView, Toggle, Widget};
+use bande_toolkit::{Color, Image, TextRole};
+use bande_xdg::{ICON_THEMES, find_icon};
 
 use crate::pages::{Widgets, boxed};
 use crate::power::charge_text;
@@ -11,11 +16,6 @@ use crate::widgets::{
     Column, HEADER_SYMBOL, Header, NOTICE_SYMBOL, Notice, SIDEBAR_SYMBOL, SidebarLabel, SidebarRow,
     Text, Tone,
 };
-use bande_network::VpnState;
-use bande_settings_panes::{Group, Pane, PaneId, Value};
-use bande_toolkit::ui::{ScrollView, Toggle, Widget};
-use bande_toolkit::{Color, Image, TextRole};
-use bande_xdg::{ICON_THEMES, find_icon};
 
 const SYMBOL_DENSITY: f32 = 2.0;
 const ATTENTION_SYMBOL: &str = "view-refresh-symbolic";
@@ -223,12 +223,13 @@ impl SettingsView {
                     ),
                 })
             }
-            PaneId::Power => self.battery.as_ref().map(|battery| {
-                tr!(
+            PaneId::Power => self.power.as_ref().map(|power| match &power.battery {
+                Some(battery) => tr!(
                     "{percent}% · {charge}",
                     percent = battery.percent.round(),
                     charge = charge_text(battery.charge)
-                )
+                ),
+                None => tr!("Power adapter"),
             }),
             PaneId::LanguageTime => {
                 let language = self.locale.as_ref().and_then(|locale| {

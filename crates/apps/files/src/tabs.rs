@@ -1,18 +1,18 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use bande_app::{TabDrop, move_tab};
 use bande_l10n::tr;
+use bande_toolkit::ui::{
+    Pointer, ScrollState, TabAction, TabLabel, TabStripLayout, TabsShown, frame_time,
+};
+use bande_toolkit::{Item, Point};
 
 use crate::browser::{Browser, Location};
 use crate::controls::Press;
 use crate::toolbar::TOOLBAR_HEIGHT;
 use crate::view::{FilesView, Hit, Request};
 use crate::views::ViewMode;
-use bande_app::{TabDrop, move_tab};
-use bande_toolkit::ui::{
-    Pointer, ScrollState, TabAction, TabLabel, TabStripLayout, TabsShown, frame_time,
-};
-use bande_toolkit::{Item, Point};
 
 pub const TAB_BAR_HEIGHT: f32 = 36.0;
 const TAB_INSET: f32 = 4.0;
@@ -57,7 +57,12 @@ pub(crate) fn location_title(location: &Location) -> String {
     match location {
         Location::Trash => tr!("Trash"),
         Location::Recents => tr!("Recents"),
-        Location::Server(url) => url.clone(),
+        Location::Network => tr!("Network"),
+        Location::Server { name, .. } if !name.is_empty() => name.clone(),
+        Location::Server { address, .. } => address
+            .split_once("://")
+            .map_or(address.as_str(), |(_, host)| host)
+            .to_owned(),
         Location::Search(folder) => tr!(
             "Searching “{folder}”",
             folder = location_title(&Location::Folder(folder.clone())),
@@ -93,8 +98,8 @@ impl SavedTab {
     pub fn still_there(&self) -> bool {
         match &self.location {
             Location::Folder(folder) => bande_volumes::quick_is_dir(folder),
-            Location::Trash | Location::Recents | Location::Search(_) => true,
-            Location::Server(_) => false,
+            Location::Trash | Location::Recents | Location::Search(_) | Location::Network => true,
+            Location::Server { .. } => false,
         }
     }
 }
@@ -117,14 +122,16 @@ impl FilesView {
     }
 
     fn park(&mut self, browser: Browser) -> Tab {
-        Tab {
+        let parked = Tab {
             browser: std::mem::replace(&mut self.browser, browser),
             mode: self.mode,
             icon_size: self.icon_size,
             shown_root: self.shown_root.take(),
             grid_scroll: std::mem::take(&mut self.grid_scroll),
             scrolls: std::mem::take(&mut self.scrolls),
-        }
+        };
+        self.browser.set_network(self.network.clone());
+        parked
     }
 
     fn leave_tab(&mut self) {

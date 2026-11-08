@@ -148,6 +148,9 @@ msgstr "Flytta åt vänster"
 msgid "Move Right"
 msgstr "Flytta åt höger"
 
+msgid "Server"
+msgstr "Server"
+
 msgid "Alias"
 msgstr "Alias"
 
@@ -235,6 +238,9 @@ msgstr "Papperskorgen är tom"
 msgid "Files you open appear here"
 msgstr "Filer du öppnar visas här"
 
+msgid "Computers and servers on your network appear here"
+msgstr "Datorer och servrar i ditt nätverk visas här"
+
 msgid "No results for “{text}” in {folder}"
 msgstr "Inga resultat för ”{text}” i {folder}"
 
@@ -298,18 +304,6 @@ msgstr "Arkiv"
 msgid "New Window"
 msgstr "Nytt fönster"
 
-msgid "New Tab"
-msgstr "Ny flik"
-
-msgid "New Folder"
-msgstr "Ny mapp"
-
-msgid "Open"
-msgstr "Öppna"
-
-msgid "Get Info"
-msgstr "Visa info"
-
 msgid "Browse Backups…"
 msgstr "Bläddra bland säkerhetskopior…"
 
@@ -319,26 +313,8 @@ msgstr "Duplicera"
 msgid "Make Alias"
 msgstr "Skapa alias"
 
-msgid "Add to Sidebar"
-msgstr "Lägg till i sidofältet"
-
-msgid "Open in Terminal"
-msgstr "Öppna i Terminal"
-
 msgid "Compress"
 msgstr "Komprimera"
-
-msgid "Move to Trash"
-msgstr "Flytta till papperskorgen"
-
-msgid "Delete Immediately…"
-msgstr "Radera direkt…"
-
-msgid "Eject"
-msgstr "Mata ut"
-
-msgid "Find"
-msgstr "Sök"
 
 msgid "Edit"
 msgstr "Redigera"
@@ -421,21 +397,6 @@ msgstr "Framåt"
 msgid "Enclosing Folder"
 msgstr "Överordnad mapp"
 
-msgid "Desktop"
-msgstr "Skrivbord"
-
-msgid "Documents"
-msgstr "Dokument"
-
-msgid "Downloads"
-msgstr "Hämtningar"
-
-msgid "Home"
-msgstr "Hem"
-
-msgid "Recents"
-msgstr "Senaste"
-
 msgid "Recent Folders"
 msgstr "Senaste mappar"
 
@@ -460,11 +421,23 @@ msgstr "Program"
 msgid "Date Added"
 msgstr "Datum tillagd"
 
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Get Info"
+msgstr "Visa info"
+
 msgid "Put Back"
 msgstr "Lägg tillbaka"
 
+msgid "Delete Immediately…"
+msgstr "Radera direkt…"
+
 msgid "Open in New Tab"
 msgstr "Öppna i ny flik"
+
+msgid "Open in Terminal"
+msgstr "Öppna i Terminal"
 
 msgid "Other…"
 msgstr "Annan…"
@@ -502,17 +475,32 @@ msgstr "Kopiera ”{name}” som sökväg"
 msgid "Copy {count} Items as Pathnames"
 msgstr "Kopiera {count} objekt som sökvägar"
 
+msgid "Add to Sidebar"
+msgstr "Lägg till i sidofältet"
+
+msgid "Move to Trash"
+msgstr "Flytta till papperskorgen"
+
 msgid "Move {count} Items to Trash"
 msgstr "Flytta {count} objekt till papperskorgen"
 
 msgid "Empty Trash…"
 msgstr "Töm papperskorgen…"
 
+msgid "New Folder"
+msgstr "Ny mapp"
+
 msgid "New Document"
 msgstr "Nytt dokument"
 
+msgid "Eject"
+msgstr "Mata ut"
+
 msgid "Remove from Sidebar"
 msgstr "Ta bort från sidofältet"
+
+msgid "Forget This Server"
+msgstr "Glöm den här servern"
 
 msgid "Restore Default Sidebar"
 msgstr "Återställ standardsidofältet"
@@ -680,6 +668,9 @@ msgstr "I år"
 msgid "“{folder}”"
 msgstr "”{folder}”"
 
+msgid "Home"
+msgstr "Hem"
+
 msgid "Search:"
 msgstr "Sök:"
 
@@ -758,6 +749,18 @@ msgstr "Det är en liten hämtning från Bandes programarkiv."
 msgid "Install"
 msgstr "Installera"
 
+msgid "Desktop"
+msgstr "Skrivbord"
+
+msgid "Documents"
+msgstr "Dokument"
+
+msgid "Downloads"
+msgstr "Hämtningar"
+
+msgid "Recents"
+msgstr "Senaste"
+
 msgid "Last Folder"
 msgstr "Senaste mappen"
 
@@ -818,14 +821,14 @@ msgstr "Behåll mappar överst vid sortering efter namn"
 msgid "Internal"
 msgstr "Intern"
 
+msgid "Network"
+msgstr "Nätverk"
+
 msgid "Favourites"
 msgstr "Favoriter"
 
 msgid "Locations"
 msgstr "Platser"
-
-msgid "Network"
-msgstr "Nätverk"
 
 msgid "Searching “{folder}”"
 msgstr "Söker i ”{folder}”"

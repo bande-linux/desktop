@@ -1,6 +1,10 @@
 use std::path::Path;
 
+use bande_fs::format_size;
 use bande_l10n::{tr, trn};
+use bande_settings_panes::{PaneId, SettingId};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
 
 use crate::login::App;
 use crate::pages::{Widgets, boxed, muted_row, submit};
@@ -8,10 +12,6 @@ use crate::software::SoftwareState;
 use crate::storage::Category;
 use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
 use crate::widgets::{Row, Segment, Text, Tone, UsageBar};
-use bande_fs::format_size;
-use bande_settings_panes::{PaneId, SettingId};
-use bande_toolkit::Spacing;
-use bande_toolkit::ui::{Axis, Button, Label, SearchField, Stack, Widget};
 
 pub(crate) fn info_row(label: &str, value: &str) -> Box<dyn Widget> {
     boxed(Row::new(
@@ -291,15 +291,15 @@ impl SettingsView {
                     .parent()
                     .map(|folder| shown_path(folder, home.as_deref()))
                     .unwrap_or_default();
-                let mut reveal = intent(&self.intents, Intent::Reveal);
-                let target = path.clone();
-                let show = Button::new(&tr!("Show in Files"), move || reveal(target.clone()));
-                let controls = Stack::new(
-                    Axis::Horizontal,
-                    Spacing::M as f32,
-                    0.0,
-                    vec![boxed(Label::new(&format_size(bytes))), boxed(show)],
-                );
+                let mut controls = vec![boxed(Label::new(&format_size(bytes)))];
+                if self.files_installed {
+                    let mut reveal = intent(&self.intents, Intent::Reveal);
+                    let target = path.clone();
+                    controls.push(boxed(Button::new(&tr!("Show in Files"), move || {
+                        reveal(target.clone())
+                    })));
+                }
+                let controls = Stack::new(Axis::Horizontal, Spacing::M as f32, 0.0, controls);
                 let row = Row::new(Text::new(&name, Tone::Primary), Some(boxed(controls)))
                     .detail(Text::new(&folder, Tone::Muted).caption());
                 self.item_row(path.to_string_lossy().into_owned(), row)

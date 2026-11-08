@@ -7,6 +7,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "“{name}” is not a dictionary Dictionary can add. Use a StarDict (.ifo) or dictd (.index) dictionary, a tarball of one, or a dict:// address."
+msgstr "”{name}” är inte en ordbok som Ordbok kan lägga till. Använd en ordbok i StarDict- (.ifo) eller dictd-format (.index), ett tar-arkiv med en sådan eller en dict://-adress."
+
+msgid "“{name}” could not be added: {detail}."
+msgstr "”{name}” kunde inte läggas till: {detail}."
+
 msgid "Dictionary"
 msgstr "Ordbok"
 
@@ -60,6 +66,27 @@ msgstr "Flytta ned"
 
 msgid "Remove"
 msgstr "Ta bort"
+
+msgid "Add Dictionary…"
+msgstr "Lägg till ordbok…"
+
+msgid "dict://dict.org/wn"
+msgstr "dict://dict.org/wn"
+
+msgid "Add Server"
+msgstr "Lägg till server"
+
+msgid "Add a StarDict or dictd dictionary file, or drop one here. Or add a DICT server (online, unencrypted):"
+msgstr "Lägg till en ordbok i StarDict- eller dictd-format, eller släpp en här. Eller lägg till en DICT-server (på nätet, okrypterad):"
+
+msgid "Adding…"
+msgstr "Lägger till…"
+
+msgid "Dictionaries"
+msgstr "Ordböcker"
+
+msgid "Added “{name}”."
+msgstr "”{name}” har lagts till."
 
 msgid "Search"
 msgstr "Sök"

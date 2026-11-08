@@ -9,7 +9,7 @@ mkdir -p "$out"
 (cd packaging/bande-desktop &&
     DEB_VERSION_OVERRIDE=$version dpkg-buildpackage -b -us -uc &&
     DEB_VERSION_OVERRIDE=$version debian/rules clean)
-mv "packaging/bande-desktop_${version}_all.deb" "$out/"
+mv packaging/*_"${version}"_all.deb "$out/"
 rm -f packaging/*.buildinfo packaging/*.changes
 target=${CARGO_TARGET_DIR:-target}
 cargo build --release --locked --package=bande-l10n-tool

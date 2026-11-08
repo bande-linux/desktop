@@ -156,6 +156,7 @@ fn open_main(
     arguments: &[String],
     displays: Option<&Displays>,
 ) -> Result<WindowId, bande_toolkit::WindowError> {
+    let files = cx.installed(FILES_APP_ID);
     cx.open(
         Kind::Main,
         &tr!("System Settings"),
@@ -164,10 +165,12 @@ fn open_main(
             if let Some(mut pane) = parked {
                 pane.0.set_appearance(appearance);
                 pane.0.set_on_screen(true);
+                pane.0.set_files_installed(files);
                 return pane;
             }
             let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
             view.set_appearance(appearance);
+            view.set_files_installed(files);
             view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
             if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
                 view.hide_screen_reader();
@@ -338,6 +341,16 @@ impl Program for Settings {
         let mut sources = vec![self.feed.fd()];
         sources.extend(self.displays.as_ref().map(Displays::fd));
         sources
+    }
+
+    fn installed_changed(&mut self, cx: &mut Cx<Self>) {
+        let files = cx.installed(FILES_APP_ID);
+        if let Some(view) = settings_view(cx, self.main, &mut self.parked) {
+            view.set_files_installed(files);
+        }
+        if let Some((window, _)) = self.main.and_then(|main| cx.window(main)) {
+            window.request_redraw();
+        }
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {

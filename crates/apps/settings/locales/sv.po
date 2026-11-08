@@ -246,9 +246,6 @@ msgstr "Vill du sluta säkerhetskopiera till {disk}?"
 msgid "The backups stay on the disk, and can still be restored with their password."
 msgstr "Säkerhetskopiorna finns kvar på skivan och kan fortfarande återställas med sitt lösenord."
 
-msgid "The power mode service"
-msgstr "Tjänsten för strömläge"
-
 msgid "The brightness service"
 msgstr "Ljusstyrketjänsten"
 
@@ -477,9 +474,6 @@ msgstr "Importera en VPN-konfiguration"
 msgid "VPN configurations"
 msgstr "VPN-konfigurationer"
 
-msgid "Couldn't import this VPN file."
-msgstr "Det gick inte att importera VPN-filen."
-
 msgid "Forget…"
 msgstr "Glöm …"
 
@@ -646,6 +640,9 @@ msgstr "{source} · {count} inmatningskällor"
 
 msgid "{percent}% · {charge}"
 msgstr "{percent} % · {charge}"
+
+msgid "Power adapter"
+msgstr "Strömadapter"
 
 msgid "No settings match “{query}”"
 msgstr "Inga inställningar matchar ”{query}”"
@@ -814,6 +811,9 @@ msgstr "Ta bort …"
 
 msgid "Import Configuration…"
 msgstr "Importera konfiguration …"
+
+msgid "Installing OpenVPN support…"
+msgstr "Installerar stöd för OpenVPN …"
 
 msgid "Add a WireGuard (.conf) or OpenVPN (.ovpn) file"
 msgstr "Lägg till en WireGuard-fil (.conf) eller OpenVPN-fil (.ovpn)"
@@ -1229,6 +1229,42 @@ msgstr "12 timmar sedan"
 msgid "Now"
 msgstr "Nu"
 
+msgid "Normal"
+msgstr "Normalt"
+
+msgid "Service recommended"
+msgstr "Service rekommenderas"
+
+msgid "Battery health"
+msgstr "Batteritillstånd"
+
+msgid "Maximum capacity {percent}%"
+msgstr "Maximal kapacitet {percent} %"
+
+msgid "Limit charging to {percent}%"
+msgstr "Begränsa laddningen till {percent} %"
+
+msgid "Limit charging"
+msgstr "Begränsa laddningen"
+
+msgid "Stops charging before full to slow the battery's ageing."
+msgstr "Slutar ladda före fullt för att batteriet ska åldras långsammare."
+
+msgid "Power information isn't available because the power service isn't running."
+msgstr "Ströminformation är inte tillgänglig eftersom strömtjänsten inte körs."
+
+msgid "Power source"
+msgstr "Strömkälla"
+
+msgid "Power modes aren't available because the power profiles service isn't installed."
+msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofiler inte är installerad."
+
+msgid "This computer doesn't offer power modes."
+msgstr "Den här datorn har inga strömlägen."
+
+msgid "This computer can't sleep yet, so it stays on when idle. The display still turns off as set in Lock Screen."
+msgstr "Den här datorn kan inte vila än, så den förblir på när den inte används. Skärmen stängs ändå av enligt Låsskärm."
+
 msgid "Only members of the lpadmin group can change printers."
 msgstr "Bara medlemmar i gruppen lpadmin kan ändra skrivare."
 
@@ -1478,6 +1514,12 @@ msgstr "Andra använder ditt kontonamn och det här lösenordet för att ansluta
 msgid "Shared folders"
 msgstr "Delade mappar"
 
+msgid "Other computers won’t see this one nearby and must connect by its address. Installing systemd-resolved lets it announce itself; it also takes over looking up names on the network."
+msgstr "Andra datorer ser inte den här i närheten och måste ansluta med dess adress. Installera systemd-resolved så annonserar den sig; den tar också över namnuppslagen i nätverket."
+
+msgid "Not visible on the network"
+msgstr "Syns inte i nätverket"
+
 msgid "Restart to finish updating"
 msgstr "Starta om för att slutföra uppdateringen"
 
@@ -1590,14 +1632,26 @@ msgstr "Ordlistan {name} passar din region men är inte installerad."
 msgid "No learned words yet."
 msgstr "Inga inlärda ord än."
 
+msgid "Add Text Replacement"
+msgstr "Lägg till textersättning"
+
+msgid "Replace, With"
+msgstr "Ersätt, Med"
+
 msgid "Replace"
 msgstr "Ersätt"
 
 msgid "With"
 msgstr "Med"
 
-msgid "Add Replacement"
-msgstr "Lägg till ersättning"
+msgid "No text replacements yet."
+msgstr "Inga textersättningar än."
+
+msgid "{from}, replaced with {to}"
+msgstr "{from}, ersätts med {to}"
+
+msgid "Remove Text Replacement"
+msgstr "Ta bort textersättning"
 
 msgid "Couldn't empty the Trash."
 msgstr "Det gick inte att tömma papperskorgen."

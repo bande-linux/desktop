@@ -5,6 +5,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::rc::Rc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
@@ -42,6 +43,7 @@ use bande_xdg::{
     state_home, user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
@@ -437,6 +439,8 @@ struct Files {
     mounts: Option<Inbox<()>>,
     nearby_inbox: Option<Inbox<ServersSeen>>,
     nearby: ServersSeen,
+    network_watch: Option<mpsc::Sender<NetworkWatch>>,
+    watching_network: bool,
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
@@ -732,6 +736,21 @@ impl Files {
         }
     }
 
+    fn watch_network(&mut self, cx: &mut Cx<Self>) {
+        let wanted = browser_windows(cx)
+            .into_iter()
+            .any(|id| browser(cx, id).is_some_and(|(_, pane)| pane.view.browser().shows_network()));
+        if wanted == self.watching_network {
+            return;
+        }
+        self.watching_network = wanted;
+        if let Some(watch) = &self.network_watch
+            && watch.send(NetworkWatch::Wanted(wanted)).is_err()
+        {
+            tracing::warn!("cannot look for servers on the network");
+        }
+    }
+
     fn open_backups(&self) {
         let Some(outbox) = self.backups.as_ref().map(Inbox::outbox) else {
             return;
@@ -874,6 +893,7 @@ impl Files {
         size: (u32, u32),
     ) -> Result<WindowId, bande_app::Error> {
         let title = view.title();
+        view.set_terminal_installed(cx.installed(TERMINAL_APP_ID));
         let carrying = Rc::clone(&self.carrying);
         let window = cx.open(Kind::Main, &title.clone(), size, |appearance| {
             view.set_appearance(appearance);
@@ -1283,6 +1303,8 @@ impl Program for Files {
                 .inspect_err(|error| tracing::warn!("cannot wait for backups: {error}"))
                 .ok(),
             nearby: ServersSeen::default(),
+            network_watch: network_watch(),
+            watching_network: false,
             ejects: Inbox::new()
                 .inspect_err(|error| tracing::warn!("cannot report eject failures: {error}"))
                 .ok(),
@@ -1429,6 +1451,7 @@ impl Program for Files {
             shown.request_redraw();
         }
         self.place_quick_look(cx, window);
+        self.watch_network(cx);
         cx.refresh_menus();
     }
 
@@ -1442,6 +1465,7 @@ impl Program for Files {
         if let Pane::Browser(mut closed) = view {
             self.hand_over_operations(cx, closed.view.take_operations());
         }
+        self.watch_network(cx);
         self.remember_recent_folders();
     }
 
@@ -1495,6 +1519,17 @@ impl Program for Files {
             .chain(self.nearby_inbox.iter().map(Inbox::fd))
             .chain(self.backups.iter().map(Inbox::fd))
             .collect()
+    }
+
+    fn installed_changed(&mut self, cx: &mut Cx<Self>) {
+        let terminal = cx.installed(TERMINAL_APP_ID);
+        let windows: Vec<WindowId> = cx.windows().collect();
+        for id in windows {
+            if let Some((_, pane)) = browser(cx, id) {
+                pane.view.set_terminal_installed(terminal);
+                pane.view.reload_apps();
+            }
+        }
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {
@@ -1583,6 +1618,75 @@ fn nearby_changes() -> Option<Inbox<ServersSeen>> {
         tracing::warn!("cannot follow nearby servers: {error}");
     }
     Some(inbox)
+}
+
+fn watch_network_with_mounts() -> zbus::Result<Connection> {
+    let session = Connection::session()?;
+    session.call_method(
+        Some(MOUNTS_SERVICE),
+        MOUNTS_PATH,
+        Some(MOUNTS_INTERFACE),
+        "Watch",
+        &(),
+    )?;
+    Ok(session)
+}
+
+enum NetworkWatch {
+    Wanted(bool),
+    MountsStarted,
+}
+
+fn follow_mounts_service(watch: &mpsc::Sender<NetworkWatch>) -> zbus::Result<()> {
+    let session = Connection::session()?;
+    let bus = DBusProxy::new(&session)?;
+    for change in bus.receive_name_owner_changed_with_args(&[(0, MOUNTS_SERVICE)])? {
+        let started = change.args().is_ok_and(|args| args.new_owner().is_some());
+        if started && watch.send(NetworkWatch::MountsStarted).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn network_watch() -> Option<mpsc::Sender<NetworkWatch>> {
+    let (watch, events) = mpsc::channel();
+    let spawned = std::thread::Builder::new()
+        .name("network watch".to_owned())
+        .spawn(move || {
+            let mut wanted = false;
+            let mut _watching = None;
+            for event in events {
+                match event {
+                    NetworkWatch::Wanted(on) => wanted = on,
+                    NetworkWatch::MountsStarted if !wanted => continue,
+                    NetworkWatch::MountsStarted => {}
+                }
+                _watching = wanted.then(watch_network_with_mounts).and_then(|watching| {
+                    watching
+                        .inspect_err(|error| {
+                            tracing::warn!("cannot look for servers on the network: {error}")
+                        })
+                        .ok()
+                });
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot look for servers on the network: {error}");
+        return None;
+    }
+    let restarts = watch.clone();
+    let following = std::thread::Builder::new()
+        .name("mounts service".to_owned())
+        .spawn(move || {
+            if let Err(error) = follow_mounts_service(&restarts) {
+                tracing::warn!("cannot follow the mounts service: {error}");
+            }
+        });
+    if let Err(error) = following {
+        tracing::warn!("cannot follow the mounts service: {error}");
+    }
+    Some(watch)
 }
 
 fn mount_changes() -> Option<Inbox<()>> {

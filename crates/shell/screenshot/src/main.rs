@@ -1032,7 +1032,10 @@ impl Screenshots {
                 self.arrange(window);
             }
             ThumbnailAction::Menu(at) => {
-                if let Err(error) = window.show_menu(thumbnail.menu(), MenuPlacement::AtPoint(at)) {
+                if let Err(error) = window.show_menu(
+                    thumbnail.menu(bande_xdg::is_installed(FILES_APP_ID)),
+                    MenuPlacement::AtPoint(at),
+                ) {
                     tracing::warn!("cannot show the screenshot's menu: {error}");
                     thumbnail.menu_closed(now);
                 }
@@ -1359,7 +1362,6 @@ fn run() -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
-    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-screenshot");
     let arguments: Vec<String> = std::env::args().collect();
     let outcome = match arguments.as_slice() {

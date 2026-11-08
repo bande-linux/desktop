@@ -1,8 +1,8 @@
 use bande_l10n::{Text, text, tr};
-
-use crate::model::{Kind, SortBy};
 use bande_toolkit::ui::{Menu, MenuItem};
 use bande_xdg::OpenWithChoice;
+
+use crate::model::{Kind, SortBy};
 
 const SORTS: [(SortBy, Text, &str); 5] = [
     (SortBy::None, text!("None"), "none"),
@@ -45,24 +45,31 @@ fn item(message: Text, action: &str) -> MenuItem {
     MenuItem::new(&message.tr(), action)
 }
 
-pub fn desktop_menu(sort: SortBy, paste: bool) -> Menu {
+pub fn desktop_menu(sort: SortBy, paste: bool, settings: bool) -> Menu {
     let sorts = SORTS
         .iter()
         .map(|(by, message, keyword)| {
             item(*message, &format!("sort:{keyword}")).checked(*by == sort)
         })
         .collect();
-    Menu::new(vec![
+    let mut items = vec![
         item(text!("New Folder"), "new-folder").shortcut("Shift+Ctrl+N"),
         item(text!("Paste"), "paste")
             .shortcut("Ctrl+V")
             .enabled(paste),
         MenuItem::separator(),
-        item(text!("Change Wallpaper…"), "change-wallpaper"),
-        MenuItem::separator(),
+    ];
+    if settings {
+        items.extend([
+            item(text!("Change Wallpaper…"), "change-wallpaper"),
+            MenuItem::separator(),
+        ]);
+    }
+    items.extend([
         MenuItem::submenu(&tr!("Sort By"), Menu::new(sorts)),
         item(text!("Clean Up"), "clean-up").enabled(sort == SortBy::None),
-    ])
+    ]);
+    Menu::new(items)
 }
 
 pub fn items_menu(selection: &Selection) -> Menu {

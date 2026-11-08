@@ -1,7 +1,8 @@
-use bande_fs::{GroupBy, Sort};
+use bande_fs::{Entry, GroupBy, Sort};
 use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
-use bande_xdg::UserDir;
+use bande_volumes::load_saved_servers;
+use bande_xdg::{Apps, UserDir, config_dirs, data_dirs};
 
 use crate::backups::backups_installed;
 use crate::browser::Location;
@@ -9,14 +10,12 @@ use std::path::PathBuf;
 
 use crate::controls::{COLUMN_ACTION, COLUMN_LEFT_ACTION, COLUMN_RIGHT_ACTION};
 use crate::menus::{
-    Command, Destination, Folder, Place, Selection, command, folder_menu, items_menu, place_menu,
-    sidebar_menu,
+    Command, Destination, Folder, Place, Selection, command, folder_menu, items_menu, network_menu,
+    place_menu, server_menu, sidebar_menu,
 };
 use crate::sidebar::{BookmarkEdit, PlaceKind, Row, SidebarEdit, favourites, layout_text};
 use crate::view::{FilesView, Hit, Request, user_folder};
 use crate::views::{ListColumn, ViewMode};
-
-const TERMINAL_DESKTOP_ID: &str = "org.bande.Terminal.desktop";
 
 impl FilesView {
     pub(crate) fn context_click(&mut self, hit: Hit, at: Point) -> bool {
@@ -115,6 +114,9 @@ impl FilesView {
     }
 
     pub(crate) fn selection_menu(&self) -> Menu {
+        if let Some(url) = self.browser.chosen_server().and_then(Entry::server_address) {
+            return server_menu(load_saved_servers().iter().any(|server| server.url == url));
+        }
         let selection = self.browser.selection();
         let trashed =
             !selection.is_empty() && selection.iter().all(|entry| entry.trashed.is_some());
@@ -175,10 +177,21 @@ impl FilesView {
     }
 
     pub fn terminal_installed(&self) -> bool {
-        self.apps.find(TERMINAL_DESKTOP_ID).is_some()
+        self.terminal
+    }
+
+    pub fn set_terminal_installed(&mut self, installed: bool) {
+        self.terminal = installed;
+    }
+
+    pub fn reload_apps(&mut self) {
+        self.apps = Apps::load(data_dirs(), &config_dirs());
     }
 
     pub(crate) fn folder_menu(&self) -> Menu {
+        if self.browser.active_column().location == Location::Network {
+            return network_menu();
+        }
         folder_menu(Folder {
             templates: self.templates(),
             trash: self.browser.active_column().location == Location::Trash,
@@ -296,6 +309,12 @@ impl FilesView {
                 Destination::Downloads => Location::Folder(user_folder(UserDir::Downloads)),
                 Destination::Recents => Location::Recents,
             }),
+            Command::ConnectToServer => self.ask_connect(),
+            Command::ForgetServer => {
+                if let Some(url) = self.browser.chosen_server().and_then(Entry::server_address) {
+                    self.requests.push(Request::ForgetServer(url.to_owned()));
+                }
+            }
             Command::EmptyTrash => self.ask_to_empty_trash(),
             Command::RestoreSidebar => self.requests.push(Request::EditSidebar(SidebarEdit {
                 layout: None,
@@ -358,10 +377,6 @@ impl FilesView {
         let Some(Row::Place(place)) = self.sidebar.get(index).cloned() else {
             return;
         };
-        if let Location::Server(url) = &place.location {
-            self.requests.push(Request::ForgetServer(url.clone()));
-            return;
-        }
         let mut places = self.favourite_places();
         places.retain(|known| known.location != place.location);
         let mut hidden = self.hidden_places.clone();

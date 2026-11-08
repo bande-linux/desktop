@@ -6,6 +6,7 @@ mod entry;
 mod file;
 mod icon;
 mod identity;
+mod installed;
 mod launch;
 mod mime;
 mod mimeapps;
@@ -27,6 +28,7 @@ pub use identity::{
     app_for_identity, app_name, find_app, find_app_for_process, notifying_app, notifying_app_name,
     running_app, write_launcher,
 };
+pub use installed::{InstallWatch, is_installed};
 pub use launch::{
     ACTIVATION_TOKEN, ExecError, LaunchError, OpenError, TERMINAL, TERMINAL_APP_ID,
     follow_oom_kills, launch, launch_action, launch_with, launch_with_arguments, open,

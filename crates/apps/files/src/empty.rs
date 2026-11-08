@@ -1,13 +1,13 @@
 use bande_l10n::tr;
+use bande_toolkit::ui::{Axis, Button, Stack, Table, WidgetId};
+use bande_toolkit::{ControlSize, Item, Point, Rect, TextAlign, TextRole, TextStyle};
+use bande_volumes::{connected_volume_of, on_connected_volume};
 
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
 use crate::tabs::location_title;
 use crate::view::{FilesView, Request};
 use crate::views::ViewMode;
-use bande_toolkit::ui::{Axis, Button, Stack, Table, WidgetId};
-use bande_toolkit::{ControlSize, Item, Point, Rect, TextAlign, TextRole, TextStyle};
-use bande_volumes::{connected_volume_of, on_connected_volume};
 
 const GAP: f32 = 8.0;
 const MARGIN: f32 = 16.0;
@@ -35,7 +35,8 @@ impl FilesView {
             Location::Folder(_) => tr!("Empty Folder"),
             Location::Trash => tr!("The Trash is empty"),
             Location::Recents => tr!("Files you open appear here"),
-            Location::Server(_) => tr!("Empty Folder"),
+            Location::Server { .. } => tr!("Empty Folder"),
+            Location::Network => tr!("Computers and servers on your network appear here"),
             Location::Search(scope) => {
                 let searching = self.searching.as_ref().filter(|shown| shown.answered)?;
                 tr!(

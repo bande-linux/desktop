@@ -545,6 +545,19 @@ msgstr "Flyt fritt från skärmkanten"
 msgid "floating, attached, dock, margin, edge, rounded"
 msgstr "flytande, fäst, dock, marginal, kant, rundad"
 
+msgid "Spacing"
+msgstr "Avstånd"
+
+msgid "gap, margin, space, distance, edge, floating, maximized"
+msgstr "mellanrum, marginal, avstånd, kant, flytande, maximerad"
+
+msgctxt "gap"
+msgid "None"
+msgstr "Inget"
+
+msgid "Wide"
+msgstr "Stort"
+
 msgid "Automatically hide and show the taskbar"
 msgstr "Dölj och visa aktivitetsfältet automatiskt"
 
@@ -989,6 +1002,15 @@ msgstr "Kort"
 msgid "Spelling"
 msgstr "Stavning"
 
+msgid "Text Replacements"
+msgstr "Textersättningar"
+
+msgid "text replacement, replace, abbreviation, shortcut, expand, snippet, autotext"
+msgstr "textersättning, ersätt, förkortning, genväg, expandera, textsnutt"
+
+msgid "As you type, the text on the left is replaced with the text on the right."
+msgstr "När du skriver ersätts texten till vänster med texten till höger."
+
 msgid "Modifier keys"
 msgstr "Modifierartangenter"
 
@@ -1276,6 +1298,12 @@ msgstr "Använd strömsparläge på batteri"
 
 msgid "low power mode, automatic, unplugged, longer battery life"
 msgstr "strömsparläge, automatiskt, urkopplad, längre batteritid"
+
+msgid "Power source"
+msgstr "Strömkälla"
+
+msgid "power adapter, mains, plugged in, energy, sleep, power profiles"
+msgstr "strömadapter, nätström, ansluten, energi, vila, strömprofiler"
 
 msgid "On power adapter"
 msgstr "På nätadapter"

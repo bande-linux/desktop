@@ -1,8 +1,10 @@
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::time::Duration;
 
 use bande_dict::{Entry, Hit, Line, Match, Pack};
 use bande_https::Timeouts;
+
+use crate::import;
 
 const PORT: u16 = 443;
 const ANSWER_LIMIT: u64 = 256 * 1024;
@@ -12,6 +14,7 @@ const TIMEOUTS: Timeouts = Timeouts {
     transfer: Duration::from_secs(10),
 };
 const WIKIMEDIA_SUMMARY: &str = "wikimedia-summary";
+const DICT: &str = "dict";
 
 fn encoded(word: &str) -> String {
     word.bytes()
@@ -62,15 +65,12 @@ fn get(host: &str, path: &str) -> io::Result<(u16, String, Vec<u8>)> {
 
 pub fn look_up(source: &Pack, word: &str, language: &str) -> Option<Hit> {
     let online = source.online.as_ref()?;
-    if language.is_empty()
-        || !language
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
-        return None;
-    }
     match online.protocol.as_str() {
         WIKIMEDIA_SUMMARY => wikimedia_summary(source, &online.url, word, language),
+        DICT => dict(source, &online.url, word)
+            .inspect_err(|error| tracing::warn!("cannot ask {}: {error}", source.name))
+            .ok()
+            .flatten(),
         other => {
             tracing::warn!("{}: unknown protocol {other}", source.id);
             None
@@ -79,6 +79,13 @@ pub fn look_up(source: &Pack, word: &str, language: &str) -> Option<Hit> {
 }
 
 fn wikimedia_summary(source: &Pack, url: &str, word: &str, language: &str) -> Option<Hit> {
+    if language.is_empty()
+        || !language
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return None;
+    }
     let address = url
         .replace("{language}", language)
         .replace("{word}", &encoded(word.trim()));
@@ -134,4 +141,81 @@ fn summary(source: &Pack, body: &[u8], language: &str) -> Option<Hit> {
         }],
         derived: None,
     })
+}
+
+fn dict(source: &Pack, url: &str, word: &str) -> io::Result<Option<Hit>> {
+    let word = word.trim();
+    if word.is_empty()
+        || word
+            .chars()
+            .any(|c| c == '"' || c == '\\' || c.is_control())
+    {
+        return Ok(None);
+    }
+    let (host, port, database) =
+        import::parse_dict_url(url).ok_or_else(|| io::Error::other("a bad address"))?;
+    let mut stream = import::connect_dict(&host, port)?;
+    stream
+        .get_mut()
+        .write_all(format!("DEFINE {database} \"{word}\"\r\nQUIT\r\n").as_bytes())?;
+    let mut entries = Vec::new();
+    let mut current: Option<Entry> = None;
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if stream.read_line(&mut line)? == 0 {
+            break;
+        }
+        let text = line.trim_end_matches(['\r', '\n']);
+        if text == "." && current.is_some() {
+            entries.extend(current.take());
+            continue;
+        }
+        match &mut current {
+            Some(entry) => {
+                let text = text
+                    .strip_prefix('.')
+                    .filter(|_| text.starts_with(".."))
+                    .unwrap_or(text);
+                let text = text.trim();
+                if !text.is_empty() && !(entry.lines.is_empty() && text.eq_ignore_ascii_case(word))
+                {
+                    entry.lines.push(Line {
+                        kind: 'D',
+                        text: text.to_owned(),
+                    });
+                }
+            }
+            None if text.starts_with("151 ") => {
+                current = Some(Entry {
+                    word: word.to_owned(),
+                    pos: String::new(),
+                    lines: Vec::new(),
+                });
+            }
+            None if text.starts_with("250")
+                || text.starts_with("552")
+                || text.starts_with("221") =>
+            {
+                if !text.starts_with("250") {
+                    break;
+                }
+            }
+            None if text.starts_with('5') || text.starts_with('4') => {
+                return Err(io::Error::other(text.to_owned()));
+            }
+            None => {}
+        }
+    }
+    Ok((!entries.is_empty()).then(|| Hit {
+        place: 0,
+        id: source.id.clone(),
+        source: source.name.clone(),
+        attribution: source.attribution.clone(),
+        language: String::new(),
+        matched: Match::Headword,
+        kind: source.kind_rank(""),
+        entries,
+        derived: None,
+    }))
 }

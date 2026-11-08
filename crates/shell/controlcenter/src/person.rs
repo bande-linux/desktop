@@ -41,9 +41,10 @@ pub struct PersonRow {
 }
 
 impl PersonRow {
-    pub fn new(name: &str, icon_dirs: &[PathBuf], changes: &Changes) -> Self {
+    pub fn new(name: &str, icon_dirs: &[PathBuf], settings: bool, changes: &Changes) -> Self {
         let buttons = BUTTONS
             .iter()
+            .filter(|(_, _, change)| settings || *change != Change::Settings)
             .map(|(label, glyph, change)| {
                 let changes = Changes::clone(changes);
                 let change = change.clone();

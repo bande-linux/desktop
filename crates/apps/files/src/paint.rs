@@ -1,7 +1,18 @@
-use bande_l10n::{Text, text, tr, trn};
-use bande_volumes::{on_connected_volume, quick_is_dir};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+use bande_content::Preview;
+use bande_fs::{Entry, Purpose, format_civil_date, format_date, format_size, is_hidden};
+use bande_l10n::{Text, text, tr, trn};
+use bande_thumbnails::ThumbnailSize;
+use bande_toolkit::ui::{
+    BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
+};
+use bande_toolkit::{
+    Color, Cut, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Shape,
+    TextAlign, TextRole, TextStyle, shortened,
+};
+use bande_volumes::{on_connected_volume, quick_is_dir};
 
 use crate::browser::Location;
 use crate::gallery::strip_size;
@@ -12,17 +23,9 @@ use crate::view::{
     PROGRESS_HEIGHT, ROW_HEIGHT, SIDEBAR_WIDTH,
 };
 use crate::views::ViewMode;
-use bande_content::Preview;
-use bande_fs::{Entry, Purpose, format_civil_date, format_date, format_size, is_hidden};
-use bande_thumbnails::ThumbnailSize;
-use bande_toolkit::ui::{
-    BUTTON_HEIGHT as CONTROL_HEIGHT, CHECKBOX_SIZE, SWITCH_SIZE, Size, TEXT_FIELD_HEIGHT, WidgetId,
-};
-use bande_toolkit::{
-    Color, Cut, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Shape,
-    TextAlign, TextRole, TextStyle, shortened,
-};
 
+const COMPUTER_ICONS: [&str; 2] = ["computer", "network-server"];
+const SHARE_ICONS: [&str; 1] = ["folder-remote"];
 const ROW_INSET: f32 = 4.0;
 const NAME_SIZE: f32 = 13.0;
 const SMALL_SIZE: f32 = 11.0;
@@ -87,6 +90,12 @@ pub(crate) fn fitted(area: Rect, image: &Image) -> Rect {
     centred(area, (width * scale).round(), (height * scale).round())
 }
 
+fn is_share(address: &str) -> bool {
+    address
+        .split_once("://")
+        .is_some_and(|(_, rest)| rest.trim_end_matches('/').contains('/'))
+}
+
 impl FilesView {
     fn paragraph(&mut self, text: &str, size: f32, color: Color, weight: f32) -> Paragraph {
         self.text().paragraph(
@@ -136,6 +145,13 @@ impl FilesView {
     pub(crate) fn entry_icon(&mut self, entry: &Entry, pixels: u32) -> Option<Image> {
         if entry.is_folder() {
             return self.icons.first(&["folder"], pixels);
+        }
+        if let Some(address) = entry.server_address() {
+            let names: &[&str] = match is_share(address) {
+                true => &SHARE_ICONS,
+                false => &COMPUTER_ICONS,
+            };
+            return self.icons.first(names, pixels);
         }
         let target = entry
             .link

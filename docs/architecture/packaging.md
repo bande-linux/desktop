@@ -79,7 +79,9 @@ profiles. Sizes are in [performance.md](performance.md).
   `P-l10n-<lang>`, when the archive has it and it is missing; Debian's own packs (Firefox ESR,
   LibreOffice) come the same way. It decides from dpkg's final state, exits at once and silently
   when nothing is missing, and only to install waits for apt or PackageKit to release the lock; it
-  logs only what it installs. An upgrade, a new app or a new language each brings its packs.
+  logs only what it installs, or why it couldn't (`LogLevelMax=notice` also drops systemd's start
+  and finish lines). A run with nothing missing costs about 0.1 s and 0.1 s of CPU, measured on
+  an arm64 builder; with no language set beyond `C` it skips the archive query. An upgrade, a new app or a new language each brings its packs.
   A run that failed, offline, runs again when NetworkManager reports a connection
   (`/usr/lib/NetworkManager/dispatcher.d/90-bande-language-packs`). Settings ▸ Language puts the
   languages with a pack (installed or in the APT index) first, says while Bande's text is being

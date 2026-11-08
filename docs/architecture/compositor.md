@@ -166,8 +166,9 @@ when they reach the screen is Bande's own.
   display, aligning tops, bottoms or centres within 48 pt, and never onto another display; with
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
-  display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
-  and controls, Refresh rate, Rotation and Colour profile. Every change is written to
+  display, Extended, Mirror), Size of text and controls (Default, then Larger Text to More Space, each
+  shown as the size the desktop looks like at the native resolution, as macOS lists scaled
+  resolutions), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation and Colour profile. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 

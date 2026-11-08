@@ -379,8 +379,10 @@ impl SettingsView {
                     )
                 };
                 let last = SCALES.len() - 1;
-                let mut choices: Vec<(String, Value)> =
-                    vec![(L10N.tr("text-size-default"), Value::Keyword(AUTOMATIC.to_owned()))];
+                let mut choices: Vec<(String, Value)> = vec![(
+                    L10N.tr("text-size-default"),
+                    Value::Keyword(AUTOMATIC.to_owned()),
+                )];
                 choices.extend(SCALES.iter().enumerate().map(|(index, &percent)| {
                     let label = match index {
                         0 => L10N.tr_args("text-size-larger", [("size", looks(percent).into())]),

@@ -173,11 +173,16 @@ impl Compositor {
         self.state.refresh_materials();
     }
 
+    pub(crate) fn style_keyword(&self) -> &'static str {
+        self.state.materials.style.keyword()
+    }
+
     pub fn set_style(&mut self, style: Style, increased_contrast: bool) {
         self.state.materials.style = style;
         self.state.materials.increased_contrast = increased_contrast;
         self.state.refresh_materials();
         self.state.needs_redraw = true;
+        bande_log::fault::write_session_facts(&self.session_facts());
     }
 
     pub fn set_wallpaper_choice(&mut self, choice: Choice) {

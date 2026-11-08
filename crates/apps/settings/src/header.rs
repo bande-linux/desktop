@@ -247,7 +247,7 @@ impl SettingsView {
                 (!parts.is_empty()).then(|| parts.join(" · "))
             }
             PaneId::About => self.about.as_ref().map(|about| about.model.clone()),
-            PaneId::Storage | PaneId::SoftwareUpdate | PaneId::CrashReports => {
+            PaneId::Storage | PaneId::SoftwareUpdate | PaneId::Diagnostics | PaneId::SendReport => {
                 self.pane_summary(pane.id)
             }
             PaneId::NightLight => self.night_light_summary(),

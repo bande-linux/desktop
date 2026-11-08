@@ -10,7 +10,9 @@ export DEBIAN_FRONTEND=noninteractive
 case ${1:-} in
 fetch)
     debver=$2 work=$(realpath -m "$3")
-    printf 'Types: deb-src\nURIs: http://deb.debian.org/debian\nSuites: testing unstable\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n' \
+    keyring=$(sed -n 's/^Signed-By: //p' /etc/apt/sources.list.d/debian.sources 2>/dev/null | head -1)
+    [ -n "$keyring" ] || keyring=$(ls /usr/share/keyrings/debian-archive-keyring.pgp /usr/share/keyrings/debian-archive-keyring.gpg 2>/dev/null | head -1)
+    printf 'Types: deb-src\nURIs: http://deb.debian.org/debian\nSuites: testing unstable\nComponents: main\nSigned-By: %s\n' "$keyring" \
         > /etc/apt/sources.list.d/debian-src.sources
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends devscripts quilt python3 debhelper dpkg-dev \

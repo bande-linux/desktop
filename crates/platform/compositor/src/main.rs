@@ -219,6 +219,10 @@ fn window_memory() -> Option<PathBuf> {
     bande_xdg::state_home().map(|state| state.join("bande/windows"))
 }
 
+fn layer_places() -> Option<PathBuf> {
+    bande_xdg::state_home().map(|state| state.join("bande/layer-places"))
+}
+
 fn window_sessions() -> Option<PathBuf> {
     bande_xdg::state_home().map(|state| state.join("bande/window-sessions"))
 }
@@ -506,6 +510,9 @@ fn listen<O: 'static>(
         .use_cursor_theme(CursorTheme::from_environment());
     if let Some(path) = window_memory() {
         app.compositor.remember_windows_in(path);
+    }
+    if let Some(path) = layer_places() {
+        app.compositor.remember_layer_places_in(path);
     }
     let socket_name = socket.socket_name().to_string_lossy().into_owned();
     if let Some(session) = &app.buses.session {

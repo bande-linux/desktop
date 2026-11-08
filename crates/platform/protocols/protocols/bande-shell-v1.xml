@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="6">
+  <interface name="bande_shell_v1" version="7">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -403,24 +403,22 @@
       <arg name="names" type="string"/>
     </event>
 
-    <request name="set_scrim">
-      <description summary="dim the display behind a layer surface">
-        While this layer surface is mapped, the compositor dims the whole
-        display behind it with the scrim colour at the given opacity (0 to 1),
-        blurred where the renderer allows, so that a centred panel such as the
-        launcher need only be as big as itself. A pointer press on the scrim
-        reaches nothing below it: the compositor sends scrim_pressed instead.
-        The opacity applies at once; send it right before the surface's commit
-        to animate it with the surface.
+    <request name="dismiss_on_press_outside">
+      <description summary="close a layer surface when the user clicks elsewhere">
+        While this layer surface is mapped, a pointer press outside it and its
+        popups sends pressed_outside and then reaches whatever lies under the
+        pointer as usual, so a panel such as the launcher hides when the user
+        clicks beside it without taking that click. A press that closes an
+        open menu closes only the menu.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
-      <arg name="opacity" type="fixed"/>
     </request>
 
-    <event name="scrim_pressed">
-      <description summary="the pointer pressed on a scrim">
-        Sent to the client whose layer surface set the scrim when a pointer
-        button is pressed on the scrim outside the surface and its popups.
+    <event name="pressed_outside">
+      <description summary="the pointer pressed outside a surface">
+        Sent to the client whose layer surface asked for
+        dismiss_on_press_outside when a pointer button is pressed outside the
+        surface and its popups.
       </description>
       <arg name="surface" type="object" interface="wl_surface"/>
     </event>
@@ -571,6 +569,22 @@
         brings it forward when it is running.
       </description>
     </event>
+
+    <request name="move_layer" since="7">
+      <description summary="let the user move a layer surface with the pointer">
+        Starts moving the client's layer surface with the pointer, for the
+        button press with this serial, as xdg_toplevel.move does for a window.
+        The surface follows the pointer, stays whole on its display and snaps
+        to where its anchor and margins put it when it comes within a few
+        points of that place. The compositor remembers where it is left for
+        its namespace on each display, in $XDG_STATE_HOME/bande/layer-places,
+        and shows it there whenever it maps on that display, clamped so it
+        stays whole, until it is moved back.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="serial" type="uint"/>
+    </request>
   </interface>
 
   <interface name="bande_app_v1" version="10">

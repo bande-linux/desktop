@@ -52,15 +52,17 @@ delegate_noop!(Globals: ignore ExtForeignToplevelHandleV1);
 
 impl Dispatch<BandeShellV1, ()> for Globals {
     fn event(
-        _: &mut Self,
+        globals: &mut Self,
         shell: &BandeShellV1,
         event: bande_shell_v1::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let bande_shell_v1::Event::Ping { serial } = event {
-            shell.pong(serial);
+        match event {
+            bande_shell_v1::Event::Ping { serial } => shell.pong(serial),
+            bande_shell_v1::Event::PressedOutside { .. } => globals.pressed_outside += 1,
+            _ => {}
         }
     }
 }

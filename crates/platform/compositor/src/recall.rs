@@ -21,53 +21,55 @@ struct Remembered {
     frame: Rectangle<i32, Logical>,
 }
 
-struct FrameWriter {
+pub(crate) struct LatestWriter {
+    what: &'static str,
     latest: Option<Sender<String>>,
     worker: Option<JoinHandle<()>>,
 }
 
-impl FrameWriter {
-    fn start(path: PathBuf) -> io::Result<Self> {
+impl LatestWriter {
+    pub(crate) fn start(path: PathBuf, what: &'static str) -> io::Result<Self> {
         let (latest, written) = mpsc::channel::<String>();
         let worker = thread::Builder::new()
-            .name("window memory".to_owned())
+            .name(what.to_owned())
             .spawn(move || {
                 while let Ok(first) = written.recv() {
                     let text = written.try_iter().last().unwrap_or(first);
                     if let Err(error) = bande_xdg::replace_file(&path, &text) {
-                        tracing::warn!("cannot remember where the window was: {error}");
+                        tracing::warn!("cannot write the {what}: {error}");
                     }
                 }
             })?;
         Ok(Self {
+            what,
             latest: Some(latest),
             worker: Some(worker),
         })
     }
 
-    fn write(&self, text: String) {
+    pub(crate) fn write(&self, text: String) {
         if let Some(latest) = &self.latest
             && latest.send(text).is_err()
         {
-            tracing::warn!("cannot remember where the window was: the writer stopped");
+            tracing::warn!("cannot write the {}: the writer stopped", self.what);
         }
     }
 }
 
-impl Drop for FrameWriter {
+impl Drop for LatestWriter {
     fn drop(&mut self) {
         self.latest = None;
         if let Some(worker) = self.worker.take()
             && worker.join().is_err()
         {
-            tracing::warn!("the window memory writer stopped early");
+            tracing::warn!("the {} writer stopped early", self.what);
         }
     }
 }
 
 #[derive(Default)]
 pub(crate) struct Recall {
-    writer: Option<FrameWriter>,
+    writer: Option<LatestWriter>,
     frames: Vec<Remembered>,
 }
 
@@ -271,7 +273,7 @@ impl Compositor {
         let frames = fs::read_to_string(&path)
             .map(|text| parse(&text))
             .unwrap_or_default();
-        let writer = FrameWriter::start(path)
+        let writer = LatestWriter::start(path, "window memory")
             .inspect_err(|error| tracing::warn!("window positions are not remembered: {error}"))
             .ok();
         self.state.recall = Recall { writer, frames };

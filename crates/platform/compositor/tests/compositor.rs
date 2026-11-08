@@ -411,3 +411,60 @@ fn another_process_dialog_opens_over_the_window_it_is_attached_to() {
             .is_minimized()
     );
 }
+
+#[test]
+fn a_click_beside_the_search_reaches_the_window_and_the_search_stays_where_it_was_dragged() {
+    let mut server = headless(800, 600);
+    let mut editor = TestClient::window(&mut server, "org.example.Editor");
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    shell.use_seat(&mut server);
+    let bytes = BLUE.repeat(200 * 100);
+    let card = ShmImage {
+        width: 200,
+        height: 100,
+        stride: 800,
+        format: Format::Xrgb8888,
+        bytes: &bytes,
+    };
+    shell.show_panel(&mut server, &card, 100);
+    let rect = server.windows()[0].geometry().expect("mapped");
+    let window = rect.loc.to_f64() + rect.size.downscale(2).to_point().to_f64();
+    let clicks = editor.buttons().len();
+    let click = |server: &mut Compositor,
+                 shell: &mut TestClient,
+                 editor: &mut TestClient,
+                 at: (f64, f64)| {
+        server.move_pointer_to(at.into(), 0);
+        server.press_button(BTN_LEFT, true, 0);
+        server.press_button(BTN_LEFT, false, 0);
+        roundtrip(server, &mut [shell, editor]);
+    };
+    click(&mut server, &mut shell, &mut editor, (window.x, window.y));
+    assert_eq!(shell.pressed_outside(), 1);
+    assert_eq!(editor.buttons().len(), clicks + 2);
+
+    let drag =
+        |server: &mut Compositor, shell: &mut TestClient, from: (f64, f64), to: (f64, f64)| {
+            server.move_pointer_to(from.into(), 0);
+            server.press_button(BTN_LEFT, true, 0);
+            shell.exchange(server);
+            shell.move_panel(server);
+            server.move_pointer_to(to.into(), 0);
+            assert_eq!(server.shown_cursor(), Some("default"));
+            server.press_button(BTN_LEFT, false, 0);
+            shell.exchange(server);
+        };
+    drag(&mut server, &mut shell, (400.0, 150.0), (150.0, 450.0));
+    click(&mut server, &mut shell, &mut editor, (150.0, 450.0));
+    assert_eq!(shell.pressed_outside(), 1);
+    shell.close_panel(&mut server);
+    shell.show_panel(&mut server, &card, 100);
+    click(&mut server, &mut shell, &mut editor, (150.0, 450.0));
+    assert_eq!(shell.pressed_outside(), 1);
+    click(&mut server, &mut shell, &mut editor, (400.0, 150.0));
+    assert_eq!(shell.pressed_outside(), 2);
+
+    drag(&mut server, &mut shell, (150.0, 450.0), (400.0, 155.0));
+    click(&mut server, &mut shell, &mut editor, (400.0, 202.0));
+    assert_eq!(shell.pressed_outside(), 3);
+}

@@ -134,7 +134,7 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 |---|---|---|---|
 | **Refined Solid** (default) | opaque `chassis` | opaque `overlay` | none, the most efficient |
 | **Wallpaper-Lit** | `chassis` at 74 % over a blurred copy of the wallpaper, sampled at the surface's position; other windows never show through | opaque `overlay` | one small texture, made once per wallpaper |
-| **Glass** | `chassis` at 68 % over live blur, three passes, saturated 1.35× | menus at 72 % `overlay`, Control Center and the notification list at 72 % `chassis`, over live blur; notification banners and the launcher card stay opaque, the launcher already has its blurred scrim | the blur is redone when what lies under it changes, never at idle |
+| **Glass** | `chassis` at 68 % over live blur, three passes, saturated 1.35× | menus at 72 % `overlay`, Control Center and the notification list at 72 % `chassis`, over live blur; notification banners and the launcher card stay opaque | the blur is redone when what lies under it changes, never at idle |
 
 - **The material is only ever behind the frame.** The sheet is opaque and declared so, which also spares the compositor drawing under it.
 - **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .60 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
@@ -143,7 +143,7 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 - **Reduce Transparency and Increase Contrast** make every style solid.
 - **Third-party windows.** GTK and Qt apps draw their own frames, and server-side title bars use opaque `chassis`, so those stay solid in every style.
 
-**Blur** in the other styles exists only behind the launcher, overview and modal alerts (a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward). "Tinted chassis" is a separate opt-in that mixes 6 % of the wallpaper's average colour into `chassis`.
+**Blur** in the other styles exists only behind the overview and modal alerts (a 24 pt backdrop blur at 60 % mix, so the eye is pulled forward). "Tinted chassis" is a separate opt-in that mixes 6 % of the wallpaper's average colour into `chassis`.
 
 **Inactive windows:** the header glyphs go to `ink3`, the window-control well loses its fill and becomes an outline, the selection turns from accent to `well`, the ambient shadow halves, and the sheet stays the same, so content stays readable.
 

@@ -44,8 +44,9 @@ derives from the app id; `<package> --version`; the state (`$XDG_STATE_HOME/band
 (`$XDG_CONFIG_HOME/bande/`) paths.
 
 ## Services and popovers
-A program whose `Program::waits_for_activation` says so (Look Up) is started by D-Bus with no
-window, waits for its first request and exits once its last window has closed. `Kind::Popover`
+A program whose `Program::waits_for_activation` says so (Dictionary, for Look Up) is started by D-Bus with no
+window, waits for its first request and exits once its last window has closed, unless a window it
+opened asked to keep running. `Kind::Popover`
 opens a window at the pointer that takes the keyboard, has no title bar or menu button and is not
 resumed, kept running or listed as a window. See [lookup.md](lookup.md).
 

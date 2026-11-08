@@ -246,6 +246,12 @@ msgstr "Vill du sluta säkerhetskopiera till {disk}?"
 msgid "The backups stay on the disk, and can still be restored with their password."
 msgstr "Säkerhetskopiorna finns kvar på skivan och kan fortfarande återställas med sitt lösenord."
 
+msgid "The power mode service"
+msgstr "Tjänsten för strömläge"
+
+msgid "The battery service"
+msgstr "Batteritjänsten"
+
 msgid "The brightness service"
 msgstr "Ljusstyrketjänsten"
 
@@ -473,6 +479,12 @@ msgstr "Importera en VPN-konfiguration"
 
 msgid "VPN configurations"
 msgstr "VPN-konfigurationer"
+
+msgid "Couldn't import this VPN file."
+msgstr "Det gick inte att importera VPN-filen."
+
+msgid "Couldn’t install OpenVPN support, so this VPN file can’t be imported."
+msgstr "Det gick inte att installera stöd för OpenVPN, så den här VPN-filen kan inte importeras."
 
 msgid "Forget…"
 msgstr "Glöm …"

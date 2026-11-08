@@ -51,8 +51,20 @@ msgstr "Datum tillagd"
 msgid "Size"
 msgstr "Storlek"
 
+msgid "New Folder"
+msgstr "Ny mapp"
+
+msgid "Paste"
+msgstr "Klistra in"
+
+msgid "Change Wallpaper…"
+msgstr "Byt skrivbordsbild…"
+
 msgid "Sort By"
 msgstr "Sortera efter"
+
+msgid "Clean Up"
+msgstr "Städa upp"
 
 msgid "Open"
 msgstr "Öppna"

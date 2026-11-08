@@ -225,14 +225,15 @@ impl SettingsView {
                     ),
                 })
             }
-            PaneId::Power => self.battery.as_ref().map(|battery| {
-                L10N.tr_args(
+            PaneId::Power => self.power.as_ref().map(|power| match &power.battery {
+                Some(battery) => L10N.tr_args(
                     "battery-summary",
                     [
                         ("percent", battery.percent.round().into()),
                         ("charge", charge_text(battery.charge).into()),
                     ],
-                )
+                ),
+                None => L10N.tr("power-on-adapter"),
             }),
             PaneId::LanguageTime => {
                 let language = self.locale.as_ref().and_then(|locale| {

@@ -19,7 +19,7 @@ pub enum Location {
     Recents,
     Search(PathBuf),
     Network,
-    Server(String),
+    Server { address: String, name: String },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -348,7 +348,7 @@ impl Browser {
             Location::Folder(folder) => self.read_folder(folder),
             Location::Trash => Contents::listed(list_trash(&self.trash, self.order())),
             Location::Recents => Contents::listed(entries(&self.recents)),
-            Location::Server(_) => {
+            Location::Server { .. } => {
                 let mut shares = self.shares.clone();
                 sort(&mut shares, self.order());
                 Contents::listed(shares)
@@ -501,11 +501,10 @@ impl Browser {
         *self.root() == Location::Network
     }
 
-    pub fn chosen_server(&self) -> Option<String> {
+    pub fn chosen_server(&self) -> Option<&Entry> {
         self.active_column()
             .selected_entry()
-            .and_then(Entry::server_address)
-            .map(str::to_owned)
+            .filter(|entry| entry.server_address().is_some())
     }
 
     pub fn set_recents(&mut self, recents: Vec<PathBuf>) {
@@ -1054,7 +1053,7 @@ impl Browser {
                 Location::Recents
                 | Location::Search(_)
                 | Location::Network
-                | Location::Server(_) => Vec::new(),
+                | Location::Server { .. } => Vec::new(),
             })
             .collect::<Vec<_>>();
         watched.extend(self.open_subfolders());
@@ -1286,7 +1285,7 @@ impl Browser {
         self.reload_where(|location| match location {
             Location::Folder(folder) => changed.contains(folder),
             Location::Trash => trash_changed,
-            Location::Network | Location::Server(_) => false,
+            Location::Network | Location::Server { .. } => false,
             Location::Recents | Location::Search(_) => true,
         });
     }

@@ -239,6 +239,9 @@ fn publish_changes(
         if before.bar.floating != after.bar.floating {
             let _ = guard.bar_floating_changed(emitter).await;
         }
+        if before.bar.gap != after.bar.gap {
+            let _ = guard.bar_gap_changed(emitter).await;
+        }
         if before.bar.auto_hide != after.bar.auto_hide {
             let _ = guard.bar_auto_hide_changed(emitter).await;
         }
@@ -769,6 +772,16 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_bar_floating(&self, floating: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::BarFloating(floating))
+    }
+
+    #[zbus(property)]
+    fn bar_gap(&self) -> u32 {
+        self.store.current().bar.gap
+    }
+
+    #[zbus(property)]
+    fn set_bar_gap(&self, gap: u32) -> zbus::fdo::Result<()> {
+        self.write(&Setting::BarGap(gap))
     }
 
     #[zbus(property)]

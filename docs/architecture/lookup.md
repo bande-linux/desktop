@@ -72,7 +72,7 @@ filled in); the protocols are `wikimedia-summary` and `dict`. Line kinds: `D` de
 
 `packaging/dict/build.py <version> <sources> <out> [package...]` makes the packs and `.deb`s, with
 their licence files, from the source data pinned by SHA-256 in `packaging/dict/sources`. The build fetches each source
-from our own copy first, the `<sha256>.xz` assets of the `dict-sources` release of
+from our own copy first (through the GitHub API, then the release download URL), the `<sha256>.xz` assets of the `dict-sources` release of
 `bande-linux/desktop` (named by content, so they are only ever added),
 and from the upstream URL only when ours lacks it; a file that does not match its pin stops the
 build, so an upstream outage or a file replaced in place cannot change or break a release. To

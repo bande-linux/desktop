@@ -81,7 +81,7 @@ TN2123 could not be read at Apple (the archive URL redirects). A [mirror](https:
 | Info in memory, written on fault | `tracing` ring per process in `bande-log`, mapped on tmpfs so it outlives the process | Copy. Ring reads debug and up. Journal stays at info, which is small; ring cost is measured |
 | `spindump` on force quit or hang | `/proc/<pid>/task/*/{stack,wchan,syscall,stat}` three times 1 s apart, then `eu-stack -p` for user stacks, bounded | Copy, without 10 s of sampling. Kernel stacks come first because a thread stuck in D state can block a ptrace attach |
 | App hang | Compositor ping timeout | Report if Not Responding lasts 10 s and the person interacted with it, or on Force Quit |
-| WindowServer watchdog | `WatchdogSec=20s`, plus a stall thread armed by the event loop only while it is working | Thread asks the reporter at 10 s, so stacks are taken before the abort at 20 s. Idle stays at zero extra wakeups |
+| WindowServer watchdog | `WatchdogSec=20s`, plus a stall thread armed by the event loop only while it is working | Thread asks the reporter at 6 s, so stacks are taken before the watchdog abort, which can come 10 s into a hang. Idle stays at zero extra wakeups |
 | Kill code `0x8badf00d` | `SIGQUIT` from Force Quit, `SIGABRT` from the watchdog | `termination` field: who ended it and why |
 | `.gpuRestart` | Compositor's device-lost path; `devcoredump`; kernel log | Fault from the compositor; attach `devcd` data when present |
 | Display failures | Compositor's failed-frame and restart path | Fault at the 3 s renderer reset, not per failed frame |

@@ -254,6 +254,7 @@ pub enum SettingId {
     BarIconSize,
     BarAutoHide,
     BarFloating,
+    BarGap,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -301,6 +302,7 @@ pub enum SettingId {
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
+    PowerStatus,
     LidOnPower,
     AppNotifications,
     SoftwareUpdates,
@@ -321,6 +323,7 @@ pub enum SettingId {
     SendReportForm,
     ShortcutsPage,
     Spelling,
+    TextReplacements,
     ClipboardHistory,
     KeyboardAccess,
     SecurityStatus,
@@ -401,6 +404,7 @@ pub enum List {
     TimeZones,
     LoginItems,
     BatteryHistory,
+    PowerStatus,
     NotificationApps,
     SoftwareUpdates,
     Ethernet,
@@ -411,6 +415,7 @@ pub enum List {
     DefaultApps,
     Clipboard,
     Spelling,
+    TextReplacements,
     KeyboardAccess,
     SecurityStatus,
     SearchExcluded,
@@ -738,7 +743,8 @@ fn rotation_choices() -> Vec<Choice> {
 
 pub const AUTOMATIC: &str = "automatic";
 
-const BAR_SIZES: (u32, u32) = (32, 56);
+const BAR_SIZES: (u32, u32) = (22, 56);
+const BAR_GAPS: (u32, u32) = (0, 24);
 const NIGHT_WARMTH: (u32, u32) = (0, 100);
 pub const TEXT_SIZES: [u32; 5] = [100, 125, 150, 175, 200];
 
@@ -947,6 +953,17 @@ fn desktop_panes() -> Vec<Pane> {
                         },
                     ),
                     switch(SettingId::BarFloating, "bar-floating"),
+                    setting(
+                        SettingId::BarGap,
+                        L10N.tr("bar-gap"),
+                        L10N.tr("bar-gap-keywords"),
+                        Kind::Range {
+                            range: BAR_GAPS,
+                            step: 2,
+                            low: L10N.tr("bar-gap-none"),
+                            high: L10N.tr("bar-gap-wide"),
+                        },
+                    ),
                     switch(SettingId::BarAutoHide, "bar-auto-hide"),
                 ],
             )],
@@ -1329,6 +1346,15 @@ fn keyboard_pane() -> Pane {
                 vec![list(SettingId::Spelling, "spelling", List::Spelling)],
             ),
             section(
+                Some(L10N.tr("text-replacements")),
+                vec![list(
+                    SettingId::TextReplacements,
+                    "text-replacements",
+                    List::TextReplacements,
+                )],
+            )
+            .noted("text-replacements-note"),
+            section(
                 Some(L10N.tr("modifier-keys")),
                 vec![setting(
                     SettingId::CapsLock,
@@ -1686,6 +1712,7 @@ fn power_pane() -> Pane {
                         ])),
                     ),
                     switch(SettingId::LowPowerOnBattery, "low-power-on-battery"),
+                    list(SettingId::PowerStatus, "power-status", List::PowerStatus),
                 ],
             ),
             section(

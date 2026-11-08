@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use accesskit::{Action, Node as AccessNode, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
-use bande_config::BarEdge;
+use bande_config::{Bar, BarEdge, DEFAULT_BAR_GAP};
 use bande_datetime::DateFormats;
 use bande_status::status::{Battery, Capture, Sense, Status, speaker_waves, wifi_quarter};
 use bande_status::unread::ClockMark;
@@ -21,14 +21,18 @@ use crate::taskbar::{TaskbarLayout as AppsRegion, WELL_ALPHA, vertical};
 const EDGE_PADDING: f32 = 24.0;
 pub const BAR_MARGIN: f32 = 8.0;
 const LABEL_ROOM: f32 = 280.0;
-const MARK_CELL: f32 = 52.0;
-const MARK_SIZE: f32 = 22.0;
-const CLOCK_CELL: f32 = 52.0;
+const MARK_CELL: (f32, f32) = (44.0, 52.0);
+const MARK_SIZE: (f32, f32) = (16.0, 22.0);
+const CLOCK_CELL: (f32, f32) = (44.0, 52.0);
 const CLOCK_PADDING: f32 = 10.0;
-const STATUS_WIDTH: f32 = 52.0;
-const STATUS_HEIGHT: f32 = 58.0;
-const GRID_CELL: f32 = 26.0;
-const GLYPH: f32 = 15.0;
+const CLOCK_INSET: f32 = 6.0;
+const STATUS_WIDTH: (f32, f32) = (44.0, 52.0);
+const STATUS_HEIGHT: (f32, f32) = (44.0, 58.0);
+const STATUS_INSET: f32 = 3.0;
+const GRID_CELL: (f32, f32) = (20.0, 26.0);
+const GLYPH: (f32, f32) = (13.0, 15.0);
+const COMPACT_ICON: f32 = 22.0;
+const REGULAR_ICON: f32 = 32.0;
 const GROUP_GAP: f32 = 6.0;
 const GROUP_RADIUS: f32 = 8.0;
 const HAIRLINE: f32 = 32.0;
@@ -39,8 +43,9 @@ const WORKSPACE_CELL: f32 = 10.0;
 const TRAY_SHOWN: usize = 3;
 const TIME_SIZE: f32 = 15.0;
 const DAY_SIZE: f32 = 11.0;
-const BADGE_SIZE: f32 = 10.0;
-const PERCENT_SIZE: f32 = 8.0;
+const BADGE_SIZE: (f32, f32) = (9.0, 10.0);
+const BADGE_HEIGHT: (f32, f32) = (12.0, 14.0);
+const PERCENT_SIZE: (f32, f32) = (7.0, 8.0);
 const UNREAD_DOT: f32 = 7.0;
 const IN_USE_DOT: f32 = 6.0;
 const HOVER_ALPHA: u8 = 18;
@@ -68,20 +73,36 @@ pub fn bar_width(icon_size: f32) -> f32 {
     icon_size + EDGE_PADDING
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub fn sized(icon_size: f32, (compact, regular): (f32, f32)) -> f32 {
+    let regularity = ((icon_size - COMPACT_ICON) / (REGULAR_ICON - COMPACT_ICON)).clamp(0.0, 1.0);
+    compact + (regular - compact) * regularity
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BarForm {
-    #[default]
-    Floating,
+    Floating { gap: u32 },
     Attached,
 }
 
+impl Default for BarForm {
+    fn default() -> Self {
+        Self::Floating {
+            gap: DEFAULT_BAR_GAP,
+        }
+    }
+}
+
 impl BarForm {
-    pub const fn from_floating(floating: bool) -> Self {
+    pub const fn new(floating: bool, gap: u32) -> Self {
         if floating {
-            Self::Floating
+            Self::Floating { gap }
         } else {
             Self::Attached
         }
+    }
+
+    pub const fn of(bar: &Bar) -> Self {
+        Self::new(bar.floating, bar.gap)
     }
 }
 
@@ -95,13 +116,20 @@ pub const fn zone_margin(form: BarForm) -> f32 {
 
 pub const fn cross_margin(form: BarForm) -> f32 {
     match form {
-        BarForm::Floating => BAR_MARGIN,
+        BarForm::Floating { gap } => gap as f32,
         BarForm::Attached => 0.0,
     }
 }
 
-pub fn surface_size(edge: BarEdge, icon_size: f32) -> (u32, u32) {
-    let depth = (bar_zone(icon_size, BarForm::Floating) + LABEL_ROOM).ceil() as u32;
+const fn along_margin(form: BarForm) -> f32 {
+    match form {
+        BarForm::Floating { gap } => gap as f32,
+        BarForm::Attached => BAR_MARGIN,
+    }
+}
+
+pub fn surface_size(edge: BarEdge, icon_size: f32, form: BarForm) -> (u32, u32) {
+    let depth = (bar_zone(icon_size, form) + LABEL_ROOM).ceil() as u32;
     match vertical(edge) {
         true => (depth, 0),
         false => (0, depth),
@@ -120,20 +148,21 @@ pub fn edge_band(edge: BarEdge, size: (f32, f32), depth: f32) -> Rect {
 
 pub fn bar_band(edge: BarEdge, size: (f32, f32), depth: f32, form: BarForm) -> Rect {
     let (width, height) = size;
-    let along = (width - 2.0 * BAR_MARGIN, height - 2.0 * BAR_MARGIN);
+    let along = along_margin(form);
+    let length = (width - 2.0 * along, height - 2.0 * along);
     let off = cross_margin(form);
     match edge {
-        BarEdge::Left => Rect::new(off, BAR_MARGIN, depth, along.1),
-        BarEdge::Right => Rect::new(width - depth - off, BAR_MARGIN, depth, along.1),
-        BarEdge::Top => Rect::new(BAR_MARGIN, off, along.0, depth),
-        BarEdge::Bottom => Rect::new(BAR_MARGIN, height - depth - off, along.0, depth),
+        BarEdge::Left => Rect::new(off, along, depth, length.1),
+        BarEdge::Right => Rect::new(width - depth - off, along, depth, length.1),
+        BarEdge::Top => Rect::new(along, off, length.0, depth),
+        BarEdge::Bottom => Rect::new(along, height - depth - off, length.0, depth),
     }
 }
 
 pub fn bar_outline(edge: BarEdge, bar: Rect, form: BarForm) -> Shape {
     let over = match form {
-        BarForm::Floating => 0.0,
-        BarForm::Attached => Radius::XL,
+        BarForm::Attached | BarForm::Floating { gap: 0 } => Radius::XL,
+        BarForm::Floating { .. } => 0.0,
     };
     let rect = match edge {
         BarEdge::Left => Rect::new(bar.x - over, bar.y, bar.width + over, bar.height),
@@ -167,7 +196,7 @@ struct Clock {
 struct ClockFit {
     hour24: bool,
     size: TextSize,
-    length: f32,
+    widest: f32,
 }
 
 pub struct TaskbarView {
@@ -236,10 +265,14 @@ fn day_line(period: Option<&str>, day: &str) -> String {
     }
 }
 
-fn time_style(palette: Palette) -> TextStyle {
-    TextStyle::new(TIME_SIZE, palette.ink)
+fn time_style(palette: Palette, scale: f32) -> TextStyle {
+    TextStyle::new(TIME_SIZE * scale, palette.ink)
         .weight(TextStyle::SEMIBOLD)
         .tabular()
+}
+
+fn day_style(palette: Palette, scale: f32) -> TextStyle {
+    TextStyle::new(DAY_SIZE * scale, palette.ink2)
 }
 
 fn battery_glyph(battery: Battery) -> String {
@@ -303,7 +336,7 @@ impl TaskbarView {
     ) -> Self {
         Self {
             palette,
-            form: BarForm::Floating,
+            form: BarForm::default(),
             text,
             edge,
             bar: Rect::default(),
@@ -377,8 +410,14 @@ impl TaskbarView {
         ]
     }
 
+    fn sized(&self, sizes: (f32, f32)) -> f32 {
+        sized(self.icon_size, sizes)
+    }
+
     fn layout(&self, size: (f32, f32)) -> (Vec<(Slot, Rect)>, AppsRegion, Vec<Rect>) {
         let thick = self.width;
+        let mark_cell = self.sized(MARK_CELL);
+        let grid_cell = self.sized(GRID_CELL);
         let bar = bar_band(self.edge, size, thick, self.form);
         let vertical = vertical(self.edge);
         let (origin, length) = match vertical {
@@ -392,17 +431,18 @@ impl TaskbarView {
                 false => Rect::new(along, bar.y + offset, extent, cross),
             }
         };
-        let mut slots = vec![(Slot::BandeMenu, place(origin, MARK_CELL, thick))];
+        let mut slots = vec![(Slot::BandeMenu, place(origin, mark_cell, thick))];
         let clock = match (vertical, self.clock_fit) {
-            (false, Some(fit)) => fit.length,
-            _ => CLOCK_CELL,
+            (false, Some(fit)) => (fit.widest + 2.0 * CLOCK_PADDING).ceil(),
+            _ => self.sized(CLOCK_CELL),
         };
         let mut end = origin + length - clock;
         slots.push((Slot::Clock, place(end, clock, thick)));
         let (status_along, status_cross) = match vertical {
-            true => (STATUS_HEIGHT, STATUS_WIDTH),
-            false => (STATUS_WIDTH, STATUS_HEIGHT),
+            true => (self.sized(STATUS_HEIGHT), self.sized(STATUS_WIDTH)),
+            false => (self.sized(STATUS_WIDTH), self.sized(STATUS_HEIGHT)),
         };
+        let status_cross = status_cross.min(thick - 2.0 * STATUS_INSET);
         end -= status_along + GROUP_GAP;
         let status = place(end, status_along, status_cross);
         slots.push((Slot::ControlCenter, status));
@@ -423,8 +463,8 @@ impl TaskbarView {
         let tray = self.tray_cells();
         if !tray.is_empty() {
             let lines = tray.len().div_ceil(2) as f32;
-            end -= GROUP_GAP + lines * GRID_CELL;
-            let group = place(end, lines * GRID_CELL, 2.0 * GRID_CELL);
+            end -= GROUP_GAP + lines * grid_cell;
+            let group = place(end, lines * grid_cell, 2.0 * grid_cell);
             for (index, slot) in tray.into_iter().enumerate() {
                 let across = (index % 2) as f32;
                 let along = (index / 2) as f32;
@@ -436,10 +476,10 @@ impl TaskbarView {
                 slots.push((
                     slot,
                     Rect::new(
-                        group.x + column * GRID_CELL,
-                        group.y + row * GRID_CELL,
-                        GRID_CELL,
-                        GRID_CELL,
+                        group.x + column * grid_cell,
+                        group.y + row * grid_cell,
+                        grid_cell,
+                        grid_cell,
                     ),
                 ));
             }
@@ -460,10 +500,10 @@ impl TaskbarView {
         }
         end -= HAIRLINE_CELL;
         let hairline = |center: f32| place((center - 0.5).round(), 1.0, HAIRLINE);
-        let start = origin + MARK_CELL + HAIRLINE_CELL;
+        let start = origin + mark_cell + HAIRLINE_CELL;
         let hairlines = vec![
             hairline(end + HAIRLINE_CELL / 2.0),
-            hairline(origin + MARK_CELL + HAIRLINE_CELL / 2.0),
+            hairline(origin + mark_cell + HAIRLINE_CELL / 2.0),
         ];
         let region = AppsRegion {
             start,
@@ -478,7 +518,7 @@ impl TaskbarView {
     }
 
     fn glyph(&mut self, name: &str, color: Color, scale: f64) -> Option<Image> {
-        let pixels = (f64::from(GLYPH) * scale).round() as u32;
+        let pixels = (f64::from(self.sized(GLYPH)) * scale).round() as u32;
         let dirs = &self.icon_dirs;
         self.icons
             .entry((name.to_owned(), color, pixels))
@@ -572,13 +612,19 @@ impl TaskbarView {
             self.highlight(*slot, *rect, &mut items);
         }
         let mut placeholder = Some(CONTROL_CENTER_GLYPH.to_owned());
+        let glyph = self.sized(GLYPH);
+        let mark = self.sized(MARK_SIZE).round();
+        let badge_size = self.sized(BADGE_SIZE);
+        let badge_height = self.sized(BADGE_HEIGHT).round();
         let glyphs = self.glyph_slots();
         for (slot, rect) in slots.clone() {
             match slot {
                 Slot::BandeMenu => {
-                    let size = (MARK_SIZE, MARK_SIZE);
-                    if let Some(image) = self.symbols.image_at(Symbol::Logo, ink, size, scale) {
-                        Self::place_image(rect, image, MARK_SIZE, scale, &mut items);
+                    if let Some(image) =
+                        self.symbols
+                            .image_at(Symbol::Logo, ink, (mark, mark), scale)
+                    {
+                        Self::place_image(rect, image, mark, scale, &mut items);
                     }
                 }
                 Slot::Wifi | Slot::Sound | Slot::Bluetooth | Slot::Battery => {
@@ -598,7 +644,7 @@ impl TaskbarView {
                             );
                             self.paragraph(
                                 &text,
-                                TextStyle::new(PERCENT_SIZE, ink)
+                                TextStyle::new(self.sized(PERCENT_SIZE), ink)
                                     .weight(TextStyle::SEMIBOLD)
                                     .tabular(),
                             )
@@ -606,20 +652,20 @@ impl TaskbarView {
                     let glyph_rect = match &percent {
                         Some(label) => Rect::new(
                             rect.x,
-                            rect.y + (rect.height - GLYPH - label.height()) / 2.0,
+                            rect.y + (rect.height - glyph - label.height()) / 2.0,
                             rect.width,
-                            GLYPH,
+                            glyph,
                         ),
                         None => rect,
                     };
                     if let Some(image) = name.and_then(|name| self.glyph(&name, ink, scale)) {
-                        Self::place_image(glyph_rect, image, GLYPH, scale, &mut items);
+                        Self::place_image(glyph_rect, image, glyph, scale, &mut items);
                     }
                     if let Some(label) = percent {
                         items.push(Item::Text {
                             origin: Point::new(
                                 snap(rect.x + (rect.width - label.width()) / 2.0, scale),
-                                snap(glyph_rect.y + GLYPH, scale),
+                                snap(glyph_rect.y + glyph, scale),
                             ),
                             paragraph: label,
                         });
@@ -627,7 +673,7 @@ impl TaskbarView {
                 }
                 Slot::StatusItem(index) => {
                     if let Some((_, Some(image))) = self.tray.get(index).cloned() {
-                        Self::place_image(rect, image, GLYPH, scale, &mut items);
+                        Self::place_image(rect, image, glyph, scale, &mut items);
                     }
                 }
                 Slot::InputSource => {
@@ -635,13 +681,13 @@ impl TaskbarView {
                         let short = source.short.clone();
                         let text = self.paragraph(
                             &short,
-                            TextStyle::new(BADGE_SIZE, ink).weight(TextStyle::SEMIBOLD),
+                            TextStyle::new(badge_size, ink).weight(TextStyle::SEMIBOLD),
                         );
                         let badge = Rect::new(
                             snap(rect.x + (rect.width - text.width() - 6.0) / 2.0, scale),
-                            snap(rect.y + (rect.height - 14.0) / 2.0, scale),
+                            snap(rect.y + (rect.height - badge_height) / 2.0, scale),
                             (text.width() + 6.0).round(),
-                            14.0,
+                            badge_height,
                         );
                         items.push(Item::Stroke {
                             shape: Shape::rounded(badge.inset(0.5), 3.0),
@@ -658,7 +704,7 @@ impl TaskbarView {
                     }
                 }
                 Slot::MoreStatusItems => {
-                    let text = self.paragraph("•••", TextStyle::new(BADGE_SIZE, ink));
+                    let text = self.paragraph("•••", TextStyle::new(badge_size, ink));
                     items.push(Item::Text {
                         origin: Point::new(
                             snap(rect.x + (rect.width - text.width()) / 2.0, scale),
@@ -709,7 +755,7 @@ impl TaskbarView {
         {
             return;
         }
-        let mut length = 0.0f32;
+        let mut widest = 0.0f32;
         for day in 19..=25 {
             for hour in [10, 22] {
                 let Ok(at) = jiff::civil::date(2026, 1, day)
@@ -720,15 +766,15 @@ impl TaskbarView {
                 };
                 let (time, period) = dates.time(&at);
                 let day = day_line(period.as_deref(), &dates.short_day(&at));
-                let time = self.paragraph(&time, time_style(self.palette));
-                let day = self.paragraph(&day, TextStyle::new(DAY_SIZE, self.palette.ink2));
-                length = length.max(time.width()).max(day.width());
+                let time = self.paragraph(&time, time_style(self.palette, 1.0));
+                let day = self.paragraph(&day, day_style(self.palette, 1.0));
+                widest = widest.max(time.width()).max(day.width());
             }
         }
         self.clock_fit = Some(ClockFit {
             hour24,
             size,
-            length: (length + 2.0 * CLOCK_PADDING).ceil(),
+            widest,
         });
     }
 
@@ -736,8 +782,13 @@ impl TaskbarView {
         let palette = self.palette;
         let time = self.clock.time.clone();
         let day = day_line(self.clock.period.as_deref(), &self.clock.day);
-        let time = self.paragraph(&time, time_style(palette));
-        let day = self.paragraph(&day, TextStyle::new(DAY_SIZE, palette.ink2));
+        let room = self.width - 2.0 * CLOCK_INSET;
+        let text_scale = match (vertical(self.edge), self.clock_fit) {
+            (true, Some(fit)) if fit.widest > room => room / fit.widest,
+            _ => 1.0,
+        };
+        let time = self.paragraph(&time, time_style(palette, text_scale));
+        let day = self.paragraph(&day, day_style(palette, text_scale));
         let total = time.height() + day.height();
         let top = rect.y + (rect.height - total) / 2.0;
         let time_x = snap(rect.x + (rect.width - time.width()) / 2.0, scale);

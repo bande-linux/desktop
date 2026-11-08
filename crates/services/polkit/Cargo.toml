@@ -26,7 +26,7 @@ zeroize.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, polkitd (>= 127), fonts-inter, init-system-helpers (>= 1.66)"
+depends = "$auto, polkitd (>= 127), fonts-inter, fonts-manrope, init-system-helpers (>= 1.66)"
 extended-description = """\
 The polkit authentication agent of the Bande desktop. When an app asks \
 for an administrator's permission, for example Settings changing the time \

@@ -167,11 +167,16 @@ impl SettingsView {
             rows.push(self.item_row(format!("vpn:{}", vpn.path), row));
         }
         let mut import = intent(&self.intents, |()| Intent::ImportVpn);
-        let button = Button::new(&L10N.tr("import-vpn"), move || import(()));
+        let mut button = Button::new(&L10N.tr("import-vpn"), move || import(()));
+        button.set_enabled(!self.installing_vpn_plugin);
         self.anchors
             .push((Anchor::Setting(SettingId::Vpns, None), button.id()));
+        let hint = match self.installing_vpn_plugin {
+            true => L10N.tr("vpn-plugin-installing"),
+            false => L10N.tr("import-vpn-hint"),
+        };
         rows.push(boxed(Row::new(
-            Text::new(&L10N.tr("import-vpn-hint"), Tone::Muted).caption(),
+            Text::new(&hint, Tone::Muted).caption(),
             Some(boxed(button)),
         )));
         rows

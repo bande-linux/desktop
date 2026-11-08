@@ -167,18 +167,23 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Resolution (up to four sizes of its native shape), Size of text
-  and controls, Refresh rate, Rotation and Match colours to this display. Every change is written to
+  and controls, Refresh rate, Rotation and Colour profile. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
 
-- **Colour.** A display whose EDID gives primaries more than 0.02 from sRGB's, and does not say
-  its default colour space is sRGB, has its frames converted from sRGB to its own primaries
-  (D65 white kept, sRGB transfer both ways) by a shader that writes the damaged regions to a
+- **Colour.** Each display has a colour profile (`colour-profile` in its settings, Settings ▸
+  Displays ▸ Colour profile, as macOS's list): "This display" (the default) builds a profile from
+  the EDID's primaries, white point and gamma, unless the EDID says the default colour space is
+  sRGB or its primaries are within 0.02 of sRGB's; "sRGB" and "None (show colours as sent)" leave
+  frames alone; "Display P3"; and any ICC matrix-and-curve display profile in
+  `$XDG_DATA_HOME/icc` or `color/icc` under the data directories ("Add Profile…" copies one there
+  after checking it; LUT-based or non-display profiles are refused with the reason). A profile
+  that differs from sRGB converts frames: a shader decodes sRGB, applies the matrix to the
+  display's primaries (relative, white kept, Bradford-adapted through D50) and encodes with the
+  profile's own tone curves through a 4096-entry table, on the damaged regions only, into a
   scratch image the GPU then copies to the display buffer. While a display converts, nothing is
-  scanned out directly or put on a plane, as a client buffer would skip the conversion. "Match
-  colours to this display" (on by default, `match-colours false` in the display's settings) turns
-  it off for a display whose EDID is wrong or that is set to its own sRGB mode. A CPU renderer does
-  not convert.
+  scanned out directly or put on a plane. With Apple's `appledrm.srgb_surfaces` set, "This
+  display" leaves the conversion to the display engine. A CPU renderer does not convert.
 - **Frame pacing.** Each output has its own scheduler (`clock.rs`) and measured timing (`pacing.rs`); no rate is assumed beyond the mode's. The vblank grid is estimated from page-flip times alone: phase and period follow a slow filter, an error over an eighth of a refresh is an outlier, eight in a row or a long idle re-anchor it, and it owns the sequence number. A frame starts at its slot minus a budget and a commit lead. The budget is the 95th percentile of the last 64 renders or the longest of the last 4 if that is more (so a spike is forgotten in 4 frames while heavier content is priced at once), plus the 99th percentile of how late the timer woke us, plus a pad that grows when a commit comes too late for its slot and decays while none do. The commit lead is how long before its slot a commit must return, learned from which vblank each flip really landed on: it starts at 35 % of a refresh on the first real flip, comes down until the first miss, rises when a commit with time to spare still misses (a driver like Apple's DCP drops anything under about 2.3 ms before the flip to the next refresh), and is lowered slowly afterwards to follow changes. A wake-up past the start time still goes if its typical render fits before the lead, and otherwise takes the next slot. When over 5 % of 128 frames miss, the pad rises. Without flips (headless) the lead stays 0. A timer wake dispatches every ready source first, so input right up to the latch counts, and no timer runs without a wanted frame or a frame callback. `BANDE_FRAME_TIMING=classic` restores the former rule (the longest of the last 16 frames plus 1 ms). Frame callbacks are taken when a frame is latched and go out once it is committed, so a client gets the time up to the next frame's start, not what is left after the flip. A client whose time from callback to commit is known (its 95th percentile over at least 8 frames, `frame_callbacks.rs`) gets its callback that long plus 0.5 ms before the next frame starts, so it reads the latest input and its frame is shown at once; a client that misses the latch this way goes back to the early callback for a second. No timer exists unless a callback is waiting. `wp_presentation` feedback (estimated vblank time, refresh, sequence, `vsync`, on DRM also `hw_completion`) is sent at the page-flip event, or the vblank on headless; a superseded commit's feedback is discarded, and a render that overruns its vblank is presented at the next one.
 - **Window motion.** Every window state change is animated by springs on x, y, width, height
   and opacity, sampled at the frame's vblank (`Compositor::animate_on`, called by each output's

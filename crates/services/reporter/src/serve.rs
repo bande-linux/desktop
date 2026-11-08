@@ -17,6 +17,7 @@ use serde_json::{Map, Value, json};
 use crate::config::{self, Config};
 use crate::counters;
 use crate::diagnose::diagnose;
+use crate::facts;
 use crate::fault::{Fault, capture_hang};
 use crate::hang::{HangEnd, HangEnds};
 use crate::spool::{MANIFEST, STATE, Spool, Status};
@@ -31,7 +32,8 @@ const REQUEST_LIMIT: u64 = 16 * 1024;
 const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
 const MOST_CAPTURES: usize = 2;
 const ADMIN_GROUP: &str = "sudo";
-const SESSION_KINDS: [&str; 7] = [
+const SESSION_KINDS: [&str; 8] = [
+    "oom",
     "app-hang",
     "force-quit",
     "compositor-stall",
@@ -46,6 +48,7 @@ const IDLE_HANG_DROPPED: &str = "idle-hang-dropped";
 const PINGED_KINDS: [&str; 2] = ["app-hang", "shell-stall"];
 const PINGED_SAMPLING: Duration = Duration::from_secs(10);
 const OTHER_SAMPLING: Duration = Duration::from_secs(3);
+const TERMINATIONS: [&str; 2] = ["logout-timeout", "force-quit"];
 const HANG_END_PATIENCE: Duration = Duration::from_secs(120);
 
 fn is_administrator(uid: u32) -> bool {
@@ -179,6 +182,15 @@ impl Service {
         if let Some(Value::Object(detail)) = request.get("detail") {
             fault.detail.extend(detail.clone());
         }
+        if kind == "force-quit" {
+            fault
+                .detail
+                .entry("termination")
+                .or_insert_with(|| json!("force-quit"));
+        }
+        if kind == "oom" {
+            self.oom(&mut fault, request)?;
+        }
         if let Some(pid) = pid.filter(|_| CAPTURE_KINDS.contains(&kind)) {
             let started = Instant::now();
             let seconds = request.get("seconds").and_then(Value::as_u64);
@@ -222,13 +234,20 @@ impl Service {
                     ends.recv_timeout(HANG_END_PATIENCE.saturating_sub(started.elapsed()))
                         .ok()
                 });
-                let (hang_seconds, recovered) = end.map_or_else(
-                    || {
-                        let waited = seconds.unwrap_or(0) as f64 + started.elapsed().as_secs_f64();
-                        (waited, false)
-                    },
-                    |end| (end.seconds, end.recovered),
-                );
+                let (hang_seconds, recovered) = match end {
+                    Some(end) => {
+                        if let Some(termination) = end.termination {
+                            fault
+                                .detail
+                                .insert("termination".to_owned(), json!(termination));
+                        }
+                        (end.seconds, end.recovered)
+                    }
+                    None => (
+                        seconds.unwrap_or(0) as f64 + started.elapsed().as_secs_f64(),
+                        false,
+                    ),
+                };
                 fault.detail.insert(
                     "hang_seconds".to_owned(),
                     json!(hang_seconds.round() as u64),
@@ -236,6 +255,11 @@ impl Service {
                 fault
                     .detail
                     .insert("recovered".to_owned(), json!(recovered));
+            } else if PINGED_KINDS.contains(&kind) {
+                fault
+                    .detail
+                    .insert("hang_seconds".to_owned(), json!(seconds));
+                fault.detail.insert("recovered".to_owned(), json!(false));
             }
             drop(waiting);
         } else {
@@ -244,6 +268,22 @@ impl Service {
         let spool = Spool::open(&self.spool_root)?;
         let id = fault.store(&spool, &self.config(), &self.spool_root)?;
         Ok(json!({"id": id}))
+    }
+
+    fn oom(&self, fault: &mut Fault, request: &Map<String, Value>) -> Result<(), Box<dyn Error>> {
+        let unit = field(request, "unit").unwrap_or_default();
+        let reason = facts::oomd_reason(unit, fault.time.as_second())
+            .ok_or("no systemd-oomd kill of that unit; the kernel watcher reports kernel kills")?;
+        fault.program = field(request, "app")
+            .filter(|app| !app.is_empty())
+            .unwrap_or(unit)
+            .to_owned()
+            .into();
+        fault.detail.insert("unit".to_owned(), json!(unit));
+        fault.detail.insert("termination".to_owned(), json!("oomd"));
+        fault.detail.insert("limit".to_owned(), json!(reason));
+        facts::add_memory_details(&mut fault.detail);
+        Ok(())
     }
 
     fn hang_over(&self, request: &Map<String, Value>, peer: u32) -> Result<Value, Box<dyn Error>> {
@@ -263,6 +303,9 @@ impl Service {
                 .get("recovered")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            termination: field(request, "termination")
+                .filter(|termination| TERMINATIONS.contains(termination))
+                .map(str::to_owned),
         };
         self.hang_ends.end(pid, hang, peer, owns_process, end)?;
         Ok(json!({}))

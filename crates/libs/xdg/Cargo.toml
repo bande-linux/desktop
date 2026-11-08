@@ -12,6 +12,7 @@ bande-volumes.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "process"] }
 bande-bus.workspace = true
 bande-inbox.workspace = true
+bande-log.workspace = true
 bande-watch.workspace = true
 tracing.workspace = true
 bande-l10n.workspace = true

@@ -37,6 +37,8 @@ const FIRMWARE_FILES: [&str; 3] = [
 const DRM: &str = "/sys/class/drm";
 const JOURNAL_LINES: &str = "200";
 const OOM_TOP: usize = 12;
+const CGROUPS: &str = "/sys/fs/cgroup";
+const OOMD_LOOKBACK: i64 = 120;
 
 fn read_trimmed(path: &str) -> Option<String> {
     let bytes = fs::read(path).ok()?;
@@ -303,8 +305,17 @@ pub fn journal_around(boot: Option<&str>, around: Option<i64>, scrubber: &Scrubb
     lines.join("\n")
 }
 
+fn status_kib(status: &str, field: &str) -> u64 {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix(field))
+        .and_then(|size| size.split_whitespace().next())
+        .and_then(|size| size.parse().ok())
+        .unwrap_or(0)
+}
+
 pub fn largest_processes() -> Value {
-    let mut sizes: Vec<(u64, String)> = Vec::new();
+    let mut sizes: Vec<(u64, u64, String)> = Vec::new();
     let Ok(entries) = fs::read_dir("/proc") else {
         return Value::Array(Vec::new());
     };
@@ -323,22 +334,110 @@ pub fn largest_processes() -> Value {
             .lines()
             .find_map(|line| line.strip_prefix("Name:"))
             .map_or("", str::trim);
-        let resident = status
-            .lines()
-            .find_map(|line| line.strip_prefix("VmRSS:"))
-            .and_then(|size| size.split_whitespace().next())
-            .and_then(|size| size.parse().ok())
-            .unwrap_or(0);
-        sizes.push((resident, name.to_owned()));
+        sizes.push((
+            status_kib(&status, "VmRSS:"),
+            status_kib(&status, "VmSwap:"),
+            name.to_owned(),
+        ));
     }
-    sizes.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
+    sizes.sort_by_key(|(resident, swapped, _)| std::cmp::Reverse(resident + swapped));
     Value::Array(
         sizes
             .into_iter()
             .take(OOM_TOP)
-            .map(|(size, name)| json!({"name": name, "resident_kib": size}))
+            .map(|(resident, swapped, name)| {
+                json!({"name": name, "resident_kib": resident, "swap_kib": swapped})
+            })
             .collect(),
     )
+}
+
+fn stat_kib(stat: &str, field: &str) -> u64 {
+    stat.lines()
+        .find_map(|line| line.strip_prefix(field)?.strip_prefix(' '))
+        .and_then(|bytes| bytes.trim().parse::<u64>().ok())
+        .map_or(0, |bytes| bytes / 1024)
+}
+
+pub fn largest_units() -> Value {
+    let mut units: Vec<(u64, Value)> = Vec::new();
+    let mut folders = vec![PathBuf::from(CGROUPS)];
+    while let Some(folder) = folders.pop() {
+        let Ok(entries) = fs::read_dir(&folder) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                folders.push(entry.path());
+            }
+        }
+        let name = folder
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        if !name.ends_with(".scope") && !name.ends_with(".service") {
+            continue;
+        }
+        let Ok(stat) = fs::read_to_string(folder.join("memory.stat")) else {
+            continue;
+        };
+        let read = |file: &str| {
+            fs::read_to_string(folder.join(file))
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok())
+                .map_or(0, |bytes| bytes / 1024)
+        };
+        let current = read("memory.current");
+        let swap = read("memory.swap.current");
+        units.push((
+            current + swap,
+            json!({
+                "unit": name,
+                "current_kib": current,
+                "anon_kib": stat_kib(&stat, "anon"),
+                "file_kib": stat_kib(&stat, "file"),
+                "swap_kib": swap,
+            }),
+        ));
+    }
+    units.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
+    Value::Array(
+        units
+            .into_iter()
+            .take(OOM_TOP)
+            .map(|(_, unit)| unit)
+            .collect(),
+    )
+}
+
+pub fn add_memory_details(detail: &mut Map<String, Value>) {
+    detail.insert("largest_processes".to_owned(), largest_processes());
+    detail.insert("largest_units".to_owned(), largest_units());
+}
+
+pub fn oomd_reason(unit: &str, around: i64) -> Option<String> {
+    let since = format!("--since=@{}", around - OOMD_LOOKBACK);
+    let until = format!("--until=@{}", around + 5);
+    let killed = format!("/{unit} due to ");
+    command_text(
+        "journalctl",
+        &[
+            "--no-pager",
+            "--quiet",
+            "-o",
+            "cat",
+            "-u",
+            "systemd-oomd",
+            &since,
+            &until,
+        ],
+    )
+    .lines()
+    .rev()
+    .find_map(|line| {
+        line.split_once(&killed)
+            .map(|(_, reason)| reason.to_owned())
+    })
 }
 
 pub fn counters_of(spool: &Path) -> Value {

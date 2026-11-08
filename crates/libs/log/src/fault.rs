@@ -71,16 +71,31 @@ pub fn report(kind: &str, reason: &str) {
     ));
 }
 
-pub fn report_hang_of(kind: &str, pid: u32, seconds: u64, hang: u64) {
+pub fn report_hang_of(
+    kind: &str,
+    pid: u32,
+    seconds: u64,
+    hang: Option<u64>,
+    termination: Option<&str>,
+) {
+    let hang = hang
+        .map(|hang| format!(r#","hang":{hang}"#))
+        .unwrap_or_default();
+    let detail = termination
+        .map(|termination| format!(r#","detail":{{"termination":"{}"}}"#, escaped(termination)))
+        .unwrap_or_default();
     send_in_background(format!(
-        r#"{{"op":"fault","kind":"{}","pid":{pid},"seconds":{seconds},"hang":{hang}}}"#,
+        r#"{{"op":"fault","kind":"{}","pid":{pid},"seconds":{seconds}{hang}{detail}}}"#,
         escaped(kind)
     ));
 }
 
-pub fn hang_over(pid: u32, hang: u64, seconds: f64, recovered: bool) {
+pub fn hang_over(pid: u32, hang: u64, seconds: f64, recovered: bool, termination: Option<&str>) {
+    let termination = termination
+        .map(|termination| format!(r#","termination":"{}""#, escaped(termination)))
+        .unwrap_or_default();
     send_in_background(format!(
-        r#"{{"op":"hang-over","pid":{pid},"hang":{hang},"seconds":{seconds:.1},"recovered":{recovered}}}"#
+        r#"{{"op":"hang-over","pid":{pid},"hang":{hang},"seconds":{seconds:.1},"recovered":{recovered}{termination}}}"#
     ));
 }
 
@@ -95,6 +110,14 @@ pub fn report_hang_and_wait(kind: &str, pid: u32, seconds: u64, wait: Duration) 
     if let Err(error) = send(hang_request(kind, pid, seconds), Some(wait)) {
         tracing::warn!("cannot leave a hang report: {error}");
     }
+}
+
+pub fn report_oom(unit: &str, app: Option<&str>) {
+    send_in_background(format!(
+        r#"{{"op":"fault","kind":"oom","unit":"{}","app":"{}"}}"#,
+        escaped(unit),
+        escaped(app.unwrap_or_default()),
+    ));
 }
 
 pub fn count(name: &str) {

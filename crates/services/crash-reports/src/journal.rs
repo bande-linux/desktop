@@ -7,6 +7,8 @@ use serde_json::{Map, Value};
 
 pub const COREDUMP_MESSAGE: &str = "fc2e22bc6ee647b6b90729ab34a250b1";
 pub const PANIC_TARGET: &str = "panic";
+const WATCHDOG_MESSAGE: &str = "Watchdog timeout";
+const WATCHDOG_LOOKBACK: i64 = 30;
 const UNIT_FAILED_MESSAGE: &str = "d9b373ed55a64feb8242e02dbe79a49c";
 const FIELDS: &str = "MESSAGE_ID,MESSAGE,TARGET,SYSLOG_IDENTIFIER,_EXE,UNIT,USER_UNIT,UNIT_RESULT,_UID,_PID,COREDUMP_EXE,COREDUMP_COMM,COREDUMP_UID,COREDUMP_PID,COREDUMP_SIGNAL_NAME,COREDUMP_TIMESTAMP,COREDUMP_FILENAME,COREDUMP_CMDLINE,COREDUMP_USER_UNIT,COREDUMP_UNIT";
 
@@ -103,6 +105,17 @@ pub fn panic_of(pid: &str, time: Timestamp) -> Option<String> {
     ])
     .ok()?;
     entries(&text).next()?.field("MESSAGE")
+}
+
+pub fn killed_by_watchdog(unit_field: &str, unit: &str, time: Timestamp) -> bool {
+    journalctl(&[
+        "-o",
+        "cat",
+        &format!("--since=@{}", time.as_second() - WATCHDOG_LOOKBACK),
+        &until(time),
+        &format!("{unit_field}={unit}"),
+    ])
+    .is_ok_and(|text| text.lines().any(|line| line.contains(WATCHDOG_MESSAGE)))
 }
 
 pub fn previous_boot_ended_cleanly() -> bool {

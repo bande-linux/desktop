@@ -5,6 +5,7 @@ use std::process::{Command, Stdio};
 use bande_reporter::config::Config;
 use bande_reporter::diagnose::previous_boot_tail;
 use bande_reporter::elfcore::read_core;
+use bande_reporter::facts;
 use bande_reporter::fault::{Fault, push_text};
 use bande_reporter::scrub::Scrubber;
 use bande_reporter::spool::{Attachment, Spool};
@@ -78,14 +79,23 @@ fn crash(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<dyn Er
     fault.program = Some(program);
     fault.executable = entry.field("COREDUMP_EXE").map(PathBuf::from);
     fault.detail.insert("signal".to_owned(), json!(signal));
-    fault.detail.insert(
-        "unit".to_owned(),
-        json!(
-            entry
-                .field("COREDUMP_USER_UNIT")
-                .or_else(|| entry.field("COREDUMP_UNIT"))
-        ),
-    );
+    let unit = entry
+        .field("COREDUMP_USER_UNIT")
+        .map(|unit| ("USER_UNIT", unit))
+        .or_else(|| entry.field("COREDUMP_UNIT").map(|unit| ("UNIT", unit)));
+    let termination = if signal == QUIT_SIGNAL {
+        Some("force-quit")
+    } else {
+        unit.as_ref()
+            .filter(|(field, unit)| journal::killed_by_watchdog(field, unit, time))
+            .map(|_| "watchdog")
+    };
+    fault
+        .detail
+        .insert("termination".to_owned(), json!(termination));
+    fault
+        .detail
+        .insert("unit".to_owned(), json!(unit.map(|(_, unit)| unit)));
     if let Some(panic) = journal::panic_of(&pid, time) {
         fault.panic_location = panic_location(&panic);
         fault.detail.insert("panic".to_owned(), json!(panic));
@@ -166,6 +176,27 @@ fn failed_unit(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<
         .and_then(|_| entry.number("_UID"))
         .filter(|uid| *uid != 0);
     fault.signature_text = Some(format!("{unit:?} {result:?}"));
+    let termination = match result.as_deref() {
+        Some("watchdog") => Some("watchdog"),
+        Some("timeout") => Some("stop-timeout"),
+        Some("oom-kill") => {
+            facts::add_memory_details(&mut fault.detail);
+            match unit
+                .as_deref()
+                .and_then(|unit| facts::oomd_reason(unit, fault.time.as_second()))
+            {
+                Some(reason) => {
+                    fault.detail.insert("limit".to_owned(), json!(reason));
+                    Some("oomd")
+                }
+                None => Some("kernel-oom"),
+            }
+        }
+        _ => None,
+    };
+    fault
+        .detail
+        .insert("termination".to_owned(), json!(termination));
     fault.program = unit;
     fault.detail.insert("result".to_owned(), json!(result));
     fault.store(spool, config, Path::new(SPOOL))?;

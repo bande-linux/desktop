@@ -427,15 +427,19 @@ impl LowMemory {
         low_memory
     }
 
-    fn refresh(&mut self, now: Instant) {
+    fn refresh(&mut self, now: Instant) -> bool {
         self.refreshed = now;
         let apps = self
             .app_slice
             .as_deref()
             .map(|slice| heaviest_apps(slice, &self.entries, APPS_SHOWN))
             .unwrap_or_default();
+        if apps == self.view.apps {
+            return false;
+        }
         load_icons(&apps, &mut self.icons, self.pixels);
         self.view.set_apps(apps, self.icons.clone());
+        true
     }
 
     fn apply(&mut self, window: &mut Window, effects: Vec<(Effect, Option<AppMemory>)>) {
@@ -499,8 +503,9 @@ impl App for LowMemory {
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        self.refresh(now);
-        window.request_redraw();
+        if self.refresh(now) {
+            window.request_redraw();
+        }
     }
 
     fn animating(&self) -> bool {

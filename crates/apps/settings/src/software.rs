@@ -590,6 +590,7 @@ fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<Opt
             actions: &[("default", &show)],
             urgency: Urgency::Normal,
             sound: None,
+            desktop_entry: Some("org.bande.Settings"),
         },
     )
     .map(Some)

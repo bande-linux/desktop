@@ -104,6 +104,7 @@ fn run() -> zbus::Result<()> {
             actions: &[(OPEN, &open)],
             urgency: Urgency::Normal,
             sound: None,
+            desktop_entry: None,
         },
     )?;
     if let Some(path) = told_path {

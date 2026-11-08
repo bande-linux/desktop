@@ -1,6 +1,7 @@
 use std::sync::mpsc::{self, Sender};
 
 use bande_notify::client::NotificationCenter;
+use bande_xdg::{Locale, applications, current_desktops, data_dirs, notifying_app_name};
 use zbus::blocking::Connection;
 
 use bande_settings_panes::PaneId;
@@ -31,12 +32,17 @@ pub enum NotificationCommand {
 }
 
 fn read(rules: &NotificationCenter<'_>) -> zbus::Result<Vec<AppNotifications>> {
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
     let mut apps: Vec<AppNotifications> = rules
         .get_apps()?
         .into_iter()
         .map(
             |(group, name, allow, banners, in_center, sound)| AppNotifications {
-                name: if name.is_empty() { group.clone() } else { name },
+                name: notifying_app_name(&entries, &group, &name),
                 group,
                 allow,
                 banners,

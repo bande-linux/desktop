@@ -810,13 +810,16 @@ dependencies = [
 name = "bande-graphics"
 version = "0.1.9"
 dependencies = [
+ "ash",
  "bande-design",
  "fontique",
  "image",
  "libc",
+ "libloading",
  "parley",
  "pollster",
  "resvg",
+ "serde_json",
  "skrifa 0.44.0",
  "tracing",
  "vello_cpu",

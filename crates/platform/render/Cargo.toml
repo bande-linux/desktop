@@ -17,3 +17,6 @@ naga.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+libc.workspace = true

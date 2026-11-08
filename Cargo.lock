@@ -716,6 +716,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-dict"
+version = "0.1.7"
+dependencies = [
+ "bande-xdg",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "bande-edid"
 version = "0.1.7"
 
@@ -840,6 +849,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-https"
+version = "0.1.7"
+dependencies = [
+ "rustls",
+]
+
+[[package]]
 name = "bande-inbox"
 version = "0.1.7"
 dependencies = [
@@ -960,11 +976,13 @@ version = "0.1.7"
 dependencies = [
  "accesskit",
  "bande-app",
+ "bande-dict",
+ "bande-https",
  "bande-inbox",
  "bande-l10n",
  "bande-toolkit",
  "bande-xdg",
- "tempfile",
+ "serde_json",
  "tracing",
 ]
 
@@ -1172,6 +1190,7 @@ name = "bande-render"
 version = "0.1.7"
 dependencies = [
  "ash",
+ "libc",
  "naga",
  "smithay",
  "tracing",
@@ -1181,12 +1200,12 @@ dependencies = [
 name = "bande-reporter"
 version = "0.1.7"
 dependencies = [
+ "bande-https",
  "bande-log",
  "flate2",
  "jiff",
  "ring",
  "rustix 1.1.6",
- "rustls",
  "serde_json",
  "tracing",
 ]
@@ -1309,6 +1328,7 @@ dependencies = [
  "bande-colour",
  "bande-config",
  "bande-datetime",
+ "bande-dict",
  "bande-edid",
  "bande-fs",
  "bande-keyboard",

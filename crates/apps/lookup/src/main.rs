@@ -1,4 +1,4 @@
-mod dict;
+mod online;
 mod panel;
 
 use std::cell::Cell;

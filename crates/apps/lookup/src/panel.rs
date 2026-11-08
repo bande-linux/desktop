@@ -8,11 +8,13 @@ use bande_toolkit::ui::{Axis, Button, Context, Event, Key, Label, ScrollView, St
 use bande_toolkit::{Appearance, Scene, Spacing, TextSystem, Window, WindowEvent};
 
 use crate::L10N;
-use crate::dict::{self, Hit, Preferences, discover};
+use bande_dict::{Choices, Hit, Preferences};
+use bande_inbox::Outbox;
+
+use crate::online;
 
 pub const PANEL_SIZE: (u32, u32) = (420, 340);
 pub const LANGUAGE_ARGUMENT: &str = "--language=";
-const PACK_FOLDER: &str = "bande/dict";
 
 pub type Answer = Result<Vec<Hit>, String>;
 
@@ -27,15 +29,12 @@ pub struct Panel {
     dismissed: Rc<Cell<bool>>,
 }
 
-fn find(word: &str, hint: Option<String>) -> Answer {
-    let folders: Vec<_> = bande_xdg::data_dirs()
+fn find(word: &str, hint: Option<String>, answers: &Outbox<Answer>) {
+    let choices = Choices::load();
+    let packs: Vec<_> = bande_dict::installed()
         .into_iter()
-        .map(|folder| folder.join(PACK_FOLDER))
+        .filter(|pack| !choices.off.contains(&pack.id))
         .collect();
-    let packs = discover(&folders);
-    if packs.is_empty() {
-        return Err(L10N.tr("no-packs"));
-    }
     let ui_languages = bande_l10n::preferred_languages();
     let word_languages: Vec<String> = hint
         .into_iter()
@@ -44,9 +43,22 @@ fn find(word: &str, hint: Option<String>) -> Answer {
     let wanted = Preferences {
         word_languages: &word_languages,
         ui_languages: &ui_languages,
-        user_order: &[],
+        user_order: &choices.order,
     };
-    dict::look_up(&packs, word, wanted).map_err(|error| error.to_string())
+    let local = match packs.is_empty() && !choices.wikipedia {
+        true => Err(L10N.tr("no-packs")),
+        false => bande_dict::look_up(&packs, word, wanted).map_err(|error| error.to_string()),
+    };
+    let language = match &local {
+        Ok(hits) if !hits.is_empty() => hits[0].language.clone(),
+        _ => word_languages.first().cloned().unwrap_or_default(),
+    };
+    if !answers.send(local) || !choices.wikipedia {
+        return;
+    }
+    if let Some(hit) = online::wikipedia(word, &language) {
+        answers.send(Ok(vec![hit]));
+    }
 }
 
 fn ui_with(root: Box<dyn Widget>, text: TextSystem, appearance: Appearance) -> Ui {
@@ -117,7 +129,7 @@ impl Panel {
         let ui = ui_with(root, TextSystem::new(), appearance);
         let outbox = answers.outbox();
         let asked = word.clone();
-        std::thread::spawn(move || outbox.send(find(&asked, hint)));
+        std::thread::spawn(move || find(&asked, hint, &outbox));
         Self {
             ui,
             appearance,
@@ -220,14 +232,18 @@ impl View for Panel {
     }
 
     fn source_ready(&mut self, _window: &mut Window, _index: usize) -> bool {
-        match self.answers.drain().pop() {
-            Some(answer) => {
-                self.answer = Some(answer);
-                self.rebuild();
-                true
-            }
-            None => false,
+        let arrived = self.answers.drain();
+        if arrived.is_empty() {
+            return false;
         }
+        for answer in arrived {
+            match (&mut self.answer, answer) {
+                (Some(Ok(hits)), Ok(more)) => hits.extend(more),
+                (shown, answer) => *shown = Some(answer),
+            }
+        }
+        self.rebuild();
+        true
     }
 
     fn animating(&self) -> bool {

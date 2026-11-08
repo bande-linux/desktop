@@ -115,6 +115,8 @@ bande-pdf = { path = "crates/toolkit/pdf" }
 bande-greeter = { path = "crates/shell/greeter" }
 bande-indexer = { path = "crates/services/index" }
 bande-inbox = { path = "crates/libs/inbox" }
+bande-https = { path = "crates/libs/https" }
+bande-dict = { path = "crates/libs/dict" }
 bande-keyring = { path = "crates/libs/keyring" }
 bande-keyboard = { path = "crates/libs/keyboard" }
 bande-l10n-macros = { path = "crates/libs/l10n-macros" }

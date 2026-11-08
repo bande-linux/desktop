@@ -321,6 +321,7 @@ pub enum SettingId {
     SendReportForm,
     ShortcutsPage,
     Spelling,
+    TextReplacements,
     LookUp,
     ClipboardHistory,
     KeyboardAccess,
@@ -412,6 +413,7 @@ pub enum List {
     DefaultApps,
     Clipboard,
     Spelling,
+    TextReplacements,
     LookUp,
     KeyboardAccess,
     SecurityStatus,
@@ -1330,6 +1332,15 @@ fn keyboard_pane() -> Pane {
                 Some(L10N.tr("spelling")),
                 vec![list(SettingId::Spelling, "spelling", List::Spelling)],
             ),
+            section(
+                Some(L10N.tr("text-replacements")),
+                vec![list(
+                    SettingId::TextReplacements,
+                    "text-replacements",
+                    List::TextReplacements,
+                )],
+            )
+            .noted("text-replacements-note"),
             section(
                 Some(L10N.tr("modifier-keys")),
                 vec![setting(

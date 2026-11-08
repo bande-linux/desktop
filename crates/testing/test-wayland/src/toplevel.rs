@@ -4,7 +4,7 @@ use wayland_protocols::xdg::shell::client::xdg_popup::{self, XdgPopup};
 use wayland_protocols::xdg::shell::client::xdg_positioner::{
     Anchor, ConstraintAdjustment, Gravity, XdgPositioner,
 };
-use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
+use wayland_protocols::xdg::shell::client::xdg_toplevel::{ResizeEdge, XdgToplevel};
 
 use crate::{Compositor, Globals, ShmImage, TestClient};
 
@@ -24,6 +24,16 @@ pub(crate) struct Toplevels {
 }
 
 impl TestClient {
+    pub fn start_resize(&mut self, server: &mut Compositor, index: usize, edge: ResizeEdge) {
+        let input = &self.globals.input;
+        self.windows[index].2.resize(
+            input.seat.as_ref().expect("use_seat first"),
+            input.button_serial,
+            edge,
+        );
+        self.exchange(server);
+    }
+
     pub fn open_popup(&mut self, server: &mut Compositor, request: &PopupRequest) -> usize {
         let qh = self.queue.handle();
         let compositor = self.globals.compositor.as_ref().expect("wl_compositor");

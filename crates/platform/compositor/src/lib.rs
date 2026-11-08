@@ -15,6 +15,7 @@ mod clock;
 mod colour;
 mod constraint;
 mod cursor;
+mod cursor_set;
 mod decoration;
 mod display_bus;
 mod displays;
@@ -78,9 +79,7 @@ pub use bande_render::{DeviceInfo, RenderError};
 pub use clock::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, Poll, RecoveryStep, Submission, Vblank,
 };
-pub use cursor::{
-    ARROW_FILL, ARROW_HEIGHT, ARROW_OUTLINE, ARROW_WIDTH, CursorTheme, DEFAULT_CURSOR_SIZE,
-};
+pub use cursor::{CursorTheme, write_cursor_theme};
 pub use display_bus::{DisplaysHandle, serve_displays};
 pub use drm::{DrmBackend, DrmBackendError, DrmNotifiers, HeadChanges};
 pub use element::{ScreenElement, SurfaceElement};

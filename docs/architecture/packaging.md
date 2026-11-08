@@ -99,10 +99,9 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   (Bluetooth), since without them the bar would read as a computer without that hardware, and
   recommends Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
   `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
-  only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` recommends
-  `dmz-cursor-theme`, whose `DMZ-Black` is the default pointer (`XCURSOR_THEME` unset), with the
-  system's `default` cursor theme as the fallback; `bande-settings` adds AccountsService (Users), PackageKit
-  (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
+  only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` ships Bande's own
+  pointers, so no cursor theme package comes along (see compositor.md); `bande-settings` adds
+  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
   import), `xkb-data` and `locales`, so its helper can generate any language picked in Settings;
   the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
   and `systemd-resolved` are from Sharing (resolved announces shares but also takes over DNS, so

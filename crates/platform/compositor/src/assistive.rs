@@ -118,7 +118,6 @@ impl State {
         if settings.cursor_size != self.cursor_theme.size {
             let theme = CursorTheme {
                 size: settings.cursor_size,
-                ..self.cursor_theme.clone()
             };
             if let Some(session) = self.assistive.session_bus.clone() {
                 let exported = theme.clone();

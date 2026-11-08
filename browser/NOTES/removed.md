@@ -5,6 +5,7 @@
 - Turned off at build time: the crash reporter, the updater, Normandy studies and pingsender.
 - Gone entirely: the built-in new-tab add-on, which carried sponsored tiles, stories and top sites, replaced by our own page; `about:telemetry` and `about:glean`; Safe Browsing's Google providers; Google geolocation.
 - Gone from Settings: data collection and the default-browser prompt.
+- Gone from new profiles: Mozilla's folder of default bookmarks.
 
 **Stays, and why:**
 - **Telemetry and Glean calls** in about 740 files, and the libraries behind them. Deleting every call would conflict with each ESR update. They cannot send: upload is off at build time, and the uploaders and ping sender are gone.

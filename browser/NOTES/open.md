@@ -1,9 +1,6 @@
 # Open
 
-- Removal, next round: the newtab add-on, asrouter, VPN, AI and report-broken-site are off and cut from startup but still in the package.
-- Branding: `about:rights` still opens Mozilla's terms; fox art in the newtab add-on goes with its removal.
-- Release: apt's third feed, once a tagged desktop 0.1.8 has the control well.
-- Settings still shows the "Make default" row under Account and sync: the prompt patch only covered the old General pane.
-- New tab is an empty page; decide whether it should show history tiles.
-- l10n: only en-US is built so far.
+- Release: the archive takes the browser from `follow-debian.yml` once apt's `web-source` branch is on its main; `bande-browser` passes from the apps to this repository there (`conf/handovers`).
+- l10n: Swedish is built; our own strings are in `l10n/<lang>/bande.ftl`.
+- Search suggestions are off even after an engine is chosen: the owner's call whether the chooser should offer them.
 - Speed: PGO, measured against this thin-LTO build.

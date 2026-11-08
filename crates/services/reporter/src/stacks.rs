@@ -66,16 +66,22 @@ fn parse_module(line: &str) -> Option<Image> {
 
 fn parse_coredump_frame(line: &str) -> Option<ParsedFrame> {
     let rest = line.trim_start().strip_prefix('#')?;
-    let (_, rest) = rest.split_once(' ')?;
+    let (number, rest) = rest.split_once(' ')?;
+    let caller = number.parse::<u32>().ok()? > 0;
     let rest = rest.trim_start();
     let (_, rest) = rest.split_once(' ')?;
     let (symbol, place) = rest.rsplit_once(" (")?;
     let (module, offset) = place.trim_end_matches(')').split_once(" + ")?;
     let symbol = symbol.trim();
+    let offset = u64::from_str_radix(offset.trim_start_matches("0x"), 16).ok()?;
     Some(ParsedFrame {
         symbol: (symbol != "n/a").then(|| readable(symbol)),
         module: base_name(module).to_owned(),
-        offset: u64::from_str_radix(offset.trim_start_matches("0x"), 16).ok()?,
+        offset: if caller {
+            offset.saturating_sub(1)
+        } else {
+            offset
+        },
     })
 }
 
@@ -299,7 +305,7 @@ mod tests {
         assert_eq!(stacks.threads.len(), 2);
         assert!(stacks.threads[0].crashed && !stacks.threads[1].crashed);
         assert_eq!(stacks.threads[0].frames.len(), 2);
-        assert_eq!(stacks.threads[0].frames[1].offset, 0x1000);
+        assert_eq!(stacks.threads[0].frames[1].offset, 0xfff);
         assert_eq!(stacks.threads[0].frames[1].symbol, None);
         assert_eq!(stacks.images[0].name, "bande-shell");
         assert_eq!(stacks.images[0].build_id.as_deref(), Some("abc123"));

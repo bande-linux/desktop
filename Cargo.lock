@@ -667,8 +667,8 @@ name = "bande-crash-reports"
 version = "0.1.7"
 dependencies = [
  "bande-log",
+ "bande-reporter",
  "jiff",
- "rustc-demangle",
  "rustix 1.1.6",
  "serde_json",
  "tracing",
@@ -1007,6 +1007,7 @@ dependencies = [
 name = "bande-network"
 version = "0.1.7"
 dependencies = [
+ "bande-log",
  "zbus",
 ]
 
@@ -1201,6 +1202,7 @@ dependencies = [
  "flate2",
  "jiff",
  "ring",
+ "rustc-demangle",
  "rustix 1.1.6",
  "serde_json",
  "tracing",
@@ -1348,6 +1350,7 @@ dependencies = [
  "libc",
  "libloading",
  "rustix 1.1.6",
+ "serde_json",
  "tempfile",
  "tracing",
  "wayland-client",

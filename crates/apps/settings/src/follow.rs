@@ -3,8 +3,8 @@ use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use bande_app::choose_file;
@@ -22,8 +22,8 @@ use crate::battery::{BatteryCommand, BatteryState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
-use crate::crash_reports::{CrashReport, CrashReportCommand, follow_crash_reports};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
+use crate::diagnostics::{Diagnostics, DiagnosticsCommand, follow_diagnostics};
 use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
@@ -71,10 +71,11 @@ pub enum Update {
     Thumbnail(Pair, bande_wallpaper::Picture),
     About(About),
     Storage(Storage),
+    Diagnostics(Diagnostics),
+    DiagnosticsReport(String, String),
+    ReportCreated(String),
+    ReportSaved(String),
     Backup(BackupUpdate),
-    CrashReports(Vec<CrashReport>),
-    CrashReportsChanged,
-    CrashReportText(PathBuf, String),
     Time(Option<TimeState>),
     Login(LoginItems),
     Battery(Option<BatteryState>),
@@ -121,8 +122,8 @@ pub enum Command {
     Picture(PictureCommand),
     About(AboutCommand),
     Storage(StorageCommand),
+    Diagnostics(DiagnosticsCommand),
     Backup(BackupCommand),
-    CrashReports(CrashReportCommand),
     CopyText(String),
     Time(TimeCommand),
     Login(LoginCommand),
@@ -191,6 +192,30 @@ impl Feed {
         while matches!((&self.wake).read(&mut bytes), Ok(read) if read > 0) {}
         self.receiver.try_iter().collect()
     }
+}
+
+fn untimed(
+    bus: &'static OnceLock<Option<Connection>>,
+    open: fn() -> zbus::Result<Connection>,
+    fallback: &Connection,
+) -> Connection {
+    bus.get_or_init(|| {
+        open()
+            .inspect_err(|error| tracing::warn!("cannot open a bus connection: {error}"))
+            .ok()
+    })
+    .clone()
+    .unwrap_or_else(|| fallback.clone())
+}
+
+pub(crate) fn waiting_system(fallback: &Connection) -> Connection {
+    static BUS: OnceLock<Option<Connection>> = OnceLock::new();
+    untimed(&BUS, Connection::system, fallback)
+}
+
+pub(crate) fn waiting_session(fallback: &Connection) -> Connection {
+    static BUS: OnceLock<Option<Connection>> = OnceLock::new();
+    untimed(&BUS, Connection::session, fallback)
 }
 
 pub fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {
@@ -374,8 +399,8 @@ pub struct Services {
     pictures: Sender<PictureCommand>,
     about: Option<Sender<AboutCommand>>,
     storage: Sender<StorageCommand>,
+    diagnostics: Sender<DiagnosticsCommand>,
     backup: Option<Sender<BackupCommand>>,
-    crash_reports: Sender<CrashReportCommand>,
     time: Option<Sender<TimeCommand>>,
     login: Sender<LoginCommand>,
     battery: Option<Sender<BatteryCommand>>,
@@ -418,8 +443,8 @@ impl Services {
             pictures: follow_pictures(session, bande_xdg::data_dirs(), updates.clone()),
             about: system.map(|system| follow_about(system, updates.clone())),
             storage: follow_storage(updates.clone()),
+            diagnostics: follow_diagnostics(updates.clone()),
             backup: system.map(|system| follow_backup(session, system, updates.clone())),
-            crash_reports: follow_crash_reports(updates.clone()),
             time: system.map(|system| follow_time(system, updates.clone())),
             login: follow_login_items(updates.clone()),
             battery: system.map(|system| follow_battery(system, updates.clone())),
@@ -468,11 +493,11 @@ impl Services {
                 .as_ref()
                 .is_some_and(|about| about.send(command).is_ok()),
             Command::Storage(command) => self.storage.send(command).is_ok(),
+            Command::Diagnostics(command) => self.diagnostics.send(command).is_ok(),
             Command::Backup(command) => self
                 .backup
                 .as_ref()
                 .is_some_and(|backup| backup.send(command).is_ok()),
-            Command::CrashReports(command) => self.crash_reports.send(command).is_ok(),
             Command::Time(command) => self
                 .time
                 .as_ref()

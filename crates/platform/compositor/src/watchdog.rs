@@ -16,6 +16,7 @@ pub const UNRESPONSIVE_AFTER: Duration = Duration::from_secs(3);
 pub(crate) const PING_SINCE: u32 = 2;
 const PING_INTERVAL: Duration = Duration::from_secs(1);
 const QUIT_PATIENCE: Duration = Duration::from_secs(10);
+const REPORT_HANG_AFTER: Duration = Duration::from_secs(10);
 
 #[derive(PartialEq)]
 enum Pinged {
@@ -41,6 +42,7 @@ struct Ping {
     pending: bool,
     unresponsive: bool,
     given_up: bool,
+    reported: bool,
 }
 
 #[derive(Default)]
@@ -209,6 +211,7 @@ impl State {
                 pending: true,
                 unresponsive: false,
                 given_up: false,
+                reported: false,
             });
         }
         for shell in self
@@ -237,6 +240,7 @@ impl State {
                 pending: true,
                 unresponsive: false,
                 given_up: false,
+                reported: false,
             });
         }
     }
@@ -267,6 +271,20 @@ impl State {
             }
             ping.given_up =
                 waiting_for_apps && ping.unresponsive && now >= ping.sent + QUIT_PATIENCE;
+            if ping.unresponsive && !ping.reported && now >= ping.sent + REPORT_HANG_AFTER {
+                ping.reported = true;
+                if let Ok(pid) = u32::try_from(ping.pid) {
+                    let kind = match ping.pinged {
+                        Pinged::App(_) => "app-hang",
+                        Pinged::Shell(_) => "shell-stall",
+                    };
+                    bande_log::fault::report_hang_of(
+                        kind,
+                        pid,
+                        now.saturating_sub(ping.sent).as_secs(),
+                    );
+                }
+            }
         }
         self.watchdog.quit_asked =
             waiting_for_apps.then(|| self.watchdog.quit_asked.unwrap_or(now));
@@ -284,8 +302,15 @@ impl State {
         self.watchdog
             .pings
             .iter()
-            .filter(|ping| ping.pending && !ping.unresponsive)
-            .map(|ping| ping.sent + UNRESPONSIVE_AFTER)
+            .filter(|ping| ping.pending && !ping.reported)
+            .map(|ping| {
+                ping.sent
+                    + if ping.unresponsive {
+                        REPORT_HANG_AFTER
+                    } else {
+                        UNRESPONSIVE_AFTER
+                    }
+            })
             .min()
             .into_iter()
             .chain(waiting_for_apps.then_some(now + PING_INTERVAL))

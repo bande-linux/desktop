@@ -140,7 +140,7 @@ pub fn follow_time(system: &Connection, updates: Updates) -> Sender<TimeCommand>
             tracing::warn!("cannot follow timedated: {error}");
         }
     });
-    let system = system.clone();
+    let system = crate::follow::waiting_system(system);
     spawn("time-worker", move || {
         let Ok(timedate) = TimedateProxyBlocking::new(&system) else {
             return;

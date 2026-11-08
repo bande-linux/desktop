@@ -158,7 +158,7 @@ pub fn follow_printers(
     let reader = updates.clone();
     let reading = system.clone();
     let session = session.clone();
-    let commands_session = session.clone();
+    let commands_session = crate::follow::waiting_session(&session);
     spawn("printers", move || {
         while changes.recv().is_ok() {
             std::thread::sleep(SETTLE);

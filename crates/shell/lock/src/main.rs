@@ -322,6 +322,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
+    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-lock");
     match run() {
         Ok(()) => ExitCode::SUCCESS,

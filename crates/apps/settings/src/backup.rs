@@ -117,14 +117,15 @@ fn start_following(system: &Connection, updates: &Updates, commands: Sender<Back
 
 pub fn follow_backup(system: &Connection, updates: Updates) -> Sender<BackupCommand> {
     let (sender, receiver) = mpsc::channel();
-    let system = system.clone();
+    let following_bus = system.clone();
+    let system = crate::follow::waiting_system(system);
     let again = sender.clone();
     spawn("backup", move || {
         let mut following = false;
         while let Ok(command) = receiver.recv() {
             if !following {
                 following = true;
-                start_following(&system, &updates, again.clone());
+                start_following(&following_bus, &updates, again.clone());
             }
             let outcome = BackupProxy::new(&system)
                 .and_then(|proxy| run_one(&proxy, &updates, command.clone()));

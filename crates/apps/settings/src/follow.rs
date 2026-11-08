@@ -3,8 +3,8 @@ use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use bande_app::choose_file;
@@ -192,6 +192,30 @@ impl Feed {
         while matches!((&self.wake).read(&mut bytes), Ok(read) if read > 0) {}
         self.receiver.try_iter().collect()
     }
+}
+
+fn untimed(
+    bus: &'static OnceLock<Option<Connection>>,
+    open: fn() -> zbus::Result<Connection>,
+    fallback: &Connection,
+) -> Connection {
+    bus.get_or_init(|| {
+        open()
+            .inspect_err(|error| tracing::warn!("cannot open a bus connection: {error}"))
+            .ok()
+    })
+    .clone()
+    .unwrap_or_else(|| fallback.clone())
+}
+
+pub(crate) fn waiting_system(fallback: &Connection) -> Connection {
+    static BUS: OnceLock<Option<Connection>> = OnceLock::new();
+    untimed(&BUS, Connection::system, fallback)
+}
+
+pub(crate) fn waiting_session(fallback: &Connection) -> Connection {
+    static BUS: OnceLock<Option<Connection>> = OnceLock::new();
+    untimed(&BUS, Connection::session, fallback)
 }
 
 pub fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {

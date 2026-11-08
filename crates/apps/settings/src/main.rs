@@ -215,8 +215,8 @@ impl Program for Settings {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
-        let session = zbus::blocking::Connection::session()?;
-        let system = zbus::blocking::Connection::system()
+        let session = bande_bus::session()?;
+        let system = bande_bus::system()
             .inspect_err(|error| tracing::warn!("no system bus: {error}"))
             .ok();
         let (feed, updates) = feed()?;
@@ -372,7 +372,7 @@ fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn finish_update() -> Result<(), Box<dyn std::error::Error>> {
-    let session = zbus::blocking::Connection::session()?;
+    let session = bande_bus::session()?;
     if bande_settings::finish_update(&session) {
         start_announcer(ANNOUNCE_LOG_OUT)?;
     }
@@ -397,14 +397,14 @@ fn start_announcer(flag: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn announce_updates_and_open_on_click() -> Result<(), Box<dyn std::error::Error>> {
-    let system = zbus::blocking::Connection::system()?;
+    let system = bande_bus::system()?;
     announce_and_open_on_click(|session| announce_updates(session, &system))
 }
 
 fn announce_and_open_on_click(
     announce: impl FnOnce(&zbus::blocking::Connection) -> zbus::Result<Option<u32>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let session = zbus::blocking::Connection::session()?;
+    let session = bande_bus::session()?;
     let notice = UpdateNotice::listen(&session)?;
     let Some(id) = announce(&session)? else {
         return Ok(());

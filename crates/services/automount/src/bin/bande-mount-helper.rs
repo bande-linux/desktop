@@ -2,7 +2,7 @@ use std::fs;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, chown};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bande_volumes::{mounted, system_mounts_root};
 use rustix::mount::{UnmountFlags, unmount};
@@ -13,7 +13,6 @@ const NFS: &str = "/usr/sbin/mount.nfs";
 const NFS_MOUNT: &str = "softerr,softreval,timeo=30,retrans=2,retry=0,nosuid,nodev";
 const DAVFS_CONF: &str = "/usr/share/bande/bande-davfs2.conf";
 const DETACH_LIMIT: Duration = Duration::from_secs(3);
-const DETACH_CHECK: Duration = Duration::from_millis(50);
 const SOFT_MOUNT: &str = "soft,echo_interval=5,actimeo=1";
 const UNMOUNTABLE: [&str; 5] = ["cifs", "smb3", "fuse", "nfs", "nfs4"];
 
@@ -178,22 +177,20 @@ fn mount(uid: u32, arguments: &[String]) -> ExitCode {
 
 fn force_unmount(point: &Path) {
     let detaching = point.to_owned();
+    let (done, detached) = std::sync::mpsc::channel();
     let spawned = std::thread::Builder::new().spawn(move || {
         let flags = UnmountFlags::FORCE | UnmountFlags::DETACH | UnmountFlags::NOFOLLOW;
         if let Err(error) = unmount(&detaching, flags) {
             eprintln!("cannot unmount {}: {error}", detaching.display());
         }
+        let _ = done.send(());
     });
     if let Err(error) = spawned {
         eprintln!("cannot unmount {}: {error}", point.display());
         return;
     }
-    let deadline = Instant::now() + DETACH_LIMIT;
-    while Instant::now() < deadline
-        && mounted(&fs::read_to_string("/proc/self/mountinfo").unwrap_or_default())
-            .any(|mount| mount.point == point)
-    {
-        std::thread::sleep(DETACH_CHECK);
+    if detached.recv_timeout(DETACH_LIMIT).is_err() {
+        eprintln!("{} is still detaching", point.display());
     }
 }
 

@@ -8,6 +8,7 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use bande_app::choose_file;
+use bande_bus::Reading;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
 use bande_status::devices::can_sleep;
@@ -46,7 +47,7 @@ use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiS
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
-use bande_network::import_vpn;
+use bande_network::{import_vpn, missing_vpn_plugin};
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_watch::FolderWatch;
@@ -61,10 +62,10 @@ pub enum Update {
     DisplayLevels(Vec<DisplayLevel>),
     Arrangements(Vec<Vec<Placement>>),
     Audio(Option<bande_audio::Snapshot>),
-    Wifi(Option<WifiState>),
+    Wifi(Reading<WifiState>),
     Network(NetworkState),
     Joined(Vec<u8>, Joined),
-    Bluetooth(Option<BluetoothState>),
+    Bluetooth(Reading<BluetoothState>),
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
     ColourProfiles(Vec<(String, String)>),
@@ -101,6 +102,7 @@ pub enum Update {
     Sharing(SharingState),
     PrinterAdded(bool),
     PrintingInstalled,
+    InstallingVpnPlugin(bool),
     Accounts(Vec<Account>, bool),
     Password(PasswordOutcome),
     PictureChosen(String, bande_toolkit::Image),
@@ -586,12 +588,34 @@ impl Services {
                             vec![(0, "*.conf".to_owned()), (0, "*.ovpn".to_owned())],
                         )),
                     );
-                    let imported = match chosen {
-                        Ok(Some(file)) => import_vpn(&file).map_err(|error| error.to_string()),
-                        Ok(None) => Ok(()),
-                        Err(error) => Err(error.to_string()),
+                    let file = match chosen {
+                        Ok(Some(file)) => file,
+                        Ok(None) => return,
+                        Err(error) => {
+                            updates.send(pane_failed(PaneId::Network, "vpn-import-failed", error));
+                            return;
+                        }
                     };
-                    if let Err(error) = imported {
+                    if let Some(package) = missing_vpn_plugin(&file) {
+                        updates.send(Update::InstallingVpnPlugin(true));
+                        let installed = bande_bus::system()
+                            .map_err(|error| error.to_string())
+                            .and_then(|system| {
+                                bande_packages::Client::new(&system)
+                                    .install_missing(&[package])
+                                    .map_err(|error| error.to_string())
+                            });
+                        updates.send(Update::InstallingVpnPlugin(false));
+                        if let Err(error) = installed {
+                            updates.send(pane_failed(
+                                PaneId::Network,
+                                "vpn-plugin-install-failed",
+                                format!("{package}: {error}"),
+                            ));
+                            return;
+                        }
+                    }
+                    if let Err(error) = import_vpn(&file) {
                         updates.send(pane_failed(PaneId::Network, "vpn-import-failed", error));
                     }
                 });

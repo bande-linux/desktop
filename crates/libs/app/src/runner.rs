@@ -11,6 +11,7 @@ use bande_toolkit::ui::{Event, parse_shortcut, shortcut_pressed};
 use bande_toolkit::{
     AppConnection, AppRequest, Rect, Scene, Surfaces, Window, WindowError, WindowEvent,
 };
+use bande_xdg::InstallWatch;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::cx::Content;
@@ -23,6 +24,7 @@ use crate::{Cx, Error, Info, Program, Saved, WindowId};
 enum Source {
     Menu,
     Instance,
+    Installs,
     Program(usize),
     View(WindowId, usize),
 }
@@ -546,6 +548,10 @@ impl<P: Program> Surfaces for Runner<P> {
             fds.push(instance.fd());
             sources.push(Source::Instance);
         }
+        if let Some(Some(installs)) = self.cx.installs.get() {
+            fds.push(installs.fd());
+            sources.push(Source::Installs);
+        }
         for (index, fd) in self.program.sources().into_iter().enumerate() {
             fds.push(fd);
             sources.push(Source::Program(index));
@@ -584,6 +590,18 @@ impl<P: Program> Surfaces for Runner<P> {
                     .unwrap_or_default();
                 for request in requests {
                     self.activated(request);
+                }
+            }
+            Some(Source::Installs) => {
+                if self
+                    .cx
+                    .installs
+                    .get_mut()
+                    .and_then(Option::as_mut)
+                    .is_some_and(InstallWatch::take_changed)
+                {
+                    self.cx.menus_changed = true;
+                    self.program.installed_changed(&mut self.cx);
                 }
             }
             Some(Source::Program(index)) => {

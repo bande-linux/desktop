@@ -28,6 +28,24 @@ fn settings(pane: &str) -> MenuItem {
     )
 }
 
+pub fn without_settings(menu: Menu) -> Menu {
+    let mut items: Vec<MenuItem> = Vec::new();
+    for mut entry in menu.items {
+        if matches!(Command::parse(&entry.action), Some(Command::Settings(_))) {
+            continue;
+        }
+        if entry.separator && items.last().is_none_or(|last| last.separator) {
+            continue;
+        }
+        entry.submenu = entry.submenu.map(without_settings);
+        items.push(entry);
+    }
+    if items.last().is_some_and(|last| last.separator) {
+        items.pop();
+    }
+    Menu { items, ..menu }
+}
+
 fn clock_time(dates: &DateFormats, at: &Zoned) -> String {
     let (time, period) = dates.time(at);
     period.map_or(time.clone(), |period| format!("{time} {period}"))
@@ -124,6 +142,14 @@ pub fn system_menu(user: &str, frontmost: Option<&str>, can_sleep: bool) -> Menu
         ),
     ]);
     Menu::new(items)
+}
+
+pub fn unavailable_menu(reason: &str, pane: &str) -> Menu {
+    Menu::new(vec![
+        note(&L10N.tr(reason)),
+        MenuItem::separator(),
+        settings(pane),
+    ])
 }
 
 pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {

@@ -9,6 +9,7 @@ Rules-Requires-Root: no
 Package: bande-desktop
 Architecture: all
 Depends: bande-compositor (= ${binary:Version}),
+         bande-icon-theme (= ${binary:Version}),
          bande-config (= ${binary:Version}),
          bande-power (= ${binary:Version}),
          bande-printd (= ${binary:Version}),
@@ -79,3 +80,15 @@ Description: Bande desktop environment
  the system services that still run replaced code, except the login
  manager, the buses, logind, polkit, PackageKit and networking; Software
  Update in Settings handles the session and the apps.
+
+Package: bande-icon-theme
+Architecture: all
+Multi-Arch: foreign
+Depends: hicolor-icon-theme, ${misc:Depends}
+Breaks: bande-shell (<< ${binary:Version})
+Replaces: bande-shell (<< ${binary:Version})
+Description: icons and symbols of the Bande desktop
+ The icons and symbols of the Bande desktop: folders, files, devices and
+ the symbolic icons of the bar, menus and sidebars, with a folder variant
+ for each accent colour. Every Bande program that draws icons depends on
+ it, so none shows an empty space where a symbol belongs.

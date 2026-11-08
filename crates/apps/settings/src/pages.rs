@@ -635,7 +635,7 @@ impl SettingsView {
     }
 
     fn device_rows(&mut self, paired: bool) -> Widgets {
-        let Some(bluetooth) = self.bluetooth.clone() else {
+        let Some(bluetooth) = self.bluetooth.present().cloned() else {
             return Vec::new();
         };
         let devices = if paired {
@@ -1108,11 +1108,11 @@ impl SettingsView {
     fn section_shown(&self, section: &Section) -> bool {
         section.settings.iter().all(|setting| match setting.id {
             SettingId::KnownNetworks | SettingId::Networks => {
-                self.wifi.as_ref().is_some_and(|wifi| wifi.enabled)
+                self.wifi.present().is_some_and(|wifi| wifi.enabled)
             }
             SettingId::PairedDevices | SettingId::NearbyDevices => self
                 .bluetooth
-                .as_ref()
+                .present()
                 .is_some_and(|bluetooth| bluetooth.powered),
             SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
             SettingId::DateAndTime | SettingId::TimeZone => self.time.is_some(),

@@ -10,6 +10,8 @@ mod scene;
 mod surface;
 mod text;
 mod title_bar;
+#[cfg(feature = "gpu")]
+mod vulkan;
 
 pub use bande_design::{
     Accent, Appearance, BackdropTone, Color, Contrast, ControlSize, Elevation, Look, Material,

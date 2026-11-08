@@ -114,6 +114,7 @@ impl SettingsView {
         }
         match &power.profiles {
             Profiles::Missing => rows.push(muted_row(&L10N.tr("power-modes-missing"))),
+            Profiles::Stopped => rows.push(muted_row(&L10N.tr("power-modes-stopped"))),
             Profiles::Offered(names) if names.is_empty() => {
                 rows.push(muted_row(&L10N.tr("power-modes-none")));
             }

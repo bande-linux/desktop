@@ -12,7 +12,9 @@ small compressed table of function names (`.gnu_debugdata`, as Fedora does), so 
 stack trace with names on every computer and with nothing to install or fetch. The line tables go
 to `bande-debug-symbols` (paths by build id under `/usr/lib/debug`), which CI keeps as an artifact of the
 run and does not publish: it is about as big as all the packages together. Install it to have
-`coredumpctl debug` show files and lines. Every build links with packed relative relocations
+`coredumpctl debug` show files and lines. It strips copies in `target/stripped`, which `cargo deb`
+packages, so cargo's own outputs keep their symbols and a later cargo step can't put them back;
+`check-debs.sh` fails any packaged program with `.debug_*` sections or no `.gnu_debugdata`. Every build links with packed relative relocations
 (`.cargo/config.toml`, [decision 0006](../decisions/0006-separate-gui-binaries.md)). Development and test builds keep the default
 profiles. Sizes are in [performance.md](performance.md).
 

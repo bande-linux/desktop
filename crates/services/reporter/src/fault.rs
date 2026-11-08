@@ -21,6 +21,7 @@ use crate::spool::{Attachment, Spool};
 use crate::stacks::{Stacks, parse_eu_stack};
 
 const PARTIAL: &str = "partial";
+const FRAME_FORMAT: u64 = 2;
 const IDLE_WAIT: &str = "do_epoll_wait";
 const SAMPLE_GAP: Duration = Duration::from_millis(500);
 const SAMPLE_PATIENCE: Duration = Duration::from_secs(2);
@@ -109,6 +110,7 @@ impl Fault {
         manifest.insert("owner_uid".to_owned(), json!(self.owner));
         manifest.insert("build_ids".to_owned(), self.stacks.build_ids());
         manifest.insert("threads".to_owned(), self.stacks.threads_json());
+        manifest.insert("frame_format".to_owned(), json!(FRAME_FORMAT));
         manifest.insert("images".to_owned(), self.stacks.images_json());
         manifest.insert("panic_location".to_owned(), json!(self.panic_location));
         manifest.insert("signature_text".to_owned(), json!(self.signature_text));

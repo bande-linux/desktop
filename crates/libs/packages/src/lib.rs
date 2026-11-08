@@ -482,7 +482,7 @@ impl Client {
 
     pub fn search_names(&self, prefix: &str) -> Result<Vec<Package>, Error> {
         Ok(self
-            .run("SearchNames", &(FILTER_NONE, [prefix]), &|_| {})?
+            .run("SearchNames", &(FILTER_NONE, vec![prefix]), &|_| {})?
             .packages)
     }
 

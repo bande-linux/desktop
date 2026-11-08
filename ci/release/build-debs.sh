@@ -18,7 +18,8 @@ fi
 echo "Building ${#packages[@]} packages $version for $(dpkg --print-architecture)"
 rm -rf "$target/debian"
 cargo build --profile "$profile" --locked "${packages[@]/#/--package=}" "${bundled[@]/#/--package=}" \
-    --package=bande-l10n-tool
+    --package=bande-l10n-tool --message-format=json-render-diagnostics |
+    jq -r 'select(.reason == "compiler-artifact") | .executable // (select(.target.kind | index("cdylib")) | .filenames[] | select(endswith(".so")))' > "$target/shipped"
 architecture=$(dpkg --print-architecture)
 built=$target/$profile
 [ "$profile" = dev ] && built=$target/debug
@@ -28,7 +29,7 @@ rm -rf "$built/cursors" "$built/l10n"
 packaged=$target
 if [ "$profile" = dist ]; then
     packaged=$target/stripped
-    ci/release/symbols.sh "$built" "$packaged/$profile" "$target/debian-symbols" "$version"
+    ci/release/symbols.sh "$target/shipped" "$packaged/$profile" "$target/debian-symbols" "$version"
     cp -a "$built/cursors" "$built/l10n" "$packaged/$profile/"
     strip=(--no-strip)
 fi

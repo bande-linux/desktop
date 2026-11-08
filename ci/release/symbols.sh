@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-binaries=$1 staged=$2 out=$3 version=$4
+list=$1 staged=$2 out=$3 version=$4
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 root=$scratch/root
@@ -33,7 +33,7 @@ while IFS= read -r binary; do
         echo "$copy is not stripped to its .gnu_debugdata" >&2
         exit 1
     fi
-done < <(find "$binaries" -maxdepth 1 -type f \( -executable -o -name '*.so' \))
+done < "$list"
 
 cat > "$root/DEBIAN/control" <<CONTROL
 Package: bande-debug-symbols

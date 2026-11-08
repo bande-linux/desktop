@@ -6,7 +6,7 @@ use std::time::Instant;
 use crate::users::Crop;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{
-    Animated, Context, Cursor, Event, Key, Size, Spring, Widget, WidgetId, focus_ring,
+    Animated, Context, Cursor, Event, Key, Size, Spring, Widget, WidgetId, focus_ring, row_fill,
 };
 use bande_toolkit::{
     Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape,
@@ -530,6 +530,16 @@ impl SidebarRow {
     }
 }
 
+fn focusable_frames(widget: &dyn Widget, cx: &Context, frames: &mut Vec<Rect>) {
+    if widget.accepts_focus(cx) {
+        frames.push(widget.frame());
+        return;
+    }
+    for child in widget.children() {
+        focusable_frames(child.as_ref(), cx, frames);
+    }
+}
+
 fn symbol_rect(center: Point, size: f32) -> Rect {
     Rect::new(
         (center.x - size / 2.0).round(),
@@ -964,6 +974,8 @@ pub struct Row {
     on_activate: Option<Box<dyn FnMut()>>,
     children: Vec<Box<dyn Widget>>,
     control: Size,
+    controls: Vec<Rect>,
+    hovered: bool,
     pressed: bool,
     frame: Rect,
 }
@@ -980,6 +992,8 @@ impl Row {
             on_activate: None,
             children: control.into_iter().collect(),
             control: Size::default(),
+            controls: Vec::new(),
+            hovered: false,
             pressed: false,
             frame: Rect::default(),
         }
@@ -1022,6 +1036,10 @@ impl Row {
             (None, Some(_)) => SIDEBAR_SYMBOL + SYMBOL_GAP,
             (None, None) => 0.0,
         }
+    }
+
+    fn over_control(&self, point: Point) -> bool {
+        self.controls.iter().any(|control| control.contains(point))
     }
 
     fn text_height(&self) -> f32 {
@@ -1079,6 +1097,10 @@ impl Widget for Row {
                 ),
             );
         }
+        self.controls.clear();
+        for child in &self.children {
+            focusable_frames(child.as_ref(), cx, &mut self.controls);
+        }
     }
 
     fn frame(&self) -> Rect {
@@ -1093,12 +1115,7 @@ impl Widget for Row {
                 paint: cx.palette.accent_soft.into(),
             });
         }
-        if self.pressed {
-            items.push(Item::Fill {
-                shape,
-                paint: cx.palette.well.into(),
-            });
-        }
+        row_fill(cx, shape, self.hovered, self.hovered && self.pressed, items);
         if cx.is_focused(self.id) {
             focus_ring(cx, shape, items);
         }
@@ -1156,8 +1173,18 @@ impl Widget for Row {
             return false;
         }
         match event {
+            Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
+                let hovered =
+                    self.frame.contains(pointer.position) && !self.over_control(pointer.position);
+                let changed = hovered != self.hovered;
+                self.hovered = hovered;
+                return changed;
+            }
+            Event::PointerLeave => {
+                self.hovered = false;
+                self.pressed = false;
+            }
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
-            Event::PointerLeave if self.pressed => self.pressed = false,
             Event::PointerUp(pointer) if pointer.is_primary() => {
                 let activate = self.pressed && self.frame.contains(pointer.position);
                 self.pressed = false;
@@ -1183,6 +1210,10 @@ impl Widget for Row {
         self.on_activate.is_some()
     }
 
+    fn hit_children(&self, point: Point) -> bool {
+        self.on_activate.is_none() || self.over_control(point)
+    }
+
     fn children(&self) -> &[Box<dyn Widget>] {
         &self.children
     }
@@ -1200,6 +1231,7 @@ pub struct Columns {
     least: f32,
     outset: f32,
     on_activate: Option<Box<dyn FnMut()>>,
+    hovered: bool,
     pressed: bool,
     frame: Rect,
 }
@@ -1219,6 +1251,7 @@ impl Columns {
             least: ROW_MIN_HEIGHT,
             outset: 0.0,
             on_activate: None,
+            hovered: false,
             pressed: false,
             frame: Rect::default(),
         }
@@ -1313,12 +1346,7 @@ impl Widget for Columns {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let shape = Shape::rounded(self.frame, Radius::S);
-        if self.pressed {
-            items.push(Item::Fill {
-                shape,
-                paint: cx.palette.well.into(),
-            });
-        }
+        row_fill(cx, shape, self.hovered, self.hovered && self.pressed, items);
         if cx.is_focused(self.id) {
             focus_ring(cx, shape, items);
         }
@@ -1344,8 +1372,18 @@ impl Widget for Columns {
             return false;
         }
         match event {
+            Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
+                let hovered =
+                    self.frame.contains(pointer.position) && !self.hit_children(pointer.position);
+                let changed = hovered != self.hovered;
+                self.hovered = hovered;
+                return changed;
+            }
+            Event::PointerLeave => {
+                self.hovered = false;
+                self.pressed = false;
+            }
             Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
-            Event::PointerLeave if self.pressed => self.pressed = false,
             Event::PointerUp(pointer) if pointer.is_primary() => {
                 let activate = self.pressed && self.frame.contains(pointer.position);
                 self.pressed = false;

@@ -78,8 +78,9 @@ writes a hex value, a corner radius or a font name of its own.
 - **Elevation.** `Elevation::{Frame, Overlay}.shadows(scheme, active)` gives the key and ambient
   shadow pair (offset, σ, opacity); an inactive frame's ambient shadow is half as strong.
   `Item::shadows(shape, elevation, scheme, active)` turns the pair into the two shadow items
-  under a shape, and `ui::focus_ring_for(palette, shape, items)` draws the focus ring around a
-  custom control.
+  under a shape, and `ui::focus_ring(cx, shape, items)` draws the focus ring around a custom
+  control when focus is visible (`focus_ring_for(palette, …)` for a surface outside `Ui` with
+  its own keyboard-only focus).
 
 ## Implemented (`crates/toolkit/toolkit`)
 
@@ -199,9 +200,14 @@ writes a hex value, a corner radius or a font name of its own.
   through `menu_action`.
 - **Controls** (Datum §9). Regular controls are
   28 pt high (`ControlSize::Regular`), radius 6 (`Radius::S`). Focus is a 2 pt `focus` ring at a
-  1 pt gap (radius + 3); fields instead turn their outline into a 1.5 pt accent line and add the
-  ring at 35 %. Text and glyphs on the accent use `on_accent`, on danger `on_danger` (dark ink
-  on the light accents of dark mode).
+  1 pt gap (radius + 3), drawn by `ui::focus_ring` only while `Context::focus_visible` holds:
+  `Ui` sets it on a key press without Ctrl, Alt or Super and clears it on a pointer press,
+  without moving focus (AccessKit focus always follows real focus). Fields instead turn their
+  outline into a 1.5 pt accent line and add the ring at 35 %, whenever they are focused. A row
+  that acts on click paints `ui::row_fill` (`ink` 5 % on hover, 10 % pressed); a container
+  hears a `PointerMove` when the pointer passes onto one of its children, so its hover follows.
+  Text and glyphs on the accent use `on_accent`, on danger `on_danger` (dark ink on the light
+  accents of dark mode).
 
   | Control | Look and API |
   |---|---|
@@ -225,7 +231,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `Slider` | 4 pt `well` track, accent fill, a 7×20 white fader knob with an `edge` outline; `.ticks(n)` adds `ink3` tick marks and detents the knob settles on (`interactive` spring); `set_value(cx, value)` from code |
   | `ProgressBar`, `LevelIndicator` | 24 cells with 2 pt gaps, radius 1, accent on `well`; indeterminate: a 4-cell block gliding back and forth (pulsing with Reduce Motion) |
   | `Spinner` | 12 `ink2` spokes |
-  | `Disclosure` | chevron that turns, content fades in |
+  | `Disclosure` | chevron that turns, content fades in; the header row takes the row hover fill |
   | Tooltip | `ink` fill with `chassis` text 12/500, radius 6, no arrow |
   | `Shortcut::new("Shift+Ctrl+N")` | the shortcut as words in `ink2`, modifiers in GNOME order (Shift, Ctrl, Alt, Super), arrows as arrow symbols, "Page Up", "Esc"; `shortcut_label` writes the label, `parse_shortcut` reads a shortcut string back into a key and modifiers (`Ctrl` or `Control`), and `shortcut_pressed` tells whether a key event matches one |
 

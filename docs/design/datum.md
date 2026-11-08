@@ -196,7 +196,9 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 **Sheet**: content on `sheet`, radius 8, inset 6.
 
-**Focus**: a 2 pt `focus` ring at a 1 pt gap, with radius = control radius + 3 (concentric outward). Text fields swap their outline to accent 1.5 pt and add the ring at 35 % opacity. The ring animates with `quick`.
+**Focus**: a 2 pt `focus` ring at a 1 pt gap, with radius = control radius + 3 (concentric outward). Text fields swap their outline to accent 1.5 pt and add the ring at 35 % opacity. It shows only while the keyboard is in use, as CSS `:focus-visible`: a key press without Ctrl, Alt or Super shows it, a pointer press hides it, and focus itself stays put, so Tab continues from the control last clicked. A field shows its accent outline whenever it has the caret.
+
+**Clickable rows**: a row that acts on click (a Settings row with ›, a disclosure header) gets an `ink` wash on hover, 5 %, and 10 % while pressed, in the row's own shape; no border.
 
 **Server-side decorations** for third-party apps draw the same header, at 40 pt instead of 48 because there is no toolbar, from the same `title_bar.rs`.
 

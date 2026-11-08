@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use bande_app::choose_file;
 use bande_colour::{IccError, PROFILE_FOLDER, Profile};
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use zbus::blocking::Connection;
 
 const SYSTEM_FOLDER: &str = "color/icc";
@@ -51,18 +51,17 @@ pub(crate) fn installed() -> Vec<(String, String)> {
 }
 
 fn reason(error: &IccError) -> String {
-    (match error {
-        IccError::TooShort => text!("it is too short to be an ICC profile"),
-        IccError::NotADisplayProfile => text!("it is not a display profile"),
-        IccError::NotRgb => text!("it does not describe RGB colours"),
-        IccError::NotXyz => text!("its colours are not described in XYZ"),
+    match error {
+        IccError::TooShort => tr!("it is too short to be an ICC profile"),
+        IccError::NotADisplayProfile => tr!("it is not a display profile"),
+        IccError::NotRgb => tr!("it does not describe RGB colours"),
+        IccError::NotXyz => tr!("its colours are not described in XYZ"),
         IccError::LookupTables => {
-            text!("it uses lookup tables, and only matrix-and-curve profiles are supported")
+            tr!("it uses lookup tables, and only matrix-and-curve profiles are supported")
         }
-        IccError::MissingTag(_) => text!("it is missing its colorants or tone curves"),
-        IccError::UnsupportedCurve => text!("it uses a tone curve that isn't supported"),
-    })
-    .tr()
+        IccError::MissingTag(_) => tr!("it is missing its colorants or tone curves"),
+        IccError::UnsupportedCurve => tr!("it uses a tone curve that isn't supported"),
+    }
 }
 
 pub(crate) enum Added {

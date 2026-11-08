@@ -4,7 +4,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 
 use crate::model::{Accept, Chooser};
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
@@ -526,15 +526,12 @@ impl ChooserView {
     fn accept_label(&self) -> String {
         let dialog = self.chooser.dialog();
         dialog.accept_label.as_deref().map_or_else(
-            || {
-                (match dialog.mode {
-                    Mode::Open {
-                        directory: false, ..
-                    } => text!("Open"),
-                    Mode::Open { .. } | Mode::SaveMany { .. } => text!("Choose"),
-                    Mode::Save { .. } => text!("Save"),
-                })
-                .tr()
+            || match dialog.mode {
+                Mode::Open {
+                    directory: false, ..
+                } => tr!("Open"),
+                Mode::Open { .. } | Mode::SaveMany { .. } => tr!("Choose"),
+                Mode::Save { .. } => tr!("Save"),
             },
             label,
         )

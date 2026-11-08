@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use bande_l10n::text;
+use bande_l10n::tr;
 
 use crate::tabs::location_title;
 use crate::view::{FilesView, Hit};
@@ -199,13 +199,10 @@ impl FilesView {
             Part::Toggle(section) => {
                 let (_, title) = self.group_cache.cached().get(section)?;
                 let mut node = Node::new(Role::Button);
-                node.set_label(
-                    (match self.grid_scroll.shows_all(title) {
-                        true => text!("Show Less"),
-                        false => text!("Show All"),
-                    })
-                    .tr(),
-                );
+                node.set_label(match self.grid_scroll.shows_all(title) {
+                    true => tr!("Show Less"),
+                    false => tr!("Show All"),
+                });
                 node.add_action(Action::Click);
                 node
             }

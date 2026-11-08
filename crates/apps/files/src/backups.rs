@@ -152,14 +152,11 @@ impl FilesView {
                 .find(|path| path.is_dir()),
         };
         let Some(found) = found else {
-            self.show_notice(
-                (if older {
-                    text!("No older version.")
-                } else {
-                    text!("No newer version.")
-                })
-                .tr(),
-            );
+            self.show_notice(if older {
+                tr!("No older version.")
+            } else {
+                tr!("No newer version.")
+            });
             return;
         };
         if file.is_some() {

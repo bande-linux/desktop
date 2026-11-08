@@ -1,5 +1,5 @@
 use bande_fs::Action;
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use std::path::PathBuf;
 
 use crate::controls::{Signal, sender};
@@ -51,24 +51,20 @@ fn check(on: bool) -> CheckState {
 }
 
 pub(crate) fn class_title(class: Class) -> String {
-    (match class {
-        Class::Owner => text!("You"),
-        Class::Group => text!("Group"),
-        Class::Others => text!("Everyone"),
-    })
-    .tr()
+    match class {
+        Class::Owner => tr!("You"),
+        Class::Group => tr!("Group"),
+        Class::Others => tr!("Everyone"),
+    }
 }
 
 fn access_titles() -> Vec<String> {
     Access::ALL
         .iter()
-        .map(|access| {
-            (match access {
-                Access::ReadWrite => text!("Read & Write"),
-                Access::ReadOnly => text!("Read only"),
-                Access::NoAccess => text!("No Access"),
-            })
-            .tr()
+        .map(|access| match access {
+            Access::ReadWrite => tr!("Read & Write"),
+            Access::ReadOnly => tr!("Read only"),
+            Access::NoAccess => tr!("No Access"),
         })
         .collect()
 }

@@ -1426,20 +1426,19 @@ impl SettingsView {
 }
 
 fn kind_noun(kind: DeviceKind) -> String {
-    (match kind {
-        DeviceKind::Mouse => text!("Mouse"),
-        DeviceKind::Keyboard => text!("Keyboard"),
-        DeviceKind::Tablet => text!("Tablet"),
-        DeviceKind::GameController => text!("Game controller"),
-        DeviceKind::Headphones => text!("Headphones"),
-        DeviceKind::Headset => text!("Headset"),
-        DeviceKind::Speaker => text!("Speaker"),
-        DeviceKind::Phone => text!("Phone"),
-        DeviceKind::Computer => text!("Computer"),
-        DeviceKind::Camera => text!("Camera"),
-        DeviceKind::Printer => text!("Printer"),
-        DeviceKind::Display => text!("Display"),
-        DeviceKind::Other => text!("Unknown device"),
-    })
-    .tr()
+    match kind {
+        DeviceKind::Mouse => tr!("Mouse"),
+        DeviceKind::Keyboard => tr!("Keyboard"),
+        DeviceKind::Tablet => tr!("Tablet"),
+        DeviceKind::GameController => tr!("Game controller"),
+        DeviceKind::Headphones => tr!("Headphones"),
+        DeviceKind::Headset => tr!("Headset"),
+        DeviceKind::Speaker => tr!("Speaker"),
+        DeviceKind::Phone => tr!("Phone"),
+        DeviceKind::Computer => tr!("Computer"),
+        DeviceKind::Camera => tr!("Camera"),
+        DeviceKind::Printer => tr!("Printer"),
+        DeviceKind::Display => tr!("Display"),
+        DeviceKind::Other => tr!("Unknown device"),
+    }
 }

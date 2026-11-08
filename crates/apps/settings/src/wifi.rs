@@ -548,11 +548,11 @@ impl SettingsView {
                     NetworkCommand::ChangeConnection(PaneId::Wifi, path, change),
                 ));
             }
-            None => self.fail_here((if self.wifi_manual {
-                text!("Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.")
+            None => self.fail_here(if self.wifi_manual {
+                tr!("Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.")
             } else {
-                text!("Enter DNS servers as IPv4 addresses, such as 1.1.1.1, 9.9.9.9.")
-            }).tr()),
+                tr!("Enter DNS servers as IPv4 addresses, such as 1.1.1.1, 9.9.9.9.")
+            }),
         }
     }
 

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_graphics::Path;
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use bande_toolkit::{
     Color, CpuRenderer, Image, Item, Palette, Paragraph, Point, Radius, Rect, Scene, Scheme, Shape,
@@ -300,18 +300,17 @@ const COMMANDS: [Command; 9] = [
 ];
 
 fn title(command: Command) -> String {
-    (match command {
-        Command::Tool(Tool::Crop) => text!("Crop"),
-        Command::Tool(Tool::Arrow) => text!("Arrow"),
-        Command::Tool(Tool::Rectangle) => text!("Rectangle"),
-        Command::Tool(Tool::Text) => text!("Text"),
-        Command::Tool(Tool::Highlight) => text!("Highlight"),
-        Command::Undo => text!("Undo"),
-        Command::Delete => text!("Delete"),
-        Command::Copy => text!("Copy"),
-        Command::Done => text!("Done"),
-    })
-    .tr()
+    match command {
+        Command::Tool(Tool::Crop) => tr!("Crop"),
+        Command::Tool(Tool::Arrow) => tr!("Arrow"),
+        Command::Tool(Tool::Rectangle) => tr!("Rectangle"),
+        Command::Tool(Tool::Text) => tr!("Text"),
+        Command::Tool(Tool::Highlight) => tr!("Highlight"),
+        Command::Undo => tr!("Undo"),
+        Command::Delete => tr!("Delete"),
+        Command::Copy => tr!("Copy"),
+        Command::Done => tr!("Done"),
+    }
 }
 
 pub type Commanded = Rc<RefCell<Vec<Command>>>;

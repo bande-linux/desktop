@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use bande_audio::{Level, VolumeKey};
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use bande_status::brightness::DisplayLevel;
 use bande_toolkit::ui::{
     Axis, Context, LevelIndicator, Menu, MenuItem, PopUpButton, Size, Slider, Stack, Ui, Widget,
@@ -176,7 +176,7 @@ fn module(rows: Vec<Box<dyn Widget>>) -> Box<dyn Widget> {
 }
 
 fn on_off(on: bool) -> String {
-    (if on { text!("On") } else { text!("Off") }).tr()
+    if on { tr!("On") } else { tr!("Off") }
 }
 
 fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {

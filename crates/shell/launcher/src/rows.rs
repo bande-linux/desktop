@@ -169,15 +169,14 @@ pub fn icon_items(
 }
 
 pub fn tone_name(tone: Option<usize>) -> String {
-    (match tone {
-        None => text!("Default"),
-        Some(0) => text!("Light"),
-        Some(1) => text!("Medium-Light"),
-        Some(2) => text!("Medium"),
-        Some(3) => text!("Medium-Dark"),
-        Some(_) => text!("Dark"),
-    })
-    .tr()
+    match tone {
+        None => tr!("Default"),
+        Some(0) => tr!("Light"),
+        Some(1) => tr!("Medium-Light"),
+        Some(2) => tr!("Medium"),
+        Some(3) => tr!("Medium-Dark"),
+        Some(_) => tr!("Dark"),
+    }
 }
 
 pub const SKIN_TONES: [Option<usize>; 6] = [None, Some(0), Some(1), Some(2), Some(3), Some(4)];

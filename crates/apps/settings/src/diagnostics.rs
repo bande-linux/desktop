@@ -223,37 +223,35 @@ pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
 }
 
 fn kind_label(kind: &str) -> String {
-    (match kind {
-        "crash" | "panic" => text!("Crash"),
+    match kind {
+        "crash" | "panic" => tr!("Crash"),
         "not-responding" | "app-hang" | "force-quit" => {
-            text!("Not responding")
+            tr!("Not responding")
         }
-        "compositor-stall" | "shell-stall" => text!("Desktop stalled"),
-        "failed-unit" => text!("Failed to run"),
+        "compositor-stall" | "shell-stall" => tr!("Desktop stalled"),
+        "failed-unit" => tr!("Failed to run"),
         "kernel-panic" | "kernel-oops" | "kernel-warning" | "lockup" | "hung-task" => {
-            text!("Kernel problem")
+            tr!("Kernel problem")
         }
-        "unexpected-restart" => text!("Unexpected restart"),
-        "oom" => text!("Out of memory"),
-        "gpu-reset" | "gpu-error" => text!("Graphics problem"),
-        "display-failure" | "display-error" => text!("Display problem"),
-        "sleep-failed" | "wake-failure" => text!("Sleep or wake problem"),
-        "storage-error" => text!("Disk problem"),
-        "mount-stall" => text!("Network drive stalled"),
-        "manual" => text!("Report by hand"),
-        _ => text!("Problem"),
-    })
-    .tr()
+        "unexpected-restart" => tr!("Unexpected restart"),
+        "oom" => tr!("Out of memory"),
+        "gpu-reset" | "gpu-error" => tr!("Graphics problem"),
+        "display-failure" | "display-error" => tr!("Display problem"),
+        "sleep-failed" | "wake-failure" => tr!("Sleep or wake problem"),
+        "storage-error" => tr!("Disk problem"),
+        "mount-stall" => tr!("Network drive stalled"),
+        "manual" => tr!("Report by hand"),
+        _ => tr!("Problem"),
+    }
 }
 
 fn status_label(status: &str) -> String {
-    (match status {
-        "sent" => text!("Sent"),
-        "waiting" => text!("Waiting to send"),
-        "rejected" => text!("Refused by the server"),
-        _ => text!("On this computer"),
-    })
-    .tr()
+    match status {
+        "sent" => tr!("Sent"),
+        "waiting" => tr!("Waiting to send"),
+        "rejected" => tr!("Refused by the server"),
+        _ => tr!("On this computer"),
+    }
 }
 
 impl SettingsView {
@@ -267,13 +265,13 @@ impl SettingsView {
             set,
         );
         rows.push(boxed(toggle));
-        rows.push(muted_row(&(if self.diagnostics.sending {
-            text!("New reports are sent to the configured server. Names, addresses and file names are removed first.")
+        rows.push(muted_row(&if self.diagnostics.sending {
+            tr!("New reports are sent to the configured server. Names, addresses and file names are removed first.")
         } else if configured {
-            text!("Reports stay on this computer unless you send one.")
+            tr!("Reports stay on this computer unless you send one.")
         } else {
-            text!("Reports stay on this computer. No server is configured.")
-        }).tr()));
+            tr!("Reports stay on this computer. No server is configured.")
+        }));
         if self.diagnostics.reports.is_empty() {
             rows.push(muted_row(&tr!("Nothing has gone wrong")));
         }

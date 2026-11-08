@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use bande_graphics::{Appearance, Event, Point, Rect, TextSystem};
 use bande_keyboard::{Action, Key, keys_for, keys_of};
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use bande_widgets::{FrameTime, Menu, MenuItem, MenuOutcome, placement_layout};
 
 use super::{ShellSurface, Window, WindowError, WindowEvent};
@@ -59,22 +59,20 @@ impl Window {
                 .enabled(!toplevel.fullscreen)
                 .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             MenuItem::new(
-                &(if toplevel.maximized {
-                    text!("Unzoom")
+                &if toplevel.maximized {
+                    tr!("Unzoom")
                 } else {
-                    text!(context = "window menu", "Zoom")
-                })
-                .tr(),
+                    tr!(context = "window menu", "Zoom")
+                },
                 "zoom",
             )
             .enabled(!toplevel.fullscreen && self.is_resizable()),
             MenuItem::new(
-                &(if toplevel.fullscreen {
-                    text!("Exit Full Screen")
+                &if toplevel.fullscreen {
+                    tr!("Exit Full Screen")
                 } else {
-                    text!("Enter Full Screen")
-                })
-                .tr(),
+                    tr!("Enter Full Screen")
+                },
                 "full-screen",
             )
             .enabled(toplevel.fullscreen || self.is_resizable())

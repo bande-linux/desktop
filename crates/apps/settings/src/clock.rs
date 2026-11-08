@@ -1,4 +1,4 @@
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 
 use crate::pages::{Widgets, boxed, muted_row, submit};
 use crate::time::{MANUAL_FORMAT, zone_offset, zone_place};
@@ -96,14 +96,11 @@ impl SettingsView {
         ))];
         let results = self.pick_results();
         if results.is_empty() {
-            rows.push(muted_row(
-                &(if query.trim().is_empty() {
-                    text!("Type the name of a city near you")
-                } else {
-                    text!("No time zone matches")
-                })
-                .tr(),
-            ));
+            rows.push(muted_row(&if query.trim().is_empty() {
+                tr!("Type the name of a city near you")
+            } else {
+                tr!("No time zone matches")
+            }));
         }
         for zone in results {
             let (city, region) = zone_place(&zone);

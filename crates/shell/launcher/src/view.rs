@@ -128,12 +128,11 @@ fn heading_text(heading: Heading) -> String {
 }
 
 fn placeholder(mode: Mode) -> String {
-    (match mode {
-        Mode::Search => text!("Search"),
-        Mode::Emoji => text!("Search Emoji & Symbols"),
-        Mode::Clipboard => text!("Search Clipboard History"),
-    })
-    .tr()
+    match mode {
+        Mode::Search => tr!("Search"),
+        Mode::Emoji => tr!("Search Emoji & Symbols"),
+        Mode::Clipboard => tr!("Search Clipboard History"),
+    }
 }
 
 const FIELD: usize = 0;
@@ -194,12 +193,11 @@ impl Card {
         let state = self.state.borrow();
         let muted = TextStyle::role(TextRole::Callout, cx.palette.ink2);
         let hint = cx.text.paragraph(
-            &(if state.model.inserts {
-                text!("Return to insert")
+            &if state.model.inserts {
+                tr!("Return to insert")
             } else {
-                text!("Return to copy, then paste with Ctrl+V")
-            })
-            .tr(),
+                tr!("Return to copy, then paste with Ctrl+V")
+            },
             muted,
             None,
             TextAlign::Start,
@@ -415,12 +413,11 @@ impl Widget for Card {
                 model.mode == Mode::Clipboard && model.query.trim().is_empty()
             };
             let message = cx.text.paragraph(
-                &(if empty_history {
-                    text!("Things you copy appear here")
+                &if empty_history {
+                    tr!("Things you copy appear here")
                 } else {
-                    text!("No Results")
-                })
-                .tr(),
+                    tr!("No Results")
+                },
                 TextStyle::role(TextRole::Heading, cx.palette.ink3),
                 None,
                 TextAlign::Start,

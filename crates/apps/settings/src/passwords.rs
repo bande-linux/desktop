@@ -539,14 +539,11 @@ impl SettingsView {
             .cloned()
             .collect::<Vec<_>>();
         if items.is_empty() {
-            rows.push(muted_row(
-                &(if self.keychain.query.trim().is_empty() {
-                    text!("No saved passwords.")
-                } else {
-                    text!("No passwords match.")
-                })
-                .tr(),
-            ));
+            rows.push(muted_row(&if self.keychain.query.trim().is_empty() {
+                tr!("No saved passwords.")
+            } else {
+                tr!("No passwords match.")
+            }));
         }
         for item in items {
             rows.push(self.keychain_row(item));
@@ -619,12 +616,11 @@ impl SettingsView {
             0.0,
             vec![
                 button(
-                    &(if revealed.is_some() {
-                        text!("Hide")
+                    &if revealed.is_some() {
+                        tr!("Hide")
                     } else {
-                        text!("Show")
-                    })
-                    .tr(),
+                        tr!("Show")
+                    },
                     Box::new(move || show(())),
                 ),
                 button(&tr!("Copy"), Box::new(move || copied(()))),

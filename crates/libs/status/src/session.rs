@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 
 pub const COUNTDOWN: Duration = Duration::from_secs(60);
 pub const QUIT_PATIENCE: Duration = Duration::from_secs(3);
@@ -34,12 +34,11 @@ impl Ending {
     }
 
     pub fn question(self) -> String {
-        (match self {
-            Self::Restart => text!("Are you sure you want to restart your computer now?"),
-            Self::ShutDown => text!("Are you sure you want to shut down your computer now?"),
-            Self::LogOut => text!("Are you sure you want to quit all apps and log out now?"),
-        })
-        .tr()
+        match self {
+            Self::Restart => tr!("Are you sure you want to restart your computer now?"),
+            Self::ShutDown => tr!("Are you sure you want to shut down your computer now?"),
+            Self::LogOut => tr!("Are you sure you want to quit all apps and log out now?"),
+        }
     }
 
     pub fn countdown(self, left: Duration) -> String {
@@ -61,12 +60,11 @@ impl Ending {
     }
 
     pub fn button(self) -> String {
-        (match self {
-            Self::Restart => text!("Restart"),
-            Self::ShutDown => text!("Shut Down"),
-            Self::LogOut => text!("Log Out"),
-        })
-        .tr()
+        match self {
+            Self::Restart => tr!("Restart"),
+            Self::ShutDown => tr!("Shut Down"),
+            Self::LogOut => tr!("Log Out"),
+        }
     }
 
     pub fn blocked(self, app: &str) -> String {
@@ -81,39 +79,35 @@ impl Ending {
     }
 
     pub fn anyway(self) -> String {
-        (match self {
-            Self::Restart => text!("Restart Anyway"),
-            Self::ShutDown => text!("Shut Down Anyway"),
-            Self::LogOut => text!("Log Out Anyway"),
-        })
-        .tr()
+        match self {
+            Self::Restart => tr!("Restart Anyway"),
+            Self::ShutDown => tr!("Shut Down Anyway"),
+            Self::LogOut => tr!("Log Out Anyway"),
+        }
     }
 
     pub fn progress(self) -> String {
-        (match self {
-            Self::Restart => text!("Restarting…"),
-            Self::ShutDown => text!("Shutting Down…"),
-            Self::LogOut => text!("Logging Out…"),
-        })
-        .tr()
+        match self {
+            Self::Restart => tr!("Restarting…"),
+            Self::ShutDown => tr!("Shutting Down…"),
+            Self::LogOut => tr!("Logging Out…"),
+        }
     }
 
     pub fn failed(self) -> String {
-        (match self {
-            Self::Restart => text!("Your computer could not restart."),
-            Self::ShutDown => text!("Your computer could not shut down."),
-            Self::LogOut => text!("You could not be logged out."),
-        })
-        .tr()
+        match self {
+            Self::Restart => tr!("Your computer could not restart."),
+            Self::ShutDown => tr!("Your computer could not shut down."),
+            Self::LogOut => tr!("You could not be logged out."),
+        }
     }
 
     pub fn inhibited(self) -> String {
-        (match self {
-            Self::Restart => text!("Something is keeping your computer from restarting."),
-            Self::ShutDown => text!("Something is keeping your computer from shutting down."),
-            Self::LogOut => text!("You could not be logged out."),
-        })
-        .tr()
+        match self {
+            Self::Restart => tr!("Something is keeping your computer from restarting."),
+            Self::ShutDown => tr!("Something is keeping your computer from shutting down."),
+            Self::LogOut => tr!("You could not be logged out."),
+        }
     }
 }
 

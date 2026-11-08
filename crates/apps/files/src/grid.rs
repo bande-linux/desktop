@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use bande_l10n::text;
+use bande_l10n::tr;
 
 use crate::browser::Location;
 use crate::controls::Press;
@@ -735,11 +735,10 @@ impl FilesView {
             true => self.palette.ink,
             false => self.palette.ink2,
         };
-        let title = (match collapsed {
-            true => text!("Show All"),
-            false => text!("Show Less"),
-        })
-        .tr();
+        let title = match collapsed {
+            true => tr!("Show All"),
+            false => tr!("Show Less"),
+        };
         let paragraph = self.text().paragraph(
             &title,
             TextStyle::new(LABEL_SIZE, color).weight(TextStyle::MEDIUM),

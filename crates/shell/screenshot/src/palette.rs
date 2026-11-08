@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Node, Role};
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use bande_toolkit::{
     Color, Elevation, Item, Paragraph, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole,
@@ -38,14 +38,13 @@ impl Mode {
     }
 
     fn label(self) -> String {
-        (match self {
-            Self::Screen => text!("Capture Entire Screen"),
-            Self::Window => text!("Capture Selected Window"),
-            Self::Area => text!("Capture Selected Portion"),
-            Self::RecordScreen => text!("Record Entire Screen"),
-            Self::RecordArea => text!("Record Selected Portion"),
-        })
-        .tr()
+        match self {
+            Self::Screen => tr!("Capture Entire Screen"),
+            Self::Window => tr!("Capture Selected Window"),
+            Self::Area => tr!("Capture Selected Portion"),
+            Self::RecordScreen => tr!("Record Entire Screen"),
+            Self::RecordArea => tr!("Record Selected Portion"),
+        }
     }
 }
 

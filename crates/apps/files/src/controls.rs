@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Instant, SystemTime};
 
-use bande_l10n::{text, tr, trn};
+use bande_l10n::{tr, trn};
 
 use crate::browser::{Location, RowEdit};
 use crate::prompt::{Kind, Prompt};
@@ -149,13 +149,12 @@ fn nested_rows(rows: Vec<Row>, depths: &[u8]) -> Vec<Row> {
 }
 
 pub fn list_column_title(column: ListColumn) -> String {
-    (match column {
-        ListColumn::Modified => text!("Date Modified"),
-        ListColumn::Created => text!("Date Created"),
-        ListColumn::Size => text!("Size"),
-        ListColumn::Kind => text!("Kind"),
-    })
-    .tr()
+    match column {
+        ListColumn::Modified => tr!("Date Modified"),
+        ListColumn::Created => tr!("Date Created"),
+        ListColumn::Size => tr!("Size"),
+        ListColumn::Kind => tr!("Kind"),
+    }
 }
 
 fn table_columns(found: bool, shown: &[ListColumn]) -> Vec<Column> {

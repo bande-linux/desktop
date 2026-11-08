@@ -4,7 +4,7 @@ use bande_graphics::{
     Shape, TextAlign, TextStyle, TextSystem, TitleBar, WindowControls, menu_button_area,
     past_drag_slop, resize_zone, shortened, title_style,
 };
-use bande_l10n::text;
+use bande_l10n::tr;
 
 use std::time::Instant;
 
@@ -33,13 +33,12 @@ pub(crate) fn control_for_node(node: NodeId) -> Option<Control> {
 }
 
 fn control_label(control: Control) -> String {
-    (match control {
-        Control::Close => text!("Close"),
-        Control::Minimize => text!("Minimize"),
-        Control::Zoom => text!(context = "window menu", "Zoom"),
-        Control::Menu => text!("Menus"),
-    })
-    .tr()
+    match control {
+        Control::Close => tr!("Close"),
+        Control::Minimize => tr!("Minimize"),
+        Control::Zoom => tr!(context = "window menu", "Zoom"),
+        Control::Menu => tr!("Menus"),
+    }
 }
 
 fn bounds(rect: Rect) -> accesskit::Rect {

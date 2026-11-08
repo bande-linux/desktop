@@ -760,13 +760,10 @@ impl Widget for StageWidget {
         let layout = &self.stage.layout;
         let session = self.stage.session();
         let mut play = Node::new(Role::Button);
-        play.set_label(
-            (match session.is_playing() {
-                true => text!("Pause"),
-                false => text!("Play"),
-            })
-            .tr(),
-        );
+        play.set_label(match session.is_playing() {
+            true => tr!("Pause"),
+            false => tr!("Play"),
+        });
         play.add_action(Action::Click);
         play.set_bounds(Self::part_bounds(layout.play));
         let mut timeline = Node::new(Role::Slider);

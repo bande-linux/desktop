@@ -10,13 +10,12 @@ pub enum Group {
 
 impl Group {
     pub fn label(self) -> String {
-        (match self {
-            Self::Connections => text!("Connections"),
-            Self::Desktop => text!("Desktop"),
-            Self::Devices => text!("Devices"),
-            Self::System => text!("System"),
-        })
-        .tr()
+        match self {
+            Self::Connections => tr!("Connections"),
+            Self::Desktop => tr!("Desktop"),
+            Self::Devices => tr!("Devices"),
+            Self::System => tr!("System"),
+        }
     }
 }
 

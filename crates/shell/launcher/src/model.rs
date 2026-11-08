@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use bande_config::{Search, SearchCategory};
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use bande_search::{FileHit, FileResults, Found, Query, Usage, calculate, fold, recent_files};
 use bande_xdg::path_from_file_uri;
 
@@ -244,25 +244,23 @@ impl SystemCommand {
     }
 
     pub fn title(self) -> String {
-        (match self {
-            Self::LockScreen => text!("Lock Screen"),
-            Self::Sleep => text!("Sleep"),
-            Self::LogOut => text!("Log Out…"),
-            Self::Restart => text!("Restart…"),
-            Self::ShutDown => text!("Shut Down…"),
-        })
-        .tr()
+        match self {
+            Self::LockScreen => tr!("Lock Screen"),
+            Self::Sleep => tr!("Sleep"),
+            Self::LogOut => tr!("Log Out…"),
+            Self::Restart => tr!("Restart…"),
+            Self::ShutDown => tr!("Shut Down…"),
+        }
     }
 
     fn keywords(self) -> String {
-        (match self {
-            Self::LockScreen => text!("lock away"),
-            Self::Sleep => text!("suspend standby"),
-            Self::LogOut => text!("logout signout exit"),
-            Self::Restart => text!("reboot"),
-            Self::ShutDown => text!("shutdown poweroff power off turn"),
-        })
-        .tr()
+        match self {
+            Self::LockScreen => tr!("lock away"),
+            Self::Sleep => tr!("suspend standby"),
+            Self::LogOut => tr!("logout signout exit"),
+            Self::Restart => tr!("reboot"),
+            Self::ShutDown => tr!("shutdown poweroff power off turn"),
+        }
     }
 }
 

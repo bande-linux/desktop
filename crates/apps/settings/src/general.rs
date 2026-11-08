@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use bande_l10n::{text, tr, trn};
+use bande_l10n::{tr, trn};
 
 use crate::login::App;
 use crate::pages::{Widgets, boxed, muted_row, submit};
@@ -21,13 +21,12 @@ pub(crate) fn info_row(label: &str, value: &str) -> Box<dyn Widget> {
 }
 
 fn category_name(category: Category) -> String {
-    (match category {
-        Category::Apps => text!("Apps"),
-        Category::Documents => text!("Documents"),
-        Category::Trash => text!("Trash"),
-        Category::System => text!("System"),
-    })
-    .tr()
+    match category {
+        Category::Apps => tr!("Apps"),
+        Category::Documents => tr!("Documents"),
+        Category::Trash => tr!("Trash"),
+        Category::System => tr!("System"),
+    }
 }
 
 fn available_of(available: u64, capacity: u64) -> String {

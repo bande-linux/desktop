@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 use bande_toolkit::ui::{Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for};
 use bande_toolkit::{
     Image, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle,
@@ -190,13 +190,12 @@ impl NowPlaying {
     }
 
     fn label(&self, control: Control) -> String {
-        (match control {
-            Control::Previous => text!("Previous"),
-            Control::Next => text!("Next"),
-            Control::PlayPause if self.playing() => text!("Pause"),
-            Control::PlayPause => text!("Play"),
-        })
-        .tr()
+        match control {
+            Control::Previous => tr!("Previous"),
+            Control::Next => tr!("Next"),
+            Control::PlayPause if self.playing() => tr!("Pause"),
+            Control::PlayPause => tr!("Play"),
+        }
     }
 
     fn control_rect(&self, index: usize) -> Rect {

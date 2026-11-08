@@ -294,13 +294,12 @@ fn state_text(printer: &PrinterInfo, queue: Option<&Printer>, jobs: usize) -> St
 }
 
 fn job_state(state: JobState) -> String {
-    (match state {
-        JobState::Waiting => text!("Waiting"),
-        JobState::Held => text!("On hold"),
-        JobState::Printing => text!("Printing"),
-        JobState::Stopped => text!("Stopped"),
-    })
-    .tr()
+    match state {
+        JobState::Waiting => tr!("Waiting"),
+        JobState::Held => tr!("On hold"),
+        JobState::Printing => tr!("Printing"),
+        JobState::Stopped => tr!("Stopped"),
+    }
 }
 
 impl SettingsView {
@@ -418,12 +417,11 @@ impl SettingsView {
         let mut add = intent(&self.intents, |()| Intent::AddPrinterAddress);
         let mut button = Button::new(&tr!("Add"), move || add(()));
         button.set_enabled(!self.adding_printer);
-        let detail = (if self.adding_printer {
-            text!("Adding…")
+        let detail = if self.adding_printer {
+            tr!("Adding…")
         } else {
-            text!("For a printer that does not show up: its IP address or host name")
-        })
-        .tr();
+            tr!("For a printer that does not show up: its IP address or host name")
+        };
         let mut rows = vec![boxed(
             Row::new(
                 Text::new(&tr!("Add by address"), Tone::Primary),
@@ -450,11 +448,13 @@ impl SettingsView {
         let mut install = intent(&self.intents, |()| Intent::InstallPrinting);
         let mut button = Button::new(&tr!("Install"), move || install(()));
         button.set_enabled(!self.installing_printing);
-        let detail = (if self.installing_printing {
-            text!("Installing…")
+        let detail = if self.installing_printing {
+            tr!("Installing…")
         } else {
-            text!("Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive")
-        }).tr();
+            tr!(
+                "Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
+            )
+        };
         self.anchors
             .push((Anchor::Item("install-printing".to_owned()), button.id()));
         boxed(
@@ -509,12 +509,11 @@ impl SettingsView {
             let job_id = job.id;
             let button = Button::new(&tr!("Cancel"), move || cancel(job_id));
             let detail = match job.message.is_empty() {
-                true => (match job.state.as_str() {
-                    "sending" | "printing" => text!("Printing"),
-                    "stopped" => text!("Stopped"),
-                    _ => text!("Waiting"),
-                })
-                .tr(),
+                true => match job.state.as_str() {
+                    "sending" | "printing" => tr!("Printing"),
+                    "stopped" => tr!("Stopped"),
+                    _ => tr!("Waiting"),
+                },
                 false => job.message.clone(),
             };
             let row = Row::new(Text::new(&job.title, Tone::Primary), Some(boxed(button)))
@@ -550,24 +549,18 @@ impl SettingsView {
             let mut pause = intent(&self.intents, Intent::PausePrinter);
             let target = name.clone();
             let pause_button = Button::new(
-                &(if paused {
-                    text!("Resume")
-                } else {
-                    text!("Pause")
-                })
-                .tr(),
+                &if paused { tr!("Resume") } else { tr!("Pause") },
                 move || pause((target.clone(), !paused)),
             );
             self.anchors
                 .push((Anchor::Item("printer-pause".to_owned()), pause_button.id()));
             actions.push(boxed(Row::new(
                 Text::new(
-                    &(if paused {
-                        text!("Printing is paused")
+                    &if paused {
+                        tr!("Printing is paused")
                     } else {
-                        text!("Pause printing")
-                    })
-                    .tr(),
+                        tr!("Pause printing")
+                    },
                     Tone::Primary,
                 ),
                 Some(boxed(pause_button)),

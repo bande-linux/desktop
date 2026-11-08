@@ -726,12 +726,11 @@ pub(crate) struct NewAccountForm {
 
 impl SettingsView {
     fn account_detail(account: &Account) -> String {
-        let kind = (if account.admin {
-            text!("Administrator")
+        let kind = if account.admin {
+            tr!("Administrator")
         } else {
-            text!("Standard")
-        })
-        .tr();
+            tr!("Standard")
+        };
         format!("{} · {kind}", account.login)
     }
 
@@ -829,12 +828,11 @@ impl SettingsView {
             Some(boxed(menu)),
         )));
         for (step, anchor) in NEW_PASSWORD_FIELDS.iter().enumerate() {
-            let label = (if step == 0 {
-                text!("Password")
+            let label = if step == 0 {
+                tr!("Password")
             } else {
-                text!("Verify")
-            })
-            .tr();
+                tr!("Verify")
+            };
             let mut entry = intent(&self.intents, move |text: String| {
                 Intent::NewAccountPassword(step, text)
             });
@@ -896,14 +894,11 @@ impl SettingsView {
                 text!("Full name"),
             ));
             let control: Box<dyn Widget> = if account.you {
-                boxed(Label::new(
-                    &(if account.admin {
-                        text!("Administrator")
-                    } else {
-                        text!("Standard")
-                    })
-                    .tr(),
-                ))
+                boxed(Label::new(&if account.admin {
+                    tr!("Administrator")
+                } else {
+                    tr!("Standard")
+                }))
             } else {
                 let mut set = intent(&self.intents, |(login, on)| {
                     Intent::Administrator(login, on)

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use bande_l10n::{text, tr};
+use bande_l10n::tr;
 
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
@@ -39,16 +39,15 @@ impl SearchKind {
     ];
 
     fn title(self) -> String {
-        (match self {
-            Self::Any => text!("Any Kind"),
-            Self::Folder => text!("Folder"),
-            Self::Document => text!("Document"),
-            Self::Image => text!("Image"),
-            Self::Audio => text!("Audio"),
-            Self::Video => text!("Video"),
-            Self::Archive => text!("Archive"),
-        })
-        .tr()
+        match self {
+            Self::Any => tr!("Any Kind"),
+            Self::Folder => tr!("Folder"),
+            Self::Document => tr!("Document"),
+            Self::Image => tr!("Image"),
+            Self::Audio => tr!("Audio"),
+            Self::Video => tr!("Video"),
+            Self::Archive => tr!("Archive"),
+        }
     }
 
     fn matches(self, mime: &str, folder: bool) -> bool {
@@ -68,14 +67,13 @@ impl SearchKind {
 }
 
 fn recency_title(recency: Recency) -> String {
-    (match recency {
-        Recency::AnyTime => text!("Any Time"),
-        Recency::Today => text!("Today"),
-        Recency::LastWeek => text!("Last 7 Days"),
-        Recency::LastMonth => text!("Last 30 Days"),
-        Recency::ThisYear => text!("This Year"),
-    })
-    .tr()
+    match recency {
+        Recency::AnyTime => tr!("Any Time"),
+        Recency::Today => tr!("Today"),
+        Recency::LastWeek => tr!("Last 7 Days"),
+        Recency::LastMonth => tr!("Last 30 Days"),
+        Recency::ThisYear => tr!("This Year"),
+    }
 }
 
 pub(crate) struct Searching {

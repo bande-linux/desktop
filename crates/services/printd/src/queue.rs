@@ -553,6 +553,7 @@ impl Spool {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         if let Err(error) = sent {

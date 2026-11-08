@@ -383,6 +383,7 @@ impl Mounts {
                 actions: &[(ALERT_DISCONNECT, &disconnect)],
                 urgency: Urgency::Critical,
                 sound: None,
+                desktop_entry: None,
             },
         )
         .inspect_err(|error| tracing::warn!("cannot post the alert: {error}"))
@@ -879,6 +880,7 @@ impl Mounts {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         if let Err(error) = posted {
@@ -899,6 +901,7 @@ impl Mounts {
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
+                desktop_entry: None,
             },
         );
         if let Err(error) = posted {

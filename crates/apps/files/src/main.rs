@@ -892,6 +892,7 @@ impl Files {
         size: (u32, u32),
     ) -> Result<WindowId, bande_app::Error> {
         let title = view.title();
+        view.set_terminal_installed(cx.installed(TERMINAL_APP_ID));
         let carrying = Rc::clone(&self.carrying);
         let window = cx.open(Kind::Main, &title.clone(), size, |appearance| {
             view.set_appearance(appearance);
@@ -1517,6 +1518,17 @@ impl Program for Files {
             .chain(self.nearby_inbox.iter().map(Inbox::fd))
             .chain(self.backups.iter().map(Inbox::fd))
             .collect()
+    }
+
+    fn installed_changed(&mut self, cx: &mut Cx<Self>) {
+        let terminal = cx.installed(TERMINAL_APP_ID);
+        let windows: Vec<WindowId> = cx.windows().collect();
+        for id in windows {
+            if let Some((_, pane)) = browser(cx, id) {
+                pane.view.set_terminal_installed(terminal);
+                pane.view.reload_apps();
+            }
+        }
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, index: usize) {

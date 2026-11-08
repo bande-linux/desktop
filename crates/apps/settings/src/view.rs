@@ -266,6 +266,7 @@ pub struct SettingsView {
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
     pub(crate) storage: Option<Storage>,
+    pub(crate) files_installed: bool,
     pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
@@ -373,6 +374,7 @@ impl SettingsView {
             about: None,
             diagnostics: Diagnostics::default(),
             storage: None,
+            files_installed: false,
             backup: BackupView::default(),
             drafts: HashMap::new(),
             confirming_empty_trash: false,
@@ -539,6 +541,13 @@ impl SettingsView {
         edit(&mut sources);
         if !sources.is_empty() && sources.len() <= MAX_INPUT_SOURCES {
             self.change(SettingId::InputSources, Value::Codes(sources));
+        }
+    }
+
+    pub fn set_files_installed(&mut self, installed: bool) {
+        if self.files_installed != installed {
+            self.files_installed = installed;
+            self.invalidate();
         }
     }
 

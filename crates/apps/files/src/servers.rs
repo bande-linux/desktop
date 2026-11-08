@@ -23,6 +23,7 @@ const SERVER_REFRESH: Duration = Duration::from_secs(10);
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServerRequest {
     pub url: String,
+    pub name: String,
     pub user: String,
     pub password: String,
     pub remember: bool,
@@ -265,7 +266,7 @@ impl FilesView {
         self.show_sheet(prompt, Sheet::ConnectServer { request, saved }, cancel);
     }
 
-    pub(crate) fn connect_to(&mut self, url: String) {
+    pub(crate) fn connect_to(&mut self, url: String, name: String) {
         let request = match &self.shares_of {
             Some(server) if url.starts_with(&format!("{}/", server.url.trim_end_matches('/'))) => {
                 ServerRequest {
@@ -275,6 +276,7 @@ impl FilesView {
             }
             _ => ServerRequest {
                 url,
+                name,
                 ..ServerRequest::default()
             },
         };
@@ -282,7 +284,10 @@ impl FilesView {
     }
 
     fn show_shares(&mut self, request: ServerRequest, shares: Vec<String>) {
-        let browsing = matches!(self.browser.root(), Location::Network | Location::Server(_));
+        let browsing = matches!(
+            self.browser.root(),
+            Location::Network | Location::Server { .. }
+        );
         if !browsing || shares.is_empty() {
             self.ask_share(request, shares);
             return;
@@ -294,8 +299,13 @@ impl FilesView {
                 Entry::server(share, url)
             })
             .collect();
-        self.browser
-            .show_shares(Location::Server(request.url.clone()), entries);
+        self.browser.show_shares(
+            Location::Server {
+                address: request.url.clone(),
+                name: request.name.clone(),
+            },
+            entries,
+        );
         self.shares_of = Some(request);
         self.selection_changed();
     }

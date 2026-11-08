@@ -1,0 +1,27 @@
+[Unit]
+Description=Bande fault reports from the kernel
+After=systemd-journald.service
+
+[Service]
+ExecStart=/usr/libexec/bande-reporter watch
+RuntimeDirectory=bande
+RuntimeDirectoryPreserve=yes
+Restart=on-failure
+RestartSec=5s
+Nice=5
+MemoryMax=64M
+CapabilityBoundingSet=CAP_SYSLOG CAP_SYS_PTRACE CAP_SYS_ADMIN CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE
+LockPersonality=yes
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectHome=tmpfs
+BindReadOnlyPaths=-/run/user
+ProtectKernelModules=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bande/reports
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

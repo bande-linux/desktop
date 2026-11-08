@@ -245,10 +245,7 @@ impl Scrubber {
     }
 
     pub fn line(&self, line: &str) -> String {
-        let mut text = scrub_quotes(line);
-        for secret in &self.secrets {
-            text = replace_words(&text, secret);
-        }
+        let text = scrub_quotes(line);
         let mut out = String::with_capacity(text.len());
         let mut token = String::new();
         for character in text.chars() {
@@ -263,6 +260,9 @@ impl Scrubber {
             }
         }
         self.push_token(&mut out, &token);
+        for secret in &self.secrets {
+            out = replace_words(&out, secret);
+        }
         out
     }
 

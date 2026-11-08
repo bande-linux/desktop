@@ -51,7 +51,7 @@ echo "== greetd shows the Bande login window and is the display manager"
 greetd_config=/usr/share/bande-greeter/greetd-config.toml
 greetd_dropin=/usr/lib/systemd/system/greetd.service.d/bande.conf
 grep -qx "ExecStart=/usr/sbin/greetd --config $greetd_config" "$greetd_dropin"
-test -x "$(sed -n 's/^command = "\([^ ]*\).*/\1/p' "$greetd_config")"
+test -x "$(sed -n 's/^command = "\([^ "]*\).*/\1/p' "$greetd_config")"
 default_display_manager() {
     grep -qx "/usr/sbin/$1" /etc/X11/default-display-manager
     [ "$(basename "$(readlink /etc/systemd/system/display-manager.service)")" = "$1.service" ]

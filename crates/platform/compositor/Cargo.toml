@@ -44,7 +44,7 @@ wayland-client.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd, pkexec, xkb-data, fonts-inter, fonts-manrope"
+depends = "$auto, bande-icon-theme, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd, pkexec, xkb-data, fonts-inter, fonts-manrope"
 recommends = "bande-clipboard, bande-shell, bande-lock, bande-screenshot, bande-files, bande-settings"
 suggests = "fcitx5"
 extended-description = """\

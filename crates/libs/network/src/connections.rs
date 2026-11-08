@@ -16,6 +16,8 @@ use crate::{
 
 pub(crate) const IGNORE_AUTO_DNS: &str = "ignore-auto-dns";
 pub(crate) const IPV4: &str = "ipv4";
+const OPENVPN_PLUGIN: &str = "/usr/lib/NetworkManager/VPN/nm-openvpn-service.name";
+const OPENVPN_PACKAGE: &str = "network-manager-openvpn";
 const DEVICE_STATE_UNMANAGED: u32 = 10;
 const ACTIVE_STATE_ACTIVATING: u32 = 1;
 const VPN_TYPES: [&str; 2] = ["vpn", "wireguard"];
@@ -383,6 +385,13 @@ pub fn vpn_type_of(file: &Path) -> Option<&'static str> {
     match file.extension()?.to_str()? {
         "conf" => Some("wireguard"),
         "ovpn" => Some("openvpn"),
+        _ => None,
+    }
+}
+
+pub fn missing_vpn_plugin(file: &Path) -> Option<&'static str> {
+    match vpn_type_of(file)? {
+        "openvpn" if !Path::new(OPENVPN_PLUGIN).exists() => Some(OPENVPN_PACKAGE),
         _ => None,
     }
 }

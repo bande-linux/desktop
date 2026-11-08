@@ -30,8 +30,12 @@ profiles. Sizes are in [performance.md](performance.md).
   (`bande-secrets-prompt` in `bande-secrets`). Packages in `ci/release/arch-variants` build
   with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Control Center and the
-  launcher, together with the Bande wallpapers and icon theme; the crates of those parts are
+  launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
+- **`bande-icon-theme`** (built from `packaging/bande-desktop` with the metapackage,
+  architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
+  package that draws icons depends on it, so a symbol never goes missing because the shell is
+  not installed.
 - **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`, section
   `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
   or `kde-plasma-desktop` do.
@@ -97,9 +101,11 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
   only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` ships Bande's own
   pointers, so no cursor theme package comes along (see compositor.md); `bande-settings` adds
-  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and
-  depends on NetworkManager (Network, VPN import), `xkb-data` and `locales`, so its helper can
-  generate any language picked in Settings;
+  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
+  import), `xkb-data` and `locales`, so its helper can generate any language picked in Settings;
+  the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
+  and `systemd-resolved` are from Sharing (resolved announces shares but also takes over DNS, so
+  it is never pulled in silently);
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
 - `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;

@@ -46,6 +46,8 @@ nmcli network-manager depends
 /usr/bin/smbpasswd samba-common-bin optional
 /usr/sbin/smbd samba optional
 /usr/sbin/sshd openssh-server optional
+/usr/lib/systemd/systemd-resolved systemd-resolved optional
+/usr/lib/NetworkManager/VPN/nm-openvpn-service.name network-manager-openvpn optional
 /usr/bin/setupcon console-setup optional
 /usr/sbin/ipp-usb ipp-usb optional
 /usr/sbin/lpadmin cups-client optional
@@ -72,3 +74,4 @@ flatpak flatpak optional
 /usr/libexec/bande-secrets-prompt bande-secrets depends
 /usr/libexec/bande-sharing-helper bande-settings depends
 /usr/share/bande/bande-davfs2.conf bande-automount depends
+/usr/share/vulkan/icd.d mesa-vulkan-drivers optional

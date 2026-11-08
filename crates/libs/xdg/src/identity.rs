@@ -58,9 +58,40 @@ pub fn find_app<'a>(entries: &'a [DesktopEntry], app_id: &str) -> Option<&'a Des
         .find_map(|rule| entries.iter().find(|entry| rule(entry)))
 }
 
+fn plain_name(id: &str) -> &str {
+    let reverse_dns = id.split('.').count() >= 3 && !id.contains(char::is_whitespace);
+    reverse_dns.then(|| last_part(id)).flatten().unwrap_or(id)
+}
+
 pub fn app_name(entries: &[DesktopEntry], app_id: &str) -> String {
-    find_app(entries, app_id).map_or_else(
-        || last_part(app_id).unwrap_or(app_id).to_owned(),
+    find_app(entries, app_id)
+        .map_or_else(|| plain_name(app_id).to_owned(), |entry| entry.name.clone())
+}
+
+pub fn notifying_app<'a>(
+    entries: &'a [DesktopEntry],
+    group: &str,
+    app_name: &str,
+) -> Option<&'a DesktopEntry> {
+    find_app(entries, group)
+        .or_else(|| find_app(entries, app_name))
+        .or_else(|| {
+            entries
+                .iter()
+                .find(|entry| !app_name.is_empty() && entry.name.eq_ignore_ascii_case(app_name))
+        })
+}
+
+pub fn notifying_app_name(entries: &[DesktopEntry], group: &str, app_name: &str) -> String {
+    notifying_app(entries, group, app_name).map_or_else(
+        || {
+            plain_name(
+                Some(app_name)
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or(group),
+            )
+            .to_owned()
+        },
         |entry| entry.name.clone(),
     )
 }

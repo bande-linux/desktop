@@ -16,7 +16,6 @@ bande-l10n.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true
 bande-sound.workspace = true
-bande-xdg.workspace = true
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true
@@ -34,7 +33,7 @@ serves org.freedesktop.ScreenSaver so applications can keep the screen \
 on, holding a logind idle inhibitor for each request, and keeps the \
 computer from sleeping when idle while a sound stream runs. Sleep is off \
 until s2idle is reliable on Apple silicon. Controls the brightness of each \
-connected display, through its backlight, DDC/CI or the compositor."""
+connected display that has one, through its backlight or DDC/CI."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-power", "usr/bin/", "755"],

@@ -97,13 +97,9 @@ impl EventSource for StallSource {
     }
 }
 
-fn publish_displays<O: FrameOutput>(app: &mut App<O>) {
+fn publish_displays<O: FrameOutput>(app: &App<O>) {
     if let Some(displays) = &app.displays {
-        let output = &mut app.output;
-        displays.publish(
-            app.compositor
-                .connected_displays(&mut |name| output.can_dim(name)),
-        );
+        displays.publish(app.compositor.connected_displays());
     }
 }
 
@@ -695,19 +691,12 @@ fn follow_session_bus<O: FrameOutput + 'static>(
         |sender| follow_alerts(bus, move || sender.send(()).is_ok()),
         |app, ()| app.compositor.flash_screen(),
     )?;
-    let (dims, dim_requests) = channel::channel();
-    match serve_displays(bus, dims) {
+    match serve_displays(bus) {
         Ok(displays) => {
             app.displays = Some(displays);
             publish_displays(app);
-            handle.insert_source(dim_requests, |event, _, app| {
-                if let Event::Msg((connector, gain)) = event {
-                    let connector: String = connector;
-                    app.output.set_dim(&connector, gain);
-                }
-            })?;
         }
-        Err(error) => tracing::warn!("displays cannot be dimmed: {error}"),
+        Err(error) => tracing::warn!("the connected displays cannot be published: {error}"),
     }
     match serve_keyboard_monitor(bus) {
         Ok(monitor) => app.compositor.monitor_keyboard(monitor),
@@ -895,7 +884,7 @@ where
             app.compositor.report_start_failure(executable, error);
         }
         if app.compositor.take_outputs_refitted() {
-            publish_displays(&mut app);
+            publish_displays(&app);
             bande_log::fault::write_session_facts(&app.compositor.session_facts());
         }
         let App {

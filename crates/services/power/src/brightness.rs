@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, ErrorKind};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
@@ -22,8 +21,6 @@ pub const BUS_NAME: &str = "org.bande.Brightness";
 pub const OBJECT_PATH: &str = "/org/bande/Brightness";
 const I2C_DEVICES: &str = "/dev";
 const INTERNAL_CONNECTORS: [&str; 3] = ["eDP", "LVDS", "DSI"];
-const LOWEST_SOFTWARE_GAIN: f64 = 0.2;
-const IDLE_GAIN: f64 = 0.5;
 const MONITOR_WRITE_GAP: Duration = Duration::from_millis(250);
 const PROBE_WAITS: [Duration; 4] = [
     Duration::ZERO,
@@ -31,11 +28,10 @@ const PROBE_WAITS: [Duration; 4] = [
     Duration::from_secs(3),
     Duration::from_secs(8),
 ];
-const SAVE_SETTLE: Duration = Duration::from_secs(2);
 const OWN_WRITE_ECHO: Duration = Duration::from_secs(1);
 const READ_LIMIT: usize = 32;
 
-type ConnectedDisplay = (String, String, String, bool);
+type ConnectedDisplay = (String, String, String);
 pub type OpenWire = Arc<dyn Fn(&str) -> Option<Box<dyn Wire>> + Send + Sync>;
 
 #[zbus::proxy(
@@ -46,7 +42,6 @@ pub type OpenWire = Arc<dyn Fn(&str) -> Option<Box<dyn Wire>> + Send + Sync>;
 trait Displays {
     #[zbus(property)]
     fn connected(&self) -> zbus::Result<Vec<ConnectedDisplay>>;
-    fn set_dim(&self, connector: &str, gain: f64) -> zbus::Result<()>;
 }
 
 #[zbus::proxy(
@@ -59,10 +54,6 @@ pub trait Brightness {
     fn displays(&self) -> zbus::Result<Vec<(String, String, f64)>>;
     fn set_level(&self, connector: &str, level: f64) -> zbus::Result<()>;
     fn refresh(&self) -> zbus::Result<()>;
-}
-
-fn software_gain(level: f64) -> f64 {
-    LOWEST_SOFTWARE_GAIN + (1.0 - LOWEST_SOFTWARE_GAIN) * level.clamp(0.0, 1.0)
 }
 
 fn is_internal(connector: &str) -> bool {
@@ -134,7 +125,6 @@ struct Light {
 
 pub struct Options {
     pub backlights: PathBuf,
-    pub saved: Option<PathBuf>,
     pub open_wire: OpenWire,
 }
 
@@ -142,7 +132,6 @@ impl Options {
     pub fn system(backlights: &Path) -> Self {
         Self {
             backlights: backlights.to_owned(),
-            saved: bande_xdg::state_home().map(|state| state.join("bande/brightness")),
             open_wire: Arc::new(open_i2c),
         }
     }
@@ -162,13 +151,10 @@ fn open_i2c(connector: &str) -> Option<Box<dyn Wire>> {
 struct Shared {
     lights: Mutex<Vec<Light>>,
     dimmed: Mutex<bool>,
-    saved: Mutex<BTreeMap<String, f64>>,
     changed: Sender<()>,
-    save: Sender<()>,
     backlight: Option<Backlight>,
     own_backlight_write: Mutex<Option<Instant>>,
     logind: Option<SessionProxyBlocking<'static>>,
-    compositor: DisplaysProxyBlocking<'static>,
     open_wire: OpenWire,
 }
 
@@ -203,19 +189,6 @@ impl Shared {
         }
     }
 
-    fn remember(&self, identity: &str, level: f64) {
-        let previous = lock(&self.saved).insert(identity.to_owned(), level);
-        if previous != Some(level) {
-            let _ = self.save.send(());
-        }
-    }
-
-    fn forget(&self, identity: &str) {
-        if lock(&self.saved).remove(identity).is_some() {
-            let _ = self.save.send(());
-        }
-    }
-
     fn set_level(&self, connector: &str, level: f64) {
         let level = level.clamp(0.0, 1.0);
         let mut lights = lock(&self.lights);
@@ -244,12 +217,12 @@ impl Shared {
             });
             stays
         });
-        for (connector, identity, name, can_dim) in heads {
+        for (connector, identity, name) in heads {
             if lights.iter().any(|light| light.connector == connector) {
                 continue;
             }
             let mailbox = Arc::new(Mailbox::default());
-            let lamp = Lamp::new(self, connector.clone(), identity.clone(), can_dim, &mailbox);
+            let lamp = Lamp::new(self, connector.clone(), &mailbox);
             let level = lamp.shown_level();
             let started = thread::Builder::new()
                 .name("brightness".to_owned())
@@ -292,7 +265,6 @@ impl Shared {
 enum Drive {
     Backlight(Backlight),
     Monitor(Monitor, u16),
-    Gain,
     Nothing,
 }
 
@@ -300,13 +272,10 @@ struct Lamp {
     shared: Arc<Shared>,
     mailbox: Arc<Mailbox>,
     connector: String,
-    identity: String,
-    can_dim: bool,
     drive: Drive,
     level: f64,
     dimmed: bool,
     unapplied: bool,
-    sent_gain: Option<f64>,
     sent_value: Option<u16>,
     wrote_at: Option<Instant>,
     probes: std::slice::Iter<'static, Duration>,
@@ -319,13 +288,7 @@ fn backlight_level(backlight: &Backlight) -> Option<f64> {
 }
 
 impl Lamp {
-    fn new(
-        shared: &Arc<Shared>,
-        connector: String,
-        identity: String,
-        can_dim: bool,
-        mailbox: &Arc<Mailbox>,
-    ) -> Self {
+    fn new(shared: &Arc<Shared>, connector: String, mailbox: &Arc<Mailbox>) -> Self {
         let internal_backlight = shared
             .backlight
             .clone()
@@ -333,23 +296,16 @@ impl Lamp {
             .and_then(|backlight| backlight_level(&backlight).map(|level| (backlight, level)));
         let (drive, level) = match internal_backlight {
             Some((backlight, level)) => (Drive::Backlight(backlight), level),
-            None => (
-                if can_dim { Drive::Gain } else { Drive::Nothing },
-                lock(&shared.saved).get(&identity).copied().unwrap_or(1.0),
-            ),
+            None => (Drive::Nothing, 1.0),
         };
-        let unapplied = !matches!(drive, Drive::Backlight(_));
         let mut lamp = Self {
             shared: Arc::clone(shared),
             mailbox: Arc::clone(mailbox),
             connector,
-            identity,
-            can_dim,
             drive,
             level,
             dimmed: *lock(&shared.dimmed),
-            unapplied,
-            sent_gain: None,
+            unapplied: false,
             sent_value: None,
             wrote_at: None,
             probes: PROBE_WAITS.iter(),
@@ -366,7 +322,7 @@ impl Lamp {
     fn plan_probe(&mut self) {
         self.next_probe = match self.drive {
             Drive::Backlight(_) | Drive::Monitor(..) => None,
-            Drive::Gain | Drive::Nothing => self.probes.next().map(|wait| Instant::now() + *wait),
+            Drive::Nothing => self.probes.next().map(|wait| Instant::now() + *wait),
         };
     }
 
@@ -388,10 +344,9 @@ impl Lamp {
                 self.unapplied = true;
             }
             if wanted.reapply {
-                self.sent_gain = None;
                 self.unapplied = true;
             }
-            if wanted.read {
+            if wanted.read || (wanted.reapply && matches!(self.drive, Drive::Nothing)) {
                 self.read();
             }
             if self.next_probe.is_some_and(|at| at <= Instant::now()) {
@@ -438,37 +393,27 @@ impl Lamp {
         self.drive = Drive::Monitor(monitor, reading.maximum);
         self.next_probe = None;
         self.unapplied = true;
-        self.shared.forget(&self.identity);
         self.shared.report(&self.connector, Some(self.level));
     }
 
     fn read(&mut self) {
         match &mut self.drive {
-            Drive::Monitor(monitor, _) if !self.unapplied => match monitor.brightness() {
-                Ok(reading) => {
-                    self.level = f64::from(reading.value) / f64::from(reading.maximum);
-                    self.sent_value = Some(reading.value);
-                    self.shared.report(&self.connector, Some(self.level));
+            Drive::Monitor(monitor, _) if !self.unapplied && !self.dimmed => {
+                match monitor.brightness() {
+                    Ok(reading) => {
+                        self.level = f64::from(reading.value) / f64::from(reading.maximum);
+                        self.sent_value = Some(reading.value);
+                        self.shared.report(&self.connector, Some(self.level));
+                    }
+                    Err(error) => tracing::debug!("cannot read {}: {error}", self.connector),
                 }
-                Err(error) => tracing::debug!("cannot read {}: {error}", self.connector),
-            },
-            Drive::Gain | Drive::Nothing if self.next_probe.is_none() => self.probe(),
+            }
+            Drive::Nothing => self.probe(),
             _ => {}
         }
     }
 
-    fn send_gain(&mut self, gain: f64) {
-        if !self.can_dim || self.sent_gain == Some(gain) {
-            return;
-        }
-        match self.shared.compositor.set_dim(&self.connector, gain) {
-            Ok(()) => self.sent_gain = Some(gain),
-            Err(error) => tracing::warn!("cannot dim {}: {error}", self.connector),
-        }
-    }
-
     fn apply(&mut self) {
-        let idle = if self.dimmed { IDLE_GAIN } else { 1.0 };
         self.unapplied = false;
         match &mut self.drive {
             Drive::Backlight(backlight) => {
@@ -492,6 +437,12 @@ impl Lamp {
             }
             Drive::Monitor(monitor, maximum) => {
                 let value = (self.level * f64::from(*maximum)).round() as u16;
+                let value = match self.dimmed {
+                    true => dimmed(u32::from(value))
+                        .and_then(|value| u16::try_from(value).ok())
+                        .unwrap_or(value),
+                    false => value,
+                };
                 let rested = self
                     .wrote_at
                     .is_none_or(|at| at.elapsed() >= MONITOR_WRITE_GAP);
@@ -503,18 +454,12 @@ impl Lamp {
                             Err(error) => {
                                 tracing::warn!("{} stopped answering DDC: {error}", self.connector);
                                 self.lost_monitor();
-                                return self.apply();
                             }
                         }
                     } else {
                         self.unapplied = true;
                     }
                 }
-                self.send_gain(idle);
-            }
-            Drive::Gain => {
-                self.shared.remember(&self.identity, self.level);
-                self.send_gain(software_gain(self.level) * idle);
             }
             Drive::Nothing => {}
         }
@@ -523,41 +468,10 @@ impl Lamp {
     fn lost_monitor(&mut self) {
         self.sent_value = None;
         self.wrote_at = None;
-        self.drive = if self.can_dim {
-            Drive::Gain
-        } else {
-            Drive::Nothing
-        };
-        self.shared.report(&self.connector, self.shown_level());
+        self.drive = Drive::Nothing;
+        self.shared.report(&self.connector, None);
         self.probes = PROBE_WAITS[1..].iter();
         self.plan_probe();
-    }
-}
-
-fn saved_levels(path: Option<&Path>) -> BTreeMap<String, f64> {
-    path.and_then(|path| fs::read_to_string(path).ok())
-        .map(|text| {
-            text.lines()
-                .filter_map(|line| {
-                    let (level, identity) = line.split_once('\t')?;
-                    Some((identity.to_owned(), level.parse().ok()?))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn save_levels(shared: &Arc<Shared>, path: PathBuf, wanted: Receiver<()>) {
-    while wanted.recv().is_ok() {
-        thread::sleep(SAVE_SETTLE);
-        wanted.try_iter().count();
-        let text: String = lock(&shared.saved)
-            .iter()
-            .map(|(identity, level)| format!("{level}\t{identity}\n"))
-            .collect();
-        if let Err(error) = bande_xdg::replace_file(&path, text) {
-            tracing::warn!("cannot remember the brightness: {error}");
-        }
     }
 }
 
@@ -636,18 +550,14 @@ impl Lights {
             .cache_properties(CacheProperties::No)
             .build()?;
         let (changed, changes) = mpsc::channel();
-        let (save, saves) = mpsc::channel();
         let backlight = Backlight::find(&options.backlights);
         let shared = Arc::new(Shared {
             lights: Mutex::default(),
             dimmed: Mutex::new(false),
-            saved: Mutex::new(saved_levels(options.saved.as_deref())),
             changed,
-            save,
             backlight: backlight.clone(),
             own_backlight_write: Mutex::new(None),
             logind,
-            compositor: compositor.clone(),
             open_wire: options.open_wire,
         });
         let server = session.object_server();
@@ -662,12 +572,6 @@ impl Lights {
         thread::Builder::new()
             .name("brightness-announce".to_owned())
             .spawn(move || announce_changes(service, changes))?;
-        if let Some(path) = options.saved {
-            let saving = Arc::clone(&shared);
-            thread::Builder::new()
-                .name("brightness-save".to_owned())
-                .spawn(move || save_levels(&saving, path, saves))?;
-        }
         if let Some(backlight) = backlight {
             let following = Arc::clone(&shared);
             thread::Builder::new()
@@ -695,5 +599,71 @@ impl Lights {
         for light in lock(&self.shared.lights).iter() {
             light.mailbox.post(|wanted| wanted.dimmed = Some(dimmed));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use super::*;
+
+    struct LateMonitor(Arc<AtomicBool>);
+
+    impl Wire for LateMonitor {
+        fn send(&mut self, _bytes: &[u8]) -> io::Result<()> {
+            match self.0.load(Ordering::SeqCst) {
+                true => Ok(()),
+                false => Err(ErrorKind::TimedOut.into()),
+            }
+        }
+
+        fn receive(&mut self, bytes: &mut [u8]) -> io::Result<()> {
+            let mut reply = vec![0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 100, 0x00, 40];
+            reply.push(reply.iter().fold(0x50, |sum, byte| sum ^ byte));
+            bytes.copy_from_slice(&reply);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn display_without_control_gets_a_bar_once_ddc_answers() {
+        let answers = Arc::new(AtomicBool::new(false));
+        let wire_answers = Arc::clone(&answers);
+        let (changed, changes) = mpsc::channel();
+        let shared = Arc::new(Shared {
+            lights: Mutex::default(),
+            dimmed: Mutex::new(false),
+            changed,
+            backlight: None,
+            own_backlight_write: Mutex::new(None),
+            logind: None,
+            open_wire: Arc::new(move |_| {
+                Some(Box::new(LateMonitor(Arc::clone(&wire_answers))) as Box<dyn Wire>)
+            }),
+        });
+        let head = || {
+            vec![(
+                "DP-1".to_owned(),
+                "monitor".to_owned(),
+                "Monitor".to_owned(),
+            )]
+        };
+        shared.sync(head());
+        assert!(shared.listed().is_empty());
+        answers.store(true, Ordering::SeqCst);
+        shared.sync(head());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while shared.listed().is_empty() {
+            let left = deadline.saturating_duration_since(Instant::now());
+            assert!(
+                changes.recv_timeout(left).is_ok(),
+                "no bar after DDC answered"
+            );
+        }
+        assert_eq!(
+            shared.listed(),
+            vec![("DP-1".to_owned(), "Monitor".to_owned(), 0.4)]
+        );
     }
 }

@@ -33,7 +33,7 @@ fn the_only_display_can_blink_or_be_swapped_and_the_windows_end_up_where_they_we
     assert_eq!(server.outputs(), ["HEADLESS-1"]);
     assert!(!server.output_powered("HEADLESS-1"));
     assert_eq!(frame_of_only_window(&server), frame);
-    assert!(server.connected_displays(&mut |_| false).is_empty());
+    assert!(server.connected_displays().is_empty());
     server.add_output(first.clone());
     roundtrip(&mut server, &mut [&mut app]);
     assert!(server.output_powered("HEADLESS-1"));

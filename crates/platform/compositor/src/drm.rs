@@ -57,8 +57,7 @@ struct Head {
     scanned_out: bool,
     dark: bool,
     colour: Colour,
-    dim: f64,
-    tone: Option<(f64, f64)>,
+    tone: Option<f64>,
     lost_at: Option<Instant>,
     relink_wanted: bool,
     flip_pending: bool,
@@ -518,7 +517,6 @@ impl DrmBackend {
             scanned_out: false,
             dark: false,
             colour: Colour::Unknown,
-            dim: 1.0,
             tone: None,
             lost_at: None,
             relink_wanted: false,
@@ -817,16 +815,15 @@ fn set_matrix(
     crtc: crtc::Handle,
     property: property::Handle,
     kelvin: f64,
-    dim: f64,
 ) -> std::io::Result<()> {
-    let blob = device.create_property_blob(&crate::night::matrix(kelvin, dim))?;
+    let blob = device.create_property_blob(&crate::night::matrix(kelvin))?;
     let applied = device.set_property(crtc, property, blob.into());
     device.destroy_property_blob(blob.into())?;
     applied
 }
 
 fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
-    if head.tone == Some((kelvin, head.dim)) {
+    if head.tone == Some(kelvin) {
         return;
     }
     let crtc = head.compositor.crtc();
@@ -836,14 +833,14 @@ fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
     }
     let applied = match head.colour {
         Colour::Ramp(size) => {
-            let [red, green, blue] = crate::night::ramp(size, kelvin, head.dim);
+            let [red, green, blue] = crate::night::ramp(size, kelvin);
             device.set_gamma(crtc, &red, &green, &blue)
         }
-        Colour::Matrix(property) => set_matrix(device, crtc, property, kelvin, head.dim),
+        Colour::Matrix(property) => set_matrix(device, crtc, property, kelvin),
         Colour::Unknown | Colour::Fixed => return,
     };
     match applied {
-        Ok(()) => head.tone = Some((kelvin, head.dim)),
+        Ok(()) => head.tone = Some(kelvin),
         Err(error) => {
             tracing::warn!("cannot tint {}: {error}", head.config.name);
             head.colour = Colour::Fixed;
@@ -861,35 +858,6 @@ impl FrameOutput for DrmBackend {
         }
         for head in &mut self.heads {
             tint(&self.device, head, kelvin);
-        }
-    }
-
-    fn can_dim(&mut self, output: &str) -> bool {
-        let device = &self.device;
-        self.heads
-            .iter_mut()
-            .find(|head| head.config.name == output)
-            .is_some_and(|head| {
-                if head.colour == Colour::Unknown {
-                    head.colour = colour_of(device, head.compositor.crtc());
-                }
-                head.colour != Colour::Fixed
-            })
-    }
-
-    fn set_dim(&mut self, output: &str, gain: f64) {
-        let kelvin = self.kelvin.unwrap_or(crate::night::NEUTRAL);
-        let active = self.session.is_active();
-        let device = &self.device;
-        if let Some(head) = self
-            .heads
-            .iter_mut()
-            .find(|head| head.config.name == output)
-        {
-            head.dim = gain;
-            if active {
-                tint(device, head, kelvin);
-            }
         }
     }
 

@@ -116,35 +116,36 @@ pub fn windowless_menus() -> Menus {
 }
 
 pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
+    let mut file = vec![
+        shortcut("menu-new-window", "Ctrl+N"),
+        shortcut("menu-new-tab", "Ctrl+T"),
+        shortcut("menu-new-folder", "Shift+Ctrl+N"),
+        shortcut("menu-open", "Ctrl+O"),
+        Entry::separator(),
+        shortcut("menu-get-info", "Ctrl+I"),
+        Entry::item(&L10N.tr("menu-browse-backups"), "browse-backups")
+            .enabled(bande_files::backups_installed()),
+        shortcut("menu-rename", "F2"),
+        Entry::item(&L10N.tr("menu-duplicate"), "duplicate"),
+        Entry::item(&L10N.tr("menu-make-alias"), "make-alias"),
+        shortcut("menu-add-to-sidebar", "Ctrl+D"),
+    ];
+    if view.terminal_installed() {
+        file.push(plain("menu-open-in-terminal", "open-in-terminal"));
+    }
+    file.extend([
+        Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
+        Entry::separator(),
+        shortcut("menu-move-to-trash", "Delete"),
+        shortcut("menu-delete-immediately", "Shift+Delete"),
+        Entry::separator(),
+        plain("menu-eject", "eject-current"),
+        shortcut("menu-find", "Ctrl+F"),
+        Entry::separator(),
+        bande_app_menu::print_item(view.can_print()),
+    ]);
     let menus = vec![
-        submenu(
-            "menu-file",
-            vec![
-                shortcut("menu-new-window", "Ctrl+N"),
-                shortcut("menu-new-tab", "Ctrl+T"),
-                shortcut("menu-new-folder", "Shift+Ctrl+N"),
-                shortcut("menu-open", "Ctrl+O"),
-                Entry::separator(),
-                shortcut("menu-get-info", "Ctrl+I"),
-                Entry::item(&L10N.tr("menu-browse-backups"), "browse-backups")
-                    .enabled(bande_files::backups_installed()),
-                shortcut("menu-rename", "F2"),
-                Entry::item(&L10N.tr("menu-duplicate"), "duplicate"),
-                Entry::item(&L10N.tr("menu-make-alias"), "make-alias"),
-                shortcut("menu-add-to-sidebar", "Ctrl+D"),
-                Entry::item(&L10N.tr("menu-open-in-terminal"), "open-in-terminal")
-                    .enabled(view.terminal_installed()),
-                Entry::item(&L10N.tr("menu-compress-selection"), "compress"),
-                Entry::separator(),
-                shortcut("menu-move-to-trash", "Delete"),
-                shortcut("menu-delete-immediately", "Shift+Delete"),
-                Entry::separator(),
-                plain("menu-eject", "eject-current"),
-                shortcut("menu-find", "Ctrl+F"),
-                Entry::separator(),
-                bande_app_menu::print_item(view.can_print()),
-            ],
-        ),
+        submenu("menu-file", file),
         submenu(
             "menu-edit",
             vec![

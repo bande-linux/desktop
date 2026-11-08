@@ -1,6 +1,6 @@
 [package]
 name = "bande-bus"
-description = "D-Bus helpers for Bande: serve until the bus goes away, follow the portal settings"
+description = "D-Bus helpers for Bande: serve until the bus goes away, follow the portal settings, tell a stopped service from missing hardware"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

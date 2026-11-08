@@ -1,6 +1,8 @@
+use std::cell::OnceCell;
 use std::path::PathBuf;
 
 use bande_toolkit::{AppConnection, Appearance, Role, Window, WindowError};
+use bande_xdg::InstallWatch;
 use zbus::blocking::Connection;
 
 use crate::resume::Resume;
@@ -44,6 +46,7 @@ pub struct Cx<P: Program> {
     session: Option<Connection>,
     background: bool,
     pub(crate) resume: Resume,
+    pub(crate) installs: OnceCell<Option<InstallWatch>>,
 }
 
 impl<P: Program> Cx<P> {
@@ -67,6 +70,7 @@ impl<P: Program> Cx<P> {
             session,
             background,
             resume,
+            installs: OnceCell::new(),
         }
     }
 
@@ -242,6 +246,15 @@ impl<P: Program> Cx<P> {
         self.shown()
             .filter(|(_, content)| matches!(content, Content::App(_)))
             .map(|(id, _)| *id)
+    }
+
+    pub fn installed(&self, app_id: &str) -> bool {
+        self.installs.get_or_init(|| {
+            InstallWatch::start()
+                .inspect_err(|error| tracing::warn!("cannot follow installed apps: {error}"))
+                .ok()
+        });
+        bande_xdg::is_installed(app_id)
     }
 
     pub fn refresh_menus(&mut self) {

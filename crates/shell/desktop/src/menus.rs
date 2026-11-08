@@ -45,22 +45,29 @@ fn item(message: &str, action: &str) -> MenuItem {
     MenuItem::new(&L10N.tr(message), action)
 }
 
-pub fn desktop_menu(sort: SortBy, paste: bool) -> Menu {
+pub fn desktop_menu(sort: SortBy, paste: bool, settings: bool) -> Menu {
     let sorts = SORTS
         .iter()
         .map(|(by, message, keyword)| {
             item(message, &format!("sort:{keyword}")).checked(*by == sort)
         })
         .collect();
-    Menu::new(vec![
+    let mut items = vec![
         item("new-folder", "new-folder").shortcut("Shift+Ctrl+N"),
         item("paste", "paste").shortcut("Ctrl+V").enabled(paste),
         MenuItem::separator(),
-        item("change-wallpaper", "change-wallpaper"),
-        MenuItem::separator(),
+    ];
+    if settings {
+        items.extend([
+            item("change-wallpaper", "change-wallpaper"),
+            MenuItem::separator(),
+        ]);
+    }
+    items.extend([
         MenuItem::submenu(&L10N.tr("sort-by"), Menu::new(sorts)),
         item("clean-up", "clean-up").enabled(sort == SortBy::None),
-    ])
+    ]);
+    Menu::new(items)
 }
 
 pub fn items_menu(selection: &Selection) -> Menu {

@@ -50,7 +50,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLay
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
 pub use self::error::WindowError;
-pub use self::gpu::RENDERER_VARIABLE;
+pub use self::gpu::{RENDERER_VARIABLE, skip_absent_vulkan_drivers};
 use self::gpu::{Gpu, start_gpu};
 pub use self::layer::{Edges, KeyboardFocus, LayerKind, LayerOptions};
 use self::layer::{anchor_of, keyboard_interactivity, layer_of};

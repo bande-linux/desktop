@@ -45,6 +45,7 @@ impl SettingsView {
             SoftwareState::Available(packages) if !packages.is_empty() => {
                 Some(L10N.tr_args("updates-available", [("count", packages.len().into())]))
             }
+            SoftwareState::Unknown => self.software_hint.clone(),
             state => state.pending(),
         }
     }

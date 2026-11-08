@@ -1,0 +1,55 @@
+#!/bin/bash
+# language-packs [--every-language]: install the language pack of every installed package for each
+# language in use (the system's and each person's locale.conf, and the per-app languages), or for
+# every language the archive has packs for. A pack is <package>-l10n-<language>-<region>, else
+# <package>-l10n-<language>, the names Debian uses too. It first waits for the apt or PackageKit run
+# that changed the packages to end, and repeats until nothing is missing.
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt=(apt-get -q -y --no-install-recommends -o DPkg::Lock::Timeout=1800)
+
+settings() {
+    sed -n 's/^\(LANG\|LANGUAGE\|LC_ALL\|LC_MESSAGES\)=//p' "$@" 2>/dev/null || true
+}
+
+in_use() {
+    settings /etc/locale.conf /etc/default/locale
+    getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print $6 }' | while read -r home; do
+        settings "$home/.config/locale.conf"
+        sed -n 's/^[^=]*=//p' "$home/.config/bande/app-languages" 2>/dev/null || true
+    done
+}
+
+available=$(apt-cache pkgnames | grep -- '-l10n-' | sort -u || true)
+if [ "${1:-}" = --every-language ]; then
+    tags=$(sed -n 's/^bande-desktop-l10n-//p' <<< "$available")
+else
+    tags=$(in_use | tr -d "\"'" | tr ':' '\n' | sed 's/[.@].*//' | tr 'A-Z_' 'a-z-' |
+        grep -vx -e '' -e c -e posix | sort -u || true)
+fi
+[ -n "$tags" ] && [ -n "$available" ] || exit 0
+
+missing() {
+    local installed
+    installed=$(dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' | awk '$1 == "ii" { print $2 }')
+    awk -v tags="$tags" '
+        FILENAME == ARGV[1] { available[$0]; next }
+        FILENAME == ARGV[2] { installed[$0]; next }
+        $0 !~ /-l10n-/ {
+            count = split(tags, wanted, "\n")
+            for (i = 1; i <= count; i++) {
+                language = wanted[i]; sub(/-.*/, "", language)
+                exact = $0 "-l10n-" wanted[i]; general = $0 "-l10n-" language
+                pack = (exact in available) ? exact : (general in available) ? general : ""
+                if (pack != "" && !(pack in installed) && !(pack in chosen)) { chosen[pack]; print pack }
+            }
+        }' <(printf '%s\n' "$available") <(printf '%s\n' "$installed") <(printf '%s\n' "$installed")
+}
+
+"${apt[@]}" install > /dev/null
+mapfile -t packs < <(missing)
+while [ ${#packs[@]} -gt 0 ]; do
+    echo "installing ${packs[*]}"
+    "${apt[@]}" install "${packs[@]}"
+    mapfile -t packs < <(missing)
+done

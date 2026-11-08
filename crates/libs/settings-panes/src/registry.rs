@@ -254,6 +254,7 @@ pub enum SettingId {
     BarIconSize,
     BarAutoHide,
     BarFloating,
+    BarGap,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -742,7 +743,8 @@ fn rotation_choices() -> Vec<Choice> {
 
 pub const AUTOMATIC: &str = "automatic";
 
-const BAR_SIZES: (u32, u32) = (32, 56);
+const BAR_SIZES: (u32, u32) = (22, 56);
+const BAR_GAPS: (u32, u32) = (0, 24);
 const NIGHT_WARMTH: (u32, u32) = (0, 100);
 pub const TEXT_SIZES: [u32; 5] = [100, 125, 150, 175, 200];
 
@@ -951,6 +953,17 @@ fn desktop_panes() -> Vec<Pane> {
                         },
                     ),
                     switch(SettingId::BarFloating, "bar-floating"),
+                    setting(
+                        SettingId::BarGap,
+                        L10N.tr("bar-gap"),
+                        L10N.tr("bar-gap-keywords"),
+                        Kind::Range {
+                            range: BAR_GAPS,
+                            step: 2,
+                            low: L10N.tr("bar-gap-none"),
+                            high: L10N.tr("bar-gap-wide"),
+                        },
+                    ),
                     switch(SettingId::BarAutoHide, "bar-auto-hide"),
                 ],
             )],

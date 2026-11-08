@@ -52,7 +52,11 @@ pub fn skip_absent_vulkan_drivers() {
         return;
     }
     let present = render_node_drivers();
-    let served = |kernel: &[&str]| kernel.iter().any(|driver| present.iter().any(|seen| seen == driver));
+    let served = |kernel: &[&str]| {
+        kernel
+            .iter()
+            .any(|driver| present.iter().any(|seen| seen == driver))
+    };
     let hardware = MESA_DRIVERS
         .iter()
         .any(|(_, kernel)| !kernel.contains(&VIRTUAL_GPU) && served(kernel));

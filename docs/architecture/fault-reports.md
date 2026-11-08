@@ -65,9 +65,59 @@ Settings ▸ General ▸ About ▸ Send Report… or `bande-diagnose [--send] [-
 
 During a total freeze nothing runs. What survives: the journal up to its last fsync (`SyncIntervalSec=15s`, at once for critical messages), hang snapshots already fsynced, and pstore if the kernel panicked. A hardware watchdog reset leaves no pstore record.
 
-## Signature
+## Protocol
 
-`kind`, the panic location without its line, and the top five frames that are not panic or signal machinery, hashed. Rust's symbol hashes are removed. Build ids are kept in their own field, so a rebuild keeps the signature whenever names are available; a frame with no name falls back to module and offset.
+The contract with the log server. Every field added after protocol v1 is optional, so an older client or server keeps working.
+
+### Manifest
+
+- `desktop_version`: the Debian version of the package that owns the faulting program, else of `bande-desktop`. `os_version` stays the system's name and kernel.
+- `threads`: `[{id, faulting, frames}]`, one thread `faulting: true` (the crashed one, or the main thread of a hang). Each frame is `{symbol?, module, build_id?, offset}`: `module` is the file name of the ELF object, `build_id` its GNU build id in hex, `offset` the program counter minus the module's load address, as elfutils reports it (one less than the return address for every frame but the innermost, so it points into the call). Address randomisation leaves it unchanged, and with the build id it symbolicates. Frames with no module are left out.
+- `signature_text`: an extra first frame for the signature (a signal name, a failed unit and its result, kernel frames), scrubbed, as hashed.
+- `hang_seconds`: on hangs, whole seconds from the first unanswered ping to the answer, or to the report if it never came.
+- `recovered`: on hangs, `true` if the program answered again, `false` if it was closed, killed or still stuck when the report was made.
+- `blocked_on`: on hangs, `{program, via, frames}` for the process the main thread waits on. `via` is `socket`, `pipe`, `dbus` or `futex`; `frames` as above, of that process's main thread.
+- `termination`: on `crash`, `force-quit`, `oom` and `not-responding`, who ended the process: `watchdog`, `force-quit`, `oomd`, `kernel-oom`, `stop-timeout` or `logout-timeout`. Missing when the process ended by itself.
+
+### `hang-tree.txt`
+
+Sampled stacks of a hang, merged. A header line, then one block per thread:
+
+```
+hang-tree <program> pid <pid> samples <n> interval-ms <ms>
+thread <tid> <name>
+<count> <symbol or ?> <module>+0x<offset>
+  <count> <symbol or ?> <module>+0x<offset>
+```
+
+Outermost frame first; each level is indented two more spaces and holds the number of samples that passed through it, children in falling count. Identical stacks fall into one path. A second header, `blocked-on <program> pid <pid> via <via> samples <n> interval-ms <ms>`, starts the blocks of the process it waited on.
+
+### Check-in
+
+`POST <endpoint>/v1/checkins`, the same key, JSON: `{machine, os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers, `active_hours` a number with one decimal, `sessions` and `boots` counts. At most one a day, only while sending is on. 200 or 201: done; 404: the server does not know check-ins yet, tried again the next day; anything else follows the table above.
+
+### Symbols
+
+`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not the submit key) and the `.debug` file as `application/octet-stream`.
+
+### Signature
+
+SHA-256 in lowercase hex of a text built from the manifest:
+
+1. `kind`, a space, and `program` (`-` without one).
+2. With `panic_location`: a newline and the location up to its first `:`.
+3. Frames: `signature_text` as a named frame, then the faulting thread's frames, innermost first. Leave out named frames whose name starts with one of `__GI_`, `__libc_`, `__pthread_`, `__restore_rt`, `__rust_`, `__kernel_rt_sigreturn`, `__futex`, `__ppoll`, `__poll`, `abort`, `core::option::`, `core::panicking::`, `core::result::`, `epoll_pwait`, `gsignal`, `pthread_kill`, `raise`, `rust_begin_unwind`, `rust_panic`, `std::panicking::`, `std::sys::`, `syscall`, and unnamed frames with an empty module. Take the first five.
+4. For each: a newline and the name without a Rust hash suffix (`::h` and 16 hex digits), or, unnamed, `<module>+0x<offset in lowercase hex>`.
+
+`signature_tag = x` in the config gives `x-<hash>`. Test vectors (also in `signature.rs`):
+
+| kind program | panic_location | frames (name or module+offset) | signature |
+|---|---|---|---|
+| `crash bande-shell` | | `SIGSEGV`, `__pthread_kill_implementation`, `bande_shell::bar::draw::h0123456789abcdef` | `e47d81b3f9358fa3b02eea676c835b04b772214c78eebc5a44d05ed1a98b647c` |
+| `panic bande-files` | `crates/apps/files/src/view.rs:120:9` | none | `5ee7d8c5e2075213f84bc4fe57f6b8e579bf27c70933874a76de6dfd8d8d1883` |
+| `app-hang bande-files` | | `bande-files+0x1a2b3`, (empty module)`+0x7fff`, `epoll_pwait`, `libc.so.6+0x0`, `a::one`, `a::two`, `a::three`, `a::four` | `5d8260dc938a5c566e60899298459d1769bdaec6a724eee84cd80f39492563f1` |
+
+A rebuild keeps a signature whenever names are available; an unnamed frame changes with the build.
 
 ## Commands
 

@@ -57,7 +57,10 @@ pub fn signature(kind: &str, panic_location: Option<&str>, frames: &[Frame<'_>])
     }
     let meaningful = frames
         .iter()
-        .filter(|frame| frame.symbol.is_none_or(|symbol| !is_machinery(symbol)))
+        .filter(|frame| match frame.symbol {
+            Some(symbol) => !is_machinery(symbol),
+            None => !frame.module.is_empty(),
+        })
         .take(FRAMES);
     for frame in meaningful {
         text.push('\n');
@@ -77,42 +80,54 @@ pub fn signature(kind: &str, panic_location: Option<&str>, frames: &[Frame<'_>])
 mod tests {
     use super::{Frame, signature};
 
-    fn frame<'a>(symbol: &'a str, offset: u64) -> Frame<'a> {
+    fn named<'a>(symbol: &'a str, module: &'a str) -> Frame<'a> {
         Frame {
             symbol: Some(symbol),
-            module: "bande-shell",
+            module,
+            offset: 0x10,
+        }
+    }
+
+    fn unnamed(module: &str, offset: u64) -> Frame<'_> {
+        Frame {
+            symbol: None,
+            module,
             offset,
         }
     }
 
     #[test]
-    fn a_rebuild_keeps_the_signature_and_another_bug_does_not() {
-        let first = [
-            frame("__pthread_kill_implementation", 0x10),
-            frame("core::panicking::panic_fmt::h0123456789abcdef", 0x20),
-            frame("bande_shell::bar::draw::h0123456789abcdef", 0x30),
+    fn the_documented_test_vectors_hold() {
+        let crash = [
+            named("SIGSEGV", ""),
+            named("__pthread_kill_implementation", "libc.so.6"),
+            named("bande_shell::bar::draw::h0123456789abcdef", "bande-shell"),
         ];
-        let rebuilt = [
-            frame("__pthread_kill_implementation", 0x99),
-            frame("core::panicking::panic_fmt::hfedcba9876543210", 0x98),
-            frame("bande_shell::bar::draw::hfedcba9876543210", 0x97),
-        ];
-        let other = [frame("bande_shell::bar::layout::h0123456789abcdef", 0x30)];
         assert_eq!(
-            signature("crash", None, &first),
-            signature("crash", None, &rebuilt)
-        );
-        assert_ne!(
-            signature("crash", None, &first),
-            signature("crash", None, &other)
-        );
-        assert_ne!(
-            signature("crash", None, &first),
-            signature("hang", None, &first)
+            signature("crash bande-shell", None, &crash),
+            "e47d81b3f9358fa3b02eea676c835b04b772214c78eebc5a44d05ed1a98b647c"
         );
         assert_eq!(
-            signature("panic", Some("crates/a/src/b.rs:10:5"), &[]),
-            signature("panic", Some("crates/a/src/b.rs:12:9"), &[])
+            signature(
+                "panic bande-files",
+                Some("crates/apps/files/src/view.rs:120:9"),
+                &[]
+            ),
+            "5ee7d8c5e2075213f84bc4fe57f6b8e579bf27c70933874a76de6dfd8d8d1883"
+        );
+        let hang = [
+            unnamed("bande-files", 0x1a2b3),
+            unnamed("", 0x7fff),
+            named("epoll_pwait", "libc.so.6"),
+            unnamed("libc.so.6", 0),
+            named("a::one", "bande-files"),
+            named("a::two", "bande-files"),
+            named("a::three", "bande-files"),
+            named("a::four", "bande-files"),
+        ];
+        assert_eq!(
+            signature("app-hang bande-files", None, &hang),
+            "5d8260dc938a5c566e60899298459d1769bdaec6a724eee84cd80f39492563f1"
         );
     }
 }

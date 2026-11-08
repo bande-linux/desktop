@@ -1677,7 +1677,6 @@ fn power_pane() -> Pane {
             section(
                 Some(L10N.tr("energy")),
                 vec![
-                    list(SettingId::PowerStatus, "power-status", List::PowerStatus),
                     setting(
                         SettingId::PowerMode,
                         L10N.tr("power-mode"),
@@ -1689,6 +1688,7 @@ fn power_pane() -> Pane {
                         ])),
                     ),
                     switch(SettingId::LowPowerOnBattery, "low-power-on-battery"),
+                    list(SettingId::PowerStatus, "power-status", List::PowerStatus),
                 ],
             ),
             section(

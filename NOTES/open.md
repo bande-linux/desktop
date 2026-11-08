@@ -124,7 +124,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   volume memory across a WirePlumber restart is unproven.
 - Not built yet: user picker and accounts (no Users pane, no fast user switching),
   tiling beyond halves and quarters, custom shortcuts, input methods as
-  sources, spell checking, colour filters, on-screen keyboard, notifications on the lock screen,
+  sources, colour filters, on-screen keyboard, notifications on the lock screen,
   inline reply, spring-loading, Wi-Fi hidden and Enterprise
   networks, more portals (GlobalShortcuts, RemoteDesktop) and portal permission review, colour
   management, battery charge limit, Do Not Disturb schedules.

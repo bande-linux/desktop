@@ -177,14 +177,15 @@ writes a hex value, a corner radius or a font name of its own.
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with
   only the changed regions damaged; `BANDE_RENDERER=gpu` or `=cpu` overrides the choice. After a GPU frame that
   uploaded images, the frame callback's arrival polls the device without waiting, so wgpu frees
-  the upload's staging memory then rather than at the next frame, which may never come. Before
-  any thread starts, `bande_app::run`, the shell, the lock screen, the greeter, the screenshot
-  tool and the file chooser set `VK_LOADER_DRIVERS_DISABLE` for the Mesa
-  Vulkan drivers whose kernel driver has no render node here, lavapipe included, when a hardware
-  render node exists (not on a VM's `virtio_gpu`, and not when `BANDE_RENDERER` is set); other
-  vendors' drivers are untouched. On the M2 that cuts a window's Vulkan start from about 40 to
+  the upload's staging memory then rather than at the next frame, which may never come. When a hardware render
+  node exists and every render node belongs to a Mesa driver (not a VM's `virtio_gpu`, and not
+  when `BANDE_RENDERER` or a `VK_*` driver override is set), the window's Vulkan instance loads
+  only that driver itself and hands it to the loader through `VK_LUNARG_direct_driver_loading`,
+  so the loader opens no other driver, lavapipe and its LLVM included; anything else takes the
+  loader's usual path. No app changes its own environment, so programs it starts inherit nothing
+  from this. On the M2 that cuts a window's Vulkan start from about 40 to
   17 ms and its resident memory by 4 MB anonymous and 47 MB file-backed (LLVM is no longer
-  mapped); the shell drops from 153 to 83 MiB. Programs an app starts inherit the setting. A
+  mapped); the shell drops from 153 to 83 MiB. A
   window whose background is opaque declares its window rectangle as its opaque region, so
   the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `bande-bench` starts
   to measure.

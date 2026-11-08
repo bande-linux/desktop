@@ -74,3 +74,4 @@ flatpak flatpak optional
 /usr/libexec/bande-secrets-prompt bande-secrets depends
 /usr/libexec/bande-sharing-helper bande-settings depends
 /usr/share/bande/bande-davfs2.conf bande-automount depends
+/usr/share/vulkan/icd.d mesa-vulkan-drivers optional

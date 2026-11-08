@@ -2,7 +2,7 @@ Ask for a search engine on first launch: no default until the user picks one
 
 --- /dev/null
 +++ firefox-esr-153.6.0esr/browser/base/content/bande-search-choice.js
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,29 @@
 +/* This Source Code Form is subject to the terms of the Mozilla Public
 + * License, v. 2.0. If a copy of the MPL was not distributed with this
 + * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -29,17 +29,20 @@ Ask for a search engine on first launch: no default until the user picks one
 +    });
 +    list.append(button);
 +  }
++  await document.l10n.ready;
++  window.resizeDialog?.();
 +});
 --- /dev/null
 +++ firefox-esr-153.6.0esr/browser/base/content/bande-search-choice.xhtml
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,24 @@
 +<?xml version="1.0"?>
 +<!-- This Source Code Form is subject to the terms of the Mozilla Public
 +   - License, v. 2.0. If a copy of the MPL was not distributed with this
 +   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
-+<html xmlns="http://www.w3.org/1999/xhtml" style="width: 28em; height: 30em">
++<html xmlns="http://www.w3.org/1999/xhtml" style="width: 28em">
 +  <head>
-+    <title>Choose a search engine</title>
++    <title data-l10n-id="bande-search-choice-title"></title>
++    <link rel="localization" href="browser/bande.ftl" />
 +    <link rel="stylesheet" href="chrome://global/skin/global.css" />
 +    <script src="chrome://browser/content/bande-search-choice.js" />
 +    <style>
@@ -50,10 +53,10 @@ Ask for a search engine on first launch: no default until the user picks one
 +    </style>
 +  </head>
 +  <body>
-+    <h1>Choose a search engine</h1>
-+    <p>Words typed in the address bar go to the engine you pick. You can change this in Settings.</p>
++    <h1 data-l10n-id="bande-search-choice-title"></h1>
++    <p data-l10n-id="bande-search-choice-description"></p>
 +    <div id="engines" style="display: contents"></div>
-+    <button id="none">Don't use a search engine for now</button>
++    <button id="none" data-l10n-id="bande-search-choice-none"></button>
 +  </body>
 +</html>
 --- firefox-esr-153.6.0esr.orig/browser/base/content/browser-init.js

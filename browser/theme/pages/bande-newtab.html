@@ -6,7 +6,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="color-scheme" content="light dark" />
-    <title>New Tab</title>
+    <link rel="localization" href="browser/bande.ftl" />
+    <title data-l10n-id="bande-newtab-title"></title>
     <link rel="stylesheet" href="chrome://browser/content/bande-newtab.css" />
     <script type="module" src="chrome://browser/content/bande-newtab.mjs"></script>
   </head>
@@ -15,7 +16,7 @@
       <h1 id="clock"></h1>
       <p id="date"></p>
       <ul id="sites"></ul>
-      <p id="empty" hidden>The sites you visit most will appear here.</p>
+      <p id="empty" data-l10n-id="bande-newtab-empty" hidden></p>
     </main>
   </body>
 </html>

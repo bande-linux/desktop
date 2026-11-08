@@ -82,12 +82,14 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
             let translations = match translations(krate, &language) {
                 Ok(translations) => translations,
                 Err(problem) => {
-                    problems.push(problem);
+                    if krate.local {
+                        problems.push(problem);
+                    }
                     continue;
                 }
             };
             let Some(Translations { file, po }) = translations else {
-                if complete.contains(&language) {
+                if complete.contains(&language) && krate.local {
                     problems.push(format!("{}: no {language}.po", krate.locales().display()));
                 }
                 continue;
@@ -96,22 +98,25 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
             let rule = match plural_rule(&po) {
                 Ok(rule) => rule,
                 Err(problem) => {
-                    problems.push(format!("{place}: {problem}"));
+                    if krate.local {
+                        problems.push(format!("{place}: {problem}"));
+                    }
                     continue;
                 }
             };
+            let mut found = Vec::new();
             let mut seen = BTreeSet::new();
             for message in &po.messages {
                 let id = key(message.context.as_deref(), &message.english);
                 if !seen.insert(id.clone()) {
-                    problems.push(format!("{place}: “{}” twice", message.english));
+                    found.push(format!("{place}: “{}” twice", message.english));
                 }
                 let Some(english) = krate.keys.iter().find(|candidate| candidate.id() == id) else {
-                    problems.push(format!("{place}: “{}” is not in the code", message.english));
+                    found.push(format!("{place}: “{}” is not in the code", message.english));
                     continue;
                 };
                 if english.plural != message.plural {
-                    problems.push(format!(
+                    found.push(format!(
                         "{place}: “{}” has another English plural in the code",
                         message.english
                     ));
@@ -125,7 +130,7 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
                     1
                 };
                 if message.forms.len() != wanted {
-                    problems.push(format!(
+                    found.push(format!(
                         "{place}: “{}” needs {wanted} forms",
                         message.english
                     ));
@@ -135,18 +140,23 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
                     match placeholders(form) {
                         Ok(used) => {
                             for name in used.into_iter().filter(|name| !known.contains(name)) {
-                                problems.push(format!(
+                                found.push(format!(
                                     "{place}: “{form}” uses {{{name}}}, which the English lacks"
                                 ));
                             }
                         }
-                        Err(problem) => problems.push(format!("{place}: {problem}")),
+                        Err(problem) => found.push(format!("{place}: {problem}")),
                     }
                 }
             }
+            if krate.local {
+                problems.append(&mut found);
+            }
             if !regional(&language) {
                 let (done, total) = counts.entry(language.clone()).or_default();
-                *total += krate.keys.len();
+                if krate.local {
+                    *total += krate.keys.len();
+                }
                 for english in &krate.keys {
                     let translated = po
                         .messages
@@ -157,7 +167,9 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
                         .filter(|message| message.translated());
                     match translated {
                         Some(message) => {
-                            *done += 1;
+                            if krate.local {
+                                *done += 1;
+                            }
                             for program in workspace.programs_with(&krate.name) {
                                 let slot =
                                     (program.clone(), format!("{language}\u{0}{}", english.id()));
@@ -173,7 +185,7 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
                                 }
                             }
                         }
-                        None if complete.contains(&language) => {
+                        None if complete.contains(&language) && krate.local => {
                             problems
                                 .push(format!("{place}: “{}” is not translated", english.english));
                         }
@@ -204,7 +216,7 @@ fn update(workspace: &Workspace) -> Result<(), Vec<String>> {
         for krate in workspace
             .crates
             .iter()
-            .filter(|krate| !krate.keys.is_empty())
+            .filter(|krate| krate.local && !krate.keys.is_empty())
         {
             let existing = match translations(krate, &language) {
                 Ok(existing) => existing,

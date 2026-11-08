@@ -98,7 +98,7 @@ The symbol may hold spaces; the last field is always the module and offset. Oute
 
 ### Symbols
 
-`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not the submit key) and the `.debug` file as `application/octet-stream`.
+`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not the submit key) and the `.debug` file as `application/octet-stream`; its debug sections are zlib-compressed (`SHF_COMPRESSED`). `ci/release/upload-symbols.sh <deb> <endpoint>` sends every `.debug` of a `bande-debug-symbols` deb (2xx is success). The owner's machines run it, since GitHub cannot reach the server: `send-symbols` on the mini after `rebuild-desktop` installs a build and after a release tag's run is green, with `LOGS_SYMBOLS_KEY` from `~/bande-linux/logs-keys.env` or `/etc/bande/reports.conf`.
 
 ### Signature
 

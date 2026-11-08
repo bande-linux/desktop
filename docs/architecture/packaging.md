@@ -30,8 +30,12 @@ profiles. Sizes are in [performance.md](performance.md).
   (`bande-secrets-prompt` in `bande-secrets`). Packages in `ci/release/arch-variants` build
   with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Control Center and the
-  launcher, together with the Bande wallpapers and icon theme; the crates of those parts are
+  launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
+- **`bande-icon-theme`** (built from `packaging/bande-desktop` with the metapackage,
+  architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
+  package that draws icons depends on it, so a symbol never goes missing because the shell is
+  not installed.
 - **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`, section
   `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
   or `kde-plasma-desktop` do.

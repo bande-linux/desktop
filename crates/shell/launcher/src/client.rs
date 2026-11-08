@@ -216,7 +216,7 @@ pub struct LauncherShell {
     config: Option<PathBuf>,
     home: PathBuf,
     skin_tone: PathBuf,
-    scrim: Option<f32>,
+    input_region: Option<Rect>,
 }
 
 fn load_skin_tone(path: &Path) -> Option<usize> {
@@ -326,7 +326,6 @@ impl LauncherShell {
             right: false,
         });
         window.set_layer_margin(surface.top);
-        self.scrim = None;
         window.set_layer_size(surface.size)
     }
 
@@ -362,6 +361,11 @@ impl LauncherShell {
                 Action::SkinTone(tone) => {
                     if let Err(error) = save_skin_tone(&self.skin_tone, tone) {
                         tracing::warn!("cannot remember the skin tone: {error}");
+                    }
+                }
+                Action::Move => {
+                    if let Err(error) = window.start_move() {
+                        tracing::warn!("cannot move the launcher: {error}");
                     }
                 }
                 Action::Close => self.close(window),
@@ -454,15 +458,15 @@ impl LauncherShell {
 impl App for LauncherShell {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
-        let now = frame_time().presentation;
-        let scrim = self.launcher.opacity(now);
-        if self.scrim != Some(scrim) {
-            self.scrim = Some(scrim);
-            if let Err(error) = window.set_scrim(scrim) {
-                tracing::info!("the screen behind the launcher is not dimmed: {error}");
-            }
+        let scene = self
+            .launcher
+            .scene(width, height, frame_time().presentation);
+        let card = self.launcher.card();
+        if self.input_region != Some(card) {
+            self.input_region = Some(card);
+            window.set_input_region(Some(&[card]));
         }
-        self.launcher.scene(width, height, now)
+        scene
     }
 
     fn animating(&self) -> bool {
@@ -473,7 +477,7 @@ impl App for LauncherShell {
         match event {
             WindowEvent::ShowLauncher => self.toggle(window, Mode::Search, false),
             WindowEvent::OpenTerminal => self.open_terminal(window),
-            WindowEvent::ScrimPressed => self.close(window),
+            WindowEvent::PressedOutside => self.close(window),
             WindowEvent::OpenLauncher { mode, text_field } => {
                 let mode = match mode {
                     LauncherMode::Clipboard => Mode::Clipboard,
@@ -659,6 +663,9 @@ impl LauncherShell {
         if let Err(error) = window.hide() {
             tracing::warn!("cannot hide: {error}");
         }
+        if let Err(error) = window.dismiss_on_press_outside() {
+            tracing::warn!("a click beside the launcher does not close it: {error}");
+        }
         let mut launcher = Launcher::new(
             apps,
             settings_panes(bande_settings_panes::panes()),
@@ -695,7 +702,7 @@ impl LauncherShell {
             ),
             home,
             skin_tone,
-            scrim: None,
+            input_region: None,
         };
         shell.follow_search();
         Ok(shell)

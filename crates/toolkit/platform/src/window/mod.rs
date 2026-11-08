@@ -205,7 +205,7 @@ pub enum WindowEvent {
     ClipboardChanged,
     Drag(DragEvent),
     ShowLauncher,
-    ScrimPressed,
+    PressedOutside,
     OpenLauncher {
         mode: LauncherMode,
         text_field: bool,
@@ -1002,7 +1002,10 @@ impl Window {
 
     pub fn start_move(&mut self) -> Result<(), WindowError> {
         let (seat, serial) = self.grab()?;
-        self.toplevel()?._move(seat, serial);
+        match &self.role {
+            ShellSurface::Layer(_) => self.move_layer(seat, serial)?,
+            _ => self.toplevel()?._move(seat, serial),
+        }
         self.flush()
     }
 

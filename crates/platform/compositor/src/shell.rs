@@ -8,7 +8,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
-use smithay::utils::{Logical, Point, Rectangle};
+use smithay::utils::{Logical, Point, Rectangle, Serial};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::foreign_toplevel_list::{
     ForeignToplevelListHandler, ForeignToplevelListState,
@@ -18,10 +18,10 @@ use smithay::wayland::text_input::TextInputSeat;
 
 use crate::menu_button::{ACTIVE_MENUS_SINCE, menu_address};
 use crate::session::SessionRole;
-use crate::state::{ClientState, State};
+use crate::state::{ClientState, State, is_mapped};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
-pub(crate) const SHELL_VERSION: u32 = 6;
+pub(crate) const SHELL_VERSION: u32 = 7;
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
@@ -94,10 +94,23 @@ impl State {
         });
     }
 
-    pub(crate) fn scrim_pressed(&self, owner: &WlSurface) {
-        for shell in &self.shell_resources {
-            if shell.client() == owner.client() {
-                shell.scrim_pressed(owner);
+    pub(crate) fn press_outside(&self, under: Option<&WlSurface>) {
+        let root = under.and_then(|surface| self.root_of(surface));
+        for screen in &self.screens {
+            let map = layer_map_for_output(&screen.output);
+            for layer in map.layers() {
+                let surface = layer.wl_surface();
+                if root.as_ref() == Some(surface)
+                    || !is_mapped(surface)
+                    || !crate::effect::dismisses_on_press_outside(surface)
+                {
+                    continue;
+                }
+                for shell in &self.shell_resources {
+                    if shell.client() == surface.client() {
+                        shell.pressed_outside(surface);
+                    }
+                }
             }
         }
     }
@@ -524,10 +537,14 @@ impl Dispatch<BandeShellV1, ()> for State {
             bande_shell_v1::Request::ActivateWindow { identifier } => {
                 state.activate_window(&identifier);
             }
-            bande_shell_v1::Request::SetScrim { surface, opacity } => {
-                crate::effect::set_scrim(&surface, opacity);
-                state.needs_redraw = true;
+            bande_shell_v1::Request::DismissOnPressOutside { surface } => {
+                crate::effect::dismiss_on_press_outside(&surface);
             }
+            bande_shell_v1::Request::MoveLayer {
+                surface,
+                seat,
+                serial,
+            } => state.request_layer_move(&surface, &seat, Serial::from(serial)),
             bande_shell_v1::Request::SetCornerRadius { surface, radius } => {
                 crate::effect::set_corner_radius(&surface, radius);
                 state.needs_redraw = true;

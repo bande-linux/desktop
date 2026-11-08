@@ -37,6 +37,7 @@ mod input_settings;
 mod keyboard_monitor;
 mod keymap;
 mod label;
+mod layer_place;
 mod lock;
 mod logind;
 mod management;

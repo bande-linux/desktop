@@ -77,6 +77,7 @@ pub struct State {
     sent_generation: u64,
     pub viewport: Rect,
     pub selected_frame: Rect,
+    card: Rect,
     screen_height: f32,
 }
 
@@ -585,6 +586,17 @@ impl Widget for Card {
     fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
         match event {
             Event::Scroll(scroll) => self.scroll.scroll(cx, scroll),
+            Event::PointerDown(pointer)
+                if pointer.is_primary()
+                    && !self.scroll.claims(self.viewport(), pointer.position) =>
+            {
+                self.state
+                    .borrow_mut()
+                    .model
+                    .actions
+                    .push(LauncherAction::Move);
+                true
+            }
             _ => self.scroll.pointer(cx, self.viewport(), event),
         }
     }
@@ -606,14 +618,14 @@ impl Widget for Card {
     }
 }
 
-struct Backdrop {
+struct Margin {
     id: WidgetId,
     state: Shared,
     children: Vec<Box<dyn Widget>>,
     frame: Rect,
 }
 
-impl Widget for Backdrop {
+impl Widget for Margin {
     fn id(&self) -> WidgetId {
         self.id
     }
@@ -627,15 +639,14 @@ impl Widget for Backdrop {
         let screen_height = self.state.borrow().screen_height;
         let card = &mut self.children[0];
         let size = card.measure(cx, Size::new(frame.width, screen_height));
-        card.place(
-            cx,
-            Rect::new(
-                frame.x + ((frame.width - size.width) / 2.0).round(),
-                frame.y + SHADOW_MARGIN,
-                size.width,
-                size.height,
-            ),
+        let placed = Rect::new(
+            frame.x + ((frame.width - size.width) / 2.0).round(),
+            frame.y + SHADOW_MARGIN,
+            size.width,
+            size.height,
         );
+        card.place(cx, placed);
+        self.state.borrow_mut().card = placed;
     }
 
     fn frame(&self) -> Rect {
@@ -650,21 +661,6 @@ impl Widget for Backdrop {
 
     fn access(&self, _cx: &Context) -> Node {
         Node::new(Role::Window)
-    }
-
-    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
-        if let Event::PointerDown(pointer) = event
-            && pointer.is_primary()
-            && !self.children[0].frame().contains(pointer.position)
-        {
-            self.state
-                .borrow_mut()
-                .model
-                .actions
-                .push(LauncherAction::Close);
-            return true;
-        }
-        false
     }
 
     fn children(&self) -> &[Box<dyn Widget>] {
@@ -717,6 +713,7 @@ impl Launcher {
             sent_generation: 0,
             viewport: Rect::default(),
             selected_frame: Rect::default(),
+            card: Rect::default(),
             screen_height: 0.0,
         }));
         let changed = state.clone();
@@ -744,13 +741,13 @@ impl Launcher {
             max_height: RESULTS_MAX_HEIGHT,
             frame: Rect::default(),
         };
-        let backdrop = Backdrop {
+        let margin = Margin {
             id: WidgetId::next(),
             state: state.clone(),
             children: vec![Box::new(card)],
             frame: Rect::default(),
         };
-        let mut ui = Ui::new(Box::new(backdrop), Context::new(text, appearance.palette()));
+        let mut ui = Ui::new(Box::new(margin), Context::new(text, appearance.palette()));
         ui.set_appearance(appearance);
         ui.perform(&ActionRequest {
             action: Action::Focus,
@@ -918,6 +915,10 @@ impl Launcher {
             ),
             top: (height * TOP_FRACTION).round() as i32 - SHADOW_MARGIN as i32,
         }
+    }
+
+    pub fn card(&self) -> Rect {
+        self.state.borrow().card
     }
 
     pub fn opacity(&self, now: Instant) -> f32 {

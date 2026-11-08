@@ -78,6 +78,7 @@ The contract with the log server. Every field added after protocol v1 is optiona
 
 - `desktop_version`: the Debian version of the package that owns the faulting program, else of `bande-desktop`. `os_version` stays the system's name and kernel.
 - `threads`: `[{id, faulting, frames}]`, one thread `faulting: true` (the crashed one, or the main thread of a hang). Each frame is `{symbol?, module, build_id?, offset}`: `module` is the file name of the ELF object, `build_id` its GNU build id in hex, `offset` the program counter minus the module's load address, as elfutils reports it (one less than the return address for every frame but the innermost, so it points into the call). Address randomisation leaves it unchanged, and with the build id it symbolicates. Frames with no module are left out.
+- `frame_format`: `2` on every report made by `Fault`, whose frames (in `threads` and `blocked_on`) follow the rule above on both the `eu-stack` and the core dump path. Without it, core dump caller frames are the return address itself.
 - `signature_text`: an extra first frame for the signature (a signal name, a failed unit and its result, kernel frames), scrubbed, as hashed.
 - `limit`: on `oom` and `failed-unit` with `oom-kill`, what was exceeded: `system`, `cgroup <path>`, or systemd-oomd's reason.
 - `largest_processes` `[{name, resident_kib, swap_kib}]` and `largest_units` `[{unit, current_kib, anon_kib, file_kib, swap_kib}]`: on `oom`, `memory-pressure` and `failed-unit` with `oom-kill`.

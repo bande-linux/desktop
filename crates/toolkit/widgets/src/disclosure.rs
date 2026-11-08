@@ -18,6 +18,8 @@ pub struct Disclosure {
     on_toggle: Box<dyn FnMut(bool)>,
     paragraph: Option<Paragraph>,
     header_height: f32,
+    hovered: bool,
+    pressed: bool,
     frame: Rect,
 }
 
@@ -38,6 +40,8 @@ impl Disclosure {
             on_toggle: Box::new(on_toggle),
             paragraph: None,
             header_height: DISCLOSURE_HEIGHT,
+            hovered: false,
+            pressed: false,
             frame: Rect::default(),
         }
     }
@@ -130,6 +134,13 @@ impl Widget for Disclosure {
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
         let header = self.header();
+        super::row_fill(
+            cx,
+            Shape::rounded(header, Radius::XS),
+            self.hovered,
+            self.hovered && self.pressed,
+            items,
+        );
         let turn = cx.sample(&self.turn);
         let centre = Point::new(header.x + 7.0, header.y + header.height / 2.0);
         chevron(centre, turn, cx.palette.ink2, items);
@@ -182,8 +193,23 @@ impl Widget for Disclosure {
             Event::PointerDown(pointer)
                 if pointer.is_primary() && self.header().contains(pointer.position) =>
             {
+                self.pressed = true;
                 let expanded = !self.expanded;
-                self.set_expanded(cx, expanded)
+                self.set_expanded(cx, expanded);
+                true
+            }
+            Event::PointerEnter(pointer) | Event::PointerMove(pointer) => {
+                let over = self.header().contains(pointer.position);
+                let changed = over != self.hovered;
+                self.hovered = over;
+                changed
+            }
+            Event::PointerUp(_) => std::mem::take(&mut self.pressed),
+            Event::PointerLeave => {
+                let changed = self.hovered || self.pressed;
+                self.hovered = false;
+                self.pressed = false;
+                changed
             }
             Event::Key { key, .. } => match key {
                 Key::Space => {

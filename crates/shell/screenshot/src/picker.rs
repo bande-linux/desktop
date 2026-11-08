@@ -6,7 +6,7 @@ use bande_l10n::tr;
 use crate::service::Choice;
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_toolkit::ui::{
-    BUTTON_HEIGHT, Button, Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring_for,
+    BUTTON_HEIGHT, Button, Context, Event, Key, Parts, Size, Widget, WidgetId, focus_ring,
 };
 use bande_toolkit::{Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextStyle};
 
@@ -212,8 +212,8 @@ impl Widget for Grid {
                 });
             }
             if focused && index == self.current && cx.keyboard_navigation {
-                focus_ring_for(
-                    &cx.palette,
+                focus_ring(
+                    cx,
                     Shape::rounded(well.inset(-RING), TILE_RADIUS + RING),
                     items,
                 );

@@ -301,6 +301,7 @@ pub enum SettingId {
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
+    PowerStatus,
     LidOnPower,
     AppNotifications,
     SoftwareUpdates,
@@ -402,6 +403,7 @@ pub enum List {
     TimeZones,
     LoginItems,
     BatteryHistory,
+    PowerStatus,
     NotificationApps,
     SoftwareUpdates,
     Ethernet,
@@ -1677,6 +1679,7 @@ fn power_pane() -> Pane {
             section(
                 Some(L10N.tr("energy")),
                 vec![
+                    list(SettingId::PowerStatus, "power-status", List::PowerStatus),
                     setting(
                         SettingId::PowerMode,
                         L10N.tr("power-mode"),

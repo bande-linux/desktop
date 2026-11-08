@@ -18,7 +18,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 use crate::L10N;
 use crate::about::{About, AboutCommand, follow_about};
 use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
-use crate::battery::{BatteryCommand, BatteryState, follow_battery};
+use crate::battery::{BatteryCommand, PowerState, follow_battery};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
@@ -80,7 +80,7 @@ pub enum Update {
     Backup(BackupUpdate),
     Time(Option<TimeState>),
     Login(LoginItems),
-    Battery(Option<BatteryState>),
+    Power(Option<PowerState>),
     CannotSleep,
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),

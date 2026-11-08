@@ -26,7 +26,7 @@ use bande_volumes::{media_roots, mounted_volumes, volume_icon};
 use bande_wallpaper::Fit;
 use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
-    data_dirs, replace_file, state_home, user_dir,
+    data_dirs, read_user_dirs, replace_file, state_home, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
     ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, PRINT, SET_WALLPAPER, SHARE_ACCOUNT,
@@ -176,7 +176,7 @@ fn run(dialog: Dialog) -> ExitCode {
     let Some(home) = std::env::home_dir() else {
         return ExitCode::from(UNAVAILABLE);
     };
-    let user_dirs = read(config_home().map(|config| config.join("user-dirs.dirs")));
+    let user_dirs = read_user_dirs();
     let documents = user_dir(&home, user_dirs.as_deref(), UserDir::Documents);
     let remembered =
         read(memory_file()).and_then(|memory| remembered_folder(&memory, &dialog.app_id));

@@ -29,7 +29,7 @@ use bande_volumes::{
 
 use crate::servers::{ServerDone, ServerRequest, ServersSeen};
 use crate::sidebar::with_nearby;
-use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri, user_dir};
+use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri};
 
 use crate::L10N;
 use crate::backups::BackupBar;
@@ -356,10 +356,7 @@ pub(crate) fn home() -> PathBuf {
 }
 
 pub(crate) fn user_folder(dir: UserDir) -> PathBuf {
-    let home = home();
-    let user_dirs = bande_xdg::config_home()
-        .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
-    user_dir(&home, user_dirs.as_deref(), dir)
+    bande_xdg::user_folder(&home(), dir)
 }
 
 fn pasted_paths(text: &str) -> Vec<PathBuf> {

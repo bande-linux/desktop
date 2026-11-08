@@ -212,12 +212,7 @@ fn user_lines(wanted: &[String], language: &str) -> String {
 
 fn write_user_file(contents: &str) -> std::io::Result<()> {
     let path = user_file().ok_or(std::io::ErrorKind::NotFound)?;
-    if let Some(folder) = path.parent() {
-        std::fs::create_dir_all(folder)?;
-    }
-    let temporary = path.with_extension("conf.new");
-    std::fs::write(&temporary, contents)?;
-    std::fs::rename(temporary, path)
+    bande_xdg::replace_file(&path, contents)
 }
 
 fn generated(code: &str) -> bool {

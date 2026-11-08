@@ -361,8 +361,7 @@ impl Image {
         kept.clone()
     }
 
-    #[cfg(feature = "gpu")]
-    pub(crate) fn release_pixels(&self) {
+    pub fn release_pixels(&self) {
         if self.pixels.redraw.is_some() {
             *self
                 .pixels

@@ -1,11 +1,11 @@
 #!/bin/sh
 set -e
 if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ] ; then
-	deb-systemd-helper unmask bande-crash-reports@boot.service >/dev/null || true
-	if deb-systemd-helper --quiet was-enabled bande-crash-reports@boot.service ; then
-		deb-systemd-helper enable bande-crash-reports@boot.service >/dev/null || true
+	deb-systemd-helper unmask bande-crash-reports@.service >/dev/null || true
+	if deb-systemd-helper --quiet was-enabled bande-crash-reports@.service ; then
+		deb-systemd-helper enable bande-crash-reports@.service >/dev/null || true
 	else
-		deb-systemd-helper update-state bande-crash-reports@boot.service >/dev/null || true
+		deb-systemd-helper update-state bande-crash-reports@.service >/dev/null || true
 	fi
 	if [ -d /run/systemd/system ] ; then
 		systemctl --system daemon-reload >/dev/null || true

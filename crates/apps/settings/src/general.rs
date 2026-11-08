@@ -290,15 +290,15 @@ impl SettingsView {
                     .parent()
                     .map(|folder| shown_path(folder, home.as_deref()))
                     .unwrap_or_default();
-                let mut reveal = intent(&self.intents, Intent::Reveal);
-                let target = path.clone();
-                let show = Button::new(&L10N.tr("show-in-files"), move || reveal(target.clone()));
-                let controls = Stack::new(
-                    Axis::Horizontal,
-                    Spacing::M as f32,
-                    0.0,
-                    vec![boxed(Label::new(&format_size(bytes))), boxed(show)],
-                );
+                let mut controls = vec![boxed(Label::new(&format_size(bytes)))];
+                if self.files_installed {
+                    let mut reveal = intent(&self.intents, Intent::Reveal);
+                    let target = path.clone();
+                    controls.push(boxed(Button::new(&L10N.tr("show-in-files"), move || {
+                        reveal(target.clone())
+                    })));
+                }
+                let controls = Stack::new(Axis::Horizontal, Spacing::M as f32, 0.0, controls);
                 let row = Row::new(Text::new(&name, Tone::Primary), Some(boxed(controls)))
                     .detail(Text::new(&folder, Tone::Muted).caption());
                 self.item_row(path.to_string_lossy().into_owned(), row)

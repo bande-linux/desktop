@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 
 use accesskit::{Action, ActionData, ActionRequest, TreeId, TreeUpdate};
 use bande_audio::{Direction, Snapshot, meter_level};
+use bande_bus::Reading;
 use bande_config::{DisplaySettings, MAX_INPUT_SOURCES, Placement, Rotation};
 use bande_toolkit::ui::{
     Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
@@ -249,9 +250,9 @@ pub struct SettingsView {
     pub(crate) keep: Option<Keep>,
     pub(crate) audio: Option<Snapshot>,
     pub(crate) input_level: Rc<Cell<f32>>,
-    pub(crate) wifi: Option<WifiState>,
+    pub(crate) wifi: Reading<WifiState>,
     pub(crate) join: Join,
-    pub(crate) bluetooth: Option<BluetoothState>,
+    pub(crate) bluetooth: Reading<BluetoothState>,
     pub(crate) busy: Vec<String>,
     pub(crate) pairing: Option<Question>,
     pub(crate) pictures: Vec<(String, Pair)>,
@@ -266,6 +267,7 @@ pub struct SettingsView {
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
     pub(crate) storage: Option<Storage>,
+    pub(crate) files_installed: bool,
     pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
@@ -357,9 +359,9 @@ impl SettingsView {
             keep: None,
             audio: None,
             input_level: Rc::default(),
-            wifi: None,
+            wifi: Reading::Absent,
             join: Join::default(),
-            bluetooth: None,
+            bluetooth: Reading::Absent,
             busy: Vec::new(),
             pairing: None,
             pictures: Vec::new(),
@@ -374,6 +376,7 @@ impl SettingsView {
             about: None,
             diagnostics: Diagnostics::default(),
             storage: None,
+            files_installed: false,
             backup: BackupView::default(),
             drafts: HashMap::new(),
             confirming_empty_trash: false,
@@ -544,6 +547,13 @@ impl SettingsView {
         }
     }
 
+    pub fn set_files_installed(&mut self, installed: bool) {
+        if self.files_installed != installed {
+            self.files_installed = installed;
+            self.invalidate();
+        }
+    }
+
     pub fn set_displays(&mut self, displays: Vec<Display>) {
         if self.displays != displays {
             self.displays = displays;
@@ -710,12 +720,14 @@ impl SettingsView {
             Update::Arrangements(arrangements) => self.arrangements = arrangements,
             Update::Audio(snapshot) => self.apply_audio(snapshot),
             Update::Wifi(wifi) => {
-                if let Some(wifi) = &wifi {
-                    self.values
-                        .insert(SettingId::WifiPower, Value::Flag(wifi.enabled));
-                }
+                match wifi.present() {
+                    Some(wifi) => self
+                        .values
+                        .insert(SettingId::WifiPower, Value::Flag(wifi.enabled)),
+                    None => self.values.remove(&SettingId::WifiPower),
+                };
                 if let Some(Detail::Network(ssid)) = &self.detail
-                    && !wifi.as_ref().is_some_and(|wifi| {
+                    && !wifi.present().is_some_and(|wifi| {
                         wifi.enabled && wifi.known.iter().any(|known| known.ssid == *ssid)
                     })
                 {
@@ -725,7 +737,10 @@ impl SettingsView {
             }
             Update::Joined(ssid, outcome) => self.joined(ssid, outcome),
             Update::Bluetooth(bluetooth) => {
-                if let Some(bluetooth) = &bluetooth {
+                if bluetooth.present().is_none() {
+                    self.values.remove(&SettingId::BluetoothPower);
+                }
+                if let Some(bluetooth) = bluetooth.present() {
                     self.values
                         .insert(SettingId::BluetoothPower, Value::Flag(bluetooth.powered));
                     let connection = |state: Option<&BluetoothState>, address: &str| {
@@ -735,7 +750,7 @@ impl SettingsView {
                             .find(|device| device.address == address)
                             .map(|device| device.connected)
                     };
-                    let before = self.bluetooth.as_ref();
+                    let before = self.bluetooth.present();
                     self.busy.retain(|address| {
                         connection(before, address) == connection(Some(bluetooth), address)
                     });
@@ -969,8 +984,8 @@ impl SettingsView {
 
     pub(crate) fn available(&self, pane: PaneId) -> bool {
         match pane {
-            PaneId::Wifi => self.wifi.is_some(),
-            PaneId::Bluetooth => self.bluetooth.is_some(),
+            PaneId::Wifi => !self.wifi.is_absent(),
+            PaneId::Bluetooth => !self.bluetooth.is_absent(),
             PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
@@ -1818,7 +1833,7 @@ impl SettingsView {
         address: String,
         command: fn(bande_bluetooth::Device) -> BluetoothCommand,
     ) {
-        let device = self.bluetooth.as_ref().and_then(|bluetooth| {
+        let device = self.bluetooth.present().and_then(|bluetooth| {
             bluetooth
                 .paired
                 .iter()
@@ -1835,7 +1850,7 @@ impl SettingsView {
     fn start_join(&mut self, ssid: Vec<u8>, password: Option<String>) {
         let Some(network) = self
             .wifi
-            .as_ref()
+            .present()
             .and_then(|wifi| wifi.networks.iter().find(|network| network.ssid == ssid))
             .cloned()
         else {

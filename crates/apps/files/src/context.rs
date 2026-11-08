@@ -2,7 +2,7 @@ use bande_fs::{Entry, GroupBy, Sort};
 use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
 use bande_volumes::load_saved_servers;
-use bande_xdg::UserDir;
+use bande_xdg::{Apps, UserDir, config_dirs, data_dirs};
 
 use crate::backups::backups_installed;
 use crate::browser::Location;
@@ -16,8 +16,6 @@ use crate::menus::{
 use crate::sidebar::{BookmarkEdit, PlaceKind, Row, SidebarEdit, favourites, layout_text};
 use crate::view::{FilesView, Hit, Request, user_folder};
 use crate::views::{ListColumn, ViewMode};
-
-const TERMINAL_DESKTOP_ID: &str = "org.bande.Terminal.desktop";
 
 impl FilesView {
     pub(crate) fn context_click(&mut self, hit: Hit, at: Point) -> bool {
@@ -179,7 +177,15 @@ impl FilesView {
     }
 
     pub fn terminal_installed(&self) -> bool {
-        self.apps.find(TERMINAL_DESKTOP_ID).is_some()
+        self.terminal
+    }
+
+    pub fn set_terminal_installed(&mut self, installed: bool) {
+        self.terminal = installed;
+    }
+
+    pub fn reload_apps(&mut self) {
+        self.apps = Apps::load(data_dirs(), &config_dirs());
     }
 
     pub(crate) fn folder_menu(&self) -> Menu {

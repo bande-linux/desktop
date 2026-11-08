@@ -11,7 +11,9 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{MatchRule, message};
 
 const SERVICE: &str = "org.bluez";
+const BUS: &str = "org.freedesktop.DBus";
 const OBJECTS: &str = "/org/bluez";
+const KERNEL_ADAPTERS: &str = "/sys/class/bluetooth";
 const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const ADAPTER: &str = "org.bluez.Adapter1";
 const DEVICE: &str = "org.bluez.Device1";
@@ -193,7 +195,18 @@ pub fn change_rules() -> zbus::Result<Vec<MatchRule<'static>>> {
     Ok(vec![
         signals()?.path_namespace(OBJECTS)?.build(),
         signals()?.path("/")?.interface(OBJECT_MANAGER)?.build(),
+        MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .sender(BUS)?
+            .interface(BUS)?
+            .member("NameOwnerChanged")?
+            .add_arg(SERVICE)?
+            .build(),
     ])
+}
+
+pub fn adapter_in_kernel() -> bool {
+    std::fs::read_dir(KERNEL_ADAPTERS).is_ok_and(|mut adapters| adapters.next().is_some())
 }
 
 fn bluez_running(bus: &Connection) -> zbus::Result<bool> {
@@ -234,7 +247,9 @@ impl Bluetooth {
 
     fn objects(&self) -> zbus::Result<HashMap<OwnedObjectPath, Interfaces>> {
         if !bluez_running(&self.bus)? {
-            return Ok(HashMap::new());
+            return Err(
+                zbus::fdo::Error::NameHasNoOwner(format!("{SERVICE} is not running")).into(),
+            );
         }
         let manager = ObjectManagerProxy::builder(&self.bus)
             .destination(SERVICE)?

@@ -1601,6 +1601,7 @@ dependencies = [
  "bande-l10n",
  "bande-notify",
  "bande-volumes",
+ "bande-watch",
  "rustix 1.1.6",
  "tempfile",
  "tracing",

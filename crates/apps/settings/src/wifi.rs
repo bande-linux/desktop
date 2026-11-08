@@ -57,7 +57,7 @@ fn ssid_text(ssid: &[u8]) -> String {
 impl SettingsView {
     fn nearby(&self, ssid: &[u8]) -> Option<&Network> {
         self.wifi
-            .as_ref()?
+            .present()?
             .networks
             .iter()
             .find(|network| network.ssid == ssid)
@@ -66,7 +66,7 @@ impl SettingsView {
     fn known_status(&self, known: &KnownNetwork) -> String {
         let nearby = self.nearby(&known.ssid);
         let current = nearby.is_some_and(|network| network.current);
-        if current && self.wifi.as_ref().is_some_and(|wifi| wifi.sign_in) {
+        if current && self.wifi.present().is_some_and(|wifi| wifi.sign_in) {
             L10N.tr("sign-in-required")
         } else if current {
             L10N.tr("connected")
@@ -90,7 +90,7 @@ impl SettingsView {
     }
 
     pub(crate) fn known_network_rows(&mut self) -> Widgets {
-        let Some(wifi) = self.wifi.clone() else {
+        let Some(wifi) = self.wifi.present().cloned() else {
             return Vec::new();
         };
         if wifi.known.is_empty() {
@@ -169,7 +169,7 @@ impl SettingsView {
     }
 
     pub(crate) fn network_rows(&mut self) -> Widgets {
-        let Some(wifi) = self.wifi.clone() else {
+        let Some(wifi) = self.wifi.present().cloned() else {
             return Vec::new();
         };
         let mut rows = Vec::new();
@@ -316,7 +316,7 @@ impl SettingsView {
         let Some(Detail::Network(ssid)) = self.detail.clone() else {
             return None;
         };
-        let wifi = self.wifi.clone()?;
+        let wifi = self.wifi.present().cloned()?;
         let known = wifi.known.iter().find(|known| known.ssid == ssid)?.clone();
         let current = self.nearby(&ssid).is_some_and(|network| network.current);
         let name = known.name();
@@ -442,7 +442,7 @@ impl SettingsView {
     pub(crate) fn open_network(&mut self, ssid: Vec<u8>) {
         let known = self
             .wifi
-            .as_ref()
+            .present()
             .and_then(|wifi| wifi.known.iter().find(|known| known.ssid == ssid))
             .cloned();
         let Some(known) = known else {
@@ -450,7 +450,7 @@ impl SettingsView {
         };
         let link = self
             .wifi
-            .as_ref()
+            .present()
             .filter(|_| self.nearby(&ssid).is_some_and(|network| network.current))
             .map(|wifi| wifi.link.addressing.clone())
             .unwrap_or_default();
@@ -493,7 +493,7 @@ impl SettingsView {
         let Some(Detail::Network(ssid)) = &self.detail else {
             return;
         };
-        let Some(path) = self.wifi.as_ref().and_then(|wifi| {
+        let Some(path) = self.wifi.present().and_then(|wifi| {
             wifi.known
                 .iter()
                 .find(|known| known.ssid == *ssid)
@@ -534,7 +534,7 @@ impl SettingsView {
 
     pub(crate) fn set_wifi_manual(&mut self, manual: bool) {
         self.wifi_manual = manual;
-        let dns = match self.wifi.as_ref() {
+        let dns = match self.wifi.present() {
             Some(wifi) if manual => wifi.link.addressing.dns.join(", "),
             _ => String::new(),
         };
@@ -549,7 +549,7 @@ impl SettingsView {
         };
         if let Some(known) = self
             .wifi
-            .as_ref()
+            .present()
             .and_then(|wifi| wifi.known.iter().find(|known| known.ssid == *ssid))
             .filter(|known| known.manual.is_some())
         {

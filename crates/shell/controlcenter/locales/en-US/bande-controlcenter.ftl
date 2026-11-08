@@ -28,4 +28,5 @@ on = On
 off = Off
 muted = Muted
 not-connected = Not Connected
+unavailable = Unavailable
 sign-in-required = Sign in required

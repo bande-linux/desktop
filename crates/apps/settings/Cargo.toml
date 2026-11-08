@@ -32,6 +32,7 @@ bande-network.workspace = true
 bande-printers.workspace = true
 bande-notify.workspace = true
 bande-packages.workspace = true
+bande-dict.workspace = true
 bande-settings-panes.workspace = true
 bande-sound.workspace = true
 bande-edid.workspace = true
@@ -67,7 +68,7 @@ follows changes made elsewhere while it is open. Desktop settings go \
 through org.bande.Config, which writes config.kdl. A polkit rule lets \
 administrators (members of sudo) change the time, language, login screen \
 keyboard layouts and computer name without a password prompt. Any \
-supported language can be chosen; localed generates it. Updates install \
+supported language can be chosen; it is generated with locale-gen. Updates install \
 through PackageKit while the computer runs; only those that need a \
 restart install at the next restart, through PackageKit's offline \
 updates. Settings asks to log out or reopen apps that still run the old \
@@ -81,11 +82,14 @@ assets = [
     ["data/org.bande.Settings.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/bande-update-check.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-update-check.timer", "usr/lib/systemd/user/", "644"],
+    ["data/bande-went-back.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-update-finish.path", "usr/lib/systemd/user/", "644"],
     ["data/bande-update-finish.service", "usr/lib/systemd/user/", "644"],
     ["data/50-bande-settings.rules", "usr/share/polkit-1/rules.d/", "644"],
     ["target/release/bande-sharing-helper", "usr/libexec/", "755"],
     ["data/org.bande.sharing-helper.policy", "usr/share/polkit-1/actions/", "644"],
+    ["target/release/bande-locale-helper", "usr/libexec/", "755"],
+    ["data/org.bande.locale-helper.policy", "usr/share/polkit-1/actions/", "644"],
     ["data/bande-disk-encryption", "usr/libexec/", "755"],
     ["data/bande-disk-encryption.service", "usr/lib/systemd/system/", "644"],
 ]

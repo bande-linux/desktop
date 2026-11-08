@@ -13,7 +13,7 @@ use bande_toolkit::ui::{
     Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
-use bande_xdg::{OCTET_STREAM, UserDir, config_home, find_icon, user_dir};
+use bande_xdg::{OCTET_STREAM, UserDir, find_icon, user_folder};
 use xdg_desktop_portal_bande::file_chooser::{Mode, Selection};
 use xdg_desktop_portal_bande::settings::icon_theme;
 
@@ -297,9 +297,12 @@ impl Prompt {
             question: question.to_owned(),
             children: vec![
                 Box::new(Label::new(question)),
-                Box::new(TextField::new("", text, move |text: &str| {
-                    *changed.borrow_mut() = text.to_owned()
-                })),
+                Box::new(
+                    TextField::new("", text, move |text: &str| {
+                        *changed.borrow_mut() = text.to_owned()
+                    })
+                    .without_text_checking(),
+                ),
                 Box::new(Stack::new(Axis::Horizontal, GAP, 0.0, buttons)),
             ],
             done,
@@ -781,6 +784,7 @@ impl ChooserView {
             &self.chooser.name,
             move |text: &str| push(&intents, Intent::Name(text.to_owned())),
         )
+        .without_text_checking()
     }
 
     fn select_stem(&mut self, field: WidgetId) {
@@ -897,9 +901,7 @@ impl ChooserView {
     }
 
     fn user_folder(&self, dir: UserDir) -> PathBuf {
-        let user_dirs = config_home()
-            .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
-        user_dir(&self.home, user_dirs.as_deref(), dir)
+        user_folder(&self.home, dir)
     }
 
     fn shown_folder(&self) -> String {

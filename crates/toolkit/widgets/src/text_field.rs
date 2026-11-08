@@ -40,6 +40,8 @@ pub struct TextField {
 
 impl TextField {
     pub fn new(placeholder: &str, text: &str, on_change: impl FnMut(&str) + 'static) -> Self {
+        let mut editor = Editor::new(text, FONT_SIZE, false);
+        editor.set_spelling(true);
         Self {
             id: WidgetId::next(),
             placeholder: placeholder.to_owned(),
@@ -47,7 +49,7 @@ impl TextField {
             border: Border::Field,
             leading: PADDING,
             trailing: PADDING,
-            editor: Editor::new(text, FONT_SIZE, false),
+            editor,
             on_change: Box::new(on_change),
             scroll: 0.0,
             field_height: TEXT_FIELD_HEIGHT,
@@ -55,8 +57,15 @@ impl TextField {
         }
     }
 
+    pub fn without_text_checking(mut self) -> Self {
+        self.editor.set_spelling(false);
+        self
+    }
+
     pub fn borderless(mut self, font_size: f32) -> Self {
+        let spelling = self.editor.spelling();
         self.editor = Editor::new(&self.editor.text(), font_size, false);
+        self.editor.set_spelling(spelling);
         self.border = Border::None;
         self
     }
@@ -76,7 +85,8 @@ impl TextField {
         }
     }
 
-    pub(crate) fn search(self, leading: f32, trailing: f32) -> Self {
+    pub(crate) fn search(mut self, leading: f32, trailing: f32) -> Self {
+        self.editor.set_spelling(false);
         Self {
             border: Border::Search,
             leading,
@@ -341,8 +351,29 @@ impl Widget for TextField {
         self.editor.select_all();
     }
 
-    fn context_menu(&mut self, _cx: &mut Context, _point: Point) -> Option<Menu> {
-        Some(self.editor.menu())
+    fn spelling_answered(&mut self) -> bool {
+        let revision = self.editor.revision();
+        self.editor.spelling_answered();
+        self.changed(revision);
+        self.editor.revision() != revision
+    }
+
+    fn context_menu(&mut self, cx: &mut Context, _point: Point) -> Option<Menu> {
+        Some(self.editor.context_menu(cx))
+    }
+
+    fn selected_text(&self) -> Option<String> {
+        self.editor
+            .has_selection()
+            .then(|| self.editor.selected_text())
+    }
+
+    fn word_at(&mut self, cx: &mut Context, point: Point) -> Option<String> {
+        let origin = self.text_origin();
+        Some(self.editor.word_at(
+            &mut cx.text,
+            Point::new(point.x - origin.x, point.y - origin.y),
+        ))
     }
 
     fn menu_action(&mut self, cx: &mut Context, action: &str) -> bool {

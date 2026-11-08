@@ -27,6 +27,7 @@ use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::failure::{explained, pane_failed, sentence};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
+use crate::lookup::{LookUpCommand, LookUpState, follow_look_up};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
 use crate::passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
@@ -41,6 +42,7 @@ use crate::services::{
 };
 use crate::sharing::{SharingCommand, SharingState, follow_sharing};
 use crate::software::{SoftwareCommand, SoftwareState, follow_software};
+use crate::spelling::{SpellingCommand, SpellingState, follow_spelling};
 use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
@@ -72,6 +74,7 @@ pub enum Update {
     Backup(BackupUpdate),
     CrashReports(Vec<CrashReport>),
     CrashReportsChanged,
+    CrashReportText(PathBuf, String),
     Time(Option<TimeState>),
     Login(LoginItems),
     Battery(Option<BatteryState>),
@@ -79,6 +82,7 @@ pub enum Update {
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     SoftwareChecked(Option<i64>),
+    SoftwareHint(Option<String>),
     Locale(Option<LocaleState>),
     Layouts(Layouts),
     Pointing(PointingDevices),
@@ -89,6 +93,8 @@ pub enum Update {
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
     KeyboardAccess(Vec<KeyboardAccess>),
+    Spelling(SpellingState),
+    LookUp(LookUpState),
     Security(SecurityStatus),
     Printers(PrintersState),
     Sharing(SharingState),
@@ -127,6 +133,8 @@ pub enum Command {
     DefaultApp(DefaultAppCommand),
     Permission(PermissionCommand),
     KeyboardAccess(String, bool),
+    Spelling(SpellingCommand),
+    LookUp(LookUpCommand),
     Printers(PrinterCommand),
     Sharing(SharingCommand),
     Users(UsersCommand),
@@ -377,6 +385,8 @@ pub struct Services {
     default_apps: Sender<DefaultAppCommand>,
     permissions: Sender<PermissionCommand>,
     keyboard_access: Sender<(String, bool)>,
+    spelling: Sender<SpellingCommand>,
+    look_up: Sender<LookUpCommand>,
     passwords: Sender<PasswordCommand>,
     brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
@@ -419,10 +429,12 @@ impl Services {
             default_apps: follow_default_apps(updates.clone()),
             permissions: follow_permissions(session, updates.clone()),
             keyboard_access: follow_keyboard_access(updates.clone()),
+            spelling: follow_spelling(updates.clone()),
+            look_up: follow_look_up(updates.clone()),
             _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
-            printers: system.map(|system| follow_printers(system, updates.clone())),
+            printers: system.map(|system| follow_printers(system, session, updates.clone())),
             sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
@@ -469,6 +481,8 @@ impl Services {
             Command::DefaultApp(command) => self.default_apps.send(command).is_ok(),
             Command::Permission(command) => self.permissions.send(command).is_ok(),
             Command::KeyboardAccess(line, on) => self.keyboard_access.send((line, on)).is_ok(),
+            Command::Spelling(command) => self.spelling.send(command).is_ok(),
+            Command::LookUp(command) => self.look_up.send(command).is_ok(),
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Sharing(command) => self.sharing.send(command).is_ok(),

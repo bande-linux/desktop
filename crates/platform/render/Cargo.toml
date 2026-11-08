@@ -10,9 +10,13 @@ repository.workspace = true
 [dependencies]
 ash.workspace = true
 smithay.workspace = true
+tracing.workspace = true
 
 [build-dependencies]
 naga.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+libc.workspace = true

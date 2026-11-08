@@ -20,7 +20,9 @@ stop_vm() {
     wait 2>/dev/null || true
 }
 cleanup() {
+    local status=$?
     stop_vm
+    [ "$status" -eq 0 ] || grep -aE 'LOCKUP|lockup|rcu.*stall|Out of memory|panic|Call trace' "$scratch/serial.log" | tail -n 20 | cut -c1-160
     rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -61,7 +63,7 @@ boot() {
     port=$((20000 + RANDOM % 20000))
     qemu-img create -q -f qcow2 -F qcow2 -b "$cache/$image" "$scratch/disk.qcow2" 12G
     "${qemu[@]}" -enable-kvm -smp "3" -m "4G" -nographic \
-        -serial "file:${UPGRADE_TEST_SERIAL:-/dev/null}" -monitor none -pidfile "$scratch/qemu.pid" \
+        -serial "file:$scratch/serial.log" -monitor none -pidfile "$scratch/qemu.pid" \
         -drive "file=$scratch/disk.qcow2,if=virtio,cache=unsafe" \
         -drive "file=$scratch/seed.img,if=virtio,format=raw,readonly=on" \
         -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:$port-:22" &
@@ -90,4 +92,4 @@ done
 scp "${guest[@]}" -q -P "$port" -r "$old" root@127.0.0.1:/root/old
 scp "${guest[@]}" -q -P "$port" -r "$new" root@127.0.0.1:/root/new
 scp "${guest[@]}" -q -P "$port" "$here/in-guest.sh" root@127.0.0.1:/root/in-guest.sh
-ssh "${guest[@]}" -p "$port" root@127.0.0.1 bash /root/in-guest.sh /root/old /root/new
+timeout 2400 ssh "${guest[@]}" -p "$port" root@127.0.0.1 bash /root/in-guest.sh /root/old /root/new

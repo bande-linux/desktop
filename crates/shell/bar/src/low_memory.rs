@@ -15,8 +15,8 @@ use bande_toolkit::{
     TextStyle, TextSystem, Window, WindowEvent,
 };
 use bande_xdg::{
-    DesktopEntry, Locale, applications, current_desktops, data_dirs, find_app, find_icon,
-    spawn_detached,
+    DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
+    find_icon, spawn_detached,
 };
 use zbus::blocking::Connection;
 
@@ -383,8 +383,8 @@ fn load_icons(apps: &[AppMemory], known: &mut HashMap<String, Image>, pixels: u3
         if known.contains_key(icon) {
             continue;
         }
-        if let Some(image) =
-            find_icon(icon, pixels, &[], &directories).and_then(|path| Image::load(&path, pixels))
+        if let Some(image) = find_icon(icon, pixels, &ICON_THEMES, &directories)
+            .and_then(|path| Image::load(&path, pixels))
         {
             known.insert(icon.clone(), image);
         }
@@ -410,7 +410,7 @@ impl LowMemory {
     ) -> Self {
         let pixels = |points: f32| (f64::from(points) * window.scale().max(2.0)).round() as u32;
         let disc_pixels = pixels(DISC);
-        let disc = find_icon(ACTIVITY_MONITOR, disc_pixels, &[], &data_dirs())
+        let disc = find_icon(ACTIVITY_MONITOR, disc_pixels, &ICON_THEMES, &data_dirs())
             .and_then(|path| Image::load(&path, disc_pixels));
         let entries = applications(
             &data_dirs(),

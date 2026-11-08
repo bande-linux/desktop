@@ -1,3 +1,7 @@
+no-suggestions = Inga förslag
+ignore-spelling = Ignorera stavning
+learn-spelling = Lär in stavning
+change-back = Ändra tillbaka till ”{ $word }”
 undo = Ångra
 redo = Gör om
 cut = Klipp ut
@@ -29,3 +33,4 @@ key-page-up = Page Up
 key-page-down = Page Down
 key-insert = Insert
 key-menu = Meny
+look-up = Slå upp ”{ $word }”

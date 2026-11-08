@@ -49,7 +49,7 @@ impl Library {
         self.app_icons
             .entry(name)
             .or_insert_with_key(|name| {
-                find_icon(name, ICON_SIZE, &[], data_dirs)
+                find_icon(name, ICON_SIZE, &ICON_THEMES, data_dirs)
                     .and_then(|path| Image::load(&path, ICON_SIZE))
             })
             .clone()

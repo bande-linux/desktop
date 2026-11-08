@@ -14,6 +14,7 @@ mod run;
 mod scale;
 mod seat;
 mod shell;
+mod spelling;
 mod text_input;
 mod window;
 
@@ -31,7 +32,7 @@ pub use bande_protocols::client::bande_shell_v1::{
 };
 pub use chrome::{FrameRegions, Header, SHEET_INSET, WINDOW_HEADER_HEIGHT};
 pub use clipboard::{DragAction, DragEvent, DragIcon, Transfer, WindowDrag};
-pub use external::{Dmabuf, DmabufPlane, ExternalSurface, ShmLayout, SurfaceBuffer};
+pub use external::{CursorImage, Dmabuf, DmabufPlane, ExternalSurface, ShmLayout, SurfaceBuffer};
 pub use popup::MenuPlacement;
 pub use run::{App, Surfaces, run, run_surfaces};
 pub use shell::{Anchor, AppWindow};

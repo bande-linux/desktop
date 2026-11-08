@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 
-use bande_packages::{Client, Info, Mode};
+use bande_packages::Client;
 use bande_printers::{
     Cups, Job, JobInfo, JobState, Kind, Mechanism, PrintClient, Printer, PrinterInfo, PrinterState,
     SPOOLER, mechanism_available,
@@ -78,21 +78,7 @@ fn read(session: &Connection, cups: &Cups, system: &Connection) -> Option<Printe
 }
 
 fn install_printing(system: &Connection) -> Result<(), bande_packages::Error> {
-    let client = Client::new(system);
-    let available: Vec<_> = client
-        .resolve(&PRINTING_PACKAGES.map(str::to_owned))?
-        .into_iter()
-        .filter(|package| package.info == Info::Available)
-        .collect();
-    let ids: Vec<String> = PRINTING_PACKAGES
-        .iter()
-        .filter_map(|name| available.iter().find(|package| package.name == *name))
-        .map(|package| package.id.clone())
-        .collect();
-    if ids.is_empty() {
-        return Ok(());
-    }
-    client.install(&ids, Mode::Apply, &|_| {}).map(drop)
+    Client::new(system).install_missing(&PRINTING_PACKAGES)
 }
 
 fn administers_printers() -> bool {

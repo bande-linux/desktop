@@ -14,7 +14,7 @@ const GIVE_UP_AFTER: Duration = Duration::from_secs(15);
 const REMEMBERED_RENDERS: usize = 16;
 const TYPICAL_RENDER_WEIGHT: f64 = 0.1;
 const TIMING_VARIABLE: &str = "BANDE_FRAME_TIMING";
-const CLASSIC_TIMING: &str = "classic";
+const LEARNED_TIMING: &str = "learned";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Vblank {
@@ -101,10 +101,10 @@ impl ClassicClock {
 
 impl FrameClock {
     pub fn new(origin: Duration, refresh: Duration) -> Self {
-        if std::env::var_os(TIMING_VARIABLE).is_some_and(|value| value == CLASSIC_TIMING) {
-            Self::classic(origin, refresh)
-        } else {
+        if std::env::var_os(TIMING_VARIABLE).is_some_and(|value| value == LEARNED_TIMING) {
             Self::measured(origin, refresh)
+        } else {
+            Self::classic(origin, refresh)
         }
     }
 

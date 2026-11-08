@@ -17,6 +17,7 @@ use crate::{
     icon_bounds, items_menu, layouts_path, parse_layouts, save_layouts,
 };
 use accesskit::TreeUpdate;
+use bande_bar::rail::BarForm;
 use bande_config::{BUS_NAME, BarEdge, Config, OBJECT_PATH, Wallpaper, WallpaperFit};
 use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, FolderWatch, Operations, Purpose, Resolution,
@@ -356,11 +357,8 @@ impl DesktopSurface {
 
     fn area(&self, size: (u32, u32)) -> Bounds {
         let (width, height) = (size.0 as f32, size.1 as f32);
-        let (bar_edge, icon_size, floating) = self.bar;
-        let edge = bande_bar::rail::bar_zone(
-            icon_size as f32,
-            bande_bar::rail::BarForm::from_floating(floating),
-        );
+        let (bar_edge, icon_size, form) = self.bar;
+        let edge = bande_bar::rail::bar_zone(icon_size as f32, form);
         let (left, right, bottom, top) = match bar_edge {
             BarEdge::Left => (edge, 0.0, 0.0, 0.0),
             BarEdge::Right => (0.0, edge, 0.0, 0.0),
@@ -1097,7 +1095,7 @@ fn desktop_folder(home: &Path) -> PathBuf {
     folder
 }
 
-type BarPlacement = (BarEdge, u32, bool);
+type BarPlacement = (BarEdge, u32, BarForm);
 
 fn follow_bar_placement(placements: Outbox<BarPlacement>) {
     let work = move || {
@@ -1117,8 +1115,11 @@ fn follow_bar_placement(placements: Outbox<BarPlacement>) {
             let read = || -> zbus::Result<Option<BarPlacement>> {
                 let edge = config.get_property::<String>("BarEdge")?;
                 let size = config.get_property::<u32>("BarIconSize")?;
-                let floating = config.get_property::<bool>("BarFloating")?;
-                Ok(BarEdge::from_keyword(&edge).map(|edge| (edge, size, floating)))
+                let form = BarForm::new(
+                    config.get_property::<bool>("BarFloating")?,
+                    config.get_property::<u32>("BarGap")?,
+                );
+                Ok(BarEdge::from_keyword(&edge).map(|edge| (edge, size, form)))
             };
             let mut last = None;
             for _ in std::iter::once(()).chain(changes.map(drop)) {
@@ -1222,7 +1223,11 @@ impl DesktopSurface {
             shown: Shown::default(),
             pictures: HashMap::new(),
             layouts_file,
-            bar: (config.bar.edge, config.bar.icon_size, config.bar.floating),
+            bar: (
+                config.bar.edge,
+                config.bar.icon_size,
+                BarForm::of(&config.bar),
+            ),
             bar_changes,
             choice: Some(configured_choice(&config.wallpaper)),
             choices,

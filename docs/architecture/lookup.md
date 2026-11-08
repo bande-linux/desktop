@@ -70,14 +70,19 @@ filled in); the protocols are `wikimedia-summary` and `dict`. Line kinds: `D` de
 
 ## Packaged sources
 
-`packaging/dict/build.py <version> <sources> <out> [package...]` downloads the source data and makes
-the packs and `.deb`s with their licence files:
+`packaging/dict/build.py <version> <sources> <out> [package...]` makes the packs and `.deb`s, with
+their licence files, from the source data pinned by checksum in `packaging/dict/sources`; a source
+that changed upstream stops the build. A release: `build.py --pin <sources>` refreshes the pins,
+commit that to `main`, then push the tag `dict-YYYYMMDD` (the packages' version). `dict.yml` builds
+them from that tag and uploads `bande-debs-all`, which the APT archive's `look.yml` picks up and
+publishes to `main`, as it does the desktop's releases.
 
 | Package | Sources | Licence |
 | --- | --- | --- |
 | `bande-dict-en` | English Dictionary and English Thesaurus, from Open English WordNet 2025 | CC BY 4.0 |
 | `bande-dict-sv` | Folkets lexikon (Swedish↔English); Svenska synonymer (Synlex, from Debian's `mythes-sv`) | CC BY-SA 2.5; Synlex's own free licence |
 | `bande-dict-sv-wiktionary` | Svenska ord: Swedish words from Wiktionary through kaikki.org | CC BY-SA 4.0 |
+| `bande-dict-en-wiktionary` | English Wiktionary, optional and off by default (41 MB download, 168 MB) | CC BY-SA 4.0 |
 
 `bande-lookup` ships `wikipedia.source` (Wikipedia, every language, on by default; the row says that
 each word looked up is sent to Wikipedia).

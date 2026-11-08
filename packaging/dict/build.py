@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
-"""Build dictionary packs and their .debs: build.py <version> <sources> <out> [pack...]. See docs/architecture/lookup.md."""
+"""Build dictionary packs and their .debs: build.py <version> <sources> <out> [package...], or build.py --pin <sources>. See docs/architecture/lookup.md."""
+import hashlib
 import json
 import pathlib
 import shutil
 import struct
 import subprocess
 import sys
-import urllib.request
 import xml.etree.ElementTree as ET
 
 MAGIC = b"BDICT1\n\0"
 MAX_ENTRIES_PER_FORM = 40
-FOLKETS = "https://folkets-lexikon.csc.kth.se/folkets/"
-OEWN = "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.zip"
 CC_BY_40 = "Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
-KAIKKI = "https://kaikki.org/dictionary/{name}/kaikki.org-dictionary-{name}.jsonl"
 CC_BY_SA_25 = "Creative Commons Attribution-ShareAlike 2.5, https://creativecommons.org/licenses/by-sa/2.5/"
 CC_BY_SA_40 = "Creative Commons Attribution-ShareAlike 4.0, https://creativecommons.org/licenses/by-sa/4.0/"
 ENGLISH_RULES = (
@@ -58,17 +55,60 @@ def clean(text):
     return " ".join(text.split())
 
 
-def fetch(url, path):
+PINS = pathlib.Path(__file__).with_name("sources")
+
+
+def pins():
+    pinned = {}
+    for line in PINS.read_text().splitlines():
+        if line and not line.startswith("#"):
+            name, sha256, url = line.split()
+            pinned[name] = (sha256, url)
+    return pinned
+
+
+def digest(path):
+    hashed = hashlib.sha256()
+    with open(path, "rb") as data:
+        for block in iter(lambda: data.read(1 << 20), b""):
+            hashed.update(block)
+    return hashed.hexdigest()
+
+
+def download(url, path):
+    subprocess.run(
+        ["curl", "-fsSL", "--retry", "5", "--retry-all-errors", "--retry-delay", "20", "-o", str(path), url],
+        check=True,
+    )
+
+
+def source(sources, name):
+    sha256, url = pins()[name]
+    path = sources / name
     if not path.exists():
-        urllib.request.urlretrieve(url, path)
+        download(url, path)
+    found = digest(path)
+    if found != sha256:
+        sys.exit(f"{name} changed upstream: {found}, pinned {sha256}; check it and run build.py --pin")
     return path
+
+
+def pin(sources):
+    sources.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for name, (_, url) in pins().items():
+        path = sources / name
+        path.unlink(missing_ok=True)
+        download(url, path)
+        lines.append(f"{name} {digest(path)} {url}")
+    PINS.write_text("# name sha256 url: the source data, checked by build.py; refreshed by build.py --pin\n" + "\n".join(lines) + "\n")
 
 
 def wordnet(sources):
     root = sources / "oewn"
     if not root.exists():
         root.mkdir()
-        archive = fetch(OEWN, root / "oewn.zip")
+        archive = source(sources, "oewn-2025.zip")
         subprocess.run(["unzip", "-q", str(archive)], cwd=root, check=True)
     data = next(path for path in root.glob("oewn*") if path.is_dir())
     forms, dictionary, thesaurus = {}, [], []
@@ -127,8 +167,7 @@ def synlex_entries(sources):
     root = sources / "mythes-sv"
     if not root.exists():
         root.mkdir()
-        subprocess.run(["apt-get", "download", "mythes-sv"], cwd=root, check=True)
-        deb = next(root.glob("mythes-sv_*.deb"))
+        deb = source(sources, "mythes-sv.deb")
         subprocess.run(["dpkg-deb", "-x", str(deb), "."], cwd=root, check=True)
     lines = open(next(root.glob("usr/share/mythes/th_sv_SE*.dat")), encoding="latin1").read().splitlines()[1:]
     found, at = [], 0
@@ -149,7 +188,7 @@ def synlex_entries(sources):
 def folkets_entries(sources):
     found = []
     for name, language in (("folkets_sv_en_public.xml", "sv"), ("folkets_en_sv_public.xml", "en")):
-        path = fetch(FOLKETS + name, sources / name)
+        path = source(sources, name)
         for word in ET.parse(path).getroot().iter("word"):
             value = word.get("value")
             if not value:
@@ -175,7 +214,7 @@ def folkets_entries(sources):
 
 
 def wiktionary_entries(sources, language, name):
-    path = fetch(KAIKKI.format(name=name), sources / f"kaikki-{language}.jsonl")
+    path = source(sources, f"kaikki-{language}.jsonl")
     found = []
     for line in open(path, encoding="utf8"):
         item = json.loads(line)
@@ -333,6 +372,9 @@ def debian_arch_all_deb(package, spec, packs, version, out):
 
 
 def main():
+    if sys.argv[1] == "--pin":
+        pin(pathlib.Path(sys.argv[2]))
+        return
     version, sources, out = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
     sources.mkdir(parents=True, exist_ok=True)
     out.mkdir(parents=True, exist_ok=True)

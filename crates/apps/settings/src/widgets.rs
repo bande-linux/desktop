@@ -9,8 +9,8 @@ use bande_toolkit::ui::{
     Animated, Context, Cursor, Event, Key, Size, Spring, Widget, WidgetId, focus_ring,
 };
 use bande_toolkit::{
-    Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape, Spacing,
-    TextAlign, TextRole, TextSize, TextStyle,
+    Color, ControlSize, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Scheme, Shape,
+    Spacing, TextAlign, TextRole, TextSize, TextStyle,
 };
 
 const SIDEBAR_WIDTH: f32 = 220.0;
@@ -39,6 +39,9 @@ const ROW_MIN_HEIGHT: f32 = 44.0;
 const ROW_GAP: f32 = Spacing::M as f32;
 const SECTION_LEAD: f32 = Spacing::M as f32;
 const CONTROL_WIDTH: f32 = 320.0;
+const COLUMN_HEADING_HEIGHT: f32 = 28.0;
+const FIRST_COLUMN_SHARE: f32 = 0.35;
+const FIELD_TEXT_INSET: f32 = 8.0;
 const UNBOUNDED: f32 = 1.0e6;
 const ROW_AVATAR: f32 = 28.0;
 const INITIAL_SCALE: f32 = 0.42;
@@ -1178,6 +1181,202 @@ impl Widget for Row {
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         self.on_activate.is_some()
+    }
+
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &self.children
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut self.children
+    }
+}
+
+pub struct Columns {
+    id: WidgetId,
+    label: String,
+    children: Vec<Box<dyn Widget>>,
+    sizes: Vec<Size>,
+    least: f32,
+    outset: f32,
+    on_activate: Option<Box<dyn FnMut()>>,
+    pressed: bool,
+    frame: Rect,
+}
+
+impl Columns {
+    pub fn new(
+        label: &str,
+        first: Box<dyn Widget>,
+        second: Box<dyn Widget>,
+        trailing: Option<Box<dyn Widget>>,
+    ) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            children: [first, second].into_iter().chain(trailing).collect(),
+            sizes: Vec::new(),
+            least: ROW_MIN_HEIGHT,
+            outset: 0.0,
+            on_activate: None,
+            pressed: false,
+            frame: Rect::default(),
+        }
+    }
+
+    pub fn heading(self) -> Self {
+        Self {
+            least: COLUMN_HEADING_HEIGHT,
+            ..self
+        }
+    }
+
+    pub fn fields(self) -> Self {
+        Self {
+            outset: FIELD_TEXT_INSET,
+            ..self
+        }
+    }
+
+    pub fn on_activate(mut self, on_activate: impl FnMut() + 'static) -> Self {
+        self.on_activate = Some(Box::new(on_activate));
+        self
+    }
+
+    fn activate(&mut self) {
+        if let Some(on_activate) = &mut self.on_activate {
+            on_activate();
+        }
+    }
+
+    fn widths(width: f32, trailing: f32) -> [f32; 2] {
+        let columns = (width - 2.0 * ROW_PADDING - trailing - 2.0 * ROW_GAP).max(0.0);
+        let first = (columns * FIRST_COLUMN_SHARE).round();
+        [first, columns - first]
+    }
+}
+
+impl Widget for Columns {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
+        let slot = cx.control_height(ControlSize::Regular);
+        let [first, second] = Self::widths(available.width, slot);
+        let widths = [first, second, slot];
+        self.sizes = self
+            .children
+            .iter_mut()
+            .zip(widths)
+            .map(|(child, width)| child.measure(cx, Size::new(width, UNBOUNDED)))
+            .collect();
+        let tallest = self
+            .sizes
+            .iter()
+            .map(|size| size.height)
+            .fold(0.0, f32::max);
+        let height = (tallest + 2.0 * Spacing::S as f32).max(self.least);
+        Size::new(available.width, height.ceil())
+    }
+
+    fn place(&mut self, cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+        let slot = cx.control_height(ControlSize::Regular);
+        let [first, second] = Self::widths(frame.width, slot);
+        let lefts = [
+            frame.x + ROW_PADDING,
+            frame.x + ROW_PADDING + first + ROW_GAP,
+            frame.x + frame.width - ROW_PADDING - slot,
+        ];
+        let widths = [first, second, slot];
+        for (index, (child, size)) in self.children.iter_mut().zip(&self.sizes).enumerate() {
+            let (left, width) = match index {
+                2 => (lefts[index], size.width.min(slot)),
+                _ => (lefts[index] - self.outset, widths[index] + self.outset),
+            };
+            child.place(
+                cx,
+                Rect::new(
+                    left.round(),
+                    (frame.y + (frame.height - size.height) / 2.0).round(),
+                    width,
+                    size.height,
+                ),
+            );
+        }
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let shape = Shape::rounded(self.frame, Radius::S);
+        if self.pressed {
+            items.push(Item::Fill {
+                shape,
+                paint: cx.palette.well.into(),
+            });
+        }
+        if cx.is_focused(self.id) {
+            focus_ring(cx, shape, items);
+        }
+        for child in &self.children {
+            child.paint(cx, items);
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(match self.on_activate.is_some() {
+            true => Role::Button,
+            false => Role::Row,
+        });
+        node.set_label(self.label.clone());
+        if self.on_activate.is_some() {
+            node.add_action(Action::Click);
+        }
+        node
+    }
+
+    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        if self.on_activate.is_none() {
+            return false;
+        }
+        match event {
+            Event::PointerDown(pointer) if pointer.is_primary() => self.pressed = true,
+            Event::PointerLeave if self.pressed => self.pressed = false,
+            Event::PointerUp(pointer) if pointer.is_primary() => {
+                let activate = self.pressed && self.frame.contains(pointer.position);
+                self.pressed = false;
+                if activate {
+                    self.activate();
+                }
+            }
+            event if is_activation(event) => self.activate(),
+            _ => return false,
+        }
+        true
+    }
+
+    fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
+        if request.action == Action::Click && self.on_activate.is_some() {
+            self.activate();
+            return true;
+        }
+        false
+    }
+
+    fn accepts_focus(&self, _cx: &Context) -> bool {
+        self.on_activate.is_some()
+    }
+
+    fn hit_children(&self, point: Point) -> bool {
+        self.on_activate.is_none()
+            || self
+                .children
+                .get(2)
+                .is_some_and(|trailing| trailing.frame().contains(point))
     }
 
     fn children(&self) -> &[Box<dyn Widget>] {

@@ -817,6 +817,7 @@ impl SettingsView {
             List::Clipboard => self.clipboard_rows(),
             List::KeyboardAccess => self.keyboard_access_rows(),
             List::Spelling => self.spelling_rows(),
+            List::TextReplacements => self.text_replacement_rows(),
             List::LookUp => self.look_up_rows(),
             List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),

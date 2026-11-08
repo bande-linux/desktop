@@ -54,7 +54,8 @@ for pack in "$out"/bande-desktop-l10n-*_all.deb; do
     fi
 done
 pack=$(deb bande-desktop-l10n-sv "$version")
-dpkg-deb --contents "$pack" | grep -q ' ./usr/share/bande/l10n/bande-settings/sv.mo$'
+contents=$(dpkg-deb --contents "$pack")
+grep -q ' ./usr/share/bande/l10n/bande-settings/sv.mo$' <<< "$contents"
 
 echo "== lintian"
 lintian=(lintian --fail-on "error,warning")

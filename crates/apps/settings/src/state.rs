@@ -145,10 +145,4 @@ impl Display {
         }
         offered
     }
-
-    pub fn variable_refresh_capable(&self) -> bool {
-        self.refresh_rates()
-            .last()
-            .is_some_and(|fastest| *fastest > REFRESH_RANGE.0)
-    }
 }

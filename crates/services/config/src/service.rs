@@ -405,8 +405,8 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result
                         .ok_or_else(mismatch)?,
                 )
             }
-            "variable-refresh-rate" => {
-                display.variable_refresh_rate = Some(bool::try_from(value).map_err(|_| mismatch())?)
+            "match-colours" => {
+                display.match_colours = Some(bool::try_from(value).map_err(|_| mismatch())?)
             }
             _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
@@ -1354,9 +1354,9 @@ impl ConfigInterface {
                             .and_then(|rotation| owned(rotation.degrees().into())),
                     ),
                     (
-                        "variable-refresh-rate",
+                        "match-colours",
                         display
-                            .variable_refresh_rate
+                            .match_colours
                             .and_then(|enabled| owned(enabled.into())),
                     ),
                 ]

@@ -55,7 +55,7 @@ fn read_roots() -> Vec<PathBuf> {
         .collect()
 }
 
-fn network_roots() -> Vec<PathBuf> {
+fn with_network_roots<T>(look: impl FnOnce(&[PathBuf]) -> T) -> T {
     let mut watched = WATCHED.lock().unwrap_or_else(PoisonError::into_inner);
     let mut changed = false;
     FIRST_READ.call_once(|| changed = true);
@@ -70,11 +70,11 @@ fn network_roots() -> Vec<PathBuf> {
     if changed {
         watched.roots = read_roots();
     }
-    watched.roots.clone()
+    look(&watched.roots)
 }
 
 pub fn on_connected_volume(path: &Path) -> bool {
-    network_roots().iter().any(|root| path.starts_with(root))
+    with_network_roots(|roots| roots.iter().any(|root| path.starts_with(root)))
 }
 
 pub fn quick_is_dir(path: &Path) -> bool {
@@ -82,19 +82,20 @@ pub fn quick_is_dir(path: &Path) -> bool {
 }
 
 pub fn connected_volume_of(path: &Path) -> Option<PathBuf> {
-    let roots = network_roots();
-    let user_roots = connected_roots();
-    roots
-        .iter()
-        .filter(|root| path.starts_with(root))
-        .max_by_key(|root| root.as_os_str().len())
-        .and_then(|root| match user_roots.contains(root) {
-            true => {
-                let name = path.strip_prefix(root).ok()?.components().next()?;
-                Some(root.join(name))
-            }
-            false => Some(root.clone()),
-        })
+    let root = with_network_roots(|roots| {
+        roots
+            .iter()
+            .filter(|root| path.starts_with(root))
+            .max_by_key(|root| root.as_os_str().len())
+            .cloned()
+    })?;
+    match connected_roots().contains(&root) {
+        true => {
+            let name = path.strip_prefix(&root).ok()?.components().next()?;
+            Some(root.join(name))
+        }
+        false => Some(root),
+    }
 }
 
 pub fn leads_to_connected_volume(path: &Path) -> bool {

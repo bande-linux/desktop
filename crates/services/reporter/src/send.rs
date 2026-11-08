@@ -1,23 +1,16 @@
 use std::fs;
 use std::io::{self, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
-use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
+use bande_https::Timeouts;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use jiff::Timestamp;
-use rustls::crypto::ring as ring_provider;
-use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::{Value, json};
 
 use crate::config::Config;
 use crate::spool::{MANIFEST, STATE, Status, Stored};
 
-const SYSTEM_ROOTS: &str = "/etc/ssl/certs/ca-certificates.crt";
 const PATH: &str = "/v1/reports";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(120);
@@ -48,37 +41,6 @@ fn parse_endpoint(endpoint: &str) -> Option<Target> {
         host: host.to_owned(),
         port,
     })
-}
-
-fn tls_config(ca: Option<&Path>) -> io::Result<Arc<ClientConfig>> {
-    let mut roots = RootCertStore::empty();
-    let source = ca.unwrap_or(Path::new(SYSTEM_ROOTS));
-    let pem = fs::read(source)?;
-    for certificate in CertificateDer::pem_slice_iter(&pem) {
-        let certificate = certificate.map_err(io::Error::other)?;
-        roots.add(certificate).map_err(io::Error::other)?;
-    }
-    let config = ClientConfig::builder_with_provider(Arc::new(ring_provider::default_provider()))
-        .with_safe_default_protocol_versions()
-        .map_err(io::Error::other)?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    Ok(Arc::new(config))
-}
-
-fn connect(target: &Target) -> io::Result<TcpStream> {
-    let mut last = io::Error::new(io::ErrorKind::NotFound, "no address");
-    for address in (target.host.as_str(), target.port).to_socket_addrs()? {
-        match TcpStream::connect_timeout(&address, CONNECT_TIMEOUT) {
-            Ok(stream) => {
-                stream.set_read_timeout(Some(TRANSFER_TIMEOUT))?;
-                stream.set_write_timeout(Some(TRANSFER_TIMEOUT))?;
-                return Ok(stream);
-            }
-            Err(error) => last = error,
-        }
-    }
-    Err(last)
 }
 
 fn boundary(id: &str) -> String {
@@ -177,10 +139,12 @@ fn post(
     boundary: &str,
     body: &[u8],
 ) -> io::Result<String> {
-    let tls = tls_config(config.ca.as_deref())?;
-    let name = ServerName::try_from(target.host.clone()).map_err(io::Error::other)?;
-    let connection = ClientConnection::new(tls, name).map_err(io::Error::other)?;
-    let mut stream = StreamOwned::new(connection, connect(target)?);
+    let timeouts = Timeouts {
+        connect: CONNECT_TIMEOUT,
+        transfer: TRANSFER_TIMEOUT,
+    };
+    let mut stream =
+        bande_https::connect(&target.host, target.port, config.ca.as_deref(), timeouts)?;
     write!(
         stream,
         "POST {PATH} HTTP/1.1\r\nHost: {}:{}\r\nAuthorization: Bearer {key}\r\nContent-Type: multipart/form-data; boundary={boundary}\r\nContent-Encoding: gzip\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

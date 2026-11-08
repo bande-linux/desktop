@@ -10,31 +10,7 @@ use unic_langid::LanguageIdentifier;
 const FALLBACK: &str = "en-US";
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
 
-#[macro_export]
-macro_rules! translations {
-    ($domain:literal) => {
-        &[
-            (
-                "en-US",
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/locales/en-US/",
-                    $domain,
-                    ".ftl"
-                )),
-            ),
-            (
-                "sv",
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/locales/sv/",
-                    $domain,
-                    ".ftl"
-                )),
-            ),
-        ]
-    };
-}
+pub use bande_l10n_macros::translations;
 
 pub struct Localizer {
     bundles: Vec<FluentBundle<FluentResource>>,
@@ -124,6 +100,14 @@ fn bundle(language: LanguageIdentifier, source: &str) -> FluentBundle<FluentReso
     bundle
 }
 
+pub fn preferred_languages() -> Vec<String> {
+    let variable = |name: &str| std::env::var(name).ok();
+    requested_languages(variable)
+        .iter()
+        .map(|language| language.language.to_string())
+        .collect()
+}
+
 fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<LanguageIdentifier> {
     let Some(locale) = LOCALE_VARIABLES
         .into_iter()
@@ -131,7 +115,7 @@ fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<LanguageIden
     else {
         return Vec::new();
     };
-    if matches!(locale.as_str(), "C" | "POSIX") || locale.starts_with("C.") {
+    if matches!(locale.as_str(), "C" | "POSIX") {
         return Vec::new();
     }
     let preferred = var("LANGUAGE").unwrap_or_default();
@@ -162,4 +146,17 @@ fn bundle_order(requested: &[LanguageIdentifier], available: &[LanguageIdentifie
     let mut order = Vec::from_iter(chosen);
     order.extend(fallback.filter(|index| chosen != Some(*index)));
     order
+}
+
+#[cfg(test)]
+mod pack_tests {
+    use super::*;
+
+    #[test]
+    fn a_language_is_a_directory_and_nothing_else() {
+        let requested = ["qaa".parse().unwrap_or_default()];
+        let found = Localizer::negotiated(crate::translations!("fixture"), &requested);
+        assert_eq!(found.tr("greeting"), "Qa");
+        assert_eq!(found.tr("only-english"), "Only English");
+    }
 }

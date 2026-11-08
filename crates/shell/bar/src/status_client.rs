@@ -33,7 +33,8 @@ use bande_toolkit::{
     App, Image, MenuPlacement, Panel, Rect, Scene, SessionEnd, Window, WindowEvent,
 };
 use bande_xdg::{
-    DesktopEntry, app_name, data_dirs, find_app, find_icon, launch_action, spawn_detached,
+    DesktopEntry, ICON_THEMES, app_name, data_dirs, find_app, find_icon, launch_action,
+    spawn_detached,
 };
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
@@ -94,7 +95,7 @@ fn tray_image(icon: &TrayIcon, pixels: u32) -> Option<Image> {
             if let Some(path) = theme_path {
                 directories.insert(0, PathBuf::from(path));
             }
-            let path = find_icon(name, pixels, &[], &directories)?;
+            let path = find_icon(name, pixels, &ICON_THEMES, &directories)?;
             Image::load(&path, pixels)
         }
         TrayIcon::Pixels {

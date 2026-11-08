@@ -37,6 +37,15 @@ impl UserDir {
     }
 }
 
+pub fn read_user_dirs() -> Option<String> {
+    crate::config_home()
+        .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok())
+}
+
+pub fn user_folder(home: &Path, dir: UserDir) -> PathBuf {
+    user_dir(home, read_user_dirs().as_deref(), dir)
+}
+
 pub fn user_dir(home: &Path, user_dirs: Option<&str>, dir: UserDir) -> PathBuf {
     let prefix = format!("{}=", dir.key());
     user_dirs

@@ -371,3 +371,4 @@ menu-share = Share
 menu-share-mail = Mail
 menu-share-to = Copy to { $place }
 failure-server-gone = The server stopped responding. Nothing was left under the real name. Try again when it’s back.
+menu-look-up = Look Up “{ $name }”

@@ -37,6 +37,7 @@ reach a running session.
   repainted. `bande-toolkit-bench` measures the toolkit sample (`crates/testing/sample`).
 - **Files at 100 000 items:** `bande-files-bench` drives `FilesView` in-process over a folder of
   100 000 files and prints UI-thread time per step.
+- **Flips on the real display:** while something on the screen changes, record DCP's swaps for ten seconds and read them with `bande-flip-report`, which needs no rate: `sudo perf record -o /tmp/flip.data -a -e dcp:iomfb_swap_submit,dcp:iomfb_swap_complete -- sleep 10`, then `sudo perf script -i /tmp/flip.data | bande-flip-report`. It prints the fitted refresh, swaps that missed their flip, gaps between flips in refreshes, and misses by time left before the flip. Nothing restarts. The simulator in `clock.rs`'s tests drives the same logic against a display with a commit cut-off in the gate.
 - **Wake-ups by hand:** sum `voluntary_ctxt_switches` over `/proc/<pid>/task/*/status` twice
   and divide by the interval; the threads' `comm` shows which one wakes. `bande-idle` counts the
   same. Leave out `nonvoluntary_ctxt_switches`: they are preemptions of a running thread, and
@@ -80,7 +81,10 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | Activity Monitor, the low memory window | every 2 s while a window is on screen | `/proc` has no change events |
 | Settings' Sound pane | 20 times a second while on screen | the input level meter |
 | Disk space (automount) | every 10 min | free space has no kernel event |
+| Server health (automount) | every 8 s while a server is connected | a server that stops answering sends nothing |
 | Files | once a day | emptying old Trash items |
+| Files, a server folder in the active window | every 10 s | servers send no change events; re-lists the folder and reads its free space off the UI thread |
+| Quick Look and Player while playing with controls shown | twice a second | the position from the media engine |
 | Mail | IDLE renewed every 25 min; full sync every 15 min; polling every 5 min only without IDLE | servers drop IDLE after 30 min and IDLE watches only the inbox |
 | Calendar | CalDAV every 5 min, subscriptions hourly | CalDAV has no push |
 

@@ -38,7 +38,7 @@ Who a client is, decided once when it connects:
 | Screen capture | `ext-image-copy-capture`, `bande_capture_v1` | shell role; everyone else through the ScreenCast portal, which asks |
 | Clipboard history | `ext-data-control` | clipboard daemon role |
 | Global shortcuts | none offered yet: no portal backend, no protocol | nobody |
-| Overlays, displays, idle | `wlr-layer-shell`, `wlr-output-management`, output power, idle notifier | everyone but sandboxed clients |
+| Overlays, displays, idle, quitting other apps | `wlr-layer-shell`, `wlr-output-management`, output power, idle notifier, `bande_app_control_v1` | everyone but sandboxed clients |
 | Lock | `ext-session-lock` | lock role only |
 
 Overlays, displays and idle stay open to unsandboxed programs: a native program can draw a full-screen

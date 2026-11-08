@@ -17,6 +17,24 @@ extract() {
 field() { dpkg-deb --field "$debs/$1_${version}_$architecture.deb" "$2"; }
 contains() { grep -q " ./$2\$" <<< "$(dpkg-deb --contents "$debs/$1_${version}_$architecture.deb")"; }
 
+if [ "${VERIFY_PROFILE:-dist}" = dist ]; then
+    echo "== every program keeps only its function names, in .gnu_debugdata"
+    for package in "${packages[@]}"; do
+        root=$(extract "$package")
+        programs=0
+        while IFS= read -r file; do
+            [ "$(od -An -tx1 -N4 "$file" | tr -d ' ')" = 7f454c46 ] || continue
+            programs=$((programs + 1))
+            sections=$(readelf --wide --section-headers "$file")
+            if grep -qE '\.debug_(info|line|str) ' <<< "$sections" || ! grep -q '\.gnu_debugdata' <<< "$sections"; then
+                echo "${file#"$root"} in $package is not stripped to its .gnu_debugdata"
+                exit 1
+            fi
+        done < <(find "$root" -type f)
+        [ $programs -gt 0 ] || { echo "$package holds no program"; exit 1; }
+    done
+fi
+
 echo "== every package is built for $architecture at $version"
 [ "$(find "$debs" -name '*.deb' | wc -l)" = "${#packages[@]}" ]
 for package in "${packages[@]}"; do

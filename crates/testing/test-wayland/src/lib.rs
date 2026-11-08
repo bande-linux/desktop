@@ -8,6 +8,7 @@ pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustm
 pub use wayland_protocols::xdg::shell::client::xdg_toplevel::ResizeEdge;
 mod drive;
 mod foreign;
+mod frames;
 mod ime;
 pub mod keys;
 mod lock;
@@ -80,6 +81,7 @@ struct Globals {
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
     exported_handle: Option<String>,
+    frames_done: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,6 +100,7 @@ pub struct TestClient {
     queue: EventQueue<Globals>,
     globals: Globals,
     windows: Vec<(WlSurface, XdgSurface, XdgToplevel)>,
+    children: Vec<(WlSurface, frames::Subsurface)>,
 }
 
 impl TestClient {
@@ -116,6 +119,7 @@ impl TestClient {
             queue,
             globals: Globals::default(),
             windows: Vec::new(),
+            children: Vec::new(),
         };
         client.exchange(server);
         client

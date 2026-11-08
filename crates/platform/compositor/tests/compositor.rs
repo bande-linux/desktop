@@ -12,8 +12,8 @@ use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_W,
 };
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, PopupRequest, RED, ResizeEdge, SeparateApp, ShmImage, TestClient,
-    act_as_separate_app, chord, grant_consent, headless, roundtrip,
+    BLUE, ConstraintAdjustment, Frames, PopupRequest, RED, ResizeEdge, SeparateApp, ShmImage,
+    TestClient, act_as_separate_app, chord, grant_consent, headless, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
 
@@ -410,4 +410,49 @@ fn another_process_dialog_opens_over_the_window_it_is_attached_to() {
             .unwrap()
             .is_minimized()
     );
+}
+
+fn idle(frames: &mut Frames, server: &mut Compositor, time: Duration) {
+    let until = Instant::now() + time;
+    frames.run_until(server, || Instant::now() > until);
+}
+
+fn expect_frame(frames: &mut Frames, server: &mut Compositor, client: &mut TestClient, before: u32) {
+    let patience = Instant::now() + Duration::from_secs(2);
+    frames.run_until(server, || {
+        assert!(Instant::now() < patience, "no frame callback came");
+        client.frames_done() > before
+    });
+}
+
+#[test]
+fn idle_surfaces_that_ask_for_a_frame_without_new_content_still_get_one() {
+    let mut server = headless(640, 480);
+    let mut client = TestClient::window(&mut server, "org.bande.FrameTest");
+    let child = client.add_child(0);
+    let mut frames = Frames::start();
+    idle(&mut frames, &mut server, Duration::from_millis(1200));
+
+    let before = client.frames_done();
+    client.ask_for_frame(0);
+    expect_frame(&mut frames, &mut server, &mut client, before);
+
+    let before = client.frames_done();
+    client.ask_for_child_frame(child);
+    idle(&mut frames, &mut server, Duration::from_millis(1200));
+    let bytes = BLUE.repeat(32 * 32);
+    let image = ShmImage {
+        width: 32,
+        height: 32,
+        stride: 128,
+        format: Format::Xrgb8888,
+        bytes: &bytes,
+    };
+    client.fill_child(child, &image);
+    expect_frame(&mut frames, &mut server, &mut client, before);
+
+    idle(&mut frames, &mut server, Duration::from_millis(1200));
+    let before = client.frames_done();
+    client.ask_for_child_frame(child);
+    expect_frame(&mut frames, &mut server, &mut client, before);
 }

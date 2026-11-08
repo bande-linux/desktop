@@ -1,16 +1,14 @@
 mod journal;
-mod report;
-mod store;
+mod structured;
 
 use std::error::Error;
-use std::fs;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use jiff::Timestamp;
 use journal::Entry;
-use report::{Kind, Owner, Report};
-use store::Store;
+use rustix::fs::{FlockOperation, flock};
 
 const STATE: &str = "/var/lib/bande/crash-reports";
 const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
@@ -18,11 +16,8 @@ const PSTORE_ARCHIVE: &str = "/var/lib/systemd/pstore";
 const CHECKED_BOOT: &str = "checked-boot";
 const PSTORE_SEEN: &str = "pstore-seen";
 const PSTORE_FILE_LIMIT: u64 = 256 * 1024;
-const FIRST_USER: u32 = 1000;
-const NOBODY: u32 = 65534;
-const QUIT_SIGNAL: &str = "SIGQUIT";
 const REPORTED_RESULTS: [&str; 4] = ["exit-code", "timeout", "watchdog", "oom-kill"];
-const WATCHED_SYSTEM_UNITS: [&str; 1] = ["greetd.service"];
+const WATCHED_SYSTEM_UNITS: [&str; 2] = ["greetd.service", "systemd-suspend.service"];
 const UNDUMPABLE: [&str; 5] = [
     "bande-clipboard",
     "bande-greeter",
@@ -31,121 +26,32 @@ const UNDUMPABLE: [&str; 5] = [
     "bande-secrets",
 ];
 
-fn owner_of(uid: u32) -> Owner {
-    if (FIRST_USER..NOBODY).contains(&uid) {
-        Owner::User(uid)
-    } else {
-        Owner::System
+fn is_reported(entry: &Entry) -> bool {
+    if entry.field("MESSAGE_ID").as_deref() == Some(journal::COREDUMP_MESSAGE) {
+        return entry.field("COREDUMP_COMM").is_some() || entry.field("COREDUMP_EXE").is_some();
     }
-}
-
-fn crash(entry: &Entry) -> Option<Report> {
-    let path = entry.field("COREDUMP_EXE");
-    let program = entry
-        .field("COREDUMP_COMM")
-        .or_else(|| program_name(path.as_deref()?))?;
-    let uid = entry.number("COREDUMP_UID")?;
-    let pid = entry.field("COREDUMP_PID")?;
-    let signal = entry.field("COREDUMP_SIGNAL_NAME").unwrap_or_default();
-    let time = entry
-        .timestamp("COREDUMP_TIMESTAMP")
-        .unwrap_or_else(|| entry.time());
-    let kind = if signal == QUIT_SIGNAL {
-        Kind::NotResponding
-    } else {
-        Kind::Crash
+    if entry.field("TARGET").as_deref() == Some(journal::PANIC_TARGET) {
+        return entry
+            .field("SYSLOG_IDENTIFIER")
+            .is_some_and(|program| UNDUMPABLE.contains(&program.as_str()));
+    }
+    let Some(result) = entry.field("UNIT_RESULT") else {
+        return false;
     };
-    let mut report = Report::new(kind, owner_of(uid), program, time, &pid);
-    report.detail("Path", path.as_deref());
-    report.detail("Command", entry.field("COREDUMP_CMDLINE").as_deref());
-    report.detail(
-        "Package",
-        path.as_deref().and_then(journal::package_of).as_deref(),
-    );
-    report.detail("Signal", Some(&signal));
-    report.detail("Panic", journal::panic_of(&pid, time).as_deref());
-    report.detail(
-        "Unit",
-        entry
-            .field("COREDUMP_USER_UNIT")
-            .or_else(|| entry.field("COREDUMP_UNIT"))
-            .as_deref(),
-    );
-    match entry.field("COREDUMP_FILENAME") {
-        Some(core) => report.detail(
-            "Core dump",
-            Some(&format!("{core} (coredumpctl debug {pid})")),
-        ),
-        None => report.detail("Core dump", Some("not kept")),
-    }
-    report.section(
-        "Stack trace",
-        entry
-            .field("MESSAGE")
-            .as_deref()
-            .map_or_else(String::new, report::stack_trace),
-    );
-    report.section(
-        "Last log lines",
-        journal::recent_lines(owner_of(uid), &pid, time),
-    );
-    Some(report)
-}
-
-fn program_name(path: &str) -> Option<String> {
-    Path::new(path).file_name()?.to_str().map(str::to_owned)
-}
-
-fn failed_unit(entry: &Entry) -> Option<Report> {
-    let result = entry.field("UNIT_RESULT")?;
     if !REPORTED_RESULTS.contains(&result.as_str()) {
-        return None;
+        return false;
     }
-    let (unit, owner) = match (entry.field("USER_UNIT"), entry.field("UNIT")) {
-        (Some(unit), _) if is_bande_service(&unit) => (unit, owner_of(entry.number("_UID")?)),
-        (None, Some(unit))
-            if is_bande_service(&unit) || WATCHED_SYSTEM_UNITS.contains(&unit.as_str()) =>
-        {
-            (unit, Owner::System)
+    match (entry.field("USER_UNIT"), entry.field("UNIT")) {
+        (Some(unit), _) => is_bande_service(&unit),
+        (None, Some(unit)) => {
+            is_bande_service(&unit) || WATCHED_SYSTEM_UNITS.contains(&unit.as_str())
         }
-        _ => return None,
-    };
-    let time = entry.time();
-    let pid = entry.field("_PID").unwrap_or_default();
-    let mut report = Report::new(Kind::Failed, owner, unit.clone(), time, &pid);
-    report.detail("Unit", Some(&unit));
-    report.detail("Result", Some(&result));
-    report.section("Last log lines", journal::unit_lines(owner, &unit, time));
-    Some(report)
+        _ => false,
+    }
 }
 
 fn is_bande_service(unit: &str) -> bool {
     unit.ends_with(".service") && (unit.starts_with("bande-") || unit.contains("-bande"))
-}
-
-fn undumpable_panic(entry: &Entry) -> Option<Report> {
-    let program = entry.field("SYSLOG_IDENTIFIER")?;
-    if !UNDUMPABLE.contains(&program.as_str()) {
-        return None;
-    }
-    let owner = owner_of(entry.number("_UID")?);
-    let time = entry.time();
-    let pid = entry.field("_PID").unwrap_or_default();
-    let mut report = Report::new(Kind::Crash, owner, program, time, &pid);
-    report.detail("Panic", entry.field("MESSAGE").as_deref());
-    report.detail("Core dump", Some("none: this program holds passwords"));
-    report.section("Last log lines", journal::recent_lines(owner, &pid, time));
-    Some(report)
-}
-
-fn report_of(entry: &Entry) -> Option<Report> {
-    if entry.field("MESSAGE_ID").as_deref() == Some(journal::COREDUMP_MESSAGE) {
-        crash(entry)
-    } else if entry.field("TARGET").as_deref() == Some(journal::PANIC_TARGET) {
-        undumpable_panic(entry)
-    } else {
-        failed_unit(entry)
-    }
 }
 
 fn new_pstore_files(root: &Path, seen: &str) -> Vec<PathBuf> {
@@ -188,57 +94,53 @@ fn kernel_log(files: &[PathBuf]) -> String {
     log
 }
 
-fn check_previous_boot(store: &Store) -> Result<(), Box<dyn Error>> {
+fn read_state(name: &str) -> Option<String> {
+    fs::read_to_string(Path::new(STATE).join(name)).ok()
+}
+
+fn replace_state(name: &str, contents: &str) -> Result<(), Box<dyn Error>> {
+    let staged = Path::new(STATE).join(format!("{name}.new"));
+    fs::write(&staged, contents)?;
+    fs::rename(staged, Path::new(STATE).join(name))?;
+    Ok(())
+}
+
+fn check_previous_boot() -> Result<(), Box<dyn Error>> {
     let boot = fs::read_to_string(BOOT_ID)?;
-    if store.read(CHECKED_BOOT).as_deref() == Some(boot.as_str()) {
+    if read_state(CHECKED_BOOT).as_deref() == Some(boot.as_str()) {
         return Ok(());
     }
-    let seen = store.read(PSTORE_SEEN).unwrap_or_default();
+    let seen = read_state(PSTORE_SEEN).unwrap_or_default();
     let panics = new_pstore_files(Path::new(PSTORE_ARCHIVE), &seen);
-    let ended_cleanly = journal::previous_boot_ended_cleanly();
-    if !panics.is_empty() || !ended_cleanly {
+    if !panics.is_empty() || !journal::previous_boot_ended_cleanly() {
         let time = journal::previous_boot_end().unwrap_or_else(Timestamp::now);
-        let kind = if panics.is_empty() {
-            Kind::UnexpectedRestart
-        } else {
-            Kind::KernelPanic
-        };
-        let mut report = Report::new(kind, Owner::System, "kernel".to_owned(), time, "0");
-        if !panics.is_empty() {
-            report.section("Kernel log saved across the restart", kernel_log(&panics));
-        }
-        report.section(
-            "Last log lines of that boot",
-            journal::previous_boot_lines(),
-        );
-        store.write(&report)?;
+        structured::of_previous_boot(&kernel_log(&panics), time)?;
     }
     if !panics.is_empty() {
         let mut seen = seen;
         for file in &panics {
             seen.push_str(&format!("{}\n", file.display()));
         }
-        store.replace(PSTORE_SEEN, &seen)?;
+        replace_state(PSTORE_SEEN, &seen)?;
     }
-    store.replace(CHECKED_BOOT, &boot)
+    replace_state(CHECKED_BOOT, &boot)
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let store = Store::open(Path::new(STATE))?;
-    let _lock = store.lock()?;
+    fs::create_dir_all(STATE)?;
+    let lock = File::create(Path::new(STATE).join("lock"))?;
+    flock(&lock, FlockOperation::LockExclusive)?;
     journal::sync();
-    if let Err(error) = check_previous_boot(&store) {
+    if let Err(error) = check_previous_boot() {
         tracing::warn!("cannot check how the last boot ended: {error}");
     }
-    for entry in journal::new_failures(&store.path("cursor"))? {
-        let Some(report) = report_of(&entry) else {
-            continue;
-        };
-        if let Err(error) = store.write(&report) {
-            tracing::warn!("cannot write a report of {}: {error}", report.program());
+    for entry in journal::new_failures(&Path::new(STATE).join("cursor"))? {
+        if is_reported(&entry)
+            && let Err(error) = structured::of_entry(&entry)
+        {
+            tracing::warn!("cannot keep a fault report: {error}");
         }
     }
-    store.prune();
     Ok(())
 }
 

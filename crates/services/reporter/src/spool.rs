@@ -12,7 +12,7 @@ const OUTBOX: &str = "outbox";
 const STAGING: &str = "tmp";
 const INSTALL_ID: &str = "machine";
 pub const MANIFEST: &str = "manifest.json";
-const STATE: &str = "state.json";
+pub const STATE: &str = "state.json";
 const UUID_SOURCE: &str = "/proc/sys/kernel/random/uuid";
 const OS_RELEASE: &str = "/etc/os-release";
 const KERNEL_RELEASE: &str = "/proc/sys/kernel/osrelease";
@@ -23,6 +23,7 @@ const KEEP_BYTES: u64 = 256 * 1024 * 1024;
 const REPORT_BYTES: u64 = 16 * 1024 * 1024;
 const KEEP_FREE_BYTES: u64 = 512 * 1024 * 1024;
 const ANY_STATE_WINDOW: Duration = Duration::from_secs(60 * 60);
+const EVERY_ONE_KEPT: [&str; 3] = ["unexpected-restart", "kernel-panic", "manual"];
 const UNSENT_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub struct Attachment {
@@ -57,7 +58,7 @@ fn invalid(message: impl Into<String>) -> io::Error {
 
 pub fn is_plain_name(name: &str) -> bool {
     !name.is_empty()
-        && name.len() <= 128
+        && name.len() <= 100
         && !name.starts_with('.')
         && name
             .bytes()
@@ -203,8 +204,18 @@ impl Spool {
         attachments: Vec<Attachment>,
         automatic: bool,
     ) -> io::Result<String> {
-        if let Some(existing) = self.repeat_of(manifest.get("signature")) {
+        let collapses = manifest
+            .get("kind")
+            .and_then(Value::as_str)
+            .is_none_or(|kind| !EVERY_ONE_KEPT.contains(&kind));
+        if let Some(existing) = self
+            .repeat_of(manifest.get("signature"))
+            .filter(|_| collapses)
+        {
             self.count_repeat(&existing)?;
+            if automatic && existing.status == Status::Sent {
+                self.queue(&existing.id)?;
+            }
             return Ok(existing.id);
         }
         let id = self.fill_manifest(&mut manifest)?;
@@ -238,14 +249,23 @@ impl Spool {
     }
 
     pub fn waiting(&self) -> io::Result<Vec<String>> {
-        let mut waiting: Vec<(SystemTime, String)> = fs::read_dir(self.outbox())?
-            .flatten()
-            .filter_map(|entry| {
-                let name = entry.file_name().into_string().ok()?;
-                is_plain_name(&name).then_some(())?;
-                Some((entry.metadata().ok()?.modified().ok()?, name))
-            })
-            .collect();
+        let mut waiting: Vec<(SystemTime, String)> = Vec::new();
+        for entry in fs::read_dir(self.outbox())?.flatten() {
+            let name = entry.file_name();
+            match name.to_str().filter(|name| is_plain_name(name)) {
+                Some(name) => {
+                    if let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified())
+                    {
+                        waiting.push((modified, name.to_owned()));
+                    }
+                }
+                None => {
+                    if let Err(error) = fs::remove_file(entry.path()) {
+                        tracing::warn!("cannot remove a stray file from the outbox: {error}");
+                    }
+                }
+            }
+        }
         waiting.sort();
         Ok(waiting.into_iter().map(|(_, name)| name).collect())
     }
@@ -300,6 +320,7 @@ impl Spool {
                 .duration_since(report.stored_at)
                 .unwrap_or(Duration::ZERO);
             report.manifest.get("signature") == Some(signature)
+                && report.status != Status::Rejected
                 && (age < ANY_STATE_WINDOW
                     || (age < UNSENT_WINDOW && report.status == Status::Local))
         })
@@ -314,6 +335,9 @@ impl Spool {
 
     pub fn settle(&self, id: &str, status: Status) -> io::Result<()> {
         let path = self.report_path(id)?;
+        if !path.is_dir() {
+            return self.unqueue(id);
+        }
         let mut state = Self::read_state(&path);
         let name = match status {
             Status::Sent => "sent",
@@ -326,7 +350,7 @@ impl Spool {
         self.unqueue(id)
     }
 
-    fn unqueue(&self, id: &str) -> io::Result<()> {
+    pub fn unqueue(&self, id: &str) -> io::Result<()> {
         match fs::remove_file(self.outbox().join(id)) {
             Ok(()) => sync_folder(&self.outbox()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -339,6 +363,13 @@ impl Spool {
         let path = self.report_path(id)?;
         fs::remove_dir_all(&path)?;
         sync_folder(&self.root.join(REPORTS))
+    }
+
+    pub fn clear_outbox(&self) -> io::Result<()> {
+        for id in self.waiting()? {
+            self.unqueue(&id)?;
+        }
+        Ok(())
     }
 
     pub fn prune(&self) {

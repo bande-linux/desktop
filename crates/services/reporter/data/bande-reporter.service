@@ -1,0 +1,21 @@
+[Unit]
+Description=Bande fault reports requests
+Requires=bande-reporter.socket
+
+[Service]
+ExecStart=/usr/libexec/bande-reporter serve
+Nice=5
+MemoryMax=192M
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_SYS_ADMIN CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE
+LockPersonality=yes
+NoNewPrivileges=yes
+IPAddressDeny=any
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectHome=tmpfs
+BindReadOnlyPaths=-/run/user
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bande/reports /etc/bande
+RestrictAddressFamilies=AF_UNIX

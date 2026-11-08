@@ -18,6 +18,7 @@ pub(crate) const PING_SINCE: u32 = 2;
 const PING_INTERVAL: Duration = Duration::from_secs(1);
 const QUIT_PATIENCE: Duration = Duration::from_secs(10);
 const REPORT_HANG_AFTER: Duration = Duration::from_secs(10);
+const LOGOUT_TIMEOUT: &str = "logout-timeout";
 
 #[derive(PartialEq)]
 enum Pinged {
@@ -32,6 +33,39 @@ impl Ping {
 
     fn reported_pid(&self) -> Option<u32> {
         u32::try_from(self.pid).ok().filter(|pid| *pid > 0)
+    }
+
+    fn hang_kind(&self) -> &'static str {
+        match self.pinged {
+            Pinged::App(_) => "app-hang",
+            Pinged::Shell(_) => "shell-stall",
+        }
+    }
+
+    fn give_up(&mut self, now: Duration) {
+        let Some(pid) = self.reported_pid().filter(|_| !self.finished) else {
+            return;
+        };
+        self.finished = true;
+        let waited = now.saturating_sub(self.sent);
+        if self.reported {
+            bande_log::fault::hang_over(
+                pid,
+                self.hang_token(),
+                waited.as_secs_f64(),
+                false,
+                Some(LOGOUT_TIMEOUT),
+            );
+        } else {
+            self.reported = true;
+            bande_log::fault::report_hang_of(
+                self.hang_kind(),
+                pid,
+                waited.as_secs(),
+                None,
+                Some(LOGOUT_TIMEOUT),
+            );
+        }
     }
 
     fn microhang_counter(&self) -> String {
@@ -51,9 +85,10 @@ impl Ping {
             bande_log::fault::count(&self.microhang_counter());
         }
         if self.reported
+            && !self.finished
             && let Some(pid) = self.reported_pid()
         {
-            bande_log::fault::hang_over(pid, self.hang_token(), waited.as_secs_f64(), true);
+            bande_log::fault::hang_over(pid, self.hang_token(), waited.as_secs_f64(), true, None);
         }
     }
 }
@@ -78,6 +113,7 @@ struct Ping {
     unresponsive: bool,
     given_up: bool,
     reported: bool,
+    finished: bool,
 }
 
 #[derive(Default)]
@@ -247,6 +283,7 @@ impl State {
                 unresponsive: false,
                 given_up: false,
                 reported: false,
+                finished: false,
             });
         }
         for shell in self
@@ -275,6 +312,7 @@ impl State {
                 unresponsive: false,
                 given_up: false,
                 reported: false,
+                finished: false,
             });
         }
     }
@@ -296,6 +334,7 @@ impl State {
             if !alive
                 && ping.pending
                 && ping.reported
+                && !ping.finished
                 && let Some(pid) = ping.reported_pid()
             {
                 bande_log::fault::hang_over(
@@ -303,6 +342,7 @@ impl State {
                     ping.hang_token(),
                     now.saturating_sub(ping.sent).as_secs_f64(),
                     false,
+                    None,
                 );
             }
             alive && !quiet
@@ -318,20 +358,21 @@ impl State {
                 announce(shells, controls, ping, false);
                 changed = true;
             }
-            ping.given_up =
+            let given_up =
                 waiting_for_apps && ping.unresponsive && now >= ping.sent + QUIT_PATIENCE;
+            if given_up && !ping.given_up {
+                ping.give_up(now);
+            }
+            ping.given_up = given_up;
             if ping.unresponsive && !ping.reported && now >= ping.sent + REPORT_HANG_AFTER {
                 ping.reported = true;
                 if let Some(pid) = ping.reported_pid() {
-                    let kind = match ping.pinged {
-                        Pinged::App(_) => "app-hang",
-                        Pinged::Shell(_) => "shell-stall",
-                    };
                     bande_log::fault::report_hang_of(
-                        kind,
+                        ping.hang_kind(),
                         pid,
                         now.saturating_sub(ping.sent).as_secs(),
-                        ping.hang_token(),
+                        Some(ping.hang_token()),
+                        None,
                     );
                 }
             }

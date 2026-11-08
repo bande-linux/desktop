@@ -145,6 +145,7 @@ pub struct GpuRenderer {
     scene: vello_gpu::Scene,
     depth: Option<(RenderSize, wgpu::TextureView)>,
     frame: Option<wgpu::Texture>,
+    uploaded: bool,
 }
 
 fn vulkan_instance() -> wgpu::Instance {
@@ -225,6 +226,7 @@ impl GpuRenderer {
             scene: vello_gpu::Scene::new(1, 1),
             depth: None,
             frame: None,
+            uploaded: false,
         }
     }
 
@@ -256,6 +258,14 @@ impl GpuRenderer {
             height: scene.height,
             rgba,
         })
+    }
+
+    pub fn release_uploads(&mut self) {
+        if std::mem::take(&mut self.uploaded)
+            && let Err(error) = self.gpu.device.poll(wgpu::PollType::Poll)
+        {
+            tracing::warn!("cannot release uploaded images: {error}");
+        }
     }
 
     pub fn present(
@@ -444,6 +454,7 @@ impl GpuRenderer {
             image.release_pixels();
         }
         self.gpu.queue.submit([encoder.finish()]);
+        self.uploaded = true;
     }
 
     fn grow_atlas(&mut self, needed: (u32, u32)) {

@@ -19,8 +19,8 @@ use crate::L10N;
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, BatteryState};
-use crate::crash_reports::{CrashReport, CrashReportCommand};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
+use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
 use crate::language::{SAME_AS_LANGUAGE, locale_matches};
@@ -109,9 +109,14 @@ pub(crate) enum Intent {
     JoinOther(Option<String>),
     WifiManual(bool),
     OpenPrinter(String),
-    OpenCrashReport(PathBuf),
-    CopyCrashReport(String),
-    DeleteCrashReport(PathBuf),
+    OpenReport(String),
+    CopyReport(String),
+    DeleteReport(String),
+    SendReport(String),
+    SetSendingReports(bool),
+    DraftReportDescription(String),
+    CreateReport(()),
+    SaveReport((String, String)),
     DefaultPrinter(String),
     Sharing(SharingCommand),
     PrinterAddress(String),
@@ -227,7 +232,7 @@ pub(crate) enum Detail {
     Network(Vec<u8>),
     Printer(String),
     Account(String),
-    CrashReport(PathBuf),
+    Report(String),
 }
 
 pub struct SettingsView {
@@ -253,7 +258,7 @@ pub struct SettingsView {
     pub(crate) layouts: Option<Layouts>,
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
-    pub(crate) crash_reports: Vec<CrashReport>,
+    pub(crate) diagnostics: Diagnostics,
     pub(crate) storage: Option<Storage>,
     pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
@@ -284,6 +289,7 @@ pub struct SettingsView {
     pub(crate) password_message: Option<String>,
     pub(crate) software: SoftwareState,
     pub(crate) software_checked: Option<i64>,
+    pub(crate) software_hint: Option<String>,
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
     pub(crate) locale: Option<LocaleState>,
@@ -356,7 +362,7 @@ impl SettingsView {
             layouts: None,
             pointing: PointingDevices::default(),
             about: None,
-            crash_reports: Vec::new(),
+            diagnostics: Diagnostics::default(),
             storage: None,
             backup: BackupView::default(),
             drafts: HashMap::new(),
@@ -387,6 +393,7 @@ impl SettingsView {
             password_message: None,
             software: SoftwareState::Unknown,
             software_checked: None,
+            software_hint: None,
             network: None,
             manual_ipv4: false,
             locale: None,
@@ -642,7 +649,7 @@ impl SettingsView {
                 &[SettingId::StorageUsage, SettingId::LargeFiles],
             ),
             Update::Backup(_) => (Some(PaneId::Backup), &[SettingId::BackupStatus]),
-            Update::Software(_) | Update::SoftwareChecked(_) => {
+            Update::Software(_) | Update::SoftwareChecked(_) | Update::SoftwareHint(_) => {
                 (Some(PaneId::SoftwareUpdate), &[SettingId::SoftwareUpdates])
             }
             Update::Pictures(_) | Update::Thumbnail(..) => (None, &[SettingId::Wallpaper]),
@@ -748,6 +755,7 @@ impl SettingsView {
             Update::NotificationApps(apps) => self.notification_apps = Some(apps),
             Update::Software(state) => self.software = state,
             Update::SoftwareChecked(at) => self.software_checked = at,
+            Update::SoftwareHint(hint) => self.software_hint = hint,
             Update::Locale(locale) => self.locale = locale,
             Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
@@ -800,10 +808,18 @@ impl SettingsView {
                 bande_settings_panes::without_sleep(&mut self.panes);
                 self.availability_changed();
             }
-            Update::CrashReports(reports) => self.crash_reports = reports,
-            Update::CrashReportsChanged => self
-                .commands
-                .push(Command::CrashReports(CrashReportCommand::Refresh)),
+            Update::Diagnostics(diagnostics) => {
+                let open = self.diagnostics.open.take();
+                self.diagnostics = diagnostics;
+                self.diagnostics.open = open;
+            }
+            Update::DiagnosticsReport(id, text) => self.diagnostics.open = Some((id, text)),
+            Update::ReportCreated(id) => {
+                self.select_pane(PaneId::Diagnostics);
+                self.detail = Some(Detail::Report(id));
+                self.focus_next = Some(Anchor::Back);
+            }
+            Update::ReportSaved(path) => self.diagnostics.saved = Some(path),
             Update::Storage(storage) => {
                 if storage.trash_items == 0 {
                     self.confirming_empty_trash = false;
@@ -957,8 +973,9 @@ impl SettingsView {
             | PaneId::Users
             | PaneId::Passwords
             | PaneId::Storage
+            | PaneId::Diagnostics
+            | PaneId::SendReport
             | PaneId::Backup
-            | PaneId::CrashReports
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
             PaneId::Mouse => self.pointing.mouse,
@@ -1359,7 +1376,7 @@ impl SettingsView {
                             Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
                             Detail::Printer(name) => format!("printer:{name}"),
                             Detail::Account(login) => format!("account:{login}"),
-                            Detail::CrashReport(path) => format!("crash:{}", path.display()),
+                            Detail::Report(id) => format!("report:{id}"),
                         }));
                         self.picture_edit = None;
                         self.deleting_account = false;
@@ -1465,18 +1482,37 @@ impl SettingsView {
                 }
                 Intent::JoinOther(password) => self.join_other(password),
                 Intent::WifiManual(manual) => self.set_wifi_manual(manual),
-                Intent::OpenCrashReport(path) => {
-                    self.detail = Some(Detail::CrashReport(path));
+                Intent::OpenReport(id) => {
+                    self.commands
+                        .push(Command::Diagnostics(DiagnosticsCommand::Read(id.clone())));
+                    self.detail = Some(Detail::Report(id));
                     self.clear_failure();
                     self.focus_next = Some(Anchor::Back);
                     *self.scroll.borrow_mut() = ScrollState::default();
                 }
-                Intent::CopyCrashReport(text) => self.commands.push(Command::CopyText(text)),
-                Intent::DeleteCrashReport(path) => {
+                Intent::CopyReport(text) => self.commands.push(Command::CopyText(text)),
+                Intent::DeleteReport(id) => {
                     self.detail = None;
                     self.commands
-                        .push(Command::CrashReports(CrashReportCommand::Delete(path)));
+                        .push(Command::Diagnostics(DiagnosticsCommand::Delete(id)));
                 }
+                Intent::SendReport(id) => self
+                    .commands
+                    .push(Command::Diagnostics(DiagnosticsCommand::Send(id))),
+                Intent::SetSendingReports(on) => self
+                    .commands
+                    .push(Command::Diagnostics(DiagnosticsCommand::SetSending(on))),
+                Intent::DraftReportDescription(text) => self.diagnostics.description = text,
+                Intent::CreateReport(()) => {
+                    let description = std::mem::take(&mut self.diagnostics.description);
+                    self.commands
+                        .push(Command::Diagnostics(DiagnosticsCommand::Create(
+                            description,
+                        )));
+                }
+                Intent::SaveReport((id, text)) => self
+                    .commands
+                    .push(Command::Diagnostics(DiagnosticsCommand::Save(id, text))),
                 Intent::OpenPrinter(name) => {
                     self.detail = Some(Detail::Printer(name));
                     self.forgetting = None;
@@ -1778,6 +1814,10 @@ impl SettingsView {
     }
 
     pub fn select_pane(&mut self, pane: PaneId) {
+        if pane == PaneId::Diagnostics {
+            self.commands
+                .push(Command::Diagnostics(DiagnosticsCommand::Refresh));
+        }
         if pane == self.pane {
             return;
         }
@@ -1851,7 +1891,12 @@ impl SettingsView {
             PaneId::Wifi | PaneId::Network => Command::Network(NetworkCommand::Watch(on)),
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
-            PaneId::LanguageTime | PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
+            PaneId::Keyboard if on => {
+                self.commands
+                    .push(Command::Spelling(crate::spelling::SpellingCommand::Read));
+                Command::Locale(LocaleCommand::Read)
+            }
+            PaneId::LanguageTime if on => Command::Locale(LocaleCommand::Read),
             _ => return,
         };
         self.commands.push(command);

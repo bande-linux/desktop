@@ -273,6 +273,7 @@ fn confirm_wallpaper(picture: &Path, app_id: &str) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-file-chooser");
     let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
     if let [flag, picture, app_flag, app_id] = arguments.as_slice()

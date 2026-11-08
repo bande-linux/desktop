@@ -15,7 +15,7 @@ const SPOOL: &str = "/var/lib/bande/reports";
 const CONFIG: &str = "/etc/bande/reports.conf";
 const FIRST_RETRY: Duration = Duration::from_secs(60);
 const LONGEST_RETRY: Duration = Duration::from_secs(6 * 60 * 60);
-const USAGE: &str = "usage: bande-reporter [--spool DIR] [--config FILE] (send | list | store MANIFEST [ATTACHMENT...] | queue ID | delete ID)";
+const USAGE: &str = "usage: bande-reporter [--spool DIR] [--config FILE] (send | serve | watch | list | store MANIFEST [ATTACHMENT...] | queue ID | delete ID)";
 
 struct Paths {
     spool: PathBuf,
@@ -65,6 +65,9 @@ fn attempt(spool: &Spool, config: &Config, waiting: &[String], retry: Duration) 
 fn settle(spool: &Spool, id: &str, status: Status) {
     if let Err(error) = spool.settle(id, status) {
         tracing::warn!("cannot record the state of report {id}: {error}");
+        if let Err(error) = spool.unqueue(id) {
+            tracing::warn!("cannot take report {id} out of the outbox: {error}");
+        }
     }
 }
 
@@ -170,6 +173,11 @@ fn run(arguments: &[String]) -> Result<(), Box<dyn Error>> {
     match rest {
         [command] if command == "send" => run_sender(&paths),
         [command] if command == "list" => list(&paths),
+        [command] if command == "collect-failures" => {
+            Ok(bande_reporter::diagnose::ask_for_collection()?)
+        }
+        [command] if command == "serve" => bande_reporter::serve::run(&paths.spool, &paths.config),
+        [command] if command == "watch" => bande_reporter::watch::run(&paths.spool, &paths.config),
         [command, manifest, attachments @ ..] if command == "store" => {
             store(&paths, Path::new(manifest), attachments)
         }

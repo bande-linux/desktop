@@ -546,14 +546,13 @@ pub fn follow_bluetooth(
     updates: Updates,
 ) -> (Sender<BluetoothCommand>, Sender<Answer>) {
     let (changed, changes) = mpsc::channel();
-    for rule in rule(change_rules).into_iter().flatten() {
-        signals(
-            system,
-            rule,
-            changed.clone(),
-            |message| shown_change(message).then_some(()),
-            || true,
-        );
+    let (adapters, properties): (Vec<MatchRule<'static>>, Vec<MatchRule<'static>>) =
+        rule(change_rules)
+            .unwrap_or_default()
+            .into_iter()
+            .partition(|rule| rule.interface().is_some());
+    for rule in adapters {
+        signals(system, rule, changed.clone(), |_| Some(()), || true);
     }
     let reader = Bluetooth::new(system);
     follow_state("bluetooth", updates.clone(), changes, move || {
@@ -568,14 +567,30 @@ pub fn follow_bluetooth(
         tracing::warn!("cannot pair from Settings: {error}");
     }
     let (sender, receiver) = mpsc::channel();
-    let bluetooth = Bluetooth::new(system);
+    let bluetooth = Bluetooth::new(&crate::follow::waiting_system(system));
+    let bus = system.clone();
     spawn("bluetooth-worker", move || {
+        let shown = Arc::new(AtomicU64::new(0));
         for command in receiver {
             let (what, result) = match command {
                 BluetoothCommand::Power(on) => {
                     ("bluetooth-power-failed", bluetooth.set_powered(on))
                 }
                 BluetoothCommand::Discover(on) => {
+                    let generation = shown.fetch_add(1, Ordering::Relaxed) + 1;
+                    if on {
+                        for rule in &properties {
+                            let current = Arc::clone(&shown);
+                            signals(
+                                &bus,
+                                rule.clone(),
+                                changed.clone(),
+                                |message| shown_change(message).then_some(()),
+                                move || current.load(Ordering::Relaxed) == generation,
+                            );
+                        }
+                        let _ = changed.send(());
+                    }
                     if let Err(error) = bluetooth.set_discovering(on) {
                         tracing::debug!("discovery not changed: {error}");
                     }

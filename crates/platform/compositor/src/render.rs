@@ -196,6 +196,14 @@ impl FrameOutput for Renderer {
             self.vulkan.is_lost(),
             self.vulkan.memory_use()
         );
+        bande_log::fault::report(
+            "gpu-reset",
+            if self.vulkan.is_lost() {
+                "device-lost"
+            } else {
+                "renderer-restart"
+            },
+        );
         self.outputs.clear();
         self.vulkan = VulkanRenderer::new()?;
         Ok(())

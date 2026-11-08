@@ -19,6 +19,15 @@ echo "== every package resolves and installs from the packages alone"
 ours=$(cd "$debs" && for deb in *.deb; do dpkg-deb --field "$deb" Package; done)
 apt-get install -y -q --no-install-recommends $ours < /dev/null
 
+echo "== every program and file the desktop needs comes with its Depends"
+while read -r item package kind; do
+    [ "$kind" = depends ] || [ "$kind" = required ] || continue
+    case $item in
+        /*) test -e "$item" ;;
+        *) command -v "$item" > /dev/null ;;
+    esac || { echo "$item from $package is missing without recommends"; exit 1; }
+done < "$(dirname "$0")/../../runtime-deps"
+
 echo "== every package bande-desktop recommends is in Debian testing or built here"
 default_apps="$(dirname "$0")/../../../packaging/bande-desktop/default-apps"
 from_the_archive=" bande-apt-source $(grep -E '^[a-z0-9]' "$default_apps" | xargs) "

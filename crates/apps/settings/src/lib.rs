@@ -52,7 +52,7 @@ use bande_l10n::Localizer;
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
 pub use backup::{BackupCommand, BackupUpdate};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
-pub use battery::{BatteryCommand, BatteryState, Charge, charge_of, follow_battery};
+pub use battery::{BatteryCommand, Charge, PowerState, charge_of, follow_battery};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;

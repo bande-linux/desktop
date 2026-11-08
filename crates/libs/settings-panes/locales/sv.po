@@ -133,7 +133,7 @@ msgstr "Anslut hörlurar, tangentbord och andra enheter"
 msgid "Wired connections and VPNs"
 msgstr "Trådbundna anslutningar och VPN"
 
-msgid "Light, dark or automatic, accent colour, wallpaper and text size"
+msgid "Light, dark or automatic, accent color, wallpaper and text size"
 msgstr "Ljust, mörkt eller automatiskt, dekorfärg, skrivbordsbild och textstorlek"
 
 msgid "Where the taskbar sits and how it behaves"
@@ -151,7 +151,7 @@ msgstr "Gör skärmen, ljudet, tangentbordet och pekaren enklare att använda"
 msgid "Arrangement, resolution and size of each display"
 msgstr "Placering, upplösning och storlek för varje skärm"
 
-msgid "Warmer colours after dark"
+msgid "Warmer colors after dark"
 msgstr "Varmare färger efter mörkrets inbrott"
 
 msgid "Output, input and sound effects"
@@ -443,7 +443,7 @@ msgstr "Belyst av skrivbordsbild"
 msgid "Glass"
 msgstr "Glas"
 
-msgid "Accent colour"
+msgid "Accent color"
 msgstr "Dekorfärg"
 
 msgid "accent, highlight, selection, color, colour, folders, tint"
@@ -831,7 +831,7 @@ msgstr "Rotation"
 msgid "rotate, portrait, landscape, orientation, turn"
 msgstr "rotera, stående, liggande, orientering, vrid"
 
-msgid "Colour profile"
+msgid "Color profile"
 msgstr "Färgprofil"
 
 msgid "colour, color, profile, icc, srgb, p3, wide gamut, calibration"

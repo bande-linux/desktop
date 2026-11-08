@@ -169,7 +169,7 @@ msgstr "Liggande"
 msgid "Two-sided"
 msgstr "Dubbelsidig"
 
-msgid "Colour"
+msgid "Color"
 msgstr "Färg"
 
 msgid "Black & White"

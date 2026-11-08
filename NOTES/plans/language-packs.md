@@ -26,7 +26,7 @@ The owner's model (2026-11-08). Research and the other language items are in [la
 ## Source files
 
 - Translations are gettext `.po` files next to the code, `crates/**/locales/<lang>.po`, one per crate and language. Poedit, Pontoon and Weblate read them, plurals included.
-- A regional file lists only what differs from its language: `en-GB.po` holds only spelling (colour, centre, licence, cancelled).
+- A regional file lists only what differs from its language: `en-GB.po` holds macOS's British spelling and words (Colour, Centre, Minimise, Bin for Trash), and the code is US English.
 - There is no English source file: the code is the English. `[workspace.metadata.l10n] development-language = "en"` in each repo's `Cargo.toml` declares the development language.
 
 ## The tool

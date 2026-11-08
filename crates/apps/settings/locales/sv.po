@@ -62,10 +62,10 @@ msgid "Backup isn't installed."
 msgstr "Säkerhetskopiering är inte installerad."
 
 msgid "Calculating…"
-msgstr "Beräknar …"
+msgstr "Beräknar…"
 
 msgid "Preparing the disk…"
-msgstr "Förbereder skivan …"
+msgstr "Förbereder skivan…"
 
 msgid "Back up this computer"
 msgstr "Säkerhetskopiera den här datorn"
@@ -224,7 +224,7 @@ msgid "{disk}, {free} free of {total}"
 msgstr "{disk}, {free} ledigt av {total}"
 
 msgid "Stop Using This Disk…"
-msgstr "Sluta använda den här skivan …"
+msgstr "Sluta använda den här skivan…"
 
 msgid "Backup disk"
 msgstr "Säkerhetskopieringsskiva"
@@ -265,7 +265,7 @@ msgid "Press Return to set the clock"
 msgstr "Tryck på Retur för att ställa klockan"
 
 msgid "Change…"
-msgstr "Ändra …"
+msgstr "Ändra…"
 
 msgid "Search cities"
 msgstr "Sök städer"
@@ -285,10 +285,10 @@ msgstr "den är för kort för att vara en ICC-profil"
 msgid "it is not a display profile"
 msgstr "den är inte en skärmprofil"
 
-msgid "it does not describe RGB colours"
+msgid "it does not describe RGB colors"
 msgstr "den beskriver inte RGB-färger"
 
-msgid "its colours are not described in XYZ"
+msgid "its colors are not described in XYZ"
 msgstr "dess färger beskrivs inte i XYZ"
 
 msgid "it uses lookup tables, and only matrix-and-curve profiles are supported"
@@ -300,10 +300,10 @@ msgstr "den saknar sina färgämnen eller tonkurvor"
 msgid "it uses a tone curve that isn't supported"
 msgstr "den använder en tonkurva som inte stöds"
 
-msgid "Colour profiles"
+msgid "Color profiles"
 msgstr "Färgprofiler"
 
-msgid "Choose a Colour Profile"
+msgid "Choose a Color Profile"
 msgstr "Välj en färgprofil"
 
 msgid "{file} can't be used: {reason}."
@@ -346,7 +346,7 @@ msgid "Text"
 msgstr "Text"
 
 msgid "Looking for apps…"
-msgstr "Söker efter appar …"
+msgstr "Söker efter appar…"
 
 msgid "No app installed"
 msgstr "Ingen app installerad"
@@ -487,7 +487,7 @@ msgid "Couldn’t install OpenVPN support, so this VPN file can’t be imported.
 msgstr "Det gick inte att installera stöd för OpenVPN, så den här VPN-filen kan inte importeras."
 
 msgid "Forget…"
-msgstr "Glöm …"
+msgstr "Glöm…"
 
 msgid "Forget “{name}”?"
 msgstr "Vill du glömma ”{name}”?"
@@ -577,7 +577,7 @@ msgid "This cannot be undone."
 msgstr "Det går inte att ångra."
 
 msgid "Empty Trash…"
-msgstr "Töm papperskorgen …"
+msgstr "Töm papperskorgen…"
 
 msgid "No apps open when you log in"
 msgstr "Inga appar öppnas när du loggar in"
@@ -586,7 +586,7 @@ msgid "Stop opening this app when you log in"
 msgstr "Sluta öppna appen när du loggar in"
 
 msgid "Add App…"
-msgstr "Lägg till app …"
+msgstr "Lägg till app…"
 
 msgid "These apps open each time you log in"
 msgstr "De här apparna öppnas varje gång du loggar in"
@@ -686,7 +686,7 @@ msgstr "Slå på Wi-Fi för att se nätverk i närheten."
 msgid "Turn on Bluetooth to connect headphones, keyboards and more."
 msgstr "Slå på Bluetooth för att ansluta hörlurar, tangentbord med mera."
 
-msgid "Turn on Night Light to make the colours warmer at night."
+msgid "Turn on Night Light to make the colors warmer at night."
 msgstr "Slå på Nattljus för att göra färgerna varmare på natten."
 
 msgid "Search languages and countries"
@@ -708,7 +708,7 @@ msgid "Choose a language"
 msgstr "Välj ett språk"
 
 msgid "Setting up {name}…"
-msgstr "Ställer in {name} …"
+msgstr "Ställer in {name}…"
 
 msgid "Language"
 msgstr "Språk"
@@ -816,7 +816,7 @@ msgid "Disconnect"
 msgstr "Koppla från"
 
 msgid "Connecting…"
-msgstr "Ansluter …"
+msgstr "Ansluter…"
 
 msgid "Connect"
 msgstr "Anslut"
@@ -828,13 +828,13 @@ msgid "Its settings and keys are deleted. Import the configuration again to use 
 msgstr "Inställningar och nycklar raderas. Importera konfigurationen igen för att använda den."
 
 msgid "Remove…"
-msgstr "Ta bort …"
+msgstr "Ta bort…"
 
 msgid "Import Configuration…"
-msgstr "Importera konfiguration …"
+msgstr "Importera konfiguration…"
 
 msgid "Installing OpenVPN support…"
-msgstr "Installerar stöd för OpenVPN …"
+msgstr "Installerar stöd för OpenVPN…"
 
 msgid "Add a WireGuard (.conf) or OpenVPN (.ovpn) file"
 msgstr "Lägg till en WireGuard-fil (.conf) eller OpenVPN-fil (.ovpn)"
@@ -918,7 +918,7 @@ msgstr "sRGB"
 msgid "Display P3"
 msgstr "Display P3"
 
-msgid "None (show colours as sent)"
+msgid "None (show colors as sent)"
 msgstr "Ingen (visa färger som de skickas)"
 
 msgid "Add Profile…"
@@ -949,7 +949,7 @@ msgid "No devices paired yet"
 msgstr "Inga enheter har parats ihop än"
 
 msgid "Looking for devices…"
-msgstr "Söker efter enheter …"
+msgstr "Söker efter enheter…"
 
 msgid "It is unpaired and must be paired again before it can connect."
 msgstr "Ihopparningen tas bort och enheten måste paras ihop igen innan den kan ansluta."
@@ -958,7 +958,7 @@ msgid "Pair"
 msgstr "Para ihop"
 
 msgid "Pairing…"
-msgstr "Parar ihop …"
+msgstr "Parar ihop…"
 
 msgid "{status} · Battery {level}%"
 msgstr "{status} · Batteri {level} %"
@@ -991,7 +991,7 @@ msgid "Stop using this input source"
 msgstr "Sluta använda den här inmatningskällan"
 
 msgid "Add Input Source…"
-msgstr "Lägg till inmatningskälla …"
+msgstr "Lägg till inmatningskälla…"
 
 msgid "Type in more than one language or layout"
 msgstr "Skriv på mer än ett språk eller en layout"
@@ -1018,7 +1018,7 @@ msgid "Type a language, country or layout name"
 msgstr "Skriv ett språk, ett land eller ett layoutnamn"
 
 msgid "Add Picture…"
-msgstr "Lägg till bild …"
+msgstr "Lägg till bild…"
 
 msgid "Your own picture"
 msgstr "Din egen bild"
@@ -1135,7 +1135,7 @@ msgid "Couldn't list your saved passwords."
 msgstr "Det gick inte att visa dina sparade lösenord."
 
 msgid "Unlock…"
-msgstr "Lås upp …"
+msgstr "Lås upp…"
 
 msgid "Your passwords are locked."
 msgstr "Dina lösenord är låsta."
@@ -1174,7 +1174,7 @@ msgid "Show"
 msgstr "Visa"
 
 msgid "Delete…"
-msgstr "Radera …"
+msgstr "Radera…"
 
 msgid "Other apps"
 msgstr "Andra appar"
@@ -1344,7 +1344,7 @@ msgstr[0] "1 skrivare"
 msgstr[1] "{count} skrivare"
 
 msgid "Looking for printers on this network…"
-msgstr "Söker efter skrivare i det här nätverket …"
+msgstr "Söker efter skrivare i det här nätverket…"
 
 msgid "No printers on this network yet. They appear here as soon as they are found."
 msgstr "Inga skrivare i det här nätverket än. De visas här så fort de hittas."
@@ -1359,7 +1359,7 @@ msgid "Add"
 msgstr "Lägg till"
 
 msgid "Adding…"
-msgstr "Lägger till …"
+msgstr "Lägger till…"
 
 msgid "For a printer that does not show up: its IP address or host name"
 msgstr "För en skrivare som inte dyker upp: dess IP-adress eller värdnamn"
@@ -1371,7 +1371,7 @@ msgid "Install"
 msgstr "Installera"
 
 msgid "Installing…"
-msgstr "Installerar …"
+msgstr "Installerar…"
 
 msgid "Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
 msgstr "Nätverksskrivare behöver inget mer. USB-skrivare och skrivare som behöver en drivrutin använder utskriftssystemet CUPS, från Debian-arkivet"
@@ -1412,7 +1412,7 @@ msgstr "Använd som standardskrivare"
 msgid "Remove “{name}”?"
 msgstr "Vill du ta bort ”{name}”?"
 
-msgid "Documents waiting for it are cancelled. You can add it again later."
+msgid "Documents waiting for it are canceled. You can add it again later."
 msgstr "Dokument som väntar på den avbryts. Du kan lägga till den igen senare."
 
 msgid "Remove this printer"
@@ -1428,7 +1428,7 @@ msgid "Everything you copied earlier is forgotten."
 msgstr "Allt du kopierat tidigare glöms bort."
 
 msgid "Clear History…"
-msgstr "Rensa historik …"
+msgstr "Rensa historik…"
 
 msgid "Clipboard history"
 msgstr "Urklippshistorik"
@@ -1565,7 +1565,7 @@ msgstr "En annan installation pågår. Försök igen när den är klar."
 msgid "There isn't enough free space. Free up some space and try again."
 msgstr "Det finns inte tillräckligt med ledigt utrymme. Frigör utrymme och försök igen."
 
-msgid "The update was cancelled."
+msgid "The update was canceled."
 msgstr "Uppdateringen avbröts."
 
 msgid "Something went wrong. Try again later."
@@ -1635,7 +1635,7 @@ msgstr "Kontrollera stavning"
 msgid "Correct spelling automatically"
 msgstr "Rätta stavning automatiskt"
 
-msgid "Capitalise words automatically"
+msgid "Capitalize words automatically"
 msgstr "Inled meningar med stor bokstav"
 
 msgid "Add period with double-space"
@@ -1734,7 +1734,7 @@ msgid "Last checked {date}"
 msgstr "Senast sökt {date}"
 
 msgid "Checking for updates…"
-msgstr "Söker efter uppdateringar …"
+msgstr "Söker efter uppdateringar…"
 
 msgid "{size} to download. Some updates need a restart."
 msgstr "{size} att hämta. Vissa uppdateringar kräver omstart."
@@ -1749,13 +1749,13 @@ msgid "Update Now"
 msgstr "Uppdatera nu"
 
 msgid "Downloading updates…"
-msgstr "Hämtar uppdateringar …"
+msgstr "Hämtar uppdateringar…"
 
 msgid "You can keep working while updates download"
 msgstr "Du kan fortsätta arbeta medan uppdateringarna hämtas"
 
 msgid "Installing updates…"
-msgstr "Installerar uppdateringar …"
+msgstr "Installerar uppdateringar…"
 
 msgid "You can keep working while updates install"
 msgstr "Du kan fortsätta arbeta medan uppdateringarna installeras"
@@ -1815,7 +1815,7 @@ msgid "{name} (you)"
 msgstr "{name} (du)"
 
 msgid "Add User…"
-msgstr "Lägg till användare …"
+msgstr "Lägg till användare…"
 
 msgid "Add a person who can log in to this computer"
 msgstr "Lägg till en person som kan logga in på datorn"
@@ -1833,7 +1833,7 @@ msgid "Account type"
 msgstr "Kontotyp"
 
 msgid "Creating the account…"
-msgstr "Skapar kontot …"
+msgstr "Skapar kontot…"
 
 msgid "Press Return after each password field to create the account, or Escape to cancel"
 msgstr "Tryck på Retur efter varje lösenordsfält för att skapa kontot, eller Escape för att avbryta"
@@ -1842,10 +1842,10 @@ msgid "Allow this user to administer this computer"
 msgstr "Tillåt användaren att administrera datorn"
 
 msgid "Change Password…"
-msgstr "Ändra lösenord …"
+msgstr "Ändra lösenord…"
 
 msgid "Choose…"
-msgstr "Välj …"
+msgstr "Välj…"
 
 msgid "Picture"
 msgstr "Bild"
@@ -1863,7 +1863,7 @@ msgid "Drag the picture to choose what shows in the circle."
 msgstr "Dra bilden för att välja vad som visas i cirkeln."
 
 msgid "Delete User…"
-msgstr "Radera användare …"
+msgstr "Radera användare…"
 
 msgid "Delete this user"
 msgstr "Radera den här användaren"
@@ -1893,7 +1893,7 @@ msgid "The passwords don't match. Type the password again."
 msgstr "Lösenorden stämmer inte överens. Skriv lösenordet igen."
 
 msgid "Changing the password…"
-msgstr "Ändrar lösenordet …"
+msgstr "Ändrar lösenordet…"
 
 msgid "Press Return after each field to change the password, or Escape to cancel"
 msgstr "Tryck på Retur efter varje fält för att ändra lösenordet, eller Escape för att avbryta"
@@ -1959,7 +1959,7 @@ msgid "Connected · sign in to use the internet"
 msgstr "Ansluten · logga in för att använda internet"
 
 msgid "Joining…"
-msgstr "Ansluter …"
+msgstr "Ansluter…"
 
 msgid "Not in range"
 msgstr "Utom räckhåll"
@@ -1971,13 +1971,13 @@ msgid "Saved"
 msgstr "Sparat"
 
 msgid "Details…"
-msgstr "Detaljer …"
+msgstr "Detaljer…"
 
 msgid "Networks you join are remembered here"
 msgstr "Nätverk du ansluter till sparas här"
 
 msgid "Sign In…"
-msgstr "Logga in …"
+msgstr "Logga in…"
 
 msgid "Press Return to join or Escape to cancel"
 msgstr "Tryck på Retur för att ansluta eller Escape för att avbryta"
@@ -1986,10 +1986,10 @@ msgid "Password for “{network}”"
 msgstr "Lösenord för ”{network}”"
 
 msgid "Looking for networks…"
-msgstr "Söker efter nätverk …"
+msgstr "Söker efter nätverk…"
 
 msgid "Other…"
-msgstr "Annat …"
+msgstr "Annat…"
 
 msgid "Join a network that does not show its name"
 msgstr "Anslut till ett nätverk som inte visar sitt namn"

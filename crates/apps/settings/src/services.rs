@@ -33,6 +33,7 @@ pub enum AudioCommand {
     Mute(Direction, bool),
     Default(Direction, String),
     App(String, f32),
+    Feedback,
     Listen(bool),
 }
 
@@ -124,7 +125,7 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), bande_audio::Er
                 },
             )
         }
-        AudioCommand::Listen(_) => Ok(()),
+        AudioCommand::Feedback | AudioCommand::Listen(_) => Ok(()),
     }
 }
 
@@ -154,8 +155,9 @@ fn listen(audio: &Audio, listening: Option<Listening>) -> Option<Listening> {
     })
 }
 
-pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
+pub fn follow_audio(session: &Connection, updates: Updates) -> Sender<AudioCommand> {
     let (sender, receiver) = mpsc::channel::<AudioCommand>();
+    let session = session.clone();
     spawn("audio", move || {
         let audio = match Audio::start() {
             Ok(audio) => Arc::new(audio),
@@ -197,8 +199,12 @@ pub fn follow_audio(updates: Updates) -> Sender<AudioCommand> {
                 commands.push(command);
             }
             for command in commands {
-                if let AudioCommand::Listen(on) = command {
-                    wanted = on;
+                match command {
+                    AudioCommand::Listen(on) => wanted = on,
+                    AudioCommand::Feedback => {
+                        bande_sound::play(&session, bande_sound::Sound::VolumeChange.name());
+                    }
+                    _ => {}
                 }
                 report(
                     &updates,

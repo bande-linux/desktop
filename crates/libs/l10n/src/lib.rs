@@ -9,6 +9,7 @@ use unic_langid::LanguageIdentifier;
 
 const FALLBACK: &str = "en-US";
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_MESSAGES", "LANG"];
+const REGION_VARIABLES: [&str; 4] = ["LC_ALL", "LC_TIME", "LC_MEASUREMENT", "LANG"];
 
 pub use bande_l10n_macros::translations;
 
@@ -106,6 +107,16 @@ pub fn preferred_languages() -> Vec<String> {
         .iter()
         .map(|language| language.language.to_string())
         .collect()
+}
+
+pub fn region_language() -> Option<String> {
+    let locale = REGION_VARIABLES
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))?;
+    if matches!(locale.as_str(), "C" | "POSIX") || locale.starts_with("C.") {
+        return None;
+    }
+    language_of_locale(&locale).map(|language| language.language.to_string())
 }
 
 fn requested_languages(var: impl Fn(&str) -> Option<String>) -> Vec<LanguageIdentifier> {

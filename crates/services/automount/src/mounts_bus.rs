@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use blocking::unblock;
+use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
 
 use crate::discovery::Discovery;
@@ -38,6 +39,12 @@ impl MountsInterface {
         unblock(move || mounts.disconnect(&PathBuf::from(mount_point)))
             .await
             .map_err(zbus::fdo::Error::Failed)
+    }
+
+    fn watch(&self, #[zbus(header)] header: Header<'_>) {
+        if let Some(sender) = header.sender() {
+            self.1.watch(sender.to_string());
+        }
     }
 
     fn nearby(&self) -> Vec<(String, String)> {

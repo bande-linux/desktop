@@ -1,6 +1,6 @@
 [package]
 name = "bande-lookup"
-description = "Bande Look Up: dictionary panel at the pointer"
+description = "Bande Dictionary: look up words in the installed and online sources, and Look Up at the pointer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,7 +11,10 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-app.workspace = true
+bande-bus.workspace = true
 bande-dict.workspace = true
+flate2.workspace = true
+bande-graphics.workspace = true
 bande-https.workspace = true
 serde_json.workspace = true
 bande-inbox.workspace = true
@@ -20,20 +23,25 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 recommends = "bande-dict-en, bande-dict-sv"
 extended-description = """\
-Shows what a word means in a small panel at the pointer, from the dictionary \
-packs installed on the computer. Started only when asked; nothing stays running."""
+Dictionary looks up words in the dictionaries, thesauruses and online sources \
+chosen in its settings, and shows Look Up in a small panel at the pointer. \
+Started only when asked; nothing stays running."""
 assets = [
     ["target/release/bande-lookup", "usr/bin/", "755"],
     ["data/org.bande.Lookup.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.Lookup.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Lookup.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/org.bande.Lookup.service", "usr/share/dbus-1/services/", "644"],
+    ["data/sources/wikipedia.source", "usr/share/bande/dict/", "644"],
 ]
 
 [lints]

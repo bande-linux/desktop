@@ -145,6 +145,16 @@ impl Compositor {
         };
     }
 
+    pub fn frame_presented(&mut self) {
+        if !std::mem::take(&mut self.state.ready_unannounced) {
+            return;
+        }
+        if let Err(error) = notify_service_manager(Some(OsStr::new(LOGIN_READY_SOCKET)), "READY=1")
+        {
+            tracing::debug!("nothing heard that the login window came up: {error}");
+        }
+    }
+
     pub fn holds_frames(&self) -> bool {
         matches!(self.state.reveal, Reveal::Holding { .. })
     }
@@ -165,12 +175,7 @@ impl Compositor {
         if !ready && now < deadline {
             return Some(deadline);
         }
-        if ready
-            && let Err(error) =
-                notify_service_manager(Some(OsStr::new(LOGIN_READY_SOCKET)), "READY=1")
-        {
-            tracing::debug!("nothing heard that the login window came up: {error}");
-        }
+        self.state.ready_unannounced = ready;
         match awaited {
             Awaited::Shell => self.state.begin_reveal(now, since, ready),
             Awaited::LoginWindow => self.state.show_login_window(now, since),

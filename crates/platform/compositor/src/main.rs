@@ -341,6 +341,7 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
         let Some((name, vblank)) = flipped else {
             return Ok(());
         };
+        app.compositor.frame_presented();
         if !app.shown {
             app.shown = true;
             tracing::info!(

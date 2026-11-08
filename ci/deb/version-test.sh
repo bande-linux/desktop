@@ -37,8 +37,16 @@ commit 0.1.1 '2026-10-31T08:00:00Z'
 git -C "$repo" tag v0.1.1
 next_release=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.1.1 "$version" "$repo")
 
+git -C "$repo" tag l10n-20261031
+translations=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=l10n-20261031 "$version" "$repo")
+expect "$translations" 0.1.1+l10n20261031 "an l10n-YYYYMMDD tag counts from the last release"
+second=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=l10n-20261031.2 "$version" "$repo")
+commit 0.1.2 '2026-11-01T08:00:00Z'
+git -C "$repo" tag v0.1.2
+following=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.1.2 "$version" "$repo")
+
 previous=
-for v in "$first" "$same_day" "$release" "$at_tag" "$after" "$later" "$next_release"; do
+for v in "$first" "$same_day" "$release" "$at_tag" "$after" "$later" "$next_release" "$translations" "$second" "$following"; do
     if [ -n "$previous" ]; then
         if dpkg --compare-versions "$previous" lt "$v"; then
             echo "ok   $previous < $v"

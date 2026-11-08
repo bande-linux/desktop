@@ -7,6 +7,13 @@ declared=$(awk '/^\[/ { section = $0 } section == "[workspace.package]" && $1 ==
 
 if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
     tag=${GITHUB_REF_NAME:?}
+    if [[ $tag =~ ^l10n-([0-9]{8})(\.[0-9]+)?$ ]]; then
+        stamp=${BASH_REMATCH[1]}${BASH_REMATCH[2]}
+        last=$(git -C "$repo" describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null) ||
+            { echo "version.sh: $tag has no vX.Y.Z release before it" >&2; exit 1; }
+        echo "${last#v}+l10n$stamp"
+        exit 0
+    fi
     [[ $tag =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "version.sh: $tag is not a vX.Y.Z tag" >&2; exit 1; }
     [ "${BASH_REMATCH[1]}" = "$declared" ] ||
         { echo "version.sh: tag $tag but Cargo.toml says $declared" >&2; exit 1; }

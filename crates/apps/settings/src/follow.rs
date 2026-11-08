@@ -83,6 +83,7 @@ pub enum Update {
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     SoftwareChecked(Option<i64>),
+    SoftwareHint(Option<String>),
     Locale(Option<LocaleState>),
     Layouts(Layouts),
     Pointing(PointingDevices),

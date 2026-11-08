@@ -1,3 +1,4 @@
+mod badge;
 mod idle;
 mod stale;
 pub mod versions;
@@ -149,6 +150,7 @@ impl SoftwareState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SoftwareCommand {
+    Glance,
     Open,
     Check,
     Update(Vec<Package>),
@@ -704,7 +706,9 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     if !check_due(session, &client) {
         return Ok(None);
     }
-    let SoftwareState::Available(packages) = check(&client, Refresh::Always) else {
+    let checked = check(&client, Refresh::Always);
+    badge::remember(&checked);
+    let SoftwareState::Available(packages) = checked else {
         return Ok(None);
     };
     if automatic(session) {
@@ -819,6 +823,9 @@ fn update_automatically(
         true => None,
         false => Some(settle(update(system, client, &now, &|_| {}))),
     };
+    if let Some(state) = &installed {
+        badge::remember(state);
+    }
     match installed {
         Some(SoftwareState::Failed { reason, .. }) => {
             announce(session, &L10N.tr("install-failed"), &reason)
@@ -862,6 +869,20 @@ pub fn follow_software(
         let client = Client::new(&system);
         for command in receiver {
             let state = match command {
+                SoftwareCommand::Glance => {
+                    match badge::glance(check_interval(&session), restart_pending()) {
+                        badge::Glance::Known(hint) => {
+                            if !updates.send(Update::SoftwareHint(hint)) {
+                                break;
+                            }
+                            continue;
+                        }
+                        badge::Glance::Due => {
+                            updates.send(Update::Software(SoftwareState::Checking));
+                            open_updates(&session, &system, &client)
+                        }
+                    }
+                }
                 SoftwareCommand::Open => {
                     updates.send(Update::Software(SoftwareState::Checking));
                     open_updates(&session, &system, &client)
@@ -908,6 +929,7 @@ pub fn follow_software(
                     }
                 }
             };
+            badge::remember(&state);
             updates.send(Update::SoftwareChecked(last_check(&client)));
             if !updates.send(Update::Software(state)) {
                 break;

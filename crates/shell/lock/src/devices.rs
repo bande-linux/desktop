@@ -33,7 +33,9 @@ impl Devices {
             .into_iter()
             .rev()
             .find_map(|update| match update {
-                Update::Devices((battery, wifi, _)) => Some((battery, wifi)),
+                Update::Devices((battery, wifi, _)) => {
+                    Some((battery.into_present(), wifi.into_present()))
+                }
                 _ => None,
             })
     }

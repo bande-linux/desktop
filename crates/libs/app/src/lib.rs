@@ -215,6 +215,8 @@ pub trait Program: Sized + 'static {
 
     fn tick(&mut self, _cx: &mut Cx<Self>, _now: Instant) {}
 
+    fn installed_changed(&mut self, _cx: &mut Cx<Self>) {}
+
     fn waits_for_activation() -> bool {
         false
     }
@@ -237,7 +239,6 @@ pub fn run<P: Program>(info: &'static Info) -> ExitCode {
         println!("{} {}", info.package, info.version);
         return ExitCode::SUCCESS;
     }
-    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init(info.package);
     let arguments = arguments.into_iter().map(argument_text).collect();
     match runner::run::<P>(info, arguments, None) {

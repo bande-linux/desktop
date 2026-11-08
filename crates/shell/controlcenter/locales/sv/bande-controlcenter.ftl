@@ -28,4 +28,5 @@ on = På
 off = Av
 muted = Ljud av
 not-connected = Ej ansluten
+unavailable = Inte tillgängligt
 sign-in-required = Inloggning krävs

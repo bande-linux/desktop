@@ -7,7 +7,7 @@ lost). If no request arrives within 30 seconds of starting it exits. Nothing run
 
 The popover is `Kind::Popover` in `bande-app`, `bande_app_v1.set_popover` in the compositor: it maps
 at the pointer, takes the keyboard, is on top, is not in the Taskbar and is not resumed. Lookups run
-on a worker thread and go over the network never.
+on a worker thread and go online only for Wikipedia.
 
 ## Languages
 
@@ -18,6 +18,18 @@ kind (a thesaurus, say), and More shows every section. Sections are ranked by ex
 inflected form over compound part, then definitions in the UI language, then kind (definition,
 translation, thesaurus), then the user's order or else the pack's priority, then the word's
 language (the hint, then the user's languages). A section identical to one above is hidden.
+
+## Settings and Wikipedia
+
+Settings ▸ Language & Time ▸ Look Up lists the installed packs (on or off, "Use First" sets the
+user's order) and the `bande-dict-*` packages PackageKit can install. The choices are in
+`$XDG_CONFIG_HOME/bande/lookup` (`off=`, `order=`, `wikipedia=on|off`) and read on every lookup.
+The code for packs and choices is `bande-dict` (`crates/libs/dict`).
+
+Wikipedia is off by default; Settings says that, when on, every word looked up goes online. Then
+the page summary (`https://<language>.wikipedia.org/api/rest_v1/page/summary/<word>`, over
+`bande-https`) is added as its own section after the local ones, in the language of the best local
+section, else the first of the user's languages.
 
 ## Pack format
 

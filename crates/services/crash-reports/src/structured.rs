@@ -172,6 +172,13 @@ fn failed_unit(entry: &Entry, spool: &Spool, config: &Config) -> Result<(), Box<
     Ok(())
 }
 
+pub fn queue_checkin_if_due() {
+    match Spool::open(Path::new(SPOOL)) {
+        Ok(spool) => bande_reporter::checkin::queue_if_due(&spool, &config()),
+        Err(error) => tracing::warn!("cannot open the report spool: {error}"),
+    }
+}
+
 pub fn of_entry(entry: &Entry) -> Result<(), Box<dyn Error>> {
     let spool = Spool::open(Path::new(SPOOL))?;
     let config = config();

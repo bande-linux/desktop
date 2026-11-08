@@ -36,7 +36,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 const HEADLESS_SIZE: (i32, i32) = (1920, 1080);
 const SHELL_READY_TIMEOUT: Duration = Duration::from_millis(2500);
 const COMPOSITOR_STALL: &str = "compositor-stall";
-const STALL_LIMIT: Duration = Duration::from_secs(10);
+const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
 const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);

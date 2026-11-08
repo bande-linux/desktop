@@ -379,6 +379,7 @@ fn show(request: Request) -> Result<(), WindowError> {
 }
 
 fn main() -> ExitCode {
+    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init(NAMESPACE);
     if set_dumpable_behavior(DumpableBehavior::NotDumpable).is_err() {
         return ExitCode::FAILURE;

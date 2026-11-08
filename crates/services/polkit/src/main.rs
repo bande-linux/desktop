@@ -178,6 +178,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
 }
 
 fn main() -> ExitCode {
+    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-polkit-agent");
     match serve() {
         Ok(()) => ExitCode::SUCCESS,

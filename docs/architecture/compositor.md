@@ -87,13 +87,21 @@ when they reach the screen is Bande's own.
   (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
 - **Pointers.** As on macOS, apps ask for a pointer by kind and the compositor draws it from
-  Bande's own set (`cursor_set.rs`, vector shapes for every `wp_cursor_shape_v1` kind, sharp at
-  any scale and pointer size), so no cursor can be missing. The same drawings are written at
-  package build time (`bande-cursor-theme`) as the Xcursor theme `Bande-Cursors`, under the CSS
-  and the X11 names, for clients that load cursors themselves; the session exports it as
+  Bande's own set, so none can be missing. Each pointer is one SVG in
+  `crates/platform/compositor/data/cursors/` (24 × 24, its hotspot in `data-hotspot` on the root),
+  drawn in macOS's manner but our own: a slim black arrow with a white rim and a soft shadow,
+  white hands with black outlines, an I-beam, slim two-way resize arrows, wall-bar one-way
+  arrows, badges for menu, copy, alias, help and not allowed, a dark spinner. `cursor_set.rs`
+  maps every `wp_cursor_shape_v1` kind to a drawing; the compositor embeds the SVGs and renders
+  them with resvg at the exact pointer size and scale, once per kind and scale, and falls back
+  to a tiny built-in arrow (logged) only if rendering fails. At package build time
+  `bande-cursor-theme` renders the same sources into the Xcursor theme `Bande-Cursors` (CSS and
+  X11 names, 24 to 128 px) for clients that load cursors themselves; the session exports it as
   `XCURSOR_THEME` and the portal as `cursor-theme`. While the pointer is on a frame zone of ours,
   or a move or resize holds a window (from our edges or `xdg_toplevel.move`/`resize`), the
-  compositor's pointer wins over the client's: the edge's resize pointer, the arrow for a move.
+  compositor's pointer wins over the client's: the arrow for a move, the edge's two-way arrow
+  for a resize, or as on macOS a one-way arrow against a wall bar when the window is at its
+  minimum or maximum size and that edge can only move one way.
 - **Controls over the Browser's own row.** A client-side window of `org.bande.Browser` keeps its
   tabs in its top row and has no title bar of ours; the compositor draws only the control well
   (`WindowControls` in `bande-graphics`) over the first 78 pt of a 48 pt row, in front of the

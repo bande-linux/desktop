@@ -6,13 +6,11 @@ use std::os::unix::fs::symlink;
 use std::path::Path;
 
 use bande_config::{CURSOR_THEME, DEFAULT_CURSOR_SIZE};
-use bande_graphics::{Color, CpuRenderer, DrawError, Scene};
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
-use smithay::input::pointer::CursorIcon;
 use smithay::utils::{Physical, Point, Transform};
 
-use crate::cursor_set::{self, CANVAS, LEGACY_NAMES, SHAPES};
+use crate::cursor_set::{Image, KINDS, LEGACY_NAMES, Pointer};
 
 const ARROW_WIDTH: i32 = 11;
 const ARROW_HEIGHT: i32 = 17;
@@ -66,12 +64,6 @@ pub(crate) struct Cursor {
     pub(crate) hotspot: Point<i32, Physical>,
 }
 
-struct Image {
-    side: u32,
-    hotspot: (u32, u32),
-    rgba: Vec<u8>,
-}
-
 impl CursorTheme {
     pub fn from_environment() -> Self {
         Self {
@@ -93,9 +85,9 @@ impl CursorTheme {
         CURSOR_THEME
     }
 
-    pub(crate) fn draw(&self, icon: CursorIcon, scale: f64) -> Option<Cursor> {
+    pub(crate) fn draw(&self, pointer: Pointer, scale: f64) -> Option<Cursor> {
         let side = (f64::from(self.size) * scale).round().max(1.0) as u32;
-        match render(icon, side) {
+        match pointer.render(side) {
             Ok(image) => Some(Cursor {
                 buffer: MemoryRenderBuffer::from_slice(
                     &image.rgba,
@@ -109,33 +101,13 @@ impl CursorTheme {
             }),
             Err(error) => {
                 tracing::warn!(
-                    "cannot draw the {} pointer at {side} px: {error}",
-                    icon.name()
+                    "cannot draw the {} pointer at {side} px, showing the built-in arrow: {error}",
+                    pointer.name()
                 );
                 None
             }
         }
     }
-}
-
-fn render(icon: CursorIcon, side: u32) -> Result<Image, DrawError> {
-    let drawing = cursor_set::drawing(icon);
-    let scale = f64::from(side) / f64::from(CANVAS);
-    let side = bande_graphics::pixels(CANVAS, scale);
-    let scene = Scene {
-        width: CANVAS,
-        height: CANVAS,
-        background: Color::TRANSPARENT,
-        items: drawing.items,
-    };
-    let mut rgba = vec![0; side as usize * side as usize * 4];
-    CpuRenderer::new().render_into(&scene, scale, &mut rgba)?;
-    let place = |at: f32| ((f64::from(at) * scale).round() as u32).min(side - 1);
-    Ok(Image {
-        side,
-        hotspot: (place(drawing.hotspot.x), place(drawing.hotspot.y)),
-        rgba,
-    })
 }
 
 pub fn write_cursor_theme(directory: &Path) -> io::Result<()> {
@@ -146,17 +118,21 @@ pub fn write_cursor_theme(directory: &Path) -> io::Result<()> {
         format!("[Icon Theme]\nName={CURSOR_THEME}\nComment=The pointers of the Bande desktop\n"),
     )?;
     let mut written = HashSet::new();
-    for icon in SHAPES {
+    for icon in KINDS {
         let images = XCURSOR_SIZES
             .iter()
-            .map(|size| render(icon, *size).map(|image| (*size, image)))
+            .map(|size| {
+                Pointer::Kind(icon)
+                    .render(*size)
+                    .map(|image| (*size, image))
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(io::Error::other)?;
         fs::write(cursors.join(icon.name()), xcursor(&images))?;
         written.insert(icon.name());
     }
     let aliases = LEGACY_NAMES.into_iter().chain(
-        SHAPES
+        KINDS
             .iter()
             .flat_map(|icon| icon.alt_names().iter().map(move |alias| (*alias, *icon))),
     );

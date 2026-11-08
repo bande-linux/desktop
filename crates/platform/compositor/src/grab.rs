@@ -14,9 +14,11 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, Rectangle, SERIAL_COUNTER, Serial};
 
+use crate::cursor_set::{Heading, Pointer};
 use crate::motion::Look;
 use crate::state::State;
 use crate::tile::Tile;
+use crate::window::Window;
 
 #[derive(Debug, Clone, Copy)]
 enum Operation {
@@ -45,7 +47,7 @@ enum Undo {
 pub(crate) struct HeldWindow {
     surface: WlSurface,
     undo: Undo,
-    cursor: CursorIcon,
+    edge: Option<ResizeEdge>,
 }
 
 pub(crate) struct WindowGrab {
@@ -82,26 +84,65 @@ fn edge_toward(window: Rectangle<i32, Logical>, point: Point<i32, Logical>) -> R
     }
 }
 
-pub(crate) fn resize_cursor(edge: ResizeEdge) -> CursorIcon {
+fn edge_parts(edge: ResizeEdge) -> Option<(i8, i8)> {
     match edge {
-        ResizeEdge::Top => CursorIcon::NResize,
-        ResizeEdge::Bottom => CursorIcon::SResize,
-        ResizeEdge::Left => CursorIcon::WResize,
-        ResizeEdge::Right => CursorIcon::EResize,
-        ResizeEdge::TopLeft => CursorIcon::NwResize,
-        ResizeEdge::TopRight => CursorIcon::NeResize,
-        ResizeEdge::BottomLeft => CursorIcon::SwResize,
-        ResizeEdge::BottomRight => CursorIcon::SeResize,
-        _ => CursorIcon::Default,
+        ResizeEdge::Top => Some((0, -1)),
+        ResizeEdge::Bottom => Some((0, 1)),
+        ResizeEdge::Left => Some((-1, 0)),
+        ResizeEdge::Right => Some((1, 0)),
+        ResizeEdge::TopLeft => Some((-1, -1)),
+        ResizeEdge::TopRight => Some((1, -1)),
+        ResizeEdge::BottomLeft => Some((-1, 1)),
+        ResizeEdge::BottomRight => Some((1, 1)),
+        _ => None,
     }
 }
 
-impl Operation {
-    fn cursor(self) -> CursorIcon {
-        match self {
-            Operation::Resize(edge) => resize_cursor(edge),
-            Operation::Move { .. } | Operation::Detach => CursorIcon::Default,
-        }
+fn heading((x, y): (i8, i8)) -> Heading {
+    match (x.signum(), y.signum()) {
+        (0, -1) => Heading::North,
+        (1, -1) => Heading::NorthEast,
+        (1, 0) => Heading::East,
+        (1, 1) => Heading::SouthEast,
+        (0, 1) => Heading::South,
+        (-1, 1) => Heading::SouthWest,
+        (-1, 0) => Heading::West,
+        _ => Heading::NorthWest,
+    }
+}
+
+fn two_way((x, y): (i8, i8)) -> CursorIcon {
+    match (x, y) {
+        (0, _) => CursorIcon::NsResize,
+        (_, 0) => CursorIcon::EwResize,
+        _ if x == y => CursorIcon::NwseResize,
+        _ => CursorIcon::NeswResize,
+    }
+}
+
+fn room(length: i32, min: i32, max: i32) -> (bool, bool) {
+    (max <= 0 || length < max, length > min.max(1))
+}
+
+pub(crate) fn resize_pointer(window: &Window, edge: ResizeEdge) -> Pointer {
+    let Some(parts) = edge_parts(edge) else {
+        return CursorIcon::Default.into();
+    };
+    let size = window.local_geometry().size;
+    let (min, max) = window.size_limits();
+    let axes: Vec<(bool, bool)> = [
+        (parts.0 != 0).then(|| room(size.w, min.w, max.w)),
+        (parts.1 != 0).then(|| room(size.h, min.h, max.h)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if axes.iter().all(|&(grow, shrink)| grow && !shrink) {
+        Pointer::Only(heading(parts))
+    } else if axes.iter().all(|&(grow, shrink)| !grow && shrink) {
+        Pointer::Only(heading((-parts.0, -parts.1)))
+    } else {
+        two_way(parts).into()
     }
 }
 
@@ -281,18 +322,24 @@ impl State {
             held: Some((surface.clone(), operation)),
         };
         pointer.set_grab(self, grab, serial, Focus::Clear);
-        let cursor = operation.cursor();
-        self.load_named_cursor(cursor);
         self.held_window = Some(HeldWindow {
             surface: surface.clone(),
             undo,
-            cursor,
+            edge: match operation {
+                Operation::Resize(edge) => Some(edge),
+                Operation::Move { .. } | Operation::Detach => None,
+            },
         });
+        self.reload_cursor();
         self.needs_redraw = true;
     }
 
-    pub(crate) fn held_cursor(&self) -> Option<CursorIcon> {
-        self.held_window.as_ref().map(|held| held.cursor)
+    pub(crate) fn held_cursor(&self) -> Option<Pointer> {
+        let held = self.held_window.as_ref()?;
+        Some(match (held.edge, self.window_index(&held.surface)) {
+            (Some(edge), Some(index)) => resize_pointer(&self.windows[index], edge),
+            _ => CursorIcon::Default.into(),
+        })
     }
 
     pub(crate) fn holds_cancellable_grab(&self) -> bool {

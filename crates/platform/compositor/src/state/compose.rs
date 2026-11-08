@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 
 use super::{Compositor, OutputElement, State, is_mapped};
+use crate::cursor_set::Pointer;
 use crate::element::ScreenElement;
 use smithay::backend::renderer::Renderer as _;
 use smithay::backend::renderer::element::Kind as ElementKind;
@@ -306,8 +307,8 @@ impl Compositor {
 
     pub fn shown_cursor(&self) -> Option<&'static str> {
         match self.state.drawn_cursor() {
-            CursorImageStatus::Named(icon) => Some(icon.name()),
-            CursorImageStatus::Hidden | CursorImageStatus::Surface(_) => None,
+            Shown::Pointer(pointer) => Some(pointer.name()),
+            Shown::Hidden | Shown::Surface(_) => None,
         }
     }
 
@@ -322,8 +323,8 @@ impl Compositor {
         }
         let at: Point<i32, Physical> = state.pointer_location.to_physical(scale).to_i32_round();
         match &state.drawn_cursor() {
-            CursorImageStatus::Hidden => Vec::new(),
-            CursorImageStatus::Surface(surface) => {
+            Shown::Hidden => Vec::new(),
+            Shown::Surface(surface) => {
                 let hotspot = with_states(surface, |states| {
                     states
                         .data_map
@@ -341,10 +342,10 @@ impl Compositor {
                     ElementKind::Cursor,
                 )
             }
-            CursorImageStatus::Named(icon) => {
+            Shown::Pointer(pointer) => {
                 let cursor = state
                     .named_cursors
-                    .get(icon)
+                    .get(pointer)
                     .and_then(Option::as_ref)
                     .unwrap_or(&state.cursor_arrow);
                 MemoryRenderBufferRenderElement::from_buffer(
@@ -367,18 +368,26 @@ impl Compositor {
     }
 }
 
+enum Shown {
+    Hidden,
+    Surface(WlSurface),
+    Pointer(Pointer),
+}
+
 impl State {
-    fn drawn_cursor(&self) -> CursorImageStatus {
+    fn drawn_cursor(&self) -> Shown {
         let over_hung_app = self
             .seat
             .get_pointer()
             .and_then(|pointer| pointer.current_focus())
             .and_then(|surface| surface.client())
             .is_some_and(|owner| self.watchdog.is_unresponsive(&owner.id()));
-        match self.owned_cursor() {
-            Some(icon) => CursorImageStatus::Named(icon),
-            None if over_hung_app => CursorImageStatus::Named(CursorIcon::Wait),
-            None => self.cursor_status.clone(),
+        match (self.owned_cursor(), &self.cursor_status) {
+            (Some(pointer), _) => Shown::Pointer(pointer),
+            (None, _) if over_hung_app => Shown::Pointer(CursorIcon::Wait.into()),
+            (None, CursorImageStatus::Named(icon)) => Shown::Pointer((*icon).into()),
+            (None, CursorImageStatus::Surface(surface)) => Shown::Surface(surface.clone()),
+            (None, CursorImageStatus::Hidden) => Shown::Hidden,
         }
     }
 

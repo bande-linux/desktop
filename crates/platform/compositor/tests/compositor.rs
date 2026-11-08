@@ -96,11 +96,11 @@ fn a_window_edge_keeps_the_resize_pointer_while_it_is_dragged() {
     server.move_pointer_to((right - 100.0, middle).into(), 0);
     roundtrip(&mut server, &mut [&mut browser]);
     server.move_pointer_to((right + 3.0, middle).into(), 0);
-    assert_eq!(server.shown_cursor(), Some("e-resize"));
+    assert_eq!(server.shown_cursor(), Some("ew-resize"));
     server.press_button(BTN_LEFT, true, 0);
     server.move_pointer_to((right + 40.0, middle).into(), 0);
     roundtrip(&mut server, &mut [&mut browser]);
-    assert_eq!(server.shown_cursor(), Some("e-resize"));
+    assert_eq!(server.shown_cursor(), Some("ew-resize"));
     server.press_button(BTN_LEFT, false, 0);
 
     let mut server = headless(560, 520);
@@ -113,7 +113,7 @@ fn a_window_edge_keeps_the_resize_pointer_while_it_is_dragged() {
     editor.start_resize(&mut server, 0, ResizeEdge::Right);
     server.move_pointer_to((centre.x + 20.0, centre.y).into(), 0);
     roundtrip(&mut server, &mut [&mut editor]);
-    assert_eq!(server.shown_cursor(), Some("e-resize"));
+    assert_eq!(server.shown_cursor(), Some("ew-resize"));
     server.press_button(BTN_LEFT, false, 0);
     roundtrip(&mut server, &mut [&mut editor]);
     assert_eq!(server.shown_cursor(), Some("default"));

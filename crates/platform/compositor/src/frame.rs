@@ -16,7 +16,8 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle, Transform};
 
-use crate::grab::resize_cursor;
+use crate::cursor_set::Pointer;
+use crate::grab::resize_pointer;
 use crate::label::Labels;
 use crate::menu_button::menu_address;
 use crate::scene::Piece;
@@ -35,10 +36,10 @@ pub(crate) enum Zone {
 }
 
 impl Zone {
-    fn cursor(self) -> CursorIcon {
-        match self {
-            Self::Control(_) | Self::TitleBar => CursorIcon::Default,
-            Self::Resize(edge) => resize_cursor(protocol_edge(edge)),
+    fn pointer(self, window: Option<&Window>) -> Pointer {
+        match (self, window) {
+            (Self::Resize(edge), Some(window)) => resize_pointer(window, protocol_edge(edge)),
+            _ => CursorIcon::Default.into(),
         }
     }
 }
@@ -248,9 +249,9 @@ impl State {
         self.rest_on_zoom(on_zoom);
         let previous = std::mem::replace(&mut self.decorations.pointed, pointed.clone());
         match pointed {
-            Some((_, zone)) => {
-                if previous.map(|(_, zone)| zone.cursor()) != Some(zone.cursor()) {
-                    self.load_named_cursor(zone.cursor());
+            Some(pointed) => {
+                if previous != Some(pointed) {
+                    self.reload_cursor();
                     self.needs_redraw = true;
                 }
             }
@@ -259,15 +260,15 @@ impl State {
         }
     }
 
-    pub(crate) fn frame_cursor(&self) -> Option<CursorIcon> {
-        self.decorations
-            .pointed
-            .as_ref()
-            .map(|(_, zone)| zone.cursor())
+    pub(crate) fn frame_cursor(&self) -> Option<Pointer> {
+        let (surface, zone) = self.decorations.pointed.as_ref()?;
+        let window = self.window_index(surface).map(|index| &self.windows[index]);
+        Some(zone.pointer(window))
     }
 
-    pub(crate) fn owned_cursor(&self) -> Option<CursorIcon> {
+    pub(crate) fn owned_cursor(&self) -> Option<Pointer> {
         self.drag_cursor()
+            .map(Pointer::from)
             .or_else(|| self.held_cursor())
             .or_else(|| self.frame_cursor())
     }

@@ -64,7 +64,7 @@ jobs:
     needs: check
     if: needs.check.outputs.build == 'true'
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - arch: arm64

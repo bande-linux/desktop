@@ -112,9 +112,7 @@ pub trait View {
         false
     }
 
-    fn animating(&self) -> bool {
-        false
-    }
+    fn animating(&self) -> bool;
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         None

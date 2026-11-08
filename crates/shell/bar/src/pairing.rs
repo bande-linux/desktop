@@ -246,6 +246,10 @@ impl App for Dialog {
         window.request_redraw();
     }
 
+    fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.ui.accessibility())
     }

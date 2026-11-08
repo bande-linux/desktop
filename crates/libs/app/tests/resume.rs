@@ -38,6 +38,10 @@ impl View for Note {
     }
 
     fn set_appearance(&mut self, _appearance: Appearance) {}
+
+    fn animating(&self) -> bool {
+        false
+    }
 }
 
 struct Notes;

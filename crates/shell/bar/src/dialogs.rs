@@ -7,7 +7,9 @@ use bande_status::devices::end_session;
 use bande_status::session::{
     Effect, Ending, Facts, Refusal, SessionEnding, Stage, facts, quitting_apps, try_again,
 };
-use bande_toolkit::ui::{Alert, CheckState, Checkbox, Event, Form, FormLine, Key, Label, Size, Ui};
+use bande_toolkit::ui::{
+    Alert, CheckState, Checkbox, Event, Form, FormLine, Key, Label, Size, Ui, Widget, WidgetId,
+};
 use bande_toolkit::{
     App, Appearance, Image, Item, Palette, Point, Rect, Role, Scene, Sizing, TextAlign, TextStyle,
     TextSystem, Window, WindowEvent,
@@ -50,13 +52,27 @@ enum Choice {
 const CANCEL: &str = "cancel";
 const CONFIRM: &str = "confirm";
 
+fn countdown(session: &SessionEnding, now: Instant) -> String {
+    session
+        .ending
+        .countdown(session.left(now) + Duration::from_millis(999))
+}
+
+fn same_dialog(shown: &Stage, stage: &Stage) -> bool {
+    match (shown, stage) {
+        (Stage::Asking { .. }, Stage::Asking { .. })
+        | (Stage::Quitting { .. }, Stage::Quitting { .. }) => true,
+        _ => shown == stage,
+    }
+}
+
 fn confirmation_ui(
     session: &SessionEnding,
     choice: &Rc<Cell<Choice>>,
     reopen: &Rc<Cell<bool>>,
     appearance: Appearance,
     now: Instant,
-) -> Ui {
+) -> (Ui, WidgetId) {
     let ending = session.ending;
     let picked = Rc::clone(choice);
     let on_choice = move |action: &str| {
@@ -67,25 +83,21 @@ fn confirmation_ui(
     };
     let cancel = tr!("Cancel");
     let alert = match session.stage() {
-        Stage::Asking { .. } => Alert::new(
-            &ending.question(),
-            &ending.countdown(session.left(now) + Duration::from_millis(999)),
-            on_choice,
-        )
-        .accessory({
-            let reopen = Rc::clone(reopen);
-            let state = match reopen.get() {
-                true => CheckState::On,
-                false => CheckState::Off,
-            };
-            Checkbox::new(
-                &tr!("Reopen windows when logging back in"),
-                state,
-                move |on| reopen.set(on),
-            )
-        })
-        .primary(&ending.button(), CONFIRM)
-        .cancel(&cancel, CANCEL),
+        Stage::Asking { .. } => Alert::new(&ending.question(), &countdown(session, now), on_choice)
+            .accessory({
+                let reopen = Rc::clone(reopen);
+                let state = match reopen.get() {
+                    true => CheckState::On,
+                    false => CheckState::Off,
+                };
+                Checkbox::new(
+                    &tr!("Reopen windows when logging back in"),
+                    state,
+                    move |on| reopen.set(on),
+                )
+            })
+            .primary(&ending.button(), CONFIRM)
+            .cancel(&cancel, CANCEL),
         Stage::Quitting { .. } => {
             Alert::new(&quitting_apps(), "", on_choice).cancel(&cancel, CANCEL)
         }
@@ -104,12 +116,13 @@ fn confirmation_ui(
                 .cancel(&cancel, CANCEL)
         }
     };
+    let id = alert.id();
     let mut ui = Ui::new(
         Box::new(alert),
         bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
     );
     ui.set_appearance(appearance);
-    ui
+    (ui, id)
 }
 
 pub(crate) fn alert_scene(ui: &mut Ui, (width, height): (u32, u32)) -> Scene {
@@ -125,7 +138,9 @@ pub(crate) fn fitted(ui: &mut Ui) -> (u32, u32) {
 
 struct Confirmation {
     session: SessionEnding,
+    shown: Stage,
     ui: Ui,
+    alert: WidgetId,
     size: (u32, u32),
     choice: Rc<Cell<Choice>>,
     reopen: Rc<Cell<bool>>,
@@ -134,13 +149,30 @@ struct Confirmation {
 
 impl Confirmation {
     fn rebuild(&mut self, window: &mut Window, now: Instant) {
-        self.ui = confirmation_ui(
+        (self.ui, self.alert) = confirmation_ui(
             &self.session,
             &self.choice,
             &self.reopen,
             window.appearance(),
             now,
         );
+        self.shown = self.session.stage().clone();
+        self.refit(window);
+    }
+
+    fn refresh(&mut self, window: &mut Window, now: Instant) {
+        if !same_dialog(&self.shown, self.session.stage()) {
+            return self.rebuild(window, now);
+        }
+        if let Stage::Asking { .. } = self.session.stage() {
+            let message = countdown(&self.session, now);
+            self.ui
+                .update_widget::<Alert>(self.alert, |alert, _| alert.set_message(&message));
+            self.refit(window);
+        }
+    }
+
+    fn refit(&mut self, window: &mut Window) {
         let size = fitted(&mut self.ui);
         if size != self.size {
             self.size = size;
@@ -173,7 +205,7 @@ impl Confirmation {
                 });
             }
         }
-        self.rebuild(window, now);
+        self.refresh(window, now);
     }
 
     fn decide(&mut self, window: &mut Window) {
@@ -220,7 +252,10 @@ impl App for Confirmation {
                     window.request_redraw();
                 }
             }
-            WindowEvent::AppearanceChanged(_) => self.rebuild(window, Instant::now()),
+            WindowEvent::AppearanceChanged(appearance) => {
+                self.ui.set_appearance(appearance);
+                self.refit(window);
+            }
             WindowEvent::AppsRunning { app_id, count } => {
                 let now = Instant::now();
                 let effect = self.session.apps_running(app_id, count, now);
@@ -239,7 +274,7 @@ impl App for Confirmation {
         for refusal in self.answers.drain() {
             self.session.refused(refusal);
         }
-        self.rebuild(window, Instant::now());
+        self.refresh(window, Instant::now());
     }
 
     fn should_close(&mut self, _window: &mut Window) -> bool {
@@ -252,9 +287,13 @@ impl App for Confirmation {
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
         match self.session.tick(now) {
-            None => self.rebuild(window, now),
+            None => self.refresh(window, now),
             effect => self.apply(window, effect, now),
         }
+    }
+
+    fn animating(&self) -> bool {
+        self.ui.is_animating()
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
@@ -267,12 +306,14 @@ pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>
     let session = SessionEnding::new(ending, now);
     let choice = Rc::new(Cell::new(Choice::Undecided));
     let reopen = Rc::new(Cell::new(reopens_windows()));
-    let mut ui = confirmation_ui(&session, &choice, &reopen, Appearance::default(), now);
+    let (mut ui, alert) = confirmation_ui(&session, &choice, &reopen, Appearance::default(), now);
     let size = fitted(&mut ui);
     let mut window = Window::open(Role::dialog(&ending.button(), DIALOGS), size)?;
     report("keep the dialog in front", window.set_keep_on_top(true));
     let mut confirmation = Confirmation {
+        shown: session.stage().clone(),
         ui,
+        alert,
         session,
         size,
         choice,
@@ -398,6 +439,10 @@ impl App for ReopenQuestion {
         false
     }
 
+    fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
         Some(self.ui.accessibility())
     }
@@ -461,6 +506,10 @@ impl App for About {
             }
             _ => {}
         }
+    }
+
+    fn animating(&self) -> bool {
+        self.ui.is_animating()
     }
 
     fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
@@ -582,6 +631,10 @@ impl App for AppAbout {
             }
             _ => {}
         }
+    }
+
+    fn animating(&self) -> bool {
+        false
     }
 }
 

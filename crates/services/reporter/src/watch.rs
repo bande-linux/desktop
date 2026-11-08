@@ -23,6 +23,11 @@ const SETTLE: Duration = Duration::from_secs(2);
 const KEPT_LINES: usize = 200;
 const RECORD_BYTES: usize = 8192;
 const NOTICE: u8 = 5;
+const OOM_SUMMARY: &str = "oom-kill:";
+const PRESSURE: &str = "/proc/pressure/memory";
+const PRESSURE_TRIGGER: &[u8] = b"full 1000000 10000000\0";
+const PRESSURE_SETTLE: Duration = Duration::from_secs(30);
+const PRESSURE_QUIET: Duration = Duration::from_secs(60 * 60);
 
 const FAULTS: [(&str, &str); 26] = [
     ("Unable to handle kernel", "kernel-oops"),
@@ -109,6 +114,62 @@ fn first_call_trace_frame(lines: &VecDeque<String>) -> Option<String> {
     Some(frame.split('+').next().unwrap_or(frame).to_owned())
 }
 
+fn oom_details(lines: &VecDeque<String>, fault: &mut Fault) {
+    facts::add_memory_details(&mut fault.detail);
+    fault
+        .detail
+        .insert("termination".to_owned(), json!("kernel-oom"));
+    let Some(summary) = lines
+        .iter()
+        .rev()
+        .find_map(|line| line.strip_prefix(OOM_SUMMARY))
+    else {
+        return;
+    };
+    let field = |name: &str| {
+        summary
+            .split(',')
+            .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
+    };
+    let limit = match field("constraint") {
+        Some("CONSTRAINT_MEMCG") => format!("cgroup {}", field("oom_memcg").unwrap_or("?")),
+        Some("CONSTRAINT_NONE") | None => "system".to_owned(),
+        Some(other) => other.trim_start_matches("CONSTRAINT_").to_lowercase(),
+    };
+    fault.detail.insert("limit".to_owned(), json!(limit));
+    if let Some(unit) = field("task_memcg").and_then(|memcg| memcg.rsplit('/').next()) {
+        fault.detail.insert("unit".to_owned(), json!(unit));
+    }
+    if let Some(task) = field("task") {
+        fault.program = Some(task.to_owned());
+    }
+}
+
+fn open_pressure_trigger() -> Option<File> {
+    let file = File::options()
+        .read(true)
+        .write(true)
+        .custom_flags((OFlags::NONBLOCK | OFlags::CLOEXEC).bits() as i32)
+        .open(PRESSURE)
+        .ok()?;
+    rustix::io::write(&file, PRESSURE_TRIGGER).ok()?;
+    Some(file)
+}
+
+fn report_pressure(spool: &Spool, config_path: &Path, spool_root: &Path) {
+    let mut fault = Fault::new("memory-pressure");
+    fault.program = Some("system".to_owned());
+    facts::add_memory_details(&mut fault.detail);
+    let config = Config::load(config_path).unwrap_or_default();
+    if let Err(error) = fault.store(spool, &config, spool_root) {
+        tracing::warn!("cannot store a memory pressure report: {error}");
+    }
+}
+
+fn left(deadline: Instant) -> Duration {
+    deadline.saturating_duration_since(Instant::now())
+}
+
 struct Pending {
     kind: &'static str,
     first: String,
@@ -141,9 +202,7 @@ fn report(
         );
     }
     if pending.kind == "oom" {
-        fault
-            .detail
-            .insert("largest_processes".to_owned(), facts::largest_processes());
+        oom_details(lines, &mut fault);
     }
     let log = lines.iter().cloned().collect::<Vec<_>>().join("\n");
     push_text(&mut fault.attachments, "kernel.txt", scrubber.text(&log));
@@ -170,18 +229,40 @@ pub fn run(spool_root: &Path, config_path: &Path) -> Result<(), Box<dyn Error>> 
     let mut lines: VecDeque<String> = VecDeque::with_capacity(KEPT_LINES);
     let mut pending: Option<Pending> = None;
     let mut buffer = vec![0; RECORD_BYTES];
+    let pressure = open_pressure_trigger();
+    let mut pressed_since: Option<Instant> = None;
+    let mut quiet_until: Option<Instant> = None;
     loop {
-        let timeout = pending.as_ref().map(|pending| {
-            let left = SETTLE.saturating_sub(pending.since.elapsed());
-            Timespec {
-                tv_sec: left.as_secs() as i64,
-                tv_nsec: i64::from(left.subsec_nanos()),
-            }
-        });
-        let mut fds = [PollFd::new(&kmsg, PollFlags::IN)];
+        if quiet_until.is_some_and(|until| left(until).is_zero()) {
+            quiet_until = None;
+        }
+        let timeout = pending
+            .as_ref()
+            .map(|pending| pending.since + SETTLE)
+            .into_iter()
+            .chain(pressed_since.map(|since| since + PRESSURE_SETTLE))
+            .chain(quiet_until)
+            .min()
+            .map(|deadline| {
+                let left = left(deadline);
+                Timespec {
+                    tv_sec: left.as_secs() as i64,
+                    tv_nsec: i64::from(left.subsec_nanos()),
+                }
+            });
+        let mut fds = vec![PollFd::new(&kmsg, PollFlags::IN)];
+        if let Some(pressure) = pressure.as_ref().filter(|_| quiet_until.is_none()) {
+            fds.push(PollFd::new(pressure, PollFlags::PRI));
+        }
         match poll(&mut fds, timeout.as_ref()) {
             Ok(_) | Err(rustix::io::Errno::INTR) => {}
             Err(error) => return Err(error.into()),
+        }
+        if fds
+            .get(1)
+            .is_some_and(|fd| fd.revents().contains(PollFlags::PRI))
+        {
+            pressed_since.get_or_insert_with(Instant::now);
         }
         let before = seen;
         loop {
@@ -196,7 +277,7 @@ pub fn run(spool_root: &Path, config_path: &Path) -> Result<(), Box<dyn Error>> 
                         continue;
                     }
                     seen = record.sequence;
-                    if record.level > NOTICE {
+                    if record.level > NOTICE && !record.text.starts_with(OOM_SUMMARY) {
                         continue;
                     }
                     if let Some(name) = expected_event(&record.text) {
@@ -232,7 +313,17 @@ pub fn run(spool_root: &Path, config_path: &Path) -> Result<(), Box<dyn Error>> 
             .is_some_and(|pending| pending.since.elapsed() >= SETTLE)
             && let Some(pending) = pending.take()
         {
+            if pending.kind == "oom" {
+                pressed_since = None;
+            }
             report(&pending, &lines, &spool, config_path, spool_root);
+        }
+        if pressed_since.is_some_and(|since| since.elapsed() >= PRESSURE_SETTLE)
+            && pending.as_ref().is_none_or(|pending| pending.kind != "oom")
+        {
+            pressed_since = None;
+            quiet_until = Some(Instant::now() + PRESSURE_QUIET);
+            report_pressure(&spool, config_path, spool_root);
         }
     }
 }

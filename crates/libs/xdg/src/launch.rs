@@ -773,6 +773,7 @@ fn watch_oom_kills(bus: &Connection) -> zbus::Result<()> {
             .iter()
             .find_map(|id| find_app(&entries, id).map(DesktopEntry::app_id))
             .or(ids.last().map(String::as_str));
+        bande_log::fault::report_oom(&unit, app_id);
         match app_id {
             Some(app_id) => tell(Ok(bus.clone()), app_id, Failure::OutOfMemory),
             None => tell_task_stopped(bus, &unit),

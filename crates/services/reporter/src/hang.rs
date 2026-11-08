@@ -32,6 +32,7 @@ const INDENT: usize = 2;
 pub struct HangEnd {
     pub seconds: f64,
     pub recovered: bool,
+    pub termination: Option<String>,
 }
 
 struct Waiter {

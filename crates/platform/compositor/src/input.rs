@@ -203,6 +203,7 @@ impl State {
     }
 
     fn run_action(&mut self, action: Action, key: Key) {
+        bande_log::fault::action(&format!("{action:?}"));
         if !matches!(
             action,
             Action::TextConsole

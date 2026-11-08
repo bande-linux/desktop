@@ -15,6 +15,7 @@ librewolf/remove-organization-policy-banner.patch
 librewolf/firefox-view.patch
 librewolf/hide-finish-setup-bookmark.patch
 bande/search-choice.patch
+bande/no-mozilla-bookmarks.patch
 bande/disconnect-startup.patch
 bande/no-remote-settings.patch
 bande/no-custom-titlebars.patch

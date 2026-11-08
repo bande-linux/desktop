@@ -1,0 +1,1005 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Show Less"
+msgstr "Visa färre"
+
+msgid "Show All"
+msgstr "Visa alla"
+
+msgid "Backups aren’t set up. Choose a disk in Settings ▸ Backup."
+msgstr "Säkerhetskopiering är inte inställd. Välj en skiva i Inställningar ▸ Säkerhetskopia."
+
+msgid "Connect the backup disk to browse backups."
+msgstr "Anslut säkerhetskopieringsskivan för att bläddra bland säkerhetskopior."
+
+msgid "The backups can’t be opened."
+msgstr "Det gick inte att öppna säkerhetskopiorna."
+
+msgid "There’s no backup of this folder yet."
+msgstr "Det finns ännu ingen säkerhetskopia av den här mappen."
+
+msgid "Older"
+msgstr "Äldre"
+
+msgid "Newer"
+msgstr "Nyare"
+
+msgid "Restore"
+msgstr "Återställ"
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "No older version."
+msgstr "Ingen äldre version."
+
+msgid "No newer version."
+msgstr "Ingen nyare version."
+
+msgid "The original folder can’t be recreated."
+msgstr "Det gick inte att återskapa originalmappen."
+
+msgid "Backup from {when}"
+msgstr "Säkerhetskopia från {when}"
+
+msgid "Start numbers at a whole number."
+msgstr "Börja numrera på ett heltal."
+
+msgid "A name can’t be empty."
+msgstr "Ett namn får inte vara tomt."
+
+msgid "A name can’t contain “/”."
+msgstr "Ett namn får inte innehålla ”/”."
+
+msgid "The names “.” and “..” are reserved by the system."
+msgstr "Namnen ”.” och ”..” är reserverade av systemet."
+
+msgid "Two items would both be named “{name}”."
+msgstr "Två objekt skulle båda heta ”{name}”."
+
+msgid "The name “{name}” is already taken. Please choose a different name."
+msgstr "Namnet ”{name}” är redan upptaget. Välj ett annat namn."
+
+msgid "{old} → {new}"
+msgstr "{old} → {new}"
+
+msgid "after name"
+msgstr "efter namnet"
+
+msgid "before name"
+msgstr "före namnet"
+
+msgid "Find:"
+msgstr "Sök efter:"
+
+msgid "Replace with:"
+msgstr "Ersätt med:"
+
+msgid "Text:"
+msgstr "Text:"
+
+msgid "Where:"
+msgstr "Plats:"
+
+msgid "Format:"
+msgstr "Format:"
+
+msgid "Name and Index"
+msgstr "Namn och index"
+
+msgid "Name and Counter"
+msgstr "Namn och räknare"
+
+msgid "Custom Format:"
+msgstr "Eget format:"
+
+msgid "Start numbers at:"
+msgstr "Börja numrera på:"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Rename"
+msgstr "Byt namn"
+
+msgid "Replace Text"
+msgstr "Ersätt text"
+
+msgid "Add Text"
+msgstr "Lägg till text"
+
+msgid "Format"
+msgstr "Format"
+
+msgid "Rename {count} Items"
+msgstr "Byt namn på {count} objekt"
+
+msgid "The operation couldn’t be completed: {error}"
+msgstr "Det gick inte att slutföra åtgärden: {error}"
+
+msgid "Date Modified"
+msgstr "Ändringsdatum"
+
+msgid "Date Created"
+msgstr "Skapad"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Kind"
+msgstr "Sort"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Where"
+msgstr "Plats"
+
+msgid "Move Left"
+msgstr "Flytta åt vänster"
+
+msgid "Move Right"
+msgstr "Flytta åt höger"
+
+msgid "Alias"
+msgstr "Alias"
+
+msgid "Icon size"
+msgstr "Ikonstorlek"
+
+msgid "Are you sure you want to permanently erase the items in the Trash?"
+msgstr "Vill du verkligen radera objekten i papperskorgen permanent?"
+
+msgid "You can’t undo this action."
+msgstr "Det går inte att ångra den här åtgärden."
+
+msgid "Empty Trash"
+msgstr "Töm papperskorgen"
+
+msgid "Delete this item immediately?"
+msgid_plural "Delete these {count} items immediately?"
+msgstr[0] "Vill du radera det här objektet direkt?"
+msgstr[1] "Vill du radera de här {count} objekten direkt?"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "The disk “{name}” wasn’t ejected because one or more programs may be using it."
+msgstr "Skivan ”{name}” matades inte ut eftersom ett eller flera program kan använda den."
+
+msgid "To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."
+msgstr "Klicka på Tvinga utmatning för att mata ut skivan direkt. Program som använder den kan förlora ändringar som inte har sparats."
+
+msgid "Force Eject"
+msgstr "Tvinga utmatning"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "The disk “{name}” couldn’t be ejected."
+msgstr "Det gick inte att mata ut skivan ”{name}”."
+
+msgid "Go to the folder:"
+msgstr "Gå till mappen:"
+
+msgid "Go"
+msgstr "Gå"
+
+msgid ""
+"Existing: {existing}\n"
+"New: {new}"
+msgstr ""
+"Befintligt: {existing}\n"
+"Nytt: {new}"
+
+msgid "An item named “{name}” already exists in this location."
+msgstr "Ett objekt med namnet ”{name}” finns redan på den här platsen."
+
+msgid "Apply to all"
+msgstr "Använd för alla"
+
+msgid "Skip"
+msgstr "Hoppa över"
+
+msgid "Replace"
+msgstr "Ersätt"
+
+msgid "Stop"
+msgstr "Stoppa"
+
+msgid "Keep Both"
+msgstr "Behåll båda"
+
+msgid "Waiting for the server…"
+msgstr "Väntar på servern…"
+
+msgid "The server isn’t responding. Files here can’t be reached right now."
+msgstr "Servern svarar inte. Filer här går inte att komma åt just nu."
+
+msgid "You don’t have permission to see the contents of “{folder}”."
+msgstr "Du har inte behörighet att se innehållet i ”{folder}”."
+
+msgid "Empty Folder"
+msgstr "Tom mapp"
+
+msgid "The Trash is empty"
+msgstr "Papperskorgen är tom"
+
+msgid "Files you open appear here"
+msgstr "Filer du öppnar visas här"
+
+msgid "No results for “{text}” in {folder}"
+msgstr "Inga resultat för ”{text}” i {folder}"
+
+msgid "Search Home"
+msgstr "Sök i hemmappen"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
+msgid "Disconnect"
+msgstr "Koppla från"
+
+msgid "You"
+msgstr "Du"
+
+msgid "Group"
+msgstr "Grupp"
+
+msgid "Everyone"
+msgstr "Alla"
+
+msgid "Read & Write"
+msgstr "Läsa och skriva"
+
+msgid "Read only"
+msgstr "Endast läsning"
+
+msgid "No Access"
+msgstr "Ingen åtkomst"
+
+msgid "Hide extension"
+msgstr "Dölj filändelse"
+
+msgid "Allow running as a program"
+msgstr "Tillåt körning som program"
+
+msgid "The permissions couldn’t be changed: {error}"
+msgstr "Det gick inte att ändra behörigheterna: {error}"
+
+msgid "Files"
+msgstr "Filer"
+
+msgid "Files Settings"
+msgstr "Inställningar för Filer"
+
+msgid "Quick Look"
+msgstr "Snabbtitt"
+
+msgid "Clear Menu"
+msgstr "Rensa menyn"
+
+msgid "Move {column} Left"
+msgstr "Flytta {column} åt vänster"
+
+msgid "Move {column} Right"
+msgstr "Flytta {column} åt höger"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "New Window"
+msgstr "Nytt fönster"
+
+msgid "New Tab"
+msgstr "Ny flik"
+
+msgid "New Folder"
+msgstr "Ny mapp"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Get Info"
+msgstr "Visa info"
+
+msgid "Browse Backups…"
+msgstr "Bläddra bland säkerhetskopior…"
+
+msgid "Duplicate"
+msgstr "Duplicera"
+
+msgid "Make Alias"
+msgstr "Skapa alias"
+
+msgid "Add to Sidebar"
+msgstr "Lägg till i sidofältet"
+
+msgid "Open in Terminal"
+msgstr "Öppna i Terminal"
+
+msgid "Compress"
+msgstr "Komprimera"
+
+msgid "Move to Trash"
+msgstr "Flytta till papperskorgen"
+
+msgid "Delete Immediately…"
+msgstr "Radera direkt…"
+
+msgid "Eject"
+msgstr "Mata ut"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "Edit"
+msgstr "Redigera"
+
+msgid "Undo"
+msgstr "Ångra"
+
+msgid "Redo"
+msgstr "Gör om"
+
+msgid "Cut"
+msgstr "Klipp ut"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Copy as Pathname"
+msgstr "Kopiera som sökväg"
+
+msgid "Paste"
+msgstr "Klistra in"
+
+msgid "Move Item Here"
+msgstr "Flytta objektet hit"
+
+msgid "Select All"
+msgstr "Markera allt"
+
+msgid "View"
+msgstr "Visning"
+
+msgid "as Icons"
+msgstr "som ikoner"
+
+msgid "as List"
+msgstr "som lista"
+
+msgid "as Columns"
+msgstr "som kolumner"
+
+msgid "as Gallery"
+msgstr "som galleri"
+
+msgid "Use Groups"
+msgstr "Använd grupper"
+
+msgid "Group By"
+msgstr "Gruppera efter"
+
+msgid "Sort By"
+msgstr "Sortera efter"
+
+msgid "Columns"
+msgstr "Kolumner"
+
+msgid "Bigger Icons"
+msgstr "Större ikoner"
+
+msgid "Smaller Icons"
+msgstr "Mindre ikoner"
+
+msgid "Hide Hidden Files"
+msgstr "Dölj dolda filer"
+
+msgid "Show Hidden Files"
+msgstr "Visa dolda filer"
+
+msgid "Show or Hide Status Bar"
+msgstr "Visa eller dölj statusfältet"
+
+msgid "Quick Look in Full Screen"
+msgstr "Snabbtitt i helskärm"
+
+msgid "Back"
+msgstr "Bakåt"
+
+msgid "Forward"
+msgstr "Framåt"
+
+msgid "Enclosing Folder"
+msgstr "Överordnad mapp"
+
+msgid "Desktop"
+msgstr "Skrivbord"
+
+msgid "Documents"
+msgstr "Dokument"
+
+msgid "Downloads"
+msgstr "Hämtningar"
+
+msgid "Home"
+msgstr "Hem"
+
+msgid "Recents"
+msgstr "Senaste"
+
+msgid "Recent Folders"
+msgstr "Senaste mappar"
+
+msgid "Go to Folder…"
+msgstr "Gå till mapp…"
+
+msgid "Connect to Server…"
+msgstr "Anslut till server…"
+
+msgid "Show Previous Tab"
+msgstr "Visa föregående flik"
+
+msgid "Show Next Tab"
+msgstr "Visa nästa flik"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "Application"
+msgstr "Program"
+
+msgid "Date Added"
+msgstr "Datum tillagd"
+
+msgid "Put Back"
+msgstr "Lägg tillbaka"
+
+msgid "Open in New Tab"
+msgstr "Öppna i ny flik"
+
+msgid "Other…"
+msgstr "Annan…"
+
+msgid "Open With"
+msgstr "Öppna med"
+
+msgid "Show in Enclosing Folder"
+msgstr "Visa i överordnad mapp"
+
+msgid "Mail"
+msgstr "E-post"
+
+msgid "Copy to {place}"
+msgstr "Kopiera till {place}"
+
+msgid "Share"
+msgstr "Dela"
+
+msgid "Rename {count} Items…"
+msgstr "Byt namn på {count} objekt…"
+
+msgid "Compress “{name}”"
+msgstr "Komprimera ”{name}”"
+
+msgid "Compress {count} Items"
+msgstr "Komprimera {count} objekt"
+
+msgid "Look Up “{name}”"
+msgstr "Slå upp ”{name}”"
+
+msgid "Copy “{name}” as Pathname"
+msgstr "Kopiera ”{name}” som sökväg"
+
+msgid "Copy {count} Items as Pathnames"
+msgstr "Kopiera {count} objekt som sökvägar"
+
+msgid "Move {count} Items to Trash"
+msgstr "Flytta {count} objekt till papperskorgen"
+
+msgid "Empty Trash…"
+msgstr "Töm papperskorgen…"
+
+msgid "New Document"
+msgstr "Nytt dokument"
+
+msgid "Remove from Sidebar"
+msgstr "Ta bort från sidofältet"
+
+msgid "Restore Default Sidebar"
+msgstr "Återställ standardsidofältet"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Always Open With"
+msgstr "Öppna alltid med"
+
+msgid "Choose an app to open “{name}”:"
+msgstr "Välj en app för att öppna ”{name}”:"
+
+msgid "Choose an app to open {count} items:"
+msgstr "Välj en app för att öppna {count} objekt:"
+
+msgid "The default app couldn’t be changed: {error}"
+msgstr "Det gick inte att ändra standardappen: {error}"
+
+msgid "{kind} · {size}"
+msgstr "{kind} · {size}"
+
+msgid "{count} item"
+msgid_plural "{count} items"
+msgstr[0] "{count} objekt"
+msgstr[1] "{count} objekt"
+
+msgid "Created"
+msgstr "Skapad"
+
+msgid "Modified"
+msgstr "Ändrad"
+
+msgid "More Info"
+msgstr "Mer info"
+
+msgid "Trash"
+msgstr "Papperskorg"
+
+msgid "{selected} of {count} selected"
+msgstr "{selected} av {count} markerade"
+
+msgid "{items}, {free} available"
+msgstr "{items}, {free} tillgängligt"
+
+msgid "{done} of {total}"
+msgstr "{done} av {total}"
+
+msgid "No selection"
+msgstr "Inget markerat"
+
+msgid "{size} for {count} item"
+msgid_plural "{size} for {count} items"
+msgstr[0] "{size} för {count} objekt"
+msgstr[1] "{size} för {count} objekt"
+
+msgid "Calculating…"
+msgstr "Beräknar…"
+
+msgid "Name & Extension"
+msgstr "Namn och filändelse"
+
+msgid "Dimensions"
+msgstr "Dimensioner"
+
+msgid "{width} × {height}"
+msgstr "{width} × {height}"
+
+msgid "Put back to"
+msgstr "Läggs tillbaka i"
+
+msgid "Deleted"
+msgstr "Raderad"
+
+msgid "Permissions"
+msgstr "Behörigheter"
+
+msgid "Points to"
+msgstr "Pekar på"
+
+msgid "Open with"
+msgstr "Öppna med"
+
+msgid "{app} (default)"
+msgstr "{app} (standard)"
+
+msgid "Use for All"
+msgstr "Använd för alla"
+
+msgid "Sharing & Permissions"
+msgstr "Delning och behörigheter"
+
+msgid "Copying {done} of {total} items"
+msgstr "Kopierar {done} av {total} objekt"
+
+msgid "Moving {done} of {total} items"
+msgstr "Flyttar {done} av {total} objekt"
+
+msgid "Duplicating {done} of {total} items"
+msgstr "Duplicerar {done} av {total} objekt"
+
+msgid "Renaming"
+msgstr "Byter namn"
+
+msgid "Creating a folder"
+msgstr "Skapar en mapp"
+
+msgid "Moving {done} of {total} items to the Trash"
+msgstr "Flyttar {done} av {total} objekt till papperskorgen"
+
+msgid "Putting back {done} of {total} items"
+msgstr "Lägger tillbaka {done} av {total} objekt"
+
+msgid "Compressing {done} of {total} items"
+msgstr "Komprimerar {done} av {total} objekt"
+
+msgid "Extracting {done} of {total} items"
+msgstr "Packar upp {done} av {total} objekt"
+
+msgid "Undoing"
+msgstr "Ångrar"
+
+msgid "Redoing"
+msgstr "Gör om"
+
+msgid "Deleting {done} of {total} items"
+msgstr "Raderar {done} av {total} objekt"
+
+msgid "Folder"
+msgstr "Mapp"
+
+msgid "Any Kind"
+msgstr "Alla sorter"
+
+msgid "Document"
+msgstr "Dokument"
+
+msgid "Image"
+msgstr "Bild"
+
+msgid "Audio"
+msgstr "Ljud"
+
+msgid "Video"
+msgstr "Video"
+
+msgid "Archive"
+msgstr "Arkiv"
+
+msgid "Any Time"
+msgstr "När som helst"
+
+msgid "Today"
+msgstr "Idag"
+
+msgid "Last 7 Days"
+msgstr "Senaste 7 dagarna"
+
+msgid "Last 30 Days"
+msgstr "Senaste 30 dagarna"
+
+msgid "This Year"
+msgstr "I år"
+
+msgid "“{folder}”"
+msgstr "”{folder}”"
+
+msgid "Search:"
+msgstr "Sök:"
+
+msgid "smb://server/share, nfs://server/export, sftp://server or https://server/dav"
+msgstr "smb://server/share, nfs://server/export, sftp://server eller https://server/dav"
+
+msgid "Reconnect at login"
+msgstr "Anslut igen vid inloggning"
+
+msgid "Recent Servers"
+msgstr "Senaste servrar"
+
+msgid "Connect to Server"
+msgstr "Anslut till server"
+
+msgid "Connect"
+msgstr "Anslut"
+
+msgid "Installing what is needed…"
+msgstr "Installerar det som behövs…"
+
+msgid "Connecting to {server}…"
+msgstr "Ansluter till {server}…"
+
+msgid "The server’s identity has changed."
+msgstr "Serverns identitet har ändrats."
+
+msgid "This could be an attack, or the server was reinstalled. Ask whoever runs it, and remove its old key from ~/.ssh/known_hosts to connect."
+msgstr "Det kan vara ett angrepp, eller så har servern installerats om. Fråga den som driver den och ta bort dess gamla nyckel från ~/.ssh/known_hosts för att ansluta."
+
+msgid "The server can’t be reached."
+msgstr "Det går inte att nå servern."
+
+msgid "Check the address and that you are on the same network."
+msgstr "Kontrollera adressen och att du är på samma nätverk."
+
+msgid "The server has no such shared folder."
+msgstr "Servern har ingen sådan delad mapp."
+
+msgid "That isn’t a server address."
+msgstr "Det är inte en serveradress."
+
+msgid "The connection failed."
+msgstr "Anslutningen misslyckades."
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Remember this password in the keychain"
+msgstr "Kom ihåg det här lösenordet i nyckelringen"
+
+msgid "Sign in to {server}"
+msgstr "Logga in på {server}"
+
+msgid "The name or password wasn’t accepted."
+msgstr "Namnet eller lösenordet godkändes inte."
+
+msgid "The server doesn’t share any folders with you."
+msgstr "Servern delar inga mappar med dig."
+
+msgid "Choose a shared folder on {server}"
+msgstr "Välj en delad mapp på {server}"
+
+msgid "This computer hasn’t connected to {server} before."
+msgstr "Den här datorn har inte anslutit till {server} tidigare."
+
+msgid "Connect only if you trust this server. Its fingerprint is {key}."
+msgstr "Anslut bara om du litar på servern. Dess fingeravtryck är {key}."
+
+msgid "Connecting to this kind of server needs software that isn’t installed."
+msgstr "För att ansluta till den här typen av server krävs programvara som inte är installerad."
+
+msgid "It’s a small download from the Bande software archive."
+msgstr "Det är en liten hämtning från Bandes programarkiv."
+
+msgid "Install"
+msgstr "Installera"
+
+msgid "Last Folder"
+msgstr "Senaste mappen"
+
+msgid "Show in Sidebar"
+msgstr "Visa i sidofältet"
+
+msgid "External disks"
+msgstr "Externa skivor"
+
+msgid "Choose the folder new windows show"
+msgstr "Välj mappen som nya fönster visar"
+
+msgid "New windows show"
+msgstr "Nya fönster visar"
+
+msgid "Default view"
+msgstr "Standardvisning"
+
+msgid "Current Folder"
+msgstr "Aktuell mapp"
+
+msgid "Search in"
+msgstr "Sök i"
+
+msgid "Spring-loading delay"
+msgstr "Fördröjning för att öppna mappar vid hovring"
+
+msgid "General"
+msgstr "Allmänt"
+
+msgid "Show hidden files"
+msgstr "Visa dolda filer"
+
+msgid "Show external disks on the desktop"
+msgstr "Visa externa skivor på skrivbordet"
+
+msgid "Spring-loaded folders"
+msgstr "Mappar som öppnas vid hovring"
+
+msgid "Advanced"
+msgstr "Avancerat"
+
+msgid "Show all filename extensions"
+msgstr "Visa alla filändelser"
+
+msgid "Show warning before changing an extension"
+msgstr "Varna innan en filändelse ändras"
+
+msgid "Show warning before emptying the Trash"
+msgstr "Varna innan papperskorgen töms"
+
+msgid "Remove items from the Trash after 30 days"
+msgstr "Ta bort objekt från papperskorgen efter 30 dagar"
+
+msgid "Keep folders on top when sorting by name"
+msgstr "Behåll mappar överst vid sortering efter namn"
+
+msgid "Internal"
+msgstr "Intern"
+
+msgid "Favourites"
+msgstr "Favoriter"
+
+msgid "Locations"
+msgstr "Platser"
+
+msgid "Network"
+msgstr "Nätverk"
+
+msgid "Searching “{folder}”"
+msgstr "Söker i ”{folder}”"
+
+msgid "Icons"
+msgstr "Ikoner"
+
+msgid "List"
+msgstr "Lista"
+
+msgid "Gallery"
+msgstr "Galleri"
+
+msgid "“{name}” couldn’t be copied."
+msgstr "”{name}” kunde inte kopieras."
+
+msgid "“{name}” couldn’t be moved."
+msgstr "”{name}” kunde inte flyttas."
+
+msgid "“{name}” couldn’t be duplicated."
+msgstr "”{name}” kunde inte dupliceras."
+
+msgid "“{name}” couldn’t be moved to the Trash."
+msgstr "”{name}” kunde inte flyttas till papperskorgen."
+
+msgid "“{name}” couldn’t be put back."
+msgstr "”{name}” kunde inte läggas tillbaka."
+
+msgid "“{name}” couldn’t be deleted."
+msgstr "”{name}” kunde inte raderas."
+
+msgid "“{name}” couldn’t be changed."
+msgstr "”{name}” kunde inte ändras."
+
+msgid "“{name}” can’t be moved because “{volume}” needs {size} more space."
+msgstr "”{name}” kan inte flyttas eftersom ”{volume}” behöver {size} mer utrymme."
+
+msgid "“{name}” can’t be duplicated because “{volume}” needs {size} more space."
+msgstr "”{name}” kan inte dupliceras eftersom ”{volume}” behöver {size} mer utrymme."
+
+msgid "“{name}” can’t be copied because “{volume}” needs {size} more space."
+msgstr "”{name}” kan inte kopieras eftersom ”{volume}” behöver {size} mer utrymme."
+
+msgid "The items can’t be moved because “{volume}” needs {size} more space."
+msgstr "Objekten kan inte flyttas eftersom ”{volume}” behöver {size} mer utrymme."
+
+msgid "The items can’t be duplicated because “{volume}” needs {size} more space."
+msgstr "Objekten kan inte dupliceras eftersom ”{volume}” behöver {size} mer utrymme."
+
+msgid "The items can’t be copied because “{volume}” needs {size} more space."
+msgstr "Objekten kan inte kopieras eftersom ”{volume}” behöver {size} mer utrymme."
+
+msgid "You don’t have permission."
+msgstr "Du har inte behörighet."
+
+msgid "The volume is read-only."
+msgstr "Volymen är skrivskyddad."
+
+msgid "The disk is full."
+msgstr "Skivan är full."
+
+msgid "The name is too long."
+msgstr "Namnet är för långt."
+
+msgid "The name isn’t allowed on this disk."
+msgstr "Namnet är inte tillåtet på den här skivan."
+
+msgid "The item is too large for the format of this disk."
+msgstr "Objektet är för stort för den här skivans format."
+
+msgid "The disk was disconnected."
+msgstr "Skivan kopplades från."
+
+msgid "The server stopped responding. Nothing was left under the real name. Try again when it’s back."
+msgstr "Servern slutade svara. Ingenting lämnades kvar under det riktiga namnet. Försök igen när den är tillbaka."
+
+msgid "The disk couldn’t be read or written. It may have been disconnected or be damaged."
+msgstr "Det gick inte att läsa från eller skriva till skivan. Den kan ha kopplats från eller vara skadad."
+
+msgid "The item or its folder no longer exists."
+msgstr "Objektet eller dess mapp finns inte längre."
+
+msgid "{error}"
+msgstr "{error}"
+
+msgid "Skip All"
+msgstr "Hoppa över alla"
+
+msgid "“{name}” can’t be moved to the Trash."
+msgstr "”{name}” kan inte flyttas till papperskorgen."
+
+msgid "This disk has no Trash you can use. Delete it now? This can’t be undone."
+msgstr "Den här skivan har ingen papperskorg som går att använda. Vill du radera objektet nu? Det går inte att ångra."
+
+msgid "Delete All"
+msgstr "Radera alla"
+
+msgid "Stop and Quit"
+msgstr "Stoppa och avsluta"
+
+msgid "Stop and Close"
+msgstr "Stoppa och stäng"
+
+msgid "Files is still working."
+msgstr "Filer arbetar fortfarande."
+
+msgid "Items already finished stay where they are. The item in progress is discarded, and its original is not touched."
+msgstr "Objekt som redan är klara blir kvar där de är. Objektet som pågår kasseras, och originalet rörs inte."
+
+msgid "Keep Going"
+msgstr "Fortsätt"
+
+msgid "Nothing was written. Make room on the disk and try again."
+msgstr "Ingenting skrevs. Frigör utrymme på skivan och försök igen."
+
+msgid "Copy of {count} Item"
+msgid_plural "Copy of {count} Items"
+msgstr[0] "kopiering av {count} objekt"
+msgstr[1] "kopiering av {count} objekt"
+
+msgid "Move of {count} Item"
+msgid_plural "Move of {count} Items"
+msgstr[0] "flytt av {count} objekt"
+msgstr[1] "flytt av {count} objekt"
+
+msgid "Duplicate of {count} Item"
+msgid_plural "Duplicate of {count} Items"
+msgstr[0] "duplicering av {count} objekt"
+msgstr[1] "duplicering av {count} objekt"
+
+msgctxt "undo"
+msgid "Rename"
+msgstr "namnbyte"
+
+msgctxt "undo"
+msgid "New Folder"
+msgstr "ny mapp"
+
+msgctxt "undo"
+msgid "New Document"
+msgstr "nytt dokument"
+
+msgctxt "undo"
+msgid "Move to Trash"
+msgstr "flytt till papperskorgen"
+
+msgctxt "undo"
+msgid "Put Back"
+msgstr "återläggning"
+
+msgctxt "undo"
+msgid "Compress"
+msgstr "komprimering"
+
+msgid "Extract"
+msgstr "uppackning"
+
+msgctxt "undo"
+msgid "Make Alias"
+msgstr "skapande av alias"
+
+msgid "“{path}” can’t be found."
+msgstr "”{path}” hittades inte."
+
+msgid "Undo {action}"
+msgstr "Ångra {action}"
+
+msgid "Redo {action}"
+msgstr "Gör om {action}"
+
+msgid "“{name}” couldn’t be handled: {error}"
+msgstr "Det gick inte att hantera ”{name}”: {error}"
+
+msgid "“{name}” couldn’t be handled: {error} ({others} more)"
+msgid_plural "“{name}” couldn’t be handled: {error} ({others} more)"
+msgstr[0] "Det gick inte att hantera ”{name}”: {error} ({others} till)"
+msgstr[1] "Det gick inte att hantera ”{name}”: {error} ({others} till)"

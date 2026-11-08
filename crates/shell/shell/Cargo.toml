@@ -43,6 +43,7 @@ assets = [
     ["target/release/bande-shell", "usr/bin/", "755"],
     ["../../../data/wallpapers/*.svg", "usr/share/bande/wallpapers/", "644"],
     ["../../../data/icons/Bande*/**/*", "usr/share/icons/", "644"],
+    ["target/release/l10n/development/bande-shell/*", "usr/share/bande/l10n/bande-shell/", "644"],
 ]
 extended-description = """\
 The shell of the Bande desktop, one process for the whole session. On \

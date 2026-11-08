@@ -93,6 +93,9 @@ assets = [
     ["data/org.bande.locale-helper.policy", "usr/share/polkit-1/actions/", "644"],
     ["data/bande-disk-encryption", "usr/libexec/", "755"],
     ["data/bande-disk-encryption.service", "usr/lib/systemd/system/", "644"],
+    ["target/release/l10n/development/bande-locale-helper/*", "usr/share/bande/l10n/bande-locale-helper/", "644"],
+    ["target/release/l10n/development/bande-settings/*", "usr/share/bande/l10n/bande-settings/", "644"],
+    ["target/release/l10n/development/bande-sharing-helper/*", "usr/share/bande/l10n/bande-sharing-helper/", "644"],
 ]
 
 [lints]

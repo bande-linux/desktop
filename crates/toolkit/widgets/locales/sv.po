@@ -1,0 +1,119 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Show Choices"
+msgstr "Visa alternativ"
+
+msgid "Change Back to “{word}”"
+msgstr "Ändra tillbaka till ”{word}”"
+
+msgid "No Suggestions"
+msgstr "Inga förslag"
+
+msgid "Ignore Spelling"
+msgstr "Ignorera stavning"
+
+msgid "Learn Spelling"
+msgstr "Lär in stavning"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Select All"
+msgstr "Markera allt"
+
+msgid "Undo"
+msgstr "Ångra"
+
+msgid "Redo"
+msgstr "Gör om"
+
+msgid "Cut"
+msgstr "Klipp ut"
+
+msgid "Paste"
+msgstr "Klistra in"
+
+msgid "Emoji & Symbols…"
+msgstr "Emojier och symboler…"
+
+msgid "Look Up “{word}”"
+msgstr "Slå upp ”{word}”"
+
+msgid "Clear"
+msgstr "Rensa"
+
+msgid "Caps Lock is on"
+msgstr "Caps Lock är på"
+
+msgid "Shift"
+msgstr "Skift"
+
+msgid "Ctrl"
+msgstr "Ctrl"
+
+msgid "Alt"
+msgstr "Alt"
+
+msgid "Super"
+msgstr "Super"
+
+msgid "←"
+msgstr "←"
+
+msgid "→"
+msgstr "→"
+
+msgid "↑"
+msgstr "↑"
+
+msgid "↓"
+msgstr "↓"
+
+msgid "Backspace"
+msgstr "Backsteg"
+
+msgctxt "key"
+msgid "Delete"
+msgstr "Delete"
+
+msgid "Enter"
+msgstr "Retur"
+
+msgid "Tab"
+msgstr "Tabb"
+
+msgid "Esc"
+msgstr "Esc"
+
+msgid "Space"
+msgstr "Mellanslag"
+
+msgctxt "key"
+msgid "Home"
+msgstr "Home"
+
+msgid "End"
+msgstr "End"
+
+msgid "Page Up"
+msgstr "Page Up"
+
+msgid "Page Down"
+msgstr "Page Down"
+
+msgctxt "key"
+msgid "Insert"
+msgstr "Insert"
+
+msgid "Menu"
+msgstr "Meny"
+
+msgid "Press {chord} to release"
+msgstr "Tryck på {chord} för att släppa"

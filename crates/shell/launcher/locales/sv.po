@@ -1,0 +1,257 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Image"
+msgstr "Bild"
+
+msgid "Lock Screen"
+msgstr "Låsskärm"
+
+msgid "Sleep"
+msgstr "Vila"
+
+msgid "Log Out…"
+msgstr "Logga ut…"
+
+msgid "Restart…"
+msgstr "Starta om…"
+
+msgid "Shut Down…"
+msgstr "Stäng av…"
+
+msgid "lock away"
+msgstr "lås låsa skärmlås"
+
+msgid "suspend standby"
+msgstr "vänteläge viloläge suspendera"
+
+msgid "logout signout exit"
+msgstr "utloggning avsluta session"
+
+msgid "reboot"
+msgstr "omstart boota"
+
+msgid "shutdown poweroff power off turn"
+msgstr "avstängning stänga släck"
+
+msgid "Just now"
+msgstr "Nyss"
+
+msgid "{count} minute ago"
+msgid_plural "{count} minutes ago"
+msgstr[0] "för {count} minut sedan"
+msgstr[1] "för {count} minuter sedan"
+
+msgid "{count} hour ago"
+msgid_plural "{count} hours ago"
+msgstr[0] "för {count} timme sedan"
+msgstr[1] "för {count} timmar sedan"
+
+msgid "{count} day ago"
+msgid_plural "{count} days ago"
+msgstr[0] "för {count} dag sedan"
+msgstr[1] "för {count} dagar sedan"
+
+msgid "{count} file"
+msgid_plural "{count} files"
+msgstr[0] "{count} fil"
+msgstr[1] "{count} filer"
+
+msgid "Image · {width} × {height}"
+msgstr "Bild · {width} × {height}"
+
+msgid "{count} character"
+msgid_plural "{count} characters"
+msgstr[0] "{count} tecken"
+msgstr[1] "{count} tecken"
+
+msgid "System Settings"
+msgstr "Systeminställningar"
+
+msgid "Items"
+msgstr "Objekt"
+
+msgid "{count} item"
+msgid_plural "{count} items"
+msgstr[0] "{count} objekt"
+msgstr[1] "{count} objekt"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "Modified"
+msgstr "Ändrad"
+
+msgid "Where"
+msgstr "Plats"
+
+msgid "Copied"
+msgstr "Kopierat"
+
+msgid "Return or Ctrl+C to copy"
+msgstr "Retur eller Ctrl+C för att kopiera"
+
+msgid "Return to open"
+msgstr "Retur för att öppna"
+
+msgid "Return to open in System Settings"
+msgstr "Retur för att öppna i Systeminställningar"
+
+msgid "Return to choose"
+msgstr "Retur för att välja"
+
+msgid "Return to copy, then paste with Ctrl+V"
+msgstr "Retur för att kopiera, klistra sedan in med Ctrl+V"
+
+msgid "Return to paste · Delete to remove"
+msgstr "Retur för att klistra in · Radera för att ta bort"
+
+msgid "Return to copy, then paste with Ctrl+V · Delete to remove"
+msgstr "Retur för att kopiera, klistra sedan in med Ctrl+V · Radera för att ta bort"
+
+msgid "Return to open · Ctrl+Return to show in Files · Ctrl+C to copy path"
+msgstr "Retur för att öppna · Ctrl+Retur för att visa i Filer · Ctrl+C för att kopiera sökväg"
+
+msgid "Return opens it in its app"
+msgstr "Retur öppnar det i sin app"
+
+msgid "Preview"
+msgstr "Förhandsvisning"
+
+msgid "Default"
+msgstr "Standard"
+
+msgid "Light"
+msgstr "Ljus"
+
+msgid "Medium-Light"
+msgstr "Medelljus"
+
+msgid "Medium"
+msgstr "Medel"
+
+msgid "Medium-Dark"
+msgstr "Medelmörk"
+
+msgid "Dark"
+msgstr "Mörk"
+
+msgid "Paste"
+msgstr "Klistra in"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Clear History"
+msgstr "Rensa historik"
+
+msgid "Insert"
+msgstr "Infoga"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Show in Files"
+msgstr "Visa i Filer"
+
+msgid "Copy Path"
+msgstr "Kopiera sökväg"
+
+msgid "Skin Tone"
+msgstr "Hudton"
+
+msgid "Top Hit"
+msgstr "Bästa träff"
+
+msgid "Applications"
+msgstr "Program"
+
+msgid "System"
+msgstr "System"
+
+msgid "Folders"
+msgstr "Mappar"
+
+msgid "Documents"
+msgstr "Dokument"
+
+msgid "Mail"
+msgstr "E-post"
+
+msgid "Events"
+msgstr "Händelser"
+
+msgid "Contacts"
+msgstr "Kontakter"
+
+msgid "Recent Apps"
+msgstr "Senaste appar"
+
+msgid "Recent Documents"
+msgstr "Senaste dokument"
+
+msgid "All Apps"
+msgstr "Alla appar"
+
+msgid "Frequently Used"
+msgstr "Ofta använda"
+
+msgid "Smileys & Emotion"
+msgstr "Smileys och känslor"
+
+msgid "People & Body"
+msgstr "Människor och kroppsdelar"
+
+msgid "Animals & Nature"
+msgstr "Djur och natur"
+
+msgid "Food & Drink"
+msgstr "Mat och dryck"
+
+msgid "Travel & Places"
+msgstr "Resor och platser"
+
+msgid "Activities"
+msgstr "Aktiviteter"
+
+msgid "Objects"
+msgstr "Föremål"
+
+msgid "Symbols"
+msgstr "Symboler"
+
+msgid "Flags"
+msgstr "Flaggor"
+
+msgid "Characters"
+msgstr "Tecken"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Search Emoji & Symbols"
+msgstr "Sök bland emojier och symboler"
+
+msgid "Search Clipboard History"
+msgstr "Sök i urklippshistoriken"
+
+msgid "Return to insert"
+msgstr "Retur för att infoga"
+
+msgid "Things you copy appear here"
+msgstr "Saker du kopierar visas här"
+
+msgid "No Results"
+msgstr "Inga resultat"
+
+msgid "Launcher"
+msgstr "Startare"

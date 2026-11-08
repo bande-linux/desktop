@@ -1,0 +1,1965 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "{family} ({cores} cores)"
+msgstr "{family} ({cores} kärnor)"
+
+msgid "The computer name service"
+msgstr "Tjänsten för datorns namn"
+
+msgid "Choose a Folder to Keep Out of Search"
+msgstr "Välj en mapp att utesluta från sökning"
+
+msgid "today at {time}"
+msgstr "i dag {time}"
+
+msgid "{date} at {time}"
+msgstr "{date} {time}"
+
+msgid "No backup for two weeks"
+msgstr "Ingen säkerhetskopia på två veckor"
+
+msgid "Connect the backup disk, or resume backups."
+msgstr "Anslut säkerhetskopieringsskivan eller återuppta säkerhetskopieringen."
+
+msgid "The disk is too small"
+msgstr "Skivan är för liten"
+
+msgid "There's no more room, even with the oldest versions removed. Use a larger disk."
+msgstr "Det finns inget mer utrymme, trots att de äldsta versionerna har tagits bort. Använd en större skiva."
+
+msgid "Damage found on the disk"
+msgstr "Skada hittades på skivan"
+
+msgid "Some older versions were lost. Backups go on, but the disk may be failing."
+msgstr "Vissa äldre versioner gick förlorade. Säkerhetskopieringen fortsätter, men skivan kan vara på väg att gå sönder."
+
+msgid "Can't open the backups"
+msgstr "Det går inte att öppna säkerhetskopiorna"
+
+msgid "They are missing from the disk or use another password. Choose the disk again."
+msgstr "De saknas på skivan eller använder ett annat lösenord. Välj skivan igen."
+
+msgid "Backups keep failing"
+msgstr "Säkerhetskopieringen misslyckas gång på gång"
+
+msgid "The last few backups didn't finish. The disk may have a fault."
+msgstr "De senaste säkerhetskopiorna blev inte klara. Skivan kan ha ett fel."
+
+msgid "That isn't the address of a share."
+msgstr "Det är inte adressen till en delad mapp."
+
+msgid "The share can't be reached with that address and sign-in."
+msgstr "Den delade mappen går inte att nå med den adressen och inloggningen."
+
+msgid "Backup isn't installed."
+msgstr "Säkerhetskopiering är inte installerad."
+
+msgid "Calculating…"
+msgstr "Beräknar …"
+
+msgid "Preparing the disk…"
+msgstr "Förbereder skivan …"
+
+msgid "Back up this computer"
+msgstr "Säkerhetskopiera den här datorn"
+
+msgid "Hourly versions, encrypted, on a disk of your choice. The oldest go when the disk fills."
+msgstr "Versioner varje timme, krypterade, på en skiva du väljer. De äldsta tas bort när skivan blir full."
+
+msgid "The disk is no longer connected."
+msgstr "Skivan är inte längre ansluten."
+
+msgid "Connect an external disk to back up to."
+msgstr "Anslut en extern skiva att säkerhetskopiera till."
+
+msgid "{size}, {filesystem}"
+msgstr "{size}, {filesystem}"
+
+msgid "Erase…"
+msgstr "Radera…"
+
+msgid "Use This Disk"
+msgstr "Använd den här skivan"
+
+msgid "Back Up to a Network Location…"
+msgstr "Säkerhetskopiera till en nätverksplats…"
+
+msgid ", including {names}"
+msgstr ", även {names}"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Erase and Use"
+msgstr "Radera och använd"
+
+msgid "Erase all of {disk} ({size})?"
+msgstr "Radera hela {disk} ({size})?"
+
+msgid "Everything on this disk will be permanently deleted{contents}. This can't be undone."
+msgstr "Allt på skivan raderas permanent{contents}. Det går inte att ångra."
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Password on the server"
+msgstr "Lösenord på servern"
+
+msgid "Address of the share"
+msgstr "Adress till den delade mappen"
+
+msgid "smb://server/share, nfs://server/path or rest:https://server:8000"
+msgstr "smb://server/mapp, nfs://server/sökväg eller rest:https://server:8000"
+
+msgid "Name on the server"
+msgstr "Namn på servern"
+
+msgid "Leave empty if the share needs no sign-in."
+msgstr "Lämna tomt om den delade mappen inte kräver inloggning."
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Next"
+msgstr "Nästa"
+
+msgid "Add Folder…"
+msgstr "Lägg till mapp…"
+
+msgid "Not backed up"
+msgstr "Säkerhetskopieras inte"
+
+msgid "Everything except caches and the Trash is backed up."
+msgstr "Allt utom cacheminnen och papperskorgen säkerhetskopieras."
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "{disk} already has this computer's backups"
+msgstr "{disk} innehåller redan den här datorns säkerhetskopior"
+
+msgid "Enter the password you chose for them to carry on."
+msgstr "Ange lösenordet du valde för dem för att fortsätta."
+
+msgid "Type the password again"
+msgstr "Skriv lösenordet igen"
+
+msgid "Write this password down. It can't be recovered: without it, these backups can't be restored onto another computer."
+msgstr "Skriv ner lösenordet. Det går inte att återfå: utan det kan säkerhetskopiorna inte återställas till en annan dator."
+
+msgid "Same password"
+msgstr "Samma lösenord"
+
+msgid "Choose a password for {disk}"
+msgstr "Välj ett lösenord för {disk}"
+
+msgid "The passwords don't match. Try again."
+msgstr "Lösenorden stämmer inte överens. Försök igen."
+
+msgid "That isn't the password for these backups."
+msgstr "Det är inte lösenordet för de här säkerhetskopiorna."
+
+msgid "The disk can't be used for backups."
+msgstr "Skivan kan inte användas för säkerhetskopiering."
+
+msgid "The disk couldn't be erased."
+msgstr "Skivan kunde inte raderas."
+
+msgid "Back up on battery"
+msgstr "Säkerhetskopiera på batteri"
+
+msgid "No backup yet"
+msgstr "Ingen säkerhetskopia än"
+
+msgid "Last backup: {when}"
+msgstr "Senaste säkerhetskopia: {when}"
+
+msgid "Backing up"
+msgstr "Säkerhetskopierar"
+
+msgid "About {minutes} min left"
+msgstr "Cirka {minutes} min kvar"
+
+msgid "Pause"
+msgstr "Pausa"
+
+msgid "Removing old versions"
+msgstr "Tar bort gamla versioner"
+
+msgid "Checking the backups"
+msgstr "Kontrollerar säkerhetskopiorna"
+
+msgid "Resume"
+msgstr "Återuppta"
+
+msgid "Paused until {when}"
+msgstr "Pausad till {when}"
+
+msgid "{disk} can't be reached"
+msgstr "Det går inte att nå {disk}"
+
+msgid "Backups carry on when it's back."
+msgstr "Säkerhetskopieringen fortsätter när den är tillbaka."
+
+msgid "{disk} isn't connected"
+msgstr "{disk} är inte ansluten"
+
+msgid "Back Up Now"
+msgstr "Säkerhetskopiera nu"
+
+msgid "Waiting for power"
+msgstr "Väntar på ström"
+
+msgid "Backups carry on when the computer is plugged in."
+msgstr "Säkerhetskopieringen fortsätter när datorn är ansluten till elnätet."
+
+msgid "{disk}, {free} free of {total}"
+msgstr "{disk}, {free} ledigt av {total}"
+
+msgid "Stop Using This Disk…"
+msgstr "Sluta använda den här skivan …"
+
+msgid "Backup disk"
+msgstr "Säkerhetskopieringsskiva"
+
+msgid "1 version kept"
+msgid_plural "{count} versions kept"
+msgstr[0] "1 version sparad"
+msgstr[1] "{count} versioner sparade"
+
+msgid "Oldest version: {when}"
+msgstr "Äldsta version: {when}"
+
+msgid "Stop Backups"
+msgstr "Sluta säkerhetskopiera"
+
+msgid "Stop backing up to {disk}?"
+msgstr "Vill du sluta säkerhetskopiera till {disk}?"
+
+msgid "The backups stay on the disk, and can still be restored with their password."
+msgstr "Säkerhetskopiorna finns kvar på skivan och kan fortfarande återställas med sitt lösenord."
+
+msgid "The power mode service"
+msgstr "Tjänsten för strömläge"
+
+msgid "The brightness service"
+msgstr "Ljusstyrketjänsten"
+
+msgid "YYYY-MM-DD HH:MM"
+msgstr "ÅÅÅÅ-MM-DD TT:MM"
+
+msgid "Date and time"
+msgstr "Datum och tid"
+
+msgid "Press Return to set the clock"
+msgstr "Tryck på Retur för att ställa klockan"
+
+msgid "Change…"
+msgstr "Ändra …"
+
+msgid "Search cities"
+msgstr "Sök städer"
+
+msgid "Choose a time zone"
+msgstr "Välj en tidszon"
+
+msgid "Type the name of a city near you"
+msgstr "Skriv namnet på en stad i närheten"
+
+msgid "No time zone matches"
+msgstr "Ingen tidszon matchar"
+
+msgid "it is too short to be an ICC profile"
+msgstr "den är för kort för att vara en ICC-profil"
+
+msgid "it is not a display profile"
+msgstr "den är inte en skärmprofil"
+
+msgid "it does not describe RGB colours"
+msgstr "den beskriver inte RGB-färger"
+
+msgid "its colours are not described in XYZ"
+msgstr "dess färger beskrivs inte i XYZ"
+
+msgid "it uses lookup tables, and only matrix-and-curve profiles are supported"
+msgstr "den använder uppslagstabeller, och bara matris- och kurvprofiler stöds"
+
+msgid "it is missing its colorants or tone curves"
+msgstr "den saknar sina färgämnen eller tonkurvor"
+
+msgid "it uses a tone curve that isn't supported"
+msgstr "den använder en tonkurva som inte stöds"
+
+msgid "Colour profiles"
+msgstr "Färgprofiler"
+
+msgid "Choose a Colour Profile"
+msgstr "Välj en färgprofil"
+
+msgid "{file} can't be used: {reason}."
+msgstr "{file} kan inte användas: {reason}."
+
+msgid "there is no folder to keep it in"
+msgstr "det finns ingen mapp att spara den i"
+
+msgid "{program} can read what you type in text fields"
+msgstr "{program} kan läsa vad du skriver i textfält"
+
+msgid "{program} can type for you"
+msgstr "{program} kan skriva åt dig"
+
+msgid "No program has asked to read or type your keystrokes. Password fields and the lock screen stay private either way."
+msgstr "Inget program har bett om att få läsa eller skriva dina tangenttryckningar. Lösenordsfält och låsskärmen förblir privata i båda fallen."
+
+msgid "Couldn't change the default app."
+msgstr "Det gick inte att ändra standardappen."
+
+msgid "Web browser"
+msgstr "Webbläsare"
+
+msgid "Mail"
+msgstr "E-post"
+
+msgid "Music"
+msgstr "Musik"
+
+msgid "Video"
+msgstr "Video"
+
+msgid "Pictures"
+msgstr "Bilder"
+
+msgid "PDF"
+msgstr "PDF"
+
+msgid "Text"
+msgstr "Text"
+
+msgid "Looking for apps…"
+msgstr "Söker efter appar …"
+
+msgid "No app installed"
+msgstr "Ingen app installerad"
+
+msgid "That could not be done."
+msgstr "Det gick inte."
+
+msgid "Crash"
+msgstr "Krasch"
+
+msgid "Not responding"
+msgstr "Svarar inte"
+
+msgid "Desktop stalled"
+msgstr "Skrivbordet stannade"
+
+msgid "Failed to run"
+msgstr "Kunde inte köras"
+
+msgid "Kernel problem"
+msgstr "Problem i kärnan"
+
+msgid "Unexpected restart"
+msgstr "Oväntad omstart"
+
+msgid "Out of memory"
+msgstr "Slut på minne"
+
+msgid "Graphics problem"
+msgstr "Grafikproblem"
+
+msgid "Display problem"
+msgstr "Skärmproblem"
+
+msgid "Sleep or wake problem"
+msgstr "Problem med vila eller väckning"
+
+msgid "Disk problem"
+msgstr "Diskproblem"
+
+msgid "Network drive stalled"
+msgstr "Nätverksenheten stannade"
+
+msgid "Report by hand"
+msgstr "Rapport för hand"
+
+msgid "Problem"
+msgstr "Problem"
+
+msgid "Sent"
+msgstr "Skickad"
+
+msgid "Waiting to send"
+msgstr "Väntar på att skickas"
+
+msgid "Refused by the server"
+msgstr "Avvisad av servern"
+
+msgid "On this computer"
+msgstr "På den här datorn"
+
+msgid "Send reports automatically"
+msgstr "Skicka rapporter automatiskt"
+
+msgid "New reports are sent to the configured server. Names, addresses and file names are removed first."
+msgstr "Nya rapporter skickas till den inställda servern. Namn, adresser och filnamn tas bort först."
+
+msgid "Reports stay on this computer unless you send one."
+msgstr "Rapporterna stannar på den här datorn om du inte skickar någon."
+
+msgid "Reports stay on this computer. No server is configured."
+msgstr "Rapporterna stannar på den här datorn. Ingen server är inställd."
+
+msgid "Nothing has gone wrong"
+msgstr "Inget har gått fel"
+
+msgid "{program}: {kind}"
+msgstr "{program}: {kind}"
+
+msgid "What happened? (optional)"
+msgstr "Vad hände? (valfritt)"
+
+msgid "This gathers the logs of this boot and the one before, including anything left from a freeze or restart. You read it before it goes."
+msgstr "Det här samlar loggarna från den här starten och den förra, med det som en frysning eller omstart lämnade efter sig. Du läser den innan den skickas."
+
+msgid "Prepare Report"
+msgstr "Förbered rapport"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Send Now"
+msgstr "Skicka nu"
+
+msgid "Save to File"
+msgstr "Spara till fil"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Report {id}"
+msgstr "Rapport {id}"
+
+msgid "Saved as {path}"
+msgstr "Sparad som {path}"
+
+msgid "{service} isn't responding. Try again in a moment."
+msgstr "{service} svarar inte. Försök igen om en stund."
+
+msgid "Only an administrator can change this."
+msgstr "Bara en administratör kan ändra detta."
+
+msgid "Couldn't make this change."
+msgstr "Det gick inte att göra ändringen."
+
+msgid "The desktop settings service"
+msgstr "Tjänsten för skrivbordsinställningar"
+
+msgid "Couldn't change the displays."
+msgstr "Det gick inte att ändra skärmarna."
+
+msgid "Couldn't clear the clipboard history."
+msgstr "Det gick inte att rensa urklippshistoriken."
+
+msgid "Couldn't add this folder to the excluded folders."
+msgstr "Det gick inte att lägga till mappen bland de uteslutna mapparna."
+
+msgid "Import a VPN Configuration"
+msgstr "Importera en VPN-konfiguration"
+
+msgid "VPN configurations"
+msgstr "VPN-konfigurationer"
+
+msgid "Couldn't import this VPN file."
+msgstr "Det gick inte att importera VPN-filen."
+
+msgid "Forget…"
+msgstr "Glöm …"
+
+msgid "Forget “{name}”?"
+msgstr "Vill du glömma ”{name}”?"
+
+msgid "Forget"
+msgstr "Glöm"
+
+msgid "Apps"
+msgstr "Appar"
+
+msgid "Documents"
+msgstr "Dokument"
+
+msgid "Trash"
+msgstr "Papperskorg"
+
+msgid "System"
+msgstr "System"
+
+msgid "{available} available of {capacity}"
+msgstr "{available} tillgängligt av {capacity}"
+
+msgid "1 update is available"
+msgid_plural "{count} updates are available"
+msgstr[0] "1 uppdatering är tillgänglig"
+msgstr[1] "{count} uppdateringar är tillgängliga"
+
+msgid "Your computer is up to date"
+msgstr "Datorn är uppdaterad"
+
+msgid "Updates aren't available on this computer"
+msgstr "Uppdateringar är inte tillgängliga på den här datorn"
+
+msgctxt "count"
+msgid "None"
+msgstr "Inga"
+
+msgid "One report"
+msgid_plural "{count} reports"
+msgstr[0] "En rapport"
+msgstr[1] "{count} rapporter"
+
+msgid "‹ {pane}"
+msgstr "‹ {pane}"
+
+msgid "Go back (Alt+Left)"
+msgstr "Gå tillbaka (Alt+Vänster)"
+
+msgid "Model"
+msgstr "Modell"
+
+msgid "Chip"
+msgstr "Chip"
+
+msgid "Memory"
+msgstr "Minne"
+
+msgid "Bande"
+msgstr "Bande"
+
+msgid "Serial number"
+msgstr "Serienummer"
+
+msgid "{category} {size}"
+msgstr "{category} {size}"
+
+msgid "Startup disk"
+msgstr "Startskiva"
+
+msgid "Empty"
+msgstr "Töm"
+
+msgid "1 item"
+msgid_plural "{count} items"
+msgstr[0] "1 objekt"
+msgstr[1] "{count} objekt"
+
+msgid "Empty Trash"
+msgstr "Töm papperskorgen"
+
+msgid "Erase the item in the Trash?"
+msgid_plural "Erase all {count} items in the Trash?"
+msgstr[0] "Vill du radera objektet i papperskorgen?"
+msgstr[1] "Vill du radera alla {count} objekt i papperskorgen?"
+
+msgid "This cannot be undone."
+msgstr "Det går inte att ångra."
+
+msgid "Empty Trash…"
+msgstr "Töm papperskorgen …"
+
+msgid "No apps open when you log in"
+msgstr "Inga appar öppnas när du loggar in"
+
+msgid "Stop opening this app when you log in"
+msgstr "Sluta öppna appen när du loggar in"
+
+msgid "Add App…"
+msgstr "Lägg till app …"
+
+msgid "These apps open each time you log in"
+msgstr "De här apparna öppnas varje gång du loggar in"
+
+msgid "Search apps"
+msgstr "Sök appar"
+
+msgid "No app matches"
+msgstr "Ingen app matchar"
+
+msgid "No large files in your home folder"
+msgstr "Inga stora filer i din hemmapp"
+
+msgid "Show in Files"
+msgstr "Visa i Filer"
+
+msgid "Off"
+msgstr "Av"
+
+msgid "Connected to “{network}”"
+msgstr "Ansluten till ”{network}”"
+
+msgid "Not connected"
+msgstr "Inte ansluten"
+
+msgid "On"
+msgstr "På"
+
+msgid "On · 1 device connected"
+msgid_plural "On · {count} devices connected"
+msgstr[0] "På · 1 enhet ansluten"
+msgstr[1] "På · {count} enheter anslutna"
+
+msgid "Ethernet connected"
+msgstr "Ethernet anslutet"
+
+msgid "Ethernet not connected"
+msgstr "Ethernet inte anslutet"
+
+msgid "No cable"
+msgstr "Ingen kabel"
+
+msgid "VPN “{vpn}” connected"
+msgstr "VPN ”{vpn}” ansluten"
+
+msgid "Logged in as {login}"
+msgstr "Inloggad som {login}"
+
+msgid "Logged in as {name} ({login})"
+msgstr "Inloggad som {name} ({login})"
+
+msgid "{count} displays"
+msgstr "{count} skärmar"
+
+msgid "{output} · Muted"
+msgstr "{output} · Ljudet är avstängt"
+
+msgid "{output} · {percent}%"
+msgstr "{output} · {percent} %"
+
+msgid "{source} · {count} input sources"
+msgstr "{source} · {count} inmatningskällor"
+
+msgid "{percent}% · {charge}"
+msgstr "{percent} % · {charge}"
+
+msgid "No settings match “{query}”"
+msgstr "Inga inställningar matchar ”{query}”"
+
+msgid "Try another word, such as “sleep” or “wallpaper”."
+msgstr "Försök med ett annat ord, till exempel ”vila” eller ”skrivbordsbild”."
+
+msgid "{pane} isn't available"
+msgstr "{pane} är inte tillgänglig"
+
+msgid "Its device or service isn't responding."
+msgstr "Enheten eller tjänsten svarar inte."
+
+msgid "{pane} is off"
+msgstr "{pane} är av"
+
+msgid "Turn on Wi-Fi to see networks nearby."
+msgstr "Slå på Wi-Fi för att se nätverk i närheten."
+
+msgid "Turn on Bluetooth to connect headphones, keyboards and more."
+msgstr "Slå på Bluetooth för att ansluta hörlurar, tangentbord med mera."
+
+msgid "Turn on Night Light to make the colours warmer at night."
+msgstr "Slå på Nattljus för att göra färgerna varmare på natten."
+
+msgid "Search languages and countries"
+msgstr "Sök språk och länder"
+
+msgid "Same as language"
+msgstr "Samma som språket"
+
+msgid "Type a language or country name"
+msgstr "Skriv ett språk eller ett landsnamn"
+
+msgid "No language matches"
+msgstr "Inget språk matchar"
+
+msgid "Language support is not installed"
+msgstr "Språkstöd är inte installerat"
+
+msgid "Choose a language"
+msgstr "Välj ett språk"
+
+msgid "Setting up {name}…"
+msgstr "Ställer in {name} …"
+
+msgid "Language"
+msgstr "Språk"
+
+msgid "Bande's own apps stay in English for now; other apps use this language."
+msgstr "Bandes egna appar förblir på engelska tills vidare, andra appar använder det här språket."
+
+msgid "Changes take effect the next time you log in"
+msgstr "Ändringarna träder i kraft nästa gång du loggar in"
+
+msgid "Choose a language for {name}"
+msgstr "Välj ett språk för {name}"
+
+msgid "Use another language in these apps. A change applies the next time the app starts."
+msgstr "Använd ett annat språk i de här apparna. En ändring gäller nästa gång appen startas."
+
+msgid "Choose a region"
+msgstr "Välj en region"
+
+msgid "Region"
+msgstr "Region"
+
+msgid "Dates and times look like"
+msgstr "Datum och tider ser ut så här"
+
+msgid "English (no country)"
+msgstr "Engelska (inget land)"
+
+msgid "{name} can't be used on this computer."
+msgstr "{name} kan inte användas på den här datorn."
+
+msgid "Couldn't set up {name}. {reason}"
+msgstr "Det gick inte att ställa in {name}. {reason}"
+
+msgid "The language service"
+msgstr "Språktjänsten"
+
+msgid "Couldn't read the current language and region."
+msgstr "Det gick inte att läsa det aktuella språket och den aktuella regionen."
+
+msgid "Couldn't change the app's language."
+msgstr "Det gick inte att ändra appens språk."
+
+msgid "Couldn't change the apps that open at login."
+msgstr "Det gick inte att ändra vilka appar som öppnas vid inloggning."
+
+msgid "System Settings"
+msgstr "Systeminställningar"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "IP address"
+msgstr "IP-adress"
+
+msgid "192.168.1.20/24"
+msgstr "192.168.1.20/24"
+
+msgid "Router"
+msgstr "Router"
+
+msgid "192.168.1.1"
+msgstr "192.168.1.1"
+
+msgid "DNS servers"
+msgstr "DNS-servrar"
+
+msgid "1.1.1.1, 9.9.9.9"
+msgstr "1.1.1.1, 9.9.9.9"
+
+msgid "No Ethernet port"
+msgstr "Ingen Ethernet-port"
+
+msgid "Set up by the system, outside NetworkManager"
+msgstr "Konfigureras av systemet, utanför NetworkManager"
+
+msgid "Cable unplugged"
+msgstr "Kabeln är urkopplad"
+
+msgid "Connected as {address}"
+msgstr "Ansluten som {address}"
+
+msgid "Connected"
+msgstr "Ansluten"
+
+msgid "Router {address}"
+msgstr "Router {address}"
+
+msgid "DNS {servers}"
+msgstr "DNS {servers}"
+
+msgid "Automatically"
+msgstr "Automatiskt"
+
+msgid "Manually"
+msgstr "Manuellt"
+
+msgid "Configure IPv4"
+msgstr "Konfigurera IPv4"
+
+msgid "Automatic"
+msgstr "Automatiskt"
+
+msgid "Disconnect"
+msgstr "Koppla från"
+
+msgid "Connecting…"
+msgstr "Ansluter …"
+
+msgid "Connect"
+msgstr "Anslut"
+
+msgid "Remove the VPN “{name}”?"
+msgstr "Vill du ta bort VPN ”{name}”?"
+
+msgid "Its settings and keys are deleted. Import the configuration again to use it."
+msgstr "Inställningar och nycklar raderas. Importera konfigurationen igen för att använda den."
+
+msgid "Remove…"
+msgstr "Ta bort …"
+
+msgid "Import Configuration…"
+msgstr "Importera konfiguration …"
+
+msgid "Add a WireGuard (.conf) or OpenVPN (.ovpn) file"
+msgstr "Lägg till en WireGuard-fil (.conf) eller OpenVPN-fil (.ovpn)"
+
+msgid "On until {time}"
+msgstr "På till {time}"
+
+msgid "Off until {time}"
+msgstr "Av till {time}"
+
+msgid "Do Not Disturb is on until {time}"
+msgstr "Stör ej är på till {time}"
+
+msgid "Do Not Disturb is on"
+msgstr "Stör ej är på"
+
+msgid "Do Not Disturb turns on at {time}"
+msgstr "Stör ej slås på {time}"
+
+msgid "Couldn't change the notification settings for this app."
+msgstr "Det gick inte att ändra notisinställningarna för appen."
+
+msgid "Temporary"
+msgstr "Tillfälliga"
+
+msgid "Persistent"
+msgstr "Bestående"
+
+msgctxt "banners"
+msgid "None"
+msgstr "Inga"
+
+msgid "Notification Center only"
+msgstr "Endast Notiscenter"
+
+msgid "{banners} banners, Notification Center"
+msgstr "{banners} banners, Notiscenter"
+
+msgid "{banners} banners"
+msgstr "{banners} banners"
+
+msgid "Allow notifications"
+msgstr "Tillåt notiser"
+
+msgid "Banner style"
+msgstr "Bannerstil"
+
+msgid "Show in Notification Center"
+msgstr "Visa i Notiscenter"
+
+msgid "Play sound for notifications"
+msgstr "Spela upp ljud för notiser"
+
+msgid "Apps appear here after they send a notification"
+msgstr "Appar visas här efter att de har skickat en notis"
+
+msgid "{value} Hz"
+msgstr "{value} Hz"
+
+msgid "{width} × {height}"
+msgstr "{width} × {height}"
+
+msgid "Looks like {width} × {height}"
+msgstr "Ser ut som {width} × {height}"
+
+msgid "Default"
+msgstr "Standard"
+
+msgid "Larger Text ({size})"
+msgstr "Större text ({size})"
+
+msgid "More Space ({size})"
+msgstr "Mer utrymme ({size})"
+
+msgid "This display"
+msgstr "Den här skärmen"
+
+msgid "sRGB"
+msgstr "sRGB"
+
+msgid "Display P3"
+msgstr "Display P3"
+
+msgid "None (show colours as sent)"
+msgstr "Ingen (visa färger som de skickas)"
+
+msgid "Add Profile…"
+msgstr "Lägg till profil…"
+
+msgid "Main display"
+msgstr "Huvudskärm"
+
+msgid "Extended"
+msgstr "Utökad"
+
+msgid "Mirror"
+msgstr "Spegla"
+
+msgid "Mirror {display}"
+msgstr "Spegla {display}"
+
+msgid "The display turns off first, so the screen saver doesn't start."
+msgstr "Skärmen stängs av först, så skärmsläckaren startar inte."
+
+msgid "The computer stays awake until the display turns off."
+msgstr "Datorn förblir vaken tills skärmen stängs av."
+
+msgid "The screen saver and the display are both set to Never, so the screen locks only when you lock it or the computer sleeps."
+msgstr "Skärmsläckaren och skärmen är båda inställda på Aldrig, så skärmen låses bara när du låser den eller datorn går i vila."
+
+msgid "No devices paired yet"
+msgstr "Inga enheter har parats ihop än"
+
+msgid "Looking for devices…"
+msgstr "Söker efter enheter …"
+
+msgid "It is unpaired and must be paired again before it can connect."
+msgstr "Ihopparningen tas bort och enheten måste paras ihop igen innan den kan ansluta."
+
+msgid "Pair"
+msgstr "Para ihop"
+
+msgid "Pairing…"
+msgstr "Parar ihop …"
+
+msgid "{status} · Battery {level}%"
+msgstr "{status} · Batteri {level} %"
+
+msgid "{address} · {status}"
+msgstr "{address} · {status}"
+
+msgid "No devices"
+msgstr "Inga enheter"
+
+msgid "No apps are playing sound"
+msgstr "Inga appar spelar upp ljud"
+
+msgid "{app} volume"
+msgstr "Volym för {app}"
+
+msgid "↑"
+msgstr "↑"
+
+msgid "Move up in the list"
+msgstr "Flytta upp i listan"
+
+msgid "↓"
+msgstr "↓"
+
+msgid "Move down in the list"
+msgstr "Flytta ned i listan"
+
+msgid "Stop using this input source"
+msgstr "Sluta använda den här inmatningskällan"
+
+msgid "Add Input Source…"
+msgstr "Lägg till inmatningskälla …"
+
+msgid "Type in more than one language or layout"
+msgstr "Skriv på mer än ett språk eller en layout"
+
+msgid "Up to {count} input sources can be used"
+msgstr "Upp till {count} inmatningskällor kan användas"
+
+msgid "The login screen uses these layouts"
+msgstr "Inloggningsskärmen använder de här layouterna"
+
+msgid "Use at Login Screen"
+msgstr "Använd på inloggningsskärmen"
+
+msgid "The login screen uses other layouts"
+msgstr "Inloggningsskärmen använder andra layouter"
+
+msgid "Search layouts"
+msgstr "Sök layouter"
+
+msgid "No keyboard layout matches"
+msgstr "Ingen tangentbordslayout matchar"
+
+msgid "Type a language, country or layout name"
+msgstr "Skriv ett språk, ett land eller ett layoutnamn"
+
+msgid "Add Picture…"
+msgstr "Lägg till bild …"
+
+msgid "Your own picture"
+msgstr "Din egen bild"
+
+msgid "Does {device} show the code {code}?"
+msgstr "Visar {device} koden {code}?"
+
+msgid "Allow {device} to connect?"
+msgstr "Tillåt att {device} ansluter?"
+
+msgid "Deny"
+msgstr "Neka"
+
+msgid "Allow"
+msgstr "Tillåt"
+
+msgid "Type {code} on {device}, then press Return on it."
+msgstr "Skriv {code} på {device} och tryck sedan på Retur där."
+
+msgid "PIN"
+msgstr "PIN"
+
+msgid "Enter the PIN for {device} and press Return."
+msgstr "Ange PIN-koden för {device} och tryck på Retur."
+
+msgid "Pairing request"
+msgstr "Begäran om ihopparning"
+
+msgid "Revert"
+msgstr "Återställ"
+
+msgid "Keep"
+msgstr "Behåll"
+
+msgid "The previous settings come back in {seconds} s."
+msgstr "De tidigare inställningarna återställs om {seconds} s."
+
+msgid "Keep these display settings?"
+msgstr "Vill du behålla de här skärminställningarna?"
+
+msgid "Arrangement"
+msgstr "Placering"
+
+msgid "Drag the displays to match how they stand on your desk. The white bar marks the main display."
+msgstr "Dra skärmarna så att de motsvarar hur de står på ditt skrivbord. Den vita stapeln markerar huvudskärmen."
+
+msgid "Mouse"
+msgstr "Mus"
+
+msgid "Keyboard"
+msgstr "Tangentbord"
+
+msgid "Tablet"
+msgstr "Surfplatta"
+
+msgid "Game controller"
+msgstr "Spelkontroll"
+
+msgid "Headphones"
+msgstr "Hörlurar"
+
+msgid "Headset"
+msgstr "Headset"
+
+msgid "Speaker"
+msgstr "Högtalare"
+
+msgid "Phone"
+msgstr "Telefon"
+
+msgid "Computer"
+msgstr "Dator"
+
+msgid "Camera"
+msgstr "Kamera"
+
+msgid "Printer"
+msgstr "Skrivare"
+
+msgid "Display"
+msgstr "Skärm"
+
+msgid "Unknown device"
+msgstr "Okänd enhet"
+
+msgid "The keychain"
+msgstr "Nyckelringen"
+
+msgid "The keychain locked. Unlock it again to continue."
+msgstr "Nyckelringen låstes. Lås upp den igen för att fortsätta."
+
+msgid "Network"
+msgstr "Nätverk"
+
+msgid "Unknown app"
+msgstr "Okänd app"
+
+msgid "Couldn't open the keychain."
+msgstr "Det gick inte att öppna nyckelringen."
+
+msgid "Couldn't show the keychain prompt."
+msgstr "Det gick inte att visa nyckelringens fråga."
+
+msgid "Couldn't read this password."
+msgstr "Det gick inte att läsa lösenordet."
+
+msgid "Couldn't save the new password."
+msgstr "Det gick inte att spara det nya lösenordet."
+
+msgid "Couldn't delete this password."
+msgstr "Det gick inte att radera lösenordet."
+
+msgid "Couldn't list your saved passwords."
+msgstr "Det gick inte att visa dina sparade lösenord."
+
+msgid "Unlock…"
+msgstr "Lås upp …"
+
+msgid "Your passwords are locked."
+msgstr "Dina lösenord är låsta."
+
+msgid "Enter your keychain password to see, copy, change or delete them."
+msgstr "Ange ditt nyckelringslösenord för att visa, kopiera, ändra eller radera dem."
+
+msgid "Website, account or app"
+msgstr "Webbplats, konto eller app"
+
+msgid "Search passwords"
+msgstr "Sök lösenord"
+
+msgid "Lock"
+msgstr "Lås"
+
+msgid "No saved passwords."
+msgstr "Inga sparade lösenord."
+
+msgid "No passwords match."
+msgstr "Inga lösenord matchar."
+
+msgid "Delete “{name}”?"
+msgstr "Vill du radera ”{name}”?"
+
+msgid "The app that saved it will ask for the password again."
+msgstr "Appen som sparade det frågar efter lösenordet igen."
+
+msgid "New password"
+msgstr "Nytt lösenord"
+
+msgid "Hide"
+msgstr "Dölj"
+
+msgid "Show"
+msgstr "Visa"
+
+msgid "Delete…"
+msgstr "Radera …"
+
+msgid "Other apps"
+msgstr "Andra appar"
+
+msgid "Couldn't change this app's permission."
+msgstr "Det gick inte att ändra appens behörighet."
+
+msgid "1 app"
+msgid_plural "{count} apps"
+msgstr[0] "1 app"
+msgstr[1] "{count} appar"
+
+msgid "No app has asked to use the camera yet."
+msgstr "Ingen app har bett om att få använda kameran än."
+
+msgid "No app has asked to use the microphone yet."
+msgstr "Ingen app har bett om att få använda mikrofonen än."
+
+msgid "No app has asked to take screenshots yet."
+msgstr "Ingen app har bett om att få ta skärmbilder än."
+
+msgid "No app remembers what it may share."
+msgstr "Ingen app minns vad den får dela."
+
+msgid "No app has asked for your location yet."
+msgstr "Ingen app har bett om din plats än."
+
+msgid "It asks again before it shares your screen or a window."
+msgstr "Den frågar igen innan den delar din skärm eller ett fönster."
+
+msgid "Choose a Wallpaper"
+msgstr "Välj en skrivbordsbild"
+
+msgid "Couldn't open the file chooser."
+msgstr "Det gick inte att öppna filväljaren."
+
+msgid "Couldn't set this picture as the wallpaper."
+msgstr "Det gick inte att använda bilden som skrivbordsbild."
+
+msgid "{minutes} min"
+msgstr "{minutes} min"
+
+msgid "{hours} h {minutes} min"
+msgstr "{hours} h {minutes} min"
+
+msgid "Charged"
+msgstr "Laddat"
+
+msgid "Charging, {time} until full"
+msgstr "Laddar, {time} kvar tills det är fullt"
+
+msgid "Charging"
+msgstr "Laddar"
+
+msgid "On battery, {time} left"
+msgstr "På batteri, {time} kvar"
+
+msgid "On battery"
+msgstr "På batteri"
+
+msgid "{percent}%"
+msgstr "{percent} %"
+
+msgid "Battery level over the last 24 hours"
+msgstr "Batterinivå de senaste 24 timmarna"
+
+msgid "24 hours ago"
+msgstr "24 timmar sedan"
+
+msgid "12 hours ago"
+msgstr "12 timmar sedan"
+
+msgid "Now"
+msgstr "Nu"
+
+msgid "Only members of the lpadmin group can change printers."
+msgstr "Bara medlemmar i gruppen lpadmin kan ändra skrivare."
+
+msgid "Couldn't change this printer."
+msgstr "Det gick inte att ändra skrivaren."
+
+msgid "Couldn't install printing support."
+msgstr "Det gick inte att installera utskriftsstöd."
+
+msgid "Couldn't add “{name}”. Check that it is turned on and on this network."
+msgstr "Det gick inte att lägga till ”{name}”. Kontrollera att den är påslagen och finns i det här nätverket."
+
+msgid "Paused"
+msgstr "Pausad"
+
+msgid "Printing"
+msgstr "Skriver ut"
+
+msgid "Not accepting documents"
+msgstr "Tar inte emot dokument"
+
+msgid "Idle"
+msgstr "Inaktiv"
+
+msgid "Offline"
+msgstr "Offline"
+
+msgid "1 document"
+msgid_plural "{count} documents"
+msgstr[0] "1 dokument"
+msgstr[1] "{count} dokument"
+
+msgid "Waiting"
+msgstr "Väntar"
+
+msgid "On hold"
+msgstr "Parkerat"
+
+msgid "Stopped"
+msgstr "Stoppat"
+
+msgid "No printers"
+msgstr "Inga skrivare"
+
+msgid "“{name}” is the default printer"
+msgid_plural "{count} printers · “{name}” is the default"
+msgstr[0] "”{name}” är standardskrivaren"
+msgstr[1] "{count} skrivare · ”{name}” är standard"
+
+msgid "1 printer"
+msgid_plural "{count} printers"
+msgstr[0] "1 skrivare"
+msgstr[1] "{count} skrivare"
+
+msgid "Looking for printers on this network…"
+msgstr "Söker efter skrivare i det här nätverket …"
+
+msgid "No printers on this network yet. They appear here as soon as they are found."
+msgstr "Inga skrivare i det här nätverket än. De visas här så fort de hittas."
+
+msgid "Default printer"
+msgstr "Standardskrivare"
+
+msgid "192.168.1.30 or printer.local"
+msgstr "192.168.1.30 eller printer.local"
+
+msgid "Add"
+msgstr "Lägg till"
+
+msgid "Adding…"
+msgstr "Lägger till …"
+
+msgid "For a printer that does not show up: its IP address or host name"
+msgstr "För en skrivare som inte dyker upp: dess IP-adress eller värdnamn"
+
+msgid "Add by address"
+msgstr "Lägg till via adress"
+
+msgid "Install"
+msgstr "Installera"
+
+msgid "Installing…"
+msgstr "Installerar …"
+
+msgid "Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
+msgstr "Nätverksskrivare behöver inget mer. USB-skrivare och skrivare som behöver en drivrutin använder utskriftssystemet CUPS, från Debian-arkivet"
+
+msgid "Support for USB and older printers"
+msgstr "Stöd för USB-skrivare och äldre skrivare"
+
+msgid "Kind"
+msgstr "Typ"
+
+msgid "Location"
+msgstr "Plats"
+
+msgid "Address"
+msgstr "Adress"
+
+msgid "Print Queue"
+msgstr "Utskriftskö"
+
+msgid "Document {id}"
+msgstr "Dokument {id}"
+
+msgid "No documents waiting"
+msgstr "Inga dokument väntar"
+
+msgid "Printing is paused"
+msgstr "Utskriften är pausad"
+
+msgid "Pause printing"
+msgstr "Pausa utskrift"
+
+msgid "Make Default"
+msgstr "Gör till standard"
+
+msgid "Use as the default printer"
+msgstr "Använd som standardskrivare"
+
+msgid "Remove “{name}”?"
+msgstr "Vill du ta bort ”{name}”?"
+
+msgid "Documents waiting for it are cancelled. You can add it again later."
+msgstr "Dokument som väntar på den avbryts. Du kan lägga till den igen senare."
+
+msgid "Remove this printer"
+msgstr "Ta bort den här skrivaren"
+
+msgid "Clear"
+msgstr "Rensa"
+
+msgid "Clear the clipboard history?"
+msgstr "Vill du rensa urklippshistoriken?"
+
+msgid "Everything you copied earlier is forgotten."
+msgstr "Allt du kopierat tidigare glöms bort."
+
+msgid "Clear History…"
+msgstr "Rensa historik …"
+
+msgid "Clipboard history"
+msgstr "Urklippshistorik"
+
+msgid "What you copied earlier, ready to paste again"
+msgstr "Det du kopierat tidigare, redo att klistras in igen"
+
+msgid "Every folder in your home folder is searched"
+msgstr "Alla mappar i din hemmapp genomsöks"
+
+msgid "Search this folder again"
+msgstr "Sök i den här mappen igen"
+
+msgid "Files in these folders never appear in search"
+msgstr "Filer i de här mapparna visas aldrig i sökresultat"
+
+msgid "Off. Anyone with this computer can read your files. Turning it on needs a new install."
+msgstr "Av. Alla som har tillgång till datorn kan läsa dina filer. För att slå på den krävs en ny installation."
+
+msgid "Off. Anyone with this computer can read your files."
+msgstr "Av. Alla som har tillgång till datorn kan läsa dina filer."
+
+msgid "Encrypting, {percent}% done. Your files are not fully protected until this finishes."
+msgstr "Krypterar, {percent} % klart. Dina filer är inte helt skyddade förrän det är klart."
+
+msgid "On. Your files can only be read with your password or recovery key."
+msgstr "På. Dina filer kan bara läsas med ditt lösenord eller din återställningsnyckel."
+
+msgid "On. Others on your network can try to sign in over SSH."
+msgstr "På. Andra i ditt nätverk kan försöka logga in via SSH."
+
+msgid "Off."
+msgstr "Av."
+
+msgid "Disk encryption"
+msgstr "Diskkryptering"
+
+msgid "Remote Login"
+msgstr "Fjärrinloggning"
+
+msgid "Apps you install"
+msgstr "Appar du installerar"
+
+msgid "Apps from Flatpak are sandboxed. Other programs run with your full access to your files, and nothing here can contain them, so only run programs you trust."
+msgstr "Appar från Flatpak körs i en sandlåda. Andra program körs med full åtkomst till dina filer, och inget här kan begränsa dem, så kör bara program du litar på."
+
+msgid "Couldn't change the sound settings."
+msgstr "Det gick inte att ändra ljudinställningarna."
+
+msgid "Couldn't turn Wi-Fi on or off."
+msgstr "Det gick inte att slå på eller av Wi-Fi."
+
+msgid "Couldn't change the network settings."
+msgstr "Det gick inte att ändra nätverksinställningarna."
+
+msgid "Couldn't connect to the VPN."
+msgstr "Det gick inte att ansluta till VPN."
+
+msgid "Couldn't remove the VPN."
+msgstr "Det gick inte att ta bort VPN."
+
+msgid "Couldn't disconnect from the VPN."
+msgstr "Det gick inte att koppla från VPN."
+
+msgid "Couldn't forget this network."
+msgstr "Det gick inte att glömma nätverket."
+
+msgid "Couldn't turn Bluetooth on or off."
+msgstr "Det gick inte att slå på eller av Bluetooth."
+
+msgid "Couldn't connect to this device."
+msgstr "Det gick inte att ansluta till enheten."
+
+msgid "Couldn't disconnect this device."
+msgstr "Det gick inte att koppla från enheten."
+
+msgid "Couldn't forget this device."
+msgstr "Det gick inte att glömma enheten."
+
+msgid "Couldn't pair with this device."
+msgstr "Det gick inte att para ihop med enheten."
+
+msgid "Choose a folder to share"
+msgstr "Välj en mapp att dela"
+
+msgid "That change didn’t go through."
+msgstr "Ändringen gick inte igenom."
+
+msgid "Others with an account on this computer can sign in with SSH"
+msgstr "Andra med ett konto på den här datorn kan logga in med SSH"
+
+msgid "Samba, from the Debian archive"
+msgstr "Samba, från Debian-arkivet"
+
+msgid "File Sharing"
+msgstr "Fildelning"
+
+msgid "Other computers on this network can open the folders you share"
+msgstr "Andra datorer i det här nätverket kan öppna mapparna du delar"
+
+msgid "Sharing password"
+msgstr "Delningslösenord"
+
+msgid "Others use your account name and this password to connect. Press Return to set it."
+msgstr "Andra använder ditt kontonamn och det här lösenordet för att ansluta. Tryck på Retur för att ställa in det."
+
+msgid "Shared folders"
+msgstr "Delade mappar"
+
+msgid "Restart to finish updating"
+msgstr "Starta om för att slutföra uppdateringen"
+
+msgid "Restart to install updates"
+msgstr "Starta om för att installera uppdateringar"
+
+msgid "Updates didn't finish installing"
+msgstr "Uppdateringarna blev inte färdiginstallerade"
+
+msgid "Log out to finish updating the desktop"
+msgstr "Logga ut för att slutföra uppdateringen av skrivbordet"
+
+msgid "You're offline. Connect to the internet and try again."
+msgstr "Du är offline. Anslut till internet och försök igen."
+
+msgid "Another installation is running. Try again when it finishes."
+msgstr "En annan installation pågår. Försök igen när den är klar."
+
+msgid "There isn't enough free space. Free up some space and try again."
+msgstr "Det finns inte tillräckligt med ledigt utrymme. Frigör utrymme och försök igen."
+
+msgid "The update was cancelled."
+msgstr "Uppdateringen avbröts."
+
+msgid "Something went wrong. Try again later."
+msgstr "Något gick fel. Försök igen senare."
+
+msgid "The update service stopped. Try again in a moment."
+msgstr "Uppdateringstjänsten stannade. Försök igen om en stund."
+
+msgid "Software Update"
+msgstr "Programuppdatering"
+
+msgid "The desktop keeps running its old version until you log out"
+msgstr "Skrivbordet fortsätter köra sin gamla version tills du loggar ut"
+
+msgid "Show Updates"
+msgstr "Visa uppdateringar"
+
+msgid "The update is ready. If it can't start, your computer goes back to this version by itself"
+msgstr "Uppdateringen är klar. Om den inte kan starta går datorn tillbaka till den här versionen av sig själv"
+
+msgid "Updates install while the computer restarts"
+msgstr "Uppdateringarna installeras medan datorn startar om"
+
+msgid "The update couldn't start"
+msgstr "Uppdateringen kunde inte starta"
+
+msgid "Your computer went back to the previous version. Your files are as you left them"
+msgstr "Datorn gick tillbaka till den tidigare versionen. Dina filer är som du lämnade dem"
+
+msgid "1 update was installed"
+msgid_plural "{count} updates were installed"
+msgstr[0] "1 uppdatering installerades"
+msgstr[1] "{count} uppdateringar installerades"
+
+msgid "Could not install updates"
+msgstr "Det gick inte att installera uppdateringar"
+
+msgid "Restart to install 1 update"
+msgid_plural "Restart to install {count} updates"
+msgstr[0] "Starta om för att installera 1 uppdatering"
+msgstr[1] "Starta om för att installera {count} uppdateringar"
+
+msgid "Some updates take effect after a restart"
+msgstr "Vissa uppdateringar träder i kraft efter en omstart"
+
+msgid "1 update is ready to install."
+msgid_plural "{count} updates are ready to install."
+msgstr[0] "1 uppdatering är redo att installeras."
+msgstr[1] "{count} uppdateringar är redo att installeras."
+
+msgid "1 update is ready to install. It needs a restart."
+msgid_plural "{count} updates are ready to install. They need a restart."
+msgstr[0] "1 uppdatering är redo att installeras. Den kräver omstart."
+msgstr[1] "{count} uppdateringar är redo att installeras. De kräver omstart."
+
+msgid "1 of them needs a restart."
+msgid_plural "{count} of them need a restart."
+msgstr[0] "1 av dem kräver omstart."
+msgstr[1] "{count} av dem kräver omstart."
+
+msgid "Software updates are available"
+msgstr "Programuppdateringar är tillgängliga"
+
+msgid "Check spelling"
+msgstr "Kontrollera stavning"
+
+msgid "Correct spelling automatically"
+msgstr "Rätta stavning automatiskt"
+
+msgid "Capitalise words automatically"
+msgstr "Inled meningar med stor bokstav"
+
+msgid "Add period with double-space"
+msgstr "Lägg till punkt med dubbla mellanslag"
+
+msgid "Use smart quotes and dashes"
+msgstr "Använd typografiska citattecken och tankstreck"
+
+msgid "Show web and email addresses as links"
+msgstr "Visa webb- och e-postadresser som länkar"
+
+msgid "Get Dictionary"
+msgstr "Hämta ordlista"
+
+msgid "The {name} dictionary matches your region but isn't installed."
+msgstr "Ordlistan {name} passar din region men är inte installerad."
+
+msgid "No learned words yet."
+msgstr "Inga inlärda ord än."
+
+msgid "Replace"
+msgstr "Ersätt"
+
+msgid "With"
+msgstr "Med"
+
+msgid "Add Replacement"
+msgstr "Lägg till ersättning"
+
+msgid "Couldn't empty the Trash."
+msgstr "Det gick inte att tömma papperskorgen."
+
+msgid "The date and time service"
+msgstr "Tjänsten för datum och tid"
+
+msgid "Later"
+msgstr "Senare"
+
+msgid "Check Now"
+msgstr "Sök nu"
+
+msgid "Restart Now"
+msgstr "Starta om nu"
+
+msgid "Log Out"
+msgstr "Logga ut"
+
+msgid "{apps} and {last}"
+msgstr "{apps} och {last}"
+
+msgid "Quit and reopen {apps} to use the new versions"
+msgstr "Avsluta och öppna {apps} igen för att använda de nya versionerna"
+
+msgid "{version} · Flatpak"
+msgstr "{version} · Flatpak"
+
+msgid "and {count} more"
+msgstr "och {count} till"
+
+msgid "This version couldn't start"
+msgstr "Den här versionen kunde inte starta"
+
+msgid "1 update: {names}"
+msgid_plural "{count} updates: {names}"
+msgstr[0] "1 uppdatering: {names}"
+msgstr[1] "{count} uppdateringar: {names}"
+
+msgid "Copy kept before a change"
+msgstr "Kopia sparad före en ändring"
+
+msgid "Running now"
+msgstr "Körs nu"
+
+msgid "Restore"
+msgstr "Återställ"
+
+msgid "Previous Versions"
+msgstr "Tidigare versioner"
+
+msgid "Bring back an earlier system. Your files, accounts, passwords and Wi-Fi networks stay as they are now"
+msgstr "Återställ ett tidigare system. Dina filer, konton, lösenord och Wi-Fi-nätverk förblir som de är nu"
+
+msgid "Last checked {date}"
+msgstr "Senast sökt {date}"
+
+msgid "Checking for updates…"
+msgstr "Söker efter uppdateringar …"
+
+msgid "{size} to download. Some updates need a restart."
+msgstr "{size} att hämta. Vissa uppdateringar kräver omstart."
+
+msgid "{size} to download"
+msgstr "{size} att hämta"
+
+msgid "Some updates need a restart"
+msgstr "Vissa uppdateringar kräver omstart"
+
+msgid "Update Now"
+msgstr "Uppdatera nu"
+
+msgid "Downloading updates…"
+msgstr "Hämtar uppdateringar …"
+
+msgid "You can keep working while updates download"
+msgstr "Du kan fortsätta arbeta medan uppdateringarna hämtas"
+
+msgid "Installing updates…"
+msgstr "Installerar uppdateringar …"
+
+msgid "You can keep working while updates install"
+msgstr "Du kan fortsätta arbeta medan uppdateringarna installeras"
+
+msgid "Finish Installing"
+msgstr "Slutför installationen"
+
+msgid "Finish installing them before you install anything else"
+msgstr "Slutför installationen innan du installerar något annat"
+
+msgid "Install the packagekit package"
+msgstr "Installera paketet packagekit"
+
+msgid "Could not check for updates"
+msgstr "Det gick inte att söka efter uppdateringar"
+
+msgid "Could not download updates"
+msgstr "Det gick inte att hämta uppdateringar"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
+msgid "The login service"
+msgstr "Inloggningstjänsten"
+
+msgid "Couldn't change this account."
+msgstr "Det gick inte att ändra kontot."
+
+msgid "{name} is logged in. To delete this user, they must log out first."
+msgstr "{name} är inloggad. För att radera användaren måste hen först logga ut."
+
+msgid "The accounts service"
+msgstr "Kontotjänsten"
+
+msgid "Choose a Picture"
+msgstr "Välj en bild"
+
+msgid "That picture can't be opened. Choose a JPEG or PNG picture."
+msgstr "Bilden kan inte öppnas. Välj en JPEG- eller PNG-bild."
+
+msgid "The file chooser"
+msgstr "Filväljaren"
+
+msgid "Current password"
+msgstr "Nuvarande lösenord"
+
+msgid "Verify"
+msgstr "Bekräfta"
+
+msgid "Administrator"
+msgstr "Administratör"
+
+msgid "Standard"
+msgstr "Standard"
+
+msgid "{name} (you)"
+msgstr "{name} (du)"
+
+msgid "Add User…"
+msgstr "Lägg till användare …"
+
+msgid "Add a person who can log in to this computer"
+msgstr "Lägg till en person som kan logga in på datorn"
+
+msgid "Full name"
+msgstr "Fullständigt namn"
+
+msgid "Account name"
+msgstr "Kontonamn"
+
+msgid "The name of the home folder; it can't be changed later."
+msgstr "Namnet på hemmappen. Det kan inte ändras senare."
+
+msgid "Account type"
+msgstr "Kontotyp"
+
+msgid "Creating the account…"
+msgstr "Skapar kontot …"
+
+msgid "Press Return after each password field to create the account, or Escape to cancel"
+msgstr "Tryck på Retur efter varje lösenordsfält för att skapa kontot, eller Escape för att avbryta"
+
+msgid "Allow this user to administer this computer"
+msgstr "Tillåt användaren att administrera datorn"
+
+msgid "Change Password…"
+msgstr "Ändra lösenord …"
+
+msgid "Choose…"
+msgstr "Välj …"
+
+msgid "Picture"
+msgstr "Bild"
+
+msgid "Picture, drag to move and scroll to zoom"
+msgstr "Bild, dra för att flytta och scrolla för att zooma"
+
+msgid "Zoom"
+msgstr "Zoom"
+
+msgid "Save"
+msgstr "Spara"
+
+msgid "Drag the picture to choose what shows in the circle."
+msgstr "Dra bilden för att välja vad som visas i cirkeln."
+
+msgid "Delete User…"
+msgstr "Radera användare …"
+
+msgid "Delete this user"
+msgstr "Radera den här användaren"
+
+msgid "Keep Home Folder"
+msgstr "Behåll hemmappen"
+
+msgid "Delete Home Folder"
+msgstr "Radera hemmappen"
+
+msgid "Keep the home folder to keep their files in /home/{login}, or delete it and everything in it."
+msgstr "Behåll hemmappen för att behålla användarens filer i /home/{login}, eller radera den och allt i den."
+
+msgid "Type the person's full name."
+msgstr "Skriv personens fullständiga namn."
+
+msgid "Use lowercase letters, digits, - and _ for the account name, starting with a letter."
+msgstr "Använd små bokstäver, siffror, - och _ i kontonamnet, och börja med en bokstav."
+
+msgid "That account name is already used. Choose another one."
+msgstr "Kontonamnet används redan. Välj ett annat."
+
+msgid "Type a new password."
+msgstr "Skriv ett nytt lösenord."
+
+msgid "The passwords don't match. Type the password again."
+msgstr "Lösenorden stämmer inte överens. Skriv lösenordet igen."
+
+msgid "Changing the password…"
+msgstr "Ändrar lösenordet …"
+
+msgid "Press Return after each field to change the password, or Escape to cancel"
+msgstr "Tryck på Retur efter varje fält för att ändra lösenordet, eller Escape för att avbryta"
+
+msgid "Type your current password first."
+msgstr "Skriv ditt nuvarande lösenord först."
+
+msgid "The new passwords don't match. Type the new password again."
+msgstr "De nya lösenorden stämmer inte överens. Skriv det nya lösenordet igen."
+
+msgid "Your password was changed. Use it the next time you log in or unlock."
+msgstr "Lösenordet har ändrats. Använd det nästa gång du loggar in eller låser upp."
+
+msgid "The current password is not correct."
+msgstr "Det nuvarande lösenordet är fel."
+
+msgid "That password can't be used: {reason}"
+msgstr "Lösenordet kan inte användas: {reason}"
+
+msgid "That password is too weak. Choose a longer one."
+msgstr "Lösenordet är för svagt. Välj ett längre."
+
+msgid "Couldn't change the password."
+msgstr "Det gick inte att ändra lösenordet."
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "The password is not correct. Try again."
+msgstr "Lösenordet är fel. Försök igen."
+
+msgid "Could not join the network: {reason}."
+msgstr "Det gick inte att ansluta till nätverket: {reason}."
+
+msgid "Enter DNS servers as IPv4 addresses, such as 1.1.1.1, 9.9.9.9."
+msgstr "Ange DNS-servrar som IPv4-adresser, till exempel 1.1.1.1, 9.9.9.9."
+
+msgid "Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1."
+msgstr "Skriv en adress som 192.168.1.20/24, och router och DNS-servrar som adresser som 192.168.1.1."
+
+msgid "Enter a time such as 22:00."
+msgstr "Ange en tid som 22:00."
+
+msgid "Type the date and time as year-month-day hours:minutes, such as 2026-10-30 14:05."
+msgstr "Skriv datum och tid som år-månad-dag timmar:minuter, till exempel 2026-10-30 14:05."
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "WPA2 Personal"
+msgstr "WPA2 Personal"
+
+msgid "WPA3 Personal"
+msgstr "WPA3 Personal"
+
+msgid "Fixed"
+msgstr "Fast"
+
+msgid "Rotating"
+msgstr "Roterande"
+
+msgid "Connected · sign in to use the internet"
+msgstr "Ansluten · logga in för att använda internet"
+
+msgid "Joining…"
+msgstr "Ansluter …"
+
+msgid "Not in range"
+msgstr "Utom räckhåll"
+
+msgid "Saved · Auto-Join off"
+msgstr "Sparat · Anslut automatiskt av"
+
+msgid "Saved"
+msgstr "Sparat"
+
+msgid "Details…"
+msgstr "Detaljer …"
+
+msgid "Networks you join are remembered here"
+msgstr "Nätverk du ansluter till sparas här"
+
+msgid "Sign In…"
+msgstr "Logga in …"
+
+msgid "Press Return to join or Escape to cancel"
+msgstr "Tryck på Retur för att ansluta eller Escape för att avbryta"
+
+msgid "Password for “{network}”"
+msgstr "Lösenord för ”{network}”"
+
+msgid "Looking for networks…"
+msgstr "Söker efter nätverk …"
+
+msgid "Other…"
+msgstr "Annat …"
+
+msgid "Join a network that does not show its name"
+msgstr "Anslut till ett nätverk som inte visar sitt namn"
+
+msgid "Network name"
+msgstr "Nätverksnamn"
+
+msgid "Security"
+msgstr "Säkerhet"
+
+msgid "Press Return in the password field to join, or Escape to cancel"
+msgstr "Tryck på Retur i lösenordsfältet för att ansluta, eller Escape för att avbryta"
+
+msgid "Join"
+msgstr "Anslut"
+
+msgid "Auto-Join"
+msgstr "Anslut automatiskt"
+
+msgid "Join this network on its own when it is in range"
+msgstr "Anslut till nätverket av sig självt när det är inom räckhåll"
+
+msgid "Low Data Mode"
+msgstr "Låg datamängd"
+
+msgid "Marks the network as metered, so apps hold back large downloads"
+msgstr "Markerar nätverket som med datatak, så att appar väntar med stora hämtningar"
+
+msgid "Private Wi-Fi address"
+msgstr "Privat Wi-Fi-adress"
+
+msgid "A private address makes this computer harder to track across networks"
+msgstr "En privat adress gör det svårare att spåra datorn mellan nätverk"
+
+msgid "Wi-Fi address"
+msgstr "Wi-Fi-adress"
+
+msgid "Connection"
+msgstr "Anslutning"
+
+msgid "TCP/IP"
+msgstr "TCP/IP"
+
+msgid "Its password is removed and Bande no longer joins it on its own."
+msgstr "Lösenordet tas bort och Bande ansluter inte till det av sig självt längre."
+
+msgid "Forget This Network"
+msgstr "Glöm det här nätverket"
+
+msgid "Type the name of the network to join."
+msgstr "Skriv namnet på nätverket du vill ansluta till."

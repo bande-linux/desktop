@@ -55,6 +55,7 @@ pub struct Workspace {
     pub crates: Vec<Crate>,
     pub programs: Vec<Program>,
     pub problems: Vec<String>,
+    pub packaging: Vec<String>,
 }
 
 impl Workspace {
@@ -83,6 +84,7 @@ impl Workspace {
             .filter_map(|package| Some((package["id"].as_str()?.to_owned(), package)))
             .collect::<BTreeMap<_, _>>();
         let mut problems = Vec::new();
+        let mut packaging = Vec::new();
         let mut crates = packages
             .iter()
             .filter(|package| {
@@ -186,7 +188,7 @@ impl Workspace {
                         .iter()
                         .any(|(holder, source)| holder == owner && *source == asset)
                     {
-                        problems.push(format!("{owner}: ship {name}'s English with the asset [\"{asset}\", \"usr/share/bande/l10n/{name}/\", \"644\"]"));
+                        packaging.push(format!("{owner}: ship {name}'s English with the asset [\"{asset}\", \"usr/share/bande/l10n/{name}/\", \"644\"]"));
                     }
                 }
                 programs.push(program);
@@ -197,6 +199,7 @@ impl Workspace {
             crates,
             programs,
             problems,
+            packaging,
         })
     }
 

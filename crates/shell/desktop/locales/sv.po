@@ -1,0 +1,109 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Delete this item immediately?"
+msgid_plural "Delete these {count} items immediately?"
+msgstr[0] "Vill du radera det här objektet direkt?"
+msgstr[1] "Vill du radera de här {count} objekten direkt?"
+
+msgid "You can’t undo this action."
+msgstr "Det går inte att ångra den här åtgärden."
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "The disk “{name}” wasn’t ejected because one or more programs may be using it."
+msgstr "Skivan ”{name}” matades inte ut eftersom ett eller flera program kan använda den."
+
+msgid "To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."
+msgstr "Klicka på Tvinga utmatning för att mata ut skivan direkt. Program som använder den kan förlora ändringar som inte har sparats."
+
+msgid "Force Eject"
+msgstr "Tvinga utmatning"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "The disk “{name}” couldn’t be ejected."
+msgstr "Det gick inte att mata ut skivan ”{name}”."
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Kind"
+msgstr "Sort"
+
+msgid "Date Added"
+msgstr "Datum tillagd"
+
+msgid "Size"
+msgstr "Storlek"
+
+msgid "New Folder"
+msgstr "Ny mapp"
+
+msgid "Paste"
+msgstr "Klistra in"
+
+msgid "Change Wallpaper…"
+msgstr "Byt skrivbordsbild…"
+
+msgid "Sort By"
+msgstr "Sortera efter"
+
+msgid "Clean Up"
+msgstr "Städa upp"
+
+msgid "Open"
+msgstr "Öppna"
+
+msgid "Open With"
+msgstr "Öppna med"
+
+msgid "Quick Look"
+msgstr "Snabbtitt"
+
+msgid "Get Info"
+msgstr "Visa info"
+
+msgid "Rename"
+msgstr "Byt namn"
+
+msgid "Duplicate"
+msgstr "Duplicera"
+
+msgid "Cut"
+msgstr "Klipp ut"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Set as Wallpaper"
+msgstr "Använd som skrivbordsbild"
+
+msgid "Eject"
+msgstr "Mata ut"
+
+msgid "Move to Trash"
+msgstr "Flytta till papperskorgen"
+
+msgid "Move {count} Items to Trash"
+msgstr "Flytta {count} objekt till papperskorgen"
+
+msgid "Delete Immediately…"
+msgstr "Radera direkt…"
+
+msgid "Desktop"
+msgstr "Skrivbord"

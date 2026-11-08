@@ -40,6 +40,7 @@ assets = [
     ["target/release/bande-indexer", "usr/bin/", "755"],
     ["data/bande-indexer.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Search.service", "usr/share/dbus-1/services/", "644"],
+    ["target/release/l10n/development/bande-indexer/*", "usr/share/bande/l10n/bande-indexer/", "644"],
 ]
 
 [lints]

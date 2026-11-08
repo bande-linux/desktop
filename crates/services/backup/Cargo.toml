@@ -57,6 +57,9 @@ assets = [
     ["data/org.bande.Backup.service", "usr/share/dbus-1/system-services/", "644"],
     ["data/org.bande.backup.policy", "usr/share/polkit-1/actions/", "644"],
     ["data/90-bande-backup.rules", "usr/lib/udev/rules.d/", "644"],
+    ["target/release/l10n/development/bande-backup-alerts/*", "usr/share/bande/l10n/bande-backup-alerts/", "644"],
+    ["target/release/l10n/development/bande-backup-restore/*", "usr/share/bande/l10n/bande-backup-restore/", "644"],
+    ["target/release/l10n/development/bande-backupd/*", "usr/share/bande/l10n/bande-backupd/", "644"],
 ]
 
 [lints]

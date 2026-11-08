@@ -1,0 +1,101 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Recovery"
+msgstr "Återställning"
+
+msgid "What do you want to do?"
+msgstr "Vad vill du göra?"
+
+msgid "Reinstall Bande"
+msgstr "Installera om Bande"
+
+msgid "Installs a fresh system. Your files and accounts stay."
+msgstr "Installerar ett nytt system. Dina filer och konton behålls."
+
+msgid "Restore a Previous Version"
+msgstr "Återställ en tidigare version"
+
+msgid "Go back to the system as it was on an earlier date. Your files stay."
+msgstr "Gå tillbaka till systemet som det såg ut ett tidigare datum. Dina filer behålls."
+
+msgid "Restore from Backup"
+msgstr "Återställ från säkerhetskopia"
+
+msgid "Bring back your files from a backup disk."
+msgstr "Hämta tillbaka dina filer från en säkerhetskopieringsskiva."
+
+msgid "Install Bande"
+msgstr "Installera Bande"
+
+msgid "Erases a disk and installs Bande on it."
+msgstr "Raderar en skiva och installerar Bande på den."
+
+msgid "Disks"
+msgstr "Skivor"
+
+msgid "Check, format and partition disks."
+msgstr "Kontrollera, formatera och partitionera skivor."
+
+msgid "Terminal"
+msgstr "Terminal"
+
+msgid "Work at the command line."
+msgstr "Arbeta på kommandoraden."
+
+msgid "Restart"
+msgstr "Starta om"
+
+msgid "Choose a Disk"
+msgstr "Välj en skiva"
+
+msgid "This erases everything on the selected disk."
+msgstr "Allt på den valda skivan raderas."
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "Erase and Install"
+msgstr "Radera och installera"
+
+msgid "Disk password"
+msgstr "Skivlösenord"
+
+msgid "Enter the Disk Password"
+msgstr "Ange skivlösenordet"
+
+msgid "Continue"
+msgstr "Fortsätt"
+
+msgid "Backup password"
+msgstr "Lösenord för säkerhetskopia"
+
+msgid "Enter the Backup's Password"
+msgstr "Ange säkerhetskopians lösenord"
+
+msgid "Finished. Restart to use your computer."
+msgstr "Klart. Starta om för att använda datorn."
+
+msgid "Preparing the disk"
+msgstr "Förbereder skivan"
+
+msgid "Copying the recovery system"
+msgstr "Kopierar återställningssystemet"
+
+msgid "Formatting"
+msgstr "Formaterar"
+
+msgid "Copying the system"
+msgstr "Kopierar systemet"
+
+msgid "Setting up startup"
+msgstr "Ställer in start"
+
+msgid "Restoring your backup"
+msgstr "Återställer din säkerhetskopia"

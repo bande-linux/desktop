@@ -1,0 +1,166 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Applications"
+msgstr "Program"
+
+msgid "Archives"
+msgstr "Arkiv"
+
+msgid "Disk Images"
+msgstr "Skivavbildningar"
+
+msgid "Documents"
+msgstr "Dokument"
+
+msgid "Folders"
+msgstr "Mappar"
+
+msgid "Images"
+msgstr "Bilder"
+
+msgid "Movies"
+msgstr "Filmer"
+
+msgid "Music"
+msgstr "Musik"
+
+msgid "PDF Documents"
+msgstr "PDF-dokument"
+
+msgid "Presentations"
+msgstr "Presentationer"
+
+msgid "Spreadsheets"
+msgstr "Kalkylblad"
+
+msgid "Other"
+msgstr "Övrigt"
+
+msgid "Today"
+msgstr "Idag"
+
+msgid "Yesterday"
+msgstr "Igår"
+
+msgid "Previous 7 Days"
+msgstr "Senaste 7 dagarna"
+
+msgid "Previous 30 Days"
+msgstr "Senaste 30 dagarna"
+
+msgid "No Date"
+msgstr "Inget datum"
+
+msgid "Over 1 GB"
+msgstr "Över 1 GB"
+
+msgid "100 MB to 1 GB"
+msgstr "100 MB till 1 GB"
+
+msgid "1 MB to 100 MB"
+msgstr "1 MB till 100 MB"
+
+msgid "100 KB to 1 MB"
+msgstr "100 kB till 1 MB"
+
+msgid "Less than 100 KB"
+msgstr "Mindre än 100 kB"
+
+msgid "Zero bytes"
+msgstr "Noll byte"
+
+msgid "{count} byte"
+msgid_plural "{count} bytes"
+msgstr[0] "{count} byte"
+msgstr[1] "{count} byte"
+
+msgid "{value} KB"
+msgstr "{value} kB"
+
+msgid "{value} MB"
+msgstr "{value} MB"
+
+msgid "{value} GB"
+msgstr "{value} GB"
+
+msgid "{value} TB"
+msgstr "{value} TB"
+
+msgid "Today, {time}"
+msgstr "Idag, {time}"
+
+msgid "Yesterday, {time}"
+msgstr "Igår, {time}"
+
+msgid "{name} copy"
+msgstr "{name} kopia"
+
+msgid "{name} copy {number}"
+msgstr "{name} kopia {number}"
+
+msgid "Are you sure you want to change the extension from “{from}” to “{to}”?"
+msgstr "Vill du verkligen ändra filändelsen från ”{from}” till ”{to}”?"
+
+msgid "Are you sure you want to add the extension “{extension}” to the end of the name?"
+msgstr "Vill du verkligen lägga till filändelsen ”{extension}” i slutet av namnet?"
+
+msgid "Are you sure you want to remove the extension “{extension}”?"
+msgstr "Vill du verkligen ta bort filändelsen ”{extension}”?"
+
+msgid "If you make this change, your document may open in a different app."
+msgstr "Om du gör den här ändringen kan dokumentet öppnas i en annan app."
+
+msgid "Keep {extension}"
+msgstr "Behåll {extension}"
+
+msgid "Don’t Add"
+msgstr "Lägg inte till"
+
+msgid "Keep"
+msgstr "Behåll"
+
+msgid "Use {extension}"
+msgstr "Använd {extension}"
+
+msgid "Add"
+msgstr "Lägg till"
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "{name} alias"
+msgstr "{name} alias"
+
+msgid "{name} alias {number}"
+msgstr "{name} alias {number}"
+
+msgid "untitled folder"
+msgstr "namnlös mapp"
+
+msgid "The archive is protected by a password."
+msgstr "Arkivet är skyddat med ett lösenord."
+
+msgid "The password is incorrect."
+msgstr "Lösenordet är fel."
+
+msgid "The archive tries to put an item outside the folder it expands into."
+msgstr "Arkivet försöker placera ett objekt utanför mappen som det packas upp i."
+
+msgid "The archive expands to more than a thousand times its size, as a decompression bomb does."
+msgstr "Arkivet packas upp till mer än tusen gånger sin storlek, som en dekompressionsbomb."
+
+msgid "There isn’t enough free space for the expanded items."
+msgstr "Det finns inte tillräckligt med ledigt utrymme för de uppackade objekten."
+
+msgid "Archive"
+msgstr "Arkiv"
+
+msgid "This disk can’t store links."
+msgstr "Den här skivan kan inte lagra länkar."

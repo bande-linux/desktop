@@ -1,8 +1,8 @@
 use std::sync::mpsc::{self, Sender};
 
-use bande_status::history::charge_history;
+use bande_status::history::{PowerSource, UPower, charge_history, system_battery};
 use zbus::blocking::{Connection, MessageIterator};
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
 
 use bande_settings_panes::SettingId;
@@ -11,46 +11,12 @@ use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 
 const UPOWER_PATH: &str = "/org/freedesktop/UPower";
-const BATTERY_KIND: u32 = 2;
 const PLACEHOLDER_DRIVER: &str = "placeholder";
 const CHARGING: u32 = 1;
 const FULL: u32 = 4;
 const PENDING_CHARGE: u32 = 5;
 const HISTORY_SECONDS: u32 = 24 * 3600;
 const HISTORY_POINTS: u32 = 96;
-
-#[zbus::proxy(
-    interface = "org.freedesktop.UPower",
-    default_service = "org.freedesktop.UPower",
-    default_path = "/org/freedesktop/UPower"
-)]
-trait UPower {
-    fn enumerate_devices(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
-    #[zbus(property)]
-    fn on_battery(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn lid_is_present(&self) -> zbus::Result<bool>;
-}
-
-#[zbus::proxy(
-    interface = "org.freedesktop.UPower.Device",
-    default_service = "org.freedesktop.UPower"
-)]
-trait PowerSource {
-    #[zbus(property, name = "Type")]
-    fn kind(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn power_supply(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn capacity(&self) -> zbus::Result<f64>;
-    #[zbus(property)]
-    fn charge_threshold_supported(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn charge_threshold_enabled(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn charge_end_threshold(&self) -> zbus::Result<u32>;
-    fn enable_charge_threshold(&self, enabled: bool) -> zbus::Result<()>;
-}
 
 #[zbus::proxy(
     interface = "org.freedesktop.UPower.Device",
@@ -173,31 +139,7 @@ fn profile_names(profiles: &PowerProfilesProxyBlocking<'_>) -> Profiles {
     }
 }
 
-fn system_battery<'a>(
-    system: &Connection,
-    upower: &UPowerProxyBlocking<'a>,
-) -> Option<PowerSourceProxyBlocking<'a>> {
-    upower
-        .enumerate_devices()
-        .ok()?
-        .into_iter()
-        .filter_map(|path| {
-            PowerSourceProxyBlocking::builder(system)
-                .path(path)
-                .ok()?
-                .cache_properties(zbus::proxy::CacheProperties::No)
-                .build()
-                .ok()
-        })
-        .find(|device| {
-            device.kind().ok() == Some(BATTERY_KIND) && device.power_supply().unwrap_or(false)
-        })
-}
-
-fn read_battery(
-    system: &Connection,
-    source: Option<&PowerSourceProxyBlocking<'_>>,
-) -> Option<BatteryState> {
+fn read_battery(system: &Connection, source: Option<&PowerSource<'_>>) -> Option<BatteryState> {
     let display = DeviceProxyBlocking::builder(system)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
@@ -205,7 +147,8 @@ fn read_battery(
     if !display.is_present().ok()? {
         return None;
     }
-    let history = charge_history(system, HISTORY_SECONDS, HISTORY_POINTS)
+    let history = source
+        .and_then(|source| charge_history(source, HISTORY_SECONDS, HISTORY_POINTS).ok())
         .unwrap_or_default()
         .into_iter()
         .map(|sample| (sample.at, sample.percent))
@@ -236,7 +179,7 @@ fn read_battery(
 }
 
 fn read(system: &Connection) -> Option<PowerState> {
-    let upower = UPowerProxyBlocking::builder(system)
+    let upower = UPower::builder(system)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
         .ok()?;
@@ -247,7 +190,7 @@ fn read(system: &Connection) -> Option<PowerState> {
             return None;
         }
     };
-    let source = system_battery(system, &upower);
+    let source = system_battery(system).ok().flatten();
     let profiles = PowerProfilesProxyBlocking::builder(system)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
@@ -269,8 +212,7 @@ fn change(system: &Connection, command: BatteryCommand) -> zbus::Result<()> {
             PowerProfilesProxyBlocking::new(system)?.set_active_profile(&profile)
         }
         BatteryCommand::ChargeLimit(enabled) => {
-            let upower = UPowerProxyBlocking::new(system)?;
-            let battery = system_battery(system, &upower)
+            let battery = system_battery(system)?
                 .ok_or_else(|| zbus::Error::Failure("no battery".to_owned()))?;
             battery.enable_charge_threshold(enabled)
         }

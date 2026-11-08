@@ -14,8 +14,14 @@ const PENDING_CHARGE: u32 = 5;
     gen_async = false,
     blocking_name = "UPower"
 )]
-trait UPowerManager {
+pub trait UPowerManager {
     fn enumerate_devices(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+
+    #[zbus(property)]
+    fn on_battery(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn lid_is_present(&self) -> zbus::Result<bool>;
 }
 
 #[zbus::proxy(
@@ -24,12 +30,26 @@ trait UPowerManager {
     gen_async = false,
     blocking_name = "PowerSource"
 )]
-trait PowerSourceDevice {
+pub trait PowerSourceDevice {
     #[zbus(property, name = "Type")]
     fn kind(&self) -> zbus::Result<u32>;
 
     #[zbus(property)]
     fn power_supply(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn capacity(&self) -> zbus::Result<f64>;
+
+    #[zbus(property)]
+    fn charge_threshold_supported(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn charge_threshold_enabled(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn charge_end_threshold(&self) -> zbus::Result<u32>;
+
+    fn enable_charge_threshold(&self, enabled: bool) -> zbus::Result<()>;
 
     fn get_history(
         &self,
@@ -60,23 +80,27 @@ pub fn charge_samples(records: Vec<(u32, f64, u32)>) -> Vec<ChargeSample> {
     samples
 }
 
-pub fn charge_history(
-    system: &Connection,
-    seconds: u32,
-    points: u32,
-) -> zbus::Result<Vec<ChargeSample>> {
+pub fn system_battery(system: &Connection) -> zbus::Result<Option<PowerSource<'static>>> {
     for path in UPower::new(system)?.enumerate_devices()? {
         let device = PowerSource::builder(system)
             .path(path)?
             .cache_properties(CacheProperties::No)
             .build()?;
         if device.kind()? == BATTERY_TYPE && device.power_supply().unwrap_or(false) {
-            return Ok(charge_samples(
-                device.get_history("charge", seconds, points)?,
-            ));
+            return Ok(Some(device));
         }
     }
-    Ok(Vec::new())
+    Ok(None)
+}
+
+pub fn charge_history(
+    battery: &PowerSource<'_>,
+    seconds: u32,
+    points: u32,
+) -> zbus::Result<Vec<ChargeSample>> {
+    Ok(charge_samples(
+        battery.get_history("charge", seconds, points)?,
+    ))
 }
 
 pub fn time_on_battery(history: &[ChargeSample], now: u32) -> Option<u32> {

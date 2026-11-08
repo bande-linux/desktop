@@ -2,11 +2,15 @@
 set -u
 [ -d /run/systemd/system ] || exit 0
 ! systemd-detect-virt --quiet --chroot || exit 0
+mkdir -p /run/bande-desktop
+touch /run/bande-desktop/packages-installed
+own=$(sed -n 's|^0::/system\.slice/\(.*/\)\{0,1\}\([^/]*\.service\)$|\2|p' /proc/$$/cgroup 2>/dev/null)
 for process in /proc/[0-9]*; do
     grep -qE '^[^ ]+ ..x. [^ ]+ [^ ]+ [^ ]+ +/(usr|opt)/.* \(deleted\)$' "$process/maps" 2>/dev/null || continue
     sed -n 's|^0::/system\.slice/\(.*/\)\{0,1\}\([^/]*\.service\)$|\2|p' "$process/cgroup" 2>/dev/null
 done | sort -u | while read -r unit; do
     case $unit in
+    "$own") ;;
     dbus*.service | greetd.service | display-manager.service | gdm*.service | sddm.service | lightdm.service | \
         systemd-logind.service | elogind.service | user@*.service | getty@*.service | serial-getty@*.service | \
         polkit.service | packagekit*.service | apt-daily*.service | unattended-upgrades.service | \
@@ -16,6 +20,4 @@ done | sort -u | while read -r unit; do
     *) systemctl try-restart --no-block "$unit" ;;
     esac
 done
-mkdir -p /run/bande-desktop
-touch /run/bande-desktop/packages-installed
 exit 0

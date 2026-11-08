@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
@@ -21,6 +22,7 @@ pub const PARTITION_TABLE: &str = "org.freedesktop.UDisks2.PartitionTable";
 pub const LOOP: &str = "org.freedesktop.UDisks2.Loop";
 pub const ENCRYPTED: &str = "org.freedesktop.UDisks2.Encrypted";
 pub const SWAPSPACE: &str = "org.freedesktop.UDisks2.Swapspace";
+const BUS: &str = "org.freedesktop.DBus";
 const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 const NONE: &str = "/";
@@ -117,6 +119,49 @@ impl Objects {
             .unwrap_or_default()
     }
 
+    fn replace(&mut self, fresh: Self) -> Vec<Change> {
+        let mut changes = Vec::new();
+        for (path, interfaces) in &self.0 {
+            let kept = fresh.0.get(path);
+            let gone: Vec<String> = interfaces
+                .keys()
+                .filter(|name| !kept.is_some_and(|now| now.contains_key(*name)))
+                .cloned()
+                .collect();
+            if !gone.is_empty() {
+                changes.push(Change::Removed(path.clone(), gone));
+            }
+        }
+        for (path, interfaces) in &fresh.0 {
+            let Some(before) = self
+                .0
+                .get(path)
+                .filter(|before| interfaces.keys().all(|name| before.contains_key(name)))
+            else {
+                changes.push(Change::Added(path.clone()));
+                continue;
+            };
+            for (interface, properties) in interfaces {
+                let old = before.get(interface);
+                let differs =
+                    |key: &String| old.and_then(|old| old.get(key)) != properties.get(key);
+                let keys: Vec<String> = properties
+                    .keys()
+                    .chain(old.into_iter().flat_map(HashMap::keys))
+                    .filter(|key| differs(key))
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .cloned()
+                    .collect();
+                if !keys.is_empty() {
+                    changes.push(Change::Changed(path.clone(), interface.clone(), keys));
+                }
+            }
+        }
+        *self = fresh;
+        changes
+    }
+
     fn apply(&mut self, signal: &Message) -> Option<Change> {
         let header = signal.header();
         let body = signal.body();
@@ -177,9 +222,23 @@ impl Udisks {
             .sender(UDISKS)?
             .path_namespace(UDISKS_PATH)?
             .build();
+        let owner = MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .sender(BUS)?
+            .interface(BUS)?
+            .member("NameOwnerChanged")?
+            .add_arg(UDISKS)?
+            .build();
         let signals = MessageIterator::for_match_rule(rule, system, None)?;
-        let objects = Arc::new(Mutex::new(Objects::load(system)?));
+        let owners = MessageIterator::for_match_rule(owner, system, None)?;
+        let (sender, received) = mpsc::channel();
+        forward(signals, sender.clone())?;
+        forward(owners, sender)?;
+        let loaded = load(system);
+        let mut ready = loaded.is_some();
+        let objects = Arc::new(Mutex::new(loaded.unwrap_or_default()));
         let shared = Arc::clone(&objects);
+        let connection = system.clone();
         thread::Builder::new()
             .name("udisks".to_owned())
             .spawn(move || {
@@ -190,10 +249,19 @@ impl Udisks {
                         changed(&objects, &Change::Added(path));
                     }
                 }
-                for signal in signals.flatten() {
-                    let mut objects = lock(&shared);
-                    if let Some(change) = objects.apply(&signal) {
-                        changed(&objects, &change);
+                for signal in received {
+                    let changes = match owner_change(&signal) {
+                        Some(false) => {
+                            ready = false;
+                            continue;
+                        }
+                        Some(true) => resync(&connection, &shared, &mut ready),
+                        None if !ready => resync(&connection, &shared, &mut ready),
+                        None => lock(&shared).apply(&signal).into_iter().collect(),
+                    };
+                    let objects = lock(&shared);
+                    for change in &changes {
+                        changed(&objects, change);
                     }
                 }
             })
@@ -211,6 +279,47 @@ impl Udisks {
     pub fn system(&self) -> &Connection {
         &self.system
     }
+}
+
+fn forward(messages: MessageIterator, sender: Sender<Message>) -> zbus::Result<()> {
+    thread::Builder::new()
+        .name("udisks signals".to_owned())
+        .spawn(move || {
+            for message in messages.flatten() {
+                if sender.send(message).is_err() {
+                    return;
+                }
+            }
+        })
+        .map(drop)
+        .map_err(|error| zbus::Error::Failure(error.to_string()))
+}
+
+fn owner_change(signal: &Message) -> Option<bool> {
+    let header = signal.header();
+    if header.member()?.as_str() != "NameOwnerChanged" || header.interface()?.as_str() != BUS {
+        return None;
+    }
+    let (_, _, owner) = signal
+        .body()
+        .deserialize::<(String, String, String)>()
+        .ok()?;
+    Some(!owner.is_empty())
+}
+
+fn load(system: &Connection) -> Option<Objects> {
+    Objects::load(system)
+        .inspect_err(|error| tracing::info!("UDisks2 is not ready, waiting for it: {error}"))
+        .ok()
+}
+
+fn resync(system: &Connection, objects: &Mutex<Objects>, ready: &mut bool) -> Vec<Change> {
+    let Some(fresh) = load(system) else {
+        *ready = false;
+        return Vec::new();
+    };
+    *ready = true;
+    lock(objects).replace(fresh)
 }
 
 fn lock(objects: &Mutex<Objects>) -> MutexGuard<'_, Objects> {

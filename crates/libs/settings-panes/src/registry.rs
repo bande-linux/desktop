@@ -322,7 +322,7 @@ pub enum SettingId {
     SendReportForm,
     ShortcutsPage,
     Spelling,
-    LookUp,
+    TextReplacements,
     ClipboardHistory,
     KeyboardAccess,
     SecurityStatus,
@@ -413,7 +413,7 @@ pub enum List {
     DefaultApps,
     Clipboard,
     Spelling,
-    LookUp,
+    TextReplacements,
     KeyboardAccess,
     SecurityStatus,
     SearchExcluded,
@@ -1344,6 +1344,15 @@ fn keyboard_pane() -> Pane {
                 vec![list(SettingId::Spelling, "spelling", List::Spelling)],
             ),
             section(
+                Some(L10N.tr("text-replacements")),
+                vec![list(
+                    SettingId::TextReplacements,
+                    "text-replacements",
+                    List::TextReplacements,
+                )],
+            )
+            .noted("text-replacements-note"),
+            section(
                 Some(L10N.tr("modifier-keys")),
                 vec![setting(
                     SettingId::CapsLock,
@@ -1796,10 +1805,6 @@ fn language_time_pane() -> Pane {
                     "app-languages",
                     List::AppLanguages,
                 )],
-            ),
-            section(
-                Some(L10N.tr("look-up")),
-                vec![list(SettingId::LookUp, "look-up", List::LookUp)],
             ),
             section(
                 Some(L10N.tr("formats")),

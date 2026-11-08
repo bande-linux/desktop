@@ -158,7 +158,8 @@ impl<P: Program> Runner<P> {
             }
             let served = P::waits_for_activation()
                 && self.cx.has_opened_a_window()
-                && self.cx.windows.is_empty();
+                && self.cx.windows.is_empty()
+                && !self.cx.link.is_kept();
             if self.cx.quitting || served || !self.cx.link.keeps_running() {
                 self.leave();
                 return Ok(());

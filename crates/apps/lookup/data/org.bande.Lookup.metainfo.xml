@@ -3,8 +3,8 @@
   <id>org.bande.Lookup</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT OR Apache-2.0</project_license>
-  <name>Look Up</name>
-  <summary>Look up a word in the installed dictionaries</summary>
+  <name>Dictionary</name>
+  <summary>Look up words in your dictionaries, thesauruses and Wikipedia</summary>
   <description><p>Shows what a word means in a small panel at the pointer.</p></description>
   <launchable type="desktop-id">org.bande.Lookup.desktop</launchable>
 </component>

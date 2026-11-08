@@ -1,5 +1,9 @@
+mod import;
 mod online;
 mod panel;
+mod results;
+mod sources;
+mod window;
 
 use std::cell::Cell;
 use std::path::Path;
@@ -8,11 +12,16 @@ use std::rc::Rc;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-use bande_app::{Cx, Info, Keys, Kind, Program, WindowId};
+use std::os::fd::BorrowedFd;
+
+use bande_app::{Cx, Info, Keys, Kind, Program, Settings, View, WindowId};
 use bande_inbox::Inbox;
 use bande_l10n::Localizer;
+use bande_toolkit::{Appearance, Scene, Window, WindowEvent};
 
 use crate::panel::{LANGUAGE_ARGUMENT, PANEL_SIZE, Panel};
+use crate::sources::{SETTINGS_SIZE, sources_window};
+use crate::window::{DictionaryWindow, WINDOW_SIZE};
 
 static L10N: LazyLock<Localizer> =
     LazyLock::new(|| Localizer::new(bande_l10n::translations!("bande-lookup")));
@@ -23,8 +32,77 @@ static INFO: Info = Info {
     version: env!("CARGO_PKG_VERSION"),
     name: || L10N.tr("app-name"),
     keys: Keys::Standard,
-    settings: None,
+    settings: Some(Settings {
+        title: || L10N.tr("settings-title"),
+        size: SETTINGS_SIZE,
+        view: sources_window,
+    }),
 };
+
+const SERVICE_FLAG: &str = "--gapplication-service";
+
+enum Pane {
+    LookUp(Panel),
+    Dictionary(DictionaryWindow),
+}
+
+impl Pane {
+    fn view(&mut self) -> &mut dyn View {
+        match self {
+            Self::LookUp(panel) => panel,
+            Self::Dictionary(window) => window,
+        }
+    }
+
+    fn shown(&self) -> &dyn View {
+        match self {
+            Self::LookUp(panel) => panel,
+            Self::Dictionary(window) => window,
+        }
+    }
+}
+
+impl View for Pane {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        self.view().scene(window)
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        self.view().event(window, event)
+    }
+
+    fn set_appearance(&mut self, appearance: Appearance) {
+        self.view().set_appearance(appearance);
+    }
+
+    fn set_active(&mut self, active: bool) {
+        self.view().set_active(active);
+    }
+
+    fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        self.shown().sources()
+    }
+
+    fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
+        self.view().source_ready(window, index)
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.shown().deadline()
+    }
+
+    fn tick(&mut self, window: &mut Window, now: Instant) -> bool {
+        self.view().tick(window, now)
+    }
+
+    fn animating(&self) -> bool {
+        self.shown().animating()
+    }
+
+    fn accessibility(&self) -> Option<accesskit::TreeUpdate> {
+        self.shown().accessibility()
+    }
+}
 
 const NO_REQUEST_LIMIT: Duration = Duration::from_secs(30);
 
@@ -41,6 +119,7 @@ impl Lookup {
         for argument in arguments {
             match argument.strip_prefix(LANGUAGE_ARGUMENT) {
                 Some(tag) => language = Some(tag.to_owned()),
+                None if argument == SERVICE_FLAG => {}
                 None => words.push(argument),
             }
         }
@@ -66,7 +145,9 @@ impl Lookup {
             Kind::Popover("lookup"),
             &title,
             PANEL_SIZE,
-            move |appearance| Panel::new(appearance, word, language, answers, dismissed),
+            move |appearance| {
+                Pane::LookUp(Panel::new(appearance, word, language, answers, dismissed))
+            },
         );
         match opened {
             Ok(window) => self.shown = Some(window),
@@ -76,7 +157,7 @@ impl Lookup {
 }
 
 impl Program for Lookup {
-    type View = Panel;
+    type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut lookup = Self {
@@ -92,10 +173,17 @@ impl Program for Lookup {
         self.show(cx, arguments);
     }
 
-    fn reopen(&mut self, _cx: &mut Cx<Self>) {}
-
-    fn save_window(&self, _cx: &Cx<Self>, _window: WindowId) -> Option<bande_app::Saved> {
-        None
+    fn reopen(&mut self, cx: &mut Cx<Self>) {
+        self.give_up_at = None;
+        let opened = cx.open(
+            Kind::Main,
+            &L10N.tr("app-name"),
+            WINDOW_SIZE,
+            |appearance| Pane::Dictionary(DictionaryWindow::new(appearance, "")),
+        );
+        if let Err(error) = opened {
+            tracing::warn!("cannot open Dictionary: {error}");
+        }
     }
 
     fn deadline(&self) -> Option<Instant> {

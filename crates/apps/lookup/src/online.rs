@@ -1,20 +1,20 @@
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::time::Duration;
 
-use bande_dict::{Entry, Hit, Line, Match};
+use bande_dict::{Entry, Hit, Line, Match, Pack};
 use bande_https::Timeouts;
 
-use crate::L10N;
+use crate::import;
 
 const PORT: u16 = 443;
 const ANSWER_LIMIT: u64 = 256 * 1024;
 const REDIRECTS: usize = 3;
-const SUMMARY: &str = "/api/rest_v1/page/summary/";
 const TIMEOUTS: Timeouts = Timeouts {
     connect: Duration::from_secs(5),
     transfer: Duration::from_secs(10),
 };
-const OTHER_KIND: u8 = 3;
+const WIKIMEDIA_SUMMARY: &str = "wikimedia-summary";
+const DICT: &str = "dict";
 
 fn encoded(word: &str) -> String {
     word.bytes()
@@ -63,7 +63,22 @@ fn get(host: &str, path: &str) -> io::Result<(u16, String, Vec<u8>)> {
     Ok((status, location, answer[split + 4..].to_vec()))
 }
 
-pub fn wikipedia(word: &str, language: &str) -> Option<Hit> {
+pub fn look_up(source: &Pack, word: &str, language: &str) -> Option<Hit> {
+    let online = source.online.as_ref()?;
+    match online.protocol.as_str() {
+        WIKIMEDIA_SUMMARY => wikimedia_summary(source, &online.url, word, language),
+        DICT => dict(source, &online.url, word)
+            .inspect_err(|error| tracing::warn!("cannot ask {}: {error}", source.name))
+            .ok()
+            .flatten(),
+        other => {
+            tracing::warn!("{}: unknown protocol {other}", source.id);
+            None
+        }
+    }
+}
+
+fn wikimedia_summary(source: &Pack, url: &str, word: &str, language: &str) -> Option<Hit> {
     if language.is_empty()
         || !language
             .chars()
@@ -71,20 +86,25 @@ pub fn wikipedia(word: &str, language: &str) -> Option<Hit> {
     {
         return None;
     }
-    let host = format!("{language}.wikipedia.org");
-    let mut path = format!("{SUMMARY}{}", encoded(word.trim()));
+    let address = url
+        .replace("{language}", language)
+        .replace("{word}", &encoded(word.trim()));
+    let rest = address.strip_prefix("https://")?;
+    let (host, first_path) = rest.split_at(rest.find('/')?);
+    let base = &first_path[..=first_path.rfind('/')?];
+    let mut path = first_path.to_owned();
     for _ in 0..REDIRECTS {
-        let (status, location, body) = get(&host, &path)
-            .inspect_err(|error| tracing::warn!("cannot reach Wikipedia: {error}"))
+        let (status, location, body) = get(host, &path)
+            .inspect_err(|error| tracing::warn!("cannot reach {}: {error}", source.name))
             .ok()?;
         match status {
-            200 => return summary(&body, language),
+            200 => return summary(source, &body, language),
             301 | 302 | 303 | 307 | 308
                 if location.starts_with('/') || !location.contains("://") =>
             {
                 path = match location.starts_with('/') {
                     true => location,
-                    false => format!("{SUMMARY}{location}"),
+                    false => format!("{base}{location}"),
                 };
             }
             _ => return None,
@@ -93,7 +113,7 @@ pub fn wikipedia(word: &str, language: &str) -> Option<Hit> {
     None
 }
 
-fn summary(body: &[u8], language: &str) -> Option<Hit> {
+fn summary(source: &Pack, body: &[u8], language: &str) -> Option<Hit> {
     let page: serde_json::Value = serde_json::from_slice(body).ok()?;
     if page.get("type").and_then(serde_json::Value::as_str) == Some("disambiguation") {
         return None;
@@ -104,12 +124,13 @@ fn summary(body: &[u8], language: &str) -> Option<Hit> {
         return None;
     }
     Some(Hit {
-        id: "wikipedia".to_owned(),
-        source: L10N.tr("wikipedia"),
-        attribution: L10N.tr("wikipedia-attribution"),
+        place: 0,
+        id: source.id.clone(),
+        source: source.name.clone(),
+        attribution: source.attribution.clone(),
         language: language.to_owned(),
         matched: Match::Headword,
-        kind: OTHER_KIND,
+        kind: source.kind_rank(language),
         entries: vec![Entry {
             word: title,
             pos: String::new(),
@@ -120,4 +141,81 @@ fn summary(body: &[u8], language: &str) -> Option<Hit> {
         }],
         derived: None,
     })
+}
+
+fn dict(source: &Pack, url: &str, word: &str) -> io::Result<Option<Hit>> {
+    let word = word.trim();
+    if word.is_empty()
+        || word
+            .chars()
+            .any(|c| c == '"' || c == '\\' || c.is_control())
+    {
+        return Ok(None);
+    }
+    let (host, port, database) =
+        import::parse_dict_url(url).ok_or_else(|| io::Error::other("a bad address"))?;
+    let mut stream = import::connect_dict(&host, port)?;
+    stream
+        .get_mut()
+        .write_all(format!("DEFINE {database} \"{word}\"\r\nQUIT\r\n").as_bytes())?;
+    let mut entries = Vec::new();
+    let mut current: Option<Entry> = None;
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if stream.read_line(&mut line)? == 0 {
+            break;
+        }
+        let text = line.trim_end_matches(['\r', '\n']);
+        if text == "." && current.is_some() {
+            entries.extend(current.take());
+            continue;
+        }
+        match &mut current {
+            Some(entry) => {
+                let text = text
+                    .strip_prefix('.')
+                    .filter(|_| text.starts_with(".."))
+                    .unwrap_or(text);
+                let text = text.trim();
+                if !text.is_empty() && !(entry.lines.is_empty() && text.eq_ignore_ascii_case(word))
+                {
+                    entry.lines.push(Line {
+                        kind: 'D',
+                        text: text.to_owned(),
+                    });
+                }
+            }
+            None if text.starts_with("151 ") => {
+                current = Some(Entry {
+                    word: word.to_owned(),
+                    pos: String::new(),
+                    lines: Vec::new(),
+                });
+            }
+            None if text.starts_with("250")
+                || text.starts_with("552")
+                || text.starts_with("221") =>
+            {
+                if !text.starts_with("250") {
+                    break;
+                }
+            }
+            None if text.starts_with('5') || text.starts_with('4') => {
+                return Err(io::Error::other(text.to_owned()));
+            }
+            None => {}
+        }
+    }
+    Ok((!entries.is_empty()).then(|| Hit {
+        place: 0,
+        id: source.id.clone(),
+        source: source.name.clone(),
+        attribution: source.attribution.clone(),
+        language: String::new(),
+        matched: Match::Headword,
+        kind: source.kind_rank(""),
+        entries,
+        derived: None,
+    }))
 }

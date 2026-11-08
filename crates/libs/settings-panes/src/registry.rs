@@ -322,7 +322,6 @@ pub enum SettingId {
     ShortcutsPage,
     Spelling,
     TextReplacements,
-    LookUp,
     ClipboardHistory,
     KeyboardAccess,
     SecurityStatus,
@@ -414,7 +413,6 @@ pub enum List {
     Clipboard,
     Spelling,
     TextReplacements,
-    LookUp,
     KeyboardAccess,
     SecurityStatus,
     SearchExcluded,
@@ -1794,10 +1792,6 @@ fn language_time_pane() -> Pane {
                     "app-languages",
                     List::AppLanguages,
                 )],
-            ),
-            section(
-                Some(L10N.tr("look-up")),
-                vec![list(SettingId::LookUp, "look-up", List::LookUp)],
             ),
             section(
                 Some(L10N.tr("formats")),

@@ -41,8 +41,15 @@ impl Entry {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Online {
+    pub protocol: String,
+    pub url: String,
+}
+
 pub struct Pack {
-    file: File,
+    file: Option<File>,
+    pub path: PathBuf,
     pub id: String,
     pub name: String,
     pub attribution: String,
@@ -54,6 +61,8 @@ pub struct Pack {
     compound: HashMap<String, usize>,
     forms: u32,
     offsets_at: u64,
+    pub online: Option<Online>,
+    default: Option<bool>,
 }
 
 fn u32_at(file: &File, at: u64) -> io::Result<u32> {
@@ -81,21 +90,11 @@ fn parse_rules(text: &str) -> Vec<Rule> {
 
 impl Pack {
     pub fn open(path: &Path) -> io::Result<Self> {
-        let file = File::open(path)?;
-        let mut magic = [0; 8];
-        file.read_exact_at(&mut magic, 0)?;
-        if &magic != MAGIC {
-            return Err(invalid("not a dictionary pack"));
-        }
-        let meta_length = u32_at(&file, 8)?;
-        let mut meta = vec![0; meta_length as usize];
-        file.read_exact_at(&mut meta, HEADER_LENGTH)?;
-        let meta = String::from_utf8(meta).map_err(|_| invalid("metadata is not UTF-8"))?;
-        let forms_at = HEADER_LENGTH + u64::from(meta_length);
         let mut pack = Self {
-            forms: u32_at(&file, forms_at)?,
-            offsets_at: forms_at + 4,
-            file,
+            file: None,
+            path: path.to_owned(),
+            forms: 0,
+            offsets_at: 0,
             id: String::new(),
             name: String::new(),
             attribution: String::new(),
@@ -105,51 +104,125 @@ impl Pack {
             kinds: HashMap::new(),
             rules: HashMap::new(),
             compound: HashMap::new(),
+            online: None,
+            default: None,
         };
+        let meta = match path
+            .extension()
+            .is_some_and(|extension| extension == SOURCE)
+        {
+            true => fs::read_to_string(path)?,
+            false => {
+                let file = File::open(path)?;
+                let mut magic = [0; 8];
+                file.read_exact_at(&mut magic, 0)?;
+                if &magic != MAGIC {
+                    return Err(invalid("not a dictionary pack"));
+                }
+                let meta_length = u32_at(&file, 8)?;
+                let mut meta = vec![0; meta_length as usize];
+                file.read_exact_at(&mut meta, HEADER_LENGTH)?;
+                let forms_at = HEADER_LENGTH + u64::from(meta_length);
+                pack.forms = u32_at(&file, forms_at)?;
+                pack.offsets_at = forms_at + 4;
+                pack.file = Some(file);
+                String::from_utf8(meta).map_err(|_| invalid("metadata is not UTF-8"))?
+            }
+        };
+        pack.read_meta(&meta);
+        let online = pack.online.is_some();
+        match pack.id.is_empty() || pack.languages.is_empty() || (online == pack.file.is_some()) {
+            true => Err(invalid(
+                "a source needs an id, languages and either data or an address",
+            )),
+            false => Ok(pack),
+        }
+    }
+
+    fn read_meta(&mut self, meta: &str) {
+        let mut protocol = None;
+        let mut url = None;
         for line in meta.lines() {
             let Some((key, value)) = line.split_once('=') else {
                 continue;
             };
             match key.split_once('.') {
                 Some(("rules", language)) => {
-                    pack.rules.insert(language.to_owned(), parse_rules(value));
+                    self.rules.insert(language.to_owned(), parse_rules(value));
                 }
                 Some(("definitions", language)) => {
-                    pack.definitions
+                    self.definitions
                         .insert(language.to_owned(), value.to_owned());
                 }
                 Some(("kind", language)) => {
-                    pack.kinds.insert(language.to_owned(), value.to_owned());
+                    self.kinds.insert(language.to_owned(), value.to_owned());
                 }
                 Some(("compound", language)) => {
                     if let Ok(shortest) = value.parse() {
-                        pack.compound.insert(language.to_owned(), shortest);
+                        self.compound.insert(language.to_owned(), shortest);
                     }
                 }
                 _ => match key {
-                    "id" => value.clone_into(&mut pack.id),
-                    "name" => value.clone_into(&mut pack.name),
-                    "attribution" => value.clone_into(&mut pack.attribution),
-                    "priority" => pack.priority = value.parse().unwrap_or(0),
+                    "id" => value.clone_into(&mut self.id),
+                    "name" => value.clone_into(&mut self.name),
+                    "attribution" => value.clone_into(&mut self.attribution),
+                    "priority" => self.priority = value.parse().unwrap_or(0),
+                    "default" => self.default = Some(value == "on"),
+                    "protocol" => protocol = Some(value.to_owned()),
+                    "url" => url = Some(value.to_owned()),
                     "languages" => {
-                        pack.languages = value.split_whitespace().map(str::to_owned).collect();
+                        self.languages = value.split_whitespace().map(str::to_owned).collect();
                     }
                     _ => {}
                 },
             }
         }
-        match pack.id.is_empty() || pack.languages.is_empty() {
-            true => Err(invalid("a pack needs an id and languages")),
-            false => Ok(pack),
+        if let (Some(protocol), Some(url)) = (protocol, url) {
+            self.online = Some(Online { protocol, url });
         }
     }
 
-    fn kind_rank(&self, language: &str) -> u8 {
-        match self.kinds.get(language).map(String::as_str) {
+    pub fn is_users(&self) -> bool {
+        bande_xdg::data_home().is_some_and(|home| self.path.starts_with(home.join(PACK_FOLDER)))
+    }
+
+    fn serves(&self, language: &str) -> bool {
+        self.languages
+            .iter()
+            .any(|known| known == language || known == ANY_LANGUAGE)
+    }
+
+    fn on_by_default(&self, languages: &[String]) -> bool {
+        self.default
+            .unwrap_or_else(|| languages.iter().any(|language| self.serves(language)))
+    }
+
+    fn default_place(&self, languages: &[String]) -> (usize, u8, i64) {
+        let first = self
+            .languages
+            .first()
+            .map(String::as_str)
+            .unwrap_or_default();
+        let defined_in = self.definitions.get(first).map_or(first, String::as_str);
+        let place = languages
+            .iter()
+            .position(|language| language == defined_in)
+            .unwrap_or(languages.len());
+        (place, self.kind_rank(first), -self.priority)
+    }
+
+    pub fn kind_rank(&self, language: &str) -> u8 {
+        let kind = self
+            .kinds
+            .get(language)
+            .or_else(|| self.kinds.get(ANY_LANGUAGE))
+            .map(String::as_str);
+        match kind {
             None | Some("definition") => 0,
             Some("translation") => 1,
             Some("thesaurus") => 2,
-            Some(_) => 3,
+            Some("encyclopedia") => 3,
+            Some(_) => 4,
         }
     }
 
@@ -161,6 +234,7 @@ impl Pack {
         derived: Option<(String, String)>,
     ) -> Hit {
         Hit {
+            place: 0,
             id: self.id.clone(),
             source: self.name.clone(),
             attribution: self.attribution.clone(),
@@ -172,10 +246,17 @@ impl Pack {
         }
     }
 
+    fn data(&self) -> io::Result<&File> {
+        self.file
+            .as_ref()
+            .ok_or_else(|| invalid("an online source has no data"))
+    }
+
     fn record(&self, index: u32) -> io::Result<(Vec<u8>, Vec<u32>)> {
-        let at = u64::from(u32_at(&self.file, self.offsets_at + u64::from(index) * 4)?);
+        let file = self.data()?;
+        let at = u64::from(u32_at(file, self.offsets_at + u64::from(index) * 4)?);
         let mut bytes = vec![0; LONGEST_RECORD];
-        let read = self.file.read_at(&mut bytes, at)?;
+        let read = file.read_at(&mut bytes, at)?;
         bytes.truncate(read);
         let end = bytes
             .iter()
@@ -198,9 +279,10 @@ impl Pack {
     }
 
     fn entry(&self, at: u32) -> io::Result<Entry> {
-        let length = u32_at(&self.file, u64::from(at))?;
+        let file = self.data()?;
+        let length = u32_at(file, u64::from(at))?;
         let mut body = vec![0; length as usize];
-        self.file.read_exact_at(&mut body, u64::from(at) + 4)?;
+        file.read_exact_at(&mut body, u64::from(at) + 4)?;
         let body = String::from_utf8(body).map_err(|_| invalid("entry is not UTF-8"))?;
         let mut lines = body.lines();
         let word = lines.next().unwrap_or_default().to_owned();
@@ -314,7 +396,7 @@ pub fn discover(folders: &[PathBuf]) -> Vec<Pack> {
             .filter_map(|file| Some(file.ok()?.path()))
             .filter(|path| {
                 path.extension()
-                    .is_some_and(|extension| extension == "bdict")
+                    .is_some_and(|extension| extension == PACK || extension == SOURCE)
             })
             .collect();
         paths.sort();
@@ -338,6 +420,7 @@ pub enum Match {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hit {
+    pub place: usize,
     pub id: String,
     pub source: String,
     pub attribution: String,
@@ -346,13 +429,6 @@ pub struct Hit {
     pub kind: u8,
     pub entries: Vec<Entry>,
     pub derived: Option<(String, String)>,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Preferences<'a> {
-    pub word_languages: &'a [String],
-    pub ui_languages: &'a [String],
-    pub user_order: &'a [String],
 }
 
 pub fn cleaned(text: &str) -> String {
@@ -450,32 +526,18 @@ fn position_or_last(list: &[String], wanted: &str) -> usize {
         .unwrap_or(list.len())
 }
 
-pub fn look_up(packs: &[Pack], text: &str, wanted: Preferences<'_>) -> io::Result<Vec<Hit>> {
+pub fn look_up(sources: &[Pack], text: &str, word_languages: &[String]) -> io::Result<Vec<Hit>> {
     let form = cleaned(text).replace('-', " ");
-    let mut hits = hits_for(packs, &form)?;
+    let mut hits = hits_for(sources, &form)?;
     if hits.is_empty() {
-        hits = compound_hits(packs, &form)?;
+        hits = compound_hits(sources, &form)?;
     }
     hits.sort_by_cached_key(|(index, hit)| {
-        let pack = &packs[*index];
-        let defined_in = pack
-            .definitions
-            .get(&hit.language)
-            .map_or(hit.language.as_str(), String::as_str);
-        let priority = match wanted.user_order.iter().position(|id| *id == pack.id) {
-            Some(place) => (0, place as i64),
-            None => (1, -pack.priority),
-        };
-        (
-            hit.matched,
-            position_or_last(wanted.ui_languages, defined_in),
-            pack.kind_rank(&hit.language),
-            priority,
-            position_or_last(wanted.word_languages, &hit.language),
-        )
+        (*index, position_or_last(word_languages, &hit.language))
     });
     let mut unique: Vec<Hit> = Vec::new();
-    for (_, hit) in hits {
+    for (place, mut hit) in hits {
+        hit.place = place;
         if unique.iter().all(|shown| shown.entries != hit.entries) {
             unique.push(hit);
         }
@@ -483,8 +545,10 @@ pub fn look_up(packs: &[Pack], text: &str, wanted: Preferences<'_>) -> io::Resul
     Ok(unique)
 }
 
-const PACK_FOLDER: &str = "bande/dict";
-const CHOICES_FILE: &str = "bande/lookup";
+const PACK: &str = "bdict";
+const SOURCE: &str = "source";
+const ANY_LANGUAGE: &str = "*";
+pub const PACK_FOLDER: &str = "bande/dict";
 
 pub fn installed() -> Vec<Pack> {
     let folders: Vec<PathBuf> = bande_xdg::data_dirs()
@@ -496,9 +560,9 @@ pub fn installed() -> Vec<Pack> {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Choices {
-    pub off: Vec<String>,
     pub order: Vec<String>,
-    pub wikipedia: bool,
+    pub on: Vec<String>,
+    pub off: Vec<String>,
 }
 
 fn ids(value: &str) -> Vec<String> {
@@ -506,39 +570,68 @@ fn ids(value: &str) -> Vec<String> {
 }
 
 impl Choices {
-    fn path() -> Option<PathBuf> {
-        bande_xdg::config_home().map(|folder| folder.join(CHOICES_FILE))
-    }
+    pub const FILE: &str = "dictionary.conf";
 
-    pub fn load() -> Self {
+    pub fn parse(text: &str) -> Self {
         let mut choices = Self::default();
-        let Some(text) = Self::path().and_then(|path| fs::read_to_string(path).ok()) else {
-            return choices;
-        };
         for line in text.lines() {
             match line.split_once('=') {
-                Some(("off", value)) => choices.off = ids(value),
                 Some(("order", value)) => choices.order = ids(value),
-                Some(("wikipedia", value)) => choices.wikipedia = value.trim() == "on",
+                Some(("on", value)) => choices.on = ids(value),
+                Some(("off", value)) => choices.off = ids(value),
                 _ => {}
             }
         }
         choices
     }
 
-    pub fn save(&self) -> io::Result<()> {
-        let path = Self::path().ok_or_else(|| invalid("no configuration folder"))?;
-        let wikipedia = match self.wikipedia {
-            true => "on",
-            false => "off",
-        };
-        let text = format!(
-            "off={}\norder={}\nwikipedia={wikipedia}\n",
-            self.off.join(" "),
-            self.order.join(" ")
-        );
-        bande_xdg::replace_file(&path, text.as_bytes())
+    pub fn to_text(&self) -> String {
+        format!(
+            "order={}\non={}\noff={}\n",
+            self.order.join(" "),
+            self.on.join(" "),
+            self.off.join(" ")
+        )
     }
+
+    pub fn load() -> Self {
+        bande_xdg::config_home()
+            .and_then(|folder| fs::read_to_string(folder.join("bande").join(Self::FILE)).ok())
+            .map(|text| Self::parse(&text))
+            .unwrap_or_default()
+    }
+
+    pub fn enabled(&self, pack: &Pack, languages: &[String]) -> bool {
+        self.on.contains(&pack.id)
+            || (!self.off.contains(&pack.id) && pack.on_by_default(languages))
+    }
+
+    pub fn set_enabled(&mut self, id: &str, on: bool) {
+        self.on.retain(|known| known != id);
+        self.off.retain(|known| known != id);
+        match on {
+            true => self.on.push(id.to_owned()),
+            false => self.off.push(id.to_owned()),
+        }
+    }
+
+    pub fn arrange(&self, mut packs: Vec<Pack>, languages: &[String]) -> Vec<Pack> {
+        packs.sort_by_cached_key(|pack| {
+            let chosen = self.order.iter().position(|id| *id == pack.id);
+            (chosen.is_none(), chosen, pack.default_place(languages))
+        });
+        packs
+    }
+}
+
+pub fn user_languages() -> Vec<String> {
+    let mut languages = bande_l10n::preferred_languages();
+    if let Some(region) = bande_l10n::region_language()
+        && !languages.contains(&region)
+    {
+        languages.push(region);
+    }
+    languages
 }
 
 #[cfg(test)]
@@ -591,12 +684,12 @@ mod tests {
         )?;
         let packs = discover(&[folder.path().to_owned()]);
 
-        let inflected = look_up(&packs, "Blorpko", Preferences::default())?;
+        let inflected = look_up(&packs, "Blorpko", &[])?;
         assert_eq!(inflected[0].source, "Zzq words");
         assert_eq!(inflected[0].entries[0].word, "blorp");
         assert_eq!(inflected[0].matched, Match::Inflected);
 
-        let compound = look_up(&packs, "snigblorp", Preferences::default())?;
+        let compound = look_up(&packs, "snigblorp", &[])?;
         assert_eq!(compound[0].matched, Match::CompoundPart);
         assert_eq!(
             compound[0].derived,
@@ -606,56 +699,61 @@ mod tests {
     }
 
     #[test]
-    fn overlapping_packs_keep_their_own_sections_in_ranked_order() -> io::Result<()> {
+    fn sources_follow_the_users_languages_and_order() -> io::Result<()> {
         let folder = tempfile::tempdir()?;
         let pack = |file: &str, meta: &str, entries: &[(&str, &str)]| {
             write_pack(&folder.path().join(file), meta, entries)
         };
         pack(
             "a.bdict",
-            "id=a\nname=A\nlanguages=zzq\ndefinitions.zzq=xx\nkind.zzq=translation\npriority=50\n",
+            "id=a\nname=A\nlanguages=zzq\ndefinitions.zzq=xx\nkind.zzq=translation\n",
             &[("zzq:blorp", "blorp\nnoun\nT\tin xx\n")],
         )?;
         pack(
             "b.bdict",
-            "id=b\nname=B\nlanguages=zzq\ndefinitions.zzq=yy\nkind.zzq=definition\npriority=1\n",
+            "id=b\nname=B\nlanguages=zzq\ndefinitions.zzq=yy\npriority=1\n",
             &[("zzq:blorp", "blorp\nnoun\nD\tin yy\n")],
         )?;
         pack(
             "c.bdict",
-            "id=c\nname=C\nlanguages=zzq\ndefinitions.zzq=yy\nkind.zzq=definition\npriority=9\n",
-            &[("zzq:blorp", "blorp\nnoun\nD\tother in yy\n")],
-        )?;
-        pack(
-            "d.bdict",
-            "id=d\nname=D\nlanguages=zzq\ndefinitions.zzq=yy\nkind.zzq=definition\npriority=2\n",
+            "id=c\nname=C\nlanguages=zzq\ndefinitions.zzq=yy\npriority=9\n",
             &[("zzq:blorp", "blorp\nnoun\nD\tin yy\n")],
         )?;
         pack(
-            "e.bdict",
-            "id=e\nname=E\nlanguages=zzq\ndefinitions.zzq=yy\npriority=99\n",
-            &[("zzq:blorpa", "blorp\nnoun\nD\tan inflected match\n")],
+            "d.bdict",
+            "id=d\nname=D\nlanguages=qqz\n",
+            &[("qqz:blorp", "blorp\nnoun\nD\tin qqz\n")],
         )?;
-        let packs = discover(&[folder.path().to_owned()]);
-        let order = |form: &str, ui: &[&str], user: &[&str]| -> io::Result<Vec<String>> {
-            let ui: Vec<String> = ui.iter().map(ToString::to_string).collect();
-            let user_order: Vec<String> = user.iter().map(ToString::to_string).collect();
-            let hits = look_up(
-                &packs,
-                form,
-                Preferences {
-                    ui_languages: &ui,
-                    user_order: &user_order,
-                    ..Preferences::default()
-                },
-            )?;
-            Ok(hits.into_iter().map(|hit| hit.id).collect())
-        };
+        fs::write(
+            folder.path().join("e.source"),
+            "id=e\nname=E\nlanguages=*\nprotocol=test\nurl=test://{word}\n",
+        )?;
+        let sources =
+            |choices: &Choices, languages: &[&str]| -> io::Result<(Vec<String>, Vec<String>)> {
+                let languages: Vec<String> = languages.iter().map(ToString::to_string).collect();
+                let arranged = choices.arrange(discover(&[folder.path().to_owned()]), &languages);
+                let listed = arranged.iter().map(|pack| pack.id.clone()).collect();
+                let enabled: Vec<Pack> = arranged
+                    .into_iter()
+                    .filter(|pack| choices.enabled(pack, &languages))
+                    .collect();
+                let hits = look_up(&enabled, "blorp", &languages)?;
+                Ok((listed, hits.into_iter().map(|hit| hit.id).collect()))
+            };
 
-        assert_eq!(order("blorp", &["xx"], &[])?, ["a", "c", "d"]);
-        assert_eq!(order("blorp", &["yy"], &[])?, ["c", "d", "a"]);
-        assert_eq!(order("blorp", &["yy"], &["b"])?, ["b", "c", "a"]);
-        assert_eq!(order("blorpa", &["yy"], &[])?, ["e"]);
+        let (listed, found) = sources(&Choices::default(), &["yy", "zzq"])?;
+        assert_eq!(listed, ["c", "b", "d", "e", "a"]);
+        assert_eq!(found, ["c", "a"]);
+
+        let mut choices = Choices {
+            order: vec!["d".to_owned(), "a".to_owned()],
+            ..Choices::default()
+        };
+        choices.set_enabled("d", true);
+        choices.set_enabled("c", false);
+        let (listed, found) = sources(&choices, &["yy", "zzq"])?;
+        assert_eq!(listed, ["d", "a", "c", "b", "e"]);
+        assert_eq!(found, ["d", "a", "b"]);
         Ok(())
     }
 }

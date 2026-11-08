@@ -508,5 +508,3 @@ sharing-keywords = dela, fildelning, samba, smb, fjärrinloggning, ssh, nätverk
 sharing-summary = Dela mappar med andra datorer och tillåt fjärrinloggning
 sharing-list = Delning
 sharing-list-keywords = fildelning, samba, smb, fjärrinloggning, ssh, delade mappar
-look-up = Slå upp
-look-up-keywords = ordbok, ordböcker, slå upp, definition, synonymer, wikipedia

@@ -509,5 +509,3 @@ spelling = Spelling
 text-replacements = Text Replacements
 text-replacements-keywords = text replacement, replace, abbreviation, shortcut, expand, snippet, autotext
 text-replacements-note = As you type, the text on the left is replaced with the text on the right.
-look-up = Look Up
-look-up-keywords = dictionary, dictionaries, look up, define, definition, thesaurus, wikipedia

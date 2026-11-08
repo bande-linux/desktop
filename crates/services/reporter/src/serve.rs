@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::net::sockopt::socket_peercred;
@@ -18,12 +18,13 @@ use crate::config::{self, Config};
 use crate::counters;
 use crate::diagnose::diagnose;
 use crate::fault::{Fault, capture_hang};
+use crate::hang::{HangEnd, HangEnds};
 use crate::spool::{MANIFEST, STATE, Spool, Status};
 
 const FAILED: &str = "failed";
 const LONGEST_UNIT: usize = 200;
 const NOT_INSTALLED: &str = "only installed programs leave fault reports";
-const FROM_INSTALLED_PROGRAMS: [&str; 2] = ["fault", "count"];
+const FROM_INSTALLED_PROGRAMS: [&str; 3] = ["fault", "count", "hang-over"];
 const FIRST_LISTEN_FD: i32 = 3;
 const IDLE_EXIT: Duration = Duration::from_secs(30);
 const REQUEST_LIMIT: u64 = 16 * 1024;
@@ -42,6 +43,10 @@ const SESSION_KINDS: [&str; 7] = [
 const CAPTURE_KINDS: [&str; 4] = ["app-hang", "force-quit", "compositor-stall", "shell-stall"];
 const GUARDED_KINDS: [&str; 3] = ["app-hang", "compositor-stall", "shell-stall"];
 const IDLE_HANG_DROPPED: &str = "idle-hang-dropped";
+const PINGED_KINDS: [&str; 2] = ["app-hang", "shell-stall"];
+const PINGED_SAMPLING: Duration = Duration::from_secs(10);
+const OTHER_SAMPLING: Duration = Duration::from_secs(3);
+const HANG_END_PATIENCE: Duration = Duration::from_secs(120);
 
 fn is_administrator(uid: u32) -> bool {
     if uid == 0 {
@@ -116,6 +121,19 @@ struct Service {
     spool_root: PathBuf,
     config_path: PathBuf,
     captures: AtomicUsize,
+    hang_ends: HangEnds,
+}
+
+struct Waiting<'a> {
+    ends: &'a HangEnds,
+    pid: u32,
+    hang: u64,
+}
+
+impl Drop for Waiting<'_> {
+    fn drop(&mut self) {
+        self.ends.forget(self.pid, self.hang);
+    }
 }
 
 fn field<'a>(request: &'a Map<String, Value>, name: &str) -> Option<&'a str> {
@@ -162,27 +180,92 @@ impl Service {
             fault.detail.extend(detail.clone());
         }
         if let Some(pid) = pid.filter(|_| CAPTURE_KINDS.contains(&kind)) {
+            let started = Instant::now();
+            let seconds = request.get("seconds").and_then(Value::as_u64);
+            let waiting = request
+                .get("hang")
+                .and_then(Value::as_u64)
+                .zip(pid.parse().ok())
+                .filter(|_| PINGED_KINDS.contains(&kind))
+                .map(|(hang, pid)| Waiting {
+                    ends: &self.hang_ends,
+                    pid,
+                    hang,
+                });
+            let ends = waiting
+                .as_ref()
+                .and_then(|waiting| self.hang_ends.wait_for(waiting.pid, waiting.hang, peer));
             if self.captures.fetch_add(1, Ordering::SeqCst) >= MOST_CAPTURES {
                 self.captures.fetch_sub(1, Ordering::SeqCst);
                 return Err("too many captures at once".into());
             }
-            let idle = capture_hang(
+            let sample_for = if PINGED_KINDS.contains(&kind) {
+                PINGED_SAMPLING
+            } else {
+                OTHER_SAMPLING
+            };
+            let capture = capture_hang(
                 &mut fault,
                 &self.spool_root,
                 &pid,
-                request.get("seconds").and_then(Value::as_u64),
+                seconds,
+                sample_for,
+                ends.as_ref(),
             );
             self.captures.fetch_sub(1, Ordering::SeqCst);
-            if idle && GUARDED_KINDS.contains(&kind) {
+            if capture.idle && GUARDED_KINDS.contains(&kind) {
                 counters::count(&self.spool_root, IDLE_HANG_DROPPED);
                 return Err("the process was waiting idle in its event loop".into());
             }
+            if let Some(ends) = &ends {
+                let end = capture.end.or_else(|| {
+                    ends.recv_timeout(HANG_END_PATIENCE.saturating_sub(started.elapsed()))
+                        .ok()
+                });
+                let (hang_seconds, recovered) = end.map_or_else(
+                    || {
+                        let waited = seconds.unwrap_or(0) as f64 + started.elapsed().as_secs_f64();
+                        (waited, false)
+                    },
+                    |end| (end.seconds, end.recovered),
+                );
+                fault.detail.insert(
+                    "hang_seconds".to_owned(),
+                    json!(hang_seconds.round() as u64),
+                );
+                fault
+                    .detail
+                    .insert("recovered".to_owned(), json!(recovered));
+            }
+            drop(waiting);
         } else {
             fault.signature_text = field(request, "reason").map(str::to_owned);
         }
         let spool = Spool::open(&self.spool_root)?;
         let id = fault.store(&spool, &self.config(), &self.spool_root)?;
         Ok(json!({"id": id}))
+    }
+
+    fn hang_over(&self, request: &Map<String, Value>, peer: u32) -> Result<Value, Box<dyn Error>> {
+        let number = |name| request.get(name).and_then(Value::as_u64);
+        let (Some(pid), Some(hang)) = (number("pid"), number("hang")) else {
+            return Err("a hang end needs pid and hang".into());
+        };
+        let pid = u32::try_from(pid)?;
+        let owns_process =
+            process_owner(&pid.to_string()).is_some_and(|owner| peer == 0 || owner == peer);
+        let end = HangEnd {
+            seconds: request
+                .get("seconds")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0),
+            recovered: request
+                .get("recovered")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        };
+        self.hang_ends.end(pid, hang, peer, owns_process, end)?;
+        Ok(json!({}))
     }
 
     fn list(&self, peer: u32) -> Result<Value, Box<dyn Error>> {
@@ -272,6 +355,7 @@ impl Service {
         let peer = peer.uid;
         match op {
             "fault" => self.fault(request, peer),
+            "hang-over" => self.hang_over(request, peer),
             "count" => {
                 counters::count(&self.spool_root, field(request, "name").unwrap_or_default());
                 Ok(json!({}))
@@ -365,6 +449,7 @@ pub fn run(spool_root: &Path, config_path: &Path) -> Result<(), Box<dyn Error>> 
         spool_root: spool_root.to_path_buf(),
         config_path: config_path.to_path_buf(),
         captures: AtomicUsize::new(0),
+        hang_ends: HangEnds::default(),
     });
     let running = Arc::new(AtomicUsize::new(0));
     loop {

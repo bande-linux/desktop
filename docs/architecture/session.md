@@ -743,7 +743,7 @@ Every failure is meant to end in a working desktop without a reboot, each stage 
 what the one before could not save. What happens for each:
 
 - **An app hangs**: Force Quit (in the compositor, opened with `Ctrl+Alt+Esc`, from the system
-  menu, a Taskbar icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 3 s
+  menu, a Taskbar icon's menu or Search; the pointer lock of an app is released while it is open) marks it Not Responding after a 2 s
   `xdg_wm_base` ping and kills its whole scope, after `SIGQUIT` if it is not responding, so its stack is kept ([behaviour](behaviour.md)).
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes

@@ -14,6 +14,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::net::sockopt::socket_peercred;
 use serde_json::{Map, Value, json};
 
+use crate::checkin;
 use crate::config::{self, Config};
 use crate::counters;
 use crate::diagnose::diagnose;
@@ -383,9 +384,21 @@ impl Service {
 
     fn status(&self) -> Value {
         let config = self.config();
+        let checkin = config
+            .sends_automatically()
+            .then(|| {
+                let spool = Spool::open(&self.spool_root).ok()?;
+                let day = checkin::due_days(&self.spool_root)
+                    .last()
+                    .copied()
+                    .or_else(checkin::yesterday)?;
+                checkin::payload(&spool, day).ok()
+            })
+            .flatten();
         json!({
             "sending": config.sends_automatically(),
             "configured": config.server().is_some(),
+            "checkin": checkin,
         })
     }
 
@@ -441,8 +454,12 @@ impl Service {
                 }
                 let on = request.get("on").and_then(Value::as_bool).unwrap_or(false);
                 config::set_sending(&self.config_path, on)?;
-                if !on {
-                    Spool::open(&self.spool_root)?.clear_outbox()?;
+                let spool = Spool::open(&self.spool_root)?;
+                if on {
+                    checkin::queue_if_due(&spool, &self.config());
+                } else {
+                    spool.clear_outbox()?;
+                    checkin::forget(&self.spool_root)?;
                 }
                 Ok(self.status())
             }
@@ -494,6 +511,7 @@ pub fn run(spool_root: &Path, config_path: &Path) -> Result<(), Box<dyn Error>> 
         captures: AtomicUsize::new(0),
         hang_ends: HangEnds::default(),
     });
+    checkin::queue_if_due(&Spool::open(spool_root)?, &service.config());
     let running = Arc::new(AtomicUsize::new(0));
     loop {
         let mut fds = [PollFd::new(&listener, PollFlags::IN)];

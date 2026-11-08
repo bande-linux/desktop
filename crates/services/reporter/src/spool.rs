@@ -254,7 +254,8 @@ impl Spool {
             let name = entry.file_name();
             match name.to_str().filter(|name| is_plain_name(name)) {
                 Some(name) => {
-                    if let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified()) {
+                    if let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified())
+                    {
                         waiting.push((modified, name.to_owned()));
                     }
                 }

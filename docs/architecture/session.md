@@ -659,8 +659,8 @@ framebuffer turns its plane off (`drm_fb_release`), closing the last file of the
 the console's framebuffer (`drm_lastclose`), and logind and greetd setting the VT back to `KD_TEXT`
 makes the console repaint. So a compositor leaving the screen closes its framebuffers with
 `DRM_IOCTL_MODE_CLOSEFB`, which leaves them on their planes;
-`bande-display-keeper@<card>` (started by udev per card, unprivileged, asleep in `pause()`) keeps
-the device open with no master; and `fbcon=vc:1-6` leaves VT 7, greetd's, without a console. The
+`bande-display-keeper@<card>` (started by udev for each card with a connector, unprivileged,
+asleep in `pause()`) keeps the device open with no master; and `fbcon=vc:1-6` leaves VT 7, greetd's, without a console. The
 next compositor takes the master and its first commit replaces the frame, without a modeset when
 the mode is the same. This was checked under QEMU with virtio-gpu; on a system without the kernel
 argument, the keeper or a kernel of at least 6.8, the same steps work with a black gap.

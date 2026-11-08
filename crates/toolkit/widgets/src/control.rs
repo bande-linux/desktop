@@ -9,10 +9,26 @@ const FIELD_RING_OPACITY: f32 = 0.35;
 const CHEVRON_WIDTH: f32 = 4.0;
 const CHEVRON_HEIGHT: f32 = 2.25;
 const GLYPH_STROKE: f32 = 1.5;
+const ROW_HOVER_INK: f32 = 0.05;
+const ROW_PRESSED_INK: f32 = 0.1;
 pub(crate) const DISABLED_ALPHA: f32 = 0.45;
 
 pub fn focus_ring(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
-    focus_ring_for(&cx.palette, shape, items);
+    if cx.focus_visible() {
+        focus_ring_for(&cx.palette, shape, items);
+    }
+}
+
+pub fn row_fill(cx: &Context, shape: Shape, hovered: bool, pressed: bool, items: &mut Vec<Item>) {
+    let ink = match (pressed, hovered) {
+        (true, _) => ROW_PRESSED_INK,
+        (false, true) => ROW_HOVER_INK,
+        (false, false) => return,
+    };
+    items.push(Item::Fill {
+        shape,
+        paint: cx.palette.ink.with_opacity(ink).into(),
+    });
 }
 
 pub fn focus_ring_for(palette: &Palette, shape: Shape, items: &mut Vec<Item>) {

@@ -3,16 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 
 use bande_l10n::{text, tr, trn};
-
-use crate::follow::{Update, Updates, spawn};
-use crate::forget::Forget;
-use crate::general::info_row;
-use crate::pages::{Widgets, boxed, muted_row};
-use crate::services::{SETTLE, signals};
-use crate::users::{accounts, members_of};
-use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
-use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
-use bande_packages::{Client, Info, Mode};
+use bande_packages::Client;
 use bande_printers::{
     Cups, Job, JobInfo, JobState, Kind, Mechanism, PrintClient, Printer, PrinterInfo, PrinterState,
     SPOOLER, mechanism_available,
@@ -23,6 +14,15 @@ use bande_toolkit::TextRole;
 use bande_toolkit::ui::{Axis, Button, Label, PopUpButton, Stack, TextField, Widget};
 use zbus::blocking::Connection;
 use zbus::{MatchRule, message};
+
+use crate::follow::{Update, Updates, spawn};
+use crate::forget::Forget;
+use crate::general::info_row;
+use crate::pages::{Widgets, boxed, muted_row};
+use crate::services::{SETTLE, signals};
+use crate::users::{accounts, members_of};
+use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
+use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
 
 pub(crate) const PRINTER_SYMBOL: &str = "printer-symbolic";
 const CUPS_PREFIX: &str = "cups:";
@@ -78,21 +78,7 @@ fn read(session: &Connection, cups: &Cups, system: &Connection) -> Option<Printe
 }
 
 fn install_printing(system: &Connection) -> Result<(), bande_packages::Error> {
-    let client = Client::new(system);
-    let available: Vec<_> = client
-        .resolve(&PRINTING_PACKAGES.map(str::to_owned))?
-        .into_iter()
-        .filter(|package| package.info == Info::Available)
-        .collect();
-    let ids: Vec<String> = PRINTING_PACKAGES
-        .iter()
-        .filter_map(|name| available.iter().find(|package| package.name == *name))
-        .map(|package| package.id.clone())
-        .collect();
-    if ids.is_empty() {
-        return Ok(());
-    }
-    client.install(&ids, Mode::Apply, &|_| {}).map(drop)
+    Client::new(system).install_missing(&PRINTING_PACKAGES)
 }
 
 fn administers_printers() -> bool {

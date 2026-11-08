@@ -1,3 +1,4 @@
+mod import;
 mod online;
 mod panel;
 mod results;

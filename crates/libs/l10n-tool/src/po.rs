@@ -125,7 +125,10 @@ pub fn parse(source: &str) -> Result<File, String> {
             Field::English => current.english = value,
             Field::Plural => current.plural = Some(value),
             Field::Form(index) => {
-                if !matches!(reader.field, Some(Field::English | Field::Plural | Field::Form(_))) {
+                if !matches!(
+                    reader.field,
+                    Some(Field::English | Field::Plural | Field::Form(_))
+                ) {
                     return Err(failed("a msgstr without its msgid"));
                 }
                 if index != current.forms.len() {

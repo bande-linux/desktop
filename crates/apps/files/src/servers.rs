@@ -1,19 +1,20 @@
+use std::io;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use bande_fs::{Action, Change, Entry, Purpose, RenameError, Task};
+use bande_inbox::Inbox;
 use bande_l10n::tr;
 use bande_toolkit::ui::{
     Axis, CheckState, Checkbox, PopUpButton, SecureField, Stack, TextField, Widget,
 };
-use std::io;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use bande_volumes::{SavedServer, load_saved_servers, on_connected_volume};
+use bande_xdg::{DesktopEntry, file_uri};
 
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
 use crate::prompt::{Kind, Prompt};
 use crate::view::{FilesView, Request, Sheet};
-use bande_fs::{Action, Change, Purpose, RenameError, Task};
-use bande_inbox::Inbox;
-use bande_volumes::{SavedServer, load_saved_servers, on_connected_volume};
-use bande_xdg::{DesktopEntry, file_uri};
 
 const FIELD_SIZE: f32 = 13.0;
 const STACK_GAP: f32 = 8.0;
@@ -22,6 +23,7 @@ const SERVER_REFRESH: Duration = Duration::from_secs(10);
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServerRequest {
     pub url: String,
+    pub name: String,
     pub user: String,
     pub password: String,
     pub remember: bool,
@@ -59,6 +61,14 @@ pub enum ServerField {
     Remember(bool),
     Reconnect(bool),
     Share(usize),
+}
+
+fn share_url(server: &str, share: &str) -> String {
+    format!(
+        "{}/{}",
+        server.trim_end_matches('/'),
+        share.replace('%', "%25").replace(' ', "%20")
+    )
 }
 
 const MAIL_SCHEME: &str = "x-scheme-handler/mailto";
@@ -261,11 +271,48 @@ impl FilesView {
         self.show_sheet(prompt, Sheet::ConnectServer { request, saved }, cancel);
     }
 
-    pub(crate) fn connect_to(&mut self, url: String) {
-        self.start_connecting(ServerRequest {
-            url,
-            ..ServerRequest::default()
-        });
+    pub(crate) fn connect_to(&mut self, url: String, name: String) {
+        let request = match &self.shares_of {
+            Some(server) if url.starts_with(&format!("{}/", server.url.trim_end_matches('/'))) => {
+                ServerRequest {
+                    url,
+                    ..server.clone()
+                }
+            }
+            _ => ServerRequest {
+                url,
+                name,
+                ..ServerRequest::default()
+            },
+        };
+        self.start_connecting(request);
+    }
+
+    fn show_shares(&mut self, request: ServerRequest, shares: Vec<String>) {
+        let browsing = matches!(
+            self.browser.root(),
+            Location::Network | Location::Server { .. }
+        );
+        if !browsing || shares.is_empty() {
+            self.ask_share(request, shares);
+            return;
+        }
+        let entries = shares
+            .into_iter()
+            .map(|share| {
+                let url = share_url(&request.url, &share);
+                Entry::server(share, url)
+            })
+            .collect();
+        self.browser.show_shares(
+            Location::Server {
+                address: request.url.clone(),
+                name: request.name.clone(),
+            },
+            entries,
+        );
+        self.shares_of = Some(request);
+        self.selection_changed();
     }
 
     pub(crate) fn server_field(&mut self, field: ServerField) {
@@ -323,11 +370,7 @@ impl FilesView {
                 chosen,
             } if action == "connect" => {
                 if let Some(share) = shares.get(chosen) {
-                    request.url = format!(
-                        "{}/{}",
-                        request.url.trim_end_matches('/'),
-                        share.replace('%', "%25").replace(' ', "%20")
-                    );
+                    request.url = share_url(&request.url, share);
                     self.start_connecting(request);
                 }
             }
@@ -385,7 +428,7 @@ impl FilesView {
             "connected" => self.go(Location::Folder(first.into())),
             "password" => self.ask_server_password(request, &first, false),
             "refused" => self.ask_server_password(request, &first, true),
-            "shares" => self.ask_share(request, details),
+            "shares" => self.show_shares(request, details),
             "host-key" => self.ask_host_key(request, first),
             "host-key-changed" => self.server_failed(
                 request,

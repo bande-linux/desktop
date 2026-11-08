@@ -20,6 +20,7 @@ use crate::DATES;
 pub enum Kind {
     Folder,
     File,
+    Server,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,8 +101,32 @@ impl Entry {
         }
     }
 
+    pub fn server(name: String, address: String) -> Self {
+        Self {
+            name,
+            path: PathBuf::from(address),
+            kind: Kind::Server,
+            size: 0,
+            modified: None,
+            created: None,
+            added: None,
+            link: false,
+            trashed: None,
+            extension_hidden: None,
+            mode: None,
+            owned: false,
+        }
+    }
+
     pub fn is_folder(&self) -> bool {
         self.kind == Kind::Folder
+    }
+
+    pub fn server_address(&self) -> Option<&str> {
+        match self.kind {
+            Kind::Server => self.path.to_str(),
+            Kind::Folder | Kind::File => None,
+        }
     }
 }
 

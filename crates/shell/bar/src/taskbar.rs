@@ -4,11 +4,9 @@ use std::f32::consts::TAU;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use bande_l10n::{tr, trn};
-
-use crate::rail::{BarForm, cross_margin, edge_band, zone_margin};
 use accesskit::{Action, ActionRequest, Node, Role};
 use bande_config::{BAR_ICON_SIZE_RANGE, BarEdge};
+use bande_l10n::{tr, trn};
 use bande_taskbar_model::{LauncherEntry, LauncherUpdate};
 use bande_toolkit::ui::{
     Animated, Context, Cursor, Event, PointerButton, Size, Spring, Ui, Widget, WidgetId,
@@ -18,6 +16,8 @@ use bande_toolkit::{
     Appearance, Color, Elevation, Image, Item, Palette, Paragraph, Point, Rect, Scene, Scheme,
     Shape, TextAlign, TextStyle, TextSystem,
 };
+
+use crate::rail::{BarForm, cross_margin, edge_band, sized, zone_margin};
 
 const CROSS_PADDING: f32 = 8.0;
 const SEPARATOR_CELL: f32 = 13.0;
@@ -30,8 +30,8 @@ const LAUNCH_TIMEOUT: Duration = Duration::from_secs(10);
 const LAUNCH_PERIOD: f32 = 1.2;
 const ATTENTION_PULSES: f32 = 2.0;
 const ATTENTION_PERIOD: f32 = 0.6;
-const BADGE_HEIGHT: f32 = 18.0;
-const BADGE_TEXT: f32 = 11.0;
+const BADGE_HEIGHT: (f32, f32) = (14.0, 18.0);
+const BADGE_TEXT: (f32, f32) = (9.0, 11.0);
 const PROGRESS_HEIGHT: f32 = 4.0;
 const HOLD_FOR_MENU: Duration = Duration::from_millis(500);
 const MENU_GAP: f32 = 6.0;
@@ -53,8 +53,7 @@ const FRAME_PLATE: f32 = 36.0;
 const FRAME_PLATE_HOVERED: f32 = 56.0;
 const FRAME_PLATE_PRESSED: f32 = 76.0;
 const OUTLINE_ROUNDNESS: f32 = 0.26;
-const MORE_TEXT: f32 = 13.0;
-const RAIL_WELL_RADIUS: f32 = 10.0;
+const MORE_TEXT: (f32, f32) = (9.0, 13.0);
 pub const WELL_ALPHA: u8 = 14;
 
 #[derive(Debug, Clone)]
@@ -295,7 +294,7 @@ impl TaskbarState {
             edge,
             icon_size,
             scheme: Scheme::default(),
-            form: BarForm::Floating,
+            form: BarForm::default(),
             reduce_motion: false,
             slots: Vec::new(),
             trash: TrashIcons::default(),
@@ -357,6 +356,10 @@ impl TaskbarState {
         self.icon_size = size;
         for slot in &mut self.slots {
             slot.initial = None;
+            slot.badge_text = None;
+        }
+        if let Some(more) = &mut self.more {
+            more.text = None;
         }
         true
     }
@@ -1356,7 +1359,8 @@ impl TaskbarState {
             {
                 let paragraph = cx.text.paragraph(
                     &label,
-                    TextStyle::new(MORE_TEXT, color).weight(TextStyle::SEMIBOLD),
+                    TextStyle::new(sized(self.icon_size, MORE_TEXT), color)
+                        .weight(TextStyle::SEMIBOLD),
                     None,
                     TextAlign::Start,
                 );
@@ -1411,7 +1415,7 @@ impl TaskbarState {
                 {
                     let paragraph = cx.text.paragraph(
                         &text,
-                        TextStyle::new(BADGE_TEXT, cx.palette.on_accent)
+                        TextStyle::new(sized(self.icon_size, BADGE_TEXT), cx.palette.on_accent)
                             .weight(TextStyle::SEMIBOLD),
                         None,
                         TextAlign::Start,
@@ -1747,12 +1751,13 @@ impl TaskbarState {
         if badge > 0.0
             && let Some((_, text)) = &slot.badge_text
         {
-            let width = (text.width() + 10.0).max(BADGE_HEIGHT);
+            let height = sized(self.icon_size, BADGE_HEIGHT).round();
+            let width = (text.width() + 10.0).max(height);
             let rest = Rect::new(
                 base.x + base.width - width + 4.0,
                 base.y - 4.0,
                 width,
-                BADGE_HEIGHT,
+                height,
             );
             let pill = scaled(rest, badge);
             let mut badge_items = vec![
@@ -1821,7 +1826,7 @@ impl TaskbarState {
         };
         let icon = self.icon_rect(more.cell);
         items.push(Item::Fill {
-            shape: Shape::rounded(icon, RAIL_WELL_RADIUS),
+            shape: Shape::rounded(icon, icon.width * OUTLINE_ROUNDNESS),
             paint: cx.palette.ink.with_alpha(WELL_ALPHA).into(),
         });
         if let Some((_, _, text)) = &more.text {

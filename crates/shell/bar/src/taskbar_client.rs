@@ -769,14 +769,26 @@ impl Taskbar {
         if !self.state.borrow_mut().set_icon_size(size) {
             return;
         }
-        let (edge, icon_size) = {
-            let state = self.state.borrow();
-            (state.edge(), state.icon_size())
-        };
         self.icons.clear();
         self.load_trash_icons();
         self.sync();
-        if let Err(error) = window.set_layer_size(surface_size(edge, icon_size)) {
+        self.fit_surface(window);
+    }
+
+    fn reform(&mut self, window: &mut Window, form: BarForm) {
+        if self.state.borrow().form() == form {
+            return;
+        }
+        self.state.borrow_mut().set_form(form);
+        self.fit_surface(window);
+    }
+
+    fn fit_surface(&self, window: &mut Window) {
+        let size = {
+            let state = self.state.borrow();
+            surface_size(state.edge(), state.icon_size(), state.form())
+        };
+        if let Err(error) = window.set_layer_size(size) {
             tracing::warn!("cannot resize the Taskbar: {error}");
         }
     }
@@ -786,10 +798,8 @@ impl Taskbar {
         for event in self.bus.drain() {
             match event {
                 BusEvent::IconSize(size) => self.resize(window, size as f32),
-                BusEvent::Floating(floating) => {
-                    self.state
-                        .borrow_mut()
-                        .set_form(BarForm::from_floating(floating));
+                BusEvent::Form { floating, gap } => {
+                    self.reform(window, BarForm::new(floating, gap));
                 }
                 BusEvent::AutoHide(auto_hide) => {
                     self.state.borrow_mut().set_auto_hide(auto_hide, now);
@@ -1065,7 +1075,7 @@ impl Taskbar {
             bus::follow(session, inbox.outbox());
         }
         let appearance = window.appearance();
-        let form = BarForm::from_floating(config.floating);
+        let form = BarForm::of(config);
         let state = TaskbarState::new(edge, icon_size);
         state.borrow_mut().set_form(form);
         state.borrow_mut().set_appearance(appearance);

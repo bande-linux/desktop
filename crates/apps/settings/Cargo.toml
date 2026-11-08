@@ -56,7 +56,7 @@ bande-test-bus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, bande-config, locales"
+depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-mono, bande-config, locales, pkexec, systemd, udev, xkb-data, network-manager"
 extended-description = """\
 System Settings of the Bande desktop in four groups: Connections \
 (Wi-Fi with known networks, per-network details and hidden networks, \
@@ -74,7 +74,7 @@ through PackageKit while the computer runs; only those that need a \
 restart install at the next restart, through PackageKit's offline \
 updates. Settings asks to log out or reopen apps that still run the old \
 version, and never restarts or logs out by itself."""
-recommends = "accountsservice, bande-polkit, cryptsetup-bin, network-manager, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
+recommends = "accountsservice, bande-polkit, cryptsetup-bin, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-settings", "usr/bin/", "755"],

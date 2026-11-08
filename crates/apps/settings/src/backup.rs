@@ -755,7 +755,11 @@ impl SettingsView {
         rows.push(self.backup_activity_row(status));
         rows.push(self.backup_disk_row(status));
         rows.extend(self.backup_excluded_rows(status));
-        if self.battery.is_some() {
+        if self
+            .power
+            .as_ref()
+            .is_some_and(|power| power.battery.is_some())
+        {
             let mut set = intent(&self.intents, |on: bool| {
                 Intent::Backup(BackupIntent::Command(BackupCommand::OnBattery(on)))
             });

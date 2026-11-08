@@ -8,7 +8,7 @@ use bande_l10n::tr;
 
 use crate::about::{About, AboutCommand};
 use crate::backup::{BackupIntent, BackupView};
-use crate::battery::{BatteryCommand, BatteryState};
+use crate::battery::{BatteryCommand, PowerState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
 use crate::follow::{Command, Update};
@@ -149,6 +149,9 @@ pub(crate) enum Intent {
     Grant(Permission, String, bool),
     KeyboardAccess(String, bool),
     Spelling(crate::spelling::SpellingCommand),
+    Battery(BatteryCommand),
+    EditReplacement(Option<String>),
+    ReplacementText(crate::spelling::ReplacementField, String),
     Passwords(PasswordCommand),
     PasswordQuery(String),
     ChangePassword(Option<String>),
@@ -263,6 +266,7 @@ pub struct SettingsView {
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
     pub(crate) storage: Option<Storage>,
+    pub(crate) files_installed: bool,
     pub(crate) backup: BackupView,
     pub(crate) drafts: HashMap<SettingId, String>,
     pub(crate) confirming_empty_trash: bool,
@@ -272,14 +276,16 @@ pub struct SettingsView {
     pub(crate) picking: Option<(Picker, String)>,
     pub(crate) login: Option<LoginItems>,
     pub(crate) language_app: Option<String>,
-    pub(crate) battery: Option<BatteryState>,
+    pub(crate) power: Option<PowerState>,
+    pub(crate) sleeps: bool,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
     pub(crate) detail: Option<Detail>,
     pub(crate) other: Option<Other>,
     pub(crate) wifi_manual: bool,
     pub(crate) printers: Option<PrintersState>,
     pub(crate) sharing: Option<SharingState>,
-    pub(crate) installing_samba: bool,
+    pub(crate) installing_sharing: bool,
+    pub(crate) installing_vpn_plugin: bool,
     pub(crate) adding_printer: bool,
     pub(crate) installing_printing: bool,
     pub(crate) printer_address: String,
@@ -309,9 +315,10 @@ pub struct SettingsView {
     pub(crate) permissions: Grants,
     pub(crate) keyboard_access: Vec<crate::consent::KeyboardAccess>,
     pub(crate) spelling: crate::spelling::SpellingState,
+    pub(crate) replacing: Option<crate::spelling::Replacing>,
     pub(crate) security: crate::security_status::SecurityStatus,
     pub(crate) keychain: Keychain,
-    stale: bool,
+    pub(crate) stale: bool,
     rebuilt: bool,
     pub(crate) focus_next: Option<Anchor>,
     reveal_pending: bool,
@@ -368,6 +375,7 @@ impl SettingsView {
             about: None,
             diagnostics: Diagnostics::default(),
             storage: None,
+            files_installed: false,
             backup: BackupView::default(),
             drafts: HashMap::new(),
             confirming_empty_trash: false,
@@ -377,14 +385,16 @@ impl SettingsView {
             picking: None,
             login: None,
             language_app: None,
-            battery: None,
+            power: None,
+            sleeps: true,
             notification_apps: None,
             detail: None,
             other: None,
             wifi_manual: false,
             printers: None,
             sharing: None,
-            installing_samba: false,
+            installing_sharing: false,
+            installing_vpn_plugin: false,
             adding_printer: false,
             installing_printing: false,
             printer_address: String::new(),
@@ -414,6 +424,7 @@ impl SettingsView {
             permissions: Vec::new(),
             keyboard_access: Vec::new(),
             spelling: Default::default(),
+            replacing: None,
             security: crate::security_status::SecurityStatus::default(),
             keychain: Keychain::default(),
             stale: true,
@@ -535,6 +546,13 @@ impl SettingsView {
         }
     }
 
+    pub fn set_files_installed(&mut self, installed: bool) {
+        if self.files_installed != installed {
+            self.files_installed = installed;
+            self.invalidate();
+        }
+    }
+
     pub fn set_displays(&mut self, displays: Vec<Display>) {
         if self.displays != displays {
             self.displays = displays;
@@ -638,9 +656,10 @@ impl SettingsView {
                     SettingId::AppVolumes,
                 ],
             ),
-            Update::Battery(_) => (
+            Update::Power(_) => (
                 Some(PaneId::Power),
                 &[
+                    SettingId::PowerStatus,
                     SettingId::BatteryLevel,
                     SettingId::PowerMode,
                     SettingId::LowPowerOnBattery,
@@ -802,8 +821,8 @@ impl SettingsView {
                 }
                 self.network = Some(network);
             }
-            Update::Battery(battery) => {
-                match battery.as_ref().and_then(|battery| battery.profile.clone()) {
+            Update::Power(power) => {
+                match power.as_ref().and_then(|power| power.profile.clone()) {
                     Some(profile) => {
                         self.values
                             .insert(SettingId::PowerMode, Value::Keyword(profile));
@@ -812,9 +831,10 @@ impl SettingsView {
                         self.values.remove(&SettingId::PowerMode);
                     }
                 }
-                self.battery = battery;
+                self.power = power;
             }
             Update::CannotSleep => {
+                self.sleeps = false;
                 bande_settings_panes::without_sleep(&mut self.panes);
                 self.availability_changed();
             }
@@ -851,8 +871,9 @@ impl SettingsView {
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
+            Update::InstallingVpnPlugin(installing) => self.installing_vpn_plugin = installing,
             Update::Sharing(state) => {
-                self.installing_samba = false;
+                self.installing_sharing = false;
                 self.sharing = Some(state);
             }
             Update::KeyboardAccess(access) => self.keyboard_access = access,
@@ -1016,7 +1037,7 @@ impl SettingsView {
         })
     }
 
-    fn anchor_focused(&self, wanted: &Anchor) -> bool {
+    pub(crate) fn anchor_focused(&self, wanted: &Anchor) -> bool {
         let focus = self.ui.focus();
         self.anchors
             .iter()
@@ -1117,7 +1138,23 @@ impl SettingsView {
         let editing = self
             .focused_setting()
             .filter(|setting| self.drafts.contains_key(setting));
+        let replacing = self.replacing.is_some() && self.replacement_focused();
         let handled = match event {
+            Event::Key {
+                key: Key::Enter, ..
+            } if replacing => {
+                self.commit_replacement();
+                self.invalidate();
+                true
+            }
+            Event::Key {
+                key: Key::Escape,
+                modifiers,
+            } if plain(modifiers) && replacing => {
+                self.cancel_replacement();
+                self.invalidate();
+                true
+            }
             Event::Key {
                 key: Key::Enter, ..
             } if editing.is_some() => {
@@ -1302,6 +1339,9 @@ impl SettingsView {
 
     pub fn settle(&mut self) -> bool {
         self.rebuilt = false;
+        if self.replacing.is_some() && !self.replacement_focused() {
+            self.commit_replacement();
+        }
         self.process_intents();
         let focused = self.focused_setting();
         if self.drafts.keys().any(|setting| Some(*setting) != focused) {
@@ -1371,6 +1411,10 @@ impl SettingsView {
                 self.printer_address = address;
                 continue;
             }
+            if let Intent::ReplacementText(field, text) = intent {
+                self.type_replacement(field, text);
+                continue;
+            }
             self.stale = true;
             match intent {
                 Intent::Draft(..) | Intent::OtherName(..) | Intent::PrinterAddress(..) => {}
@@ -1436,6 +1480,9 @@ impl SettingsView {
                 Intent::Grant(permission, app, on) => self.grant(permission, app, on),
                 Intent::KeyboardAccess(line, on) => self.change_keyboard_access(line, on),
                 Intent::Spelling(command) => self.change_spelling(command),
+                Intent::Battery(command) => self.commands.push(Command::Battery(command)),
+                Intent::EditReplacement(original) => self.edit_replacement(original),
+                Intent::ReplacementText(..) => {}
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
                     self.keychain.query = query;
@@ -1536,7 +1583,10 @@ impl SettingsView {
                         .push(Command::Printers(PrinterCommand::SetDefault(name)));
                 }
                 Intent::Sharing(command) => {
-                    self.installing_samba |= command == SharingCommand::InstallSamba;
+                    self.installing_sharing |= matches!(
+                        command,
+                        SharingCommand::InstallSamba | SharingCommand::InstallResolved
+                    );
                     self.commands.push(Command::Sharing(command));
                 }
                 Intent::InstallPrinting => {

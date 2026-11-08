@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File};
 use std::io;
 use std::os::unix::fs::FileExt;
@@ -634,50 +634,114 @@ pub fn user_languages() -> Vec<String> {
     languages
 }
 
+pub struct NewEntry {
+    pub keys: Vec<String>,
+    pub word: String,
+    pub pos: String,
+    pub lines: Vec<Line>,
+}
+
+fn offset(value: usize) -> io::Result<[u8; 4]> {
+    u32::try_from(value)
+        .map(u32::to_le_bytes)
+        .map_err(|_| invalid("the dictionary is larger than 4 GB"))
+}
+
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+pub fn write_pack(path: &Path, meta: &str, entries: &[NewEntry]) -> io::Result<()> {
+    let mut forms: BTreeMap<Vec<u8>, Vec<usize>> = BTreeMap::new();
+    let mut bodies: Vec<Vec<u8>> = Vec::with_capacity(entries.len());
+    for (index, entry) in entries.iter().enumerate() {
+        let mut body = format!("{}\n{}", one_line(&entry.word), one_line(&entry.pos));
+        for line in &entry.lines {
+            body.push('\n');
+            body.push(line.kind);
+            body.push('\t');
+            body.push_str(&one_line(&line.text));
+        }
+        bodies.push(body.into_bytes());
+        for key in &entry.keys {
+            let key = key.to_lowercase().into_bytes();
+            if !key.is_empty() && key.len() <= MAX_FORM_LENGTH && !key.contains(&0) {
+                let places = forms.entry(key).or_default();
+                if places.len() < usize::from(u16::MAX) && !places.contains(&index) {
+                    places.push(index);
+                }
+            }
+        }
+    }
+    let offsets_at = HEADER_LENGTH as usize + meta.len() + 4;
+    let records: usize = forms
+        .iter()
+        .map(|(key, places)| key.len() + 3 + places.len() * 4)
+        .sum();
+    let mut entry_at = offsets_at + forms.len() * 4 + records;
+    let mut places = Vec::with_capacity(bodies.len());
+    for body in &bodies {
+        places.push(offset(entry_at)?);
+        entry_at += 4 + body.len();
+    }
+    offset(entry_at)?;
+    let mut file = Vec::with_capacity(entry_at);
+    file.extend(MAGIC);
+    file.extend(offset(meta.len())?);
+    file.extend(meta.as_bytes());
+    file.extend(offset(forms.len())?);
+    let mut record_at = offsets_at + forms.len() * 4;
+    for (key, indexes) in &forms {
+        file.extend(offset(record_at)?);
+        record_at += key.len() + 3 + indexes.len() * 4;
+    }
+    for (key, indexes) in &forms {
+        file.extend(key);
+        file.push(0);
+        file.extend((indexes.len() as u16).to_le_bytes());
+        for index in indexes {
+            file.extend(places[*index]);
+        }
+    }
+    for body in bodies {
+        file.extend(offset(body.len())?);
+        file.extend(body);
+    }
+    bande_xdg::replace_file(path, file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn write_pack(path: &Path, meta: &str, entries: &[(&str, &str)]) -> io::Result<()> {
-        let mut forms: Vec<(String, usize)> = Vec::new();
-        for (index, (keys, _)) in entries.iter().enumerate() {
-            forms.extend(keys.split(' ').map(|key| (key.to_owned(), index)));
-        }
-        forms.sort();
-        let offsets_at = HEADER_LENGTH as usize + meta.len() + 4;
-        let records: usize = forms.iter().map(|(key, _)| key.len() + 7).sum();
-        let mut entry_at = offsets_at + forms.len() * 4 + records;
-        let mut bodies = Vec::new();
-        let mut places = Vec::new();
-        for (_, body) in entries {
-            places.push(entry_at as u32);
-            bodies.extend((body.len() as u32).to_le_bytes());
-            bodies.extend(body.as_bytes());
-            entry_at += 4 + body.len();
-        }
-        let mut file = MAGIC.to_vec();
-        file.extend((meta.len() as u32).to_le_bytes());
-        file.extend(meta.as_bytes());
-        file.extend((forms.len() as u32).to_le_bytes());
-        let mut record_at = offsets_at + forms.len() * 4;
-        let mut records = Vec::new();
-        for (key, index) in &forms {
-            file.extend((record_at as u32).to_le_bytes());
-            records.extend(key.as_bytes());
-            records.push(0);
-            records.extend(1u16.to_le_bytes());
-            records.extend(places[*index].to_le_bytes());
-            record_at += key.len() + 7;
-        }
-        file.extend(records);
-        file.extend(bodies);
-        fs::write(path, file)
+    fn write_test_pack(path: &Path, meta: &str, entries: &[(&str, &str)]) -> io::Result<()> {
+        let entries: Vec<NewEntry> = entries
+            .iter()
+            .map(|(keys, body)| {
+                let mut lines = body.lines();
+                NewEntry {
+                    keys: keys.split(' ').map(str::to_owned).collect(),
+                    word: lines.next().unwrap_or_default().to_owned(),
+                    pos: lines.next().unwrap_or_default().to_owned(),
+                    lines: lines
+                        .filter_map(|line| {
+                            let (kind, text) = line.split_once('\t')?;
+                            Some(Line {
+                                kind: kind.chars().next()?,
+                                text: text.to_owned(),
+                            })
+                        })
+                        .collect(),
+                }
+            })
+            .collect();
+        write_pack(path, meta, &entries)
     }
 
     #[test]
     fn a_made_up_language_pack_works_without_code() -> io::Result<()> {
         let folder = tempfile::tempdir()?;
-        write_pack(
+        write_test_pack(
             &folder.path().join("zzq.bdict"),
             "id=zzq-test\nname=Zzq words\nattribution=Made up\nlanguages=zzq\nrules.zzq=noun:ko:\ncompound.zzq=3\n",
             &[("zzq:blorp", "blorp\nnoun\nD\ta made-up thing\n")],
@@ -702,7 +766,7 @@ mod tests {
     fn sources_follow_the_users_languages_and_order() -> io::Result<()> {
         let folder = tempfile::tempdir()?;
         let pack = |file: &str, meta: &str, entries: &[(&str, &str)]| {
-            write_pack(&folder.path().join(file), meta, entries)
+            write_test_pack(&folder.path().join(file), meta, entries)
         };
         pack(
             "a.bdict",

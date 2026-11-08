@@ -1,14 +1,14 @@
 use bande_l10n::{text, tr};
+use bande_network::VpnState;
+use bande_settings_panes::{SettingId, Value};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, SegmentedControl, Stack, TextField, Widget};
 
 use crate::forget::Forget;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::services::NetworkCommand;
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
-use bande_network::VpnState;
-use bande_settings_panes::{SettingId, Value};
-use bande_toolkit::Spacing;
-use bande_toolkit::ui::{Axis, Button, SegmentedControl, Stack, TextField, Widget};
 
 const MANUAL_FIELDS: [(SettingId, bande_l10n::Text, bande_l10n::Text); 3] = [
     (
@@ -173,15 +173,16 @@ impl SettingsView {
             rows.push(self.item_row(format!("vpn:{}", vpn.path), row));
         }
         let mut import = intent(&self.intents, |()| Intent::ImportVpn);
-        let button = Button::new(&tr!("Import Configuration…"), move || import(()));
+        let mut button = Button::new(&tr!("Import Configuration…"), move || import(()));
+        button.set_enabled(!self.installing_vpn_plugin);
         self.anchors
             .push((Anchor::Setting(SettingId::Vpns, None), button.id()));
+        let hint = match self.installing_vpn_plugin {
+            true => tr!("Installing OpenVPN support…"),
+            false => tr!("Add a WireGuard (.conf) or OpenVPN (.ovpn) file"),
+        };
         rows.push(boxed(Row::new(
-            Text::new(
-                &tr!("Add a WireGuard (.conf) or OpenVPN (.ovpn) file"),
-                Tone::Muted,
-            )
-            .caption(),
+            Text::new(&hint, Tone::Muted).caption(),
             Some(boxed(button)),
         )));
         rows

@@ -11,7 +11,9 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-app.workspace = true
+bande-bus.workspace = true
 bande-dict.workspace = true
+flate2.workspace = true
 bande-graphics.workspace = true
 bande-https.workspace = true
 serde_json.workspace = true
@@ -21,10 +23,13 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
-depends = "$auto, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+depends = "$auto, bande-icon-theme, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 recommends = "bande-dict-en, bande-dict-sv"
 extended-description = """\
 Dictionary looks up words in the dictionaries, thesauruses and online sources \

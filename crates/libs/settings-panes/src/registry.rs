@@ -412,6 +412,7 @@ pub enum SettingId {
     BarIconSize,
     BarAutoHide,
     BarFloating,
+    BarGap,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
@@ -459,6 +460,7 @@ pub enum SettingId {
     BatteryLevel,
     PowerMode,
     LowPowerOnBattery,
+    PowerStatus,
     LidOnPower,
     AppNotifications,
     SoftwareUpdates,
@@ -479,6 +481,7 @@ pub enum SettingId {
     SendReportForm,
     ShortcutsPage,
     Spelling,
+    TextReplacements,
     ClipboardHistory,
     KeyboardAccess,
     SecurityStatus,
@@ -559,6 +562,7 @@ pub enum List {
     TimeZones,
     LoginItems,
     BatteryHistory,
+    PowerStatus,
     NotificationApps,
     SoftwareUpdates,
     Ethernet,
@@ -569,6 +573,7 @@ pub enum List {
     DefaultApps,
     Clipboard,
     Spelling,
+    TextReplacements,
     KeyboardAccess,
     SecurityStatus,
     SearchExcluded,
@@ -889,7 +894,8 @@ fn rotation_choices() -> Vec<Choice> {
 
 pub const AUTOMATIC: &str = "automatic";
 
-const BAR_SIZES: (u32, u32) = (32, 56);
+const BAR_SIZES: (u32, u32) = (22, 56);
+const BAR_GAPS: (u32, u32) = (0, 24);
 const NIGHT_WARMTH: (u32, u32) = (0, 100);
 pub const TEXT_SIZES: [u32; 5] = [100, 125, 150, 175, 200];
 
@@ -1088,6 +1094,17 @@ fn desktop_panes() -> Vec<Pane> {
                         SettingId::BarFloating,
                         tr!("Float away from the screen edge"),
                         tr!("floating, attached, dock, margin, edge, rounded"),
+                    ),
+                    setting(
+                        SettingId::BarGap,
+                        tr!("Spacing"),
+                        tr!("gap, margin, space, distance, edge, floating, maximized"),
+                        Kind::Range {
+                            range: BAR_GAPS,
+                            step: 2,
+                            low: tr!(context = "gap", "None"),
+                            high: tr!("Wide"),
+                        },
                     ),
                     switch(
                         SettingId::BarAutoHide,
@@ -1652,6 +1669,13 @@ fn keyboard_pane() -> Pane {
                 )],
             ),
             section(
+                Some(tr!("Text Replacements")),
+                vec![list(SettingId::TextReplacements, tr!("Text Replacements"), tr!("text replacement, replace, abbreviation, shortcut, expand, snippet, autotext"),
+                    List::TextReplacements,
+                )],
+            )
+            .noted(tr!("As you type, the text on the left is replaced with the text on the right.")),
+            section(
                 Some(tr!("Modifier keys")),
                 vec![setting(
                     SettingId::CapsLock,
@@ -2038,6 +2062,12 @@ fn power_pane() -> Pane {
                         SettingId::LowPowerOnBattery,
                         tr!("Use Power Saver on battery"),
                         tr!("low power mode, automatic, unplugged, longer battery life"),
+                    ),
+                    list(
+                        SettingId::PowerStatus,
+                        tr!("Power source"),
+                        tr!("power adapter, mains, plugged in, energy, sleep, power profiles"),
+                        List::PowerStatus,
                     ),
                 ],
             ),

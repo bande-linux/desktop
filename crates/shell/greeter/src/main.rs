@@ -510,7 +510,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> ExitCode {
-    bande_toolkit::skip_absent_vulkan_drivers();
     bande_log::init("bande-greeter");
     match run() {
         Ok(()) => ExitCode::SUCCESS,

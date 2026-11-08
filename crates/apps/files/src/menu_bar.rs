@@ -119,35 +119,36 @@ pub fn windowless_menus() -> Menus {
 }
 
 pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
+    let mut file = vec![
+        shortcut(text!("New Window"), "Ctrl+N"),
+        shortcut(text!("New Tab"), "Ctrl+T"),
+        shortcut(text!("New Folder"), "Shift+Ctrl+N"),
+        shortcut(text!("Open"), "Ctrl+O"),
+        Entry::separator(),
+        shortcut(text!("Get Info"), "Ctrl+I"),
+        Entry::item(&tr!("Browse Backups…"), "browse-backups")
+            .enabled(bande_files::backups_installed()),
+        shortcut(text!("Rename"), "F2"),
+        Entry::item(&tr!("Duplicate"), "duplicate"),
+        Entry::item(&tr!("Make Alias"), "make-alias"),
+        shortcut(text!("Add to Sidebar"), "Ctrl+D"),
+    ];
+    if view.terminal_installed() {
+        file.push(plain(text!("Open in Terminal"), "open-in-terminal"));
+    }
+    file.extend([
+        Entry::item(&tr!("Compress"), "compress"),
+        Entry::separator(),
+        shortcut(text!("Move to Trash"), "Delete"),
+        shortcut(text!("Delete Immediately…"), "Shift+Delete"),
+        Entry::separator(),
+        plain(text!("Eject"), "eject-current"),
+        shortcut(text!("Find"), "Ctrl+F"),
+        Entry::separator(),
+        bande_app_menu::print_item(view.can_print()),
+    ]);
     let menus = vec![
-        submenu(
-            text!("File"),
-            vec![
-                shortcut(text!("New Window"), "Ctrl+N"),
-                shortcut(text!("New Tab"), "Ctrl+T"),
-                shortcut(text!("New Folder"), "Shift+Ctrl+N"),
-                shortcut(text!("Open"), "Ctrl+O"),
-                Entry::separator(),
-                shortcut(text!("Get Info"), "Ctrl+I"),
-                Entry::item(&tr!("Browse Backups…"), "browse-backups")
-                    .enabled(bande_files::backups_installed()),
-                shortcut(text!("Rename"), "F2"),
-                Entry::item(&tr!("Duplicate"), "duplicate"),
-                Entry::item(&tr!("Make Alias"), "make-alias"),
-                shortcut(text!("Add to Sidebar"), "Ctrl+D"),
-                Entry::item(&tr!("Open in Terminal"), "open-in-terminal")
-                    .enabled(view.terminal_installed()),
-                Entry::item(&tr!("Compress"), "compress"),
-                Entry::separator(),
-                shortcut(text!("Move to Trash"), "Delete"),
-                shortcut(text!("Delete Immediately…"), "Shift+Delete"),
-                Entry::separator(),
-                plain(text!("Eject"), "eject-current"),
-                shortcut(text!("Find"), "Ctrl+F"),
-                Entry::separator(),
-                bande_app_menu::print_item(view.can_print()),
-            ],
-        ),
+        submenu(text!("File"), file),
         submenu(
             text!("Edit"),
             vec![
@@ -203,6 +204,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 plain(text!("Downloads"), "go:downloads"),
                 shortcut(text!("Home"), "Alt+Home"),
                 plain(text!("Recents"), "go:recents"),
+                shortcut(text!("Network"), "Shift+Ctrl+K"),
                 Entry::separator(),
                 submenu(text!("Recent Folders"), recent_entries(recent_folders)),
                 shortcut(text!("Go to Folder…"), "Ctrl+L"),

@@ -4,6 +4,7 @@ cd "$(dirname "$0")/../.."
 
 cargo fmt --all --check
 cargo run --locked --quiet --package bande-l10n-tool -- check ci/l10n-complete
+ci/check-runtime-deps.py
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
 forbid() {
@@ -21,6 +22,10 @@ done
 if grep -rnE '\.actions\b|Desktop Action|DesktopAction' crates/apps/files/src crates/shell/desktop/src \
     || grep -nE 'DesktopEntry' crates/apps/files/src/menus.rs crates/shell/desktop/src/menus.rs; then
     echo "no application adds entries to the context menus of Files or the desktop: see docs/architecture/behaviour.md"
+    exit 1
+fi
+if grep -rnE --include='*.rs' '\b(set_var|remove_var|setenv|putenv|unsetenv)\(' crates | grep -vE '^crates/testing/|/tests/'; then
+    echo "no program changes its own environment: every child would inherit it; set a child's variables on its Command"
     exit 1
 fi
 ci/check-apps.sh

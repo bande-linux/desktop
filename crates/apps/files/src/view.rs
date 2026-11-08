@@ -1,5 +1,3 @@
-use bande_inbox::Inbox;
-use bande_l10n::{tr, trn};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -13,9 +11,11 @@ use bande_app::TabDrop;
 use bande_content::Preview;
 use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, Finished, FolderChanges, FolderWatch, Format,
-    History, Operations, Purpose, RenameError, Resolution, Running, Sort, Step, Task, TrashItem,
-    archive_path, can_extract,
+    History, Kind, Operations, Purpose, RenameError, Resolution, Running, Sort, Step, Task,
+    TrashItem, archive_path, can_extract,
 };
+use bande_inbox::Inbox;
+use bande_l10n::{tr, trn};
 use bande_quick_look::QuickLookLink;
 use bande_search::{Usage, recent_files, recently_used};
 use bande_thumbnails::Thumbnails;
@@ -27,6 +27,7 @@ use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, 
 use bande_volumes::{
     EjectFailure, SavedServer, mounted_volumes, on_connected_volume, quick_is_dir, volume_icon,
 };
+use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri};
 
 use crate::backups::BackupBar;
 use crate::browser::{Browser, Location};
@@ -37,7 +38,6 @@ use crate::loader::{Loaded, Loader};
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
 use crate::servers::{ServerDone, ServerRequest, ServersSeen};
 use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
-use crate::sidebar::with_nearby;
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
 use crate::tabs::{TabSlot, location_title};
 use crate::thumbs::Thumbs;
@@ -45,7 +45,6 @@ use crate::toolbar::{TOOLBAR_HEIGHT, Toolbar};
 use crate::views::{
     DEFAULT_ICON_SIZE, FolderView, ICON_SIZES, ListColumn, ViewMemory, ViewMode, load_list_columns,
 };
-use bande_xdg::{Apps, DesktopEntry, UserDir, path_from_file_uri};
 
 pub const COLUMN_WIDTH: f32 = 240.0;
 pub const ROW_HEIGHT: f32 = 32.0;
@@ -241,6 +240,7 @@ pub struct FilesView {
     pub(crate) browser: Browser,
     pub(crate) sidebar: Vec<Row>,
     pub(crate) apps: Apps,
+    pub(crate) terminal: bool,
     pub(crate) icons: Icons,
     pub(crate) palette: Palette,
     pub(crate) ui: Ui,
@@ -299,9 +299,10 @@ pub struct FilesView {
     pub(crate) server_token: u64,
     pub(crate) server_work: Option<Inbox<ServerDone>>,
     pub(crate) free_on_server: Option<(PathBuf, u64)>,
+    pub(crate) shares_of: Option<ServerRequest>,
     pub(crate) next_refresh: Option<Instant>,
     pub(crate) window_active: bool,
-    nearby: Vec<(String, String)>,
+    pub(crate) network: Vec<Entry>,
     pub(crate) unresponsive: Vec<PathBuf>,
     pub(crate) sheet_primary: Option<WidgetId>,
     pub(crate) favourites: Vec<Row>,
@@ -405,6 +406,7 @@ impl FilesView {
             browser,
             sidebar,
             apps,
+            terminal: false,
             icons,
             palette,
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
@@ -463,9 +465,10 @@ impl FilesView {
             server_token: 0,
             server_work: Inbox::new().ok(),
             free_on_server: None,
+            shares_of: None,
             next_refresh: None,
             window_active: true,
-            nearby: Vec::new(),
+            network: Vec::new(),
             unresponsive: Vec::new(),
             sheet_primary: None,
             favourites: Vec::new(),
@@ -537,17 +540,21 @@ impl FilesView {
             .cloned()
             .collect::<Vec<_>>();
         let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
-        let rows = with_volumes(sidebar, &shown, |volume| {
+        with_volumes(sidebar, &shown, |volume| {
             match self.unresponsive.iter().any(|known| known == volume) {
                 true => UNRESPONSIVE_ICON,
                 false => volume_icon(&mountinfo, volume),
             }
-        });
-        with_nearby(&rows, &self.nearby)
+        })
     }
 
     pub fn set_nearby(&mut self, seen: ServersSeen) {
-        self.nearby = seen.nearby;
+        self.network = seen
+            .nearby
+            .into_iter()
+            .map(|(name, url)| Entry::server(name, url))
+            .collect();
+        self.browser.set_network(self.network.clone());
         self.unresponsive = seen.unresponsive;
         self.sidebar = self.with_volumes(&self.favourites, &self.mounted);
         self.menu_place = None;
@@ -1511,10 +1518,6 @@ impl FilesView {
     }
 
     pub fn go(&mut self, location: Location) {
-        if let Location::Server(url) = location {
-            self.connect_to(url);
-            return;
-        }
         self.commit_rename();
         self.end_search();
         self.browser.go(location);
@@ -1773,6 +1776,7 @@ impl FilesView {
             Key::Character('n' | 'N') if command && shift => self.new_folder(),
             Key::Character('l' | 'L') if command && !shift => self.ask_go_to(),
             Key::Character('k' | 'K') if command && !shift => self.ask_connect(),
+            Key::Character('k' | 'K') if command => self.go(Location::Network),
             Key::Character('1') if command => self.set_mode(ViewMode::Icons),
             Key::Character('2') if command => self.set_mode(ViewMode::List),
             Key::Character('=' | '+') if command => self.grow_icons(true),
@@ -1960,6 +1964,12 @@ impl FilesView {
     }
 
     pub(crate) fn open(&mut self) {
+        if let Some(server) = self.browser.chosen_server()
+            && let Some(url) = server.server_address()
+        {
+            self.connect_to(url.to_owned(), server.name.clone());
+            return;
+        }
         let selection = self
             .browser
             .selection()
@@ -2077,7 +2087,11 @@ impl FilesView {
     }
 
     pub(crate) fn shown_name<'a>(&self, entry: &'a Entry) -> &'a str {
-        let hidden = self.hidden_extension(&entry.name, entry.is_folder(), entry.extension_hidden);
+        let hidden = self.hidden_extension(
+            &entry.name,
+            entry.kind != Kind::File,
+            entry.extension_hidden,
+        );
         &entry.name[..entry.name.len() - hidden.map_or(0, str::len)]
     }
 

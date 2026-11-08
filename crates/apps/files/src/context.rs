@@ -1,4 +1,4 @@
-use bande_fs::{GroupBy, Sort};
+use bande_fs::{Entry, GroupBy, Sort};
 use bande_toolkit::Point;
 use bande_toolkit::ui::Menu;
 use bande_volumes::load_saved_servers;
@@ -116,7 +116,7 @@ impl FilesView {
     }
 
     pub(crate) fn selection_menu(&self) -> Menu {
-        if let Some(url) = self.browser.chosen_server() {
+        if let Some(url) = self.browser.chosen_server().and_then(Entry::server_address) {
             return server_menu(load_saved_servers().iter().any(|server| server.url == url));
         }
         let selection = self.browser.selection();
@@ -305,8 +305,8 @@ impl FilesView {
             }),
             Command::ConnectToServer => self.ask_connect(),
             Command::ForgetServer => {
-                if let Some(url) = self.browser.chosen_server() {
-                    self.requests.push(Request::ForgetServer(url));
+                if let Some(url) = self.browser.chosen_server().and_then(Entry::server_address) {
+                    self.requests.push(Request::ForgetServer(url.to_owned()));
                 }
             }
             Command::EmptyTrash => self.ask_to_empty_trash(),

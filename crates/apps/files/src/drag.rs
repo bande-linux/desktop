@@ -224,9 +224,10 @@ impl FilesView {
         match location {
             Location::Folder(folder) => Some(Target::Folder(folder.clone())),
             Location::Trash => Some(Target::Trash),
-            Location::Recents | Location::Search(_) | Location::Network | Location::Server(_) => {
-                None
-            }
+            Location::Recents
+            | Location::Search(_)
+            | Location::Network
+            | Location::Server { .. } => None,
         }
     }
 

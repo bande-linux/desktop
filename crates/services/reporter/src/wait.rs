@@ -6,10 +6,12 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::fs::inotify;
 use rustix::io::Errno;
-use rustix::net::netlink::SocketAddrNetlink;
-use rustix::net::{AddressFamily, SocketFlags, SocketType, bind, socket_with};
+use rustix::net::netlink::{self, SocketAddrNetlink};
+use rustix::net::{AddressFamily, Protocol, SocketFlags, SocketType, bind, socket_with};
 
 const ROUTE_GROUPS: u32 = 0x1 | 0x10 | 0x40 | 0x100 | 0x400;
+const KERNEL_UEVENTS: u32 = 0x1;
+const POWER_SUPPLY: &[u8] = b"SUBSYSTEM=power_supply";
 const SETTLE: Duration = Duration::from_secs(2);
 const DRAIN_BYTES: usize = 8192;
 
@@ -18,21 +20,32 @@ pub enum Woken {
     Deadline,
     Network,
     Config,
+    Outbox,
+    Power,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct Wakes {
+    pub network: bool,
+    pub power: bool,
+    pub outbox: bool,
 }
 
 pub struct Waiter {
     network: Option<OwnedFd>,
     config: Option<OwnedFd>,
+    outbox: Option<OwnedFd>,
+    power: Option<OwnedFd>,
 }
 
-fn route_events() -> io::Result<OwnedFd> {
+fn netlink_socket(protocol: Option<Protocol>, groups: u32) -> io::Result<OwnedFd> {
     let events = socket_with(
         AddressFamily::NETLINK,
         SocketType::RAW,
         SocketFlags::CLOEXEC | SocketFlags::NONBLOCK,
-        None,
+        protocol,
     )?;
-    bind(&events, &SocketAddrNetlink::new(0, ROUTE_GROUPS))?;
+    bind(&events, &SocketAddrNetlink::new(0, groups))?;
     Ok(events)
 }
 
@@ -49,9 +62,18 @@ fn folder_changes(folder: &Path) -> io::Result<OwnedFd> {
     Ok(changes)
 }
 
-fn drain(fd: &OwnedFd) {
+fn drain(fd: &OwnedFd) -> bool {
     let mut buffer = [0; DRAIN_BYTES];
-    while matches!(rustix::io::read(fd, &mut buffer), Ok(read) if read > 0) {}
+    let mut power = false;
+    while let Ok(read) = rustix::io::read(fd, &mut buffer) {
+        if read == 0 {
+            break;
+        }
+        power |= buffer[..read]
+            .windows(POWER_SUPPLY.len())
+            .any(|window| window == POWER_SUPPLY);
+    }
+    power
 }
 
 fn timespec(duration: Duration) -> Timespec {
@@ -62,25 +84,46 @@ fn timespec(duration: Duration) -> Timespec {
 }
 
 impl Waiter {
-    pub fn new(config_file: &Path) -> Self {
-        let network = route_events()
+    pub fn new(config_file: &Path, outbox: &Path) -> Self {
+        let network = netlink_socket(None, ROUTE_GROUPS)
             .inspect_err(|error| tracing::warn!("cannot follow network changes: {error}"))
             .ok();
         let config = config_file
             .parent()
             .and_then(|folder| folder_changes(folder).ok());
-        Self { network, config }
+        Self {
+            network,
+            config,
+            outbox: folder_changes(outbox)
+                .inspect_err(|error| tracing::warn!("cannot follow the outbox: {error}"))
+                .ok(),
+            power: None,
+        }
     }
 
-    pub fn wait(&self, deadline: Option<Instant>, network_ends_wait: bool) -> io::Result<Woken> {
+    pub fn wait(&mut self, deadline: Option<Instant>, wakes: Wakes) -> io::Result<Woken> {
+        if wakes.power && self.power.is_none() {
+            self.power = netlink_socket(Some(netlink::KOBJECT_UEVENT), KERNEL_UEVENTS)
+                .inspect_err(|error| tracing::warn!("cannot follow power changes: {error}"))
+                .ok();
+        }
+        if let Some(power) = &self.power {
+            drain(power);
+        }
         loop {
-            let mut fds = Vec::with_capacity(2);
-            if let Some(config) = &self.config {
-                fds.push(PollFd::new(config, PollFlags::IN));
-            }
-            if let Some(network) = &self.network {
-                fds.push(PollFd::new(network, PollFlags::IN));
-            }
+            let sources: Vec<(&OwnedFd, Woken)> = [
+                (self.config.as_ref(), Woken::Config),
+                (self.outbox.as_ref().filter(|_| wakes.outbox), Woken::Outbox),
+                (self.network.as_ref(), Woken::Network),
+                (self.power.as_ref().filter(|_| wakes.power), Woken::Power),
+            ]
+            .into_iter()
+            .filter_map(|(fd, woken)| Some((fd?, woken)))
+            .collect();
+            let mut fds: Vec<PollFd> = sources
+                .iter()
+                .map(|(fd, _)| PollFd::new(*fd, PollFlags::IN))
+                .collect();
             let left = deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
             if left == Some(Duration::ZERO) {
                 return Ok(Woken::Deadline);
@@ -96,27 +139,30 @@ impl Waiter {
                 .map(|fd| fd.revents().contains(PollFlags::IN))
                 .collect();
             drop(fds);
-            let mut ready = ready.into_iter();
-            if self.config.is_some() && ready.next() == Some(true) {
-                if let Some(config) = &self.config {
-                    drain(config);
+            for ((fd, woken), ready) in sources.into_iter().zip(ready) {
+                if !ready {
+                    continue;
                 }
-                return Ok(Woken::Config);
-            }
-            if self.network.is_some()
-                && ready.next() == Some(true)
-                && let Some(network) = &self.network
-            {
-                self.settle(network);
-                if network_ends_wait {
-                    return Ok(Woken::Network);
+                match woken {
+                    Woken::Config | Woken::Outbox => {
+                        drain(fd);
+                        return Ok(woken);
+                    }
+                    Woken::Network => {
+                        std::thread::sleep(SETTLE);
+                        drain(fd);
+                        if wakes.network {
+                            return Ok(Woken::Network);
+                        }
+                    }
+                    Woken::Power => {
+                        if drain(fd) {
+                            return Ok(Woken::Power);
+                        }
+                    }
+                    Woken::Deadline => {}
                 }
             }
         }
-    }
-
-    fn settle(&self, network: &OwnedFd) {
-        std::thread::sleep(SETTLE);
-        drain(network);
     }
 }

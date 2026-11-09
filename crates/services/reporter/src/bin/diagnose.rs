@@ -39,7 +39,7 @@ fn in_this_process(asked: &Asked) -> std::io::Result<Value> {
         asked.send,
     )?;
     Ok(
-        json!({"ok": {"id": id, "queued": asked.send && config.server().is_some(), "text": text_of_report(&Spool::open(root)?, &id)?}}),
+        json!({"ok": {"id": id, "queued": asked.send && config.has_server(), "text": text_of_report(&Spool::open(root)?, &id)?}}),
     )
 }
 

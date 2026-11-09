@@ -56,12 +56,12 @@ impl Config {
         config
     }
 
-    pub fn server(&self) -> Option<(&str, &str)> {
-        Some((self.endpoint.as_deref()?, self.key.as_deref()?))
+    pub fn has_server(&self) -> bool {
+        self.endpoint.is_some()
     }
 
     pub fn sends_automatically(&self) -> bool {
-        self.send && self.server().is_some()
+        self.send && self.has_server()
     }
 }
 

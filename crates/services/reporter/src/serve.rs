@@ -21,6 +21,7 @@ use crate::diagnose::diagnose;
 use crate::facts;
 use crate::fault::{Fault, attach_device_dumps, capture_hang};
 use crate::hang::{HangEnd, HangEnds};
+use crate::send;
 use crate::spool::{MANIFEST, STATE, Spool, Status};
 
 const FAILED: &str = "failed";
@@ -391,17 +392,16 @@ impl Service {
         let checkin = config
             .sends_automatically()
             .then(|| {
-                let spool = Spool::open(&self.spool_root).ok()?;
                 let day = checkin::due_days(&self.spool_root)
                     .last()
                     .copied()
                     .or_else(checkin::yesterday)?;
-                checkin::payload(&spool, day).ok()
+                checkin::payload(day).ok()
             })
             .flatten();
         json!({
             "sending": config.sends_automatically(),
-            "configured": config.server().is_some(),
+            "configured": config.has_server(),
             "checkin": checkin,
         })
     }
@@ -436,7 +436,7 @@ impl Service {
                 let id = diagnose(&self.spool_root, &self.config(), peer, description, send)?;
                 Ok(json!({
                     "id": id,
-                    "queued": send && self.config().server().is_some(),
+                    "queued": send && self.config().has_server(),
                 }))
             }
             "delete" => {
@@ -446,10 +446,10 @@ impl Service {
             }
             "send" => {
                 let (spool, _) = self.visible(id, peer)?;
-                if self.config().server().is_none() {
+                if !self.config().has_server() {
                     return Err("no server is configured".into());
                 }
-                spool.queue(id)?;
+                spool.queue_by_hand(id)?;
                 Ok(json!({}))
             }
             "set-sending" => {
@@ -464,6 +464,7 @@ impl Service {
                 } else {
                     spool.clear_outbox()?;
                     checkin::forget(&self.spool_root)?;
+                    send::forget_here(&spool)?;
                 }
                 Ok(self.status())
             }

@@ -172,8 +172,8 @@ pub fn diagnose(
         },
         spool_root,
     )?;
-    if send && config.server().is_some() {
-        spool.queue(&id)?;
+    if send && config.has_server() {
+        spool.queue_by_hand(&id)?;
     }
     Ok(id)
 }

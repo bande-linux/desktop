@@ -14,12 +14,12 @@ jiff.workspace = true
 ring.workspace = true
 bande-https.workspace = true
 rustc-demangle.workspace = true
+rustls.workspace = true
 rustix = { workspace = true, features = ["fs", "net", "stdio", "thread"] }
 serde_json.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-rustls.workspace = true
 tempfile.workspace = true
 
 [package.metadata.deb]
@@ -29,13 +29,15 @@ depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66), elfutils"
 replaces = "bande-scripts (<< 0.1.2~)"
 extended-description = """\
 Keeps a small report of each fault in a root-only folder. Reports leave the \
-computer only if sending is switched on and a server is configured; nothing is \
-configured by default. Between faults no process runs: sending starts when a \
+computer only if sending is switched on, which it is not until the person \
+agrees in first setup or in Settings. Between faults no process runs: sending starts when a \
 report waits, and waits on network changes rather than polling."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/bande-reporter", "usr/libexec/", "755"],
     ["target/release/bande-diagnose", "usr/bin/", "755"],
+    ["data/reports.conf", "usr/share/bande/reports.conf", "644"],
+    ["data/reports-ca.pem", "usr/share/bande/reports-ca.pem", "644"],
     ["data/report-failure-system.conf", "usr/lib/systemd/system/bande-.service.d/50-bande-report-failure.conf", "644"],
     ["data/report-failure-system.conf", "usr/lib/systemd/system/greetd.service.d/50-bande-report-failure.conf", "644"],
     ["data/report-failure-system.conf", "usr/lib/systemd/system/systemd-suspend.service.d/50-bande-report-failure.conf", "644"],

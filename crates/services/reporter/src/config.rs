@@ -4,6 +4,7 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 const PRIVATE_BITS: u32 = 0o077;
+const SHIPPED: &str = "/usr/share/bande/reports.conf";
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -17,9 +18,15 @@ pub struct Config {
 
 impl Config {
     pub fn load(path: &Path) -> io::Result<Self> {
+        let mut config = Self::default();
+        if let Ok(shipped) = std::fs::read_to_string(SHIPPED) {
+            let shipped = Self::parse(&shipped, Self::default());
+            config.endpoint = shipped.endpoint;
+            config.ca = shipped.ca;
+        }
         let mut file = match File::open(path) {
             Ok(file) => file,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(config),
             Err(error) => return Err(error),
         };
         let metadata = file.metadata()?;
@@ -33,11 +40,10 @@ impl Config {
         }
         let mut text = String::new();
         file.read_to_string(&mut text)?;
-        Ok(Self::parse(&text))
+        Ok(Self::parse(&text, config))
     }
 
-    fn parse(text: &str) -> Self {
-        let mut config = Self::default();
+    fn parse(text: &str, mut config: Self) -> Self {
         for line in text.lines() {
             let Some((name, value)) = line.split_once('=') else {
                 continue;

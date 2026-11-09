@@ -18,7 +18,7 @@ const SPOOL: &str = "/var/lib/bande/reports";
 const CONFIG: &str = "/etc/bande/reports.conf";
 const FIRST_RETRY: Duration = Duration::from_secs(60);
 const LONGEST_RETRY: Duration = Duration::from_secs(6 * 60 * 60);
-const USAGE: &str = "usage: bande-reporter [--spool DIR] [--config FILE] (send | serve | watch | resources | list | store MANIFEST [ATTACHMENT...] | queue ID | delete ID)";
+const USAGE: &str = "usage: bande-reporter [--spool DIR] [--config FILE] (send | serve | watch | resources | list | sending on|off | store MANIFEST [ATTACHMENT...] | queue ID | delete ID)";
 
 struct Paths {
     spool: PathBuf,
@@ -407,6 +407,9 @@ fn run(arguments: &[String]) -> Result<(), Box<dyn Error>> {
         [command, manifest, attachments @ ..] if command == "store" => {
             store(&paths, Path::new(manifest), attachments)
         }
+        [command, on] if command == "sending" && (on == "on" || on == "off") => Ok(
+            bande_reporter::serve::set_sending(&paths.spool, &paths.config, on == "on")?,
+        ),
         [command, id] if command == "queue" => Ok(Spool::open(&paths.spool)?.queue_by_hand(id)?),
         [command, id] if command == "delete" => Ok(Spool::open(&paths.spool)?.delete(id)?),
         _ => Err(USAGE.into()),

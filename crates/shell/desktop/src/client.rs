@@ -26,7 +26,7 @@ use bande_fs::{
 use bande_inbox::{Inbox, Outbox};
 use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
-use bande_toolkit::ui::frame_time;
+use bande_toolkit::ui::{Event, frame_time};
 use bande_toolkit::{
     App, DragAction, DragEvent, Edges, Image, KeyboardFocus, LayerKind, LayerOptions,
     MenuPlacement, Point, Role, Scene, Scheme, TextSystem, Transfer, Window, WindowEvent,
@@ -49,6 +49,7 @@ const WALLPAPER_CACHE: &str = "bande/wallpapers";
 const SETTINGS_APP: &str = "org.bande.Settings";
 const WALLPAPER_PANE: &str = "appearance";
 const FILES_INFO_FLAG: &str = "--info";
+const NO_WINDOW_FLAG: &str = "--no-window";
 
 type Loaded = (WallpaperKey, Option<(Picture, Luma)>);
 
@@ -418,6 +419,22 @@ impl DesktopSurface {
 
     fn files_app(&self) -> Option<DesktopEntry> {
         self.apps.borrow().default_for(DIRECTORY).cloned()
+    }
+
+    fn start_files_without_window(&self, window: &Window) {
+        let Some(files) = self.files_app() else {
+            return;
+        };
+        if window
+            .running_apps()
+            .iter()
+            .any(|app| app == files.app_id())
+        {
+            return;
+        }
+        if let Err(error) = launch_with_arguments(&files, &[NO_WINDOW_FLAG.to_owned()], None) {
+            tracing::warn!("cannot start {}: {error}", files.id);
+        }
     }
 
     fn launch_with(&self, window: &mut Window, app: &DesktopEntry, files: &[PathBuf]) {
@@ -883,6 +900,10 @@ impl App for DesktopSurface {
             WindowEvent::Input(input) => {
                 if self.view.handle(&input, frame_time().on_screen()) {
                     window.request_redraw();
+                } else if let Event::Key { key, modifiers } = input
+                    && let Err(error) = window.pass_key(key, modifiers)
+                {
+                    tracing::warn!("cannot pass a key on to Files: {error}");
                 }
                 self.run_requests(window);
             }
@@ -935,6 +956,9 @@ impl App for DesktopSurface {
                 }
             }
             WindowEvent::Focus(focused) => {
+                if focused {
+                    self.start_files_without_window(window);
+                }
                 self.view.set_focused(focused);
                 if let Some(link) = self.quick_look.as_ref().filter(|_| !focused)
                     && link.borrow().is_shown()
@@ -1164,7 +1188,7 @@ pub fn role() -> Role {
 
 impl DesktopSurface {
     pub fn new(
-        window: &Window,
+        window: &mut Window,
         main: bool,
         config: &Config,
         text: TextSystem,
@@ -1246,6 +1270,11 @@ impl DesktopSurface {
         surface.view.set_quick_look(quick_look);
         let folder = surface.desktop_dir.clone();
         surface.view.set_folder(folder);
+        if let Some(files) = surface.files_app()
+            && let Err(error) = window.act_for_app(files.app_id())
+        {
+            tracing::warn!("the desktop cannot act for {}: {error}", files.id);
+        }
         Ok(surface)
     }
 }

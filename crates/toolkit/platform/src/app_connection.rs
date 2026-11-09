@@ -59,6 +59,19 @@ fn modifiers(bits: u32) -> Modifiers {
     }
 }
 
+pub(crate) fn modifier_bits(modifiers: Modifiers) -> u32 {
+    [
+        modifiers.shift,
+        modifiers.control,
+        modifiers.alt,
+        modifiers.logo,
+    ]
+    .into_iter()
+    .enumerate()
+    .filter(|(_, held)| *held)
+    .fold(0, |bits, (bit, _)| bits | 1 << bit)
+}
+
 impl AppConnection {
     pub fn connect(app_id: &str) -> Result<Self, WindowError> {
         Self::on(

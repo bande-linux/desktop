@@ -147,36 +147,70 @@ impl Input {
     }
 }
 
+const NAMED_KEYS: [(u32, Key); 16] = [
+    (keysyms::KEY_Left, Key::Left),
+    (keysyms::KEY_Right, Key::Right),
+    (keysyms::KEY_Up, Key::Up),
+    (keysyms::KEY_Down, Key::Down),
+    (keysyms::KEY_BackSpace, Key::Backspace),
+    (keysyms::KEY_Delete, Key::Delete),
+    (keysyms::KEY_Return, Key::Enter),
+    (keysyms::KEY_Tab, Key::Tab),
+    (keysyms::KEY_Escape, Key::Escape),
+    (keysyms::KEY_space, Key::Space),
+    (keysyms::KEY_Home, Key::Home),
+    (keysyms::KEY_End, Key::End),
+    (keysyms::KEY_Page_Up, Key::PageUp),
+    (keysyms::KEY_Page_Down, Key::PageDown),
+    (keysyms::KEY_Insert, Key::Insert),
+    (keysyms::KEY_Menu, Key::Menu),
+];
+
+fn without_keypad(raw: u32) -> u32 {
+    match raw {
+        keysyms::KEY_KP_Left => keysyms::KEY_Left,
+        keysyms::KEY_KP_Right => keysyms::KEY_Right,
+        keysyms::KEY_KP_Up => keysyms::KEY_Up,
+        keysyms::KEY_KP_Down => keysyms::KEY_Down,
+        keysyms::KEY_KP_Delete => keysyms::KEY_Delete,
+        keysyms::KEY_KP_Enter => keysyms::KEY_Return,
+        keysyms::KEY_ISO_Left_Tab => keysyms::KEY_Tab,
+        keysyms::KEY_KP_Home => keysyms::KEY_Home,
+        keysyms::KEY_KP_End => keysyms::KEY_End,
+        keysyms::KEY_KP_Page_Up => keysyms::KEY_Page_Up,
+        keysyms::KEY_KP_Page_Down => keysyms::KEY_Page_Down,
+        keysyms::KEY_KP_Insert => keysyms::KEY_Insert,
+        raw => raw,
+    }
+}
+
 pub(crate) fn key_for(keysym: Keysym) -> Option<Key> {
-    let key = match keysym.raw() {
-        keysyms::KEY_Left | keysyms::KEY_KP_Left => Key::Left,
-        keysyms::KEY_Right | keysyms::KEY_KP_Right => Key::Right,
-        keysyms::KEY_Up | keysyms::KEY_KP_Up => Key::Up,
-        keysyms::KEY_Down | keysyms::KEY_KP_Down => Key::Down,
-        keysyms::KEY_BackSpace => Key::Backspace,
-        keysyms::KEY_Delete | keysyms::KEY_KP_Delete => Key::Delete,
-        keysyms::KEY_Return | keysyms::KEY_KP_Enter => Key::Enter,
-        keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Key::Tab,
-        keysyms::KEY_Escape => Key::Escape,
-        keysyms::KEY_space => Key::Space,
-        keysyms::KEY_Home | keysyms::KEY_KP_Home => Key::Home,
-        keysyms::KEY_End | keysyms::KEY_KP_End => Key::End,
-        keysyms::KEY_Page_Up | keysyms::KEY_KP_Page_Up => Key::PageUp,
-        keysyms::KEY_Page_Down | keysyms::KEY_KP_Page_Down => Key::PageDown,
-        keysyms::KEY_Insert | keysyms::KEY_KP_Insert => Key::Insert,
-        keysyms::KEY_Menu => Key::Menu,
-        raw @ keysyms::KEY_F1..=keysyms::KEY_F12 => {
-            Key::Function(u8::try_from(raw - keysyms::KEY_F1 + 1).ok()?)
+    let raw = without_keypad(keysym.raw());
+    if let Some((_, key)) = NAMED_KEYS.iter().find(|(named, _)| *named == raw) {
+        return Some(*key);
+    }
+    if (keysyms::KEY_F1..=keysyms::KEY_F12).contains(&raw) {
+        return Some(Key::Function(u8::try_from(raw - keysyms::KEY_F1 + 1).ok()?));
+    }
+    let character = char::from_u32(xkb::keysym_to_utf32(keysym))?;
+    if character.is_control() || character == '\0' {
+        return None;
+    }
+    Some(Key::Character(character))
+}
+
+pub(crate) fn keysym_for(key: Key) -> Option<u32> {
+    match key {
+        Key::Function(number @ 1..=12) => Some(keysyms::KEY_F1 + u32::from(number) - 1),
+        Key::Function(_) => None,
+        Key::Character(character) => {
+            Some(xkb::utf32_to_keysym(u32::from(character)).raw()).filter(|raw| *raw != 0)
         }
-        _ => {
-            let character = char::from_u32(xkb::keysym_to_utf32(keysym))?;
-            if character.is_control() || character == '\0' {
-                return None;
-            }
-            Key::Character(character)
-        }
-    };
-    Some(key)
+        named => NAMED_KEYS
+            .iter()
+            .find(|(_, key)| *key == named)
+            .map(|(raw, _)| *raw),
+    }
 }
 
 fn button_for(code: u32) -> Option<PointerButton> {

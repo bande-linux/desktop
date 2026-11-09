@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use bande_app::{Cx, Error, Info, Keys, Kind, Program, View};
 use bande_compositor::Compositor;
 use bande_test_bus::SessionBus;
-use bande_test_wayland::keys::{KEY_LEFTCTRL, KEY_Q, KEY_W};
-use bande_test_wayland::{Frames, chord, headless};
+use bande_test_wayland::keys::{KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_TAB, KEY_W};
+use bande_test_wayland::{Frames, TestClient, chord, headless};
 use bande_toolkit::{Appearance, Scene, Window, WindowEvent};
 
 static ASKED: Mutex<Option<Sender<Asked>>> = Mutex::new(None);
@@ -104,7 +104,7 @@ fn wait_for_windows(frames: &mut Frames, server: &mut Compositor, wanted: usize)
 }
 
 #[test]
-fn a_second_launch_reaches_the_running_app_which_outlives_its_windows_until_quit() {
+fn a_second_launch_reaches_the_running_app_which_outlives_its_windows_and_the_switcher_activates_it_without_one() {
     let bus = SessionBus::start().expect("private session bus");
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
@@ -141,6 +141,15 @@ fn a_second_launch_reaches_the_running_app_which_outlives_its_windows_until_quit
     let launched_again = launch(&[], unused);
     wait_for_windows(&mut frames, &mut server, 1);
     assert_eq!(launched_again.join().expect("launched again"), Ok(()));
+
+    chord(&mut server, &[KEY_LEFTCTRL, KEY_W]);
+    wait_for_windows(&mut frames, &mut server, 0);
+    let _other = TestClient::window(&mut server, "org.bande.Other");
+    wait_for_windows(&mut frames, &mut server, 1);
+    chord(&mut server, &[KEY_LEFTALT, KEY_TAB]);
+    let settled = Instant::now() + Duration::from_millis(500);
+    frames.run_until(&mut server, || Instant::now() > settled);
+    wait_for_windows(&mut frames, &mut server, 1);
 
     chord(&mut server, &[KEY_LEFTCTRL, KEY_Q]);
     frames.run_until(&mut server, || app.is_finished());

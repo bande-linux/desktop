@@ -38,6 +38,7 @@ struct Runner<P: Program> {
 }
 
 const BACKGROUND_FLAG: &str = "--background";
+const NO_WINDOW_FLAG: &str = "--no-window";
 
 pub(crate) fn run<P: Program>(
     info: &'static Info,
@@ -50,6 +51,9 @@ pub(crate) fn run<P: Program>(
     if background && !P::runs_in_background() {
         return Ok(());
     }
+    let given = arguments.len();
+    arguments.retain(|argument| argument != NO_WINDOW_FLAG);
+    let windowless = arguments.len() < given;
     let session = bande_bus::session()
         .inspect_err(|error| {
             tracing::warn!("no session bus, so no menu bar and no single instance: {error}");
@@ -63,7 +67,7 @@ pub(crate) fn run<P: Program>(
         .ok()
         .flatten();
     let instance = match (claimed, &session) {
-        (Some(Claim::Running), _) if background => return Ok(()),
+        (Some(Claim::Running), _) if background || windowless => return Ok(()),
         (Some(Claim::Running), Some(session)) => {
             return instance::forward(session, info.id, Request::from_launch(arguments)?);
         }
@@ -74,23 +78,31 @@ pub(crate) fn run<P: Program>(
         Some(display) => AppConnection::connect_on(display, info.id)?,
         None => AppConnection::connect(info.id)?,
     };
-    let plain_launch = arguments.is_empty() && !background;
+    let plain_launch = arguments.is_empty() && !background && !windowless;
     let mut resume = Resume::load(info.id);
     let mut link = link;
     resume.join(&mut link);
+    if windowless {
+        link.keep_running();
+    }
     let mut cx = Cx::new(info, link, session, background, resume);
     let mut program = P::start(&mut cx, arguments)?;
-    let asked = !background && reopen_saved_windows(&mut program, &mut cx);
-    if plain_launch && !asked && !cx.resume.has_main_window() {
+    let prompted = !background && !windowless && reopen_saved_windows(&mut program, &mut cx);
+    if plain_launch && !prompted && !cx.resume.has_main_window() {
         program.reopen(&mut cx);
     }
-    if cx.windows.is_empty() && !background && !P::waits_for_activation() {
+    if cx.windows.is_empty() && !background && !windowless && !P::waits_for_activation() {
         return Ok(());
     }
     let menu = cx.session().cloned().and_then(|session| {
         AppMenu::serve(
             session,
-            assemble(info, program.menus(&cx), true, cx.sizing()),
+            assemble(
+                info,
+                program.menus(&cx),
+                !cx.windows.is_empty(),
+                cx.sizing(),
+            ),
         )
         .inspect_err(|error| tracing::warn!("{error}"))
         .ok()
@@ -441,8 +453,8 @@ impl<P: Program> Runner<P> {
     fn key_without_window(&mut self, input: &Event) {
         let settings = self.cx.info.settings.is_some();
         match self.cx.info.keys.standard(input, settings) {
-            Some(standard) => self.perform(self.cx.focused(), standard.action()),
-            None => self.menu_shortcut(self.cx.focused(), input),
+            Some(standard) => self.perform(None, standard.action()),
+            None => self.menu_shortcut(None, input),
         }
     }
 

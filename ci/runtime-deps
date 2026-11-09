@@ -21,6 +21,8 @@ pkexec pkexec depends
 /usr/bin/systemctl systemd depends
 systemctl systemd depends
 journalctl systemd depends
+busctl systemd depends
+systemd-ac-power systemd depends
 /usr/bin/udevadm udev depends
 /usr/sbin/locale-gen locales depends
 /usr/share/i18n/SUPPORTED locales depends

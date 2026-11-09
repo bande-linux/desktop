@@ -501,6 +501,7 @@ impl FrameScheduler {
                     compositor.latch_on(&name);
                     let deadline = self.clock.deadline(vblank);
                     let submission = output.submit(compositor, &name).inspect_err(|_| {
+                        compositor.release_wake_keys();
                         self.wanted = true;
                         self.stalled_since.get_or_insert(started);
                         self.phase = Phase::Backoff(started + FAILED_FRAME_RETRY);
@@ -545,6 +546,9 @@ impl FrameScheduler {
                     self.phase = match submission {
                         Submission::AwaitingFlip => Phase::AwaitingFlip(now),
                         Submission::Paused => {
+                            if compositor.output_powered(&name) {
+                                compositor.release_wake_keys();
+                            }
                             self.stalled_since = None;
                             Phase::Held
                         }

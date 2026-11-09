@@ -1,10 +1,15 @@
 pub const KEY_ESC: u32 = 1;
+pub const KEY_BACKSPACE: u32 = 14;
 pub const KEY_TAB: u32 = 15;
 pub const KEY_Q: u32 = 16;
 pub const KEY_W: u32 = 17;
 pub const KEY_ENTER: u32 = 28;
 pub const KEY_LEFTCTRL: u32 = 29;
 pub const KEY_A: u32 = 30;
+pub const KEY_D: u32 = 32;
+pub const KEY_X: u32 = 45;
+pub const KEY_C: u32 = 46;
+pub const KEY_B: u32 = 48;
 pub const KEY_LEFTALT: u32 = 56;
 pub const KEY_DOWN: u32 = 108;
 pub const BTN_LEFT: u32 = 0x110;

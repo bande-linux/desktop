@@ -19,6 +19,8 @@ pub(crate) struct OutputPower {
     controls: Vec<(ZwlrOutputPowerV1, String)>,
     off: Vec<String>,
     turned_on: bool,
+    lighting_up: bool,
+    swallowed_keys: Vec<u32>,
     power_key_pressed_at: Option<u32>,
     sleep_requests: Option<Sender<()>>,
 }
@@ -47,6 +49,7 @@ impl State {
         if self.power_mode(output) == mode {
             return;
         }
+        let was_lit = self.any_screen_lit();
         match mode {
             Mode::Off => {
                 self.output_power.off.push(output.to_owned());
@@ -55,6 +58,7 @@ impl State {
             _ => {
                 self.output_power.off.retain(|name| name != output);
                 self.output_power.turned_on = true;
+                self.output_power.lighting_up |= !was_lit && self.any_screen_lit();
             }
         }
         self.needs_redraw = true;
@@ -76,6 +80,38 @@ impl State {
             && !self
                 .screen_named(output)
                 .is_some_and(|screen| self.screens[screen].parked)
+    }
+
+    fn any_screen_lit(&self) -> bool {
+        self.screens
+            .iter()
+            .any(|screen| self.powered(&screen.name()))
+    }
+
+    pub(crate) fn light_up(&mut self) {
+        self.output_power.lighting_up = self.any_screen_lit();
+    }
+
+    pub(crate) fn lit_up(&mut self) {
+        self.output_power.lighting_up = false;
+    }
+
+    pub(crate) fn swallows_wake_key(&mut self, code: u32, pressed: bool) -> bool {
+        if self.output_power.lighting_up && !self.any_screen_lit() {
+            self.lit_up();
+        }
+        let power = &mut self.output_power;
+        if pressed && power.lighting_up {
+            power.swallowed_keys.push(code);
+            return true;
+        }
+        match power.swallowed_keys.iter().position(|held| *held == code) {
+            Some(at) if !pressed => {
+                power.swallowed_keys.remove(at);
+                true
+            }
+            _ => false,
+        }
     }
 
     pub(crate) fn power_key(&mut self, pressed: bool, time: u32) {
@@ -100,6 +136,10 @@ impl State {
 impl Compositor {
     pub fn output_powered(&self, output: &str) -> bool {
         self.state.powered(output)
+    }
+
+    pub fn release_wake_keys(&mut self) {
+        self.state.lit_up();
     }
 
     pub fn take_outputs_powered_on(&mut self) -> bool {

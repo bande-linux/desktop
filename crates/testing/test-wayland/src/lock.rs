@@ -7,6 +7,10 @@ use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_surface_v
     self, ExtSessionLockSurfaceV1,
 };
 use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_v1::ExtSessionLockV1;
+use wayland_protocols_wlr::output_power_management::v1::client::zwlr_output_power_manager_v1::ZwlrOutputPowerManagerV1;
+use wayland_protocols_wlr::output_power_management::v1::client::zwlr_output_power_v1::{
+    Mode, ZwlrOutputPowerV1,
+};
 
 use crate::{Compositor, Globals, ShmImage, TestClient};
 
@@ -52,6 +56,15 @@ impl TestClient {
         self.exchange(server);
     }
 
+    pub fn turn_the_display_off(&mut self, server: &mut Compositor) {
+        let manager: ZwlrOutputPowerManagerV1 = self.bind("zwlr_output_power_manager_v1", 1);
+        let output: WlOutput = self.bind("wl_output", 1);
+        manager
+            .get_output_power(&output, &self.queue.handle(), ())
+            .set_mode(Mode::Off);
+        self.exchange(server);
+    }
+
     pub fn lock_surface_has_keyboard(&self) -> bool {
         self.globals.lock.surface.is_some()
             && self.globals.input.keyboard_focus == self.globals.lock.surface
@@ -80,5 +93,7 @@ impl Dispatch<ExtSessionLockSurfaceV1, ()> for Globals {
 }
 
 delegate_noop!(Globals: ExtSessionLockManagerV1);
+delegate_noop!(Globals: ZwlrOutputPowerManagerV1);
+delegate_noop!(Globals: ignore ZwlrOutputPowerV1);
 delegate_noop!(Globals: ignore ExtSessionLockV1);
 delegate_noop!(Globals: ignore WlOutput);

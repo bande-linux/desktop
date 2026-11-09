@@ -53,7 +53,7 @@ graph LR
   else, covering the desktop through `ext-session-lock`, as macOS hands its saver over to the
   lock screen. Every lock starts resting; the first key, click, scroll or movement, or waking
   from sleep, fades in the picture, name and password field (a typed letter lands in the
-  field), and a minute without input clears the field and rests again. "Require
+  field, unless it turned a dark display on: see `behaviour.md`), and a minute without input clears the field and rests again. "Require
   password after screen saver begins or display is turned off" (default immediately) is a grace
   period: until it passes, any key, click or movement dismisses the saver without a password.
   Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer

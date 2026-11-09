@@ -16,18 +16,27 @@ Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and reject
 
 ## Sending
 
-Nothing leaves the computer unless a server is configured and sending is on, or someone sends one report by hand. Shipped images configure no server. Settings ▸ Privacy & Security ▸ Diagnostics shows which applies.
+Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until the person agrees: first setup asks once ("Share Bande Analytics", off unless switched on, with the server's `/privacy` address), and Settings ▸ Privacy & Security ▸ Diagnostics changes it later, shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
 
-`/etc/bande/reports.conf`, owned by root, mode `0600` (any other mode is refused, because it holds a key):
+`/usr/share/bande/reports.conf` (shipped) holds the server every installation uses:
 
 ```
-endpoint = https://host:port
-key = <submit key>
+endpoint = https://logs.mikaelhug.se
+ca = /usr/share/bande/reports-ca.pem
+```
+
+`ca` pins Let's Encrypt's roots (ISRG Root X1 and X2). A server whose chain they do not verify, or a missing `ca` file, falls back to the system's roots, so a new Let's Encrypt root or another organisation's server still works.
+
+`/etc/bande/reports.conf`, owned by root, mode `0600` (any other mode is refused), overrides it key by key and holds the switch:
+
+```
 send = on
+endpoint = https://host:port
 ca = /path/to/ca.pem
+key = <shared submit key, while a server still takes one>
 ```
 
-`ca` is optional; without it the system's roots are used. The file never goes in a package or a public repo.
+`bande-reporter sending on|off` and Settings write `send`; the other keys are for development machines and other organisations.
 
 A daily check-in rides on the same sender: at boot, at login, when `serve` starts, when sending is switched on and on the resource wake-up every 10 minutes, an `outbox/checkin` marker is added if a day is due and this machine's minute of the policy's `checkin_hour` (UTC) has passed, or two days are due; and the sender posts it with the reports (see Protocol). Settings ▸ Diagnostics shows its exact contents. It carries no content of any kind.
 
@@ -127,7 +136,7 @@ The symbol may hold spaces; the last field is always the module and offset. Oute
 
 ### Symbols
 
-`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not the submit key) and the `.debug` file as `application/octet-stream`; its debug sections are zlib-compressed (`SHF_COMPRESSED`). `ci/release/upload-symbols.sh <deb> <endpoint>` sends every `.debug` of a `bande-debug-symbols` deb (2xx is success). The owner's machines run it, since GitHub cannot reach the server: `send-symbols` on the mini after `rebuild-desktop` installs a build and after a release tag's run is green, with `LOGS_SYMBOLS_KEY` from `~/bande-linux/logs-keys.env` or `/etc/bande/reports.conf`.
+`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not the submit key) and the `.debug` file as `application/octet-stream`; its debug sections are zlib-compressed (`SHF_COMPRESSED`). `ci/release/upload-symbols.sh <deb> <endpoint>` sends every `.debug` of a `bande-debug-symbols` deb (2xx is success). `LOGS_SYMBOLS_KEY` may list several keys separated by commas: on a 401 the next one is tried and kept, so the server's keys can be rotated without a gap. The owner's machines run it over the internet like every other client: `send-symbols` on the mini after `rebuild-desktop` installs a build and after a release tag's run is green, with `LOGS_SYMBOLS_KEY` from `~/bande-linux/logs-keys.env` or `/etc/bande/reports.conf`.
 
 ### Signature
 

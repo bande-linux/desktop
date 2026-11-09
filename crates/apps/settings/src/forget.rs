@@ -1,5 +1,6 @@
 use bande_l10n::tr;
 
+use crate::diagnostics::DiagnosticsCommand;
 use crate::follow::Command;
 use crate::pages::boxed;
 use crate::passwords::PasswordCommand;
@@ -22,6 +23,7 @@ pub(crate) enum Forget {
     Printer(String),
     Vpn(String),
     Password(String),
+    SentReports,
 }
 
 impl SettingsView {
@@ -75,6 +77,7 @@ impl SettingsView {
             Some(Forget::Printer(name)) => format!("printer:{name}"),
             Some(Forget::Vpn(path)) => format!("vpn:{path}"),
             Some(Forget::Password(path)) => format!("password:{path}"),
+            Some(Forget::SentReports) => crate::diagnostics::SENT_REPORTS.to_owned(),
             None => return,
         };
         self.focus_next = Some(Anchor::Item(if target.is_some() {
@@ -112,6 +115,10 @@ impl SettingsView {
             Some(Forget::Password(path)) => {
                 self.focus_next = Some(Anchor::Setting(SettingId::SavedPasswords, None));
                 Some(Command::Passwords(PasswordCommand::Delete(path)))
+            }
+            Some(Forget::SentReports) => {
+                self.focus_next = Some(Anchor::Setting(SettingId::DiagnosticsList, None));
+                Some(Command::Diagnostics(DiagnosticsCommand::ForgetSent))
             }
             Some(Forget::Printer(name)) => {
                 self.detail = None;

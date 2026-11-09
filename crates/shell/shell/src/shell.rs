@@ -146,7 +146,7 @@ impl Context {
                 )?;
                 window.share_fonts(&self.text);
                 let part = DesktopSurface::new(
-                    &window,
+                    &mut window,
                     display.main,
                     &self.config(),
                     self.text.sharing_fonts(),

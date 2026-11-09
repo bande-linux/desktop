@@ -4,6 +4,7 @@ use bande_protocols::server::bande_shell_v1::{self, BandeShellV1};
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::XdgToplevel;
 use smithay::reexports::wayland_server::WEnum;
 use smithay::reexports::wayland_server::backend::ClientId;
+use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
@@ -180,9 +181,6 @@ impl State {
     }
 
     pub(crate) fn send_app_key(&self, keysym: u32, modifiers: Modifiers) {
-        let Some((client, _)) = &self.windowless_app else {
-            return;
-        };
         let bits = [
             modifiers.shift,
             modifiers.control,
@@ -193,18 +191,65 @@ impl State {
         .enumerate()
         .filter(|(_, held)| *held)
         .fold(0, |bits, (bit, _)| bits | 1 << bit);
+        self.send_key_to_active_app(keysym, bits);
+    }
+
+    fn send_key_to_active_app(&self, keysym: u32, modifiers: u32) {
+        let Some((client, _)) = &self.windowless_app else {
+            return;
+        };
         for (app, _) in &self.kept_apps {
             if app.client().as_ref() == Some(client) {
-                app.key(keysym, bits);
+                app.key(keysym, modifiers);
             }
         }
     }
 
+    pub(crate) fn kept_client(&self, app_id: &str) -> Option<Client> {
+        self.kept_apps
+            .iter()
+            .filter(|(_, kept)| kept == app_id)
+            .find_map(|(app, _)| app.client().filter(|client| !is_shell(client)))
+    }
+
+    pub(crate) fn act_for_app(&mut self, surface: WlSurface, app_id: String) {
+        self.acting_surfaces
+            .retain(|(known, _)| known.is_alive() && *known != surface);
+        self.acting_surfaces.push((surface, app_id));
+        self.follow_acting_surface();
+    }
+
+    pub(crate) fn acting_app_of(&self, surface: &WlSurface) -> Option<String> {
+        let root = self.root_of(surface)?;
+        self.acting_surfaces
+            .iter()
+            .find(|(known, _)| *known == root && known.is_alive())
+            .map(|(_, app_id)| app_id.clone())
+    }
+
+    pub(crate) fn follow_acting_surface(&mut self) {
+        let Some(app_id) = self
+            .focused()
+            .and_then(|focused| self.acting_app_of(&focused))
+        else {
+            return;
+        };
+        self.windowless_app = self.kept_client(&app_id).map(|client| (client, app_id));
+        let key = self.key_window();
+        self.announce_active_app(key.as_ref());
+    }
+
+    pub(crate) fn pass_key(&self, requester: Option<Client>, keysym: u32, modifiers: u32) {
+        let acting = self.focused().filter(|focused| {
+            focused.client() == requester && self.acting_app_of(focused).is_some()
+        });
+        if acting.is_some() {
+            self.send_key_to_active_app(keysym, modifiers);
+        }
+    }
+
     pub(crate) fn activate_windowless_app(&mut self, app_id: &str) -> Option<Client> {
-        let (client, _) = self
-            .windowless_apps()
-            .into_iter()
-            .find(|(_, windowless)| windowless == app_id)?;
+        let client = self.kept_client(app_id)?;
         if self.exclusive_layer.is_none() {
             self.focus(None);
             self.windowless_app = Some((client.clone(), app_id.to_owned()));
@@ -511,6 +556,7 @@ impl Dispatch<BandeAppV1, ()> for State {
             bande_app_v1::Request::KeepRunning { app_id } => {
                 state.kept_apps.retain(|(app, _)| app != resource);
                 state.kept_apps.push((resource.clone(), app_id));
+                state.follow_acting_surface();
             }
             bande_app_v1::Request::Destroy => {
                 state.app_resources.retain(|app| app != resource);

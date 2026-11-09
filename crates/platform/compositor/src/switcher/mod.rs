@@ -530,7 +530,7 @@ impl State {
         self.end_switcher();
         if let Some(app) = chosen_app {
             match app.client {
-                None => self.reopen_app(&app.id),
+                None => self.bring_app_forward(&app.id, false),
                 Some(_) => {
                     if let Some(front) = self.windows_of(&app, false).first() {
                         self.bring_forward(front);

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="7">
+  <interface name="bande_shell_v1" version="8">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -585,6 +585,31 @@
       <arg name="seat" type="object" interface="wl_seat"/>
       <arg name="serial" type="uint"/>
     </request>
+
+    <request name="act_for_app" since="8">
+      <description summary="make a layer surface part of an app">
+        Says that the client's layer surface belongs to the app with this app
+        id, as the desktop belongs to the Finder on a Mac. While the surface
+        has the keyboard, that app is the active app with no key window: the
+        Taskbar shows it as active, its menus are the active menus, and when it
+        runs (bande_app_v1.keep_running) the keys the surface passes on with
+        pass_key reach it. Asking again changes the app id.
+      </description>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="app_id" type="string"/>
+    </request>
+
+    <request name="pass_key" since="8">
+      <description summary="hand a key the surface did not use to its app">
+        Sent for a key pressed on a layer surface that acts for an app
+        (act_for_app) and that the surface did not use, such as Ctrl+N on
+        the desktop. While that surface has the keyboard, the compositor sends
+        the key to the app as bande_app_v1.key, with the same keysym and
+        modifiers.
+      </description>
+      <arg name="keysym" type="uint"/>
+      <arg name="modifiers" type="uint"/>
+    </request>
   </interface>
 
   <interface name="bande_app_v1" version="10">
@@ -693,8 +718,8 @@
       <description summary="the user asked for the app while it has no window">
         Sent to an object that asked to keep_running when the app has no
         window and the user asks for it, by clicking its Taskbar icon or a
-        notification or picking it in the app switcher
-        (bande_shell_v1.reopen_app), as macOS sends the reopen event. The
+        notification (bande_shell_v1.reopen_app), as macOS sends the reopen
+        event. Picking it in the app switcher only makes it the active app. The
         app becomes the active app at once and should open its main window,
         activating it with this xdg_activation_v1 token.
       </description>
@@ -705,7 +730,9 @@
       <description summary="a key pressed while the app is active without a window">
         Sent to an object that asked to keep_running for each key the user
         presses while its app is the active app, no surface has the keyboard
-        and the key is not one of the compositor's own shortcuts, as a Mac
+        (or a layer surface acting for the app passes the key on,
+        bande_shell_v1.pass_key) and the key is not one of the compositor's
+        own shortcuts, as a Mac
         sends key equivalents to the active app's menus when it has no
         window. Keysym is the xkb keysym with the modifiers applied, such as
         q for Ctrl+Q and W for Shift+Ctrl+W. Modifiers adds 1 for Shift, 2

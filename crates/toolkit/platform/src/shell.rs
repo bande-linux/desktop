@@ -18,9 +18,11 @@ use wayland_protocols::xdg::activation::v1::client::xdg_activation_token_v1::{
     self, XdgActivationTokenV1,
 };
 
-use bande_graphics::Rect;
+use bande_graphics::{Key, Modifiers, Rect};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 
+use crate::app_connection::modifier_bits;
+use crate::seat::keysym_for;
 use crate::window::{State, Window, WindowError, WindowEvent};
 
 pub(crate) const END_SESSION_SINCE: u32 = 3;
@@ -32,7 +34,8 @@ const LOOK_UP_PATH: &str = "/org/bande/Lookup";
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
 pub(crate) const MOVE_LAYER_SINCE: u32 = 7;
-pub(crate) const SHELL_VERSION: u32 = 7;
+pub(crate) const SHELL_VERSION: u32 = 8;
+const ACT_FOR_APP_SINCE: u32 = 8;
 
 struct Toplevel {
     handle: ExtForeignToplevelHandleV1,
@@ -294,6 +297,24 @@ impl Window {
 
     pub fn activate_app(&mut self, app_id: &str) -> Result<(), WindowError> {
         self.shell()?.activate_app(app_id.to_owned());
+        self.flush()
+    }
+
+    pub fn act_for_app(&mut self, app_id: &str) -> Result<(), WindowError> {
+        let shell = self.shell()?;
+        if shell.version() < ACT_FOR_APP_SINCE {
+            return Ok(());
+        }
+        shell.act_for_app(&self.surface, app_id.to_owned());
+        self.flush()
+    }
+
+    pub fn pass_key(&mut self, key: Key, modifiers: Modifiers) -> Result<(), WindowError> {
+        let shell = self.shell()?;
+        let Some(keysym) = keysym_for(key).filter(|_| shell.version() >= ACT_FOR_APP_SINCE) else {
+            return Ok(());
+        };
+        shell.pass_key(keysym, modifier_bits(modifiers));
         self.flush()
     }
 

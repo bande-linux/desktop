@@ -35,9 +35,24 @@ impl State {
         let onto_layer = surface
             .as_ref()
             .is_some_and(|surface| self.toplevel_of(surface).is_none());
-        self.key_behind_layer = self.key_window().filter(|_| onto_layer);
+        let acting = surface
+            .as_ref()
+            .and_then(|surface| self.acting_app_of(surface));
+        self.key_behind_layer = match acting {
+            Some(_) => None,
+            None => self
+                .key_window()
+                .or_else(|| {
+                    self.focused()
+                        .filter(|focused| self.acting_app_of(focused).is_some())
+                })
+                .filter(|_| onto_layer),
+        };
         if surface.is_some() && !onto_layer {
             self.windowless_app = None;
+        }
+        if let Some(app_id) = acting {
+            self.windowless_app = self.kept_client(&app_id).map(|client| (client, app_id));
         }
         self.typed_at = None;
         if let Some(surface) = &surface
@@ -107,7 +122,7 @@ impl State {
         let next = self
             .key_behind_layer
             .clone()
-            .filter(|key| self.window_index(key).is_some())
+            .filter(|key| self.window_index(key).is_some() || self.acting_app_of(key).is_some())
             .or_else(|| self.frontmost_unless_windowless());
         self.focus(next);
     }

@@ -1,4 +1,5 @@
 pub const KEY_ESC: u32 = 1;
+pub const KEY_TAB: u32 = 15;
 pub const KEY_Q: u32 = 16;
 pub const KEY_W: u32 = 17;
 pub const KEY_ENTER: u32 = 28;

@@ -21,7 +21,7 @@ use crate::session::SessionRole;
 use crate::state::{ClientState, State, client_pid, is_mapped};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
-pub(crate) const SHELL_VERSION: u32 = 7;
+pub(crate) const SHELL_VERSION: u32 = 8;
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
@@ -283,6 +283,10 @@ impl State {
                     .as_ref()
                     .map(|(_, app_id)| app_id.clone())
             })
+            .or_else(|| {
+                self.focused()
+                    .and_then(|focused| self.acting_app_of(&focused))
+            })
             .unwrap_or_default();
         let output = key
             .and_then(|surface| self.window_index(surface))
@@ -327,6 +331,11 @@ impl State {
     }
 
     pub(crate) fn activate_app(&mut self, app_id: &str) {
+        self.bring_app_forward(app_id, true);
+    }
+
+    pub(crate) fn bring_app_forward(&mut self, app_id: &str, restore_minimized: bool) {
+        let restores = restore_minimized || self.kept_client(app_id).is_none();
         self.show_app(app_id);
         let (mut chosen, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.windows)
             .into_iter()
@@ -334,9 +343,7 @@ impl State {
                 window.size.is_some() && toplevel_names(window.toplevel.wl_surface()).1 == app_id
             });
         self.windows = rest;
-        let restored = chosen
-            .iter()
-            .all(|window| window.is_minimized())
+        let restored = (restores && chosen.iter().all(|window| window.is_minimized()))
             .then(|| chosen.iter().max_by_key(|window| window.minimized))
             .flatten()
             .map(|latest| latest.toplevel.wl_surface().clone());
@@ -582,6 +589,12 @@ impl Dispatch<BandeShellV1, ()> for State {
                 ending: WEnum::Value(ending),
             } => state.confirm_session_end(ending),
             bande_shell_v1::Request::QuitAllApps => state.quit_all_apps(resource.clone()),
+            bande_shell_v1::Request::ActForApp { surface, app_id } => {
+                state.act_for_app(surface, app_id);
+            }
+            bande_shell_v1::Request::PassKey { keysym, modifiers } => {
+                state.pass_key(resource.client(), keysym, modifiers);
+            }
             bande_shell_v1::Request::Pong { .. } => state.shell_pong(resource.clone()),
             bande_shell_v1::Request::Destroy => {
                 state.shell_resources.retain(|shell| shell != resource);

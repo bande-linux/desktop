@@ -1,13 +1,13 @@
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use jiff::Timestamp;
 use rustix::fs::statvfs;
 use serde_json::{Map, Value, json};
 
-use crate::facts;
+use crate::{counters, facts};
 
 const REPORTS: &str = "reports";
 const OUTBOX: &str = "outbox";
@@ -20,6 +20,8 @@ const OS_RELEASE: &str = "/etc/os-release";
 const KERNEL_RELEASE: &str = "/proc/sys/kernel/osrelease";
 pub const DESKTOP_PACKAGE: &str = "bande-desktop";
 const CHECKIN: &str = "checkin";
+const FORGET: &str = "forget";
+const ASKED: &[u8] = b"asked";
 
 const KEEP_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const KEEP_REPORTS: usize = 200;
@@ -29,6 +31,8 @@ const KEEP_FREE_BYTES: u64 = 512 * 1024 * 1024;
 const ANY_STATE_WINDOW: Duration = Duration::from_secs(60 * 60);
 const EVERY_ONE_KEPT: [&str; 3] = ["unexpected-restart", "kernel-panic", "manual"];
 const UNSENT_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+const PROGRAM_DAILY_REPORTS: usize = 25;
+const PROGRAM_LIMIT_COUNTER: &str = "program-limit";
 
 pub struct Attachment {
     pub name: String,
@@ -153,6 +157,20 @@ impl Spool {
         self.unqueue(CHECKIN)
     }
 
+    pub fn queue_forget(&self, request: &Value) -> io::Result<()> {
+        write_synced(&self.outbox().join(FORGET), &serde_json::to_vec(request)?)?;
+        sync_folder(&self.outbox())
+    }
+
+    pub fn forget_waiting(&self) -> Option<Map<String, Value>> {
+        let bytes = fs::read(self.outbox().join(FORGET)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    pub fn forgotten(&self) -> io::Result<()> {
+        self.unqueue(FORGET)
+    }
+
     pub fn install_id(&self) -> io::Result<String> {
         let path = self.root.join(INSTALL_ID);
         match fs::read_to_string(&path) {
@@ -169,7 +187,6 @@ impl Spool {
     fn fill_manifest(&self, manifest: &mut Map<String, Value>) -> io::Result<String> {
         let id = new_uuid()?;
         manifest.insert("id".to_owned(), json!(id));
-        manifest.insert("machine".to_owned(), json!(self.install_id()?));
         manifest
             .entry("time")
             .or_insert_with(|| json!(Timestamp::now().to_string()));
@@ -234,15 +251,33 @@ impl Spool {
             .get("kind")
             .and_then(Value::as_str)
             .is_none_or(|kind| !EVERY_ONE_KEPT.contains(&kind));
-        if let Some(existing) = self
-            .repeat_of(manifest.get("signature"))
-            .filter(|_| collapses)
-        {
+        let today = self.stored_today(manifest.get("program"));
+        let limited = collapses && today.len() >= PROGRAM_DAILY_REPORTS;
+        let repeat = if limited {
+            today
+                .into_iter()
+                .rev()
+                .find(|report| report.manifest.get("signature") == manifest.get("signature"))
+        } else {
+            self.repeat_of(manifest.get("signature"))
+                .filter(|_| collapses)
+        };
+        if let Some(existing) = repeat {
             self.count_repeat(&existing)?;
             if automatic && existing.status == Status::Sent {
                 self.queue(&existing.id)?;
             }
             return Ok(existing.id);
+        }
+        if limited {
+            counters::count(&self.root, PROGRAM_LIMIT_COUNTER);
+            return Err(io::Error::other(format!(
+                "{} made {PROGRAM_DAILY_REPORTS} reports today, so this one is only counted",
+                manifest
+                    .get("program")
+                    .and_then(Value::as_str)
+                    .unwrap_or("-")
+            )));
         }
         let id = self.fill_manifest(&mut manifest)?;
         let attachments = self.trim_to_quota(&mut manifest, attachments);
@@ -267,18 +302,33 @@ impl Spool {
     }
 
     pub fn queue(&self, id: &str) -> io::Result<()> {
+        if self.outbox().join(id).exists() {
+            return Ok(());
+        }
+        self.mark(id, b"")
+    }
+
+    pub fn queue_by_hand(&self, id: &str) -> io::Result<()> {
+        self.mark(id, ASKED)
+    }
+
+    fn mark(&self, id: &str, content: &[u8]) -> io::Result<()> {
         if !self.report_path(id)?.is_dir() {
             return Err(invalid(format!("no such report: {id}")));
         }
-        write_synced(&self.outbox().join(id), b"")?;
+        write_synced(&self.outbox().join(id), content)?;
         sync_folder(&self.outbox())
+    }
+
+    pub fn asked(&self, id: &str) -> bool {
+        is_plain_name(id) && fs::read(self.outbox().join(id)).is_ok_and(|content| content == ASKED)
     }
 
     pub fn waiting(&self) -> io::Result<Vec<String>> {
         let mut waiting: Vec<(SystemTime, String)> = Vec::new();
         for entry in fs::read_dir(self.outbox())?.flatten() {
             let name = entry.file_name();
-            if name == CHECKIN {
+            if name == CHECKIN || name == FORGET {
                 continue;
             }
             match name.to_str().filter(|name| is_plain_name(name)) {
@@ -339,6 +389,24 @@ impl Spool {
             .collect();
         all.sort_by_key(|report| report.stored_at);
         all
+    }
+
+    fn stored_today(&self, program: Option<&Value>) -> Vec<Stored> {
+        let midnight = Timestamp::now()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .start_of_day()
+            .map_or(UNIX_EPOCH, |start| {
+                UNIX_EPOCH
+                    + Duration::from_secs(start.timestamp().as_second().max(0).unsigned_abs())
+            });
+        self.all()
+            .into_iter()
+            .filter(|report| {
+                report.stored_at >= midnight
+                    && report.status != Status::Rejected
+                    && report.manifest.get("program") == program
+            })
+            .collect()
     }
 
     fn repeat_of(&self, signature: Option<&Value>) -> Option<Stored> {

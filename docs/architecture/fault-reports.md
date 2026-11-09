@@ -7,10 +7,12 @@
 `/var/lib/bande/reports`, root only (`0700`):
 
 - `reports/<id>/`: `manifest.json`, attachments and `state.json` (occurrences, sent or rejected). A report is written in `tmp/`, every file and folder fsynced, then renamed into place, so a power cut leaves a whole report or none.
-- `outbox/<id>`: an empty marker for a report waiting to be sent.
-- `machine`: a random install id. It says nothing about the computer, and a reinstall replaces it.
+- `outbox/<id>`: a marker for a report waiting to be sent; it holds `asked` when someone sent it by hand. `outbox/checkin` and `outbox/forget` (a token to delete from the server) wait the same way.
+- `identity` (`0600`): `{endpoint, machine, token, rotate_after, checkin_minute, policy}`, what the server handed out at enrollment and its last collection policy (see Protocol).
+- `sending.json`: what went out this UTC day (reports, bytes, exempt reports) and when the last upload run was.
+- `machine`: a random install id, sent only with a shared submit key (see Enrollment).
 
-Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and rejected reports go first, then the oldest. With under 512 MiB free on the disk a report keeps its manifest and drops its attachments, and names them in `attachments_dropped`. A repeat of a signature within an hour, or within a day while the first is unsent, only adds to `occurrences`; if the first was already sent, the manifest goes again without attachments so the server keeps count.
+Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and rejected reports go first, then the oldest. With under 512 MiB free on the disk a report keeps its manifest and drops its attachments, and names them in `attachments_dropped`. A repeat of a signature within an hour, or within a day while the first is unsent, only adds to `occurrences`; if the first was already sent, the manifest goes again without attachments so the server keeps count. A program makes at most 25 reports a UTC day (`manual`, `kernel-panic` and `unexpected-restart` aside); after that a repeat of any of its signatures that day only adds to `occurrences`, and a new signature is only counted, as `program-limit` in the counters.
 
 ## Sending
 
@@ -27,16 +29,31 @@ ca = /path/to/ca.pem
 
 `ca` is optional; without it the system's roots are used. The file never goes in a package or a public repo.
 
-A daily check-in rides on the same sender: at boot, at login, when `serve` starts and when sending is switched on, an `outbox/checkin` marker is added if a day is due, and the sender posts it with the reports (see Protocol). Settings ▸ Diagnostics shows its exact contents. It carries no content of any kind.
+A daily check-in rides on the same sender: at boot, at login, when `serve` starts, when sending is switched on and on the resource wake-up every 10 minutes, an `outbox/checkin` marker is added if a day is due and this machine's minute of the policy's `checkin_hour` (UTC) has passed, or two days are due; and the sender posts it with the reports (see Protocol). Settings ▸ Diagnostics shows its exact contents. It carries no content of any kind.
 
-`bande-reporter-send.path` starts `bande-reporter-send.service` while `outbox/` has anything in it, and the service exits when `outbox/` is empty, so nothing runs between faults. While reports wait it sleeps in `poll`. It wakes on a deadline, on a network change (rtnetlink) or when the settings folder changes.
+`bande-reporter-send.path` starts `bande-reporter-send.service` while `outbox/` has anything in it, and the service exits when `outbox/` is empty, so nothing runs between faults. While reports wait it sleeps in `poll`. It wakes on a deadline, on a network change (rtnetlink), when the settings folder or the outbox changes, and, only while a large report waits for mains power, on a `power_supply` uevent.
 
-`POST <endpoint>/v1/reports` with `Authorization: Bearer <key>`: `multipart/form-data` with `Content-Encoding: gzip` on the whole body, a part named `manifest` (`application/json`) first, then parts named `attachment`, each with a `filename`. The report's id makes a resend harmless.
+### Enrollment
+
+No key is built in. The first time something is to be sent, the sender enrolls: it asks `GET /v1/enroll` for a challenge, solves the proof of work and keeps the `{machine, token}` from `POST /v1/enroll` in `identity`. Reports and check-ins then carry `Authorization: Bearer <token>` and no `machine`: the server knows the computer only by the id it chose. The token is rotated (`POST /v1/rotate`) once `rotate_after` has passed or an answer says `"rotate": true`. `401 unknown_token` enrolls afresh; `401 revoked` stops sending until the settings change. Switching sending off removes `identity` and queues `outbox/forget`, which `DELETE /v1/me` erases from the server once it can be reached; switching it on again enrolls under a new id, so the two periods cannot be linked. A different `endpoint` forgets the old server the same way.
+
+While a server still takes a shared `key` from the settings file, it is used only when enrollment is not possible (an older server), with the install id as `machine`.
+
+### Throttling
+
+- **Runs:** at most one upload run per `min_interval` of the policy (15 minutes by default). A run sends the check-in and then the whole outbox over one connection. A report sent by hand goes at once, whatever the limits below.
+- **Budget:** each UTC day at most `daily_reports` reports and `daily_bytes` of compressed upload (50 and 20 MiB by default). `kernel-panic`, `failed-boot` and `manual` stay outside it but have 10 a day of their own. Over it, reports wait in the outbox for the next day, plus up to an hour at random; the spool's limits drop the oldest first.
+- **Conditions:** on a metered connection (NetworkManager's `Metered` yes or guess-yes) nothing goes until a network change. A report with over 1 MiB of attachments waits for mains power (`systemd-ac-power`).
+- **Policy:** kinds in `kinds_off` stay on this computer, `sample` sends one in `n` of a kind (chosen by report id) and keeps the rest here, and a signature in `counts_only` goes as its manifest without attachments.
+- **Retries:** every backoff and `Retry-After` wait is spread by ±20 %.
+
+`POST <endpoint>/v1/reports` with `Authorization: Bearer <token>`: `multipart/form-data` with `Content-Encoding: gzip` on the whole body, a part named `manifest` (`application/json`) first, then parts named `attachment`, each with a `filename`. The report's id makes a resend harmless.
 
 | Answer | What happens |
 |---|---|
-| 201, 200 | Marked sent; the local copy stays until the limits above remove it |
+| 201, 200 | Marked sent; the local copy stays until the limits above remove it. A `policy` in the answer replaces the stored one |
 | 400 | Marked rejected, never retried |
+| 401 `unknown_token` | Enrolls again and sends once more |
 | 401, 403 | Waits for the settings to change |
 | 413 | The largest attachment is left out and named in `attachments_dropped`, then sent again; with none left, rejected |
 | 429, 5xx | Waits for `Retry-After`, or else for the backoff |
@@ -106,7 +123,7 @@ The symbol may hold spaces; the last field is always the module and offset. Oute
 
 ### Check-in
 
-`POST <endpoint>/v1/checkins`, the same key, JSON: `{machine, os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers; `active_hours` (one decimal) the time that day a desktop session (logind class `user`, type `wayland`) was open and the computer awake; `sessions` the desktop sessions started and `boots` the boots that day, all from the journal. Only while sending is on: the first covers yesterday, later ones each day since the last, at most 7, and days with no use are skipped; switching sending off forgets where it was. 200 or 201: done; 404: the server does not know check-ins yet, tried again a day later; anything else follows the table above.
+`POST <endpoint>/v1/checkins`, the same token, JSON: `{os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers; `active_hours` (one decimal) the time that day a desktop session (logind class `user`, type `wayland`) was open and the computer awake; `sessions` the desktop sessions started and `boots` the boots that day, all from the journal. Only while sending is on: the first covers yesterday, later ones each day since the last, at most 7, and days with no use are skipped; switching sending off forgets where it was. 200 or 201: done; 404: the server does not know check-ins yet, tried again a day later; anything else follows the table above.
 
 ### Symbols
 

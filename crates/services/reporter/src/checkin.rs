@@ -11,6 +11,7 @@ use serde_json::{Map, Value, json};
 
 use crate::config::Config;
 use crate::facts;
+use crate::identity::Identity;
 use crate::spool::Spool;
 
 const STATE: &str = "checkin.json";
@@ -83,8 +84,27 @@ pub fn due_days(root: &Path) -> Vec<Date> {
         .collect()
 }
 
+fn in_window(root: &Path, due: usize) -> bool {
+    let Some(identity) = Identity::load(root) else {
+        return true;
+    };
+    let moment = Timestamp::now()
+        .to_zoned(TimeZone::UTC)
+        .date()
+        .at(
+            i8::try_from(identity.policy.checkin_hour).unwrap_or(0),
+            i8::try_from(identity.checkin_minute).unwrap_or(0),
+            0,
+            0,
+        )
+        .to_zoned(TimeZone::UTC)
+        .map(|moment| moment.timestamp());
+    due > 1 || moment.is_ok_and(|moment| Timestamp::now() >= moment)
+}
+
 pub fn queue_if_due(spool: &Spool, config: &Config) {
-    if !config.sends_automatically() || due_days(spool.root()).is_empty() {
+    let due = due_days(spool.root()).len();
+    if !config.sends_automatically() || due == 0 || !in_window(spool.root(), due) {
         return;
     }
     if let Err(error) = spool.queue_checkin() {
@@ -230,7 +250,7 @@ fn spans_of(
     spans
 }
 
-pub fn payload(spool: &Spool, day: Date) -> io::Result<Value> {
+pub fn payload(day: Date) -> io::Result<Value> {
     let start = day
         .to_zoned(TimeZone::UTC)
         .map_err(io::Error::other)?
@@ -312,7 +332,6 @@ pub fn payload(spool: &Spool, day: Date) -> io::Result<Value> {
         .filter(|boot| (start..end).contains(&boot.first))
         .count();
     Ok(json!({
-        "machine": spool.install_id()?,
         "os_version": crate::spool::os_version(),
         "desktop_version": facts::installed_version(crate::spool::DESKTOP_PACKAGE),
         "arch": std::env::consts::ARCH,

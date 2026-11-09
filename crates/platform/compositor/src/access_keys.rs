@@ -349,6 +349,9 @@ impl State {
 impl Compositor {
     pub fn key(&mut self, evdev_code: u32, pressed: bool, time: u32) {
         self.state.note_activity();
+        if self.state.swallows_wake_key(evdev_code, pressed) {
+            return;
+        }
         if evdev_code == KEY_POWER {
             self.state.power_key(pressed, time);
         }

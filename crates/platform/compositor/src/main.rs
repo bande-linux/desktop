@@ -926,6 +926,7 @@ where
         }
         match output.renew_failed_renderer() {
             Ok(true) => {
+                compositor.release_wake_keys();
                 schedulers.iter_mut().for_each(FrameScheduler::restart);
                 frame_wake = Some(now());
             }
@@ -946,6 +947,7 @@ where
         match recovery.step(stalled_for) {
             RecoveryStep::Wait => {}
             RecoveryStep::RestartDisplay => {
+                compositor.release_wake_keys();
                 tracing::error!("no frame reached the display for a while; restarting it");
                 bande_log::fault::report("display-failure", "no-frame-restart");
                 if let Err(error) = output.restart_display() {

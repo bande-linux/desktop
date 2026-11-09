@@ -1,8 +1,10 @@
+use std::ops::Range;
+
 use accesskit::{Action, ActionData, ActionRequest, Node, Role};
 use bande_l10n::tr;
 
 use super::control::paint_field;
-use super::{Context, Cursor, Event, Key, Size, Widget, WidgetId};
+use super::{Context, Cursor, Event, Key, Modifiers, Size, Widget, WidgetId};
 use bande_graphics::{
     ControlSize, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
@@ -25,9 +27,12 @@ pub struct SecureField {
     font_size: f32,
     scale: f32,
     secret: Zeroizing<String>,
+    anchor: usize,
+    caret: usize,
     on_submit: Box<dyn FnMut(&str)>,
     on_edit: Option<OnEdit>,
     bullets: Option<Paragraph>,
+    bullet_width: f32,
     placeholder_paragraph: Option<Paragraph>,
     go_button: bool,
     frame: Rect,
@@ -41,9 +46,12 @@ impl SecureField {
             font_size,
             scale: 1.0,
             secret: Zeroizing::default(),
+            anchor: 0,
+            caret: 0,
             on_submit: Box::new(on_submit),
             on_edit: None,
             bullets: None,
+            bullet_width: 0.0,
             placeholder_paragraph: None,
             go_button: false,
             frame: Rect::default(),
@@ -146,9 +154,145 @@ impl SecureField {
     fn text_origin(&self, paragraph: Option<&Paragraph>) -> Point {
         let height = paragraph.map_or(0.0, Paragraph::height);
         Point::new(
-            self.frame.x + PADDING,
+            self.frame.x + PADDING - self.scroll(),
             self.frame.y + ((self.frame.height - height) / 2.0).round(),
         )
+    }
+
+    fn length(&self) -> usize {
+        self.secret.chars().count()
+    }
+
+    fn advance(&self, index: usize) -> f32 {
+        self.bullet_width * index as f32
+    }
+
+    fn scroll(&self) -> f32 {
+        let right = self
+            .go_rect()
+            .map_or(self.frame.x + self.frame.width, |go| go.x);
+        let room = right - self.frame.x - 2.0 * PADDING - CARET_WIDTH;
+        (self.advance(self.caret) - room).max(0.0)
+    }
+
+    fn selection(&self) -> Range<usize> {
+        self.anchor.min(self.caret)..self.anchor.max(self.caret)
+    }
+
+    fn go(&mut self, to: usize, extend: bool) {
+        self.caret = to;
+        if !extend {
+            self.anchor = to;
+        }
+    }
+
+    fn select_all(&mut self) {
+        self.anchor = 0;
+        self.caret = self.length();
+    }
+
+    fn replace(&mut self, range: Range<usize>, text: &str) {
+        let byte = |index: usize| {
+            self.secret
+                .char_indices()
+                .nth(index)
+                .map_or(self.secret.len(), |(at, _)| at)
+        };
+        let (start, end) = (byte(range.start), byte(range.end));
+        let mut replaced = Zeroizing::new(String::with_capacity(
+            self.secret
+                .capacity()
+                .max(self.secret.len() - (end - start) + text.len()),
+        ));
+        replaced.push_str(&self.secret[..start]);
+        replaced.push_str(text);
+        replaced.push_str(&self.secret[end..]);
+        self.secret = replaced;
+        self.go(range.start + text.chars().count(), false);
+    }
+
+    fn insert(&mut self, text: &str) {
+        let typed: Zeroizing<String> = Zeroizing::new(
+            text.chars()
+                .filter(|character| !character.is_control())
+                .collect(),
+        );
+        if !typed.is_empty() {
+            self.replace(self.selection(), &typed);
+        }
+    }
+
+    fn delete(&mut self, forward: bool, to_the_edge: bool) -> bool {
+        let selection = self.selection();
+        let range = match (selection.is_empty(), forward, to_the_edge) {
+            (false, _, _) => selection,
+            (true, true, true) => self.caret..self.length(),
+            (true, true, false) => self.caret..(self.caret + 1).min(self.length()),
+            (true, false, true) => 0..self.caret,
+            (true, false, false) => self.caret.saturating_sub(1)..self.caret,
+        };
+        let deletes = !range.is_empty();
+        if deletes {
+            self.replace(range, "");
+        }
+        deletes
+    }
+
+    fn arrow(&mut self, right: bool, modifiers: Modifiers) {
+        let selection = self.selection();
+        let to = match (right, modifiers.control) {
+            (_, false) if !modifiers.shift && !selection.is_empty() => match right {
+                true => selection.end,
+                false => selection.start,
+            },
+            (true, true) => self.length(),
+            (false, true) => 0,
+            (true, false) => (self.caret + 1).min(self.length()),
+            (false, false) => self.caret.saturating_sub(1),
+        };
+        self.go(to, modifiers.shift);
+    }
+
+    fn index_at(&self, x: f32) -> usize {
+        if self.bullet_width <= 0.0 {
+            return 0;
+        }
+        let origin = self.text_origin(self.bullets.as_ref()).x;
+        (((x - origin) / self.bullet_width).round().max(0.0) as usize).min(self.length())
+    }
+
+    fn edited(&mut self) {
+        if let Some(on_edit) = &mut self.on_edit {
+            on_edit(&self.secret);
+        }
+    }
+
+    fn key(&mut self, cx: &mut Context, key: Key, modifiers: Modifiers) -> Option<bool> {
+        let typing = !modifiers.control && !modifiers.alt;
+        match key {
+            Key::Enter => (self.on_submit)(&self.secret),
+            Key::Character('a') if modifiers.control => self.select_all(),
+            Key::Character('c' | 'x') if modifiers.control => {}
+            Key::Character('v') if modifiers.control => cx.request_paste(),
+            Key::Left | Key::Right if !modifiers.alt => self.arrow(key == Key::Right, modifiers),
+            Key::Home | Key::End if !modifiers.alt => {
+                let to = if key == Key::End { self.length() } else { 0 };
+                self.go(to, modifiers.shift);
+            }
+            Key::Backspace | Key::Delete => {
+                return Some(self.delete(key == Key::Delete, modifiers.control));
+            }
+            Key::Character(character) if typing => {
+                self.insert(character.encode_utf8(&mut [0; 4]));
+                return Some(true);
+            }
+            Key::Space if typing => {
+                self.insert(" ");
+                return Some(true);
+            }
+            _ => return None,
+        }
+        Some(false)
     }
 }
 
@@ -159,13 +303,15 @@ impl Widget for SecureField {
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         self.scale = cx.text.scale();
-        let bullets: String = std::iter::repeat_n(BULLET, self.secret.chars().count()).collect();
-        self.bullets = Some(cx.text.paragraph(
-            &bullets,
+        let count = self.length();
+        let bullets = cx.text.paragraph(
+            &std::iter::repeat_n(BULLET, count.max(1)).collect::<String>(),
             TextStyle::new(self.font_size, cx.palette.ink),
             None,
             TextAlign::Start,
-        ));
+        );
+        self.bullet_width = bullets.width() / count.max(1) as f32;
+        self.bullets = (count > 0).then_some(bullets);
         self.placeholder_paragraph = Some(cx.text.paragraph(
             &self.placeholder,
             TextStyle::new(self.font_size, cx.palette.ink3),
@@ -203,15 +349,30 @@ impl Widget for SecureField {
                 paragraph: paragraph.clone(),
             });
         }
-        if focused {
-            let advance = if self.secret.is_empty() {
-                0.0
-            } else {
-                self.bullets.as_ref().map_or(0.0, Paragraph::width)
-            };
-            let height = shown.map_or(self.font_size, Paragraph::height);
+        let height = shown.map_or(self.font_size, Paragraph::height);
+        let selection = self.selection();
+        if focused && !selection.is_empty() {
+            let start = origin.x + self.advance(selection.start);
+            content.insert(
+                0,
+                Item::Fill {
+                    shape: Shape::rect(Rect::new(
+                        start,
+                        origin.y,
+                        origin.x + self.advance(selection.end) - start,
+                        height,
+                    )),
+                    paint: cx.palette.accent_soft.into(),
+                },
+            );
+        } else if focused {
             content.push(Item::Fill {
-                shape: Shape::rect(Rect::new(origin.x + advance, origin.y, CARET_WIDTH, height)),
+                shape: Shape::rect(Rect::new(
+                    origin.x + self.advance(self.caret),
+                    origin.y,
+                    CARET_WIDTH,
+                    height,
+                )),
                 paint: cx.palette.accent_text.into(),
             });
         }
@@ -236,45 +397,43 @@ impl Widget for SecureField {
         match (&request.action, &request.data) {
             (Action::SetValue, Some(ActionData::Value(value))) => {
                 self.secret = Zeroizing::new(value.to_string());
+                self.go(self.length(), false);
                 true
             }
             _ => false,
         }
     }
 
-    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
-        let Event::Key { key, modifiers } = event else {
-            let Event::PointerDown(pointer) = event else {
-                return false;
-            };
-            if !pointer.is_primary() {
-                return false;
+    fn handle(&mut self, cx: &mut Context, event: &Event) -> bool {
+        let edited = match event {
+            Event::Key { key, modifiers } if !modifiers.logo => {
+                match self.key(cx, *key, *modifiers) {
+                    Some(edited) => edited,
+                    None => return false,
+                }
             }
-            if self
-                .go_rect()
-                .is_some_and(|go| go.contains(pointer.position))
-            {
-                (self.on_submit)(&self.secret);
+            Event::Commit(text) => {
+                self.insert(text);
+                true
             }
-            return true;
-        };
-        if modifiers.logo {
-            return false;
-        }
-        match key {
-            Key::Enter => (self.on_submit)(&self.secret),
-            Key::Backspace if modifiers.control => {
-                self.secret = Zeroizing::default();
+            Event::PointerDown(pointer) if pointer.is_primary() => {
+                if self
+                    .go_rect()
+                    .is_some_and(|go| go.contains(pointer.position))
+                {
+                    (self.on_submit)(&self.secret);
+                } else if pointer.count >= 2 {
+                    self.select_all();
+                } else {
+                    let to = self.index_at(pointer.position.x);
+                    self.go(to, pointer.modifiers.shift);
+                }
+                false
             }
-            Key::Backspace => remove_last(&mut self.secret),
-            Key::Character(character) if !modifiers.control && !modifiers.alt => {
-                push(&mut self.secret, *character)
-            }
-            Key::Space if !modifiers.control && !modifiers.alt => push(&mut self.secret, ' '),
             _ => return false,
-        }
-        if let Some(on_edit) = &mut self.on_edit {
-            on_edit(&self.secret);
+        };
+        if edited {
+            self.edited();
         }
         true
     }
@@ -286,22 +445,4 @@ impl Widget for SecureField {
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
     }
-}
-
-fn remove_last(secret: &mut Zeroizing<String>) {
-    let mut characters = secret.chars();
-    characters.next_back();
-    let mut kept = Zeroizing::new(String::with_capacity(secret.capacity()));
-    kept.push_str(characters.as_str());
-    *secret = kept;
-}
-
-fn push(secret: &mut Zeroizing<String>, character: char) {
-    let needed = secret.len() + character.len_utf8();
-    if needed > secret.capacity() {
-        let mut grown = Zeroizing::new(String::with_capacity(needed.max(secret.capacity() * 2)));
-        grown.push_str(secret);
-        *secret = grown;
-    }
-    secret.push(character);
 }

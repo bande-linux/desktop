@@ -76,6 +76,7 @@ impl Compositor {
     pub fn woke(&mut self) {
         self.state.night_light.recheck();
         self.state.note_activity();
+        self.state.light_up();
         self.state.needs_redraw = true;
     }
 

@@ -977,6 +977,7 @@ dependencies = [
  "bande-log",
  "bande-spring",
  "bande-status",
+ "bande-test-wayland",
  "bande-toolkit",
  "bande-wallpaper",
  "bande-xdg",

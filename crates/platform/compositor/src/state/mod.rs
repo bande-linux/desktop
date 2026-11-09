@@ -534,6 +534,7 @@ impl Compositor {
             callback.send(millis);
         }
         self.state.confirm_lock(screen);
+        self.state.lit_up();
         self.display.flush_clients()
     }
 

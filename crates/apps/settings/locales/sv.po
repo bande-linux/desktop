@@ -411,23 +411,47 @@ msgstr "På den här datorn"
 msgid "Send reports automatically"
 msgstr "Skicka rapporter automatiskt"
 
-msgid "New reports are sent to the configured server. Names, addresses and file names are removed first."
-msgstr "Nya rapporter skickas till den inställda servern. Namn, adresser och filnamn tas bort först."
+msgid "New reports are sent to Bande's report server. Names, addresses and file names are removed first."
+msgstr "Nya rapporter skickas till Bandes rapportserver. Namn, adresser och filnamn tas bort först."
 
 msgid "Reports stay on this computer unless you send one."
 msgstr "Rapporterna stannar på den här datorn om du inte skickar någon."
 
+msgid "Reports stay on this computer. No server is configured."
+msgstr "Rapporterna stannar på den här datorn. Ingen server är inställd."
+
 msgid "Once a day it also sends how long the computer was used, and nothing else: {checkin}"
 msgstr "En gång om dagen skickas också hur länge datorn användes, och inget annat: {checkin}"
 
-msgid "Reports stay on this computer. No server is configured."
-msgstr "Rapporterna stannar på den här datorn. Ingen server är inställd."
+msgid "What the server keeps, and for how long: {address}"
+msgstr "Vad servern sparar, och hur länge: {address}"
 
 msgid "Nothing has gone wrong"
 msgstr "Inget har gått fel"
 
 msgid "{program}: {kind}"
 msgstr "{program}: {kind}"
+
+msgid "Delete the reports sent from this computer?"
+msgstr "Radera rapporterna som skickats från den här datorn?"
+
+msgid "The server erases them and stops knowing this computer. Reports sent later start afresh."
+msgstr "Servern raderar dem och glömmer den här datorn. Rapporter som skickas senare börjar om från början."
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "The reports sent from this computer are deleted from the server as soon as it can be reached."
+msgstr "Rapporterna som skickats från den här datorn raderas från servern så snart den kan nås."
+
+msgid "Delete…"
+msgstr "Radera…"
+
+msgid "Delete reports sent from this computer"
+msgstr "Radera rapporter som skickats från den här datorn"
+
+msgid "Erases everything the server keeps about this computer"
+msgstr "Raderar allt servern sparar om den här datorn"
 
 msgid "What happened? (optional)"
 msgstr "Vad hände? (valfritt)"
@@ -446,9 +470,6 @@ msgstr "Skicka nu"
 
 msgid "Save to File"
 msgstr "Spara till fil"
-
-msgid "Delete"
-msgstr "Radera"
 
 msgid "Report {id}"
 msgstr "Rapport {id}"
@@ -1181,9 +1202,6 @@ msgstr "Dölj"
 
 msgid "Show"
 msgstr "Visa"
-
-msgid "Delete…"
-msgstr "Radera…"
 
 msgid "Other apps"
 msgstr "Andra appar"

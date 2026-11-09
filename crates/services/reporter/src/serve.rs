@@ -21,6 +21,7 @@ use crate::diagnose::diagnose;
 use crate::facts;
 use crate::fault::{Fault, attach_device_dumps, capture_hang};
 use crate::hang::{HangEnd, HangEnds};
+use crate::identity::Identity;
 use crate::send;
 use crate::spool::{MANIFEST, STATE, Spool, Status};
 
@@ -399,10 +400,14 @@ impl Service {
                 checkin::payload(day).ok()
             })
             .flatten();
+        let spool = Spool::open(&self.spool_root).ok();
         json!({
             "sending": config.sends_automatically(),
             "configured": config.has_server(),
             "checkin": checkin,
+            "enrolled": Identity::load(&self.spool_root).is_some_and(|identity| identity.credentials.is_some()),
+            "forgetting": spool.is_some_and(|spool| spool.forget_waiting().is_some()),
+            "privacy": config.endpoint.as_ref().map(|endpoint| format!("{endpoint}/privacy")),
         })
     }
 
@@ -452,20 +457,19 @@ impl Service {
                 spool.queue_by_hand(id)?;
                 Ok(json!({}))
             }
+            "forget-sent" => {
+                if !is_administrator(peer) {
+                    return Err("only an administrator can change this".into());
+                }
+                send::forget_here(&Spool::open(&self.spool_root)?)?;
+                Ok(self.status())
+            }
             "set-sending" => {
                 if !is_administrator(peer) {
                     return Err("only an administrator can change this".into());
                 }
                 let on = request.get("on").and_then(Value::as_bool).unwrap_or(false);
-                config::set_sending(&self.config_path, on)?;
-                let spool = Spool::open(&self.spool_root)?;
-                if on {
-                    checkin::queue_if_due(&spool, &self.config());
-                } else {
-                    spool.clear_outbox()?;
-                    checkin::forget(&self.spool_root)?;
-                    send::forget_here(&spool)?;
-                }
+                set_sending(&self.spool_root, &self.config_path, on)?;
                 Ok(self.status())
             }
             other => Err(format!("unknown request: {other}").into()),
@@ -499,6 +503,19 @@ impl Service {
         };
         let mut stream = stream;
         writeln!(stream, "{answer}")
+    }
+}
+
+pub fn set_sending(spool_root: &Path, config_path: &Path, on: bool) -> std::io::Result<()> {
+    config::set_sending(config_path, on)?;
+    let spool = Spool::open(spool_root)?;
+    if on {
+        checkin::queue_if_due(&spool, &Config::load(config_path).unwrap_or_default());
+        Ok(())
+    } else {
+        spool.clear_outbox()?;
+        checkin::forget(spool_root)?;
+        send::forget_here(&spool)
     }
 }
 

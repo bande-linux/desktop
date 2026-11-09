@@ -1233,8 +1233,8 @@ msgstr "Skicka rapport"
 msgid "Reports"
 msgstr "Rapporter"
 
-msgid "crash, crashes, freeze, hang, quit unexpectedly, kernel panic, core dump, log, diagnostics, report, send, bug"
-msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, kernel panic, core dump, logg, diagnostik, rapport, skicka, fel"
+msgid "crash, crashes, freeze, hang, quit unexpectedly, kernel panic, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"
+msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, kernel panic, core dump, logg, diagnostik, rapport, skicka, fel, analys, integritet, radera"
 
 msgid "disk space, free, used, available, full, capacity, trash, empty trash, apps, documents"
 msgstr "diskutrymme, ledigt, använt, tillgängligt, fullt, kapacitet, papperskorg, töm papperskorgen, appar, dokument"

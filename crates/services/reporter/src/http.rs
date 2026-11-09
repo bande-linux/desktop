@@ -69,6 +69,14 @@ fn retry_after(value: &str) -> Option<Duration> {
     Some(Duration::from_secs(seconds.min(LONGEST_RETRY_AFTER)))
 }
 
+fn is_untrusted(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::NotFound
+        || error
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+            .is_some_and(|inner| matches!(inner, rustls::Error::InvalidCertificate(_)))
+}
+
 fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.to_owned())
 }
@@ -170,18 +178,26 @@ impl Session {
         }
     }
 
-    fn connect(&self) -> io::Result<BufReader<Stream>> {
+    fn open(&self, ca: Option<&Path>) -> io::Result<BufReader<Stream>> {
         let timeouts = Timeouts {
             connect: CONNECT_TIMEOUT,
             transfer: TRANSFER_TIMEOUT,
         };
-        let stream = bande_https::connect(
-            &self.target.host,
-            self.target.port,
-            self.ca.as_deref(),
-            timeouts,
-        )?;
+        let mut stream = bande_https::connect(&self.target.host, self.target.port, ca, timeouts)?;
+        stream.conn.complete_io(&mut stream.sock)?;
         Ok(BufReader::new(stream))
+    }
+
+    fn connect(&self) -> io::Result<BufReader<Stream>> {
+        match self.open(self.ca.as_deref()) {
+            Err(error) if self.ca.is_some() && is_untrusted(&error) => {
+                tracing::info!(
+                    "the report server's certificate is not from the pinned roots, so the system's roots decide: {error}"
+                );
+                self.open(None)
+            }
+            opened => opened,
+        }
     }
 
     fn exchange(

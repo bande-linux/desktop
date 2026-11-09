@@ -599,7 +599,8 @@ Bande uses `greetd` for the privileged part of login and keeps its own UI unpriv
 While `/var/lib/bande/setup-pending` exists, `bande-compositor --greeter` runs `bande-setup` in place
 of `bande-greeter`, in the same role and as the same unprivileged user. It asks for language,
 keyboard, account and password (default: the same password encrypts the disk, then the recovery
-key is shown once), Wi-Fi, appearance and automatic updates, in that order so that no secret reaches
+key is shown once), Wi-Fi, appearance, automatic updates and whether to share Bande Analytics
+(fault reports, off unless switched on), in that order so that no secret reaches
 the disk before encryption has started. The steps needing root go through `pkexec` to
 `/usr/libexec/bande-first-run` in the image, which a polkit rule allows `_greetd` only while the
 file exists. The last step removes it and signs in over greetd's IPC, so finishing goes straight to

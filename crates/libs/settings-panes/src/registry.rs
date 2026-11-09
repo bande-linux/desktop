@@ -1965,7 +1965,7 @@ fn system_panes() -> Vec<Pane> {
             PaneId::Diagnostics,
             vec![section(
                 None,
-                vec![list(SettingId::DiagnosticsList, tr!("Reports"), tr!("crash, crashes, freeze, hang, quit unexpectedly, kernel panic, core dump, log, diagnostics, report, send, bug"),
+                vec![list(SettingId::DiagnosticsList, tr!("Reports"), tr!("crash, crashes, freeze, hang, quit unexpectedly, kernel panic, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"),
                     List::Diagnostics,
                 )],
             )],

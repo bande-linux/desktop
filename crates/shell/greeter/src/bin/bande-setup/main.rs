@@ -32,6 +32,7 @@ const CARD_HEIGHT: f32 = 560.0;
 const LIST_HEIGHT: f32 = 300.0;
 const FIELD_FONT: f32 = 13.0;
 const SCAN_TIME: Duration = Duration::from_secs(6);
+const REPORT_SETTINGS: &str = "/usr/share/bande/reports.conf";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -42,6 +43,7 @@ enum Page {
     Wifi,
     Look,
     Privacy,
+    Analytics,
     Finishing,
 }
 
@@ -56,6 +58,7 @@ enum Intent {
     EncryptDisk(bool),
     Look(usize),
     AutomaticUpdates(bool),
+    ShareAnalytics(bool),
 }
 
 enum Reply {
@@ -124,6 +127,7 @@ struct Answers {
     network: Option<String>,
     look: usize,
     automatic_updates: bool,
+    share_analytics: bool,
 }
 
 struct Assistant {
@@ -301,6 +305,29 @@ impl Assistant {
                     ),
                 ]
             }
+            Page::Analytics => {
+                let intents = Rc::clone(&self.intents);
+                let mut rows = vec![
+                    boxed(Label::new(&tr!("When something goes wrong, such as a program closing unexpectedly or the computer freezing, Bande can send a report so it gets fixed. Once a day it can also send how long the computer was used."))),
+                    boxed(Label::new(&tr!("A report says which program failed and where, its version, the kind of computer and recent system messages. Names, addresses, file names and anything you typed are removed first. Your files are never sent, and nothing in a report says who you are.")).secondary()),
+                    boxed(Label::new(&tr!("You can read every report, turn this off or delete what was sent at any time in Settings, under Privacy & Security, Diagnostics.")).secondary()),
+                ];
+                if let Some(privacy) = privacy_address() {
+                    rows.push(boxed(
+                        Label::new(&tr!(
+                            "What the server keeps, and for how long: {address}",
+                            address = privacy
+                        ))
+                        .secondary(),
+                    ));
+                }
+                rows.push(switch(
+                    &tr!("Share Bande Analytics"),
+                    self.answers.share_analytics,
+                    move |on| intents.borrow_mut().push(Intent::ShareAnalytics(on)),
+                ));
+                rows
+            }
             Page::Finishing => vec![boxed(Label::new(&tr!("Setting up your desktop.")).secondary())],
         }
     }
@@ -314,6 +341,7 @@ impl Assistant {
             Page::Wifi => text!("Wi-Fi"),
             Page::Look => text!("Appearance"),
             Page::Privacy => text!("Privacy"),
+            Page::Analytics => text!("Bande Analytics"),
             Page::Finishing => text!("Getting Ready"),
         };
         let mut column: Vec<Box<dyn Widget>> = vec![boxed(Label::heading(&id.tr()))];
@@ -328,7 +356,7 @@ impl Assistant {
                 buttons.push(boxed(Button::new(&tr!("Back"), self.intent(Intent::Back))));
             }
             let forward = match self.page {
-                Page::Privacy => text!("Finish"),
+                Page::Analytics => text!("Finish"),
                 Page::Wifi if self.answers.network.is_none() => text!("Skip"),
                 _ => text!("Continue"),
             };
@@ -493,9 +521,11 @@ impl Assistant {
         let password = self.answers.password.clone();
         let look = LOOKS[self.answers.look].1;
         let updates = self.answers.automatic_updates;
+        let analytics = self.answers.share_analytics;
         self.work(move || {
             let updates = if updates { "on" } else { "off" };
-            if let Err(error) = helper(&["finish", &login, look, updates], None) {
+            let analytics = if analytics { "on" } else { "off" };
+            if let Err(error) = helper(&["finish", &login, look, updates, analytics], None) {
                 return Reply::Failed(error);
             }
             match sign_in(&login, password) {
@@ -524,7 +554,8 @@ impl Assistant {
             Page::RecoveryKey => self.show_wifi(),
             Page::Wifi => self.page = Page::Look,
             Page::Look => self.page = Page::Privacy,
-            Page::Privacy => self.finish(),
+            Page::Privacy => self.page = Page::Analytics,
+            Page::Analytics => self.finish(),
             Page::Finishing => {}
         }
     }
@@ -536,6 +567,7 @@ impl Assistant {
             Page::Account => Page::Keyboard,
             Page::Look | Page::Wifi => Page::Account,
             Page::Privacy => Page::Look,
+            Page::Analytics => Page::Privacy,
             page => page,
         };
     }
@@ -587,6 +619,7 @@ impl Assistant {
                     changed = true;
                 }
                 Intent::AutomaticUpdates(on) => self.answers.automatic_updates = on,
+                Intent::ShareAnalytics(on) => self.answers.share_analytics = on,
                 _ => {}
             }
             if self.page != page || self.working {
@@ -617,7 +650,7 @@ impl Assistant {
                     "That step did not work. Try again, or restart this computer."
                 ));
                 if self.page == Page::Finishing {
-                    self.page = Page::Privacy;
+                    self.page = Page::Analytics;
                 }
             }
             Reply::Networks(networks) => {
@@ -735,6 +768,15 @@ impl App for Assistant {
     }
 }
 
+fn privacy_address() -> Option<String> {
+    std::fs::read_to_string(REPORT_SETTINGS)
+        .ok()?
+        .lines()
+        .filter_map(|line| line.split_once('='))
+        .find(|(name, _)| name.trim() == "endpoint")
+        .map(|(_, endpoint)| format!("{}/privacy", endpoint.trim().trim_end_matches('/')))
+}
+
 fn run_assistant() -> Result<(), Box<dyn std::error::Error>> {
     let mut window = Window::open(
         Role::Layer(LayerOptions {
@@ -775,6 +817,7 @@ fn run_assistant() -> Result<(), Box<dyn std::error::Error>> {
             network: None,
             look: 2,
             automatic_updates: true,
+            share_analytics: false,
         },
         locales: read_supported(),
         layouts: Layouts::load(),

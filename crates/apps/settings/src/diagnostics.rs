@@ -9,8 +9,9 @@ use bande_l10n::{text, tr};
 
 use crate::failure::pane_failed;
 use crate::follow::{Update, Updates, spawn};
+use crate::forget::Forget;
 use crate::pages::{boxed, muted_row};
-use crate::view::{Detail, Intent, SettingsView, intent};
+use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Card, Header, Row, Text, Tone};
 use bande_settings_panes::PaneId;
 use bande_toolkit::ui::{Axis, Button, Stack, TextField, TextView, Toggle, Widget};
@@ -27,6 +28,7 @@ const SEND_CHECKS: [Duration; 3] = [
 const REPORT_FONT_SIZE: f32 = 12.0;
 const REPORT_SYMBOL: &str = "dialog-warning-symbolic";
 const HEADER_SYMBOL: f32 = 32.0;
+pub(crate) const SENT_REPORTS: &str = "sent-reports";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Report {
@@ -43,6 +45,9 @@ pub struct Diagnostics {
     pub reports: Vec<Report>,
     pub sending: bool,
     pub configured: bool,
+    pub enrolled: bool,
+    pub forgetting: bool,
+    pub privacy: Option<String>,
     pub checkin: Option<String>,
     pub open: Option<(String, String)>,
     pub description: String,
@@ -56,6 +61,7 @@ pub enum DiagnosticsCommand {
     Delete(String),
     Send(String),
     SetSending(bool),
+    ForgetSent,
     Create(String),
     Save(String, String),
 }
@@ -116,6 +122,12 @@ fn load() -> io::Result<Diagnostics> {
         reports,
         sending: flag("sending"),
         configured: flag("configured"),
+        enrolled: flag("enrolled"),
+        forgetting: flag("forgetting"),
+        privacy: status
+            .get("privacy")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         checkin: status
             .get("checkin")
             .and_then(Value::as_object)
@@ -158,6 +170,18 @@ fn report_text(id: &str) -> io::Result<String> {
     Ok(text)
 }
 
+fn follow_sending(asked: &io::Result<()>, updates: &Updates) {
+    if asked.is_err() {
+        return;
+    }
+    for wait in SEND_CHECKS {
+        if let Ok(diagnostics) = load() {
+            updates.send(Update::Diagnostics(diagnostics));
+        }
+        std::thread::sleep(wait);
+    }
+}
+
 pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
     let (sender, receiver) = mpsc::channel();
     spawn("diagnostics", move || {
@@ -181,14 +205,12 @@ pub fn follow_diagnostics(updates: Updates) -> Sender<DiagnosticsCommand> {
                 DiagnosticsCommand::Delete(id) => ask(&json!({"op": "delete", "id": id})).map(drop),
                 DiagnosticsCommand::Send(id) => {
                     let asked = ask(&json!({"op": "send", "id": id})).map(drop);
-                    if asked.is_ok() {
-                        for wait in SEND_CHECKS {
-                            if let Ok(diagnostics) = load() {
-                                updates.send(Update::Diagnostics(diagnostics));
-                            }
-                            std::thread::sleep(wait);
-                        }
-                    }
+                    follow_sending(&asked, &updates);
+                    asked
+                }
+                DiagnosticsCommand::ForgetSent => {
+                    let asked = ask(&json!({"op": "forget-sent"})).map(drop);
+                    follow_sending(&asked, &updates);
                     asked
                 }
                 DiagnosticsCommand::SetSending(on) => {
@@ -280,7 +302,7 @@ impl SettingsView {
         );
         rows.push(boxed(toggle));
         rows.push(muted_row(&if self.diagnostics.sending {
-            tr!("New reports are sent to the configured server. Names, addresses and file names are removed first.")
+            tr!("New reports are sent to Bande's report server. Names, addresses and file names are removed first.")
         } else if configured {
             tr!("Reports stay on this computer unless you send one.")
         } else {
@@ -292,6 +314,13 @@ impl SettingsView {
                 checkin = checkin
             )));
         }
+        if let Some(privacy) = self.diagnostics.privacy.clone() {
+            rows.push(muted_row(&tr!(
+                "What the server keeps, and for how long: {address}",
+                address = privacy
+            )));
+        }
+        rows.extend(self.sent_reports_row());
         if self.diagnostics.reports.is_empty() {
             rows.push(muted_row(&tr!("Nothing has gone wrong")));
         }
@@ -313,6 +342,46 @@ impl SettingsView {
             rows.push(self.item_row(format!("report:{}", report.id), row));
         }
         rows
+    }
+
+    fn sent_reports_row(&mut self) -> Option<Box<dyn Widget>> {
+        if self.forgetting == Some(Forget::SentReports) {
+            return Some(self.confirm_row(
+                &tr!("Delete the reports sent from this computer?"),
+                &tr!("The server erases them and stops knowing this computer. Reports sent later start afresh."),
+                &tr!("Delete"),
+            ));
+        }
+        if self.diagnostics.forgetting {
+            return Some(muted_row(&tr!(
+                "The reports sent from this computer are deleted from the server as soon as it can be reached."
+            )));
+        }
+        if !self.diagnostics.enrolled {
+            return None;
+        }
+        let mut ask = intent(&self.intents, |()| {
+            Intent::AskForget(Some(Forget::SentReports))
+        });
+        let button = Button::new(&tr!("Delete…"), move || ask(()));
+        self.anchors
+            .push((Anchor::Item(SENT_REPORTS.to_owned()), button.id()));
+        Some(boxed(
+            Row::new(
+                Text::new(
+                    &tr!("Delete reports sent from this computer"),
+                    Tone::Primary,
+                ),
+                Some(boxed(button)),
+            )
+            .detail(
+                Text::new(
+                    &tr!("Erases everything the server keeps about this computer"),
+                    Tone::Muted,
+                )
+                .caption(),
+            ),
+        ))
     }
 
     pub(crate) fn send_report_rows(&mut self) -> Vec<Box<dyn Widget>> {

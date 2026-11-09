@@ -52,6 +52,21 @@ msgstr "Dina filer, ditt konto och dina inställningar stannar på den här dato
 msgid "Install updates automatically"
 msgstr "Installera uppdateringar automatiskt"
 
+msgid "When something goes wrong, such as a program closing unexpectedly or the computer freezing, Bande can send a report so it gets fixed. Once a day it can also send how long the computer was used."
+msgstr "När något går fel, till exempel när ett program stängs oväntat eller datorn fryser, kan Bande skicka en rapport så att felet blir åtgärdat. En gång om dagen kan den också skicka hur länge datorn användes."
+
+msgid "A report says which program failed and where, its version, the kind of computer and recent system messages. Names, addresses, file names and anything you typed are removed first. Your files are never sent, and nothing in a report says who you are."
+msgstr "En rapport berättar vilket program som fick fel och var, dess version, vilken sorts dator det är och de senaste systemmeddelandena. Namn, adresser, filnamn och allt du har skrivit tas bort först. Dina filer skickas aldrig, och inget i en rapport säger vem du är."
+
+msgid "You can read every report, turn this off or delete what was sent at any time in Settings, under Privacy & Security, Diagnostics."
+msgstr "Du kan när som helst läsa varje rapport, stänga av detta eller radera det som skickats i Inställningar, under Integritet och säkerhet, Diagnostik."
+
+msgid "What the server keeps, and for how long: {address}"
+msgstr "Vad servern sparar, och hur länge: {address}"
+
+msgid "Share Bande Analytics"
+msgstr "Dela Bande-analys"
+
 msgid "Setting up your desktop."
 msgstr "Ställer in ditt skrivbord."
 
@@ -72,6 +87,9 @@ msgstr "Wi-Fi"
 
 msgid "Privacy"
 msgstr "Integritet"
+
+msgid "Bande Analytics"
+msgstr "Bande-analys"
 
 msgid "Getting Ready"
 msgstr "Gör i ordning"

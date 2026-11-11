@@ -1,6 +1,6 @@
 #!/bin/bash
 # local-build.sh <debian version> <dir> [step...]: the build on any Debian machine, without root or
-# containers: a Debian forky chroot made with mmdebstrap's unshare mode. <dir> must be reachable
+# containers: a Debian chroot of $SUITE (default forky) made with mmdebstrap's unshare mode. <dir> must be reachable
 # by other users (/var/tmp/...). Steps, all but clean by default:
 #   chroot   make <dir>/chroot (once)
 #   fetch    Debian's source into <dir>/work (emptied first)
@@ -12,6 +12,12 @@ debver=$1 dir=$(realpath -m "$2"); shift 2
 repo=$(dirname "$(dirname "$(realpath "$0")")")
 version=${BROWSER_VERSION:-$("$repo/scripts/version.sh" "$debver")}
 steps=("$@"); [ ${#steps[@]} -gt 0 ] || steps=(chroot fetch prepare compile)
+# The package version ends in the chroot's Debian release suffix (debian-release.sh).
+package_version() {
+    [ -n "${BROWSER_VERSION:-}" ] && { echo "$version"; return; }
+    echo "$version$(OS_RELEASE=$dir/chroot/etc/os-release DISTRO_INFO_CSV=$dir/chroot/usr/share/distro-info/debian.csv \
+        "$repo/scripts/debian-release.sh")"
+}
 
 as_root() { unshare --map-auto --map-root-user --mount --pid --fork --kill-child "$@"; }
 in_chroot() {
@@ -34,16 +40,16 @@ for step in "${steps[@]}"; do
         [ -d "$dir/chroot/etc" ] && continue
         mkdir -p "$dir"
         chmod 755 "$dir"
-        mmdebstrap --mode=unshare --variant=buildd --include=ca-certificates forky "$dir/chroot"
+        mmdebstrap --mode=unshare --variant=buildd --include=ca-certificates,distro-info-data "${SUITE:-forky}" "$dir/chroot"
         ;;
     fetch)
         as_root rm -rf "$dir/work"
         in_chroot /repo/scripts/build.sh fetch "$debver" /work
         ;;
-    prepare) in_chroot sh -c '/repo/scripts/prepare.sh /work/firefox-esr-*/ "$0"' "$version" ;;
+    prepare) in_chroot sh -c '/repo/scripts/prepare.sh /work/firefox-esr-*/ "$0"' "$(package_version)" ;;
     compile)
         as_root rm -rf "$dir/out"
-        in_chroot /repo/scripts/build.sh compile "$version" /work /out
+        in_chroot /repo/scripts/build.sh compile "$(package_version)" /work /out
         ;;
     clean) as_root rm -rf "$dir" ;;
     *) echo "local-build: unknown step $step" >&2; exit 2 ;;

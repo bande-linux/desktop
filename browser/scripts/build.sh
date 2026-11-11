@@ -1,5 +1,5 @@
 #!/bin/bash
-# build.sh: run as root in debian:forky, sharing <work dir> between steps.
+# build.sh: run as root in debian:<suite>, the Debian release the package is for, sharing <work dir> between steps.
 #   build.sh fetch <debian version> <work dir>    Debian's firefox-esr source through apt, checked
 #                                                 against the signed Release
 #   (then scripts/prepare.sh <work dir>/firefox-esr-* <version>)
@@ -16,7 +16,8 @@ fetch)
     for key in /usr/share/keyrings/debian-archive-keyring.pgp /usr/share/keyrings/debian-archive-keyring.gpg; do
         [ -n "$keyring" ] || [ ! -f "$key" ] || keyring=$key
     done
-    printf 'Types: deb-src\nURIs: http://deb.debian.org/debian\nSuites: forky unstable\nComponents: main\nSigned-By: %s\n\nTypes: deb-src\nURIs: http://security.debian.org/debian-security\nSuites: forky-security\nComponents: main\nSigned-By: %s\n' "$keyring" "$keyring" \
+    suite=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release | tr -d '"')
+    printf 'Types: deb-src\nURIs: http://deb.debian.org/debian\nSuites: %s unstable\nComponents: main\nSigned-By: %s\n\nTypes: deb-src\nURIs: http://security.debian.org/debian-security\nSuites: %s-security\nComponents: main\nSigned-By: %s\n' "$suite" "$keyring" "$suite" "$keyring" \
         > /etc/apt/sources.list.d/debian-src.sources
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends devscripts quilt python3 debhelper dpkg-dev \

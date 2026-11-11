@@ -17,6 +17,7 @@ fi
 
 echo "Building ${#packages[@]} packages $version for $(dpkg --print-architecture)"
 rm -rf "$target/debian"
+mkdir -p "$target"
 cargo build --profile "$profile" --locked "${packages[@]/#/--package=}" "${bundled[@]/#/--package=}" \
     --package=bande-l10n-tool --message-format=json-render-diagnostics |
     jq -r 'select(.reason == "compiler-artifact") | .executable // (select(.target.kind | index("cdylib")) | .filenames[] | select(endswith(".so")))' > "$target/shipped"

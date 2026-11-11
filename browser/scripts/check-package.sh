@@ -1,5 +1,5 @@
 #!/bin/bash
-# check-package.sh <deb>: as root in a Debian testing container with the Bande archive: installs the
+# check-package.sh <deb>: as root in a Debian forky container with the Bande archive: installs the
 # package and proves a fresh profile stays silent for 10 minutes. No release passes without this.
 set -euo pipefail
 deb=$(realpath "$1")
@@ -9,7 +9,7 @@ apt-get update -qq
 apt-get install -y -qq --no-install-recommends ca-certificates tcpdump iproute2 python3 dbus \
     mesa-vulkan-drivers > /dev/null
 install -m 644 "$repo/scripts/bande-archive-key.asc" /usr/share/keyrings/bande-archive-key.asc
-printf 'Types: deb\nURIs: https://bande-linux.github.io/apt\nSuites: rolling\nComponents: main\nSigned-By: /usr/share/keyrings/bande-archive-key.asc\n' \
+printf 'Types: deb\nURIs: https://bande-linux.github.io/apt\nSuites: forky\nComponents: main\nSigned-By: /usr/share/keyrings/bande-archive-key.asc\n' \
     > /etc/apt/sources.list.d/bande.sources
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends bande-compositor bande-config xdg-desktop-portal-bande "$deb" > /dev/null

@@ -47,7 +47,7 @@ jobs:
           if [ -z "$TEST_VERSION" ] && [ "$FORCE" != true ] && { [ "$published" = "$version" ] || [ "$built" -gt 0 ]; }; then
             build=false
           fi
-          compositor=$(curl -fsSL https://bande-linux.github.io/apt/dists/rolling/main/binary-arm64/Packages.xz | xz -d |
+          compositor=$(curl -fsSL https://bande-linux.github.io/apt/dists/forky/main/binary-arm64/Packages.xz | xz -d |
             awk '/^Package: / { p = ($2 == "bande-compositor") } p && /^Version: / { print $2 }' | sort -V | tail -1)
           if ! dpkg --compare-versions "${compositor:-0}" ge 0.1.8; then
             echo "No build: the package needs bande-compositor 0.1.8, the archive has ${compositor:-none}"
@@ -90,11 +90,11 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache /usr/local/share/boost
           df -h /
 
-      - name: Start the Debian testing container
+      - name: Start the Debian forky container
         run: |
           mkdir -p "$RUNNER_TEMP/work" "$RUNNER_TEMP/out"
           docker run -d --privileged --name build -v "$PWD:/repo" -v "$RUNNER_TEMP/work:/work" -v "$RUNNER_TEMP/out:/out" \
-            debian:testing sleep infinity
+            debian:forky sleep infinity
 
       - name: Fetch Debian's source
         run: docker exec build /repo/scripts/build.sh fetch "$DEBIAN_VERSION" /work

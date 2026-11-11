@@ -27,7 +27,7 @@ Memory: with thin Rust LTO and 3 jobs the peak is 6.5 GB of real memory (48 min 
 killed at the 10.2 GB limit of a 13 GB build machine. `BROWSER_RUST_LTO=-Clto=off` is for quick test
 builds; `scripts/mem-peak.sh` measures a build.
 
-`local-build.sh` needs no root: a Debian testing chroot from `mmdebstrap --mode=unshare`. It fetches
+`local-build.sh` needs no root: a Debian forky chroot from `mmdebstrap --mode=unshare`. It fetches
 unstable's source through apt, runs `prepare.sh` and Debian's own build. `prepare.sh` exits 3 if a
 patch no longer applies, leaving quilt at it.
 

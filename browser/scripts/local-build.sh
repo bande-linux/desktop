@@ -1,6 +1,6 @@
 #!/bin/bash
 # local-build.sh <debian version> <dir> [step...]: the build on any Debian machine, without root or
-# containers: a Debian testing chroot made with mmdebstrap's unshare mode. <dir> must be reachable
+# containers: a Debian forky chroot made with mmdebstrap's unshare mode. <dir> must be reachable
 # by other users (/var/tmp/...). Steps, all but clean by default:
 #   chroot   make <dir>/chroot (once)
 #   fetch    Debian's source into <dir>/work (emptied first)
@@ -34,7 +34,7 @@ for step in "${steps[@]}"; do
         [ -d "$dir/chroot/etc" ] && continue
         mkdir -p "$dir"
         chmod 755 "$dir"
-        mmdebstrap --mode=unshare --variant=buildd --include=ca-certificates testing "$dir/chroot"
+        mmdebstrap --mode=unshare --variant=buildd --include=ca-certificates forky "$dir/chroot"
         ;;
     fetch)
         as_root rm -rf "$dir/work"

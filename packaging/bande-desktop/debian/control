@@ -54,7 +54,7 @@ Recommends: ${bande:Recommends},
             systemd-zram-generator
 Description: Bande desktop environment
  The Bande desktop: a pure Wayland desktop with its own compositor, shell,
- session services, login window and applications, on Debian testing.
+ session services, login window and applications, on Debian 14 (forky).
  .
  It brings a way to log in: the Bande login window under greetd, or the
  display manager the system already has. With recommends, the login

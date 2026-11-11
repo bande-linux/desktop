@@ -1,6 +1,6 @@
 # Debian packaging
 
-Bande ships as Debian packages for Debian testing on arm64 and amd64. Each crate that installs
+Bande ships as Debian packages for Debian 14 (forky) on arm64 and amd64. Each crate that installs
 something is its own binary package, built with `cargo deb` from the crate's
 `[package.metadata.deb]`; the architecture-independent packages are built with debhelper from
 `packaging/`. Every package of one build carries the same version, derived from git by
@@ -64,7 +64,7 @@ profiles. Sizes are in [performance.md](performance.md).
   `~/.config/mimeapps.list` still wins. A file no installed app opens gets the Open With sheet in
   Files (every app that opens files, with "Always open with"); on the desktop, it is revealed in
   Files. The `install` jobs install without the third-party recommends and check that each of
-  them has an installation candidate in Debian testing. Installing it adds "Bande" to the sessions a
+  them has an installation candidate in Debian forky. Installing it adds "Bande" to the sessions a
   display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
   the desktop, a login and sound and nothing else; the images install it that way.
 - **Language packs** (`bande-l10n-tool debs`, architecture `all`, section `localization`):

@@ -65,7 +65,7 @@ Read from the running kernel and driver, not from documents, except where marked
 
 **Rounded corners and planes.** A rounded window on a plane needs the composed frame above it with a hole. Smithay 0.7 can do this with underlays, but only below the primary, and plane 0 is the lowest. The fix would be a kernel change making plane 1 the DRM primary. The compositor's frame would then have to be AR24, as the X-format trick works only on the bottom plane.
 
-**Versions.** Debian testing: Mesa 26.1.6-1, `linux-image-arm64` 7.2.15-1. We run our 7.3 series. Smithay 0.7.0 has no colour management, but has underlays and a VRR API. No Mesa or kernel blocker exists for stages 1, 3, 4, 5 and 6.
+**Versions.** Debian forky (2026-11): Mesa 26.1.6-1, `linux-image-arm64` 7.2.15-1. We run our 7.3 series. Smithay 0.7.0 has no colour management, but has underlays and a VRR API. No Mesa or kernel blocker exists for stages 1, 3, 4, 5 and 6.
 
 **Others.** KWin 6.5 has overlays, off by default because of driver freezes; its author measured 7.3 W against 8.4 W for video on a laptop, and overlays are off with a colour profile or night light until the KMS colour pipeline is used. GNOME 48 has `wp_color_management_v1`. wlroots has it too (from memory).
 

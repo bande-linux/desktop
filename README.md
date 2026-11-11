@@ -68,9 +68,10 @@ Once a version is published, Bande installs on Debian 14 (forky), not on Debian 
 
 ```bash
 cd /tmp
+suite=$(. /etc/os-release && echo "$VERSION_CODENAME")
 wget https://github.com/bande-linux/apt/releases/latest/download/bande-archive-keyring.deb \
-     https://github.com/bande-linux/apt/releases/latest/download/bande-apt-source.deb
-sudo apt install ./bande-archive-keyring.deb ./bande-apt-source.deb
+     "https://github.com/bande-linux/apt/releases/latest/download/bande-apt-source-$suite.deb"
+sudo apt install ./bande-archive-keyring.deb "./bande-apt-source-$suite.deb"
 sudo apt update
 sudo apt install bande-desktop
 ```

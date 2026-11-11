@@ -9,3 +9,4 @@ libseat-dev
 libudev-dev
 libpipewire-0.3-dev
 libclang-dev
+distro-info-data

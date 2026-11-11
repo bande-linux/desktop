@@ -22,9 +22,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  suites:
+    uses: bande-linux/apt/.github/workflows/suites.yml@main
+
   lint:
+    needs: suites
     runs-on: ubuntu-24.04-arm
-    container: debian:forky
+    container: debian:${{ fromJSON(needs.suites.outputs.list)[0] }}
     timeout-minutes: 60
     steps:
       - name: Install git
@@ -38,9 +42,15 @@ jobs:
       - run: ci/release/verify.sh lint
 
   test:
+    name: test (${{ matrix.suite }})
+    needs: suites
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
     runs-on: ubuntu-24.04-arm
     container:
-      image: debian:forky
+      image: debian:${{ matrix.suite }}
       volumes:
         - /usr/share/dotnet:/host/dotnet
         - /usr/local/lib/android:/host/android
@@ -55,15 +65,18 @@ jobs:
       - run: ci/release/verify.sh --setup test
       - uses: Swatinem/rust-cache@v2
         with:
-          key: test
+          key: test-${{ matrix.suite }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: ci/release/verify.sh test
 
   debs:
-    name: debs (${{ matrix.arch }})
+    name: debs (${{ matrix.suite }}, ${{ matrix.arch }})
+    needs: suites
     strategy:
       fail-fast: false
       matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
+        arch: [arm64, amd64]
         include:
           - arch: arm64
             runner: ubuntu-24.04-arm
@@ -71,7 +84,7 @@ jobs:
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     container:
-      image: debian:forky
+      image: debian:${{ matrix.suite }}
       volumes:
         - /usr/share/dotnet:/host/dotnet
         - /usr/local/lib/android:/host/android
@@ -91,7 +104,7 @@ jobs:
       - run: ci/release/verify.sh --setup debs
       - uses: Swatinem/rust-cache@v2
         with:
-          key: debs-${{ matrix.arch }}
+          key: debs-${{ matrix.suite }}-${{ matrix.arch }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: ci/release/verify.sh debs
       - name: Disk and memory after the build
@@ -99,18 +112,24 @@ jobs:
         run: df -h / && grep -E "MemTotal|MemAvailable" /proc/meminfo
       - uses: actions/upload-artifact@v7
         with:
-          name: bande-debs-${{ matrix.arch }}
+          name: bande-debs-${{ matrix.suite }}-${{ matrix.arch }}
           path: target/debian/*.deb
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
-          name: bande-debug-symbols-${{ matrix.arch }}
+          name: bande-debug-symbols-${{ matrix.suite }}-${{ matrix.arch }}
           path: target/debian-symbols/*.deb
           if-no-files-found: error
 
   deb-all:
+    name: deb-all (${{ matrix.suite }})
+    needs: suites
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
     runs-on: ubuntu-24.04
-    container: debian:forky
+    container: debian:${{ matrix.suite }}
     timeout-minutes: 15
     steps:
       - name: Install git
@@ -127,35 +146,37 @@ jobs:
       - run: ci/release/verify.sh all
       - uses: actions/upload-artifact@v7
         with:
-          name: bande-debs-all
+          name: bande-debs-${{ matrix.suite }}-all
           path: target/debian-all/*.deb
           if-no-files-found: error
 
   install:
-    name: install (${{ matrix.arch }})
-    needs: [debs, deb-all]
+    name: install (${{ matrix.suite }}, ${{ matrix.arch }})
+    needs: [suites, debs, deb-all]
     strategy:
       fail-fast: false
       matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
+        arch: [arm64, amd64]
         include:
           - arch: arm64
             runner: ubuntu-24.04-arm
           - arch: amd64
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
-    container: debian:forky
+    container: debian:${{ matrix.suite }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
-          name: bande-debs-${{ matrix.arch }}
+          name: bande-debs-${{ matrix.suite }}-${{ matrix.arch }}
           path: install-debs
       - uses: actions/download-artifact@v7
         with:
-          name: bande-debs-all
+          name: bande-debs-${{ matrix.suite }}-all
           path: install-debs
-      - name: Install bande-desktop into a clean Debian forky, alone and next to another display manager
+      - name: Install bande-desktop into a clean Debian ${{ matrix.suite }}, alone and next to another display manager
         run: |
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           ci/deb/install-test/run.sh install-debs

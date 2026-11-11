@@ -4,7 +4,8 @@ Bande ships as Debian packages for Debian 14 (forky) on arm64 and amd64. Each cr
 something is its own binary package, built with `cargo deb` from the crate's
 `[package.metadata.deb]`; the architecture-independent packages are built with debhelper from
 `packaging/`. Every package of one build carries the same version, derived from git by
-`ci/deb/version.sh`. How CI builds, checks and publishes them is in [ci.md](ci.md).
+`ci/deb/version.sh` and ending in the Debian release suffix (`~deb14` for forky; see
+[ci.md](ci.md)). How CI builds, checks and publishes them is in [ci.md](ci.md).
 
 Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
 unit, `panic = "abort"`, and `ci/release/symbols.sh` splits the symbols: each binary keeps only a

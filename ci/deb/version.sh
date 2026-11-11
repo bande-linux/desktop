@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo=${1:-.}
+# Every version ends in the Debian release suffix (debian-release.sh); an l10n stamp follows it.
+suffix=$("$(dirname "$(realpath "$0")")/debian-release.sh")
 declared=$(awk '/^\[/ { section = $0 } section == "[workspace.package]" && $1 == "version" { gsub(/"/, "", $3); print $3; exit }' "$repo/Cargo.toml")
 [ -n "$declared" ] || { echo "version.sh: Cargo.toml declares no workspace version" >&2; exit 1; }
 
@@ -11,13 +13,13 @@ if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
         stamp=${BASH_REMATCH[1]}${BASH_REMATCH[2]}
         last=$(git -C "$repo" describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null) ||
             { echo "version.sh: $tag has no vX.Y.Z release before it" >&2; exit 1; }
-        echo "${last#v}+l10n$stamp"
+        echo "${last#v}$suffix+l10n$stamp"
         exit 0
     fi
     [[ $tag =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "version.sh: $tag is not a vX.Y.Z tag" >&2; exit 1; }
     [ "${BASH_REMATCH[1]}" = "$declared" ] ||
         { echo "version.sh: tag $tag but Cargo.toml says $declared" >&2; exit 1; }
-    echo "$declared"
+    echo "$declared$suffix"
     exit 0
 fi
 
@@ -31,4 +33,4 @@ else
 fi
 date=$(TZ=UTC git -C "$repo" log -1 --format=%cd --date=format-local:%Y%m%d)
 sha=$(git -C "$repo" rev-parse --short=7 HEAD)
-echo "$base+git$date.$count.$sha"
+echo "$base+git$date.$count.$sha$suffix"

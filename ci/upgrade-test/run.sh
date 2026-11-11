@@ -28,23 +28,27 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 143' TERM INT HUP
 
+# The VM runs the Debian release this machine runs, the one the debs are built for.
+suite=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release | tr -d '"')
+number=$("$here/../deb/debian-release.sh")
+number=${number#\~deb}
 case $(dpkg --print-architecture) in
     arm64)
-        image=debian-14-genericcloud-arm64-daily.qcow2
+        image=debian-$number-genericcloud-arm64-daily.qcow2
         cp /usr/share/AAVMF/AAVMF_VARS.fd "$scratch/vars.fd"
         qemu=(qemu-system-aarch64 -machine "virt,gic-version=max,its=off" -cpu host
             -drive "if=pflash,format=raw,readonly=on,file=/usr/share/AAVMF/AAVMF_CODE.fd"
             -drive "if=pflash,format=raw,file=$scratch/vars.fd")
         ;;
     amd64)
-        image=debian-14-genericcloud-amd64-daily.qcow2
+        image=debian-$number-genericcloud-amd64-daily.qcow2
         qemu=(qemu-system-x86_64 -machine q35 -cpu host)
         ;;
     *) echo "run.sh: no image for this architecture" >&2; exit 1 ;;
 esac
 
 [ -f "$cache/$image" ] && [ -z "$(find "$cache/$image" -mtime +7)" ] ||
-    curl -fsSL --retry 3 -o "$cache/$image" "https://cloud.debian.org/images/cloud/forky/daily/latest/$image"
+    curl -fsSL --retry 3 -o "$cache/$image" "https://cloud.debian.org/images/cloud/$suite/daily/latest/$image"
 ssh-keygen -q -t ed25519 -N '' -f "$scratch/key"
 cat > "$scratch/user-data" <<DATA
 #cloud-config

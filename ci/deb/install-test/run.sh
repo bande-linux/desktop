@@ -28,7 +28,7 @@ while read -r item package kind; do
     esac || { echo "$item from $package is missing without recommends"; exit 1; }
 done < "$(dirname "$0")/../../runtime-deps"
 
-echo "== every package bande-desktop recommends is in Debian forky or built here"
+echo "== every package bande-desktop recommends is in this Debian release or built here"
 default_apps="$(dirname "$0")/../../../packaging/bande-desktop/default-apps"
 from_the_archive=" bande-apt-source $(grep -E '^[a-z0-9]' "$default_apps" | xargs) "
 apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |

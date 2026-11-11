@@ -63,7 +63,7 @@ Besides `dict.yml`, which builds the dictionary packs from a `dict-YYYYMMDD` tag
 `l10n-YYYYMMDD` tag (`.N` for another the same day) at `<last release>+l10nYYYYMMDD`
 (`ci/release/build-packs.sh`), so a corrected translation ships without a release, the one workflow, `release.yml`, runs on version tags (`vX.Y.Z`) and on manual dispatch, never
 on pushes or pull requests. It runs on GitHub-hosted runners (`ubuntu-24.04-arm` and
-`ubuntu-24.04`), every job in a `debian:testing` container that installs what it needs with
+`ubuntu-24.04`), every job in a `debian:forky` container that installs what it needs with
 `ci/apt-install.sh` (build libraries in `ci/release/build-depends`) and the toolchain pinned in
 `rust-toolchain.toml`. Rendering runs on lavapipe, Mesa's CPU Vulkan, so no job needs a GPU or
 a display; the compositor tests run it headless.
@@ -81,7 +81,7 @@ with `verify.sh --setup` and runs one stage:
   --profile dist` for the crates in `ci/release/packages` and `ci/release/bundled` (built with
   them, shipped inside another package: `bande-secrets-prompt` in `bande-secrets`) and `cargo
   deb` for each at the version from `ci/deb/version.sh`. cargo-deb takes the architecture from
-  the native target and the shared-library dependencies from Debian testing's `dpkg-shlibdeps`.
+  the native target and the shared-library dependencies from Debian forky's `dpkg-shlibdeps`.
   `check-debs.sh` checks that every package is there for `dpkg --print-architecture` at that
   version with no build paths inside, the D-Bus activation files, the user units, the portal
   backend's registration and the login session; `smoke.sh` starts the packaged settings service
@@ -93,7 +93,7 @@ with `verify.sh --setup` and runs one stage:
   `bande-greeter`, `bande-apt-source` and `systemd-zram-generator`, and lints it with `lintian`.
   It uploads `bande-debs-all`. The APT source and keyring packages are built by the APT
   repository itself.
-- `install (arm64)`, `install (amd64)`: in a clean `debian:testing` on the native runner,
+- `install (arm64)`, `install (amd64)`: in a clean `debian:forky` on the native runner,
   `ci/deb/install-test/run.sh` installs `bande-desktop` from that architecture's packages and
   the `all` packages alone without recommends and checks that it brings the login window,
   greetd and PipeWire, then installs every package and checks that they have the same version,
@@ -108,7 +108,7 @@ with `verify.sh --setup` and runs one stage:
 
 The APT repository publishes on its own: every 30 minutes it looks for new green `release.yml`
 runs for tags and takes their `bande-debs-arm64`, `bande-debs-amd64` and
-`bande-debs-all` artifacts into the `main` component of its `rolling` suite. It refuses a run
+`bande-debs-all` artifacts into the `main` component of its `forky` suite. It refuses a run
 whose architectures do not carry the same packages at the tag's version, and after each deploy
 it installs `bande-desktop` from the live site on amd64 and on arm64 and checks that every
 package is that architecture's build (or `all`) at the published version
@@ -150,7 +150,7 @@ build-run <worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the
 4. Within 30 minutes apt's `look.yml` finds it (or at once from its Run workflow button) and
    starts `publish.yml`, which deploys the site and installs `bande-desktop` from it on both
    architectures.
-5. Check: `curl -s https://bande-linux.github.io/apt/dists/rolling/main/binary-amd64/Packages`
+5. Check: `curl -s https://bande-linux.github.io/apt/dists/forky/main/binary-amd64/Packages`
    lists `bande-compositor` at the new version for `amd64`, and the same for `arm64`.
 6. On the mini, `send-symbols --tag vX.Y.Z` sends that run's `bande-debug-symbols` debs to the
    log server with `ci/release/upload-symbols.sh`, which is on the LAN where GitHub cannot reach

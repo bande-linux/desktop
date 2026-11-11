@@ -31,7 +31,7 @@ device watch, so mounts outlive Files and every client sees the same state.
 | MTP | `go-mtpfs` | Debian has dropped `jmtpfs` and `simple-mtpfs`; `aft-mtp-mount` drags in Qt. No libfuse or GUI dependency |
 | PTP | `gphotofs` | libgphoto2's own |
 
-Ruled out: GVfs (GNOME, and not a real path for other apps); `rclone` (not in Debian testing); `smbnetfs` (gone);
+Ruled out: GVfs (GNOME, and not a real path for other apps); `rclone` (not in Debian forky); `smbnetfs` (gone);
 own FUSE daemons in Rust (re-implementing protocols Debian maintains).
 
 **Discovery** is `systemd-resolved`, already in the image: `io.systemd.Resolve.BrowseServices` over varlink

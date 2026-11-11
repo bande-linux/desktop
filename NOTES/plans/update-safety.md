@@ -93,9 +93,10 @@ service, and the recovery OS (fix-first-run) calls it from its menu.
 **How often.** The daily user timer `bande-update-check.timer` stays the one timer. It reminds about
 a pending restart at every tick and only checks when the interval has passed since PackageKit's
 last refresh, the way `apt.systemd.daily` uses its own daily timer and stamps. Debian's
-`apt-daily.timer` fetches nothing while `APT::Periodic` is unset, as it is here. Testing has no
-security suite to ask cheaply (its `testing-security` is empty and fixes arrive by migration), so
-security updates follow the same interval, and the setting says so.
+`apt-daily.timer` fetches nothing while `APT::Periodic` is unset, as it is here. Forky's
+`forky-security` stays nearly empty until forky is released (fixes arrive by migration), so for
+now security updates follow the same interval, and the setting says so. Once forky is stable,
+`forky-security` is the cheap suite to ask more often.
 
 **Cleanup.** Keep the running version, the last good one and the newest few that fit: fewer when
 free space is short. Failed versions go at the next update.

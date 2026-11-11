@@ -1,6 +1,6 @@
 # Bande
 
-Bande is a Linux desktop environment written in Rust for Debian testing on arm64 and amd64, with
+Bande is a Linux desktop environment written in Rust for Debian 14 (forky) on arm64 and amd64, with
 Apple Silicon as its primary hardware. It has its own compositor, shell, session services and
 apps, holds itself to the polish of macOS, and is pure Wayland: no X11 or XWayland anywhere.
 It is early and not yet a daily driver; [`docs/parity.md`](docs/parity.md) shows where it stands.
@@ -27,7 +27,7 @@ metapackage, `ci/` the release and packaging scripts, `data/` wallpapers, icons 
 
 ## Building and testing
 
-On Debian testing, install the build and test dependencies (with `sudo`, Debian's `rustup`
+On Debian forky, install the build and test dependencies (with `sudo`, Debian's `rustup`
 included) and the toolchain pinned in `rust-toolchain.toml`:
 
 ```bash
@@ -58,12 +58,12 @@ GitHub CI runs only on version tags (and on manual dispatch for an unpublished b
 is: bump `[workspace.package] version` in `Cargo.toml`, merge to `main` through the train, whose
 gate runs the same checks, and tag `vX.Y.Z`. The tag's
 `release.yml` lints, tests, builds the packages for arm64 and amd64 and install-tests them in a
-clean Debian testing; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
+clean Debian forky; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
 publishes a fully green tag run on its own. Details: [`docs/architecture/ci.md`](docs/architecture/ci.md).
 
 ## Installing
 
-Once a version is published, Bande installs on Debian testing (not Debian 13) from
+Once a version is published, Bande installs on Debian 14 (forky), not on Debian 13, from
 <https://bande-linux.github.io/apt>:
 
 ```bash

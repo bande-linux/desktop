@@ -1,7 +1,5 @@
 debian/build/bin/bande-reporter usr/libexec/
 debian/build/bin/bande-diagnose usr/bin/
-crates/services/reporter/data/reports.conf usr/share/bande/
-crates/services/reporter/data/reports-ca.pem usr/share/bande/
 crates/services/reporter/data/system/bande-.service.d usr/lib/systemd/system/
 crates/services/reporter/data/system/bande-crash-reports@.service.d usr/lib/systemd/system/
 crates/services/reporter/data/user/bande-.service.d usr/lib/systemd/user/

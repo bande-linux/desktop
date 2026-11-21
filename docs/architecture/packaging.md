@@ -64,6 +64,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   login window and sound, no X server, greetd as the display manager, the login window's
   pictures folder), `every-package` (the one version, every program and file in
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
+  `system-setup` (every package with its recommends brings none of the short list of packages
+  that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
+  display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and the `hosts`
+  line of `/etc/nsswitch.conf` as they were, but for `libnss-mdns`'s own entry),
   `display-manager` (next to LightDM, greetd is offered and not imposed), `services` (the
   settings service on a private bus, the compositor headless), `portal` (the colour scheme
   through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).

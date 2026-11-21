@@ -1,0 +1,52 @@
+#!/bin/bash
+# Installing every Bande package with its recommends brings no package that takes over system-wide
+# setup, and leaves /etc/resolv.conf, the hosts line of /etc/nsswitch.conf and
+# /etc/network/interfaces as they were. The one allowed change is libnss-mdns adding
+# mdns4_minimal to the hosts line, Debian's way to resolve the .local names Files finds.
+# greetd is Bande's login window, which the display-manager test shows is offered, not imposed.
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+takes_over=(
+    systemd-resolved systemd-networkd resolvconf openresolv netplan.io connman iwd
+    firewalld ufw apparmor-profiles apparmor-profiles-extra x-display-manager
+)
+allowed=(greetd)
+candidate() {
+    apt-cache policy "$1" | sed -n 's/^ *Candidate: //p'
+}
+setup() {
+    if [ -L /etc/resolv.conf ]; then
+        echo "resolv.conf links to $(readlink /etc/resolv.conf)"
+    fi
+    cat /etc/resolv.conf 2> /dev/null || echo "no resolv.conf"
+    sed -n 's/^hosts:[[:space:]]*//p' /etc/nsswitch.conf |
+        sed -E 's/mdns4_minimal \[NOTFOUND=return\]//; s/[[:space:]]+/ /g; s/ $//'
+    cat /etc/network/interfaces 2> /dev/null || echo "no interfaces"
+}
+version=$(candidate bande-desktop)
+restic=$(candidate restic)
+ours=()
+for package in $(apt-cache pkgnames | grep -E '^(bande-|libpam-bande-|xdg-desktop-portal-bande$)' | sort); do
+    [ "$(candidate "$package")" = "$version" ] || continue
+    [ "$package" != bande-backup ] || [ -n "${restic#(none)}" ] || continue
+    ours+=("$package")
+done
+[ "${#ours[@]}" -gt 1 ] || { echo "no Bande packages to install"; exit 1; }
+before=$(setup)
+
+mapfile -t coming < <(apt-get install -s -q -o APT::Install-Recommends=true "${ours[@]}" |
+    sed -n 's/^Inst \([^ ]*\).*/\1/p')
+offending=$({ apt-cache show --no-all-versions "${coming[@]}"; echo; } | awk -v bad="${takes_over[*]}" -v ok="${allowed[*]}" '
+    BEGIN { split(bad, list, " "); for (i in list) wrong[list[i]] = 1
+            split(ok, list, " "); for (i in list) fine[list[i]] = 1 }
+    /^Package: / { package = $2; names = $2 }
+    /^Provides: / { line = substr($0, 11); gsub(/\([^)]*\)/, "", line); gsub(/,/, " ", line); names = names " " line }
+    /^$/ { if (!(package in fine)) { n = split(names, each, " "); for (i = 1; i <= n; i++) if (each[i] in wrong) print package }
+           package = ""; names = "" }
+' | sort -u)
+[ -z "$offending" ] || { echo "installing Bande with its recommends brings" $offending; exit 1; }
+
+apt-get install -y -q -o APT::Install-Recommends=true "${ours[@]}" < /dev/null
+after=$(setup)
+[ "$before" = "$after" ] || { diff <(echo "$before") <(echo "$after"); exit 1; }
+echo "${#coming[@]} packages with recommends leave the system's network setup alone"

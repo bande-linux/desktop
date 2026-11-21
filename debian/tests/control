@@ -14,6 +14,10 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
  apt, bash, coreutils, dash, dpkg, libc-bin, login, mount, passwd, tar, tzdata, util-linux
 Restrictions: needs-root, allow-stderr
 
+Tests: system-setup
+Depends: apt
+Restrictions: needs-root, breaks-testbed, allow-stderr
+
 Tests: display-manager
 Depends: bande-desktop, lightdm, bsdutils, debconf
 Restrictions: needs-root, breaks-testbed, allow-stderr

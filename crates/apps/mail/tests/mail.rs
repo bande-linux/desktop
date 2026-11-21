@@ -7,11 +7,14 @@ use std::process::Command;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use bande_discovery::testing::{Record, nameserver};
 use bande_mail::compose::{Draft, Outgoing, from_mailto};
+use bande_mail::discover::Source;
 use bande_mail::imap::{Fetched, Folder, Session};
 use bande_mail::message::Address;
 use bande_mail::net::{Network, Security, Server};
 use bande_mail::offer::{DOMAIN, MESSAGE_ARGUMENT, offer_to_search};
+use bande_mail::setup::{Outcome, Problem, check, find};
 use bande_mail::store::{Account, Store};
 use bande_mail::worker::{Command as Order, Event, Mailroom, Status, Worker};
 use bande_search::Offer;
@@ -202,6 +205,45 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
     assert!(!data.contains("boss@example.com"));
     assert!(!data.contains("\r\nBcc:"));
     assert!(!data.contains("\r\nInjected:"));
+}
+
+#[test]
+fn an_account_found_in_its_domains_records_signs_in_after_a_wrong_password() {
+    if !Path::new(DOVECOT).exists() {
+        eprintln!("{DOVECOT} is not installed; skipping");
+        return;
+    }
+    let dovecot = Dovecot::start();
+    let smtp = smtp_server(Sent::default());
+    let record = |service: &str, port| Record::Srv {
+        name: format!("{service}._tcp.bande.test"),
+        port,
+        target: "localhost".to_owned(),
+    };
+    let records = vec![record("_imap", dovecot.port), record("_submission", smtp)];
+    let network = Network {
+        resolver: nameserver(records).unwrap(),
+        ..Network::default()
+    };
+    let (mut found, source) = find(USER, &network).settings.unwrap();
+    assert_eq!(source, Source::Services);
+    assert_eq!(
+        (found.imap.host.as_str(), found.imap.port),
+        ("localhost", dovecot.port)
+    );
+    assert_eq!(
+        (found.smtp.security, found.user.as_str()),
+        (Security::StartTls, USER)
+    );
+
+    found.imap.security = Security::Plain;
+    found.smtp.security = Security::Plain;
+    let refused = check(&found, "wrong", &network);
+    assert!(
+        matches!(refused, Outcome::Failed(_, Problem::WrongCredentials(_))),
+        "{refused:?}"
+    );
+    assert_eq!(check(&found, PASSWORD, &network), Outcome::Ready(found));
 }
 
 #[test]

@@ -616,6 +616,13 @@ version = "0.1.9"
 source = "git+https://github.com/bande-linux/desktop?rev=d466583ab5bfce535b2ff05f11bc96384ef27f55#d466583ab5bfce535b2ff05f11bc96384ef27f55"
 
 [[package]]
+name = "bande-discovery"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+]
+
+[[package]]
 name = "bande-disks"
 version = "0.1.5"
 dependencies = [
@@ -766,6 +773,7 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
+ "bande-discovery",
  "bande-fs",
  "bande-inbox",
  "bande-keyring",

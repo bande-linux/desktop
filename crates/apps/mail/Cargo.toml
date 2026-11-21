@@ -13,6 +13,7 @@ accesskit.workspace = true
 bande-app.workspace = true
 bande-app-menu.workspace = true
 bande-app-settings.workspace = true
+bande-discovery.workspace = true
 bande-fs.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
@@ -35,6 +36,7 @@ bande-keyring.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+bande-discovery = { workspace = true, features = ["testing"] }
 rustix = { workspace = true, features = ["process"] }
 tempfile.workspace = true
 

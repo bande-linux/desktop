@@ -3,6 +3,8 @@ use std::net::{IpAddr, Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
 
+use bande_discovery::Resolver;
+use bande_l10n::tr;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
 use rustls_platform_verifier::BuilderVerifierExt;
@@ -21,6 +23,16 @@ pub enum Security {
 }
 
 impl Security {
+    pub const ALL: [Self; 3] = [Self::Tls, Self::StartTls, Self::Plain];
+
+    pub fn title(self) -> String {
+        match self {
+            Self::Tls => tr!("TLS"),
+            Self::StartTls => tr!("STARTTLS"),
+            Self::Plain => tr!("None (this computer only)"),
+        }
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Self::Tls => "tls",
@@ -30,7 +42,7 @@ impl Security {
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        [Self::Tls, Self::StartTls, Self::Plain]
+        Self::ALL
             .into_iter()
             .find(|security| security.name() == name)
     }
@@ -46,12 +58,14 @@ pub struct Server {
 #[derive(Clone)]
 pub struct Network {
     pub timeout: Duration,
+    pub resolver: Resolver,
 }
 
 impl Default for Network {
     fn default() -> Self {
         Self {
             timeout: COMMAND_TIMEOUT,
+            resolver: Resolver::system(),
         }
     }
 }

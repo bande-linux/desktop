@@ -64,6 +64,7 @@ pub enum Event {
     NotSent(AccountId, String, Box<Outgoing>),
     Held(AccountId, Box<Command>),
     Setup(Box<crate::setup::Outcome>),
+    Found(Box<crate::setup::Found>),
     Pictures(MessageId, Vec<(String, crate::picture::Picture)>),
     MailboxRefused(String),
 }

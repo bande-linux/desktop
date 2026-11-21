@@ -10,11 +10,14 @@ apt install bande-mail
 
 ## What it does
 
-- **Accounts.** The setup sheet asks for a name, an address and a password, finds the servers
-  and checks that both IMAP and SMTP accept the password before the account is added. If no
-  servers are found, or they cannot be reached, the sheet shows the server fields, filled with
-  whatever was found. When Gmail, iCloud, Yahoo, AOL or Fastmail refuse the password, the sheet
-  says where to create an app password. Several accounts work side by side.
+- **Accounts.** The setup sheet first asks for the account type (IMAP and SMTP), then for a
+  name, an address and a password. Mail looks up the servers of the address's domain and shows
+  them, with user name, hosts, ports and security (TLS, STARTTLS), in the server settings step
+  to confirm or change; Enter Server Settings Manually goes there directly. Sign In checks that
+  both IMAP and SMTP accept the password before the account is added. A failure says what went
+  wrong (server unreachable, certificate not valid, no encryption offered, user name or password
+  refused, server error) and keeps every field editable. When a saved password stops working,
+  the password sheet also leads to Server Settings…. Several accounts work side by side.
 - **Settings** (Ctrl+,) has five tabs. General: notifications for new mail and their sound.
   Accounts: whether each account is used, its full name, signature and server settings (user
   name, hosts, ports, TLS or STARTTLS), Add Account… and Remove…; changed servers are checked
@@ -26,11 +29,14 @@ apt install bande-mail
   Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
   while Mail is open; Message → Apply Rules runs them on the chosen messages. They are kept in
   `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
-- **Finding servers**, in this order: the provider's own autoconfig
-  (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`), Mozilla's ISPDB
-  (`autoconfig.thunderbird.net`), DNS SRV records (RFC 6186), the ISPDB entry of the domain's
-  mail exchanger (custom domains on Google or Microsoft), and finally `imap.`/`mail.`/`smtp.`
-  guesses that answer on the usual ports. Autoconfig is fetched over HTTPS only.
+- **Finding servers** asks only the address's own domain, in this order: DNS SRV records (RFC
+  6186: `_imaps`, `_imap`, `_submissions`, `_submission`), the domain's published autoconfig
+  (`autoconfig.<domain>`, then `<domain>/.well-known/autoconfig`, over HTTPS, password sign-in
+  only), and finally `imap.`/`mail.`/`smtp.` guesses that answer on the usual ports. The DNS
+  lookups use `bande-discovery`, shared with Calendar.
+- **Sign-in** uses SASL PLAIN, else LOGIN, as the server's capabilities offer, and only over TLS
+  or STARTTLS. After sending, Mail keeps a copy in Sent unless the server already filed one
+  with the same `Message-ID`.
 - **Security.** IMAP and SMTP use TLS or STARTTLS, verified against the system's certificate
   store. Plain text is refused for anything but this computer (`localhost`, `127.0.0.1`, `::1`),
   so a local bridge or test server still works. Passwords live in the Secret Service,

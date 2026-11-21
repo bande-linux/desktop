@@ -1,13 +1,14 @@
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
-use crate::dns;
+use bande_discovery::domain_of;
+
 use crate::http;
 use crate::net::{Network, Security, Server};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(4);
 const CONFIG_LIMIT: usize = 1 << 20;
-const ISPDB: &str = "https://autoconfig.thunderbird.net/v1.1/";
+const PASSWORD_METHODS: [&str; 2] = ["password-cleartext", "plain"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
@@ -18,20 +19,9 @@ pub struct Settings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    Provider,
-    Directory,
     Services,
+    Domain,
     Guess,
-}
-
-fn domain_of(email: &str) -> Option<&str> {
-    let (local, domain) = email.trim().rsplit_once('@')?;
-    let valid = !local.is_empty()
-        && domain.contains('.')
-        && domain
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || ".-".contains(character));
-    valid.then_some(domain)
 }
 
 fn expand(template: &str, email: &str) -> String {
@@ -69,10 +59,19 @@ pub fn parse_config(xml: &str, email: &str) -> Option<Settings> {
             .and_then(|child| child.text())
             .map(|text| text.trim().to_owned())
     };
+    let takes_password = |node: roxmltree::Node<'_, '_>| {
+        let mut methods = node
+            .children()
+            .filter(|child| child.has_tag_name("authentication"))
+            .filter_map(|child| child.text())
+            .peekable();
+        methods.peek().is_none() || methods.any(|method| PASSWORD_METHODS.contains(&method.trim()))
+    };
     let servers = |tag: &str, kind: &str| {
         let mut found = provider
             .children()
             .filter(|node| node.has_tag_name(tag) && node.attribute("type") == Some(kind))
+            .filter(|node| takes_password(*node))
             .filter_map(|node| {
                 let security = security_of(&child_text(node, "socketType")?)?;
                 let server = Server {
@@ -113,23 +112,16 @@ fn query_value(text: &str) -> String {
         .collect()
 }
 
-fn base_domain(host: &str) -> String {
-    let parts = host.trim_end_matches('.').split('.').collect::<Vec<_>>();
-    let keep = match parts.len() >= 3 && parts[parts.len() - 2].len() <= 3 {
-        true => 3,
-        false => 2,
-    };
-    parts[parts.len().saturating_sub(keep)..].join(".")
-}
-
-fn from_services(domain: &str, email: &str) -> Option<Settings> {
+fn from_services(domain: &str, email: &str, network: &Network) -> Option<Settings> {
     let first = |names: [(&str, Security); 2]| {
         names.into_iter().find_map(|(service, security)| {
-            dns::services(&format!("{service}.{domain}"))
+            network
+                .resolver
+                .services(&format!("{service}.{domain}"))
                 .into_iter()
                 .next()
                 .map(|target| Server {
-                    host: target.host.to_ascii_lowercase(),
+                    host: target.host,
                     port: target.port,
                     security,
                 })
@@ -151,7 +143,6 @@ fn from_services(domain: &str, email: &str) -> Option<Settings> {
 }
 
 fn answers(host: &str, port: u16) -> bool {
-    use std::net::ToSocketAddrs;
     (host, port)
         .to_socket_addrs()
         .ok()
@@ -191,35 +182,22 @@ fn guess(domain: &str, email: &str) -> Option<Settings> {
 
 pub fn discover(email: &str, network: &Network) -> Option<(Settings, Source)> {
     let email = email.trim();
-    let domain = domain_of(email)?.to_ascii_lowercase();
-    let provider = [
+    let domain = domain_of(email)?;
+    if let Some(found) = from_services(&domain, email, network) {
+        return Some((found, Source::Services));
+    }
+    let published = [
         format!(
             "https://autoconfig.{domain}/mail/config-v1.1.xml?emailaddress={}",
             query_value(email)
         ),
         format!("https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml"),
     ];
-    if let Some(found) = provider
+    if let Some(found) = published
         .iter()
         .find_map(|url| from_config(url, email, network))
     {
-        return Some((found, Source::Provider));
-    }
-    if let Some(found) = from_config(&format!("{ISPDB}{domain}"), email, network) {
-        return Some((found, Source::Directory));
-    }
-    if let Some(found) = from_services(&domain, email) {
-        return Some((found, Source::Services));
-    }
-    let exchanger = dns::exchangers(&domain)
-        .into_iter()
-        .next()
-        .map(|target| base_domain(&target.host))
-        .filter(|exchanger| *exchanger != domain);
-    if let Some(found) =
-        exchanger.and_then(|exchanger| from_config(&format!("{ISPDB}{exchanger}"), email, network))
-    {
-        return Some((found, Source::Directory));
+        return Some((found, Source::Domain));
     }
     guess(&domain, email).map(|found| (found, Source::Guess))
 }

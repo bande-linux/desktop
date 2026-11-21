@@ -9,7 +9,7 @@ use bande_l10n::{Text, text, tr, trn};
 use crate::discover::Settings as Servers;
 use crate::net::{Network, Security, Server};
 use crate::settings::{Change, MAX_PREVIEW_LINES, MailSettings, announce};
-use crate::setup::{Outcome, Request as SetupRequest, check};
+use crate::setup::{Outcome, Problem, check};
 use crate::store::{Account, AccountId, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
 use crate::worker::{Event as MailEvent, Mailroom};
@@ -27,7 +27,6 @@ use bande_toolkit::{
 
 pub const SETTINGS_SIZE: (u32, u32) = (620, 620);
 const TAB_WIDTH: f32 = 92.0;
-const SECURITIES: [Security; 3] = [Security::Tls, Security::StartTls, Security::Plain];
 const SIGNATURE_LINES: u16 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,7 +94,7 @@ impl Editing {
             (
                 server.host.clone(),
                 server.port.to_string(),
-                SECURITIES
+                Security::ALL
                     .iter()
                     .position(|security| *security == server.security)
                     .unwrap_or_default(),
@@ -116,7 +115,7 @@ impl Editing {
             Some(Server {
                 host: (!host.is_empty()).then(|| host.to_owned())?,
                 port: port.trim().parse().ok().filter(|port| *port > 0)?,
-                security: SECURITIES.get(*security).copied()?,
+                security: Security::ALL.get(*security).copied()?,
             })
         };
         let user = self.user.trim();
@@ -193,14 +192,7 @@ fn field(state: &Shared, text: &str, placeholder: Text, set: fn(&mut Editing, &s
 }
 
 fn security(state: &Shared, chosen: usize, set: fn(&mut Editing, usize)) -> PopUpButton {
-    let names = SECURITIES
-        .iter()
-        .map(|security| match security {
-            Security::Tls => tr!("TLS"),
-            Security::StartTls => tr!("STARTTLS"),
-            Security::Plain => tr!("None (this computer only)"),
-        })
-        .collect::<Vec<_>>();
+    let names = Security::ALL.map(Security::title);
     let state = Rc::clone(state);
     PopUpButton::new(&tr!("Security"), &names, chosen, move |index| {
         set(&mut state.borrow_mut().editing, index);
@@ -936,48 +928,37 @@ impl SettingsView {
                     })
                     .map_err(crate::error::Error::from)
                 {
-                    Ok((Some(password), keyring)) => {
-                        let request = SetupRequest {
-                            name: String::new(),
-                            email: email.clone(),
-                            password,
-                            servers: Some(servers.clone()),
-                        };
-                        match check(&request, &network) {
-                            Outcome::Ready(checked) => {
-                                let kept = Store::open(&store_path)
-                                    .and_then(|store| store.update_servers(id, &servers))
-                                    .and_then(|()| match servers.imap.host == old_host {
-                                        true => Ok(()),
-                                        false => keyring
-                                            .save(
-                                                &crate::keyring_key(&email, &servers.imap.host),
-                                                &crate::keyring_label(&email),
-                                                &request.password,
-                                            )
-                                            .and_then(|()| {
-                                                keyring
-                                                    .forget(&crate::keyring_key(&email, &old_host))
-                                            })
-                                            .map_err(Into::into),
-                                    });
-                                match kept {
-                                    Ok(()) => {
-                                        announce(Change::Accounts);
-                                        Outcome::Ready(checked)
-                                    }
-                                    Err(error) => {
-                                        Outcome::NeedsServers(Some(servers), error.to_string())
-                                    }
+                    Ok((Some(password), keyring)) => match check(&servers, &password, &network) {
+                        Outcome::Ready(checked) => {
+                            let kept = Store::open(&store_path)
+                                .and_then(|store| store.update_servers(id, &servers))
+                                .and_then(|()| match servers.imap.host == old_host {
+                                    true => Ok(()),
+                                    false => keyring
+                                        .save(
+                                            &crate::keyring_key(&email, &servers.imap.host),
+                                            &crate::keyring_label(&email),
+                                            &password,
+                                        )
+                                        .and_then(|()| {
+                                            keyring.forget(&crate::keyring_key(&email, &old_host))
+                                        })
+                                        .map_err(Into::into),
+                                });
+                            match kept {
+                                Ok(()) => {
+                                    announce(Change::Accounts);
+                                    Outcome::Ready(checked)
+                                }
+                                Err(error) => {
+                                    Outcome::Failed(servers, Problem::Saving(error.to_string()))
                                 }
                             }
-                            outcome => outcome,
                         }
-                    }
-                    Ok((None, _)) => {
-                        Outcome::WrongPassword(servers, "no saved password".to_owned())
-                    }
-                    Err(error) => Outcome::NeedsServers(Some(servers), error.to_string()),
+                        outcome => outcome,
+                    },
+                    Ok((None, _)) => Outcome::Failed(servers, Problem::NoPassword),
+                    Err(error) => Outcome::Failed(servers, Problem::Saving(error.to_string())),
                 };
                 notifier.send(MailEvent::Setup(Box::new(outcome)));
             });
@@ -1000,14 +981,7 @@ impl SettingsView {
                 }
                 (tr!("The server settings were saved."), false)
             }
-            Outcome::WrongPassword(..) => (tr!("The user name or password is incorrect."), true),
-            Outcome::NeedsServers(_, reason) => (
-                tr!(
-                    "Mail could not reach the servers: {reason}",
-                    reason = reason
-                ),
-                true,
-            ),
+            Outcome::Failed(_, problem) => (problem.message(), true),
         });
     }
 

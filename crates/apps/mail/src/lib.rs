@@ -1,6 +1,5 @@
 pub mod compose;
 pub mod discover;
-pub mod dns;
 pub mod error;
 pub mod html;
 pub mod http;

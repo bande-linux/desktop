@@ -11,12 +11,13 @@ use bande_l10n::{Text, text, tr, trn};
 
 use crate::compose::{Draft, Original, Outgoing, forward, reply, signed};
 use crate::discover::Settings;
+use crate::discover::Source;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
 use crate::message::{Content, Envelope};
 use crate::net::Network;
 use crate::settings::{MailSettings, SortBy};
-use crate::setup::{Outcome, Request as SetupRequest, check};
+use crate::setup::{Found, Outcome, check, find};
 use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
 use crate::ui::format::full_date;
 use crate::ui::reader::{Entry, Layout, Reading, Remote, Respond, Target, Thread};
@@ -87,6 +88,7 @@ pub enum Request {
     },
     ShowMenu(Menu, Point),
     Clipboard(ClipboardRequest),
+    OpenSettings,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -317,7 +319,7 @@ impl MailView {
             self.spawn_worker(account);
         }
         if self.accounts.is_empty() {
-            self.present_setup(Mode::Add);
+            self.present_setup(Mode::Kind);
         }
     }
 
@@ -1386,7 +1388,7 @@ impl MailView {
 
     pub fn compose(&mut self, mut draft: Draft) {
         let Some(account) = self.sending_account() else {
-            self.present_setup(Mode::Add);
+            self.present_setup(Mode::Kind);
             return;
         };
         if draft.from.email.is_empty() {
@@ -1850,6 +1852,7 @@ impl MailView {
                     held.push(account);
                 }
                 MailEvent::Setup(outcome) => self.setup_checked(*outcome),
+                MailEvent::Found(found) => self.servers_found(*found),
                 MailEvent::Pictures(id, pictures) => {
                     if let Some(reading) = self
                         .thread
@@ -2014,66 +2017,70 @@ impl MailView {
             setup.mode.clone(),
             setup.password_field,
         );
-        let action = state.borrow_mut().action.take();
-        match action {
-            None => {}
-            Some(Action::Cancel) => self.close_setup(),
-            Some(Action::SignIn) => {
-                if state.borrow().busy {
-                    return;
-                }
-                self.submit_password(field);
-                state.borrow_mut().action = None;
-                self.sign_in(&state, &mode);
+        let Some(action) = state.borrow_mut().action.take() else {
+            return;
+        };
+        if state.borrow().busy && action != Action::Cancel {
+            return;
+        }
+        if action != Action::Cancel && mode != Mode::Kind {
+            self.submit_password(field);
+            state.borrow_mut().action = None;
+        }
+        match (action, mode) {
+            (Action::Cancel, _) => self.close_setup(),
+            (Action::Primary, Mode::Kind) => self.present_setup(Mode::Address),
+            (Action::Primary, Mode::Address) => self.find_servers(&state),
+            (Action::Primary, Mode::Servers) => self.sign_in(&state),
+            (Action::Primary, Mode::Password(email)) => self.renew_password(&state, &email),
+            (Action::Other, Mode::Address) => self.present_setup(Mode::Servers),
+            (Action::Other, Mode::Servers) => self.present_setup(Mode::Address),
+            (Action::Other, Mode::Password(_)) => {
+                self.close_setup();
+                self.requests.push(Request::OpenSettings);
             }
+            (Action::Other, Mode::Kind) => {}
         }
     }
 
-    fn sign_in(&mut self, state: &Shared, mode: &Mode) {
+    fn renew_password(&mut self, state: &Shared, email: &str) {
         let password = state.borrow().password.clone();
-        if let Mode::Password(email) = mode {
-            if password.is_empty() {
-                return;
-            }
-            let Some(account) = self
-                .accounts
-                .iter()
-                .map(|(account, _)| account.clone())
-                .find(|account| account.email == *email)
-            else {
-                return;
-            };
-            let host = account.imap.host.clone();
-            let saved = password.clone();
-            std::thread::spawn(move || {
-                if let Err(error) = Keyring::open(crate::KEYRING).and_then(|keyring| {
-                    keyring.save(
-                        &crate::keyring_key(&account.email, &host),
-                        &crate::keyring_label(&account.email),
-                        &saved,
-                    )
-                }) {
-                    tracing::warn!("cannot save the password: {error}");
-                }
-            });
-            self.send_command(account.id, Command::Password(password.to_string()));
-            self.close_setup();
+        if password.is_empty() {
+            state.borrow_mut().status = Some((tr!("Enter your password."), true));
             return;
         }
-        let (name, email) = {
-            let state = state.borrow();
-            (state.value(Field::Name), state.value(Field::Email))
+        let Some(account) = self
+            .accounts
+            .iter()
+            .map(|(account, _)| account.clone())
+            .find(|account| account.email == email)
+        else {
+            return;
         };
-        let servers = match mode {
-            Mode::Manual => state.borrow().servers(),
-            _ => None,
-        };
-        let problem = if name.is_empty() || !email.contains('@') {
+        let host = account.imap.host.clone();
+        let saved = password.clone();
+        std::thread::spawn(move || {
+            if let Err(error) = Keyring::open(crate::KEYRING).and_then(|keyring| {
+                keyring.save(
+                    &crate::keyring_key(&account.email, &host),
+                    &crate::keyring_label(&account.email),
+                    &saved,
+                )
+            }) {
+                tracing::warn!("cannot save the password: {error}");
+            }
+        });
+        self.send_command(account.id, Command::Password(password.to_string()));
+        self.close_setup();
+    }
+
+    fn address_problem(&self, state: &Shared) -> Option<Text> {
+        let state = state.borrow();
+        let email = state.value(Field::Email);
+        if state.value(Field::Name).is_empty() || bande_discovery::domain_of(&email).is_none() {
             Some(text!("Enter your name and email address."))
-        } else if password.is_empty() {
+        } else if state.password.is_empty() {
             Some(text!("Enter your password."))
-        } else if *mode == Mode::Manual && servers.is_none() {
-            Some(text!("Enter both server names."))
         } else if self
             .store
             .accounts()
@@ -2084,32 +2091,88 @@ impl MailView {
             Some(text!("This account is already set up."))
         } else {
             None
-        };
-        if let Some(problem) = problem {
+        }
+    }
+
+    fn start_check(&self, state: &Shared, status: String) -> bool {
+        if let Some(problem) = self.address_problem(state) {
             state.borrow_mut().status = Some((problem.tr(), true));
+            return false;
+        }
+        let mut state = state.borrow_mut();
+        state.busy = true;
+        state.status = Some((status, false));
+        true
+    }
+
+    fn find_servers(&mut self, state: &Shared) {
+        if !self.start_check(state, tr!("Looking up the servers…")) {
             return;
         }
-        {
-            let mut state = state.borrow_mut();
-            state.busy = true;
-            state.status = Some((tr!("Checking the account…"), false));
+        let email = state.borrow().value(Field::Email);
+        let network = self.network.clone();
+        let notifier = self.mailroom.notifier();
+        std::thread::spawn(move || {
+            notifier.send(MailEvent::Found(Box::new(find(&email, &network))));
+        });
+    }
+
+    fn servers_found(&mut self, found: Found) {
+        if self.setup.as_ref().map(|setup| &setup.mode) != Some(&Mode::Address) {
+            return;
         }
-        let request = SetupRequest {
-            name,
-            email,
-            password: password.to_string(),
-            servers,
+        if let Some((settings, _)) = &found.settings
+            && let Some(setup) = &self.setup
+        {
+            setup.state.borrow_mut().fill(settings);
+        }
+        self.present_setup(Mode::Servers);
+        let domain = found.domain;
+        let message = match found.settings.map(|(_, source)| source) {
+            Some(Source::Services) => tr!(
+                "Mail found these servers in the DNS records of {domain}. Check that they belong to your mail provider, then sign in.",
+                domain = domain
+            ),
+            Some(Source::Domain) => tr!(
+                "Mail found these servers in the settings {domain} publishes. Check that they belong to your mail provider, then sign in.",
+                domain = domain
+            ),
+            Some(Source::Guess) => tr!(
+                "{domain} publishes no mail settings, so Mail guessed these servers. Check them against what your mail provider gives, then sign in.",
+                domain = domain
+            ),
+            None => tr!(
+                "Mail found no servers for {domain}. Enter the settings your mail provider gives for IMAP and SMTP.",
+                domain = domain
+            ),
+        };
+        if let Some(setup) = &self.setup {
+            setup.state.borrow_mut().status = Some((message, false));
+        }
+    }
+
+    fn sign_in(&mut self, state: &Shared) {
+        let Some(servers) = state.borrow().servers() else {
+            state.borrow_mut().status = Some((tr!("Enter both server names."), true));
+            return;
+        };
+        if !self.start_check(state, tr!("Checking the account…")) {
+            return;
+        }
+        let (email, password) = {
+            let state = state.borrow();
+            (state.value(Field::Email), state.password.to_string())
         };
         let network = self.network.clone();
         let notifier = self.mailroom.notifier();
         std::thread::spawn(move || {
-            let outcome = check(&request, &network);
+            let outcome = check(&servers, &password, &network);
             if let Outcome::Ready(settings) = &outcome
                 && let Err(error) = Keyring::open(crate::KEYRING).and_then(|keyring| {
                     keyring.save(
-                        &crate::keyring_key(&request.email, &settings.imap.host),
-                        &crate::keyring_label(&request.email),
-                        &request.password,
+                        &crate::keyring_key(&email, &settings.imap.host),
+                        &crate::keyring_label(&email),
+                        &password,
                     )
                 })
             {
@@ -2127,36 +2190,8 @@ impl MailView {
         state.borrow_mut().busy = false;
         match outcome {
             Outcome::Ready(settings) => self.add_account(&state, settings),
-            Outcome::WrongPassword(settings, _) => {
-                let mut state = state.borrow_mut();
-                fill_servers(&mut state, &settings);
-                let message = match app_password_hint(&settings.imap.host) {
-                    Some(hint) => format!(
-                        "{} {}",
-                        tr!("The user name or password is incorrect."),
-                        hint.tr()
-                    ),
-                    None => tr!("The user name or password is incorrect."),
-                };
-                state.status = Some((message, true));
-            }
-            Outcome::NeedsServers(settings, reason) => {
-                if let Some(settings) = &settings {
-                    fill_servers(&mut state.borrow_mut(), settings);
-                }
-                let manual = setup.mode == Mode::Manual;
-                if !manual {
-                    self.present_setup(Mode::Manual);
-                }
-                if let Some(setup) = &self.setup {
-                    setup.state.borrow_mut().status = Some((
-                        tr!(
-                            "Mail could not reach the servers: {reason}",
-                            reason = reason
-                        ),
-                        true,
-                    ));
-                }
+            Outcome::Failed(_, problem) => {
+                state.borrow_mut().status = Some((problem.message(), true));
             }
         }
     }
@@ -2883,7 +2918,7 @@ impl MailView {
             "delete" => self.delete_selected(),
             "compose" => self.compose(Draft::default()),
             "get-mail" => self.get_mail(),
-            "add-account" => self.present_setup(Mode::Add),
+            "add-account" => self.present_setup(Mode::Kind),
             "new-mailbox" => {
                 if let Some(account) = self.current_account() {
                     self.mailbox_action("mailbox-new", account);
@@ -2976,51 +3011,4 @@ fn write_new(folder: &std::path::Path, name: &str, data: &[u8]) -> std::io::Resu
         }
     }
     Err(std::io::Error::other("no free file name"))
-}
-
-fn app_password_hint(host: &str) -> Option<Text> {
-    let host = host.to_ascii_lowercase();
-    let provider = |domains: &[&str]| {
-        domains
-            .iter()
-            .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
-    };
-    if provider(&["gmail.com", "googlemail.com"]) {
-        Some(text!(
-            "Google needs an app password for Mail: turn on 2-Step Verification, then create one at myaccount.google.com/apppasswords."
-        ))
-    } else if provider(&["outlook.com", "office365.com", "hotmail.com", "live.com"]) {
-        Some(text!(
-            "Outlook.com and Microsoft 365 may refuse passwords from mail apps; Mail cannot sign in with Microsoft yet."
-        ))
-    } else if provider(&["me.com", "mac.com", "icloud.com"]) {
-        Some(text!(
-            "iCloud needs an app-specific password: create one at account.apple.com under Sign-In and Security."
-        ))
-    } else if provider(&["yahoo.com", "aol.com"]) {
-        Some(text!(
-            "Yahoo and AOL need an app password: create one in your account's security settings."
-        ))
-    } else if provider(&["fastmail.com", "messagingengine.com"]) {
-        Some(text!(
-            "Fastmail needs an app password: create one in Settings → Privacy & Security."
-        ))
-    } else {
-        None
-    }
-}
-
-fn fill_servers(state: &mut SheetState, settings: &Settings) {
-    for (field, value) in [
-        (Field::Incoming, settings.imap.host.clone()),
-        (Field::IncomingPort, settings.imap.port.to_string()),
-        (Field::Outgoing, settings.smtp.host.clone()),
-        (Field::OutgoingPort, settings.smtp.port.to_string()),
-        (Field::User, settings.user.clone()),
-    ] {
-        match state.values.iter_mut().find(|(known, _)| *known == field) {
-            Some((_, known)) => *known = value,
-            None => state.values.push((field, value)),
-        }
-    }
 }

@@ -517,6 +517,7 @@ impl Mail {
                 Request::Compose(outgoing) => {
                     self.open_compose(cx, *outgoing);
                 }
+                Request::OpenSettings => cx.open_settings(),
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
                 Request::OpenAttachment(path) => self.open_file(cx, window, &path),
                 Request::SaveAttachment(name, data) => save_attachment(name, data),
@@ -596,7 +597,7 @@ impl Mail {
             Change::Settings => view.set_settings(load_settings()),
             Change::Accounts => view.accounts_changed(),
             Change::Remove(id) => view.remove_account(id),
-            Change::AddAccount => view.present_setup(Mode::Add),
+            Change::AddAccount => view.present_setup(Mode::Kind),
         }
         if let Some(main) = self.main {
             self.serve(cx, main);

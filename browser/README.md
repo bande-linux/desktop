@@ -14,8 +14,6 @@ This repository holds no browser source. It holds what we change in Debian's:
 | `theme/` | chrome CSS using Bande's design tokens |
 | `scripts/` | the build, run the same way anywhere |
 
-The old engine is in this repository's history, where `apps/browser` still pins it.
-
 ## Build
 
 ```

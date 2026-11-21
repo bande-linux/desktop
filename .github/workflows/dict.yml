@@ -47,7 +47,7 @@ jobs:
       - name: Build the packs offline
         run: |
           version=${GITHUB_REF_NAME#dict-}-1$(ci/deb/debian-release.sh)
-          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
           dpkg-source --extract source/*.dsc build
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct -- packaging/dict) \
             ci/deb/changelog-entry.sh build/debian/changelog "$version" "$codename" "Build for Debian $codename."

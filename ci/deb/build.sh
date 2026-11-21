@@ -10,7 +10,7 @@ dsc=$(realpath "${1:?usage: build.sh <dsc> <out dir> [dpkg-buildpackage option..
 out=$(realpath -m "${2:?usage: build.sh <dsc> <out dir> [dpkg-buildpackage option...]}")
 shift 2
 version=$(ci/deb/version.sh)
-codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
 unset CARGO_BUILD_RUSTFLAGS RUSTFLAGS CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
 export DEB_BUILD_PROFILES="pkg.bande.vendor${DEB_BUILD_PROFILES:+ $DEB_BUILD_PROFILES}"
 export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}

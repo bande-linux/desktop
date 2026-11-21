@@ -18,7 +18,7 @@ the part today.
 | Icon menu | The menu on an app icon's right click: windows, Open, actions, Keep in Taskbar, Hide, Quit | taskbar menus |
 | More apps | The "+N" cell when the icons do not fit | `more`, `more-apps` |
 | Trash | The Trash icon at the end of the Taskbar icons | `trash` |
-| Desktop dots | The workspace dots, the active one a pill; a click switches, on the active one opens the Overview | `Slot::Workspace`, `workspace` |
+| Workspace dots | One dot per workspace, the active one a pill; a click switches, on the active one opens the Overview | `Slot::Workspace`, `workspace` |
 | Status items | The tray icons of other programs, two per row, with `•••` for the rest | `Slot::StatusItem`, `Slot::MoreStatusItems`, StatusNotifierItem |
 | Input menu | The short name of the active input source (SV, EN), with more than one source | `Slot::InputSource` |
 | Quick Settings button | One button with the Wi-Fi, Sound, Bluetooth and Battery glyphs; a click opens Quick Settings | `Slot::QuickSettings`, `Slot::Wifi`… |
@@ -27,4 +27,5 @@ the part today.
 | Notification Center | The sheet of notifications beside the taskbar | crate `bande-notifications` |
 | Position | The Taskbar's edge, set in Settings ▸ Taskbar; there is no separate menu bar | `BarEdge`, `bar { edge }` |
 | App Switcher | The row of apps on Alt+Tab | `switcher` |
-| Overview | All windows of the active desktop, and the desktops | `overview` |
+| Overview | All windows of the active workspace, and the workspaces | `overview` |
+| Workspace | One of a display's row of window sets; the window menu's Move to Workspace lists them as "Workspace 1"… with New Workspace | `Workspace`, `workspace` |

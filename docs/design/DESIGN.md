@@ -36,7 +36,7 @@ silent, these principles decide; where they do not, take the simpler answer.
 ## 3. Motion
 
 - **Every state change is animated, and every animation is interruptible.** Windows open,
-  close, minimise, zoom and move between spaces with motion that shows where they come from
+  close, minimize, maximize and move between workspaces with motion that shows where they come from
   and go to. Starting a new action mid-animation retargets it from the current position and
   velocity (`bande-spring`), never jumps or queues.
 - **Springs, not curves.** Motion is driven by critically or slightly underdamped springs with

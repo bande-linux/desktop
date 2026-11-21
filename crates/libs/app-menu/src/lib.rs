@@ -28,7 +28,7 @@ pub enum Standard {
     Hide,
     Quit,
     Minimize,
-    Zoom,
+    Maximize,
     FullScreen,
     CloseWindow,
     Settings,
@@ -38,7 +38,7 @@ const STANDARD: [(Standard, &str); 7] = [
     (Standard::Hide, "app-menu:hide"),
     (Standard::Quit, "app-menu:quit"),
     (Standard::Minimize, "app-menu:minimize"),
-    (Standard::Zoom, "app-menu:zoom"),
+    (Standard::Maximize, "app-menu:maximize"),
     (Standard::FullScreen, "app-menu:full-screen"),
     (Standard::CloseWindow, "app-menu:close-window"),
     (Standard::Settings, "app-menu:settings"),
@@ -62,7 +62,7 @@ impl Standard {
     pub fn needs_window(self) -> bool {
         matches!(
             self,
-            Self::Minimize | Self::Zoom | Self::FullScreen | Self::CloseWindow
+            Self::Minimize | Self::Maximize | Self::FullScreen | Self::CloseWindow
         )
     }
 }
@@ -119,7 +119,7 @@ pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> E
     Entry::submenu(app, entries)
 }
 
-pub fn window_submenu(items: Vec<Entry>, zoomable: bool, full_screen: Option<bool>) -> Entry {
+pub fn window_submenu(items: Vec<Entry>, maximizable: bool, full_screen: Option<bool>) -> Entry {
     let full_screen_label = match full_screen {
         Some(true) => tr!("Exit Full Screen"),
         _ => tr!("Enter Full Screen"),
@@ -127,8 +127,8 @@ pub fn window_submenu(items: Vec<Entry>, zoomable: bool, full_screen: Option<boo
     let mut entries = vec![
         Entry::item(&tr!("Minimize"), Standard::Minimize.action())
             .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
-        Entry::item(&tr!("Maximize"), Standard::Zoom.action())
-            .enabled(zoomable && full_screen != Some(true)),
+        Entry::item(&tr!("Maximize"), Standard::Maximize.action())
+            .enabled(maximizable && full_screen != Some(true)),
         Entry::item(&full_screen_label, Standard::FullScreen.action())
             .shortcut(FULL_SCREEN)
             .enabled(full_screen.is_some()),

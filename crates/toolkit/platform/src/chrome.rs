@@ -23,7 +23,7 @@ fn control_node(control: Control) -> NodeId {
     NodeId(match control {
         Control::Close => u64::MAX - 2,
         Control::Minimize => u64::MAX - 3,
-        Control::Zoom => u64::MAX - 4,
+        Control::Maximize => u64::MAX - 4,
         Control::Menu => u64::MAX - 5,
     })
 }
@@ -36,7 +36,7 @@ fn control_label(control: Control) -> String {
     match control {
         Control::Close => tr!("Close"),
         Control::Minimize => tr!("Minimize"),
-        Control::Zoom => tr!("Maximize"),
+        Control::Maximize => tr!("Maximize"),
         Control::Menu => tr!("Menus"),
     }
 }
@@ -66,7 +66,7 @@ pub(crate) enum TabDrag {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ZoomWait {
+pub(crate) struct MaximizeWait {
     pub(crate) since: Instant,
     pub(crate) held: bool,
 }
@@ -221,7 +221,7 @@ pub(crate) struct Chrome {
     hovered: Option<Control>,
     close_hover: Animated,
     minimize_hover: Animated,
-    zoom_hover: Animated,
+    maximize_hover: Animated,
     menu_hover: Animated,
     pub(crate) menu: bool,
     pub(crate) menu_open: bool,
@@ -236,8 +236,8 @@ pub(crate) struct Chrome {
     pub(crate) content_buttons: usize,
     pub(crate) tab_drag: Option<TabDrag>,
     pub(crate) detachable_tabs: bool,
-    pub(crate) zoom_wait: Option<ZoomWait>,
-    pub(crate) zoom_settled: bool,
+    pub(crate) maximize_wait: Option<MaximizeWait>,
+    pub(crate) maximize_settled: bool,
     pub(crate) move_areas: Vec<Rect>,
 }
 
@@ -340,7 +340,7 @@ impl Chrome {
             let mut button = Node::new(Role::Button);
             button.set_label(control_label(control));
             button.set_bounds(bounds(control.area(frame.width, frame.title)));
-            if control == Control::Zoom && self.fixed {
+            if control == Control::Maximize && self.fixed {
                 button.set_disabled();
             } else {
                 button.add_action(Action::Click);
@@ -367,7 +367,7 @@ impl Chrome {
                 Zone::Control(control) => Some(control),
                 _ => None,
             })
-            .filter(|control| *control != Control::Zoom || !self.fixed);
+            .filter(|control| *control != Control::Maximize || !self.fixed);
         if hovered == self.hovered {
             return false;
         }
@@ -376,7 +376,7 @@ impl Chrome {
         for (animated, control) in [
             (&mut self.close_hover, Control::Close),
             (&mut self.minimize_hover, Control::Minimize),
-            (&mut self.zoom_hover, Control::Zoom),
+            (&mut self.maximize_hover, Control::Maximize),
             (&mut self.menu_hover, Control::Menu),
         ] {
             animated.animate_at(now, reduce_motion, level(control), Spring::FADE);
@@ -384,10 +384,10 @@ impl Chrome {
         true
     }
 
-    pub(crate) fn rest_on_zoom(&mut self, now: Instant) {
-        let on_zoom = self.hovered == Some(Control::Zoom);
-        self.zoom_settled &= on_zoom;
-        self.zoom_wait = (on_zoom && !self.zoom_settled).then_some(ZoomWait {
+    pub(crate) fn rest_on_maximize(&mut self, now: Instant) {
+        let on_maximize = self.hovered == Some(Control::Maximize);
+        self.maximize_settled &= on_maximize;
+        self.maximize_wait = (on_maximize && !self.maximize_settled).then_some(MaximizeWait {
             since: now,
             held: false,
         });
@@ -494,9 +494,9 @@ impl Chrome {
         };
         let (close, closing) = self.close_hover.value_at(now);
         let (minimize, minimizing) = self.minimize_hover.value_at(now);
-        let (zoom, zooming) = self.zoom_hover.value_at(now);
+        let (maximize, maximizing) = self.maximize_hover.value_at(now);
         let (menu, menu_fading) = self.menu_hover.value_at(now);
-        self.animating = closing || minimizing || zooming || menu_fading;
+        self.animating = closing || minimizing || maximizing || menu_fading;
         items.extend(
             TitleBar {
                 title,
@@ -508,12 +508,12 @@ impl Chrome {
                     hover: ControlHover {
                         close,
                         minimize,
-                        zoom,
+                        maximize,
                         menu,
                     },
                     pressed: self.pressed.filter(|_| self.pressed_inside),
-                    zoomed: look.zoomed,
-                    zoomable: !self.fixed,
+                    maximized: look.maximized,
+                    maximizable: !self.fixed,
                     alternate: self.alternate && look.active,
                     menu_open: frame.menu_button().map(|_| self.menu_open),
                 },
@@ -535,6 +535,6 @@ impl Chrome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Look {
     pub(crate) active: bool,
-    pub(crate) zoomed: bool,
+    pub(crate) maximized: bool,
     pub(crate) fullscreen: bool,
 }

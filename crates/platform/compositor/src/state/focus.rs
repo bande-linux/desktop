@@ -38,10 +38,10 @@ impl State {
         let acting = surface
             .as_ref()
             .and_then(|surface| self.acting_app_of(surface));
-        self.key_behind_layer = match acting {
+        self.focused_behind_layer = match acting {
             Some(_) => None,
             None => self
-                .key_window()
+                .focused_window()
                 .or_else(|| {
                     self.focused()
                         .filter(|focused| self.acting_app_of(focused).is_some())
@@ -120,7 +120,7 @@ impl State {
 
     pub(crate) fn focus_behind_layer(&mut self) {
         let next = self
-            .key_behind_layer
+            .focused_behind_layer
             .clone()
             .filter(|key| self.window_index(key).is_some() || self.acting_app_of(key).is_some())
             .or_else(|| self.frontmost_unless_windowless());
@@ -151,7 +151,7 @@ impl State {
         self.focus(next);
         if windowless {
             self.windowless_app = owner.map(|owner| (owner, app_id));
-            let key = self.key_window();
+            let key = self.focused_window();
             self.announce_active_app(key.as_ref());
         }
     }
@@ -175,7 +175,11 @@ impl State {
             return true;
         };
         let owner = surface.client();
-        if focused.client() == owner || self.key_window().is_some_and(|key| key.client() == owner) {
+        if focused.client() == owner
+            || self
+                .focused_window()
+                .is_some_and(|key| key.client() == owner)
+        {
             return true;
         }
         if self.would_interrupt_typing(surface, &focused) {

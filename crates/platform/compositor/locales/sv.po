@@ -130,11 +130,11 @@ msgstr "Flytta till nästa skärm"
 msgid "Restore Size"
 msgstr "Återställ storlek"
 
-msgid "Desktop {number}"
-msgstr "Skrivbord {number}"
+msgid "Workspace {number}"
+msgstr "Arbetsyta {number}"
 
-msgid "New Desktop"
-msgstr "Nytt skrivbord"
+msgid "New Workspace"
+msgstr "Ny arbetsyta"
 
 msgid "Minimize"
 msgstr "Minimera"
@@ -142,8 +142,8 @@ msgstr "Minimera"
 msgid "Tile"
 msgstr "Placera"
 
-msgid "Move to Desktop"
-msgstr "Flytta till skrivbord"
+msgid "Move to Workspace"
+msgstr "Flytta till arbetsyta"
 
 msgid "Close"
 msgstr "Stäng"

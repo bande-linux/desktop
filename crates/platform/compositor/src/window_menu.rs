@@ -71,13 +71,13 @@ struct Resting {
 }
 
 #[derive(Clone)]
-struct ZoomWait {
+struct MaximizeWait {
     surface: WlSurface,
     since: Instant,
     held: bool,
 }
 
-impl ZoomWait {
+impl MaximizeWait {
     fn deadline(&self) -> Instant {
         self.since
             + match self.held {
@@ -92,9 +92,9 @@ pub(crate) struct WindowMenus {
     open: Option<Open>,
     labels: Option<Labels>,
     text_size: TextSize,
-    on_zoom: Option<WlSurface>,
-    zoom_settled: bool,
-    zoom_wait: Option<ZoomWait>,
+    on_maximize: Option<WlSurface>,
+    maximize_settled: bool,
+    maximize_wait: Option<MaximizeWait>,
 }
 
 impl WindowMenus {
@@ -256,7 +256,7 @@ fn item(title: String, action: &str) -> MenuItem {
 impl State {
     fn tiling_items(&self, index: usize) -> Vec<MenuItem> {
         let window = &self.windows[index];
-        let zoomed = window.has_state(xdg_toplevel::State::Maximized);
+        let maximized = window.has_state(xdg_toplevel::State::Maximized);
         let resizable = !window.fixed_size();
         let tile = |title: String, action: &str| {
             item(title, action)
@@ -274,7 +274,7 @@ impl State {
             tile(tr!("Bottom Left"), "place-bottom-left"),
             tile(tr!("Bottom Right"), "place-bottom-right"),
             MenuItem::separator(),
-            tile(tr!("Maximize"), "place-fill").enabled(!zoomed && resizable),
+            tile(tr!("Maximize"), "place-fill").enabled(!maximized && resizable),
         ];
         let displays = self
             .screens
@@ -290,7 +290,7 @@ impl State {
         }
         items.extend([
             MenuItem::separator(),
-            item(tr!("Restore Size"), "place-restore").enabled(window.tile.is_some() || zoomed),
+            item(tr!("Restore Size"), "place-restore").enabled(window.tile.is_some() || maximized),
         ]);
         items
     }
@@ -306,7 +306,7 @@ impl State {
                     .is_some_and(|id| !workspaces.is_full_screen(id))
             })
             .map(|position| {
-                let title = tr!("Desktop {number}", number = (position + 1));
+                let title = tr!("Workspace {number}", number = (position + 1));
                 item(title, &format!("desktop-{position}"))
                     .checked(Some(position) == current)
                     .enabled(Some(position) != current)
@@ -315,7 +315,7 @@ impl State {
         items.extend([
             MenuItem::separator(),
             item(
-                tr!("New Desktop"),
+                tr!("New Workspace"),
                 &format!("desktop-{}", workspaces.count()),
             ),
         ]);
@@ -323,22 +323,22 @@ impl State {
     }
 
     fn window_menu(&self, index: usize) -> Menu {
-        let zoomed = self.windows[index].has_state(xdg_toplevel::State::Maximized);
+        let maximized = self.windows[index].has_state(xdg_toplevel::State::Maximized);
         Menu::new(vec![
             item(tr!("Minimize"), "minimize")
                 .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             item(
-                match zoomed {
+                match maximized {
                     true => tr!("Restore Size"),
                     false => tr!("Maximize"),
                 },
-                "zoom",
+                "maximize",
             )
             .enabled(!self.windows[index].fixed_size()),
             MenuItem::separator(),
             MenuItem::submenu(&tr!("Tile"), Menu::new(self.tiling_items(index))),
             MenuItem::submenu(
-                &tr!("Move to Desktop"),
+                &tr!("Move to Workspace"),
                 Menu::new(self.desktop_items(index)),
             ),
             MenuItem::separator(),
@@ -372,7 +372,7 @@ impl State {
     }
 
     fn open_tiling_menu(&mut self, index: usize, held: bool) {
-        let Some(control) = self.zoom_control_of(index) else {
+        let Some(control) = self.maximize_control_of(index) else {
             return;
         };
         let below = control.to_i32_round();
@@ -391,14 +391,14 @@ impl State {
         }
     }
 
-    fn zoom_control_of(&self, index: usize) -> Option<Frame> {
+    fn maximize_control_of(&self, index: usize) -> Option<Frame> {
         let window = &self.windows[index];
         let geometry = window.geometry()?;
         let bar = match window.title_bar_height() {
             0 => WINDOW_HEADER_HEIGHT as f32,
             bar => bar as f32,
         };
-        let control = WindowControl::Zoom.area(geometry.size.w as f32, bar);
+        let control = WindowControl::Maximize.area(geometry.size.w as f32, bar);
         Some(Rectangle {
             loc: (
                 f64::from(geometry.loc.x) + f64::from(control.x),
@@ -418,7 +418,7 @@ impl State {
             || window.fixed_size()
             || window.has_state(xdg_toplevel::State::Fullscreen)
             || !self
-                .zoom_control_of(index)
+                .maximize_control_of(index)
                 .is_some_and(|control| control.contains(self.pointer_location))
             || self
                 .surface_under(self.pointer_location)
@@ -460,8 +460,8 @@ impl State {
             closing: false,
             resting: None,
         });
-        self.window_menus.zoom_wait = None;
-        self.window_menus.zoom_settled = true;
+        self.window_menus.maximize_wait = None;
+        self.window_menus.maximize_settled = true;
         for window in &mut self.windows {
             window.frame.hovered = None;
             window.frame.pressed = None;
@@ -573,7 +573,7 @@ impl State {
         };
         let placement = match action {
             "minimize" => return self.minimize(surface),
-            "zoom" => return self.toggle_zoom(surface),
+            "maximize" => return self.toggle_maximize(surface),
             "close" => return self.windows[index].toplevel.send_close(),
             "place-fill" => return self.maximize(surface),
             "place-left" => Placement::Left,
@@ -643,7 +643,7 @@ impl State {
 
     pub(crate) fn window_menu_button(&mut self, button: u32, pressed: bool) -> bool {
         if !pressed {
-            self.window_menus.zoom_wait = None;
+            self.window_menus.maximize_wait = None;
         }
         if !self.window_menus.is_open() {
             return false;
@@ -692,29 +692,29 @@ impl State {
         self.apply_menu_outcome(outcome, true);
     }
 
-    pub(crate) fn rest_on_zoom(&mut self, on_zoom: Option<WlSurface>) {
+    pub(crate) fn rest_on_maximize(&mut self, on_maximize: Option<WlSurface>) {
         let menus = &mut self.window_menus;
         let still_held = menus
-            .zoom_wait
+            .maximize_wait
             .as_ref()
-            .is_some_and(|wait| wait.held && on_zoom.as_ref() == Some(&wait.surface));
+            .is_some_and(|wait| wait.held && on_maximize.as_ref() == Some(&wait.surface));
         if still_held {
             return;
         }
-        menus.zoom_settled &= menus.on_zoom == on_zoom;
-        menus.on_zoom.clone_from(&on_zoom);
-        menus.zoom_wait = on_zoom
-            .filter(|_| !menus.zoom_settled)
-            .map(|surface| ZoomWait {
+        menus.maximize_settled &= menus.on_maximize == on_maximize;
+        menus.on_maximize.clone_from(&on_maximize);
+        menus.maximize_wait = on_maximize
+            .filter(|_| !menus.maximize_settled)
+            .map(|surface| MaximizeWait {
                 surface,
                 since: Instant::now(),
                 held: false,
             });
     }
 
-    pub(crate) fn press_zoom(&mut self, surface: &WlSurface) {
-        self.window_menus.zoom_settled = true;
-        self.window_menus.zoom_wait = Some(ZoomWait {
+    pub(crate) fn press_maximize(&mut self, surface: &WlSurface) {
+        self.window_menus.maximize_settled = true;
+        self.window_menus.maximize_wait = Some(MaximizeWait {
             surface: surface.clone(),
             since: Instant::now(),
             held: true,
@@ -724,21 +724,21 @@ impl State {
     fn offer_tiling_menu(&mut self, now: Instant) {
         let Some(wait) = self
             .window_menus
-            .zoom_wait
+            .maximize_wait
             .clone()
             .filter(|wait| wait.deadline() <= now)
         else {
             return;
         };
-        self.window_menus.zoom_wait = None;
-        self.window_menus.zoom_settled = true;
+        self.window_menus.maximize_wait = None;
+        self.window_menus.maximize_settled = true;
         let Some(index) = self.window_index(&wait.surface) else {
             return;
         };
         let frame = &self.windows[index].frame;
-        let on_zoom = frame.pressed == Some(WindowControl::Zoom)
-            || frame.hovered == Some(WindowControl::Zoom);
-        if on_zoom
+        let on_maximize = frame.pressed == Some(WindowControl::Maximize)
+            || frame.hovered == Some(WindowControl::Maximize);
+        if on_maximize
             && !self.window_menus.is_open()
             && !self.windows[index].has_state(xdg_toplevel::State::Fullscreen)
         {
@@ -770,7 +770,11 @@ impl State {
             .as_ref()
             .filter(|open| !open.closing)
             .and_then(|open| open.tracker.deadline());
-        let wait = self.window_menus.zoom_wait.as_ref().map(ZoomWait::deadline);
+        let wait = self
+            .window_menus
+            .maximize_wait
+            .as_ref()
+            .map(MaximizeWait::deadline);
         let left = left.filter(|_| self.window_menus.is_open());
         menu.into_iter().chain(wait).chain(left).min()
     }

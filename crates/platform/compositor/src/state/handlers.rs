@@ -249,7 +249,7 @@ impl XdgShellHandler for State {
         self.apps_changed = true;
         self.recall_late(toplevel.wl_surface());
         self.publish_toplevel(toplevel.wl_surface());
-        let key = self.key_window();
+        let key = self.focused_window();
         self.announce_active_app(key.as_ref());
     }
 

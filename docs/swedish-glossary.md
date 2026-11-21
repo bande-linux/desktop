@@ -51,5 +51,7 @@ Plurals: Swedish has two forms (`Plural-Forms: nplurals=2; plural=(n != 1);`), `
 | Tile (window) | Placera | | Restore Size | Återställ storlek |
 | Saved Networks | Sparade nätverk | | Metered Connection | Begränsad anslutning |
 | Create Link | Skapa länk | | Arrange Icons | Ordna ikoner |
+| Workspace | Arbetsyta | | Overview | Översikt |
+| Dictionary | Ordbok | | Look Up | Slå upp |
 
 Product names stay: Bande, Velox. Add a row when a term recurs.

@@ -3,7 +3,7 @@ use bande_graphics::{Cursor, Event, Modifiers, Point, Pointer, PointerButton, Re
 use bande_protocols::client::bande_app_v1::Offer;
 
 use super::{Window, WindowError, WindowEvent};
-use crate::chrome::{Control, Frame, TabDrag, Zone, ZoomWait, control_for_node};
+use crate::chrome::{Control, Frame, MaximizeWait, TabDrag, Zone, control_for_node};
 use crate::clipboard::DragEvent;
 
 fn resize_cursor(edge: ResizeEdge) -> Cursor {
@@ -127,7 +127,7 @@ impl Window {
             let inside = zone == Zone::Control(control);
             if inside != chrome.pressed_inside {
                 chrome.pressed_inside = inside;
-                chrome.zoom_wait = None;
+                chrome.maximize_wait = None;
                 chrome.hover(
                     frame,
                     inside.then_some(pointer.position),
@@ -141,7 +141,7 @@ impl Window {
         if chrome.hover(frame, Some(pointer.position), now, reduce_motion) {
             self.needs_redraw = true;
         }
-        chrome.rest_on_zoom(now);
+        chrome.rest_on_maximize(now);
         let content = zone == Zone::Content || chrome.content_buttons > 0;
         if content {
             let entering = !chrome.pointer_in_content;
@@ -203,9 +203,9 @@ impl Window {
             Zone::Control(control) => {
                 chrome.pressed = Some(control);
                 chrome.pressed_inside = true;
-                chrome.zoom_settled = true;
-                chrome.zoom_wait =
-                    (control == Control::Zoom && !chrome.fixed).then_some(ZoomWait {
+                chrome.maximize_settled = true;
+                chrome.maximize_wait =
+                    (control == Control::Maximize && !chrome.fixed).then_some(MaximizeWait {
                         since: now,
                         held: true,
                     });
@@ -215,7 +215,7 @@ impl Window {
                     _ => Ok(()),
                 }
             }
-            Zone::TitleBar if pointer.count.is_multiple_of(2) => self.toggle_zoom(),
+            Zone::TitleBar if pointer.count.is_multiple_of(2) => self.toggle_maximize(),
             Zone::TitleBar => self.start_move(),
             Zone::Resize(edge) => self.start_resize(edge),
             Zone::Content | Zone::Outside => Ok(()),
@@ -237,7 +237,7 @@ impl Window {
             return;
         };
         chrome.tab_drag = None;
-        chrome.zoom_wait = None;
+        chrome.maximize_wait = None;
         if chrome.content_buttons > 0 {
             chrome.content_buttons -= 1;
             passed.push(WindowEvent::Input(Event::PointerUp(into_content(
@@ -250,7 +250,7 @@ impl Window {
         };
         self.needs_redraw = true;
         chrome.hover(frame, Some(pointer.position), now, reduce_motion);
-        chrome.rest_on_zoom(now);
+        chrome.rest_on_maximize(now);
         if chrome.zone_at(frame, pointer.position) != Zone::Control(control) {
             return;
         }
@@ -260,8 +260,8 @@ impl Window {
                 Ok(())
             }
             Control::Minimize => self.minimize(),
-            Control::Zoom if pointer.modifiers.alt => self.toggle_full_screen(),
-            Control::Zoom => self.toggle_zoom(),
+            Control::Maximize if pointer.modifiers.alt => self.toggle_full_screen(),
+            Control::Maximize => self.toggle_maximize(),
             Control::Menu => Ok(()),
         };
         if result.is_err() {
@@ -286,8 +286,8 @@ impl Window {
         };
         chrome.content_buttons = 0;
         chrome.tab_drag = None;
-        chrome.zoom_wait = None;
-        chrome.zoom_settled = false;
+        chrome.maximize_wait = None;
+        chrome.maximize_settled = false;
         if chrome.hover(frame, None, now, reduce_motion) | chrome.pressed.take().is_some() {
             self.needs_redraw = true;
         }
@@ -309,7 +309,7 @@ impl Window {
                 Ok(())
             }
             Control::Minimize => self.minimize(),
-            Control::Zoom => self.toggle_zoom(),
+            Control::Maximize => self.toggle_maximize(),
             Control::Menu => self.show_menus(),
         };
         result.is_ok()
@@ -319,8 +319,8 @@ impl Window {
         let Some(chrome) = self.chrome.as_mut() else {
             return;
         };
-        chrome.zoom_settled = true;
-        let Some(wait) = chrome.zoom_wait.take() else {
+        chrome.maximize_settled = true;
+        let Some(wait) = chrome.maximize_wait.take() else {
             return;
         };
         let offer = match wait.held {

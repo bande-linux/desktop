@@ -674,7 +674,7 @@ impl State {
     }
 
     fn announced_screen(&self) -> usize {
-        self.key_window()
+        self.focused_window()
             .and_then(|key| self.window_index(&key))
             .map_or_else(
                 || self.pointer_screen(),
@@ -693,7 +693,7 @@ impl State {
             }
         }
         self.announce_full_screen();
-        let key = self.key_window();
+        let key = self.focused_window();
         self.announce_active_app(key.as_ref());
         self.suspend_unseen_windows();
     }

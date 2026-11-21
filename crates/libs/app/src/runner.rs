@@ -56,7 +56,7 @@ pub(crate) fn run<P: Program>(
     let windowless = arguments.len() < given;
     let session = bande_bus::session()
         .inspect_err(|error| {
-            tracing::warn!("no session bus, so no menu bar and no single instance: {error}");
+            tracing::warn!("no session bus, so no app menus and no single instance: {error}");
         })
         .ok();
     let claimed = session
@@ -386,7 +386,7 @@ impl<P: Program> Runner<P> {
             .map(|index| &mut self.cx.windows[index]);
         let result = match (standard, shown) {
             (Standard::Hide | Standard::Minimize, Some(window)) => window.minimize(),
-            (Standard::Zoom, Some(window)) => window.toggle_zoom(),
+            (Standard::Maximize, Some(window)) => window.toggle_maximize(),
             (Standard::FullScreen, Some(window)) => match full_screen {
                 Some(_) => window.toggle_full_screen(),
                 None => Ok(()),
@@ -503,7 +503,7 @@ impl<P: Program> Runner<P> {
         if focused {
             self.cx.focused = Some(window);
             self.cx.menus_changed = true;
-            crate::portal::remember_key_window(self.cx.windows[index].exported_handle());
+            crate::portal::remember_focused_window(self.cx.windows[index].exported_handle());
         }
         self.cx.views[index].1.view().set_active(focused);
         self.cx.windows[index].request_redraw();

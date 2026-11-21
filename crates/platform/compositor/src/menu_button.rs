@@ -206,12 +206,12 @@ impl State {
     fn menu_address_changed(&mut self, surface: &WlSurface, address: Option<String>) {
         set_menu_address(surface, address);
         self.needs_redraw = true;
-        let key = self.key_window();
+        let key = self.focused_window();
         self.announce_active_app(key.as_ref());
     }
 
     pub(crate) fn request_menus(&mut self, surface: &WlSurface) {
-        let key = self.key_window();
+        let key = self.focused_window();
         if key.as_ref() != Some(surface) || !self.show_menus_of(surface) {
             self.set_menus_open(surface, false);
         }

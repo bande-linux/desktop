@@ -5,9 +5,8 @@ depend on each other, and the conventions every crate follows.
 
 ## Context
 
-The workspace had 31 crates side by side in `crates/`, with nothing saying which were libraries,
-which were processes and which role a process played, while several agents work in parallel and
-each needs to know which directory it owns.
+The workspace holds libraries and processes, and each process plays a role in the session; several
+agents work in parallel and each needs to know which directory it owns.
 
 ## Decision
 
@@ -16,15 +15,17 @@ Crates are grouped by role:
 ```
 crates/
   platform/  compositor, render, protocols
-  toolkit/   toolkit, design, graphics, platform, widgets
+  toolkit/   toolkit, design, graphics, platform, widgets, pdf
   shell/     shell, bar, desktop, notifications, quick-settings, launcher,
              screenshot, lock, greeter
-  apps/      files, settings, file-chooser, secrets-prompt
-  services/  config, notify, power, sound, clipboard, tray, automount, portal, polkit,
-             secrets, secrets-pam
+  apps/      files, settings, lookup, file-chooser, secrets-prompt
+  services/  config, notify, power, sound, clipboard, tray, automount, backup, index, printd,
+             spell, reporter, crash-reports, portal, polkit, secrets, secrets-pam
   libs/      app, app-menu, app-settings, settings-panes, xdg, fs, content, glance, thumbnails,
              search, status, taskbar-model, packages, audio, network, bluetooth, volumes,
-             keyboard, datetime, l10n, log, bus, inbox, watch, wallpaper, edid, spring
+             keyboard, datetime, colour, dict, edid, https, inbox, keyring, media, media-view,
+             printers, l10n, l10n-macros, l10n-source, l10n-tool, log, bus, watch, wallpaper,
+             spring
   testing/   test-bus, test-wayland, bench, sample, review
 data/        shared assets (wallpapers, icons, sounds)
 ```
@@ -48,7 +49,7 @@ these crates at a pinned revision.
   keyring's (`bande-secrets-prompt`, installed by `bande-secrets`).
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
-  `mimeapps.list`, user directories and `Apps`, the one answer to "which apps open this path";
+  `mimeapps.list`, user directories, `show_items` (the file manager's `ShowItems`) and `Apps`, the one answer to "which apps open this path";
   `fs` holds folder listings and their sort order, size and date formatting, the trash, file
   operations with their running queue and undo, and watching; `content` decodes what a file
   holds without any toolkit type (image pyramids and animations, PDF pages from a confined
@@ -63,7 +64,7 @@ these crates at a pinned revision.
 Rules:
 
 1. **Names.** Directory names are short. Package, binary and Debian package names stay
-   `bande-*` (and `xdg-desktop-portal-bande`), so nothing installed changes name.
+   `bande-*` (and `xdg-desktop-portal-bande`, `libpam-bande-secrets`).
 2. **One crate per process.** Each app, shell client and service is its own crate; each part
    hosted by `bande-shell` is its own library crate.
 3. **Dependency direction.** `libs` ← `toolkit` ← `shell` and `apps`. Services never depend on
@@ -78,8 +79,8 @@ Rules:
    `app_id` and the D-Bus name: `org.bande.Files` for Files.
 7. **No panics.** `[workspace.lints]` denies `unwrap`, `expect` and `panic` outside tests.
 8. **Logging.** Through `tracing`, to the journal, set up by `libs/log`.
-9. **Localization.** Every user-visible string goes through Fluent (`libs/l10n`), with
-   `locales/<lang>/*.ftl` in each crate, compiled in by `bande_l10n::translations!`.
+9. **Localization.** Every user-visible string goes through gettext with `tr!` (`libs/l10n`),
+   with `locales/<lang>.po` in each crate; see [localisation](../architecture/localisation.md).
 10. **Appearance.** Dark mode and the accent colour are followed by the toolkit itself, from the
     portal's `org.freedesktop.appearance` settings, not by each app.
 

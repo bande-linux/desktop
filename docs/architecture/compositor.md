@@ -34,7 +34,7 @@ when they reach the screen is Bande's own.
   renderer cannot draw is left out of the frame with one warning; only a lost device fails it.
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 16 pt rounded corners (antialiased in the fragment shader)
-  and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the key window's
+  and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the focused window's
   is larger and darker (blur 14 pt, 10 pt down, 42 %) than other windows' (7 pt, 4 pt, 22 %).
   The shadow is cut out under the window, so translucent windows do not show it through. All
   windows get this, including client-side decorated toolkits that draw their own shadow outside
@@ -52,7 +52,7 @@ when they reach the screen is Bande's own.
   (libadwaita, `gtk_window_set_titlebar`) ask for client-side and keep their own, and a later
   switch is honoured. A mode requested before the surface becomes a toplevel is kept and
   applied when it does. The bar is `bande_graphics::TitleBar`, which `bande-toolkit-platform`
-  draws its own with: 40 pt high, a pill on the right with minimise, zoom and close, the menu
+  draws its own with: 40 pt high, a pill on the right with minimize, maximize and close, the menu
   button (⋮) to its left when the window said where its menus are (`org_kde_kwin_appmenu`, or a
   GTK 3 or GTK 4 `GtkApplicationWindow` menu bar through `gtk_shell1`), a
   flush-left Manrope title, colours of the light or dark palette (followed from the portal's
@@ -60,9 +60,9 @@ when they reach the screen is Bande's own.
   It is rasterised on the CPU at its display's scale whenever its look changes (and stretched
   to fit while it is drawn on another display mid-drag or in a mirror) and becomes part
   of the window: inside its rounded clip and shadow, in the opening, closing and overview
-  animations. The window's geometry includes the bar, so placement, zoom and tiling size the
+  animations. The window's geometry includes the bar, so placement, maximizing and tiling size the
   app to what is left below it. Dragging the bar moves the window (with snapping), a double
-  click zooms, the buttons close, minimise and zoom (a press that slides off does nothing), and a band from the rounded outline to 8 pt outside resizes it with the matching
+  click maximizes, the buttons close, minimize and maximize (a press that slides off does nothing), and a band from the rounded outline to 8 pt outside resizes it with the matching
   cursor, the corner cut-outs included, and a corner resizes both ways for 32 pt along each edge
   and 16 pt out diagonally (`resize_zone` in `bande-graphics`, shared with the toolkit); nothing inside the outline resizes, so the bar's top pixel moves the window. A
   floating client-side window gets the outside band too wherever its own input region leaves
@@ -137,7 +137,7 @@ when they reach the screen is Bande's own.
   sharp when it moves to a display of another scale. The pointer moves across the displays at
   their own scales and never leaves them (it stops at an edge without a neighbour); a new
   window opens on the display with the pointer, cascading only from its app's windows shown on
-  that display, maximising, full screen, tiling and snapping
+  that display, maximizing, full screen, tiling and snapping
   use the window's display, and dragging a window until the pointer crosses onto another
   display moves it there. `Shift+Super+Left/Right/Up/Down` move the focused window to the
   neighbouring display in that direction keeping its relative place (shrunk only when it does
@@ -191,7 +191,7 @@ when they reach the screen is Bande's own.
   of different rates never repeat a frame. An animation stops once its remaining motion is
   invisible: within 0.25 physical pixel (1/512 for opacity) and slower than that per 20 ms.
   Opening grows from 96 % and fades in (`standard`); closing keeps the last frame's textures
-  and shrinks to 98 % while fading out (`quick`); minimising scales
+  and shrinks to 98 % while fading out (`quick`); minimizing scales
   into the app's taskbar icon, reported with `bande_shell_v1.set_icon_rect`, or toward the
   taskbar's centre (the bottom edge without a taskbar), drawn above the taskbar (`gentle`); restoring
   plays it back. Maximize and full screen (`standard`) start at the request and stretch
@@ -205,11 +205,11 @@ when they reach the screen is Bande's own.
 - **Snapping and tiling.** The edges are those of the usable area, the display minus the
   taskbar, so a drag against the taskbar snaps. Dragging a window until the pointer touches the
   left or right edge previews the half, within 64 pt of a corner the quarter, and against the top
-  zoom; the translucent rounded preview grows from the pointer at once, except at an edge shared
+  maximize; the translucent rounded preview grows from the pointer at once, except at an edge shared
   with another display, where the pointer must rest 250 ms so a window can still be dragged
   across. Releasing over a shown preview springs the window into it. `Super+Left/Right` tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
-  `Up` zooms a free window and `Down` returns a zoomed one. A tile is only a shape:
+  `Up` maximizes a free window and `Down` returns a maximized one. A tile is only a shape:
   no gaps, but the window keeps its rounded corners, shadow and resize edges, and gets no
   xdg-shell tiled states, since clients drop their resize edges for those (GTK) and would have
   none to offer. `bande_app_v1.window_tiled` tells toolkit apps instead. Dragging the edge two
@@ -242,7 +242,7 @@ when they reach the screen is Bande's own.
   claims three-finger swipes: once the fingers have moved 16 units the axis locks, and a
   horizontal swipe switches workspaces, a swipe up opens the overview and a swipe down shows
   the focused app's windows (below). Two- and four-finger swipes go to apps.
-- **Workspaces.** Each display has its own row of workspaces; swipes and switching shortcuts act on the display with the pointer, the overview opens on every display with that display's windows and strip (a window dropped on another display moves there), and shell clients learn the row of the display with the key window. A window opens on the active one
+- **Workspaces.** Each display has its own row of workspaces; swipes and switching shortcuts act on the display with the pointer, the overview opens on every display with that display's windows and strip (a window dropped on another display moves there), and shell clients learn the row of the display with the focused window. A window opens on the active one
   (a window of another app opened while a full-screen workspace is active opens on that
   workspace's home). Workspaces are made on demand: moving a window past the last one adds
   one, and so does going full screen, which gives the window a workspace of its own right
@@ -271,7 +271,7 @@ when they reach the screen is Bande's own.
   when the overview closes, with `standard`; the drawing is the window's own live buffer
   scaled, never a copy. The strip slides down from the top: one live thumbnail per workspace
   (wallpaper and windows, scaled from the same textures), the active one ringed, and a "+"
-  that adds a workspace. The selected window (the key window at first, then the one under
+  that adds a workspace. The selected window (the focused window at first, then the one under
   the pointer or reached with the arrow keys) is ringed and shows its title below it, drawn
   with `bande-graphics` once per title. A click on a window or `Return` focuses it, a click
   on a thumbnail switches there and closes the overview, and dragging a window by 4 pt
@@ -359,7 +359,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | pointer and keyboard implemented, touch not |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | implemented where the device supports syncobj eventfds |
-| `xdg_wm_base` | Application windows and popups | implemented; a minimised or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
+| `xdg_wm_base` | Application windows and popups | implemented; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | implemented |
 | `wp_presentation` | Presentation timing, VSync | implemented |
@@ -378,13 +378,13 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `gtk_shell1` / `gtk_surface1` | Version 1 with only the `global_menu_bar` capability, as Mutter offers it: a GTK 3 or GTK 4 `GtkApplicationWindow` stops drawing its menu bar and gives its `org.gtk.Menus` menu bar, `org.gtk.Actions` paths and unique bus name with `set_dbus_properties`, which becomes the window's menu address; windows without a menu bar send none and are unchanged. Version 1 keeps GTK's own edge constraints and title-bar gestures | implemented |
 | `org_kde_kwin_server_decoration_manager` | Decoration negotiation for GTK 3 and GTK 4 (default server-side, client-side for header-bar windows) | implemented |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | implemented (v4; enabled heads only, no custom modes) |
-| `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimised), shm buffers and LINEAR ARGB8888 dmabufs (copied by the GPU, offered when the renderer knows its render node); a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
+| `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimized), shm buffers and LINEAR ARGB8888 dmabufs (copied by the GPU, offered when the renderer knows its render node); a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
 | `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | implemented, shell clients only |
 | `wp_cursor_shape_v1` | Cursor shapes, drawn from Bande's own set | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | implemented |
 | `zwlr_output_power_management_v1` | Display power for idle and lock | implemented |
-| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimised windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the key window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
+| `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimized windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the focused window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
 | `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | implemented, every client |
 | `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

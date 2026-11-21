@@ -220,7 +220,7 @@ impl State {
         self.overview.press = None;
         self.overview.hovered = None;
         self.overview.returning = None;
-        self.overview.selected = self.key_window();
+        self.overview.selected = self.focused_window();
         self.overview.pointer = self.pointer_location;
     }
 
@@ -252,7 +252,7 @@ impl State {
         if target == 0.0 {
             self.overview.press = None;
             let keeps_focus = self
-                .key_window()
+                .focused_window()
                 .and_then(|surface| self.window_index(&surface))
                 .is_some_and(|index| self.present(&self.windows[index]));
             if !keeps_focus {
@@ -311,7 +311,7 @@ impl State {
                 None
             } else {
                 let app = self
-                    .key_window()
+                    .focused_window()
                     .map(|surface| toplevel_names(&surface).1)
                     .filter(|app_id| !app_id.is_empty());
                 if app.is_none() {

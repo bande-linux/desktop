@@ -37,7 +37,7 @@
     </event>
 
     <event name="active_app">
-      <description summary="the app of the key window changed">
+      <description summary="the app of the focused window changed">
         Sent on binding and whenever the window with keyboard focus changes to
         one of another app, with that app's app id, so the shell can name the
         active app. An empty app id means no window has the keyboard, as
@@ -77,7 +77,7 @@
       <description summary="say where an app's icon is shown">
         Tells the compositor where the Taskbar shows the icon of the app with this
         app id, as a rectangle in the surface coordinates of the given surface.
-        The compositor minimises the app's windows into this rectangle and
+        The compositor minimizes the app's windows into this rectangle and
         restores them out of it. A width or height of 0 forgets the rectangle,
         as when the icon leaves the Taskbar. The rectangle is also forgotten when
         the surface is destroyed.
@@ -145,7 +145,7 @@
 
     <request name="activate_window">
       <description summary="bring one window forward">
-        Shows, restores if minimised, raises and focuses the window whose
+        Shows, restores if minimized, raises and focuses the window whose
         ext_foreign_toplevel_handle_v1 identifier is given, as picking a window
         from a Taskbar icon's menu does. The Taskbar lists the windows, their titles
         and app ids through ext_foreign_toplevel_list_v1.
@@ -154,10 +154,10 @@
     </request>
 
     <event name="window_minimized">
-      <description summary="a window was minimised or restored">
+      <description summary="a window was minimized or restored">
         Sent whenever the window with this ext_foreign_toplevel_handle_v1
-        identifier is minimised (1) or restored (0), and on binding for every
-        minimised window, so the Taskbar icon menu can mark minimised windows.
+        identifier is minimized (1) or restored (0), and on binding for every
+        minimized window, so the Taskbar icon menu can mark minimized windows.
       </description>
       <arg name="identifier" type="string"/>
       <arg name="minimized" type="uint"/>
@@ -278,8 +278,8 @@
     </event>
 
     <event name="active_output">
-      <description summary="the display holding the key window">
-        Sent on binding and whenever the key window is on another display than
+      <description summary="the display holding the focused window">
+        Sent on binding and whenever the focused window is on another display than
         before, with the name of that display's wl_output; empty when no window
         has the keyboard. The bar dims the active app's header on the other
         displays.
@@ -382,7 +382,7 @@
     <event name="full_screen">
       <description summary="a display shows a full-screen window or stops">
         Sent on binding for every display and whenever the active workspace of
-        the display with this wl_output name becomes or stops being the space
+        the display with this wl_output name becomes or stops being the workspace
         of a full-screen window. Full-screen windows are drawn above the top
         layer, so the bar moves to the overlay layer and hides until the
         pointer pushes against its edge.
@@ -554,9 +554,9 @@
     </event>
 
     <event name="active_menus" since="4">
-      <description summary="where the key window's menus are">
-        Sent on binding, after every active_app and whenever the key window
-        or the place it gives for its menus changes, so the menu bar and Menu
+      <description summary="where the focused window's menus are">
+        Sent on binding, after every active_app and whenever the focused window
+        or the place it gives for its menus changes, so the App menu and Menu
         Search show that window's menus. Menu is as in show_app_menu.
       </description>
       <arg name="menu" type="string"/>
@@ -589,7 +589,7 @@
       <description summary="make a layer surface part of an app">
         Says that the client's layer surface belongs to the app with this app
         id, as the desktop belongs to Files. While the surface
-        has the keyboard, that app is the active app with no key window: the
+        has the keyboard, that app is the active app with no focused window: the
         Taskbar shows it as active, its menus are the active menus, and when it
         runs (bande_app_v1.keep_running) the keys the surface passes on with
         pass_key reach it. Asking again changes the app id.
@@ -637,7 +637,7 @@
       <entry name="top_right" value="3" summary="the top right quarter"/>
       <entry name="bottom_left" value="4" summary="the bottom left quarter"/>
       <entry name="bottom_right" value="5" summary="the bottom right quarter"/>
-      <entry name="restore" value="6" summary="the size and place the window had before it was tiled or zoomed"/>
+      <entry name="restore" value="6" summary="the size and place the window had before it was tiled or maximized"/>
       <entry name="next_display" value="7" summary="the next display, keeping its place there"/>
     </enum>
 
@@ -645,8 +645,8 @@
       <description summary="tile one of the app's windows">
         Places the toplevel as the window menu's Move and Resize items do, with
         the same animation as dragging the window to a screen edge or pressing
-        Super+Arrows. Restore undoes tiling and zoom. Zoom,
-        full screen and minimise use xdg_toplevel's own requests. Ignored for a
+        Super+Arrows. Restore undoes tiling and maximize. Maximize,
+        full screen and minimize use xdg_toplevel's own requests. Ignored for a
         toplevel of another client and in full screen.
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
@@ -676,7 +676,7 @@
         Sets or clears the window menu's Keep on Top toggle for the toplevel.
         While set, the window stays in front of every window without it on
         its workspace, even when another window is focused, and still below
-        the menu bar, the Taskbar and other shell surfaces. Windows that keep on
+        the Taskbar and other shell surfaces. Windows that keep on
         top stack among themselves by focus as usual. The state lasts until
         it is cleared or the window closes. Ignored for a toplevel of another
         client.
@@ -767,7 +767,7 @@
         Asks the shell to open the app's menus below the toplevel's menu
         button, with the serial of the press that pressed it or of the last
         input event the window had when a screen reader pressed it. Ignored
-        unless the toplevel is the key window, has a menu button, and the
+        unless the toplevel is the focused window, has a menu button, and the
         press is not the one that just closed its menus.
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
@@ -778,11 +778,11 @@
     <request name="set_panel" since="5">
       <description summary="make one of the app's windows a panel that never takes the keyboard">
         Makes the toplevel a floating panel that does not activate (Glance): it stays in front of every other window, never
-        becomes the key window and never takes the keyboard, whether it maps,
-        is clicked, asks for activation or goes full screen, so the app's key
+        becomes the focused window and never takes the keyboard, whether it maps,
+        is clicked, asks for activation or goes full screen, so the app's focused
         window keeps its keys and its menus. Pointer input reaches it as
         usual and it can be moved and resized. Full screen covers its display
-        without a full-screen space of its own. It is not listed as a window
+        without a full-screen workspace of its own. It is not listed as a window
         of its own to other clients. Lasts until the window closes. Ignored
         for a toplevel of another client.
       </description>
@@ -819,7 +819,7 @@
     <event name="window_tiled" since="7">
       <description summary="a window took or left a tile">
         Sent with tiled 1 when the toplevel was tiled and with tiled 0 when it
-        stopped being tiled: it was moved away, resized by the user, zoomed or
+        stopped being tiled: it was moved away, resized by the user, maximized or
         restored. A tile is only a shape: the window keeps its rounded corners,
         resize edges and xdg_toplevel states, without xdg_toplevel's tiled
         states. While tiled, Restore in place_window has something to return to
@@ -843,8 +843,8 @@
     </enum>
 
     <request name="offer_placements" since="8">
-      <description summary="offer Move and Resize below a toplevel's zoom control">
-        Opens the compositor's Move and Resize menu below the zoom control of
+      <description summary="offer Move and Resize below a toplevel's maximize control">
+        Opens the compositor's Move and Resize menu below the maximize control of
         the toolkit's title bar. Ignored unless the pointer is on that control,
         the window can be resized and is not in full screen, and no window
         menu is open.

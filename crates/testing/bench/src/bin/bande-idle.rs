@@ -199,7 +199,7 @@ fn measure_cases(session: &mut Session, options: &Options) -> Result<Vec<Case>, 
     let mut cases = vec![(WINDOWS_OPEN, session.measure(window)?)];
     session.minimize_apps()?;
     session.run_for(settle)?;
-    cases.push(("windows minimised", session.measure(window)?));
+    cases.push(("windows minimized", session.measure(window)?));
     session.server.request_lock_screen();
     session.run_for(settle)?;
     if session.server.lock_screen_pid().is_none() {
@@ -359,7 +359,7 @@ impl Session {
         if shown.is_empty() {
             Ok(())
         } else {
-            Err(format!("still shown after minimising: {shown:?}").into())
+            Err(format!("still shown after minimizing: {shown:?}").into())
         }
     }
 

@@ -259,7 +259,7 @@ impl SessionLockHandler for State {
         self.drop_window_menu();
         self.close_force_quit();
         self.dismiss_assist();
-        let previous = self.key_window();
+        let previous = self.focused_window();
         self.lock = Some(Lock {
             owner,
             surfaces: Vec::new(),

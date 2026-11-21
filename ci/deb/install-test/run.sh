@@ -16,8 +16,8 @@ for package in bande-greeter greetd pipewire wireplumber pipewire-pulse; do
 done
 
 echo "== every package resolves and installs from the packages alone"
-ours=$(cd "$debs" && for deb in *.deb; do dpkg-deb --field "$deb" Package; done)
-apt-get install -y -q --no-install-recommends $ours < /dev/null
+mapfile -t ours < <(cd "$debs" && for deb in *.deb; do dpkg-deb --field "$deb" Package; done)
+apt-get install -y -q --no-install-recommends "${ours[@]}" < /dev/null
 
 echo "== every program and file the desktop needs comes with its Depends"
 while read -r item package kind; do
@@ -50,8 +50,8 @@ x11=$(dpkg-query -W -f '${db:Status-Status} ${Package}\n' | awk '$1 == "installe
 [ -z "$x11" ] || { echo "installed: $x11"; exit 1; }
 
 echo "== every packaged program is in place"
-for program in $(dpkg -L $(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande) 2>/dev/null |
-    grep -E '^/usr/(bin|libexec)/.'); do
+mapfile -t our_packages < <(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande)
+for program in $(dpkg -L "${our_packages[@]}" 2>/dev/null | grep -E '^/usr/(bin|libexec)/.'); do
     test -x "$program" || { echo "$program is not executable"; exit 1; }
 done
 test -e /usr/share/wayland-sessions/bande.desktop
@@ -92,7 +92,8 @@ test ! -e "$pictures"
 default_display_manager greetd
 
 echo "== the installed compositor serves Wayland clients"
-export XDG_RUNTIME_DIR=$(mktemp -d)
+XDG_RUNTIME_DIR=$(mktemp -d)
+export XDG_RUNTIME_DIR
 status=0
 timeout 10 bande-compositor --headless > /tmp/compositor.out 2>&1 || status=$?
 cat /tmp/compositor.out

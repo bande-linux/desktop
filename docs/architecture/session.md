@@ -48,7 +48,7 @@ graph LR
 - Idle ([`config.kdl`](overview.md#configuration) `idle`,
   Settings ▸ Lock Screen): the displays dim 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
-  screen itself, resting: its clock and date over the blurred desktop picture and nothing
+  screen itself, resting: its clock and date over the blurred wallpaper and nothing
   else, covering the desktop through `ext-session-lock`, so the saver hands over to the lock
   screen. Every lock starts resting; the first key, click, scroll or movement, or waking
   from sleep, fades in the picture, name and password field (a typed letter lands in the
@@ -71,7 +71,7 @@ graph LR
   | `org.freedesktop.ScreenSaver.Inhibit` | Firefox (first choice), Chromium/Electron (after GNOME's) | `bande-power`, held until `UnInhibit` or the caller leaves the bus |
   | `org.freedesktop.portal.Inhibit`, idle flag | sandboxed apps | `xdg-desktop-portal-bande` forwards it to `org.freedesktop.ScreenSaver` |
   | logind `idle` block inhibitor (`systemd-inhibit --what=idle`) | scripts, `caffeinate`-style tools | `bande-power` follows logind's `BlockInhibited` |
-  | `zwp_idle_inhibitor_v1` on a surface | Player and Glance (on the video's surface), mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
+  | `zwp_idle_inhibitor_v1` on a surface | Player and Glance (on the video's surface), mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimized, as in KWin and sway |
 
   Audio alone keeps the computer but not the display awake, and neither CPU load,
   builds nor MPRIS keep anything awake. Idle time restarts when the last inhibitor ends, so a
@@ -150,10 +150,10 @@ graph LR
   is copied to `$XDG_DATA_HOME/backgrounds/<seconds>-<name>` (a picture from the document
   portal or a download folder may not last) and written to `org.bande.Config` as both the
   light and the dark wallpaper, as Settings ▸ Wallpaper's Add Picture does; `set-on` is not
-  told apart, since the lock screen shows the desktop picture. When the app asks for a preview
+  told apart, since the lock screen shows the wallpaper. When the app asks for a preview
   the frontend skips its own Access dialog, so the preview is the user's consent:
   `bande-file-chooser --set-wallpaper <picture> --app-id <id>` asks "Use “name” as your
-  desktop picture?" with the picture as the alert's image, Cancel and Set Desktop Picture; any
+  wallpaper?" with the picture as the alert's image, Cancel and Set Wallpaper; any
   answer but Set is a cancel. Non-file URIs and missing files fail with response 2.
 - `org.freedesktop.impl.portal.FileChooser`: the Bande Open and Save dialogs. The portal
   runs `/usr/libexec/bande-file-chooser` (`crates/apps/file-chooser`) per request with the
@@ -265,7 +265,7 @@ graph LR
   sandboxed apps cannot reach it past the Flatpak bus proxy. The tool captures on a second event
   queue of that same connection, in its own thread, so capturing never waits for its UI.
 - **Screen sharing**: `SelectSources` shows a picker on the tool's overlay: each display (named
-  by its description when there are several) and every open window as live thumbnails (other workspaces and minimised windows included), the
+  by its description when there are several) and every open window as live thumbnails (other workspaces and minimized windows included), the
   first chosen; arrow keys move, Space adds a source when the app allows several, Return
   shares, Escape cancels, a double click shares at once; the dialog, the list and each source
   are published to screen readers. `Start` opens one PipeWire `Video/Source` node per source

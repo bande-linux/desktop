@@ -241,8 +241,8 @@ msgstr "internet, anslutning, lan"
 msgid "theme, look, colour, color, wallpaper, background, desktop picture, picture, photo, image"
 msgstr "tema, look, färg, skrivbordsbild, bakgrund, bild, foto"
 
-msgid "bar, dock, menu bar, launcher, taskbar, panel, favourites, favorites"
-msgstr "fält, dock, menyrad, startare, aktivitetsfält, panel, favoriter"
+msgid "bar, dock, launcher, taskbar, panel, favourites, favorites"
+msgstr "fält, dock, startare, aktivitetsfält, panel, favoriter"
 
 msgid "alerts, banners"
 msgstr "aviseringar, banners"
@@ -798,8 +798,8 @@ msgstr "bakgrundsbelysning, dämpa, ljus, skärmljusstyrka"
 msgid "Use as"
 msgstr "Använd som"
 
-msgid "main display, mirror, extend, primary, menu bar, bar"
-msgstr "huvudskärm, spegla, utöka, primär, menyrad, fält"
+msgid "main display, mirror, extend, primary, taskbar, bar"
+msgstr "huvudskärm, spegla, utöka, primär, aktivitetsfält, fält"
 
 msgid "Size of text and controls"
 msgstr "Storlek på text och kontroller"
@@ -1392,8 +1392,8 @@ msgstr "datumformat, talformat, valuta, måttenheter, metriska, brittiska, pappe
 msgid "24-hour time"
 msgstr "24-timmarsklocka"
 
-msgid "12-hour, am, pm, hour format, menu bar clock, lock screen clock"
-msgstr "12-timmars, fm, em, timformat, menyradsklocka, låsskärmsklocka"
+msgid "12-hour, am, pm, hour format, taskbar clock, lock screen clock"
+msgstr "12-timmars, fm, em, timformat, aktivitetsfältsklocka, låsskärmsklocka"
 
 msgid "Time"
 msgstr "Tid"

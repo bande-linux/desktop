@@ -14,7 +14,7 @@ reach a running session.
 
 - **The whole session at idle:** `bande-idle --binaries <dir>` runs the compositor, the shell,
   the services and the apps found in `<dir>` with a private home folder and reports RSS and
-  wake-ups per process with windows open, minimised and locked.
+  wake-ups per process with windows open, minimized and locked.
 - **One client's memory and CPU:** `bande-footprint` starts a client as a shell client on a
   2928×1818 output at 1.5×, lets it settle (`--settle <seconds>`), optionally moves the pointer
   over it, and prints RSS + swap, Vulkan device memory, threads and CPU per pointer move. For an

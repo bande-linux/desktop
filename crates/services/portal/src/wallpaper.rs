@@ -40,7 +40,7 @@ pub fn keep(picture: &Path, folder: &Path) -> io::Result<PathBuf> {
 impl Wallpaper {
     fn set(&self, app_id: &str, uri: &str, preview: bool, cancellation: &Cancellation) -> u32 {
         let Some(picture) = path_from_file_uri(uri).filter(|path| path.is_file()) else {
-            tracing::warn!("{app_id} asked for a desktop picture that is not a file: {uri}");
+            tracing::warn!("{app_id} asked for a wallpaper that is not a file: {uri}");
             return OTHER;
         };
         if preview && !self.ui.confirm(app_id, &picture, cancellation) {
@@ -52,7 +52,7 @@ impl Wallpaper {
         match chosen {
             Ok(()) => SUCCESS,
             Err(error) => {
-                tracing::warn!("cannot set the desktop picture for {app_id}: {error}");
+                tracing::warn!("cannot set the wallpaper for {app_id}: {error}");
                 OTHER
             }
         }

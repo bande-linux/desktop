@@ -217,10 +217,10 @@ impl<P: Program> Cx<P> {
 
     pub(crate) fn sizing(&self) -> (bool, Option<bool>) {
         self.focused().map_or((false, None), |window| {
-            let zoomable = self
+            let maximizable = self
                 .index(window)
                 .is_some_and(|index| self.windows[index].is_resizable());
-            (zoomable, self.full_screen(window))
+            (maximizable, self.full_screen(window))
         })
     }
 

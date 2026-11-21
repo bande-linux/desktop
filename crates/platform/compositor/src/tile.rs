@@ -45,7 +45,7 @@ enum Side {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Snap {
     Tile(Tile),
-    Zoom,
+    Maximize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +59,7 @@ pub(crate) enum Direction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Placing {
     Tile(Tile),
-    Zoom,
+    Maximize,
     Previous,
 }
 
@@ -164,7 +164,7 @@ fn moved_sides(
     .filter_map(|(moved, side)| moved.then_some(side))
 }
 
-fn placing(tile: Option<Tile>, zoomed: bool, direction: Direction) -> Option<Placing> {
+fn placing(tile: Option<Tile>, maximized: bool, direction: Direction) -> Option<Placing> {
     let row = tile.map(Tile::row);
     let left = tile.map(Tile::on_left);
     match (direction, left, row) {
@@ -182,7 +182,7 @@ fn placing(tile: Option<Tile>, zoomed: bool, direction: Direction) -> Option<Pla
         (Direction::Down, Some(left), Some(Row::Top)) => {
             Some(Placing::Tile(Tile::on_side(left, Row::Whole)))
         }
-        (Direction::Up, None, _) if !zoomed => Some(Placing::Zoom),
+        (Direction::Up, None, _) if !maximized => Some(Placing::Maximize),
         (Direction::Down, None, _) => Some(Placing::Previous),
         _ => None,
     }
@@ -203,7 +203,7 @@ pub(crate) fn snap_at(pointer: Point<f64, Logical>, area: Rectangle<i32, Logical
     if left || right {
         return Some(Snap::Tile(Tile::on_side(left, row)));
     }
-    (pointer.y <= f64::from(area.loc.y) + EDGE_REACH).then_some(Snap::Zoom)
+    (pointer.y <= f64::from(area.loc.y) + EDGE_REACH).then_some(Snap::Maximize)
 }
 
 type Target = (usize, Snap);
@@ -236,7 +236,7 @@ impl State {
         let area = self.usable_area(screen);
         match snap {
             Snap::Tile(tile) => tile.rect(area),
-            Snap::Zoom => area,
+            Snap::Maximize => area,
         }
     }
 
@@ -373,14 +373,14 @@ impl State {
             return;
         }
         let tile = window.tile.map(|(tile, _)| tile);
-        let zoomed = window.has_state(xdg_toplevel::State::Maximized);
-        match placing(tile, zoomed, direction) {
+        let maximized = window.has_state(xdg_toplevel::State::Maximized);
+        match placing(tile, maximized, direction) {
             Some(Placing::Tile(tile)) => {
                 self.tile_window(index, tile, Spring::STANDARD);
                 self.offer_other_half(index);
             }
-            Some(Placing::Zoom) => self.maximize(surface),
-            Some(Placing::Previous) if zoomed => self.unmaximize(surface),
+            Some(Placing::Maximize) => self.maximize(surface),
+            Some(Placing::Previous) if maximized => self.unmaximize(surface),
             Some(Placing::Previous) | None => {}
         }
     }
@@ -462,7 +462,7 @@ impl State {
     fn borders_another_screen(&self, (screen, snap): Target, pointer: Point<f64, Logical>) -> bool {
         let output = self.screen_rect(screen).to_f64();
         let beyond: Point<f64, Logical> = match snap {
-            Snap::Zoom => (pointer.x, output.loc.y - 1.0).into(),
+            Snap::Maximize => (pointer.x, output.loc.y - 1.0).into(),
             Snap::Tile(tile) if tile.on_left() => (output.loc.x - 1.0, pointer.y).into(),
             Snap::Tile(_) => (output.loc.x + output.size.w, pointer.y).into(),
         };
@@ -575,7 +575,7 @@ impl State {
                 self.tile_window(index, tile, Spring::QUICK);
                 self.offer_other_half(index);
             }
-            Some((_, Snap::Zoom)) => self.maximize(surface),
+            Some((_, Snap::Maximize)) => self.maximize(surface),
             None => {}
         }
     }

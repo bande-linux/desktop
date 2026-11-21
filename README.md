@@ -15,7 +15,7 @@ One Cargo workspace with the desktop itself, grouped by role in `crates/`
 | `platform/` | `bande-compositor` (Smithay with its own Vulkan renderer, `bande-render`) and the private Wayland protocols |
 | `toolkit/` | `bande-toolkit`: Datum design tokens, Vello drawing, Parley text, widgets, Wayland windows, AccessKit |
 | `shell/` | `bande-shell` (desktop, Taskbar, notifications, Quick Settings, launcher in one process), screenshots, lock screen, greeter |
-| `apps/` | Files, Settings, Look Up, the portal's file chooser and the keyring prompt |
+| `apps/` | Files, Settings, Dictionary (Look Up), the portal's file chooser and the keyring prompt |
 | `services/` | config (`config.kdl` over D-Bus), notifications, power, sound, clipboard, tray, automount, backups, search index, printing, spell checking, fault reports and crash collection, portal backend, polkit agent, keyring (Secret Service and its PAM module) |
 | `libs/` | shared logic, including `bande-app`, the framework every app is built on |
 | `testing/` | the test bus, a Wayland test client, benchmarks, a sample app and the review recorder |

@@ -296,7 +296,7 @@ impl Widget for Button {
         self.tooltip.as_deref()
     }
 
-    fn key_equivalent(&self) -> Option<Key> {
+    fn shortcut(&self) -> Option<Key> {
         match self.role {
             ButtonRole::Primary => Some(Key::Enter),
             ButtonRole::Cancel => Some(Key::Escape),

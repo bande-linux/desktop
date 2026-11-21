@@ -38,8 +38,8 @@ Implements xdg-desktop-portal's backends for the Bande desktop: Settings \
 (colour scheme, accent colour, folder icons and Reduce Motion from \
 config.kdl, so GTK, libadwaita and Qt apps follow them), the Bande Open \
 and Save dialogs, Open With for links and files, permission questions, \
-screenshots and screen sharing, the desktop picture, notifications \
-through the Bande notification center, keeping the screen or the \
+screenshots and screen sharing, the wallpaper, notifications \
+through the Bande Notification Center, keeping the screen or the \
 computer awake, writing email in the default mail app, running in the \
 background, adding web apps to Applications, sharing the account's \
 name and picture, and a key in the Bande keyring for each sandboxed \

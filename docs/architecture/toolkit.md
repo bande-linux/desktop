@@ -138,21 +138,21 @@ writes a hex value, a corner radius or a font name of its own.
     `well` left of it. Each control
     is its own button with the same 18 pt disc: pointing at one fades in a backfill of `ink` at
     12 % and turns its glyph `ink` (the close control a `danger` disc with an `on_danger` ×), and
-    a press deepens it to 22 % (`danger` darkened by 15 %). A disabled zoom (fixed-size windows)
+    a press deepens it to 22 % (`danger` darkened by 15 %). A disabled maximize (fixed-size windows)
     has a faded glyph and no hover or press. In inactive windows the wells are a `hairline`
     outline with `ink3` glyphs; hover and press work the same, since a click on an inactive
-    window's control acts at once. The zoom glyph turns inward
-    while the window is zoomed; with Alt held it shows + and Alt-click enters full screen. The
+    window's control acts at once. The maximize glyph turns inward
+    while the window is maximized; with Alt held it shows + and Alt-click enters full screen. The
     hit cells cover the pill's full height and the close cell reaches the window's left edge.
     Rounded corners (16 pt), the one pixel dark ring and the shadow pair are the compositor's, cut
     at the window geometry (`set_window_geometry`), so every app looks alike; only full-screen
     windows are square. They act on release inside. A drag on the header or
-    the chassis around the sheet moves the window, a double click zooms, a right click opens
+    the chassis around the sheet moves the window, a double click maximizes, a right click opens
     the window menu. A band from the rounded outline to 8 pt outside resizes, corner
     cut-outs included, with corners reaching 32 pt along the edges and 16 pt out diagonally, the part
     beyond the 8 pt margin being the compositor's, and the pointer shows the direction; nothing inside the outline resizes, so the free space around tabs moves the
     window. Tiled windows have the same band, a side with no room outside gets its band from
-    the compositor, maximised and full-screen windows have none, and full screen hides the header and the inset.
+    the compositor, maximized and full-screen windows have none, and full screen hides the header and the inset.
     `Window::size` and pointer positions are in the content's coordinates: by default the
     content is the sheet and the app draws only into it (clipped to its rounded shape, on the
     `Scene`'s background). An app with a sidebar or toolbar on the frame calls
@@ -162,17 +162,17 @@ writes a hex value, a corner radius or a font name of its own.
     toolbar lives in the header calls `Window::set_header(Header { title_x, items })`: its
     content then also covers the header (`Window::header_height` is 0 in full screen), the
     toolkit draws the title at `title_x` (clipped before the next item), presses on `items`
-    (content coordinates) go to the app, and the rest of the header still moves, zooms and
+    (content coordinates) go to the app, and the rest of the header still moves, maximizes and
     opens the window menu. The first item starts at `HEADER_LEADING`, the same place a plain
     title starts. A strip or toolbar in a row below the header names its free space with
     `Window::set_move_areas` (content coordinates), which then behaves as the header does. The header and its buttons are published to screen readers above the app's tree. Server-side frames
     for third-party apps (`compositor/src/frame.rs`) draw the same header and pill from
-    `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the zoom glyph
+    `title_bar.rs`, 40 pt high, and redraw when Alt is pressed or released so the maximize glyph
     follows it.
   - **Resizing from the app.** As `NSWindow setFrame:display:animate:`,
     `Window::resize_content(size, Sizing)` gives a toplevel a new content size and makes it
-    `Sizing::Fixed` (minimum and maximum size equal, no resize band or zoom) or
-    `Sizing::Resizable`. A floating window takes the size in its next frame; a zoomed, tiled or
+    `Sizing::Fixed` (minimum and maximum size equal, no resize band or maximize) or
+    `Sizing::Resizable`. A floating window takes the size in its next frame; a maximized, tiled or
     full-screen one keeps the size it was given (a fixed one is then released to floating by the
     compositor). A fixed floating window ignores configure sizes, so its own size wins. When the only Vulkan device renders on the CPU (lavapipe or
   llvmpipe, as in VMs) every window stays on `CpuRenderer` and presents `wl_shm` buffers with

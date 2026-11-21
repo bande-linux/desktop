@@ -1,8 +1,6 @@
 use bande_inbox::Outbox;
+use bande_xdg::{FILE_MANAGER, FILE_MANAGER_PATH};
 use zbus::blocking::Connection;
-
-const NAME: &str = "org.freedesktop.FileManager1";
-const PATH: &str = "/org/freedesktop/FileManager1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Show {
@@ -45,6 +43,8 @@ impl FileManager {
 }
 
 pub fn serve_file_manager(session: &Connection, requests: Outbox<ShowRequest>) -> zbus::Result<()> {
-    session.object_server().at(PATH, FileManager { requests })?;
-    session.request_name(NAME)
+    session
+        .object_server()
+        .at(FILE_MANAGER_PATH, FileManager { requests })?;
+    session.request_name(FILE_MANAGER)
 }

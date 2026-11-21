@@ -35,12 +35,12 @@ const DISABLED_OPACITY: f32 = 0.45;
 pub enum WindowControl {
     Close,
     Minimize,
-    Zoom,
+    Maximize,
     Menu,
 }
 
 impl WindowControl {
-    pub const ALL: [Self; 3] = [Self::Minimize, Self::Zoom, Self::Close];
+    pub const ALL: [Self; 3] = [Self::Minimize, Self::Maximize, Self::Close];
 
     pub fn shown(menu: bool) -> impl Iterator<Item = Self> {
         menu.then_some(Self::Menu).into_iter().chain(Self::ALL)
@@ -51,12 +51,12 @@ impl WindowControl {
         let centre = self.centre(width, height).x;
         let start = match self {
             Self::Minimize => well,
-            Self::Zoom | Self::Close => centre - CELL_PITCH / 2.0,
+            Self::Maximize | Self::Close => centre - CELL_PITCH / 2.0,
             Self::Menu => width - window_controls_width(true) - MENU_REACH,
         };
         let end = match self {
             Self::Close => width,
-            Self::Minimize | Self::Zoom => centre + CELL_PITCH / 2.0,
+            Self::Minimize | Self::Maximize => centre + CELL_PITCH / 2.0,
             Self::Menu => well,
         };
         Rect::new(start, 0.0, end - start, height)
@@ -70,7 +70,7 @@ impl WindowControl {
         let well = well_start(width);
         let x = match self {
             Self::Minimize => well + FIRST_GLYPH,
-            Self::Zoom => well + FIRST_GLYPH + CELL_PITCH,
+            Self::Maximize => well + FIRST_GLYPH + CELL_PITCH,
             Self::Close => well + FIRST_GLYPH + 2.0 * CELL_PITCH,
             Self::Menu => well - MENU_GAP - WELL_HEIGHT / 2.0,
         };
@@ -173,7 +173,7 @@ fn side(at: f32, start: f32, length: f32) -> i8 {
 pub struct ControlHover {
     pub close: f32,
     pub minimize: f32,
-    pub zoom: f32,
+    pub maximize: f32,
     pub menu: f32,
 }
 
@@ -183,7 +183,7 @@ impl ControlHover {
         Self {
             close: level(WindowControl::Close),
             minimize: level(WindowControl::Minimize),
-            zoom: level(WindowControl::Zoom),
+            maximize: level(WindowControl::Maximize),
             menu: level(WindowControl::Menu),
         }
     }
@@ -192,7 +192,7 @@ impl ControlHover {
         match control {
             WindowControl::Close => self.close,
             WindowControl::Minimize => self.minimize,
-            WindowControl::Zoom => self.zoom,
+            WindowControl::Maximize => self.maximize,
             WindowControl::Menu => self.menu,
         }
     }
@@ -241,8 +241,8 @@ pub struct WindowControls<'a> {
     pub active: bool,
     pub hover: ControlHover,
     pub pressed: Option<WindowControl>,
-    pub zoomed: bool,
-    pub zoomable: bool,
+    pub maximized: bool,
+    pub maximizable: bool,
     pub alternate: bool,
     pub menu_open: Option<bool>,
 }
@@ -284,7 +284,7 @@ impl WindowControls<'_> {
     }
 
     fn enabled(&self, control: WindowControl) -> bool {
-        control != WindowControl::Zoom || self.zoomable
+        control != WindowControl::Maximize || self.maximizable
     }
 
     fn held(&self, control: WindowControl) -> bool {
@@ -347,11 +347,11 @@ impl WindowControls<'_> {
             WindowControl::Minimize => {
                 items.push(stroke(Path::through(&[at(-4.0, 0.0), at(4.0, 0.0)])));
             }
-            WindowControl::Zoom if self.alternate && self.zoomable => {
+            WindowControl::Maximize if self.alternate && self.maximizable => {
                 items.push(stroke(Path::through(&[at(-4.0, 0.0), at(4.0, 0.0)])));
                 items.push(stroke(Path::through(&[at(0.0, -4.0), at(0.0, 4.0)])));
             }
-            WindowControl::Zoom if self.zoomed => {
+            WindowControl::Maximize if self.maximized => {
                 items.push(stroke(Path::through(&[
                     at(-4.5, -1.0),
                     at(-1.0, -1.0),
@@ -363,7 +363,7 @@ impl WindowControls<'_> {
                     at(1.0, 4.5),
                 ])));
             }
-            WindowControl::Zoom => {
+            WindowControl::Maximize => {
                 items.push(stroke(Path::through(&[
                     at(-4.5, -1.0),
                     at(-4.5, -4.5),

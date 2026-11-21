@@ -56,10 +56,10 @@ profiles. Sizes are in [performance.md](performance.md).
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
   start), fault reporting (`bande-reporter`, `bande-crash-reports`), the screenshot tool, Files, Settings, the tray, automount, file
   chooser, polkit agent and the keyring's PAM module, all built here at the same version, and the few Debian packages in
-  [Runtime stack](#runtime-stack). It also recommends, unversioned, every Bande app, listed in
-  `packaging/bande-desktop/default-apps`: an app built in
-  [bande-linux/apps](https://github.com/bande-linux/apps) is added there when it gets its first
-  APT release. It recommends no apps from Debian; a browser comes from Software. Network printers
+  [Runtime stack](#runtime-stack). It also recommends, unversioned, the default apps listed in
+  `packaging/bande-desktop/default-apps`, built in
+  [bande-linux/apps](https://github.com/bande-linux/apps); an app is added there when it gets its
+  first APT release. It recommends no apps from Debian; a browser comes from Software. Network printers
   need nothing more; support for USB and older printers comes from Settings ▸ Printers.
   `debian/default-apps.sh` turns that file into the `${bande:Recommends}` substitution variable
   at build time, so any default app can be removed or replaced. It installs

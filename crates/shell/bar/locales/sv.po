@@ -274,8 +274,8 @@ msgstr "{time}, olästa notiser"
 msgid "{time}, Do Not Disturb"
 msgstr "{time}, Stör ej"
 
-msgid "Desktop {number}"
-msgstr "Skrivbord {number}"
+msgid "Workspace {number}"
+msgstr "Arbetsyta {number}"
 
 msgid "Status items"
 msgstr "Statusobjekt"

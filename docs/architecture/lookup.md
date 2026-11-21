@@ -15,7 +15,7 @@ Dictionary app and Look Up:
   and Dictionary show one section per enabled source with a hit, in this order; the popover shows
   the first section and the first of each other kind, and More shows them all.
 
-Lookups run on worker threads. Online sources are asked only when they are enabled.
+Searches run on worker threads. Online sources are asked only when they are enabled.
 
 ## Sources
 

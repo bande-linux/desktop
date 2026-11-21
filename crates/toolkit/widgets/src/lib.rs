@@ -377,7 +377,7 @@ pub trait Widget: Any {
         false
     }
 
-    fn key_equivalent(&self) -> Option<Key> {
+    fn shortcut(&self) -> Option<Key> {
         None
     }
 
@@ -466,7 +466,7 @@ fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool
 }
 
 fn equivalent(widget: &dyn Widget, key: Key) -> Option<WidgetId> {
-    if widget.key_equivalent() == Some(key) {
+    if widget.shortcut() == Some(key) {
         return Some(widget.id());
     }
     widget
@@ -681,7 +681,7 @@ impl Ui {
             .into_iter()
             .find(|id| {
                 self.lookup(*id)
-                    .is_some_and(|widget| widget.key_equivalent().is_none())
+                    .is_some_and(|widget| widget.shortcut().is_none())
             })
             .or(primary.filter(|id| self.accepts_focus(*id)));
     }

@@ -249,12 +249,12 @@ fn confirm_wallpaper(picture: &Path, app_id: &str) -> ExitCode {
     let asked = bande_toolkit::ask("wallpaper-confirmation", |window| {
         let pixels = (PREVIEW_SIZE * window.scale().max(2.0)).ceil() as u32;
         let alert = Alert::new(
-            &tr!("Use “{picture}” as your desktop picture?", picture = name),
-            &tr!("{app} wants to change your desktop picture.", app = app),
+            &tr!("Use “{picture}” as your wallpaper?", picture = name),
+            &tr!("{app} wants to change your wallpaper.", app = app),
             move |action| chosen.set(action == SET),
         )
         .cancel(&tr!("Cancel"), "cancel")
-        .primary(&tr!("Set Desktop Picture"), SET);
+        .primary(&tr!("Set Wallpaper"), SET);
         let preview = bande_wallpaper::render(picture, Fit::Fill, pixels, pixels)
             .ok()
             .and_then(|picture| Image::from_rgba(picture.width, picture.height, picture.rgba));

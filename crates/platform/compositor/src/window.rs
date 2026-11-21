@@ -467,7 +467,7 @@ impl State {
     }
 
     pub(crate) fn sync_activated(&mut self) {
-        let key = self.key_window();
+        let key = self.focused_window();
         for window in &self.windows {
             let active = key.as_ref() == Some(window.surface());
             window.toplevel.with_pending_state(|state| {
@@ -502,13 +502,13 @@ impl State {
         }
     }
 
-    pub(crate) fn key_window(&self) -> Option<WlSurface> {
+    pub(crate) fn focused_window(&self) -> Option<WlSurface> {
         let focused = match &self.exclusive_layer {
             Some(layer) => layer.previous.clone(),
             None => self.focused(),
         }?;
         self.toplevel_of(&focused).or_else(|| {
-            self.key_behind_layer
+            self.focused_behind_layer
                 .clone()
                 .filter(|key| self.window_index(key).is_some())
         })

@@ -167,7 +167,7 @@ impl State {
             self.windowless_app = None;
             let next = self.frontmost(None);
             self.focus(next);
-            let key = self.key_window();
+            let key = self.focused_window();
             self.announce_active_app(key.as_ref());
         }
     }
@@ -235,7 +235,7 @@ impl State {
             return;
         };
         self.windowless_app = self.kept_client(&app_id).map(|client| (client, app_id));
-        let key = self.key_window();
+        let key = self.focused_window();
         self.announce_active_app(key.as_ref());
     }
 
@@ -461,7 +461,7 @@ impl Dispatch<BandeAppV1, ()> for State {
                 {
                     state.windows[index].panel = true;
                     let surface = state.windows[index].surface().clone();
-                    if state.key_window().as_ref() == Some(&surface) {
+                    if state.focused_window().as_ref() == Some(&surface) {
                         state.refocus_after_losing(&surface);
                     }
                     state.needs_redraw = true;

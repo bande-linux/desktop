@@ -871,7 +871,7 @@ impl TaskbarView {
                 }
             }
             Slot::Workspace(index) => {
-                tr!("Desktop {number}", number = (index as i64 + 1))
+                tr!("Workspace {number}", number = (index as i64 + 1))
             }
         }
     }

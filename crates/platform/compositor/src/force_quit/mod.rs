@@ -300,7 +300,7 @@ impl State {
     }
 
     fn frontmost_key(&self) -> Option<String> {
-        let surface = self.key_window()?;
+        let surface = self.focused_window()?;
         let client = surface.client()?;
         let (_, app_id) = toplevel_names(&surface);
         Some(match app_id.is_empty() {

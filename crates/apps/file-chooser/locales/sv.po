@@ -73,13 +73,13 @@ msgstr "Välj en mapp"
 msgid "Save"
 msgstr "Spara"
 
-msgid "Use “{picture}” as your desktop picture?"
+msgid "Use “{picture}” as your wallpaper?"
 msgstr "Vill du använda ”{picture}” som skrivbordsbild?"
 
-msgid "{app} wants to change your desktop picture."
+msgid "{app} wants to change your wallpaper."
 msgstr "{app} vill ändra din skrivbordsbild."
 
-msgid "Set Desktop Picture"
+msgid "Set Wallpaper"
 msgstr "Använd som skrivbordsbild"
 
 msgid "A4"

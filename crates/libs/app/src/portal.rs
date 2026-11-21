@@ -13,14 +13,16 @@ const REQUEST: &str = "org.freedesktop.portal.Request";
 
 pub type Filter = (String, Vec<(u32, String)>);
 
-static KEY_WINDOW: Mutex<Option<String>> = Mutex::new(None);
+static FOCUSED_WINDOW: Mutex<Option<String>> = Mutex::new(None);
 
-pub(crate) fn remember_key_window(handle: Option<&str>) {
-    *KEY_WINDOW.lock().unwrap_or_else(PoisonError::into_inner) = handle.map(str::to_owned);
+pub(crate) fn remember_focused_window(handle: Option<&str>) {
+    *FOCUSED_WINDOW
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = handle.map(str::to_owned);
 }
 
 pub fn parent_window() -> String {
-    KEY_WINDOW
+    FOCUSED_WINDOW
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .as_ref()

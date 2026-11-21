@@ -45,7 +45,7 @@ pub(crate) fn assemble(
     info: &Info,
     menus: Menus,
     windowed: bool,
-    (zoomable, full_screen): (bool, Option<bool>),
+    (maximizable, full_screen): (bool, Option<bool>),
 ) -> Vec<Entry> {
     let name = (info.name)();
     let items = match info.settings {
@@ -56,7 +56,7 @@ pub(crate) fn assemble(
     entries.extend(menus.menus);
     let mut window = vec![close_window(info.keys.close())];
     window.extend(menus.window);
-    entries.push(window_submenu(window, zoomable, full_screen));
+    entries.push(window_submenu(window, maximizable, full_screen));
     match windowed {
         true => entries,
         false => entries.into_iter().map(Entry::without_window).collect(),

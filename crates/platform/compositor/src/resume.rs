@@ -44,7 +44,7 @@ struct Placed {
     space: usize,
     frame: Frame,
     tile: Option<Tile>,
-    zoomed: bool,
+    maximized: bool,
     full_screen: bool,
     minimized: bool,
     rank: usize,
@@ -196,7 +196,7 @@ impl State {
                 height: frame.size.h,
             },
             tile: window.tile.map(|(tile, _)| tile),
-            zoomed: window.has_state(xdg_toplevel::State::Maximized),
+            maximized: window.has_state(xdg_toplevel::State::Maximized),
             full_screen: window.has_state(xdg_toplevel::State::Fullscreen),
             minimized: window.minimized.is_some(),
             rank,
@@ -329,7 +329,7 @@ impl State {
         });
         window.resume_rank = Some(record.rank);
         let fixed = window.fixed_size();
-        match (record.full_screen, record.zoomed, record.tile) {
+        match (record.full_screen, record.maximized, record.tile) {
             _ if fixed => window.recalled = Some(frame.loc),
             (true, _, _) => {
                 self.place(index, xdg_toplevel::State::Fullscreen, Some(output));

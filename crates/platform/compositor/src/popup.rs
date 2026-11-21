@@ -197,7 +197,7 @@ impl State {
             pointer.set_grab(self, PopupPointerGrab::new(&grab), serial, Focus::Keep);
         }
         if let Some(keyboard) = keyboard {
-            self.key_behind_layer = self.key_window();
+            self.focused_behind_layer = self.focused_window();
             keyboard.set_focus(self, grab.current_grab(), serial);
             keyboard.set_grab(self, PopupKeyboardGrab::new(&grab), serial);
         }

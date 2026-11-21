@@ -278,7 +278,7 @@ impl Compositor {
                     return Err(RenderError::NothingRendered);
                 };
                 let shading = Shading {
-                    active: self.state.key_window().as_ref() == Some(window.surface()),
+                    active: self.state.focused_window().as_ref() == Some(window.surface()),
                     scheme: self.state.decorations.scheme,
                 };
                 let at_origin = Look::shown(Rectangle::from_size(geometry.size.to_f64()));

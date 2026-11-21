@@ -264,7 +264,7 @@ impl XdgDialogHandler for State {
         let Some(parent) = toplevel.parent() else {
             return;
         };
-        if is_modal && self.key_window().as_ref() == Some(&parent) {
+        if is_modal && self.focused_window().as_ref() == Some(&parent) {
             self.focus(Some(toplevel.wl_surface().clone()));
         }
     }

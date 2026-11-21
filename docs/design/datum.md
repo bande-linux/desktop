@@ -36,7 +36,7 @@ Bande should feel like a well-made instrument, like a good radio or synthesizer.
 
 **Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). Corners are plain circular arcs: they read crisper and more technical and are cheap to draw.
 
-The compositor's window corners are 16, on maximised and tiled windows too: a window is always rounded, with its shadow and lit edge, whichever style and however the Taskbar sits. Only true full screen, which has no window edges, is square.
+The compositor's window corners are 16, on maximized and tiled windows too: a window is always rounded, with its shadow and lit edge, whichever style and however the Taskbar sits. Only true full screen, which has no window edges, is square.
 
 ### Hairlines
 - One hairline width: 1 device pixel at integer scales, snapped to the pixel grid at fractional scales (`width = 1/scale` logical, rounded to whole device pixels ≥ 1).
@@ -180,16 +180,16 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 **Header (48 pt, `chassis`)**: from the left, 12 pt in: back/forward (when relevant), the **title flush left** in Manrope 15/700, toolbar items, search (`well`, radius 8), a 16 gap, then the menu button and the window controls on the right. No separator line: the sheet's top edge is the division.
 
-**Window controls (right, ours)**: one **well**, a 66×24 pill with radius 12 (`well` fill) 12 pt from the right edge, holding three neutral glyphs on a 21 pt pitch, from the left minimise, zoom, close, so close is at the far right as in GTK, Qt and Firefox. The menu button (⋮), a 24×24 well, sits 6 pt left of it.
-- **Minimise**: an 8 pt bar.
-- **Maximize**: two opposing corner brackets (expand). It changes to inward brackets while zoomed or full screen, so the glyph tells the state.
+**Window controls (right, ours)**: one **well**, a 66×24 pill with radius 12 (`well` fill) 12 pt from the right edge, holding three neutral glyphs on a 21 pt pitch, from the left minimize, maximize, close, so close is at the far right as in GTK, Qt and Firefox. The menu button (⋮), a 24×24 well, sits 6 pt left of it.
+- **Minimize**: an 8 pt bar.
+- **Maximize**: two opposing corner brackets (expand). It changes to inward brackets while maximized or full screen, so the glyph tells the state.
 - **Close**: an × with 7 pt arms and a 1.5 stroke, round caps.
 - **Rest**: glyphs `ink2`, **always visible** (honest, and discoverable on first use).
 - **Hover over the well**: all glyphs go to `ink`. The hovered *close* gets a 16 pt danger disc with a white ×. Maximize and minimize get no colour (one signal: only the destructive action turns red).
 - **Press**: a disc of `ink` at 12 % behind the glyph, plus the `quick` spring.
 - **Inactive window**: the well becomes a 1 pt `hairline` outline and the glyphs go to `ink3`.
-- **Alt held**: zoom shows a "+" (zoom to fit) instead of brackets, following DESIGN §1's progressive disclosure.
-- The hit target is the full 24×21 cell; close's cell reaches the window's right edge, so the top-right screen corner closes a maximised window (Fitts).
+- **Alt held**: maximize shows a "+" (full screen) instead of brackets, following DESIGN §1's progressive disclosure.
+- The hit target is the full 24×21 cell; close's cell reaches the window's right edge, so the top-right screen corner closes a maximized window (Fitts).
 
 **Sidebar**: on `chassis` (part of the frame). It uses tracked labels ("PLACES"), 16 pt line symbols in `ink2`, a 28 pt row and a tone-only selection with radius 6: `well` in the active window, `hairline` while the sidebar has the keyboard, and `well` halfway to `chassis` in an inactive window. The selected symbol turns `ink`; sidebar rows get no accent and no focus ring. Content selection (on the sheet) is accent-filled, so "where I am" (grey) and "what I picked" (signal) are never confused.
 
@@ -250,7 +250,7 @@ not gloss. Third-party icons are shown unmodified.
 
 The presets are `bande-spring`'s (`QUICK`, `STANDARD`, `GENTLE`, `FADE`, `INTERACTIVE`, `MOMENTUM`, `BOUNCY`, `SHAKE`). Datum adds **how** things move, Material 3-style: *spatial* springs for position and size, *effects* springs (`fade`) for colour and opacity, never mixed.
 
-- **Axis-true:** objects travel in straight lines from their source. Minimise slides and scales into its exact bar slot along one straight path (`gentle`), keeping its shape. Restore reverses it.
+- **Axis-true:** objects travel in straight lines from their source. Minimize slides and scales into its exact bar slot along one straight path (`gentle`), keeping its shape. Restore reverses it.
 - **Open / close:** the window scales 0.96 → 1 and fades in from the bar icon's side (`standard`); close is 1 → 0.98 + fade (`quick`).
 - **The selection block glides:** in lists, menus, segmented controls and the sidebar, the highlight *moves* to the new row (`quick`) rather than blinking. This is the most visible "Datum" motion.
 - **The signal square blinks only once:** running and launch feedback pulses the square indicator (opacity 1 → .35 → 1 on `fade`) until the first window maps; icons never move.
@@ -264,8 +264,8 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 ## 11. The shell: the Taskbar
 
-The Taskbar is an edge-anchored bar, 64 pt at the default icon size, plus its margins when floating, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly:
-- Bar surface = the same tone, material (§4), radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. In every style it floats by default: 8 pt from the screen on all sides, and 8 pt from maximised and tiled windows, which is 2 × 8 pt added to the space it reserves. The 8 pt on the screen side counts as part of it for the pointer, so a throw to the screen edge still lands on it. Settings ▸ Taskbar turns floating off (`bar { floating #false }`): it then attaches to its screen edge, keeps 8 pt from the ends and rounds its inner corners, and reserves only its own thickness. "Tinted chassis" applies here too.
+The Taskbar is an edge-anchored bar, 64 pt at the default icon size, plus its margins when floating, on the left holding: the mark, the app menu block, apps, Trash, workspaces, a status cluster and the clock. Datum fits it directly:
+- Bar surface = the same tone, material (§4), radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. In every style it floats by default: 8 pt from the screen on all sides, and 8 pt from maximized and tiled windows, which is 2 × 8 pt added to the space it reserves. The 8 pt on the screen side counts as part of it for the pointer, so a throw to the screen edge still lands on it. Settings ▸ Taskbar turns floating off (`bar { floating #false }`): it then attaches to its screen edge, keeps 8 pt from the ends and rounds its inner corners, and reserves only its own thickness. "Tinted chassis" applies here too.
 - **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 16 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".

@@ -216,7 +216,7 @@ impl Compositor {
         elements.extend(self.state.assist_elements(renderer, screen, scale));
         elements.extend(self.state.window_menu_elements(renderer, screen, scale));
         let source = self.state.behind(renderer, screen, scale);
-        let key = self.state.key_window();
+        let key = self.state.focused_window();
         let shell_opacity = self.state.shell_opacity();
         let wallpapers: Vec<WlSurface> = match shell_opacity < 1.0 {
             true => self

@@ -304,7 +304,7 @@ impl State {
     }
 
     fn running_apps(&mut self) -> Vec<App> {
-        let key = self.key_window().map(|surface| owner_of(&surface));
+        let key = self.focused_window().map(|surface| owner_of(&surface));
         let mut found: Vec<(String, String, Option<ClientId>)> = Vec::new();
         let owners = self
             .windows
@@ -380,7 +380,7 @@ impl State {
         let selected = if backwards {
             apps.len() - 1
         } else {
-            usize::from(self.key_window().is_some() && apps.len() > 1)
+            usize::from(self.focused_window().is_some() && apps.len() > 1)
         };
         self.close_overview();
         self.switcher.session = Some(Session {

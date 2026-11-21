@@ -25,9 +25,9 @@ section = "misc"
 depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66), elfutils"
 extended-description = """\
 Keeps a small report of each fault in a root-only folder. Reports leave the \
-computer only if sending is switched on, which it is not until the person \
-agrees in first setup or in Settings. Between faults no process runs: sending starts when a \
-report waits, and waits on network changes rather than polling."""
+computer only once sending is switched on in Settings. Only the resource sampler \
+stays running: collecting starts at a fault, and sending starts when a report \
+waits and waits on network changes rather than polling."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-reporter/copyright", "usr/share/doc/bande-reporter/copyright", "644"],

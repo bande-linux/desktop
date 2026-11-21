@@ -272,7 +272,7 @@ impl PaneId {
                 "theme, look, colour, color, wallpaper, background, desktop picture, picture, photo, image"
             ),
             Self::Bar => {
-                tr!("bar, dock, menu bar, launcher, taskbar, panel, favourites, favorites")
+                tr!("bar, dock, launcher, taskbar, panel, favourites, favorites")
             }
             Self::Notifications => tr!("alerts, banners"),
             Self::Search => tr!("launcher, super, results, recents, privacy"),
@@ -1414,7 +1414,7 @@ fn displays_pane() -> Pane {
                     setting(
                         SettingId::DisplayUse,
                         tr!("Use as"),
-                        tr!("main display, mirror, extend, primary, menu bar, bar"),
+                        tr!("main display, mirror, extend, primary, taskbar, bar"),
                         Kind::DisplayUses,
                     ),
                     setting(
@@ -2192,7 +2192,7 @@ fn language_time_pane() -> Pane {
                     switch(
                         SettingId::Clock24Hour,
                         tr!("24-hour time"),
-                        tr!("12-hour, am, pm, hour format, menu bar clock, lock screen clock"),
+                        tr!("12-hour, am, pm, hour format, taskbar clock, lock screen clock"),
                     ),
                 ],
             ),

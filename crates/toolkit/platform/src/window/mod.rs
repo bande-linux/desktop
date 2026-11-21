@@ -1020,7 +1020,7 @@ impl Window {
         self.flush()
     }
 
-    pub fn toggle_zoom(&mut self) -> Result<(), WindowError> {
+    pub fn toggle_maximize(&mut self) -> Result<(), WindowError> {
         if !self.is_resizable() {
             return Ok(());
         }
@@ -1318,7 +1318,7 @@ impl Window {
     }
 
     fn placements_deadline(&self) -> Option<Instant> {
-        let wait = self.chrome.as_ref()?.zoom_wait?;
+        let wait = self.chrome.as_ref()?.maximize_wait?;
         Some(
             wait.since
                 + match wait.held {
@@ -1423,7 +1423,7 @@ impl Window {
         let toplevel = self.state.toplevel;
         let look = Look {
             active: toplevel.activated,
-            zoomed: toplevel.maximized || toplevel.fullscreen,
+            maximized: toplevel.maximized || toplevel.fullscreen,
             fullscreen: toplevel.fullscreen,
         };
         match &mut self.chrome {

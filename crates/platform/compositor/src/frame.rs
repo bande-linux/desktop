@@ -51,8 +51,8 @@ struct Look {
     scheme: Scheme,
     hovered: Option<WindowControl>,
     pressed: Option<WindowControl>,
-    zoomed: bool,
-    zoomable: bool,
+    maximized: bool,
+    maximizable: bool,
     alternate: bool,
     menu: Option<bool>,
     offset: i32,
@@ -228,8 +228,9 @@ impl State {
         for window in &mut self.windows {
             let over = match &pointed {
                 Some((surface, Zone::Control(control))) if surface == window.surface() => {
-                    Some(*control)
-                        .filter(|control| *control != WindowControl::Zoom || !window.fixed_size())
+                    Some(*control).filter(|control| {
+                        *control != WindowControl::Maximize || !window.fixed_size()
+                    })
                 }
                 _ => None,
             };
@@ -238,12 +239,12 @@ impl State {
                 self.needs_redraw = true;
             }
         }
-        let on_zoom = self
+        let on_maximize = self
             .windows
             .iter()
-            .find(|window| window.frame.hovered == Some(WindowControl::Zoom))
+            .find(|window| window.frame.hovered == Some(WindowControl::Maximize))
             .map(|window| window.surface().clone());
-        self.rest_on_zoom(on_zoom);
+        self.rest_on_maximize(on_maximize);
         let previous = std::mem::replace(&mut self.decorations.pointed, pointed.clone());
         match pointed {
             Some(pointed) => {
@@ -303,12 +304,12 @@ impl State {
                     self.windows[index].frame.pressed = Some(control);
                     self.needs_redraw = true;
                 }
-                if control == WindowControl::Zoom
+                if control == WindowControl::Maximize
                     && self
                         .window_index(&surface)
                         .is_some_and(|index| !self.windows[index].fixed_size())
                 {
-                    self.press_zoom(&surface);
+                    self.press_maximize(&surface);
                 }
                 true
             }
@@ -324,7 +325,7 @@ impl State {
                     });
                 if double {
                     self.swallowed_button = Some(button);
-                    self.toggle_zoom(&surface);
+                    self.toggle_maximize(&surface);
                     return true;
                 }
                 self.decorations.last_click = Some((surface.clone(), time));
@@ -363,15 +364,15 @@ impl State {
         match control {
             Some(WindowControl::Close) => self.windows[index].toplevel.send_close(),
             Some(WindowControl::Minimize) => self.minimize(&surface),
-            Some(WindowControl::Zoom) if self.windows[index].fixed_size() => {}
-            Some(WindowControl::Zoom) if self.alternate_held() => self.fullscreen(&surface),
-            Some(WindowControl::Zoom) => self.toggle_zoom(&surface),
+            Some(WindowControl::Maximize) if self.windows[index].fixed_size() => {}
+            Some(WindowControl::Maximize) if self.alternate_held() => self.fullscreen(&surface),
+            Some(WindowControl::Maximize) => self.toggle_maximize(&surface),
             Some(WindowControl::Menu) | None => {}
         }
         true
     }
 
-    pub(crate) fn toggle_zoom(&mut self, surface: &WlSurface) {
+    pub(crate) fn toggle_maximize(&mut self, surface: &WlSurface) {
         let Some(index) = self.window_index(surface) else {
             return;
         };
@@ -395,7 +396,7 @@ impl State {
     }
 
     pub(crate) fn paint_title_bars(&mut self, renderer: &mut VulkanRenderer) {
-        let key = self.key_window();
+        let key = self.focused_window();
         let alternate = self.alternate_held();
         let scales: Vec<f64> = self
             .windows
@@ -429,8 +430,8 @@ impl State {
                 scheme,
                 hovered: window.frame.hovered,
                 pressed: window.frame.pressed,
-                zoomed: window.has_state(xdg_toplevel::State::Maximized),
-                zoomable: !window.fixed_size(),
+                maximized: window.has_state(xdg_toplevel::State::Maximized),
+                maximizable: !window.fixed_size(),
                 alternate,
                 menu,
                 offset,
@@ -483,8 +484,8 @@ fn paint_title_bar(
         pressed: look
             .pressed
             .filter(|pressed| look.hovered == Some(*pressed)),
-        zoomed: look.zoomed,
-        zoomable: look.zoomable,
+        maximized: look.maximized,
+        maximizable: look.maximizable,
         alternate: look.alternate && look.active,
         menu_open: look.menu,
     };

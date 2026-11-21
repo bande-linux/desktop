@@ -64,7 +64,7 @@ impl Window {
                 } else {
                     tr!("Maximize")
                 },
-                "zoom",
+                "maximize",
             )
             .enabled(!toplevel.fullscreen && self.is_resizable()),
             MenuItem::new(
@@ -112,7 +112,7 @@ impl Window {
         use bande_protocols::client::bande_app_v1::Placement;
         match action {
             "minimize" => self.minimize(),
-            "zoom" => self.toggle_zoom(),
+            "maximize" => self.toggle_maximize(),
             "full-screen" => self.toggle_full_screen(),
             "move" => self.start_move(),
             "close" => {
@@ -129,7 +129,7 @@ impl Window {
             "place-top-right" => self.place(Placement::TopRight),
             "place-bottom-left" => self.place(Placement::BottomLeft),
             "place-bottom-right" => self.place(Placement::BottomRight),
-            "place-fill" if !self.state.toplevel.maximized => self.toggle_zoom(),
+            "place-fill" if !self.state.toplevel.maximized => self.toggle_maximize(),
             "place-next-display" => self.place(Placement::NextDisplay),
             "place-restore" => self.place(Placement::Restore),
             "keep-on-top" => {

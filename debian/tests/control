@@ -1,5 +1,5 @@
 Tests: desktop
-Depends: bande-desktop
+Depends: bande-desktop, passwd
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: every-package
@@ -10,7 +10,8 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
  bande-files, bande-lookup, bande-settings, bande-greeter, bande-terminal, bande-software,
  bande-installer, bande-monitor, bande-mail, bande-calendar, bande-velox, bande-calculator,
  bande-player, bande-viewer, bande-clock, bande-text-editor, bande-disks, bande-archive,
- bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb
+ bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb,
+ apt, bash, coreutils, dash, dpkg, libc-bin, login, mount, passwd, tar, tzdata, util-linux
 Restrictions: needs-root, allow-stderr
 
 Tests: display-manager

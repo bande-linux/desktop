@@ -493,8 +493,8 @@ what the one before could not save:
   a session without a clean log out, the next asks "Reopen your apps?" before anything starts.
 - **The record**: every failure of a Bande program leaves one report, kept on the computer unless
   sending is on ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`
-  (`bande-desktop` sets `DefaultLimitCORE=infinity` for the user manager, whose soft limit is
-  otherwise 0). Programs that hold passwords (`bande-lock`, `bande-greeter`, `bande-polkit`,
+  (`bande-crash-reports`, which depends on it, sets `DefaultLimitCORE=infinity` for the user
+  manager, whose soft limit is otherwise 0). Programs that hold passwords (`bande-lock`, `bande-greeter`, `bande-polkit`,
   `bande-secrets`, `bande-clipboard`) are not dumpable, so only their panic text is recorded.
   Symbols are in [packaging](packaging.md).
 

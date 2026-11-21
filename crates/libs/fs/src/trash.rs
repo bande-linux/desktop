@@ -435,14 +435,8 @@ impl Trash {
     }
 
     pub fn for_user() -> Option<Self> {
-        let data_home = std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-            .or_else(|| {
-                std::env::var_os("HOME").map(|home| Path::new(&home).join(".local/share"))
-            })?;
         Some(Self::new(
-            data_home.join("Trash"),
+            bande_xdg::data_home()?.join("Trash"),
             rustix::process::getuid().as_raw(),
         ))
     }

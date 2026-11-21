@@ -1,5 +1,4 @@
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -77,10 +76,10 @@ impl Manifest {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
-        let staging = path.with_extension("json.new");
-        let mut file = File::create(&staging)?;
-        file.write_all(&serde_json::to_vec_pretty(self)?)?;
-        persist(&file, &staging, path)
+        Ok(bande_xdg::replace_file(
+            path,
+            serde_json::to_vec_pretty(self)?,
+        )?)
     }
 
     pub fn is_suspended(&self) -> bool {
@@ -93,13 +92,4 @@ impl Manifest {
             .find(|forward| forward.guest == 22)
             .map(|forward| forward.host)
     }
-}
-
-pub(crate) fn persist(file: &File, staging: &Path, path: &Path) -> Result<()> {
-    file.sync_all()?;
-    fs::rename(staging, path)?;
-    if let Some(folder) = path.parent() {
-        File::open(folder)?.sync_all()?;
-    }
-    Ok(())
 }

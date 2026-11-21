@@ -29,7 +29,7 @@ pub(crate) fn input_source_language(layout: &str, table: &HashMap<String, String
 
 pub(crate) fn data_directories() -> Vec<PathBuf> {
     let mut directories = Vec::new();
-    if let Some(home) = bande_data_home() {
+    if let Some(home) = bande_xdg::data_home() {
         directories.push(home);
     }
     let shared = std::env::var("XDG_DATA_DIRS")
@@ -38,12 +38,6 @@ pub(crate) fn data_directories() -> Vec<PathBuf> {
         .unwrap_or_else(|| "/usr/local/share:/usr/share".to_owned());
     directories.extend(shared.split(':').map(PathBuf::from));
     directories
-}
-
-pub(crate) fn bande_data_home() -> Option<PathBuf> {
-    std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::home_dir().map(|home| home.join(".local/share")))
 }
 
 pub(crate) fn data_stamp() -> Vec<Option<SystemTime>> {

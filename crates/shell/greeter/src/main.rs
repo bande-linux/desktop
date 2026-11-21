@@ -403,12 +403,7 @@ impl App for Greeter {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let users = login_users(&std::fs::read_to_string("/etc/passwd")?);
-    let last_user = last_user_file(
-        std::env::var_os("XDG_STATE_HOME")
-            .map(PathBuf::from)
-            .as_deref(),
-        std::env::home_dir().as_deref(),
-    );
+    let last_user = last_user_file();
     let remembered = last_user.as_deref().and_then(remembered_user);
     let user = users
         .iter()

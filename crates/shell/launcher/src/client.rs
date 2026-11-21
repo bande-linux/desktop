@@ -691,12 +691,7 @@ impl LauncherShell {
                 .ok(),
             apps: apps_by_type,
             recently_used,
-            config: config_path(
-                std::env::var_os("XDG_CONFIG_HOME")
-                    .map(PathBuf::from)
-                    .as_deref(),
-                Some(&home),
-            ),
+            config: config_path(),
             home,
             skin_tone,
             input_region: None,

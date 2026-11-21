@@ -32,7 +32,7 @@ use bande_toolkit::{
     MenuPlacement, Point, Rect, Role, Scene, Shape, Snapshot, TextAlign, TextStyle, TextSystem,
     Transfer, Window, WindowError, WindowEvent,
 };
-use bande_xdg::{UserDir, config_home, file_uri, spawn_detached, state_home, user_dir};
+use bande_xdg::{UserDir, cache_home, config_home, file_uri, spawn_detached, state_home, user_dir};
 use zbus::blocking::Connection;
 
 const MARKUP_FLAG: &str = "--markup";
@@ -110,6 +110,7 @@ struct Recorder {
 struct Screenshots {
     home: PathBuf,
     config_home: PathBuf,
+    portal_dir: PathBuf,
     options_path: PathBuf,
     options: CaptureOptions,
     palette_mode: PaletteMode,
@@ -193,13 +194,6 @@ impl Screenshots {
     fn user_dir(&self, dir: UserDir) -> PathBuf {
         let user_dirs = std::fs::read_to_string(self.config_home.join("user-dirs.dirs")).ok();
         user_dir(&self.home, user_dirs.as_deref(), dir)
-    }
-
-    fn portal_dir(&self) -> PathBuf {
-        std::env::var_os("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.home.join(".cache"))
-            .join("bande-screenshot")
     }
 
     fn destination_dir(&self) -> PathBuf {
@@ -463,8 +457,8 @@ impl Screenshots {
                 let path = shot
                     .and_then(|shot| Self::snapshot(window, &target, &shot))
                     .and_then(|image| {
-                        let dir = self.portal_dir();
-                        save(&image, &dir, bande_datetime::now().datetime())
+                        let dir = &self.portal_dir;
+                        save(&image, dir, bande_datetime::now().datetime())
                             .inspect_err(|error| {
                                 tracing::warn!("cannot save to {}: {error}", dir.display())
                             })
@@ -1304,12 +1298,14 @@ impl App for Screenshots {
 }
 
 fn run() -> Result<(), WindowError> {
+    let no_home = || WindowError::Io(std::io::Error::other("HOME is not set"));
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
-        .ok_or_else(|| WindowError::Io(std::io::Error::other("HOME is not set")))?;
-    let config_home = config_home().unwrap_or_else(|| home.join(".config"));
+        .ok_or_else(no_home)?;
+    let config_home = config_home().ok_or_else(no_home)?;
+    let portal_dir = cache_home().ok_or_else(no_home)?.join("bande-screenshot");
     let options_path = state_home()
-        .unwrap_or_else(|| home.join(".local/state"))
+        .ok_or_else(no_home)?
         .join("bande-screenshot/options");
     let mut window = Window::open(
         Role::Layer(LayerOptions {
@@ -1337,6 +1333,7 @@ fn run() -> Result<(), WindowError> {
     let mut screenshots = Screenshots {
         home,
         config_home,
+        portal_dir,
         options: CaptureOptions::load(&options_path),
         options_path,
         palette_mode: PaletteMode::Area,

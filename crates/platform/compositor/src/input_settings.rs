@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::thread;
 
 use bande_config::{
@@ -43,9 +43,7 @@ impl InputSettings {
 }
 
 pub fn user_config() -> Option<Config> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let Some(path) = config_path(config_home.as_deref(), home.as_deref()) else {
+    let Some(path) = config_path() else {
         return Some(Config::default());
     };
     let source = match std::fs::read_to_string(&path) {

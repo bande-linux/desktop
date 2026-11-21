@@ -23,12 +23,8 @@ pub fn login_picture(folder: &Path, uid: u32) -> Option<File> {
     trusted.then_some(file)
 }
 
-pub fn last_user_file(state_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
-    let state = match state_home.filter(|path| path.is_absolute()) {
-        Some(state) => state.to_path_buf(),
-        None => home?.join(".local/state"),
-    };
-    Some(state.join(LAST_USER))
+pub fn last_user_file() -> Option<PathBuf> {
+    bande_xdg::state_home().map(|state| state.join(LAST_USER))
 }
 
 pub fn remember_user(file: &Path, login: &str) -> std::io::Result<()> {

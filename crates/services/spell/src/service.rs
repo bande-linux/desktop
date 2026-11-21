@@ -9,8 +9,8 @@ use spellbook::Dictionary;
 use zbus::object_server::SignalEmitter;
 
 use crate::dictionaries::{
-    bande_data_home, best_for, data_directories, data_stamp, input_source_language, installed,
-    language_data, language_of, load,
+    best_for, data_directories, data_stamp, input_source_language, installed, language_data,
+    language_of, load,
 };
 use crate::store::Store;
 
@@ -473,12 +473,8 @@ fn wait_until_idle(activity: &Receiver<()>) {
 
 impl Engine {
     pub fn open() -> Result<Self, Box<dyn std::error::Error>> {
-        let home = std::env::home_dir();
-        let config = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| home.as_ref().map(|home| home.join(".config")))
-            .ok_or("neither XDG_CONFIG_HOME nor HOME is set")?;
-        let data = bande_data_home().ok_or("neither XDG_DATA_HOME nor HOME is set")?;
+        let config = bande_xdg::config_home().ok_or("neither XDG_CONFIG_HOME nor HOME is set")?;
+        let data = bande_xdg::data_home().ok_or("neither XDG_DATA_HOME nor HOME is set")?;
         let (system_language, region) = system_locale();
         Ok(Self {
             store: Store::open(&config, &data),

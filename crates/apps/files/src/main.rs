@@ -19,9 +19,8 @@ use bande_files::{
     BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, ServersSeen,
     Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
-    recent_folders_file as recent_folders_file_in, rows, serve_file_manager, settings_view,
-    sidebar_file, status_bar_file, views_file, volumes_hidden, with_bookmarks, with_place_shown,
-    without_bookmark,
+    recent_folders_file, rows, serve_file_manager, settings_view, sidebar_file, status_bar_file,
+    views_file, volumes_hidden, with_bookmarks, with_place_shown, without_bookmark,
 };
 use bande_fs::{History, Running, Trash};
 use bande_glance::{Action, GlanceLink, Panel, remembered_size, serve_worker};
@@ -40,7 +39,7 @@ use bande_volumes::{
 use bande_xdg::{
     Apps, TERMINAL, UserDir, config_dirs, config_home, data_dirs, file_uri, launch_with,
     launch_with_arguments, path_from_file_uri, read_user_dirs, replace_file, spawn_detached,
-    state_home, user_dir,
+    user_dir,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use zbus::blocking::fdo::DBusProxy;
@@ -458,22 +457,14 @@ fn read(path: Option<PathBuf>) -> Option<String> {
     path.and_then(|path| std::fs::read_to_string(path).ok())
 }
 
-fn layout_file(home: &Path) -> PathBuf {
-    sidebar_file(state_home().as_deref(), home)
-}
-
 struct Sidebar {
     rows: Vec<Row>,
     hidden: Vec<Location>,
     volumes_shown: bool,
 }
 
-fn recent_folders_file(home: &Path) -> PathBuf {
-    recent_folders_file_in(state_home().as_deref(), home)
-}
-
 fn sidebar(home: &Path) -> Sidebar {
-    let layout = read(Some(layout_file(home)));
+    let layout = read(sidebar_file());
     let rows = rows(
         home,
         read_user_dirs().as_deref(),
@@ -504,11 +495,11 @@ fn edit_bookmarks(edit: &BookmarkEdit) -> std::io::Result<()> {
     replace_file(&file, &edited)
 }
 
-fn edit_sidebar(home: &Path, edit: &SidebarEdit) -> std::io::Result<()> {
+fn edit_sidebar(edit: &SidebarEdit) -> std::io::Result<()> {
     if let Some(bookmarks) = &edit.bookmarks {
         edit_bookmarks(bookmarks)?;
     }
-    let file = layout_file(home);
+    let file = sidebar_file().ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
     match &edit.layout {
         Some(layout) => {
             let volumes_shown = !volumes_hidden(read(Some(file.clone())).as_deref());
@@ -590,7 +581,10 @@ impl Files {
             .iter()
             .map(|folder| format!("{}\n", folder.display()))
             .collect();
-        if let Err(error) = replace_file(&recent_folders_file(&self.home), &text) {
+        let remembered = recent_folders_file()
+            .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+            .and_then(|file| replace_file(&file, &text));
+        if let Err(error) = remembered {
             tracing::warn!("cannot remember the recent folders: {error}");
         }
     }
@@ -931,13 +925,15 @@ impl Files {
             user_dirs.as_deref(),
             UserDir::Templates,
         ));
-        let state_home = state_home();
-        view.set_view_memory(ViewMemory::load(views_file(
-            state_home.as_deref(),
-            &self.home,
-        )));
-        view.set_status_bar_file(status_bar_file(state_home.as_deref(), &self.home));
-        view.set_list_columns_file(list_columns_file(state_home.as_deref(), &self.home));
+        if let Some(file) = views_file() {
+            view.set_view_memory(ViewMemory::load(file));
+        }
+        if let Some(file) = status_bar_file() {
+            view.set_status_bar_file(file);
+        }
+        if let Some(file) = list_columns_file() {
+            view.set_list_columns_file(file);
+        }
         if let (Some(xbel), Some(usage)) = (recently_used_path(), usage_path()) {
             view.set_recents_sources(xbel, usage);
         }
@@ -1214,7 +1210,7 @@ impl Files {
             | Request::TabDrop(_) => {}
             Request::OpenTerminal(folder) => open_terminal(window, &folder),
             Request::EditSidebar(edit) => {
-                if let Err(error) = edit_sidebar(&self.home, &edit) {
+                if let Err(error) = edit_sidebar(&edit) {
                     tracing::warn!("cannot change the sidebar: {error}");
                 }
                 self.load_sidebars(cx);
@@ -1262,8 +1258,9 @@ impl Program for Files {
             let folders = inbox.outbox();
             bande_search::follow_policy(home.clone(), move |policy| folders.send(policy.excluded));
         }
-        let sidebar_watch = layout_file(&home)
-            .parent()
+        let sidebar_watch = sidebar_file()
+            .as_deref()
+            .and_then(Path::parent)
             .and_then(|folder| SettingsWatch::start(folder, SIDEBAR_FILE));
         let shows = Inbox::new()
             .inspect_err(|error| tracing::warn!("cannot show folders for other apps: {error}"))
@@ -1273,7 +1270,7 @@ impl Program for Files {
         {
             tracing::warn!("cannot serve org.freedesktop.FileManager1: {error}");
         }
-        let recent_folders = read(Some(recent_folders_file(&home)))
+        let recent_folders = read(recent_folders_file())
             .unwrap_or_default()
             .lines()
             .filter(|line| !line.is_empty())

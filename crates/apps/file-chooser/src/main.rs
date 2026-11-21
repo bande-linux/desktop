@@ -27,7 +27,7 @@ use bande_volumes::{media_roots, mounted_volumes, volume_icon};
 use bande_wallpaper::Fit;
 use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
-    data_dirs, read_user_dirs, replace_file, state_home, user_dir,
+    data_dirs, read_user_dirs, replace_file, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
     ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, PRINT, SET_WALLPAPER, SHARE_ACCOUNT,
@@ -191,7 +191,7 @@ fn run(dialog: Dialog) -> ExitCode {
     let user = std::env::var("USER").unwrap_or_default();
     let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
     let volumes = mounted_volumes(&mountinfo, &media_roots(&user));
-    let layout = std::fs::read_to_string(sidebar_file(state_home().as_deref(), &home)).ok();
+    let layout = sidebar_file().and_then(|file| std::fs::read_to_string(file).ok());
     let places = with_volumes(
         &rows(
             &home,

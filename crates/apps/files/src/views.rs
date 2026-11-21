@@ -102,30 +102,26 @@ pub struct ViewMemory {
     folders: Vec<(PathBuf, FolderView)>,
 }
 
-fn state_file(state_home: Option<&Path>, home: &Path, name: &str) -> PathBuf {
-    state_home
-        .filter(|path| path.is_absolute())
-        .map_or_else(|| home.join(".local/state"), Path::to_path_buf)
-        .join("bande")
-        .join(name)
+fn state_file(name: &str) -> Option<PathBuf> {
+    bande_xdg::state_home().map(|state| state.join("bande").join(name))
 }
 
-pub fn views_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
-    state_file(state_home, home, "files-views")
+pub fn views_file() -> Option<PathBuf> {
+    state_file("files-views")
 }
 
 pub const SIDEBAR_FILE: &str = "files-sidebar";
 
-pub fn recent_folders_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
-    state_file(state_home, home, "files-recent-folders")
+pub fn recent_folders_file() -> Option<PathBuf> {
+    state_file("files-recent-folders")
 }
 
-pub fn sidebar_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
-    state_file(state_home, home, SIDEBAR_FILE)
+pub fn sidebar_file() -> Option<PathBuf> {
+    state_file(SIDEBAR_FILE)
 }
 
-pub fn list_columns_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
-    state_file(state_home, home, "files-columns")
+pub fn list_columns_file() -> Option<PathBuf> {
+    state_file("files-columns")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,8 +183,8 @@ pub fn save_list_columns(file: &Path, columns: &[ListColumn]) -> io::Result<()> 
     replace_file(file, text)
 }
 
-pub fn status_bar_file(state_home: Option<&Path>, home: &Path) -> PathBuf {
-    state_file(state_home, home, "files-status-bar")
+pub fn status_bar_file() -> Option<PathBuf> {
+    state_file("files-status-bar")
 }
 
 fn parse(text: &str) -> Vec<(PathBuf, FolderView)> {

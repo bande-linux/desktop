@@ -14,7 +14,7 @@ use bande_toolkit::ui::{
     Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Slider, Toggle, Ui, Widget,
 };
 use bande_toolkit::{Appearance, TextSystem};
-use bande_xdg::{UserDir, read_user_dirs, replace_file, state_home, user_dir};
+use bande_xdg::{UserDir, read_user_dirs, replace_file, user_dir};
 
 pub const SETTINGS_SIZE: (u32, u32) = (500, 560);
 pub const DEFAULT_SPRING_DELAY: u32 = 900;
@@ -253,7 +253,9 @@ fn place_toggle(file: &Path, label: String, place: Option<Location>, shown: bool
 
 fn sidebar_lines() -> Vec<FormLine> {
     let home = home();
-    let file = sidebar_file(state_home().as_deref(), &home);
+    let Some(file) = sidebar_file() else {
+        return Vec::new();
+    };
     let layout = fs::read_to_string(&file).ok();
     let hidden = hidden_places(layout.as_deref());
     let user_dirs = read_user_dirs();

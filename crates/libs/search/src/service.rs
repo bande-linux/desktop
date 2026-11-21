@@ -165,9 +165,8 @@ trait ConfigService {
     fn search_shows(&self) -> zbus::Result<std::collections::HashMap<String, bool>>;
 }
 
-fn saved_search(home: &Path) -> Search {
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let Some(path) = config_path(config_home.as_deref(), Some(home)) else {
+fn saved_search() -> Search {
+    let Some(path) = config_path() else {
         return Search::default();
     };
     let source = match std::fs::read_to_string(&path) {
@@ -186,7 +185,7 @@ fn saved_search(home: &Path) -> Search {
 
 fn policy(config: &ConfigServiceProxyBlocking<'_>, home: &Path) -> Policy {
     let (Ok(exclude), Ok(shows)) = (config.search_excluded(), config.search_shows()) else {
-        let search = saved_search(home);
+        let search = saved_search();
         return Policy {
             excluded: search.excluded(Some(home)),
             files: search.shows(SearchCategory::Documents) || search.shows(SearchCategory::Folders),

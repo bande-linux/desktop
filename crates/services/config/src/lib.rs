@@ -913,12 +913,8 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-pub fn config_path(xdg_config_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
-    let base = match xdg_config_home.filter(|path| path.is_absolute()) {
-        Some(config_home) => config_home.to_path_buf(),
-        None => home?.join(".config"),
-    };
-    Some(base.join("bande").join("config.kdl"))
+pub fn config_path() -> Option<PathBuf> {
+    bande_xdg::config_home().map(|config| config.join("bande/config.kdl"))
 }
 
 impl Config {

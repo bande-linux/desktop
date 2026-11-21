@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -37,8 +37,7 @@ fn serve(path: &Path) -> Result<(ConfigService, Connection), Box<dyn Error>> {
 
 fn main() -> ExitCode {
     bande_log::init("bande-config");
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    let Some(path) = config_path(config_home.as_deref(), std::env::home_dir().as_deref()) else {
+    let Some(path) = config_path() else {
         tracing::error!("neither XDG_CONFIG_HOME nor HOME is set");
         return ExitCode::FAILURE;
     };

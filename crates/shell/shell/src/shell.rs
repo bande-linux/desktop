@@ -51,15 +51,13 @@ struct Context {
     system: Option<Connection>,
     status: StatusHub,
     apps: Rc<RefCell<Apps>>,
-    config_home: Option<PathBuf>,
-    home: Option<PathBuf>,
     app_slice: Option<PathBuf>,
     glance: GlanceLink,
 }
 
 impl Context {
     fn config(&self) -> Config {
-        config_path(self.config_home.as_deref(), self.home.as_deref())
+        config_path()
             .and_then(|path| std::fs::read_to_string(path).ok())
             .and_then(|source| Config::load(&source).ok())
             .map(|(config, _)| config)
@@ -84,8 +82,6 @@ impl Context {
             system,
             status,
             apps: Rc::new(RefCell::new(Apps::load(data_dirs(), &config_dirs()))),
-            config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
-            home: std::env::var_os("HOME").map(PathBuf::from),
             app_slice: own_app_slice(),
             glance: GlanceLink::default(),
         })

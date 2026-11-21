@@ -325,9 +325,7 @@ pub fn run_confirmation(ending: Ending) -> Result<(), Box<dyn std::error::Error>
 }
 
 fn reopens_windows() -> bool {
-    let config_home = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from);
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-    config_path(config_home.as_deref(), home.as_deref())
+    config_path()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|source| Config::load(&source).ok())
         .is_none_or(|(config, _)| config.reopen_apps)

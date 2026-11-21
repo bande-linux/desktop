@@ -75,7 +75,9 @@ impl Units {
             return self.remove_autostart(machine);
         }
         let path = machine.autostart_file();
-        let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+        let data_home = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute());
         let text = unit_text(
             &machine.manifest.name,
             program,

@@ -180,10 +180,10 @@ grep -qx 'inode/directory=org.bande.Files.desktop;' "$scratch/desktop/usr/share/
 echo "== bande-desktop brings a login, sound and the system around the desktop"
 relation() { desktop "$1" | tr ',' '\n' | sed 's/^ *//' | grep -qxF "$2"; }
 relation Depends "bande-greeter (>= $version) | x-display-manager"
-for depended in pipewire wireplumber pipewire-pulse; do
+for depended in pipewire wireplumber; do
     relation Depends "$depended"
 done
-for recommended in "bande-greeter (>= $version)" "bande-reporter (>= $version)" "bande-crash-reports (>= $version)"; do
+for recommended in "bande-greeter (>= $version)" "bande-reporter (>= $version)" "bande-crash-reports (>= $version)" pipewire-pulse; do
     relation Recommends "$recommended"
 done
 

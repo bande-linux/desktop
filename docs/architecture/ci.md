@@ -96,8 +96,8 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   stripped to its `.gnu_debugdata`, the D-Bus activation files, the user units, the portal
   backend's registration, the login session, the pointers and the English catalogs, that
   `bande-desktop` asks for its packages at the build's version, depends on `bande-greeter |
-  x-display-manager`, `pipewire`, `wireplumber` and `pipewire-pulse`, recommends
-  `bande-greeter`, `bande-reporter` and `bande-crash-reports` and only Bande packages built here,
+  x-display-manager`, `pipewire` and `wireplumber`, recommends `bande-greeter`,
+  `bande-reporter`, `bande-crash-reports` and `pipewire-pulse` and only Bande packages built here,
   and that the language packs hold only catalogs; then `lintian --fail-on error,warning` on the
   `.changes` and the `.dsc`. The job uploads `bande-debs-<suite>-<arch>`, amd64 also
   `bande-debs-<suite>-all`, and the `-dbgsym` packages as `bande-debug-symbols-<suite>-<arch>`.

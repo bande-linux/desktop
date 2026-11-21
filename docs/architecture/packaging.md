@@ -104,10 +104,11 @@ are in [performance.md](performance.md).
 - **`bande-desktop`** (architecture `all`, section `metapackages`): the one package that installs a complete Bande desktop.
   It depends on the compositor, the core session services, the shell, the lock
   screen, the keyring (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
-  `libpam-systemd`, on PipeWire, and on `bande-greeter | x-display-manager`, so there is always
+  `libpam-systemd`, on PipeWire and WirePlumber, and on `bande-greeter | x-display-manager`, so there is always
   a way to log in: the Bande login window under greetd, or the display manager the system
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
-  start), fault reporting (`bande-reporter`, `bande-crash-reports`), the screenshot tool, Files, Settings, the tray, automount, file
+  start), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
+  clipboard daemon, the screenshot tool, Files, Settings, the tray, automount, file
   chooser, polkit agent, the keyring's PAM module and the default apps (every app but Velox),
   all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack); being recommends, any of them can be removed or replaced. It
@@ -147,17 +148,19 @@ The packages pull in the runtime stack the architecture relies on:
 
 Each Debian package is declared by the Bande package that uses it, and only when a Bande
 component uses it at runtime; nothing a Bande component replaces comes along, directly or through
-another package's recommends. `bande-desktop` itself keeps:
+another package's recommends. A package depends only on what it cannot work without; what a
+feature of it needs is a recommendation, so the desktop stays installable while Debian lacks a
+package for a while, and the feature says what is missing. `bande-desktop` itself keeps:
 
 - `dbus-user-session`: the session bus every Bande service is activated on, under the user manager;
 - `default-logind | logind`, `libpam-systemd`: the compositor's seat and session;
-- `fonts-noto-core`, `fonts-noto-cjk`: the fallback faces for scripts Inter does not cover;
+- `fonts-noto-core`, `fonts-noto-cjk` (recommended): the fallback faces for scripts Inter does not cover;
 - `pipewire`, `wireplumber`: the sound service, screen capture and recording;
-- `pipewire-pulse`: apps that play through PulseAudio (the session drop-ins start it);
+- `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it);
   the login window's user (`_greetd`) starts none of PipeWire, its Pulse server, WirePlumber or
   the filter chain (`ConditionUser=!_greetd`), so the person's session never finds the sound
   card busy;
-- `libspa-0.2-bluetooth`: Bluetooth headphones, which the shell's Bluetooth menu connects;
+- `libspa-0.2-bluetooth` (recommended): Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
 - `systemd-oomd`: closes an app when memory stays under pressure.
 
@@ -169,22 +172,30 @@ nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` 
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
 `xdg-user-dirs`, which the Bande packages that use them declare:
 
-- `bande-shell` depends on NetworkManager (network menu), UPower (battery) and BlueZ
-  (Bluetooth), since without them the bar would read as a computer without that hardware, and
-  recommends Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
+- `bande-shell` depends on NetworkManager (network menu) and UPower (battery), since without
+  them the bar would read as a computer without a network or battery, and recommends BlueZ
+  (Bluetooth), the colour emoji font, Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
   `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
   only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` ships Bande's own
   pointers, so no cursor theme package comes along (see compositor.md); `bande-settings` adds
-  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
-  import), `xkb-data` and `locales`, so its helper can generate any language picked in Settings;
+  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and
+  NetworkManager (Network, VPN import) to its recommends and depends on `xkb-data` and `locales`,
+  so its helper can generate any language picked in Settings;
   the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
   and `systemd-resolved` are from Sharing (resolved announces shares but also takes over DNS, so
   it is never pulled in silently);
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
-- `bande-player` is the one package linking GStreamer: its engine process plays for Player and Glance; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
-- `bande-screenshot` depends on `gst-launch-1.0`, `pipewiresrc` and the VP8 encoder, so screen
-  recording always works, and recommends the H.264 encoder for MP4;
+- `bande-player` is the one package linking GStreamer: its engine process plays for Player and
+  Glance; it depends on the base plugins and recommends the good, PulseAudio, libav and dav1d
+  plugins (the codecs); `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
+- `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc`, the VP8 encoder and the H.264
+  encoder for MP4: screen recording is offered only when they are there;
+- `bande-reporter` recommends `eu-stack` (elfutils) for the stacks of a hung program and
+  `bande-crash-reports` `libdw` for systemd-coredump's stack traces; a report without them
+  has no stack;
+- `bande-spell` recommends the English dictionary, `bande-files` and `bande-lookup` DejaVu Sans
+  Mono, and `bande-clock` the notification and sound services, which ring its alarms;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;

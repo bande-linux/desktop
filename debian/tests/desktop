@@ -2,7 +2,7 @@
 # bande-desktop alone, without recommends, brings a login window and sound and no X server, and
 # greetd shows the Bande login window, whose pictures folder only the login window reads.
 set -euo pipefail
-for package in bande-greeter greetd pipewire wireplumber pipewire-pulse; do
+for package in bande-greeter greetd pipewire wireplumber; do
     [ "$(dpkg-query -W -f '${db:Status-Status}' "$package")" = installed ] || { echo "$package is missing"; exit 1; }
 done
 

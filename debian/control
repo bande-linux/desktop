@@ -401,8 +401,8 @@ Section: misc
 Depends: ${shlibs:Depends},
  systemd (>= 257),
  init-system-helpers (>= 1.66),
- elfutils,
  ${misc:Depends}
+Recommends: elfutils
 Description: Bande fault reports: a local report of each fault, sent when switched on
  Keeps a small report of each fault in a root-only folder. Reports leave
  the computer only once sending is switched on in Settings. Only the
@@ -419,8 +419,8 @@ Depends: ${shlibs:Depends},
  systemd (>= 257),
  init-system-helpers (>= 1.66),
  systemd-coredump,
- libdw1t64,
  ${misc:Depends}
+Recommends: libdw1t64
 Description: Bande crash reports: a local report of every crash and hang of a Bande program
  Keeps a report of every crash of a Bande program, every hang that was
  stopped and every failed Bande service, with a stack trace and the last
@@ -454,8 +454,8 @@ Static-Built-Using: ${cargo:Static-Built-Using}
 Section: misc
 Depends: ${shlibs:Depends},
  default-dbus-session-bus | dbus-session-bus,
- hunspell-en-us,
  ${misc:Depends}
+Recommends: hunspell-en-us
 Description: Bande spelling service
  Serves spell checking, learned words and text replacements to Bande apps
  as org.bande.Spell on the session bus. Started by D-Bus activation when
@@ -657,18 +657,18 @@ Depends: ${shlibs:Depends},
  fonts-inter,
  fonts-manrope,
  fonts-jetbrains-mono,
- fonts-noto-color-emoji,
  hicolor-icon-theme,
  bande-notify (= ${binary:Version}),
  upower,
  network-manager,
- bluez,
  ${misc:Depends}
 Recommends: network-manager-config-connectivity-debian,
  pipewire,
  wireplumber,
  bande-tray (= ${binary:Version}),
- xdg-user-dirs
+ xdg-user-dirs,
+ fonts-noto-color-emoji,
+ bluez
 Description: Bande shell: the desktop, the bar, notifications and the launcher
  The shell of the Bande desktop, one process for the whole session. On
  every display it draws the desktop, the wallpaper in its light and dark
@@ -708,12 +708,12 @@ Static-Built-Using: ${cargo:Static-Built-Using}
 Section: misc
 Depends: ${shlibs:Depends},
  bande-icon-theme (= ${source:Version}),
+ ${misc:Depends}
+Recommends: gstreamer1.0-plugins-ugly,
  pipewire,
  gstreamer1.0-tools,
  gstreamer1.0-pipewire,
- gstreamer1.0-plugins-good,
- ${misc:Depends}
-Recommends: gstreamer1.0-plugins-ugly
+ gstreamer1.0-plugins-good
 Description: Bande screenshots: saves pictures of the screen or of a dragged-out area
  The screenshot tool of the Bande desktop. Shift+Print saves a picture of
  each display, Shift+Super+S one of an area dragged out with the pointer
@@ -731,11 +731,11 @@ Static-Built-Using: ${cargo:Static-Built-Using}
 Section: misc
 Depends: ${shlibs:Depends},
  bande-icon-theme (= ${source:Version}),
- fonts-dejavu-core,
  fonts-inter,
  fonts-manrope,
  fonts-jetbrains-mono,
  ${misc:Depends}
+Recommends: fonts-dejavu-core
 Description: Bande Files: the file manager of the Bande desktop
  The file manager of the Bande desktop: folders open in Miller columns
  driven by the arrow keys, and Space shows the selected file in Glance.
@@ -747,13 +747,13 @@ Static-Built-Using: ${cargo:Static-Built-Using}
 Section: misc
 Depends: ${shlibs:Depends},
  bande-icon-theme (= ${source:Version}),
- fonts-dejavu-core,
  fonts-inter,
  fonts-manrope,
  fonts-jetbrains-mono,
  ${misc:Depends}
 Recommends: bande-dict-en,
- bande-dict-sv
+ bande-dict-sv,
+ fonts-dejavu-core
 Description: Bande Dictionary: looks up words, and Look Up at the pointer
  Dictionary looks up words in the dictionaries, thesauruses and online
  sources chosen in its settings, and shows Look Up in a small panel at
@@ -775,7 +775,6 @@ Depends: ${shlibs:Depends},
  systemd,
  udev,
  xkb-data,
- network-manager,
  ${misc:Depends}
 Recommends: accountsservice,
  bande-polkit (= ${binary:Version}),
@@ -785,7 +784,8 @@ Recommends: accountsservice,
  bande-notify (= ${binary:Version}),
  packagekit,
  power-profiles-daemon,
- upower
+ upower,
+ network-manager
 Description: Bande Settings: panes for the desktop and its devices with ranked search
  Settings of the Bande desktop in four groups: Connections (Wi-Fi with
  known networks, per-network details and hidden networks, Bluetooth,
@@ -992,11 +992,11 @@ Depends: ${shlibs:Depends},
  fonts-manrope,
  fonts-jetbrains-mono,
  gstreamer1.0-plugins-base,
- gstreamer1.0-plugins-good,
+ ${misc:Depends}
+Recommends: gstreamer1.0-plugins-good,
  gstreamer1.0-pulseaudio,
  gstreamer1.0-libav,
- gstreamer1.0-dav1d,
- ${misc:Depends}
+ gstreamer1.0-dav1d
 Description: audio and video player for the Bande desktop
  The audio and video player of the Bande desktop: opens common music and
  film files from Files, with simple controls over the picture, full
@@ -1032,9 +1032,9 @@ Depends: ${shlibs:Depends},
  fonts-manrope,
  fonts-jetbrains-mono,
  tzdata,
- bande-notify (= ${binary:Version}),
- bande-sound (= ${binary:Version}),
  ${misc:Depends}
+Recommends: bande-notify (= ${binary:Version}),
+ bande-sound (= ${binary:Version})
 Description: clock with alarms, timers and a stopwatch for the Bande desktop
  The clock of the Bande desktop: alarms that repeat on chosen days, with
  a label, a sound and snooze; several timers at once, with presets; a
@@ -1108,58 +1108,58 @@ Section: metapackages
 Build-Profiles: <!pkg.bande.l10n-only>
 Architecture: all
 Depends: bande-compositor (>= ${source:Version}),
-         bande-icon-theme (>= ${source:Version}),
-         bande-config (>= ${source:Version}),
-         bande-power (>= ${source:Version}),
-         bande-printd (>= ${source:Version}),
-         bande-sound (>= ${source:Version}),
-         bande-spell (>= ${source:Version}),
-         bande-notify (>= ${source:Version}),
-         bande-clipboard (>= ${source:Version}),
-         bande-shell (>= ${source:Version}),
-         bande-lock (>= ${source:Version}),
-         bande-secrets (>= ${source:Version}),
-         xdg-desktop-portal-bande (>= ${source:Version}),
-         dbus-user-session,
-         default-logind | logind,
-         libpam-systemd,
-         libx11-data,
-         fonts-noto-core,
-         fonts-noto-cjk,
-         bande-greeter (>= ${source:Version}) | x-display-manager,
-         pipewire,
-         wireplumber,
-         pipewire-pulse,
-         libspa-0.2-bluetooth,
-         ${misc:Depends}
+ bande-icon-theme (>= ${source:Version}),
+ bande-config (>= ${source:Version}),
+ bande-power (>= ${source:Version}),
+ bande-sound (>= ${source:Version}),
+ bande-notify (>= ${source:Version}),
+ bande-shell (>= ${source:Version}),
+ bande-lock (>= ${source:Version}),
+ bande-secrets (>= ${source:Version}),
+ xdg-desktop-portal-bande (>= ${source:Version}),
+ dbus-user-session,
+ default-logind | logind,
+ libpam-systemd,
+ libx11-data,
+ bande-greeter (>= ${source:Version}) | x-display-manager,
+ pipewire,
+ wireplumber,
+ ${misc:Depends}
 Recommends: bande-greeter (>= ${source:Version}),
-            bande-reporter (>= ${source:Version}),
-            bande-crash-reports (>= ${source:Version}),
-            bande-screenshot (>= ${source:Version}),
-            bande-files (>= ${source:Version}),
-            bande-settings (>= ${source:Version}),
-            bande-tray (>= ${source:Version}),
-            bande-indexer (>= ${source:Version}),
-            bande-automount (>= ${source:Version}),
-            bande-backup (>= ${source:Version}),
-            bande-file-chooser (>= ${source:Version}),
-            bande-polkit (>= ${source:Version}),
-            apt-config-icons-hidpi,
-            libpam-bande-secrets (>= ${source:Version}),
-            bande-terminal (>= ${source:Version}),
-            bande-software (>= ${source:Version}),
-            bande-installer (>= ${source:Version}),
-            bande-archive (>= ${source:Version}),
-            bande-monitor (>= ${source:Version}),
-            bande-calculator (>= ${source:Version}),
-            bande-viewer (>= ${source:Version}),
-            bande-player (>= ${source:Version}),
-            bande-clock (>= ${source:Version}),
-            bande-disks (>= ${source:Version}),
-            bande-text-editor (>= ${source:Version}),
-            bande-mail (>= ${source:Version}),
-            bande-calendar (>= ${source:Version}),
-            systemd-oomd
+ bande-reporter (>= ${source:Version}),
+ bande-crash-reports (>= ${source:Version}),
+ bande-screenshot (>= ${source:Version}),
+ bande-files (>= ${source:Version}),
+ bande-settings (>= ${source:Version}),
+ bande-tray (>= ${source:Version}),
+ bande-indexer (>= ${source:Version}),
+ bande-automount (>= ${source:Version}),
+ bande-backup (>= ${source:Version}),
+ bande-file-chooser (>= ${source:Version}),
+ bande-polkit (>= ${source:Version}),
+ apt-config-icons-hidpi,
+ libpam-bande-secrets (>= ${source:Version}),
+ bande-terminal (>= ${source:Version}),
+ bande-software (>= ${source:Version}),
+ bande-installer (>= ${source:Version}),
+ bande-archive (>= ${source:Version}),
+ bande-monitor (>= ${source:Version}),
+ bande-calculator (>= ${source:Version}),
+ bande-viewer (>= ${source:Version}),
+ bande-player (>= ${source:Version}),
+ bande-clock (>= ${source:Version}),
+ bande-disks (>= ${source:Version}),
+ bande-text-editor (>= ${source:Version}),
+ bande-mail (>= ${source:Version}),
+ bande-calendar (>= ${source:Version}),
+ systemd-oomd,
+ bande-printd (>= ${source:Version}),
+ bande-spell (>= ${source:Version}),
+ bande-clipboard (>= ${source:Version}),
+ fonts-noto-core,
+ fonts-noto-cjk,
+ pipewire-pulse,
+ libspa-0.2-bluetooth
 Description: Bande desktop environment
  Bande is a Wayland desktop with its own compositor, shell, session
  services, login window and applications.

@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::ops::ControlFlow;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +10,6 @@ use rustls::crypto::ring;
 use sha2::{Digest, Sha256, Sha512};
 use ureq::tls::{RootCerts, TlsConfig};
 
-use crate::manifest::persist;
 use crate::{Error, Result};
 
 const CHUNK: usize = 1024 * 1024;
@@ -68,7 +67,7 @@ macro_rules! arch {
 
 const CATALOG: &[CloudImage] = &[
     CloudImage {
-        os: "Debian 13",
+        os: "Debian 13 (trixie)",
         url: concat!(
             "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-",
             arch!(debian),
@@ -259,7 +258,7 @@ impl ImageStore {
         image: &CloudImage,
         checksums: &str,
         keys: &[u8],
-        folder: &std::path::Path,
+        folder: &Path,
     ) -> Result<String> {
         let keyring = folder.join("keys.gpg");
         let signed = folder.join("sums");
@@ -299,7 +298,7 @@ impl ImageStore {
         &self,
         image: &CloudImage,
         expected: &str,
-        staging: &std::path::Path,
+        staging: &Path,
         progress: &mut dyn FnMut(u64, Option<u64>) -> ControlFlow<()>,
     ) -> Result<File> {
         let response = self.agent.get(image.url).call()?;
@@ -330,4 +329,13 @@ impl ImageStore {
         }
         Ok(file)
     }
+}
+
+fn persist(file: &File, staging: &Path, path: &Path) -> Result<()> {
+    file.sync_all()?;
+    fs::rename(staging, path)?;
+    if let Some(folder) = path.parent() {
+        bande_xdg::sync_folder(folder)?;
+    }
+    Ok(())
 }

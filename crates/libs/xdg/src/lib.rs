@@ -36,7 +36,7 @@ pub use launch::{
     follow_oom_kills, launch, launch_action, launch_with, launch_with_arguments, open,
     spawn_detached, wait_for_exit,
 };
-pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN};
+pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN, unescape_xml};
 pub use mimeapps::{
     MimeApps, cache_home, config_dirs, config_home, data_home, mimeapps_paths, set_default_app,
     state_home,

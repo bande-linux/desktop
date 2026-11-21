@@ -87,9 +87,20 @@ fn remove_if_stale(path: &Path) -> io::Result<()> {
 }
 
 pub(crate) fn sweep(path: PathBuf) {
-    let _ = thread::Builder::new()
+    let spawned = thread::Builder::new()
         .name("stale partial".to_owned())
-        .spawn(move || {
-            let _ = remove_if_stale(&path);
+        .spawn(move || match remove_if_stale(&path) {
+            Err(error)
+                if !matches!(
+                    error.kind(),
+                    io::ErrorKind::NotFound | io::ErrorKind::WouldBlock
+                ) =>
+            {
+                tracing::warn!("cannot remove the stale {}: {error}", path.display());
+            }
+            _ => {}
         });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot start removing a stale partial copy: {error}");
+    }
 }

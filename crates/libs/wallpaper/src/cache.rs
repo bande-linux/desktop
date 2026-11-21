@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -46,20 +46,12 @@ fn store(entry: &Path, picture: &Picture) -> io::Result<()> {
     let folder = entry
         .parent()
         .ok_or_else(|| io::Error::other("the cache has no folder"))?;
-    fs::create_dir_all(folder)?;
-    let staging = entry.with_extension(format!("{}.partial", std::process::id()));
-    let written = File::create(&staging).and_then(|mut file| {
-        file.write_all(&picture.width.to_le_bytes())?;
-        file.write_all(&picture.height.to_le_bytes())?;
-        file.write_all(&picture.rgba)
-    });
-    match written.and_then(|()| fs::rename(&staging, entry)) {
-        Ok(()) => prune(folder),
-        Err(error) => {
-            let _ = fs::remove_file(&staging);
-            Err(error)
-        }
-    }
+    let mut contents = Vec::with_capacity(8 + picture.rgba.len());
+    contents.extend_from_slice(&picture.width.to_le_bytes());
+    contents.extend_from_slice(&picture.height.to_le_bytes());
+    contents.extend_from_slice(&picture.rgba);
+    bande_xdg::replace_file(entry, contents)?;
+    prune(folder)
 }
 
 fn prune(folder: &Path) -> io::Result<()> {

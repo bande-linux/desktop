@@ -843,6 +843,9 @@ dependencies = [
 [[package]]
 name = "bande-edid"
 version = "0.2.0"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "bande-file-chooser"
@@ -1947,6 +1950,7 @@ version = "0.2.0"
 dependencies = [
  "bande-inbox",
  "bande-volumes",
+ "bande-xdg",
  "image",
  "resvg",
  "tracing",

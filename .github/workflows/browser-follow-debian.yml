@@ -55,7 +55,11 @@ jobs:
         run: |
           debian=${TEST_VERSION:-$(scripts/debian-version.sh)}
           version=$(scripts/version.sh "$debian")
-          published=$(scripts/published.sh "$SUITE" || true)
+          published=$(scripts/published.sh "$SUITE")
+          if [ -z "$published" ] && [ -z "$TEST_VERSION" ] && [ "$FORCE" != true ]; then
+            echo "::error::The archive serves no bande-browser in $SUITE; dispatch with force to publish the first one"
+            exit 1
+          fi
           built=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bande-version-$version" \
             --jq '[.artifacts[] | select(.expired | not)] | length')
           build=true

@@ -352,10 +352,8 @@ fn read_mount_points(mut table: &fs::File) -> io::Result<Vec<PathBuf>> {
     let mut text = String::new();
     table.seek(SeekFrom::Start(0))?;
     table.read_to_string(&mut text)?;
-    Ok(text
-        .lines()
-        .filter_map(|line| line.split(' ').nth(1))
-        .map(unescape_mount_field)
+    Ok(bande_volumes::mounted(&text)
+        .map(|mount| mount.point)
         .collect())
 }
 
@@ -366,41 +364,18 @@ fn mount_points() -> Vec<PathBuf> {
     {
         return known.points.clone();
     }
-    let read = fs::File::open("/proc/self/mounts").and_then(|table| {
+    let read = fs::File::open("/proc/self/mountinfo").and_then(|table| {
         let points = read_mount_points(&table)?;
         Ok(Mounts { table, points })
     });
     match read {
         Ok(read) => mounts.insert(read).points.clone(),
-        Err(_) => {
+        Err(error) => {
+            tracing::warn!("cannot read the mount table to find trash folders on volumes: {error}");
             *mounts = None;
             Vec::new()
         }
     }
-}
-
-fn unescape_mount_field(field: &str) -> PathBuf {
-    let bytes = field.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        let octal = (bytes[index] == b'\\')
-            .then(|| bytes.get(index + 1..index + 4))
-            .flatten()
-            .and_then(|digits| std::str::from_utf8(digits).ok())
-            .and_then(|digits| u8::from_str_radix(digits, 8).ok());
-        match octal {
-            Some(byte) => {
-                decoded.push(byte);
-                index += 4;
-            }
-            None => {
-                decoded.push(bytes[index]);
-                index += 1;
-            }
-        }
-    }
-    PathBuf::from(std::ffi::OsStr::from_bytes(&decoded))
 }
 
 fn topdir(path: &Path) -> io::Result<PathBuf> {
@@ -435,14 +410,8 @@ impl Trash {
     }
 
     pub fn for_user() -> Option<Self> {
-        let data_home = std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-            .or_else(|| {
-                std::env::var_os("HOME").map(|home| Path::new(&home).join(".local/share"))
-            })?;
         Some(Self::new(
-            data_home.join("Trash"),
+            bande_xdg::data_home()?.join("Trash"),
             rustix::process::getuid().as_raw(),
         ))
     }

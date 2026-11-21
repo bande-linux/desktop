@@ -272,55 +272,6 @@ impl Profile {
         })
     }
 
-    pub fn to_icc(&self, description: &str) -> Vec<u8> {
-        let mut tags: Vec<([u8; 4], Vec<u8>)> = Vec::new();
-        tags.push((*b"desc", text(description)));
-        tags.push((*b"cprt", text("No copyright, use freely")));
-        tags.push((*b"wtpt", xyz_tag(D50)));
-        for (name, column) in [(*b"rXYZ", 0), (*b"gXYZ", 1), (*b"bXYZ", 2)] {
-            tags.push((
-                name,
-                xyz_tag(std::array::from_fn(|row| self.to_pcs[row][column])),
-            ));
-        }
-        for (name, curve) in [*b"rTRC", *b"gTRC", *b"bTRC"].into_iter().zip(&self.curves) {
-            tags.push((name, curve_tag(curve)));
-        }
-        let table_end = 132 + 12 * tags.len();
-        let mut body = Vec::new();
-        let mut entries = Vec::new();
-        for (name, data) in &tags {
-            let offset = table_end + body.len();
-            entries.push((*name, offset, data.len()));
-            body.extend_from_slice(data);
-            while body.len() % 4 != 0 {
-                body.push(0);
-            }
-        }
-        let size = table_end + body.len();
-        let mut out = Vec::with_capacity(size);
-        out.extend_from_slice(&(size as u32).to_be_bytes());
-        out.extend_from_slice(b"none");
-        out.extend_from_slice(&[4, 0x30, 0, 0]);
-        out.extend_from_slice(b"mntrRGB XYZ ");
-        out.extend_from_slice(&[0; 12]);
-        out.extend_from_slice(b"acsp");
-        out.extend_from_slice(&[0; 24]);
-        out.extend_from_slice(&[0, 0, 0, 0]);
-        for value in D50 {
-            out.extend_from_slice(&to_fixed(value));
-        }
-        out.extend_from_slice(&[0; 48]);
-        out.extend_from_slice(&(tags.len() as u32).to_be_bytes());
-        for (name, offset, length) in entries {
-            out.extend_from_slice(&name);
-            out.extend_from_slice(&(offset as u32).to_be_bytes());
-            out.extend_from_slice(&(length as u32).to_be_bytes());
-        }
-        out.extend_from_slice(&body);
-        out
-    }
-
     fn is_srgb(&self) -> bool {
         let srgb = Self::srgb();
         self.curves.iter().all(|curve| *curve == Curve::Srgb)
@@ -335,61 +286,6 @@ impl Profile {
 
 fn fixed(bytes: &[u8]) -> f64 {
     f64::from(i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])) / 65536.0
-}
-
-fn to_fixed(value: f64) -> [u8; 4] {
-    ((value * 65536.0).round() as i32).to_be_bytes()
-}
-
-fn xyz_tag(value: [f64; 3]) -> Vec<u8> {
-    let mut data = b"XYZ \0\0\0\0".to_vec();
-    for component in value {
-        data.extend_from_slice(&to_fixed(component));
-    }
-    data
-}
-
-fn text(value: &str) -> Vec<u8> {
-    let utf16: Vec<u8> = value.encode_utf16().flat_map(u16::to_be_bytes).collect();
-    let mut data = b"mluc\0\0\0\0".to_vec();
-    data.extend_from_slice(&1u32.to_be_bytes());
-    data.extend_from_slice(&12u32.to_be_bytes());
-    data.extend_from_slice(b"enUS");
-    data.extend_from_slice(&(utf16.len() as u32).to_be_bytes());
-    data.extend_from_slice(&28u32.to_be_bytes());
-    data.extend_from_slice(&utf16);
-    data
-}
-
-fn curve_tag(curve: &Curve) -> Vec<u8> {
-    let (kind, parameters): (u16, Vec<f64>) = match curve {
-        Curve::Srgb => (
-            3,
-            vec![2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045],
-        ),
-        Curve::Gamma(gamma) => (0, vec![*gamma]),
-        Curve::Parametric { kind, parameters } => {
-            let used = [1, 3, 4, 5, 7][usize::from(*kind).min(4)];
-            (*kind, parameters[..used].to_vec())
-        }
-        Curve::Table(values) => {
-            let mut data = b"curv\0\0\0\0".to_vec();
-            data.extend_from_slice(&(values.len() as u32).to_be_bytes());
-            for value in values {
-                data.extend_from_slice(
-                    &((value.clamp(0.0, 1.0) * 65535.0).round() as u16).to_be_bytes(),
-                );
-            }
-            return data;
-        }
-    };
-    let mut data = b"para\0\0\0\0".to_vec();
-    data.extend_from_slice(&kind.to_be_bytes());
-    data.extend_from_slice(&[0, 0]);
-    for value in parameters {
-        data.extend_from_slice(&to_fixed(value));
-    }
-    data
 }
 
 fn parse_curve(data: &[u8]) -> Result<Curve, IccError> {

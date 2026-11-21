@@ -167,9 +167,19 @@ trait ConfigService {
 
 fn saved_search(home: &Path) -> Search {
     let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    config_path(config_home.as_deref(), Some(home))
-        .and_then(|path| std::fs::read_to_string(path).ok())
-        .and_then(|source| Config::load(&source).ok())
+    let Some(path) = config_path(config_home.as_deref(), Some(home)) else {
+        return Search::default();
+    };
+    let source = match std::fs::read_to_string(&path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Search::default(),
+        Err(error) => {
+            tracing::warn!("cannot read {}: {error}", path.display());
+            return Search::default();
+        }
+    };
+    Config::load(&source)
+        .inspect_err(|error| tracing::warn!("cannot read {}: {error}", path.display()))
         .map(|(config, _)| config.search)
         .unwrap_or_default()
 }

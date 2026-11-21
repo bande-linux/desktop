@@ -299,7 +299,8 @@ Recommends: bande-clipboard (= ${binary:Version}),
  bande-lock (= ${binary:Version}),
  bande-screenshot (= ${binary:Version}),
  bande-files (= ${binary:Version}),
- bande-settings (= ${binary:Version})
+ bande-settings (= ${binary:Version}),
+ hwdata
 Suggests: fcitx5
 Description: Bande Wayland compositor
  Wayland compositor for the Bande desktop session, built on Smithay. It

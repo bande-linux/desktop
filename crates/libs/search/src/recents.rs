@@ -6,7 +6,7 @@ use std::thread;
 
 use bande_inbox::{Inbox, Outbox};
 use bande_watch::{Changes, FolderWatch};
-use bande_xdg::path_from_file_uri;
+use bande_xdg::{path_from_file_uri, unescape_xml};
 
 use crate::usage::Usage;
 
@@ -25,14 +25,6 @@ fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     Some(&tag[start..start + length])
 }
 
-fn unescape(text: &str) -> String {
-    text.replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-}
-
 fn seconds(stamp: &str) -> Option<u64> {
     let stamp = stamp.parse::<jiff::Timestamp>().ok()?;
     u64::try_from(stamp.as_second()).ok()
@@ -44,7 +36,7 @@ pub fn recently_used(xbel: &str) -> Vec<(PathBuf, u64)> {
         .filter_map(|rest| {
             let tag = format!(" {}", &rest[..rest.find('>')?]);
             let tag = tag.as_str();
-            let path = path_from_file_uri(&unescape(attribute(tag, "href")?))?;
+            let path = path_from_file_uri(&unescape_xml(attribute(tag, "href")?))?;
             let used = ["visited", "modified", "added"]
                 .iter()
                 .filter_map(|name| attribute(tag, name).and_then(seconds))

@@ -11,7 +11,6 @@ publish = false
 [dependencies]
 accesskit.workspace = true
 bande-app.workspace = true
-bande-app-settings.workspace = true
 bande-app-menu.workspace = true
 bande-datetime.workspace = true
 bande-fs.workspace = true
@@ -46,8 +45,8 @@ recommends = "bande-polkit, bande-settings"
 extended-description = """\
 The app store of the Bande desktop: browse and search the apps Debian \
 describes with AppStream, read about them before installing, and hide apps \
-that need X11, which Bande does not run. With flatpak installed, it offers \
-Flathub's apps too."""
+that need X11, which Bande does not run. When flatpak is installed and a \
+Flatpak remote is configured, it lists that remote's apps too."""
 assets = [
     ["target/release/bande-software", "usr/bin/", "755"],
     ["data/org.bande.Software.desktop", "usr/share/applications/", "644"],

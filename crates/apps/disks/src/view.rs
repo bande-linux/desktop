@@ -507,7 +507,7 @@ impl DisksView {
             target = described(&name, &device, size),
             image = quoted(&image_name),
             image_size = format_size(image_size)
-        ) + &self.startup_warning(target);
+        ) + &self.system_disk_warning(target);
         self.ui.present_sheet(
             Alert::new(
                 &title,
@@ -531,13 +531,13 @@ impl DisksView {
         })
     }
 
-    fn startup_warning(&self, path: &str) -> String {
-        let on_startup_disk = self
+    fn system_disk_warning(&self, path: &str) -> String {
+        let on_system_disk = self
             .model
             .disks
             .iter()
             .any(|disk| disk.system && disk.volumes.iter().any(|volume| volume.path == path));
-        match on_startup_disk {
+        match on_system_disk {
             true => format!(
                 "\n\n{}",
                 tr!("This partition is on the disk this computer started up from.")
@@ -770,7 +770,7 @@ impl DisksView {
         let message = tr!(
             "Erasing {target} will permanently delete all data stored on it. You can’t undo this action.",
             target = described(name, device, size)
-        ) + &self.startup_warning(path);
+        ) + &self.system_disk_warning(path);
         let default_name = match whole_disk {
             true => tr!("Untitled"),
             false => name.to_owned(),
@@ -828,7 +828,7 @@ impl DisksView {
         let message = tr!(
             "Deleting the partition {target} deletes all data stored on it. You can’t undo this action.",
             target = described(&volume.name, &volume.device, volume.size),
-        ) + &self.startup_warning(&volume.path);
+        ) + &self.system_disk_warning(&volume.path);
         self.ui.present_sheet(
             Alert::new(
                 &title,
@@ -1351,7 +1351,7 @@ impl DisksView {
             }
         }
         if disk.system {
-            pairs.push((tr!("Access:"), tr!("Startup disk (read-only)")));
+            pairs.push((tr!("Access:"), tr!("System disk (read-only)")));
         }
         vec![
             boxed(Heading::new(

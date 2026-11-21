@@ -124,8 +124,8 @@ msgstr "Öppna…"
 msgid "Show in Files"
 msgstr "Visa i Filer"
 
-msgid "Get Info"
-msgstr "Visa info"
+msgid "Properties"
+msgstr "Egenskaper"
 
 msgid "Copy"
 msgstr "Kopiera"

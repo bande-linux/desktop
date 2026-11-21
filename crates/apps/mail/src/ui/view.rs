@@ -1298,14 +1298,14 @@ impl MailView {
                         Ok(Some(from)) => from,
                         Ok(None) => continue,
                         Err(error) => {
-                            tracing::warn!("cannot put the message back: {error}");
+                            tracing::warn!("cannot restore the message: {error}");
                             continue;
                         }
                     };
                     self.expect_arrival(&from, moved.message_id.clone());
                     match self.store.move_messages(&[id], &from) {
                         Ok(accounts) => self.flush(&accounts),
-                        Err(error) => tracing::warn!("cannot put the message back: {error}"),
+                        Err(error) => tracing::warn!("cannot restore the message: {error}"),
                     }
                 }
                 Ok(None) if moved.tries < UNDO_TRIES => {
@@ -1319,13 +1319,13 @@ impl MailView {
                     });
                 }
                 Ok(None) => lost.push(moved.to),
-                Err(error) => tracing::warn!("cannot put the message back: {error}"),
+                Err(error) => tracing::warn!("cannot restore the message: {error}"),
             }
         }
         if let Some(mailbox) = lost.first().and_then(|id| self.mailbox(*id)) {
             self.ui.present_sheet(
                 Alert::new(
-                    &trn!("A Message Could Not Be Put Back", "{count} Messages Could Not Be Put Back", count = lost.len()),
+                    &trn!("A Message Could Not Be Restored", "{count} Messages Could Not Be Restored", count = lost.len()),
                     &tr!("Mail did not find it in {mailbox} on the server. It may have been moved or deleted there.", mailbox = mailbox.name),
                     |_| {},
                 )

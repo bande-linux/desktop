@@ -7,7 +7,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use bande_inbox::Outbox;
-use bande_packages::flatpak::{self, FLATHUB, Installed};
+use bande_packages::flatpak::{self, Installed};
 use bande_toolkit::Image;
 use bande_xdg::DesktopEntry;
 use jxl_oxide::JxlImage;
@@ -41,7 +41,6 @@ pub enum Loaded {
         apps: Vec<Component>,
         installed: HashSet<String>,
         flatpaks: HashMap<String, Installed>,
-        flathub: bool,
     },
     Icons(Vec<(String, Option<Image>)>),
     Shot {
@@ -360,7 +359,6 @@ fn catalogue() -> Loaded {
         apps,
         installed,
         flatpaks,
-        flathub: remotes.iter().any(|remote| remote == FLATHUB),
     }
 }
 

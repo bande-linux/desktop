@@ -963,7 +963,6 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
- "bande-app-settings",
  "bande-datetime",
  "bande-fs",
  "bande-inbox",

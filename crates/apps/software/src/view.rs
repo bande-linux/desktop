@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::os::fd::BorrowedFd;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 
@@ -11,15 +10,13 @@ use bande_l10n::{text, tr, trn};
 use crate::catalog::{self, Block, Bundle, Category, Component, Icon, flatpak_needs_x11, search};
 use crate::media::{self, Loaded, Media, Request, ShotError};
 use crate::online;
-use crate::settings::SoftwareSettings;
 use crate::widgets::{AppRow, Grid, Picture};
 use crate::worker::{self, Facts, Failure, Job, Message, Problem, Query};
-use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_datetime::DateFormats;
 use bande_fs::format_size;
 use bande_inbox::Inbox;
 use bande_packages::flatpak::{
-    self, Canceller as FlatpakCanceller, FLATHUB, Installed, Permission, permissions,
+    self, Canceller as FlatpakCanceller, Installed, Permission, permissions,
 };
 use bande_packages::{Canceller, Client, Package, Progress, Status};
 use bande_toolkit::ui::{
@@ -143,13 +140,6 @@ fn place_name(place: Place) -> String {
     }
 }
 
-fn remote_name(remote: &str) -> String {
-    match remote {
-        FLATHUB => tr!("Flathub"),
-        other => other.to_owned(),
-    }
-}
-
 fn permission_text(permission: Permission) -> String {
     match permission {
         Permission::Network => tr!("Uses the network"),
@@ -268,7 +258,7 @@ fn source_name(source: &Source) -> String {
     match source {
         Source::Debian => tr!("Debian"),
         Source::Flatpak(remote) => {
-            tr!("Flatpak · {remote}", remote = remote_name(remote))
+            tr!("Flatpak · {remote}", remote = remote)
         }
     }
 }
@@ -317,8 +307,8 @@ fn problem_text(problem: Problem, task: Task, name: &str) -> String {
             text!("Installing apps needs PackageKit, which isn’t installed.")
         }
         (Problem::NeedsX11, _) => text!("This app needs X11, which Bande doesn’t run."),
-        (Problem::Other | Problem::Cancelled, Task::Install) => text!("Couldn’t install {name}."),
-        (Problem::Other | Problem::Cancelled, Task::Remove) => text!("Couldn’t remove {name}."),
+        (Problem::Other, Task::Install) => text!("Couldn’t install {name}."),
+        (Problem::Other, Task::Remove) => text!("Couldn’t remove {name}."),
     };
     id.tr_args(&[("name", &name.to_owned() as &dyn std::fmt::Display)])
 }
@@ -366,10 +356,6 @@ pub struct Software {
     dates: DateFormats,
     installed: HashSet<String>,
     flatpaks: HashMap<String, Installed>,
-    flathub: bool,
-    flathub_wanted: Option<bool>,
-    flathub_busy: bool,
-    flathub_failure: Option<Failure>,
     chosen: HashMap<String, Source>,
     icons: HashMap<String, Option<Image>>,
     requested: HashSet<String>,
@@ -390,8 +376,6 @@ pub struct Software {
     flatpak_canceller: FlatpakCanceller,
     media: Media,
     inbox: Inbox<Message>,
-    settings_folder: Option<PathBuf>,
-    settings_watch: Option<SettingsWatch>,
     place: Place,
     pages: Vec<(Page, ScrollState)>,
     query: String,
@@ -424,14 +408,6 @@ impl Software {
         let canceller = transactions.canceller();
         let flatpak_canceller = FlatpakCanceller::default();
         let workers = worker::start(transactions, queries, flatpak_canceller.clone(), arch)?;
-        let folder = settings_folder();
-        let settings_watch = folder
-            .as_deref()
-            .and_then(|folder| SettingsWatch::start(folder, SoftwareSettings::FILE));
-        let flathub_wanted = folder
-            .as_deref()
-            .filter(|folder| folder.join(SoftwareSettings::FILE).exists())
-            .map(|folder| SoftwareSettings::load(folder).flathub);
         let media = media::start(&workers.inbox.outbox())?;
         online::watch(workers.inbox.outbox());
         let intents: Rc<RefCell<Vec<Intent>>> = Rc::default();
@@ -461,10 +437,6 @@ impl Software {
             dates: DateFormats::from_env(),
             installed: HashSet::new(),
             flatpaks: HashMap::new(),
-            flathub: false,
-            flathub_wanted,
-            flathub_busy: false,
-            flathub_failure: None,
             chosen: HashMap::new(),
             icons: HashMap::new(),
             requested: HashSet::new(),
@@ -485,8 +457,6 @@ impl Software {
             flatpak_canceller,
             media,
             inbox: workers.inbox,
-            settings_folder: folder,
-            settings_watch,
             place: Place::Discover,
             pages: vec![(Page::Home, ScrollState::default())],
             query: String::new(),
@@ -507,9 +477,7 @@ impl Software {
     }
 
     pub fn fds(&self) -> Vec<BorrowedFd<'_>> {
-        let mut fds = vec![self.inbox.fd()];
-        fds.extend(self.settings_watch.iter().map(SettingsWatch::fd));
-        fds
+        vec![self.inbox.fd()]
     }
 
     pub fn ui(&mut self) -> &mut Ui {
@@ -542,14 +510,7 @@ impl Software {
     pub fn pump(&mut self) -> bool {
         let messages = self.inbox.drain();
         let intents: Vec<Intent> = self.intents.borrow_mut().drain(..).collect();
-        let settings = self
-            .settings_watch
-            .as_mut()
-            .is_some_and(SettingsWatch::drain);
-        if settings {
-            self.follow_settings();
-        }
-        if messages.is_empty() && intents.is_empty() && !settings {
+        if messages.is_empty() && intents.is_empty() {
             return false;
         }
         for intent in intents {
@@ -574,38 +535,6 @@ impl Software {
             tracing::warn!("the catalogue loader stopped");
         }
         self.ask(Query::Updates);
-    }
-
-    fn follow_settings(&mut self) {
-        let Some(folder) = &self.settings_folder else {
-            return;
-        };
-        let wanted = SoftwareSettings::load(folder).flathub;
-        if self.flathub_wanted == Some(wanted) {
-            return;
-        }
-        self.flathub_wanted = Some(wanted);
-        if wanted == self.flathub && self.flathub_failure.is_none() {
-            return;
-        }
-        self.flathub_failure = None;
-        self.flathub_busy = true;
-        self.send(Job::Flathub(wanted));
-    }
-
-    fn remember_flathub(&mut self) {
-        if self.flathub_wanted.is_some() {
-            return;
-        }
-        self.flathub_wanted = Some(self.flathub);
-        let settings = SoftwareSettings {
-            flathub: self.flathub,
-        };
-        if let Some(folder) = &self.settings_folder
-            && let Err(error) = settings.save(folder)
-        {
-            tracing::warn!("cannot save the Software settings: {error}");
-        }
     }
 
     fn send(&self, job: Job) {
@@ -816,7 +745,6 @@ impl Software {
                 apps,
                 installed,
                 flatpaks,
-                flathub,
             }) => {
                 let apps: Vec<Component> = apps.into_iter().filter(|app| !app.needs_x11).collect();
                 let shown: Vec<Option<usize>> = self
@@ -848,7 +776,6 @@ impl Software {
                 self.apps = apps;
                 self.installed = installed;
                 self.flatpaks = flatpaks;
-                self.flathub = flathub;
                 self.facts.clear();
                 self.flatpak_facts.clear();
                 self.flatpak_offered = !self.flatpaks.is_empty()
@@ -858,7 +785,6 @@ impl Software {
                         .flat_map(|app| &app.bundles)
                         .any(|bundle| matches!(bundle, Bundle::Flatpak { .. }));
                 self.loading = false;
-                self.remember_flathub();
                 self.refresh_details();
             }
             Message::Online(online) => {
@@ -908,17 +834,6 @@ impl Software {
             }
             Message::FlatpakDetails(key, remote, facts) => {
                 self.flatpak_facts.insert((key, remote), facts);
-            }
-            Message::Flathub(result) => {
-                self.flathub_busy = false;
-                match result {
-                    Ok(on) => {
-                        self.flathub = on;
-                        self.reload();
-                    }
-                    Err(failure) if failure.problem == Problem::Cancelled => {}
-                    Err(failure) => self.flathub_failure = Some(failure),
-                }
             }
             Message::Stopped(key) => {
                 self.busy.remove(&key);
@@ -1273,44 +1188,13 @@ impl Software {
                 .get(*index)
                 .is_some_and(|app| names.insert(app.name.to_lowercase()))
         });
-        let mut widgets = self.flathub_status();
-        widgets.extend([
+        let mut widgets = vec![
             boxed(Label::heading(&tr!("Categories"))),
             boxed(Grid::new(3, SPACING / 2.0, tiles)),
-        ]);
+        ];
         if !fresh.is_empty() {
             widgets.push(boxed(Label::heading(&tr!("New & Updated"))));
             widgets.extend(self.rows(&fresh, NEW_ROWS));
-        }
-        widgets
-    }
-
-    fn flathub_status(&self) -> Widgets {
-        if self.flathub_busy {
-            let id = match self.flathub_wanted {
-                Some(false) => text!("Turning off Flathub…"),
-                _ => text!("Turning on Flathub…"),
-            };
-            return vec![row(vec![
-                boxed(Spinner::new(&id.tr())),
-                boxed(Label::new(&id.tr()).secondary()),
-            ])];
-        }
-        let Some(failure) = &self.flathub_failure else {
-            return Vec::new();
-        };
-        let mut widgets = vec![boxed(Label::new(&problem_text(
-            failure.problem,
-            Task::Install,
-            &tr!("Flathub"),
-        )))];
-        if !failure.details.is_empty() {
-            widgets.push(boxed(Disclosure::new(
-                &tr!("Details"),
-                false,
-                Label::new(&failure.details),
-                |_| {},
-            )));
         }
         widgets
     }

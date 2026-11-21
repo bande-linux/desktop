@@ -33,7 +33,7 @@ const FILES: &str = "bande-files";
 
 const OPEN: &str = "open";
 const SHOW_IN_FILES: &str = "show-in-files";
-const GET_INFO: &str = "get-info";
+const PROPERTIES: &str = "properties";
 const COPY: &str = "copy";
 const SIDEBAR: &str = "sidebar";
 const ACTUAL_SIZE: &str = "actual-size";
@@ -304,7 +304,7 @@ impl Program for Viewer {
             file_menu.push(item(text!("Show in Files"), SHOW_IN_FILES, None, file));
         }
         file_menu.extend([
-            item(text!("Get Info"), GET_INFO, Some("Ctrl+I"), file),
+            item(text!("Properties"), PROPERTIES, Some("Ctrl+I"), file),
             Entry::separator(),
             bande_app_menu::print_item(file),
         ]);
@@ -377,7 +377,7 @@ impl Program for Viewer {
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
         match command {
             OPEN => return self.choose(cx),
-            GET_INFO => return self.show_info(cx),
+            PROPERTIES => return self.show_info(cx),
             _ => {}
         }
         let Some(window) = window

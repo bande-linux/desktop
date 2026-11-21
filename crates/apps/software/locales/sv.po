@@ -10,9 +10,6 @@ msgstr ""
 msgid "Software"
 msgstr "Programvara"
 
-msgid "Software Settings"
-msgstr "Inställningar för Programvara"
-
 msgid "{name} is installed"
 msgstr "{name} har installerats"
 
@@ -37,15 +34,6 @@ msgstr "Installerade"
 
 msgid "Updates"
 msgstr "Uppdateringar"
-
-msgid "Get apps from Flathub"
-msgstr "Hämta appar från Flathub"
-
-msgid "Sources"
-msgstr "Källor"
-
-msgid "Flathub offers apps Debian doesn’t have, and newer versions, packaged by their developers or the community. They install for you only, without a password, run in a sandbox and update with Software Update."
-msgstr "Flathub erbjuder appar som Debian inte har, och nyare versioner, paketerade av utvecklarna eller gemenskapen. De installeras bara för dig, utan lösenord, körs i en sandlåda och uppdateras med Programuppdatering."
 
 msgid "Internet"
 msgstr "Internet"
@@ -73,9 +61,6 @@ msgstr "Verktyg"
 
 msgid "System"
 msgstr "System"
-
-msgid "Flathub"
-msgstr "Flathub"
 
 msgid "Uses the network"
 msgstr "Använder nätverket"
@@ -214,12 +199,6 @@ msgstr "Kategorier"
 
 msgid "New & Updated"
 msgstr "Nytt och uppdaterat"
-
-msgid "Turning off Flathub…"
-msgstr "Slår av Flathub…"
-
-msgid "Turning on Flathub…"
-msgstr "Slår på Flathub…"
 
 msgid "Details"
 msgstr "Detaljer"

@@ -27,7 +27,6 @@ pub enum Job {
         key: String,
         reference: String,
     },
-    Flathub(bool),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +60,6 @@ pub enum Problem {
     NotAuthorized,
     NoPackageKit,
     NeedsX11,
-    Cancelled,
     Other,
 }
 
@@ -99,7 +97,6 @@ pub enum Message {
     FlatpakDetails(String, String, flatpak::Facts),
     Updates(Vec<Package>, Vec<flatpak::Update>),
     Failed(String, Failure),
-    Flathub(Result<bool, Failure>),
 }
 
 fn flatpak_failure(error: flatpak::Error) -> Option<Failure> {
@@ -136,13 +133,6 @@ fn flatpak_progress(status: Status, percent: Option<u32>) -> Progress {
         status,
         allow_cancel: true,
     }
-}
-
-fn flathub_failure(error: flatpak::Error) -> Failure {
-    flatpak_failure(error).unwrap_or(Failure {
-        problem: Problem::Cancelled,
-        details: String::new(),
-    })
 }
 
 fn failure(error: &Error) -> Option<Failure> {
@@ -343,16 +333,6 @@ fn transact(
                 });
                 flatpak_settled(key, removed)
             }
-            Job::Flathub(true) => Message::Flathub(
-                flatpak::enable_flathub()
-                    .map(|()| true)
-                    .map_err(flathub_failure),
-            ),
-            Job::Flathub(false) => Message::Flathub(
-                flatpak::disable_flathub()
-                    .map(|()| false)
-                    .map_err(flathub_failure),
-            ),
         };
         if !out.send(message) {
             return;

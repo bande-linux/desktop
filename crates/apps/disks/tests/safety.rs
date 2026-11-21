@@ -71,7 +71,7 @@ fn shown(view: &mut DisksView) -> String {
 }
 
 #[test]
-fn the_startup_disk_stays_untouchable_while_a_usb_stick_is_erased_and_ejected() {
+fn the_system_disk_stays_untouchable_while_a_usb_stick_is_erased_and_ejected() {
     let mut view = DisksView::new(Appearance::default());
     view.set_abilities(Abilities {
         formats: vec![Format::Ext4, Format::ExFat],

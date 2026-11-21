@@ -8,7 +8,7 @@
   <summary xml:lang="sv">Radera, partitionera och reparera skivor, och arbeta med skivavbildningar</summary>
   <description>
     <p>Disks shows the internal and external disks, their partitions and volumes, and the disk images that are open, with their capacity, format, connection and S.M.A.R.T. health.</p>
-    <p>It mounts, unmounts and ejects volumes, erases disks as ext4, encrypted ext4, exFAT, FAT32 or NTFS with a GPT or MBR partition table, adds, deletes and resizes partitions, checks and repairs volumes, creates and restores disk images, and writes an image to a USB drive. Every change asks for authorization; the startup disk and the volumes the system uses stay read-only.</p>
+    <p>It mounts, unmounts and ejects volumes, erases disks as ext4, encrypted ext4, exFAT, FAT32 or NTFS with a GPT or MBR partition table, adds, deletes and resizes partitions, checks and repairs volumes, creates and restores disk images, and writes an image to a USB drive. Every change asks for authorization; the system disk and the volumes the system uses stay read-only.</p>
   </description>
   <developer id="org.bande">
     <name>Bande</name>

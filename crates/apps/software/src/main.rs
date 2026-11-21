@@ -2,21 +2,17 @@ use std::os::fd::BorrowedFd;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
-use bande_app_settings::{SettingsWindow, settings_folder};
 use bande_l10n::{Text, text, tr};
 use bande_notify::Urgency;
 use bande_notify::client::{Request as Notification, notify};
 use bande_packages::{Client, debian_arch};
-use bande_software::settings::{SETTINGS_SIZE, SoftwareSettings, settings_form};
 use bande_software::{
     COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, Finished,
     SETTINGS_ID, Software, WINDOW_SIZE,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
-
-const FLATPAK: &str = "flatpak";
 
 const INFO: Info = Info {
     id: "org.bande.Software",
@@ -26,23 +22,6 @@ const INFO: Info = Info {
     keys: Keys::Standard,
     settings: None,
 };
-
-const WITH_FLATPAK: Info = Info {
-    settings: Some(Settings {
-        title: || tr!("Software Settings"),
-        size: SETTINGS_SIZE,
-        view: settings_window,
-    }),
-    ..INFO
-};
-
-fn settings_window(appearance: Appearance) -> Box<dyn View> {
-    Box::new(SettingsWindow::<SoftwareSettings>::new(
-        appearance,
-        settings_folder(),
-        settings_form,
-    ))
-}
 
 struct Pane(Software);
 
@@ -228,9 +207,5 @@ impl Program for Store {
 }
 
 fn main() -> ExitCode {
-    let info = match bande_xdg::find_executable(FLATPAK) {
-        Some(_) => &WITH_FLATPAK,
-        None => &INFO,
-    };
-    bande_app::run::<Store>(info)
+    bande_app::run::<Store>(&INFO)
 }

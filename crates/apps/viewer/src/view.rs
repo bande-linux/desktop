@@ -153,7 +153,7 @@ impl FileView {
             Rect::default(),
         );
         let tools = [
-            (INFO_SYMBOL, text!("Get Info"), Signal::Info),
+            (INFO_SYMBOL, text!("Properties"), Signal::Info),
             (ZOOM_OUT_SYMBOL, text!("Zoom Out"), Signal::ZoomOut),
             (ZOOM_IN_SYMBOL, text!("Zoom In"), Signal::ZoomIn),
             (ROTATE_SYMBOL, text!("Rotate Left"), Signal::RotateLeft),

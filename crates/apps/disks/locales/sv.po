@@ -436,8 +436,8 @@ msgstr "Drifttimmar:"
 msgid "Access:"
 msgstr "Åtkomst:"
 
-msgid "Startup disk (read-only)"
-msgstr "Startskiva (skrivskyddad)"
+msgid "System disk (read-only)"
+msgstr "Systemskiva (skrivskyddad)"
 
 msgid "{location} Physical Volume • {format}"
 msgstr "Fysisk volym, {location} • {format}"

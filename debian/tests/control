@@ -24,7 +24,7 @@ Restrictions: allow-stderr
 
 Tests: portal
 Depends: xdg-desktop-portal-bande, bande-config, xdg-desktop-portal, dbus-daemon, dbus-bin
-Restrictions: isolation-container, allow-stderr
+Restrictions: allow-stderr
 
 Tests: metadata
 Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-power,

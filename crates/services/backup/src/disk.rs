@@ -13,7 +13,6 @@ use crate::store::{self, Destination, SecretFile};
 
 pub const RUN_DIR: &str = "/run/bande-backup";
 pub const BROWSE_DIR: &str = "/run/bande-backup-browse";
-pub const LOCAL_BROWSE_DIR: &str = "/run/bande-backup-local";
 const MOUNT_DIR: &str = "/run/bande-backup/disk";
 pub const REPOSITORIES: &str = "BandeBackups";
 const PRIVATE: u32 = 0o700;

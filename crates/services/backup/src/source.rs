@@ -3,11 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const SNAPSHOT_NAME: &str = ".bande-backup-snapshot";
-const SNAPSHOTS: &str = "/.snapshots";
 const VIEW: &str = "/run/bande-backup/view";
 const BACKED_UP_FILESYSTEMS: [&str; 5] = ["ext4", "ext3", "btrfs", "xfs", "f2fs"];
 const NEVER_UNDER: [&str; 6] = ["/run", "/media", "/mnt", "/tmp", "/proc", "/sys"];
-pub const EXCLUDED: [&str; 20] = [
+pub const EXCLUDED: [&str; 19] = [
     SNAPSHOT_NAME,
     "/dev",
     "/proc",
@@ -27,7 +26,6 @@ pub const EXCLUDED: [&str; 20] = [
     "/home/*/.cache",
     "/home/*/.local/share/Trash",
     "/root/.cache",
-    SNAPSHOTS,
 ];
 
 fn unescaped(field: &str) -> String {
@@ -114,15 +112,7 @@ fn is_btrfs(point: &Path, mounts: &str) -> bool {
 }
 
 fn snapshot_of(source: &Path) -> PathBuf {
-    let snapshots = Path::new(SNAPSHOTS);
-    let shared =
-        fs::read_to_string("/proc/self/mounts").is_ok_and(|mounts| is_btrfs(snapshots, &mounts));
-    if shared {
-        let name = source.to_string_lossy().replace('/', "-");
-        snapshots.join("home").join(format!("backup{name}"))
-    } else {
-        source.join(SNAPSHOT_NAME)
-    }
+    source.join(SNAPSHOT_NAME)
 }
 
 fn delete_snapshot(path: &Path) {

@@ -758,8 +758,7 @@ chose, for restoring when the machine is gone. The disk is mounted under `/run/b
 
 Settings ▸ Backup holds the choice of disk and the status. Files browses `restic mount` at
 `/run/bande-backup-browse/versions/<time>`, read-only, with each file's old owner and mode enforced by
-the kernel, and restores by copying as the person. Nothing privileged runs on their behalf. On btrfs, hourly
-read-only snapshots of `/home` while the destination is away appear beside them.
+the kernel, and restores by copying as the person. Nothing privileged runs on their behalf.
 
 ## Updates
 

@@ -33,7 +33,7 @@ zbus.workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "admin"
-recommends = "btrfs-progs, e2fsprogs"
+recommends = "e2fsprogs"
 depends = "$auto, restic (>= 0.18), fuse3, systemd (>= 257), dbus-system-bus | dbus, polkitd, udisks2"
 extended-description = """\
 Keeps hourly, daily and weekly versions of the whole computer on an external \

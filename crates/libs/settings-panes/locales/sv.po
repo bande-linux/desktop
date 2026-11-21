@@ -331,8 +331,8 @@ msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, kernel pan
 msgid "bug, report, problem, freeze, crash, feedback, send, diagnose"
 msgstr "fel, rapport, problem, frysning, krasch, återkoppling, skicka, diagnos"
 
-msgid "restore, versions, external disk, history, snapshot, recover"
-msgstr "återställ, versioner, extern skiva, historik, ögonblicksbild, återskapa"
+msgid "restore, versions, external disk, history, recover"
+msgstr "återställ, versioner, extern skiva, historik, återskapa"
 
 msgid "When available"
 msgstr "När de finns"

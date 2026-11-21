@@ -328,7 +328,7 @@ impl PaneId {
                 tr!("bug, report, problem, freeze, crash, feedback, send, diagnose")
             }
             Self::Backup => {
-                tr!("restore, versions, external disk, history, snapshot, recover")
+                tr!("restore, versions, external disk, history, recover")
             }
         }
     }

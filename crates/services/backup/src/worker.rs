@@ -12,9 +12,8 @@ use rustix::process::{Pid, Signal, kill_process};
 use zbus::blocking::Connection;
 
 use crate::client::{Status, phase, problem, setup_error};
-use crate::disk::{self, BROWSE_DIR, LOCAL_BROWSE_DIR, Space};
+use crate::disk::{self, BROWSE_DIR, Space};
 use crate::erase::erase;
-use crate::local;
 use crate::restic::{Exit, Finished, Repository, Snapshot, StopReason, Stopper, damaged_packs};
 use crate::service::{DAY, HOUR, emit_status};
 use crate::source::{self, SnapshotView};
@@ -194,8 +193,7 @@ impl Shared {
 }
 
 struct Browser {
-    child: Option<Child>,
-    local: bool,
+    child: Child,
     clients: Vec<String>,
 }
 
@@ -390,35 +388,22 @@ impl Worker {
         let Some(destination) = state.destination else {
             return;
         };
-        let local = local::open_view();
         let child = match open_mount(&destination, self.commands.clone()) {
-            Ok(child) => Some(child),
+            Ok(child) => child,
             Err(error) => {
                 tracing::info!(
                     "the backups can't be browsed on {}: {error}",
                     destination.name()
                 );
-                None
+                self.shared.set_phase(phase::DISK_AWAY);
+                return;
             }
         };
-        if child.is_none() && !local {
-            self.shared.set_phase(phase::DISK_AWAY);
-            return;
-        }
         self.shared.browsers.fetch_add(1, Ordering::SeqCst);
         self.browser = Some(Browser {
             child,
-            local,
             clients: vec![client],
         });
-        if self
-            .browser
-            .as_ref()
-            .is_some_and(|browser| browser.child.is_none())
-        {
-            locked(&self.shared.live).browse_root = LOCAL_BROWSE_DIR.to_owned();
-            self.shared.publish();
-        }
     }
 
     fn close_browser(&mut self, client: &str) {
@@ -436,28 +421,20 @@ impl Worker {
             return;
         };
         browser.clients.clear();
-        match &browser.child {
-            Some(child) => {
-                let target = i32::try_from(child.id()).ok().and_then(Pid::from_raw);
-                if let Some(target) = target
-                    && let Err(error) = kill_process(target, Signal::INT)
-                {
-                    tracing::warn!("cannot stop browsing the backups: {error}");
-                }
-            }
-            None => self.browser_exited(),
+        let target = i32::try_from(browser.child.id())
+            .ok()
+            .and_then(Pid::from_raw);
+        if let Some(target) = target
+            && let Err(error) = kill_process(target, Signal::INT)
+        {
+            tracing::warn!("cannot stop browsing the backups: {error}");
         }
     }
 
     fn browser_exited(&mut self) {
-        if let Some(browser) = self.browser.take() {
-            if let Some(mut child) = browser.child
-                && let Err(error) = child.wait()
-            {
+        if let Some(mut browser) = self.browser.take() {
+            if let Err(error) = browser.child.wait() {
                 tracing::warn!("cannot collect the backup browser: {error}");
-            }
-            if browser.local {
-                local::close_view();
             }
             self.shared.browsers.fetch_sub(1, Ordering::SeqCst);
         }
@@ -725,7 +702,6 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
         return;
     };
     if state.paused_until > now() {
-        local::take_hourly();
         shared.set_phase(phase::PAUSED);
         note_overdue(shared, &state);
         return;
@@ -734,13 +710,11 @@ fn back_up(shared: &Shared, forced: bool, browsing: bool) {
         shared.change(|state| state.paused_until = 0);
     }
     if !destination.is_present() {
-        local::take_hourly();
         shared.set_phase(phase::DISK_AWAY);
         note_overdue(shared, &state);
         return;
     }
     if !forced && !state.on_battery && on_battery() {
-        local::take_hourly();
         shared.set_phase(phase::WAITING_FOR_POWER);
         note_overdue(shared, &state);
         return;

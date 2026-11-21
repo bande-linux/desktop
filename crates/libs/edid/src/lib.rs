@@ -3,32 +3,7 @@ const DESCRIPTORS: [usize; 4] = [54, 72, 90, 108];
 const MONITOR_NAME: u8 = 0xfc;
 const SERIAL_TEXT: u8 = 0xff;
 
-const VENDORS: [(&str, &str); 24] = [
-    ("ACR", "Acer"),
-    ("AOC", "AOC"),
-    ("APP", "Apple"),
-    ("AUO", "AU Optronics"),
-    ("BNQ", "BenQ"),
-    ("BOE", "BOE"),
-    ("CMN", "Chimei Innolux"),
-    ("DEL", "Dell"),
-    ("ENC", "Eizo"),
-    ("GSM", "LG"),
-    ("HPN", "HP"),
-    ("HWP", "HP"),
-    ("IVM", "Iiyama"),
-    ("LEN", "Lenovo"),
-    ("LGD", "LG Display"),
-    ("MSI", "MSI"),
-    ("NEC", "NEC"),
-    ("PHL", "Philips"),
-    ("SAM", "Samsung"),
-    ("SDC", "Samsung Display"),
-    ("SHP", "Sharp"),
-    ("SNY", "Sony"),
-    ("VSC", "ViewSonic"),
-    ("XMI", "Xiaomi"),
-];
+const PNP_IDS: &str = "/usr/share/hwdata/pnp.ids";
 
 const SRGB_DEFAULT: u8 = 1 << 2;
 const UNDEFINED_GAMMA: u8 = 0xff;
@@ -80,6 +55,17 @@ fn descriptor_text(block: &[u8], kind: u8) -> Option<String> {
     })
 }
 
+fn vendor_name(code: &str) -> Option<String> {
+    let ids = std::fs::read(PNP_IDS)
+        .inspect_err(|error| tracing::debug!("cannot read {PNP_IDS}: {error}"))
+        .ok()?;
+    ids.split(|byte| *byte == b'\n').find_map(|line| {
+        let name = line.strip_prefix(code.as_bytes())?.strip_prefix(b"\t")?;
+        let name = String::from_utf8_lossy(name).trim().to_owned();
+        (!name.is_empty()).then_some(name)
+    })
+}
+
 pub fn parse(block: &[u8]) -> Option<Edid> {
     if block.len() < 128 || block[..8] != HEADER {
         return None;
@@ -87,10 +73,7 @@ pub fn parse(block: &[u8]) -> Option<Edid> {
     let vendor = u16::from_be_bytes([block[8], block[9]]);
     let letter = |shift: u16| char::from(b'A' - 1 + ((vendor >> shift) & 0x1f) as u8);
     let code: String = [letter(10), letter(5), letter(0)].into_iter().collect();
-    let make = VENDORS
-        .iter()
-        .find(|(known, _)| *known == code)
-        .map_or(code.clone(), |(_, name)| (*name).to_owned());
+    let make = vendor_name(&code).unwrap_or_else(|| code.clone());
     let product = u16::from_le_bytes([block[10], block[11]]);
     let number = u32::from_le_bytes([block[12], block[13], block[14], block[15]]);
     let model =

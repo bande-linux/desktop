@@ -797,8 +797,8 @@ msgstr "192.168.1.1"
 msgid "DNS servers"
 msgstr "DNS-servrar"
 
-msgid "1.1.1.1, 9.9.9.9"
-msgstr "1.1.1.1, 9.9.9.9"
+msgid "192.0.2.1, 198.51.100.1"
+msgstr "192.0.2.1, 198.51.100.1"
 
 msgid "No Ethernet port"
 msgstr "Ingen Ethernet-port"

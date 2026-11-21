@@ -24,7 +24,7 @@ const MANUAL_FIELDS: [(SettingId, bande_l10n::Text, bande_l10n::Text); 3] = [
     (
         SettingId::EthernetDns,
         text!("DNS servers"),
-        text!("1.1.1.1, 9.9.9.9"),
+        text!("192.0.2.1, 198.51.100.1"),
     ),
 ];
 

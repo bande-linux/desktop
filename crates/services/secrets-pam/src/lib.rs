@@ -190,6 +190,8 @@ fn send(uid: libc::uid_t, message: &[u8]) -> Result<(), Failure> {
     }
 }
 
+/// # Safety
+/// `handle` is the live handle PAM passed to the calling hook.
 unsafe fn report(handle: *mut PamHandle, result: Result<(), Failure>) {
     if let Err(failure) = result {
         // SAFETY: handle is the live handle PAM passed to the calling hook, and the "%s" format

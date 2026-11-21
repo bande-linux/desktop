@@ -90,13 +90,6 @@ pub(crate) fn deliver() -> bool {
     shown_changed
 }
 
-fn is_absent(error: zbus::Error) -> bool {
-    matches!(
-        zbus::fdo::Error::from(error),
-        zbus::fdo::Error::ServiceUnknown(_) | zbus::fdo::Error::NameHasNoOwner(_)
-    )
-}
-
 fn follow_changes(connection: Connection, replier: Replier) {
     let Ok(proxy) = Proxy::new(&connection, BUS_NAME, OBJECT_PATH, BUS_NAME) else {
         return;
@@ -140,7 +133,7 @@ fn serve(requests: &Receiver<SpellRequest>, replier: &Replier) {
                         words.into_iter().zip(verdicts).collect(),
                     )),
                     Err(error) => {
-                        if is_absent(error) {
+                        if bande_bus::is_unowned(&error) {
                             replier.send(SpellReply::Absent);
                             return;
                         }

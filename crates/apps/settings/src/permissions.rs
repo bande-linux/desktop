@@ -83,12 +83,8 @@ fn entry(permission: Permission) -> (&'static str, &'static str) {
 
 fn absent(error: &zbus::Error) -> bool {
     match error {
-        zbus::Error::MethodError(name, _, _) => {
-            name.as_str() == NOT_FOUND
-                || name.as_str() == "org.freedesktop.DBus.Error.ServiceUnknown"
-        }
-        zbus::Error::FDO(error) => matches!(**error, zbus::fdo::Error::ServiceUnknown(_)),
-        _ => false,
+        zbus::Error::MethodError(name, _, _) if name.as_str() == NOT_FOUND => true,
+        error => bande_bus::is_unowned(error),
     }
 }
 

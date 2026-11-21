@@ -7,7 +7,7 @@ use zbus::blocking::Connection;
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
 
-use crate::failure::{failed, kind};
+use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::services::{follow_state, signals};
 
@@ -137,7 +137,7 @@ fn profile_names(profiles: &PowerProfilesProxyBlocking<'_>) -> Profiles {
                 .filter_map(|profile| text(profile, "Profile"))
                 .collect(),
         ),
-        Err(error) if kind(&error) == "ServiceUnknown" => {
+        Err(error) if bande_bus::is_unowned(&error) => {
             tracing::info!("no power modes: {error}");
             Profiles::Missing
         }

@@ -264,12 +264,7 @@ pub enum Error {
 
 impl From<zbus::Error> for Error {
     fn from(error: zbus::Error) -> Self {
-        let name = match &error {
-            zbus::Error::MethodError(name, _, _) => name.as_str().to_owned(),
-            zbus::Error::FDO(error) => zbus::DBusError::name(error.as_ref()).to_string(),
-            _ => String::new(),
-        };
-        if name.ends_with(".ServiceUnknown") {
+        if bande_bus::is_unowned(&error) {
             return Self::Missing;
         }
         Self::Bus(error)

@@ -11,13 +11,7 @@ const REFUSED: [&str; 5] = [
     "NotAuthorized",
     "AuthFailed",
 ];
-const SILENT: [&str; 5] = [
-    "ServiceUnknown",
-    "NoReply",
-    "TimedOut",
-    "Timeout",
-    "NameHasNoOwner",
-];
+const SILENT: [&str; 3] = ["NoReply", "TimedOut", "Timeout"];
 
 pub(crate) fn kind(error: &zbus::Error) -> String {
     let name = match error {
@@ -29,7 +23,7 @@ pub(crate) fn kind(error: &zbus::Error) -> String {
 }
 
 pub(crate) fn unresponsive(error: &zbus::Error) -> bool {
-    SILENT.contains(&kind(error).as_str())
+    bande_bus::is_unowned(error) || SILENT.contains(&kind(error).as_str())
 }
 
 pub(crate) fn not_responding(service: Text) -> String {

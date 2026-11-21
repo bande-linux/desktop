@@ -713,13 +713,11 @@ what the one before could not save. What happens for each:
   line says what the renderer held, by kind. A hung device is abandoned rather than waited for.
   Textures are keyed by the renderer's context, so everything is uploaded again; apps keep
   running. If no new device can be created, the compositor exits (back to the login window).
-- **Memory runs out**: zram, the low-memory window, systemd-oomd on `app.slice` and the
+- **Memory runs out**: the low-memory window, systemd-oomd on `app.slice` and the
   notification of a closed app ([decision 0004](../decisions/0004-memory-pressure.md)). The
   compositor (with the shell and every client it starts) and the session bus, PipeWire,
   WirePlumber and the portal sit at the user's OOM floor (`OOMScoreAdjust=100`, oomd `avoid`),
-  apps at 200. `MemoryLow=` keeps the session's memory out of reclaim: 512M for
-  `bande-compositor.service`, 640M for `session.slice`, and 640M down the system chain
-  (`user.slice`, `user-.slice`, `user@.service`) without which the inner values give nothing.
+  apps at 200.
 - **Session services crash**: every Bande user service (`bande-config`, `-power`, `-sound`,
   `-tray`, `-polkit-agent`, `-automount`, `-notify`, the portal backend) has
   `Restart=on-failure` with systemd's start limit (5 in 10 s), runs in `session.slice` and is
@@ -735,9 +733,8 @@ what the one before could not save. What happens for each:
   apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
   the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
   ([behaviour](behaviour.md)).
-- **The record**: every failure leaves one report, which stays on this computer unless sending is switched on, and Settings ▸ Privacy & Security ▸ Diagnostics shows which applies ([fault reports](fault-reports.md)). `bande-desktop` depends on `systemd-coredump` (`coredump.conf.d/50-bande.conf`: up to 8 GB a dump,
-  2 GB in all, 4 GB of disk kept free; `DefaultLimitCORE=infinity` for both managers, since the soft limit is
-  otherwise 0 and no dump is stored; dumps go after two weeks). The programs that hold passwords
+- **The record**: every failure leaves one report, which stays on this computer unless sending is switched on, and Settings ▸ Privacy & Security ▸ Diagnostics shows which applies ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`; `bande-desktop` sets `DefaultLimitCORE=infinity` for the user manager, since the soft limit is
+  otherwise 0 and no dump is stored. The programs that hold passwords
   (`bande-lock`, `bande-greeter`, `bande-polkit`, `bande-secrets`, `bande-clipboard`) are not dumpable, so
   only their panic text is recorded. Force Quit of a not-responding app sends
   `SIGQUIT` first and waits up to 8 s, so a hang leaves a stack too. Symbols are in [packaging](packaging.md).

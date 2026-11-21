@@ -13,40 +13,16 @@ by the user's. Waiting for the kernel OOM killer is not a policy. A desktop need
 
 ## Decision
 
-Four layers, each with one job, and nothing outside Debian.
+Three layers, each with one job, and nothing outside Debian. Swap, zram and the system's
+memory settings stay the system's own.
 
 | Layer | What | Owner |
 | :--- | :--- | :--- |
-| 1. More room | zram swap, `min(ram, 8192)`, zstd, ahead of any disk swap | `bande-desktop` (drop-in for `systemd-zram-generator`) |
-| 2. Ask the user | at sustained memory stall, the shell's "running low on memory" window with the heaviest apps and Force Quit | `bande-shell` |
-| 3. Act for the user | systemd-oomd kills the app with the most reclaim activity in `app.slice` | `bande-desktop` (drop-in for `app.slice`) and Debian's `systemd-oomd` |
-| 4. Tell the user | a notification naming the app that was closed | `bande-shell` through `bande-xdg` |
+| 1. Ask the user | at sustained memory stall, the shell's "running low on memory" window with the heaviest apps and Force Quit | `bande-shell` |
+| 2. Act for the user | systemd-oomd kills the app with the most reclaim activity in `app.slice` | `bande-desktop` (drop-in for `app.slice`) and Debian's `systemd-oomd` |
+| 3. Tell the user | a notification naming the app that was closed | `bande-shell` through `bande-xdg` |
 
-### 1. zram
-
-`/usr/lib/systemd/zram-generator.conf.d/50-bande.conf`:
-
-```ini
-[zram0]
-zram-size = min(ram, 8192)
-compression-algorithm = zstd
-```
-
-This is Fedora's rule (Debian's default is `min(ram / 2, 4096)` with the kernel's lz4). zram is
-created with priority 100, so an existing swap partition stays as overflow. Debian's kernel has
-`CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends, and the
-VM compresses before it writes.
-
-zram stacked over a disk swap partition is a known bad pairing: Fedora saw premature OOM
-kills (Firefox) with it and moved swapfile systems to zswap. We add no disk swap. An admin who
-does should prefer zswap (`zswap.enabled=1`) and turn zram off with an empty
-`/etc/systemd/zram-generator.conf` and an empty `/etc/systemd/zram-generator.conf.d/50-bande.conf`.
-
-We keep swappiness, `page-cluster` and the watermarks at the kernel defaults. Fedora ships zram
-with defaults too. A sysctl file would also apply when an admin turns zram off and swaps to disk,
-where `swappiness=180` is wrong.
-
-### 2. Kill domain: `app.slice`, session protected
+### 1. Kill domain: `app.slice`
 
 - `/usr/lib/systemd/user/app.slice.d/50-bande-oomd.conf`: `ManagedOOMMemoryPressure=kill`,
   `ManagedOOMMemoryPressureLimit=40%`, with Debian's default duration of 20 s. The systemd manual
@@ -74,21 +50,13 @@ where `swappiness=180` is wrong.
   `rustc` at adj 0 that caused it lived: at 200, a 10 MB service scores about 196k pages
   against 119k for the build. At 100 it scores about 98k, below any process over about 1.5 GB.
   Once the session bus is gone, no session service or app reconnects.
-- The session's memory is protected from reclaim, so the screen and the shell stay responsive
-  while apps thrash: `MemoryLow=512M` on `bande-compositor.service` and `640M` on
-  `session.slice`, and `640M` on `user.slice`, `user-.slice` and `user@.service` from
-  `bande-desktop`'s system drop-ins, because a cgroup's protection is capped by its parent's.
-  `MemoryLow` is best effort, not a reservation: unused protection stays free for apps, and
-  under extreme pressure the kernel still reclaims it rather than kill. Those drop-ins also
-  protect a logged-in user who is not at the screen, which with no fast user switching is only
-  the login window's user; 640M is small next to the RAM of any machine Bande runs on.
 - The session bus, PipeWire, WirePlumber and the portal also get `ManagedOOMPreference=avoid`,
   so Debian's backstop on `user@.service` passes them over while an app remains.
 - Swap kill stays off (`ManagedOOMSwap=auto`, Debian's default), for the reason Ubuntu found.
 - No `oomd.conf` drop-in: Debian already sets `DefaultMemoryPressureDurationSec=20s`, and the
   per-unit limit above is the only threshold we change.
 
-### 3. The low-memory window
+### 2. The low-memory window
 
 The shell (one process, always running, fonts already loaded) opens a PSI trigger on
 `/proc/pressure/memory`: `full 100000 2000000`, a full stall of at least 5 % in a 2 s window.
@@ -116,7 +84,7 @@ short is exactly what must be avoided) is a toplevel kept on top:
   pressure graph is; the button is hidden when System Monitor is not installed.
 - **Close** (Escape) dismisses it.
 
-### 4. The notification
+### 3. The notification
 
 `bande_xdg::follow_oom_kills` subscribes to the user manager (`Subscribe`, because systemd
 only sends unit signals while someone is subscribed) and watches `PropertiesChanged` on
@@ -137,8 +105,6 @@ background task was stopped because memory ran low", naming the unit.
 - **`min_ttl_ms` by default.** The MGLRU knob makes the kernel kill rather than thrash, but the
   kernel OOM killer picks by size, not by app. Behind oomd it is a second, cruder killer.
   Revisit if oomd turns out too slow on low-RAM machines.
-- **uresourced** (protection moved to the active user as seats change). It is not in Debian,
-  and with one person at the screen the static values above do the same.
 - **Pausing apps (SIGSTOP).** Wayland clients that stop answering pings are shown as
   hung, and a stopped app holds its memory. The user chooses in the window instead.
 
@@ -155,4 +121,4 @@ background task was stopped because memory ran low", naming the unit.
 6. Linux kernel, "Multi-Gen LRU", https://docs.kernel.org/admin-guide/mm/multigen_lru.html
 7. systemd 257 manuals: `systemd.resource-control(5)` (ManagedOOM*), `systemd-oomd.service(8)`,
    `oomd.conf(5)`; systemd v257 `src/core/cgroup.c` (`unit_check_oomd_kill`) and
-   `src/core/scope.c` (`SCOPE_FAILURE_OOM_KILL`); `zram-generator.conf(5)`.
+   `src/core/scope.c` (`SCOPE_FAILURE_OOM_KILL`).

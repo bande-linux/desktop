@@ -92,7 +92,7 @@ with `verify.sh --setup` and runs one stage:
 - `deb-all (<suite>)`: `verify.sh all` builds the architecture-independent meta-package `bande-desktop`,
   checks that it pins its packages at the build's version, that it depends on `bande-greeter |
   x-display-manager`, `pipewire`, `wireplumber` and `pipewire-pulse` and recommends
-  `bande-greeter`, `bande-apt-source` and `systemd-zram-generator`, and lints it with `lintian`.
+  `bande-greeter` and `bande-apt-source`, and lints it with `lintian`.
   It uploads `bande-debs-<suite>-all`. The APT source and keyring packages are built by the APT
   repository itself.
 - `install (<suite>, <arch>)`: in a clean `debian:<suite>` on the native runner,

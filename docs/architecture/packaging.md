@@ -104,7 +104,7 @@ another package's recommends. `bande-desktop` itself keeps:
 - `pipewire-pulse`: apps that play through PulseAudio (the session drop-ins start it);
 - `libspa-0.2-bluetooth`: Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
-- `systemd-oomd`, `systemd-zram-generator`: run the memory policy it ships.
+- `systemd-oomd`: closes an app when memory stays under pressure.
 
 It does not pull in `gnome-keyring` (the Bande keyring replaces it and conflicts with it, so the
 bus name has one owner), `pipewire-alsa`, `cups` or `avahi-daemon` (`bande-printd` prints to

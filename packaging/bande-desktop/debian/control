@@ -49,8 +49,7 @@ Recommends: ${bande:Recommends},
             bande-polkit (= ${binary:Version}),
             apt-config-icons-hidpi,
             libpam-bande-secrets (= ${binary:Version}),
-            systemd-oomd,
-            systemd-zram-generator
+            systemd-oomd
 Description: Bande desktop environment
  The Bande desktop: a pure Wayland desktop with its own compositor, shell,
  session services, login window and applications, on Debian 14 (forky).
@@ -64,15 +63,9 @@ Description: Bande desktop environment
  live in the Bande keyring, unlocked when you log in. Other apps, such as a
  browser, come from Software.
  .
- So that running out of memory never freezes the computer, it recommends
- compressed swap in memory (zram, as large as the memory up to 8 GB,
- compressed with zstd) and systemd-oomd, and makes the apps' slice the
- place where systemd-oomd closes an app when memory stays under pressure,
- so the compositor and the session services keep running. It keeps up to
- 640 MB of the session (compositor, shell and session services) out of
- reclaim, through MemoryLow on user.slice, user-*.slice and user@.service,
- so the screen stays responsive while apps thrash, and caps all apps
- together at a quarter of the system's task limit.
+ It recommends systemd-oomd and makes the apps' slice the place where it
+ closes an app when memory stays under pressure, so the session keeps
+ running.
  .
  Updates install while the computer runs; Software Update in Settings
  handles the session and the apps.

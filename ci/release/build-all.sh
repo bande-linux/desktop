@@ -31,7 +31,7 @@ relation Depends "bande-greeter (= $version) | x-display-manager"
 for depended in pipewire wireplumber pipewire-pulse; do
     relation Depends "$depended"
 done
-for recommended in "bande-greeter (= $version)" bande-apt-source systemd-zram-generator; do
+for recommended in "bande-greeter (= $version)" bande-apt-source; do
     relation Recommends "$recommended"
 done
 

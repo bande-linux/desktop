@@ -54,7 +54,7 @@ these crates at a pinned revision.
   holds without any toolkit type (image pyramids and animations, PDF pages from a confined
   `hayro` child process, text with cheap syntax colours, Markdown, RTF and HTML as blocks,
   fonts, folder and archive totals), shared by Files, the launcher, Glance and the apps
-  repository's Preview; `glance` is the one Glance panel that Files and the desktop
+  repository's Viewer; `glance` is the one Glance panel that Files and the desktop
   show (it draws with the toolkit, an exception to "without UI").
 - **`testing/`**: `test-bus` (private D-Bus buses and fakes of system services),
   `test-wayland`, the benchmarks, the toolkit sample and `review` (records a scenario on a live

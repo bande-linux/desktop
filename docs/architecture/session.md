@@ -2,8 +2,7 @@
 
 A desktop needs a good deal of invisible infrastructure: clipboard, locking, notifications,
 portals, power, authentication, audio, input methods. This document describes what Bande
-provides and how. Behaviour decisions taken with macOS as the
-reference are in [behaviour.md](behaviour.md).
+provides and how. Behaviour decisions are in [behaviour.md](behaviour.md).
 
 ## Core services
 
@@ -46,12 +45,12 @@ graph LR
 - Locking is built on `ext-session-lock-v1`.
 - **Crash resilience**: if the lock screen crashes, the session stays locked; the compositor
   draws a blank frame and a new locker may take over the lock.
-- Idle, as in macOS's Lock Screen settings ([`config.kdl`](overview.md#configuration) `idle`,
+- Idle ([`config.kdl`](overview.md#configuration) `idle`,
   Settings ▸ Lock Screen): the displays dim 10 s before the screen saver or the
   display turning off, whichever comes first (default 5 and 10 min). The screen saver is the lock
   screen itself, resting: its clock and date over the blurred desktop picture and nothing
-  else, covering the desktop through `ext-session-lock`, as macOS hands its saver over to the
-  lock screen. Every lock starts resting; the first key, click, scroll or movement, or waking
+  else, covering the desktop through `ext-session-lock`, so the saver hands over to the lock
+  screen. Every lock starts resting; the first key, click, scroll or movement, or waking
   from sleep, fades in the picture, name and password field (a typed letter lands in the
   field, unless it turned a dark display on: see `behaviour.md`), and a minute without input clears the field and rests again. "Require
   password after screen saver begins or display is turned off" (default immediately) is a grace
@@ -64,8 +63,8 @@ graph LR
   The earlier of the screen saver and the display turning off starts the lock, and sleep never
   comes before the display turns off; the settings say so on their rows when a choice is overridden,
   and the sleep row only shows when logind's `CanSuspend` is `yes`.
-- Keeping awake: a playing video holds off dimming, the display turning off and the lock, as
-  macOS's display-sleep assertion does, through whichever path the player uses:
+- Keeping awake: a playing video holds off dimming, the display turning off and the lock,
+  through whichever path the player uses:
 
   | Path | Used by | Bande |
   |---|---|---|
@@ -74,11 +73,11 @@ graph LR
   | logind `idle` block inhibitor (`systemd-inhibit --what=idle`) | scripts, `caffeinate`-style tools | `bande-power` follows logind's `BlockInhibited` |
   | `zwp_idle_inhibitor_v1` on a surface | Player and Glance (on the video's surface), mpv, Chromium (on the focused window), Firefox (last resort) | the compositor, while the surface's window is on screen, covered or not and focused or not; not while minimised, as in KWin and sway |
 
-  Audio alone keeps the computer but not the display awake, as on macOS, and neither CPU load,
+  Audio alone keeps the computer but not the display awake, and neither CPU load,
   builds nor MPRIS keep anything awake. Idle time restarts when the last inhibitor ends, so a
   finished film does not lock the screen at once.
 - Keeping the computer awake only holds back idle sleep. Nothing stops Sleep in a menu, the
-  power button or the lid, as macOS's `PreventUserIdleSystemSleep` does not, so these are not
+  power button or the lid, so these are not
   logind `sleep` block inhibitors (those would turn an explicit Sleep into an administrator
   prompt and hide it from the menus). The paths are any app's running PipeWire stream (output,
   microphone or camera; not a paused one, the system's own filters or Bande's event sounds,
@@ -100,11 +99,11 @@ graph LR
   computer sleeps, the session is locked through logind (`Session.Lock`) while a `delay` sleep
   inhibitor holds the suspend back until the lock screen sets `LockedHint`, or 3 seconds pass
   (below logind's default `InhibitDelayMaxSec` of 5); the inhibitor is taken again on wake.
-  macOS likewise asks for the password after sleep by default. The service owns
+  The service owns
   `org.freedesktop.ScreenSaver` (`Inhibit`/`UnInhibit` at `/org/freedesktop/ScreenSaver` and
   `/ScreenSaver`) and holds one logind `idle` block inhibitor per request, released by
   `UnInhibit` from the same client or when the client leaves the bus, so every inhibitor shows
-  in `systemd-inhibit --list` as macOS lists power assertions. Battery alerts follow UPower's
+  in `systemd-inhibit --list`. Battery alerts follow UPower's
   `WarningLevel` of the display device: a "Low Battery" notification at `Low`, replaced by a
   critical one that stays on screen at `Critical` or `Action`, closed when the level clears.
   The idle state machine (`bande_power::idle`) maps idle time to dim, saver (lock, and logind's
@@ -216,7 +215,7 @@ graph LR
   `active-on-seats` for the frontmost app) and answers running (1) or active (2) per app,
   keyed by the Flatpak id; anything else is in the background, as windowless apps are. Its
   `RunningApplicationsChanged` is passed on. `NotifyBackground` allows, as GNOME does: an app
-  in the background keeps its running dot in the Taskbar, as on macOS, rather than a prompt.
+  in the background keeps its running dot in the Taskbar rather than a prompt.
 - `org.freedesktop.impl.portal.DynamicLauncher` (application and web app launchers, as browsers
   install web apps): `bande-file-chooser --create-launcher` reads the icon from standard input
   and asks "Add this web app to Applications?" with the icon, the name in a text field (a label
@@ -347,7 +346,7 @@ graph LR
 - Every device list (Settings ▸ Sound, Quick Settings, the sound menu) leaves out a device whose
   port is unavailable, judged as WirePlumber's `haveAvailableRoutes` does and followed live
   through the card's `Route` and `EnumRoute` params, so Headphones and Headset Microphone appear
-  only while something is plugged into the jack. As on a Mac, plugging in makes the jack the
+  only while something is plugged into the jack. Plugging in makes the jack the
   default (`bande-sound` does it, once per session); a later choice holds until the next
   plug-in, and unplugging falls back to WirePlumber's previous choice, the speaker.
   Filter-chain streams (`node.link-group`, such as a speaker DSP output) are never listed
@@ -381,7 +380,7 @@ graph LR
   answer (a failed send is logged through `pam_syslog`, never the password), and `password` passes the old and new passwords so
   `passwd` and Users & Groups re-encrypt the login keyring, only when the old password opens
   it. The lock screen runs `auth` only,
-  so it unlocks nothing; as on macOS the login keyring stays unlocked while the screen is
+  so it unlocks nothing; the login keyring stays unlocked while the screen is
   locked. When the login password does not open the keyring, the next unlock offers to update
   its password or start a new one (the old file is kept).
 - The daemon is also NetworkManager's secret agent (`org.bande.Secrets`, re-registered when
@@ -389,7 +388,7 @@ graph LR
   mobile, PPPoE and VPN secrets are kept in the login keyring under libnm's attributes
   (`connection-uuid`, `setting-name`, `setting-key`), and when NetworkManager needs a new
   Wi-Fi or 802.1X password it asks through the keyring prompt. Wi-Fi joined from Bande keeps
-  its password system-wide, as macOS keeps it in the System keyring.
+  its password system-wide.
 - Items record the app that saved them (`bande:creator`: the Flatpak id or the executable of
   the D-Bus peer). Another app sees such an item as locked and gets it after confirming with
   the keyring password (`bande:allowed` remembers "Always Allow"). Prompts are
@@ -470,11 +469,11 @@ made again.
   and answers `CancelAuthentication` by closing the socket. A helper that cannot start or stops
   early is an error in the journal and a refusal to polkitd, never a silent cancel. It
   authenticates as the requesting user when polkitd lists them, otherwise as the first listed
-  user, as macOS pre-fills the dialog with the current administrator. Each request opens a
+  user. Each request opens a
   Datum dialog on an overlay layer with exclusive keyboard focus: a padlock, polkit's message as
   the title, who is asked for, a password field, Cancel (Escape) and Authenticate (Return). A
   wrong password shakes the dialog, clears the field and says so, and the dialog stays open
-  until the right password or Cancel, as the macOS authorization dialog does. Requests are
+  until the right password or Cancel. Requests are
   shown one at a time. Once the field hands the password over, it stays in zeroized buffers
   up to the helper's socket. Settings checks its actions without interaction and
   leaves rows changeable when polkit answers with a challenge, so changing them brings up the
@@ -533,8 +532,8 @@ made again.
     mounted when it appears, including drives present at login, while the logind session is
     active and unlocked (`Active`, not `LockedHint`), as GNOME does; drives that appear while it
     is locked or inactive are mounted when it is unlocked again, unless removed meanwhile, and
-    manual mounts from Files are unaffected; a drive removed while still mounted posts "Disk Not Ejected Properly", as macOS
-    does. Encrypted volumes wait for the UI.
+    manual mounts from Files are unaffected; a drive removed while still mounted posts "Disk Not Ejected Properly".
+    Encrypted volumes wait for the UI.
   - `bande-volumes` holds the one UDisks2 client (`udisks::Udisks`: the managed objects, kept
     current from the daemon's signals) that automount, Files, the desktop and Disks share.
     Eject (Files, the desktop, Disks) unmounts every filesystem of the volume's drive and
@@ -720,7 +719,7 @@ The login window shows the wallpaper of the person it offers,
 starting with whoever signed in last (remembered in the greeter user's
 `$XDG_STATE_HOME/bande-greeter/last-user`, on Debian under `/var/lib/greetd`, the home that
 greetd's package creates owned by `_greetd`, so no state directory of our own is
-needed), as the macOS login window shows the user's desktop picture. Debian's
+needed). Debian's
 AccountsService lacks Ubuntu's `SetBackgroundFile`, and Debian creates homes as 0700, so
 `bande-config` copies the dark picture (at most 64 MiB) whenever the wallpaper changes into
 `/var/lib/bande-greeter/pictures/<uid>`, and removes it when the person returns to the
@@ -748,7 +747,7 @@ what the one before could not save. What happens for each:
   the bar, the desktop, Quick Settings and the launcher away for a moment but never the session
   or its apps; notifications live in `bande-notify` and reappear with the shell. Shell clients
   answer `bande_shell_v1.ping`, so a hung shell shows in Force Quit as "Taskbar & Desktop (Not
-  Responding)" with Relaunch, as macOS lists the Finder; Relaunch kills it and the supervisor
+  Responding)" with Relaunch; Relaunch kills it and the supervisor
   starts it again. The lock screen is supervised too: the session stays locked if it dies, and
   one that has not answered a ping for 10 s while locked is killed and started again.
 - **Frames stop reaching the display** while the compositor itself runs: a failed frame is retried
@@ -767,8 +766,8 @@ what the one before could not save. What happens for each:
   press also opens Force Quit when the compositor can still draw, which names the second press.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s` and the
   compositor's event loop pings it, so a hung compositor is aborted (then killed after
-  `TimeoutAbortSec=10s`); a crash or abort ends the session and greetd shows the login window,
-  as a WindowServer crash returns a Mac to the login window. Wayland apps cannot outlive their
+  `TimeoutAbortSec=10s`); a crash or abort ends the session and greetd shows the login window.
+  Wayland apps cannot outlive their
   compositor; after such an end the open apps are offered again (below). The login window's own
   compositor arms `alarm(20)` from its event loop every 10 s, so a hung login window ends and
   greetd starts it again. `Ctrl+Alt+F1`…`F12` switch virtual terminals through logind
@@ -793,8 +792,8 @@ what the one before could not save. What happens for each:
   restarted by D-Bus activation on the next call after that.
 - **The kernel fails**: a panic, an oops, or a CPU stuck past the lockup detectors restarts the
   computer after 10 s (`50-bande-recovery.conf` in `sysctl.d`), and systemd feeds the hardware
-  watchdog (`RuntimeWatchdogSec=2min`), so a kernel that stops scheduling restarts it too, as
-  macOS's watchdog does. Neither needs the power button.
+  watchdog (`RuntimeWatchdogSec=2min`), so a kernel that stops scheduling restarts it too.
+  Neither needs the power button.
 - **Too many processes**: each app scope gets the user manager's default `TasksMax` (15 % of
   the kernel's limit) and `app.slice` together 25 %, under logind's 33 % for the user, so a
   fork bomb in an app leaves room for the session.
@@ -815,7 +814,7 @@ what the one before could not save. What happens for each:
 
 ## Backups
 
-Time Machine's behaviour on a Debian engine; the choice is in `NOTES/plans/backup.md` while that is open.
+Scheduled, versioned backups with `restic`.
 `crates/services/backup` builds three programs. `bande-backupd` is a system service
 (`org.bande.Backup`), root because a whole-system restore needs every file. It runs `restic` as a child
 and talks to it through exit codes and `--json`. A timer that exists once a disk is chosen, a udev rule
@@ -843,8 +842,7 @@ itself. Settings lists the versions under Previous Versions and restores one thr
 `bande-system-restore@<id>.service`. Without that layout the offline path below applies. The
 compositor sends `READY=1` to `/run/bande/login-ready` once the first frame with the login window or
 the desktop has been flipped onto a display, so a boot that only draws black is not called good;
-`bande-boot-health.service` waits for it on a counted boot. `NOTES/plans/update-safety.md`
-has the design.
+`bande-boot-health.service` waits for it on a counted boot.
 
 How often it checks is `update-check-every` in `config.kdl` (Settings: When available, Every day,
 Every 7 days, Every 31 days; unset is When available). With an interval, the daily timer and an

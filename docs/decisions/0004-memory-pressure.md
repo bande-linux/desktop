@@ -34,10 +34,10 @@ compression-algorithm = zstd
 
 This is Fedora's rule (Debian's default is `min(ram / 2, 4096)` with the kernel's lz4). zram is
 created with priority 100, so an existing swap partition stays as overflow. Debian's kernel has
-`CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends, and the
-VM compresses before it writes. This is the macOS compressor model.
+`CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends,, and the
+VM compresses before it writes.
 
-zram stacked over a disk swap partition is a known bad pairing: Fedora Asahi saw premature OOM
+zram stacked over a disk swap partition is a known bad pairing: Fedora saw premature OOM
 kills (Firefox) with it and moved swapfile systems to zswap. We add no disk swap. An admin who
 does should prefer zswap (`zswap.enabled=1`) and turn zram off with an empty
 `/etc/systemd/zram-generator.conf` and an empty `/etc/systemd/zram-generator.conf.d/50-bande.conf`.
@@ -139,34 +139,20 @@ background task was stopped because memory ran low", naming the unit.
   Revisit if oomd turns out too slow on low-RAM machines.
 - **uresourced** (protection moved to the active user as seats change). It is not in Debian,
   and with one person at the screen the static values above do the same.
-- **Pausing apps (SIGSTOP) like macOS.** Wayland clients that stop answering pings are shown as
+- **Pausing apps (SIGSTOP).** Wayland clients that stop answering pings are shown as
   hung, and a stopped app holds its memory. The user chooses in the window instead.
 
 ## Sources
 
-1. Apple, System Monitor User Guide, "View memory usage in System Monitor on Mac",
-   https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/mac
-2. Apple Developer, "Responding to low-memory warnings",
-   https://developer.apple.com/documentation/xcode/responding-to-low-memory-warnings
-3. XNU, `doc/vm/memorystatus_notify.md` (pressure levels and dispatch flags).
-4. Apple Community threads on "Your system has run out of application memory", e.g.
-   https://discussions.apple.com/thread/7520039
-5. Microsoft Learn, "Introduction to the page file",
-   https://learn.microsoft.com/windows/client-management/introduction-page-file
-6. Microsoft Learn, `CreateMemoryResourceNotification`,
-   https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-creatememoryresourcenotification
-7. Microsoft, Resource Exhaustion Detector and Resolver events (Windows Server 2008 R2 docs),
-   https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-r2-and-2008/cc774657(v=ws.10)
-8. Fedora, "Changes/EnableSystemdOomd", https://fedoraproject.org/wiki/Changes/EnableSystemdOomd
-9. GLib, `gio/gmemorymonitorpsi.c`,
+1. Fedora, "Changes/EnableSystemdOomd", https://fedoraproject.org/wiki/Changes/EnableSystemdOomd
+2. GLib, `gio/gmemorymonitorpsi.c`,
    https://gitlab.gnome.org/GNOME/glib/-/blob/main/gio/gmemorymonitorpsi.c
-10. KDE, plasma-workspace merge request 4204 (oom-notifier),
-    https://invent.kde.org/plasma/plasma-workspace/-/merge_requests/4204
-11. Launchpad bug 1972159, "systemd-oomd frequently kills firefox and visual studio code",
-    and https://www.phoronix.com/news/Ubuntu-Drops-Swap-Kill
-12. Android, "Low memory killer daemon", https://source.android.com/docs/core/perf/lmkd
-13. Linux kernel, "PSI - Pressure Stall Information", https://docs.kernel.org/accounting/psi.html
-14. Linux kernel, "Multi-Gen LRU", https://docs.kernel.org/admin-guide/mm/multigen_lru.html
-15. systemd 257 manuals: `systemd.resource-control(5)` (ManagedOOM*), `systemd-oomd.service(8)`,
-    `oomd.conf(5)`; systemd v257 `src/core/cgroup.c` (`unit_check_oomd_kill`) and
-    `src/core/scope.c` (`SCOPE_FAILURE_OOM_KILL`); `zram-generator.conf(5)`.
+3. KDE, plasma-workspace merge request 4204 (oom-notifier),
+   https://invent.kde.org/plasma/plasma-workspace/-/merge_requests/4204
+4. Ubuntu bug 1972159 (Launchpad), "systemd-oomd frequently kills firefox and visual studio code",
+   and https://www.phoronix.com/news/Ubuntu-Drops-Swap-Kill
+5. Linux kernel, "PSI - Pressure Stall Information", https://docs.kernel.org/accounting/psi.html
+6. Linux kernel, "Multi-Gen LRU", https://docs.kernel.org/admin-guide/mm/multigen_lru.html
+7. systemd 257 manuals: `systemd.resource-control(5)` (ManagedOOM*), `systemd-oomd.service(8)`,
+   `oomd.conf(5)`; systemd v257 `src/core/cgroup.c` (`unit_check_oomd_kill`) and
+   `src/core/scope.c` (`SCOPE_FAILURE_OOM_KILL`); `zram-generator.conf(5)`.

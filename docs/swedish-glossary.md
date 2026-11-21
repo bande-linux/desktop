@@ -1,6 +1,6 @@
 # Swedish glossary
 
-Natural Swedish as on a Swedish Mac or phone. Use "du" and short sentences. Sentence case in menus and titles, never English title case. Buttons are imperative ("Spara"), status lines say what happened ("Lösenordet har ändrats."). No "vänligen". Quotes ”så här”, ellipsis …, a space before units, 24-hour clock.
+Natural, everyday Swedish. Use "du" and short sentences. Sentence case in menus and titles, never English title case. Buttons are imperative ("Spara"), status lines say what happened ("Lösenordet har ändrats."). No "vänligen". Quotes ”så här”, ellipsis …, a space before units, 24-hour clock.
 
 Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable where needed; rephrase rather than leave a broken sentence ("Filen ”{ $name }” finns redan").
 

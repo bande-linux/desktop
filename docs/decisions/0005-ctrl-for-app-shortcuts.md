@@ -1,35 +1,26 @@
 # Ctrl for App Shortcuts: Decision Record
 
 Status: **decided** (2026-11-01). Scope: which modifier runs shortcuts in Bande's own apps, text
-fields and shell, and which is left to the system. Replaces the "Super acts as Command" keyboard
-model of the [overview](../architecture/overview.md#keyboard-model).
+fields and shell, and which is left to the system.
 
 ## Context
 
-- Until now Super did the job of macOS's Command key in Bande's own apps: `Super+C` copied in
-  Files, Terminal, Settings and the launcher, text fields followed the macOS text rules
-  (`Super+Left/Right` to the line ends, `Alt+Left/Right` by word), Ctrl did nothing there, and
-  Ctrl+click was a right click. The idea was one meaning per modifier on the Apple keyboards
-  Bande was first planned for.
-- The owner types on a PC keyboard (a Microsoft and a Logitech receiver), where Super sits where
-  no thumb goes for copy and paste.
-- Every third-party app the owner uses (VS Code, Zed, Claude, Firefox, all pinned in the bar)
-  expects Ctrl. The compositor translates nothing, so two conventions ran side by side, and
-  `Ctrl+C` in a Bande text field did nothing.
-- The compositor took only chords with Super held (plus Print and the Mission Control key), so
-  third-party apps already got Ctrl untouched.
+- On a PC keyboard Super sits where no thumb goes for copy and paste.
+- Third-party apps (VS Code, Zed, Firefox) expect Ctrl, and the compositor translates nothing, so
+  Bande's own apps must use the same convention for one set of habits to work everywhere.
+- The compositor takes only chords with Super held (plus Print and the LaunchA key), so
+  third-party apps get Ctrl untouched.
 
 ## Options
 
-1. **Ctrl is the app key, Super is the system key**, as GNOME and KDE do. One convention in every
-   app; nothing to translate. Cost: new bindings in the toolkit, seven apps and the shell.
-2. **Keep Super as Command and translate Super to Ctrl for other clients**. Mac-like everywhere, but it needs a compositor rewrite layer with per-app
-   exceptions, Ctrl+Shift for terminals, an escape hatch for a real Ctrl+C, and it breaks apps
-   that bind Super themselves. Text navigation still differs between apps. The owner's note asks
-   for the opposite.
+1. **Ctrl is the app key, Super is the system key**, the convention of the Linux desktops. One
+   convention in every app; nothing to translate.
+2. **Super as the app key, translated to Ctrl for other clients.** It needs a compositor rewrite
+   layer with per-app exceptions, Ctrl+Shift for terminals and an escape hatch for a real Ctrl+C,
+   and it breaks apps that bind Super themselves. Text navigation still differs between apps.
 3. **Firefox's `ui.key.accelKey` only.** Fixes one app and leaves the rest.
-4. **A setting for Mac or Linux style.** Two sets of bindings and text rules in every app, for a
-   choice nobody asked for.
+4. **A setting for two styles.** Two sets of bindings and text rules in every app, for a choice
+   nobody asked for.
 
 ## Decision
 
@@ -40,8 +31,8 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   `crates/libs/keyboard/src/shortcuts.rs`, the one table the compositor matches and Settings ▸
   Keyboard lists. The owner cut it to: Search on a tap of Super; `Super+V`, `Super+.`, `Super+N`,
   `Super+S`, `Super+L`; `Alt+F4`, `Super+H`, `Super+arrows`, `Shift+Super+arrows`; `Alt+Tab`
-  (the only switcher), `Ctrl+Alt+T` Terminal; `Ctrl+Super+Left/Right`, `Super+D`, the Mission
-  Control key; `Print`, `Shift+Print`, `Shift+Super+S`; `Ctrl+Alt+F1…F12`; the zoom and screen
+  (the only switcher), `Ctrl+Alt+T` Terminal; `Ctrl+Super+Left/Right`, `Super+D`, the LaunchA
+  key; `Print`, `Shift+Print`, `Shift+Super+S`; `Ctrl+Alt+F1…F12`; the zoom and screen
   reader keys. Force Quit, input sources, app menus and full screen have no system shortcut.
   Super+drag moves a window and Super+right drag resizes it.
 
@@ -50,7 +41,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   `Ctrl+Y` redo; `Ctrl+Left/Right` by word, `Home`/`End` to the line ends, `Ctrl+Home/End` to the
   text ends, `Ctrl+Up/Down` by paragraph; `Ctrl+Backspace/Delete` delete a word. Alt and Super are
   not used in text fields.
-- **Ctrl+click** toggles an item in a selection. It is no longer a right click.
+- **Ctrl+click** toggles an item in a selection.
 - **App standard items**: Close Window `Ctrl+W` and Quit `Ctrl+Q`, handled inside the app.
   Minimize is `Super+H`; `F11` enters and leaves full screen (Window menu, not panels); `Ctrl+Y`
   runs any `Shift+Ctrl+Z` redo item. Hide and Hide Others stay in the app menu without a chord.
@@ -60,8 +51,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   on `Shift+Ctrl` and sends every plain Ctrl+letter to the shell; Settings goes back with
   `Alt+Left`.
 - **Shortcut labels are words** in GNOME order (Shift, Ctrl, Alt, Super): "Shift+Ctrl+N",
-  "Alt+Super+8", "Page Up", "Esc", arrows as arrow symbols. The ⌃⌥⇧ symbols and the Super glyph
-  are gone.
+  "Alt+Super+8", "Page Up", "Esc", arrows as arrow symbols; no modifier symbols.
 
 ## Consequences
 
@@ -71,8 +61,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   into a key and modifiers; `bande-app` runs the menu entry for a key the view did not take, so
   an app's menus are its shortcut table ([apps](../architecture/apps.md)).
 - On a non-Latin layout Ctrl+C does not match yet, because the toolkit matches the shifted
-  keysym. This held for Super before, so it is not a regression; the compositor's Latin fallback
-  is the fix when a non-Latin source is added.
+  keysym; the compositor's Latin fallback is the fix when a non-Latin source is added.
 
 ## Sources
 

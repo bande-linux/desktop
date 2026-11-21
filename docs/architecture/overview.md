@@ -3,9 +3,8 @@
 ## Goal
 
 Bande (`bande-desktop`) is a Linux desktop environment written in Rust for Debian 14 (forky) on
-amd64 and arm64. It is its own desktop: macOS is the bar for
-how polished, smooth and finished it feels, and the main reference for which basics a modern
-desktop needs, but the structure, feature set and look are ours. The principles that decide
+amd64 and arm64. It has its own structure, feature set and look, and aims to feel polished, smooth and finished
+in every basic a modern desktop needs. The principles that decide
 design questions are in [`../design/DESIGN.md`](../design/DESIGN.md).
 
 The desktop lives in one Cargo workspace in this repository: compositor, renderer, toolkit,
@@ -22,7 +21,7 @@ The architecture is split by subject:
 | [`compositor.md`](compositor.md) | the compositor, its renderer, frame pacing and the Wayland protocol matrix |
 | [`toolkit.md`](toolkit.md) | the UI toolkit that the shell and the apps draw with |
 | [`session.md`](session.md) | session services, D-Bus, the greeter, supervision, setup and updates |
-| [`behaviour.md`](behaviour.md) | recorded behaviour decisions and their macOS precedents |
+| [`behaviour.md`](behaviour.md) | recorded behaviour decisions and their reasons |
 | [`apps.md`](apps.md) | the app framework every app is built on |
 | [`ci.md`](ci.md) | the local gate, the release workflow and how a release is cut |
 | [`packaging.md`](packaging.md) | Debian packages and the meta-package |
@@ -50,10 +49,10 @@ graph TB
     subgraph "Shell clients (started by the compositor)"
         subgraph "bande-shell"
             DESKTOP[Desktop]
-            DOCK[Taskbar]
+            BAR[Taskbar]
             NOTES[Notifications]
             LAUNCHER[Launcher]
-            CC[Quick Settings]
+            QS[Quick Settings]
         end
         SHOT[Screenshot]
         LOCK[Lock screen]
@@ -82,12 +81,12 @@ graph TB
     TOOLKIT[bande-toolkit: Vello, Parley, AccessKit, Wayland windows]
 
     DRM & INPUT & SEAT --> SMITHAY
-    DOCK & LAUNCHER & CC & SHOT & LOCK & GREETER -->|Wayland| SMITHAY
+    BAR & LAUNCHER & QS & SHOT & LOCK & GREETER -->|Wayland| SMITHAY
     FILES & SETTINGS & TERM -->|Wayland| SMITHAY
     CLIP -->|Wayland, trusted socket| SMITHAY
-    DOCK & LAUNCHER & FILES & SETTINGS & TERM --- TOOLKIT
+    BAR & LAUNCHER & FILES & SETTINGS & TERM --- TOOLKIT
     CONFIG & NOTIFY & POWER & TRAY & INDEXER & AUTOMOUNT & PORTAL & POLKIT <-->|D-Bus| SYS
-    SETTINGS & DOCK & CC <-->|D-Bus| CONFIG
+    SETTINGS & BAR & QS <-->|D-Bus| CONFIG
 ```
 
 The desktop and the taskbar of every display, the notifications, Quick Settings and the
@@ -115,7 +114,7 @@ thinks of it as part of the system:
 - **Apps.** Ordinary Wayland clients started by the user, each one process for all its windows
   on `bande-app` ([apps](apps.md)): Files and Settings here, the rest in bande-linux/apps.
   Settings and System Monitor have no special access. Closing an app's last window leaves it
-  running until Quit, as on macOS.
+  running until Quit.
 - **Session services.** Processes without windows that own D-Bus names for the session
   (configuration, notifications, power, sound, clipboard, tray, automount, portal, polkit). They are
   started by systemd user units or D-Bus activation ([session](session.md)).
@@ -195,10 +194,10 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }
   search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false
-  display "Dell DELL U2720Q 7ZD5K53" { scale 1.5; refresh-rate 120 }
+  display "Example EX27 0001" { scale 1.5; refresh-rate 120 }
   arrangement {
       display "BOE NE135A1M" x=0 y=0 main=#true
-      display "Dell DELL U2720Q 7ZD5K53" x=1504 y=-300
+      display "Example EX27 0001" x=1504 y=-300
   }
   ```
 - **Errors**: an unknown setting, a duplicate or an out-of-range value is skipped and reported

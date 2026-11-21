@@ -1,6 +1,6 @@
 # Fault reports
 
-`bande-reporter` keeps a small report of each fault and sends it only if sending is on. How macOS compares: [the plan](../../NOTES/plans/fault-reports.md).
+`bande-reporter` keeps a small report of each fault and sends it only if sending is on.
 
 ## Spool
 

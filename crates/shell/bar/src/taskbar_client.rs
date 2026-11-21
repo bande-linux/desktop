@@ -1083,7 +1083,6 @@ impl Taskbar {
         config: &BarConfig,
         text: TextSystem,
         session: Option<&Connection>,
-        home: (Option<&Path>, Option<&Path>),
     ) -> std::io::Result<Self> {
         let edge = config.edge;
         let icon_size = config.icon_size as f32;
@@ -1101,7 +1100,6 @@ impl Taskbar {
             .set_auto_hide(config.auto_hide, Instant::now());
         let mut ui = taskbar_ui(state.clone(), appearance.palette(), text);
         ui.set_appearance(appearance);
-        let (config_home, home) = home;
         let mut taskbar = Self {
             state,
             ui,
@@ -1122,7 +1120,7 @@ impl Taskbar {
             unresponsive: Vec::new(),
             windowed: Vec::new(),
             keep: session.map(|session| bus::keep_writer(session.clone())),
-            autostart: autostart_dir(config_home, home),
+            autostart: autostart_dir(),
             bus: inbox,
             trash: TrashWatch::start(),
             session: session.cloned(),

@@ -248,11 +248,8 @@ pub fn follow_mounts(changed: impl Fn() + Send + 'static) -> std::io::Result<()>
     Ok(())
 }
 
-fn saved_file() -> Option<PathBuf> {
-    let state = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".local/state")))?;
-    Some(state.join("bande/servers"))
+fn saved_file(state_home: &Path) -> PathBuf {
+    state_home.join("bande/servers")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -262,9 +259,9 @@ pub struct SavedServer {
     pub reconnect: bool,
 }
 
-pub fn load_saved_servers() -> Vec<SavedServer> {
-    let text = saved_file()
-        .and_then(|file| std::fs::read_to_string(file).ok())
+pub fn load_saved_servers(state_home: Option<&Path>) -> Vec<SavedServer> {
+    let text = state_home
+        .and_then(|state| std::fs::read_to_string(saved_file(state)).ok())
         .unwrap_or_default();
     text.lines()
         .filter_map(|line| {
@@ -281,8 +278,8 @@ pub fn load_saved_servers() -> Vec<SavedServer> {
         .collect()
 }
 
-pub fn store_saved_servers(saved: &[SavedServer]) {
-    let Some(file) = saved_file() else {
+pub fn store_saved_servers(state_home: Option<&Path>, saved: &[SavedServer]) {
+    let Some(file) = state_home.map(saved_file) else {
         return;
     };
     let text: String = saved

@@ -56,12 +56,6 @@ impl Stored for VeloxSettings {
     }
 }
 
-fn autostart() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let config = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-    bande_xdg::autostart_dir(config.as_deref(), home.as_deref())
-}
-
 fn installed_entry() -> Option<PathBuf> {
     bande_xdg::data_dirs()
         .into_iter()
@@ -70,9 +64,10 @@ fn installed_entry() -> Option<PathBuf> {
 }
 
 fn login_toggle() -> Box<dyn Widget> {
-    let on = autostart().is_some_and(|dir| bande_xdg::opens_at_login(&dir, DESKTOP_ENTRY));
+    let on = bande_xdg::autostart_dir()
+        .is_some_and(|dir| bande_xdg::opens_at_login(&dir, DESKTOP_ENTRY));
     Box::new(Toggle::new(&tr!("Launch Velox at login"), on, |on| {
-        let (Some(dir), Some(entry)) = (autostart(), installed_entry()) else {
+        let (Some(dir), Some(entry)) = (bande_xdg::autostart_dir(), installed_entry()) else {
             return tracing::warn!("cannot find Velox's desktop entry");
         };
         if let Err(error) = bande_xdg::set_open_at_login(&dir, DESKTOP_ENTRY, &entry, on) {

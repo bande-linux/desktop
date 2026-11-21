@@ -71,8 +71,6 @@ impl Context {
             text: &self.text,
             session: self.session.as_ref(),
             status: &self.status,
-            config_home: self.config_home.as_deref(),
-            home: self.home.as_deref(),
         }
     }
 

@@ -635,15 +635,12 @@ impl LauncherShell {
         let apps = app_infos(&entries);
         let icon_names = Rc::new(RefCell::new(app_icon_names(&entries)));
         let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
-        let recently_used = RecentlyUsed::follow(recently_used_path(
-            std::env::var_os("XDG_DATA_HOME")
-                .map(PathBuf::from)
-                .as_deref(),
-            &home,
-        ))
-        .inspect_err(|error| tracing::warn!("cannot follow recent documents: {error}"))
-        .ok();
-        let usage_file = usage_path(bande_xdg::state_home().as_deref(), Some(&home));
+        let recently_used = recently_used_path().and_then(|path| {
+            RecentlyUsed::follow(path)
+                .inspect_err(|error| tracing::warn!("cannot follow recent documents: {error}"))
+                .ok()
+        });
+        let usage_file = usage_path();
         let skin_tone = usage_file
             .as_deref()
             .and_then(Path::parent)

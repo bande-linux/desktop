@@ -938,9 +938,8 @@ impl Files {
         )));
         view.set_status_bar_file(status_bar_file(state_home.as_deref(), &self.home));
         view.set_list_columns_file(list_columns_file(state_home.as_deref(), &self.home));
-        let data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
-        if let Some(usage) = usage_path(state_home.as_deref(), Some(&self.home)) {
-            view.set_recents_sources(recently_used_path(data_home.as_deref(), &self.home), usage);
+        if let (Some(xbel), Some(usage)) = (recently_used_path(), usage_path()) {
+            view.set_recents_sources(xbel, usage);
         }
         view.set_search_excluded(self.search_excluded.clone());
         view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));

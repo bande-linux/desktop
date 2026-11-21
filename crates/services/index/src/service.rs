@@ -132,7 +132,7 @@ pub fn run(home: PathBuf, folder: PathBuf) -> io::Result<()> {
         })?;
     let (restored, orphans) = Tree::restored(store.entries().map_err(io::Error::other)?);
     let mut service = Service {
-        usage_file: usage_path(bande_xdg::state_home().as_deref(), Some(&home)),
+        usage_file: usage_path(),
         home: home.clone(),
         store,
         tree: restored,

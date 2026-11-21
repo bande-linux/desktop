@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use bande_config::Config;
 use bande_status::hub::StatusHub;
 use bande_toolkit::{App, TextSystem, Window};
@@ -22,8 +20,6 @@ pub struct Services<'a> {
     pub text: &'a TextSystem,
     pub session: Option<&'a Connection>,
     pub status: &'a StatusHub,
-    pub config_home: Option<&'a Path>,
-    pub home: Option<&'a Path>,
 }
 
 pub struct Bar {
@@ -38,7 +34,6 @@ pub fn open(
     services: &Services<'_>,
 ) -> Result<Bar, Box<dyn std::error::Error>> {
     let text = services.text;
-    let homes = (services.config_home, services.home);
     let open_window = |role, size| -> Result<Window, Box<dyn std::error::Error>> {
         let mut window = beside.open_beside_on(&display.output, role, size)?;
         window.share_fonts(text);
@@ -55,7 +50,6 @@ pub fn open(
         bar,
         text.sharing_fonts(),
         services.session,
-        homes,
     )?;
     let mut view = TaskbarView::new(
         window.appearance().palette(),

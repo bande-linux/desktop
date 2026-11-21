@@ -231,7 +231,7 @@ impl FilesView {
     }
 
     fn ask_connect_to(&mut self, request: ServerRequest) {
-        let saved = load_saved_servers();
+        let saved = load_saved_servers(bande_xdg::state_home().as_deref());
         let send = sender(&self.signals);
         let address = TextField::new(
             &tr!("smb://server/share, nfs://server/export, sftp://server or https://server/dav"),

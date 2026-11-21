@@ -132,9 +132,7 @@ fn run(dir: &Path, apps: &[DesktopEntry], command: LoginCommand) -> std::io::Res
 pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
     let (sender, receiver) = mpsc::channel();
     spawn("login-items", move || {
-        let config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
-        let Some(dir) = autostart_dir(config_home.as_deref(), std::env::home_dir().as_deref())
-        else {
+        let Some(dir) = autostart_dir() else {
             return;
         };
         let load = || {

@@ -115,7 +115,11 @@ impl FilesView {
 
     pub(crate) fn selection_menu(&self) -> Menu {
         if let Some(url) = self.browser.chosen_server().and_then(Entry::server_address) {
-            return server_menu(load_saved_servers().iter().any(|server| server.url == url));
+            return server_menu(
+                load_saved_servers(bande_xdg::state_home().as_deref())
+                    .iter()
+                    .any(|server| server.url == url),
+            );
         }
         let selection = self.browser.selection();
         let trashed =

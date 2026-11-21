@@ -12,11 +12,8 @@ use crate::usage::Usage;
 
 pub const FILE_KEY: &str = "file:";
 
-pub fn recently_used_path(data_home: Option<&Path>, home: &Path) -> PathBuf {
-    data_home
-        .filter(|path| path.is_absolute())
-        .map_or_else(|| home.join(".local/share"), Path::to_path_buf)
-        .join("recently-used.xbel")
+pub fn recently_used_path() -> Option<PathBuf> {
+    bande_xdg::data_home().map(|data| data.join("recently-used.xbel"))
 }
 
 fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {

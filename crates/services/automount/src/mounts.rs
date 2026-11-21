@@ -290,7 +290,9 @@ impl Mounts {
         let mounts = Self {
             session: session.clone(),
             daemons: Arc::default(),
-            saved: Arc::new(Mutex::new(load_saved_servers())),
+            saved: Arc::new(Mutex::new(load_saved_servers(
+                bande_xdg::state_home().as_deref(),
+            ))),
             known: Arc::default(),
             alerts: Arc::default(),
             health: Arc::default(),
@@ -514,7 +516,7 @@ impl Mounts {
             let mut saved = guard(&self.saved);
             let removed: Vec<Saved> = saved.iter().filter(|e| e.url == url).cloned().collect();
             saved.retain(|entry| entry.url != url);
-            store_saved_servers(&saved);
+            store_saved_servers(bande_xdg::state_home().as_deref(), &saved);
             removed
         };
         for entry in removed {
@@ -592,7 +594,7 @@ impl Mounts {
                 },
             );
             saved.truncate(20);
-            store_saved_servers(&saved);
+            store_saved_servers(bande_xdg::state_home().as_deref(), &saved);
         }
         if request.remember && !request.password.is_empty() {
             let saved = Keyring::open(KEYRING_APP).and_then(|keyring| {

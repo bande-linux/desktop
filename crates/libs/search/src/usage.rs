@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const DAY: u64 = 24 * 60 * 60;
 const KEPT: usize = 1000;
@@ -34,12 +34,8 @@ pub struct Usage {
     file: Option<PathBuf>,
 }
 
-pub fn usage_path(state_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
-    let state = state_home
-        .filter(|path| path.is_absolute())
-        .map(Path::to_path_buf)
-        .or_else(|| home.map(|home| home.join(".local/state")))?;
-    Some(state.join("bande/launcher-usage"))
+pub fn usage_path() -> Option<PathBuf> {
+    bande_xdg::state_home().map(|state| state.join("bande/launcher-usage"))
 }
 
 impl Usage {

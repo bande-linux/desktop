@@ -1,12 +1,10 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-pub fn autostart_dir(config_home: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
-    config_home
-        .filter(|path| path.is_absolute())
-        .map(Path::to_path_buf)
-        .or_else(|| home.map(|home| home.join(".config")))
-        .map(|config| config.join("autostart"))
+use crate::mimeapps::config_home;
+
+pub fn autostart_dir() -> Option<PathBuf> {
+    config_home().map(|config| config.join("autostart"))
 }
 
 pub fn opens_at_login(dir: &Path, entry_id: &str) -> bool {

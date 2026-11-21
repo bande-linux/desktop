@@ -948,7 +948,8 @@ Depends: ${shlibs:Depends},
  fonts-manrope,
  fonts-jetbrains-mono,
  ${misc:Depends}
-Recommends: bande-terminal (= ${binary:Version})
+Recommends: bande-terminal (= ${binary:Version}),
+ packagekit
 Suggests: docker-compose,
  podman,
  qemu-system-native,

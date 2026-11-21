@@ -1171,14 +1171,14 @@ msgstr "Tar bort motordata som ingenting använder. Volymer innehåller verkliga
 msgid "Reclaim"
 msgstr "Frigör"
 
-msgid "Or Podman (rootless, from Debian)"
-msgstr "Eller Podman (rootless, från Debian)"
+msgid "Or Podman, rootless"
+msgstr "Eller Podman, rootless"
 
-msgid "Docker Engine (recommended)"
-msgstr "Docker Engine (rekommenderas)"
+msgid "Podman, rootless (recommended)"
+msgstr "Podman, rootless (rekommenderas)"
 
-msgid "Docker publishes no packages for this Debian release yet, so these steps use trixie's."
-msgstr "Docker publicerar inga paket för den här Debian-versionen än, så de här stegen använder paketen från trixie."
+msgid "Or Docker Engine"
+msgstr "Eller Docker Engine"
 
 msgid "Install a container engine to continue"
 msgstr "Installera en containermotor för att fortsätta"
@@ -1339,6 +1339,9 @@ msgstr "Det gick inte att starta motorn"
 msgid "Cannot stop the engine"
 msgstr "Det gick inte att stoppa motorn"
 
+msgid "Cannot install Podman"
+msgstr "Det gick inte att installera Podman"
+
 msgid "“{name}” already exists"
 msgstr "”{name}” finns redan"
 
@@ -1363,8 +1366,14 @@ msgstr "Starta {engine}"
 msgid "Stop {engine}"
 msgstr "Stoppa {engine}"
 
-msgid "Podman, rootless"
-msgstr "Podman, rootless"
+msgid "Installing Podman…"
+msgstr "Installerar Podman…"
+
+msgid "Install Podman"
+msgstr "Installera Podman"
+
+msgid "In a terminal"
+msgstr "I en terminal"
 
 msgid "Show This Computer"
 msgstr "Visa den här datorn"

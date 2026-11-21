@@ -1876,6 +1876,7 @@ dependencies = [
  "bande-app-settings",
  "bande-fs",
  "bande-l10n",
+ "bande-packages",
  "bande-terminal-view",
  "bande-toolkit",
  "bande-vm",

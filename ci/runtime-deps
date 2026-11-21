@@ -48,7 +48,7 @@ nmcli network-manager optional
 /usr/bin/smbpasswd samba-common-bin optional
 /usr/sbin/smbd samba optional
 /usr/sbin/sshd openssh-server optional
-/usr/lib/systemd/systemd-resolved systemd-resolved optional
+/usr/sbin/avahi-daemon avahi-daemon optional
 /usr/lib/NetworkManager/VPN/nm-openvpn-service.name network-manager-openvpn optional
 /usr/bin/setupcon console-setup optional
 /usr/sbin/ipp-usb ipp-usb optional

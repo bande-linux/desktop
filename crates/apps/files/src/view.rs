@@ -36,7 +36,7 @@ use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
-use crate::servers::{ServerDone, ServerRequest, ServersSeen};
+use crate::servers::{Discovery, ServerDone, ServerRequest, ServersSeen};
 use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
 use crate::tabs::{TabSlot, location_title};
@@ -184,6 +184,7 @@ pub enum Request {
         token: u64,
         request: ServerRequest,
     },
+    InstallDiscovery,
     InstallServerTools {
         token: u64,
         request: ServerRequest,
@@ -286,6 +287,8 @@ pub struct FilesView {
     pub(crate) searching: Option<Searching>,
     pub(crate) index: Option<Index>,
     pub(crate) search_home_button: Option<WidgetId>,
+    pub(crate) install_discovery_button: Option<WidgetId>,
+    pub(crate) discovery: Discovery,
     pub(crate) trouble_buttons: Option<WidgetId>,
     pub(crate) toolbar: Toolbar,
     pub(crate) sheet_inset: f32,
@@ -452,6 +455,8 @@ impl FilesView {
             searching: None,
             index: None,
             search_home_button: None,
+            install_discovery_button: None,
+            discovery: Discovery::Ready,
             trouble_buttons: None,
             toolbar: Toolbar::default(),
             sheet_inset: SHEET_INSET as f32,
@@ -556,8 +561,10 @@ impl FilesView {
             .collect();
         self.browser.set_network(self.network.clone());
         self.unresponsive = seen.unresponsive;
+        self.discovery = seen.discovery;
         self.sidebar = self.with_volumes(&self.favourites, &self.mounted);
         self.menu_place = None;
+        self.sync_install_discovery();
     }
 
     pub fn refresh_volumes(&mut self) {
@@ -1052,6 +1059,7 @@ impl FilesView {
         }
         self.keep_selection_visible();
         self.sync_search_home();
+        self.sync_install_discovery();
         self.sync_connection_trouble();
         self.sync_table();
     }

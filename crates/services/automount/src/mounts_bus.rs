@@ -68,6 +68,15 @@ impl MountsInterface {
         list
     }
 
+    fn nearby_availability(&self) -> String {
+        self.1.availability().wire().to_owned()
+    }
+
+    async fn install_discovery(&self) {
+        let (mounts, discovery) = (self.0.clone(), self.1.clone());
+        unblock(move || discovery.install(|packages| mounts.install(packages))).await;
+    }
+
     fn unresponsive(&self) -> Vec<String> {
         self.0
             .unresponsive()

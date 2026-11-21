@@ -241,11 +241,20 @@ msgstr "Filer du öppnar visas här"
 msgid "Computers and servers on your network appear here"
 msgstr "Datorer och servrar i ditt nätverk visas här"
 
+msgid "Finding computers nearby needs Avahi, which isn’t installed."
+msgstr "Avahi behövs för att hitta datorer i närheten, och det är inte installerat."
+
+msgid "Installing Avahi…"
+msgstr "Installerar Avahi…"
+
 msgid "No results for “{text}” in {folder}"
 msgstr "Inga resultat för ”{text}” i {folder}"
 
 msgid "Search Home"
 msgstr "Sök i hemmappen"
+
+msgid "Install Avahi"
+msgstr "Installera Avahi"
 
 msgid "Try Again"
 msgstr "Försök igen"

@@ -165,9 +165,8 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
 - `systemd-oomd` (recommended): closes an app when memory stays under pressure.
 
 It does not pull in `gnome-keyring` (the Bande keyring replaces it and conflicts with it, so the
-bus name has one owner), `pipewire-alsa`, `cups` or `avahi-daemon` (`bande-printd` prints to
-network printers without them; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for USB
-and older printers), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
+bus name has one owner), `pipewire-alsa` or `cups` (`bande-printd` prints to network printers
+without it; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for USB and older printers), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
 nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
 `xdg-user-dirs`, which the Bande packages that use them declare:
@@ -182,8 +181,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   NetworkManager (Network, VPN import) to its recommends and depends on `xkb-data` and `locales`,
   so its helper can generate any language picked in Settings;
   the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
-  and `systemd-resolved` are from Sharing (resolved announces shares but also takes over DNS, so
-  it is never pulled in silently);
+  and `avahi-daemon` are from Sharing;
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
 - `bande-player` is the one package linking GStreamer: its engine process plays for Player and
@@ -197,6 +195,10 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `bande-spell` recommends the English dictionary, `bande-files` and `bande-lookup` DejaVu Sans
   Mono, and `bande-clock` the notification and sound services, which ring its alarms;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
+- `bande-automount` recommends `avahi-daemon`, which Files browses for nearby computers over its
+  D-Bus interface (Samba announces shares through it too), and `libnss-mdns`, so the `.local`
+  names it finds resolve when mounting; neither touches `/etc/resolv.conf` or the network setup;
+  without them the Network folder offers to install them;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
@@ -210,6 +212,7 @@ No package depends on an X server, XWayland or an X session; the `desktop` autop
 comes along.
 
 Bande ships no firewall rules and changes no system-wide kernel or resolver policy: none of its
-components listens on the network until the person turns a service on, and a default-deny ruleset
+components listens on the network until the person turns a service on (`avahi-daemon`, when
+installed, answers for the computer's name on the local network as Debian configures it), and a default-deny ruleset
 would only break what a person turns on (file sharing, a development server). Flatpak is the sandbox and the portal asks for access; other programs run with the user's
 full access, and Settings ▸ Privacy & Security says so.

@@ -1541,8 +1541,8 @@ msgstr "Andra använder ditt kontonamn och det här lösenordet för att ansluta
 msgid "Shared folders"
 msgstr "Delade mappar"
 
-msgid "Other computers won’t see this one nearby and must connect by its address. Installing systemd-resolved lets it announce itself; it also takes over looking up names on the network."
-msgstr "Andra datorer ser inte den här i närheten och måste ansluta med dess adress. Installera systemd-resolved så annonserar den sig; den tar också över namnuppslagen i nätverket."
+msgid "Other computers won’t see this one nearby and must connect by its address. Installing Avahi lets it announce itself."
+msgstr "Andra datorer ser inte den här i närheten och måste ansluta med dess adress. Installera Avahi så annonserar den sig."
 
 msgid "Not visible on the network"
 msgstr "Syns inte i nätverket"

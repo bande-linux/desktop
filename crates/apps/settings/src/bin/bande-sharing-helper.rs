@@ -3,9 +3,6 @@ use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, ExitCode, Stdio};
 
-const DNSSD_FOLDER: &str = "/etc/systemd/dnssd";
-const DNSSD_FILE: &str = "/etc/systemd/dnssd/bande-file-sharing.dnssd";
-const DNSSD: &str = "[Service]\nName=%H\nType=_smb._tcp\nPort=445\n";
 const SHARE_GROUP: &str = "sambashare";
 const SAMBA_CONFIG: &str = "/etc/samba/bande-smb.conf";
 const SAMBA_SETTINGS: &str = "[global]\nserver role = standalone server\nmap to guest = never\nserver min protocol = SMB2\nload printers = no\ndisable spoolss = yes\nusershare max shares = 100\nusershare allow guests = no\nusershare owner only = yes\n";
@@ -35,16 +32,7 @@ fn systemctl(arguments: &[&str]) -> ExitCode {
     run(Command::new("/usr/bin/systemctl").args(arguments))
 }
 
-fn remove_if_present(path: &str) -> std::io::Result<()> {
-    match fs::remove_file(path) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
-        _ => Ok(()),
-    }
-}
-
 fn write_samba_setup() -> std::io::Result<()> {
-    fs::create_dir_all(DNSSD_FOLDER)?;
-    fs::write(DNSSD_FILE, DNSSD)?;
     fs::write(SAMBA_CONFIG, SAMBA_SETTINGS)?;
     fs::set_permissions(USERSHARES, fs::Permissions::from_mode(0o1775))?;
     fs::create_dir_all(SMBD_DROP_IN_FOLDER)?;
@@ -52,23 +40,16 @@ fn write_samba_setup() -> std::io::Result<()> {
 }
 
 fn file_sharing(on: bool) -> ExitCode {
-    let changed = match on {
-        true => write_samba_setup(),
-        false => remove_if_present(DNSSD_FILE),
-    };
-    if let Err(error) = changed {
+    if !on {
+        return systemctl(&["disable", "--now", "smbd.service", "nmbd.service"]);
+    }
+    if let Err(error) = write_samba_setup() {
         return fail(&format!("cannot change the setup: {error}"));
     }
-    systemctl(&["try-reload-or-restart", "systemd-resolved.service"]);
-    match on {
-        true => {
-            systemctl(&["daemon-reload"]);
-            systemctl(&["disable", "--now", "nmbd.service"]);
-            systemctl(&["enable", "smbd.service"]);
-            systemctl(&["restart", "smbd.service"])
-        }
-        false => systemctl(&["disable", "--now", "smbd.service", "nmbd.service"]),
-    }
+    systemctl(&["daemon-reload"]);
+    systemctl(&["disable", "--now", "nmbd.service"]);
+    systemctl(&["enable", "smbd.service"]);
+    systemctl(&["restart", "smbd.service"])
 }
 
 fn remote_login(on: bool) -> ExitCode {

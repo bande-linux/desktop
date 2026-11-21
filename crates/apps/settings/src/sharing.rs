@@ -17,8 +17,8 @@ use crate::widgets::{Row, Text, Tone};
 const HELPER: &str = "/usr/libexec/bande-sharing-helper";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const SAMBA: &str = "samba";
-const RESOLVED: &str = "systemd-resolved";
-const RESOLVED_DAEMON: &str = "/usr/lib/systemd/systemd-resolved";
+const AVAHI: &str = "avahi-daemon";
+const AVAHI_DAEMON: &str = "/usr/sbin/avahi-daemon";
 const SMBD: &str = "/usr/sbin/smbd";
 const SSHD: &str = "/usr/sbin/sshd";
 const NET: &str = "/usr/bin/net";
@@ -34,7 +34,7 @@ pub struct Share {
 pub struct SharingState {
     pub samba_installed: bool,
     pub ssh_installed: bool,
-    pub resolved_installed: bool,
+    pub avahi_installed: bool,
     pub file_sharing: bool,
     pub remote_login: bool,
     pub shares: Vec<Share>,
@@ -47,7 +47,7 @@ pub enum SharingCommand {
     FileSharing(bool),
     RemoteLogin(bool),
     InstallSamba,
-    InstallResolved,
+    InstallAvahi,
     AddFolder,
     Remove(String),
     Password(String),
@@ -93,7 +93,7 @@ fn read_state() -> SharingState {
     SharingState {
         samba_installed,
         ssh_installed: Path::new(SSHD).exists(),
-        resolved_installed: Path::new(RESOLVED_DAEMON).exists(),
+        avahi_installed: Path::new(AVAHI_DAEMON).exists(),
         file_sharing: samba_installed && service_active("smbd.service"),
         remote_login: service_active("ssh.service"),
         shares: match samba_installed {
@@ -183,7 +183,7 @@ fn run(command: SharingCommand, system: Option<&Connection>, session: Option<&Co
             None,
         ),
         SharingCommand::InstallSamba => install(system, SAMBA),
-        SharingCommand::InstallResolved => install(system, RESOLVED),
+        SharingCommand::InstallAvahi => install(system, AVAHI),
         SharingCommand::Password(password) => helper(&["password"], Some(&password)),
         SharingCommand::Remove(name) => helper(&["remove", &name], None),
         SharingCommand::AddFolder => {
@@ -291,7 +291,7 @@ impl SettingsView {
         if !state.file_sharing {
             return rows;
         }
-        if !state.resolved_installed {
+        if !state.avahi_installed {
             rows.push(self.unadvertised_row());
         }
         let field = SecureField::new(
@@ -334,17 +334,17 @@ impl SettingsView {
     fn unadvertised_row(&mut self) -> Box<dyn Widget> {
         let mut install = intent(&self.intents, Intent::Sharing);
         let mut button = Button::new(&tr!("Install"), move || {
-            install(SharingCommand::InstallResolved);
+            install(SharingCommand::InstallAvahi);
         });
         button.set_enabled(!self.installing_sharing);
         let detail = match self.installing_sharing {
             true => tr!("Installing…"),
             false => tr!(
-                "Other computers won’t see this one nearby and must connect by its address. Installing systemd-resolved lets it announce itself; it also takes over looking up names on the network."
+                "Other computers won’t see this one nearby and must connect by its address. Installing Avahi lets it announce itself."
             ),
         };
         self.anchors
-            .push((Anchor::Item("install-resolved".to_owned()), button.id()));
+            .push((Anchor::Item("install-avahi".to_owned()), button.id()));
         boxed(
             Row::new(
                 Text::new(&tr!("Not visible on the network"), Tone::Primary),

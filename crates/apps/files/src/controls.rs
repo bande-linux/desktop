@@ -57,6 +57,7 @@ pub(crate) enum Signal {
     Server(crate::servers::ServerField),
     SheetDefault,
     TryConnectionAgain,
+    InstallDiscovery,
     DisconnectCurrent,
     ApplyToAll(bool),
     Drag(Point),
@@ -358,6 +359,7 @@ impl FilesView {
             Some(self.toolbar.search),
             self.size_slider,
             self.search_home_button,
+            self.install_discovery_button,
             self.trouble_buttons,
         ]
         .into_iter()
@@ -661,6 +663,7 @@ impl FilesView {
                     }
                     Signal::Server(field) => self.server_field(field),
                     Signal::TryConnectionAgain => self.browser.reload(),
+                    Signal::InstallDiscovery => self.requests.push(Request::InstallDiscovery),
                     Signal::DisconnectCurrent => self.disconnect_current(),
                     Signal::SheetDefault => {
                         if let Some(primary) = self.sheet_primary.take() {
@@ -1166,6 +1169,7 @@ impl FilesView {
             )
         });
         let search_home = self.search_home_frame(self.empty_area());
+        let install_discovery = self.install_discovery_frame(self.empty_area());
         let trouble = self.trouble_frame(self.empty_area());
         let table_id = self.table;
         if let Some(host) = self.host_mut() {
@@ -1175,6 +1179,7 @@ impl FilesView {
                 .chain(rename)
                 .chain(slider)
                 .chain(search_home)
+                .chain(install_discovery)
                 .chain(trouble)
             {
                 host.set_frame(id, frame);

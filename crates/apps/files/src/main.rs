@@ -16,7 +16,7 @@ use bande_app::{
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_backup::client::{Browsing, CannotBrowse, open_browser};
 use bande_files::{
-    BookmarkEdit, Browser, CarriedTab, FilesSettings, FilesView, Location, Request, Row,
+    BookmarkEdit, Browser, CarriedTab, Discovery, FilesSettings, FilesView, Location, Request, Row,
     SETTINGS_SIZE, SIDEBAR_FILE, SIDEBAR_WIDTH, SavedTab, ServerAnswer, ServerRequest, ServersSeen,
     Show, ShowRequest, SidebarEdit, TOOLBAR_HEIGHT, ViewMemory, hidden_places, list_columns_file,
     recent_folders_file, rows, serve_file_manager, settings_view, sidebar_file, status_bar_file,
@@ -1166,27 +1166,8 @@ impl Files {
                     tracing::warn!("cannot show the menu: {error}");
                 }
             }
-            Request::ForgetServer(url) => {
-                let forgotten = std::thread::Builder::new()
-                    .name("forget server".to_owned())
-                    .spawn(move || {
-                        let called = Connection::session().and_then(|session| {
-                            session.call_method(
-                                Some(MOUNTS_SERVICE),
-                                MOUNTS_PATH,
-                                Some(MOUNTS_INTERFACE),
-                                "Forget",
-                                &(&url,),
-                            )
-                        });
-                        if let Err(error) = called {
-                            tracing::warn!("cannot forget {url}: {error}");
-                        }
-                    });
-                if let Err(error) = forgotten {
-                    tracing::warn!("cannot forget a server: {error}");
-                }
-            }
+            Request::ForgetServer(url) => call_mounts_aside("Forget", (url,)),
+            Request::InstallDiscovery => call_mounts_aside("InstallDiscovery", ()),
             Request::Compose { app, arguments } => {
                 let token = window.activation_token(app.app_id()).ok();
                 if let Err(error) = launch_with_arguments(&app, &arguments, token.as_deref()) {
@@ -1570,11 +1551,42 @@ fn mounts_answer<T: serde::de::DeserializeOwned + zbus::zvariant::Type + Default
         .unwrap_or_default()
 }
 
+fn call_mounts_aside<B>(method: &'static str, body: B)
+where
+    B: serde::Serialize + zbus::zvariant::DynamicType + Send + 'static,
+{
+    let spawned = std::thread::Builder::new()
+        .name(method.to_owned())
+        .spawn(move || {
+            let called = Connection::session().and_then(|session| {
+                session.call_method(
+                    Some(MOUNTS_SERVICE),
+                    MOUNTS_PATH,
+                    Some(MOUNTS_INTERFACE),
+                    method,
+                    &body,
+                )
+            });
+            if let Err(error) = called {
+                tracing::warn!("{method} failed: {error}");
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot start {method}: {error}");
+    }
+}
+
 fn nearby_list(session: &Connection) -> ServersSeen {
     let unresponsive: Vec<String> = mounts_answer(session, "Unresponsive");
+    let discovery: String = mounts_answer(session, "NearbyAvailability");
     ServersSeen {
         nearby: mounts_answer(session, "Nearby"),
         unresponsive: unresponsive.into_iter().map(PathBuf::from).collect(),
+        discovery: match discovery.as_str() {
+            "missing" => Discovery::Missing,
+            "installing" => Discovery::Installing,
+            _ => Discovery::Ready,
+        },
     }
 }
 

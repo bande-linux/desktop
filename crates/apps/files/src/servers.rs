@@ -46,10 +46,19 @@ pub enum ServerDone {
     FreeSpace(PathBuf, u64),
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Discovery {
+    #[default]
+    Ready,
+    Missing,
+    Installing,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServersSeen {
     pub nearby: Vec<(String, String)>,
     pub unresponsive: Vec<PathBuf>,
+    pub discovery: Discovery,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

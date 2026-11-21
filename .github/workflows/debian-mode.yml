@@ -1,0 +1,56 @@
+name: debian mode
+run-name: "Build from Debian's crates, ${{ github.ref_name }}"
+
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - 'crates/*/*/Cargo.toml'
+      - debian/control
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gap:
+    name: gap (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [forky, sid]
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    container: debian:${{ matrix.suite }}
+    timeout-minutes: 120
+    steps:
+      - name: Install the tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates build-essential dpkg-dev python3 xz-utils
+      - uses: actions/checkout@v7
+      - name: The Build-Depends without the vendored crates
+        run: dpkg-checkbuilddeps 2>&1 | tr ' ' '\n' | grep '^librust-' || true
+      - name: What Debian lacks
+        run: |
+          ci/deb/debian-gap.py gap-${{ matrix.suite }}.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: debian-gap-${{ matrix.suite }}
+          path: gap-${{ matrix.suite }}.json
+      - name: Install what Debian has
+        run: |
+          mapfile -t installable < <(python3 -c 'import json, sys; print("\n".join(g["package"] for g in json.load(open(sys.argv[1])) if g["state"] == "installable"))' gap-${{ matrix.suite }}.json)
+          apt-get build-dep -y -qq --no-install-recommends -Pnocheck,pkg.bande.vendor ./
+          [ ${#installable[@]} -eq 0 ] || apt-get install -y -qq --no-install-recommends "${installable[@]}"
+      - name: Build against Debian's crate registry
+        run: |
+          export DEB_BUILD_OPTIONS=nocheck DEB_BUILD_PROFILES=nocheck
+          debian/rules build-arch

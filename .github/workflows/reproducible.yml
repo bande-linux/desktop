@@ -1,0 +1,57 @@
+name: reproducible
+run-name: "Reproducibility of ${{ github.ref_name }}"
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  suites:
+    uses: bande-linux/apt/.github/workflows/suites.yml@main
+
+  twice:
+    name: twice (${{ matrix.suite }})
+    needs: suites
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:${{ matrix.suite }}
+      volumes:
+        - /usr/share/dotnet:/host/dotnet
+        - /usr/local/lib/android:/host/android
+        - /opt/ghc:/host/ghc
+    timeout-minutes: 360
+    env:
+      DEB_BUILD_OPTIONS: nocheck parallel=2
+    steps:
+      - name: Free disk space on the host
+        run: rm -rf /host/dotnet/* /host/android/* /host/ghc/* && df -h /
+      - name: Install git
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: ci/release/verify.sh --setup debs
+      - run: ci/deb/source.sh source
+      - name: Build the same source twice, in different folders
+        run: |
+          ci/deb/build.sh source/*.dsc first --build=binary
+          CARGO_TARGET_DIR=$PWD/second-target ci/deb/build.sh source/*.dsc second --build=binary
+      - name: Compare the packages
+        run: |
+          (cd first && sha256sum ./*.deb) > first.sums
+          (cd second && sha256sum ./*.deb) > second.sums
+          diff first.sums second.sums | tee -a "$GITHUB_STEP_SUMMARY"

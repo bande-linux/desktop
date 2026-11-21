@@ -102,6 +102,9 @@ another package's recommends. `bande-desktop` itself keeps:
 - `fonts-noto-core`, `fonts-noto-cjk`: the fallback faces for scripts Inter does not cover;
 - `pipewire`, `wireplumber`: the sound service, screen capture and recording;
 - `pipewire-pulse`: apps that play through PulseAudio (the session drop-ins start it);
+  the login window's user (`_greetd`) starts none of PipeWire, its Pulse server, WirePlumber or
+  the filter chain (`ConditionUser=!_greetd`), so the person's session never finds the sound
+  card busy;
 - `libspa-0.2-bluetooth`: Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
 - `systemd-oomd`: closes an app when memory stays under pressure.

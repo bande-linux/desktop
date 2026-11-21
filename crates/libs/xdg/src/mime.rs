@@ -597,7 +597,7 @@ impl MimeDatabase {
     }
 }
 
-fn unescape_xml(text: &str) -> String {
+pub fn unescape_xml(text: &str) -> String {
     text.replace("&lt;", "<")
         .replace("&gt;", ">")
         .replace("&quot;", "\"")

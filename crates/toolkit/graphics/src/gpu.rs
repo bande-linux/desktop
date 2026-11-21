@@ -43,9 +43,10 @@ fn is_software(info: &wgpu::AdapterInfo) -> bool {
 impl GpuDevice {
     fn offscreen() -> Result<Self, DrawError> {
         let instance = vulkan_instance();
-        let adapter =
-            futures_lite::future::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-                .map_err(DrawError::Adapter)?;
+        let adapter = futures_lite::future::block_on(
+            instance.request_adapter(&wgpu::RequestAdapterOptions::default()),
+        )
+        .map_err(DrawError::Adapter)?;
         Self::open(instance, adapter)
     }
 
@@ -80,10 +81,12 @@ impl GpuDevice {
         // SAFETY: the caller of shared_for guarantees the handles in target outlive the surface.
         let surface = unsafe { instance.create_surface_unsafe(target) }
             .map_err(|error| DrawError::Gpu(error.to_string()))?;
-        let adapter = futures_lite::future::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            compatible_surface: Some(&surface),
-            ..wgpu::RequestAdapterOptions::default()
-        }))
+        let adapter = futures_lite::future::block_on(instance.request_adapter(
+            &wgpu::RequestAdapterOptions {
+                compatible_surface: Some(&surface),
+                ..wgpu::RequestAdapterOptions::default()
+            },
+        ))
         .map_err(DrawError::Adapter)?;
         let info = adapter.get_info();
         if !allow_software && is_software(&info) {
@@ -96,9 +99,10 @@ impl GpuDevice {
     }
 
     fn open(instance: wgpu::Instance, adapter: wgpu::Adapter) -> Result<Self, DrawError> {
-        let (device, queue) =
-            futures_lite::future::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-                .map_err(DrawError::Device)?;
+        let (device, queue) = futures_lite::future::block_on(
+            adapter.request_device(&wgpu::DeviceDescriptor::default()),
+        )
+        .map_err(DrawError::Device)?;
         device.on_uncaptured_error(Arc::new(|error| tracing::error!(%error, "GPU error")));
         Ok(Self {
             instance,

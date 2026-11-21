@@ -26,7 +26,6 @@ pub fn options() -> roxmltree::ParsingOptions {
     roxmltree::ParsingOptions {
         allow_dtd: false,
         nodes_limit: MAX_XML_NODES,
-        ..roxmltree::ParsingOptions::default()
     }
 }
 

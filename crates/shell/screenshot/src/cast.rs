@@ -710,7 +710,12 @@ fn serve(
             wake(&retried);
         }
     });
-    let _ = retry.update_timer(Some(RETRY), Some(RETRY));
+    if let Err(error) = retry
+        .update_timer(Some(RETRY), Some(RETRY))
+        .into_sync_result()
+    {
+        tracing::warn!("cannot start the screen cast retry timer: {error}");
+    }
     main_loop.run();
     let mut producer = producer.borrow_mut();
     if let Some(stream) = producer.stream.take() {

@@ -123,12 +123,18 @@ impl PairingDialogs {
             (child.id(), child.stdout.take()?)
         };
         let mut output = String::new();
-        let _ = stdout.read_to_string(&mut output);
+        if let Err(error) = stdout.read_to_string(&mut output) {
+            tracing::warn!("cannot read the pairing answer: {error}");
+        }
         let mut shown = lock(&self.shown);
         if shown.as_ref().map(Child::id) != Some(asking) {
             return None;
         }
-        let status = shown.take()?.wait().ok()?;
+        let status = shown
+            .take()?
+            .wait()
+            .inspect_err(|error| tracing::warn!("cannot wait for the pairing question: {error}"))
+            .ok()?;
         Some((status, output))
     }
 

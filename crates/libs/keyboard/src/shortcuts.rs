@@ -175,7 +175,7 @@ pub enum Key {
     Up,
     Down,
     AnyArrow,
-    MissionControl,
+    LaunchA,
 }
 
 impl Key {
@@ -201,7 +201,7 @@ impl Key {
             Self::Right => "Right".to_owned(),
             Self::Up => "Up".to_owned(),
             Self::Down => "Down".to_owned(),
-            Self::MissionControl => "Mission Control".to_owned(),
+            Self::LaunchA => "LaunchA".to_owned(),
         }
     }
 }
@@ -254,9 +254,9 @@ pub const SHORTCUTS: [Shortcut; 28] = [
     shortcut(Action::OpenTerminal, CTRL_ALT, Key::Character('t')),
     shortcut(Action::PreviousWorkspace, CTRL_SUPER, Key::Left),
     shortcut(Action::NextWorkspace, CTRL_SUPER, Key::Right),
-    shortcut(Action::Overview, NONE, Key::MissionControl),
+    shortcut(Action::Overview, NONE, Key::LaunchA),
     shortcut(Action::ShowDesktop, SUPER, Key::Character('d')),
-    shortcut(Action::ShowDesktop, SUPER, Key::MissionControl),
+    shortcut(Action::ShowDesktop, SUPER, Key::LaunchA),
     shortcut(Action::CaptureScreen, SHIFT, Key::Print),
     shortcut(Action::CaptureArea, SHIFT_SUPER, Key::Character('s')),
     shortcut(Action::CaptureOptions, NONE, Key::Print),

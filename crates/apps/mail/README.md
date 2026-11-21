@@ -129,7 +129,7 @@ noted:
 
 | Crate | Why |
 |---|---|
-| `rustls`, `rustls-platform-verifier` | TLS 1.2 and 1.3 for IMAP, SMTP and HTTPS, checked against the system's CA store, on the aws-lc-rs crypto provider (not in Debian) for its post-quantum hybrid key exchange (X25519MLKEM768), which keeps recorded mail sessions safe from later decryption; the same TLS stack as Calendar, Software and Velox |
+| `rustls`, `rustls-platform-verifier` | TLS 1.2 and 1.3 for IMAP, SMTP and HTTPS, checked against the system's CA store, on the ring crypto provider, the one Debian builds rustls with; the same TLS stack as the rest of Bande |
 | `mailparse` | MIME parsing, charsets and encoded words of incoming mail |
 | `rusqlite` | the offline store, on the system `libsqlite3` |
 | `html5ever` | a correct HTML tokenizer for turning mail HTML into safe text |

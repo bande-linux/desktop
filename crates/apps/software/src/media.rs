@@ -11,7 +11,7 @@ use bande_packages::flatpak::{self, Installed};
 use bande_toolkit::Image;
 use bande_xdg::DesktopEntry;
 use jxl_oxide::JxlImage;
-use rustls::crypto::aws_lc_rs;
+use rustls::crypto::ring;
 use sha2::{Digest, Sha256};
 use ureq::tls::{RootCerts, TlsConfig};
 
@@ -199,7 +199,7 @@ fn prune_shots() {
 fn agent() -> ureq::Agent {
     let tls = TlsConfig::builder()
         .root_certs(RootCerts::PlatformVerifier)
-        .unversioned_rustls_crypto_provider(Arc::new(aws_lc_rs::default_provider()))
+        .unversioned_rustls_crypto_provider(Arc::new(ring::default_provider()))
         .build();
     ureq::Agent::config_builder()
         .timeout_global(Some(TIMEOUT))

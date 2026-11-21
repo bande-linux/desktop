@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use base64::Engine;
 use md5::Md5;
-use rustls::crypto::aws_lc_rs;
+use rustls::crypto::ring;
 use sha2::Sha256;
 use ureq::tls::{RootCerts, TlsConfig};
 
@@ -261,7 +261,7 @@ impl Http {
     pub fn new(credentials: Option<&Credentials>) -> Self {
         let tls = TlsConfig::builder()
             .root_certs(RootCerts::PlatformVerifier)
-            .unversioned_rustls_crypto_provider(Arc::new(aws_lc_rs::default_provider()))
+            .unversioned_rustls_crypto_provider(Arc::new(ring::default_provider()))
             .build();
         let agent = ureq::Agent::config_builder()
             .http_status_as_error(false)

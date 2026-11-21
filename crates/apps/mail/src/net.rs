@@ -71,7 +71,7 @@ impl Default for Network {
 }
 
 fn tls_config() -> Result<Arc<ClientConfig>> {
-    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
     let config = ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .and_then(|builder| builder.with_platform_verifier())

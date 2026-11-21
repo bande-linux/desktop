@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rustls::crypto::aws_lc_rs;
+use rustls::crypto::ring;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
@@ -28,7 +28,7 @@ fn tls_config(ca: Option<&Path>) -> io::Result<Arc<ClientConfig>> {
         let certificate = certificate.map_err(io::Error::other)?;
         roots.add(certificate).map_err(io::Error::other)?;
     }
-    let config = ClientConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
+    let config = ClientConfig::builder_with_provider(Arc::new(ring::default_provider()))
         .with_safe_default_protocol_versions()
         .map_err(io::Error::other)?
         .with_root_certificates(roots)

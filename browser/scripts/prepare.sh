@@ -12,6 +12,7 @@ export QUILT_PATCHES=debian/patches QUILT_PC=.pc
 debver=$(dpkg-parsechangelog -S Version)
 suite=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
 maintainer='Mikael Hug <mikaelhug@gmail.com>'
+released=$(date -R)
 major=${debver%%.*}
 patches=$repo/patches/$major
 [ -f "$patches/series" ] || { echo "prepare: no patches for ESR $major" >&2; exit 4; }
@@ -36,7 +37,7 @@ find . -type f -name '*.yaml' -not -path './third_party/*' -exec sed -i 's/follo
     echo
     echo "  * Bande's Browser: Debian firefox-esr $debver with the patches of bande-linux/desktop's browser/."
     echo
-    echo " -- $maintainer  $(date -R)"
+    echo " -- $maintainer  $released"
     echo
     cat debian/changelog
 } > debian/changelog.new
@@ -88,6 +89,8 @@ PictureInPicture:Picture-in-Picture:Bild-i-bild
 Sharing:Sharing Indicator:Delningsindikator
 WINDOWS
 cp "$repo/branding/org.bande.Browser.desktop" "$repo/branding/org.bande.Browser.metainfo.xml" "$repo/branding/org.bande.Browser.svg" debian/
+sed -i "s|^</component>|  <releases>\n    <release version=\"$version\" date=\"$(date -d "$released" +%F)\"/>\n  </releases>\n</component>|" \
+    debian/org.bande.Browser.metainfo.xml
 
 b=browser/branding/bande
 cp -a browser/branding/unofficial "$b"

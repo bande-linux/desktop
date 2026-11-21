@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.TextEditor</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Text Editor</name>
+  <summary>Write and edit text documents</summary>
+  <summary xml:lang="sv">Skriv och redigera textdokument</summary>
+  <description>
+    <p>A simple editor for plain and rich text documents.</p>
+    <ul>
+      <li>Opens plain text in any common encoding and keeps its line endings</li>
+      <li>Rich text with fonts, colours, alignment and lists; RTF, Markdown and HTML</li>
+      <li>Opens and saves Office Open XML (.docx) and OpenDocument (.odt) documents</li>
+      <li>Find and replace, with regular expressions</li>
+      <li>Documents are saved automatically and come back after a crash or quit</li>
+      <li>Opens large log files without stalling</li>
+    </ul>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.TextEditor.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+  <provides>
+    <mediatype>text/plain</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+</component>

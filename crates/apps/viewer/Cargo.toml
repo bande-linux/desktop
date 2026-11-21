@@ -1,0 +1,55 @@
+[package]
+name = "bande-viewer"
+description = "image and PDF viewer for the Bande desktop"
+version = "0.1.6"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+bande-volumes.workspace = true
+serde.workspace = true
+accesskit.workspace = true
+image = { workspace = true, features = ["webp"] }
+tracing.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-content.workspace = true
+bande-fs.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-thumbnails.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "graphics"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+recommends = "bande-files"
+extended-description = """\
+The image and PDF viewer of the Bande desktop: opens photos and pictures \
+from Files, zooms, rotates and flips them, steps through a folder, plays \
+animations and slideshows, copies them and shows their size, dimensions \
+and camera details. PDF documents scroll continuously with page \
+thumbnails and their table of contents; their text can be selected, \
+copied and searched, and locked documents open with their password."""
+assets = [
+    ["target/release/bande-viewer", "usr/bin/", "755"],
+    ["data/org.bande.Viewer.desktop", "usr/share/applications/", "644"],
+    ["target/release/deb-assets/bande-viewer/org.bande.Viewer.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-viewer/copyright", "usr/share/doc/bande-viewer/copyright", "644"],
+    ["target/release/deb-assets/bande-viewer/changelog.gz", "usr/share/doc/bande-viewer/", "644"],
+    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-viewer", "644"],
+    ["target/release/deb-assets/bande-viewer/man/*", "usr/share/man/man1/", "644"],
+    ["data/org.bande.Viewer.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/l10n/development/bande-viewer/*", "usr/share/bande/l10n/bande-viewer/", "644"],
+]

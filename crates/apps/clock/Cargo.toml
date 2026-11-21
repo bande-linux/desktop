@@ -1,0 +1,53 @@
+[package]
+name = "bande-clock"
+description = "clock with alarms, timers and a stopwatch for the Bande desktop"
+version = "0.1.5"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+jiff = { workspace = true, features = ["serde"] }
+rustix = { workspace = true, features = ["fs", "time"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-datetime.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-sound.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "utils"
+priority = "optional"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, tzdata, bande-notify, bande-sound"
+extended-description = """\
+The clock of the Bande desktop: alarms that repeat on chosen days, with a \
+label, a sound and snooze; several timers at once, with presets; a \
+stopwatch with laps; and a world clock with cities from the time zone \
+database. Alarms and timers ring through a notification with sound even \
+when Clock's window is closed, and the shell's Clock menu shows the \
+running timers and the next alarm."""
+assets = [
+    ["target/release/bande-clock", "usr/bin/", "755"],
+    ["data/org.bande.Clock.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.ClockAgent.desktop", "etc/xdg/autostart/", "644"],
+    ["target/release/deb-assets/bande-clock/org.bande.Clock.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-clock/copyright", "usr/share/doc/bande-clock/copyright", "644"],
+    ["target/release/deb-assets/bande-clock/changelog.gz", "usr/share/doc/bande-clock/", "644"],
+    ["target/release/deb-assets/bande-clock/man/*", "usr/share/man/man1/", "644"],
+    ["data/org.bande.Clock.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/l10n/development/bande-clock/*", "usr/share/bande/l10n/bande-clock/", "644"],
+]

@@ -1,0 +1,9 @@
+.TH "BANDE-MEDIA-ENGINE" "1" "" "bande-player" "User Commands"
+.SH NAME
+bande\-media\-engine \- decode audio and video for Player and Glance
+.SH SYNOPSIS
+.B bande\-media\-engine
+.SH DESCRIPTION
+The separate process in which Player and Glance decode and play media with
+GStreamer. They start it with a socket on its standard input and send it their
+commands there; it is not meant to be run by hand.

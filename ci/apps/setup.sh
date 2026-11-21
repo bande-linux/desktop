@@ -1,0 +1,62 @@
+#!/bin/bash
+# setup.sh install|check <app>... | source: the Debian packages the build of the named apps needs
+# (the suite's own rustc, cargo, rustfmt and rust-clippy among them) and cargo-deb, from one list:
+# install (as root, in CI's debian:<suite>) installs them; check (the local gate) fails, naming what
+# to install, if any is missing. Apps depend on desktop packages, so apt needs the Bande archive:
+# source (as root) adds it, pinned to the Bande packages, with the archive key in
+# ci/bande-archive-key.asc, unless apt already knows the archive.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+mode=${1:?usage: setup.sh install|check <app>... | source}
+shift
+cargo_deb=3.8.0
+packages=(build-essential cargo rustc rustfmt rust-clippy pkg-config jq libxkbcommon-dev libfontconfig1
+    libwayland-client0 libvulkan1 mesa-vulkan-drivers dbus-daemon fonts-inter fonts-manrope
+    fonts-jetbrains-mono desktop-file-utils appstream python3 distro-info-data lintian)
+for app in "$@"; do
+    [ -f "apps/$app/Cargo.toml" ] || { echo "setup: no app apps/$app" >&2; exit 1; }
+    mapfile -t -O ${#packages[@]} packages < <(grep -v '^#' "apps/$app/build-depends" 2>/dev/null | xargs -rn1)
+done
+
+archive=bande-linux.github.io
+knows_archive() { [[ $(apt-cache policy bande-sound 2>/dev/null) == *"Candidate: "[0-9]* ]]; }
+add_source() {
+    knows_archive && return
+    install -D -m 644 ci/bande-archive-key.asc /etc/apt/keyrings/bande-archive-key.asc
+    printf 'Types: deb\nURIs: https://%s/apt\nSuites: %s\nComponents: main\nSigned-By: %s\n' \
+        "$archive" "$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release | tr -d '"')" /etc/apt/keyrings/bande-archive-key.asc > /etc/apt/sources.list.d/bande-build.sources
+    printf 'Package: *\nPin: origin %s\nPin-Priority: -1\n\nPackage: bande-* xdg-desktop-portal-bande libpam-bande-secrets\nPin: origin %s\nPin-Priority: 500\n' \
+        "$archive" "$archive" > /etc/apt/preferences.d/bande-build.pref
+    apt-get update -qq
+}
+
+case $mode in
+source)
+    add_source
+    knows_archive || { echo "setup: apt still knows no Bande archive" >&2; exit 1; }
+    ;;
+install)
+    export DEBIAN_FRONTEND=noninteractive PATH="$HOME/.cargo/bin:$PATH"
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends ca-certificates > /dev/null
+    add_source
+    apt-get install -y -qq --no-install-recommends "${packages[@]}" > /dev/null
+    cargo deb --version 2>/dev/null | grep -qw "$cargo_deb" ||
+        cargo install -q cargo-deb --version "$cargo_deb" --locked
+    ;;
+check)
+    missing=()
+    for package in "${packages[@]}"; do
+        dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null | grep -q '^ii' || missing+=("$package")
+    done
+    [ ${#missing[@]} -eq 0 ] || { echo "setup: missing Debian packages: sudo apt-get install ${missing[*]}" >&2; exit 1; }
+    knows_archive || { echo "setup: apt knows no Bande archive: sudo ci/setup.sh source" >&2; exit 1; }
+    cargo deb --version 2>/dev/null | grep -qw "$cargo_deb" ||
+        { echo "setup: not cargo-deb $cargo_deb: cargo install cargo-deb --version $cargo_deb --locked" >&2; exit 1; }
+    echo "setup: every tool and package is installed"
+    ;;
+*)
+    echo "usage: setup.sh install|check <app>... | source" >&2
+    exit 2
+    ;;
+esac

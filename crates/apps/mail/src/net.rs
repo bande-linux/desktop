@@ -1,0 +1,286 @@
+use std::io::{self, Read, Write};
+use std::net::{IpAddr, Shutdown, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
+use std::time::Duration;
+
+use bande_discovery::Resolver;
+use bande_l10n::tr;
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls_platform_verifier::BuilderVerifierExt;
+
+use crate::error::{Error, Result};
+
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
+const READ_CHUNK: usize = 16 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Security {
+    Tls,
+    StartTls,
+    Plain,
+}
+
+impl Security {
+    pub const ALL: [Self; 3] = [Self::Tls, Self::StartTls, Self::Plain];
+
+    pub fn title(self) -> String {
+        match self {
+            Self::Tls => tr!("TLS"),
+            Self::StartTls => tr!("STARTTLS"),
+            Self::Plain => tr!("None (this computer only)"),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Tls => "tls",
+            Self::StartTls => "starttls",
+            Self::Plain => "plain",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|security| security.name() == name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Server {
+    pub host: String,
+    pub port: u16,
+    pub security: Security,
+}
+
+#[derive(Clone)]
+pub struct Network {
+    pub timeout: Duration,
+    pub resolver: Resolver,
+}
+
+impl Default for Network {
+    fn default() -> Self {
+        Self {
+            timeout: COMMAND_TIMEOUT,
+            resolver: Resolver::system(),
+        }
+    }
+}
+
+fn tls_config() -> Result<Arc<ClientConfig>> {
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .and_then(|builder| builder.with_platform_verifier())
+        .map_err(|error| Error::Tls(error.to_string()))?
+        .with_no_client_auth();
+    Ok(Arc::new(config))
+}
+
+enum Stream {
+    Plain(TcpStream),
+    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
+}
+
+impl Stream {
+    fn tcp(&self) -> &TcpStream {
+        match self {
+            Self::Plain(stream) => stream,
+            Self::Tls(stream) => stream.get_ref(),
+        }
+    }
+}
+
+impl Read for Stream {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Plain(stream) => stream.read(buffer),
+            Self::Tls(stream) => stream.read(buffer),
+        }
+    }
+}
+
+impl Write for Stream {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Plain(stream) => stream.write(bytes),
+            Self::Tls(stream) => stream.write(bytes),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Plain(stream) => stream.flush(),
+            Self::Tls(stream) => stream.flush(),
+        }
+    }
+}
+
+pub struct Link {
+    stream: Stream,
+    buffer: Vec<u8>,
+    network: Network,
+    host: String,
+}
+
+pub fn is_loopback(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
+fn open_tcp(host: &str, port: u16, timeout: Duration) -> Result<TcpStream> {
+    let addresses = (host, port).to_socket_addrs()?.collect::<Vec<_>>();
+    let mut last = Error::Io(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!("{host} has no address"),
+    ));
+    for address in addresses {
+        match TcpStream::connect_timeout(&address, timeout.min(CONNECT_TIMEOUT)) {
+            Ok(stream) => {
+                stream.set_read_timeout(Some(timeout))?;
+                stream.set_write_timeout(Some(timeout))?;
+                stream.set_nodelay(true)?;
+                return Ok(stream);
+            }
+            Err(error) => last = error.into(),
+        }
+    }
+    Err(last)
+}
+
+impl Link {
+    pub fn connect(server: &Server, network: &Network) -> Result<Self> {
+        if server.security == Security::Plain && !is_loopback(&server.host) {
+            return Err(Error::Insecure);
+        }
+        let tcp = open_tcp(&server.host, server.port, network.timeout)?;
+        let link = Self {
+            stream: Stream::Plain(tcp),
+            buffer: Vec::new(),
+            network: network.clone(),
+            host: server.host.clone(),
+        };
+        match server.security {
+            Security::Tls => link.start_tls(),
+            Security::StartTls | Security::Plain => Ok(link),
+        }
+    }
+
+    pub fn start_tls(self) -> Result<Self> {
+        let Stream::Plain(tcp) = self.stream else {
+            return Ok(self);
+        };
+        if !self.buffer.is_empty() {
+            return Err(Error::Protocol(
+                "data arrived before the secure connection started".to_owned(),
+            ));
+        }
+        let host = self.host.trim_start_matches('[').trim_end_matches(']');
+        let name =
+            ServerName::try_from(host.to_owned()).map_err(|error| Error::Tls(error.to_string()))?;
+        let session = ClientConnection::new(tls_config()?, name)
+            .map_err(|error| Error::Tls(error.to_string()))?;
+        let mut tls = StreamOwned::new(session, tcp);
+        while tls.conn.is_handshaking() {
+            tls.conn
+                .complete_io(&mut tls.sock)
+                .map_err(|error| Error::Tls(error.to_string()))?;
+        }
+        Ok(Self {
+            stream: Stream::Tls(Box::new(tls)),
+            buffer: Vec::new(),
+            network: self.network,
+            host: self.host,
+        })
+    }
+
+    pub fn set_read_timeout(&self, timeout: Duration) -> Result<()> {
+        Ok(self.stream.tcp().set_read_timeout(Some(timeout))?)
+    }
+
+    pub fn restore_read_timeout(&self) -> Result<()> {
+        self.set_read_timeout(self.network.timeout)
+    }
+
+    pub fn closer(&self) -> Result<Closer> {
+        Ok(Closer(self.stream.tcp().try_clone()?))
+    }
+
+    fn fill(&mut self) -> Result<()> {
+        let start = self.buffer.len();
+        self.buffer.resize(start + READ_CHUNK, 0);
+        let read = self.stream.read(&mut self.buffer[start..]);
+        match read {
+            Ok(0) => {
+                self.buffer.truncate(start);
+                Err(Error::Closed)
+            }
+            Ok(count) => {
+                self.buffer.truncate(start + count);
+                Ok(())
+            }
+            Err(error) => {
+                self.buffer.truncate(start);
+                Err(error.into())
+            }
+        }
+    }
+
+    pub fn read_line(&mut self, limit: usize) -> Result<Vec<u8>> {
+        let mut searched = 0;
+        loop {
+            if let Some(end) = self.buffer[searched..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+            {
+                let line = self.buffer.drain(..searched + end + 1).collect();
+                return Ok(line);
+            }
+            searched = self.buffer.len();
+            if searched > limit {
+                return Err(Error::Protocol(format!("a line longer than {limit} bytes")));
+            }
+            self.fill()?;
+        }
+    }
+
+    pub fn read_to_end(&mut self, limit: usize) -> Result<Vec<u8>> {
+        loop {
+            if self.buffer.len() > limit {
+                return Err(Error::Protocol(format!("more than {limit} bytes")));
+            }
+            match self.fill() {
+                Ok(()) => {}
+                Err(Error::Closed) => return Ok(std::mem::take(&mut self.buffer)),
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    pub fn read_exact(&mut self, length: usize) -> Result<Vec<u8>> {
+        while self.buffer.len() < length {
+            self.fill()?;
+        }
+        Ok(self.buffer.drain(..length).collect())
+    }
+
+    pub fn send(&mut self, bytes: &[u8]) -> Result<()> {
+        self.stream.write_all(bytes)?;
+        Ok(self.stream.flush()?)
+    }
+}
+
+pub struct Closer(TcpStream);
+
+impl Closer {
+    pub fn close(&self) {
+        let _ = self.0.shutdown(Shutdown::Both);
+    }
+}

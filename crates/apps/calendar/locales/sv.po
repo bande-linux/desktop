@@ -1,0 +1,635 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Calendar"
+msgstr "Kalender"
+
+msgid "Calendar Settings"
+msgstr "Kalenderinställningar"
+
+msgid "Export Calendar"
+msgstr "Exportera kalender"
+
+msgid "Import Events"
+msgstr "Importera händelser"
+
+msgid "Cannot export {file}: {error}"
+msgstr "Det gick inte att exportera {file}: {error}"
+
+msgid "System Time Zone"
+msgstr "Systemets tidszon"
+
+msgid "Time Zone"
+msgstr "Tidszon"
+
+msgid "Day"
+msgstr "Dag"
+
+msgid "Week"
+msgstr "Vecka"
+
+msgid "Month"
+msgstr "Månad"
+
+msgid "Year"
+msgstr "År"
+
+msgid "Go to Today"
+msgstr "Gå till idag"
+
+msgid "Previous"
+msgstr "Föregående"
+
+msgid "Next"
+msgstr "Nästa"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "New Event"
+msgstr "Ny händelse"
+
+msgid "New Calendar…"
+msgstr "Ny kalender…"
+
+msgid "Add Account…"
+msgstr "Lägg till konto…"
+
+msgid "Refresh Calendars"
+msgstr "Uppdatera kalendrar"
+
+msgid "Import…"
+msgstr "Importera…"
+
+msgid "Export…"
+msgstr "Exportera…"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Updating…"
+msgstr "Uppdaterar…"
+
+msgid "“{title}” was changed elsewhere; both versions are kept."
+msgstr "”{title}” ändrades på annat håll. Båda versionerna har sparats."
+
+msgid "{name}: {error}"
+msgstr "{name}: {error}"
+
+msgid "Updated {time}"
+msgstr "Uppdaterad {time}"
+
+msgid "Snooze"
+msgstr "Snooza"
+
+msgid "Can’t sign in to “{name}”"
+msgstr "Det gick inte att logga in på ”{name}”"
+
+msgid "The server refused the password. Click to enter it again."
+msgstr "Servern avvisade lösenordet. Klicka för att ange det igen."
+
+msgid "first"
+msgstr "första"
+
+msgid "second"
+msgstr "andra"
+
+msgid "third"
+msgstr "tredje"
+
+msgid "fourth"
+msgstr "fjärde"
+
+msgid "last"
+msgstr "sista"
+
+msgid "Custom Repeat"
+msgstr "Anpassad upprepning"
+
+msgid "days"
+msgstr "dagar"
+
+msgid "weeks"
+msgstr "veckor"
+
+msgid "months"
+msgstr "månader"
+
+msgid "years"
+msgstr "år"
+
+msgid "every:"
+msgstr "var:"
+
+msgid "on:"
+msgstr "på:"
+
+msgid "on the {nth} {weekday}"
+msgstr "den {nth} {weekday}"
+
+msgid "on day {day}"
+msgstr "dag {day}"
+
+msgid "on {month} {day}"
+msgstr "den {day} {month}"
+
+msgid "{on} of {month}"
+msgstr "{on} i {month}"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Red"
+msgstr "Röd"
+
+msgid "Orange"
+msgstr "Orange"
+
+msgid "Yellow"
+msgstr "Gul"
+
+msgid "Green"
+msgstr "Grön"
+
+msgid "Teal"
+msgstr "Turkos"
+
+msgid "Blue"
+msgstr "Blå"
+
+msgid "Purple"
+msgstr "Lila"
+
+msgid "Graphite"
+msgstr "Grafit"
+
+msgid "Rename…"
+msgstr "Byt namn…"
+
+msgid "Delete Calendar"
+msgstr "Radera kalender"
+
+msgid "Remove Account"
+msgstr "Ta bort konto"
+
+msgid "Do you want to change only this event, or all events in the series?"
+msgstr "Vill du ändra bara den här händelsen eller alla händelser i serien?"
+
+msgid "Never"
+msgstr "Aldrig"
+
+msgid "Every Day"
+msgstr "Varje dag"
+
+msgid "Every Weekday"
+msgstr "Varje vardag"
+
+msgid "Every Week"
+msgstr "Varje vecka"
+
+msgid "Every 2 Weeks"
+msgstr "Varannan vecka"
+
+msgid "Every Month"
+msgstr "Varje månad"
+
+msgid "Every Year"
+msgstr "Varje år"
+
+msgid "Custom…"
+msgstr "Anpassa…"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "Custom"
+msgstr "Anpassad"
+
+msgid "At time of event"
+msgstr "Vid händelsens start"
+
+msgid "1 hour before"
+msgstr "1 timme före"
+
+msgid "1 day before"
+msgstr "1 dag före"
+
+msgid "{hours} hours before"
+msgstr "{hours} timmar före"
+
+msgid "{minutes} minutes before"
+msgstr "{minutes} minuter före"
+
+msgid "On day of event ({time})"
+msgstr "Samma dag ({time})"
+
+msgid "1 day before ({time})"
+msgstr "1 dag före ({time})"
+
+msgid "1 week before ({time})"
+msgstr "1 vecka före ({time})"
+
+msgid "Accept"
+msgstr "Tacka ja"
+
+msgid "Maybe"
+msgstr "Kanske"
+
+msgid "Decline"
+msgstr "Tacka nej"
+
+msgid "No Reply"
+msgstr "Inget svar"
+
+msgid "organizer"
+msgstr "organisatör"
+
+msgid "accepted"
+msgstr "tackat ja"
+
+msgid "maybe"
+msgstr "kanske"
+
+msgid "declined"
+msgstr "tackat nej"
+
+msgid "no reply"
+msgstr "inget svar"
+
+msgid "invitees:"
+msgstr "inbjudna:"
+
+msgid "This calendar is read-only."
+msgstr "Den här kalendern är skrivskyddad."
+
+msgid "Add Location"
+msgstr "Lägg till plats"
+
+msgid "all-day:"
+msgstr "heldag:"
+
+msgid "starts:"
+msgstr "börjar:"
+
+msgid "ends:"
+msgstr "slutar:"
+
+msgid "Floating"
+msgstr "Flytande"
+
+msgid "time zone:"
+msgstr "tidszon:"
+
+msgid "repeat:"
+msgstr "upprepa:"
+
+msgid "After"
+msgstr "Efter"
+
+msgid "On Date"
+msgstr "På datum"
+
+msgid "end repeat:"
+msgstr "sluta upprepa:"
+
+msgid "times or date"
+msgstr "gånger eller datum"
+
+msgid "alert:"
+msgstr "påminnelse:"
+
+msgid "going?"
+msgstr "kommer du?"
+
+msgid "Add Invitees"
+msgstr "Lägg till inbjudna"
+
+msgid "calendar:"
+msgstr "kalender:"
+
+msgid "Add Notes"
+msgstr "Lägg till anteckningar"
+
+msgid "Delete Event"
+msgstr "Radera händelse"
+
+msgid "Local"
+msgstr "Lokalt"
+
+msgid "Untitled"
+msgstr "Namnlös"
+
+msgid "Delete “{name}”?"
+msgstr "Vill du radera ”{name}”?"
+
+msgid "Its events are deleted too, also on the server."
+msgstr "Kalenderns händelser raderas också, även på servern."
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "Add {count} events to “{calendar}”?"
+msgstr "Vill du lägga till {count} händelser i ”{calendar}”?"
+
+msgid "From {file}"
+msgstr "Från {file}"
+
+msgid "Add"
+msgstr "Lägg till"
+
+msgid "Only This Event"
+msgstr "Bara den här händelsen"
+
+msgid "All Events"
+msgstr "Alla händelser"
+
+msgid "Remove “{name}”?"
+msgstr "Vill du ta bort ”{name}”?"
+
+msgid "Its calendars are removed from this computer. Nothing is deleted on the server."
+msgstr "Kontots kalendrar tas bort från den här datorn. Inget raderas på servern."
+
+msgid "Do you want to delete only this event, or all events in the series?"
+msgstr "Vill du radera bara den här händelsen eller alla händelser i serien?"
+
+msgid "New Calendar"
+msgstr "Ny kalender"
+
+msgid "Rename Calendar"
+msgstr "Byt namn på kalender"
+
+msgid "name:"
+msgstr "namn:"
+
+msgid "account:"
+msgstr "konto:"
+
+msgid "Create"
+msgstr "Skapa"
+
+msgid "Rename"
+msgstr "Byt namn"
+
+msgid "W{week}"
+msgstr "v{week}"
+
+msgid "all-day"
+msgstr "heldag"
+
+msgid "{count} more…"
+msgstr "{count} till…"
+
+msgid "No events match “{text}”"
+msgstr "Inga händelser matchar ”{text}”"
+
+msgid "Results for “{text}”"
+msgstr "Resultat för ”{text}”"
+
+msgid "Manually"
+msgstr "Manuellt"
+
+msgid "Every minute"
+msgstr "Varje minut"
+
+msgid "Every hour"
+msgstr "Varje timme"
+
+msgid "Every day"
+msgstr "Varje dag"
+
+msgid "Every week"
+msgstr "Varje vecka"
+
+msgid "Every {minutes} minutes"
+msgstr "Var {minutes}:e minut"
+
+msgid "Default calendar:"
+msgstr "Standardkalender:"
+
+msgid "Default for Region"
+msgstr "Regionens standard"
+
+msgid "Show week numbers"
+msgstr "Visa veckonummer"
+
+msgid "General"
+msgstr "Allmänt"
+
+msgid "Start week on:"
+msgstr "Veckan börjar på:"
+
+msgid "Day starts at:"
+msgstr "Dagen börjar kl.:"
+
+msgid "Day ends at:"
+msgstr "Dagen slutar kl.:"
+
+msgid "Show:"
+msgstr "Visa:"
+
+msgid "{hours} hours at a time"
+msgstr "{hours} timmar åt gången"
+
+msgid "Time zone support"
+msgstr "Stöd för tidszoner"
+
+msgid "Advanced"
+msgstr "Avancerat"
+
+msgid "Shows each event’s time zone in its details, so times can be set in another zone, such as a flight’s departure and arrival."
+msgstr "Visar varje händelses tidszon i dess detaljer, så att tider kan anges i en annan zon, till exempel en flygnings avgång och ankomst."
+
+msgid "Show alerts when Calendar is closed"
+msgstr "Visa påminnelser när Kalender är stängd"
+
+msgid "Default Alerts"
+msgstr "Standardpåminnelser"
+
+msgid "Events:"
+msgstr "Händelser:"
+
+msgid "All-day events:"
+msgstr "Heldagshändelser:"
+
+msgid "Accounts"
+msgstr "Konton"
+
+msgid "Refresh calendars:"
+msgstr "Uppdatera kalendrar:"
+
+msgid "Refresh subscriptions:"
+msgstr "Uppdatera prenumerationer:"
+
+msgid "CalDAV on {server} as {user}"
+msgstr "CalDAV på {server} som {user}"
+
+msgid "Server Settings…"
+msgstr "Serverinställningar…"
+
+msgid "Server, user name and password"
+msgstr "Server, användarnamn och lösenord"
+
+msgid "Subscribed to {url}"
+msgstr "Prenumererar på {url}"
+
+msgid "Remove…"
+msgstr "Ta bort…"
+
+msgid "Calendar works with CalDAV servers and with published calendars (webcal or https links). Some providers need a separate app password for calendar apps."
+msgstr "Kalender fungerar med CalDAV-servrar och med publicerade kalendrar (webcal- eller https-länkar). Vissa leverantörer kräver ett separat applösenord för kalenderappar."
+
+msgid "As in Settings"
+msgstr "Som i Inställningar"
+
+msgid "Alerts"
+msgstr "Påminnelser"
+
+msgid "Calendar could not reach the server. Check the address, and that this computer is online."
+msgstr "Kalender kunde inte nå servern. Kontrollera adressen, och att datorn är ansluten till internet."
+
+msgid "The certificate of {server} could not be verified. Check that the address is exactly the one your provider gives."
+msgstr "Certifikatet för {server} kunde inte verifieras. Kontrollera att adressen är exakt den som din leverantör anger."
+
+msgid "This calendar needs a sign-in. Ask its publisher for a public address, or add it as a CalDAV account."
+msgstr "Kalendern kräver inloggning. Be den som publicerar den om en offentlig adress, eller lägg till den som ett CalDAV-konto."
+
+msgid "The server did not accept the user name or password. Check both; some providers need a separate app password for calendar apps."
+msgstr "Servern godtog inte användarnamnet eller lösenordet. Kontrollera båda. Vissa leverantörer kräver ett separat applösenord för kalenderappar."
+
+msgid "The server asks for a sign-in method Calendar does not support ({schemes}). Ask your provider for sign-in with a password."
+msgstr "Servern begär en inloggningsmetod som Kalender inte stöder ({schemes}). Fråga din leverantör om inloggning med lösenord."
+
+msgid "{server} offers no encrypted connection, so Calendar does not send the password. Use an https:// address."
+msgstr "{server} erbjuder ingen krypterad anslutning, så Kalender skickar inte lösenordet. Använd en https://-adress."
+
+msgid "The server answered with an error ({status}). Try again later."
+msgstr "Servern svarade med ett fel ({status}). Försök igen senare."
+
+msgid "There is no calendar at this address. Check the link."
+msgstr "Det finns ingen kalender på den här adressen. Kontrollera länken."
+
+msgid "There is no CalDAV calendar at this address. Check the server address and path your provider gives."
+msgstr "Det finns ingen CalDAV-kalender på den här adressen. Kontrollera serveradressen och sökvägen som din leverantör anger."
+
+msgid "password:"
+msgstr "lösenord:"
+
+msgid "Add a Calendar Account"
+msgstr "Lägg till ett kalenderkonto"
+
+msgid "Add a CalDAV Account"
+msgstr "Lägg till ett CalDAV-konto"
+
+msgid "CalDAV Server Settings"
+msgstr "Inställningar för CalDAV-server"
+
+msgid "Sign in to “{name}”"
+msgstr "Logga in på ”{name}”"
+
+msgid "Subscribe to a Calendar"
+msgstr "Prenumerera på en kalender"
+
+msgid "Sign In"
+msgstr "Logga in"
+
+msgid "CalDAV account"
+msgstr "CalDAV-konto"
+
+msgid "Calendar subscription (webcal or https link)"
+msgstr "Kalenderprenumeration (webcal- eller https-länk)"
+
+msgid "account type:"
+msgstr "kontotyp:"
+
+msgid "A CalDAV account keeps calendars in sync with a server. A subscription shows a published calendar, read-only."
+msgstr "Ett CalDAV-konto håller kalendrar synkroniserade med en server. En prenumeration visar en publicerad kalender som bara kan läsas."
+
+msgid "Continue"
+msgstr "Fortsätt"
+
+msgid "address:"
+msgstr "adress:"
+
+msgid "jane@example.org"
+msgstr "anna@example.org"
+
+msgid "Calendar looks up the CalDAV server of your address’s domain and shows it to you before it signs in."
+msgstr "Kalender slår upp CalDAV-servern för adressens domän och visar den för dig innan den loggar in."
+
+msgid "Enter Server Settings Manually"
+msgstr "Ange serverinställningar manuellt"
+
+msgid "server:"
+msgstr "server:"
+
+msgid "https://dav.example.org/"
+msgstr "https://dav.example.org/"
+
+msgid "user name:"
+msgstr "användarnamn:"
+
+msgid "Enter the server address your provider gives, with its port and path if it has them. Calendar sends the password only when the server asks for it."
+msgstr "Ange serveradressen som din leverantör anger, med port och sökväg om den har sådana. Kalender skickar lösenordet bara när servern ber om det."
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "webcal://example.org/calendar.ics"
+msgstr "webcal://example.org/calendar.ics"
+
+msgid "Paste a webcal:// or https:// link to a calendar. It is read-only and refreshes as set in Calendar Settings."
+msgstr "Klistra in en webcal://- eller https://-länk till en kalender. Den kan bara läsas och uppdateras enligt Kalenderinställningar."
+
+msgid "Subscribe"
+msgstr "Prenumerera"
+
+msgid "The server did not accept the password for {user}. Enter it again, or check the server settings."
+msgstr "Servern godtog inte lösenordet för {user}. Ange det igen eller kontrollera serverinställningarna."
+
+msgid "Enter your address, such as jane@example.org."
+msgstr "Ange din adress, till exempel anna@example.org."
+
+msgid "Looking up the server…"
+msgstr "Slår upp servern…"
+
+msgid "Enter the address of the server."
+msgstr "Ange serverns adress."
+
+msgid "Enter your user name."
+msgstr "Ange ditt användarnamn."
+
+msgid "Enter your password."
+msgstr "Ange ditt lösenord."
+
+msgid "Signing in…"
+msgstr "Loggar in…"
+
+msgid "Enter the address of the calendar."
+msgstr "Ange kalenderns adress."
+
+msgid "Calendar found a CalDAV server for {domain}. Check that it belongs to your provider, then sign in."
+msgstr "Kalender hittade en CalDAV-server för {domain}. Kontrollera att den tillhör din leverantör och logga sedan in."
+
+msgid "Calendar found no CalDAV server for {domain}. Enter the server address your provider gives."
+msgstr "Kalender hittade ingen CalDAV-server för {domain}. Ange serveradressen som din leverantör anger."
+
+msgid "Subscriptions"
+msgstr "Prenumerationer"
+
+msgid "Today"
+msgstr "Idag"
+
+msgid "Search"
+msgstr "Sök"

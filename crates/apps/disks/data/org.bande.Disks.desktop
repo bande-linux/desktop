@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Disks
+Name[sv]=Skivor
+Comment=Erase, partition and repair disks, and work with disk images
+Comment[sv]=Radera, partitionera och reparera skivor, och arbeta med skivavbildningar
+Icon=org.bande.Disks
+Exec=bande-disks
+StartupNotify=true
+Categories=System;Utility;
+Keywords=disk;drive;partition;format;erase;usb;iso;image;smart;fsck;
+Keywords[sv]=skiva;disk;enhet;partition;formatera;radera;usb;iso;avbildning;smart;fsck;

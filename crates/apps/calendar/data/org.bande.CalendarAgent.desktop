@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Calendar Alerts
+Name[sv]=Kalenderpåminnelser
+Comment=Shows Calendar's event alerts when Calendar is closed
+Comment[sv]=Visar Kalenders påminnelser om händelser när Kalender är stängd
+Exec=bande-calendar --background
+TryExec=bande-calendar
+Icon=org.bande.Calendar
+NoDisplay=true
+OnlyShowIn=X-Bande;

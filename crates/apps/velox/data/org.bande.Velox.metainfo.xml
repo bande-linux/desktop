@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Velox</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Velox</name>
+  <summary>Run your containers and virtual machines</summary>
+  <summary xml:lang="sv">Kör dina containrar och virtuella maskiner</summary>
+  <description>
+    <p>Velox shows the containers of the computer's Docker Engine or Podman, grouped by Compose project, and starts and stops them. It follows the engine live.</p>
+    <p>Velox also makes and runs virtual machines on QEMU from Debian, Ubuntu and Fedora cloud images, and follows them live too.</p>
+    <p>Velox never installs or configures anything. When an engine or QEMU is missing, it shows the steps to set it up.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Velox.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/apps</url>
+  <content_rating type="oars-1.1"/>
+</component>

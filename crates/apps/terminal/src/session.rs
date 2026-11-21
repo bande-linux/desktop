@@ -1,0 +1,348 @@
+use std::collections::HashMap;
+use std::io::{self, Read, Write};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use alacritty_terminal::event::{Event as TermEvent, OnResize};
+use alacritty_terminal::tty::{self, Options, Pty, Shell};
+use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
+
+use crate::process::{self, Report, Reports};
+use bande_terminal_view::{GridSize, Terminal};
+
+const READ_BUFFER: usize = 65536;
+const READS_PER_WAKE: usize = 16;
+const UNREAD_INPUT_CAP: usize = 1 << 20;
+const TITLE_SEPARATOR: &str = " — ";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Notice {
+    Copy(String),
+    Bell,
+    Finished {
+        command: String,
+        elapsed: Duration,
+        code: Option<i32>,
+    },
+    Notify {
+        title: String,
+        body: String,
+    },
+}
+
+pub struct Session {
+    pub terminal: Terminal,
+    pty: Pty,
+    readiness: OwnedFd,
+    awaiting_room: bool,
+    shell: u32,
+    output: Vec<u8>,
+    reports: Reports,
+    reported_directory: Option<PathBuf>,
+    program_title: Option<String>,
+    foreground: Option<(u32, String)>,
+    command: Option<(Instant, String)>,
+    notices: Vec<Notice>,
+    exited: bool,
+}
+
+pub type ShellCommand = (String, Vec<String>);
+
+fn enter_server_folder_in_the_shell(
+    shell: Option<ShellCommand>,
+    directory: Option<PathBuf>,
+) -> (Option<ShellCommand>, Option<PathBuf>) {
+    let Some(folder) = directory
+        .as_ref()
+        .filter(|folder| bande_volumes::on_connected_volume(folder))
+        .cloned()
+    else {
+        return (shell, directory);
+    };
+    let (program, arguments) = shell.unwrap_or_default();
+    let start = match program.is_empty() {
+        true => r#"cd -- "$1"; exec "${SHELL:-/bin/sh}" -l"#,
+        false => r#"cd -- "$1"; shift; exec "$@""#,
+    };
+    let mut wrapped = vec![
+        "-c".to_owned(),
+        start.to_owned(),
+        "sh".to_owned(),
+        folder.to_string_lossy().into_owned(),
+    ];
+    if !program.is_empty() {
+        wrapped.push(program);
+        wrapped.extend(arguments);
+    }
+    (Some(("/bin/sh".to_owned(), wrapped)), None)
+}
+
+impl Session {
+    pub fn spawn(
+        terminal: Terminal,
+        shell: Option<ShellCommand>,
+        directory: Option<PathBuf>,
+    ) -> io::Result<Self> {
+        let (shell, directory) = enter_server_folder_in_the_shell(shell, directory);
+        let options = Options {
+            shell: shell.map(|(program, arguments)| Shell::new(program, arguments)),
+            working_directory: directory,
+            drain_on_exit: true,
+            env: HashMap::from([
+                ("TERM".to_owned(), "xterm-256color".to_owned()),
+                ("COLORTERM".to_owned(), "truecolor".to_owned()),
+                ("TERM_PROGRAM".to_owned(), "bande-terminal".to_owned()),
+            ]),
+        };
+        let pty = tty::new(&options, terminal.window_size(), 0)?;
+        let shell = pty.child().id();
+        let readiness = epoll::create(CreateFlags::CLOEXEC)?;
+        epoll::add(
+            &readiness,
+            pty.file(),
+            EventData::new_u64(0),
+            EventFlags::IN,
+        )?;
+        let mut session = Self {
+            terminal,
+            pty,
+            readiness,
+            awaiting_room: false,
+            shell,
+            output: Vec::new(),
+            reports: Reports::new(process::host_name()),
+            reported_directory: None,
+            program_title: None,
+            foreground: None,
+            command: None,
+            notices: Vec::new(),
+            exited: false,
+        };
+        session.refresh_foreground();
+        Ok(session)
+    }
+
+    pub fn id(&self) -> u32 {
+        self.shell
+    }
+
+    pub fn fd(&self) -> BorrowedFd<'_> {
+        self.readiness.as_fd()
+    }
+
+    pub fn exited(&self) -> bool {
+        self.exited
+    }
+
+    pub fn has_pending_output(&self) -> bool {
+        !self.output.is_empty()
+    }
+
+    pub fn send(&mut self, bytes: &[u8]) -> bool {
+        if self.output.len() >= UNREAD_INPUT_CAP {
+            return false;
+        }
+        self.output.extend_from_slice(bytes);
+        self.flush();
+        true
+    }
+
+    pub fn flush(&mut self) {
+        while !self.output.is_empty() {
+            let mut master = self.pty.file();
+            match master.write(&self.output) {
+                Ok(0) => break,
+                Ok(written) => {
+                    self.output.drain(..written);
+                }
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+        self.await_room(!self.output.is_empty());
+    }
+
+    fn await_room(&mut self, wanted: bool) {
+        if wanted == self.awaiting_room {
+            return;
+        }
+        let events = match wanted {
+            true => EventFlags::IN | EventFlags::OUT,
+            false => EventFlags::IN,
+        };
+        match epoll::modify(
+            &self.readiness,
+            self.pty.file(),
+            EventData::new_u64(0),
+            events,
+        ) {
+            Ok(()) => self.awaiting_room = wanted,
+            Err(error) => tracing::warn!("cannot wait to type into the terminal: {error}"),
+        }
+    }
+
+    pub fn read(&mut self) -> Vec<Notice> {
+        let mut buffer = [0u8; READ_BUFFER];
+        for _ in 0..READS_PER_WAKE {
+            let mut master = self.pty.file();
+            match master.read(&mut buffer) {
+                Ok(0) => {
+                    self.exited = true;
+                    break;
+                }
+                Ok(read) => {
+                    let chunk = &buffer[..read];
+                    let mut fed = 0;
+                    for (end, report) in self.reports.scan(chunk) {
+                        self.terminal.feed(&chunk[fed..end]);
+                        fed = end;
+                        self.reported(report);
+                    }
+                    self.terminal.feed(&chunk[fed..]);
+                }
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(_) => {
+                    self.exited = true;
+                    break;
+                }
+            }
+        }
+        self.refresh_foreground();
+        let notices = self.take_notices();
+        self.flush();
+        notices
+    }
+
+    fn reported(&mut self, report: Report) {
+        match report {
+            Report::Directory(directory) => self.reported_directory = Some(directory),
+            Report::PromptStarted => self.terminal.mark_output_end(),
+            Report::CommandStarted => self.start_command(),
+            Report::OutputStarted => {
+                self.terminal.mark_output_start();
+                self.start_command();
+            }
+            Report::CommandFinished(code) => {
+                self.terminal.mark_output_end();
+                self.finish_command(code);
+            }
+            Report::Notify { title, body } => self.notices.push(Notice::Notify { title, body }),
+        }
+    }
+
+    fn start_command(&mut self) {
+        if self.command.is_none() {
+            let name = self.running_program().unwrap_or_default().to_owned();
+            self.command = Some((Instant::now(), name));
+        }
+    }
+
+    fn finish_command(&mut self, code: Option<i32>) {
+        if let Some((started, command)) = self.command.take() {
+            self.notices.push(Notice::Finished {
+                command,
+                elapsed: started.elapsed(),
+                code,
+            });
+        }
+    }
+
+    pub fn take_notices(&mut self) -> Vec<Notice> {
+        let mut notices = std::mem::take(&mut self.notices);
+        for event in self.terminal.take_events() {
+            match event {
+                TermEvent::PtyWrite(text) => {
+                    self.send(text.as_bytes());
+                }
+                TermEvent::TextAreaSizeRequest(reply) => {
+                    let text = reply(self.terminal.window_size());
+                    self.send(text.as_bytes());
+                }
+                TermEvent::Title(title) => self.program_title = Some(title),
+                TermEvent::ResetTitle => self.program_title = None,
+                TermEvent::ClipboardStore(_, text) => notices.push(Notice::Copy(text)),
+                TermEvent::Bell => notices.push(Notice::Bell),
+                TermEvent::ChildExit(_) | TermEvent::Exit => self.exited = true,
+                _ => {}
+            }
+        }
+        notices
+    }
+
+    pub fn resize(&mut self, size: GridSize, cell_size: (u16, u16)) {
+        if self.terminal.resize(size, cell_size) {
+            self.pty.on_resize(self.terminal.window_size());
+        }
+    }
+
+    pub fn refresh_foreground(&mut self) -> bool {
+        let group = process::foreground_group(self.shell).unwrap_or(self.shell);
+        let name = process::name(group);
+        let same_group = self
+            .foreground
+            .as_ref()
+            .is_some_and(|(pid, _)| *pid == group);
+        if same_group
+            && self
+                .foreground
+                .as_ref()
+                .is_some_and(|(_, known)| Some(known) == name.as_ref())
+        {
+            return false;
+        }
+        self.foreground = name.map(|name| (group, name));
+        match self.running_program().map(str::to_owned) {
+            Some(name) => match &mut self.command {
+                Some((_, command)) if command.is_empty() || same_group => *command = name,
+                Some(_) => {}
+                None => self.command = Some((Instant::now(), name)),
+            },
+            None => self.finish_command(None),
+        }
+        true
+    }
+
+    pub fn running_program(&self) -> Option<&str> {
+        self.foreground
+            .as_ref()
+            .filter(|(pid, _)| *pid != self.shell)
+            .map(|(_, name)| name.as_str())
+    }
+
+    pub fn working_directory(&self) -> Option<PathBuf> {
+        self.reported_directory
+            .clone()
+            .or_else(|| process::working_directory(self.shell))
+    }
+
+    pub fn title(&self, home: Option<&Path>) -> String {
+        if let Some(title) = self
+            .program_title
+            .as_ref()
+            .filter(|title| !title.is_empty())
+        {
+            return title.clone();
+        }
+        let directory = self
+            .working_directory()
+            .map(|directory| display_directory(&directory, home));
+        let program = self.foreground.as_ref().map(|(_, name)| name.clone());
+        [directory, program]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(TITLE_SEPARATOR)
+    }
+}
+
+pub fn display_directory(directory: &Path, home: Option<&Path>) -> String {
+    if home == Some(directory) {
+        return "~".to_owned();
+    }
+    directory.file_name().map_or_else(
+        || directory.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}

@@ -85,8 +85,6 @@ Package: bande-icon-theme
 Architecture: all
 Multi-Arch: foreign
 Depends: hicolor-icon-theme, ${misc:Depends}
-Breaks: bande-shell (<< ${binary:Version})
-Replaces: bande-shell (<< ${binary:Version})
 Description: icons and symbols of the Bande desktop
  The icons and symbols of the Bande desktop: folders, files, devices and
  the symbolic icons of the bar, menus and sidebars, with a folder variant

@@ -39,7 +39,7 @@ workspace = true
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "admin"
-depends = "$auto, gpgv, pkexec, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+depends = "$auto, gpgv, pkexec, systemd, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 recommends = "bande-terminal"
 suggests = "docker-compose, podman, qemu-system-native, qemu-system-modules-opengl, qemu-utils, passt, swtpm, virtiofsd"
 extended-description = """\

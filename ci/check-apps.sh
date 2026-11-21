@@ -1,6 +1,10 @@
 #!/bin/bash
-# check-apps.sh [app dir...]: static checks that each desktop app is a bande-app app with matching
-# packaging (no build); fails on any problem.
+# check-apps.sh [app dir...]: static checks (no build) that each app (default: crates/apps/* but the
+# file chooser and the keyring prompt) is a bande-app app packaged like every other: the package is
+# bande-<dir>; the app id in src/main.rs names the .desktop file, its Icon= and the metainfo <id>;
+# Exec= starts the package; StartupNotify=true; Depends has the toolkit's three font packages;
+# src/main.rs calls bande_app::run and nothing in src/ runs its own loop or menu export. Fails on
+# any problem.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -11,8 +15,9 @@ problem() {
 }
 
 check() {
-    local dir=$1 package id desktop metainfo
+    local dir=${1%/} package id desktop metainfo
     package=$(sed -n 's/^name = "\(.*\)"$/\1/p' "$dir/Cargo.toml" | head -1)
+    [ "$package" = "bande-$(basename "$dir")" ] || problem "$dir" "the package is $package, not bande-$(basename "$dir")"
     id=$(sed -n 's/^ *id: "\([^"]*\)",$/\1/p; s/^const APP_ID: &str = "\([^"]*\)";$/\1/p' "$dir/src/main.rs" | head -1)
     [ -n "$id" ] || { problem "$dir" "no app id in src/main.rs"; return; }
     desktop="$dir/data/$id.desktop"
@@ -37,9 +42,14 @@ check() {
 }
 
 apps=("$@")
-[ $# -gt 0 ] || apps=(crates/apps/files crates/apps/settings crates/apps/lookup)
+if [ $# -eq 0 ]; then
+    for dir in crates/apps/*/; do
+        case $dir in crates/apps/file-chooser/ | crates/apps/secrets-prompt/) continue ;; esac
+        apps+=("$dir")
+    done
+fi
 for app in "${apps[@]}"; do
     check "$app"
 done
 [ "$problems" -eq 0 ] || { echo "check-apps: $problems problems" >&2; exit 1; }
-echo "check-apps passed"
+echo "check-apps passed: ${#apps[@]} apps"

@@ -1,4 +1,4 @@
-Files: libs/vm/data/ubuntu.gpg libs/vm/data/fedora.gpg
+Files: crates/libs/vm/data/ubuntu.gpg crates/libs/vm/data/fedora.gpg
 Copyright: none
 License: public-domain
  OpenPGP public keys, not subject to copyright: Canonical's Ubuntu cloud image

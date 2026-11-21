@@ -15,13 +15,19 @@ pub struct Pack<'a> {
     pub version: &'a str,
     pub package: &'a str,
     pub copyright: &'a Path,
+    pub released: &'a [String],
 }
 
 pub fn build(workspace: &Workspace, pack: &Pack<'_>) -> Result<(), String> {
-    let owned = workspace
+    let released = workspace
         .programs
         .iter()
-        .filter(|program| program.package.as_deref() == Some(pack.package))
+        .filter(|program| {
+            program
+                .package
+                .as_ref()
+                .is_some_and(|package| pack.released.contains(package))
+        })
         .map(|program| program.name.clone())
         .collect::<Vec<_>>();
     let mut languages = read_names(&pack.catalogs.join("packs"))?;
@@ -31,12 +37,12 @@ pub fn build(workspace: &Workspace, pack: &Pack<'_>) -> Result<(), String> {
         let folder = pack.catalogs.join("packs").join(&language);
         let programs = read_names(&folder)?
             .into_iter()
-            .filter(|program| owned.is_empty() || owned.contains(program))
+            .filter(|program| released.contains(program))
             .collect::<Vec<_>>();
         if programs.is_empty() {
             continue;
         }
-        build_one(pack, &language, &folder, &programs, !owned.is_empty())?;
+        build_one(pack, &language, &folder, &programs)?;
     }
     Ok(())
 }
@@ -46,7 +52,6 @@ fn build_one(
     language: &str,
     folder: &Path,
     programs: &[String],
-    depends: bool,
 ) -> Result<(), String> {
     let name = format!("{}-l10n-{}", pack.package, language.to_lowercase());
     let scratch = std::env::temp_dir().join(format!("bande-l10n-{}-{name}", std::process::id()));
@@ -86,17 +91,12 @@ fn build_one(
         .arg(docs.join("changelog")))?;
     run(Command::new("chmod").args(["-R", "u=rwX,go=rX"]).arg(&root))?;
     let size = run(Command::new("du").args(["-sk"]).arg(root.join("usr")))?;
-    let relation = if depends {
-        format!("Depends: {}\n", pack.package)
-    } else {
-        String::new()
-    };
     let description = format!(
         "The {team} text of {}, read by each of its programs when it starts in a {team} session. Without it they show the English they were written in.",
         pack.package
     );
     let control = format!(
-        "Package: {name}\nVersion: {}\nArchitecture: all\nMaintainer: {MAINTAINER}\nInstalled-Size: {}\n{relation}Enhances: {}\nSection: localization\nPriority: optional\nMulti-Arch: foreign\nDescription: {team} translations for {}\n{}\n",
+        "Package: {name}\nVersion: {}\nArchitecture: all\nMaintainer: {MAINTAINER}\nInstalled-Size: {}\nEnhances: {}\nSection: localization\nPriority: optional\nMulti-Arch: foreign\nDescription: {team} translations for {}\n{}\n",
         pack.version,
         size.split_whitespace().next().unwrap_or("0"),
         pack.package,

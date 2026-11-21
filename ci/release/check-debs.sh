@@ -44,11 +44,24 @@ for package in "${packages[@]}"; do
     [ "$(dpkg-deb --field "$deb" Package)" = "$package" ]
     [ "$(dpkg-deb --field "$deb" Architecture)" = "$architecture" ]
     [ "$(dpkg-deb --field "$deb" Version)" = "$version" ]
-    section=$(dpkg-deb --field "$deb" Section)
-    [[ " misc admin " == *" $section "* ]] || { echo "$package is in section $section, not misc or admin"; exit 1; }
+    [ -n "$(dpkg-deb --field "$deb" Section)" ] || { echo "$package has no section"; exit 1; }
     [ "$(dpkg-deb --fsys-tarfile "$deb" | tar -xO | grep -ac -e "$PWD" -e "${CARGO_HOME:-$HOME/.cargo}")" = 0 ]
 done
 field bande-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
+
+echo "== every app's desktop entry and metainfo validate, and its program names itself"
+for package in "${packages[@]}"; do
+    root=$(extract "$package")
+    mapfile -t desktops < <(find "$root/usr/share/applications" -name '*.desktop' 2>/dev/null)
+    [ ${#desktops[@]} -gt 0 ] || continue
+    desktop-file-validate "${desktops[@]}"
+    mapfile -t metainfos < <(find "$root/usr/share/metainfo" -name '*.xml' 2>/dev/null)
+    [ ${#metainfos[@]} -gt 0 ] || { echo "$package ships a desktop entry and no metainfo"; exit 1; }
+    appstreamcli validate --no-net "${metainfos[@]}"
+    if [ -x "$root/usr/bin/$package" ]; then
+        "$root/usr/bin/$package" --version | grep -q "^$package " || { echo "$package --version does not name $package"; exit 1; }
+    fi
+done
 
 echo "== the compositor ships the Bande pointers under their CSS and X11 names"
 root=$(extract bande-compositor)

@@ -35,11 +35,11 @@ for recommended in "bande-greeter (= $version)" "bande-reporter (= $version)" "b
     relation Recommends "$recommended"
 done
 
-echo "== bande-desktop recommends each default app unversioned, none built here"
-while read -r package; do
-    relation Recommends "$package" || { echo "bande-desktop does not recommend $package"; exit 1; }
-    ! grep -qxF "$package" ci/release/packages || { echo "$package is built here, not a default app"; exit 1; }
-done < <(grep -E '^[a-z0-9]' packaging/bande-desktop/default-apps)
+echo "== bande-desktop recommends only packages built here at $version, or Debian's"
+field bande-desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | while read -r package relation; do
+    [ "$relation" = "(= $version)" ] || { echo "bande-desktop recommends $package $relation"; exit 1; }
+    grep -qxF "$package" ci/release/packages || { echo "$package is not built here"; exit 1; }
+done
 
 echo "== a language pack holds only catalogs, one per program"
 for pack in "$out"/bande-desktop-l10n-*_all.deb; do
@@ -52,6 +52,8 @@ done
 pack=$(deb bande-desktop-l10n-sv "$version")
 contents=$(dpkg-deb --contents "$pack")
 grep -q ' ./usr/share/bande/l10n/bande-settings/sv.mo$' <<< "$contents"
+grep -q ' ./usr/share/bande/l10n/bande-mail/sv.mo$' <<< "$contents"
+if grep -q ' ./usr/share/bande/l10n/bande-template/' <<< "$contents"; then echo "$pack holds the template's catalog"; exit 1; fi
 
 echo "== lintian"
 lintian=(lintian --fail-on "error,warning")

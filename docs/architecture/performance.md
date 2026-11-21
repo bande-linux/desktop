@@ -49,9 +49,9 @@ reach a running session.
 lavapipe draws on the CPU, so its GPU memory shows up as process memory; real GPU numbers
 need a real GPU.
 
-## Where it stands
+## Footprint
 
-Measured 2026-11-01. Idle at the login window on an arm64 machine (installed dist packages, one
+Idle at the login window on an arm64 machine (installed dist packages, one
 2560×1440 display): the greeter's compositor 50 MB RSS and the greeter 40 MB, every user service
 2–4 MB and asleep in `epoll` with no timer; the compositor wakes only for its systemd watchdog.
 Under `bande-footprint` on the CPU path the shell holds about 78 MiB anonymous memory and the

@@ -1,0 +1,16 @@
+Files: crates/platform/protocols/protocols/xdg-session-management-v1.xml
+Copyright: 2018 Mike Blumenkrantz
+ 2018 Samsung Electronics Co., Ltd
+ 2018 Red Hat Inc.
+License: MIT
+Comment: Wayland protocols the generated code is built from.
+
+Files: crates/platform/protocols/protocols/kde-appmenu.xml
+Copyright: 2017 David Edmundson
+License: MIT
+Comment: The interfaces of plasma-wayland-protocols' appmenu.xml.
+
+Files: crates/platform/protocols/protocols/gtk-shell.xml
+Copyright: The GTK authors
+License: LGPL-2+
+Comment: The interfaces of GTK's gdk/wayland/protocol/gtk-shell.xml.

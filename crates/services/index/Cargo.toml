@@ -37,6 +37,7 @@ answers searches from Search and Files. Runs in the background at idle \
 priority and is woken only by changes."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-indexer/copyright", "usr/share/doc/bande-indexer/copyright", "644"],
     ["target/release/bande-indexer", "usr/bin/", "755"],
     ["data/bande-indexer.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Search.service", "usr/share/dbus-1/services/", "644"],

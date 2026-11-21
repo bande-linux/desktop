@@ -2,7 +2,6 @@
 set -euo pipefail
 
 repo=${1:-.}
-# Every version ends in the Debian release suffix (debian-release.sh); an l10n stamp follows it.
 suffix=$("$(dirname "$(realpath "$0")")/debian-release.sh")
 declared=$(awk '/^\[/ { section = $0 } section == "[workspace.package]" && $1 == "version" { gsub(/"/, "", $3); print $3; exit }' "$repo/Cargo.toml")
 [ -n "$declared" ] || { echo "version.sh: Cargo.toml declares no workspace version" >&2; exit 1; }

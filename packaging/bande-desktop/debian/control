@@ -60,25 +60,22 @@ Description: Bande desktop environment
  window comes along anyway, and debconf asks which display manager to
  start; "dpkg-reconfigure greetd" asks again later. Sound runs on PipeWire.
  .
- It recommends the Bande APT repository, through which the system follows
- every Bande release and every Bande app. Passwords apps and networks
- keep live in the Bande keyring, unlocked when you log in. Other apps,
- such as a browser, come from Software.
+ It recommends the Bande apps. The passwords that apps and networks keep
+ live in the Bande keyring, unlocked when you log in. Other apps, such as a
+ browser, come from Software.
  .
  So that running out of memory never freezes the computer, it recommends
- compressed swap in memory (zram, sized like Fedora's and compressed with
- zstd) and systemd-oomd, and makes the apps' slice the place where
- systemd-oomd closes an app when memory stays under pressure, so the
- compositor and the session services keep running. It keeps up to 640 MB
- of the session (compositor, shell and session services) out of reclaim,
- through MemoryLow on user.slice, user-*.slice and user@.service, so the
- screen stays responsive while apps thrash, and caps all apps together at
- a quarter of the system's task limit.
+ compressed swap in memory (zram, as large as the memory up to 8 GB,
+ compressed with zstd) and systemd-oomd, and makes the apps' slice the
+ place where systemd-oomd closes an app when memory stays under pressure,
+ so the compositor and the session services keep running. It keeps up to
+ 640 MB of the session (compositor, shell and session services) out of
+ reclaim, through MemoryLow on user.slice, user-*.slice and user@.service,
+ so the screen stays responsive while apps thrash, and caps all apps
+ together at a quarter of the system's task limit.
  .
- Updates install while the computer runs. After each dpkg run, it restarts
- the system services that still run replaced code, except the login
- manager, the buses, logind, polkit, PackageKit and networking; Software
- Update in Settings handles the session and the apps.
+ Updates install while the computer runs; Software Update in Settings
+ handles the session and the apps.
 
 Package: bande-icon-theme
 Architecture: all

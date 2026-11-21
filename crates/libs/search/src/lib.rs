@@ -13,8 +13,7 @@ pub use recents::{
     FILE_KEY, RecentlyUsed, Recents, is_excluded, recent_files, recently_used, recently_used_path,
 };
 pub use service::{
-    BUS_NAME, Donation, Found, IndexProxyBlocking, OBJECT_PATH, Policy, SearchService,
-    follow_policy,
+    BUS_NAME, Found, IndexProxyBlocking, OBJECT_PATH, Offer, Policy, SearchService, follow_policy,
 };
 pub use tree::{ROOT, Restored, Stamp, Tree};
 pub use usage::{MAX_BOOST, Usage, usage_path};

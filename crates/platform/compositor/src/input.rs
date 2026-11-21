@@ -91,7 +91,6 @@ fn pressed_key(keysym: u32, unshifted: Option<u32>) -> Option<Key> {
         keysyms::KEY_Right => Key::Right,
         keysyms::KEY_Up => Key::Up,
         keysyms::KEY_Down => Key::Down,
-        keysyms::KEY_XF86LaunchA => Key::LaunchA,
         _ => Key::Character(
             char::from_u32(base)
                 .filter(char::is_ascii_graphic)?

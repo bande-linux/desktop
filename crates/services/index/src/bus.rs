@@ -1,6 +1,6 @@
 use std::sync::mpsc::{Sender, channel};
 
-use bande_search::{BUS_NAME, Donation, Found, OBJECT_PATH};
+use bande_search::{BUS_NAME, Found, OBJECT_PATH, Offer};
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
 
@@ -26,8 +26,8 @@ impl Search {
         answer.recv().unwrap_or_default()
     }
 
-    fn donate(&self, domain: String, items: Vec<Donation>, cursor: String) {
-        let _ = self.messages.send(Message::Donate {
+    fn offer(&self, domain: String, items: Vec<Offer>, cursor: String) {
+        let _ = self.messages.send(Message::Offer {
             domain,
             items,
             cursor,

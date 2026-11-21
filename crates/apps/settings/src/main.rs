@@ -9,7 +9,7 @@ use bande_app_menu::Entry;
 use bande_l10n::tr;
 use bande_settings::{
     Command, Displays, Feed, PaneId, PointingDevices, Services, SettingsView, SoftwareCommand,
-    UDEV_DATA, UpdateNotice, announce_log_out, announce_updates, feed, sidebar_width,
+    UDEV_DATA, UpdateNotice, announce_updates, feed, sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::{
@@ -28,7 +28,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || tr!("System Settings"),
+    name: || tr!("Settings"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -168,31 +168,26 @@ fn open_main(
     displays: Option<&Displays>,
 ) -> Result<WindowId, bande_toolkit::WindowError> {
     let files = cx.installed(FILES_APP_ID);
-    cx.open(
-        Kind::Main,
-        &tr!("System Settings"),
-        WINDOW_SIZE,
-        |appearance| {
-            if let Some(mut pane) = parked {
-                pane.0.set_appearance(appearance);
-                pane.0.set_on_screen(true);
-                pane.0.set_files_installed(files);
-                return pane;
-            }
-            let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
-            view.set_appearance(appearance);
-            view.set_files_installed(files);
-            view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
-            if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
-                view.hide_screen_reader();
-            }
-            open_arguments(&mut view, arguments);
-            if let Some(displays) = displays {
-                view.set_displays(displays.list());
-            }
-            Pane(view)
-        },
-    )
+    cx.open(Kind::Main, &tr!("Settings"), WINDOW_SIZE, |appearance| {
+        if let Some(mut pane) = parked {
+            pane.0.set_appearance(appearance);
+            pane.0.set_on_screen(true);
+            pane.0.set_files_installed(files);
+            return pane;
+        }
+        let mut view = SettingsView::new(appearance.palette(), TextSystem::new());
+        view.set_appearance(appearance);
+        view.set_files_installed(files);
+        view.set_pointing_devices(PointingDevices::scan(Path::new(UDEV_DATA)));
+        if bande_xdg::find_executable(bande_config::SCREEN_READER).is_none() {
+            view.hide_screen_reader();
+        }
+        open_arguments(&mut view, arguments);
+        if let Some(displays) = displays {
+            view.set_displays(displays.list());
+        }
+        Pane(view)
+    })
 }
 
 impl Settings {
@@ -380,8 +375,6 @@ impl Program for Settings {
 
 const CHECK_UPDATES: &str = "--check-updates";
 const ANNOUNCE_UPDATES: &str = "--announce-updates";
-const FINISH_UPDATE: &str = "--finish-update";
-const ANNOUNCE_LOG_OUT: &str = "--announce-log-out";
 const DELETED: &str = " (deleted)";
 
 fn installed_program() -> Result<String, std::io::Error> {
@@ -393,14 +386,6 @@ fn installed_program() -> Result<String, std::io::Error> {
 
 fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
     start_announcer(ANNOUNCE_UPDATES)
-}
-
-fn finish_update() -> Result<(), Box<dyn std::error::Error>> {
-    let session = bande_bus::session()?;
-    if bande_settings::finish_update(&session) {
-        start_announcer(ANNOUNCE_LOG_OUT)?;
-    }
-    Ok(())
 }
 
 fn start_announcer(flag: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -461,14 +446,6 @@ fn main() -> ExitCode {
         [flag] if flag == ANNOUNCE_UPDATES => {
             bande_log::init(INFO.package);
             finish(announce_updates_and_open_on_click())
-        }
-        [flag] if flag == FINISH_UPDATE => {
-            bande_log::init(INFO.package);
-            finish(finish_update())
-        }
-        [flag] if flag == ANNOUNCE_LOG_OUT => {
-            bande_log::init(INFO.package);
-            finish(announce_and_open_on_click(announce_log_out))
         }
         _ => bande_app::run::<Settings>(&INFO),
     }

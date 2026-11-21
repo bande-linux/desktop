@@ -13,11 +13,11 @@ msgstr "Om {app}"
 msgid "Hide {app}"
 msgstr "Dölj {app}"
 
-msgid "Hide Others"
-msgstr "Dölj övriga"
+msgid "Hide Other Apps"
+msgstr "Dölj andra appar"
 
-msgid "Show All"
-msgstr "Visa alla"
+msgid "Show All Apps"
+msgstr "Visa alla appar"
 
 msgid "Quit {app}"
 msgstr "Avsluta {app}"

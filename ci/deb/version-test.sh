@@ -47,8 +47,6 @@ second=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=l10n-20261031.2 "$version" "$repo")
 commit 0.1.2 '2026-11-01T08:00:00Z'
 git -C "$repo" tag v0.1.2
 following=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.1.2 "$version" "$repo")
-# Upgrading Debian upgrades Bande: the next release's build of the same version sorts above
-# every build for the previous one, translation packs included.
 next_debian=$(OS_RELEASE=$repo.duke GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.1.2 "$version" "$repo")
 expect "$next_debian" 0.1.2~deb15 "the build for the next Debian release carries its number"
 next_translations=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=l10n-20261101 "$version" "$repo")

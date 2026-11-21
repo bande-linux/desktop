@@ -1,7 +1,5 @@
 # Bande design principles
 
-Status: draft, awaiting the owner's edit.
-
 Bande is its own desktop, with its own structure, feature set and look. It aims to feel
 elegant, smooth and finished, and to cover every basic a modern desktop needs. Where a spec is
 silent, these principles decide; where they do not, take the simpler answer.
@@ -29,7 +27,7 @@ silent, these principles decide; where they do not, take the simpler answer.
   are shown in menus. Ctrl runs app shortcuts and Super the system (see the [keyboard model](../architecture/overview.md#keyboard-model)).
 - **Every pointer state is visible.** Hover, press, drag-over and disabled each look different,
   and the cursor shape tells what a click or drag will do.
-- **Double click opens, drag moves, Alt-drag copies, Escape cancels.** Everywhere, the same.
+- **Double click opens, drag moves, Ctrl-drag copies, Escape cancels.** Everywhere, the same.
 - **Selection is consistent.** Click selects, Shift extends a range, Ctrl toggles one item,
   dragging on empty space draws a selection rectangle, Ctrl+A selects all.
 - **Drag and drop works between any two places** where the object makes sense: files to apps,
@@ -84,9 +82,8 @@ silent, these principles decide; where they do not, take the simpler answer.
 - Ctrl runs app shortcuts and Super the system, following the Linux desktop convention.
 - Pure Wayland; no X11 compatibility layer.
 - Configuration is a human-readable file (`config.kdl`); every Settings control writes to it.
-- Not planned, by design: Taskbar magnification, a separate full-screen app grid (the launcher's
-  empty query is the app grid), widgets or a Today view, Focus modes beyond Do Not Disturb, a hot
-  corner by default.
+- The launcher's empty query is the app grid; Do Not Disturb is the one focus mode; no hot
+  corners.
 
 ## How this document is used
 

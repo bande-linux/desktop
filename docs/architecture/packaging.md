@@ -9,7 +9,7 @@ something is its own binary package, built with `cargo deb` from the crate's
 
 Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
 unit, `panic = "abort"`, and `ci/release/symbols.sh` splits the symbols: each binary keeps only a
-small compressed table of function names (`.gnu_debugdata`, as Fedora does), so a crash report has a
+small compressed table of function names (`.gnu_debugdata`), so a crash report has a
 stack trace with names on every computer and with nothing to install or fetch. The line tables go
 to `bande-debug-symbols` (paths by build id under `/usr/lib/debug`), which CI keeps as an artifact of the
 run and does not publish: it is about as big as all the packages together. Install it to have
@@ -31,7 +31,11 @@ profiles. Sizes are in [performance.md](performance.md).
   by `packaging/dict/build.py`, not from this tree's code; see [lookup.md](lookup.md). Package names stay `bande-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)). Crates in `ci/release/bundled` build with them and ship inside another package
   (`bande-secrets-prompt` in `bande-secrets`). Packages in `ci/release/arch-variants` build
-  with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `bande-shell` installs the one
+  with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `ci/release/deb-assets.sh` writes what each package ships from `target/<profile>/deb-assets/<package>`: its DEP-5
+  `copyright` from `ci/copyright.py` (`ci/copyright` for this tree, then a paragraph per crate
+  linked into it with the authors and licence from its `Cargo.toml`, or `ci/copyright.d/<crate>`
+  for a crate that carries third-party material, then each licence's text from `ci/licenses`),
+  and each metainfo with its release, the version and the date of the crate's last commit. `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Quick Settings and the
   launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
@@ -40,8 +44,7 @@ profiles. Sizes are in [performance.md](performance.md).
   package that draws icons depends on it, so a symbol never goes missing because the shell is
   not installed.
 - **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`, section
-  `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
-  or `kde-plasma-desktop` do.
+  `metapackages`): the one package that installs a complete Bande desktop.
   It depends on the compositor, the core session services, the shell, the lock
   screen, the keyring (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
   `libpam-systemd`, on PipeWire, and on `bande-greeter | x-display-manager`, so there is always
@@ -74,24 +77,10 @@ profiles. Sizes are in [performance.md](performance.md).
   own package carries its English catalog, `en.mo`, through the cargo-deb asset
   `target/release/l10n/development/<program>/*`, which `bande-l10n-tool check` requires. See
   [localisation.md](localisation.md).
-  Packs follow by themselves: after each apt or PackageKit run (the `DPkg::Post-Invoke` stamp
-  `/run/bande-desktop/packages-installed`, watched by `bande-language-packs.path`),
-  `bande-language-packs.service` runs `/usr/libexec/bande-desktop/language-packs`. For each
-  language in use (`/etc/locale.conf`, each person's `~/.config/locale.conf` and per-app
-  languages) and each installed package `P`, it installs `P-l10n-<lang>-<region>`, else
-  `P-l10n-<lang>`, when the archive has it and it is missing; Debian's own packs (Firefox ESR,
-  LibreOffice) come the same way. It decides from dpkg's final state, exits at once and silently
-  when nothing is missing, and only to install waits for apt or PackageKit to release the lock; it
-  logs only what it installs, or why it couldn't (`LogLevelMax=notice` also drops systemd's start
-  and finish lines). A run with nothing missing costs about 0.1 s and 0.1 s of CPU, measured on
-  an arm64 builder; with no language set beyond `C` it skips the archive query. An upgrade, a new app or a new language each brings its packs.
-  A run that failed, offline, runs again when NetworkManager reports a connection
-  (`/usr/lib/NetworkManager/dispatcher.d/90-bande-language-packs`). Settings ▸ Language puts the
-  languages with a pack (installed or in the APT index) first, says while Bande's text is being
-  fetched, and says when it will come once the computer is online. Settings starts
-  the service when a language changes (a polkit rule lets an active local user start this one
-  unit) and follows the job's `JobRemoved` signal on its own thread, so region and keyboard
-  changes never wait behind apt's lock.
+  Settings ▸ Language puts the languages with a pack (installed or in the APT index) first. When
+  a language is chosen there, for the system or for one app, Settings installs its missing pack
+  (`bande-desktop-l10n-<lang>-<region>` and `bande-desktop-l10n-<lang>`) through PackageKit on
+  its own thread, says while Bande's text is being fetched, and says when it could not be.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.
@@ -114,8 +103,7 @@ another package's recommends. `bande-desktop` itself keeps:
 - `systemd-oomd`, `systemd-zram-generator`: run the memory policy it ships.
 
 It does not pull in `gnome-keyring` (the Bande keyring replaces it and conflicts with it, so the
-bus name has one owner), `pipewire-alsa`, `needrestart` (Bande has
-`/usr/libexec/bande-desktop/restart-services`, below), `cups` or `avahi-daemon` (`bande-printd` prints to
+bus name has one owner), `pipewire-alsa`, `cups` or `avahi-daemon` (`bande-printd` prints to
 network printers without them; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for USB
 and older printers), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
 nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader
@@ -144,14 +132,6 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
   `xdg-desktop-portal-backend` and serves every interface itself (no `xdg-desktop-portal-gtk`);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
-
-After each dpkg run, `restart-services` (`DPkg::Post-Invoke` in
-`/etc/apt/apt.conf.d/50bande-restart-services`) try-restarts every `system.slice` service whose
-processes map a replaced `/usr` or `/opt` executable or library, as needrestart did, except the
-login managers, the buses, logind, getty, `user@`, polkit, PackageKit, networking, Bluetooth and
-container managers; it does nothing in a chroot or without systemd. It then touches
-`/run/bande-desktop/packages-installed`, which makes each logged-in user's
-`bande-update-finish.path` deal with the session's own processes ([Software Update](session.md)).
 
 Every program the desktop runs and every system file it reads by path is listed in
 `ci/runtime-deps` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).

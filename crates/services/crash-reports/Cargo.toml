@@ -27,6 +27,7 @@ no network at all; a report leaves the computer only if sending is switched on, 
 through bande-reporter. It runs only after a failure, at boot and at login."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-crash-reports/copyright", "usr/share/doc/bande-crash-reports/copyright", "644"],
     ["target/release/bande-crash-reports", "usr/libexec/", "755"],
     ["data/bande-crash-reports@.service", "usr/lib/systemd/system/", "644"],
     ["data/coredump-drop-in.conf", "usr/lib/systemd/system/systemd-coredump@.service.d/50-bande-crash-reports.conf", "644"],

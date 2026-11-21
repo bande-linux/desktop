@@ -1,8 +1,8 @@
 # Apps
 
-Every Bande app is built on `bande-app` (`crates/libs/app`): Files and Settings in this repo, and
-every app in [`bande-linux/apps`](https://github.com/bande-linux/apps) (Terminal, Activity
-Monitor, Software, the Package Installer, Mail, Calendar and the app template), which is one
+Every Bande app is built on `bande-app` (`crates/libs/app`): Files, Settings and Look Up in this
+repo, and every app in [`bande-linux/apps`](https://github.com/bande-linux/apps) and its app
+template, which is one
 Cargo workspace pinning the desktop crates at one revision. `ci/check-apps.sh` checks that every
 app here is built this way.
 
@@ -22,7 +22,7 @@ app here is built this way.
 | What | Rule |
 | --- | --- |
 | Process | one process for all of an app's windows, Settings included; a second launch hands its arguments, working folder and activation token to the first and exits |
-| Menus | Shown from the menu button (⋮) left of each titled window's controls: App menu (About with the app's own version, Settings… if the app has settings, Hide, Hide Others, Show All, Quit), the app's menus, then Window (Minimize, Zoom, Close Window, the app's window items) |
+| Menus | Shown from the menu button (⋮) left of each titled window's controls: App menu (About with the app's own version, Settings… if the app has settings, Hide, Hide Other Apps, Show All Apps, Quit), the app's menus, then Window (Minimize, Zoom, Close Window, the app's window items) |
 | Keys | 1. Close Window, Quit and Settings… (`Ctrl+W`, `Ctrl+Q`, `Ctrl+,`; with `Shift` for Terminal) before the view. 2. The focused view. 3. A key the view did not take runs the enabled menu entry with that shortcut, so the menus are the one shortcut table |
 | Edit menu | `edit_submenu` items are `key:<shortcut>` actions: the focused view gets that key press, so Copy works in any text field |
 | Close | Close Window closes the active tab first where the app has tabs (`Program::close_tab`), else asks `should_close`; the close button closes the window; closing the last window leaves the app running until Quit; Quit asks every window and stops at the first refusal |

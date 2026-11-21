@@ -168,7 +168,6 @@ pub enum Key {
     Up,
     Down,
     AnyArrow,
-    LaunchA,
 }
 
 impl Key {
@@ -194,7 +193,6 @@ impl Key {
             Self::Right => "Right".to_owned(),
             Self::Up => "Up".to_owned(),
             Self::Down => "Down".to_owned(),
-            Self::LaunchA => "LaunchA".to_owned(),
         }
     }
 }
@@ -237,7 +235,7 @@ const fn shortcut(action: Action, modifiers: Modifiers, key: Key) -> Shortcut {
     }
 }
 
-pub const SHORTCUTS: [Shortcut; 27] = [
+pub const SHORTCUTS: [Shortcut; 26] = [
     shortcut(Action::CloseWindow, ALT, Key::Function(4)),
     shortcut(Action::MinimizeWindow, SUPER, Key::Character('h')),
     shortcut(Action::TileWindow, SUPER, Key::AnyArrow),
@@ -247,9 +245,8 @@ pub const SHORTCUTS: [Shortcut; 27] = [
     shortcut(Action::OpenTerminal, CTRL_ALT, Key::Character('t')),
     shortcut(Action::PreviousWorkspace, CTRL_SUPER, Key::Left),
     shortcut(Action::NextWorkspace, CTRL_SUPER, Key::Right),
-    shortcut(Action::Overview, NONE, Key::LaunchA),
+    shortcut(Action::Overview, SUPER, Key::Character('w')),
     shortcut(Action::ShowDesktop, SUPER, Key::Character('d')),
-    shortcut(Action::ShowDesktop, SUPER, Key::LaunchA),
     shortcut(Action::CaptureScreen, SHIFT, Key::Print),
     shortcut(Action::CaptureArea, SHIFT_SUPER, Key::Character('s')),
     shortcut(Action::CaptureOptions, NONE, Key::Print),

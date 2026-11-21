@@ -111,8 +111,8 @@ pub fn app_submenu(app: &str, version: &str, items: Vec<Entry>, quit: &str) -> E
     entries.extend([
         Entry::item(&tr!("Hide {app}", app = app), Standard::Hide.action())
             .shell_action(ShellAction::Hide),
-        Entry::item(&tr!("Hide Others"), "").shell_action(ShellAction::HideOthers),
-        Entry::item(&tr!("Show All"), "").shell_action(ShellAction::ShowAll),
+        Entry::item(&tr!("Hide Other Apps"), "").shell_action(ShellAction::HideOthers),
+        Entry::item(&tr!("Show All Apps"), "").shell_action(ShellAction::ShowAll),
         Entry::separator(),
         Entry::item(&tr!("Quit {app}", app = app), Standard::Quit.action()).shortcut(quit),
     ]);

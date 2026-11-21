@@ -294,15 +294,16 @@ impl SettingsView {
     pub(crate) fn diagnostics_rows(&mut self) -> Vec<Box<dyn Widget>> {
         let mut rows: Vec<Box<dyn Widget>> = Vec::new();
         let configured = self.diagnostics.configured;
-        let set = intent(&self.intents, Intent::SetSendingReports);
-        let toggle = Toggle::new(
-            &tr!("Send reports automatically"),
-            self.diagnostics.sending,
-            set,
-        );
-        rows.push(boxed(toggle));
-        rows.push(muted_row(&if self.diagnostics.sending {
-            tr!("New reports are sent to Bande's report server. Names, addresses and file names are removed first.")
+        if configured {
+            let set = intent(&self.intents, Intent::SetSendingReports);
+            rows.push(boxed(Toggle::new(
+                &tr!("Send reports automatically"),
+                self.diagnostics.sending,
+                set,
+            )));
+        }
+        rows.push(muted_row(&if self.diagnostics.sending && configured {
+            tr!("New reports are sent to the report server. Names, addresses and file names are removed first.")
         } else if configured {
             tr!("Reports stay on this computer unless you send one.")
         } else {

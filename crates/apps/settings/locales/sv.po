@@ -411,8 +411,8 @@ msgstr "På den här datorn"
 msgid "Send reports automatically"
 msgstr "Skicka rapporter automatiskt"
 
-msgid "New reports are sent to Bande's report server. Names, addresses and file names are removed first."
-msgstr "Nya rapporter skickas till Bandes rapportserver. Namn, adresser och filnamn tas bort först."
+msgid "New reports are sent to the report server. Names, addresses and file names are removed first."
+msgstr "Nya rapporter skickas till rapportservern. Namn, adresser och filnamn tas bort först."
 
 msgid "Reports stay on this computer unless you send one."
 msgstr "Rapporterna stannar på den här datorn om du inte skickar någon."
@@ -740,8 +740,8 @@ msgstr "Språk"
 msgid "Getting Bande in {name}…"
 msgstr "Hämtar Bande på {name}…"
 
-msgid "Bande in {name} is fetched when this computer is online."
-msgstr "Bande på {name} hämtas när datorn är ansluten till internet."
+msgid "Couldn't get Bande in {name}. Choose it again when this computer is online."
+msgstr "Det gick inte att hämta Bande på {name}. Välj det igen när datorn är ansluten till internet."
 
 msgid "Bande's own apps stay in English for now; other apps use this language."
 msgstr "Bandes egna appar förblir på engelska tills vidare, andra appar använder det här språket."
@@ -785,8 +785,8 @@ msgstr "Det gick inte att ändra appens språk."
 msgid "Couldn't change the apps that open at login."
 msgstr "Det gick inte att ändra vilka appar som öppnas vid inloggning."
 
-msgid "System Settings"
-msgstr "Systeminställningar"
+msgid "Settings"
+msgstr "Inställningar"
 
 msgid "View"
 msgstr "Visa"
@@ -1313,8 +1313,8 @@ msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofil
 msgid "This computer doesn't offer power modes."
 msgstr "Den här datorn har inga strömlägen."
 
-msgid "This computer can't sleep yet, so it stays on when idle. The display still turns off as set in Lock Screen."
-msgstr "Den här datorn kan inte vila än, så den förblir på när den inte används. Skärmen stängs ändå av enligt Låsskärm."
+msgid "This computer can't sleep, so it stays on when idle. The display still turns off as set in Lock Screen."
+msgstr "Den här datorn kan inte vila, så den förblir på när den inte används. Skärmen stängs ändå av enligt Låsskärm."
 
 msgid "Only members of the lpadmin group can change printers."
 msgstr "Bara medlemmar i gruppen lpadmin kan ändra skrivare."

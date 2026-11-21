@@ -57,7 +57,7 @@ writes a hex value, a corner radius or a font name of its own.
 
   `Accent` has eight presets (Ultramarine by default, Teal, Moss, Amber, Ember, Rose, Plum,
   Graphite); `Contrast::Increased` darkens `edge`. Every scheme × accent × contrast was solved
-  for WCAG and APCA contrast ([Datum §5](../design/datum.md#5-colour)); a token change keeps
+  for WCAG and APCA contrast ([Datum §3](../design/datum.md#3-colour)); a token change keeps
   those targets.
 - **Radii.** `Radius::{XS, S, M, L, XL}` = 4, 6, 8, 10, 14 pt; a child inside a rounded parent
   takes `Radius::concentric(outer, inset)` (= outer − inset, at least 4): the 14 pt window with
@@ -184,9 +184,7 @@ writes a hex value, a corner radius or a font name of its own.
   only that driver itself and hands it to the loader through `VK_LUNARG_direct_driver_loading`,
   so the loader opens no other driver, lavapipe and its LLVM included; anything else takes the
   loader's usual path. No app changes its own environment, so programs it starts inherit nothing
-  from this. Measured on an arm64 machine, that cuts a window's Vulkan start from about 40 to
-  17 ms and its resident memory by 4 MB anonymous and 47 MB file-backed (LLVM is no longer
-  mapped); the shell drops from 153 to 83 MiB. A
+  from this, so no window maps LLVM. A
   window whose background is opaque declares its window rectangle as its opaque region, so
   the compositor shades nothing beneath it. `crates/testing/sample` is a settings card on the toolkit that `bande-bench` starts
   to measure.
@@ -198,7 +196,7 @@ writes a hex value, a corner radius or a font name of its own.
   setting, off by default); tabbing into a field selects its text. A widget opens a menu
   of its own (a pop-up button's choices) with `Context::show_menu`; the choice comes back to it
   through `menu_action`.
-- **Controls** (Datum §9). Regular controls are
+- **Controls** (Datum §7). Regular controls are
   28 pt high (`ControlSize::Regular`), radius 6 (`Radius::S`). Focus is a 2 pt `focus` ring at a
   1 pt gap (radius + 3), drawn by `ui::focus_ring` only while `Context::focus_visible` holds:
   `Ui` sets it on a key press without Ctrl, Alt or Super and clears it on a pointer press,
@@ -294,11 +292,11 @@ writes a hex value, a corner radius or a font name of its own.
   once. `Ui::deadline` tells the window when to draw it; `Window::drive` wakes for it. The text
   is also the node's accessible description.
 - **Text.** `TextField`, `SearchField`, `ComboBox` and `TextView` share one editor
-  (`editor.rs`). The document is a list of paragraphs, each laid out by Parley on its own and
+  (`editor/`). The document is a list of paragraphs, each laid out by Parley on its own and
   only when visible or under the caret, with estimated heights for the rest, so a 100,000-line
   `TextView` types without delay. Movement uses Parley's cursors, so arrows move visually
   through mixed left-to-right and right-to-left text and each paragraph takes its own
-  direction. Bindings follow the [keyboard model](overview.md#keyboard-model), as in GNOME:
+  direction. Bindings follow the [keyboard model](overview.md#keyboard-model):
   Home/End to the line ends, Ctrl+Home/End to the document ends, Ctrl+Left/Right by word,
   Ctrl+Up/Down by paragraph, Up/Down by line keeping the column (to the ends of a single-line
   field), Page Up/Down by a page, Shift extending, Ctrl+Backspace/Delete deleting a word,

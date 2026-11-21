@@ -31,6 +31,7 @@ bus, and the Notification Center under its own name, org.bande.NotificationCente
 so that apps allowed to post notifications cannot read or dismiss others'. \
 The bus starts it on the first notification through D-Bus activation."""
 assets = [
+    ["target/release/deb-assets/bande-notify/copyright", "usr/share/doc/bande-notify/copyright", "644"],
     ["target/release/bande-notify", "usr/bin/", "755"],
     ["data/org.bande.Notify.service", "usr/share/dbus-1/services/", "644"],
     ["data/org.bande.NotificationCenter.service", "usr/share/dbus-1/services/", "644"],

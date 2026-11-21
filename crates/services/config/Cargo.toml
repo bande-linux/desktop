@@ -31,6 +31,7 @@ its line and column. Started with the graphical session or by D-Bus \
 activation."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-config/copyright", "usr/share/doc/bande-config/copyright", "644"],
     ["target/release/bande-config", "usr/bin/", "755"],
     ["data/bande-config.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Config.service", "usr/share/dbus-1/services/", "644"],

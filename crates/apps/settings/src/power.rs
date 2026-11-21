@@ -120,7 +120,7 @@ impl SettingsView {
             Profiles::Offered(_) => {}
         }
         if !self.sleeps {
-            rows.push(muted_row(&tr!("This computer can't sleep yet, so it stays on when idle. The display still turns off as set in Lock Screen.")));
+            rows.push(muted_row(&tr!("This computer can't sleep, so it stays on when idle. The display still turns off as set in Lock Screen.")));
         }
         rows
     }

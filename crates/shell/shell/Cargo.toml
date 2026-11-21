@@ -39,6 +39,7 @@ section = "misc"
 depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-mono, fonts-noto-color-emoji, hicolor-icon-theme, bande-notify, upower, network-manager, bluez"
 recommends = "network-manager-config-connectivity-debian, pipewire, wireplumber, bande-tray, xdg-user-dirs"
 assets = [
+    ["target/release/deb-assets/bande-shell/copyright", "usr/share/doc/bande-shell/copyright", "644"],
     ["../launcher/data/emoji/*", "usr/share/bande/emoji/", "644"],
     ["target/release/bande-shell", "usr/bin/", "755"],
     ["../../../data/wallpapers/*.svg", "usr/share/bande/wallpapers/", "644"],

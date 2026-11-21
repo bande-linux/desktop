@@ -1,7 +1,6 @@
 # Datum: a design language for Bande
 
-Status: adopted by the owner on 2026-10-30 and built; the running desktop is the reference
-render. [`datum/src/colors.py`](datum/src/colors.py) keeps the OKLCH and contrast maths behind the
+The running desktop is the reference render. [`datum/src/colors.py`](datum/src/colors.py) keeps the OKLCH and contrast maths behind the
 tables below.
 
 > **Datum**: a fixed reference point that everything else is measured from.
@@ -11,19 +10,19 @@ Bande should feel like a well-made instrument, like a good radio or synthesizer,
 
 ---
 
-## 3. Principles
+## 1. Principles
 
-1. **Material is a choice, legibility is not.** Depth comes from *tone* (frame vs sheet), a lit edge and one shadow. Content always sits on an opaque sheet. What the frame and the bar are made of is the user's **style** (§6), independent of light and dark, and every style keeps the same text contrast.
+1. **Material is a choice, legibility is not.** Depth comes from *tone* (frame vs sheet), a lit edge and one shadow. Content always sits on an opaque sheet. What the frame and the bar are made of is the user's **style** (§4), independent of light and dark, and every style keeps the same text contrast.
 2. **One signal.** Exactly one chromatic colour carries meaning at a time: the accent marks *selected, focused, active, live*. Everything else is warm greys. Semantic red, amber and green appear only for status. App icons are the only place several hues meet.
 3. **Frame and sheet.** Every window is a *frame* (the chassis: title bar, toolbar, sidebar) holding an inset *sheet* (the content), whose radius is concentric with the window. You always see where the controls end and your work begins.
 4. **Exact edges.** Radii come from one concentric rule, spacing from a 4 pt scale, and every hairline lands on a device pixel. Nothing is "about 7".
 5. **Visible controls.** Glyphs on window controls are always visible. Control boundaries meet 3:1 in Increase Contrast and are never below 1.9:1 by default. A field always looks like a field.
 6. **Labelled like an instrument.** Section labels are small tracked caps, numbers are tabular, and the clock and sizes line up. A square motif (the mark, the running indicator, the cursor in icons) is our dot-matrix: used sparingly.
-7. **Precise motion.** The existing springs, critically damped, with movement along straight axes from a visible source. Bounce only when a gesture has momentum. No genie, no wobble.
+7. **Precise motion.** The existing springs, critically damped, with movement along straight axes from a visible source. Bounce only when a gesture has momentum; shapes never distort in motion.
 
 ---
 
-## 4. Geometry
+## 2. Geometry
 
 ### Radii: five values and one rule
 | Token | pt | Used for |
@@ -35,7 +34,7 @@ Bande should feel like a well-made instrument, like a good radio or synthesizer,
 | `radius.xl` | 16 | windows, alerts, notifications, launcher, bar panels (Quick Settings, calendar) |
 | `radius.full` | h/2 | **only** switch, slider track, badge, progress segments (1) |
 
-**Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). Corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
+**Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). Corners are plain circular arcs: they read crisper and more technical and are cheap to draw.
 
 The compositor's window corners are 16, on maximised and tiled windows too: a window is always rounded, with its shadow and lit edge, whichever style and however the Taskbar sits. Only true full screen, which has no window edges, is square.
 
@@ -46,18 +45,18 @@ The compositor's window corners are 16, on maximised and tiled windows too: a wi
 - Never between sidebar rows or settings rows. Use spacing and tone. Never under the title bar: the frame/sheet step replaces it.
 
 ### Spacing, density, grid
-- Scale (pt): **2, 4, 8, 12, 16, 24, 32, 48**. The existing `Spacing` gets `XXXL = 48`.
+- Scale (pt): **2, 4, 8, 12, 16, 24, 32, 48** (`Spacing`, up to `XXXL`).
 - Control heights: **28 regular** (buttons, fields, pop-ups, segmented), 22 small, 36 large (alert and sheet buttons on touch-friendly scale).
 - Row heights: list and table 32 (selection 30 inset 1); sidebar 28 with 2 gaps (pitch 30); menu item 28; settings row 44.
-- Title bar / unified toolbar ("header"): **48** (was 28). It holds the window controls, navigation, title and toolbar items in one row. Header-less utility windows use 36.
+- Title bar / unified toolbar ("header"): **48**. It holds the window controls, navigation, title and toolbar items in one row. Header-less utility windows use 36.
 - Sheet inset from the frame: 6 on the right and bottom, 0 at the top (it meets the header), sidebar width + 0 on the left.
 - Layout grid: 4 pt base and 8 pt rhythm. Text is flush left everywhere, including the window title, which sits after the navigation instead of being centred.
 
 ---
 
-## 5. Colour
+## 3. Colour
 
-Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral hue per scheme (warm grey h = 80° in light, dusk slate h = 262° in dark), accent, and contrast. The values below are the generated defaults (sRGB hex).
+Defined in **OKLCH** and generated from a few inputs: a neutral hue per scheme (warm grey h = 80° in light, dusk slate h = 262° in dark), accent, and contrast. The values below are the generated defaults (sRGB hex).
 
 ### Neutrals
 | Role | Light | Dark | Use |
@@ -73,7 +72,7 @@ Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral h
 | `ink3` | `#83807A` | `#8D9198` | labels, placeholders, disabled, timestamps |
 | `deep` | `#201E1A` | `#161A21` (L .215) | dark text on light fills (Amber, Graphite, warning), the terminal's Midnight background |
 
-Light keeps the warm hue (paper and stone). Dark is a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .008 so the tint is felt without reading as blue. In dark, content is recessed and what is raised is lighter: sheet < chassis < overlay < well < hairline < edge.
+Light keeps the warm hue (paper and stone). Dark is a lifted "dusk slate": hue 262, next to the Ultramarine accent, with chroma .008 so the tint is felt without reading as blue. In dark, content is recessed and what is raised is lighter: sheet < chassis < overlay < well < hairline < edge.
 
 ### Measured contrast (WCAG 2 ratio)
 | Pair | Light | Dark |
@@ -116,7 +115,7 @@ Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc
 
 ---
 
-## 6. Materials and depth
+## 4. Materials and depth
 
 | Level | Surface | Shadow (light) | Shadow (dark) |
 |---|---|---|---|
@@ -149,7 +148,7 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 
 ---
 
-## 7. Typography
+## 5. Typography
 
 **UI text: Inter** (already installed, `fonts-inter`, SIL OFL), set apart from SF with Inter 4's own features:
 `cv05` (lowercase l with tail: disambiguates Il1 in file names), `cv08` (capital I with serifs), `ss07` and `ss08` (square punctuation and quotes: the square motif at the size of a full stop), and `tnum` wherever numbers are in columns (tables, clock, sizes, sliders). parley already sets `FontFeatures`, so this is a one-line change in `text.rs`.
@@ -177,7 +176,7 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ---
 
-## 8. Window chrome
+## 6. Window chrome
 
 **Header (48 pt, `chassis`)**: from the left, 12 pt in: back/forward (when relevant), the **title flush left** in Manrope 15/700, toolbar items, search (`well`, radius 8), a 16 gap, then the menu button and the window controls on the right. No separator line: the sheet's top edge is the division.
 
@@ -204,7 +203,7 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ---
 
-## 9. Controls
+## 7. Controls
 
 | Control | Spec |
 |---|---|
@@ -230,10 +229,10 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ---
 
-## 10. Iconography
+## 8. Iconography
 
 **App icons** are rounded squares, as in the bar mockup the owner picked: on a 48 grid a 44 pt
-body with circular-arc corners of radius 10 (not a squircle), a rich but clean colour field (a
+body with circular-arc corners of radius 10, a rich but clean colour field (a
 subtle vertical gradient is allowed) and a detailed, well-crafted symbol with depth through tone,
 not gloss. Third-party icons are shown unmodified.
 
@@ -241,33 +240,33 @@ not gloss. Third-party icons are shown unmodified.
 
 **Folders**: a stone body (`#D9D3CA`) with an **accent tab**, so folders follow the user's accent while the folder itself stays neutral. Special folders have an engraved `ink2` symbol on the body (download arrow, picture, music, home).
 
-**Symbols** (sidebar, menus, bar status, tray, Trash, view modes): a 16/18 pt grid, drawn with the detail and weight of the bar mockup and filled where it helps legibility, recoloured with the text colour; accent only when selected. They are an SVG set in `data/icons/Bande/symbolic`.
+**Symbols** (sidebar, menus, bar status, tray, Trash, view modes): a 16/18 pt grid, drawn with the detail and weight of the bar glyphs and filled where it helps legibility, recoloured with the text colour; accent only when selected. They are an SVG set in `data/icons/Bande/symbolic`.
 
 **The theme** (`data/icons/Bande`) is generated by `python3 data/icons/src/generate.py`, which needs `fonts-jetbrains-mono` for the label bands (outlines are baked into the SVGs) and also writes our apps' hicolor icons. Symbolic icons are 16 pt, 1.6 strokes converted to single-colour fills (`#201E1A`, with `opacity` for unlit parts and `class="warning"`/`"error"` for low battery), so GTK, Qt and our toolkit can recolour them with the text colour. The accent tab of folders comes from hidden sibling themes `Bande-<Accent>` (`Inherits=Bande`) that hold only the recoloured folders: the session selects the icon theme `Bande-Teal` and so on for a non-default accent.
 
 ---
 
-## 11. Motion signature
+## 9. Motion signature
 
 The presets are `bande-spring`'s (`QUICK`, `STANDARD`, `GENTLE`, `FADE`, `INTERACTIVE`, `MOMENTUM`, `BOUNCY`, `SHAKE`). Datum adds **how** things move, Material 3-style: *spatial* springs for position and size, *effects* springs (`fade`) for colour and opacity, never mixed.
 
-- **Axis-true:** objects travel in straight lines from their source. Minimise slides and scales into its exact bar slot along one straight path (`gentle`), with no genie distortion. Restore reverses it.
+- **Axis-true:** objects travel in straight lines from their source. Minimise slides and scales into its exact bar slot along one straight path (`gentle`), keeping its shape. Restore reverses it.
 - **Open / close:** the window scales 0.96 → 1 and fades in from the bar icon's side (`standard`); close is 1 → 0.98 + fade (`quick`).
 - **The selection block glides:** in lists, menus, segmented controls and the sidebar, the highlight *moves* to the new row (`quick`) rather than blinking. This is the most visible "Datum" motion.
-- **The signal square blinks only once:** running and launch feedback pulses the square indicator (opacity 1 → .35 → 1 on `fade`) until the first window maps; no bouncing icons.
+- **The signal square blinks only once:** running and launch feedback pulses the square indicator (opacity 1 → .35 → 1 on `fade`) until the first window maps; icons never move.
 - **The fader knob** follows 1:1 and settles on detents with `interactive`.
 - **Bounce** (`momentum`, 0.6 % overshoot) only after a flick. `bouncy` is reserved for the attention pulse of a bar icon.
 - Reduce Motion: every spatial spring becomes `fade`, per the existing rule.
 
-## 12. Sound and haptics (brief)
+## 10. Sound and haptics (brief)
 
 A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones under 150 ms, all pitched within D major pentatonic so overlapping sounds never clash, mastered to about −20 LUFS. Alert is two notes (A4→D5); trash is a soft paper rustle plus a low tick; screenshot is a mechanical shutter click; volume tick is a single 5 ms woodblock; plug-in rises a fifth, unplug falls a fifth. There are no chimes and no glassy pads, the sonic equivalent of solid material. Haptics on trackpads that support them: one light tick on slider detents and on snapping a window to a tile.
 
-## 13. The shell: the Taskbar
+## 11. The shell: the Taskbar
 
 The Taskbar is an edge-anchored bar, 64 pt at the default icon size, plus its margins when floating, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly:
-- Bar surface = the same tone, material (§6), radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. In every style it floats by default: 8 pt from the screen on all sides, and 8 pt from maximised and tiled windows, which is 2 × 8 pt added to the space it reserves. The 8 pt on the screen side counts as part of it for the pointer, so a throw to the screen edge still lands on it. Settings ▸ Taskbar turns floating off (`bar { floating #false }`): it then attaches to its screen edge, keeps 8 pt from the ends and rounds its inner corners, and reserves only its own thickness. "Tinted chassis" applies here too.
-- **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif; a dot would be macOS).
+- Bar surface = the same tone, material (§4), radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. In every style it floats by default: 8 pt from the screen on all sides, and 8 pt from maximised and tiled windows, which is 2 × 8 pt added to the space it reserves. The 8 pt on the screen side counts as part of it for the pointer, so a throw to the screen edge still lands on it. Settings ▸ Taskbar turns floating off (`bar { floating #false }`): it then attaches to its screen edge, keeps 8 pt from the ends and rounds its inner corners, and reserves only its own thickness. "Tinted chassis" applies here too.
+- **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 16 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".
 - The mark is a "B" knocked out of a rounded square in `ink`, stroked at the weight of the bar glyphs.

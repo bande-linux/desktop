@@ -1,6 +1,6 @@
 [package]
 name = "bande-settings"
-description = "Bande System Settings: panes for the desktop and its devices with ranked search"
+description = "Bande Settings: panes for the desktop and its devices with ranked search"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -58,7 +58,7 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-mono, bande-config, locales, pkexec, systemd, udev, xkb-data, network-manager"
 extended-description = """\
-System Settings of the Bande desktop in four groups: Connections \
+Settings of the Bande desktop in four groups: Connections \
 (Wi-Fi with known networks, per-network details and hidden networks, \
 Bluetooth, network), Desktop (appearance and wallpaper, the bar, \
 notifications per app, accessibility), Devices (displays, sound, keyboard, \
@@ -77,14 +77,13 @@ version, and never restarts or logs out by itself."""
 recommends = "accountsservice, bande-polkit, bluez, pipewire, wireplumber, bande-notify, packagekit, power-profiles-daemon, upower"
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-settings/copyright", "usr/share/doc/bande-settings/copyright", "644"],
     ["target/release/bande-settings", "usr/bin/", "755"],
     ["data/org.bande.Settings.desktop", "usr/share/applications/", "644"],
-    ["data/org.bande.Settings.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-settings/org.bande.Settings.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/org.bande.Settings.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/bande-update-check.service", "usr/lib/systemd/user/", "644"],
     ["data/bande-update-check.timer", "usr/lib/systemd/user/", "644"],
-    ["data/bande-update-finish.path", "usr/lib/systemd/user/", "644"],
-    ["data/bande-update-finish.service", "usr/lib/systemd/user/", "644"],
     ["data/50-bande-settings.rules", "usr/share/polkit-1/rules.d/", "644"],
     ["target/release/bande-sharing-helper", "usr/libexec/", "755"],
     ["data/org.bande.sharing-helper.policy", "usr/share/polkit-1/actions/", "644"],

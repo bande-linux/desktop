@@ -3,8 +3,8 @@
 `bande-lookup` (`crates/apps/lookup`, app id `org.bande.Lookup`, shown as Dictionary) is both the
 Dictionary app and Look Up:
 
-- **Dictionary window**: a search field; local sources answer as you type, online sources once
-  typing pauses.
+- **Dictionary window**: a search field; local sources answer as you type, and online sources,
+  each off until the user turns it on, once typing pauses.
 - **Look Up**: started by D-Bus (`org.freedesktop.Application.Open` with the text, optionally
   `--language=<tag>` first) from a text field's or label's menu, Files, Terminal, the Browser or
   `Ctrl+Super+D`. It shows a popover at the pointer (`Kind::Popover`, `bande_app_v1.set_popover`)

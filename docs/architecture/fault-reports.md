@@ -16,12 +16,12 @@ Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and reject
 
 ## Sending
 
-Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until the person switches on "Send reports automatically" in Settings ▸ Privacy & Security ▸ Diagnostics, which links the server's `/privacy` address and also shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
+Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until a server is configured and the person switches on "Send reports automatically" in Settings ▸ Privacy & Security ▸ Diagnostics, which links the server's `/privacy` address and also shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
 
-`/usr/share/bande/reports.conf` (shipped) holds the server every installation uses:
+`/usr/share/bande/reports.conf` (shipped) names no server, so reporting stays off until one is
+configured; it holds only
 
 ```
-endpoint = https://logs.mikaelhug.se
 ca = /usr/share/bande/reports-ca.pem
 ```
 
@@ -36,7 +36,7 @@ ca = /path/to/ca.pem
 key = <shared submit key, while a server still takes one>
 ```
 
-`bande-reporter sending on|off` and Settings write `send`; the other keys are for development machines and other organisations.
+`bande-reporter sending on|off` and Settings write `send`; `endpoint` names the server, and Settings offers the switch only once one is set.
 
 A daily check-in rides on the same sender: at boot, at login, when `serve` starts, when sending is switched on and on the resource wake-up every 10 minutes, an `outbox/checkin` marker is added if a day is due and this machine's minute of the policy's `checkin_hour` (UTC) has passed, or two days are due; and the sender posts it with the reports (see Protocol). Settings ▸ Diagnostics shows its exact contents. It carries no content of any kind.
 

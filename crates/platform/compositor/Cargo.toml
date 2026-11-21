@@ -54,6 +54,7 @@ on a logind seat, drives the displays through DRM/KMS, reads input through \
 libinput and composes windows with its own Vulkan renderer, scanning \
 full-screen clients out directly when it can."""
 assets = [
+    ["target/release/deb-assets/bande-compositor/copyright", "usr/share/doc/bande-compositor/copyright", "644"],
     ["target/release/bande-compositor", "usr/bin/", "755"],
     ["data/bande-session", "usr/bin/", "755"],
     ["data/bande-compositor.service", "usr/lib/systemd/user/", "644"],

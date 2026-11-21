@@ -531,7 +531,7 @@ fn about_ui(facts: &Facts, appearance: Appearance) -> Ui {
         &format!("Bande {}", env!("CARGO_PKG_VERSION")),
     ));
     let mut ui = Ui::new(
-        Box::new(Form::new(&tr!("About This Computer"), lines)),
+        Box::new(Form::new(&tr!("About This System"), lines)),
         bande_toolkit::ui::Context::new(TextSystem::new(), appearance.palette()),
     );
     ui.set_appearance(appearance);
@@ -556,7 +556,7 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
     };
     about.refit();
     let mut window = Window::open(
-        Role::utility(&tr!("About This Computer"), DIALOGS),
+        Role::utility(&tr!("About This System"), DIALOGS),
         about.size,
     )?;
     about.ui = about_ui(&facts, window.appearance());

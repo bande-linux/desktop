@@ -28,7 +28,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 143' TERM INT HUP
 
-# The VM runs the Debian release this machine runs, the one the debs are built for.
 suite=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release | tr -d '"')
 number=$("$here/../deb/debian-release.sh")
 number=${number#\~deb}

@@ -75,13 +75,13 @@ pub fn admitted(
 pub enum Edit {
     Put(Entry),
     Remove(u32),
-    PutItem(Donated),
+    PutItem(Offered),
     ForgetItem(String),
     ForgetDomain(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Donated {
+pub struct Offered {
     pub key: String,
     pub domain: String,
     pub kind: String,

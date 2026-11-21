@@ -5,6 +5,11 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Dictionary</name>
   <summary>Look up words in your dictionaries, thesauruses and Wikipedia</summary>
-  <description><p>Shows what a word means in a small panel at the pointer.</p></description>
+  <description><p>Shows what a word means in a small panel at the pointer, from your dictionaries and thesauruses, and from Wikipedia once you turn it on in Dictionary Settings.</p></description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
   <launchable type="desktop-id">org.bande.Lookup.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+  <content_rating type="oars-1.1"/>
 </component>

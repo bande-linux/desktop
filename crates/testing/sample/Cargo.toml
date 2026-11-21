@@ -1,6 +1,6 @@
 [package]
 name = "bande-sample"
-description = "Sample bande-toolkit app whose start time and memory ci/perf measures"
+description = "Sample bande-toolkit app whose start time and memory bande-toolkit-bench measures"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

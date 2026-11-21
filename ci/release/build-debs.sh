@@ -34,6 +34,7 @@ if [ "$profile" = dist ]; then
     cp -a "$built/cursors" "$built/l10n" "$packaged/$profile/"
     strip=(--no-strip)
 fi
+ci/release/deb-assets.sh "$packaged/$(basename "$built")/deb-assets" "$version" "${packages[@]}"
 for package in "${packages[@]}"; do
     variant=()
     if grep -qx "$package" ci/release/arch-variants; then

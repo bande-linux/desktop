@@ -1,0 +1,5 @@
+Files: crates/shell/launcher/data/emoji.tsv
+ crates/shell/launcher/data/emoji/*
+Copyright: 1991-2025 Unicode, Inc.
+License: Unicode-3.0
+Comment: Emoji names and keywords from the Unicode CLDR annotations.

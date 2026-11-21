@@ -1,6 +1,6 @@
 [package]
 name = "bande-bench"
-description = "Performance measurements for Bande, run by ci/perf"
+description = "Performance measurements for Bande, run by hand (docs/architecture/performance.md)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -27,6 +27,10 @@ marked as passwords) in ~/.local/state/bande/clipboard, readable by \
 the user only, and offers them to the launcher on the session bus as \
 org.bande.Clipboard. bande-compositor starts it on a socket pair and \
 offers ext-data-control on that connection only."""
+assets = [
+    "$auto",
+    ["target/release/deb-assets/bande-clipboard/copyright", "usr/share/doc/bande-clipboard/copyright", "644"],
+]
 
 [lints]
 workspace = true

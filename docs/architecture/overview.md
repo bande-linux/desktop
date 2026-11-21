@@ -10,8 +10,7 @@ design questions are in [`../design/DESIGN.md`](../design/DESIGN.md).
 The desktop lives in one Cargo workspace in this repository: compositor, renderer, toolkit,
 shell clients, session services, Files, Settings, libraries and test harnesses. Its layout is
 recorded in [`../decisions/0003-repository-layout.md`](../decisions/0003-repository-layout.md).
-The other Bande apps (Terminal, System Monitor, Software, the Package Installer, Mail,
-Calendar) live in [bande-linux/apps](https://github.com/bande-linux/apps), built on the same
+The other Bande apps live in [bande-linux/apps](https://github.com/bande-linux/apps), built on the same
 toolkit and app framework ([apps.md](apps.md)).
 
 The architecture is split by subject:
@@ -149,30 +148,30 @@ Bande is a Wayland-only desktop by design:
 
 ## Keyboard model
 
-Bande follows the Linux convention of GNOME and KDE: Ctrl runs shortcuts inside apps and Super
+Ctrl runs shortcuts inside apps and Super
 belongs to the system ([decision 0005](../decisions/0005-ctrl-for-app-shortcuts.md)). Bande's
 own apps and third-party apps use the same keys, so the compositor translates nothing.
 
 | Modifier | Role | Examples |
 | :--- | :--- | :--- |
 | **`Ctrl`** | Shortcuts inside apps and text fields | `Ctrl+C` (copy), `Ctrl+V` (paste), `Ctrl+X` (cut), `Ctrl+Z` (undo), `Ctrl+W` (close window), `Ctrl+Q` (quit), `Ctrl+F` (find), `Ctrl+click` (toggle an item in a selection) |
-| **`Super`** | The system only, never an app action | a tap of `Super` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Quick Settings), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
+| **`Super`** | The system only, never an app action | a tap of `Super` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+W` (overview), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Quick Settings), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
 | **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Tab` (switcher), `Alt+Click` (toggle disclosure) |
 | **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V`, `Shift+Drag` (move) |
 
 - **Screenshots and Terminal**: `Print` (options), `Shift+Print` (the screen),
-  `Shift+Super+S` (an area), `Ctrl+Alt+T` (Terminal). Force Quit has no shortcut. The
+  `Shift+Super+S` (an area), `Ctrl+Alt+T` (Terminal), `Ctrl+Alt+Esc` (Force Quit). The
   whole system set is `SHORTCUTS` in `crates/libs/keyboard/src/shortcuts.rs`, which the
   compositor matches against and Settings ▸ Keyboard lists.
-- **Drag and drop**: `Ctrl` copies and `Shift` moves, as in GTK and KDE.
+- **Drag and drop**: `Ctrl` copies and `Shift` moves.
 
 - **Text fields**: `Ctrl+Left/Right` move by word, `Home`/`End` to the line ends,
   `Ctrl+Home/End` to the text ends, `Ctrl+Up/Down` by paragraph, and `Ctrl+Backspace/Delete`
   delete a word; `Shift` extends the selection. `Ctrl+Y` also redoes. Alt and Super are not used
   in text fields.
 - **Terminal**: every plain `Ctrl+letter` goes to the shell (`Ctrl+C` interrupts, `Ctrl+D` ends
-  input), so the Terminal's own commands are on `Shift+Ctrl`, as in GNOME Terminal and Konsole.
-- **Menus** write shortcuts as words in GNOME order (Shift, Ctrl, Alt, Super): "Shift+Ctrl+N",
+  input), so the Terminal's own commands are on `Shift+Ctrl`.
+- **Menus** write shortcuts as words in the order Shift, Ctrl, Alt, Super: "Shift+Ctrl+N",
   "Alt+Super+8".
 
 ## Configuration

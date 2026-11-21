@@ -8,7 +8,7 @@ export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 LANGUAGE=
 failures=0
 monitor=$(mktemp)
 report() {
-    journalctl -b --no-pager -q | grep -E 'bande-|pipewire|update-finish|[Ww]atchdog|core-dump|getty' |
+    journalctl -b --no-pager -q | grep -E 'bande-|pipewire|[Ww]atchdog|core-dump|getty' |
         grep -v runuser | tail -n 200 | cut -c1-200
     cut -c1-200 "$monitor" | tail -n 20
 }
@@ -94,7 +94,6 @@ systemctl restart getty@tty1.service
 wait_until "the session's shell runs" 90 running bande-shell
 wait_until "the session's clipboard runs" 30 running bande-clipboard
 wait_until "the settings service runs" 30 running bande-config
-check "the update watcher is active" as_user systemctl --user is-active --quiet bande-update-finish.path
 
 old_shell=$(packaged_sum bande-shell bande-shell "$old")
 old_lock=$(packaged_sum bande-lock bande-lock "$old")
@@ -111,6 +110,7 @@ watcher=$!
 say "update the running session with apt"
 apt-get install -y -qq --no-install-recommends "$new"/*.deb > /dev/null
 check "the new shell is installed" [ "$(sha256sum /usr/bin/bande-shell | cut -d' ' -f1)" = "$new_shell" ]
+as_user env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" systemctl --user start bande-update-check.service
 
 wait_until "the settings service moves to the new build" 30 is_build bande-config "$new_config"
 told() { grep -q "Log out to finish updating" "$monitor"; }

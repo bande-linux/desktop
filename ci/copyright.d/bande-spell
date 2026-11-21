@@ -1,0 +1,6 @@
+Files: crates/services/spell/data/text/en.common
+ crates/services/spell/data/text/sv.common
+Copyright: 2018 Hermit Dave
+License: CC-BY-SA-4.0
+Comment: The 30,000 most frequent words of FrequencyWords
+ (https://github.com/hermitdave/FrequencyWords), derived from OpenSubtitles.

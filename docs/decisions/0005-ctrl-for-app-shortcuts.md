@@ -8,8 +8,8 @@ fields and shell, and which is left to the system.
 - On a PC keyboard Super sits where no thumb goes for copy and paste.
 - Third-party apps (VS Code, Zed, Firefox) expect Ctrl, and the compositor translates nothing, so
   Bande's own apps must use the same convention for one set of habits to work everywhere.
-- The compositor takes only chords with Super held (plus Print and the LaunchA key), so
-  third-party apps get Ctrl untouched.
+- The compositor takes chords with Super held, plus Print, `Alt+Tab`, `Alt+F4` and a few
+  `Ctrl+Alt` chords, so third-party apps get Ctrl chords untouched.
 
 ## Options
 
@@ -26,17 +26,17 @@ fields and shell, and which is left to the system.
 
 Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell.
 
-- **Super is only for the system**, in GNOME and KDE's chords, and nothing an app does (close,
-  quit, copy, paste, save, find, tabs) is on Super. The set is `SHORTCUTS` in
-  `crates/libs/keyboard/src/shortcuts.rs`, the one table the compositor matches and Settings ▸
-  Keyboard lists. The owner cut it to: Search on a tap of Super; `Super+V`, `Super+.`, `Super+N`,
-  `Super+S`, `Super+L`; `Alt+F4`, `Super+H`, `Super+arrows`, `Shift+Super+arrows`; `Alt+Tab`
-  (the only switcher), `Ctrl+Alt+T` Terminal; `Ctrl+Super+Left/Right`, `Super+D`, the LaunchA
-  key; `Print`, `Shift+Print`, `Shift+Super+S`; `Ctrl+Alt+F1…F12`; the zoom and screen
-  reader keys. Force Quit, input sources, app menus and full screen have no system shortcut.
+- **Super is only for the system**, and nothing an app does (close, quit, copy, paste, save,
+  find, tabs) is on Super. The set is `SHORTCUTS` in `crates/libs/keyboard/src/shortcuts.rs`, the
+  one table the compositor matches and Settings ▸ Keyboard lists: Search on a tap of Super;
+  `Super+V`, `Super+.`, `Super+N`, `Super+S`, `Super+L`; `Alt+F4`, `Super+H`, `Super+arrows`,
+  `Shift+Super+arrows`; `Alt+Tab` (the only switcher), `Ctrl+Alt+T` Terminal;
+  `Ctrl+Super+Left/Right`, `Super+W` (Overview), `Super+D` (Show Desktop); `Print`,
+  `Shift+Print`, `Shift+Super+S`; `Ctrl+Alt+Esc` (Force Quit); `Ctrl+Alt+F1…F12`; the zoom and
+  screen reader keys. Input sources, app menus and full screen have no system shortcut.
   Super+drag moves a window and Super+right drag resizes it.
 
-  Unbound Super chords reach the focused app, as in GNOME.
+  Unbound Super chords reach the focused app.
 - **Text fields** follow the Linux rules: `Ctrl+C/X/V/A`; `Ctrl+Z` undo, `Shift+Ctrl+Z` and
   `Ctrl+Y` redo; `Ctrl+Left/Right` by word, `Home`/`End` to the line ends, `Ctrl+Home/End` to the
   text ends, `Ctrl+Up/Down` by paragraph; `Ctrl+Backspace/Delete` delete a word. Alt and Super are
@@ -44,24 +44,22 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
 - **Ctrl+click** toggles an item in a selection.
 - **App standard items**: Close Window `Ctrl+W` and Quit `Ctrl+Q`, handled inside the app.
   Minimize is `Super+H`; `F11` enters and leaves full screen (Window menu, not panels); `Ctrl+Y`
-  runs any `Shift+Ctrl+Z` redo item. Hide and Hide Others stay in the app menu without a chord.
-- **Apps take GNOME's bindings** where Linux convention differs from a plain swap: Files follows
-  Nautilus (`Delete` to the Trash, `Alt+Up` to the enclosing folder, `Alt+Left/Right` back and
-  forward, `Ctrl+L` Go to Folder, `Ctrl+H` hidden files, `F2` rename); Terminal puts its commands
+  runs any `Shift+Ctrl+Z` redo item. Hide and Hide Other Apps stay in the app menu without a chord.
+- **Apps take the usual Linux bindings** where they differ from a plain swap: Files has
+  `Delete` to the Trash, `Alt+Up` to the enclosing folder, `Alt+Left/Right` back and
+  forward, `Ctrl+L` Go to Folder, `Ctrl+H` hidden files, `F2` rename; Terminal puts its commands
   on `Shift+Ctrl` and sends every plain Ctrl+letter to the shell; Settings goes back with
   `Alt+Left`.
-- **Shortcut labels are words** in GNOME order (Shift, Ctrl, Alt, Super): "Shift+Ctrl+N",
+- **Shortcut labels are words** in the order Shift, Ctrl, Alt, Super: "Shift+Ctrl+N",
   "Alt+Super+8", "Page Up", "Esc", arrows as arrow symbols; no modifier symbols.
 
 ## Consequences
 
 - Muscle memory from VS Code, Firefox and the terminal works the same in Bande's apps.
-- Drag and drop takes GTK and KDE's modifiers: Ctrl copies and Shift moves.
+- In drag and drop, Ctrl copies and Shift moves.
 - One parser in `widgets/src/shortcut.rs` reads a menu's shortcut string ("Shift+Ctrl+N") back
   into a key and modifiers; `bande-app` runs the menu entry for a key the view did not take, so
   an app's menus are its shortcut table ([apps](../architecture/apps.md)).
-- On a non-Latin layout Ctrl+C does not match yet, because the toolkit matches the shifted
-  keysym; the compositor's Latin fallback is the fix when a non-Latin source is added.
 
 ## Sources
 

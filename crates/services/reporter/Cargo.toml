@@ -33,6 +33,7 @@ agrees in first setup or in Settings. Between faults no process runs: sending st
 report waits, and waits on network changes rather than polling."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-reporter/copyright", "usr/share/doc/bande-reporter/copyright", "644"],
     ["target/release/bande-reporter", "usr/libexec/", "755"],
     ["target/release/bande-diagnose", "usr/bin/", "755"],
     ["data/reports.conf", "usr/share/bande/reports.conf", "644"],

@@ -6,7 +6,7 @@ the part today.
 | Name | What it is | In code |
 | :--- | :--- | :--- |
 | Taskbar | The whole bar on the chosen edge (left, bottom, right or top) of every display, holding everything below | crate `bande-bar`, `BarClient`, `TaskbarView`, `StatusClient`, `Taskbar`, layer namespace `bar` |
-| Bande menu | The logo at the start of the bar (top, or left on a horizontal bar): a click opens Search, a right click the Bande menu (About This Computer, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out) | `Slot::BandeMenu`, `Slot::Search`, `Symbol::Logo`, `system_menu` |
+| Bande menu | The logo at the start of the bar (top, or left on a horizontal bar): a click opens Search, a right click the Bande menu (About This System, System Settings…, Force Quit…, Sleep, Restart…, Shut Down…, Lock Screen, Log Out) | `Slot::BandeMenu`, `Slot::Search`, `Symbol::Logo`, `system_menu` |
 | Menu button | The ⋮ left of a window's minimise, zoom and close controls, in Bande apps' title bars and in the compositor's bar of third-party windows that export menus; it opens the App menu below it | `WindowControl::Menu`, `show_app_menu` |
 | App menu | The cascade the menu button opens: the "Type to search" field, the app row, then File, Edit, View… | `menus::cascade` |
 | Search | The centred card on a tap of Super: apps, settings, files, calculator; also Clipboard History (Super+V) and Emoji & Symbols (Super+.) | crate `bande-launcher`, `Action::ShowLauncher` |

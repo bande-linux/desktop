@@ -30,7 +30,7 @@ pub struct Found {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct Donation {
+pub struct Offer {
     pub id: String,
     pub kind: String,
     pub title: String,
@@ -46,7 +46,7 @@ pub struct Donation {
 )]
 pub trait Index {
     fn find(&self, text: &str, within: &str, limit: u32) -> zbus::Result<Vec<Found>>;
-    fn donate(&self, domain: &str, items: Vec<Donation>, cursor: &str) -> zbus::Result<()>;
+    fn offer(&self, domain: &str, items: Vec<Offer>, cursor: &str) -> zbus::Result<()>;
     fn cursor(&self, domain: &str) -> zbus::Result<String>;
     fn forget(&self, domain: &str, ids: Vec<String>) -> zbus::Result<()>;
     fn forget_all(&self, domain: &str) -> zbus::Result<()>;

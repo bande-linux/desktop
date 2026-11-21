@@ -7,16 +7,13 @@ use bande_l10n::{text, tr};
 
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
+use bande_packages::Client;
 use bande_settings_panes::{PaneId, SettingId};
-use zbus::MatchRule;
-use zbus::blocking::{Connection, MessageIterator};
-use zbus::proxy::MethodFlags;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::blocking::Connection;
 
 pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_locales};
 
 const HELPER: &str = "/usr/libexec/bande-locale-helper";
-const LANGUAGE_PACKS: &str = "bande-language-packs.service";
 const PACKS: &str = "bande-desktop-l10n-";
 const OWN_CATALOGS: &str = "bande-settings";
 const PKEXEC: &str = "/usr/bin/pkexec";
@@ -31,40 +28,6 @@ pub const REGION_CATEGORIES: [&str; 5] = [
     "LC_MEASUREMENT",
     "LC_PAPER",
 ];
-
-const SYSTEMD: &str = "org.freedesktop.systemd1";
-const MANAGER_PATH: &str = "/org/freedesktop/systemd1";
-const MANAGER: &str = "org.freedesktop.systemd1.Manager";
-
-fn run_unit(system: &Connection, unit: &str) -> zbus::Result<()> {
-    let rule = MatchRule::builder()
-        .msg_type(zbus::message::Type::Signal)
-        .sender(SYSTEMD)?
-        .interface(MANAGER)?
-        .member("JobRemoved")?
-        .build();
-    let mut removed = MessageIterator::for_match_rule(rule, system, None)?;
-    let manager = zbus::blocking::Proxy::new(system, SYSTEMD, MANAGER_PATH, MANAGER)?;
-    manager.call_method("Subscribe", &())?;
-    let job: OwnedObjectPath = manager
-        .call_with_flags(
-            "StartUnit",
-            MethodFlags::AllowInteractiveAuth.into(),
-            &(unit, "replace"),
-        )?
-        .ok_or(zbus::Error::InvalidReply)?;
-    let finished = removed.find_map(|message| {
-        let message = message.ok()?;
-        let (_, path, _, result): (u32, OwnedObjectPath, String, String) =
-            message.body().deserialize().ok()?;
-        (path == job).then_some(result)
-    });
-    match finished.as_deref() {
-        Some("done") => Ok(()),
-        Some(result) => Err(zbus::Error::Failure(format!("{unit}: {result}"))),
-        None => Err(zbus::Error::InvalidReply),
-    }
-}
 
 #[zbus::proxy(
     interface = "org.freedesktop.locale1",
@@ -425,7 +388,7 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             match outcome {
                 Ok(()) => match write_user_file(&contents) {
                     Ok(()) if setting == SettingId::Language => {
-                        follow_packs(&system, &updates, &watch, available, tongue(needed));
+                        follow_packs(&system, &updates, &watch, available, needed.to_owned());
                     }
                     Ok(()) => {}
                     Err(error) => {
@@ -464,9 +427,10 @@ fn follow_packs(
     let updates = updates.clone();
     let watch = Arc::clone(watch);
     let available = available.to_vec();
-    fetch_language_packs(move |fetched| {
-        let installed = installed_catalogs().contains(&wanted);
-        let offered = installed || translations().contains(&wanted);
+    fetch_language_packs(wanted.clone(), move |fetched| {
+        let tongue = tongue(&wanted);
+        let installed = installed_catalogs().contains(&tongue);
+        let offered = installed || translations().contains(&tongue);
         let current = watch
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -477,9 +441,28 @@ fn follow_packs(
     });
 }
 
-pub(crate) fn fetch_language_packs(done: impl FnOnce(bool) + Send + 'static) {
+fn pack_names(code: &str) -> Vec<String> {
+    let regional = code
+        .split(['.', '@'])
+        .next()
+        .unwrap_or(code)
+        .to_lowercase()
+        .replace('_', "-");
+    let mut names = vec![
+        format!("{PACKS}{regional}"),
+        format!("{PACKS}{}", tongue(code)),
+    ];
+    names.dedup();
+    names
+}
+
+pub(crate) fn fetch_language_packs(code: String, done: impl FnOnce(bool) + Send + 'static) {
     spawn("language-packs", move || {
-        let fetched = bande_bus::system().and_then(|system| run_unit(&system, LANGUAGE_PACKS));
+        let names = pack_names(&code);
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let fetched = bande_bus::system()
+            .map_err(bande_packages::Error::from)
+            .and_then(|system| Client::new(&system).install_missing(&names));
         done(
             fetched
                 .inspect_err(|error| tracing::warn!("cannot fetch the language packs: {error}"))

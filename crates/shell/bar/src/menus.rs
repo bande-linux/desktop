@@ -114,7 +114,7 @@ pub fn system_menu(user: &str, frontmost: Option<&str>, can_sleep: bool) -> Menu
         None => force_quit,
     };
     let mut items = vec![
-        item(&tr!("About This Computer"), &Command::About),
+        item(&tr!("About This System"), &Command::About),
         MenuItem::separator(),
         item(&tr!("System Settings…"), &Command::Settings(None)),
         MenuItem::separator(),
@@ -345,8 +345,8 @@ fn standard_app_menu(name: &str) -> Menu {
         MenuItem::new(&tr!("About {app}", app = name), "").enabled(false),
         MenuItem::separator(),
         item(&tr!("Hide {app}", app = name), &Command::HideApp),
-        item(&tr!("Hide Others"), &Command::HideOthers),
-        item(&tr!("Show All"), &Command::ShowAll),
+        item(&tr!("Hide Other Apps"), &Command::HideOthers),
+        item(&tr!("Show All Apps"), &Command::ShowAll),
         MenuItem::separator(),
         item(&tr!("Quit {app}", app = name), &Command::QuitApp).shortcut("Ctrl+Q"),
     ])

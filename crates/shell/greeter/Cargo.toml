@@ -39,6 +39,7 @@ greetd.service; greetd itself asks which display manager to start when \
 another one is installed."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-greeter/copyright", "usr/share/doc/bande-greeter/copyright", "644"],
     ["target/release/bande-greeter", "usr/bin/", "755"],
     ["data/bande-greeter-session", "usr/libexec/", "755"],
     ["data/bande-console-fallback.service", "usr/lib/systemd/system/", "644"],

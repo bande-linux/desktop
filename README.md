@@ -15,12 +15,12 @@ One Cargo workspace with the desktop itself, grouped by role in `crates/`
 | `platform/` | `bande-compositor` (Smithay with its own Vulkan renderer, `bande-render`) and the private Wayland protocols |
 | `toolkit/` | `bande-toolkit`: Datum design tokens, Vello drawing, Parley text, widgets, Wayland windows, AccessKit |
 | `shell/` | `bande-shell` (desktop, Taskbar, notifications, Quick Settings, launcher in one process), screenshots, lock screen, greeter |
-| `apps/` | Files, Settings, the portal's file chooser and the keyring prompt |
-| `services/` | config (`config.kdl` over D-Bus), notifications, power, sound, clipboard, tray, automount, portal backend, polkit agent, keyring (Secret Service and its PAM module) |
+| `apps/` | Files, Settings, Look Up, the portal's file chooser and the keyring prompt |
+| `services/` | config (`config.kdl` over D-Bus), notifications, power, sound, clipboard, tray, automount, backups, search index, printing, spell checking, fault reports and crash collection, portal backend, polkit agent, keyring (Secret Service and its PAM module) |
 | `libs/` | shared logic, including `bande-app`, the framework every app is built on |
-| `testing/` | the test bus, a Wayland test client, benchmarks |
+| `testing/` | the test bus, a Wayland test client, benchmarks, a sample app and the review recorder |
 
-Terminal, System Monitor, Software, the Package Installer, Mail and Calendar live in
+The other Bande apps live in
 [bande-linux/apps](https://github.com/bande-linux/apps), built on `bande-app` at a pinned revision
 of this repository and released on their own. `packaging/` holds the `bande-desktop`
 metapackage, `ci/` the release and packaging scripts, `data/` wallpapers, icons and sounds.
@@ -62,7 +62,7 @@ publishes a fully green tag run on its own. Details: [`docs/architecture/ci.md`]
 
 ## Installing
 
-Once a version is published, Bande installs on Debian 14 (forky), not on Debian 13, from
+Once a version is published, Bande installs on Debian 14 (forky) from
 <https://bande-linux.github.io/apt>:
 
 ```bash
@@ -75,9 +75,9 @@ sudo apt update
 sudo apt install bande-desktop
 ```
 
-`bande-desktop` brings the desktop, its login window under greetd, NetworkManager, PipeWire, the
-Bande apps Terminal, Software, Package Installer, System Monitor and Archives, and compressed swap in
-memory; other apps, such as a browser, install from Software. With `--no-install-recommends` it
+`bande-desktop` brings the desktop, its login window under greetd, NetworkManager, PipeWire and
+compressed swap in memory, and recommends the Bande apps listed in
+[`packaging/bande-desktop/default-apps`](packaging/bande-desktop/default-apps); other apps, such as a browser, install from Software. With `--no-install-recommends` it
 brings only the desktop, a login and sound. Pick the **Bande** session at login. Updates arrive with `sudo apt upgrade` or
 Settings ▸ Software Update. The archive is signed with the key
 `04FC EAF9 B799 98D9 828C  256B 7963 AC44 9BD9 992E`.

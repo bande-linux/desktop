@@ -41,6 +41,7 @@ the startup disk or the home folder runs out of space. Started with the \
 graphical session."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-automount/copyright", "usr/share/doc/bande-automount/copyright", "644"],
     ["target/release/bande-automount", "usr/bin/", "755"],
     ["target/release/bande-mount-helper", "usr/libexec/", "755"],
     ["data/bande-automount.service", "usr/lib/systemd/user/", "644"],

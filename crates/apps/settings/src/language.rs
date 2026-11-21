@@ -167,7 +167,7 @@ impl SettingsView {
         match locale.packs {
             Packs::Fetching => rows.push(muted_row(&tr!("Getting Bande in {name}…", name = name))),
             Packs::Offline => rows.push(muted_row(&tr!(
-                "Bande in {name} is fetched when this computer is online.",
+                "Couldn't get Bande in {name}. Choose it again when this computer is online.",
                 name = name
             ))),
             Packs::Ready => {}

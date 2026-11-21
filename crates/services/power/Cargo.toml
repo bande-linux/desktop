@@ -31,11 +31,11 @@ Locks the session before the computer sleeps through a logind delay \
 inhibitor, makes the power button lock the session, posts low and critical battery notifications from UPower, \
 serves org.freedesktop.ScreenSaver so applications can keep the screen \
 on, holding a logind idle inhibitor for each request, and keeps the \
-computer from sleeping when idle while a sound stream runs. Sleep is off \
-until suspend and wake are proven reliable. Controls the brightness of each \
+computer from sleeping when idle while a sound stream runs. Controls the brightness of each \
 connected display that has one, through its backlight or DDC/CI."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-power/copyright", "usr/share/doc/bande-power/copyright", "644"],
     ["target/release/bande-power", "usr/bin/", "755"],
     ["data/bande-power.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Power.service", "usr/share/dbus-1/services/", "644"],
@@ -43,7 +43,6 @@ assets = [
     ["data/70-bande-ddc.rules", "usr/lib/udev/rules.d/", "644"],
     ["data/bande-ddc.conf", "usr/lib/modules-load.d/", "644"],
     ["data/logind.conf", "usr/lib/systemd/logind.conf.d/bande-power.conf", "644"],
-    ["data/sleep.conf", "usr/lib/systemd/sleep.conf.d/bande-power.conf", "644"],
     ["target/release/l10n/development/bande-power/*", "usr/share/bande/l10n/bande-power/", "644"],
 ]
 

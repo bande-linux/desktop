@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=System Settings
-GenericName=Settings
+Name=Settings
+Name[sv]=Inställningar
 Comment=Change the appearance, taskbar and lock screen
 Icon=org.bande.Settings
 Exec=bande-settings

@@ -7,7 +7,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use bande_search::{BUS_NAME, Donation, Found, OBJECT_PATH};
+use bande_search::{BUS_NAME, Found, OBJECT_PATH, Offer};
 use bande_test_bus::SessionBus;
 use zbus::blocking::Connection;
 
@@ -197,7 +197,7 @@ fn contents_are_found_kept_current_and_survive_a_restart() {
         "a moved folder is found at its new place"
     );
 
-    let donated = Donation {
+    let offered = Offer {
         id: "42".to_owned(),
         kind: "mail".to_owned(),
         title: "Lunch on Friday".to_owned(),
@@ -210,10 +210,10 @@ fn contents_are_found_kept_current_and_survive_a_restart() {
             Some(BUS_NAME),
             OBJECT_PATH,
             Some("org.bande.Search"),
-            "Donate",
-            &("org.bande.Mail", vec![donated], "42"),
+            "Offer",
+            &("org.bande.Mail", vec![offered], "42"),
         )
-        .expect("donate");
+        .expect("offer");
     assert!(appears(
         &connection,
         "vermilion",

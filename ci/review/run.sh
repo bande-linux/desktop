@@ -51,6 +51,7 @@ if [ "$build" = 1 ]; then
     version=$(ci/deb/version.sh "$repo")
     echo "Building packages $version"
     debs=()
+    ci/release/deb-assets.sh target/release/deb-assets "$version" "${packages[@]}"
     for package in "${packages[@]}"; do
         $cargo deb --package "$package" --locked --deb-version "$version"
         debs+=("$repo/target/debian/${package}_${version}_$(dpkg --print-architecture).deb")

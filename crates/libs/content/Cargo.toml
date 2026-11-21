@@ -1,6 +1,6 @@
 [package]
 name = "bande-content"
-description = "File contents for Bande's Glance, Files and Preview: images, PDF in a confined renderer, text, documents, fonts, folders and archives"
+description = "File contents for Bande's Glance, Files and Viewer: images, PDF in a confined renderer, text, documents, fonts, folders and archives"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

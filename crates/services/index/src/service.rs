@@ -8,12 +8,12 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use bande_search::{
-    CACHE_TAG, Donation, Found, Policy, Query, ROOT, Stamp, Tree, Usage, follow_policy,
-    is_excluded, skipped_name, usage_path,
+    CACHE_TAG, Found, Offer, Policy, Query, ROOT, Stamp, Tree, Usage, follow_policy, is_excluded,
+    skipped_name, usage_path,
 };
 use bande_watch::{Changes, FolderWatch};
 
-use crate::background::{Background, Child, Donated, Edit, Job, Reply, admitted, inspect};
+use crate::background::{Background, Child, Edit, Job, Offered, Reply, admitted, inspect};
 use crate::bus;
 use crate::store::{Entry, Hit, Store};
 
@@ -35,9 +35,9 @@ pub enum Message {
         limit: usize,
         reply: Sender<Vec<Found>>,
     },
-    Donate {
+    Offer {
         domain: String,
-        items: Vec<Donation>,
+        items: Vec<Offer>,
         cursor: String,
     },
     Cursor {
@@ -232,11 +232,11 @@ impl Service {
             } => {
                 let _ = reply.send(self.find(&text, &within, limit));
             }
-            Message::Donate {
+            Message::Offer {
                 domain,
                 items,
                 cursor,
-            } => self.donate(domain, items, cursor),
+            } => self.offer(domain, items, cursor),
             Message::Cursor { domain, reply } => {
                 let _ = reply.send(self.cursor(&domain));
             }
@@ -732,9 +732,9 @@ impl Service {
         })
     }
 
-    fn donate(&mut self, domain: String, items: Vec<Donation>, cursor: String) {
+    fn offer(&mut self, domain: String, items: Vec<Offer>, cursor: String) {
         for item in items {
-            self.edits.push(Edit::PutItem(Donated {
+            self.edits.push(Edit::PutItem(Offered {
                 key: format!("{domain}{DOMAIN_SEPARATOR}{}", item.id),
                 domain: domain.clone(),
                 kind: item.kind,
@@ -745,7 +745,7 @@ impl Service {
             }));
         }
         if !cursor.is_empty() {
-            self.edits.push(Edit::PutItem(Donated {
+            self.edits.push(Edit::PutItem(Offered {
                 key: cursor_key(&domain),
                 domain: domain.clone(),
                 kind: String::new(),

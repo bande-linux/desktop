@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="gtk">
+  <copyright>
+    The interfaces of GTK's gdk/wayland/protocol/gtk-shell.xml.
+    Copyright The GTK authors.
+
+    This library is free software; you can redistribute it and/or modify it
+    under the terms of the GNU Library General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or (at your
+    option) any later version.
+  </copyright>
   <interface name="gtk_shell1" version="1">
     <description summary="GTK's extensions to the shell">
       GTK's protocol, as Mutter offers it. GTK 3 and GTK 4 read the

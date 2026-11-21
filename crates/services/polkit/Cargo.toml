@@ -35,6 +35,7 @@ polkit gives, says who is asked for, shakes and asks again after a wrong \
 password, and cancels with Escape. Started with the graphical session."""
 maintainer-scripts = "debian/"
 assets = [
+    ["target/release/deb-assets/bande-polkit/copyright", "usr/share/doc/bande-polkit/copyright", "644"],
     ["target/release/bande-polkit-agent", "usr/bin/", "755"],
     ["data/bande-polkit-agent.service", "usr/lib/systemd/user/", "644"],
     ["target/release/l10n/development/bande-polkit-agent/*", "usr/share/bande/l10n/bande-polkit-agent/", "644"],

@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="appmenu">
+  <copyright>
+    The interfaces of plasma-wayland-protocols' appmenu.xml.
+    SPDX-FileCopyrightText: 2017 David Edmundson
+    SPDX-License-Identifier: MIT
+  </copyright>
   <interface name="org_kde_kwin_appmenu_manager" version="2">
     <description summary="where a window's menus are exported">
       KDE's protocol for a client to say on which com.canonical.dbusmenu

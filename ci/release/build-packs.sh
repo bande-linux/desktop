@@ -13,4 +13,4 @@ tool=$target/release/bande-l10n-tool
 "$tool" check ci/l10n-complete
 rm -rf "$target/l10n"
 "$tool" pack "$target/l10n"
-"$tool" debs "$target/l10n" "$out" "$version" bande-desktop packaging/bande-desktop/debian/copyright
+"$tool" debs "$target/l10n" "$out" "$version" bande-desktop ci/copyright

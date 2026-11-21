@@ -57,8 +57,8 @@ graph LR
   period: until it passes, any key, click or movement dismisses the saver without a password.
   Locks from `Super+L`, logind, sleep and the power button always ask for it. The computer
   sleeps with the display unless `suspend-after` is later or `"never"`, and only if logind
-  says `CanSuspend` is `yes`: the `bande-power` package ships `AllowSuspend=no` (below).
-  A virtual machine never sleeps when idle, as GNOME's power plugin does: a sleeping guest looks
+  says `CanSuspend` is `yes`.
+  A virtual machine never sleeps when idle: a sleeping guest looks
   like a crash and loses its network until the host wakes it.
   The earlier of the screen saver and the display turning off starts the lock, and sleep never
   comes before the display turns off; the settings say so on their rows when a choice is overridden,
@@ -84,11 +84,9 @@ graph LR
   through `bande-audio`), the portal's suspend flag (`org.bande.Power.KeepAwake`, `Hold` and
   `Release`, freed when the caller leaves the bus) and someone else's logind `sleep` block
   inhibitor. When the last one ends, the computer sleeps after a full `suspend-after` more.
-- Sleep is off until suspend and wake survive ten clean cycles on the build machine. The one
-  switch is the line `AllowSuspend=no` in `crates/services/power/data/sleep.conf`: `CanSuspend`
-  then answers `na`, so Sleep leaves the menus and idle stays awake. Changing it to `yes` brings
-  all of it back, including the power button: logind's press always locks, and the compositor
-  asks for `Suspend` on a press shorter than the five-second hold when `CanSuspend` is `yes`.
+- Where logind's `CanSuspend` is not `yes`, Sleep leaves the menus and idle stays awake. The power
+  button always locks through logind, and the compositor asks for `Suspend` on a press shorter
+  than the five-second hold when `CanSuspend` is `yes`.
 - Implemented in `crates/shell/lock`: date, time, the user's picture (AccountsService's
   `IconFile`, read off the UI thread; the initial on the accent colour without one) and name
   and a secure field. PAM
@@ -214,7 +212,7 @@ graph LR
   window, its Flatpak id as `sandboxed-app-id` from the client's `/.flatpak-info`, and
   `active-on-seats` for the frontmost app) and answers running (1) or active (2) per app,
   keyed by the Flatpak id; anything else is in the background, as windowless apps are. Its
-  `RunningApplicationsChanged` is passed on. `NotifyBackground` allows, as GNOME does: an app
+  `RunningApplicationsChanged` is passed on. `NotifyBackground` allows: an app
   in the background keeps its running dot in the Taskbar rather than a prompt.
 - `org.freedesktop.impl.portal.DynamicLauncher` (application and web app launchers, as browsers
   install web apps): `bande-file-chooser --create-launcher` reads the icon from standard input
@@ -246,8 +244,8 @@ graph LR
   `@import url("bande.css");` at the top of the user's own `gtk.css`, leaving the rest of that
   file alone. GTK 4.18 has no `prefers-color-scheme` media query, so the file's unconditional
   block is the current scheme (rewritten when it changes; running GTK apps pick it up at their
-  next start) and media-query blocks make GTK 4.20 and later switch live. Checked headlessly
-  with gnome-text-editor 48 and Loupe 48 (libadwaita 1.7) in light and dark. `FileChooser`
+  next start) and media-query blocks make GTK 4.20 and later switch live.
+  `FileChooser`
   (open, save, save many, with filters, choices, folders, `file://` URIs and request
   cancellation), `Screenshot` (with the permission question when the frontend has not checked
   the permission store, and `PickColor`) and `ScreenCast` (sessions, source and cursor
@@ -285,8 +283,7 @@ graph LR
   The picture is saved as a PNG under `$XDG_CACHE_HOME/bande-screenshot` (not the Desktop:
   the app asked for it, the user did not) and returned as a `file://` URI. `PickColor` shows a
   loupe with the colour's hex value under the pointer; a click picks, Escape cancels.
-- **Screenshot tool** (`bande-screenshot`): `Shift+Print` saves one picture per display, as
-  GNOME does; the overlay lives on the main display, so `Shift+Super+S`
+- **Screenshot tool** (`bande-screenshot`): `Shift+Print` saves one picture per display; the overlay lives on the main display, so `Shift+Super+S`
   lets the user drag out an area, and Space there switches to choosing a window (the window under
   the pointer is tinted; a click takes it alone with its rounded corners, transparent around it,
   and a soft shadow drawn by the tool). `Print` (`show_options` on `bande_capture_v1`)
@@ -486,7 +483,7 @@ made again.
   - Implemented in `crates/services/tray` (`bande-tray`, a session service):
     `org.kde.StatusNotifierWatcher` at `/StatusNotifierWatcher`. An item registered by bus name
     is listed as `<name>/StatusNotifierItem`, one registered by object path (libappindicator,
-    Ayatana) as `<caller><path>`, as KDE's watcher does; items and hosts are dropped when their
+    Ayatana) as `<caller><path>`; items and hosts are dropped when their
     connection leaves the bus. The Taskbar is the host (`org.kde.StatusNotifierHost-<pid>`): it
     shows each item that is not `Passive` by its icon name or pixmap; a click opens the item's
     `com.canonical.dbusmenu` menu below it (or calls `Activate` when it has none), a secondary
@@ -514,7 +511,7 @@ made again.
     through `bande_shell_v1`, since an app cannot hide itself: About (a small window with the
     app's icon and name from its desktop entry and the version in `x-bande-version`), Hide
     (which also hands the active app to the frontmost other window when the app has none),
-    Hide Others and Show All (`show_app` for every running app).
+    Hide Other Apps and Show All Apps (`show_app` for every running app).
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Quick Settings and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`. Bande never rewrites `/etc/network/interfaces` or
@@ -532,7 +529,7 @@ made again.
   - Implemented in `crates/services/automount` (`bande-automount`, a session service): every
     filesystem UDisks2 hints for automounting (`HintAuto`, not `HintIgnore` or `HintSystem`) is
     mounted when it appears, including drives present at login, while the logind session is
-    active and unlocked (`Active`, not `LockedHint`), as GNOME does; drives that appear while it
+    active and unlocked (`Active`, not `LockedHint`); drives that appear while it
     is locked or inactive are mounted when it is unlocked again, unless removed meanwhile, and
     manual mounts from Files are unaffected; a drive removed while still mounted posts "Disk Not Ejected Properly".
     Encrypted volumes wait for the UI.
@@ -675,9 +672,7 @@ other's files, and the setgid bit gives every file the `_greetd` group, so a cop
 mode 0640 is readable by its owner and the login window alone. The greeter opens
 `<uid>` without following links and uses it only if it is a regular file owned by that uid
 and within the size limit, then decodes it through `/proc/self/fd`, so the file it checked is
-the file it shows; anything else falls back to the bundled default. Also not done: a user picker (Up/Down switches users
-for now), choosing among several sessions, a visible (non-secret) field for PAM's visible
-prompts (they are answered in the secure field), and an accessibility menu.
+the file it shows; anything else falls back to the bundled default. Up/Down switches users, and PAM's visible prompts are answered in the secure field.
 
 
 ## Crash handling and supervision
@@ -790,17 +785,12 @@ set; if apt would pull in an offline package, everything goes offline: download,
 "Restart to install n updates". Otherwise the live set installs now with `UpdatePackages`, which
 asks for a password through the polkit agent unless polkit grants `system-update` (PackageKit grants
 it to active sudo members), then the offline set is downloaded and triggered.
-`bande-desktop`'s apt hook (`/usr/libexec/bande-desktop/restart-services`) restarts the
-system services an update replaced, never the login manager, the buses, logind, getty,
-`user@`, polkit, PackageKit or networking ([packaging](packaging.md#runtime-stack)), and touches
-`/run/bande-desktop/packages-installed`. So after any apt run, from Settings or Terminal,
-`bande-update-finish.path` in each logged-in user's manager runs `bande-settings --finish-update`.
-It reloads the user's units and looks at the user's own processes that map a deleted `/usr` or
-`/opt` executable or library, grouped by cgroup: services in `session.slice` restart through the
-user manager's `TryRestartUnit`; if the compositor's service, the session bus or the login scope
-remain, it posts "Log out to finish updating the desktop", unless Settings is installing and shows
-it itself. Software Update shows the same state whenever it opens with nothing to install (Log Out
-/ Later); apps in `app.slice` are listed as "Quit and reopen … to use the new versions", Settings
+After installing, Settings reloads the user's units and looks at the user's own processes that
+map a deleted `/usr` or `/opt` executable or library, grouped by cgroup: services in
+`session.slice` restart through the user manager's `TryRestartUnit`; if the compositor's service,
+the session bus or the login scope remain, it shows "Log out to finish updating the desktop". The
+daily user timer does the same after an apt run from Terminal and posts it as a notification. Software Update shows the same state whenever it opens
+with nothing to install (Log Out / Later); apps in `app.slice` are listed as "Quit and reopen … to use the new versions", Settings
 itself left out. A restart is
 always the user's: Restart Now / Later, Log Out / Later; Restart Now and Log Out ask for it through
 `bande_app_v1.end_session`, the Bande menu's confirmation, so every app is asked to quit first. A pending restart is remembered with the

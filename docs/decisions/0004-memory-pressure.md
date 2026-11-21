@@ -34,7 +34,7 @@ compression-algorithm = zstd
 
 This is Fedora's rule (Debian's default is `min(ram / 2, 4096)` with the kernel's lz4). zram is
 created with priority 100, so an existing swap partition stays as overflow. Debian's kernel has
-`CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends,, and the
+`CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends, and the
 VM compresses before it writes.
 
 zram stacked over a disk swap partition is a known bad pairing: Fedora saw premature OOM
@@ -94,7 +94,7 @@ The shell (one process, always running, fonts already loaded) opens a PSI trigge
 `/proc/pressure/memory`: `full 100000 2000000`, a full stall of at least 5 % in a 2 s window.
 That is System Monitor's "Critical" level (full avg10 ≥ 5 %), so the window and the graph
 agree. It is the system-wide file, because thrashing hurts the whole machine whoever causes it.
-`/proc/pressure/*` is mode 0666 on Debian 13 (Linux 6.12), and a 2 s window is allowed for
+`/proc/pressure/*` is mode 0666 on Debian 14 (forky), and a 2 s window is allowed for
 unprivileged users. The fd sits in the shell's `poll()` set. Idle cost is zero: no timer, no
 reads, and the kernel only arms the trigger while memory stalls.
 

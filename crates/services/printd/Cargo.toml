@@ -34,11 +34,12 @@ maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"
 depends = "$auto, default-dbus-session-bus | dbus-session-bus"
 extended-description = """\
-Serves org.bande.Print on the session bus: finds AirPrint and IPP Everywhere \
+Serves org.bande.Print on the session bus: finds IPP Everywhere (driverless) \
 printers on the network with its own mDNS browser, keeps a queue of documents \
 for each user and sends them over IPP, with CUPS queues too where CUPS is \
 installed. It starts when asked and exits when nothing is left to do."""
 assets = [
+    ["target/release/deb-assets/bande-printd/copyright", "usr/share/doc/bande-printd/copyright", "644"],
     ["target/release/bande-printd", "usr/bin/", "755"],
     ["data/org.bande.Print.service", "usr/share/dbus-1/services/", "644"],
     ["data/bande-printd.service", "usr/lib/systemd/user/", "644"],

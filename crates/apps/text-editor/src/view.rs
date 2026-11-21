@@ -1519,7 +1519,7 @@ fn format_title(name: &str) -> String {
         "rtf" => tr!("Rich Text Document"),
         "markdown" => tr!("Markdown"),
         "html" => tr!("Web Page"),
-        "docx" => tr!("Word Document"),
+        "docx" => tr!("Office Open XML Document"),
         "odt" => tr!("OpenDocument Text"),
         other => other.to_owned(),
     }

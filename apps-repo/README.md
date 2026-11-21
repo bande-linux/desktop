@@ -23,7 +23,7 @@ apt install bande-<name>
 | Player | `bande-player` (audio and video files; the default player of both; decoding runs in the `bande-media-engine` child process, the only part linking GStreamer) |
 | Viewer | `bande-viewer` (images and PDF documents, the default viewer of both; PDFs render in a child process) |
 | Clock | `bande-clock` (alarms, timers, a stopwatch and a world clock; rings with its window closed) |
-| Text Editor | `bande-text-editor` (plain and rich text, Markdown, HTML, Word and OpenDocument; the desktop maps `text/plain` to it) |
+| Text Editor | `bande-text-editor` (plain and rich text, Markdown, HTML, Office Open XML and OpenDocument; the desktop maps `text/plain` to it) |
 | Disks | `bande-disks` (disks, volumes and disk images through UDisks2) |
 | Archives | `bande-archive` (the desktop maps zip, tar, gzip, bzip2, xz, zstd and 7-Zip files to it, and Files' Compress) |
 

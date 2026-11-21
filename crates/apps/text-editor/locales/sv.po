@@ -16,23 +16,23 @@ msgstr "Unicode (UTF-16 Little Endian)"
 msgid "Unicode (UTF-16 Big Endian)"
 msgstr "Unicode (UTF-16 Big Endian)"
 
-msgid "Western (Windows Latin 1)"
-msgstr "Västeuropeisk (Windows Latin 1)"
+msgid "Western (windows-1252)"
+msgstr "Västeuropeisk (windows-1252)"
 
 msgid "Western (ISO Latin 9)"
 msgstr "Västeuropeisk (ISO Latin 9)"
 
-msgid "Western (Mac OS Roman)"
-msgstr "Västeuropeisk (Mac OS Roman)"
+msgid "Western (macintosh)"
+msgstr "Västeuropeisk (macintosh)"
 
-msgid "Central European (Windows Latin 2)"
-msgstr "Centraleuropeisk (Windows Latin 2)"
+msgid "Central European (windows-1250)"
+msgstr "Centraleuropeisk (windows-1250)"
 
 msgid "Central European (ISO Latin 2)"
 msgstr "Centraleuropeisk (ISO Latin 2)"
 
-msgid "Cyrillic (Windows)"
-msgstr "Kyrillisk (Windows)"
+msgid "Cyrillic (windows-1251)"
+msgstr "Kyrillisk (windows-1251)"
 
 msgid "Cyrillic (ISO 8859-5)"
 msgstr "Kyrillisk (ISO 8859-5)"
@@ -40,17 +40,17 @@ msgstr "Kyrillisk (ISO 8859-5)"
 msgid "Cyrillic (KOI8-R)"
 msgstr "Kyrillisk (KOI8-R)"
 
-msgid "Cyrillic (DOS)"
-msgstr "Kyrillisk (DOS)"
+msgid "Cyrillic (IBM866)"
+msgstr "Kyrillisk (IBM866)"
 
-msgid "Greek (Windows)"
-msgstr "Grekisk (Windows)"
+msgid "Greek (windows-1253)"
+msgstr "Grekisk (windows-1253)"
 
 msgid "Greek (ISO 8859-7)"
 msgstr "Grekisk (ISO 8859-7)"
 
-msgid "Turkish (Windows Latin 5)"
-msgstr "Turkisk (Windows Latin 5)"
+msgid "Turkish (windows-1254)"
+msgstr "Turkisk (windows-1254)"
 
 msgid "Japanese (Shift JIS)"
 msgstr "Japansk (Shift JIS)"
@@ -67,8 +67,8 @@ msgstr "Traditionell kinesiska (Big 5)"
 msgid "Korean (EUC)"
 msgstr "Koreansk (EUC)"
 
-msgid "Thai (Windows)"
-msgstr "Thailändsk (Windows)"
+msgid "Thai (windows-874)"
+msgstr "Thailändsk (windows-874)"
 
 msgid "Text Editor"
 msgstr "Textredigerare"
@@ -376,8 +376,8 @@ msgstr "Markdown"
 msgid "Web Page"
 msgstr "Webbsida"
 
-msgid "Word Document"
-msgstr "Word-dokument"
+msgid "Office Open XML Document"
+msgstr "Office Open XML-dokument"
 
 msgid "OpenDocument Text"
 msgstr "OpenDocument-text"

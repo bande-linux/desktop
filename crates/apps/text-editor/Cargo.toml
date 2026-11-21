@@ -43,7 +43,7 @@ depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
 The text editor of the Bande desktop: \
 plain text in any encoding and line ending, rich text, RTF, Markdown, HTML, \
-Word and OpenDocument files, find and replace with regular \
+Office Open XML and OpenDocument files, find and replace with regular \
 expressions, and documents that are saved automatically and come back after \
 a crash or quit."""
 assets = [

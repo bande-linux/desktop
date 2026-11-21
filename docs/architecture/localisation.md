@@ -29,5 +29,7 @@ change applies at the next start of each program.
 **Checks.** `bande-l10n-tool check ci/l10n-complete` (in `ci/release/lint.sh`) fails on a broken
 `.po`, an entry the code no longer has, a placeholder the English lacks, a wrong number of plural
 forms, two crates of one program translating the same English differently, a language in
-`ci/l10n-complete` with a gap, and a program package without its English catalog.
-`bande-l10n-tool update` adds new English to each `.po` and drops what the code no longer has.
+`ci/l10n-complete` with a gap, a program package without its English catalog, and a `.po` that
+differs from what `update` would write.
+`bande-l10n-tool update` adds new English to each `.po` in the order the code uses it and drops
+what the code no longer has.

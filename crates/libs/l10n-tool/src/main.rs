@@ -195,6 +195,23 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
             }
         }
     }
+    let (catalogs, _) = updated(workspace);
+    problems.extend(
+        catalogs
+            .iter()
+            .filter(|catalog| {
+                catalog
+                    .current
+                    .as_ref()
+                    .is_some_and(|current| *current != catalog.text)
+            })
+            .map(|catalog| {
+                format!(
+                    "{}: not up to date with the code; run bande-l10n-tool update",
+                    catalog.file.display()
+                )
+            }),
+    );
     for (language, (done, total)) in &counts {
         println!("{language}: {done} of {total}");
     }
@@ -205,8 +222,15 @@ fn check(workspace: &Workspace, complete: &BTreeSet<String>) -> Result<(), Vec<S
     }
 }
 
-fn update(workspace: &Workspace) -> Result<(), Vec<String>> {
-    let mut problems = workspace.problems.clone();
+struct Updated {
+    file: PathBuf,
+    current: Option<String>,
+    text: String,
+}
+
+fn updated(workspace: &Workspace) -> (Vec<Updated>, Vec<String>) {
+    let mut catalogs = Vec::new();
+    let mut problems = Vec::new();
     for language in workspace.languages() {
         let header = workspace
             .crates
@@ -229,6 +253,10 @@ fn update(workspace: &Workspace) -> Result<(), Vec<String>> {
                 continue;
             }
             let file = krate.locales().join(format!("{language}.po"));
+            let current = existing
+                .is_some()
+                .then(|| std::fs::read_to_string(&file).ok())
+                .flatten();
             let (header, old) = match existing {
                 Some(Translations { po, .. }) => (po.header, po.messages),
                 None => (header.clone().unwrap_or_default(), Vec::new()),
@@ -257,11 +285,30 @@ fn update(workspace: &Workspace) -> Result<(), Vec<String>> {
                     }),
                 })
                 .collect();
-            let written = std::fs::create_dir_all(krate.locales())
-                .and_then(|()| std::fs::write(&file, po::write(&File { header, messages })));
-            if let Err(error) = written {
-                problems.push(format!("{}: {error}", file.display()));
-            }
+            catalogs.push(Updated {
+                file,
+                current,
+                text: po::write(&File { header, messages }),
+            });
+        }
+    }
+    (catalogs, problems)
+}
+
+fn update(workspace: &Workspace) -> Result<(), Vec<String>> {
+    let (catalogs, found) = updated(workspace);
+    let mut problems = [workspace.problems.clone(), found].concat();
+    for catalog in catalogs
+        .into_iter()
+        .filter(|catalog| catalog.current.as_ref() != Some(&catalog.text))
+    {
+        let written = catalog
+            .file
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(&catalog.file, catalog.text));
+        if let Err(error) = written {
+            problems.push(format!("{}: {error}", catalog.file.display()));
         }
     }
     if problems.is_empty() {

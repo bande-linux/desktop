@@ -106,7 +106,9 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   autopkgtests of the source package against that architecture's and the `all` packages
   (`autopkgtest --no-built-binaries <dsc> <debs> -- null`): `desktop`, `every-package`,
   `display-manager`, `services`, `portal` and `metadata` (see
-  [packaging.md](packaging.md#the-source-package)).
+  [packaging.md](packaging.md#the-source-package)). A Debian package that the release lacks for
+  the moment (restic, which `bande-backup` depends on, is out of forky) is a warning: `bande-desktop`
+  only recommends `bande-backup`, and `every-package` installs it only when restic can be.
 - `release-source` (tags only, after `install`): attaches the source package to the tag's GitHub
   release; the vendored crates make it too big to keep in git.
 
@@ -138,8 +140,9 @@ release suffix `~debNN` of the release it runs on (`ci/deb/debian-release.sh`:
 `VERSION_CODENAME`, numbered by distro-info-data; forky is `~deb14`), the way Debian's backports
 carry `~bpoNN`: `X.Y.Z-1~deb14` sorts below `X.Y.Z-1~deb15`, so upgrading Debian upgrades Bande
 to the next release's build. Unpublished and local builds get
-`X.Y.Z+gitDATE.COUNT.sha-1~debNN`, counted from the last tag, which sorts above that tag and
-below the next. Language packs put their stamp after the suffix, `X.Y.Z-R~debNN+l10nYYYYMMDD`,
+`X.Y.Z~gitDATE.COUNT.sha-1~debNN`, X.Y.Z the `Cargo.toml` version and COUNT the commits since
+the last tag, which sorts below the release of X.Y.Z, or `X.Y.Z+git…` once X.Y.Z is released,
+which sorts above it. Language packs put their stamp after the suffix, `X.Y.Z-R~debNN+l10nYYYYMMDD`,
 so they too sort below the next Debian release's build; the dictionary packs are
 `YYYYMMDD-1~debNN`.
 

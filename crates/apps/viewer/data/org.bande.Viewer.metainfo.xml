@@ -23,4 +23,5 @@
     <mediatype>image/svg+xml</mediatype>
     <mediatype>application/pdf</mediatype>
   </provides>
+  <content_rating type="oars-1.1"/>
 </component>

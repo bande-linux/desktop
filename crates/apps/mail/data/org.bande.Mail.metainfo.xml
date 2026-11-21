@@ -14,4 +14,5 @@
   </developer>
   <launchable type="desktop-id">org.bande.Mail.desktop</launchable>
   <url type="homepage">https://github.com/bande-linux/apps</url>
+  <content_rating type="oars-1.1"/>
 </component>

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Build dictionary packs and their .debs: build.py <version> <sources> <out> [package...], or build.py --pin <sources>. See docs/architecture/lookup.md."""
+"""Dictionary packs: build.py fetch <sources> fetches the pinned source data into <sources>/<component>/<file>;
+build.py packs <sources> <work> <out> writes each package's packs to <out>/<package>/ from it, offline;
+build.py --pin <sources> refreshes the pins. See docs/architecture/lookup.md."""
 import hashlib
 import json
 import pathlib
-import shutil
+import re
 import struct
 import subprocess
 import sys
@@ -11,9 +13,7 @@ import xml.etree.ElementTree as ET
 
 MAGIC = b"BDICT1\n\0"
 MAX_ENTRIES_PER_FORM = 40
-CC_BY_40 = "Creative Commons Attribution 4.0, https://creativecommons.org/licenses/by/4.0/"
-CC_BY_SA_25 = "Creative Commons Attribution-ShareAlike 2.5, https://creativecommons.org/licenses/by-sa/2.5/"
-CC_BY_SA_40 = "Creative Commons Attribution-ShareAlike 4.0, https://creativecommons.org/licenses/by-sa/4.0/"
+WORK = pathlib.Path(".")
 ENGLISH_RULES = (
     "noun:s: noun:ses:s noun:xes:x noun:zes:z noun:ches:ch noun:shes:sh noun:men:man noun:ies:y "
     "verb:s: verb:ies:y verb:es:e verb:es: verb:ed:e verb:ed: verb:ing:e verb:ing: "
@@ -108,11 +108,18 @@ def from_mirror(sources, sha256, path):
     return unpacked
 
 
-def source(sources, name):
+def component(name):
+    return re.sub(r"[._]", "-", name).lower()
+
+
+def source(sources, name, fetch=False):
     sha256, url = pins()[name]
-    path = sources / name
+    path = sources / component(name) / name
     if path.exists() and digest(path) == sha256:
         return path
+    if not fetch:
+        sys.exit(f"{path} is missing or does not match its pin")
+    path.parent.mkdir(parents=True, exist_ok=True)
     if from_mirror(sources, sha256, path) and digest(path) == sha256:
         return path
     print(f"{name}: not in our copy at {MIRROR}, fetching {url}", file=sys.stderr)
@@ -125,10 +132,10 @@ def source(sources, name):
 
 
 def pin(sources):
-    sources.mkdir(parents=True, exist_ok=True)
     lines = []
     for name, (_, url) in pins().items():
-        path = sources / name
+        path = sources / component(name) / name
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.unlink(missing_ok=True)
         if not download(url, path):
             sys.exit(f"cannot fetch {url}")
@@ -141,7 +148,7 @@ def pin(sources):
 
 
 def wordnet(sources):
-    root = sources / "oewn"
+    root = WORK / "oewn"
     if not root.exists():
         root.mkdir()
         archive = source(sources, "oewn-2025.zip")
@@ -200,7 +207,7 @@ def wordnet_thesaurus(sources):
 
 
 def synlex_entries(sources):
-    root = sources / "mythes-sv"
+    root = WORK / "mythes-sv"
     if not root.exists():
         root.mkdir()
         deb = source(sources, "mythes-sv.deb")
@@ -288,8 +295,6 @@ PACKS = {
                 },
             },
         ],
-        "summary": "English words from Wiktionary for Dictionary",
-        "licence": f"Wiktionary contributors, extracted by kaikki.org (wiktextract).\n{CC_BY_SA_40}\nConverted to the Bande pack format.\n",
     },
     "bande-dict-en": {
         "packs": [
@@ -322,8 +327,6 @@ PACKS = {
                 },
             },
         ],
-        "summary": "English dictionary and thesaurus for Dictionary (Open English WordNet)",
-        "licence": f"Open English WordNet 2025, https://en-word.net/\n{CC_BY_40}\nConverted to the Bande pack format.\n",
     },
     "bande-dict-sv": {
         "packs": [
@@ -358,9 +361,6 @@ PACKS = {
                 },
             },
         ],
-        "summary": "Swedish-English dictionary and Swedish thesaurus for Dictionary (Folkets lexikon, Synlex)",
-        "licence": f"Folkets lexikon, KTH, https://folkets-lexikon.csc.kth.se/\n{CC_BY_SA_25}\n\nSynlex, Folkets synonymlexikon, 2009 Viggo Kann, KTH, as packaged in Debian's mythes-sv; its copyright file follows.\nConverted to the Bande pack format.\n\n",
-        "licence_file": "mythes-sv/usr/share/doc/mythes-sv/copyright",
     },
     "bande-dict-sv-wiktionary": {
         "packs": [
@@ -379,53 +379,35 @@ PACKS = {
                 },
             },
         ],
-        "summary": "Swedish words from Wiktionary for Dictionary",
-        "licence": f"Wiktionary contributors, extracted by kaikki.org (wiktextract).\n{CC_BY_SA_40}\nConverted to the Bande pack format.\n",
     },
 }
 
 
-def debian_arch_all_deb(package, spec, packs, version, out):
-    root = out / f"{package}.root"
-    shutil.rmtree(root, ignore_errors=True)
-    folder = root / "usr/share/bande/dict"
-    docs = root / f"usr/share/doc/{package}"
-    folder.mkdir(parents=True)
-    docs.mkdir(parents=True)
-    (root / "DEBIAN").mkdir()
-    for pack in packs:
-        shutil.copy(pack, folder)
-    (docs / "copyright").write_text(spec["licence"])
-    (root / "DEBIAN/control").write_text(
-        f"Package: {package}\nVersion: {version}\nArchitecture: all\n"
-        f"Maintainer: Mikael Hug <mikaelhug@gmail.com>\nSection: text\nPriority: optional\n"
-        f"Installed-Size: {sum(pack.stat().st_size for pack in packs) // 1024}\nDescription: {spec['summary']}\n"
-    )
-    deb = out / f"{package}_{version}_all.deb"
-    subprocess.run(["dpkg-deb", "--root-owner-group", "-Zxz", "-b", str(root), str(deb)], check=True)
-    shutil.rmtree(root)
-    return deb
+def packs(sources, out, packages):
+    for package in packages or PACKS:
+        folder = out / package
+        folder.mkdir(parents=True, exist_ok=True)
+        for part in PACKS[package]["packs"]:
+            pack = folder / f"{part['file']}.bdict"
+            write_pack(pack, part["meta"], part["entries"](sources))
+        print(package, sum(pack.stat().st_size for pack in folder.iterdir()) // 1000000, "MB")
 
 
 def main():
-    if sys.argv[1] == "--pin":
-        pin(pathlib.Path(sys.argv[2]))
-        return
-    version, sources, out = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
-    sources.mkdir(parents=True, exist_ok=True)
-    out.mkdir(parents=True, exist_ok=True)
-    for package in sys.argv[4:] or PACKS:
-        spec = PACKS[package]
-        packs = []
-        for part in spec["packs"]:
-            pack = out / f"{part['file']}.bdict"
-            write_pack(pack, part["meta"], part["entries"](sources))
-            packs.append(pack)
-        if "licence_file" in spec:
-            spec["licence"] += (sources / spec["licence_file"]).read_text()
-        deb = debian_arch_all_deb(package, spec, packs, version, out)
-        size = sum(pack.stat().st_size for pack in packs) // 1000000
-        print(package, size, "MB packs,", deb.stat().st_size // 1000000, "MB deb")
+    global WORK
+    match sys.argv[1:]:
+        case ["--pin", sources]:
+            pin(pathlib.Path(sources))
+        case ["fetch", sources]:
+            for name in pins():
+                source(pathlib.Path(sources), name, fetch=True)
+        case ["packs", sources, work, out, *packages]:
+            WORK = pathlib.Path(work)
+            WORK.mkdir(parents=True, exist_ok=True)
+            packs(pathlib.Path(sources).resolve(), pathlib.Path(out), packages)
+        case _:
+            sys.exit(__doc__)
+
 
 if __name__ == "__main__":
     main()

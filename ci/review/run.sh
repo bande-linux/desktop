@@ -49,11 +49,13 @@ cd "$repo"
 if [ "$build" = 1 ]; then
     version=$(ci/deb/version.sh "$repo")
     echo "Building packages $version"
+    rm -rf target/review-debs
+    ci/deb/source.sh target/review-debs
+    DEB_BUILD_OPTIONS=nocheck PROFILE=release ci/deb/build.sh target/review-debs/bande-desktop_"$(ci/deb/version.sh --source)".dsc \
+        target/review-debs -B
     debs=()
-    ci/release/deb-assets.sh target/release/deb-assets "$version" "${packages[@]}"
     for package in "${packages[@]}"; do
-        $cargo deb --package "$package" --locked --deb-version "$version"
-        debs+=("$repo/target/debian/${package}_${version}_$(dpkg --print-architecture).deb")
+        debs+=("$repo/target/review-debs/${package}_${version}_$(dpkg --print-architecture).deb")
     done
     sudo apt-get install -y --allow-downgrades --reinstall "${debs[@]}"
     systemctl --user daemon-reload

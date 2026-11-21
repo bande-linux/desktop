@@ -31,26 +31,5 @@ wayland-client.workspace = true
 wayland-protocols.workspace = true
 zbus.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, bande-icon-theme, pipewire, gstreamer1.0-tools, gstreamer1.0-pipewire, gstreamer1.0-plugins-good"
-recommends = "gstreamer1.0-plugins-ugly"
-extended-description = """\
-The screenshot tool of the Bande desktop. Shift+Print saves a picture of \
-each display, Shift+Super+S one of an area dragged out with the pointer or \
-of a window, and Print opens the options: screen, window or area, a \
-recording, where to save, a timer and the pointer. Pictures are PNG files \
-named after the moment they were taken. It also captures the screen and \
-windows for the desktop portal: the picker \
-for screen sharing, the PipeWire streams, and screenshots apps ask for. \
-bande-compositor starts it and keeps it running."""
-assets = [
-    "$auto",
-    ["target/release/deb-assets/bande-screenshot/copyright", "usr/share/doc/bande-screenshot/copyright", "644"],
-    ["target/release/deb-assets/bande-screenshot/changelog.gz", "usr/share/doc/bande-screenshot/", "644"],
-    ["target/release/deb-assets/bande-screenshot/man/*", "usr/share/man/man1/", "644"],
-]
-
 [lints]
 workspace = true

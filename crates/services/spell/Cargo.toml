@@ -17,24 +17,5 @@ bande-log.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, default-dbus-session-bus | dbus-session-bus, hunspell-en-us"
-extended-description = """\
-Serves spell checking, learned words and text replacements to Bande apps \
-as org.bande.Spell on the session bus. Started by D-Bus activation when \
-text is first checked; holds one copy of each dictionary and exits when \
-idle. Dictionaries are Debian's hunspell packages."""
-assets = [
-    ["target/release/deb-assets/bande-spell/copyright", "usr/share/doc/bande-spell/copyright", "644"],
-    ["target/release/deb-assets/bande-spell/changelog.gz", "usr/share/doc/bande-spell/", "644"],
-    ["target/release/bande-spell", "usr/libexec/", "755"],
-    ["data/org.bande.Spell.service", "usr/share/dbus-1/services/", "644"],
-    ["data/bande-spell.service", "usr/lib/systemd/user/", "644"],
-    ["data/text/*", "usr/share/bande/text/", "644"],
-    ["target/release/l10n/development/bande-spell/*", "usr/share/bande/l10n/bande-spell/", "644"],
-]
-
 [lints]
 workspace = true

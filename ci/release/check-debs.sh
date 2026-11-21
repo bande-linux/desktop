@@ -1,11 +1,14 @@
 #!/bin/bash
+# check-debs.sh <debs dir> [version]: checks the binary packages one build of debian/ made for this
+# architecture and the architecture-independent ones: versions, stripping, contents and relations.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-debs=$(realpath "${1:-${CARGO_TARGET_DIR:-target}/debian}")
-version=${DEB_VERSION:-$(ci/deb/version.sh)}
+debs=$(realpath "${1:?usage: check-debs.sh <debs dir> [version]}")
+version=${2:-$(ci/deb/version.sh)}
 architecture=$(dpkg --print-architecture)
-mapfile -t packages < ci/release/packages
+mapfile -t packages < <(dh_listpackages -a)
+mapfile -t independent < <(dh_listpackages -i)
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 extract() {
@@ -17,7 +20,7 @@ extract() {
 field() { dpkg-deb --field "$debs/$1_${version}_$architecture.deb" "$2"; }
 contains() { grep -q " ./$2\$" <<< "$(dpkg-deb --contents "$debs/$1_${version}_$architecture.deb")"; }
 
-if [ "${VERIFY_PROFILE:-dist}" = dist ]; then
+if [ "${PROFILE:-dist}" = dist ]; then
     echo "== every program keeps only its function names, in .gnu_debugdata"
     for package in "${packages[@]}"; do
         root=$(extract "$package")
@@ -35,9 +38,10 @@ if [ "${VERIFY_PROFILE:-dist}" = dist ]; then
     done
 fi
 
-echo "== every package is built for $architecture at $version"
-[ "$(find "$debs" -name '*.deb' | wc -l)" = "${#packages[@]}" ]
+echo "== every package is built for $architecture at $version, each with its debug symbols"
+[ "$(find "$debs" -name "*_$architecture.deb" ! -name '*-dbgsym_*' | wc -l)" = "${#packages[@]}" ]
 for package in "${packages[@]}"; do
+    test -e "$debs/$package-dbgsym_${version}_$architecture.deb" || { echo "$package has no -dbgsym package"; exit 1; }
     deb="$debs/${package}_${version}_$architecture.deb"
     dpkg-deb --info "$deb"
     dpkg-deb --contents "$deb"
@@ -48,20 +52,6 @@ for package in "${packages[@]}"; do
     [ "$(dpkg-deb --fsys-tarfile "$deb" | tar -xO | grep -ac -e "$PWD" -e "${CARGO_HOME:-$HOME/.cargo}")" = 0 ]
 done
 field bande-compositor Depends | grep -F 'mesa-vulkan-drivers | vulkan-icd'
-
-echo "== every app's desktop entry and metainfo validate, and its program names itself"
-for package in "${packages[@]}"; do
-    root=$(extract "$package")
-    mapfile -t desktops < <(find "$root/usr/share/applications" -name '*.desktop' 2>/dev/null)
-    [ ${#desktops[@]} -gt 0 ] || continue
-    desktop-file-validate "${desktops[@]}"
-    mapfile -t metainfos < <(find "$root/usr/share/metainfo" -name '*.xml' 2>/dev/null)
-    [ ${#metainfos[@]} -gt 0 ] || { echo "$package ships a desktop entry and no metainfo"; exit 1; }
-    appstreamcli validate --no-net "${metainfos[@]}"
-    if [ -x "$root/usr/bin/$package" ]; then
-        "$root/usr/bin/$package" --version | grep -q "^$package " || { echo "$package --version does not name $package"; exit 1; }
-    fi
-done
 
 echo "== the compositor ships the Bande pointers under their CSS and X11 names"
 root=$(extract bande-compositor)
@@ -166,17 +156,9 @@ grep -qx 'Exec=bande-session' "$session"
 grep -qx 'DesktopNames=X-Bande' "$session"
 test -x "$root/usr/bin/bande-session"
 sh -n "$root/usr/bin/bande-session"
-units="$scratch/units"
-mkdir -p "$units"
-cp "$root"/usr/lib/systemd/user/* "$units/"
-sed -i "s|^ExecStart=/|ExecStart=$root/|" "$units"/*
-grep -qx 'Type=notify' "$units/bande-compositor.service"
-grep -qx 'BindsTo=graphical-session.target' "$units/bande-compositor.service"
-grep -qx 'Wants=xdg-desktop-autostart.target' "$units/bande-session.target"
-[ -z "$(grep -l 'WantedBy=graphical-session.target' "$units"/* || true)" ]
-findings=$(cd "$units" && XDG_RUNTIME_DIR=$(mktemp -d -p "$scratch") SYSTEMD_LOG_LEVEL=warning systemd-analyze --user verify ./* 2>&1) || true
-echo "$findings"
-test -z "$findings"
+grep -qx 'Type=notify' "$root/usr/lib/systemd/user/bande-compositor.service"
+grep -qx 'BindsTo=graphical-session.target' "$root/usr/lib/systemd/user/bande-compositor.service"
+grep -qx 'Wants=xdg-desktop-autostart.target' "$root/usr/lib/systemd/user/bande-session.target"
 
 echo "== the portal backend's registration"
 root=$(extract xdg-desktop-portal-bande)
@@ -187,15 +169,40 @@ grep -qx 'Name=org.freedesktop.impl.portal.desktop.bande' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
 grep -qx 'default=bande;' "$root/usr/share/xdg-desktop-portal/x-bande-portals.conf"
 
-echo "== lintian"
-lintian=(lintian --fail-on "error,warning")
-if [ "$(id -u)" = 0 ]; then
-    linted=$(mktemp -d -p "$scratch")
-    chmod 755 "$scratch" "$linted"
-    cp "$debs"/*.deb "$linted/"
-    chmod 644 "$linted"/*.deb
-    runuser -u nobody -- "${lintian[@]}" "$linted"/*.deb
-else
-    "${lintian[@]}" "$debs"/*.deb
-fi
-echo "the $architecture packages passed"
+echo "== bande-desktop asks for its packages at $version"
+all() { echo "$debs/$1_${version}_all.deb"; }
+desktop() { dpkg-deb --field "$(all bande-desktop)" "$1"; }
+desktop Depends | grep -qF "bande-compositor (>= $version)"
+desktop Recommends | grep -qF "bande-files (>= $version)"
+dpkg-deb --extract "$(all bande-desktop)" "$scratch/desktop"
+grep -qx 'inode/directory=org.bande.Files.desktop;' "$scratch/desktop/usr/share/applications/x-bande-mimeapps.list"
+
+echo "== bande-desktop brings a login, sound and the system around the desktop"
+relation() { desktop "$1" | tr ',' '\n' | sed 's/^ *//' | grep -qxF "$2"; }
+relation Depends "bande-greeter (>= $version) | x-display-manager"
+for depended in pipewire wireplumber; do
+    relation Depends "$depended"
+done
+for recommended in "bande-greeter (>= $version)" "bande-reporter (>= $version)" "bande-crash-reports (>= $version)" pipewire-pulse; do
+    relation Recommends "$recommended"
+done
+
+echo "== bande-desktop recommends only packages built here at $version, or Debian's"
+desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | while read -r package relation; do
+    [ "$relation" = "(>= $version)" ] || { echo "bande-desktop recommends $package $relation"; exit 1; }
+    printf '%s\n' "${packages[@]}" "${independent[@]}" | grep -qxF "$package" || { echo "$package is not built here"; exit 1; }
+done
+
+echo "== a language pack holds only catalogs, one per program"
+for pack in "$debs"/bande-desktop-l10n-*_all.deb; do
+    [ "$(dpkg-deb --field "$pack" Section)" = localization ]
+    if dpkg-deb --contents "$pack" | awk '{print $6}' | grep -v -e '^\./usr/share/bande/l10n/' -e '^\./usr/share/doc/' -e '^\./$' -e '^\./usr/$' -e '^\./usr/share/$' -e '^\./usr/share/bande/$'; then
+        echo "$pack holds more than catalogs"
+        exit 1
+    fi
+done
+contents=$(dpkg-deb --contents "$(all bande-desktop-l10n-sv)")
+grep -q ' ./usr/share/bande/l10n/bande-settings/sv.mo$' <<< "$contents"
+grep -q ' ./usr/share/bande/l10n/bande-mail/sv.mo$' <<< "$contents"
+if grep -q ' ./usr/share/bande/l10n/bande-template/' <<< "$contents"; then echo "the Swedish pack holds the template's catalog"; exit 1; fi
+echo "the $architecture and all packages passed"

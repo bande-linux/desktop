@@ -20,8 +20,9 @@ One Cargo workspace with the desktop and its apps, grouped by role in `crates/`
 | `libs/` | shared logic, including `bande-app`, the framework every app is built on, and what apps share (`bande-keyring`, `bande-discovery`, `bande-terminal-view`, `bande-vm`) |
 | `testing/` | the test bus, a Wayland test client, benchmarks, a sample app and the review recorder |
 
-`packaging/` holds the `bande-desktop` metapackage, `ci/` the release and packaging scripts,
-`data/` wallpapers, icons and sounds.
+`debian/` builds every package, the apps' included, as the one Debian source package
+`bande-desktop`; `packaging/dict` holds the dictionary packs' source package, `ci/` the release
+and packaging scripts, `data/` wallpapers, icons, sounds and the session's systemd drop-ins.
 
 ## Apps
 
@@ -61,12 +62,12 @@ whenever Debian uploads a new `firefox-esr`. `browser/firefox-esr-bande/` is the
 
 ## Building and testing
 
-On Debian forky, install the build and test dependencies (with `sudo`; Debian's own `rustc`,
-`cargo`, `rustfmt` and `rust-clippy` included):
+On Debian forky, install the build and test dependencies, the Build-Depends of `debian/control`
+and the tools of the checks (with `sudo`; Debian's own `rustc`, `cargo`, `rustfmt` and
+`rust-clippy` included):
 
 ```bash
-xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 \
-    libwayland-client0 procps fonts-inter fonts-manrope fonts-jetbrains-mono < ci/release/build-depends
+ci/release/verify.sh --setup gate
 ```
 
 The gate is the release checks: fmt, clippy, the layering rules, the tests on a private D-Bus bus
@@ -74,7 +75,7 @@ and the packages with their checks; tests need no GPU or display (lavapipe rende
 compositor runs headless):
 
 ```bash
-VERIFY_PROFILE=dev ci/release/verify.sh gate
+PROFILE=dev ci/release/verify.sh gate
 ```
 
 `cargo run -p bande-compositor -- --headless` starts the compositor without a display.
@@ -89,10 +90,10 @@ screenshot tests; [`docs/quality/tests.md`](docs/quality/tests.md) lists them an
 
 GitHub CI runs only on version tags (and on manual dispatch for an unpublished build). Every
 package, desktop and apps, is released together at one version. A release
-is: bump `[workspace.package] version` in `Cargo.toml`, merge to `main` through the train, whose
-gate runs the same checks, and tag `vX.Y.Z`. The tag's
-`release.yml` lints, tests, builds every package for arm64 and amd64 and install-tests them in a
-clean Debian forky; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
+is: bump `[workspace.package] version` in `Cargo.toml` and add the `X.Y.Z-1` entry to
+`debian/changelog`, merge to `main` through the train, whose gate runs the same checks, and tag
+`vX.Y.Z`. The tag's `release.yml` lints, tests, makes the source package, builds every package
+from it offline for arm64 and amd64 and runs its autopkgtests in a clean Debian forky; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
 publishes a fully green tag run on its own. Details: [`docs/architecture/ci.md`](docs/architecture/ci.md).
 
 ## Installing

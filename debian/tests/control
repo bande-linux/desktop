@@ -1,0 +1,39 @@
+Tests: desktop
+Depends: bande-desktop, passwd
+Restrictions: needs-root, breaks-testbed, allow-stderr
+
+Tests: every-package
+Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-power,
+ bande-printd, bande-reporter, bande-crash-reports, bande-sound, bande-spell,
+ xdg-desktop-portal-bande, bande-file-chooser, bande-tray, bande-indexer, bande-automount,
+ bande-polkit, bande-secrets, libpam-bande-secrets, bande-shell, bande-lock, bande-screenshot,
+ bande-files, bande-lookup, bande-settings, bande-greeter, bande-terminal, bande-software,
+ bande-installer, bande-monitor, bande-mail, bande-calendar, bande-velox, bande-calculator,
+ bande-player, bande-viewer, bande-clock, bande-text-editor, bande-disks, bande-archive,
+ bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb,
+ apt, bash, coreutils, dash, dpkg, libc-bin, login, mount, passwd, tar, tzdata, util-linux
+Restrictions: needs-root, allow-stderr
+
+Tests: display-manager
+Depends: bande-desktop, lightdm, bsdutils, debconf
+Restrictions: needs-root, breaks-testbed, allow-stderr
+
+Tests: services
+Depends: bande-config, bande-compositor, dbus-daemon, dbus-bin
+Restrictions: allow-stderr
+
+Tests: portal
+Depends: xdg-desktop-portal-bande, bande-config, xdg-desktop-portal, dbus-daemon, dbus-bin
+Restrictions: allow-stderr
+
+Tests: metadata
+Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-power,
+ bande-printd, bande-reporter, bande-crash-reports, bande-sound, bande-spell,
+ xdg-desktop-portal-bande, bande-file-chooser, bande-tray, bande-indexer, bande-automount,
+ bande-polkit, bande-secrets, libpam-bande-secrets, bande-shell, bande-lock, bande-screenshot,
+ bande-files, bande-lookup, bande-settings, bande-greeter, bande-terminal, bande-software,
+ bande-installer, bande-monitor, bande-mail, bande-calendar, bande-velox, bande-calculator,
+ bande-player, bande-viewer, bande-clock, bande-text-editor, bande-disks, bande-archive,
+ bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb,
+ desktop-file-utils, appstream, systemd
+Restrictions: allow-stderr

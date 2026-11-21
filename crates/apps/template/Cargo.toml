@@ -17,21 +17,3 @@ bande-toolkit.workspace = true
 
 [lints]
 workspace = true
-
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
-extended-description = """\
-A starting point for a Bande app: one window that says hello, with the \
-menus, keys and single instance every Bande app has."""
-assets = [
-    ["target/release/bande-template", "usr/bin/", "755"],
-    ["data/org.bande.Template.desktop", "usr/share/applications/", "644"],
-    ["target/release/deb-assets/bande-template/org.bande.Template.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["target/release/deb-assets/bande-template/copyright", "usr/share/doc/bande-template/copyright", "644"],
-    ["target/release/deb-assets/bande-template/changelog.gz", "usr/share/doc/bande-template/", "644"],
-    ["target/release/deb-assets/bande-template/man/*", "usr/share/man/man1/", "644"],
-    ["data/org.bande.Template.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["target/release/l10n/development/bande-template/*", "usr/share/bande/l10n/bande-template/", "644"],
-]

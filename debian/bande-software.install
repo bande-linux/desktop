@@ -1,0 +1,5 @@
+debian/build/bin/bande-software usr/bin/
+crates/apps/software/data/org.bande.Software.desktop usr/share/applications/
+crates/apps/software/data/org.bande.Software.svg usr/share/icons/hicolor/scalable/apps/
+debian/build/metainfo/org.bande.Software.metainfo.xml usr/share/metainfo/
+debian/build/l10n/development/bande-software/* usr/share/bande/l10n/bande-software/

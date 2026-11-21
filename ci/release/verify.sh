@@ -2,7 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-cargo_deb_version=3.8.0
 actionlint_version=1.7.12
 export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
@@ -13,26 +12,22 @@ export CFLAGS="${CFLAGS:-} -ffile-prefix-map=$PWD=/build -ffile-prefix-map=${CAR
 
 setup=0
 [ "${1:-}" != --setup ] || { setup=1; shift; }
-[ $# -gt 0 ] || { echo "usage: verify.sh [--setup] lint|test|debs|all|gate..." >&2; exit 2; }
+[ $# -gt 0 ] || { echo "usage: verify.sh [--setup] lint|test|debs|gate..." >&2; exit 2; }
 stages=()
 for stage; do
     case $stage in
-        gate) stages+=(lint test all debs) ;;
-        lint | test | debs | all) stages+=("$stage") ;;
+        gate) stages+=(lint test debs) ;;
+        lint | test | debs) stages+=("$stage") ;;
         *) echo "verify.sh: no stage $stage" >&2; exit 2 ;;
     esac
 done
 
 packages() {
     case $1 in
-        lint) echo curl ca-certificates shellcheck python3 ;;
-        test) echo libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin at-spi2-core libfontconfig1 \
-            libwayland-client0 procps fonts-inter fonts-manrope fonts-jetbrains-mono ;;
-        debs) echo dpkg-dev jq lintian libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd dbus-user-session \
-            desktop-file-utils appstream ;;
-        all) echo build-essential debhelper dpkg-dev lintian distro-info-data cargo rustc ;;
+        lint) echo curl ca-certificates shellcheck python3 jq rustfmt rust-clippy distro-info-data dpkg-dev ;;
+        test) echo dpkg-dev ;;
+        debs) echo build-essential dpkg-dev devscripts git jq lintian xz-utils distro-info-data ;;
     esac
-    [ "$1" = all ] || cat ci/release/build-depends
 }
 
 actionlint() {
@@ -56,9 +51,11 @@ actionlint() {
     "$cache/actionlint"
 }
 
-cargo_deb() {
-    cargo deb --version 2>/dev/null | grep -qw "$cargo_deb_version" ||
-        cargo install cargo-deb --version "$cargo_deb_version" --locked
+build_dep() {
+    local as_root=()
+    [ "$(id -u)" = 0 ] || as_root=(sudo)
+    dpkg-checkbuilddeps -Ppkg.bande.vendor 2>/dev/null ||
+        "${as_root[@]}" env DEBIAN_FRONTEND=noninteractive apt-get build-dep -y --no-install-recommends -Ppkg.bande.vendor ./
 }
 
 prepare() {
@@ -66,6 +63,7 @@ prepare() {
     mapfile -t wanted < <(packages "$stage" | xargs -n1)
     if [ $setup = 1 ]; then
         ci/apt-install.sh "${wanted[@]}"
+        build_dep
         return
     fi
     for package in "${wanted[@]}"; do
@@ -73,6 +71,8 @@ prepare() {
     done
     [ ${#missing[@]} -eq 0 ] ||
         { echo "verify.sh: the $stage stage needs ${missing[*]}; install them (ci/apt-install.sh does)" >&2; exit 1; }
+    dpkg-checkbuilddeps -Ppkg.bande.vendor ||
+        { echo "verify.sh: install the Build-Depends (verify.sh --setup does)" >&2; exit 1; }
 }
 
 run() {
@@ -87,9 +87,19 @@ run() {
             dbus-run-session \
                 --config-file=crates/testing/test-bus/data/session.conf -- cargo test --locked "${test_args[@]}"
             ;;
-        debs) cargo_deb && ci/release/build-debs.sh && ci/release/check-debs.sh && ci/release/smoke.sh ;;
-        all) ci/release/build-all.sh ;;
+        debs) debs ;;
     esac
+}
+
+debs() {
+    local out=${CARGO_TARGET_DIR:-target}/debian version
+    version=$(ci/deb/version.sh)
+    rm -rf "$out"
+    ci/deb/source.sh "$out/source"
+    DEB_BUILD_OPTIONS="nocheck ${DEB_BUILD_OPTIONS:-}" \
+        ci/deb/build.sh "$out/source/bande-desktop_$(ci/deb/version.sh --source).dsc" "$out" --build=binary
+    ci/release/check-debs.sh "$out" "$version"
+    lintian --fail-on error,warning "$out"/*.changes
 }
 
 for stage in "${stages[@]}"; do

@@ -1,0 +1,2 @@
+debian/build/bin/bande-clipboard usr/bin/
+debian/build/l10n/development/bande-clipboard/* usr/share/bande/l10n/bande-clipboard/

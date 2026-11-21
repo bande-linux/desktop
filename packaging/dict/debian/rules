@@ -1,0 +1,10 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	python3 build.py packs . debian/build/work debian/build/packs
+
+override_dh_auto_clean:
+	rm -rf debian/build

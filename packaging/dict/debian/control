@@ -1,0 +1,53 @@
+Source: bande-dict
+Section: text
+Priority: optional
+Maintainer: Mikael Hug <mikaelhug@gmail.com>
+Build-Depends: debhelper-compat (= 14)
+Build-Depends-Indep: python3,
+ unzip,
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/bande-linux/desktop
+Vcs-Browser: https://github.com/bande-linux/desktop/tree/main/packaging/dict
+Vcs-Git: https://github.com/bande-linux/desktop.git
+
+Package: bande-dict-en
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Enhances: bande-lookup
+Description: English dictionary and thesaurus for Dictionary (Open English WordNet)
+ The English Dictionary and the English Thesaurus of Open English WordNet
+ 2025, converted to the pack format that Bande's Dictionary and Look Up
+ read from /usr/share/bande/dict.
+
+Package: bande-dict-en-wiktionary
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Enhances: bande-lookup
+Description: English words from Wiktionary for Dictionary
+ The English words of Wiktionary, extracted by kaikki.org, converted to the
+ pack format that Bande's Dictionary and Look Up read from
+ /usr/share/bande/dict. Dictionary leaves it off until it is turned on in
+ its settings.
+
+Package: bande-dict-sv
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Enhances: bande-lookup
+Description: Swedish-English dictionary and Swedish thesaurus for Dictionary
+ Folkets lexikon, the Swedish-English dictionary of KTH, and Synlex, its
+ Swedish thesaurus, converted to the pack format that Bande's Dictionary and
+ Look Up read from /usr/share/bande/dict.
+
+Package: bande-dict-sv-wiktionary
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Enhances: bande-lookup
+Description: Swedish words from Wiktionary for Dictionary
+ The Swedish words of Wiktionary, extracted by kaikki.org, with their
+ English definitions, converted to the pack format that Bande's Dictionary
+ and Look Up read from /usr/share/bande/dict.

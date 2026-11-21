@@ -1,0 +1,1205 @@
+Source: bande-desktop
+Section: misc
+Priority: optional
+Maintainer: Mikael Hug <mikaelhug@gmail.com>
+Build-Depends: debhelper-compat (= 14),
+ dh-cargo (>= 34),
+ cargo,
+ rustc (>= 1.98),
+ python3,
+# librust: written by ci/deb/build-depends.py
+ librust-accesskit-0.25-dev (>= 0.25.2-~~) <!pkg.bande.vendor>,
+ librust-accesskit-0.25+default-dev (>= 0.25.2-~~) <!pkg.bande.vendor>,
+ librust-accesskit-unix-0.24-dev (>= 0.24.1-~~) <!pkg.bande.vendor>,
+ librust-accesskit-unix-0.24+default-dev (>= 0.24.1-~~) <!pkg.bande.vendor>,
+ librust-alacritty-terminal-0.26-dev (>= 0.26.0-~~) <!pkg.bande.vendor>,
+ librust-ash-0.38-dev (>= 0.38.0-~~) <!pkg.bande.vendor>,
+ librust-ash-0.38+default-dev (>= 0.38.0-~~) <!pkg.bande.vendor>,
+ librust-async-channel-2-dev (>= 2.5.0-~~) <!pkg.bande.vendor>,
+ librust-async-channel-2+default-dev (>= 2.5.0-~~) <!pkg.bande.vendor>,
+ librust-async-executor-1-dev (>= 1.14.0-~~) <!pkg.bande.vendor>,
+ librust-async-executor-1+default-dev (>= 1.14.0-~~) <!pkg.bande.vendor>,
+ librust-async-io-2-dev (>= 2.6.0-~~) <!pkg.bande.vendor>,
+ librust-async-io-2+default-dev (>= 2.6.0-~~) <!pkg.bande.vendor>,
+ librust-async-lock-3-dev (>= 3.4.2-~~) <!pkg.bande.vendor>,
+ librust-async-lock-3+default-dev (>= 3.4.2-~~) <!pkg.bande.vendor>,
+ librust-async-process-2-dev (>= 2.5.0-~~) <!pkg.bande.vendor>,
+ librust-async-process-2+default-dev (>= 2.5.0-~~) <!pkg.bande.vendor>,
+ librust-base64-0.22-dev (>= 0.22.1-~~) <!pkg.bande.vendor>,
+ librust-base64-0.22+default-dev (>= 0.22.1-~~) <!pkg.bande.vendor>,
+ librust-blocking-1-dev (>= 1.6.2-~~) <!pkg.bande.vendor>,
+ librust-blocking-1+default-dev (>= 1.6.2-~~) <!pkg.bande.vendor>,
+ librust-bzip2-0.6-dev (>= 0.6.1-~~) <!pkg.bande.vendor>,
+ librust-bzip2-0.6+default-dev (>= 0.6.1-~~) <!pkg.bande.vendor>,
+ librust-data-encoding-2-dev (>= 2.11.0-~~) <!pkg.bande.vendor>,
+ librust-data-encoding-2+default-dev (>= 2.11.0-~~) <!pkg.bande.vendor>,
+ librust-encoding-rs-0.8-dev (>= 0.8.35-~~) <!pkg.bande.vendor>,
+ librust-encoding-rs-0.8+default-dev (>= 0.8.35-~~) <!pkg.bande.vendor>,
+ librust-fatfs-0.3-dev (>= 0.3.6-~~) <!pkg.bande.vendor>,
+ librust-fatfs-0.3+alloc-dev (>= 0.3.6-~~) <!pkg.bande.vendor>,
+ librust-fatfs-0.3+std-dev (>= 0.3.6-~~) <!pkg.bande.vendor>,
+ librust-flate2-1-dev (>= 1.1.10-~~) <!pkg.bande.vendor>,
+ librust-flate2-1+default-dev (>= 1.1.10-~~) <!pkg.bande.vendor>,
+ librust-fontique-0.12-dev (>= 0.12.0-~~) <!pkg.bande.vendor>,
+ librust-fontique-0.12+default-dev (>= 0.12.0-~~) <!pkg.bande.vendor>,
+ librust-fontique-0.12+fontconfig-dlopen-dev (>= 0.12.0-~~) <!pkg.bande.vendor>,
+ librust-futures-lite-2-dev (>= 2.6.1-~~) <!pkg.bande.vendor>,
+ librust-futures-lite-2+default-dev (>= 2.6.1-~~) <!pkg.bande.vendor>,
+ librust-gstreamer-0.25-dev (>= 0.25.4-~~) <!pkg.bande.vendor>,
+ librust-gstreamer-0.25+default-dev (>= 0.25.4-~~) <!pkg.bande.vendor>,
+ librust-gstreamer-app-0.25-dev (>= 0.25.2-~~) <!pkg.bande.vendor>,
+ librust-gstreamer-app-0.25+default-dev (>= 0.25.2-~~) <!pkg.bande.vendor>,
+ librust-gstreamer-video-0.25-dev (>= 0.25.4-~~) <!pkg.bande.vendor>,
+ librust-gstreamer-video-0.25+default-dev (>= 0.25.4-~~) <!pkg.bande.vendor>,
+ librust-hayro-0.8-dev (>= 0.8.0-~~) <!pkg.bande.vendor>,
+ librust-hayro-0.8+default-dev (>= 0.8.0-~~) <!pkg.bande.vendor>,
+ librust-html5ever-0.40-dev (>= 0.40.0-~~) <!pkg.bande.vendor>,
+ librust-html5ever-0.40+default-dev (>= 0.40.0-~~) <!pkg.bande.vendor>,
+ librust-httparse-1-dev (>= 1.10.1-~~) <!pkg.bande.vendor>,
+ librust-httparse-1+default-dev (>= 1.10.1-~~) <!pkg.bande.vendor>,
+ librust-icu-calendar-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-calendar-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-datetime-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-datetime-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-locale-core-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-locale-core-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-image-0.25-dev (>= 0.25.10-~~) <!pkg.bande.vendor>,
+ librust-image-0.25+gif-dev (>= 0.25.10-~~) <!pkg.bande.vendor>,
+ librust-image-0.25+jpeg-dev (>= 0.25.10-~~) <!pkg.bande.vendor>,
+ librust-image-0.25+png-dev (>= 0.25.10-~~) <!pkg.bande.vendor>,
+ librust-image-0.25+webp-dev (>= 0.25.10-~~) <!pkg.bande.vendor>,
+ librust-jiff-0.2-dev (>= 0.2.37-~~) <!pkg.bande.vendor>,
+ librust-jiff-0.2+default-dev (>= 0.2.37-~~) <!pkg.bande.vendor>,
+ librust-jiff-0.2+serde-dev (>= 0.2.37-~~) <!pkg.bande.vendor>,
+ librust-jxl-oxide-0.12-dev (>= 0.12.6-~~) <!pkg.bande.vendor>,
+ librust-kamadak-exif-0.6-dev (>= 0.6.1-~~) <!pkg.bande.vendor>,
+ librust-kamadak-exif-0.6+default-dev (>= 0.6.1-~~) <!pkg.bande.vendor>,
+ librust-kdl-6-dev (>= 6.7.1-~~) <!pkg.bande.vendor>,
+ librust-kdl-6+span-dev (>= 6.7.1-~~) <!pkg.bande.vendor>,
+ librust-krilla-0.8-dev (>= 0.8.2-~~) <!pkg.bande.vendor>,
+ librust-krilla-0.8+raster-images-dev (>= 0.8.2-~~) <!pkg.bande.vendor>,
+ librust-libc-0.2-dev (>= 0.2.186-~~) <!pkg.bande.vendor>,
+ librust-libc-0.2+default-dev (>= 0.2.186-~~) <!pkg.bande.vendor>,
+ librust-libloading-0.8-dev (>= 0.8.9-~~) <!pkg.bande.vendor>,
+ librust-libloading-0.8+default-dev (>= 0.8.9-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19+encoder-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19+std-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
+ librust-lzma-rust2-0.19+xz-dev (>= 0.19.0-~~) <!pkg.bande.vendor>,
+ librust-mailparse-0.16-dev (>= 0.16.0-~~) <!pkg.bande.vendor>,
+ librust-mailparse-0.16+default-dev (>= 0.16.0-~~) <!pkg.bande.vendor>,
+ librust-md-5-0.10-dev (>= 0.10.6-~~) <!pkg.bande.vendor>,
+ librust-md-5-0.10+default-dev (>= 0.10.6-~~) <!pkg.bande.vendor>,
+ librust-naga-30-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-naga-30+default-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-naga-30+spv-out-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-naga-30+wgsl-in-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-oo7-0.7-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-oo7-0.7+async-std-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-oo7-0.7+native-crypto-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-oo7-0.7+unstable-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-parley-0.12-dev (>= 0.12.0-~~) <!pkg.bande.vendor>,
+ librust-parley-0.12+complex-scripts-dev (>= 0.12.0-~~) <!pkg.bande.vendor>,
+ librust-parley-0.12+default-dev (>= 0.12.0-~~) <!pkg.bande.vendor>,
+ librust-pipewire-0.10-dev (>= 0.10.1-~~) <!pkg.bande.vendor>,
+ librust-pipewire-0.10+default-dev (>= 0.10.1-~~) <!pkg.bande.vendor>,
+ librust-pipewire-0.10+v0-3-34-dev (>= 0.10.1-~~) <!pkg.bande.vendor>,
+ librust-png-0.18-dev (>= 0.18.1-~~) <!pkg.bande.vendor>,
+ librust-png-0.18+default-dev (>= 0.18.1-~~) <!pkg.bande.vendor>,
+ librust-proc-macro2-1-dev (>= 1.0.107-~~) <!pkg.bande.vendor>,
+ librust-proc-macro2-1+default-dev (>= 1.0.107-~~) <!pkg.bande.vendor>,
+ librust-proc-macro2-1+span-locations-dev (>= 1.0.107-~~) <!pkg.bande.vendor>,
+ librust-quick-xml-0.38-dev (>= 0.38.0-~~) <!pkg.bande.vendor>,
+ librust-quick-xml-0.38+default-dev (>= 0.38.0-~~) <!pkg.bande.vendor>,
+ librust-quote-1-dev (>= 1.0.47-~~) <!pkg.bande.vendor>,
+ librust-quote-1+default-dev (>= 1.0.47-~~) <!pkg.bande.vendor>,
+ librust-raw-window-handle-0.6-dev (>= 0.6.2-~~) <!pkg.bande.vendor>,
+ librust-raw-window-handle-0.6+default-dev (>= 0.6.2-~~) <!pkg.bande.vendor>,
+ librust-regex-1-dev (>= 1.13.1-~~) <!pkg.bande.vendor>,
+ librust-regex-1+default-dev (>= 1.13.1-~~) <!pkg.bande.vendor>,
+ librust-resvg-0.48-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
+ librust-resvg-0.48+memmap-fonts-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
+ librust-resvg-0.48+raster-images-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
+ librust-resvg-0.48+system-fonts-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
+ librust-resvg-0.48+text-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
+ librust-ring-0.17-dev (>= 0.17.14-~~) <!pkg.bande.vendor>,
+ librust-ring-0.17+default-dev (>= 0.17.14-~~) <!pkg.bande.vendor>,
+ librust-roxmltree-0.21-dev (>= 0.21.2-~~) <!pkg.bande.vendor>,
+ librust-roxmltree-0.21+default-dev (>= 0.21.2-~~) <!pkg.bande.vendor>,
+ librust-rusqlite-0.40-dev (>= 0.40.0-~~) <!pkg.bande.vendor>,
+ librust-rusqlite-0.40+default-dev (>= 0.40.0-~~) <!pkg.bande.vendor>,
+ librust-rustc-demangle-0.1-dev (>= 0.1.28-~~) <!pkg.bande.vendor>,
+ librust-rustc-demangle-0.1+default-dev (>= 0.1.28-~~) <!pkg.bande.vendor>,
+ librust-rustix-1-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+default-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+event-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+fs-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+mm-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+mount-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+net-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+param-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+pipe-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+process-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+pty-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+rand-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+stdio-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+thread-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustix-1+time-dev (>= 1.1.5-~~) <!pkg.bande.vendor>,
+ librust-rustls-0.23-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
+ librust-rustls-0.23+logging-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
+ librust-rustls-0.23+ring-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
+ librust-rustls-0.23+std-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
+ librust-rustls-0.23+tls12-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
+ librust-rustls-platform-verifier-0.6-dev (>= 0.6.0-~~) <!pkg.bande.vendor>,
+ librust-rustls-platform-verifier-0.6+default-dev (>= 0.6.0-~~) <!pkg.bande.vendor>,
+ librust-ruzstd-0.9-dev (>= 0.9.1-~~) <!pkg.bande.vendor>,
+ librust-ruzstd-0.9+default-dev (>= 0.9.1-~~) <!pkg.bande.vendor>,
+ librust-serde-1-dev (>= 1.0.229-~~) <!pkg.bande.vendor>,
+ librust-serde-1+default-dev (>= 1.0.229-~~) <!pkg.bande.vendor>,
+ librust-serde-1+derive-dev (>= 1.0.229-~~) <!pkg.bande.vendor>,
+ librust-serde-json-1-dev (>= 1.0.154-~~) <!pkg.bande.vendor>,
+ librust-serde-json-1+default-dev (>= 1.0.154-~~) <!pkg.bande.vendor>,
+ librust-serde-norway-0.9-dev (>= 0.9.42-~~) <!pkg.bande.vendor>,
+ librust-serde-norway-0.9+default-dev (>= 0.9.42-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+aes256-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+bzip2-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+deflate-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sevenz-rust2-0.21+ppmd-dev (>= 0.21.0-~~) <!pkg.bande.vendor>,
+ librust-sha2-0.11-dev (>= 0.11.1-~~) <!pkg.bande.vendor>,
+ librust-skrifa-0.44-dev (>= 0.44.0-~~) <!pkg.bande.vendor>,
+ librust-skrifa-0.44+default-dev (>= 0.44.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7+backend-drm-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7+backend-gbm-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7+backend-libinput-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7+backend-session-libseat-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7+backend-udev-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7+desktop-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-smithay-0.7+wayland-frontend-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
+ librust-spellbook-0.4-dev (>= 0.4.2-~~) <!pkg.bande.vendor>,
+ librust-spellbook-0.4+default-dev (>= 0.4.2-~~) <!pkg.bande.vendor>,
+ librust-syn-2-dev (>= 2.0.119-~~) <!pkg.bande.vendor>,
+ librust-syn-2+default-dev (>= 2.0.119-~~) <!pkg.bande.vendor>,
+ librust-tar-0.4-dev (>= 0.4.46-~~) <!pkg.bande.vendor>,
+ librust-tar-0.4+default-dev (>= 0.4.46-~~) <!pkg.bande.vendor>,
+ librust-tempfile-3-dev (>= 3.27.0-~~) <!pkg.bande.vendor>,
+ librust-tempfile-3+default-dev (>= 3.27.0-~~) <!pkg.bande.vendor>,
+ librust-tracing-0.1-dev (>= 0.1.44-~~) <!pkg.bande.vendor>,
+ librust-tracing-0.1+default-dev (>= 0.1.44-~~) <!pkg.bande.vendor>,
+ librust-tracing-journald-0.3-dev (>= 0.3.2-~~) <!pkg.bande.vendor>,
+ librust-tracing-journald-0.3+default-dev (>= 0.3.2-~~) <!pkg.bande.vendor>,
+ librust-tracing-subscriber-0.3-dev (>= 0.3.23-~~) <!pkg.bande.vendor>,
+ librust-tracing-subscriber-0.3+ansi-dev (>= 0.3.23-~~) <!pkg.bande.vendor>,
+ librust-tracing-subscriber-0.3+fmt-dev (>= 0.3.23-~~) <!pkg.bande.vendor>,
+ librust-tracing-subscriber-0.3+registry-dev (>= 0.3.23-~~) <!pkg.bande.vendor>,
+ librust-tracing-subscriber-0.3+std-dev (>= 0.3.23-~~) <!pkg.bande.vendor>,
+ librust-tracing-subscriber-0.3+tracing-log-dev (>= 0.3.23-~~) <!pkg.bande.vendor>,
+ librust-udev-0.9-dev (>= 0.9.3-~~) <!pkg.bande.vendor>,
+ librust-udev-0.9+default-dev (>= 0.9.3-~~) <!pkg.bande.vendor>,
+ librust-ureq-3-dev (>= 3.4.2-~~) <!pkg.bande.vendor>,
+ librust-ureq-3+gzip-dev (>= 3.4.2-~~) <!pkg.bande.vendor>,
+ librust-ureq-3+platform-verifier-dev (>= 3.4.2-~~) <!pkg.bande.vendor>,
+ librust-ureq-3+rustls-no-provider-dev (>= 3.4.2-~~) <!pkg.bande.vendor>,
+ librust-vello-cpu-0.3-dev (>= 0.3.0-~~) <!pkg.bande.vendor>,
+ librust-vello-cpu-0.3+default-dev (>= 0.3.0-~~) <!pkg.bande.vendor>,
+ librust-vello-gpu-0.3-dev (>= 0.3.0-~~) <!pkg.bande.vendor>,
+ librust-vello-gpu-0.3+text-dev (>= 0.3.0-~~) <!pkg.bande.vendor>,
+ librust-vello-gpu-0.3+wgpu-dev (>= 0.3.0-~~) <!pkg.bande.vendor>,
+ librust-wayland-backend-0.3-dev (>= 0.3.17-~~) <!pkg.bande.vendor>,
+ librust-wayland-backend-0.3+client-system-dev (>= 0.3.17-~~) <!pkg.bande.vendor>,
+ librust-wayland-backend-0.3+default-dev (>= 0.3.17-~~) <!pkg.bande.vendor>,
+ librust-wayland-backend-0.3+log-dev (>= 0.3.17-~~) <!pkg.bande.vendor>,
+ librust-wayland-client-0.31-dev (>= 0.31.15-~~) <!pkg.bande.vendor>,
+ librust-wayland-client-0.31+default-dev (>= 0.31.15-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-0.32-dev (>= 0.32.13-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-0.32+client-dev (>= 0.32.13-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-0.32+default-dev (>= 0.32.13-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-0.32+staging-dev (>= 0.32.13-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-0.32+unstable-dev (>= 0.32.13-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-misc-0.3-dev (>= 0.3.12-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-misc-0.3+client-dev (>= 0.3.12-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-misc-0.3+default-dev (>= 0.3.12-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-wlr-0.3-dev (>= 0.3.12-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-wlr-0.3+client-dev (>= 0.3.12-~~) <!pkg.bande.vendor>,
+ librust-wayland-protocols-wlr-0.3+default-dev (>= 0.3.12-~~) <!pkg.bande.vendor>,
+ librust-wayland-scanner-0.31-dev (>= 0.31.11-~~) <!pkg.bande.vendor>,
+ librust-wayland-scanner-0.31+default-dev (>= 0.31.11-~~) <!pkg.bande.vendor>,
+ librust-wayland-server-0.31-dev (>= 0.31.14-~~) <!pkg.bande.vendor>,
+ librust-wayland-server-0.31+default-dev (>= 0.31.14-~~) <!pkg.bande.vendor>,
+ librust-wgpu-30-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-wgpu-30+parking-lot-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-wgpu-30+std-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-wgpu-30+vulkan-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-wgpu-30+wgsl-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-writeable-0.6-dev (>= 0.6.4-~~) <!pkg.bande.vendor>,
+ librust-writeable-0.6+default-dev (>= 0.6.4-~~) <!pkg.bande.vendor>,
+ librust-xkbcommon-0.9-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
+ librust-xkbcommon-0.9+default-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
+ librust-xkbcommon-0.9+wayland-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
+ librust-zbus-5-dev (>= 5.19.0-~~) <!pkg.bande.vendor>,
+ librust-zbus-5+default-dev (>= 5.19.0-~~) <!pkg.bande.vendor>,
+ librust-zbus-5+p2p-dev (>= 5.19.0-~~) <!pkg.bande.vendor>,
+ librust-zeroize-1-dev (>= 1.8.1-~~) <!pkg.bande.vendor>,
+ librust-zeroize-1+default-dev (>= 1.8.1-~~) <!pkg.bande.vendor>,
+ librust-zeroize-1+serde-dev (>= 1.8.1-~~) <!pkg.bande.vendor>,
+ librust-zip-9-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
+ librust-zip-9+deflate-flate2-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
+# librust: end
+Build-Depends-Arch: pkgconf,
+ libwayland-dev,
+ libxkbcommon-dev,
+ libgbm-dev,
+ libinput-dev,
+ libseat-dev,
+ libudev-dev,
+ libpipewire-0.3-dev,
+ libclang-dev,
+ libsqlite3-dev,
+ libgstreamer1.0-dev,
+ libgstreamer-plugins-base1.0-dev,
+ dbus-daemon <!nocheck>,
+ dbus-bin <!nocheck>,
+ libvulkan1 <!nocheck>,
+ mesa-vulkan-drivers <!nocheck>,
+ at-spi2-core <!nocheck>,
+ libfontconfig1 <!nocheck>,
+ libwayland-client0 <!nocheck>,
+ procps <!nocheck>,
+ fonts-inter <!nocheck>,
+ fonts-manrope <!nocheck>,
+ fonts-jetbrains-mono <!nocheck>,
+ libx11-data <!nocheck>,
+ distro-info-data <!nocheck>,
+ gstreamer1.0-plugins-base <!nocheck>,
+ gstreamer1.0-plugins-good <!nocheck>
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/bande-linux/desktop
+Vcs-Browser: https://github.com/bande-linux/desktop
+Vcs-Git: https://github.com/bande-linux/desktop.git
+
+Package: bande-compositor
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ libvulkan1,
+ mesa-vulkan-drivers | vulkan-icd,
+ systemd,
+ pkexec,
+ xkb-data,
+ fonts-inter,
+ fonts-manrope,
+ ${misc:Depends}
+Recommends: bande-clipboard (= ${binary:Version}),
+ bande-shell (= ${binary:Version}),
+ bande-lock (= ${binary:Version}),
+ bande-screenshot (= ${binary:Version}),
+ bande-files (= ${binary:Version}),
+ bande-settings (= ${binary:Version})
+Suggests: fcitx5
+Description: Bande Wayland compositor
+ Wayland compositor for the Bande desktop session, built on Smithay. It
+ runs on a logind seat, drives the displays through DRM/KMS, reads input
+ through libinput and composes windows with its own Vulkan renderer,
+ scanning full-screen clients out directly when it can.
+
+Package: bande-notify
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ ${misc:Depends}
+Provides: notification-daemon
+Description: Bande notification daemon (org.freedesktop.Notifications)
+ Serves org.freedesktop.Notifications (specification 1.2) on the session
+ bus, and the Notification Center under its own name,
+ org.bande.NotificationCenter, so that apps allowed to post notifications
+ cannot read or dismiss others'. The bus starts it on the first
+ notification through D-Bus activation.
+
+Package: bande-clipboard
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ ${misc:Depends}
+Description: Bande clipboard daemon: keeps the selection and remembers recent copies
+ Takes over each new clipboard and primary selection through
+ ext-data-control-v1 and serves it after the copying application has
+ quit. It also keeps the last 100 copies of the past week (never ones
+ marked as passwords) in ~/.local/state/bande/clipboard, readable by the
+ user only, and offers them to the launcher on the session bus as
+ org.bande.Clipboard. bande-compositor starts it on a socket pair and
+ offers ext-data-control on that connection only.
+
+Package: bande-config
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Description: Bande KDL configuration
+ Serves ~/.config/bande/config.kdl as org.bande.Config on the session
+ bus, applies changes to the file atomically, writes settings back
+ without disturbing comments, and reports an invalid file as a
+ notification with its line and column. Started with the graphical
+ session or by D-Bus activation.
+
+Package: bande-power
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ init-system-helpers (>= 1.66),
+ default-logind | logind,
+ ${misc:Depends}
+Recommends: upower,
+ pipewire,
+ bande-config (= ${binary:Version})
+Description: Bande power service: sleep locking, battery alerts and idle inhibition
+ Locks the session before the computer sleeps through a logind delay
+ inhibitor, makes the power button lock the session, posts low and
+ critical battery notifications from UPower, serves
+ org.freedesktop.ScreenSaver so applications can keep the screen on,
+ holding a logind idle inhibitor for each request, and keeps the computer
+ from sleeping when idle while a sound stream runs. Controls the
+ brightness of each connected display that has one, through its backlight
+ or DDC/CI.
+
+Package: bande-printd
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ ${misc:Depends}
+Description: Bande print service: prints to network printers without CUPS
+ Serves org.bande.Print on the session bus: finds IPP Everywhere
+ (driverless) printers on the network with its own mDNS browser, keeps a
+ queue of documents for each user and sends them over IPP, with CUPS
+ queues too where CUPS is installed. It starts when asked and exits when
+ nothing is left to do.
+
+Package: bande-reporter
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ systemd (>= 257),
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Recommends: elfutils
+Description: Bande fault reports: a local report of each fault, sent when switched on
+ Keeps a small report of each fault in a root-only folder. Reports leave
+ the computer only once sending is switched on in Settings. Only the
+ resource sampler stays running: collecting starts at a fault, and
+ sending starts when a report waits and waits on network changes rather
+ than polling.
+
+Package: bande-crash-reports
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ systemd (>= 257),
+ init-system-helpers (>= 1.66),
+ systemd-coredump,
+ ${misc:Depends}
+Recommends: libdw1t64
+Description: Bande crash reports: a local report of every crash and hang of a Bande program
+ Keeps a report of every crash of a Bande program, every hang that was
+ stopped and every failed Bande service, with a stack trace and the last
+ log lines. Settings shows the reports. This service has no network at
+ all; a report leaves the computer only if sending is switched on,
+ through bande-reporter. It runs only after a failure, at boot and at
+ login.
+
+Package: bande-sound
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Recommends: pipewire,
+ wireplumber,
+ bande-config (= ${binary:Version})
+Description: Bande event sounds: an original sound theme played through PipeWire
+ Plays the Bande desktop's event sounds (alerts, notifications, the
+ volume tick, screenshots, emptying the Trash, plugging in power and low
+ battery) through PipeWire, following the sound settings in config.kdl,
+ and installs them as the Bande XDG sound theme for other apps.
+
+Package: bande-spell
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ ${misc:Depends}
+Recommends: hunspell-en-us
+Description: Bande spelling service
+ Serves spell checking, learned words and text replacements to Bande apps
+ as org.bande.Spell on the session bus. Started by D-Bus activation when
+ text is first checked; holds one copy of each dictionary and exits when
+ idle. Dictionaries are Debian's hunspell packages.
+
+Package: xdg-desktop-portal-bande
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ xdg-desktop-portal (>= 1.20),
+ default-dbus-session-bus | dbus-session-bus,
+ ${misc:Depends}
+Recommends: bande-config (= ${binary:Version}),
+ bande-file-chooser (= ${binary:Version}),
+ bande-notify (= ${binary:Version}),
+ bande-printd (= ${binary:Version}),
+ bande-power (= ${binary:Version}),
+ bande-screenshot (= ${binary:Version}),
+ bande-secrets (= ${binary:Version})
+Provides: xdg-desktop-portal-backend
+Description: Bande backend for xdg-desktop-portal
+ Implements xdg-desktop-portal's backends for the Bande desktop: Settings
+ (colour scheme, accent colour, folder icons and Reduce Motion from
+ config.kdl, so GTK, libadwaita and Qt apps follow them), the Bande Open
+ and Save dialogs, Open With for links and files, permission questions,
+ screenshots and screen sharing, the wallpaper, notifications through the
+ Bande Notification Center, keeping the screen or the computer awake,
+ writing email in the default mail app, running in the background, adding
+ web apps to Applications, sharing the account's name and picture, and a
+ key in the Bande keyring for each sandboxed app's own passwords. No GTK
+ or GNOME backend is needed.
+
+Package: bande-file-chooser
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ fonts-inter,
+ fonts-manrope,
+ ${misc:Depends}
+Description: Bande portal dialogs: Open and Save, Open With and permissions
+ The dialogs of xdg-desktop-portal-bande: the Bande Open and Save dialogs
+ (favourite places and volumes in a sidebar, a path bar, a sortable list
+ with type-to-jump, file type filters, New Folder when saving, and the
+ last folder remembered for each app), Open With for links and files,
+ permission questions, adding an app or web app to Applications, sharing
+ the account's name and picture, and setting the wallpaper.
+
+Package: bande-tray
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Description: Bande StatusNotifierWatcher for tray icons
+ Serves org.kde.StatusNotifierWatcher, the registry through which
+ applications such as Steam and Nextcloud publish tray icons and the
+ Bande Taskbar finds them. Started with the graphical session.
+
+Package: bande-indexer
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Description: Bande search index: file contents, mail, calendar and contacts
+ Keeps a private on-disk index of the names and contents of the documents
+ in the home folder, and of the mail, events and contacts apps give it,
+ and answers searches from Search and Files. Runs in the background at
+ idle priority and is woken only by changes.
+
+Package: bande-automount
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ default-dbus-session-bus | dbus-session-bus,
+ init-system-helpers (>= 1.66),
+ udisks2,
+ pkexec,
+ systemd,
+ ${misc:Depends}
+Recommends: cifs-utils,
+ smbclient,
+ sshfs,
+ davfs2,
+ go-mtpfs,
+ gphotofs,
+ libmtp-common,
+ fuse3,
+ systemd-resolved
+Description: Bande removable media mounting
+ Mounts removable drives through UDisks2 as they appear, connects to SMB,
+ SFTP and WebDAV servers as ordinary mounts with passwords in the
+ keyring, mounts phones and cameras, warns when a mounted drive is
+ disconnected without being ejected, and warns once when the startup disk
+ or the home folder runs out of space. Started with the graphical
+ session.
+
+Package: bande-backup
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: admin
+Depends: ${shlibs:Depends},
+ restic (>= 0.18),
+ fuse3,
+ systemd (>= 257),
+ dbus-system-bus | dbus,
+ polkitd,
+ udisks2,
+ ${misc:Depends}
+Recommends: e2fsprogs
+Description: Bande backups: hourly encrypted versions on an external disk
+ Keeps hourly, daily and weekly versions of the whole computer on an
+ external disk, encrypted with restic, and removes the oldest when the
+ disk fills up. Settings chooses the disk; Files browses and restores
+ past versions.
+
+Package: bande-polkit
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ polkitd (>= 127),
+ fonts-inter,
+ fonts-manrope,
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Description: Bande polkit authentication agent
+ The polkit authentication agent of the Bande desktop. When an app asks
+ for an administrator's permission, for example Settings changing the
+ time zone or the computer's name, it shows a password dialog with the
+ reason polkit gives, says who is asked for, shakes and asks again after
+ a wrong password, and cancels with Escape. Started with the graphical
+ session.
+
+Package: bande-secrets
+Architecture: any
+Multi-Arch: foreign
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ default-dbus-session-bus | dbus-session-bus,
+ fonts-inter,
+ fonts-manrope,
+ init-system-helpers (>= 1.66),
+ ${misc:Depends}
+Recommends: libpam-bande-secrets (= ${binary:Version})
+Provides: org.freedesktop.secrets
+Conflicts: gnome-keyring
+Description: Bande keyring: the Secret Service of the Bande desktop
+ The keyring of the Bande desktop: it keeps the passwords apps save, such
+ as mail accounts, calendars, browsers and VPNs, encrypted with the login
+ password, and serves them through the freedesktop Secret Service. The
+ login keyring is unlocked when you log in and follows password changes.
+ When an app asks for a password another app saved, the keyring asks
+ first. Started with the session or by D-Bus activation.
+
+Package: libpam-bande-secrets
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Multi-Arch: same
+Section: admin
+Depends: ${shlibs:Depends},
+ libpam-runtime (>= 1.0.1-6),
+ bande-secrets (= ${binary:Version}),
+ ${misc:Depends}
+Description: PAM module that unlocks the Bande keyring at login
+ Unlocks the Bande login keyring with the password you log in with, and
+ re-encrypts it when you change your password. The lock screen and sudo
+ pass through it without unlocking anything. Enabled through
+ pam-auth-update.
+
+Package: bande-shell
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ hicolor-icon-theme,
+ bande-notify (= ${binary:Version}),
+ upower,
+ network-manager,
+ ${misc:Depends}
+Recommends: network-manager-config-connectivity-debian,
+ pipewire,
+ wireplumber,
+ bande-tray (= ${binary:Version}),
+ xdg-user-dirs,
+ fonts-noto-color-emoji,
+ bluez
+Description: Bande shell: the desktop, the bar, notifications and the launcher
+ The shell of the Bande desktop, one process for the whole session. On
+ every display it draws the desktop, the wallpaper in its light and dark
+ variants with the files of the Desktop folder and the plugged-in drives
+ as icons, and the bar: the apps kept in it and the running apps with
+ their badges and progress, the Trash, the system menu, the active app
+ with its menus, the status notifier items of apps, Bluetooth, sound,
+ Wi-Fi and battery, Quick Settings and the clock, which opens the
+ Notification Center. It also shows notification banners, Quick Settings
+ with the volume and brightness HUD, and the launcher that a tap of Super
+ opens to find apps, files and answers. bande-compositor starts it and
+ keeps it running. It installs the Bande wallpapers, which the lock
+ screen and the login window also show, and the Bande icon theme.
+
+Package: bande-lock
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ fonts-inter,
+ fonts-manrope,
+ libpam0g,
+ libpam-runtime,
+ ${misc:Depends}
+Recommends: bande-shell (= ${binary:Version})
+Description: Bande lock screen: locks the session until the user's password is entered
+ The lock screen of the Bande desktop. Super+L, or the session going idle
+ or to sleep, starts it; it covers every output through
+ ext-session-lock-v1 and unlocks once PAM accepts the user's password.
+
+Package: bande-screenshot
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ ${misc:Depends}
+Recommends: gstreamer1.0-plugins-ugly,
+ pipewire,
+ gstreamer1.0-tools,
+ gstreamer1.0-pipewire,
+ gstreamer1.0-plugins-good
+Description: Bande screenshots: saves pictures of the screen or of a dragged-out area
+ The screenshot tool of the Bande desktop. Shift+Print saves a picture of
+ each display, Shift+Super+S one of an area dragged out with the pointer
+ or of a window, and Print opens the options: screen, window or area, a
+ recording, where to save, a timer and the pointer. Pictures are PNG
+ files named after the moment they were taken. It also captures the
+ screen and windows for the desktop portal: the picker for screen
+ sharing, the PipeWire streams, and screenshots apps ask for.
+ bande-compositor starts it and keeps it running.
+
+Package: bande-files
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: fonts-dejavu-core
+Description: Bande Files: the file manager of the Bande desktop
+ The file manager of the Bande desktop: folders open in Miller columns
+ driven by the arrow keys, and Space shows the selected file in Glance.
+
+Package: bande-lookup
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-dict-en,
+ bande-dict-sv,
+ fonts-dejavu-core
+Description: Bande Dictionary: looks up words, and Look Up at the pointer
+ Dictionary looks up words in the dictionaries, thesauruses and online
+ sources chosen in its settings, and shows Look Up in a small panel at
+ the pointer. Started only when asked; nothing stays running.
+
+Package: bande-settings
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ bande-config (= ${binary:Version}),
+ locales,
+ pkexec,
+ systemd,
+ udev,
+ xkb-data,
+ ${misc:Depends}
+Recommends: accountsservice,
+ bande-polkit (= ${binary:Version}),
+ bluez,
+ pipewire,
+ wireplumber,
+ bande-notify (= ${binary:Version}),
+ packagekit,
+ power-profiles-daemon,
+ upower,
+ network-manager
+Description: Bande Settings: panes for the desktop and its devices with ranked search
+ Settings of the Bande desktop in four groups: Connections (Wi-Fi with
+ known networks, per-network details and hidden networks, Bluetooth,
+ network), Desktop (appearance and wallpaper, the bar, notifications per
+ app, accessibility), Devices (displays, sound, keyboard, trackpad and
+ mouse) and System (power, users and groups, apps that open at login,
+ language and time, about this computer with storage and software
+ update), with a search field that ranks the matching settings and marks
+ them. Every pane follows changes made elsewhere while it is open.
+ Desktop settings go through org.bande.Config, which writes config.kdl. A
+ polkit rule lets administrators (members of sudo) change the time,
+ language, login screen keyboard layouts and computer name without a
+ password prompt. Any supported language can be chosen; it is generated
+ with locale-gen. Updates install through PackageKit while the computer
+ runs; only those that need a restart install at the next restart,
+ through PackageKit's offline updates. Settings asks to log out or reopen
+ apps that still run the old version, and never restarts or logs out by
+ itself.
+
+Package: bande-greeter
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ bande-icon-theme (= ${source:Version}),
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ greetd (>= 0.10.3-6),
+ bande-compositor (= ${binary:Version}),
+ kbd,
+ locales,
+ ${misc:Depends}
+Description: Bande login window: signs users in through greetd
+ The login window of the Bande desktop: greetd runs it as its greeter
+ inside bande-compositor --greeter, and it lists the people who can sign
+ in, asks for the chosen person's password and has greetd start their
+ Bande session. It becomes greetd's greeter through a drop-in for
+ greetd.service; greetd itself asks which display manager to start when
+ another one is installed.
+
+Package: bande-terminal
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ fonts-jetbrains-mono,
+ fonts-inter,
+ fonts-manrope,
+ ${misc:Depends}
+Recommends: bande-files (= ${binary:Version}),
+ bande-sound (= ${binary:Version})
+Provides: x-terminal-emulator
+Description: terminal emulator for the Bande desktop
+ The terminal of the Bande desktop: xterm-compatible emulation with
+ 10,000 lines of scrollback, Shift+Ctrl+C and Shift+Ctrl+V for the
+ clipboard so that Ctrl+C stays the interrupt, and the system's light or
+ dark appearance.
+
+Package: bande-software
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: admin
+Depends: ${shlibs:Depends},
+ appstream,
+ packagekit,
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-polkit (= ${binary:Version}),
+ bande-settings (= ${binary:Version})
+Description: software centre for the Bande desktop
+ Software, the software centre of the Bande desktop: browse and search
+ the apps Debian describes with AppStream, read about them before
+ installing, and hide apps that need X11, which Bande does not run. When
+ flatpak is installed and a Flatpak remote is configured, it lists that
+ remote's apps too.
+
+Package: bande-installer
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: admin
+Depends: ${shlibs:Depends},
+ packagekit,
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-polkit (= ${binary:Version})
+Description: package installer for the Bande desktop
+ The package installer of the Bande desktop: opens .deb files from Files
+ or a browser, checks that they fit this computer, shows what else they
+ install or remove, and installs, upgrades or removes them through
+ PackageKit, asking for an administrator password.
+
+Package: bande-monitor
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-files (= ${binary:Version})
+Description: system monitor for the Bande desktop
+ The system monitor of the Bande desktop: lists running apps with their
+ processes and shows CPU, memory, disk and network use, and quits or
+ force quits any app.
+
+Package: bande-mail
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: mail
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-secrets (= ${binary:Version}) | org.freedesktop.secrets
+Description: email client for the Bande desktop
+ Mail for the Bande desktop, in three panes: mailboxes and a unified
+ Inbox, the message list, and the reader. It speaks IMAP and SMTP over
+ TLS, keeps an offline copy of every account, follows new mail with IMAP
+ IDLE and keeps passwords in the Secret Service.
+
+Package: bande-calendar
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: utils
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-secrets (= ${binary:Version}) | org.freedesktop.secrets
+Description: calendar for the Bande desktop
+ The calendar of the Bande desktop: CalDAV accounts with offline sync, a
+ local calendar and read-only subscriptions, with day, week, month and
+ year views and event alerts.
+
+Package: bande-velox
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: admin
+Depends: ${shlibs:Depends},
+ gpgv,
+ pkexec,
+ systemd,
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-terminal (= ${binary:Version})
+Suggests: docker-compose,
+ podman,
+ qemu-system-native,
+ qemu-system-modules-opengl,
+ qemu-utils,
+ passt,
+ swtpm,
+ virtiofsd
+Description: container and virtual machine manager for the Bande desktop
+ Velox shows the containers of the computer's Docker Engine or Podman,
+ grouped by Compose project, and starts and stops them. It also makes and
+ runs virtual machines from Debian, Ubuntu and Fedora cloud images on
+ QEMU. It follows the engine and the machines live and never installs
+ anything: when something is missing it shows the steps to set it up.
+ Passing a USB device to a machine or bridging it onto the local network
+ asks for an administrator's password.
+
+Package: bande-calculator
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: misc
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Description: calculator for the Bande desktop
+ The calculator of the Bande desktop: Basic, Scientific and Programmer
+ modes with exact decimal arithmetic, operator precedence, degrees and
+ radians, hexadecimal, octal and binary with bitwise operations and word
+ sizes, Reverse Polish Notation and a paper tape.
+
+Package: bande-player
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: video
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ gstreamer1.0-plugins-base,
+ ${misc:Depends}
+Recommends: gstreamer1.0-plugins-good,
+ gstreamer1.0-pulseaudio,
+ gstreamer1.0-libav,
+ gstreamer1.0-dav1d
+Description: audio and video player for the Bande desktop
+ The audio and video player of the Bande desktop: opens common music and
+ film files from Files, with simple controls over the picture, full
+ screen, speed, audio and subtitle tracks, media keys, and Glance
+ playback in Files.
+
+Package: bande-viewer
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: graphics
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-files (= ${binary:Version})
+Description: image and PDF viewer for the Bande desktop
+ The image and PDF viewer of the Bande desktop: opens photos and pictures
+ from Files, zooms, rotates and flips them, steps through a folder, plays
+ animations and slideshows, copies them and shows their size, dimensions
+ and camera details. PDF documents scroll continuously with page
+ thumbnails and their table of contents; their text can be selected,
+ copied and searched, and locked documents open with their password.
+
+Package: bande-clock
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: utils
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ tzdata,
+ ${misc:Depends}
+Recommends: bande-notify (= ${binary:Version}),
+ bande-sound (= ${binary:Version})
+Description: clock with alarms, timers and a stopwatch for the Bande desktop
+ The clock of the Bande desktop: alarms that repeat on chosen days, with
+ a label, a sound and snooze; several timers at once, with presets; a
+ stopwatch with laps; and a world clock with cities from the time zone
+ database. Alarms and timers ring through a notification with sound even
+ when Clock's window is closed, and the shell's Clock menu shows the
+ running timers and the next alarm.
+
+Package: bande-text-editor
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: editors
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Description: text editor for the Bande desktop
+ The text editor of the Bande desktop: plain text in any encoding and
+ line ending, rich text, RTF, Markdown, HTML, Office Open XML and
+ OpenDocument files, find and replace with regular expressions, and
+ documents that are saved automatically and come back after a crash or
+ quit.
+
+Package: bande-disks
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: admin
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ udisks2,
+ ${misc:Depends}
+Recommends: dosfstools,
+ e2fsprogs,
+ exfatprogs
+Suggests: ntfs-3g
+Description: disk manager for the Bande desktop
+ Disks shows the computer's internal and external disks, their partitions
+ and volumes and the disk images that are open, with their capacity,
+ format, connection and S.M.A.R.T. health. It mounts, unmounts and ejects
+ them, erases and partitions disks, checks and repairs volumes, renames
+ volumes, creates and restores disk images and writes an image to a USB
+ drive. Every change goes through UDisks2 and asks for authorization. The
+ disk the computer started up from and the volumes the system uses are
+ shown read-only.
+
+Package: bande-archive
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: utils
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Description: archive manager for the Bande desktop
+ The archive tool of the Bande desktop: expands zip, tar (gzip, bzip2,
+ xz, zstd), single gzip, bzip2, xz and zstd files and 7-Zip archives next
+ to themselves, asks for the password of encrypted ones, and makes Files'
+ Compress in the format chosen in its settings. It refuses items that
+ would land outside the folder, decompression bombs and setuid
+ permissions.
+
+Package: bande-desktop
+Section: metapackages
+Build-Profiles: <!pkg.bande.l10n-only>
+Architecture: all
+Depends: bande-compositor (>= ${source:Version}),
+ bande-icon-theme (>= ${source:Version}),
+ bande-config (>= ${source:Version}),
+ bande-power (>= ${source:Version}),
+ bande-sound (>= ${source:Version}),
+ bande-notify (>= ${source:Version}),
+ bande-shell (>= ${source:Version}),
+ bande-lock (>= ${source:Version}),
+ bande-secrets (>= ${source:Version}),
+ xdg-desktop-portal-bande (>= ${source:Version}),
+ dbus-user-session,
+ default-logind | logind,
+ libpam-systemd,
+ libx11-data,
+ bande-greeter (>= ${source:Version}) | x-display-manager,
+ pipewire,
+ wireplumber,
+ ${misc:Depends}
+Recommends: bande-greeter (>= ${source:Version}),
+ bande-reporter (>= ${source:Version}),
+ bande-crash-reports (>= ${source:Version}),
+ bande-screenshot (>= ${source:Version}),
+ bande-files (>= ${source:Version}),
+ bande-settings (>= ${source:Version}),
+ bande-tray (>= ${source:Version}),
+ bande-indexer (>= ${source:Version}),
+ bande-automount (>= ${source:Version}),
+ bande-backup (>= ${source:Version}),
+ bande-file-chooser (>= ${source:Version}),
+ bande-polkit (>= ${source:Version}),
+ apt-config-icons-hidpi,
+ libpam-bande-secrets (>= ${source:Version}),
+ bande-terminal (>= ${source:Version}),
+ bande-software (>= ${source:Version}),
+ bande-installer (>= ${source:Version}),
+ bande-archive (>= ${source:Version}),
+ bande-monitor (>= ${source:Version}),
+ bande-calculator (>= ${source:Version}),
+ bande-viewer (>= ${source:Version}),
+ bande-player (>= ${source:Version}),
+ bande-clock (>= ${source:Version}),
+ bande-disks (>= ${source:Version}),
+ bande-text-editor (>= ${source:Version}),
+ bande-mail (>= ${source:Version}),
+ bande-calendar (>= ${source:Version}),
+ systemd-oomd,
+ bande-printd (>= ${source:Version}),
+ bande-spell (>= ${source:Version}),
+ bande-clipboard (>= ${source:Version}),
+ fonts-noto-core,
+ fonts-noto-cjk,
+ pipewire-pulse,
+ libspa-0.2-bluetooth
+Description: Bande desktop environment
+ Bande is a Wayland desktop with its own compositor, shell, session
+ services, login window and applications.
+ .
+ This metapackage installs a complete Bande session: the compositor, the
+ shell and lock screen, the keyring, the portal backend, PipeWire for
+ sound and a way to log in (the Bande login window under greetd, or the
+ display manager the system already has). It recommends the Bande apps,
+ fault reporting and systemd-oomd, which closes an app when memory stays
+ under pressure.
+
+Package: bande-icon-theme
+Build-Profiles: <!pkg.bande.l10n-only>
+Architecture: all
+Multi-Arch: foreign
+Depends: hicolor-icon-theme, ${misc:Depends}
+Description: icons and symbols of the Bande desktop
+ The icons and symbols of the Bande desktop: folders, files, devices and
+ the symbolic icons of the bar, menus and sidebars, with a folder variant
+ for each accent colour. Every Bande program that draws icons depends on
+ it, so none shows an empty space where a symbol belongs.
+
+Package: bande-desktop-l10n-sv
+Architecture: all
+Multi-Arch: foreign
+Section: localization
+Depends: ${misc:Depends}
+Enhances: bande-desktop
+Description: Swedish translations for bande-desktop
+ The Swedish text of the Bande desktop and its apps, read by each of its
+ programs when it starts in a Swedish session. Without it they show the
+ English they were written in.
+
+Package: bande-desktop-l10n-en-gb
+Architecture: all
+Multi-Arch: foreign
+Section: localization
+Depends: ${misc:Depends}
+Enhances: bande-desktop
+Description: British English translations for bande-desktop
+ The British English text of the Bande desktop and its apps, read by each
+ of its programs when it starts in a British English session. Without it
+ they show the English they were written in.

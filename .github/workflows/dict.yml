@@ -34,7 +34,7 @@ jobs:
       - name: Install the tools
         run: |
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends git ca-certificates curl python3 dpkg-dev unzip xz-utils distro-info-data
+          apt-get install -y -qq --no-install-recommends git ca-certificates curl python3 dpkg-dev debhelper unzip xz-utils distro-info-data lintian
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -42,10 +42,24 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Check that the tagged commit is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - name: Build the packs from the pinned sources
-        run: python3 packaging/dict/build.py "${GITHUB_REF_NAME#dict-}$(ci/deb/debian-release.sh)" /var/tmp/dict-sources target/dict
+      - name: Make the source package from the pinned sources
+        run: packaging/dict/source.sh "${GITHUB_REF_NAME#dict-}" /var/tmp/dict-sources source
+      - name: Build the packs offline
+        run: |
+          version=${GITHUB_REF_NAME#dict-}-1$(ci/deb/debian-release.sh)
+          codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
+          dpkg-source --extract source/*.dsc build
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct -- packaging/dict) \
+            ci/deb/changelog-entry.sh build/debian/changelog "$version" "$codename" "Build for Debian $codename."
+          rm -rf /var/tmp/dict-sources
+          (cd build && dpkg-buildpackage --unsigned-source --unsigned-changes --build=all)
+      - name: Lintian
+        run: |
+          chmod 755 . source
+          chmod 644 ./*.deb ./*.changes ./*.buildinfo source/*
+          runuser -u nobody -- lintian --fail-on error,warning ./*.changes source/*.dsc
       - uses: actions/upload-artifact@v7
         with:
           name: bande-debs-${{ matrix.suite }}-all
-          path: target/dict/*.deb
+          path: ./*.deb
           if-no-files-found: error

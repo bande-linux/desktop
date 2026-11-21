@@ -1,27 +1,88 @@
 # Debian packaging
 
-Bande ships as Debian packages for Debian 14 (forky) on arm64 and amd64. Each crate that installs
-something is its own binary package, built with `cargo deb` from the crate's
-`[package.metadata.deb]`; the architecture-independent packages are built with debhelper from
-`packaging/`. Every package of one build carries the same version, derived from git by
-`ci/deb/version.sh` and ending in the Debian release suffix (`~deb14` for forky; see
-[ci.md](ci.md)). How CI builds, checks and publishes them is in [ci.md](ci.md).
+Bande ships as Debian packages for Debian 14 (forky) on arm64 and amd64. Every package of the
+desktop, the apps and the language packs included, is a binary package of one Debian source
+package, `bande-desktop`, whose `debian/` is at the root of this repository: `3.0 (quilt)`,
+debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's cargo wrapper
+(`/usr/share/cargo/bin/cargo`, which passes Debian's build flags, the target and
+`DEB_BUILD_OPTIONS`). The dictionary packs are a second source package, `bande-dict`
+([lookup.md](lookup.md)). How CI builds, checks and publishes them is in [ci.md](ci.md).
 
-Packages are built with the `dist` profile (`cargo deb --profile dist`): fat LTO, one codegen
-unit, `panic = "abort"`, and `ci/release/symbols.sh` splits the symbols: each binary keeps only a
-small compressed table of function names (`.gnu_debugdata`), so a crash report has a
-stack trace with names on every computer and with nothing to install or fetch. The line tables go
-to `bande-debug-symbols` (paths by build id under `/usr/lib/debug`), which CI keeps as an artifact of the
-run and does not publish: it is about as big as all the packages together. Install it to have
-`coredumpctl debug` show files and lines. It strips copies in `target/stripped`, which `cargo deb`
-packages, so cargo's own outputs keep their symbols and a later cargo step can't put them back;
-`check-debs.sh` fails any packaged program that keeps `.debug_info`, `.debug_line` or `.debug_str`, or lacks `.gnu_debugdata`. Every build links with packed relative relocations
-(`.cargo/config.toml`, [decision 0006](../decisions/0006-separate-gui-binaries.md)). Development and test builds keep the default
-profiles. Sizes are in [performance.md](performance.md).
+## The source package
+
+- **Upstream tarball**: `bande-desktop_X.Y.Z.orig.tar.xz` is `git archive` of the commit
+  (`ci/deb/orig.sh`); `.gitattributes` leaves `debian/` and `browser/` out.
+- **Vendored crates**: `bande-desktop_X.Y.Z.orig-vendor.tar.xz`, a component tarball unpacked
+  in `vendor/`, holds every crate of `Cargo.lock` (`ci/deb/vendor.sh`: `cargo vendor --locked
+  --versioned-dirs`). A crate that no Linux build on amd64 or arm64 uses keeps only its
+  `Cargo.toml` and an empty `src/lib.rs`, which cargo needs to resolve, so no Windows or macOS
+  code or prebuilt library is in the source. Both tarballs are made byte for byte the same for
+  the same commit (sorted, dated by the commit, single-threaded xz).
+- **Two ways to build, one `debian/`**: with the build profile `pkg.bande.vendor`, the way Bande
+  builds, `debian/rules` builds from `vendor/` with `Cargo.lock` (`--locked`), offline. Without
+  it, the way a build in Debian's archive would, it builds from Debian's packaged crates
+  (`cargo prepare-debian debian/cargo_registry --link-from-system`, without `Cargo.lock`), and
+  fills `Built-Using`/`Static-Built-Using` with dh-cargo; the `librust-*-dev` Build-Depends are
+  marked `<!pkg.bande.vendor>` and written from the workspace's direct dependencies by
+  `ci/deb/build-depends.py` (`--check` in lint). `debian/rules` fails when the profile and the
+  presence of `vendor/` disagree. Most crates Bande uses are in Debian; `ci/deb/debian-gap.py`
+  reports the rest ([ci.md](ci.md#jobs)).
+- **`debian/control`** holds every binary package; siblings are pinned at `(=
+  ${binary:Version})`, the architecture-independent ones at `${source:Version}` (`bande-desktop`
+  asks for the others at `>= ${source:Version}`, which a binNMU of them still meets).
+  `debian/<package>.install` lists what each ships: the programs from `debian/build/bin`
+  (the cargo output), files from the crates' `data/` and `data/` at the root under their
+  installed names, and what `debian/rules` generates in `debian/build`: the pointers
+  (`bande-cursor-theme`), the catalogs (`bande-l10n-tool pack`) and each metainfo with its
+  release (the upstream version and the date of the changelog entry). After `dh_install`,
+  `debian/manpages.py` writes a manual page for each program in `/usr/bin`: the crate's
+  `data/<program>.1` when it has one (a package's second program must), or else the Cargo
+  description of the crate that builds it and the package's description.
+- **`debian/copyright`** is one DEP-5 file for the whole source, written by `ci/copyright.py`
+  (`--check` in lint fails when it no longer matches `Cargo.lock`): `ci/copyright` for this tree,
+  `ci/copyright.d/*` for the third-party material in it, a paragraph per vendored crate with the
+  authors and licence from its `Cargo.toml`, then each licence's text from `ci/licenses`.
+- **Units and maintainer scripts**: `dh_installsystemd` and `dh_installsystemduser` enable and
+  restart the units: the user units of the session services are enabled for every user and
+  never started from a package; `bande-backup`'s timer and service are neither enabled nor
+  started (Settings turns backups on; `postinst` restarts a running backup service), the
+  login window's console fallback and the fault reporter's socket-activated services are not
+  started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
+  enabled by its own `postinst`. `bande-reporter` and `bande-greeter` create their state
+  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`; the login window's pictures
+  folder is `3733 root:_greetd`, so each person writes only their own picture and only the login
+  window reads it). The other scripts purge state, restart nothing else and run
+  `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
+  `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative.
+- **Version**: `debian/changelog` names the release, `X.Y.Z-1`, with `X.Y.Z` the
+  `[workspace.package] version`; a packaging-only fix is `X.Y.Z-2` (tag `vX.Y.Z-2`). A build
+  for a Debian release adds an entry with that release's suffix, `X.Y.Z-1~deb14` for forky
+  (`ci/deb/build.sh`; [ci.md](ci.md#versions)); sbuild's `--append-to-version` would make a
+  binNMU-style build without the architecture-independent packages, so an sbuild build takes
+  a source package with that entry.
+- **Tests**: `debian/tests` holds the autopkgtests: `desktop` (bande-desktop alone brings a
+  login window and sound, no X server, greetd as the display manager, the login window's
+  pictures folder), `every-package` (the one version, every program and file in
+  `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
+  `display-manager` (next to LightDM, greetd is offered and not imposed), `services` (the
+  settings service on a private bus, the compositor headless), `portal` (the colour scheme
+  through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).
+
+Packages are built with the `dist` profile (`PROFILE` picks another): fat LTO, one codegen
+unit, `panic = "abort"`, line tables only. `dh_strip` moves the line tables to each package's
+`-dbgsym` package (paths by build id under `/usr/lib/debug`), which CI keeps as an artifact of
+the run and does not publish, and `debian/gnu-debugdata.sh` keeps in each program a small
+compressed table of its function names (`.gnu_debugdata`), so a crash report has a stack
+trace with names on every computer, with nothing to install or fetch. Install the `-dbgsym`
+packages to have `coredumpctl debug` show files and lines. `check-debs.sh` fails any packaged
+program that keeps `.debug_info`, `.debug_line` or `.debug_str`, or lacks `.gnu_debugdata`.
+Every build links with packed relative relocations (`.cargo/config.toml`, [decision
+0006](../decisions/0006-separate-gui-binaries.md)) and maps the build paths to `/build`. Sizes
+are in [performance.md](performance.md).
 
 ## Packages
 
-- **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
+- **The programs** (architecture `amd64`, `arm64`): `bande-compositor`, the session services
   (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
   `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
@@ -29,41 +90,31 @@ profiles. Sizes are in [performance.md](performance.md).
   `bande-settings`, `bande-file-chooser`, `bande-lookup`, `bande-terminal`, `bande-software`,
   `bande-installer`, `bande-monitor`, `bande-mail`, `bande-calendar`, `bande-velox`,
   `bande-calculator`, `bande-player`, `bande-viewer`, `bande-clock`, `bande-text-editor`,
-  `bande-disks`, `bande-archive`). The Look Up dictionary packs
-  (`bande-dict-en`, `bande-dict-sv`, `bande-dict-sv-wiktionary`) are made from their source data
-  by `packaging/dict/build.py`, not from this tree's code; see [lookup.md](lookup.md). Package names stay `bande-*` whatever directory the crate lives in
-  ([decision 0003](../decisions/0003-repository-layout.md)). Crates in `ci/release/bundled` build with them and ship inside another package
-  (`bande-secrets-prompt` in `bande-secrets`). Packages in `ci/release/arch-variants` build
-  with `--variant <arch>`, whose assets name the multiarch path (`libpam-bande-secrets`' PAM module). `ci/release/deb-assets.sh` writes what each package ships from `target/<profile>/deb-assets/<package>`: its DEP-5
-  `copyright` from `ci/copyright.py` (`ci/copyright` for this tree, then a paragraph per crate
-  linked into it with the authors and licence from its `Cargo.toml`, or `ci/copyright.d/<crate>`
-  for a crate that carries third-party material, then each licence's text from `ci/licenses`),
-  its `changelog.gz` and a manual page for each program in `/usr/bin` from `ci/release/deb-docs.py`
-  (the Cargo description of the crate that builds it, or `data/<program>.1` for a package's second
-  program), and each metainfo with its release, the version and the date of the crate's last commit. A package
-  that renders PDF text through hayro ships a lintian override for `embedded-library freetype`: the
-  pure-Rust skrifa carries FreeType's list of hint-reliant fonts, not FreeType. `bande-shell` installs the one
-  shell binary that hosts the desktop, the bar, the notifications, Quick Settings and the
-  launcher, together with the Bande wallpapers; the crates of those parts are
+  `bande-disks`, `bande-archive`). Package names stay `bande-*` whatever directory the crate
+  lives in ([decision 0003](../decisions/0003-repository-layout.md)); a program may ship in
+  another crate's package (`bande-secrets-prompt` in `bande-secrets`). A package that renders
+  PDF text through hayro carries a lintian override for `embedded-library freetype`: the
+  pure-Rust skrifa carries FreeType's list of hint-reliant fonts, not FreeType. `bande-shell`
+  installs the one shell binary that hosts the desktop, the bar, the notifications, Quick
+  Settings and the launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
-- **`bande-icon-theme`** (built from `packaging/bande-desktop` with the metapackage,
-  architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
+- **`bande-icon-theme`** (architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
   package that draws icons depends on it, so a symbol never goes missing because the shell is
   not installed.
-- **`bande-desktop`** (`packaging/bande-desktop`, architecture `all`, section
-  `metapackages`): the one package that installs a complete Bande desktop.
+- **`bande-desktop`** (architecture `all`, section `metapackages`): the one package that installs a complete Bande desktop.
   It depends on the compositor, the core session services, the shell, the lock
   screen, the keyring (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
-  `libpam-systemd`, on PipeWire, and on `bande-greeter | x-display-manager`, so there is always
+  `libpam-systemd`, on PipeWire and WirePlumber, and on `bande-greeter | x-display-manager`, so there is always
   a way to log in: the Bande login window under greetd, or the display manager the system
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
-  start), fault reporting (`bande-reporter`, `bande-crash-reports`), the screenshot tool, Files, Settings, the tray, automount, file
+  start), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
+  clipboard daemon, the screenshot tool, Files, Settings, the tray, automount, file
   chooser, polkit agent, the keyring's PAM module and the default apps (every app but Velox),
   all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack); being recommends, any of them can be removed or replaced. It
   recommends no apps from Debian; a browser comes from Software. Network printers
   need nothing more; support for USB and older printers comes from Settings ▸ Printers. It installs
-  `/usr/share/applications/x-bande-mimeapps.list`, read only in a Bande session, which opens
+  `/usr/share/applications/x-bande-mimeapps.list` (`data/x-bande-mimeapps.list`), read only in a Bande session, which opens
   folders in Files, `.deb` files in the Package Installer, plain text (with source code and
   logs, its subtypes) in Text Editor when it is installed and archives (zip, tar, gzip, bzip2, xz,
   zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
@@ -71,17 +122,18 @@ profiles. Sizes are in [performance.md](performance.md).
   whose desktop entry declares them, and a person's own choice in
   `~/.config/mimeapps.list` still wins. A file no installed app opens gets the Open With sheet in
   Files (every app that opens files, with "Always open with"); on the desktop, it is revealed in
-  Files. The `install` jobs install without the third-party recommends and check that each of
+  Files. The autopkgtests install it without the third-party recommends and check that each of
   them has an installation candidate in Debian forky. Installing it adds "Bande" to the sessions a
   display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
   the desktop, a login and sound and nothing else.
-- **Language packs** (`bande-l10n-tool debs`, architecture `all`, section `localization`):
-  `bande-desktop-l10n-<lang>` (`sv`, `en-gb`) holds one catalog per program of the packages in
-  `ci/release/packages`, the apps' included, `/usr/share/bande/l10n/<program>/<lang>.mo`, and
-  enhances `bande-desktop`. Each program's
-  own package carries its English catalog, `en.mo`, through the cargo-deb asset
-  `target/release/l10n/development/<program>/*`, which `bande-l10n-tool check` requires. See
-  [localisation.md](localisation.md).
+- **Language packs** (architecture `all`, section `localization`): `bande-desktop-l10n-<lang>`
+  (`sv`, `en-gb`, a stanza in `debian/control` and a `.install` each) holds one catalog per
+  program the source package ships, `/usr/share/bande/l10n/<program>/<lang>.mo`, and enhances
+  `bande-desktop`. Each program's own package carries its English catalog, `en.mo`, through the
+  line `debian/build/l10n/development/<program>/* usr/share/bande/l10n/<program>/` of its
+  `.install`, which `bande-l10n-tool check` requires. A translation-only release builds the
+  packs alone with the build profile `pkg.bande.l10n-only`, which leaves out the other
+  architecture-independent packages ([ci.md](ci.md#jobs)). See [localisation.md](localisation.md).
   Settings ▸ Language puts the languages with a pack (installed or in the APT index) first. When
   a language is chosen there, for the system or for one app, Settings installs its missing pack
   (`bande-desktop-l10n-<lang>-<region>` and `bande-desktop-l10n-<lang>`) through PackageKit on
@@ -96,17 +148,19 @@ The packages pull in the runtime stack the architecture relies on:
 
 Each Debian package is declared by the Bande package that uses it, and only when a Bande
 component uses it at runtime; nothing a Bande component replaces comes along, directly or through
-another package's recommends. `bande-desktop` itself keeps:
+another package's recommends. A package depends only on what it cannot work without; what a
+feature of it needs is a recommendation, so the desktop stays installable while Debian lacks a
+package for a while, and the feature says what is missing. `bande-desktop` itself keeps:
 
 - `dbus-user-session`: the session bus every Bande service is activated on, under the user manager;
 - `default-logind | logind`, `libpam-systemd`: the compositor's seat and session;
-- `fonts-noto-core`, `fonts-noto-cjk`: the fallback faces for scripts Inter does not cover;
+- `fonts-noto-core`, `fonts-noto-cjk` (recommended): the fallback faces for scripts Inter does not cover;
 - `pipewire`, `wireplumber`: the sound service, screen capture and recording;
-- `pipewire-pulse`: apps that play through PulseAudio (the session drop-ins start it);
+- `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it);
   the login window's user (`_greetd`) starts none of PipeWire, its Pulse server, WirePlumber or
   the filter chain (`ConditionUser=!_greetd`), so the person's session never finds the sound
   card busy;
-- `libspa-0.2-bluetooth`: Bluetooth headphones, which the shell's Bluetooth menu connects;
+- `libspa-0.2-bluetooth` (recommended): Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
 - `systemd-oomd`: closes an app when memory stays under pressure.
 
@@ -118,22 +172,30 @@ nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` 
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
 `xdg-user-dirs`, which the Bande packages that use them declare:
 
-- `bande-shell` depends on NetworkManager (network menu), UPower (battery) and BlueZ
-  (Bluetooth), since without them the bar would read as a computer without that hardware, and
-  recommends Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
+- `bande-shell` depends on NetworkManager (network menu) and UPower (battery), since without
+  them the bar would read as a computer without a network or battery, and recommends BlueZ
+  (Bluetooth), the colour emoji font, Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
   `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
   only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` ships Bande's own
   pointers, so no cursor theme package comes along (see compositor.md); `bande-settings` adds
-  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and depends on NetworkManager (Network, VPN
-  import), `xkb-data` and `locales`, so its helper can generate any language picked in Settings;
+  AccountsService (Users), PackageKit (Software Update), power-profiles-daemon (Power) and
+  NetworkManager (Network, VPN import) to its recommends and depends on `xkb-data` and `locales`,
+  so its helper can generate any language picked in Settings;
   the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
   and `systemd-resolved` are from Sharing (resolved announces shares but also takes over DNS, so
   it is never pulled in silently);
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
-- `bande-player` is the one package linking GStreamer: its engine process plays for Player and Glance; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
-- `bande-screenshot` depends on `gst-launch-1.0`, `pipewiresrc` and the VP8 encoder, so screen
-  recording always works, and recommends the H.264 encoder for MP4;
+- `bande-player` is the one package linking GStreamer: its engine process plays for Player and
+  Glance; it depends on the base plugins and recommends the good, PulseAudio, libav and dav1d
+  plugins (the codecs); `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
+- `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc`, the VP8 encoder and the H.264
+  encoder for MP4: screen recording is offered only when they are there;
+- `bande-reporter` recommends `eu-stack` (elfutils) for the stacks of a hung program and
+  `bande-crash-reports` `libdw` for systemd-coredump's stack traces; a report without them
+  has no stack;
+- `bande-spell` recommends the English dictionary, `bande-files` and `bande-lookup` DejaVu Sans
+  Mono, and `bande-clock` the notification and sound services, which ring its alarms;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
@@ -144,7 +206,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 Every program Bande runs and every system file it reads by path is listed in
 `ci/runtime-deps` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
 
-No package depends on an X server, XWayland or an X session; the `install` jobs check that none
+No package depends on an X server, XWayland or an X session; the `desktop` autopkgtest checks that none
 comes along.
 
 Bande ships no firewall rules: with SSH not installed and LLMNR off, only mDNS listens by default,

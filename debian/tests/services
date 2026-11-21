@@ -1,0 +1,26 @@
+#!/bin/bash
+# The installed settings service answers on a private bus and the installed compositor serves
+# Wayland clients headless.
+set -euo pipefail
+export XDG_CONFIG_HOME=$AUTOPKGTEST_TMP/config XDG_RUNTIME_DIR=$AUTOPKGTEST_TMP/runtime
+mkdir -p "$XDG_CONFIG_HOME/bande"
+mkdir -m 700 "$XDG_RUNTIME_DIR"
+echo 'bar { edge "top"; }' > "$XDG_CONFIG_HOME/bande/config.kdl"
+dbus-run-session -- bash -c '
+    /usr/bin/bande-config &
+    daemon=$!
+    for attempt in $(seq 50); do
+        reply=$(dbus-send --session --print-reply --dest=org.bande.Config /org/bande/Config \
+            org.freedesktop.DBus.Properties.Get string:org.bande.Config string:BarEdge 2>/dev/null) &&
+            break
+        sleep 0.1
+    done
+    kill "$daemon"
+    echo "$reply"
+    grep -q "string \"top\"" <<< "$reply"
+'
+status=0
+timeout 10 bande-compositor --headless > "$AUTOPKGTEST_TMP/stdout" || status=$?
+cat "$AUTOPKGTEST_TMP/stdout"
+[ "$status" = 124 ]
+grep -q '^WAYLAND_DISPLAY=wayland-' "$AUTOPKGTEST_TMP/stdout"

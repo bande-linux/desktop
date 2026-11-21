@@ -1,0 +1,5 @@
+debian/build/bin/bande-viewer usr/bin/
+crates/apps/viewer/data/org.bande.Viewer.desktop usr/share/applications/
+debian/build/metainfo/org.bande.Viewer.metainfo.xml usr/share/metainfo/
+crates/apps/viewer/data/org.bande.Viewer.svg usr/share/icons/hicolor/scalable/apps/
+debian/build/l10n/development/bande-viewer/* usr/share/bande/l10n/bande-viewer/

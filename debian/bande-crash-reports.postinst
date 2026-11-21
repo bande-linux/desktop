@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ] || [ "$1" = abort-upgrade ] || [ "$1" = abort-deconfigure ] || [ "$1" = abort-remove ]; then
+	if deb-systemd-helper --quiet was-enabled bande-crash-reports@.service; then
+		deb-systemd-helper enable bande-crash-reports@.service >/dev/null || true
+	else
+		deb-systemd-helper update-state bande-crash-reports@.service >/dev/null || true
+	fi
+	if [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
+		systemctl --system daemon-reload >/dev/null || true
+	fi
+fi
+#DEBHELPER#

@@ -27,33 +27,5 @@ zeroize.workspace = true
 [dev-dependencies]
 bande-test-bus.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, xdg-desktop-portal (>= 1.20), default-dbus-session-bus | dbus-session-bus"
-recommends = "bande-config, bande-file-chooser, bande-notify, bande-printd, bande-power, bande-screenshot, bande-secrets"
-provides = "xdg-desktop-portal-backend"
-extended-description = """\
-Implements xdg-desktop-portal's backends for the Bande desktop: Settings \
-(colour scheme, accent colour, folder icons and Reduce Motion from \
-config.kdl, so GTK, libadwaita and Qt apps follow them), the Bande Open \
-and Save dialogs, Open With for links and files, permission questions, \
-screenshots and screen sharing, the wallpaper, notifications \
-through the Bande Notification Center, keeping the screen or the \
-computer awake, writing email in the default mail app, running in the \
-background, adding web apps to Applications, sharing the account's \
-name and picture, and a key in the Bande keyring for each sandboxed \
-app's own passwords. No GTK or GNOME backend is needed."""
-assets = [
-    ["target/release/deb-assets/xdg-desktop-portal-bande/copyright", "usr/share/doc/xdg-desktop-portal-bande/copyright", "644"],
-    ["target/release/deb-assets/xdg-desktop-portal-bande/changelog.gz", "usr/share/doc/xdg-desktop-portal-bande/", "644"],
-    ["target/release/xdg-desktop-portal-bande", "usr/libexec/", "755"],
-    ["data/xdg-desktop-portal-bande.service", "usr/lib/systemd/user/", "644"],
-    ["data/org.freedesktop.impl.portal.desktop.bande.service", "usr/share/dbus-1/services/", "644"],
-    ["data/bande.portal", "usr/share/xdg-desktop-portal/portals/", "644"],
-    ["data/x-bande-portals.conf", "usr/share/xdg-desktop-portal/", "644"],
-    ["target/release/l10n/development/xdg-desktop-portal-bande/*", "usr/share/bande/l10n/xdg-desktop-portal-bande/", "644"],
-]
-
 [lints]
 workspace = true

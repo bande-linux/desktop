@@ -1,0 +1,6 @@
+Version: 5
+
+Template: GitHub
+Owner: bande-linux
+Project: desktop
+Custom-Version: v(\d+\.\d+\.\d+)

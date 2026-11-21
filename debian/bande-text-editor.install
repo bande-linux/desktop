@@ -1,0 +1,5 @@
+debian/build/bin/bande-text-editor usr/bin/
+crates/apps/text-editor/data/org.bande.TextEditor.desktop usr/share/applications/
+debian/build/metainfo/org.bande.TextEditor.metainfo.xml usr/share/metainfo/
+crates/apps/text-editor/data/org.bande.TextEditor.svg usr/share/icons/hicolor/scalable/apps/
+debian/build/l10n/development/bande-text-editor/* usr/share/bande/l10n/bande-text-editor/

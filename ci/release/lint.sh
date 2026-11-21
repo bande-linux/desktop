@@ -5,6 +5,8 @@ cd "$(dirname "$0")/../.."
 cargo fmt --all --check
 cargo run --locked --quiet --package bande-l10n-tool -- check ci/l10n-complete
 ci/check-runtime-deps.py
+ci/copyright.py --check
+ci/deb/build-depends.py --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
 forbid() {

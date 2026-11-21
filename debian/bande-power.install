@@ -1,0 +1,8 @@
+debian/build/bin/bande-power usr/bin/
+crates/services/power/data/bande-power.service usr/lib/systemd/user/
+crates/services/power/data/org.bande.Power.service usr/share/dbus-1/services/
+crates/services/power/data/org.bande.Brightness.service usr/share/dbus-1/services/
+crates/services/power/data/70-bande-ddc.rules usr/lib/udev/rules.d/
+crates/services/power/data/bande-ddc.conf usr/lib/modules-load.d/
+crates/services/power/data/logind.conf.d usr/lib/systemd/
+debian/build/l10n/development/bande-power/* usr/share/bande/l10n/bande-power/

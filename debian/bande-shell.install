@@ -1,0 +1,4 @@
+crates/shell/launcher/data/emoji/* usr/share/bande/emoji/
+debian/build/bin/bande-shell usr/bin/
+data/wallpapers/*.svg usr/share/bande/wallpapers/
+debian/build/l10n/development/bande-shell/* usr/share/bande/l10n/bande-shell/

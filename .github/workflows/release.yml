@@ -69,9 +69,42 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: ci/release/verify.sh test
 
+  source:
+    needs: suites
+    runs-on: ubuntu-24.04
+    container: debian:${{ fromJSON(needs.suites.outputs.list)[0] }}
+    timeout-minutes: 30
+    steps:
+      - name: Install the tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates cargo dpkg-dev jq python3 xz-utils distro-info-data
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Check that the tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Check that the tag, Cargo.toml and debian/changelog agree
+        run: ci/deb/version.sh
+      - run: ci/deb/source.sh source
+      - name: Check that debian/copyright and the librust Build-Depends follow Cargo.lock
+        run: |
+          ci/copyright.py --check
+          ci/deb/build-depends.py --check
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bande-source
+          path: |
+            source/*.dsc
+            source/*.tar.xz
+          if-no-files-found: error
+
   debs:
     name: debs (${{ matrix.suite }}, ${{ matrix.arch }})
-    needs: suites
+    needs: [suites, source]
     strategy:
       fail-fast: false
       matrix:
@@ -80,8 +113,10 @@ jobs:
         include:
           - arch: arm64
             runner: ubuntu-24.04-arm
+            build: --build=any
           - arch: amd64
             runner: ubuntu-24.04
+            build: --build=binary
     runs-on: ${{ matrix.runner }}
     container:
       image: debian:${{ matrix.suite }}
@@ -90,6 +125,9 @@ jobs:
         - /usr/local/lib/android:/host/android
         - /opt/ghc:/host/ghc
     timeout-minutes: 240
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/deb
+      DEB_BUILD_OPTIONS: nocheck parallel=2
     steps:
       - name: Free disk space on the host
         run: rm -rf /host/dotnet/* /host/android/* /host/ghc/* && df -h /
@@ -102,57 +140,50 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
       - run: ci/release/verify.sh --setup debs
+      - uses: actions/download-artifact@v7
+        with:
+          name: bande-source
+          path: source
       - uses: Swatinem/rust-cache@v2
         with:
           key: debs-${{ matrix.suite }}-${{ matrix.arch }}
+          cache-targets: false
+          cache-directories: target/deb
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: ci/release/verify.sh debs
+      - name: Build the packages offline from the source package
+        run: ci/deb/build.sh source/*.dsc debs ${{ matrix.build }}
       - name: Disk and memory after the build
         if: always()
         run: df -h / && grep -E "MemTotal|MemAvailable" /proc/meminfo
+      - name: Check the packages
+        run: ci/release/check-debs.sh debs
+      - name: Lintian
+        run: |
+          chmod 755 debs source
+          chmod 644 debs/* source/*
+          runuser -u nobody -- lintian --fail-on error,warning debs/*.changes source/*.dsc
       - uses: actions/upload-artifact@v7
         with:
           name: bande-debs-${{ matrix.suite }}-${{ matrix.arch }}
-          path: target/debian/*.deb
+          path: |
+            debs/*_${{ matrix.arch }}.deb
+            !debs/*-dbgsym_*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'amd64'
+        with:
+          name: bande-debs-${{ matrix.suite }}-all
+          path: debs/*_all.deb
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: bande-debug-symbols-${{ matrix.suite }}-${{ matrix.arch }}
-          path: target/debian-symbols/*.deb
-          if-no-files-found: error
-
-  deb-all:
-    name: deb-all (${{ matrix.suite }})
-    needs: suites
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: ${{ fromJSON(needs.suites.outputs.list) }}
-    runs-on: ubuntu-24.04
-    container: debian:${{ matrix.suite }}
-    timeout-minutes: 15
-    steps:
-      - name: Install git
-        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Trust the checkout
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Check that the tagged commit is on main
-        if: github.ref_type == 'tag'
-        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - run: ci/release/verify.sh --setup all
-      - run: ci/release/verify.sh all
-      - uses: actions/upload-artifact@v7
-        with:
-          name: bande-debs-${{ matrix.suite }}-all
-          path: target/debian-all/*.deb
+          path: debs/*-dbgsym_*.deb
           if-no-files-found: error
 
   install:
     name: install (${{ matrix.suite }}, ${{ matrix.arch }})
-    needs: [suites, debs, deb-all]
+    needs: [suites, debs]
     strategy:
       fail-fast: false
       matrix:
@@ -165,20 +196,44 @@ jobs:
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     container: debian:${{ matrix.suite }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - name: Install autopkgtest
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends autopkgtest dpkg-dev
+      - uses: actions/download-artifact@v7
+        with:
+          name: bande-source
+          path: source
       - uses: actions/download-artifact@v7
         with:
           name: bande-debs-${{ matrix.suite }}-${{ matrix.arch }}
-          path: install-debs
+          path: debs
       - uses: actions/download-artifact@v7
         with:
           name: bande-debs-${{ matrix.suite }}-all
-          path: install-debs
-      - name: Install bande-desktop into a clean Debian ${{ matrix.suite }}, alone and next to another display manager
+          path: debs
+      - name: Run the autopkgtests on this throwaway Debian ${{ matrix.suite }}
         run: |
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
-          ci/deb/install-test/run.sh install-debs
-      - name: Read the colour scheme through xdg-desktop-portal
-        run: ci/deb/install-test/portal-frontend.sh
+          autopkgtest --no-built-binaries source/*.dsc debs/*.deb -- null
+
+  release-source:
+    if: github.ref_type == 'tag'
+    needs: [suites, install]
+    runs-on: ubuntu-24.04
+    container: debian:${{ fromJSON(needs.suites.outputs.list)[0] }}
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Install gh
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends gh ca-certificates
+      - uses: actions/download-artifact@v7
+        with:
+          name: bande-source
+          path: source
+      - name: Attach the source package to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes "" source/*

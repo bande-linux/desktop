@@ -1,0 +1,5 @@
+debian/build/bin/bande-sound usr/bin/
+crates/services/sound/data/bande-sound.service usr/lib/systemd/user/
+crates/services/sound/data/org.bande.Sound.service usr/share/dbus-1/services/
+data/sounds/Bande/index.theme usr/share/sounds/Bande/
+data/sounds/Bande/stereo/*.wav usr/share/sounds/Bande/stereo/

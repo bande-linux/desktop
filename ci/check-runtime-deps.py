@@ -38,17 +38,36 @@ def names(relation):
             yield name
 
 
+def control():
+    depends = {}
+    for stanza in re.split(r"\n\s*\n", (ROOT / "debian" / "control").read_text(encoding="utf-8")):
+        package = re.search(r"^Package: (\S+)$", stanza, re.M)
+        if package:
+            relation = re.search(r"^Depends:((?:.*)(?:\n .*)*)", stanza, re.M)
+            depends[package.group(1)] = set(names(relation.group(1) if relation else ""))
+    installers = {}
+    for install in (ROOT / "debian").glob("*.install"):
+        for line in install.read_text(encoding="utf-8").splitlines():
+            if line.startswith("debian/build/bin/"):
+                installers[line.split()[0].removeprefix("debian/build/bin/")] = install.stem
+    return depends, installers
+
+
 def packages():
     metadata = json.loads(subprocess.run(
         ["cargo", "metadata", "--format-version", "1", "--offline", "--locked", "--no-deps"],
         cwd=ROOT, check=True, capture_output=True, text=True,
     ).stdout)
+    depends, installers = control()
     crates = {}
     for package in metadata["packages"]:
-        deb = (package.get("metadata") or {}).get("deb")
-        crates[package["name"]] = {
+        name = package["name"]
+        binaries = [target["name"] for target in package["targets"] if "bin" in target["kind"]]
+        deb = name if name in depends else next(
+            (installers[binary] for binary in binaries if binary in installers), None)
+        crates[name] = {
             "root": pathlib.Path(package["manifest_path"]).parent,
-            "deb": (deb.get("name", package["name"]), set(names(deb.get("depends", "")))) if deb else None,
+            "deb": (deb, depends[deb]) if deb else None,
             "uses": [dependency["name"] for dependency in package["dependencies"]
                      if dependency.get("path") and dependency["kind"] is None],
         }

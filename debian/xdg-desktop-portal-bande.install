@@ -1,0 +1,6 @@
+debian/build/bin/xdg-desktop-portal-bande usr/libexec/
+crates/services/portal/data/xdg-desktop-portal-bande.service usr/lib/systemd/user/
+crates/services/portal/data/org.freedesktop.impl.portal.desktop.bande.service usr/share/dbus-1/services/
+crates/services/portal/data/bande.portal usr/share/xdg-desktop-portal/portals/
+crates/services/portal/data/x-bande-portals.conf usr/share/xdg-desktop-portal/
+debian/build/l10n/development/xdg-desktop-portal-bande/* usr/share/bande/l10n/xdg-desktop-portal-bande/

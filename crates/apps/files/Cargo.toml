@@ -36,26 +36,5 @@ zbus.workspace = true
 rustix = { workspace = true, features = ["process"] }
 tempfile.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, bande-icon-theme, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
-extended-description = """\
-The file manager of the Bande desktop: folders open in Miller columns \
-driven by the arrow keys, and Space shows \
-the selected file in Glance."""
-assets = [
-    ["target/release/deb-assets/bande-files/copyright", "usr/share/doc/bande-files/copyright", "644"],
-    ["target/release/deb-assets/bande-files/changelog.gz", "usr/share/doc/bande-files/", "644"],
-    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-files", "644"],
-    ["target/release/deb-assets/bande-files/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-files", "usr/bin/", "755"],
-    ["data/org.bande.Files.desktop", "usr/share/applications/", "644"],
-    ["target/release/deb-assets/bande-files/org.bande.Files.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["data/org.bande.Files.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["data/org.freedesktop.FileManager1.service", "usr/share/dbus-1/services/", "644"],
-    ["target/release/l10n/development/bande-files/*", "usr/share/bande/l10n/bande-files/", "644"],
-]
-
 [lints]
 workspace = true

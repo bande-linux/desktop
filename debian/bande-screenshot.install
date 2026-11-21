@@ -1,0 +1,2 @@
+debian/build/bin/bande-screenshot usr/bin/
+debian/build/l10n/development/bande-screenshot/* usr/share/bande/l10n/bande-screenshot/

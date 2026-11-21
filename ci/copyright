@@ -1,10 +1,31 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: Bande
 Source: https://github.com/bande-linux/desktop
+Files-Excluded: vendor/libloading-*/tests/*.dll
+ vendor/vcpkg-*/test-data
+ vendor/sevenz-rust2-*/tests/resources/*.exe
+ vendor/pdf-writer-*/examples/sRGB_v4.icc
+Comment: The vendored crates come without their prebuilt Windows test programs and
+ pdf-writer's example ICC profile, whose licence does not allow modification; none
+ is built.
 
 Files: *
 Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
 License: Apache-2.0 or MIT
+
+Files: crates/*/*/data/*.metainfo.xml
+Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
+License: CC0-1.0
+Comment: The AppStream metadata, as each file's metadata_license says.
+
+Files: data/icons/Bande/scalable/mimetypes/*
+ data/icons/Bande/*/mimetypes/*
+Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
+ 2020 The JetBrains Mono Project Authors
+License: (Apache-2.0 or MIT) and OFL-1.1
+Comment: The labels of the file icons are outlines of JetBrains Mono Bold,
+ drawn by data/icons/src/generate.py; the icons are installed by
+ bande-icon-theme.
 
 License: Apache-2.0
  Licensed under the Apache License, Version 2.0 (the "License"); you may not
@@ -31,3 +52,7 @@ License: MIT
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
+
+License: OFL-1.1
+ On Debian systems, the full text of the SIL Open Font License, Version 1.1
+ can be found in /usr/share/common-licenses/OFL-1.1.

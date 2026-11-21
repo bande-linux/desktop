@@ -1,0 +1,12 @@
+debian/build/bin/bande-backupd usr/libexec/
+debian/build/bin/bande-backup-alerts usr/libexec/
+crates/services/backup/data/bande-backup-alerts.service usr/lib/systemd/user/
+crates/services/backup/data/bande-backup-alerts.path usr/lib/systemd/user/
+crates/services/backup/data/bande-backup.service usr/lib/systemd/system/
+crates/services/backup/data/bande-backup.timer usr/lib/systemd/system/
+crates/services/backup/data/org.bande.Backup.conf usr/share/dbus-1/system.d/
+crates/services/backup/data/org.bande.Backup.service usr/share/dbus-1/system-services/
+crates/services/backup/data/org.bande.backup.policy usr/share/polkit-1/actions/
+crates/services/backup/data/90-bande-backup.rules usr/lib/udev/rules.d/
+debian/build/l10n/development/bande-backup-alerts/* usr/share/bande/l10n/bande-backup-alerts/
+debian/build/l10n/development/bande-backupd/* usr/share/bande/l10n/bande-backupd/

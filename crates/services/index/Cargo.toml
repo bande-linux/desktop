@@ -24,26 +24,5 @@ zbus.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66)"
-extended-description = """\
-Keeps a private on-disk index of the names and contents of the documents in \
-the home folder, and of the mail, events and contacts apps give it, and \
-answers searches from Search and Files. Runs in the background at idle \
-priority and is woken only by changes."""
-maintainer-scripts = "debian/"
-assets = [
-    ["target/release/deb-assets/bande-indexer/copyright", "usr/share/doc/bande-indexer/copyright", "644"],
-    ["target/release/deb-assets/bande-indexer/changelog.gz", "usr/share/doc/bande-indexer/", "644"],
-    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-indexer", "644"],
-    ["target/release/deb-assets/bande-indexer/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-indexer", "usr/bin/", "755"],
-    ["data/bande-indexer.service", "usr/lib/systemd/user/", "644"],
-    ["data/org.bande.Search.service", "usr/share/dbus-1/services/", "644"],
-    ["target/release/l10n/development/bande-indexer/*", "usr/share/bande/l10n/bande-indexer/", "644"],
-]
-
 [lints]
 workspace = true

@@ -42,35 +42,5 @@ bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
 wayland-client.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, bande-icon-theme, libvulkan1, mesa-vulkan-drivers | vulkan-icd, systemd, pkexec, xkb-data, fonts-inter, fonts-manrope"
-recommends = "bande-clipboard, bande-shell, bande-lock, bande-screenshot, bande-files, bande-settings"
-suggests = "fcitx5"
-extended-description = """\
-Wayland compositor for the Bande desktop session, built on Smithay. It runs \
-on a logind seat, drives the displays through DRM/KMS, reads input through \
-libinput and composes windows with its own Vulkan renderer, scanning \
-full-screen clients out directly when it can."""
-assets = [
-    ["target/release/deb-assets/bande-compositor/copyright", "usr/share/doc/bande-compositor/copyright", "644"],
-    ["target/release/deb-assets/bande-compositor/changelog.gz", "usr/share/doc/bande-compositor/", "644"],
-    ["target/release/deb-assets/bande-compositor/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-compositor", "usr/bin/", "755"],
-    ["data/bande-session", "usr/bin/", "755"],
-    ["data/bande-compositor.service", "usr/lib/systemd/user/", "644"],
-    ["data/bande-session.target", "usr/lib/systemd/user/", "644"],
-    ["data/bande.desktop", "usr/share/wayland-sessions/", "644"],
-    ["data/session-clients", "usr/share/bande-compositor/", "644"],
-    ["data/bande-consent", "usr/libexec/", "755"],
-    ["data/50-bande-ptrace.conf", "usr/lib/sysctl.d/", "644"],
-    ["data/50-bande-resolved.conf", "usr/lib/systemd/resolved.conf.d/", "644"],
-    ["data/org.bande.consent.policy", "usr/share/polkit-1/actions/", "644"],
-    ["target/release/l10n/development/bande-compositor/*", "usr/share/bande/l10n/bande-compositor/", "644"],
-    ["target/release/cursors/Bande-Cursors/index.theme", "usr/share/icons/Bande-Cursors/", "644"],
-    { source = "target/release/cursors/Bande-Cursors/cursors/*", dest = "usr/share/icons/Bande-Cursors/cursors/", mode = "644", preserve_symlinks = true },
-]
-
 [lints]
 workspace = true

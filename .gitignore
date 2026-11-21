@@ -4,12 +4,20 @@
 *.swp
 *.bak
 
-# Debian Packaging
+# Debian packaging
 *.deb
-debian/.debhelper/
-debian/debhelper-build-stamp
-debian/files
-debian/*.substvars
+*.ddeb
+/vendor/
+/debian/*/
+!/debian/source/
+!/debian/tests/
+!/debian/upstream/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/debian/*.debhelper
+/debian/*.debhelper.log
+/debian/Cargo.lock.upstream
 
 # IDE & Editor
 .vscode/
@@ -23,14 +31,6 @@ debian/*.substvars
 .factory/cache/
 .sccache/
 
-/packaging/*/debian/*/
-!/packaging/*/debian/source/
-/packaging/*/debian/files
-/packaging/*/debian/*.substvars
-/packaging/*/debian/debhelper-build-stamp
-/packaging/*.buildinfo
-/packaging/*.changes
-/ci/deb/install-test/debs/
 
 # Agent worktrees
 .claude/

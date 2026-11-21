@@ -46,7 +46,7 @@ const CONFIRM_DELETE: &str = "delete";
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Shown {
     Nothing,
-    Page(Blocker),
+    Page(Blocker, bool),
     Empty,
     Table,
 }
@@ -492,6 +492,7 @@ impl MachinesPane {
                 }
                 Intent::Menu(action, keys) => self.menu_action(ui, &action, &keys),
                 Intent::Emulate => self.requests.push(Request::Emulate),
+                Intent::Install => self.requests.push(Request::Install),
                 Intent::Copy(text) => ui.context().copy(text),
                 Intent::Field(field) => {
                     if let Some(draft) = &mut self.draft {
@@ -572,7 +573,7 @@ impl MachinesPane {
         let status = self.fleet.borrow().status.clone();
         let wanted = match status {
             Status::Probing => Shown::Nothing,
-            Status::Blocked(blocker) => Shown::Page(blocker),
+            Status::Blocked(blocker) => Shown::Page(blocker, self.fleet.borrow().installing),
             Status::Ready(_) => {
                 let fleet = self.fleet.borrow();
                 match fleet.entries.is_empty() && fleet.jobs.is_empty() {
@@ -584,7 +585,9 @@ impl MachinesPane {
         if wanted != self.shown {
             let content = match &wanted {
                 Shown::Nothing => super::page::blank(),
-                Shown::Page(blocker) => super::page::not_ready(blocker, &self.intents),
+                Shown::Page(blocker, installing) => {
+                    super::page::not_ready(blocker, *installing, &self.intents)
+                }
                 Shown::Empty => super::page::empty(&self.intents),
                 Shown::Table => {
                     let table = self.make_table();

@@ -143,6 +143,7 @@ pub enum Update {
     UsbDevices(Vec<UsbDevice>),
     Usb(String, Vec<String>),
     UsbFailed(String, String),
+    Installed(Result<(), String>),
 }
 
 #[derive(Clone)]
@@ -833,6 +834,20 @@ impl Backend {
 
     fn probe(&self) {
         let _ = self.recheck.send(Recheck::Probe);
+    }
+
+    pub fn install(&self) {
+        let worker = self.worker();
+        spawn("velox-vm-install", move || {
+            let installed = zbus::blocking::Connection::system()
+                .map_err(bande_packages::Error::from)
+                .and_then(|system| {
+                    bande_packages::Client::new(&system).install_missing(&Host::missing_packages())
+                })
+                .map_err(|error| error.to_string());
+            worker.out.send(Update::Installed(installed));
+            let _ = worker.recheck.send(Recheck::Probe);
+        });
     }
 
     pub fn emulate(&self) {

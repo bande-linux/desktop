@@ -66,6 +66,7 @@ pub struct Fleet {
     pub jobs: BTreeMap<u64, Job>,
     pub created: Vec<(u64, String)>,
     pub notices: Vec<Notice>,
+    pub installing: bool,
     pub focus: Option<String>,
     pub to_open: Vec<String>,
     pub chosen_iso: Option<PathBuf>,
@@ -242,6 +243,7 @@ impl Default for Fleet {
             jobs: BTreeMap::new(),
             created: Vec::new(),
             notices: Vec::new(),
+            installing: false,
             focus: None,
             to_open: Vec::new(),
             chosen_iso: None,
@@ -413,6 +415,16 @@ impl Fleet {
             }
             Update::IsoChosen(path) => self.chosen_iso = Some(path),
             Update::FolderChosen(..) => {}
+            Update::Installed(installed) => {
+                self.installing = false;
+                if let Err(message) = installed {
+                    self.notices.push(Notice {
+                        id: None,
+                        title: tr!("Cannot install virtualization"),
+                        message,
+                    });
+                }
+            }
             Update::Settled(id) => {
                 if let Some(entry) = self.entries.get_mut(&id) {
                     entry.pending = None;

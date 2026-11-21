@@ -40,6 +40,7 @@ enum Intent {
     Inspector,
     Menu(String, Vec<String>),
     Emulate,
+    Install,
     Copy(&'static str),
     Field(Field),
     Sheet(String),
@@ -75,6 +76,7 @@ pub enum Request {
     Open(String),
     Connect(String),
     Emulate,
+    Install,
     Change(String, Change),
     Snapshot(String, SnapshotOp),
     Clone(String, bande_vm::NewClone),
@@ -219,6 +221,10 @@ impl Hub {
                     .choose_folder(id, tr!("Choose a Folder to Share"));
             }
             Request::Emulate => self.backend.emulate(),
+            Request::Install => {
+                fleet.installing = true;
+                self.backend.install();
+            }
             Request::Change(id, change) => self.backend.change(id, change),
             Request::Usb(id, key) => self.backend.usb(id, key),
         }

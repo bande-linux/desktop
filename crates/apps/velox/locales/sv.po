@@ -499,6 +499,9 @@ msgstr "”{name}” startade utan 3D-grafik"
 msgid "The machine did not start with 3D graphics, so Velox started it with the plain display."
 msgstr "Datorn startade inte med 3D-grafik, så Velox startade den med den vanliga skärmen."
 
+msgid "Cannot install virtualization"
+msgstr "Det gick inte att installera virtualisering"
+
 msgid "Cannot create “{name}”"
 msgstr "Det gick inte att skapa ”{name}”"
 
@@ -538,14 +541,17 @@ msgstr "Utan KVM körs maskinerna emulerade och mycket långsammare."
 msgid "Use Emulation"
 msgstr "Använd emulering"
 
+msgid "Installing…"
+msgstr "Installerar…"
+
+msgid "Install"
+msgstr "Installera"
+
 msgid "Install virtualization to continue"
 msgstr "Installera virtualisering för att fortsätta"
 
 msgid "Missing: {packages}"
 msgstr "Saknas: {packages}"
-
-msgid "Install QEMU, its firmware and passt"
-msgstr "Installera QEMU, dess firmware och passt"
 
 msgid "No access to KVM"
 msgstr "Ingen åtkomst till KVM"

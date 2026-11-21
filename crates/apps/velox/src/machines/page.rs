@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use bande_l10n::tr;
 use bande_toolkit::ui::{Axis, Button, Label, ScrollView, Stack, Widget};
-use bande_vm::Host;
 
 use super::readiness::{Blocker, KVM_GROUP};
 use super::{Intent, Intents, push};
@@ -55,7 +54,18 @@ fn emulate(intents: &Intents) -> Box<dyn Widget> {
     ))
 }
 
-pub fn not_ready(blocker: &Blocker, intents: &Intents) -> Box<dyn Widget> {
+fn install(installing: bool, intents: &Intents) -> Box<dyn Widget> {
+    let install = Rc::clone(intents);
+    let title = match installing {
+        true => tr!("Installing…"),
+        false => tr!("Install"),
+    };
+    let mut button = Button::new(&title, move || push(&install, Intent::Install)).primary();
+    button.set_enabled(!installing);
+    boxed(Stack::new(Axis::Horizontal, 0.0, 0.0, vec![boxed(button)]))
+}
+
+pub fn not_ready(blocker: &Blocker, installing: bool, intents: &Intents) -> Box<dyn Widget> {
     let mut children = Vec::new();
     match blocker {
         Blocker::Missing(packages) => {
@@ -65,11 +75,7 @@ pub fn not_ready(blocker: &Blocker, intents: &Intents) -> Box<dyn Widget> {
             children.push(boxed(
                 Label::new(&tr!("Missing: {packages}", packages = packages.join(", "))).secondary(),
             ));
-            children.push(steps(
-                &tr!("Install QEMU, its firmware and passt"),
-                Host::INSTALL,
-                intents,
-            ));
+            children.push(install(installing, intents));
         }
         Blocker::NoKvm => {
             children.push(boxed(Label::heading(&tr!("No access to KVM"))));

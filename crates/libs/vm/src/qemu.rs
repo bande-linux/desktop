@@ -26,7 +26,6 @@ struct Platform {
     gpu_3d: &'static str,
     basic_display: &'static str,
     tpm: &'static str,
-    install: &'static str,
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -51,7 +50,6 @@ const PLATFORM: Platform = Platform {
     gpu_3d: "virtio-vga-gl",
     basic_display: "VGA",
     tpm: "tpm-crb",
-    install: "sudo apt install qemu-system-x86 ovmf qemu-system-modules-opengl qemu-utils passt",
 };
 
 #[cfg(target_arch = "aarch64")]
@@ -71,7 +69,6 @@ const PLATFORM: Platform = Platform {
     gpu_3d: "virtio-gpu-gl-pci",
     basic_display: "ramfb",
     tpm: "tpm-tis-device",
-    install: "sudo apt install qemu-system-arm qemu-efi-aarch64 qemu-system-modules-opengl qemu-utils passt",
 };
 
 const VIRTIOFSD: &str = "/usr/libexec/virtiofsd";
@@ -126,8 +123,6 @@ fn has_dbus_display() -> bool {
 }
 
 impl Host {
-    pub const INSTALL: &str = PLATFORM.install;
-
     pub fn detect() -> Result<Self> {
         let [qemu, qemu_img, passt, firmware_code, firmware_vars] =
             REQUIRED.map(|(path, package)| locate(path).ok_or(Error::Missing(package.into())));

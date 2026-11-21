@@ -223,7 +223,7 @@ pub fn handle(view: &mut CalendarView, event: &Event) -> bool {
         }
         Event::PointerDown(pointer) => pointer_down(view, pointer),
         Event::PointerMove(pointer) => pointer_move(view, pointer, event),
-        Event::PointerUp(pointer) => pointer_up(view, pointer, event),
+        Event::PointerUp(_) => pointer_up(view, event),
         Event::Scroll(scroll) if !over_controls(view, scroll.position) => {
             let step = match scroll.source {
                 ScrollSource::Wheel => scroll.delta.y.signum() * WHEEL_STEP,
@@ -624,12 +624,11 @@ fn pointer_move(view: &mut CalendarView, pointer: &Pointer, event: &Event) -> bo
     }
 }
 
-fn pointer_up(view: &mut CalendarView, pointer: &Pointer, event: &Event) -> bool {
+fn pointer_up(view: &mut CalendarView, event: &Event) -> bool {
     view.press = None;
     let Some(drag) = view.drag.take() else {
         return view.ui.handle(event);
     };
-    let _ = pointer;
     match drag {
         Drag::Create {
             anchor,

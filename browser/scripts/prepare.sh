@@ -78,7 +78,7 @@ sed -i -e "s/^Maintainer: .*/Maintainer: $maintainer/" -e '/^Uploaders:/d' debia
 rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-symbolic.svg.in \
     debian/browser.preinst.in debian/browser.postrm.in debian/firefox.in
 sed -i 's/^stamps\/dh_install:: debian\/noinstall debian\/$($(PRODUCT))-symbolic.svg/stamps\/dh_install:: debian\/noinstall/' debian/rules
-cp "$repo/prefs/bande.js" debian/00-bande.js
+cat "$repo/firefox-esr-bande/settings.js" "$repo/prefs/bande.js" > debian/00-bande.js
 while IFS=: read -r window name name_sv; do
     printf '[Desktop Entry]\nType=Application\nName=%s\nName[sv]=%s\nIcon=org.bande.Browser\nExec=bande-browser\nNoDisplay=true\n' \
         "$name" "$name_sv" > "debian/org.bande.Browser.$window.desktop"
@@ -171,6 +171,14 @@ License: CC0-1.0
  On Debian systems, the complete text of the CC0 1.0 Universal licence can be
  found in the file `/usr/share/common-licenses/CC0-1.0'.
 COPYRIGHT
+mkdir -p debian/upstream
+cat > debian/upstream/metadata <<'METADATA'
+Name: Bande's Browser
+Repository: https://github.com/bande-linux/web.git
+Repository-Browse: https://github.com/bande-linux/web
+Bug-Database: https://github.com/bande-linux/web/issues
+Bug-Submit: https://github.com/bande-linux/web/issues/new
+METADATA
 debian/rules debian/control
 grep -q '^Source: bande-browser$' debian/control
 ! grep -q 'debian/firefox usr/bin' debian/browser.install.in

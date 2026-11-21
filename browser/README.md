@@ -9,10 +9,25 @@ This repository holds no browser source. It holds what we change in Debian's:
 |---|---|
 | `patches/<esr>/` | our patches and `series`, applied after Debian's; `librewolf/` are from [LibreWolf](https://codeberg.org/librewolf/source) |
 | `branding/` | name, icon, desktop file and metainfo, added with `--with-branding` |
-| `prefs/bande.js` | locked prefs, the second line of defence behind the removals |
+| `firefox-esr-bande/` | the settings package's source; its `settings.js` holds the prefs both forms share, the second line of defence behind the removals |
+| `prefs/bande.js` | prefs only the rebuild needs, added after `settings.js` |
 | `search/` | search engines, with no partner codes |
 | `theme/` | chrome CSS using Bande's design tokens |
 | `scripts/` | the build, run the same way anywhere |
+
+## Two forms
+
+- **The rebuild**, `bande-browser` in Bande's archive: Debian's `firefox-esr` source with the patches,
+  branding, prefs, search and theme here. Only this form removes code and has Bande's look.
+- **The settings package**, `bande-firefox-esr-settings` from `firefox-esr-bande/`: Bande's prefs
+  (`/etc/firefox-esr/bande-settings.js`) and enterprise policies
+  (`/usr/share/firefox-esr/distribution/policies.json`) for Debian's own `firefox-esr`. It covers what
+  a pref or policy controls; Remote Settings is off by policy, so translation is unavailable and
+  security data arrives with `firefox-esr` updates. It can't carry the theme, the new tab and
+  first-launch search pages, the menu button and title bar changes, the shipped Tracking Protection
+  lists (Debian's browser fetches them) or search engines without partner codes. An administrator's
+  `/etc/firefox/policies/policies.json` replaces its policies. Build it with
+  `cd firefox-esr-bande && dpkg-buildpackage -us -uc -b`.
 
 ## Build
 

@@ -14,7 +14,7 @@ local gate call it, so CI holds no check the gate skips:
 | `gate` | `lint test all debs` |
 
 `verify.sh` sets the environment the stages share (no incremental, no debug info, build paths
-remapped to `/build` and `/cargo`) and checks that the Debian packages each stage needs are
+remapped to `/build` and `/cargo` in Rust and C code) and checks that the Debian packages each stage needs are
 installed, failing with the list of what is missing rather than skipping a step; `verify.sh --setup
 STAGE` installs them and the pinned `cargo-deb` instead (what CI does). `VERIFY_PROFILE` picks the
 cargo profile of the debs (default `dist`).

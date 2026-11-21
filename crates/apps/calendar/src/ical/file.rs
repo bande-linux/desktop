@@ -38,6 +38,7 @@ pub fn export<'a>(name: &str, objects: impl IntoIterator<Item = &'a str>) -> Str
     let mut calendar = Component::new("VCALENDAR");
     calendar.push(Property::new("VERSION", "2.0"));
     calendar.push(Property::new("PRODID", PRODUCT));
+    calendar.push(Property::new("NAME", escape(name)));
     calendar.push(Property::new("X-WR-CALNAME", escape(name)));
     let mut zones = HashSet::new();
     let roots = objects

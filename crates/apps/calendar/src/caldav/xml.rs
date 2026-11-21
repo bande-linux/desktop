@@ -3,7 +3,7 @@ use super::http::Error;
 pub const DAV: &str = "DAV:";
 pub const CALDAV: &str = "urn:ietf:params:xml:ns:caldav";
 pub const CALSERVER: &str = "http://calendarserver.org/ns/";
-pub const APPLE: &str = "http://apple.com/ns/ical/";
+pub const CALENDAR_COLOR_NS: &str = "http://apple.com/ns/ical/";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Element {
@@ -162,7 +162,7 @@ pub fn escape(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-const NAMESPACES: &str = "xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" xmlns:cs=\"http://calendarserver.org/ns/\" xmlns:a=\"http://apple.com/ns/ical/\"";
+const NAMESPACES: &str = "xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" xmlns:cs=\"http://calendarserver.org/ns/\" xmlns:ic=\"http://apple.com/ns/ical/\"";
 
 pub fn propfind(props: &[&str]) -> String {
     format!(
@@ -206,7 +206,7 @@ pub fn set_property(element: &str, value: &str) -> String {
 
 pub fn mkcalendar(name: &str, color: &str) -> String {
     format!(
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<c:mkcalendar {NAMESPACES}><d:set><d:prop><d:displayname>{}</d:displayname><a:calendar-color>{}</a:calendar-color><c:supported-calendar-component-set><c:comp name=\"VEVENT\"/></c:supported-calendar-component-set></d:prop></d:set></c:mkcalendar>",
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<c:mkcalendar {NAMESPACES}><d:set><d:prop><d:displayname>{}</d:displayname><ic:calendar-color>{}</ic:calendar-color><c:supported-calendar-component-set><c:comp name=\"VEVENT\"/></c:supported-calendar-component-set></d:prop></d:set></c:mkcalendar>",
         escape(name),
         escape(color)
     )

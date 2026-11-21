@@ -1,6 +1,6 @@
 use super::dns;
 use super::http::{Credentials, Error, Http, Response, join, origin, same_resource};
-use super::xml::{self, APPLE, CALDAV, CALSERVER, DAV, Multistatus, parse_multistatus};
+use super::xml::{self, CALDAV, CALENDAR_COLOR_NS, CALSERVER, DAV, Multistatus, parse_multistatus};
 
 const MAX_REDIRECTS: usize = 5;
 const MULTIGET_BATCH: usize = 50;
@@ -238,7 +238,7 @@ impl Client {
         let body = xml::propfind(&[
             "d:resourcetype",
             "d:displayname",
-            "a:calendar-color",
+            "ic:calendar-color",
             "cs:getctag",
             "d:sync-token",
             "d:current-user-privilege-set",
@@ -279,7 +279,9 @@ impl Client {
                         .text(DAV, "displayname")
                         .map(str::to_owned)
                         .unwrap_or_else(|| last_segment(&calendar_url)),
-                    color: entry.text(APPLE, "calendar-color").map(str::to_owned),
+                    color: entry
+                        .text(CALENDAR_COLOR_NS, "calendar-color")
+                        .map(str::to_owned),
                     ctag: entry.text(CALSERVER, "getctag").map(str::to_owned),
                     sync_token: entry.text(DAV, "sync-token").map(str::to_owned),
                     read_only,
@@ -440,7 +442,13 @@ impl Client {
     }
 
     pub fn set_color(&self, url: &str, color: &str) -> Result<(), Error> {
-        self.set_property(url, APPLE, "calendar-color", "a:calendar-color", color)
+        self.set_property(
+            url,
+            CALENDAR_COLOR_NS,
+            "calendar-color",
+            "ic:calendar-color",
+            color,
+        )
     }
 
     pub fn rename(&self, url: &str, name: &str) -> Result<(), Error> {

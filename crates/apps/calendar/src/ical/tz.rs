@@ -6,7 +6,7 @@ use jiff::{Timestamp, ToSpan};
 
 use super::lines::{Component, Property};
 
-const WINDOWS_ZONES: [(&str, &str); 24] = [
+const NON_IANA_ZONES: [(&str, &str); 24] = [
     ("UTC", "UTC"),
     ("GMT Standard Time", "Europe/London"),
     ("Greenwich Standard Time", "Atlantic/Reykjavik"),
@@ -58,9 +58,9 @@ fn system_zone(tzid: &str) -> Option<TimeZone> {
     if let Ok(zone) = TimeZone::get(tzid) {
         return Some(zone);
     }
-    if let Some((_, iana)) = WINDOWS_ZONES
+    if let Some((_, iana)) = NON_IANA_ZONES
         .iter()
-        .find(|(windows, _)| windows.eq_ignore_ascii_case(tzid))
+        .find(|(name, _)| name.eq_ignore_ascii_case(tzid))
     {
         return TimeZone::get(iana).ok();
     }

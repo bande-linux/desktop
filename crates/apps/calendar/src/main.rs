@@ -40,6 +40,7 @@ const REFRESH: &str = "refresh";
 const IMPORT: &str = "import";
 const EXPORT: &str = "export";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
+const FEED_COLOR_PROPERTIES: [&str; 2] = ["COLOR", "X-APPLE-CALENDAR-COLOR"];
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
 const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(24);
@@ -445,10 +446,12 @@ impl CalendarApp {
                 .and_then(|object| object.calendar.value(name))
                 .map(str::to_owned)
         };
-        let name = header("X-WR-CALNAME").unwrap_or_else(|| host_of(&url).to_owned());
-        let color = header("X-APPLE-CALENDAR-COLOR")
-            .as_deref()
-            .and_then(parse_color)
+        let name = header("NAME")
+            .or_else(|| header("X-WR-CALNAME"))
+            .unwrap_or_else(|| host_of(&url).to_owned());
+        let color = FEED_COLOR_PROPERTIES
+            .iter()
+            .find_map(|property| header(property).as_deref().and_then(parse_color))
             .map(color_text)
             .unwrap_or_else(|| color_text(Accent::Plum.color(Scheme::Light)));
         let account = new_uid();

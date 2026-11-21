@@ -15,8 +15,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
 - **Vendored crates**: `bande-desktop_X.Y.Z.orig-vendor.tar.xz`, a component tarball unpacked
   in `vendor/`, holds every crate of `Cargo.lock` (`ci/deb/vendor.sh`: `cargo vendor --locked
   --versioned-dirs`). A crate that no Linux build on amd64 or arm64 uses keeps only its
-  `Cargo.toml` and an empty `src/lib.rs`, which cargo needs to resolve, so no Windows or macOS
-  code or prebuilt library is in the source. Both tarballs are made byte for byte the same for
+  `Cargo.toml` and an empty `src/lib.rs`, which cargo needs to resolve, so no code or prebuilt
+  library for other platforms is in the source. Both tarballs are made byte for byte the same for
   the same commit (sorted, dated by the commit, single-threaded xz).
 - **Two ways to build, one `debian/`**: with the build profile `pkg.bande.vendor`, the way Bande
   builds, `debian/rules` builds from `vendor/` with `Cargo.lock` (`--locked`), offline. Without
@@ -108,8 +108,8 @@ are in [performance.md](performance.md).
   a way to log in: the Bande login window under greetd, or the display manager the system
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
   start), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
-  clipboard daemon, the screenshot tool, Files, Settings, the tray, automount, file
-  chooser, polkit agent, the keyring's PAM module and the default apps (every app but Velox),
+  clipboard daemon, the screenshot tool, Files, Settings, the tray, file indexing
+  (`bande-indexer`), automount, backups (`bande-backup`), the file chooser, the polkit agent, the keyring's PAM module and the default apps (every app but Velox),
   all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack); being recommends, any of them can be removed or replaced. It
   recommends no apps from Debian; a browser comes from Software. Network printers
@@ -144,8 +144,6 @@ are in [performance.md](performance.md).
 
 ## Runtime stack
 
-The packages pull in the runtime stack the architecture relies on:
-
 Each Debian package is declared by the Bande package that uses it, and only when a Bande
 component uses it at runtime; nothing a Bande component replaces comes along, directly or through
 another package's recommends. A package depends only on what it cannot work without; what a
@@ -154,6 +152,8 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
 
 - `dbus-user-session`: the session bus every Bande service is activated on, under the user manager;
 - `default-logind | logind`, `libpam-systemd`: the compositor's seat and session;
+- `libx11-data`: the Compose tables xkbcommon reads for dead keys, text files and no library
+  ([overview.md](overview.md));
 - `fonts-noto-core`, `fonts-noto-cjk` (recommended): the fallback faces for scripts Inter does not cover;
 - `pipewire`, `wireplumber`: the sound service, screen capture and recording;
 - `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it);
@@ -161,8 +161,8 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
   the filter chain (`ConditionUser=!_greetd`), so the person's session never finds the sound
   card busy;
 - `libspa-0.2-bluetooth` (recommended): Bluetooth headphones, which the shell's Bluetooth menu connects;
-- `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
-- `systemd-oomd`: closes an app when memory stays under pressure.
+- `apt-config-icons-hidpi` (recommended): the AppStream icons Software shows, at 2×;
+- `systemd-oomd` (recommended): closes an app when memory stays under pressure.
 
 It does not pull in `gnome-keyring` (the Bande keyring replaces it and conflicts with it, so the
 bus name has one owner), `pipewire-alsa`, `cups` or `avahi-daemon` (`bande-printd` prints to

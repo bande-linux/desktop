@@ -82,7 +82,7 @@ and from the upstream URL only when ours lacks it; a file that does not match it
 build, so an upstream outage or a file replaced in place cannot change or break a release. To
 take new upstream data: `build.py --pin <sources>` downloads it, rewrites the pins and leaves
 `<sha256>.xz` copies to add to `dict-sources` (`gh release upload dict-sources <files>`); commit the pins to `main`, then push the tag `dict-YYYYMMDD`. `dict.yml` makes the source package and builds
-the packs from that tag at `YYYYMMDD-1~debNN`, lints them and uploads `bande-debs-all`, which the APT archive's `look.yml` picks up and
+the packs from that tag at `YYYYMMDD-1~debNN`, lints them and uploads `bande-debs-<suite>-all`, which the APT archive's `look.yml` picks up and
 publishes to `main`, as it does the desktop's releases.
 
 | Package | Sources | Licence |

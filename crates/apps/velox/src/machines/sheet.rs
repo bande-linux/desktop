@@ -184,7 +184,7 @@ impl Draft {
 
     fn os(&self) -> String {
         match (self.installs_from_iso(), self.preset) {
-            (true, Preset::Windows) => tr!("Windows 11"),
+            (true, Preset::SecureBootTpm) => tr!("Secure Boot and TPM 2.0"),
             (true, Preset::Linux) => tr!("Linux"),
             (false, _) => catalog()
                 .get(self.image)
@@ -226,7 +226,7 @@ impl Draft {
             Field::Password(password) => self.password = password,
             Field::Preset(index) => {
                 self.preset = match index {
-                    1 => Preset::Windows,
+                    1 => Preset::SecureBootTpm,
                     _ => Preset::Linux,
                 };
             }
@@ -291,7 +291,7 @@ impl Draft {
             Step::Installer => {
                 let chooser = Rc::clone(intents);
                 let disk = self.imports_disk();
-                let presets = [tr!("Linux"), tr!("Windows 11")];
+                let presets = [tr!("Linux"), tr!("Secure Boot and TPM 2.0")];
                 let chosen = self.iso.as_ref().map_or_else(
                     || match disk {
                         true => tr!("No disk image chosen"),
@@ -326,17 +326,19 @@ impl Draft {
                         Box::new(PopUpButton::new(
                             &tr!("System"),
                             &presets,
-                            usize::from(self.preset == Preset::Windows),
+                            usize::from(self.preset == Preset::SecureBootTpm),
                             index(Field::Preset),
                         )),
                     ),
                 ];
-                if self.preset == Preset::Windows && Host::swtpm().is_none() {
+                if self.preset == Preset::SecureBootTpm && Host::swtpm().is_none() {
                     lines.push(FormLine::Row(
                         String::new(),
                         Box::new(
-                            Label::new(&tr!("Windows 11 needs a TPM: sudo apt install swtpm"))
-                                .secondary(),
+                            Label::new(&tr!(
+                                "Secure Boot and TPM 2.0 needs swtpm: sudo apt install swtpm"
+                            ))
+                            .secondary(),
                         ),
                     ));
                 }

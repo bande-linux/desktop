@@ -149,7 +149,7 @@ impl Units {
         watch: &CreationWatch,
     ) -> Result<Vec<String>> {
         let mut helpers = Vec::new();
-        if machine.manifest.preset == Preset::Windows {
+        if machine.manifest.preset == Preset::SecureBootTpm {
             fs::create_dir_all(machine.tpm_state())?;
             let unit = machine.tpm_unit();
             self.start_helper(

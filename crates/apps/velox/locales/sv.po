@@ -733,8 +733,8 @@ msgstr "SSH"
 msgid "Usage"
 msgstr "Användning"
 
-msgid "Windows 11"
-msgstr "Windows 11"
+msgid "Secure Boot and TPM 2.0"
+msgstr "Säker start och TPM 2.0"
 
 msgid "Linux"
 msgstr "Linux"
@@ -769,8 +769,8 @@ msgstr "Skivavbild"
 msgid "System"
 msgstr "System"
 
-msgid "Windows 11 needs a TPM: sudo apt install swtpm"
-msgstr "Windows 11 behöver en TPM: sudo apt install swtpm"
+msgid "Secure Boot and TPM 2.0 needs swtpm: sudo apt install swtpm"
+msgstr "Säker start och TPM 2.0 kräver swtpm: sudo apt install swtpm"
 
 msgid "Choose the disk image to import. Velox copies it."
 msgstr "Välj diskavbilden att importera. Velox kopierar den."

@@ -235,7 +235,7 @@ impl MachineWindow {
             return (String::new(), 0);
         };
         let manifest = &entry.listed.manifest;
-        let shown = match entry.running() && manifest.preset != bande_vm::Preset::Windows {
+        let shown = match entry.running() && manifest.preset != bande_vm::Preset::SecureBootTpm {
             true => manifest.displays.clamp(1, bande_vm::MAX_DISPLAYS),
             false => 0,
         };
@@ -838,8 +838,8 @@ impl MachineWindow {
         lines.push(FormLine::Heading(tr!("Display")));
         let has_memory =
             manifest.snapshots.iter().any(|snapshot| snapshot.memory) || manifest.is_suspended();
-        let available =
-            bande_vm::Host::render_node().is_some() && manifest.preset != bande_vm::Preset::Windows;
+        let available = bande_vm::Host::render_node().is_some()
+            && manifest.preset != bande_vm::Preset::SecureBootTpm;
         let toggle_intents = Rc::clone(&self.intents);
         let changeable = !locked && !has_memory && available;
         let toggle: Box<dyn Widget> = match changeable {
@@ -870,8 +870,8 @@ impl MachineWindow {
             boxed(Stack::new(Axis::Vertical, 2.0, 0.0, column)),
         ));
         let displays = manifest.displays.clamp(1, bande_vm::MAX_DISPLAYS);
-        let windows = manifest.preset == bande_vm::Preset::Windows;
-        lines.push(match (windows, has_memory) {
+        let secure = manifest.preset == bande_vm::Preset::SecureBootTpm;
+        lines.push(match (secure, has_memory) {
             (true, _) => FormLine::Row(tr!("Displays"), boxed(Label::new("1"))),
             (false, true) => FormLine::Row(
                 tr!("Displays"),

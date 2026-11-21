@@ -17,7 +17,7 @@ pub struct Forward {
 pub enum Preset {
     #[default]
     Linux,
-    Windows,
+    SecureBootTpm,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

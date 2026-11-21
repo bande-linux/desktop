@@ -182,7 +182,7 @@ impl Host {
     pub fn uses_3d(&self, machine: &Machine) -> bool {
         self.allow_3d
             && machine.manifest.graphics_3d
-            && machine.manifest.preset != Preset::Windows
+            && machine.manifest.preset != Preset::SecureBootTpm
             && Self::render_node().is_some()
     }
 
@@ -250,9 +250,9 @@ impl Host {
         ]);
         push(&["-uuid", &manifest.id, "-nodefaults", "-no-user-config"]);
         push(&["-boot", "menu=on,splash-time=0"]);
-        let windows = manifest.preset == Preset::Windows;
+        let secure = manifest.preset == Preset::SecureBootTpm;
         let has_shares = !manifest.shares.is_empty();
-        let machine_type = match windows {
+        let machine_type = match secure {
             true => PLATFORM.secure_machine,
             false => PLATFORM.machine,
         };
@@ -261,7 +261,7 @@ impl Host {
             machine_options.push_str(",memory-backend=shared-memory");
         }
         push(&["-machine", &machine_options]);
-        if windows {
+        if secure {
             push(PLATFORM.secure_globals);
         }
         push(&["-accel", &accel, "-cpu", cpu]);
@@ -276,7 +276,7 @@ impl Host {
                 ),
             ]);
         }
-        let code = match windows {
+        let code = match secure {
             true => Path::new(PLATFORM.secure_code),
             false => self.firmware_code.as_path(),
         };
@@ -286,7 +286,7 @@ impl Host {
         push(&["-blockdev", &format("vars", "qcow2", false)]);
         push(&["-blockdev", &file("disk", &machine.disk(), false)?]);
         push(&["-blockdev", &format("disk", "qcow2", false)]);
-        match windows {
+        match secure {
             true => push(&["-device", "nvme,drive=disk,serial=velox,bootindex=1"]),
             false => push(&["-device", "virtio-blk-pci,drive=disk,bootindex=1"]),
         }
@@ -334,7 +334,7 @@ impl Host {
             0 | 1 => device.to_owned(),
             displays => format!("{device},max_outputs={}", displays.min(MAX_DISPLAYS)),
         };
-        match (windows, accelerated) {
+        match (secure, accelerated) {
             (true, _) => push(&["-device", PLATFORM.basic_display]),
             (false, true) => push(&["-device", &gpu(PLATFORM.gpu_3d)]),
             (false, false) => push(&["-device", &gpu(PLATFORM.gpu)]),
@@ -350,7 +350,7 @@ impl Host {
                 "usb-storage,drive=installer,bus=usb.0,removable=on,bootindex=2",
             ]);
         }
-        if windows {
+        if secure {
             push(&["-chardev", &socket_client("tpm", &machine.tpm_socket())?]);
             push(&["-tpmdev", "emulator,id=tpm,chardev=tpm"]);
             push(&["-device", &format!("{},tpmdev=tpm", PLATFORM.tpm)]);
@@ -489,7 +489,7 @@ impl Host {
     pub(crate) fn create_vars_for(&self, vars: &Path, preset: Preset) -> Result<()> {
         let source = match preset {
             Preset::Linux => self.firmware_vars.as_path(),
-            Preset::Windows => Path::new(PLATFORM.secure_vars),
+            Preset::SecureBootTpm => Path::new(PLATFORM.secure_vars),
         };
         self.qemu_img(&[
             "convert",

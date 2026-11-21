@@ -66,12 +66,14 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
 #TabsToolbar, #nav-bar, #PersonalToolbar, #navigator-toolbox { background: var(--bande-chassis) !important; color: var(--bande-ink) !important; }
 
 /* Tabs and Bande's window controls in one row. The compositor draws the real control well over the
-   first 78 px of a client-side org.bande.Browser window and takes the clicks there (WindowControls
-   in title_bar.rs, frame.rs). The numbers copy title_bar.rs: WINDOW_HEADER_HEIGHT 48, well end 78,
-   WELL_X 12. Fullscreen has no well, so Firefox's restore button is the mouse way out. */
+   last 78 px of a client-side org.bande.Browser window and takes the clicks there (WindowControls
+   in title_bar.rs, frame.rs). The numbers copy title_bar.rs: WINDOW_HEADER_HEIGHT 48,
+   window_controls_width 78, MENU_GAP 6, HEADER_LEADING 12. The well stays on the right in every
+   locale, so the gap uses physical sides. Fullscreen has no well, so Firefox's restore button is the mouse way out. */
 #main-window {
   --bande-row-height: 48px;
   --bande-well-gap: 84px;
+  --bande-row-leading: 12px;
 }
 #tabbrowser-tabs {
   --tab-min-height: 28px !important;
@@ -88,7 +90,6 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
 :root[inFullscreen] #TabsToolbar .titlebar-buttonbox-container { display: flex !important; }
 :root[inFullscreen] #TabsToolbar .titlebar-restore {
   display: flex !important;
-  order: 0 !important;
   padding-inline: 12px !important;
   color: var(--bande-ink2);
   &:hover { color: var(--bande-ink); }
@@ -102,16 +103,17 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
   }
 }
 #TabsToolbar { min-height: var(--bande-row-height) !important; }
+:root:not([inFullscreen]) #TabsToolbar { padding-right: var(--bande-well-gap) !important; }
 #appMenu-report-broken-site-button, #help_reportBrokenSite, #appMenu-help-report-site-issue { display: none !important; }
 #TabsToolbar .titlebar-spacer[type="pre-tabs"] {
   display: flex !important;
-  width: var(--bande-well-gap) !important;
+  width: var(--bande-row-leading) !important;
 }
 #TabsToolbar .titlebar-spacer[type="post-tabs"] { display: flex !important; }
 :root[inFullscreen] #TabsToolbar .titlebar-spacer[type="post-tabs"],
 :root[inFullscreen] #TabsToolbar .titlebar-spacer[type="pre-tabs"] { display: none !important; }
 
-/* The app menu is the ⋮ button beside the well, as in Bande's own apps. */
+/* The app menu is the ⋮ button left of the well, as in Bande's own apps. */
 #PanelUI-button { margin: 0 !important; padding: 0 !important; align-self: center; }
 #PanelUI-menu-button {
   list-style-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.25" fill="context-fill"/><circle cx="8" cy="8" r="1.25" fill="context-fill"/><circle cx="8" cy="12.5" r="1.25" fill="context-fill"/></svg>') !important;

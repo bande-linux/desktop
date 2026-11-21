@@ -920,8 +920,8 @@ fn connection_panes() -> Vec<Pane> {
             vec![
                 section(None, vec![switch(SettingId::WifiPower, tr!("Wi-Fi"), tr!("on, off, airplane"))]),
                 section(
-                    Some(tr!("Known Networks")),
-                    vec![list(SettingId::KnownNetworks, tr!("Known Networks"), tr!("saved, remembered, auto-join, forget, details, ip address, router, dns, mac address, private address, low data, metered"),
+                    Some(tr!("Saved Networks")),
+                    vec![list(SettingId::KnownNetworks, tr!("Saved Networks"), tr!("known, remembered, connect automatically, forget, details, ip address, router, dns, mac address, random hardware address, metered"),
                         List::KnownNetworks,
                     )],
                 ),
@@ -1213,7 +1213,7 @@ fn search_pane() -> Pane {
                     switch(SettingId::SearchFolders, tr!("Folders"), tr!("directories")),
                     switch(
                         SettingId::SearchSettings,
-                        tr!("System Settings"),
+                        tr!("Settings"),
                         tr!("settings, preferences, panes"),
                     ),
                     switch(
@@ -1419,7 +1419,7 @@ fn displays_pane() -> Pane {
                     setting(
                         SettingId::DisplayScale,
                         tr!("Size of text and controls"),
-                        tr!("scale, zoom, resolution, hidpi, retina, bigger, smaller"),
+                        tr!("scale, zoom, resolution, hidpi, bigger, smaller"),
                         Kind::TextSizes,
                     ),
                     switch(

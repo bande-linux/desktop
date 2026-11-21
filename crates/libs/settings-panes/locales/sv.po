@@ -290,7 +290,7 @@ msgid "account, user, password, login, administrator, admin"
 msgstr "konto, användare, lösenord, inloggning, administratör, admin"
 
 msgid "keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
-msgstr "nyckelring, nyckelknippa, sparade lösenord, hemligheter, wi-fi-lösenord, webbplatslösenord, konton"
+msgstr "nyckelring, sparade lösenord, hemligheter, wi-fi-lösenord, webbplatslösenord, konton"
 
 msgid "permissions, screen recording, camera access, privacy, security, clipboard"
 msgstr "behörigheter, skärminspelning, kameraåtkomst, integritet, säkerhet, urklipp"
@@ -375,11 +375,11 @@ msgstr "{value}°"
 msgid "on, off, airplane"
 msgstr "på, av, flygplansläge"
 
-msgid "Known Networks"
-msgstr "Kända nätverk"
+msgid "Saved Networks"
+msgstr "Sparade nätverk"
 
-msgid "saved, remembered, auto-join, forget, details, ip address, router, dns, mac address, private address, low data, metered"
-msgstr "sparade, ihågkomna, anslut automatiskt, glöm, detaljer, ip-adress, router, dns, mac-adress, privat adress, låg datamängd, datatak"
+msgid "known, remembered, connect automatically, forget, details, ip address, router, dns, mac address, random hardware address, metered"
+msgstr "kända, ihågkomna, anslut automatiskt, glöm, detaljer, ip-adress, router, dns, mac-adress, slumpmässig maskinvaruadress, datapris, begränsad"
 
 msgid "Other Networks"
 msgstr "Andra nätverk"
@@ -657,8 +657,8 @@ msgstr "Mappar"
 msgid "directories"
 msgstr "kataloger"
 
-msgid "System Settings"
-msgstr "Systeminställningar"
+msgid "Settings"
+msgstr "Inställningar"
 
 msgid "settings, preferences, panes"
 msgstr "inställningar, önskemål, paneler"
@@ -804,8 +804,8 @@ msgstr "huvudskärm, spegla, utöka, primär, menyrad, fält"
 msgid "Size of text and controls"
 msgstr "Storlek på text och kontroller"
 
-msgid "scale, zoom, resolution, hidpi, retina, bigger, smaller"
-msgstr "skala, zoom, upplösning, hidpi, retina, större, mindre"
+msgid "scale, zoom, resolution, hidpi, bigger, smaller"
+msgstr "skala, zoom, upplösning, hidpi, större, mindre"
 
 msgid "Show all resolutions"
 msgstr "Visa alla upplösningar"

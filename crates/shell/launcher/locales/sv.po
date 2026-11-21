@@ -71,8 +71,8 @@ msgid_plural "{count} characters"
 msgstr[0] "{count} tecken"
 msgstr[1] "{count} tecken"
 
-msgid "System Settings"
-msgstr "Systeminställningar"
+msgid "Settings"
+msgstr "Inställningar"
 
 msgid "Items"
 msgstr "Objekt"
@@ -100,8 +100,8 @@ msgstr "Retur eller Ctrl+C för att kopiera"
 msgid "Return to open"
 msgstr "Retur för att öppna"
 
-msgid "Return to open in System Settings"
-msgstr "Retur för att öppna i Systeminställningar"
+msgid "Return to open in Settings"
+msgstr "Retur för att öppna i Inställningar"
 
 msgid "Return to choose"
 msgstr "Retur för att välja"
@@ -169,7 +169,7 @@ msgstr "Kopiera sökväg"
 msgid "Skin Tone"
 msgstr "Hudton"
 
-msgid "Top Hit"
+msgid "Best Match"
 msgstr "Bästa träff"
 
 msgid "Applications"

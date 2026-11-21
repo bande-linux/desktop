@@ -581,7 +581,7 @@ impl State {
         let header = FRAME_HEADER_HEIGHT as f32;
         let text = labels.get_mut().text();
         let title = text.paragraph(
-            &tr!("Force Quit Apps"),
+            &tr!("Force Quit"),
             title_style(&palette, true),
             Some(CONTENT.0),
             TextAlign::Center,

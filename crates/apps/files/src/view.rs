@@ -358,10 +358,10 @@ fn step_title(step: &Step) -> String {
         Action::NewFolder => tr!(context = "undo", "New Folder"),
         Action::NewDocument => tr!(context = "undo", "New Document"),
         Action::Trash => tr!(context = "undo", "Move to Trash"),
-        Action::PutBack => tr!(context = "undo", "Put Back"),
+        Action::PutBack => tr!(context = "undo", "Restore"),
         Action::Compress => tr!(context = "undo", "Compress"),
         Action::Extract => tr!("Extract"),
-        Action::MakeAlias => tr!(context = "undo", "Make Alias"),
+        Action::MakeAlias => tr!(context = "undo", "Create Link"),
     }
 }
 

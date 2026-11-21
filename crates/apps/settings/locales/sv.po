@@ -569,8 +569,8 @@ msgstr "Serienummer"
 msgid "{category} {size}"
 msgstr "{category} {size}"
 
-msgid "Startup disk"
-msgstr "Startskiva"
+msgid "System disk"
+msgstr "Systemskiva"
 
 msgid "Empty"
 msgstr "Töm"
@@ -1935,8 +1935,8 @@ msgstr "Ansluter…"
 msgid "Not in range"
 msgstr "Utom räckhåll"
 
-msgid "Saved · Auto-Join off"
-msgstr "Sparat · Anslut automatiskt av"
+msgid "Saved · Doesn’t connect automatically"
+msgstr "Sparat · Ansluter inte automatiskt"
 
 msgid "Saved"
 msgstr "Sparat"
@@ -1977,23 +1977,23 @@ msgstr "Tryck på Retur i lösenordsfältet för att ansluta, eller Escape för 
 msgid "Join"
 msgstr "Anslut"
 
-msgid "Auto-Join"
+msgid "Connect Automatically"
 msgstr "Anslut automatiskt"
 
-msgid "Join this network on its own when it is in range"
-msgstr "Anslut till nätverket av sig självt när det är inom räckhåll"
+msgid "Connect to this network whenever it is in range"
+msgstr "Anslut till nätverket när det är inom räckhåll"
 
-msgid "Low Data Mode"
-msgstr "Låg datamängd"
+msgid "Metered Connection"
+msgstr "Begränsad anslutning"
 
-msgid "Marks the network as metered, so apps hold back large downloads"
-msgstr "Markerar nätverket som med datatak, så att appar väntar med stora hämtningar"
+msgid "Apps hold back large downloads on this network"
+msgstr "Appar väntar med stora hämtningar på det här nätverket"
 
-msgid "Private Wi-Fi address"
-msgstr "Privat Wi-Fi-adress"
+msgid "Random Hardware Address"
+msgstr "Slumpmässig maskinvaruadress"
 
-msgid "A private address makes this computer harder to track across networks"
-msgstr "En privat adress gör det svårare att spåra datorn mellan nätverk"
+msgid "A random hardware address makes this computer harder to track across networks"
+msgstr "En slumpmässig maskinvaruadress gör det svårare att spåra datorn mellan nätverk"
 
 msgid "Wi-Fi address"
 msgstr "Wi-Fi-adress"

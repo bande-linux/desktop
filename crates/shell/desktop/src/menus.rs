@@ -67,7 +67,7 @@ pub fn desktop_menu(sort: SortBy, paste: bool, settings: bool) -> Menu {
     }
     items.extend([
         MenuItem::submenu(&tr!("Sort By"), Menu::new(sorts)),
-        item(text!("Clean Up"), "clean-up").enabled(sort == SortBy::None),
+        item(text!("Arrange Icons"), "clean-up").enabled(sort == SortBy::None),
     ]);
     Menu::new(items)
 }
@@ -87,7 +87,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
     }
     items.push(MenuItem::separator());
     items.push(item(text!("Glance"), "glance").shortcut("Space"));
-    items.push(item(text!("Get Info"), "info").shortcut("Ctrl+I"));
+    items.push(item(text!("Properties"), "info").shortcut("Ctrl+I"));
     items.push(
         item(text!("Rename"), "rename")
             .shortcut("F2")

@@ -1068,7 +1068,7 @@ impl FilesView {
                         .unwrap_or_default(),
                 };
                 let location_label = if entry.trashed.is_some() {
-                    tr!("Put back to")
+                    tr!("Restores to")
                 } else {
                     tr!("Where")
                 };

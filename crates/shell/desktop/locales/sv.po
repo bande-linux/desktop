@@ -63,8 +63,8 @@ msgstr "Byt skrivbordsbild…"
 msgid "Sort By"
 msgstr "Sortera efter"
 
-msgid "Clean Up"
-msgstr "Städa upp"
+msgid "Arrange Icons"
+msgstr "Ordna ikoner"
 
 msgid "Open"
 msgstr "Öppna"
@@ -75,8 +75,8 @@ msgstr "Öppna med"
 msgid "Glance"
 msgstr "Glimt"
 
-msgid "Get Info"
-msgstr "Visa info"
+msgid "Properties"
+msgstr "Egenskaper"
 
 msgid "Rename"
 msgstr "Byt namn"

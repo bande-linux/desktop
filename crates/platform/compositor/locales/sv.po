@@ -49,20 +49,20 @@ msgstr "Aktivitetsfält och skrivbord"
 msgid "Untitled App"
 msgstr "Namnlös app"
 
-msgid "Force Quit Apps"
-msgstr "Tvinga appar att avsluta"
+msgid "Force Quit"
+msgstr "Tvinga avslut"
 
 msgid "{name} (Not Responding)"
 msgstr "{name} (svarar inte)"
 
-msgid "Force Quit"
-msgstr "Tvinga avslut"
+msgid "Apps"
+msgstr "Appar"
 
 msgid "Relaunch"
 msgstr "Starta om"
 
-msgid "If an app does not respond for a while, select its name and click Force Quit."
-msgstr "Om en app inte svarar på ett tag markerar du dess namn och klickar på Tvinga avslut."
+msgid "When an app stops responding, choose it and click Force Quit to close it. Anything unsaved in it is lost."
+msgstr "När en app slutar svara väljer du den och klickar på Tvinga avslut för att stänga den. Det som inte har sparats i den går förlorat."
 
 msgid "You can open this window with Ctrl+Alt+Esc."
 msgstr "Du kan öppna det här fönstret med Ctrl+Alt+Esc."
@@ -121,14 +121,14 @@ msgstr "Nederst till vänster"
 msgid "Bottom Right"
 msgstr "Nederst till höger"
 
-msgid "Fill"
-msgstr "Fyll"
+msgid "Maximize"
+msgstr "Maximera"
 
 msgid "Move to Next Display"
 msgstr "Flytta till nästa skärm"
 
-msgid "Return to Previous Size"
-msgstr "Återgå till tidigare storlek"
+msgid "Restore Size"
+msgstr "Återställ storlek"
 
 msgid "Desktop {number}"
 msgstr "Skrivbord {number}"
@@ -139,14 +139,8 @@ msgstr "Nytt skrivbord"
 msgid "Minimize"
 msgstr "Minimera"
 
-msgid "Unzoom"
-msgstr "Zooma tillbaka"
-
-msgid "Zoom"
-msgstr "Zooma"
-
-msgid "Move & Resize"
-msgstr "Flytta och ändra storlek"
+msgid "Tile"
+msgstr "Placera"
 
 msgid "Move to Desktop"
 msgstr "Flytta till skrivbord"

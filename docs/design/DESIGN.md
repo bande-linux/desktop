@@ -65,7 +65,7 @@ silent, these principles decide; where they do not, take the simpler answer.
 ## 5. Trust
 
 - **No dead ends.** Every state has a way out: Escape, a close button, Ctrl+W, undo.
-- **Undo before confirmation.** Prefer an undoable action (Trash with Put Back, Ctrl+Z for
+- **Undo before confirmation.** Prefer an undoable action (Trash with Restore, Ctrl+Z for
   file operations) to a "are you sure" dialog.
 - **The desktop never freezes.** A hung app is shown as such and can be force-quit; the shell
   keeps responding.

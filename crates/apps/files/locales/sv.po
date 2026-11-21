@@ -151,8 +151,8 @@ msgstr "Flytta åt höger"
 msgid "Server"
 msgstr "Server"
 
-msgid "Alias"
-msgstr "Alias"
+msgid "Link"
+msgstr "Länk"
 
 msgid "Icon size"
 msgstr "Ikonstorlek"
@@ -253,6 +253,9 @@ msgstr "Försök igen"
 msgid "Disconnect"
 msgstr "Koppla från"
 
+msgid "Folder"
+msgstr "Mapp"
+
 msgid "You"
 msgstr "Du"
 
@@ -313,8 +316,8 @@ msgstr "Ny mapp"
 msgid "Open"
 msgstr "Öppna"
 
-msgid "Get Info"
-msgstr "Visa info"
+msgid "Properties"
+msgstr "Egenskaper"
 
 msgid "Browse Backups…"
 msgstr "Bläddra bland säkerhetskopior…"
@@ -322,8 +325,8 @@ msgstr "Bläddra bland säkerhetskopior…"
 msgid "Duplicate"
 msgstr "Duplicera"
 
-msgid "Make Alias"
-msgstr "Skapa alias"
+msgid "Create Link"
+msgstr "Skapa länk"
 
 msgid "Add to Sidebar"
 msgstr "Lägg till i sidofältet"
@@ -424,7 +427,7 @@ msgstr "Bakåt"
 msgid "Forward"
 msgstr "Framåt"
 
-msgid "Enclosing Folder"
+msgid "Parent Folder"
 msgstr "Överordnad mapp"
 
 msgid "Desktop"
@@ -439,7 +442,7 @@ msgstr "Hämtningar"
 msgid "Home"
 msgstr "Hem"
 
-msgid "Recents"
+msgid "Recent"
 msgstr "Senaste"
 
 msgid "Network"
@@ -448,8 +451,8 @@ msgstr "Nätverk"
 msgid "Recent Folders"
 msgstr "Senaste mappar"
 
-msgid "Go to Folder…"
-msgstr "Gå till mapp…"
+msgid "Go to Location…"
+msgstr "Gå till plats…"
 
 msgid "Connect to Server…"
 msgstr "Anslut till server…"
@@ -469,9 +472,6 @@ msgstr "Program"
 msgid "Date Added"
 msgstr "Datum tillagd"
 
-msgid "Put Back"
-msgstr "Lägg tillbaka"
-
 msgid "Open in New Tab"
 msgstr "Öppna i ny flik"
 
@@ -481,7 +481,7 @@ msgstr "Annan…"
 msgid "Open With"
 msgstr "Öppna med"
 
-msgid "Show in Enclosing Folder"
+msgid "Show in Parent Folder"
 msgstr "Visa i överordnad mapp"
 
 msgid "Mail"
@@ -593,8 +593,8 @@ msgstr "Dimensioner"
 msgid "{width} × {height}"
 msgstr "{width} × {height}"
 
-msgid "Put back to"
-msgstr "Läggs tillbaka i"
+msgid "Restores to"
+msgstr "Återställs till"
 
 msgid "Deleted"
 msgstr "Raderad"
@@ -652,9 +652,6 @@ msgstr "Gör om"
 
 msgid "Deleting {done} of {total} items"
 msgstr "Raderar {done} av {total} objekt"
-
-msgid "Folder"
-msgstr "Mapp"
 
 msgid "Any Kind"
 msgstr "Alla sorter"
@@ -860,8 +857,8 @@ msgstr "”{name}” kunde inte dupliceras."
 msgid "“{name}” couldn’t be moved to the Trash."
 msgstr "”{name}” kunde inte flyttas till papperskorgen."
 
-msgid "“{name}” couldn’t be put back."
-msgstr "”{name}” kunde inte läggas tillbaka."
+msgid "“{name}” couldn’t be restored."
+msgstr "Det gick inte att återställa ”{name}”."
 
 msgid "“{name}” couldn’t be deleted."
 msgstr "”{name}” kunde inte raderas."
@@ -982,8 +979,8 @@ msgid "Move to Trash"
 msgstr "flytt till papperskorgen"
 
 msgctxt "undo"
-msgid "Put Back"
-msgstr "återläggning"
+msgid "Restore"
+msgstr "återställning"
 
 msgctxt "undo"
 msgid "Compress"
@@ -993,8 +990,8 @@ msgid "Extract"
 msgstr "uppackning"
 
 msgctxt "undo"
-msgid "Make Alias"
-msgstr "skapande av alias"
+msgid "Create Link"
+msgstr "skapande av länk"
 
 msgid "“{path}” can’t be found."
 msgstr "”{path}” hittades inte."

@@ -102,7 +102,7 @@ pub(crate) fn system_disk_name() -> String {
 
 fn recents() -> Place {
     Place {
-        name: tr!("Recents"),
+        name: tr!("Recent"),
         location: Location::Recents,
         icon: "document-open-recent",
         kind: PlaceKind::Standard,

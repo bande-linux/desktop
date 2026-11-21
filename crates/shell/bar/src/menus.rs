@@ -114,9 +114,9 @@ pub fn system_menu(user: &str, frontmost: Option<&str>, can_sleep: bool) -> Menu
         None => force_quit,
     };
     let mut items = vec![
-        item(&tr!("About This System"), &Command::About),
+        item(&tr!("About"), &Command::About),
         MenuItem::separator(),
-        item(&tr!("System Settings…"), &Command::Settings(None)),
+        item(&tr!("Settings…"), &Command::Settings(None)),
         MenuItem::separator(),
         force_quit,
         MenuItem::separator(),
@@ -197,7 +197,7 @@ pub fn wifi_menu(wifi: &Wifi) -> Menu {
         let known: Vec<_> = networks.iter().filter(|network| network.known).collect();
         let other: Vec<_> = networks.iter().filter(|network| !network.known).collect();
         for (heading, group) in [
-            (text!("Known Networks"), known),
+            (text!("Saved Networks"), known),
             (text!("Other Networks"), other),
         ] {
             if group.is_empty() {

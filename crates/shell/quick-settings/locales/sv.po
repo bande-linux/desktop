@@ -97,5 +97,5 @@ msgstr "Låsskärm"
 msgid "Sleep, Restart or Shut Down"
 msgstr "Vila, starta om eller stäng av"
 
-msgid "System Settings"
-msgstr "Systeminställningar"
+msgid "Settings"
+msgstr "Inställningar"

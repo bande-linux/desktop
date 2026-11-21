@@ -135,11 +135,11 @@ msgstr "Lägg till"
 msgid "Remove"
 msgstr "Ta bort"
 
-msgid "{name} alias"
-msgstr "{name} alias"
+msgid "{name} link"
+msgstr "{name} länk"
 
-msgid "{name} alias {number}"
-msgstr "{name} alias {number}"
+msgid "{name} link {number}"
+msgstr "{name} länk {number}"
 
 msgid "untitled folder"
 msgstr "namnlös mapp"

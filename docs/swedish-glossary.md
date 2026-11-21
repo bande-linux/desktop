@@ -36,7 +36,7 @@ Plurals: Swedish has two forms (`Plural-Forms: nplurals=2; plural=(n != 1);`), `
 | Language & Region | Språk och region | | Privacy & Security | Integritet och säkerhet |
 | Accessibility | Hjälpmedel | | Appearance | Utseende |
 | Update | Uppdatering | | Install | Installera |
-| Backup | Säkerhetskopia | | Snapshot | Ögonblicksbild |
+| Backup | Säkerhetskopia | | Properties | Egenskaper |
 | Printer | Skrivare | | Screenshot | Skärmbild |
 | Share | Dela | | Drive / Volume | Enhet / Volym |
 | Attachment | Bilaga | | Inbox | Inkorg |
@@ -47,6 +47,9 @@ Plurals: Swedish has two forms (`Plural-Forms: nplurals=2; plural=(n != 1);`), `
 | Glance | Glimt | | Sticky Keys | Tröga tangenter |
 | Force Quit | Tvinga avslut | | Clipboard | Urklipp |
 | Launcher | Startare | | Pair (Bluetooth) | Parkoppla |
-| File sharing | Fildelning | | Startup disk | Startskiva |
+| File sharing | Fildelning | | System disk | Systemskiva |
+| Tile (window) | Placera | | Restore Size | Återställ storlek |
+| Saved Networks | Sparade nätverk | | Metered Connection | Begränsad anslutning |
+| Create Link | Skapa länk | | Arrange Icons | Ordna ikoner |
 
 Product names stay: Bande, Velox. Add a row when a term recurs.

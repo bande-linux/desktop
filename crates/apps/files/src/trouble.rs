@@ -17,7 +17,7 @@ fn failure_title(name: &str, purpose: Purpose) -> String {
         Purpose::Do(Action::Move) => tr!("“{name}” couldn’t be moved.", name = name),
         Purpose::Do(Action::Duplicate) => tr!("“{name}” couldn’t be duplicated.", name = name),
         Purpose::Do(Action::Trash) => tr!("“{name}” couldn’t be moved to the Trash.", name = name),
-        Purpose::Do(Action::PutBack) => tr!("“{name}” couldn’t be put back.", name = name),
+        Purpose::Do(Action::PutBack) => tr!("“{name}” couldn’t be restored.", name = name),
         Purpose::Erase => tr!("“{name}” couldn’t be deleted.", name = name),
         _ => tr!("“{name}” couldn’t be changed.", name = name),
     }

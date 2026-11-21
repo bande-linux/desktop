@@ -13,9 +13,8 @@ msgstr "Stäng"
 msgid "Minimize"
 msgstr "Minimera"
 
-msgctxt "window menu"
-msgid "Zoom"
-msgstr "Zooma"
+msgid "Maximize"
+msgstr "Maximera"
 
 msgid "Menus"
 msgstr "Menyer"
@@ -38,17 +37,11 @@ msgstr "Nederst till vänster"
 msgid "Bottom Right"
 msgstr "Nederst till höger"
 
-msgid "Fill"
-msgstr "Fyll"
-
 msgid "Move to Next Display"
 msgstr "Flytta till nästa skärm"
 
-msgid "Return to Previous Size"
-msgstr "Återgå till tidigare storlek"
-
-msgid "Unzoom"
-msgstr "Zooma tillbaka"
+msgid "Restore Size"
+msgstr "Återställ storlek"
 
 msgid "Exit Full Screen"
 msgstr "Avsluta helskärmsläge"
@@ -56,8 +49,8 @@ msgstr "Avsluta helskärmsläge"
 msgid "Enter Full Screen"
 msgstr "Helskärmsläge"
 
-msgid "Move & Resize"
-msgstr "Flytta och ändra storlek"
+msgid "Tile"
+msgstr "Placera"
 
 msgid "Keep on Top"
 msgstr "Behåll överst"

@@ -85,7 +85,7 @@ impl SettingsView {
         } else if nearby.is_none() {
             tr!("Not in range")
         } else if !known.auto_join {
-            tr!("Saved · Auto-Join off")
+            tr!("Saved · Doesn’t connect automatically")
         } else {
             tr!("Saved")
         }
@@ -341,8 +341,8 @@ impl SettingsView {
             self.wifi_switch(
                 "auto-join",
                 (
-                    tr!("Auto-Join"),
-                    tr!("Join this network on its own when it is in range"),
+                    tr!("Connect Automatically"),
+                    tr!("Connect to this network whenever it is in range"),
                 ),
                 known.auto_join,
                 &known.path,
@@ -351,8 +351,8 @@ impl SettingsView {
             self.wifi_switch(
                 "low-data-mode",
                 (
-                    tr!("Low Data Mode"),
-                    tr!("Marks the network as metered, so apps hold back large downloads"),
+                    tr!("Metered Connection"),
+                    tr!("Apps hold back large downloads on this network"),
                 ),
                 known.low_data,
                 &known.path,
@@ -378,17 +378,17 @@ impl SettingsView {
             ))
         });
         let segmented =
-            SegmentedControl::new(&tr!("Private Wi-Fi address"), &labels, selected, choose);
+            SegmentedControl::new(&tr!("Random Hardware Address"), &labels, selected, choose);
         self.anchors
             .push((Anchor::Item("private-address".to_owned()), segmented.id()));
         choices.push(boxed(
             Row::new(
-                Text::new(&tr!("Private Wi-Fi address"), Tone::Primary),
+                Text::new(&tr!("Random Hardware Address"), Tone::Primary),
                 Some(boxed(segmented)),
             )
             .detail(
                 Text::new(
-                    &tr!("A private address makes this computer harder to track across networks"),
+                    &tr!("A random hardware address makes this computer harder to track across networks"),
                     Tone::Muted,
                 )
                 .caption(),

@@ -137,7 +137,7 @@ impl SettingsView {
         };
         let mut rows = vec![
             boxed(
-                Row::new(Text::new(&tr!("Startup disk"), Tone::Primary), None)
+                Row::new(Text::new(&tr!("System disk"), Tone::Primary), None)
                     .detail(Text::new(&summary, Tone::Muted).caption()),
             ),
             boxed(UsageBar::new(&summary, segments, storage.capacity)),

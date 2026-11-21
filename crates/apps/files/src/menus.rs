@@ -194,18 +194,18 @@ pub fn items_menu(selection: &Selection) -> Menu {
         items.push(item(text!("Open"), &Command::Open).shortcut("Ctrl+O"));
         items.push(item(text!("Glance"), &Command::Glance).shortcut("Space"));
         items.push(item(text!("Copy"), &Command::Copy).shortcut("Ctrl+C"));
-        items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
+        items.push(item(text!("Properties"), &Command::Info).shortcut("Ctrl+I"));
         return Menu::new(items);
     }
     if selection.trashed {
-        items.push(item(text!("Put Back"), &Command::PutBack));
+        items.push(item(text!("Restore"), &Command::PutBack));
         items.push(
             item(text!("Delete Immediately…"), &Command::DeleteImmediately)
                 .shortcut("Shift+Delete"),
         );
         items.push(MenuItem::separator());
         items.push(item(text!("Glance"), &Command::Glance).shortcut("Space"));
-        items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
+        items.push(item(text!("Properties"), &Command::Info).shortcut("Ctrl+I"));
         return Menu::new(items);
     }
     items.push(item(text!("Open"), &Command::Open).shortcut("Ctrl+O"));
@@ -229,13 +229,13 @@ pub fn items_menu(selection: &Selection) -> Menu {
     }
     items.push(MenuItem::separator());
     items.push(item(text!("Glance"), &Command::Glance).shortcut("Space"));
-    items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
+    items.push(item(text!("Properties"), &Command::Info).shortcut("Ctrl+I"));
     if selection.can_browse_backups && count == 1 {
         items.push(item(text!("Browse Backups…"), &Command::BrowseBackups));
     }
     if selection.away {
         items.push(item(
-            text!("Show in Enclosing Folder"),
+            text!("Show in Parent Folder"),
             &Command::ShowInEnclosingFolder,
         ));
     }
@@ -337,7 +337,7 @@ pub fn folder_menu(folder: Folder) -> Menu {
         );
     }
     items.push(MenuItem::separator());
-    items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
+    items.push(item(text!("Properties"), &Command::Info).shortcut("Ctrl+I"));
     if !folder.trash && folder.terminal {
         items.push(item(text!("Open in Terminal"), &Command::OpenInTerminal));
     }

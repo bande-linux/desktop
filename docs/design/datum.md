@@ -182,10 +182,10 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 **Window controls (right, ours)**: one **well**, a 66×24 pill with radius 12 (`well` fill) 12 pt from the right edge, holding three neutral glyphs on a 21 pt pitch, from the left minimise, zoom, close, so close is at the far right as in GTK, Qt and Firefox. The menu button (⋮), a 24×24 well, sits 6 pt left of it.
 - **Minimise**: an 8 pt bar.
-- **Zoom**: two opposing corner brackets (expand). It changes to inward brackets while zoomed or full screen, so the glyph tells the state.
+- **Maximize**: two opposing corner brackets (expand). It changes to inward brackets while zoomed or full screen, so the glyph tells the state.
 - **Close**: an × with 7 pt arms and a 1.5 stroke, round caps.
 - **Rest**: glyphs `ink2`, **always visible** (honest, and discoverable on first use).
-- **Hover over the well**: all glyphs go to `ink`. The hovered *close* gets a 16 pt danger disc with a white ×. Zoom and minimise get no colour (one signal: only the destructive action turns red).
+- **Hover over the well**: all glyphs go to `ink`. The hovered *close* gets a 16 pt danger disc with a white ×. Maximize and minimize get no colour (one signal: only the destructive action turns red).
 - **Press**: a disc of `ink` at 12 % behind the glyph, plus the `quick` spring.
 - **Inactive window**: the well becomes a 1 pt `hairline` outline and the glyphs go to `ink3`.
 - **Alt held**: zoom shows a "+" (zoom to fit) instead of brackets, following DESIGN §1's progressive disclosure.

@@ -128,7 +128,7 @@ pub fn window_submenu(items: Vec<Entry>, zoomable: bool, full_screen: Option<boo
         Entry::item(&tr!("Minimize"), Standard::Minimize.action())
             .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
         Entry::item(
-            &tr!(context = "window menu", "Zoom"),
+            &tr!("Maximize"),
             Standard::Zoom.action(),
         )
         .enabled(zoomable && full_screen != Some(true)),

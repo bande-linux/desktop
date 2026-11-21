@@ -36,7 +36,7 @@ fn control_label(control: Control) -> String {
     match control {
         Control::Close => tr!("Close"),
         Control::Minimize => tr!("Minimize"),
-        Control::Zoom => tr!(context = "window menu", "Zoom"),
+        Control::Zoom => tr!("Maximize"),
         Control::Menu => tr!("Menus"),
     }
 }

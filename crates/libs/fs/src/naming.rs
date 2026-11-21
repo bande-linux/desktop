@@ -160,10 +160,10 @@ impl ExtensionChange {
 }
 
 pub fn alias_name(folder: &Path, name: &OsStr) -> PathBuf {
-    let first = tr!("{name} alias", name = NAME_MARK);
+    let first = tr!("{name} link", name = NAME_MARK);
     let later = (2u64..).map(|number| {
         tr!(
-            "{name} alias {number}",
+            "{name} link {number}",
             name = NAME_MARK,
             number = number.to_string()
         )

@@ -25,7 +25,7 @@ const BUTTONS: [(Text, &str, Change); 3] = [
         Change::Power,
     ),
     (
-        text!("System Settings"),
+        text!("Settings"),
         "emblem-system-symbolic",
         Change::Settings,
     ),

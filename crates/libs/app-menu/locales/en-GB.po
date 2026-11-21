@@ -9,3 +9,6 @@ msgstr ""
 
 msgid "Minimize"
 msgstr "Minimise"
+
+msgid "Maximize"
+msgstr "Maximise"

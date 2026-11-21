@@ -274,7 +274,7 @@ impl State {
             tile(tr!("Bottom Left"), "place-bottom-left"),
             tile(tr!("Bottom Right"), "place-bottom-right"),
             MenuItem::separator(),
-            tile(tr!("Fill"), "place-fill").enabled(!zoomed && resizable),
+            tile(tr!("Maximize"), "place-fill").enabled(!zoomed && resizable),
         ];
         let displays = self
             .screens
@@ -290,7 +290,7 @@ impl State {
         }
         items.extend([
             MenuItem::separator(),
-            item(tr!("Return to Previous Size"), "place-restore")
+            item(tr!("Restore Size"), "place-restore")
                 .enabled(window.tile.is_some() || zoomed),
         ]);
         items
@@ -330,14 +330,14 @@ impl State {
                 .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             item(
                 match zoomed {
-                    true => tr!("Unzoom"),
-                    false => tr!("Zoom"),
+                    true => tr!("Restore Size"),
+                    false => tr!("Maximize"),
                 },
                 "zoom",
             )
             .enabled(!self.windows[index].fixed_size()),
             MenuItem::separator(),
-            MenuItem::submenu(&tr!("Move & Resize"), Menu::new(self.tiling_items(index))),
+            MenuItem::submenu(&tr!("Tile"), Menu::new(self.tiling_items(index))),
             MenuItem::submenu(
                 &tr!("Move to Desktop"),
                 Menu::new(self.desktop_items(index)),

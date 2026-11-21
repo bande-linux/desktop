@@ -80,7 +80,7 @@ impl ForceQuitView {
         let signals = Signals::default();
         let selection = signals.clone();
         let activation = signals.clone();
-        let table = Table::new(vec![Column::new(&tr!("Force Quit Apps"), 200.0).flexible()])
+        let table = Table::new(vec![Column::new(&tr!("Apps"), 200.0).flexible()])
             .without_header()
             .on_selection(move |keys| selection.borrow_mut().push(Signal::Selected(keys.to_vec())))
             .on_activate(move |_| activation.borrow_mut().push(Signal::Ask));
@@ -228,7 +228,7 @@ impl ForceQuitView {
         let text = &mut self.ui.context().text;
         let hint = paragraph(
             text,
-            &tr!("If an app does not respond for a while, select its name and click Force Quit."),
+            &tr!("When an app stops responding, choose it and click Force Quit to close it. Anything unsaved in it is lost."),
             TextStyle::role(TextRole::Callout, palette.ink2),
             text_width,
         );
@@ -391,9 +391,9 @@ impl ForceQuitView {
         let mut update = self.ui.accessibility();
         if let Some((_, root)) = update.nodes.first_mut() {
             root.set_role(Role::Dialog);
-            root.set_label(tr!("Force Quit Apps"));
+            root.set_label(tr!("Force Quit"));
             root.set_description(tr!(
-                "If an app does not respond for a while, select its name and click Force Quit."
+                "When an app stops responding, choose it and click Force Quit to close it. Anything unsaved in it is lost."
             ));
         }
         update

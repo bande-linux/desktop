@@ -25,14 +25,14 @@ msgstr "{app} stängdes eftersom minnet höll på att ta slut"
 msgid "Your computer ran out of memory and closed it to keep everything else working. Click to open it again."
 msgstr "Datorn fick slut på minne och stängde appen så att allt annat fortsätter fungera. Klicka för att öppna den igen."
 
-msgid "A background task was stopped because memory ran low"
-msgstr "En bakgrundsuppgift stoppades eftersom minnet höll på att ta slut"
-
-msgid "Your computer ran out of memory and stopped {unit} to keep everything else working."
-msgstr "Datorn fick slut på minne och stoppade {unit} så att allt annat fortsätter fungera."
-
 msgid "Reopen"
 msgstr "Öppna igen"
 
 msgid "Show Report"
 msgstr "Visa rapport"
+
+msgid "A background task was stopped because memory ran low"
+msgstr "En bakgrundsuppgift stoppades eftersom minnet höll på att ta slut"
+
+msgid "Your computer ran out of memory and stopped {unit} to keep everything else working."
+msgstr "Datorn fick slut på minne och stoppade {unit} så att allt annat fortsätter fungera."

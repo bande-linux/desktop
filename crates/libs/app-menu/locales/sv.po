@@ -31,9 +31,8 @@ msgstr "Helskärmsläge"
 msgid "Minimize"
 msgstr "Minimera"
 
-msgctxt "window menu"
-msgid "Zoom"
-msgstr "Zooma"
+msgid "Maximize"
+msgstr "Maximera"
 
 msgid "Window"
 msgstr "Fönster"

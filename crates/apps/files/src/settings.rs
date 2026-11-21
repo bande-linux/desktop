@@ -60,7 +60,7 @@ impl StartFolder {
             Self::Desktop => text!("Desktop"),
             Self::Documents => text!("Documents"),
             Self::Downloads => text!("Downloads"),
-            Self::Recents => text!("Recents"),
+            Self::Recents => text!("Recent"),
             Self::Last => text!("Last Folder"),
             Self::Other => text!("Other…"),
         }

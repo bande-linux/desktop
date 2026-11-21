@@ -47,7 +47,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   runs any `Shift+Ctrl+Z` redo item. Hide and Hide Other Apps stay in the app menu without a chord.
 - **Apps take the usual Linux bindings** where they differ from a plain swap: Files has
   `Delete` to the Trash, `Alt+Up` to the enclosing folder, `Alt+Left/Right` back and
-  forward, `Ctrl+L` Go to Folder, `Ctrl+H` hidden files, `F2` rename; Terminal puts its commands
+  forward, `Ctrl+L` Go to Location, `Ctrl+H` hidden files, `F2` rename; Terminal puts its commands
   on `Shift+Ctrl` and sends every plain Ctrl+letter to the shell; Settings goes back with
   `Alt+Left`.
 - **Shortcut labels are words** in the order Shift, Ctrl, Alt, Super: "Shift+Ctrl+N",

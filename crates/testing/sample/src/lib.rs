@@ -5,8 +5,8 @@ use bande_toolkit::{
 pub const SIZE: (u32, u32) = (640, 400);
 
 const ROWS: [(&str, &str); 4] = [
-    ("Displays", "Built-in Retina Display, 120 Hz"),
-    ("Sound", "MacBook Pro Speakers"),
+    ("Displays", "Built-in Display, 120 Hz"),
+    ("Sound", "Speakers"),
     ("Network", "Wi-Fi connected to Bande"),
     ("Keyboard", "Key repeat fast, delay short"),
 ];

@@ -835,7 +835,7 @@ impl FilesView {
                 self.entry_icon(entry, 32),
                 formats
                     .alias
-                    .get_or_insert_with(|| Rc::from(tr!("Alias")))
+                    .get_or_insert_with(|| Rc::from(tr!("Link")))
                     .clone(),
             ),
             _ => {

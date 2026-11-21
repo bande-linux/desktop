@@ -40,8 +40,8 @@ msgstr "Minne"
 msgid "Desktop"
 msgstr "Skrivbord"
 
-msgid "About This System"
-msgstr "Om det här systemet"
+msgid "About"
+msgstr "Om"
 
 msgid "Version {version}"
 msgstr "Version {version}"
@@ -100,8 +100,8 @@ msgstr "Tvinga avslut…"
 msgid "Force Quit “{app}”"
 msgstr "Tvinga ”{app}” att avsluta"
 
-msgid "System Settings…"
-msgstr "Systeminställningar…"
+msgid "Settings…"
+msgstr "Inställningar…"
 
 msgid "Sleep"
 msgstr "Vila"
@@ -151,8 +151,8 @@ msgstr "Inloggning krävs"
 msgid "Sign In…"
 msgstr "Logga in…"
 
-msgid "Known Networks"
-msgstr "Kända nätverk"
+msgid "Saved Networks"
+msgstr "Sparade nätverk"
 
 msgid "Other Networks"
 msgstr "Andra nätverk"

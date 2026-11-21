@@ -35,7 +35,7 @@ impl Window {
             tile(tr!("Bottom Left"), "place-bottom-left"),
             tile(tr!("Bottom Right"), "place-bottom-right"),
             MenuItem::separator(),
-            tile(tr!("Fill"), "place-fill").enabled(!toplevel.maximized && resizable),
+            tile(tr!("Maximize"), "place-fill").enabled(!toplevel.maximized && resizable),
         ];
         if self.can_place() && self.state.outputs.len() > 1 {
             items.push(
@@ -46,7 +46,7 @@ impl Window {
         }
         items.extend([
             MenuItem::separator(),
-            place(tr!("Return to Previous Size"), "place-restore")
+            place(tr!("Restore Size"), "place-restore")
                 .enabled(toplevel.tiled || toplevel.maximized),
         ]);
         items
@@ -60,9 +60,9 @@ impl Window {
                 .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
             MenuItem::new(
                 &if toplevel.maximized {
-                    tr!("Unzoom")
+                    tr!("Restore Size")
                 } else {
-                    tr!(context = "window menu", "Zoom")
+                    tr!("Maximize")
                 },
                 "zoom",
             )
@@ -82,7 +82,7 @@ impl Window {
         if self.can_place() {
             items.push(
                 MenuItem::submenu(
-                    &tr!("Move & Resize"),
+                    &tr!("Tile"),
                     Menu::new(self.move_and_resize_items()),
                 )
                 .enabled(!toplevel.fullscreen),

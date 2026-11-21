@@ -99,9 +99,9 @@ struct Card {
 
 fn heading_text(heading: Heading) -> String {
     (match heading {
-        Heading::TopHit => text!("Top Hit"),
+        Heading::TopHit => text!("Best Match"),
         Heading::Applications => text!("Applications"),
-        Heading::Settings => text!("System Settings"),
+        Heading::Settings => text!("Settings"),
         Heading::System => text!("System"),
         Heading::Folders => text!("Folders"),
         Heading::Documents => text!("Documents"),

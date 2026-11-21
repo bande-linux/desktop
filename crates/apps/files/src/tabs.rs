@@ -56,7 +56,7 @@ impl CarriedTab {
 pub(crate) fn location_title(location: &Location) -> String {
     match location {
         Location::Trash => tr!("Trash"),
-        Location::Recents => tr!("Recents"),
+        Location::Recents => tr!("Recent"),
         Location::Network => tr!("Network"),
         Location::Server { name, .. } if !name.is_empty() => name.clone(),
         Location::Server { address, .. } => address

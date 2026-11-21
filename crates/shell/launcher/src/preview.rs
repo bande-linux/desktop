@@ -259,7 +259,7 @@ impl PreviewPane {
             let subtitle = match (&hit.target, &clip) {
                 (Target::Path(path), _) => Some(state.catalog.kind(path, hit.kind == Kind::Folder)),
                 (Target::Settings(_), _) => {
-                    hit.detail.clone().or_else(|| Some(tr!("System Settings")))
+                    hit.detail.clone().or_else(|| Some(tr!("Settings")))
                 }
                 (Target::Clip(_), Some(clip)) => Some(clip_description(clip, content)),
                 _ => hit.detail.clone(),
@@ -308,7 +308,7 @@ impl PreviewPane {
             match hit.kind {
                 Kind::Calculation => tr!("Return or Ctrl+C to copy"),
                 Kind::Application => tr!("Return to open"),
-                Kind::Setting => tr!("Return to open in System Settings"),
+                Kind::Setting => tr!("Return to open in Settings"),
                 Kind::Command => tr!("Return to choose"),
                 Kind::Emoji => tr!("Return to copy, then paste with Ctrl+V"),
                 Kind::CopiedText if state.model.inserts => {

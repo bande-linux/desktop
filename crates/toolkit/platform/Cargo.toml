@@ -20,7 +20,7 @@ bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-protocols = { workspace = true, features = ["client"] }
 bande-widgets.workspace = true
-wayland-backend = { workspace = true, features = ["client_system", "dlopen"] }
+wayland-backend = { workspace = true, features = ["client_system"] }
 wayland-client.workspace = true
 wayland-protocols.workspace = true
 wayland-protocols-wlr.workspace = true

@@ -1,0 +1,6 @@
+Files: desktop/crates/platform/protocols/protocols/xdg-session-management-v1.xml
+Copyright: 2018 Mike Blumenkrantz
+ 2018 Samsung Electronics Co., Ltd
+ 2018 Red Hat Inc.
+License: MIT
+Comment: The Wayland protocol the generated client code is built from.

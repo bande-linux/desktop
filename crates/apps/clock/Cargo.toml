@@ -30,7 +30,6 @@ workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-copyright = "2026 Mikael Hug"
 section = "utils"
 priority = "optional"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, tzdata, bande-notify, bande-sound"
@@ -45,7 +44,8 @@ assets = [
     ["target/release/bande-clock", "usr/bin/", "755"],
     ["data/org.bande.Clock.desktop", "usr/share/applications/", "644"],
     ["data/org.bande.ClockAgent.desktop", "etc/xdg/autostart/", "644"],
-    ["data/org.bande.Clock.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-clock/org.bande.Clock.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-clock/copyright", "usr/share/doc/bande-clock/copyright", "644"],
     ["data/org.bande.Clock.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-clock/*", "usr/share/bande/l10n/bande-clock/", "644"],
 ]

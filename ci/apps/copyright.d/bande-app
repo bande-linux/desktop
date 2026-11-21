@@ -1,0 +1,5 @@
+Files: desktop/*
+Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
+License: Apache-2.0 or MIT
+Comment: The bande-* crates of https://github.com/bande-linux/desktop at the
+ revision Cargo.lock pins.

@@ -22,7 +22,6 @@ workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-copyright = "2026 Mikael Hug"
 section = "misc"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
@@ -33,7 +32,8 @@ Reverse Polish Notation and a paper tape."""
 assets = [
     ["target/release/bande-calculator", "usr/bin/", "755"],
     ["data/org.bande.Calculator.desktop", "usr/share/applications/", "644"],
-    ["data/org.bande.Calculator.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-calculator/org.bande.Calculator.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-calculator/copyright", "usr/share/doc/bande-calculator/copyright", "644"],
     ["data/org.bande.Calculator.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-calculator/*", "usr/share/bande/l10n/bande-calculator/", "644"],
 ]

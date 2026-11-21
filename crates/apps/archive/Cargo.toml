@@ -31,7 +31,6 @@ workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-copyright = "2026 Mikael Hug"
 section = "utils"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
@@ -43,7 +42,8 @@ land outside the folder, decompression bombs and setuid permissions."""
 assets = [
     ["target/release/bande-archive", "usr/bin/", "755"],
     ["data/org.bande.Archives.desktop", "usr/share/applications/", "644"],
-    ["data/org.bande.Archives.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-archive/org.bande.Archives.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-archive/copyright", "usr/share/doc/bande-archive/copyright", "644"],
     ["data/org.bande.Archives.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-archive/*", "usr/share/bande/l10n/bande-archive/", "644"],
 ]

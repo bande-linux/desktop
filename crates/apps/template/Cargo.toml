@@ -20,7 +20,6 @@ workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-copyright = "2026 Mikael Hug"
 section = "misc"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
@@ -29,7 +28,8 @@ menus, keys and single instance every Bande app has."""
 assets = [
     ["target/release/bande-template", "usr/bin/", "755"],
     ["data/org.bande.Template.desktop", "usr/share/applications/", "644"],
-    ["data/org.bande.Template.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-template/org.bande.Template.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-template/copyright", "usr/share/doc/bande-template/copyright", "644"],
     ["data/org.bande.Template.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-template/*", "usr/share/bande/l10n/bande-template/", "644"],
 ]

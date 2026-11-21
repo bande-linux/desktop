@@ -45,7 +45,8 @@ and the Window menu names the main window (Message Viewer, Calendar, System Moni
 | `ci/` | the build, the same in CI and locally |
 | `ci/gate.sh [app...]` | the local merge gate: CI's own `ci/build-app.sh` on each app in the `gate` profile, `ci/check.sh` on the libs and the template, one `target/` (default: every app, the libs and the template) |
 | `ci/setup.sh install\|check <app>... \| source` | the Debian packages a build needs (the suite's own `rustc`, `cargo`, `rustfmt` and `rust-clippy` among them) and `cargo-deb`: CI installs them, the gate fails if one is missing; apps depend on desktop packages, so both add (`source`, as root) or need the Bande archive, pinned to the Bande packages, with the key in `ci/bande-archive-key.asc` |
-| `ci/build-app.sh <app> <out> [profile]` | one app's build, the same in CI and the gate: `ci/check-app.sh`, `ci/version.sh`, `ci/check.sh`, the binaries, the `.deb` and `ci/smoke.sh` on it |
+| `ci/build-app.sh <app> <out> [profile]` | one app's build, the same in CI and the gate: `ci/check-app.sh`, `ci/version.sh`, `ci/check.sh`, the binaries, the copyright file and the metainfo with its release, the `.deb` and `ci/smoke.sh` on it |
+| `ci/copyright.py <package>` | the package's DEP-5 copyright file: `ci/copyright` for this repository, every crate linked in with its authors and licence, `ci/copyright.d/<crate>` where a crate needs more (bundled C code, embedded data), and the licence texts from `ci/licenses/` |
 | `ci/build-packs.sh <out>` | every released app's language packs from the translations alone, for an `l10n-YYYYMMDD` tag |
 | `ci/check.sh <package>` | fmt, clippy `--all-targets -D warnings` and the tests of one package, `--locked`, on a private session bus with software Vulkan |
 | `ci/check-app.sh <dir>...` | static checks that an app is a `bande-app` app packaged like the others (ids, `.desktop`, metainfo, fonts); fails on any problem |
@@ -116,4 +117,5 @@ declare, as the desktop's check does (its `docs/architecture/ci.md`).
 
 ## Licence
 
-MIT OR Apache-2.0, unless an app says otherwise.
+MIT OR Apache-2.0, unless an app says otherwise. Each package's copyright file also lists the
+crates linked into it.

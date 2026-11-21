@@ -24,21 +24,21 @@ pub enum Kind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Preset {
-    ICloud,
+    Generic,
     Fastmail,
     Google,
+    ICloud,
     Nextcloud,
-    Other,
     Subscription,
 }
 
 impl Preset {
     const ALL: [Self; 6] = [
-        Self::ICloud,
+        Self::Generic,
         Self::Fastmail,
         Self::Google,
+        Self::ICloud,
         Self::Nextcloud,
-        Self::Other,
         Self::Subscription,
     ];
 
@@ -48,7 +48,7 @@ impl Preset {
             Self::Fastmail => tr!("Fastmail"),
             Self::Google => tr!("Google"),
             Self::Nextcloud => tr!("Nextcloud"),
-            Self::Other => tr!("Other CalDAV Account"),
+            Self::Generic => tr!("CalDAV Account"),
             Self::Subscription => tr!("Subscription"),
         }
     }
@@ -67,7 +67,7 @@ impl Preset {
             Self::Nextcloud => tr!(
                 "Enter your Nextcloud server; an app password from Settings ▸ Security works best."
             ),
-            Self::Other => {
+            Self::Generic => {
                 tr!("Enter the server, or leave it empty to look it up from your e-mail address.")
             }
             Self::Subscription => tr!("Paste a webcal:// or https:// link to a calendar."),
@@ -159,7 +159,7 @@ impl Setup {
             vec![(server, Width::Fill)],
             ROW,
         ));
-        let note = panel.add(Label::new(&Preset::ICloud.hint()));
+        let note = panel.add(Label::new(&Preset::Generic.hint()));
         panel.line(Line::new(None, vec![(note, Width::Fill)], 36.0));
         let send = sender(signals);
         let cancel =
@@ -177,7 +177,7 @@ impl Setup {
         );
         let setup = Self {
             kind: Kind::CalDav,
-            preset: Preset::ICloud,
+            preset: Preset::Generic,
             account: None,
             user: String::new(),
             server: String::new(),
@@ -229,7 +229,7 @@ impl Setup {
         );
         let setup = Self {
             kind: Kind::CalDav,
-            preset: Preset::Other,
+            preset: Preset::Generic,
             account: Some(account.to_owned()),
             user: user.to_owned(),
             server: String::new(),
@@ -248,7 +248,7 @@ impl Setup {
     pub fn apply(&mut self, signal: &Signal) {
         match signal {
             Signal::SetupKind(index) => {
-                self.preset = Preset::ALL.get(*index).copied().unwrap_or(Preset::Other);
+                self.preset = Preset::ALL.get(*index).copied().unwrap_or(Preset::Generic);
                 self.kind = self.preset.kind();
             }
             Signal::SetupUser(text) => self.user = text.trim().to_owned(),

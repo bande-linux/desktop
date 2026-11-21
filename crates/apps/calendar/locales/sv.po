@@ -517,8 +517,8 @@ msgstr "Google"
 msgid "Nextcloud"
 msgstr "Nextcloud"
 
-msgid "Other CalDAV Account"
-msgstr "Annat CalDAV-konto"
+msgid "CalDAV Account"
+msgstr "CalDAV-konto"
 
 msgid "Subscription"
 msgstr "Prenumeration"

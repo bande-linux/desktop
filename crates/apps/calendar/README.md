@@ -1,6 +1,6 @@
 # Bande Calendar
 
-A calendar for the Bande desktop, modelled on macOS Calendar: CalDAV accounts that work offline,
+A calendar for the Bande desktop: CalDAV accounts that work offline,
 a local "On My Computer" calendar, and read-only subscriptions, shown in day, week, month and year
 views. Packaged as `bande-calendar`.
 
@@ -9,9 +9,9 @@ views. Packaged as `bande-calendar`.
 - **Accounts.** CalDAV (RFC 4791) with discovery: a full URL, a host name or just an e-mail
   address. It tries `_caldavs._tcp` DNS SRV records, `/.well-known/caldav`, then
   `current-user-principal` → `calendar-home-set` → the calendars in the home set. Passwords go to
-  the Secret Service (the Bande keychain), never to disk, and are sent only over HTTPS (or to this
+  the Secret Service, never to disk, and are sent only over HTTPS (or to this
   computer, for a local server). Several accounts, plus a local calendar. The account sheet
-  has iCloud, Fastmail, Google and Nextcloud presets that fill in the server and say which
+  has Fastmail, Google, iCloud and Nextcloud presets that fill in the server and say which
   password to use (Google needs OAuth, so it offers a subscription to the calendar's secret
   iCal address instead). When the server refuses the password, Calendar asks for it again
   (also from Password… in Settings) and keeps every offline change meanwhile; with its window
@@ -19,7 +19,7 @@ views. Packaged as `bande-calendar`.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
   never; for all of them or one by one in Settings); their alerts are dropped unless turned on
-  for that subscription, as on macOS; the name and colour come from `X-WR-CALNAME` and
+  for that subscription; the name and colour come from `X-WR-CALNAME` and
   `X-APPLE-CALENDAR-COLOR`.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
   without a network and pushes changes as soon as NetworkManager says the network is back.
@@ -54,8 +54,7 @@ views. Packaged as `bande-calendar`.
   `calendar-user-address-set`.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
-  Snooze (5 minutes) and a click that opens Calendar on the event's day. As macOS's
-  CalendarAgent, Calendar also shows them when it was never opened or was quit: the autostart
+  Snooze (5 minutes) and a click that opens Calendar on the event's day. Calendar also shows them when it was never opened or was quit: the autostart
   entry `/etc/xdg/autostart/org.bande.CalendarAgent.desktop` starts `bande-calendar
   --background` at login, a process with no window that is not a running app until Calendar is
   opened, and Quit returns there; both follow "Show alerts when Calendar is closed" (on by
@@ -74,7 +73,7 @@ views. Packaged as `bande-calendar`.
   the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The
   desktop file registers `text/calendar` and the `webcal` schemes. With the window closed,
   Refresh Calendars syncs in the background and Import… and Export… show only the file chooser;
-  the window opens when there is something to confirm, as on macOS.
+  the window opens when there is something to confirm.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
 Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
@@ -106,11 +105,3 @@ Settings; the desktop pin is shared by the workspace (see `../../README.md`).
 `tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
 exceptions and end follow. The repo's whole test list and the reason for each is in
 `NOTES/tests.md`.
-
-## Not done yet
-
-- Invitation e-mails (`METHOD:REQUEST`/`REPLY` over iMIP), free/busy, tasks (`VTODO`).
-- OAuth providers (Google, Microsoft); Basic authentication only, so iCloud and Fastmail work with
-  an app password.
-- Rules the Custom sheet cannot express
-  (several month days, `BYSETPOS`) are kept but replaced if edited there. The ranked list is in `NOTES/plans/calendar-depth.md`.

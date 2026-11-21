@@ -382,14 +382,14 @@ msgstr "Word-dokument"
 msgid "OpenDocument Text"
 msgstr "OpenDocument-text"
 
-msgid "LF (macOS and Linux)"
-msgstr "LF (macOS och Linux)"
+msgid "LF (Line Feed)"
+msgstr "LF (radmatning)"
 
-msgid "CRLF (Windows)"
-msgstr "CRLF (Windows)"
+msgid "CRLF (Carriage Return, Line Feed)"
+msgstr "CRLF (vagnretur och radmatning)"
 
-msgid "CR (Classic Mac OS)"
-msgstr "CR (Classic Mac OS)"
+msgid "CR (Carriage Return)"
+msgstr "CR (vagnretur)"
 
 msgid "Don’t Save"
 msgstr "Spara inte"

@@ -49,7 +49,7 @@ priority = "optional"
 depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 recommends = "bande-secrets | org.freedesktop.secrets"
 extended-description = """\
-Mail for the Bande desktop, in three panes as in macOS Mail: mailboxes \
+Mail for the Bande desktop, in three panes: mailboxes \
 and a unified Inbox, the message list, and the reader. It speaks IMAP and \
 SMTP over TLS, keeps an offline copy of every account, follows new mail \
 with IMAP IDLE and keeps passwords in the Secret Service."""

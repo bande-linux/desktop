@@ -1527,9 +1527,9 @@ fn format_title(name: &str) -> String {
 
 pub fn line_ending_title(name: &str) -> String {
     match name {
-        "lf" => tr!("LF (macOS and Linux)"),
-        "crlf" => tr!("CRLF (Windows)"),
-        "cr" => tr!("CR (Classic Mac OS)"),
+        "lf" => tr!("LF (Line Feed)"),
+        "crlf" => tr!("CRLF (Carriage Return, Line Feed)"),
+        "cr" => tr!("CR (Carriage Return)"),
         other => other.to_owned(),
     }
 }

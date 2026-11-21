@@ -1,6 +1,6 @@
 # Bande Mail
 
-Mail for the Bande desktop, modelled on macOS Mail: mailboxes in a sidebar with a unified
+Mail for the Bande desktop: mailboxes in a sidebar with a unified
 Inbox, the message list, and the reader, in one window. It reads mail over IMAP, sends it over
 SMTP, keeps an offline copy of every account and follows new mail with IMAP IDLE.
 
@@ -33,8 +33,8 @@ apt install bande-mail
   guesses that answer on the usual ports. Autoconfig is fetched over HTTPS only.
 - **Security.** IMAP and SMTP use TLS or STARTTLS, verified against the system's certificate
   store. Plain text is refused for anything but this computer (`localhost`, `127.0.0.1`, `::1`),
-  so a local bridge or test server still works. Passwords live in the Secret Service
-  (the Bande keychain), under `application=org.bande.Mail`, never in a file.
+  so a local bridge or test server still works. Passwords live in the Secret Service,
+  under `application=org.bande.Mail`, never in a file.
 - **Window.** The sidebar lists Inbox, Flagged, Drafts, Sent, Archive, Junk and Trash across all
   accounts, then each account's folders with unread counts. The list shows sender, subject, a
   preview (two lines unless Settings says otherwise), the date, an unread dot, a flag and a
@@ -63,7 +63,7 @@ apt install bande-mail
 - **Toolbar and keys.** Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
   Delete (Delete or Backspace), Junk, Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
   Forward (Shift+Ctrl+F), Flag (Message → Flag picks one of seven colours, kept
-  on the server as macOS does), Mark as Read or Unread, Send
+  on the server), Mark as Read or Unread, Send
   (Ctrl+Enter), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which finds messages
   with every word in their sender, recipients, subject or text; `from:`, `to:` and `subject:`
   keep a word to that field, and quotes keep words together. View sorts the list by date, sender, subject, size or unread first,
@@ -142,15 +142,6 @@ Each one is in Debian, except where noted:
 No IMAP, SMTP, DNS or HTTP crate is used: the maintained IMAP crates are async-only or not in
 Debian, and the desktop has no async runtime. The IMAP and SMTP clients, the SRV/MX lookup and
 the HTTPS autoconfig fetch are small, synchronous and bounded by timeouts.
-
-## Not yet
-
-- Rich text, drag and drop of files into Compose. The ranked list
-  of what users still need is in `../../NOTES/plans/mail-depth.md`.
-- Remote pictures over plain `http` (they show their alt text), SVG pictures, printing.
-- OAuth2 (Gmail and Outlook need app passwords for now), CONDSTORE/QRESYNC for faster flag
-  sync on large mailboxes, full-text search on the server.
-- Recognising localised folder names on servers without `SPECIAL-USE`.
 
 ## Licence
 

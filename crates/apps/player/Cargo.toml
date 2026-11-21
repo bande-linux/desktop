@@ -49,7 +49,7 @@ depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, gstreamer1.0
 extended-description = """\
 The audio and video player of the Bande desktop: opens common music and film \
 files from Files, with simple controls over the picture, full screen, speed, \
-audio and subtitle tracks, media keys, and Quick Look playback in Files."""
+audio and subtitle tracks, media keys, and Glance playback in Files."""
 assets = [
     ["target/release/bande-player", "usr/bin/", "755"],
     ["target/release/bande-media-engine", "usr/bin/", "755"],

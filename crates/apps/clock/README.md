@@ -1,7 +1,7 @@
 # Bande Clock
 
-Alarms, timers, a stopwatch and a world clock for the Bande desktop, modelled on macOS Clock.
-Packaged as `bande-clock`; it replaces gnome-clocks.
+Alarms, timers, a stopwatch and a world clock for the Bande desktop.
+Packaged as `bande-clock`.
 
 ## What it does
 
@@ -66,9 +66,3 @@ After a resume the alarms and timers whose time passed ring at once.
 `tests/alarm_time.rs` checks the date maths: repeating alarms across weekends, both daylight
 saving changes and another time zone, and that an agent started late rings a missed one-off
 alarm once but not one more than an hour old.
-
-## Not done yet
-
-- Alarm sounds are the four short desktop alert sounds; there is no longer ringtone.
-- The alarm sheet takes the time in 24-hour steppers whatever the clock format.
-- No reordering of world clock cities, and no analogue faces.

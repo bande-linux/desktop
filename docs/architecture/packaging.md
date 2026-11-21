@@ -57,7 +57,9 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
 - **Version**: `debian/changelog` names the release, `X.Y.Z-1`, with `X.Y.Z` the
   `[workspace.package] version`; a packaging-only fix is `X.Y.Z-2` (tag `vX.Y.Z-2`). A build
   for a Debian release adds an entry with that release's suffix, `X.Y.Z-1~deb14` for forky
-  (`ci/deb/build.sh`; [ci.md](ci.md#versions)).
+  (`ci/deb/build.sh`; [ci.md](ci.md#versions)); sbuild's `--append-to-version` would make a
+  binNMU-style build without the architecture-independent packages, so an sbuild build takes
+  a source package with that entry.
 - **Tests**: `debian/tests` holds the autopkgtests: `desktop` (bande-desktop alone brings a
   login window and sound, no X server, greetd as the display manager, the login window's
   pictures folder), `every-package` (the one version, every program and file in

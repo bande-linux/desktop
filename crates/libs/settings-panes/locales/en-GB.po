@@ -10,7 +10,6 @@ msgstr ""
 msgid "Light, dark or automatic, accent color, wallpaper and text size"
 msgstr "Light, dark or automatic, accent colour, wallpaper and text size"
 
-
 msgid "Warmer colors after dark"
 msgstr "Warmer colours after dark"
 

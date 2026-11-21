@@ -39,9 +39,6 @@ msgstr "Empty Bin…"
 msgid "Turn on Night Light to make the colors warmer at night."
 msgstr "Turn on Night Light to make the colours warmer at night."
 
-
-
-
 msgid "None (show colors as sent)"
 msgstr "None (show colours as sent)"
 

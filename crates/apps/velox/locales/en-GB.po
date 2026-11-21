@@ -7,11 +7,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Install virtualization to continue"
-msgstr "Install virtualisation to continue"
-
 msgid "Virtualization is not ready."
 msgstr "Virtualisation is not ready."
 
 msgid "Cannot install virtualization"
 msgstr "Cannot install virtualisation"
+
+msgid "Install virtualization to continue"
+msgstr "Install virtualisation to continue"

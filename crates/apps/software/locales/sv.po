@@ -200,9 +200,6 @@ msgstr "Kategorier"
 msgid "New & Updated"
 msgstr "Nytt och uppdaterat"
 
-msgid "Details"
-msgstr "Detaljer"
-
 msgid "No apps from the catalog are installed."
 msgstr "Inga appar från katalogen är installerade."
 
@@ -272,6 +269,9 @@ msgstr "Du får frågan om en administratörs lösenord."
 
 msgid "Installed for you only, without a password. It runs in a sandbox with the permissions below."
 msgstr "Installeras bara för dig, utan lösenord. Appen körs i en sandlåda med behörigheterna nedan."
+
+msgid "Details"
+msgstr "Detaljer"
 
 msgid "Remove {name}?"
 msgstr "Vill du ta bort {name}?"

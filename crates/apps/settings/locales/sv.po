@@ -366,12 +366,6 @@ msgstr "Skrivbordet stannade"
 msgid "Failed to run"
 msgstr "Kunde inte köras"
 
-msgid "Kernel problem"
-msgstr "Problem i kärnan"
-
-msgid "Unexpected restart"
-msgstr "Oväntad omstart"
-
 msgid "Out of memory"
 msgstr "Slut på minne"
 
@@ -381,11 +375,8 @@ msgstr "Grafikproblem"
 msgid "Display problem"
 msgstr "Skärmproblem"
 
-msgid "Sleep or wake problem"
-msgstr "Problem med vila eller väckning"
-
-msgid "Disk problem"
-msgstr "Diskproblem"
+msgid "Wake problem"
+msgstr "Problem med väckning"
 
 msgid "Network drive stalled"
 msgstr "Nätverksenheten stannade"

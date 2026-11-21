@@ -25,23 +25,22 @@
 
     <event name="capture_screen">
       <description summary="the user pressed the full-screen capture shortcut">
-        Sent for Shift+Print, as Command-Shift-3 takes a picture of the whole
-        screen on a Mac.
+        Sent for Shift+Print, which takes a picture of the whole screen.
       </description>
     </event>
 
     <event name="capture_area">
       <description summary="the user pressed the area capture shortcut">
-        Sent for Shift+Super+S, as Command-Shift-4 lets the user drag out the
-        part of the screen to take a picture of on a Mac.
+        Sent for Shift+Super+S, which lets the user drag out the part of the
+        screen to take a picture of.
       </description>
     </event>
 
     <event name="active_app">
       <description summary="the app of the key window changed">
         Sent on binding and whenever the window with keyboard focus changes to
-        one of another app, with that app's app id, as the macOS menu bar names
-        the active app. An empty app id means no window has the keyboard, as
+        one of another app, with that app's app id, so the shell can name the
+        active app. An empty app id means no window has the keyboard, as
         when the user clicks the empty desktop.
       </description>
       <arg name="app_id" type="string"/>
@@ -56,9 +55,9 @@
     <event name="volume_key">
       <description summary="the user pressed a volume key">
         Sent for the mute, volume down and volume up keys, with or without Super
-        and also while the session is locked, as a Mac's volume keys always work.
-        Fine is 1 when Option and Shift are held, which on a Mac changes the
-        volume in quarter steps.
+        and also while the session is locked, so the volume keys always work.
+        Fine is 1 when Alt and Shift are held, which changes the volume in
+        quarter steps.
       </description>
       <arg name="key" type="uint" enum="volume_key"/>
       <arg name="fine" type="uint"/>
@@ -108,8 +107,8 @@
 
     <request name="hide_app">
       <description summary="hide every window of an app">
-        Fades out every window of the app with this app id, as Hide in a Mac's
-        Taskbar menu or Command-H does. The windows take no input while hidden.
+        Fades out every window of the app with this app id, for Hide in the
+        app's menu or its Taskbar menu. The windows take no input while hidden.
         activate_app, activate_window or an activation request from the app shows
         them again.
       </description>
@@ -196,8 +195,8 @@
     <request name="show_app">
       <description summary="show the hidden windows of an app">
         Fades the windows of the app with this app id back in after hide_app,
-        without raising them or moving the keyboard focus, as Show All in a
-        Mac's app menu does.
+        without raising them or moving the keyboard focus, for Show All in the
+        app menu.
       </description>
       <arg name="app_id" type="string"/>
     </request>
@@ -213,7 +212,7 @@
       <description summary="the user pressed a brightness key">
         Sent for the display and keyboard brightness keys, with or without
         Super and also while the session is locked, as volume_key is. Fine is 1
-        when Option and Shift are held, for quarter steps. Output is the connector
+        when Alt and Shift are held, for quarter steps. Output is the connector
         name of the display under the pointer, the one the display keys act on.
       </description>
       <arg name="key" type="uint" enum="brightness_key"/>
@@ -234,7 +233,7 @@
     <request name="show_windows">
       <description summary="open the overview">
         Opens the overview of the active workspace. With an app id it shows
-        only that app's windows on every workspace, as App Exposé does; an
+        only that app's windows on every workspace; an
         empty app id shows every window of the active workspace. Asking again
         for what is already shown closes it.
       </description>
@@ -272,8 +271,8 @@
     <event name="media_key">
       <description summary="the user pressed a media key">
         Sent for the play/pause, pause, next and previous keys, with or without
-        Super and also while the session is locked, as a Mac's media keys
-        always control what is playing.
+        Super and also while the session is locked, so the media keys always
+        control what is playing.
       </description>
       <arg name="key" type="uint" enum="media_key"/>
     </event>
@@ -314,8 +313,8 @@
     <request name="insert_text">
       <description summary="type text into the window the launcher covered">
         Commits the text through text-input-v3 into the text field of the
-        window that gets the keyboard back after the shell surface closes, as
-        the macOS character viewer inserts into the frontmost app. Dropped if
+        window that gets the keyboard back after the shell surface closes, so
+        the emoji picker types into the app the user was in. Dropped if
         no other client's text input becomes active within a second.
       </description>
       <arg name="text" type="string"/>
@@ -494,7 +493,7 @@
         but opens nothing; when the app runs without a window
         (bande_app_v1.keep_running), it is also sent bande_app_v1.reopen so it
         opens its main window. Sent for a click on a running app's Taskbar icon
-        and on a notification, as the Dock sends the reopen event.
+        and on a notification.
       </description>
       <arg name="app_id" type="string"/>
     </request>
@@ -505,7 +504,7 @@
         (bande_app_v1.keep_running) has no window left, and on binding for
         every such app; sent with windowless 0 when it shows a window again,
         stops keeping running or exits. The Taskbar keeps showing such an app
-        as running, as the Dock keeps its dot under a Mac app with no window.
+        as running.
         Pid is the process on the other end of the app's connection.
       </description>
       <arg name="app_id" type="string"/>
@@ -589,7 +588,7 @@
     <request name="act_for_app" since="8">
       <description summary="make a layer surface part of an app">
         Says that the client's layer surface belongs to the app with this app
-        id, as the desktop belongs to the Finder on a Mac. While the surface
+        id, as the desktop belongs to Files. While the surface
         has the keyboard, that app is the active app with no key window: the
         Taskbar shows it as active, its menus are the active menus, and when it
         runs (bande_app_v1.keep_running) the keys the surface passes on with
@@ -624,7 +623,7 @@
 
     <event name="quit_requested">
       <description summary="the user asked to quit the app">
-        Sent for the shell's Quit item, as Command-Q quits an app on a Mac. The app should
+        Sent for the shell's Quit item. The app should
         quit: close all its windows and exit, asking the user once first if
         something would be lost, as a terminal with running programs does. If
         the user cancels, the app keeps running and nothing is closed.
@@ -697,7 +696,7 @@
     <request name="keep_running" since="2">
       <description summary="keep the app running after its last window closes">
         Says that this client is the app with this app id and keeps running
-        when its last window closes, as a Mac app does, until it destroys this
+        when its last window closes, until it destroys this
         object or disconnects. While it has no window the compositor still
         counts it as a running app: the Taskbar shows it as running
         (bande_shell_v1.windowless_app), it stays the active app in the menu
@@ -706,7 +705,7 @@
         the next login include it. Quit requests for the client are then sent
         only to this object. Asking again changes the app id. A client that
         has not asked is not a running app while it has no window: an app
-        that runs in the background, as a Mac's agents do, asks only when it
+        that runs in the background asks only when it
         opens its first window, and destroys this object to go back to the
         background, which also makes the next app active if it was the
         active app.
@@ -718,8 +717,7 @@
       <description summary="the user asked for the app while it has no window">
         Sent to an object that asked to keep_running when the app has no
         window and the user asks for it, by clicking its Taskbar icon or a
-        notification (bande_shell_v1.reopen_app), as macOS sends the reopen
-        event. Picking it in the app switcher only makes it the active app. The
+        notification (bande_shell_v1.reopen_app). Picking it in the app switcher only makes it the active app. The
         app becomes the active app at once and should open its main window,
         activating it with this xdg_activation_v1 token.
       </description>
@@ -732,9 +730,8 @@
         presses while its app is the active app, no surface has the keyboard
         (or a layer surface acting for the app passes the key on,
         bande_shell_v1.pass_key) and the key is not one of the compositor's
-        own shortcuts, as a Mac
-        sends key equivalents to the active app's menus when it has no
-        window. Keysym is the xkb keysym with the modifiers applied, such as
+        own shortcuts, so the active app's menu shortcuts work while it has
+        no window. Keysym is the xkb keysym with the modifiers applied, such as
         q for Ctrl+Q and W for Shift+Ctrl+W. Modifiers adds 1 for Shift, 2
         for Control, 4 for Alt and 8 for Super.
       </description>
@@ -746,7 +743,7 @@
         Opens the same confirmation as the Bande menu's Log Out, Restart and
         Shut Down (bande_shell_v1.confirm_session_end), or brings forward the
         one already open. If the user confirms, every app is asked to quit
-        first and an app with unsaved work can stop it, as on a Mac. Sent by
+        first and an app with unsaved work can stop it. Sent by
         Software Update's Restart Now and Log Out.
       </description>
       <arg name="ending" type="uint" enum="bande_shell_v1.session_end"/>
@@ -780,8 +777,7 @@
 
     <request name="set_panel" since="5">
       <description summary="make one of the app's windows a panel that never takes the keyboard">
-        Makes the toplevel a floating panel, as a non-activating panel on a
-        Mac (Glance): it stays in front of every other window, never
+        Makes the toplevel a floating panel that does not activate (Glance): it stays in front of every other window, never
         becomes the key window and never takes the keyboard, whether it maps,
         is clicked, asks for activation or goes full screen, so the app's key
         window keeps its keys and its menus. Pointer input reaches it as
@@ -859,7 +855,7 @@
 
     <request name="set_popover" since="10">
       <description summary="make one of the app's windows a popover at the pointer">
-        Makes the toplevel a transient popover, as Look Up on a Mac: it maps
+        Makes the toplevel a transient popover (Look Up): it maps
         at the pointer, kept inside the usable area, stays in front of other
         windows and takes the keyboard as usual. It is not listed as a window
         of its own to other clients and is not saved for resume. Lasts until

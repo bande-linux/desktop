@@ -99,7 +99,7 @@ any branch with a `+git` version; it is never published.
 
 - The release profile (fat LTO, one codegen unit): the gate packages the `gate` profile, the same
   without its slow optimisations, so a gate stays within minutes.
-- amd64: the mini is arm64; cross-checking needs every C library for amd64.
+- arm64: the build machine is amd64; cross-checking needs every C library for arm64.
 - Installing into a clean root system (`ci/smoke.sh --install`): apt resolving the package's
   dependencies from Debian and the Bande archive, the installed files and the app's own `smoke.sh` need root in a
   fresh `debian:<suite>`; locally `apt-get -s` resolves them against this system only.

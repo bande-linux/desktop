@@ -22,22 +22,17 @@ App `apps/velox`, package `bande-velox`, id `org.bande.Velox`, name "Velox".
 | 7 | Tests follow the apps budget of **~80–100 lines per app** (apps `CLAUDE.md` 1ac2b62) |
 | 8 | **Cut from v1:** CLI, remote SSH hosts, `.velox.local` DNS, bridged/NAT networking and `setup`, export/import, PCI passthrough, migration, x86 guests |
 
-## What the M2 mini gives us (checked read-only on 7.3-rc7+bande-apple-arm64-16k)
+## Host
 
-- **KVM works as shipped.** `CONFIG_KVM=y`, the `kvm` module is loaded, `/dev/kvm` exists, and
-  the kernel boots at EL2. The vhost, TUN, bridge, nftables/NAT, overlay, user-namespace and
-  memory-cgroup options are on too. All of it comes from Debian's `arm64-16k` config, so the
-  kernel repo needs no change.
+- **KVM:** Debian's kernels ship KVM with the vhost, TUN, bridge, nftables/NAT, overlay,
+  user-namespace and memory-cgroup options Velox needs; no kernel change.
 - **`/dev/kvm` access:** it is `root:kvm 0660` with udev's `uaccess` tag, so the user at the
   seat gets an ACL and needs no `kvm` group. The group matters only for SSH-only use.
-- **CPU:** 4 Blizzard (E) and 4 Avalanche (P) cores. QEMU runs with `-M virt,gic-version=3
-  -accel kvm -cpu host`. Guests are arm64 only.
-- **Installed:** QEMU 11.1, AAVMF (with secboot/ms variants), `virtiofsd`, and
-  `qemu-system-modules-opengl`, which ships `ui-dbus.so`.
-- **In forky, not installed:** `podman` 5.8, `docker.io` 28.5, `docker-compose` 2.40,
-  `passt`, `swtpm`.
-- **Host pages are 16K.** Some arm64 images built with a 4K-page jemalloc crash in native
-  containers.
+- **Architectures:** `bande-vm` is arm64-only so far: `-M virt,gic-version=3 -accel kvm -cpu
+  host`, AAVMF and arm64 cloud images. amd64, the primary architecture, is milestone V6.
+- **In forky:** QEMU 11.1, AAVMF and OVMF (with secboot/ms variants), `virtiofsd`,
+  `qemu-system-modules-opengl` (which ships `ui-dbus.so`), `podman` 5.8, `docker.io` 28.5,
+  `docker-compose` 2.40, `passt`, `swtpm`.
 
 ## Scope (the brief's sections → v1)
 
@@ -370,7 +365,6 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
   - Storage folder (`$XDG_DATA_HOME/bande/velox/vms`, Change…; it never silently recreates
     missing disks).
   - Defaults for new machines (CPUs, memory, disk).
-  - "Pin to performance cores" (default on if V0 says so).
 - **About:** Velox's About comes from `bande-app`. Copy Diagnostics (versions, engine,
   readiness) goes in Help.
 
@@ -393,12 +387,12 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
   shell; names and labels are data.
 - **Disks:** never mutate a disk a running VM has attached, and never `cache=unsafe`.
 
-## Performance targets (measured on the mini with `bande-background` and the bench scripts)
+## Performance targets (measured on the build machine with `bande-background` and the bench scripts)
 
 - **Idle:** 0 wake-ups/s, both with a static window and windowless. Windowless private memory
   ≤ 4 MB, as Terminal's 3.4 MB.
 - **Responsiveness:** first list of 100 containers ≤ 150 ms; 1,000 rows scroll smoothly.
-- **Console:** 0 % CPU when still; 1080p at 60 fps ≤ 5 % of a P-core with shared memory, about
+- **Console:** 0 % CPU when still; 1080p at 60 fps ≤ 5 % of a core with shared memory, about
   0 with dmabuf.
 - **VMs:** Debian genericcloud boots to SSH ≤ 8 s; virtio-blk IOPS within 10 % of libvirt's
   defaults; snapshot save/load of 4 GB ≤ 5 s.
@@ -420,16 +414,12 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
     accessibility tree shows both not-ready lines and their Copy buttons.
   - One parser test for chunked decoding plus stream framing.
 
-## V0 findings (2026-11-02, mini, QEMU 11.1.2, passt 2026-10-02, Debian 13 genericcloud)
+## V0 findings (arm64 host, QEMU 11.1.2, passt 2026-10-02, Debian 13 genericcloud guest)
 
-- **KVM over SSH (solved since):** `/dev/kvm` is `root:kvm 0660` plus a uaccess ACL for the
-  seated session, and the seat had only the greeter, so an SSH session gets `EACCES`. The
-  spike ran on **TCG** (`-accel tcg,thread=multi,tb-size=256 -cpu max,pauth-impdef=on`).
-  KVM needs the owner's seated session, or `kvm` group membership for SSH-only use (owner's
-  call). `Accel::detect()` picks KVM when `/dev/kvm` opens read-write.
-- **TCG times (4 vCPU, 2 GiB):** QEMU initialised (unit active + QMP greeting) in 0.08–0.2 s;
-  the first boot with cloud-init took 69 s to "Cloud-init finished" and SSH; a warm boot took
-  36–72 s to multi-user (load-dependent). The ≤ 8 s target needs a KVM measurement.
+- **KVM over SSH:** `/dev/kvm` is `root:kvm 0660` plus a uaccess ACL for the seated session,
+  so an SSH session with only the greeter on the seat gets `EACCES`. KVM needs the seated
+  session, or `kvm` group membership for SSH-only use. `Accel::detect()` picks KVM when
+  `/dev/kvm` opens read-write, TCG otherwise.
 - **Snapshots (internal, qcow2 disk + qcow2 vars):** `snapshot-save` with 0.9 GB of dirty RAM
   took 0.35–0.9 s, `snapshot-load` 0.4–2.2 s (TCG), and `snapshot-delete` ~15 ms. RAM state
   really reverts: a file written after the save was gone after the load, and SSH reconnects
@@ -452,33 +442,6 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 - **systemd** emits every `ActiveState` change twice, plus an `inactive` when a transient
   unit loads; `UnitEvents` drops repeats. `system_powerdown` ends the unit cleanly (passt
   exits with `--one-off`), and so does `systemctl --user stop` (QEMU exits on SIGTERM).
-- **PMU (from the kernel source, `arch/arm64/kvm/pmu-emul.c`; not measured):** the M2 PMU is
-  IMPDEF, and KVM spoofs a minimal PMUv3 through `ARM64_WORKAROUND_PMUV3_IMPDEF_TRAPS`, so
-  `-cpu host` keeps `pmu=on`. QEMU sets no PMU type, so KVM takes the PMU of the core where the
-  vCPU was initialised and lets vCPUs run on both clusters. Guest counters just stop on the
-  other cluster, which is harmless.
-- **Core pinning:** none by default. Pinning to the P-cores (CPUs 4–7) would only keep guest
-  perf counters steady and would starve the desktop. Revisit if a KVM run shows guest timer
-  trouble.
-- **highmem:** left at QEMU's default. The guest under TCG saw 4 vCPUs (`CPU part 0x051`, `max`)
-  and booted UEFI from qcow2 vars. Under KVM, QEMU clamps the high regions to the host IPA
-  size by itself, which is unconfirmed until a KVM run.
-- **First KVM run (2026-11-02, bande-vm's own argv, QEMU run through `sg kvm` because the
-  lingering user manager predates the owner's `kvm` group):**
-  - Time to SSH: **21.9 s** on the first boot with cloud-init, **16.5 s** warm (4 vCPU, 4 GiB,
-    Debian 13). The guest's kernel + userspace take 7.1 s (`systemd-analyze`), so ~9 s go to
-    QEMU, AAVMF and GRUB before the kernel. The ≤ 8 s target is not met; the next step is to
-    time the firmware and try a shorter UEFI path (boot order, GRUB timeout, direct kernel).
-  - Guest `dmesg`: PMU `armv8_pmuv3_0` with 2 counters (KVM's spoofed PMUv3); `arch_timer`
-    virtual timer at 24 MHz; GICv3 with ITS, a redistributor per vCPU; PSCI 1.3; vCPUs report
-    MIDR `0x611f0320` (Blizzard, the E-core where they were initialised). One
-    `hrtimer: interrupt took 12 ms` at boot, nothing else.
-  - E/P migration: with 4 busy guest vCPUs, the vCPU threads were moved between CPUs 0–3 and
-    4–7 every 0.5 s for 60 s (116 moves): no new guest messages, no fault, and the guest clock
-    stayed within SSH latency of the host's. No pinning needed.
-  - highmem: QEMU drops the high PCIe window for the M2's IPA size by itself; the guest has only
-    the 32-bit window `0x10000000–0x3efeffff` and RAM above 4 GiB (`0x47ff0000–0x13fffffff`).
-    Fine for virtio; large BARs (virtio-gpu blobs at V3) will need a check.
 - **passt and AppArmor:** Debian's `passt` profile only lets it write under `/tmp`, `/var/tmp`
   and `$HOME`, so a socket in `$XDG_RUNTIME_DIR` fails with `EACCES` (the spike used an
   unconfined copy). bande-vm keeps passt's socket and pid file in a private
@@ -493,6 +456,7 @@ There is also Reclaim Space… (File). Disabled items stay visible, as on macOS.
 | # | Repo | What | Done when |
 |---|---|---|---|
 | V5 | apps | Left of V5: a Windows 11 ARM install checked end to end | a Windows 11 ARM ISO installs with no manual flags |
+| V6 | apps, libs/vm | amd64 hosts: `q35`, OVMF (`ovmf`, `qemu-system-x86`), amd64 cloud images and the matching install steps and `Suggests` | the catalog's images and an ISO boot under KVM on amd64, and the targets above are measured there |
 | A7 | apps | Velox extras: Ctrl+K palette, crash notifications (`bande-notify`), optional status item via the tray with the background mode (as Calendar's) | each off by default and measured at 0 wake-ups while idle |
 
 Done and merged: A1–A4, V0, V1, D1 (`SurfaceView`), D2 (`Graph`), V3 and V4. D4 needs no widget of
@@ -506,31 +470,21 @@ swtpm and Secure Boot firmware for Windows, and gpgv-checked vendor checksums.
   so the firmware installs from it and later boots the disk; Settings ▸ Eject drops it. No seed.
 - **Windows 11 preset:** `AAVMF_CODE.ms.fd` with Microsoft keys enrolled in the vars, `ramfb` for
   the picture (Windows has no virtio-gpu driver), NVMe for the disk, `tpm-tis-device` on swtpm. No
-  network driver during setup (virtio-win is a separate download). Not run: no Windows ISO and no
-  swtpm on the mini.
+  network driver during setup (virtio-win is a separate download). Not run yet.
 - **Helpers:** swtpm and virtiofsd run in their own transient units, started before QEMU and
   waited for by their socket; they exit with QEMU. A machine with shared folders cannot take
   snapshots (vhost-user-fs does not migrate).
 - **Checksums:** Ubuntu's `SHA256SUMS.gpg` and Fedora's clearsigned `CHECKSUM` are checked with
   `gpgv` against the vendor keys in `libs/vm/data`. Debian publishes no signature beside
   `latest/SHA512SUMS`, so Debian stays HTTPS-only.
-
-Measured on the mini (KVM, Debian 13 generic, 4 vCPU, 4 GiB):
-- **Boot to SSH: 8.4 s** from the unit's start (firmware 0.7 s, GRUB and kernel load 1.6 s, Linux to
-  login 5.8 s). AAVMF waited 5 s for a boot key until `-boot menu=on,splash-time=0`.
-- **Snapshots:** saving 2.3 GB of dirty memory took 4.6 s, loading it 8.8 s; Suspend took 8.7 s and
-  resuming to SSH 10.2 s with 2.7 GB in use.
-- **3D:** glmark2-es2 (off-screen, DRM) scores 899 with virgl on the M2 GPU against 127 with the guest's
-  llvmpipe, about 7×. Showing the 3D picture needs a compositor that imports the host GPU's dmabufs;
-  the headless lab (lavapipe) cannot, so Velox says so instead of being dropped by the compositor.
-- Not measured: 1080p at 60 fps and a release build's cost (a debug build used about 1.7 % of a core
-  with a still guest and the main window open).
+- **Boot menu:** AAVMF waited 5 s for a boot key until `-boot menu=on,splash-time=0`.
+- **3D:** showing the 3D picture needs a compositor that imports the host GPU's dmabufs; the
+  headless lab (lavapipe) cannot, so Velox says so instead of being dropped by the compositor.
 - **Guest resize:** the guest is offered the window's size as its preferred mode (`SetUIInfo`);
   GNOME and KDE apply it, Xfce needs `xrandr --auto`. QEMU's own vdagent sends no monitor
   configuration, so `spice-vdagent` cannot apply it either.
 
-D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor. **Kernel: none.** If V0 hits a guest timer, PMU or vGIC
-fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
+D3 (desktop): the theme icon, with A1; the app ships the same SVG for hicolor.
 
 ## Audit against macOS Velox and VMware Workstation Pro (2026-11-07)
 
@@ -560,10 +514,6 @@ fault, it becomes a held topic in `kernel/patches/<series>/held/kvm/`.
 
 ## Risks
 
-- **16K host pages:** some arm64 images crash in native containers. Name the cause in the error.
-  A later fix is a 4K "container VM" (as Asahi's muvm).
-- **P/E core migration** may confuse guests; pin to P-cores if V0 shows a problem.
-- **Partial vGIC and Apple PMU** may need non-default QEMU options; V0 settles them.
 - **Internal snapshots with UEFI** need the vars as qcow2; internal snapshots grow files, so
   delete must discard.
 - **`qemu-display` maturity and zbus skew:** fall back to our own bindings.

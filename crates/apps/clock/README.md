@@ -45,11 +45,9 @@ timerfds, which need `CAP_WAKE_ALARM`; an app does not have it (`EPERM`), so it 
 transient systemd user timer (`bande-clock-wake-*.timer`) at the next alarm or timer end, which
 starts `bande-clock --background` should the agent not be running. Debian's user manager holds
 `CAP_WAKE_ALARM`, so where an RTC has a wake alarm (`/sys/class/rtc/*/wakealarm`) the timer gets
-`WakeSystem=true` and wakes the computer from sleep. On the M2 Mac mini it cannot: the
-`macsmc-rtc` RTC has no wake alarm, so a `WakeSystem=true` timer fails to start there
-(`Failed to add realtime event source: Operation not supported`) and Clock leaves it out; sleep is
-masked there for now anyway (`HARDWARE-GAPS.md`). After a resume the alarms and timers whose time
-passed ring at once.
+`WakeSystem=true` and wakes the computer from sleep. Without one, a `WakeSystem=true` timer fails
+to start (`Failed to add realtime event source: Operation not supported`), so Clock leaves it out.
+After a resume the alarms and timers whose time passed ring at once.
 
 ## Layout
 

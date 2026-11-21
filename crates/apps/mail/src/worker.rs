@@ -691,8 +691,23 @@ impl Runner {
         replaces: Option<&Original>,
     ) -> Result<()> {
         let sent = self.store.mailbox_with_role(self.account.id, Role::Sent)?;
-        if let Some(sent) = sent.filter(|_| !saves_sent_mail(&self.account.imap.host)) {
-            match self.session()?.append(&sent.path, &[Flag::Seen], raw) {
+        if let Some(sent) = sent {
+            let filed = match message_id(raw) {
+                Some(id) => match self.session()?.holds(&sent.path, &id) {
+                    Err(error) if error.is_connection() => return Err(error),
+                    Err(error) => {
+                        tracing::warn!("cannot look for {id} in {}: {error}", sent.path);
+                        false
+                    }
+                    Ok(filed) => filed,
+                },
+                None => false,
+            };
+            let kept = match filed {
+                true => Ok(()),
+                false => self.session()?.append(&sent.path, &[Flag::Seen], raw),
+            };
+            match kept {
                 Err(error) if error.is_connection() => return Err(error),
                 Err(error) => tracing::warn!("cannot keep a copy in {}: {error}", sent.path),
                 Ok(()) => {}
@@ -715,9 +730,13 @@ impl Runner {
     }
 }
 
-fn saves_sent_mail(host: &str) -> bool {
-    let host = host.to_ascii_lowercase();
-    host == "imap.gmail.com" || host.ends_with(".googlemail.com")
+fn message_id(raw: &[u8]) -> Option<String> {
+    use mailparse::MailHeaderMap;
+    let (headers, _) = mailparse::parse_headers(raw).ok()?;
+    headers
+        .get_first_value("Message-ID")
+        .map(|id| id.trim().to_owned())
+        .filter(|id| !id.is_empty())
 }
 
 struct Idle {

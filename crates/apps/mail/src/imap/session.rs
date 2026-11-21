@@ -448,6 +448,19 @@ impl Session {
             .collect())
     }
 
+    pub fn holds(&mut self, path: &str, message_id: &str) -> Result<bool> {
+        let Some(id) = quote(message_id) else {
+            return Ok(false);
+        };
+        self.select(path)?;
+        let reply = self.run(&format!("UID SEARCH HEADER Message-ID {id}"))?;
+        Ok(reply
+            .data
+            .iter()
+            .filter(|values| values.first().is_some_and(|word| word.is_atom("SEARCH")))
+            .any(|values| values.len() > 1))
+    }
+
     fn fetch(&mut self, uids: &[u32], items: &str) -> Result<Vec<Fetched>> {
         let mut found = Vec::new();
         for set in uid_sets(uids) {

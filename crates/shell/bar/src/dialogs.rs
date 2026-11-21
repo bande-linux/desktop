@@ -554,10 +554,7 @@ pub fn run_about() -> Result<(), Box<dyn std::error::Error>> {
         size: (0, 0),
     };
     about.refit();
-    let mut window = Window::open(
-        Role::utility(&tr!("About"), DIALOGS),
-        about.size,
-    )?;
+    let mut window = Window::open(Role::utility(&tr!("About"), DIALOGS), about.size)?;
     about.ui = about_ui(&facts, window.appearance());
     about.refit();
     bande_toolkit::run(&mut window, &mut about)?;

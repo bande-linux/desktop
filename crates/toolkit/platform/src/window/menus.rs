@@ -81,11 +81,8 @@ impl Window {
         ];
         if self.can_place() {
             items.push(
-                MenuItem::submenu(
-                    &tr!("Tile"),
-                    Menu::new(self.move_and_resize_items()),
-                )
-                .enabled(!toplevel.fullscreen),
+                MenuItem::submenu(&tr!("Tile"), Menu::new(self.move_and_resize_items()))
+                    .enabled(!toplevel.fullscreen),
             );
         }
         if self.can_keep_on_top() {

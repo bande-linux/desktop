@@ -258,9 +258,7 @@ impl PreviewPane {
             }
             let subtitle = match (&hit.target, &clip) {
                 (Target::Path(path), _) => Some(state.catalog.kind(path, hit.kind == Kind::Folder)),
-                (Target::Settings(_), _) => {
-                    hit.detail.clone().or_else(|| Some(tr!("Settings")))
-                }
+                (Target::Settings(_), _) => hit.detail.clone().or_else(|| Some(tr!("Settings"))),
                 (Target::Clip(_), Some(clip)) => Some(clip_description(clip, content)),
                 _ => hit.detail.clone(),
             };

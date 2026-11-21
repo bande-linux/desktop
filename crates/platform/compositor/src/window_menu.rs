@@ -290,8 +290,7 @@ impl State {
         }
         items.extend([
             MenuItem::separator(),
-            item(tr!("Restore Size"), "place-restore")
-                .enabled(window.tile.is_some() || zoomed),
+            item(tr!("Restore Size"), "place-restore").enabled(window.tile.is_some() || zoomed),
         ]);
         items
     }

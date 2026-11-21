@@ -228,7 +228,9 @@ impl ForceQuitView {
         let text = &mut self.ui.context().text;
         let hint = paragraph(
             text,
-            &tr!("When an app stops responding, choose it and click Force Quit to close it. Anything unsaved in it is lost."),
+            &tr!(
+                "When an app stops responding, choose it and click Force Quit to close it. Anything unsaved in it is lost."
+            ),
             TextStyle::role(TextRole::Callout, palette.ink2),
             text_width,
         );

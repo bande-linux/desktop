@@ -127,11 +127,8 @@ pub fn window_submenu(items: Vec<Entry>, zoomable: bool, full_screen: Option<boo
     let mut entries = vec![
         Entry::item(&tr!("Minimize"), Standard::Minimize.action())
             .shortcut(&keys_of(Action::MinimizeWindow).unwrap_or_default()),
-        Entry::item(
-            &tr!("Maximize"),
-            Standard::Zoom.action(),
-        )
-        .enabled(zoomable && full_screen != Some(true)),
+        Entry::item(&tr!("Maximize"), Standard::Zoom.action())
+            .enabled(zoomable && full_screen != Some(true)),
         Entry::item(&full_screen_label, Standard::FullScreen.action())
             .shortcut(FULL_SCREEN)
             .enabled(full_screen.is_some()),

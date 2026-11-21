@@ -733,7 +733,7 @@ what the one before could not save. What happens for each:
   apps?" before anything starts (`bande-shell --reopen-after-crash`, summoned by the compositor;
   the list stays until answered). An app that crashes posts "<App> quit unexpectedly"
   ([behaviour](behaviour.md)).
-- **The record**: every failure leaves one report, which stays on this computer unless sending is switched on, and Settings ▸ Privacy & Security ▸ Diagnostics shows which applies ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`; `bande-desktop` sets `DefaultLimitCORE=infinity` for the user manager, since the soft limit is
+- **The record**: every failure of a Bande program leaves one report, which stays on this computer unless sending is switched on, and Settings ▸ Privacy & Security ▸ Diagnostics shows which applies ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`; `bande-desktop` sets `DefaultLimitCORE=infinity` for the user manager, since the soft limit is
   otherwise 0 and no dump is stored. The programs that hold passwords
   (`bande-lock`, `bande-greeter`, `bande-polkit`, `bande-secrets`, `bande-clipboard`) are not dumpable, so
   only their panic text is recorded. Force Quit of a not-responding app sends

@@ -322,7 +322,7 @@ impl PaneId {
             Self::Storage => tr!("disk, drive, space, ssd"),
             Self::SoftwareUpdate => tr!("updates, upgrade, packages, apt, debian"),
             Self::Diagnostics => tr!(
-                "crash, crashes, freeze, hang, quit unexpectedly, kernel panic, core dump, log, diagnostics, report, send, bug, privacy"
+                "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, privacy"
             ),
             Self::SendReport => {
                 tr!("bug, report, problem, freeze, crash, feedback, send, diagnose")
@@ -1965,7 +1965,7 @@ fn system_panes() -> Vec<Pane> {
             PaneId::Diagnostics,
             vec![section(
                 None,
-                vec![list(SettingId::DiagnosticsList, tr!("Reports"), tr!("crash, crashes, freeze, hang, quit unexpectedly, kernel panic, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"),
+                vec![list(SettingId::DiagnosticsList, tr!("Reports"), tr!("crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"),
                     List::Diagnostics,
                 )],
             )],

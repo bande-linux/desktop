@@ -1,0 +1,22 @@
+#!/bin/bash
+# The installed desktop entries, metainfo and units validate, each app's program names itself,
+# and the session's user units load.
+set -euo pipefail
+mapfile -t ours < <(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande libpam-bande-secrets)
+mapfile -t desktops < <(dpkg -L "${ours[@]}" | grep -E '^/usr/share/applications/.*\.desktop$')
+desktop-file-validate "${desktops[@]}"
+mapfile -t metainfos < <(dpkg -L "${ours[@]}" | grep -E '^/usr/share/metainfo/.*\.xml$')
+appstreamcli validate --no-net "${metainfos[@]}"
+for package in "${ours[@]}"; do
+    if dpkg -L "$package" | grep -q '^/usr/share/applications/.*\.desktop$' && [ -x "/usr/bin/$package" ]; then
+        "/usr/bin/$package" --version | grep -q "^$package " || { echo "$package --version does not name $package"; exit 1; }
+    fi
+done
+grep -qx 'DesktopNames=X-Bande' /usr/share/wayland-sessions/bande.desktop
+sh -n /usr/bin/bande-session
+mapfile -t units < <(dpkg -L "${ours[@]}" | grep -E '^/usr/lib/systemd/user/[^/]+\.(service|socket|timer|path|target)$')
+[ -z "$(grep -l 'WantedBy=graphical-session.target' "${units[@]}" || true)" ]
+findings=$(XDG_RUNTIME_DIR=$AUTOPKGTEST_TMP SYSTEMD_LOG_LEVEL=warning systemd-analyze --user verify "${units[@]}" 2>&1) || true
+echo "$findings"
+test -z "$findings"
+echo "the desktop entries, metainfo and units validate"

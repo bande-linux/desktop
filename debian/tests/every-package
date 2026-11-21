@@ -1,0 +1,40 @@
+#!/bin/bash
+# Every package installs at the one version, brings every program and file the desktop needs
+# without its recommends, and the installed compositor serves Wayland clients.
+set -euo pipefail
+version=$(dpkg-query -W -f '${Version}' bande-desktop)
+for package in $(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande libpam-bande-secrets); do
+    installed=$(dpkg-query -W -f '${db:Status-Status} ${Version}' "$package" 2>/dev/null || true)
+    [ "$installed" = "installed $version" ] || [ -z "${installed%%not-installed*}" ] ||
+        { echo "$package is $installed, bande-desktop is $version"; exit 1; }
+done
+
+while read -r item package kind; do
+    [ "$kind" = depends ] || [ "$kind" = required ] || continue
+    case $item in
+        /*) test -e "$item" ;;
+        *) command -v "$item" > /dev/null ;;
+    esac || { echo "$item from $package is missing without recommends"; exit 1; }
+done < ci/runtime-deps
+
+apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
+    while read -r recommended; do
+        [ -n "$recommended" ] || continue
+        candidate=$(apt-cache policy "$recommended" | sed -n 's/^ *Candidate: //p')
+        [ -n "$candidate" ] && [ "$candidate" != "(none)" ] || { echo "$recommended cannot be installed"; exit 1; }
+    done
+
+mapfile -t ours < <(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande)
+for program in $(dpkg -L "${ours[@]}" 2>/dev/null | grep -E '^/usr/(bin|libexec)/.'); do
+    [ -d "$program" ] || test -x "$program" || { echo "$program is not executable"; exit 1; }
+done
+test -e /usr/share/wayland-sessions/bande.desktop
+
+XDG_RUNTIME_DIR=$(mktemp -d)
+export XDG_RUNTIME_DIR
+status=0
+timeout 10 bande-compositor --headless > "$AUTOPKGTEST_TMP/compositor.out" 2>&1 || status=$?
+cat "$AUTOPKGTEST_TMP/compositor.out"
+[ "$status" = 124 ]
+grep -q '^WAYLAND_DISPLAY=wayland-' "$AUTOPKGTEST_TMP/compositor.out"
+echo "every package installs at $version"

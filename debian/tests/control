@@ -1,0 +1,23 @@
+Tests: desktop
+Depends: bande-desktop
+Restrictions: needs-root, breaks-testbed, allow-stderr
+
+Tests: every-package
+Depends: @
+Restrictions: needs-root, allow-stderr
+
+Tests: display-manager
+Depends: bande-desktop, lightdm, bsdutils, debconf
+Restrictions: needs-root, breaks-testbed, allow-stderr
+
+Tests: services
+Depends: bande-config, bande-compositor, dbus-daemon, dbus-bin
+Restrictions: allow-stderr
+
+Tests: portal
+Depends: xdg-desktop-portal-bande, bande-config, xdg-desktop-portal, dbus-daemon, dbus-bin
+Restrictions: isolation-container, allow-stderr
+
+Tests: metadata
+Depends: @, desktop-file-utils, appstream, systemd
+Restrictions: allow-stderr

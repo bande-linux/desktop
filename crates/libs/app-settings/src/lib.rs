@@ -122,6 +122,11 @@ impl<S: Stored> SettingsWindow<S> {
         self.settings.borrow().clone()
     }
 
+    /// The window's controls, for presenting a sheet over them.
+    pub fn ui_mut(&mut self) -> &mut Ui {
+        &mut self.ui
+    }
+
     pub fn follow(&mut self, appearance: Appearance) -> bool {
         let Some(folder) = &self.folder else {
             return false;

@@ -47,4 +47,4 @@ if [ -n "$still_pinned" ]; then
     exit 1
 fi
 echo "== cargo $*"
-cargo "${patches[@]}" "$@"
+cargo "$1" "${patches[@]}" "${@:2}"

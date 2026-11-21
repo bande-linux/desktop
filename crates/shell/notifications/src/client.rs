@@ -9,7 +9,7 @@ use bande_datetime::DateFormats;
 
 use crate::{Request, Screen, Sender};
 use bande_inbox::{Inbox, Outbox};
-use bande_notify::client::NotificationCenter;
+use bande_notify::client::NotificationsProxy;
 use bande_notify::{BUS_NAME, Picture, Presentation};
 use bande_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Radius, Rect, Role, Scene,
@@ -235,7 +235,7 @@ impl App for Notifications {
                     .set_appearance(appearance.palette(), appearance.reduce_motion, now);
                 window.request_redraw();
             }
-            WindowEvent::TogglePanel(Panel::NotificationCenter) => {
+            WindowEvent::TogglePanel(Panel::Notifications) => {
                 self.screen.set_today(bande_datetime::now().date(), now);
                 self.screen.toggle(now);
                 self.carry_out(window);
@@ -256,7 +256,7 @@ impl App for Notifications {
                 self.carry_out(window);
             }
             WindowEvent::PanelAnchor {
-                panel: Panel::NotificationCenter,
+                panel: Panel::Notifications,
                 edge,
                 rect,
                 ..
@@ -310,7 +310,7 @@ impl App for Notifications {
 }
 
 fn follow(connection: &Connection, outbox: &Outbox<Message>) -> zbus::Result<()> {
-    let center = NotificationCenter::new(connection)?;
+    let center = NotificationsProxy::new(connection)?;
     let changes = center.receive_presentation_changed()?;
     outbox.send(Message::Presentation(Presentation::from_wire(
         center.get_presentation()?,
@@ -343,7 +343,7 @@ fn follow_while_present(connection: &Connection, outbox: &Outbox<Message>) -> zb
 }
 
 fn serve(connection: &Connection, outgoing: &Receiver<Outgoing>, outbox: &Outbox<Message>) {
-    let center = match NotificationCenter::new(connection) {
+    let center = match NotificationsProxy::new(connection) {
         Ok(center) => center,
         Err(error) => {
             tracing::warn!("cannot reach the notification daemon: {error}");

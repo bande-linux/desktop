@@ -23,8 +23,8 @@ the part today.
 | Input menu | The short name of the active input source (SV, EN), with more than one source | `Slot::InputSource` |
 | Quick Settings button | One button with the Wi-Fi, Sound, Bluetooth and Battery glyphs; a click opens Quick Settings | `Slot::QuickSettings`, `Slot::Wifi`… |
 | Quick Settings | The panel the button opens | crate `bande-quick-settings` |
-| Clock | Time over the short day, with a notification dot or a Do Not Disturb moon; a click opens Notification Center | `Slot::Clock`, `ClockMark` |
-| Notification Center | The sheet of notifications beside the taskbar | crate `bande-notifications` |
+| Clock | Time over the short day, with a notification dot or a Do Not Disturb moon; a click opens Notifications | `Slot::Clock`, `ClockMark` |
+| Notifications | The sheet of notifications beside the taskbar | crate `bande-notifications` |
 | Position | The Taskbar's edge, set in Settings ▸ Taskbar; there is no separate menu bar | `BarEdge`, `bar { edge }` |
 | App Switcher | The row of apps on Alt+Tab | `switcher` |
 | Overview | All windows of the active workspace, and the workspaces | `overview` |

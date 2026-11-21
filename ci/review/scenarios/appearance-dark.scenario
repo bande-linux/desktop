@@ -24,7 +24,7 @@ key escape
 wait 500ms
 key super+n
 wait 1200ms
-shot "dark notification center"
+shot "dark notifications"
 key escape
 wait 800ms
 key super+s

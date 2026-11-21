@@ -10,8 +10,6 @@ msgstr ""
 msgid "Minimize the window"
 msgstr "Minimise the window"
 
-msgid "Open or close the Notification Center"
-msgstr "Open or close the Notification Centre"
 
 msgid "Open or close Quick Settings"
 msgstr "Open or close Quick Settings"

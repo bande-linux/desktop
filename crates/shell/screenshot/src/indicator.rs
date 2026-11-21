@@ -1,5 +1,5 @@
 use bande_graphics::{Point, Rect, Shape};
-use bande_notify::client::NotificationCenter;
+use bande_notify::client::NotificationsProxy;
 use zbus::blocking::Connection;
 use zbus::zvariant::OwnedObjectPath;
 
@@ -104,7 +104,7 @@ impl Indicator {
         )?;
         Watcher::new(&connection)?.register_status_notifier_item(PATH)?;
         if let Err(error) =
-            NotificationCenter::new(&connection).and_then(|center| center.quiet_while_connected())
+            NotificationsProxy::new(&connection).and_then(|center| center.quiet_while_connected())
         {
             tracing::warn!("cannot keep notification banners away from the shared screen: {error}");
         }

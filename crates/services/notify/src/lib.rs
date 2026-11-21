@@ -27,7 +27,7 @@ pub use picture::{MAX_PICTURE, Picture};
 pub use wire::{WireNotification, WirePresentation, WireStack};
 
 pub const BUS_NAME: &str = "org.freedesktop.Notifications";
-pub const CENTER_BUS_NAME: &str = "org.bande.NotificationCenter";
+pub const BANDE_BUS_NAME: &str = "org.bande.Notifications";
 pub const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 pub const SPEC_VERSION: &str = "1.2";
 const APPS_FILE: &str = "notification-apps";
@@ -316,12 +316,12 @@ impl NotificationServer {
         )?;
         center_connection.object_server().at(
             OBJECT_PATH,
-            NotificationCenter {
+            BandeNotifications {
                 shared: Arc::clone(&shared),
                 notifications: connection.inner().clone(),
             },
         )?;
-        center_connection.request_name(CENTER_BUS_NAME)?;
+        center_connection.request_name(BANDE_BUS_NAME)?;
         connection.request_name(BUS_NAME)?;
         let timer = Arc::clone(&shared);
         let timer_connection = connection.clone();
@@ -356,7 +356,7 @@ impl NotificationServer {
             shared.set_do_not_disturb(on);
             let announced = center
                 .object_server()
-                .interface::<_, NotificationCenter>(OBJECT_PATH)
+                .interface::<_, BandeNotifications>(OBJECT_PATH)
                 .and_then(|interface| {
                     zbus::block_on(
                         interface
@@ -403,7 +403,7 @@ fn publish(presented: &Receiver<Presentation>, connection: &Connection) {
             presentation = newer;
         }
         let wire = presentation.to_wire();
-        if let Err(error) = zbus::block_on(NotificationCenter::presentation_changed(&emitter, wire))
+        if let Err(error) = zbus::block_on(BandeNotifications::presentation_changed(&emitter, wire))
         {
             tracing::warn!("cannot publish the notifications on screen: {error}");
         }
@@ -589,19 +589,19 @@ impl Notifications {
     ) -> zbus::Result<()>;
 }
 
-struct NotificationCenter {
+struct BandeNotifications {
     shared: Arc<Shared>,
     notifications: zbus::Connection,
 }
 
-impl NotificationCenter {
+impl BandeNotifications {
     fn notifications(&self) -> zbus::Result<SignalEmitter<'static>> {
         SignalEmitter::new(&self.notifications, OBJECT_PATH)
     }
 }
 
-#[zbus::interface(name = "org.bande.NotificationCenter")]
-impl NotificationCenter {
+#[zbus::interface(name = "org.bande.Notifications")]
+impl BandeNotifications {
     #[zbus(property)]
     fn do_not_disturb(&self) -> bool {
         self.shared.lock().center.do_not_disturb()

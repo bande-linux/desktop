@@ -318,8 +318,8 @@ Depends: ${shlibs:Depends},
 Provides: notification-daemon
 Description: Bande notification daemon (org.freedesktop.Notifications)
  Serves org.freedesktop.Notifications (specification 1.2) on the session
- bus, and the Notification Center under its own name,
- org.bande.NotificationCenter, so that apps allowed to post notifications
+ bus, and Notifications under its own name,
+ org.bande.Notifications, so that apps allowed to post notifications
  cannot read or dismiss others'. The bus starts it on the first
  notification through D-Bus activation.
 
@@ -484,8 +484,8 @@ Description: Bande backend for xdg-desktop-portal
  (colour scheme, accent colour, folder icons and Reduce Motion from
  config.kdl, so GTK, libadwaita and Qt apps follow them), the Bande Open
  and Save dialogs, Open With for links and files, permission questions,
- screenshots and screen sharing, the wallpaper, notifications through the
- Bande Notification Center, keeping the screen or the computer awake,
+ screenshots and screen sharing, the wallpaper, notifications through Bande
+ Notifications, keeping the screen or the computer awake,
  writing email in the default mail app, running in the background, adding
  web apps to Applications, sharing the account's name and picture, and a
  key in the Bande keyring for each sandboxed app's own passwords. No GTK
@@ -677,7 +677,7 @@ Description: Bande shell: the desktop, the bar, notifications and the launcher
  their badges and progress, the Trash, the system menu, the active app
  with its menus, the status notifier items of apps, Bluetooth, sound,
  Wi-Fi and battery, Quick Settings and the clock, which opens the
- Notification Center. It also shows notification banners, Quick Settings
+ Notifications. It also shows notification banners, Quick Settings
  with the volume and brightness HUD, and the launcher that a tap of Super
  opens to find apps, files and answers. bande-compositor starts it and
  keeps it running. It installs the Bande wallpapers, which the lock

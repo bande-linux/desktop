@@ -39,14 +39,8 @@ msgstr "Empty Bin…"
 msgid "Turn on Night Light to make the colors warmer at night."
 msgstr "Turn on Night Light to make the colours warmer at night."
 
-msgid "Notification Center only"
-msgstr "Notification Centre only"
 
-msgid "{banners} banners, Notification Center"
-msgstr "{banners} banners, Notification Centre"
 
-msgid "Show in Notification Center"
-msgstr "Show in Notification Centre"
 
 msgid "None (show colors as sent)"
 msgstr "None (show colours as sent)"

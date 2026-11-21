@@ -5,7 +5,7 @@ use bande_config::{
     SearchCategory,
 };
 use bande_datetime::DateFormats;
-use bande_notify::client::NotificationCenter;
+use bande_notify::client::NotificationsProxy;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
@@ -431,7 +431,7 @@ pub fn stop_speed(stop: u32) -> f64 {
 
 pub struct SettingsClient {
     config: ConfigProxyBlocking<'static>,
-    notifications: NotificationCenter<'static>,
+    notifications: NotificationsProxy<'static>,
 }
 
 impl SettingsClient {
@@ -440,7 +440,7 @@ impl SettingsClient {
             config: ConfigProxyBlocking::builder(connection)
                 .cache_properties(CacheProperties::No)
                 .build()?,
-            notifications: NotificationCenter::builder(connection)
+            notifications: NotificationsProxy::builder(connection)
                 .cache_properties(CacheProperties::No)
                 .build()?,
         })

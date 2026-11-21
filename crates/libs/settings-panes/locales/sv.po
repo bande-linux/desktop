@@ -139,8 +139,8 @@ msgstr "Ljust, mörkt eller automatiskt, dekorfärg, skrivbordsbild och textstor
 msgid "Where the taskbar sits and how it behaves"
 msgstr "Var aktivitetsfältet sitter och hur det beter sig"
 
-msgid "Banners and Notification Center"
-msgstr "Banners och Notiscenter"
+msgid "Banners and Notifications"
+msgstr "Banners och Notiser"
 
 msgid "What the launcher finds and which folders it leaves out"
 msgstr "Vad startaren hittar och vilka mappar den utesluter"
@@ -603,8 +603,8 @@ msgstr "Till"
 msgid "Application notifications"
 msgstr "Appnotiser"
 
-msgid "per app, apps, banners, alerts, allow notifications, persistent, notification center, block, silence an app"
-msgstr "per app, appar, banners, aviseringar, tillåt notiser, bestående, notiscenter, blockera, tysta en app"
+msgid "per app, apps, banners, alerts, allow notifications, persistent, notification list, block, silence an app"
+msgstr "per app, appar, banners, aviseringar, tillåt notiser, bestående, notislista, blockera, tysta en app"
 
 msgid "Search results"
 msgstr "Sökresultat"

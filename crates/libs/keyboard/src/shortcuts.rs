@@ -51,7 +51,7 @@ pub enum Action {
     ShowLauncher,
     ShowClipboardHistory,
     ShowEmojiPicker,
-    ShowNotificationCenter,
+    ShowNotifications,
     ShowQuickSettings,
     LockScreen,
     ForceQuit,
@@ -80,7 +80,7 @@ impl Action {
             Self::ShowLauncher
             | Self::ShowClipboardHistory
             | Self::ShowEmojiPicker
-            | Self::ShowNotificationCenter
+            | Self::ShowNotifications
             | Self::ShowQuickSettings
             | Self::LockScreen
             | Self::ForceQuit
@@ -109,7 +109,7 @@ impl Action {
             Self::ShowLauncher => tr!("Search and open apps"),
             Self::ShowClipboardHistory => tr!("Show what you copied recently"),
             Self::ShowEmojiPicker => tr!("Show emoji and symbols"),
-            Self::ShowNotificationCenter => tr!("Open or close the Notification Center"),
+            Self::ShowNotifications => tr!("Open or close Notifications"),
             Self::ShowQuickSettings => tr!("Open or close Quick Settings"),
             Self::LockScreen => tr!("Lock Screen"),
             Self::ForceQuit => tr!("Force Quit"),
@@ -253,7 +253,7 @@ pub const SHORTCUTS: [Shortcut; 26] = [
     shortcut(Action::ShowLauncher, SUPER, Key::Tap),
     shortcut(Action::ShowClipboardHistory, SUPER, Key::Character('v')),
     shortcut(Action::ShowEmojiPicker, SUPER, Key::Character('.')),
-    shortcut(Action::ShowNotificationCenter, SUPER, Key::Character('n')),
+    shortcut(Action::ShowNotifications, SUPER, Key::Character('n')),
     shortcut(Action::ShowQuickSettings, SUPER, Key::Character('s')),
     shortcut(Action::LockScreen, SUPER, Key::Character('l')),
     shortcut(Action::ForceQuit, CTRL_ALT, Key::Escape),

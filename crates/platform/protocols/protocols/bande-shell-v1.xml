@@ -332,7 +332,7 @@
 
     <enum name="panel">
       <entry name="quick_settings" value="0" summary="Quick Settings"/>
-      <entry name="notification_center" value="1" summary="the Notification Center"/>
+      <entry name="notifications" value="1" summary="Notifications"/>
     </enum>
 
     <enum name="edge">
@@ -461,7 +461,7 @@
     <event name="toggle_panel">
       <description summary="the user asked to open or close a panel">
         Sent to every shell client when the bar or a keyboard shortcut asks
-        for Quick Settings or the Notification Center. The client that draws
+        for Quick Settings or Notifications. The client that draws
         the panel opens it, or closes it when it is open; the client that
         draws the other panel closes it, so one panel is open at a time.
       </description>

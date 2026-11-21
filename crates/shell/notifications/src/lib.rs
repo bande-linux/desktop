@@ -411,7 +411,7 @@ impl Screen {
         let palette = self.palette;
         let mut rows = Vec::new();
         let title = self.text.paragraph(
-            &tr!("Notification Center"),
+            &tr!("Notifications"),
             TextStyle::role(TextRole::Heading, palette.ink),
             None,
             TextAlign::Start,

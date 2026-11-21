@@ -19,5 +19,13 @@ rustix = { workspace = true, features = ["fs", "net", "stdio", "thread"] }
 serde_json.workspace = true
 tracing.workspace = true
 
+[[bin]]
+name = "bande-reporter"
+path = "src/main.rs"
+
+[[bin]]
+name = "bande-diagnose"
+path = "src/bin/diagnose.rs"
+
 [lints]
 workspace = true

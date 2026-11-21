@@ -270,7 +270,9 @@ fn moved(event: &Event, offset: Point) -> Event {
 
 impl QuickSettings {
     fn notifications(&self) -> Option<NotificationsProxy<'_>> {
-        NotificationsProxy::new(self.session.as_ref()?).ok()
+        NotificationsProxy::new(self.session.as_ref()?)
+            .inspect_err(|error| tracing::warn!("cannot reach the notification centre: {error}"))
+            .ok()
     }
 
     fn set_light(&mut self, connector: String, level: f32) {

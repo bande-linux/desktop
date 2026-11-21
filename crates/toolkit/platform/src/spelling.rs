@@ -91,11 +91,11 @@ pub(crate) fn deliver() -> bool {
 }
 
 fn follow_changes(connection: Connection, replier: Replier) {
-    let Ok(proxy) = Proxy::new(&connection, BUS_NAME, OBJECT_PATH, BUS_NAME) else {
-        return;
-    };
-    let Ok(changes) = proxy.receive_signal("Changed") else {
-        return;
+    let changes = Proxy::new(&connection, BUS_NAME, OBJECT_PATH, BUS_NAME)
+        .and_then(|proxy| proxy.receive_signal("Changed"));
+    let changes = match changes {
+        Ok(changes) => changes,
+        Err(error) => return tracing::warn!("cannot follow spelling changes: {error}"),
     };
     for _ in changes {
         replier.send(SpellReply::Changed);
@@ -108,7 +108,11 @@ fn suggest(connection: Connection, word: String, replier: Replier) {
     thread::spawn(move || {
         let found = Proxy::new(&connection, BUS_NAME, OBJECT_PATH, BUS_NAME)
             .and_then(|proxy| proxy.call::<_, _, Vec<String>>("Suggest", &(&asked,)));
-        let _ = answer.send(found.unwrap_or_default());
+        let suggestions = found.unwrap_or_else(|error| {
+            tracing::warn!("cannot suggest spellings: {error}");
+            Vec::new()
+        });
+        let _ = answer.send(suggestions);
     });
     let suggestions = answered.recv_timeout(SUGGESTIONS_WAIT).unwrap_or_default();
     replier.send(SpellReply::Suggested(word, suggestions));
@@ -148,14 +152,18 @@ fn serve(requests: &Receiver<SpellRequest>, replier: &Replier) {
             SpellRequest::Correct(word, sentence_start) => {
                 let found = proxy
                     .call::<_, _, String>("Correction", &(&word, sentence_start))
-                    .unwrap_or_default();
+                    .unwrap_or_else(|error| {
+                        tracing::warn!("cannot correct a word: {error}");
+                        String::new()
+                    });
                 replier.send(SpellReply::Corrected(word, found));
             }
-            SpellRequest::Rules => {
-                if let Ok((rules, replacements)) = proxy.call("Rules", &()) {
+            SpellRequest::Rules => match proxy.call("Rules", &()) {
+                Ok((rules, replacements)) => {
                     replier.send(SpellReply::Rules(rules, replacements));
                 }
-            }
+                Err(error) => tracing::warn!("cannot read the spelling rules: {error}"),
+            },
             SpellRequest::Learn(word) => {
                 if let Err(error) = proxy.call::<_, _, ()>("Learn", &(&word,)) {
                     tracing::warn!("cannot learn a word: {error}");

@@ -284,19 +284,14 @@ impl State {
         self.keys.sticky(code, pressed, time)
     }
 
-    fn arm_slow_keys(&mut self) {
-        if self.keys.timer.is_none() {
-            let created = timerfd_create(
-                TimerfdClockId::Monotonic,
-                TimerfdFlags::NONBLOCK | TimerfdFlags::CLOEXEC,
-            );
-            let Ok(timer) = created else {
-                return;
-            };
-            let Ok(watched) = timer.try_clone() else {
-                return;
-            };
-            let inserted = self.blockers.insert_source(
+    fn slow_keys_timer(&mut self) -> std::io::Result<OwnedFd> {
+        let timer = timerfd_create(
+            TimerfdClockId::Monotonic,
+            TimerfdFlags::NONBLOCK | TimerfdFlags::CLOEXEC,
+        )?;
+        let watched = timer.try_clone()?;
+        self.blockers
+            .insert_source(
                 Generic::new(watched, Interest::READ, Mode::Level),
                 |_, timer, state: &mut State| {
                     let mut expirations = [0u8; 8];
@@ -304,11 +299,17 @@ impl State {
                     state.accept_slow_key();
                     Ok(PostAction::Continue)
                 },
-            );
-            if inserted.is_err() {
-                return;
+            )
+            .map_err(|error| std::io::Error::other(error.error))?;
+        Ok(timer)
+    }
+
+    fn arm_slow_keys(&mut self) {
+        if self.keys.timer.is_none() {
+            match self.slow_keys_timer() {
+                Ok(timer) => self.keys.timer = Some(timer),
+                Err(error) => return tracing::warn!("cannot create the slow keys timer: {error}"),
             }
-            self.keys.timer = Some(timer);
         }
         let Some(timer) = &self.keys.timer else {
             return;

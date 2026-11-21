@@ -11,18 +11,6 @@ const MIB: u64 = 1 << 20;
 const SMALLEST_FREE: u64 = 4 * MIB;
 const KELVIN: f64 = 273.15;
 const USER_MOUNTS: [&str; 3] = ["/media/", "/run/media/", "/mnt/"];
-const APPLE_DRIVE: &str = "APPLE SSD";
-const MACOS_TYPES: [&str; 3] = [
-    "7c3457ef-0000-11aa-aa11-00306543ecac",
-    "48465300-0000-11aa-aa11-00306543ecac",
-    "53746f72-6167-11aa-aa11-00306543ecac",
-];
-const APPLE_SYSTEM_TYPES: [&str; 4] = [
-    "69646961-6700-11aa-aa11-00306543ecac",
-    "52637672-7900-11aa-aa11-00306543ecac",
-    "426f6f74-0000-11aa-aa11-00306543ecac",
-    "5265636f-7665-11aa-aa11-00306543ecac",
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
@@ -35,12 +23,6 @@ pub enum Group {
 pub enum Scheme {
     Gpt,
     Mbr,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Apple {
-    MacOs,
-    System,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,7 +45,6 @@ pub struct Volume {
     pub encrypted: bool,
     pub locked: bool,
     pub mount_points: Vec<String>,
-    pub apple: Option<Apple>,
     pub in_use: bool,
     pub partition: bool,
 }
@@ -81,7 +62,6 @@ pub struct Disk {
     pub scheme: Option<Scheme>,
     pub smart: Option<Smart>,
     pub system: bool,
-    pub apple: bool,
     pub solid_state: bool,
     pub ejectable: bool,
     pub image: Option<String>,
@@ -112,24 +92,11 @@ fn system_mount(point: &str) -> bool {
     !USER_MOUNTS.iter().any(|root| point.starts_with(root))
 }
 
-fn apple_kind(objects: &Objects, block: &str, apple_drive: bool) -> Option<Apple> {
-    if !apple_drive {
-        return None;
-    }
-    let kind = objects.text(block, PARTITION, "Type").to_lowercase();
-    if APPLE_SYSTEM_TYPES.contains(&kind.as_str()) || !objects.has(block, PARTITION) {
-        return Some(Apple::System);
-    }
-    let macos =
-        MACOS_TYPES.contains(&kind.as_str()) || objects.text(block, BLOCK, "IdType") == "apfs";
-    macos.then_some(Apple::MacOs)
-}
-
 fn cleartext(objects: &Objects, block: &str) -> Option<String> {
     objects.path(block, ENCRYPTED, "CleartextDevice")
 }
 
-fn volume(objects: &Objects, block: &str, apple_drive: bool) -> Volume {
+fn volume(objects: &Objects, block: &str) -> Volume {
     let encrypted = objects.has(block, ENCRYPTED);
     let opened = cleartext(objects, block);
     let shown = opened.clone().unwrap_or_else(|| block.to_owned());
@@ -139,18 +106,13 @@ fn volume(objects: &Objects, block: &str, apple_drive: bool) -> Volume {
         .map(|path| objects.mount_points(path))
         .unwrap_or_default();
     let swapping = objects.flag(&shown, SWAPSPACE, "Active");
-    let apple = apple_kind(objects, block, apple_drive);
     let name = [
         objects.text(&shown, BLOCK, "IdLabel"),
         objects.text(block, PARTITION, "Name"),
     ]
     .into_iter()
-    .find(|name| !name.is_empty());
-    let name = match apple {
-        Some(Apple::MacOs) => tr!("macOS"),
-        Some(Apple::System) => name.unwrap_or_else(|| tr!("Apple system")),
-        None => name.unwrap_or_else(|| tr!("Untitled")),
-    };
+    .find(|name| !name.is_empty())
+    .unwrap_or_else(|| tr!("Untitled"));
     Volume {
         path: block.to_owned(),
         filesystem,
@@ -164,7 +126,6 @@ fn volume(objects: &Objects, block: &str, apple_drive: bool) -> Volume {
         locked: encrypted && opened.is_none(),
         in_use: swapping || mount_points.iter().any(|point| system_mount(point)),
         mount_points,
-        apple,
         partition: objects.has(block, PARTITION),
     }
 }
@@ -195,12 +156,11 @@ fn smart(objects: &Objects, drive: &str) -> Option<Smart> {
     })
 }
 
-fn connection(objects: &Objects, drive: &str, apple_drive: bool) -> String {
+fn connection(objects: &Objects, drive: &str) -> String {
     let key = match objects.text(drive, DRIVE, "ConnectionBus").as_str() {
         "usb" => text!("USB"),
         "sdio" => text!("Secure Digital"),
         "ieee1394" => text!("FireWire"),
-        _ if apple_drive => text!("Apple Fabric"),
         _ if objects.has(drive, NVME) => text!("PCI Express"),
         _ if objects.flag(drive, DRIVE, "Optical") => text!("ATAPI"),
         _ if objects.has(drive, ATA) => text!("SATA"),
@@ -243,7 +203,6 @@ fn disk(objects: &Objects, block: &str) -> Option<Disk> {
     }
     let drive = drive.unwrap_or_default();
     let model = objects.text(&drive, DRIVE, "Model");
-    let apple = model.starts_with(APPLE_DRIVE);
     let mut partitions: Vec<String> = objects
         .paths()
         .map(|path| path.to_string())
@@ -260,11 +219,11 @@ fn disk(objects: &Objects, block: &str) -> Option<Disk> {
             || objects.has(block, ENCRYPTED)
             || !objects.text(block, BLOCK, "IdUsage").is_empty());
     let volumes: Vec<Volume> = match whole {
-        true => vec![volume(objects, block, apple)],
+        true => vec![volume(objects, block)],
         false => partitions
             .iter()
             .filter(|path| !objects.flag(path, PARTITION, "IsContainer"))
-            .map(|path| volume(objects, path, apple))
+            .map(|path| volume(objects, path))
             .collect(),
     };
     let free = match scheme {
@@ -309,12 +268,11 @@ fn disk(objects: &Objects, block: &str) -> Option<Disk> {
         serial: objects.text(&drive, DRIVE, "Serial"),
         connection: match &image {
             Some(_) => tr!("Disk Image"),
-            None => connection(objects, &drive, apple),
+            None => connection(objects, &drive),
         },
         scheme,
         smart: smart(objects, &drive),
         system: volumes.iter().any(|volume| volume.in_use),
-        apple,
         solid_state: objects.get::<i32>(&drive, DRIVE, "RotationRate") == Some(0),
         ejectable,
         image,
@@ -370,7 +328,7 @@ impl Disk {
     }
 
     pub fn protected(&self) -> bool {
-        self.system || self.apple
+        self.system
     }
 
     pub fn whole_volume(&self) -> Option<&Volume> {
@@ -403,7 +361,7 @@ impl Volume {
     }
 
     pub fn protected(&self) -> bool {
-        self.in_use || self.apple.is_some()
+        self.in_use
     }
 
     pub fn mounted(&self) -> bool {

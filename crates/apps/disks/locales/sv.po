@@ -7,23 +7,23 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Linux (ext4)"
-msgstr "Linux (ext4)"
+msgid "ext4"
+msgstr "ext4"
 
-msgid "Linux (ext4, Encrypted)"
-msgstr "Linux (ext4, krypterad)"
+msgid "ext4, Encrypted"
+msgstr "ext4, krypterad"
 
-msgid "ExFAT"
-msgstr "ExFAT"
+msgid "exFAT"
+msgstr "exFAT"
 
-msgid "MS-DOS (FAT32)"
-msgstr "MS-DOS (FAT32)"
+msgid "FAT32"
+msgstr "FAT32"
 
-msgid "Windows NT (NTFS)"
-msgstr "Windows NT (NTFS)"
+msgid "NTFS"
+msgstr "NTFS"
 
-msgid "The volume has errors that First Aid couldn’t repair. Back up its data and erase it."
-msgstr "Volymen har fel som Första hjälpen inte kunde reparera. Säkerhetskopiera dess data och radera den."
+msgid "The volume has errors that couldn’t be repaired. Back up its data and erase it."
+msgstr "Volymen har fel som inte kunde repareras. Säkerhetskopiera dess data och radera den."
 
 msgid "The operation was stopped."
 msgstr "Åtgärden stoppades."
@@ -55,8 +55,8 @@ msgstr "Öppna skivavbildning…"
 msgid "Image from Selection…"
 msgstr "Avbildning från markering…"
 
-msgid "First Aid…"
-msgstr "Första hjälpen…"
+msgid "Check and Repair…"
+msgstr "Kontrollera och reparera…"
 
 msgid "Add Partition…"
 msgstr "Lägg till partition…"
@@ -82,12 +82,6 @@ msgstr "Mata ut"
 msgid "File"
 msgstr "Arkiv"
 
-msgid "macOS"
-msgstr "macOS"
-
-msgid "Apple system"
-msgstr "Apple-system"
-
 msgid "Untitled"
 msgstr "Namnlös"
 
@@ -99,9 +93,6 @@ msgstr "Secure Digital"
 
 msgid "FireWire"
 msgstr "FireWire"
-
-msgid "Apple Fabric"
-msgstr "Apple Fabric"
 
 msgid "PCI Express"
 msgstr "PCI Express"
@@ -121,23 +112,20 @@ msgstr "Skivavbildning"
 msgid "{name} ({device}, {size})"
 msgstr "{name} ({device}, {size})"
 
-msgid "Linux ({kind})"
-msgstr "Linux ({kind})"
-
-msgid "MS-DOS (FAT)"
-msgstr "MS-DOS (FAT)"
+msgid "FAT"
+msgstr "FAT"
 
 msgid "APFS"
 msgstr "APFS"
 
-msgid "Mac OS Extended"
-msgstr "Mac OS Extended"
+msgid "HFS+"
+msgstr "HFS+"
 
 msgid "Encrypted (LUKS)"
 msgstr "Krypterad (LUKS)"
 
-msgid "Linux Swap"
-msgstr "Linux-växlingsutrymme"
+msgid "Swap"
+msgstr "Växlingsutrymme"
 
 msgid "ISO 9660"
 msgstr "ISO 9660"
@@ -178,8 +166,8 @@ msgstr "Volymen hade fel som har reparerats."
 msgid "The volume appears to be OK."
 msgstr "Volymen verkar vara i ordning."
 
-msgid "First Aid process has completed."
-msgstr "Första hjälpen är klar."
+msgid "The repair has finished."
+msgstr "Reparationen är klar."
 
 msgid "Creating an image of {name}…"
 msgstr "Skapar en avbildning av {name}…"
@@ -247,8 +235,8 @@ msgstr "Radera {name}?"
 msgid "Erasing {target} will permanently delete all data stored on it. You can’t undo this action."
 msgstr "Om du raderar {target} raderas alla data på den permanent. Du kan inte ångra det här."
 
-msgid "GUID Partition Map"
-msgstr "GUID-partitionsschema"
+msgid "GUID Partition Table"
+msgstr "GUID-partitionstabell"
 
 msgid "Master Boot Record"
 msgstr "Master Boot Record"
@@ -289,14 +277,14 @@ msgstr "Välj en ny storlek för {target}, upp till {largest}."
 msgid "Resize"
 msgstr "Ändra storlek"
 
-msgid "Run First Aid on {name}?"
-msgstr "Köra Första hjälpen på {name}?"
+msgid "Check and repair {name}?"
+msgstr "Kontrollera och reparera {name}?"
 
-msgid "First Aid checks the volume for errors and repairs them. The volume is unmounted while it runs and mounted again afterwards."
-msgstr "Första hjälpen söker efter fel på volymen och reparerar dem. Volymen avmonteras medan det pågår och monteras igen efteråt."
+msgid "Disks checks the volume for errors and repairs them. The volume is unmounted while this runs and mounted again afterwards."
+msgstr "Skivor söker efter fel på volymen och reparerar dem. Volymen avmonteras medan det pågår och monteras igen efteråt."
 
-msgid "First Aid checks the volume for errors and repairs them."
-msgstr "Första hjälpen söker efter fel på volymen och reparerar dem."
+msgid "Disks checks the volume for errors and repairs them."
+msgstr "Skivor söker efter fel på volymen och reparerar dem."
 
 msgid "Run"
 msgstr "Kör"
@@ -364,8 +352,8 @@ msgstr "Ändrar storlek på {name}…"
 msgid "Checking the file system…"
 msgstr "Kontrollerar filsystemet…"
 
-msgid "First Aid process has failed."
-msgstr "Första hjälpen misslyckades."
+msgid "The repair has failed."
+msgstr "Reparationen misslyckades."
 
 msgid "Couldn’t rename the volume."
 msgstr "Det gick inte att byta namn på volymen."
@@ -448,9 +436,6 @@ msgstr "Drifttimmar:"
 msgid "Access:"
 msgstr "Åtkomst:"
 
-msgid "Apple system (read-only)"
-msgstr "Apple-system (skrivskyddad)"
-
 msgid "Startup disk (read-only)"
 msgstr "Startskiva (skrivskyddad)"
 
@@ -478,9 +463,6 @@ msgstr "Tillgängligt:"
 msgid "UUID:"
 msgstr "UUID:"
 
-msgid "macOS (read-only)"
-msgstr "macOS (skrivskyddad)"
-
 msgid "In use (read-only)"
 msgstr "Används (skrivskyddad)"
 
@@ -490,8 +472,8 @@ msgstr "+"
 msgid "−"
 msgstr "−"
 
-msgid "First Aid"
-msgstr "Första hjälpen"
+msgid "Repair"
+msgstr "Reparera"
 
 msgid "Partition"
 msgstr "Partitionera"

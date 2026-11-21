@@ -6,7 +6,7 @@ use std::rc::Rc;
 use bande_l10n::{Text, text, tr};
 
 use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report};
-use crate::model::{Apple, Disk, Group, Model, Scheme, Selected, Volume};
+use crate::model::{Disk, Group, Model, Scheme, Selected, Volume};
 use crate::size::parse_size;
 use crate::widgets::{
     CapacityBar, Closable, Heading, InfoGrid, Root, SIDEBAR_WIDTH, Segment, TOOLBAR_HEIGHT, symbol,
@@ -25,7 +25,6 @@ const DISK_SYMBOL: &str = include_str!("../data/symbols/disk.svg");
 const EXTERNAL_SYMBOL: &str = include_str!("../data/symbols/external.svg");
 const VOLUME_SYMBOL: &str = include_str!("../data/symbols/volume.svg");
 const IMAGE_SYMBOL: &str = include_str!("../data/symbols/image.svg");
-const APPLE_SYMBOL: &str = include_str!("../data/symbols/apple.svg");
 const SIDEBAR_PIXELS: u32 = 32;
 const HEADING_PIXELS: u32 = 96;
 const TITLE_INSET: f32 = 16.0;
@@ -48,7 +47,7 @@ pub const ERASE: &str = "erase";
 pub const ADD_PARTITION: &str = "add-partition";
 pub const DELETE_PARTITION: &str = "delete-partition";
 pub const RESIZE: &str = "resize";
-pub const FIRST_AID: &str = "first-aid";
+pub const REPAIR: &str = "repair";
 pub const RENAME: &str = "rename";
 pub const RESTORE: &str = "restore";
 pub const IMAGE_FROM: &str = "image-from";
@@ -60,7 +59,7 @@ pub const COMMANDS: [&str; 11] = [
     ADD_PARTITION,
     DELETE_PARTITION,
     RESIZE,
-    FIRST_AID,
+    REPAIR,
     RENAME,
     RESTORE,
     IMAGE_FROM,
@@ -102,7 +101,7 @@ enum Sheet {
     Delete(String),
     Resize(String),
     Rename(String),
-    FirstAid(String),
+    Repair(String),
     Unlock(String),
     Restore(String, PathBuf),
     Stop,
@@ -181,15 +180,15 @@ fn described(name: &str, device: &str, size: u64) -> String {
 pub fn format_name(volume: &Volume) -> String {
     let key = match volume.fs_type.as_str() {
         "ext4" | "ext3" | "ext2" => {
-            return tr!("Linux ({kind})", kind = volume.fs_type.as_str());
+            return volume.fs_type.clone();
         }
-        "vfat" => text!("MS-DOS (FAT)"),
-        "exfat" => text!("ExFAT"),
-        "ntfs" => text!("Windows NT (NTFS)"),
+        "vfat" => text!("FAT"),
+        "exfat" => text!("exFAT"),
+        "ntfs" => text!("NTFS"),
         "apfs" => text!("APFS"),
-        "hfsplus" => text!("Mac OS Extended"),
+        "hfsplus" => text!("HFS+"),
         "crypto_LUKS" => text!("Encrypted (LUKS)"),
-        "swap" => text!("Linux Swap"),
+        "swap" => text!("Swap"),
         "iso9660" => text!("ISO 9660"),
         "" => text!("Not formatted"),
         other => return other.to_owned(),
@@ -439,7 +438,7 @@ impl DisksView {
                             true => text!("The volume had errors that were repaired."),
                             false => text!("The volume appears to be OK."),
                         };
-                        self.notice(&tr!("First Aid process has completed."), &message.tr());
+                        self.notice(&tr!("The repair has finished."), &message.tr());
                     }
                     (Ok(Outcome::Done), Some((title, message))) => self.notice(&title, &message),
                     (Ok(Outcome::Done), None) | (Err(Failure::Dismissed), _) => {}
@@ -568,9 +567,7 @@ impl DisksView {
         };
         let usable: Vec<&&Volume> = volumes
             .iter()
-            .filter(|volume| {
-                volume.apple.is_none() && (volume.filesystem.is_some() || volume.encrypted)
-            })
+            .filter(|volume| volume.filesystem.is_some() || volume.encrypted)
             .collect();
         if usable.iter().any(|volume| volume.mounted()) {
             if usable.iter().any(|volume| volume.in_use) {
@@ -621,7 +618,7 @@ impl DisksView {
             }
             ADD_PARTITION => {
                 disk.is_some_and(|disk| {
-                    !disk.apple && disk.scheme.is_some() && disk.largest_free().is_some()
+                    disk.scheme.is_some() && disk.largest_free().is_some()
                 }) && !self.abilities.formats.is_empty()
             }
             DELETE_PARTITION => {
@@ -638,7 +635,7 @@ impl DisksView {
                                 || self.abilities.can_resize(&volume.fs_type, false, false))
                     })
             }
-            FIRST_AID => volume.is_some_and(|(_, volume)| {
+            REPAIR => volume.is_some_and(|(_, volume)| {
                 volume.filesystem.is_some()
                     && !volume.protected()
                     && self.abilities.check.contains(&volume.fs_type)
@@ -691,7 +688,7 @@ impl DisksView {
             (ADD_PARTITION, Some(disk), _) => self.ask_add(&disk),
             (DELETE_PARTITION, _, Some(volume)) => self.ask_delete(&volume),
             (RESIZE, Some(disk), Some(volume)) => self.ask_resize(&disk, &volume),
-            (FIRST_AID, _, Some(volume)) => self.ask_first_aid(&volume),
+            (REPAIR, _, Some(volume)) => self.ask_repair(&volume),
             (RENAME, _, Some(volume)) => self.ask_rename(&volume),
             (RESTORE, Some(disk), _) if whole_disk => self
                 .requests
@@ -784,7 +781,7 @@ impl DisksView {
             FormLine::Row(tr!("Format"), boxed(self.formats_popup(true))),
         ];
         if whole_disk {
-            let schemes = [tr!("GUID Partition Map"), tr!("Master Boot Record")];
+            let schemes = [tr!("GUID Partition Table"), tr!("Master Boot Record")];
             let popup = PopUpButton::new(&tr!("Scheme"), &schemes, 0, |_| {});
             self.fields.scheme = Some(popup.id());
             lines.push(FormLine::Row(tr!("Scheme"), boxed(popup)));
@@ -869,22 +866,22 @@ impl DisksView {
         );
     }
 
-    fn ask_first_aid(&mut self, volume: &Volume) {
+    fn ask_repair(&mut self, volume: &Volume) {
         let Some(filesystem) = volume.filesystem.clone() else {
             return;
         };
-        let title = tr!("Run First Aid on {name}?", name = quoted(&volume.name));
+        let title = tr!("Check and repair {name}?", name = quoted(&volume.name));
         let message = match volume.mounted() {
             true => tr!(
-                "First Aid checks the volume for errors and repairs them. The volume is unmounted while it runs and mounted again afterwards."
+                "Disks checks the volume for errors and repairs them. The volume is unmounted while this runs and mounted again afterwards."
             ),
-            false => tr!("First Aid checks the volume for errors and repairs them."),
+            false => tr!("Disks checks the volume for errors and repairs them."),
         };
         self.ui.present_sheet(
             Alert::new(
                 &title,
                 &message,
-                choice(&self.intents, Sheet::FirstAid(filesystem)),
+                choice(&self.intents, Sheet::Repair(filesystem)),
             )
             .cancel(&tr!("Cancel"), "cancel")
             .primary(&tr!("Run"), "run"),
@@ -1158,14 +1155,14 @@ impl DisksView {
                     false,
                 );
             }
-            (Sheet::FirstAid(filesystem), "run") => {
+            (Sheet::Repair(filesystem), "run") => {
                 let title = tr!("Checking the file system…");
                 let done = (String::new(), String::new());
                 self.start(
-                    Job::FirstAid(filesystem),
+                    Job::Repair(filesystem),
                     &title,
                     done,
-                    text!("First Aid process has failed."),
+                    text!("The repair has failed."),
                     false,
                 );
             }
@@ -1244,13 +1241,6 @@ impl DisksView {
         }
     }
 
-    fn volume_symbol(volume: &Volume) -> &'static str {
-        match volume.apple {
-            Some(_) => APPLE_SYMBOL,
-            None => VOLUME_SYMBOL,
-        }
-    }
-
     fn sidebar_rows(&self) -> (Vec<Row>, Vec<SidebarHeading>, Vec<String>) {
         let mut rows = Vec::new();
         let mut headings = Vec::new();
@@ -1266,7 +1256,7 @@ impl DisksView {
                 .volumes
                 .iter()
                 .map(|volume| {
-                    let icon = self.icon(Self::volume_symbol(volume), SIDEBAR_PIXELS);
+                    let icon = self.icon(VOLUME_SYMBOL, SIDEBAR_PIXELS);
                     Row::new(
                         volume.key(),
                         vec![Cell::new(volume.name.clone()).icon(icon)],
@@ -1286,17 +1276,13 @@ impl DisksView {
         (rows, headings, expanded)
     }
 
-    fn color(&self, index: usize, apple: bool) -> Color {
-        let accent = match apple {
-            true => Accent::Graphite,
-            false => SEGMENT_ACCENTS[index % SEGMENT_ACCENTS.len()],
-        };
-        accent.color(self.palette.scheme)
+    fn color(&self, index: usize) -> Color {
+        SEGMENT_ACCENTS[index % SEGMENT_ACCENTS.len()].color(self.palette.scheme)
     }
 
     fn disk_detail(&self, disk: &Disk) -> Vec<Box<dyn Widget>> {
         let scheme = match disk.scheme {
-            Some(Scheme::Gpt) => tr!("GUID Partition Map"),
+            Some(Scheme::Gpt) => tr!("GUID Partition Table"),
             Some(Scheme::Mbr) => tr!("Master Boot Record"),
             None => tr!("No Partition Map"),
         };
@@ -1317,7 +1303,7 @@ impl DisksView {
                 name: volume.name.clone(),
                 detail: format_size(volume.size),
                 size: volume.size,
-                color: self.color(index, volume.apple.is_some()),
+                color: self.color(index),
             })
             .collect();
         let free: u64 = disk.free.iter().map(|(_, size)| size).sum();
@@ -1365,9 +1351,7 @@ impl DisksView {
                 pairs.push((tr!("Power-on hours:"), hours.to_string()));
             }
         }
-        if disk.apple {
-            pairs.push((tr!("Access:"), tr!("Apple system (read-only)")));
-        } else if disk.system {
+        if disk.system {
             pairs.push((tr!("Access:"), tr!("Startup disk (read-only)")));
         }
         vec![
@@ -1399,7 +1383,7 @@ impl DisksView {
                     name: tr!("Used"),
                     detail: format_size(volume.size.saturating_sub(available)),
                     size: volume.size.saturating_sub(available),
-                    color: self.color(0, volume.apple.is_some()),
+                    color: self.color(0),
                 },
                 Segment {
                     name: tr!("Free"),
@@ -1412,7 +1396,7 @@ impl DisksView {
                 name: volume.name.clone(),
                 detail: format_size(volume.size),
                 size: volume.size,
-                color: self.color(0, volume.apple.is_some()),
+                color: self.color(0),
             }],
         };
         let mount_point = match (volume.mount_points.first(), volume.locked) {
@@ -1434,17 +1418,12 @@ impl DisksView {
         if !volume.uuid.is_empty() {
             pairs.push((tr!("UUID:"), volume.uuid.clone()));
         }
-        match (volume.apple, volume.in_use) {
-            (Some(Apple::MacOs), _) => pairs.push((tr!("Access:"), tr!("macOS (read-only)"))),
-            (Some(Apple::System), _) => {
-                pairs.push((tr!("Access:"), tr!("Apple system (read-only)")))
-            }
-            (None, true) => pairs.push((tr!("Access:"), tr!("In use (read-only)"))),
-            (None, false) => {}
+        if volume.in_use {
+            pairs.push((tr!("Access:"), tr!("In use (read-only)")));
         }
         vec![
             boxed(Heading::new(
-                self.icon(Self::volume_symbol(volume), HEADING_PIXELS),
+                self.icon(VOLUME_SYMBOL, HEADING_PIXELS),
                 &volume.name,
                 &subtitle,
                 &format_size(volume.size),
@@ -1469,7 +1448,7 @@ impl DisksView {
         vec![
             tool(tr!("+"), ADD_PARTITION),
             tool(tr!("−"), DELETE_PARTITION),
-            tool(tr!("First Aid"), FIRST_AID),
+            tool(tr!("Repair"), REPAIR),
             tool(tr!("Partition"), partition),
             tool(tr!("Erase"), ERASE),
             tool(tr!("Restore"), RESTORE),

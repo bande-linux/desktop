@@ -12,19 +12,18 @@ use bande_volumes::udisks::Objects;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 const UD: &str = "/org/freedesktop/UDisks2";
-const APFS: &str = "7c3457ef-0000-11aa-aa11-00306543ecac";
 const OBJECTS: &str = "
-drives/APPLE Drive:Model=APPLE_SSD_AP0256Z NVMe.Controller:SmartCriticalWarning=
+drives/SSD Drive:Vendor=Samsung,Model=SSD_990_PRO NVMe.Controller:SmartCriticalWarning=
 drives/USB Drive:Vendor=SanDisk,Model=Ultra,Ejectable=true,ConnectionBus=usb
-block_devices/nvme0n1 Block:PreferredDevice=/dev/nvme0n1,Drive=APPLE,Size=250 PartitionTable:Type=gpt
-block_devices/nvme0n1p2 Block:PreferredDevice=/dev/nvme0n1p2,Drive=APPLE,Size=114,IdType=apfs Partition:Table=nvme0n1,Offset=1,Size=114,Type=APFS
-block_devices/nvme0n1p6 Block:PreferredDevice=/dev/nvme0n1p6,Drive=APPLE,Size=100,IdType=ext4 Partition:Table=nvme0n1,Offset=115,Size=100 Filesystem:MountPoints=/
-block_devices/nvme0n1p7 Block:PreferredDevice=/dev/nvme0n1p7,Drive=APPLE,Size=20,IdType=ext4 Partition:Table=nvme0n1,Offset=215,Size=20 Filesystem:MountPoints=
+block_devices/nvme0n1 Block:PreferredDevice=/dev/nvme0n1,Drive=SSD,Size=250 PartitionTable:Type=gpt
+block_devices/nvme0n1p1 Block:PreferredDevice=/dev/nvme0n1p1,Drive=SSD,Size=1,IdType=vfat Partition:Table=nvme0n1,Offset=0,Size=1 Filesystem:MountPoints=/boot/efi
+block_devices/nvme0n1p2 Block:PreferredDevice=/dev/nvme0n1p2,Drive=SSD,Size=200,IdType=ext4 Partition:Table=nvme0n1,Offset=1,Size=200 Filesystem:MountPoints=/
+block_devices/nvme0n1p3 Block:PreferredDevice=/dev/nvme0n1p3,Drive=SSD,Size=20,IdType=ext4 Partition:Table=nvme0n1,Offset=201,Size=20 Filesystem:MountPoints=
 block_devices/sda Block:PreferredDevice=/dev/sda,Drive=USB,Size=32 PartitionTable:Type=gpt
 block_devices/sda1 Block:PreferredDevice=/dev/sda1,Drive=USB,Size=31,IdType=vfat,IdLabel=STICK Partition:Table=sda,Offset=1,Size=31 Filesystem:MountPoints=/media/anna/STICK";
 
 fn value(key: &str, text: &str) -> OwnedValue {
-    let text = text.replace('_', " ").replace("APFS", APFS);
+    let text = text.replace('_', " ");
     let value = match key {
         "Size" | "Offset" => Value::from(text.parse::<u64>().unwrap() * 1_000_000_000),
         "Ejectable" => Value::from(text == "true"),
@@ -72,7 +71,7 @@ fn shown(view: &mut DisksView) -> String {
 }
 
 #[test]
-fn the_startup_disk_and_macos_stay_untouchable_while_a_usb_stick_is_erased_and_ejected() {
+fn the_startup_disk_stays_untouchable_while_a_usb_stick_is_erased_and_ejected() {
     let mut view = DisksView::new(Appearance::default());
     view.set_abilities(Abilities {
         formats: vec![Format::Ext4, Format::ExFat],
@@ -83,9 +82,9 @@ fn the_startup_disk_and_macos_stay_untouchable_while_a_usb_stick_is_erased_and_e
     for expected in [
         "Internal",
         "External",
-        "macOS",
+        "Samsung SSD 990 PRO",
         "SanDisk Ultra",
-        "Apple Fabric",
+        "PCI Express",
         "Verified",
     ] {
         assert!(listed.contains(expected), "{expected} is not shown");
@@ -94,8 +93,8 @@ fn the_startup_disk_and_macos_stay_untouchable_while_a_usb_stick_is_erased_and_e
     let key = |kind: &str, name: &str| format!("{kind}:{UD}/block_devices/{name}");
     for (kind, name) in [
         ("disk", "nvme0n1"),
+        ("volume", "nvme0n1p1"),
         ("volume", "nvme0n1p2"),
-        ("volume", "nvme0n1p6"),
     ] {
         view.select(&key(kind, name));
         assert!(
@@ -105,10 +104,10 @@ fn the_startup_disk_and_macos_stay_untouchable_while_a_usb_stick_is_erased_and_e
         view.command(ERASE);
         assert!(!view.ui_ref().has_sheet() && view.take_requests().is_empty());
     }
-    view.select(&key("volume", "nvme0n1p7"));
+    view.select(&key("volume", "nvme0n1p3"));
     view.command(ERASE);
     let asked = shown(&mut view);
-    assert!(asked.contains("(/dev/nvme0n1p7, 20 GB)") && asked.contains("started up from"));
+    assert!(asked.contains("(/dev/nvme0n1p3, 20 GB)") && asked.contains("started up from"));
 
     view.select(&key("disk", "sda"));
     view.command(ERASE);

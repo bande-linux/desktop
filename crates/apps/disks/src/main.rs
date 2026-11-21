@@ -8,7 +8,7 @@ use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_disks::{
-    ADD_PARTITION, Abilities, DELETE_PARTITION, DisksView, EJECT, ERASE, FIRST_AID, IMAGE_FROM,
+    ADD_PARTITION, Abilities, DELETE_PARTITION, DisksView, EJECT, ERASE, REPAIR, IMAGE_FROM,
     MOUNT, Model, OPEN_IMAGE, RENAME, RESIZE, RESTORE, Report, Request, SIDEBAR_WIDTH, Worker,
 };
 use bande_l10n::tr;
@@ -206,7 +206,7 @@ impl Program for Disks {
         ];
         let edit = edit_submenu(vec![
             Entry::separator(),
-            self.item(cx, tr!("First Aid…"), FIRST_AID),
+            self.item(cx, tr!("Check and Repair…"), REPAIR),
             self.item(cx, tr!("Add Partition…"), ADD_PARTITION),
             self.item(cx, tr!("Delete Partition…"), DELETE_PARTITION),
             self.item(cx, tr!("Resize Partition…"), RESIZE),

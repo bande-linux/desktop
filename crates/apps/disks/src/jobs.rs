@@ -55,11 +55,11 @@ impl Format {
 
     pub fn title(self) -> String {
         match self {
-            Self::Ext4 => tr!("Linux (ext4)"),
-            Self::Ext4Encrypted => tr!("Linux (ext4, Encrypted)"),
-            Self::ExFat => tr!("ExFAT"),
-            Self::Fat32 => tr!("MS-DOS (FAT32)"),
-            Self::Ntfs => tr!("Windows NT (NTFS)"),
+            Self::Ext4 => tr!("ext4"),
+            Self::Ext4Encrypted => tr!("ext4, Encrypted"),
+            Self::ExFat => tr!("exFAT"),
+            Self::Fat32 => tr!("FAT32"),
+            Self::Ntfs => tr!("NTFS"),
         }
     }
 
@@ -138,7 +138,7 @@ pub enum Job {
         size: u64,
         grow: bool,
     },
-    FirstAid(String),
+    Repair(String),
     Rename(String, String),
     CreateImage(String, PathBuf),
     Restore(String, PathBuf),
@@ -347,7 +347,7 @@ fn resize(system: &Connection, partition: &str, size: u64, grow: bool) -> Result
     remount(system, &unmounted)
 }
 
-fn first_aid(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> {
+fn repair(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> {
     let unmounted = release(system, &[filesystem.to_owned()])?;
     let consistent: bool = call(system, filesystem, FILESYSTEM, "Check", &(none(),))?
         .body()
@@ -362,7 +362,7 @@ fn first_aid(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> 
     match consistent || repaired {
         true => Ok(Outcome::Checked { repaired }),
         false => Err(Failure::Failed(tr!(
-            "The volume has errors that First Aid couldn’t repair. Back up its data and erase it."
+            "The volume has errors that couldn’t be repaired. Back up its data and erase it."
         ))),
     }
 }
@@ -578,7 +578,7 @@ fn perform(
             size,
             grow,
         } => resize(system, &partition, size, grow)?,
-        Job::FirstAid(filesystem) => return first_aid(system, &filesystem),
+        Job::Repair(filesystem) => return repair(system, &filesystem),
         Job::Rename(filesystem, label) => {
             call(
                 system,

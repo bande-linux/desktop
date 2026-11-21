@@ -37,11 +37,11 @@ extended-description = """\
 Disks shows the computer's internal and external disks, their \
 partitions and volumes and the disk images that are open, with their \
 capacity, format, connection and S.M.A.R.T. health. It mounts, unmounts and \
-ejects them, erases and partitions disks, checks and repairs volumes with \
-First Aid, renames volumes, creates and restores disk images and writes an \
-image to a USB drive. Every change goes through UDisks2 and asks for \
-authorization. The disk the computer started up from and Apple's own \
-partitions on a Mac are shown read-only."""
+ejects them, erases and partitions disks, checks and repairs volumes, \
+renames volumes, creates and restores disk images and writes an image to a \
+USB drive. Every change goes through UDisks2 and asks for authorization. \
+The disk the computer started up from and the volumes the system uses are \
+shown read-only."""
 assets = [
     ["target/release/bande-disks", "usr/bin/", "755"],
     ["data/org.bande.Disks.desktop", "usr/share/applications/", "644"],

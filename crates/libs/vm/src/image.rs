@@ -67,7 +67,7 @@ macro_rules! arch {
 
 const CATALOG: &[CloudImage] = &[
     CloudImage {
-        os: "Debian 13",
+        os: "Debian 13 (trixie)",
         url: concat!(
             "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-",
             arch!(debian),

@@ -432,9 +432,11 @@ every display manager's maintainer scripts keep the two in step with the debconf
   chooses it. Next to another display manager the existing choice is preselected, so a
   non-interactive install keeps it.
 - `dpkg-reconfigure bande-greeter` (or any display manager's package) switches.
-- Removing `bande-greeter` while it is chosen asks for another installed display manager
-  (non-interactively the first one, greetd itself if nothing else) and links it; with none
-  left, the link goes and the computer starts to the text console.
+- Removing `bande-greeter` while it is chosen asks at critical priority for another installed
+  display manager, preselecting one other than greetd (greetd's own greeter only if nothing
+  else is installed), and links it; with none left, the link goes and the computer starts to
+  the text console. Only these scripts touch the link: `deb-systemd-helper`, whose purge
+  removes an alias whatever it points to, never manages `bande-greeter.service`.
 - Another greetd configuration for the login window: `systemctl edit bande-greeter` and set
   `ExecStart=` and a new `ExecStart=/usr/sbin/greetd --config …`.
 

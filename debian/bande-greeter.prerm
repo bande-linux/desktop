@@ -13,8 +13,11 @@ if { [ "$1" = remove ] || [ "$1" = deconfigure ]; } && [ -e /usr/share/debconf/c
 	. /usr/share/debconf/confmodule
 	db_unregister $question || true
 	if db_metaget $question owners; then
-		db_subst $question choices "$RET"
+		owners=$RET
+		db_subst $question choices "$owners"
 		if [ "$(chosen_daemon)" = /usr/bin/bande-greeter ]; then
+			preferred=$(echo "$owners" | tr -d ' ' | tr ',' '\n' | grep -vx greetd | head -n 1)
+			db_set $question "${preferred:-greetd}"
 			db_fset $question seen false
 			db_input critical $question || true
 			db_go || true
@@ -36,6 +39,10 @@ if { [ "$1" = remove ] || [ "$1" = deconfigure ]; } && [ -e /usr/share/debconf/c
 		fi
 	fi
 	db_stop
+fi
+
+if [ "$1" = remove ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
+	deb-systemd-invoke stop bande-greeter.service > /dev/null || true
 fi
 
 #DEBHELPER#

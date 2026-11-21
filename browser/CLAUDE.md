@@ -9,7 +9,7 @@
 4. **Security updates come first**: a new Debian upload must reach users fast. Never hold one for a feature.
 5. **Licences**: patches to MPL files are MPL 2.0, keeping their headers. Never ship Firefox's name or logo as ours; the branding is `branding/`, with "based on Mozilla Firefox source code" kept. `Firefox` stays in the User-Agent for site compatibility.
 6. **Pure Wayland**: `cairo-gtk3-wayland-only`; GTK is a dependency we don't extend. Prefer portals over GTK where a seam exists.
-7. **Behaviour bar is macOS, looks are Bande's**: `~/bande-linux/repos/desktop/docs/design/datum.md` is the reference. Theme CSS stays in `theme/` and is small enough to throw away.
+7. **Behaviour and looks are Bande's**: the desktop's `docs/design/datum.md` is the reference. Theme CSS stays in `theme/` and is small enough to throw away.
 8. **Small docs**: update docs with the change, delete finished plans. No dated logs.
 9. **Scripts**: no comments beyond a usage header; event-driven where anything waits.
 
@@ -17,6 +17,6 @@
 - Build through `build-run` with `BUILD_NO_MINI=1` and `scripts/local-build.sh`; see `README.md`. Use a temporary `HOME` for anything that runs the browser.
 
 ## Workflow
-- Trunk-based: `main` builds. Work on a short branch from `main`, merge when it builds and passes the checks. Never force-push or rewrite history: `apps/browser` pins old commits of this repository.
+- Trunk-based: `main` builds. Work on a short branch from `main`, merge when it builds and passes the checks. Never force-push or rewrite history.
 - Commit messages: one brief line saying what the commit does. No body, no trailers.
 - Don't push tags or dispatch workflows unless the owner asks.

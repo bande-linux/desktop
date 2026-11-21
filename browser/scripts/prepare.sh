@@ -85,7 +85,7 @@ cp "$repo/branding/org.bande.Browser.desktop" "$repo/branding/org.bande.Browser.
 b=browser/branding/bande
 cp -a browser/branding/unofficial "$b"
 cp "$repo/branding/brand.ftl" "$repo/branding/brand.properties" "$b/locales/en-US/"
-sed -i 's/^MOZ_APP_DISPLAYNAME=.*/MOZ_APP_DISPLAYNAME=Browser/; s/^MOZ_MACBUNDLE_ID=.*/MOZ_MACBUNDLE_ID=browser/' "$b/configure.sh"
+sed -i 's/^MOZ_APP_DISPLAYNAME=.*/MOZ_APP_DISPLAYNAME=Browser/' "$b/configure.sh"
 sed -i '/app\.update\./d' "$b/pref/firefox-branding.js"
 svg=$repo/branding/org.bande.Browser.svg
 for size in 16 22 24 32 48 64 128 256; do rsvg-convert -w "$size" -h "$size" "$svg" -o "$b/default$size.png"; done

@@ -118,7 +118,7 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
   --toolbarbutton-border-radius: 12px;
 }
 
-/* The Bookmarks Toolbar is Bande's favorites bar, shown in every window as Safari shows its own. */
+/* The Bookmarks Toolbar is Bande's favorites bar, shown in every window. */
 #PersonalToolbar {
   min-height: 32px !important;
   padding: 0 10px 4px !important;

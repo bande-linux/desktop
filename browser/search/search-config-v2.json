@@ -57,7 +57,6 @@
     "is",
     "it",
     "ja",
-    "ja-JP-macos",
     "ka",
     "kab",
     "kk",
@@ -302,7 +301,6 @@
        "id",
        "is",
        "ja",
-       "ja-JP-macos",
        "ka",
        "kab",
        "kk",
@@ -2149,8 +2147,7 @@
     {
      "environment": {
       "locales": [
-       "ja",
-       "ja-JP-macos"
+       "ja"
       ]
      }
     }

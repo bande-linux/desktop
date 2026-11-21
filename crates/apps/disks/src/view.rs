@@ -617,9 +617,8 @@ impl DisksView {
                     && !self.abilities.formats.is_empty()
             }
             ADD_PARTITION => {
-                disk.is_some_and(|disk| {
-                    disk.scheme.is_some() && disk.largest_free().is_some()
-                }) && !self.abilities.formats.is_empty()
+                disk.is_some_and(|disk| disk.scheme.is_some() && disk.largest_free().is_some())
+                    && !self.abilities.formats.is_empty()
             }
             DELETE_PARTITION => {
                 !whole_disk

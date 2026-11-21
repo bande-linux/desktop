@@ -8,8 +8,8 @@ use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_disks::{
-    ADD_PARTITION, Abilities, DELETE_PARTITION, DisksView, EJECT, ERASE, REPAIR, IMAGE_FROM,
-    MOUNT, Model, OPEN_IMAGE, RENAME, RESIZE, RESTORE, Report, Request, SIDEBAR_WIDTH, Worker,
+    ADD_PARTITION, Abilities, DELETE_PARTITION, DisksView, EJECT, ERASE, IMAGE_FROM, MOUNT, Model,
+    OPEN_IMAGE, RENAME, REPAIR, RESIZE, RESTORE, Report, Request, SIDEBAR_WIDTH, Worker,
 };
 use bande_l10n::tr;
 use bande_toolkit::{
@@ -126,19 +126,14 @@ impl Disks {
         }
         let model = self.model.clone();
         let abilities = self.abilities.clone();
-        let opened = cx.open(
-            Kind::Main,
-            &tr!("Disks"),
-            WINDOW_SIZE,
-            |appearance| {
-                let mut view = DisksView::new(appearance);
-                if let Some(abilities) = abilities {
-                    view.set_abilities(abilities);
-                }
-                view.set_model(model);
-                Pane { view }
-            },
-        );
+        let opened = cx.open(Kind::Main, &tr!("Disks"), WINDOW_SIZE, |appearance| {
+            let mut view = DisksView::new(appearance);
+            if let Some(abilities) = abilities {
+                view.set_abilities(abilities);
+            }
+            view.set_model(model);
+            Pane { view }
+        });
         match opened {
             Ok(window) => self.main = Some(window),
             Err(error) => tracing::warn!("cannot open a window: {error}"),

@@ -517,7 +517,9 @@ made again.
     Hide Others and Show All (`show_app` for every running app).
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
   (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Quick Settings and Settings, through
-  `crates/libs/network` and `crates/libs/bluetooth`.
+  `crates/libs/network` and `crates/libs/bluetooth`. Bande never rewrites `/etc/network/interfaces` or
+  NetworkManager's configuration; a wired device that ifupdown or systemd-networkd manages is to be
+  shown read-only in Settings, with Wi-Fi alone in the Taskbar and Quick Settings.
 - **Service outages**: the bar, Quick Settings and Settings tell a stopped service from missing
   hardware (`bande_bus::Reading`: present, absent, unavailable). A failed UPower,
   NetworkManager or BlueZ read counts as absent only when the kernel has no battery

@@ -365,7 +365,7 @@ next session.
 
 ## Wayland protocol matrix
 
-Priority: **P0** is needed for a daily-driver desktop, **P1** for full parity, **P2** later.
+Priority: **P0** is needed for a daily-driver desktop, **P1** for a complete desktop, **P2** later.
 Status is what `crates/platform/compositor` serves on `main`.
 
 | Protocol | Purpose | Priority | Status |

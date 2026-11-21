@@ -159,3 +159,8 @@ Every program the desktop runs and every system file it reads by path is listed 
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.
+
+Bande ships no firewall rules: with SSH not installed and LLMNR off, only mDNS listens by default,
+and a default-deny ruleset would only break what a person turns on (file sharing, a development
+server). Flatpak is the sandbox and the portal asks for access; other programs run with the user's
+full access, and Settings ▸ Privacy & Security says so.

@@ -73,7 +73,7 @@ Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral h
 | `ink3` | `#83807A` | `#8D9198` | labels, placeholders, disabled, timestamps |
 | `deep` | `#201E1A` | `#161A21` (L .215) | dark text on light fills (Amber, Graphite, warning), the terminal's Midnight background |
 
-Light keeps the warm hue (paper and stone). Dark is a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .008 so the tint is felt without reading as blue. In dark, content is recessed and what is raised is lighter: sheet < chassis < overlay < well < hairline < edge. Whether light moves to the same slate family is an open owner decision (plan `NOTES/plans/dark-theme.md`, milestone 6).
+Light keeps the warm hue (paper and stone). Dark is a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .008 so the tint is felt without reading as blue. In dark, content is recessed and what is raised is lighter: sheet < chassis < overlay < well < hairline < edge.
 
 ### Measured contrast (WCAG 2 ratio)
 | Pair | Light | Dark |

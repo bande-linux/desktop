@@ -328,8 +328,8 @@ msgstr "Lägg till anteckningar"
 msgid "Delete Event"
 msgstr "Radera händelse"
 
-msgid "On My Computer"
-msgstr "På min dator"
+msgid "Local"
+msgstr "Lokalt"
 
 msgid "Untitled"
 msgstr "Namnlös"

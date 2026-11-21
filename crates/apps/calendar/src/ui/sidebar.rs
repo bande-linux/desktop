@@ -44,7 +44,7 @@ pub fn paint(
             continue;
         }
         let heading = match account.kind {
-            AccountKind::Local => tr!("On My Computer"),
+            AccountKind::Local => tr!("Local"),
             AccountKind::Subscription { .. } => tr!("Subscriptions"),
             AccountKind::CalDav { .. } => account.name.clone(),
         };

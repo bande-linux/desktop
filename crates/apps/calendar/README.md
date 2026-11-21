@@ -1,7 +1,7 @@
 # Bande Calendar
 
 A calendar for the Bande desktop: CalDAV accounts that work offline,
-a local "On My Computer" calendar, and read-only subscriptions, shown in day, week, month and year
+local calendars, and read-only subscriptions, shown in day, week, month and year
 views. Packaged as `bande-calendar`.
 
 ## What it does

@@ -558,7 +558,7 @@ impl CalendarView {
             .accounts
             .iter()
             .filter_map(|known| match known.kind {
-                AccountKind::Local => Some((known.id.clone(), tr!("On My Computer"))),
+                AccountKind::Local => Some((known.id.clone(), tr!("Local"))),
                 AccountKind::CalDav { .. } => Some((known.id.clone(), known.name.clone())),
                 AccountKind::Subscription { .. } => None,
             })

@@ -265,10 +265,10 @@ impl FilesView {
 
     fn backup_bar_area(&self) -> Rect {
         let content = self.content_frame();
-        let search = self.search_bar_height();
+        let above = self.search_bar_height() + self.discovery_bar_height();
         Rect::new(
             content.x,
-            content.y - search - BACKUP_BAR_HEIGHT,
+            content.y - above - BACKUP_BAR_HEIGHT,
             content.width,
             BACKUP_BAR_HEIGHT,
         )

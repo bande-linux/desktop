@@ -359,7 +359,7 @@ impl FilesView {
             Some(self.toolbar.search),
             self.size_slider,
             self.search_home_button,
-            self.install_discovery_button,
+            self.discovery_bar.as_ref().and_then(|bar| bar.install),
             self.trouble_buttons,
         ]
         .into_iter()
@@ -1150,7 +1150,8 @@ impl FilesView {
             .toolbar_frames()
             .into_iter()
             .chain(self.scope_frames())
-            .chain(self.backup_bar_frames());
+            .chain(self.backup_bar_frames())
+            .chain(self.discovery_bar_frames());
         let rename = self
             .rename
             .as_ref()
@@ -1169,7 +1170,6 @@ impl FilesView {
             )
         });
         let search_home = self.search_home_frame(self.empty_area());
-        let install_discovery = self.install_discovery_frame(self.empty_area());
         let trouble = self.trouble_frame(self.empty_area());
         let table_id = self.table;
         if let Some(host) = self.host_mut() {
@@ -1179,7 +1179,6 @@ impl FilesView {
                 .chain(rename)
                 .chain(slider)
                 .chain(search_home)
-                .chain(install_discovery)
                 .chain(trouble)
             {
                 host.set_frame(id, frame);

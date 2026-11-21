@@ -5,7 +5,6 @@ use bande_volumes::{connected_volume_of, on_connected_volume};
 
 use crate::browser::Location;
 use crate::controls::{Signal, sender};
-use crate::servers::Discovery;
 use crate::tabs::location_title;
 use crate::view::{FilesView, Request};
 use crate::views::ViewMode;
@@ -37,13 +36,7 @@ impl FilesView {
             Location::Trash => tr!("The Trash is empty"),
             Location::Recents => tr!("Files you open appear here"),
             Location::Server { .. } => tr!("Empty Folder"),
-            Location::Network => match self.discovery {
-                Discovery::Ready => tr!("Computers and servers on your network appear here"),
-                Discovery::Missing => {
-                    tr!("Finding computers nearby needs Avahi, which isn’t installed.")
-                }
-                Discovery::Installing => tr!("Installing Avahi…"),
-            },
+            Location::Network => tr!("Computers and servers on your network appear here"),
             Location::Search(scope) => {
                 let searching = self.searching.as_ref().filter(|shown| shown.answered)?;
                 tr!(
@@ -77,29 +70,6 @@ impl FilesView {
                 })
                 .quiet();
                 self.search_home_button = Some(self.insert(button));
-            }
-        }
-    }
-
-    pub(crate) fn sync_install_discovery(&mut self) {
-        let wanted = self.discovery == Discovery::Missing
-            && self
-                .browser
-                .columns()
-                .first()
-                .is_some_and(|column| column.location == Location::Network)
-            && self.empty_message(0).is_some();
-        if wanted == self.install_discovery_button.is_some() {
-            return;
-        }
-        match self.install_discovery_button.take() {
-            Some(button) => self.remove(button),
-            None => {
-                let send = sender(&self.signals);
-                let button = Button::new(&tr!("Install Avahi"), move || {
-                    send(Signal::InstallDiscovery);
-                });
-                self.install_discovery_button = Some(self.insert(button));
             }
         }
     }
@@ -180,31 +150,10 @@ impl FilesView {
 
     pub(crate) fn search_home_frame(&mut self, area: Rect) -> Option<(WidgetId, Rect)> {
         let button = self.search_home_button?;
-        Some(self.below_empty_message(button, &tr!("Search Home"), area))
-    }
-
-    pub(crate) fn install_discovery_frame(&mut self, area: Rect) -> Option<(WidgetId, Rect)> {
-        let button = self.install_discovery_button?;
-        Some(self.below_empty_message(button, &tr!("Install Avahi"), area))
-    }
-
-    fn below_empty_message(
-        &mut self,
-        button: WidgetId,
-        title: &str,
-        area: Rect,
-    ) -> (WidgetId, Rect) {
         let height = self.ui.context().control_height(ControlSize::Regular);
-        let ink = self.palette.ink;
-        let label = self.text().paragraph(
-            title,
-            TextStyle::role(TextRole::Body, ink),
-            None,
-            TextAlign::Start,
-        );
-        let width = (label.width() + 2.0 * BUTTON_PADDING).ceil();
+        let width = self.button_width(&tr!("Search Home"));
         let centre = area.y + (area.height / 2.0).round();
-        (
+        Some((
             button,
             Rect::new(
                 area.x + ((area.width - width) / 2.0).round(),
@@ -212,7 +161,18 @@ impl FilesView {
                 width,
                 height,
             ),
-        )
+        ))
+    }
+
+    pub(crate) fn button_width(&mut self, title: &str) -> f32 {
+        let ink = self.palette.ink;
+        let label = self.text().paragraph(
+            title,
+            TextStyle::role(TextRole::Body, ink),
+            None,
+            TextAlign::Start,
+        );
+        (label.width() + 2.0 * BUTTON_PADDING).ceil()
     }
 
     pub(crate) fn paint_empty(&mut self, index: usize, area: Rect, items: &mut Vec<Item>) {
@@ -228,8 +188,7 @@ impl FilesView {
             TextAlign::Center,
         );
         let centre = area.y + (area.height / 2.0).round();
-        let below = self.search_home_button.is_some() || self.install_discovery_button.is_some();
-        let y = match index == 0 && below {
+        let y = match index == 0 && self.search_home_button.is_some() {
             true => centre - GAP / 2.0 - paragraph.height(),
             false => centre - (paragraph.height() / 2.0).round(),
         };

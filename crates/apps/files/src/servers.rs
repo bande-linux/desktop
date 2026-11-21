@@ -6,8 +6,10 @@ use bande_fs::{Action, Change, Entry, Purpose, RenameError, Task};
 use bande_inbox::Inbox;
 use bande_l10n::tr;
 use bande_toolkit::ui::{
-    Axis, CheckState, Checkbox, PopUpButton, SecureField, Stack, TextField, Widget,
+    Axis, BUTTON_HEIGHT, Button, CheckState, Checkbox, Label, PopUpButton, SecureField, Stack,
+    TextField, Widget, WidgetId,
 };
+use bande_toolkit::{Rect, TextAlign, TextStyle};
 use bande_volumes::{SavedServer, load_saved_servers, on_connected_volume};
 use bande_xdg::{DesktopEntry, file_uri};
 
@@ -19,6 +21,9 @@ use crate::view::{FilesView, Request, Sheet};
 const FIELD_SIZE: f32 = 13.0;
 const STACK_GAP: f32 = 8.0;
 const SERVER_REFRESH: Duration = Duration::from_secs(10);
+const DISCOVERY_BAR_HEIGHT: f32 = 36.0;
+const BAR_INSET: f32 = 12.0;
+const LABEL_SIZE: f32 = 13.0;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServerRequest {
@@ -54,6 +59,19 @@ pub enum Discovery {
     Installing,
 }
 
+fn discovery_message(shown: Discovery) -> String {
+    match shown {
+        Discovery::Installing => tr!("Installing Avahi…"),
+        _ => tr!("Finding computers nearby needs Avahi, which isn’t installed."),
+    }
+}
+
+pub(crate) struct DiscoveryBar {
+    shown: Discovery,
+    label: WidgetId,
+    pub(crate) install: Option<WidgetId>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServersSeen {
     pub nearby: Vec<(String, String)>,
@@ -84,6 +102,98 @@ const MAIL_SCHEME: &str = "x-scheme-handler/mailto";
 const BANDE_MAIL: &str = "org.bande.Mail.desktop";
 
 impl FilesView {
+    pub(crate) fn sync_discovery_bar(&mut self) {
+        let on_network = self
+            .browser
+            .columns()
+            .first()
+            .is_some_and(|column| column.location == Location::Network);
+        let wanted = (on_network && self.discovery != Discovery::Ready).then_some(self.discovery);
+        if wanted == self.discovery_bar.as_ref().map(|bar| bar.shown) {
+            return;
+        }
+        if let Some(bar) = self.discovery_bar.take() {
+            for id in std::iter::once(bar.label).chain(bar.install) {
+                self.remove(id);
+            }
+        }
+        let Some(shown) = wanted else {
+            return;
+        };
+        let text = discovery_message(shown);
+        let label = self.insert(Label::new(&text));
+        let install = (shown == Discovery::Missing).then(|| {
+            let send = sender(&self.signals);
+            self.insert(Button::new(&tr!("Install Avahi"), move || {
+                send(Signal::InstallDiscovery);
+            }))
+        });
+        self.discovery_bar = Some(DiscoveryBar {
+            shown,
+            label,
+            install,
+        });
+    }
+
+    pub(crate) fn discovery_bar_height(&self) -> f32 {
+        match self.discovery_bar {
+            Some(_) => DISCOVERY_BAR_HEIGHT,
+            None => 0.0,
+        }
+    }
+
+    pub(crate) fn discovery_bar_frames(&mut self) -> Vec<(WidgetId, Rect)> {
+        let Some((label, install, shown)) = self
+            .discovery_bar
+            .as_ref()
+            .map(|bar| (bar.label, bar.install, bar.shown))
+        else {
+            return Vec::new();
+        };
+        let content = self.content_frame();
+        let top = content.y - self.search_bar_height() - DISCOVERY_BAR_HEIGHT;
+        let left = content.x + BAR_INSET;
+        let mut right = content.x + content.width - BAR_INSET;
+        let mut frames = Vec::new();
+        if let Some(button) = install {
+            let width = self.button_width(&tr!("Install Avahi"));
+            right -= width;
+            frames.push((
+                button,
+                Rect::new(
+                    right,
+                    top + ((DISCOVERY_BAR_HEIGHT - BUTTON_HEIGHT) / 2.0).round(),
+                    width,
+                    BUTTON_HEIGHT,
+                ),
+            ));
+            right -= STACK_GAP;
+        }
+        let text = discovery_message(shown);
+        let ink = self.palette.ink;
+        let width = (right - left).max(0.0);
+        let height = self
+            .text()
+            .paragraph(
+                &text,
+                TextStyle::new(LABEL_SIZE, ink),
+                Some(width),
+                TextAlign::Start,
+            )
+            .height()
+            .ceil();
+        frames.push((
+            label,
+            Rect::new(
+                left,
+                top + ((DISCOVERY_BAR_HEIGHT - height) / 2.0).round(),
+                width,
+                height,
+            ),
+        ));
+        frames
+    }
+
     pub(crate) fn on_server(&mut self, work: impl FnOnce() -> ServerDone + Send + 'static) {
         let Some(outbox) = self.server_work.as_ref().map(Inbox::outbox) else {
             return;

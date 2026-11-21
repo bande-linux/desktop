@@ -36,7 +36,7 @@ use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
 use crate::search::{Index, SEARCH_HEIGHT, Searching};
-use crate::servers::{Discovery, ServerDone, ServerRequest, ServersSeen};
+use crate::servers::{Discovery, DiscoveryBar, ServerDone, ServerRequest, ServersSeen};
 use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
 use crate::tabs::{TabSlot, location_title};
@@ -287,7 +287,7 @@ pub struct FilesView {
     pub(crate) searching: Option<Searching>,
     pub(crate) index: Option<Index>,
     pub(crate) search_home_button: Option<WidgetId>,
-    pub(crate) install_discovery_button: Option<WidgetId>,
+    pub(crate) discovery_bar: Option<DiscoveryBar>,
     pub(crate) discovery: Discovery,
     pub(crate) trouble_buttons: Option<WidgetId>,
     pub(crate) toolbar: Toolbar,
@@ -455,7 +455,7 @@ impl FilesView {
             searching: None,
             index: None,
             search_home_button: None,
-            install_discovery_button: None,
+            discovery_bar: None,
             discovery: Discovery::Ready,
             trouble_buttons: None,
             toolbar: Toolbar::default(),
@@ -564,7 +564,7 @@ impl FilesView {
         self.discovery = seen.discovery;
         self.sidebar = self.with_volumes(&self.favourites, &self.mounted);
         self.menu_place = None;
-        self.sync_install_discovery();
+        self.sync_discovery_bar();
     }
 
     pub fn refresh_volumes(&mut self) {
@@ -1059,7 +1059,7 @@ impl FilesView {
         }
         self.keep_selection_visible();
         self.sync_search_home();
-        self.sync_install_discovery();
+        self.sync_discovery_bar();
         self.sync_connection_trouble();
         self.sync_table();
     }
@@ -1169,7 +1169,11 @@ impl FilesView {
         let inspector = if self.inspector { INSPECTOR_WIDTH } else { 0.0 };
         let progress = self.visible_jobs() as f32 * PROGRESS_HEIGHT;
         let search = self.search_bar_height();
-        let top = sheet.y + self.tab_bar_height() + self.backup_bar_height() + search;
+        let top = sheet.y
+            + self.tab_bar_height()
+            + self.backup_bar_height()
+            + self.discovery_bar_height()
+            + search;
         Rect::new(
             sheet.x,
             top,

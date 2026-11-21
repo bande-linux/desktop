@@ -455,6 +455,7 @@ pub enum SettingId {
     Clock24Hour,
     LoginItems,
     ReopenApps,
+    CheckUpdatesAutomatically,
     AutomaticUpdates,
     UpdateCheckEvery,
     BatteryLevel,
@@ -1993,6 +1994,8 @@ fn system_panes() -> Vec<Pane> {
                     list(SettingId::SoftwareUpdates, tr!("Software Update"), tr!("install updates, check for updates, security updates, upgrade, packages, restart"),
                         List::SoftwareUpdates,
                     ),
+                    switch(SettingId::CheckUpdatesAutomatically, tr!("Check for updates automatically"), tr!("update check, automatic check, background check, network"))
+                        .described(tr!("While this and automatic updates are off, nothing is fetched until you click Check Now.")),
                     setting(
                         SettingId::UpdateCheckEvery,
                         tr!("Check for updates"),

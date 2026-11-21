@@ -179,6 +179,9 @@ fn publish_changes(
         if before.reopen_apps != after.reopen_apps {
             announce(guard.reopen_apps_changed(emitter).await);
         }
+        if before.check_updates_automatically != after.check_updates_automatically {
+            announce(guard.check_updates_automatically_changed(emitter).await);
+        }
         if before.automatic_updates != after.automatic_updates {
             announce(guard.automatic_updates_changed(emitter).await);
         }
@@ -588,6 +591,16 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::ReopenApps(on))
+    }
+
+    #[zbus(property)]
+    fn check_updates_automatically(&self) -> bool {
+        self.store.current().check_updates_automatically
+    }
+
+    #[zbus(property)]
+    fn set_check_updates_automatically(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::CheckUpdatesAutomatically(on))
     }
 
     #[zbus(property)]

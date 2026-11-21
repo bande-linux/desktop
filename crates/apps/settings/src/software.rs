@@ -307,7 +307,19 @@ fn check_interval(session: &Connection) -> Option<Duration> {
     (seconds > 0).then(|| Duration::from_secs(seconds))
 }
 
+fn checks_automatically(session: &Connection) -> bool {
+    ConfigProxyBlocking::new(session)
+        .and_then(|config| Ok(config.check_updates_automatically()? || config.automatic_updates()?))
+        .unwrap_or_else(|error| {
+            tracing::warn!("cannot read whether to check for updates automatically: {error}");
+            false
+        })
+}
+
 fn check_due(session: &Connection, client: &Client) -> bool {
+    if !checks_automatically(session) {
+        return false;
+    }
     let Some(every) = check_interval(session) else {
         return true;
     };

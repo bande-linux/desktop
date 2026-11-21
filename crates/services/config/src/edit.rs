@@ -18,6 +18,7 @@ pub enum Setting {
     Accent(Accent),
     TintedFrame(bool),
     ReopenApps(bool),
+    CheckUpdatesAutomatically(bool),
     AutomaticUpdates(bool),
     UpdateCheckEvery(Option<Duration>),
     LockMessage(String),
@@ -111,6 +112,12 @@ impl Setting {
                 None,
                 "lock-message",
                 (!message.is_empty()).then(|| message.clone().into()),
+            ),
+            Self::CheckUpdatesAutomatically(on) => set(
+                &mut document,
+                None,
+                "check-updates-automatically",
+                on.then_some(KdlValue::Bool(true)),
             ),
             Self::AutomaticUpdates(on) => set(
                 &mut document,

@@ -1248,6 +1248,15 @@ msgstr "stora filer, största, städa, frigör utrymme, återvinn"
 msgid "install updates, check for updates, security updates, upgrade, packages, restart"
 msgstr "installera uppdateringar, sök efter uppdateringar, säkerhetsuppdateringar, uppgradering, paket, omstart"
 
+msgid "Check for updates automatically"
+msgstr "Sök efter uppdateringar automatiskt"
+
+msgid "update check, automatic check, background check, network"
+msgstr "uppdateringskontroll, automatisk kontroll, kontroll i bakgrunden, nätverk"
+
+msgid "While this and automatic updates are off, nothing is fetched until you click Check Now."
+msgstr "Så länge det här och automatiska uppdateringar är av hämtas ingenting förrän du klickar på Sök nu."
+
 msgid "Check for updates"
 msgstr "Sök efter uppdateringar"
 

@@ -761,6 +761,9 @@ the kernel, and restores by copying as the person. Nothing privileged runs on th
 
 Packages come from Bande's signed APT repository ([packaging](packaging.md)).
 
+Nothing is fetched by itself unless the person switches on "Check for updates automatically"
+(`check-updates-automatically #true`, off by default) or automatic updates below; until then the
+daily timer and an opened pane only show what the last check found, and Check Now always fetches.
 How often it checks is `update-check-every` in `config.kdl` (Settings: When available, Every day,
 Every 7 days, Every 31 days; unset is When available). With an interval, the daily timer and an
 opened pane fetch nothing until that long has passed since PackageKit's last refresh, and Check Now

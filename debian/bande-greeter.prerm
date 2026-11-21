@@ -1,0 +1,48 @@
+#!/bin/sh
+set -e
+
+question=shared/default-x-display-manager
+chosen_file=/etc/X11/default-display-manager
+alias_link=/etc/systemd/system/display-manager.service
+
+chosen_daemon() {
+	grep -v '^[[:space:]]*#' $chosen_file 2> /dev/null | head -n 1
+}
+
+if { [ "$1" = remove ] || [ "$1" = deconfigure ]; } && [ -e /usr/share/debconf/confmodule ]; then
+	. /usr/share/debconf/confmodule
+	db_unregister $question || true
+	if db_metaget $question owners; then
+		owners=$RET
+		db_subst $question choices "$owners"
+		if [ "$(chosen_daemon)" = /usr/bin/bande-greeter ]; then
+			preferred=$(echo "$owners" | tr -d ' ' | tr ',' '\n' | grep -vx greetd | head -n 1)
+			db_set $question "${preferred:-greetd}"
+			db_fset $question seen false
+			db_input critical $question || true
+			db_go || true
+			db_get $question
+			if db_get "$RET/daemon_name"; then
+				echo "$RET" > $chosen_file
+			fi
+		fi
+	fi
+	if [ "$(chosen_daemon)" = /usr/bin/bande-greeter ]; then
+		rm -f $chosen_file
+	fi
+	if [ "$(basename "$(readlink $alias_link)")" = bande-greeter.service ]; then
+		unit=/usr/lib/systemd/system/$(basename "$(chosen_daemon)").service
+		if [ -s $chosen_file ] && [ -e "$unit" ]; then
+			ln -sf "$unit" $alias_link
+		else
+			rm -f $alias_link
+		fi
+	fi
+	db_stop
+fi
+
+if [ "$1" = remove ] && [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ]; then
+	deb-systemd-invoke stop bande-greeter.service > /dev/null || true
+fi
+
+#DEBHELPER#

@@ -1,0 +1,22 @@
+[Unit]
+Description=Bande login window
+Documentation=man:greetd(1)
+After=systemd-user-sessions.service plymouth-quit-wait.service
+After=getty@tty7.service
+Conflicts=getty@tty7.service greetd.service
+OnFailure=bande-console-fallback.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/greetd --config /usr/share/bande-greeter/greetd-config.toml
+IgnoreSIGPIPE=no
+SendSIGHUP=yes
+TimeoutStopSec=30s
+KeyringMode=shared
+Restart=always
+RestartSec=1
+StartLimitBurst=5
+StartLimitIntervalSec=30
+
+[Install]
+Alias=display-manager.service

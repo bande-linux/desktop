@@ -417,21 +417,31 @@ ends the login scope, `bande-session` traps the signal and stops the service. Re
 Down call logind's `Reboot` and `PowerOff`; the confirmation stays open until answered and shows
 a refusal.
 
-**Installation.** `/etc/greetd/config.toml` is greetd's conffile and stays untouched:
-`bande-greeter` ships `/usr/share/bande-greeter/greetd-config.toml` and a drop-in,
-`/usr/lib/systemd/system/greetd.service.d/bande.conf`, pointing `--config` at it. Which display
-manager runs is chosen the Debian way (greetd >= 0.10.3-6 provides `x-display-manager` and
-shares the debconf question `shared/default-x-display-manager`); `bande-greeter` never touches
-it. To override:
+**Installation.** `bande-greeter` is a display manager of its own, the way Debian's display
+managers are: it provides `x-display-manager`, shares the debconf question
+`shared/default-x-display-manager` and ships `bande-greeter.service`, which runs greetd with
+`/usr/share/bande-greeter/greetd-config.toml`, conflicts with `greetd.service` (both use VT 7)
+and starts `bande-console-fallback.service` when greetd gives up. greetd's own
+`greetd.service` and its conffile `/etc/greetd/config.toml` stay untouched. The chosen display
+manager is the daemon named in `/etc/X11/default-display-manager` (`/usr/bin/bande-greeter`
+for the login window), and `/etc/systemd/system/display-manager.service` links to its unit;
+every display manager's maintainer scripts keep the two in step with the debconf answer.
 
-- another greetd configuration: copy the drop-in to
-  `/etc/systemd/system/greetd.service.d/bande.conf` and change its `--config`, or mask it with
-  `ln -s /dev/null /etc/systemd/system/greetd.service.d/bande.conf` to go back to
-  `/etc/greetd/config.toml`;
-- another display manager: `dpkg-reconfigure greetd` (or the other manager's package) and pick it.
+- Where no display manager is chosen yet, debconf offers the login window and greetd (which
+  `bande-greeter` depends on) with the login window preselected, so a non-interactive install
+  chooses it. Next to another display manager the existing choice is preselected, so a
+  non-interactive install keeps it.
+- `dpkg-reconfigure bande-greeter` (or any display manager's package) switches.
+- Removing `bande-greeter` while it is chosen asks at critical priority for another installed
+  display manager, preselecting one other than greetd (greetd's own greeter only if nothing
+  else is installed), and links it; with none left, the link goes and the computer starts to
+  the text console. Only these scripts touch the link: `deb-systemd-helper`, whose purge
+  removes an alias whatever it points to, never manages `bande-greeter.service`.
+- Another greetd configuration for the login window: `systemctl edit bande-greeter` and set
+  `ExecStart=` and a new `ExecStart=/usr/sbin/greetd --config …`.
 
-Either takes effect after `systemctl daemon-reload` and a restart of the display manager,
-which ends the sessions it started.
+A switch takes effect at the next start, or at once with `systemctl restart
+display-manager.service`, which ends the sessions it started.
 
 **Wallpaper at login.** The login window shows the wallpaper of the person it offers, starting
 with whoever signed in last (`$XDG_STATE_HOME/bande-greeter/last-user` in greetd's home,
@@ -485,8 +495,8 @@ what the one before could not save:
   a session without a clean log out, the next asks "Reopen your apps?" before anything starts.
 - **The record**: every failure of a Bande program leaves one report, kept on the computer unless
   sending is on ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`
-  (`bande-desktop` sets `DefaultLimitCORE=infinity` for the user manager, whose soft limit is
-  otherwise 0). Programs that hold passwords (`bande-lock`, `bande-greeter`, `bande-polkit`,
+  (`bande-crash-reports`, which depends on it, sets `DefaultLimitCORE=infinity` for the user
+  manager, whose soft limit is otherwise 0). Programs that hold passwords (`bande-lock`, `bande-greeter`, `bande-polkit`,
   `bande-secrets`, `bande-clipboard`) are not dumpable, so only their panic text is recorded.
   Symbols are in [packaging](packaging.md).
 

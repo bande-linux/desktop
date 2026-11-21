@@ -1,0 +1,2 @@
+# Every display manager's maintainer scripts read <chosen package>/daemon_name.
+unused-debconf-template bande-greeter/daemon_name [templates:*]

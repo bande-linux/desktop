@@ -64,6 +64,13 @@ License: public-domain
  signing key and the Fedora Project's release keys, embedded to check the
  signed checksums of downloaded cloud images.
 
+Files: debian/bande-greeter.templates debian/po/*
+Copyright: 2000-2004 Branden Robinson
+ The translators named in each debian/po file
+License: GPL-2.0-or-later
+Comment: The shared/default-x-display-manager debconf question and its
+ translations, which every display manager in Debian carries word for word.
+
 Files: vendor/accesskit-0.25.2/*
 Copyright: The AccessKit contributors
 License: MIT or Apache-2.0
@@ -3012,6 +3019,15 @@ License: CDLA-Permissive-2.0
  5.4. "Results" means any outcome obtained by computational analysis
  of Data, including for example machine learning models and models'
  insights.
+
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation; either version 2 of the License, or (at your option) any later
+ version.
+ .
+ On Debian systems, the full text of the GNU General Public License, Version 2
+ can be found in /usr/share/common-licenses/GPL-2.
 
 License: ISC
  Permission to use, copy, modify, and/or distribute this software for any

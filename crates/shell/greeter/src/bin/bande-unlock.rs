@@ -628,23 +628,35 @@ impl Console {
             .open("/dev/tty1")
             .ok();
         if let Some(tty) = &tty {
-            let _ = set_console_mode(tty, KDSKBMODE, K_OFF);
-            let _ = set_console_mode(tty, KDSETMODE, KD_GRAPHICS);
+            set_console_mode(tty, KDSKBMODE, K_OFF, "turn off the console keyboard");
+            set_console_mode(
+                tty,
+                KDSETMODE,
+                KD_GRAPHICS,
+                "put the console in graphics mode",
+            );
         }
         Self { tty }
     }
 }
 
-fn set_console_mode(tty: &File, request: libc::c_ulong, mode: libc::c_int) -> io::Result<()> {
+fn set_console_mode(tty: &File, request: libc::c_ulong, mode: libc::c_int, action: &str) {
     // SAFETY: KDSETMODE and KDSKBMODE take their mode as an integer argument, not a pointer.
-    unsafe { ioctl(tty.as_raw_fd(), request, mode as *mut libc::c_void) }
+    if let Err(error) = unsafe { ioctl(tty.as_raw_fd(), request, mode as *mut libc::c_void) } {
+        eprintln!("bande-unlock: cannot {action}: {error}");
+    }
 }
 
 impl Drop for Console {
     fn drop(&mut self) {
         if let Some(tty) = &self.tty {
-            let _ = set_console_mode(tty, KDSETMODE, KD_TEXT);
-            let _ = set_console_mode(tty, KDSKBMODE, K_UNICODE);
+            set_console_mode(tty, KDSETMODE, KD_TEXT, "put the console back in text mode");
+            set_console_mode(
+                tty,
+                KDSKBMODE,
+                K_UNICODE,
+                "turn the console keyboard back on",
+            );
         }
     }
 }
@@ -787,7 +799,9 @@ fn main() -> ExitCode {
     let wrong = std::env::var("CRYPTTAB_TRIED").is_ok_and(|tried| tried != "0");
     match run(&assets, wrong) {
         Ok(passphrase) => {
-            let _ = stash(&passphrase);
+            if let Err(error) = stash(&passphrase) {
+                eprintln!("bande-unlock: cannot keep the passphrase for signing in: {error}");
+            }
             let mut output = io::stdout();
             if output.write_all(passphrase.as_bytes()).is_err() || output.flush().is_err() {
                 return ExitCode::FAILURE;

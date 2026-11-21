@@ -274,15 +274,31 @@ impl Greeter {
 const UNLOCK_PASSWORD: &str = "/run/bande-disk-encryption/for-login";
 
 fn take_unlock_password() -> Option<Zeroizing<String>> {
-    let mut file = std::fs::OpenOptions::new()
+    let mut file = match std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .open(UNLOCK_PASSWORD)
-        .ok()?;
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            tracing::warn!("cannot open {UNLOCK_PASSWORD}: {error}");
+            return None;
+        }
+    };
     let mut password = Zeroizing::new(String::new());
     let read = std::io::Read::read_to_string(&mut file, &mut password);
-    let _ = file.set_len(0);
-    read.ok()?;
+    if let Err(error) = file.set_len(0) {
+        tracing::warn!("cannot empty {UNLOCK_PASSWORD}: {error}");
+        if let Err(error) = std::fs::remove_file(UNLOCK_PASSWORD) {
+            tracing::warn!("cannot remove {UNLOCK_PASSWORD}, so not signing in with it: {error}");
+            return None;
+        }
+    }
+    if let Err(error) = read {
+        tracing::warn!("cannot read {UNLOCK_PASSWORD}: {error}");
+        return None;
+    }
     (!password.is_empty()).then_some(password)
 }
 

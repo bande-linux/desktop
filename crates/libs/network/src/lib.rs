@@ -29,6 +29,7 @@ const ACTIVE_STATE_ACTIVATED: u32 = 2;
 const ACTIVE_STATE_DEACTIVATED: u32 = 4;
 const ACTIVE_REASON_NO_SECRETS: u32 = 9;
 const CONNECTIVITY_PORTAL: u32 = 2;
+const STATE_CONNECTED_GLOBAL: u32 = 70;
 const ACTIVE_REASON_LOGIN_FAILED: u32 = 10;
 const WIRELESS: &str = "802-11-wireless";
 const WIRELESS_SECURITY: &str = "802-11-wireless-security";
@@ -233,6 +234,26 @@ impl fmt::Display for JoinOutcome {
             },
         })
     }
+}
+
+/// Calls `changed` with whether this computer is online, then again each time that changes, until `changed` returns false.
+pub fn follow_online(system: &Connection, mut changed: impl FnMut(bool) -> bool) -> Result<()> {
+    let manager = NetworkManagerProxyBlocking::new(system)?;
+    let changes = manager.inner().receive_signal("StateChanged")?;
+    let mut online = manager.state()? == STATE_CONNECTED_GLOBAL;
+    if !changed(online) {
+        return Ok(());
+    }
+    for change in changes {
+        let now = change.body().deserialize::<u32>()? == STATE_CONNECTED_GLOBAL;
+        if now != online {
+            online = now;
+            if !changed(now) {
+                break;
+            }
+        }
+    }
+    Ok(())
 }
 
 type NewConnection = HashMap<&'static str, HashMap<&'static str, Value<'static>>>;

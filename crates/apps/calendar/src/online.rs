@@ -1,10 +1,6 @@
 use bande_datetime::timedate::zone_changes;
 use bande_inbox::Outbox;
-use zbus::blocking::{Connection, Proxy};
-
-const MANAGER: &str = "org.freedesktop.NetworkManager";
-const MANAGER_PATH: &str = "/org/freedesktop/NetworkManager";
-const CONNECTED_GLOBAL: u32 = 70;
+use zbus::blocking::Connection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum System {
@@ -12,18 +8,12 @@ pub enum System {
     Zone(String),
 }
 
-fn follow_network(outbox: &Outbox<System>) -> zbus::Result<()> {
-    let bus = Connection::system()?;
-    let manager = Proxy::new(&bus, MANAGER, MANAGER_PATH, MANAGER)?;
-    let mut online = manager.get_property::<u32>("State")? == CONNECTED_GLOBAL;
-    for changed in manager.receive_signal("StateChanged")? {
-        let now = changed.body().deserialize::<u32>()? == CONNECTED_GLOBAL;
-        if now && !online && !outbox.send(System::Online) {
-            break;
-        }
-        online = now;
-    }
-    Ok(())
+fn follow_network(outbox: &Outbox<System>) -> Result<(), bande_network::Error> {
+    let mut first = true;
+    bande_network::follow_online(&Connection::system()?, |online| {
+        let came_online = online && !std::mem::take(&mut first);
+        !came_online || outbox.send(System::Online)
+    })
 }
 
 fn follow_zone(outbox: &Outbox<System>) -> zbus::Result<()> {
@@ -35,7 +25,7 @@ fn follow_zone(outbox: &Outbox<System>) -> zbus::Result<()> {
     Ok(())
 }
 
-fn spawn(name: &str, work: impl FnOnce() -> zbus::Result<()> + Send + 'static) {
+fn spawn<E: std::fmt::Display>(name: &str, work: impl FnOnce() -> Result<(), E> + Send + 'static) {
     let spawned = std::thread::Builder::new()
         .name(name.to_owned())
         .spawn(move || {

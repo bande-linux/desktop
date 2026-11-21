@@ -5,9 +5,9 @@ Maintainer: Mikael Hug <mikaelhug@gmail.com>
 Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.7.4
 Rules-Requires-Root: no
-Homepage: https://github.com/bande-linux/web
-Vcs-Browser: https://github.com/bande-linux/web
-Vcs-Git: https://github.com/bande-linux/web.git
+Homepage: https://github.com/bande-linux/desktop/tree/main/browser
+Vcs-Browser: https://github.com/bande-linux/desktop/tree/main/browser/firefox-esr-bande
+Vcs-Git: https://github.com/bande-linux/desktop.git [browser/firefox-esr-bande]
 
 Package: bande-firefox-esr-settings
 Architecture: all

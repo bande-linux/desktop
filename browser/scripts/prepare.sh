@@ -34,7 +34,7 @@ find . -type f -name '*.yaml' -not -path './third_party/*' -exec sed -i 's/follo
 {
     echo "bande-browser ($version) $suite; urgency=medium"
     echo
-    echo "  * Bande's Browser: Debian firefox-esr $debver with the patches of bande-linux/web."
+    echo "  * Bande's Browser: Debian firefox-esr $debver with the patches of bande-linux/desktop's browser/."
     echo
     echo " -- $maintainer  $(date -R)"
     echo
@@ -174,10 +174,10 @@ COPYRIGHT
 mkdir -p debian/upstream
 cat > debian/upstream/metadata <<'METADATA'
 Name: Bande's Browser
-Repository: https://github.com/bande-linux/web.git
-Repository-Browse: https://github.com/bande-linux/web
-Bug-Database: https://github.com/bande-linux/web/issues
-Bug-Submit: https://github.com/bande-linux/web/issues/new
+Repository: https://github.com/bande-linux/desktop.git
+Repository-Browse: https://github.com/bande-linux/desktop/tree/main/browser
+Bug-Database: https://github.com/bande-linux/desktop/issues
+Bug-Submit: https://github.com/bande-linux/desktop/issues/new
 METADATA
 debian/rules debian/control
 grep -q '^Source: bande-browser$' debian/control

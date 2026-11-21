@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: bande-firefox-esr-settings
-Source: https://github.com/bande-linux/web
+Source: https://github.com/bande-linux/desktop/tree/main/browser/firefox-esr-bande
 
 Files: *
 Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>

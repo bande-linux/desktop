@@ -12,7 +12,7 @@ bande-newtab-favorites = Favorites
 bande-newtab-frequent = Frequently Visited
 
 bande-rights-title = Your rights
-bande-rights-licence = { -brand-product-name } is free software, based on Mozilla Firefox source code. Most of it is under the Mozilla Public License 2.0. The full list of licences is at <a data-l10n-name="licence">about:license</a>, and the source of our changes is at <a data-l10n-name="source">github.com/bande-linux/web</a>.
+bande-rights-licence = { -brand-product-name } is free software, based on Mozilla Firefox source code. Most of it is under the Mozilla Public License 2.0. The full list of licences is at <a data-l10n-name="licence">about:license</a>, and the source of our changes is at <a data-l10n-name="source">github.com/bande-linux/desktop</a>.
 bande-rights-use = You may use, share and change it under those licences. It comes with no warranty.
 bande-rights-services = The browser sends no telemetry and shows no ads or sponsored content. It connects to services only when you ask it to, such as signing in to an account, turning on translation or DRM video, or installing an extension. Those services have their own terms.
 bande-rights-trademarks = Mozilla and Firefox are trademarks of the Mozilla Foundation. This browser is not made or endorsed by Mozilla.

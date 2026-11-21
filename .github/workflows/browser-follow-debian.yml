@@ -1,7 +1,12 @@
-name: follow-debian
-run-name: "${{ github.event_name == 'schedule' && 'Every 6 hours: follow Debian firefox-esr' || (inputs.debian_version != '' && format('Test build of Debian firefox-esr {0}', inputs.debian_version) || 'Build Debian firefox-esr') }}"
+name: browser follow Debian
+run-name: "${{ github.event_name == 'schedule' && 'Browser: every 6 hours, follow Debian firefox-esr' || (inputs.debian_version != '' && format('Browser: test build of Debian firefox-esr {0}', inputs.debian_version) || 'Browser: build Debian firefox-esr') }}"
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'browser/**'
+      - '.github/workflows/browser-follow-debian.yml'
   schedule:
     - cron: '37 */6 * * *'
   workflow_dispatch:
@@ -17,6 +22,10 @@ on:
 permissions:
   contents: read
   actions: read
+
+defaults:
+  run:
+    working-directory: browser
 
 jobs:
   suites:
@@ -75,7 +84,7 @@ jobs:
             runner: ubuntu-24.04
     name: build (${{ matrix.suite }}, ${{ matrix.arch }})
     concurrency:
-      group: follow-debian-${{ matrix.suite }}-${{ matrix.arch }}-${{ inputs.debian_version || 'unstable' }}
+      group: browser-follow-debian-${{ matrix.suite }}-${{ matrix.arch }}-${{ inputs.debian_version || 'unstable' }}
       cancel-in-progress: false
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 350
@@ -140,6 +149,10 @@ jobs:
 
       - name: Build
         run: docker exec -e BROWSER_JOBS=3 build /repo/scripts/build.sh compile "$PACKAGE_VERSION" /work /out
+
+      - name: Build the settings package
+        if: matrix.arch == 'arm64'
+        run: docker exec build /repo/scripts/settings-package.sh "$PACKAGE_VERSION" /out
 
       - name: Prove a fresh profile stays silent
         run: docker exec build sh -c '/repo/scripts/check-package.sh /out/bande-browser_*.deb'

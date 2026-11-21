@@ -3,7 +3,7 @@
 Bande's web browser: Debian's `firefox-esr` with telemetry, ads and sponsored content removed, and
 Bande's look. Package `bande-browser`, app id `org.bande.Browser`.
 
-This repository holds no browser source. It holds what we change in Debian's:
+This directory holds no browser source. It holds what we change in Debian's:
 
 | Path | What it is |
 |---|---|
@@ -13,7 +13,7 @@ This repository holds no browser source. It holds what we change in Debian's:
 | `prefs/bande.js` | prefs only the rebuild needs, added after `settings.js` |
 | `search/` | search engines, with no partner codes |
 | `theme/` | chrome CSS using Bande's design tokens |
-| `scripts/` | the build, run the same way anywhere |
+| `scripts/` | the build, run the same way anywhere; `.github/workflows/browser-follow-debian.yml` runs it every 6 hours, on dispatch and on changes to `browser/` |
 
 ## Two forms
 

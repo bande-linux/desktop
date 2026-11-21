@@ -344,17 +344,22 @@ pub fn run_errands(connection: &Connection, errands: &Receiver<Errand>, outbox: 
 
 fn app_menu(connection: &Connection, gtk: &mut Importer, menu: &str) -> Option<Node> {
     if gtkmenu::is_gtk(menu) {
-        return gtk.load(connection, menu).ok();
+        return gtk
+            .load(connection, menu)
+            .inspect_err(|error| tracing::warn!("cannot read the app menu {menu}: {error}"))
+            .ok();
     }
     let (service, path) = split(menu);
     let running = BusName::try_from(service).is_ok_and(|name| {
         DBusProxy::new(connection)
             .and_then(|bus| Ok(bus.name_has_owner(name)?))
+            .inspect_err(|error| tracing::warn!("cannot tell whether {service} runs: {error}"))
             .unwrap_or(false)
     });
     let root = running
-        .then(|| dbus_menu(connection, menu).and_then(|proxy| proxy.get_layout(0, -1, &[])))
-        .and_then(Result::ok)
+        .then(|| dbus_menu(connection, menu).and_then(|proxy| proxy.get_layout(0, -1, &[])))?
+        .inspect_err(|error| tracing::warn!("cannot read the app menu {menu}: {error}"))
+        .ok()
         .map(|(_, root)| tree(root))?;
     Some(match path == APP_MENU_PATH {
         true => root,

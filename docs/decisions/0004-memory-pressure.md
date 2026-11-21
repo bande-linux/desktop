@@ -25,7 +25,7 @@ memory settings stay the system's own.
 
 - `/usr/lib/systemd/user/app.slice.d/50-bande-oomd.conf`: `ManagedOOMMemoryPressure=kill`,
   `ManagedOOMMemoryPressureLimit=40%`, with Debian's default duration of 20 s. The systemd manual
-  suggests about 40 % for latency-sensitive user cgroups. The candidates are the apps' scopes
+  suggests about 40 % for latency-sensitive user cgroups [3]. The candidates are the apps' scopes
   only. Debian's own 50 % kill on `user@.service` stays as the backstop.
 - Every app already runs in its own `app-bande-<id>-<pid>.scope` in `app.slice`
   (`bande_xdg::spawn_detached`).
@@ -58,7 +58,7 @@ memory settings stay the system's own.
 ### 2. The low-memory window
 
 The shell (one process, always running, fonts already loaded) opens a PSI trigger on
-`/proc/pressure/memory`: `full 100000 2000000`, a full stall of at least 5 % in a 2 s window.
+`/proc/pressure/memory` [1]: `full 100000 2000000`, a full stall of at least 5 % in a 2 s window.
 That is System Monitor's "Critical" level (full avg10 ≥ 5 %), so the window and the graph
 agree. It is the system-wide file, because thrashing hurts the whole machine whoever causes it.
 `/proc/pressure/*` is mode 0666 on Debian 14 (forky), and a 2 s window is allowed for
@@ -88,7 +88,7 @@ short is exactly what must be avoided) is a toplevel kept on top:
 `bande_xdg::follow_oom_kills` subscribes to the user manager (`Subscribe`, because systemd
 only sends unit signals while someone is subscribed) and watches `PropertiesChanged` on
 `/org/freedesktop/systemd1/unit/*`. Since systemd 248 both a kernel OOM kill and a systemd-oomd
-kill set a scope's or service's `Result` to `oom-kill`. The unit name is decoded from the bus
+kill set a scope's or service's `Result` to `oom-kill` [3]. The unit name is decoded from the bus
 path, the app from the unit name (the decoder System Monitor uses too), and the
 notification says "Terminal was closed because memory ran low". Clicking it opens the app again,
 as the crash notice does. Units that are not apps (a build in `run-*.scope`, a service) get "A
@@ -101,9 +101,8 @@ background task was stopped because memory ran low", naming the unit.
   Debian's own defaults build on.
 - **Our own killer in the shell.** That would duplicate oomd and run in the session it must
   protect.
-- **`min_ttl_ms` by default.** The MGLRU knob makes the kernel kill rather than thrash, but the
+- **`min_ttl_ms` by default.** The MGLRU knob [2] makes the kernel kill rather than thrash, but the
   kernel OOM killer picks by size, not by app. Behind oomd it is a second, cruder killer.
-  Revisit if oomd turns out too slow on low-RAM machines.
 - **Pausing apps (SIGSTOP).** Wayland clients that stop answering pings are shown as
   hung, and a stopped app holds its memory. The user chooses in the window instead.
 

@@ -8,11 +8,7 @@ may have one test. There are no screenshot or golden-image tests: behaviour is a
 the accessibility tree, the Wayland protocol, D-Bus and files. At most a couple of tests per app
 or feature; a new test replaces or merges with an old one before the total grows.
 
-The guide is about 1,500 lines of tests for the desktop and 80–100 per app. Today there are
-4,394: 3,818 lines in `crates/**/tests/*.rs` (`wc -l`) and 576 lines in the 18 `#[cfg(test)]`
-modules under `crates/**/src` (each counted from its `#[cfg(test)]` line to its closing brace).
-The keyring boundary (406), the compositor's input and lock boundaries (312) and Mail's
-end-to-end test with dovecot are most of the excess; trim them before adding anything.
+The guide is about 1,500 lines of tests for the desktop and 80–100 per app.
 
 `cargo test --workspace` runs them on the hermetic bus
 (`dbus-run-session --config-file=crates/testing/test-bus/data/session.conf -- cargo test --workspace`);

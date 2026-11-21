@@ -45,20 +45,17 @@ Design rules for `bande-render`:
    plane assignment, direct scanout and overlay planes; elements that fail the atomic
    test are composed by us on the primary plane [2].
 
-Plane assignment, direct scanout and the semaphore `sync_file`
-path still need checking on the hardware; the CPU release path covers drivers without them.
-
 ## Decision 2: the toolkit draws with Vello and lays out text with Parley
 
-`bande-toolkit` replaces its rectangle-and-atlas renderer with Linebender's Vello
-sparse-strips renderers and Parley.
+`bande-toolkit` draws with Linebender's Vello sparse-strips renderers and lays out text with
+Parley.
 
-- **Vello** [6]: `vello_cpu` (multithreaded, SIMD, currently the most mature) and
+- **Vello** [6]: `vello_cpu` (multithreaded, SIMD, the most mature) and
   `vello_gpu` (CPU path preprocessing, GPU rasterisation, no compute shaders required)
   share one scene model. The compute renderer is experimental and is not used.
 - **Parley** [7]: rich text layout with shaping by HarfRust, bidi and font fallback,
   which the CJK and accessibility requirements need and which `ab_glyph` cannot do.
-- Extending our own renderer would mean rebuilding path filling, anti-aliasing,
+- A renderer of our own would mean building path filling, anti-aliasing,
   gradients, clips, rounded rectangles and shaping ourselves, with no speed advantage.
 
 How it is used:
@@ -100,4 +97,3 @@ input-to-photon latency needs a camera on real hardware.
 5. Smithay `backend::renderer` (GLES, pixman, multi-GPU; no Vulkan): <https://docs.rs/smithay/latest/smithay/backend/renderer/index.html>
 6. Vello repository (sparse strips, `vello_cpu`, `vello_gpu`, status): <https://github.com/linebender/vello>
 7. Parley: <https://docs.rs/parley/>
-8. Linux kernel, multiplane overlay constraints (example of per-driver plane limits): <https://docs.kernel.org/next/gpu/amdgpu/display/mpo-overview.html>

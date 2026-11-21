@@ -3,8 +3,8 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bande_viewer::FileView;
 use bande_toolkit::Appearance;
+use bande_viewer::FileView;
 use image::codecs::gif::GifEncoder;
 use image::{Frame, Rgba, RgbaImage};
 

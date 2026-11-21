@@ -8,12 +8,12 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_inbox::Inbox;
 use bande_l10n::{Text, text, tr};
-use bande_viewer::{
-    InfoPanel, FileView, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
-    document_rows, file_rows, info_ui, picture_rows,
-};
 use bande_toolkit::ui::{Ui, WidgetId};
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
+use bande_viewer::{
+    FileView, InfoPanel, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
+    document_rows, file_rows, info_ui, picture_rows,
+};
 use bande_xdg::spawn_detached;
 
 static INFO: Info = Info {

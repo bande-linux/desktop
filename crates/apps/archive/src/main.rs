@@ -271,16 +271,11 @@ impl Utility {
             return;
         }
         let rows = self.rows();
-        let opened = cx.open(
-            Kind::Main,
-            &tr!("Archives"),
-            PANEL_SIZE,
-            |appearance| {
-                let mut panel = Panel::progress(appearance);
-                panel.show(&rows);
-                Pane(panel)
-            },
-        );
+        let opened = cx.open(Kind::Main, &tr!("Archives"), PANEL_SIZE, |appearance| {
+            let mut panel = Panel::progress(appearance);
+            panel.show(&rows);
+            Pane(panel)
+        });
         match opened {
             Ok(window) => self.panel = Some(window),
             Err(error) => tracing::warn!("cannot show the progress: {error}"),

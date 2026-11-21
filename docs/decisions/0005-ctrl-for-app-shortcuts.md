@@ -5,22 +5,18 @@ fields and shell, and which is left to the system.
 
 ## Context
 
-- On a PC keyboard Super sits where no thumb goes for copy and paste.
-- Third-party apps (VS Code, Zed, Firefox) expect Ctrl, and the compositor translates nothing, so
-  Bande's own apps must use the same convention for one set of habits to work everywhere.
-- The compositor takes chords with Super held, plus Print, `Alt+Tab`, `Alt+F4` and a few
-  `Ctrl+Alt` chords, so third-party apps get Ctrl chords untouched.
+- Apps on a Linux desktop run their shortcuts with Ctrl, and the compositor translates no keys,
+  so Bande's own apps use Ctrl too, and one set of habits works in every app.
+- The system needs chords no app takes: the compositor takes chords with Super held, plus
+  Print, `Alt+Tab`, `Alt+F4` and a few `Ctrl+Alt` chords, so apps get their Ctrl chords
+  untouched.
 
 ## Options
 
-1. **Ctrl is the app key, Super is the system key**, the convention of the Linux desktops. One
-   convention in every app; nothing to translate.
-2. **Super as the app key, translated to Ctrl for other clients.** It needs a compositor rewrite
-   layer with per-app exceptions, Ctrl+Shift for terminals and an escape hatch for a real Ctrl+C,
-   and it breaks apps that bind Super themselves. Text navigation still differs between apps.
-3. **Firefox's `ui.key.accelKey` only.** Fixes one app and leaves the rest.
-4. **A setting for two styles.** Two sets of bindings and text rules in every app, for a choice
-   nobody asked for.
+1. **Ctrl is the app key, Super is the system key.** One convention in every app; nothing to
+   translate.
+2. **A setting for two styles.** Two sets of bindings and text rules in every app, for a choice
+   that buys the user nothing.
 
 ## Decision
 
@@ -45,7 +41,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
 - **App standard items**: Close Window `Ctrl+W` and Quit `Ctrl+Q`, handled inside the app.
   Minimize is `Super+H`; `F11` enters and leaves full screen (Window menu, not panels); `Ctrl+Y`
   runs any `Shift+Ctrl+Z` redo item. Hide and Hide Other Apps stay in the app menu without a chord.
-- **Apps take the usual Linux bindings** where they differ from a plain swap: Files has
+- **Apps take the usual Linux bindings** beyond the standard items: Files has
   `Delete` to the Trash, `Alt+Up` to the parent folder, `Alt+Left/Right` back and
   forward, `Ctrl+L` Go to Location, `Ctrl+H` hidden files, `F2` rename; Terminal puts its commands
   on `Shift+Ctrl` and sends every plain Ctrl+letter to the shell; Settings goes back with
@@ -55,7 +51,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
 
 ## Consequences
 
-- Muscle memory from VS Code, Firefox and the terminal works the same in Bande's apps.
+- Shortcuts learned in any Linux app work the same in Bande's apps, and the reverse.
 - In drag and drop, Ctrl copies and Shift moves.
 - One parser in `widgets/src/shortcut.rs` reads a menu's shortcut string ("Shift+Ctrl+N") back
   into a key and modifiers; `bande-app` runs the menu entry for a key the view did not take, so

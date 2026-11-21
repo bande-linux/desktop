@@ -45,8 +45,8 @@ time from exec to the first buffer the compositor receives, 45–48 launches per
   across the desktop's binaries, cold start 1–10 ms faster and up to 1 MB less RSS at start
   (Settings 2.7 MB), but warm start up to 0.1 ms slower: glibc decodes RELR bitmaps bit by bit,
   and the scattered relocations of Rust's `.data.rel.ro` make that branchy loop slower than plain
-  RELA. Adopted: the owner accepted the 0.1 ms warm cost for the faster cold start, the lower
-  RSS and the smaller packages. glibc ≥ 2.36 loads such binaries; `dpkg-shlibdeps` adds the
+  RELA. Adopted: a cold start is what a person waits for, so 1–10 ms there, the lower RSS and the
+  smaller packages outweigh 0.1 ms on a warm start. glibc ≥ 2.36 loads such binaries; `dpkg-shlibdeps` adds the
   `libc6` version through the `GLIBC_ABI_DT_RELR` symbol version.
 - **ICU segmentation data loaded at run time** (about 2.9 MB per binary): needs a blob data
   provider in Parley's segmenter and slower lookups; not pursued.

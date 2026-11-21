@@ -403,7 +403,7 @@ msgstr "Anslutning:"
 msgid "Child count:"
 msgstr "Antal underordnade:"
 
-msgid "Partition Map:"
+msgid "Partition map:"
 msgstr "Partitionsschema:"
 
 msgid "S.M.A.R.T. status:"
@@ -451,7 +451,7 @@ msgstr "Låst"
 msgid "Not Mounted"
 msgstr "Inte monterad"
 
-msgid "Mount Point:"
+msgid "Mount point:"
 msgstr "Monteringspunkt:"
 
 msgid "Format:"

@@ -220,7 +220,7 @@ msgstr "Ny mapp"
 msgid "Show Hidden Files"
 msgstr "Visa dolda filer"
 
-msgid "Save As:"
+msgid "Save as:"
 msgstr "Spara som:"
 
 msgid "The folder “{path}” can’t be found."

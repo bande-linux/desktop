@@ -286,7 +286,7 @@ impl AccountSetup {
             entered(Signal::Entered);
         }));
         panel.line(Line::new(
-            Some(&tr!("password:")),
+            Some(&tr!("Password:")),
             vec![(field, Width::Fill)],
             ROW,
         ));
@@ -340,13 +340,13 @@ impl AccountSetup {
                 ];
                 let chosen = usize::from(self.subscription);
                 let kind = panel.add(RadioGroup::new(
-                    &tr!("account type:"),
+                    &tr!("Account type:"),
                     &kinds,
                     Some(chosen),
                     move |index| send(Signal::Kind(index)),
                 ));
                 panel.line(Line::new(
-                    Some(&tr!("account type:")),
+                    Some(&tr!("Account type:")),
                     vec![(kind, Width::Fill)],
                     KINDS,
                 ));
@@ -359,7 +359,7 @@ impl AccountSetup {
             Step::Address => {
                 self.field(
                     &mut panel,
-                    &tr!("address:"),
+                    &tr!("Address:"),
                     &tr!("jane@example.org"),
                     &self.address.clone(),
                     Signal::Address,
@@ -378,14 +378,14 @@ impl AccountSetup {
             Step::Server => {
                 self.field(
                     &mut panel,
-                    &tr!("server:"),
+                    &tr!("Server:"),
                     &tr!("https://dav.example.org/"),
                     &self.server.clone(),
                     Signal::Server,
                 );
                 self.field(
                     &mut panel,
-                    &tr!("user name:"),
+                    &tr!("User name:"),
                     &tr!("jane@example.org"),
                     &self.user.clone(),
                     Signal::User,
@@ -401,7 +401,7 @@ impl AccountSetup {
             Step::Subscription => {
                 self.field(
                     &mut panel,
-                    &tr!("address:"),
+                    &tr!("Address:"),
                     &tr!("webcal://example.org/calendar.ics"),
                     &self.url.clone(),
                     Signal::Server,

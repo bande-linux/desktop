@@ -492,16 +492,16 @@ msgstr "Ta bort {email}?"
 msgid "Mail forgets this account, its saved password and the copy of its mail on this computer. The mail on the server stays."
 msgstr "E-post glömmer det här kontot, dess sparade lösenord och kopian av dess e-post på den här datorn. E-posten på servern finns kvar."
 
-msgid "Account Type:"
+msgid "Account type:"
 msgstr "Kontotyp:"
 
 msgid "Name:"
 msgstr "Namn:"
 
-msgid "Email Address:"
+msgid "Email address:"
 msgstr "E-postadress:"
 
-msgid "User Name:"
+msgid "User name:"
 msgstr "Användarnamn:"
 
 msgid "Password:"

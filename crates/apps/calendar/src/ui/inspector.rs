@@ -164,7 +164,7 @@ fn invitee_lines(panel: &mut Panel, invited: &[Invitee]) {
     let shown = invited.len().min(8);
     let label = panel.add(Label::new(&text));
     panel.line(Line::new(
-        Some(&tr!("invitees:")),
+        Some(&tr!("Invitees:")),
         vec![(label, Width::Fill)],
         18.0 * shown as f32,
     ));
@@ -327,7 +327,7 @@ impl Inspector {
                     panel.add(Checkbox::new("", state, move |on| send(Signal::AllDay(on))));
                 panel.line(
                     Line::new(
-                        Some(&tr!("all-day:")),
+                        Some(&tr!("All-day:")),
                         vec![(all_day, Width::Fixed(20.0))],
                         ROW,
                     )
@@ -340,14 +340,14 @@ impl Inspector {
                 let start_date = panel.add(field(&texts[0], Signal::StartDate));
                 let start_time = panel.add(field(&texts[1], Signal::StartTime));
                 panel.line(Line::new(
-                    Some(&tr!("starts:")),
+                    Some(&tr!("Starts:")),
                     vec![(start_date, Width::Fill), (start_time, Width::Fixed(64.0))],
                     ROW,
                 ));
                 let end_date = panel.add(field(&texts[2], Signal::EndDate));
                 let end_time = panel.add(field(&texts[3], Signal::EndTime));
                 panel.line(Line::new(
-                    Some(&tr!("ends:")),
+                    Some(&tr!("Ends:")),
                     vec![(end_date, Width::Fill), (end_time, Width::Fixed(64.0))],
                     ROW,
                 ));
@@ -357,7 +357,7 @@ impl Inspector {
                         send(Signal::TimeZone(text.to_owned()))
                     }));
                     panel.line(Line::new(
-                        Some(&tr!("time zone:")),
+                        Some(&tr!("Time zone:")),
                         vec![(field, Width::Fill)],
                         ROW,
                     ));
@@ -370,13 +370,13 @@ impl Inspector {
                     .position(|repeat| *repeat == details.repeat)
                     .unwrap_or(0);
                 let repeat = panel.add(PopUpButton::new(
-                    &tr!("repeat:"),
+                    &tr!("Repeat:"),
                     &titles,
                     selected,
                     move |index| send(Signal::Repeat(index)),
                 ));
                 panel.line(Line::new(
-                    Some(&tr!("repeat:")),
+                    Some(&tr!("Repeat:")),
                     vec![(repeat, Width::Fill)],
                     ROW,
                 ));
@@ -386,7 +386,7 @@ impl Inspector {
                     .map(|message| message.tr())
                     .collect();
                 let end_choice = panel.add(PopUpButton::new(
-                    &tr!("end repeat:"),
+                    &tr!("End repeat:"),
                     &ends,
                     end_kind,
                     move |index| send(Signal::EndRepeatKind(index)),
@@ -398,7 +398,7 @@ impl Inspector {
                     move |text| send(Signal::EndRepeatText(text.to_owned())),
                 ));
                 panel.line(Line::new(
-                    Some(&tr!("end repeat:")),
+                    Some(&tr!("End repeat:")),
                     vec![(end_choice, Width::Fill), (end_field, Width::Fixed(96.0))],
                     ROW,
                 ));
@@ -410,13 +410,13 @@ impl Inspector {
                 .position(|alert| *alert == details.alert)
                 .unwrap_or(0);
             let alert = panel.add(PopUpButton::new(
-                &tr!("alert:"),
+                &tr!("Alert:"),
                 &titles,
                 selected,
                 move |index| send(Signal::Alert(index)),
             ));
             panel.line(Line::new(
-                Some(&tr!("alert:")),
+                Some(&tr!("Alert:")),
                 vec![(alert, Width::Fill)],
                 ROW,
             ));
@@ -444,7 +444,7 @@ impl Inspector {
                     send(Signal::Invitees(text.to_owned()))
                 }));
                 panel.line(Line::new(
-                    Some(&tr!("invitees:")),
+                    Some(&tr!("Invitees:")),
                     vec![(field, Width::Fill)],
                     ROW,
                 ));
@@ -456,13 +456,13 @@ impl Inspector {
                 .position(|(index, _)| *index == found.calendar)
                 .unwrap_or(0);
             let calendar = panel.add(PopUpButton::new(
-                &tr!("calendar:"),
+                &tr!("Calendar:"),
                 &names,
                 selected,
                 move |index| send(Signal::Calendar(index)),
             ));
             panel.line(
-                Line::new(Some(&tr!("calendar:")), vec![(calendar, Width::Fill)], ROW).separated(),
+                Line::new(Some(&tr!("Calendar:")), vec![(calendar, Width::Fill)], ROW).separated(),
             );
             let send = sender(signals);
             let notes = panel.add(

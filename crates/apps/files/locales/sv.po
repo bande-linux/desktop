@@ -97,7 +97,7 @@ msgstr "Namn och index"
 msgid "Name and Counter"
 msgstr "Namn och räknare"
 
-msgid "Custom Format:"
+msgid "Custom format:"
 msgstr "Eget format:"
 
 msgid "Start numbers at:"

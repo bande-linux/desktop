@@ -1324,7 +1324,7 @@ impl DisksView {
             (tr!("Capacity:"), format_size(disk.size)),
             (tr!("Connection:"), disk.connection.clone()),
             (tr!("Child count:"), disk.volumes.len().to_string()),
-            (tr!("Partition Map:"), scheme),
+            (tr!("Partition map:"), scheme),
             (tr!("S.M.A.R.T. status:"), smart),
             (tr!("Device:"), disk.device.clone()),
             (
@@ -1404,7 +1404,7 @@ impl DisksView {
             (None, false) => tr!("Not Mounted"),
         };
         let mut pairs = vec![
-            (tr!("Mount Point:"), mount_point),
+            (tr!("Mount point:"), mount_point),
             (tr!("Capacity:"), format_size(volume.size)),
             (tr!("Format:"), format),
             (tr!("Device:"), volume.device.clone()),

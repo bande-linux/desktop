@@ -45,20 +45,20 @@ impl Naming {
             send(Signal::NameText(text.to_owned()))
         }));
         panel.line(Line::new(
-            Some(&tr!("name:")),
+            Some(&tr!("Name:")),
             vec![(field, Width::Fill)],
             ROW,
         ));
         if matches!(target, Target::New(_)) {
             let send = sender(signals);
             let account = panel.add(PopUpButton::new(
-                &tr!("account:"),
+                &tr!("Account:"),
                 accounts,
                 chosen,
                 move |index| send(Signal::NameAccount(index)),
             ));
             panel.line(Line::new(
-                Some(&tr!("account:")),
+                Some(&tr!("Account:")),
                 vec![(account, Width::Fill)],
                 ROW,
             ));

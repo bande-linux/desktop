@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::os::fd::BorrowedFd;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -33,7 +33,6 @@ use crate::APP_ID;
 use crate::bus::Bus;
 
 const BADGE_GAP: Duration = Duration::from_millis(250);
-const FILES: &str = "bande-files";
 pub(crate) const FILES_APP_ID: &str = "org.bande.Files";
 const WINDOW_NODE: NodeId = NodeId(u64::MAX);
 const TERMINAL_NODE: NodeId = NodeId(u64::MAX - 1);
@@ -1091,10 +1090,10 @@ impl TerminalWindow {
             MenuCommand::CopyLink(uri) => window.copy(&uri),
             MenuCommand::ShowInFiles => {
                 if let Some(directory) = self.session().working_directory() {
-                    self.show_in_files(window, &directory);
+                    bande_app::show_in_files(Some(window), vec![directory]);
                 }
             }
-            MenuCommand::Reveal(path) => self.show_in_files(window, &path),
+            MenuCommand::Reveal(path) => bande_app::show_in_files(Some(window), vec![path]),
             MenuCommand::LookUp => {
                 if let Some(text) = look_up_text(self.terminal().selected_text()) {
                     window.look_up(text);
@@ -1106,19 +1105,6 @@ impl TerminalWindow {
                 }
             }
             MenuCommand::CloseOtherTabs(id) => self.close_other_tabs(window, id),
-        }
-    }
-
-    fn show_in_files(&mut self, window: &mut Window, path: &Path) {
-        let token = window
-            .activation_token(FILES_APP_ID)
-            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
-            .ok();
-        let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
-        if let Err(error) =
-            bande_xdg::spawn_detached(FILES_APP_ID, &command, None, token.as_deref())
-        {
-            tracing::warn!("cannot show {} in Files: {error}", path.display());
         }
     }
 

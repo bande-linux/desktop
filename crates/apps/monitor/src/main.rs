@@ -17,7 +17,6 @@ use bande_toolkit::{
 };
 use bande_xdg::{
     ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_icon, replace_file,
-    spawn_detached,
 };
 
 const APP_ID: &str = "org.bande.SystemMonitor";
@@ -25,7 +24,6 @@ const WINDOW_SIZE: (u32, u32) = (960, 640);
 const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
-const FILES: &str = "bande-files";
 const PROC_ROOT: &str = "/";
 const STATE_FILE: &str = "monitor";
 const MEMORY_FLAG: &str = "--memory";
@@ -252,7 +250,7 @@ impl SystemMonitor {
 
 fn serve_in(window: &mut Window, request: Request) {
     match request {
-        Request::ShowInFiles(path) => show_in_files(window, &path),
+        Request::ShowInFiles(path) => bande_app::show_in_files(Some(window), vec![path]),
         Request::Copy(text) => window.copy(&text),
         Request::Clipboard(request) => {
             if let Err(error) = window.serve_clipboard(request) {
@@ -287,17 +285,6 @@ fn save_state(cx: &Cx<SystemMonitor>, text: &str) {
     };
     if let Err(error) = replace_file(&file, text) {
         tracing::warn!("cannot remember the view: {error}");
-    }
-}
-
-fn show_in_files(window: &mut Window, path: &Path) {
-    let token = window
-        .activation_token(FILES_APP_ID)
-        .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
-        .ok();
-    let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
-    if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
-        tracing::warn!("cannot show {} in Files: {error}", path.display());
     }
 }
 

@@ -35,8 +35,6 @@ const SHOW_AFTER: Duration = Duration::from_millis(500);
 const COMPRESS_FLAG: &str = "--compress";
 const EXPAND_ARCHIVE: &str = "expand-archive";
 const SHOW_PANEL: &str = "show-panel";
-const FILE_MANAGER: &str = "org.freedesktop.FileManager1";
-const FILE_MANAGER_PATH: &str = "/org/freedesktop/FileManager1";
 const MIME_FILTER: u32 = 1;
 const ARCHIVE_TYPES: [&str; 11] = [
     "application/zip",
@@ -97,31 +95,6 @@ impl View for Pane {
 
     fn text_input_area(&self) -> Option<Rect> {
         self.0.ui.text_input_area()
-    }
-}
-
-fn reveal(paths: Vec<PathBuf>) {
-    let uris: Vec<String> = paths.iter().map(|path| bande_xdg::file_uri(path)).collect();
-    let spawned = std::thread::Builder::new()
-        .name("reveal".to_owned())
-        .spawn(move || {
-            let shown = Connection::session().and_then(|session| {
-                session
-                    .call_method(
-                        Some(FILE_MANAGER),
-                        FILE_MANAGER_PATH,
-                        Some(FILE_MANAGER),
-                        "ShowItems",
-                        &(uris, ""),
-                    )
-                    .map(drop)
-            });
-            if let Err(error) = shown {
-                tracing::warn!("cannot reveal the items in Files: {error}");
-            }
-        });
-    if let Err(error) = spawned {
-        tracing::warn!("cannot reveal the items in Files: {error}");
     }
 }
 
@@ -219,7 +192,7 @@ impl Utility {
                     put_in_trash(&work.originals());
                 }
                 if shown {
-                    reveal(made);
+                    bande_app::show_in_files(None, made);
                 }
             }
             Ended::Password { archive, wrong } => {

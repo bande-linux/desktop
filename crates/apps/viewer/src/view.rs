@@ -216,7 +216,7 @@ impl FileView {
         if view.paths.is_empty() {
             let (title, detail) = (
                 tr!("No file is open"),
-                tr!("Open an image or a PDF document with File › Open… or from Files."),
+                tr!("Open an image or a PDF document with File ▸ Open… or from Files."),
             );
             view.with_canvas(|canvas| canvas.show_message(&title, &detail));
         }

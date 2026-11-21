@@ -14,7 +14,6 @@ use bande_viewer::{
     FileView, InfoPanel, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
     document_rows, file_rows, info_ui, picture_rows,
 };
-use bande_xdg::spawn_detached;
 
 static INFO: Info = Info {
     id: "org.bande.Viewer",
@@ -29,7 +28,6 @@ const WINDOW_SIZE: (u32, u32) = (900, 680);
 const INFO_SIZE: (u32, u32) = (380, 460);
 const INFO_TAG: &str = "info";
 const FILES_APP_ID: &str = "org.bande.Files";
-const FILES: &str = "bande-files";
 
 const OPEN: &str = "open";
 const SHOW_IN_FILES: &str = "show-in-files";
@@ -225,14 +223,7 @@ impl Viewer {
         let Some(path) = view.path().map(Path::to_path_buf) else {
             return;
         };
-        let token = shown
-            .activation_token(FILES_APP_ID)
-            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
-            .ok();
-        let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
-        if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
-            tracing::warn!("cannot show {} in Files: {error}", path.display());
-        }
+        bande_app::show_in_files(Some(shown), vec![path]);
     }
 
     fn serve(&mut self, cx: &mut Cx<Self>, window: WindowId) {

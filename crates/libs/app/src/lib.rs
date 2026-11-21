@@ -1,4 +1,5 @@
 mod cx;
+mod files;
 mod instance;
 mod menus;
 mod portal;
@@ -22,6 +23,7 @@ use bande_xdg::file_uri;
 
 pub use bande_pdf::{Block, Orientation, Page, PageItem, PageSetup, Paper, flow};
 pub use cx::{Cx, WindowId};
+pub use files::show_in_files;
 pub use portal::{Filter, choose_file, choose_save_file, parent_window};
 pub use print::{
     Document, Layout, can_print, file_document, image_document, print, rich_document, text_document,

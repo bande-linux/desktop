@@ -6,21 +6,30 @@ views. Packaged as `bande-calendar`.
 
 ## What it does
 
-- **Accounts.** CalDAV (RFC 4791) with discovery: a full URL, a host name or just an e-mail
-  address. It tries `_caldavs._tcp` DNS SRV records, `/.well-known/caldav`, then
-  `current-user-principal` → `calendar-home-set` → the calendars in the home set. Passwords go to
-  the Secret Service, never to disk, and are sent only over HTTPS (or to this
-  computer, for a local server). Several accounts, plus a local calendar. The account sheet
-  has Fastmail, Google, iCloud and Nextcloud presets that fill in the server and say which
-  password to use (Google needs OAuth, so it offers a subscription to the calendar's secret
-  iCal address instead). When the server refuses the password, Calendar asks for it again
-  (also from Password… in Settings) and keeps every offline change meanwhile; with its window
-  closed it posts one notification instead, which opens the window at the password sheet.
+- **Accounts.** The account sheet first asks for the type: CalDAV account (RFC 4791) or
+  calendar subscription. For CalDAV it takes an address and a password and looks up the
+  server of the address's own domain (RFC 6764: `_caldavs._tcp` and `_caldav._tcp` SRV records
+  with their TXT `path`, then `/.well-known/caldav`), without sending the password. The server
+  settings step shows what was found, with server URL and user name, to confirm or change;
+  Enter Server Settings Manually goes there directly. Sign In follows `current-user-principal`
+  → `calendar-home-set` → the calendars in the home set, trying the URL, its
+  `/.well-known/caldav` and its root. Credentials go only in answer to a server's challenge,
+  as HTTP Basic or Digest (RFC 7616, SHA-256 or MD5), and only over HTTPS (or to this computer,
+  for a local server). A failure says what went wrong (unreachable, certificate not valid, user
+  name or password refused, unsupported sign-in, no calendar there, server error) and keeps
+  every field editable. Passwords go to the Secret Service, never to disk. Several accounts,
+  plus a local calendar. Settings ▸ Accounts shows each account's server and user name, and
+  Server Settings… changes them; the sheet opens in the Settings window. When the server
+  refuses the password, Calendar asks for it again, with Server Settings… in the same sheet,
+  and keeps every offline change meanwhile; with its window closed it posts one notification
+  instead, which opens the window at the password sheet. DNS lookups use `bande-discovery`,
+  shared with Mail.
 - **Subscriptions.** `webcal:` / `webcals:` links and plain `https:` `.ics` URLs, read-only,
   refreshed on a wall-clock deadline kept across restarts (every 5 minutes to every week, or
   never; for all of them or one by one in Settings); their alerts are dropped unless turned on
-  for that subscription; the name and colour come from `X-WR-CALNAME` and
-  `X-APPLE-CALENDAR-COLOR`.
+  for that subscription; the name comes from RFC 7986 `NAME` or `X-WR-CALNAME`, the colour from
+  `COLOR` (a CSS colour name) or the de-facto `X-APPLE-CALENDAR-COLOR`. The subscription sheet
+  also opens for a `webcal:` link given to Calendar.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
   without a network and pushes changes as soon as NetworkManager says the network is back.
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
@@ -29,8 +38,8 @@ views. Packaged as `bande-calendar`.
 - **iCalendar.** Its own parser and writer: line folding, escaping, unknown properties and
   components kept on round trip, `RRULE` (every frequency and `BY*` part, `COUNT`, `UNTIL`,
   `BYSETPOS`, week numbers), `EXDATE`, `RDATE`, `RECURRENCE-ID` overrides, all-day events,
-  `VALARM`, and time zones: `TZID`s resolve through the system tz database (also Outlook's
-  Windows names and prefixed Mozilla names), unknown ones through their `VTIMEZONE` (converted to
+  `VALARM`, and time zones: `TZID`s resolve through the system tz database (also common
+  non-IANA zone names and prefixed names), unknown ones through their `VTIMEZONE` (converted to
   a POSIX rule). Written events carry a `VTIMEZONE` generated from the tz database.
 - **Views.** Day, week, month and year, a mini month and the calendar list in the sidebar,
   per-calendar colours and visibility, Today and previous/next.
@@ -46,8 +55,7 @@ views. Packaged as `bande-calendar`.
   weekday, or years) and when it ends (never, after a number of times, or on a date), alert,
   calendar and notes. Changing a recurring event asks whether it is for this event only (an
   override) or all events.
-- **Invitations** through the server (RFC 6638 implicit scheduling, as iCloud, Fastmail,
-  Nextcloud and Google do it): the inspector lists the organizer and invitees with their
+- **Invitations** through the server (RFC 6638 implicit scheduling): the inspector lists the organizer and invitees with their
   answers, Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
   times stay read-only), and on an event you organise in a CalDAV calendar you can add
   invitees by address; the server sends the mail. Your addresses come from

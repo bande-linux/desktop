@@ -1,4 +1,5 @@
-use super::dns;
+use bande_discovery::{Resolver, domain_of};
+
 use super::http::{Credentials, Error, Http, Response, join, origin, same_resource};
 use super::xml::{self, CALDAV, CALENDAR_COLOR_NS, CALSERVER, DAV, Multistatus, parse_multistatus};
 
@@ -53,42 +54,64 @@ fn has_scheme(text: &str) -> bool {
     text.starts_with("http://") || text.starts_with("https://")
 }
 
-pub fn candidates(
-    server: &str,
-    user: &str,
-    lookup: impl Fn(&str) -> Vec<dns::Service>,
-) -> Vec<String> {
+fn well_known(url: &str) -> String {
+    format!("{}/.well-known/caldav", origin(url))
+}
+
+pub fn candidates(server: &str) -> Vec<String> {
     let server = server.trim();
-    if has_scheme(server) {
-        let mut found = vec![server.to_owned()];
-        let well_known = format!("{}/.well-known/caldav", origin(server));
-        if !found.contains(&well_known) {
-            found.push(well_known);
-        }
-        return found;
-    }
-    let host = match server.is_empty() {
-        true => user.rsplit_once('@').map_or("", |(_, domain)| domain),
-        false => server.trim_end_matches('/'),
+    let mut found = match (server.is_empty(), has_scheme(server)) {
+        (true, _) => return Vec::new(),
+        (false, true) => vec![server.to_owned()],
+        (false, false) if server.contains('/') => vec![format!("https://{server}")],
+        (false, false) => Vec::new(),
     };
-    if host.is_empty() {
-        return Vec::new();
+    let base = match has_scheme(server) {
+        true => server.to_owned(),
+        false => format!("https://{}", server.split('/').next().unwrap_or(server)),
+    };
+    for url in [well_known(&base), format!("{}/", origin(&base))] {
+        if !found.contains(&url) {
+            found.push(url);
+        }
     }
-    let mut found = Vec::new();
-    let domain = host.split(['/', ':']).next().unwrap_or(host);
-    for record in lookup(&format!("_caldavs._tcp.{domain}")) {
-        let port = match record.port {
-            443 => String::new(),
-            port => format!(":{port}"),
-        };
-        found.push(format!(
-            "https://{}{port}/.well-known/caldav",
-            record.target
-        ));
-    }
-    found.push(format!("https://{host}/.well-known/caldav"));
-    found.push(format!("https://{host}/"));
     found
+}
+
+fn contexts(domain: &str, resolver: &Resolver) -> Vec<String> {
+    let mut found = Vec::new();
+    for (service, scheme, default_port) in [
+        ("_caldavs._tcp", "https", 443),
+        ("_caldav._tcp", "http", 80),
+    ] {
+        let name = format!("{service}.{domain}");
+        let path = resolver
+            .texts(&name)
+            .iter()
+            .find_map(|text| text.strip_prefix("path="))
+            .filter(|path| path.starts_with('/'))
+            .map(str::to_owned);
+        for target in resolver.services(&name) {
+            let port = match target.port == default_port {
+                true => String::new(),
+                false => format!(":{}", target.port),
+            };
+            let path = path.as_deref().unwrap_or("/.well-known/caldav");
+            found.push(format!("{scheme}://{}{port}{path}", target.host));
+        }
+    }
+    found.push(format!("https://{domain}/.well-known/caldav"));
+    found
+}
+
+fn rank(error: &Error) -> u8 {
+    match error {
+        Error::Unauthorized => 0,
+        Error::Unsupported(_) => 1,
+        Error::Insecure(_) => 2,
+        Error::Certificate(_) => 3,
+        _ => 4,
+    }
 }
 
 impl Client {
@@ -148,31 +171,56 @@ impl Client {
             .map(|href| (url.clone(), join(&url, &href))))
     }
 
-    pub fn discover(&self, server: &str, user: &str) -> Result<Discovered, Error> {
-        self.discover_with(server, user, dns::lookup)
+    /// The CalDAV context URL that the domain of `address` points to (RFC 6764), found
+    /// without sending credentials.
+    pub fn find(address: &str, resolver: &Resolver) -> Option<String> {
+        let probe = Self::new(None);
+        contexts(&domain_of(address)?, resolver)
+            .into_iter()
+            .find_map(|url| probe.probe(&url))
     }
 
-    pub fn discover_with(
-        &self,
-        server: &str,
-        user: &str,
-        lookup: impl Fn(&str) -> Vec<dns::Service>,
-    ) -> Result<Discovered, Error> {
-        let mut last = Error::NotFound(match server.is_empty() {
-            true => user.to_owned(),
-            false => server.to_owned(),
-        });
-        for candidate in candidates(server, user, lookup) {
-            match self.discover_at(&candidate) {
-                Ok(found) => return Ok(found),
-                Err(Error::Unauthorized) => return Err(Error::Unauthorized),
+    fn probe(&self, url: &str) -> Option<String> {
+        let mut url = url.to_owned();
+        let body = xml::propfind(&["d:current-user-principal"]);
+        for _ in 0..MAX_REDIRECTS {
+            let response = match self
+                .http
+                .send("PROPFIND", &url, &[("Depth", "0")], Some(&body))
+            {
+                Err(Error::Unauthorized) => return Some(url),
                 Err(error) => {
-                    tracing::debug!("no calendars at {candidate}: {error}");
-                    last = error;
+                    tracing::debug!("no calendar server at {url}: {error}");
+                    return None;
+                }
+                Ok(response) => response,
+            };
+            match (&response.location, response.status) {
+                (Some(location), 301 | 302 | 303 | 307 | 308) => url = join(&url, location),
+                (_, 207) => return Some(url),
+                (_, status) => {
+                    tracing::debug!("no calendar server at {url}: {status}");
+                    return None;
                 }
             }
         }
-        Err(last)
+        None
+    }
+
+    pub fn discover(&self, server: &str) -> Result<Discovered, Error> {
+        let mut best = Error::NotFound(server.to_owned());
+        for candidate in candidates(server) {
+            match self.discover_at(&candidate) {
+                Ok(found) => return Ok(found),
+                Err(error) => {
+                    tracing::debug!("no calendars at {candidate}: {error}");
+                    if rank(&error) <= rank(&best) {
+                        best = error;
+                    }
+                }
+            }
+        }
+        Err(best)
     }
 
     fn discover_at(&self, url: &str) -> Result<Discovered, Error> {

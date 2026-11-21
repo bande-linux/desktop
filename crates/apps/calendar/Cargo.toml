@@ -11,13 +11,16 @@ publish = false
 [dependencies]
 accesskit.workspace = true
 bande-app.workspace = true
+bande-discovery.workspace = true
 bande-search.workspace = true
 base64.workspace = true
 jiff.workspace = true
+md-5.workspace = true
 roxmltree.workspace = true
 rustix = { workspace = true, features = ["fs", "time"] }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tracing.workspace = true
 rustls.workspace = true
 ureq.workspace = true
@@ -33,6 +36,7 @@ bande-toolkit.workspace = true
 bande-xdg.workspace = true
 
 [dev-dependencies]
+bande-discovery = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 
 [lints]

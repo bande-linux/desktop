@@ -79,9 +79,6 @@ msgstr "Visa"
 msgid "Updating…"
 msgstr "Uppdaterar…"
 
-msgid "{url} is not a calendar."
-msgstr "{url} är inte en kalender."
-
 msgid "“{title}” was changed elsewhere; both versions are kept."
 msgstr "”{title}” ändrades på annat håll. Båda versionerna har sparats."
 
@@ -352,15 +349,6 @@ msgstr "Från {file}"
 msgid "Add"
 msgstr "Lägg till"
 
-msgid "Subscribe to “{url}”?"
-msgstr "Vill du prenumerera på ”{url}”?"
-
-msgid "The calendar is read-only and refreshes as set in Calendar Settings."
-msgstr "Kalendern är skrivskyddad och uppdateras enligt inställningarna i Kalenderinställningar."
-
-msgid "Subscribe"
-msgstr "Prenumerera"
-
 msgid "Only This Event"
 msgstr "Bara den här händelsen"
 
@@ -484,11 +472,14 @@ msgstr "Uppdatera kalendrar:"
 msgid "Refresh subscriptions:"
 msgstr "Uppdatera prenumerationer:"
 
-msgid "CalDAV on {server}"
-msgstr "CalDAV på {server}"
+msgid "CalDAV on {server} as {user}"
+msgstr "CalDAV på {server} som {user}"
 
-msgid "Password…"
-msgstr "Lösenord…"
+msgid "Server Settings…"
+msgstr "Serverinställningar…"
+
+msgid "Server, user name and password"
+msgstr "Server, användarnamn och lösenord"
 
 msgid "Subscribed to {url}"
 msgstr "Prenumererar på {url}"
@@ -496,8 +487,8 @@ msgstr "Prenumererar på {url}"
 msgid "Remove…"
 msgstr "Ta bort…"
 
-msgid "iCloud and Fastmail sign in with an app password, Nextcloud with your password or an app password. Google needs OAuth, which Calendar cannot do yet."
-msgstr "iCloud och Fastmail loggar du in på med ett applösenord, Nextcloud med ditt lösenord eller ett applösenord. Google kräver OAuth, vilket Kalender inte kan hantera ännu."
+msgid "Calendar works with CalDAV servers and with published calendars (webcal or https links). Some providers need a separate app password for calendar apps."
+msgstr "Kalender fungerar med CalDAV-servrar och med publicerade kalendrar (webcal- eller https-länkar). Vissa leverantörer kräver ett separat applösenord för kalenderappar."
 
 msgid "As in Settings"
 msgstr "Som i Inställningar"
@@ -505,65 +496,134 @@ msgstr "Som i Inställningar"
 msgid "Alerts"
 msgstr "Påminnelser"
 
-msgid "iCloud"
-msgstr "iCloud"
+msgid "Calendar could not reach the server. Check the address, and that this computer is online."
+msgstr "Kalender kunde inte nå servern. Kontrollera adressen, och att datorn är ansluten till internet."
 
-msgid "Fastmail"
-msgstr "Fastmail"
+msgid "The certificate of {server} could not be verified. Check that the address is exactly the one your provider gives."
+msgstr "Certifikatet för {server} kunde inte verifieras. Kontrollera att adressen är exakt den som din leverantör anger."
 
-msgid "Google"
-msgstr "Google"
+msgid "This calendar needs a sign-in. Ask its publisher for a public address, or add it as a CalDAV account."
+msgstr "Kalendern kräver inloggning. Be den som publicerar den om en offentlig adress, eller lägg till den som ett CalDAV-konto."
 
-msgid "Nextcloud"
-msgstr "Nextcloud"
+msgid "The server did not accept the user name or password. Check both; some providers need a separate app password for calendar apps."
+msgstr "Servern godtog inte användarnamnet eller lösenordet. Kontrollera båda. Vissa leverantörer kräver ett separat applösenord för kalenderappar."
 
-msgid "CalDAV Account"
-msgstr "CalDAV-konto"
+msgid "The server asks for a sign-in method Calendar does not support ({schemes}). Ask your provider for sign-in with a password."
+msgstr "Servern begär en inloggningsmetod som Kalender inte stöder ({schemes}). Fråga din leverantör om inloggning med lösenord."
 
-msgid "Subscription"
-msgstr "Prenumeration"
+msgid "{server} offers no encrypted connection, so Calendar does not send the password. Use an https:// address."
+msgstr "{server} erbjuder ingen krypterad anslutning, så Kalender skickar inte lösenordet. Använd en https://-adress."
 
-msgid "Sign in with your Apple Account and an app-specific password from account.apple.com."
-msgstr "Logga in med ditt Apple-konto och ett applösenord från account.apple.com."
+msgid "The server answered with an error ({status}). Try again later."
+msgstr "Servern svarade med ett fel ({status}). Försök igen senare."
 
-msgid "Sign in with an app password from Fastmail’s Settings ▸ Privacy & Security."
-msgstr "Logga in med ett applösenord från Fastmails Inställningar ▸ Integritet och säkerhet."
+msgid "There is no calendar at this address. Check the link."
+msgstr "Det finns ingen kalender på den här adressen. Kontrollera länken."
 
-msgid "Google needs OAuth. To see a Google calendar, paste its secret address in iCal format."
-msgstr "Google kräver OAuth. Om du vill se en Google-kalender klistrar du in dess hemliga adress i iCal-format."
-
-msgid "Enter your Nextcloud server; an app password from Settings ▸ Security works best."
-msgstr "Ange din Nextcloud-server. Ett applösenord från Inställningar ▸ Säkerhet fungerar bäst."
-
-msgid "Enter the server, or leave it empty to look it up from your e-mail address."
-msgstr "Ange servern, eller lämna fältet tomt för att söka upp den utifrån din e-postadress."
-
-msgid "Paste a webcal:// or https:// link to a calendar."
-msgstr "Klistra in en webcal://- eller https://-länk till en kalender."
-
-msgid "Add a Calendar Account"
-msgstr "Lägg till ett kalenderkonto"
-
-msgid "user name:"
-msgstr "användarnamn:"
+msgid "There is no CalDAV calendar at this address. Check the server address and path your provider gives."
+msgstr "Det finns ingen CalDAV-kalender på den här adressen. Kontrollera serveradressen och sökvägen som din leverantör anger."
 
 msgid "password:"
 msgstr "lösenord:"
 
-msgid "dav.example.com, or a webcal:// link"
-msgstr "dav.example.com eller en webcal://-länk"
+msgid "Add a Calendar Account"
+msgstr "Lägg till ett kalenderkonto"
 
-msgid "server or URL:"
-msgstr "server eller URL:"
+msgid "Add a CalDAV Account"
+msgstr "Lägg till ett CalDAV-konto"
 
-msgid "Sign In"
-msgstr "Logga in"
+msgid "CalDAV Server Settings"
+msgstr "Inställningar för CalDAV-server"
 
 msgid "Sign in to “{name}”"
 msgstr "Logga in på ”{name}”"
 
-msgid "Enter the password or app password for {user}."
-msgstr "Ange lösenordet eller applösenordet för {user}."
+msgid "Subscribe to a Calendar"
+msgstr "Prenumerera på en kalender"
+
+msgid "Sign In"
+msgstr "Logga in"
+
+msgid "CalDAV account"
+msgstr "CalDAV-konto"
+
+msgid "Calendar subscription (webcal or https link)"
+msgstr "Kalenderprenumeration (webcal- eller https-länk)"
+
+msgid "account type:"
+msgstr "kontotyp:"
+
+msgid "A CalDAV account keeps calendars in sync with a server. A subscription shows a published calendar, read-only."
+msgstr "Ett CalDAV-konto håller kalendrar synkroniserade med en server. En prenumeration visar en publicerad kalender som bara kan läsas."
+
+msgid "Continue"
+msgstr "Fortsätt"
+
+msgid "address:"
+msgstr "adress:"
+
+msgid "jane@example.org"
+msgstr "anna@example.org"
+
+msgid "Calendar looks up the CalDAV server of your address’s domain and shows it to you before it signs in."
+msgstr "Kalender slår upp CalDAV-servern för adressens domän och visar den för dig innan den loggar in."
+
+msgid "Enter Server Settings Manually"
+msgstr "Ange serverinställningar manuellt"
+
+msgid "server:"
+msgstr "server:"
+
+msgid "https://dav.example.org/"
+msgstr "https://dav.example.org/"
+
+msgid "user name:"
+msgstr "användarnamn:"
+
+msgid "Enter the server address your provider gives, with its port and path if it has them. Calendar sends the password only when the server asks for it."
+msgstr "Ange serveradressen som din leverantör anger, med port och sökväg om den har sådana. Kalender skickar lösenordet bara när servern ber om det."
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "webcal://example.org/calendar.ics"
+msgstr "webcal://example.org/calendar.ics"
+
+msgid "Paste a webcal:// or https:// link to a calendar. It is read-only and refreshes as set in Calendar Settings."
+msgstr "Klistra in en webcal://- eller https://-länk till en kalender. Den kan bara läsas och uppdateras enligt Kalenderinställningar."
+
+msgid "Subscribe"
+msgstr "Prenumerera"
+
+msgid "The server did not accept the password for {user}. Enter it again, or check the server settings."
+msgstr "Servern godtog inte lösenordet för {user}. Ange det igen eller kontrollera serverinställningarna."
+
+msgid "Enter your address, such as jane@example.org."
+msgstr "Ange din adress, till exempel anna@example.org."
+
+msgid "Looking up the server…"
+msgstr "Slår upp servern…"
+
+msgid "Enter the address of the server."
+msgstr "Ange serverns adress."
+
+msgid "Enter your user name."
+msgstr "Ange ditt användarnamn."
+
+msgid "Enter your password."
+msgstr "Ange ditt lösenord."
+
+msgid "Signing in…"
+msgstr "Loggar in…"
+
+msgid "Enter the address of the calendar."
+msgstr "Ange kalenderns adress."
+
+msgid "Calendar found a CalDAV server for {domain}. Check that it belongs to your provider, then sign in."
+msgstr "Kalender hittade en CalDAV-server för {domain}. Kontrollera att den tillhör din leverantör och logga sedan in."
+
+msgid "Calendar found no CalDAV server for {domain}. Enter the server address your provider gives."
+msgstr "Kalender hittade ingen CalDAV-server för {domain}. Ange serveradressen som din leverantör anger."
 
 msgid "Subscriptions"
 msgstr "Prenumerationer"

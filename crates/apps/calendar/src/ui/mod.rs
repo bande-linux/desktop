@@ -7,7 +7,7 @@ mod paint;
 pub mod painter;
 mod panel;
 mod settings_view;
-mod setup;
+pub mod setup;
 mod sidebar;
 mod toolbar;
 
@@ -16,6 +16,7 @@ use std::rc::Rc;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_datetime::DateFormats;
+use bande_inbox::Outbox;
 use bande_l10n::tr;
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
 use bande_toolkit::{
@@ -62,12 +63,7 @@ impl Mode {
 pub enum Request {
     Menu(Menu, Point),
     Clipboard(ClipboardRequest),
-    AddAccount {
-        server: String,
-        user: String,
-        password: String,
-    },
-    Subscribe(String),
+    Setup(Box<setup::Done>),
     RemoveAccount(String),
     Collection {
         account: String,
@@ -75,11 +71,6 @@ pub enum Request {
         change: crate::worker::Change,
     },
     Changed,
-    SetPassword {
-        account: String,
-        user: String,
-        password: String,
-    },
     Export {
         name: String,
         data: String,
@@ -119,12 +110,6 @@ pub(crate) enum Signal {
     Notes(String),
     DeleteEvent,
     Choice(String),
-    SetupKind(usize),
-    SetupUser(String),
-    SetupPassword(String),
-    SetupServer(String),
-    SetupSubmit,
-    SetupCancel,
     NameText(String),
     NameAccount(usize),
     NameSubmit,
@@ -195,7 +180,6 @@ pub(crate) enum Confirm {
     Delete(Found),
     RemoveAccount(String),
     Import(Vec<CalendarObject>, usize),
-    Subscribe(String),
     DeleteCalendar(usize),
 }
 
@@ -233,7 +217,8 @@ pub struct CalendarView {
     hover: Option<Hit>,
     selected: Option<Selection>,
     inspector: Option<inspector::Inspector>,
-    setup: Option<setup::Setup>,
+    setup: Option<setup::AccountSetup>,
+    setup_replies: Outbox<setup::Reply>,
     custom: Option<custom::Custom>,
     naming: Option<naming::Naming>,
     confirm: Option<Confirm>,
@@ -253,10 +238,11 @@ impl CalendarView {
         text: TextSystem,
         formats: DateFormats,
         settings: CalendarSettings,
-        zone: TimeZone,
         now: Zoned,
+        setup_replies: Outbox<setup::Reply>,
     ) -> Self {
         let signals: Signals = Rc::new(RefCell::new(Vec::new()));
+        let zone = now.time_zone().clone();
         let mut host = FreeLayout::new();
         let toolbar = toolbar::Toolbar::new(&mut host, &signals, Mode::Week);
         let host_id = bande_toolkit::ui::Widget::id(&host);
@@ -291,6 +277,7 @@ impl CalendarView {
             selected: None,
             inspector: None,
             setup: None,
+            setup_replies,
             custom: None,
             naming: None,
             confirm: None,
@@ -727,26 +714,39 @@ impl CalendarView {
     }
 
     pub fn ask_password(&mut self, account: &str) {
-        if self.setup.is_some() {
+        if self.setup.as_ref().is_some_and(|setup| !setup.closed()) {
             return;
         }
-        let Some((name, user)) =
-            self.library
-                .account(account)
-                .and_then(|known| match &known.kind {
-                    AccountKind::CalDav { user, .. } => Some((known.name.clone(), user.clone())),
-                    _ => None,
-                })
-        else {
+        let Some(start) = self.library.account(account).and_then(setup::sign_in) else {
             return;
         };
+        self.open_setup(start);
+    }
+
+    fn open_setup(&mut self, start: setup::Start) {
         self.close_inspector(true);
-        let (panel, setup) = setup::Setup::sign_in(&self.signals, account, &name, &user);
-        let field = setup.password_field();
+        let mut setup = setup::AccountSetup::new(start, self.setup_replies.clone());
+        setup.present(&mut self.ui);
         self.setup = Some(setup);
-        self.ui.present_sheet(panel);
-        if let Some(field) = field {
-            self.ui.set_focus(field);
+    }
+
+    pub fn setup_reply(&mut self, reply: setup::Reply) {
+        if let Some(setup) = &mut self.setup
+            && let Some(done) = setup.receive(&mut self.ui, reply)
+        {
+            self.requests.push(Request::Setup(Box::new(done)));
+        }
+    }
+
+    fn update_setup(&mut self) {
+        let Some(setup) = &mut self.setup else {
+            return;
+        };
+        if let Some(done) = setup.update(&mut self.ui) {
+            self.requests.push(Request::Setup(Box::new(done)));
+        }
+        if setup.closed() {
+            self.setup = None;
         }
     }
 
@@ -785,10 +785,7 @@ impl CalendarView {
     }
 
     pub fn open_account_setup(&mut self) {
-        self.close_inspector(true);
-        let (panel, setup) = setup::Setup::build(&self.signals);
-        self.setup = Some(setup);
-        self.ui.present_sheet(panel);
+        self.open_setup(setup::Start::Add);
     }
 
     pub fn offer_import(&mut self, objects: Vec<CalendarObject>, file: &str) -> bool {
@@ -811,29 +808,10 @@ impl CalendarView {
     }
 
     pub fn offer_subscription(&mut self, url: &str) {
-        let title = tr!("Subscribe to “{url}”?", url = url.to_owned());
-        self.confirm = Some(Confirm::Subscribe(url.to_owned()));
-        let alert = Alert::new(
-            &title,
-            &tr!("The calendar is read-only and refreshes as set in Calendar Settings."),
-            self.choice(),
-        )
-        .cancel(&tr!("Cancel"), "cancel")
-        .primary(&tr!("Subscribe"), "accept");
-        self.ui.present_dialog(alert);
-    }
-
-    pub fn account_failed(&mut self, message: &str) {
-        match &mut self.setup {
-            Some(setup) => setup.show_error(&mut self.ui, message),
-            None => self.status = Some(message.to_owned()),
-        }
+        self.open_setup(setup::Start::Subscribe(url.to_owned()));
     }
 
     pub fn account_added(&mut self) {
-        if let Some(setup) = self.setup.take() {
-            setup.close(&mut self.ui);
-        }
         self.drain();
     }
 
@@ -1273,6 +1251,7 @@ impl CalendarView {
     }
 
     pub(crate) fn drain(&mut self) {
+        self.update_setup();
         loop {
             let signals = std::mem::take(&mut *self.signals.borrow_mut());
             if signals.is_empty() {

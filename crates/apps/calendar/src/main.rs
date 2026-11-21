@@ -17,6 +17,7 @@ use bande_calendar::settings::{CalendarSettings, Change, listen};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, Library, data_dir, new_uid};
 use bande_calendar::sync::{apply, subscription_outcome};
 use bande_calendar::ui::painter::{color_text, parse_color};
+use bande_calendar::ui::setup::{Done, Reply as SetupReply};
 use bande_calendar::ui::{
     CalendarView, Mode, Request, SETTINGS_SIZE, SIDEBAR_WIDTH, SettingsView, TOOLBAR_HEIGHT,
 };
@@ -117,6 +118,7 @@ struct CalendarApp {
     changes: Inbox<Change>,
     chosen: Inbox<Chosen>,
     online: Inbox<System>,
+    setups: Inbox<SetupReply>,
     settings: CalendarSettings,
     settings_watch: Option<SettingsWatch>,
     zone: TimeZone,
@@ -225,6 +227,42 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
 fn clock(formats: &DateFormats, at: &Zoned) -> String {
     let (time, period) = formats.time(at);
     period.map_or(time.clone(), |period| format!("{time} {period}"))
+}
+
+fn discovered_calendars(account: &str, found: &Discovered) -> Vec<CalendarInfo> {
+    found
+        .calendars
+        .iter()
+        .enumerate()
+        .map(|(index, remote)| CalendarInfo {
+            id: new_uid(),
+            account: account.to_owned(),
+            url: Some(remote.url.clone()),
+            name: remote.name.clone(),
+            color: remote
+                .color
+                .as_deref()
+                .and_then(parse_color)
+                .map(color_text)
+                .unwrap_or_else(|| {
+                    color_text(Accent::ALL[index % Accent::ALL.len()].color(Scheme::Light))
+                }),
+            read_only: remote.read_only,
+            visible: true,
+            ctag: None,
+            sync_token: None,
+            refreshed: None,
+        })
+        .collect()
+}
+
+fn caldav_kind(server: String, user: String, found: Discovered) -> AccountKind {
+    AccountKind::CalDav {
+        server,
+        user,
+        home: found.home,
+        addresses: found.addresses,
+    }
 }
 
 fn host_of(url: &str) -> &str {
@@ -379,53 +417,54 @@ impl CalendarApp {
         self.rearm(view);
     }
 
-    fn add_discovered(
-        &mut self,
-        view: &mut CalendarView,
-        id: String,
-        server: String,
-        user: String,
-        found: Discovered,
-    ) {
-        let name = match user.contains('@') {
-            true => user.clone(),
-            false => format!("{user}@{}", host_of(&found.principal)),
-        };
-        let calendars = found
-            .calendars
-            .iter()
-            .enumerate()
-            .map(|(index, remote)| CalendarInfo {
-                id: new_uid(),
-                account: id.clone(),
-                url: Some(remote.url.clone()),
-                name: remote.name.clone(),
-                color: remote
-                    .color
-                    .as_deref()
-                    .and_then(parse_color)
-                    .map(color_text)
-                    .unwrap_or_else(|| {
-                        color_text(Accent::ALL[index % Accent::ALL.len()].color(Scheme::Light))
-                    }),
-                read_only: remote.read_only,
-                visible: true,
-                ctag: None,
-                sync_token: None,
-                refreshed: None,
-            })
-            .collect();
-        let account = Account {
-            id,
-            name,
-            kind: AccountKind::CalDav {
+    fn setup_done(&mut self, view: &mut CalendarView, done: Done) {
+        let (account, user, password) = match done {
+            Done::Added {
                 server,
                 user,
-                home: found.home,
-                addresses: found.addresses,
-            },
+                password,
+                found,
+            } => {
+                let id = new_uid();
+                let name = match user.contains('@') {
+                    true => user.clone(),
+                    false => format!("{user}@{}", host_of(&found.principal)),
+                };
+                let calendars = discovered_calendars(&id, &found);
+                let account = Account {
+                    id: id.clone(),
+                    name,
+                    kind: caldav_kind(server, user.clone(), found),
+                };
+                view.library_mut().add_account(account, calendars);
+                (id, user, password)
+            }
+            Done::Updated {
+                account,
+                server,
+                user,
+                password,
+                found,
+            } => {
+                let calendars = discovered_calendars(&account, &found);
+                let kind = caldav_kind(server, user.clone(), found);
+                view.library_mut().update_account(&account, kind, calendars);
+                (account, user, password)
+            }
+            Done::Subscribed { url, data } => return self.add_subscription(view, url, &data),
+            Done::Password {
+                account,
+                user,
+                password,
+            } => (account, user, password),
         };
-        view.library_mut().add_account(account, calendars);
+        self.asked.remove(&account);
+        self.withdraw_sign_in(&account);
+        self.worker.send(Job::SetPassword {
+            account,
+            user,
+            password,
+        });
         view.account_added();
         self.push_soon(Duration::ZERO);
     }
@@ -437,7 +476,7 @@ impl CalendarApp {
 
     fn add_subscription(&mut self, view: &mut CalendarView, url: String, data: &str) {
         let Ok(objects) = CalendarObject::parse(data) else {
-            view.account_failed(&tr!("{url} is not a calendar.", url = url));
+            tracing::warn!("{url} is not a calendar");
             return;
         };
         let header = |name: &str| {
@@ -499,14 +538,6 @@ impl CalendarApp {
         let changed = !replies.is_empty();
         for reply in replies {
             match reply {
-                Reply::Discovered {
-                    id,
-                    server,
-                    user,
-                    found,
-                } => self.add_discovered(view, id, server, user, found),
-                Reply::DiscoveryFailed(error) => view.account_failed(&error),
-                Reply::Subscribed { url, data } => self.add_subscription(view, url, &data),
                 Reply::Synced(outcome) => {
                     for title in apply(view.library_mut(), outcome, false) {
                         self.sync_again = true;
@@ -613,17 +644,7 @@ impl CalendarApp {
                         tracing::warn!("cannot use the clipboard: {error}");
                     }
                 }
-                Request::AddAccount {
-                    server,
-                    user,
-                    password,
-                } => self.worker.send(Job::Discover {
-                    id: new_uid(),
-                    server,
-                    user,
-                    password,
-                }),
-                Request::Subscribe(url) => self.worker.send(Job::Subscribe { url }),
+                Request::Setup(done) => self.setup_done(view, *done),
                 Request::RemoveAccount(id) => {
                     view.library_mut().remove_account(&id);
                     self.worker.send(Job::Forget(id));
@@ -632,20 +653,6 @@ impl CalendarApp {
                     self.push_soon(PUSH_DELAY);
                     self.check_alerts(view);
                     view.refresh_search();
-                }
-                Request::SetPassword {
-                    account,
-                    user,
-                    password,
-                } => {
-                    self.asked.remove(&account);
-                    self.withdraw_sign_in(&account);
-                    self.worker.send(Job::SetPassword {
-                        account,
-                        user,
-                        password,
-                    });
-                    self.push_soon(Duration::ZERO);
                 }
                 Request::Export { name, data } => choose(self.chosen.outbox(), Some((name, data))),
                 Request::Collection {
@@ -816,22 +823,18 @@ impl CalendarApp {
     }
 
     fn apply_change(&mut self, cx: &mut Cx<Self>, change: Change) {
-        if matches!(
-            change,
-            Change::AddAccount | Change::RemoveAccount(_) | Change::Password(_)
-        ) {
+        if matches!(change, Change::RemoveAccount(_)) {
             self.raise(cx);
         }
-        self.with_view(cx, |_, view| match &change {
-            Change::AddAccount => view.open_account_setup(),
-            Change::RemoveAccount(id) => view.ask_remove_account(id),
-            Change::Password(id) => view.ask_password(id),
+        self.with_view(cx, |app, view| match change {
+            Change::RemoveAccount(id) => view.ask_remove_account(&id),
+            Change::Setup(done) => app.setup_done(view, *done),
             Change::SubscriptionRefresh(id, minutes) => {
                 view.library_mut()
-                    .set_subscription(id, Some(*minutes), None)
+                    .set_subscription(&id, Some(minutes), None)
             }
             Change::SubscriptionAlerts(id, alerts) => {
-                view.library_mut().set_subscription(id, None, Some(*alerts))
+                view.library_mut().set_subscription(&id, None, Some(alerts))
             }
         });
     }
@@ -923,14 +926,15 @@ impl Program for CalendarApp {
         let formats = DateFormats::from_env();
         let settings = load_settings();
         let now = Zoned::now().with_time_zone(zone.clone());
+        let setups = Inbox::new()?;
         let mut view = CalendarView::new(
             library,
             Appearance::default().palette(),
             TextSystem::new(),
             formats.clone(),
             settings.clone(),
-            zone.clone(),
             now,
+            setups.outbox(),
         );
         let title = view.title();
         let directory = std::env::current_dir().unwrap_or_default();
@@ -956,6 +960,7 @@ impl Program for CalendarApp {
             changes,
             chosen: Inbox::new()?,
             online,
+            setups,
             settings,
             settings_watch,
             zone,
@@ -1071,6 +1076,7 @@ impl Program for CalendarApp {
             self.chosen.fd(),
             self.online.fd(),
             self.notices.fd(),
+            self.setups.fd(),
         ]
         .into_iter()
         .chain(self.settings_watch.iter().map(SettingsWatch::fd))
@@ -1134,6 +1140,11 @@ impl Program for CalendarApp {
             5 => {
                 for notice in self.notices.take() {
                     self.notice(cx, notice);
+                }
+            }
+            6 => {
+                for reply in self.setups.drain() {
+                    self.with_view(cx, |_, view| view.setup_reply(reply));
                 }
             }
             _ => self.follow_settings(cx),

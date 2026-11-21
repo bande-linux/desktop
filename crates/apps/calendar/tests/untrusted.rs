@@ -2,7 +2,6 @@
 
 use std::io::ErrorKind;
 
-use bande_calendar::caldav::{Client, Credentials, Error};
 use bande_calendar::ical::{CalendarObject, read_file};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -60,16 +59,4 @@ fn a_hostile_fifo_or_huge_calendar_file_opens_without_panicking_hanging_or_being
         read_file(&huge).map_err(|error| error.kind()),
         Err(ErrorKind::FileTooLarge)
     );
-}
-
-#[test]
-fn a_password_is_sent_only_over_https_or_to_this_computer() {
-    let client = Client::new(Some(&Credentials {
-        user: "jane".to_owned(),
-        password: "secret".to_owned(),
-    }));
-    for server in ["http://dav.example.com/", "http://localhost.evil.example/"] {
-        let refused = client.discover(server, "jane");
-        assert!(matches!(refused, Err(Error::Insecure(_))));
-    }
 }

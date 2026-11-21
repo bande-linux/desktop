@@ -199,11 +199,10 @@ impl Stored for CalendarSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Change {
-    AddAccount,
     RemoveAccount(String),
-    Password(String),
+    Setup(Box<crate::ui::setup::Done>),
     SubscriptionRefresh(String, Option<u32>),
     SubscriptionAlerts(String, bool),
 }

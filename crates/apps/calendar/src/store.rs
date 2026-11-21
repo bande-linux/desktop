@@ -444,6 +444,31 @@ impl Library {
         }
     }
 
+    pub fn update_account(&mut self, id: &str, kind: AccountKind, calendars: Vec<CalendarInfo>) {
+        let Some(account) = self.accounts.iter_mut().find(|account| account.id == id) else {
+            return;
+        };
+        account.kind = kind;
+        self.save_accounts();
+        while let Some(index) = self.calendars.iter().position(|calendar| {
+            calendar.info.account == id
+                && !calendars
+                    .iter()
+                    .any(|found| found.url.is_some() && found.url == calendar.info.url)
+        }) {
+            self.remove_calendar(index);
+        }
+        for info in calendars {
+            if !self
+                .calendars
+                .iter()
+                .any(|calendar| calendar.info.account == id && calendar.info.url == info.url)
+            {
+                self.add_calendar(info);
+            }
+        }
+    }
+
     pub fn add_calendar(&mut self, info: CalendarInfo) -> usize {
         self.calendars.push(Calendar::new(info));
         let index = self.calendars.len() - 1;

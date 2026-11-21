@@ -6,23 +6,14 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use bande_keyring::Keyring;
 
-use crate::caldav::{Client, Credentials, Discovered, Error};
+use crate::caldav::{Client, Credentials, Error};
 use crate::store::{AccountKind, Calendar};
 use crate::sync::{Outcome, sync_calendar};
 
-const KEYRING: &str = "bande-calendar";
+const KEYRING: &str = "org.bande.Calendar";
 
 #[derive(Debug)]
 pub enum Job {
-    Discover {
-        id: String,
-        server: String,
-        user: String,
-        password: String,
-    },
-    Subscribe {
-        url: String,
-    },
     Sync(Vec<(AccountKind, String, Calendar)>),
     Forget(String),
     SetPassword {
@@ -48,17 +39,6 @@ pub enum Change {
 
 #[derive(Debug)]
 pub enum Reply {
-    Discovered {
-        id: String,
-        server: String,
-        user: String,
-        found: Discovered,
-    },
-    DiscoveryFailed(String),
-    Subscribed {
-        url: String,
-        data: String,
-    },
     Synced(Outcome),
     Refreshed {
         calendar: String,
@@ -132,42 +112,6 @@ impl Passwords {
 
 fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
     match job {
-        Job::Discover {
-            id,
-            server,
-            user,
-            password,
-        } => {
-            let client = Client::new(Some(&Credentials {
-                user: user.clone(),
-                password: password.clone(),
-            }));
-            match client.discover(&server, &user) {
-                Ok(found) => {
-                    let label = format!("Calendar: {user}");
-                    if let Some(keyring) = passwords.keyring()
-                        && let Err(error) = keyring.save(&[("account", &id)], &label, &password)
-                    {
-                        tracing::warn!("cannot keep the password: {error}");
-                    }
-                    passwords.known.insert(id.clone(), password);
-                    reply(Reply::Discovered {
-                        id,
-                        server,
-                        user,
-                        found,
-                    });
-                }
-                Err(error) => reply(Reply::DiscoveryFailed(error.to_string())),
-            }
-        }
-        Job::Subscribe { url } => match Client::new(None).get(&http_url(&url)) {
-            Ok(resource) => reply(Reply::Subscribed {
-                url,
-                data: resource.data,
-            }),
-            Err(error) => reply(Reply::DiscoveryFailed(error.to_string())),
-        },
         Job::Sync(calendars) => {
             for (kind, account, calendar) in calendars {
                 let result = match &kind {

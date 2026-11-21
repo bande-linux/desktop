@@ -1,9 +1,11 @@
+use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::PathBuf;
 
 use bande_l10n::{Text, text, tr};
 
 use super::inspector::alert_title;
+use super::setup::{self, AccountSetup, Reply};
 use crate::edit::Alert;
 use crate::settings::{
     CalendarSettings, Change, HOURS_SHOWN, REFRESH_MINUTES, SUBSCRIPTION_MINUTES, WEEKDAYS,
@@ -14,6 +16,7 @@ use accesskit::TreeUpdate;
 use bande_app::View;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Shared, settings_folder};
 use bande_datetime::DateFormats;
+use bande_inbox::Inbox;
 use bande_toolkit::ui::{
     Axis, Button, CheckState, Checkbox, Context, Form, FormLine, Label, PopUpButton, ScrollView,
     Stack, Toggle, Ui, Widget,
@@ -271,15 +274,22 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
         ),
     ];
     for account in &summary.accounts {
-        let id = account.id.clone();
         let (kind, mut buttons): (String, Vec<Box<dyn Widget>>) = match &account.kind {
             AccountKind::Local => continue,
-            AccountKind::CalDav { server, .. } => (
-                tr!("CalDAV on {server}", server = server.clone()),
-                vec![Box::new(Button::new(&tr!("Password…"), move || {
-                    announce(Change::Password(id.clone()))
-                }))],
-            ),
+            AccountKind::CalDav { server, user, .. } => {
+                let start = setup::edit(account);
+                (
+                    tr!(
+                        "CalDAV on {server} as {user}",
+                        server = server.clone(),
+                        user = user.clone()
+                    ),
+                    vec![Box::new(
+                        Button::new(&tr!("Server Settings…"), move || ask(start.clone()))
+                            .tooltip(&tr!("Server, user name and password")),
+                    )],
+                )
+            }
             AccountKind::Subscription {
                 url,
                 refresh_minutes,
@@ -290,23 +300,29 @@ fn accounts(settings: &Shared<CalendarSettings>, summary: &Summary) -> Vec<FormL
             ),
         };
         let id = account.id.clone();
-        buttons.push(Box::new(
-            Button::new(&tr!("Remove…"), move || {
-                announce(Change::RemoveAccount(id.clone()))
-            })
-            .tooltip(&kind),
-        ));
+        buttons.push(Box::new(Button::new(&tr!("Remove…"), move || {
+            announce(Change::RemoveAccount(id.clone()))
+        })));
         lines.push(FormLine::Row(
             account.name.clone(),
             Box::new(Stack::new(Axis::Horizontal, 8.0, 0.0, buttons).trailing()),
         ));
+        lines.push(FormLine::Wide(Box::new(Label::new(&kind).secondary())));
     }
-    let add = Button::new(&tr!("Add Account…"), || announce(Change::AddAccount));
+    let add = Button::new(&tr!("Add Account…"), || ask(Some(setup::Start::Add)));
     lines.push(FormLine::Row(String::new(), Box::new(add)));
     lines.push(FormLine::Wide(Box::new(
-        Label::new(&tr!("iCloud and Fastmail sign in with an app password, Nextcloud with your password or an app password. Google needs OAuth, which Calendar cannot do yet.")).secondary(),
+        Label::new(&tr!("Calendar works with CalDAV servers and with published calendars (webcal or https links). Some providers need a separate app password for calendar apps.")).secondary(),
     )));
     lines
+}
+
+thread_local! {
+    static ASKED: RefCell<Option<setup::Start>> = const { RefCell::new(None) };
+}
+
+fn ask(start: Option<setup::Start>) {
+    ASKED.with(|asked| *asked.borrow_mut() = start);
 }
 
 fn subscription_controls(id: &str, refresh: Option<u32>, alerts: bool) -> Vec<Box<dyn Widget>> {
@@ -365,6 +381,9 @@ pub struct SettingsView {
     window: SettingsWindow<CalendarSettings>,
     accounts: Option<SettingsWatch>,
     folder: Option<PathBuf>,
+    setup: Option<AccountSetup>,
+    replies: Option<Inbox<Reply>>,
+    stale: bool,
 }
 
 impl SettingsView {
@@ -374,7 +393,38 @@ impl SettingsView {
             window: SettingsWindow::new(appearance, folder.clone(), settings_form),
             accounts: SettingsWatch::start(&data_dir(), ACCOUNTS_FILE),
             folder,
+            setup: None,
+            replies: Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot set up accounts here: {error}"))
+                .ok(),
+            stale: false,
         }
+    }
+
+    fn update_setup(&mut self, appearance: Appearance) {
+        if let Some(start) = ASKED.with(|asked| asked.borrow_mut().take())
+            && let Some(replies) = &self.replies
+        {
+            let mut setup = AccountSetup::new(start, replies.outbox());
+            setup.present(self.window.ui_mut());
+            self.setup = Some(setup);
+        }
+        if let Some(setup) = &mut self.setup {
+            if let Some(done) = setup.update(self.window.ui_mut()) {
+                announce(Change::Setup(Box::new(done)));
+            }
+            if setup.closed() {
+                self.setup = None;
+            }
+        }
+        if self.setup.is_none() && self.stale {
+            self.rebuild(appearance);
+        }
+    }
+
+    fn rebuild(&mut self, appearance: Appearance) {
+        self.stale = false;
+        self.window = SettingsWindow::new(appearance, self.folder.clone(), settings_form);
     }
 }
 
@@ -384,7 +434,9 @@ impl View for SettingsView {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
-        self.window.event(window, event)
+        let handled = self.window.event(window, event);
+        self.update_setup(window.appearance());
+        handled
     }
 
     fn set_appearance(&mut self, appearance: Appearance) {
@@ -398,6 +450,7 @@ impl View for SettingsView {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let mut sources = self.window.sources();
         sources.extend(self.accounts.iter().map(SettingsWatch::fd));
+        sources.extend(self.replies.iter().map(Inbox::fd));
         sources
     }
 
@@ -406,10 +459,24 @@ impl View for SettingsView {
         if index < own {
             return self.window.source_ready(window, index);
         }
+        if index == own + usize::from(self.accounts.is_some())
+            && let Some(replies) = &mut self.replies
+        {
+            for reply in replies.drain() {
+                if let Some(setup) = &mut self.setup
+                    && let Some(done) = setup.receive(self.window.ui_mut(), reply)
+                {
+                    announce(Change::Setup(Box::new(done)));
+                }
+            }
+            self.update_setup(window.appearance());
+            return true;
+        }
         if let Some(accounts) = &mut self.accounts {
             accounts.drain();
         }
-        self.window = SettingsWindow::new(window.appearance(), self.folder.clone(), settings_form);
+        self.stale = true;
+        self.update_setup(window.appearance());
         true
     }
 

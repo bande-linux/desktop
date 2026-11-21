@@ -111,7 +111,7 @@ impl Machine {
             .iter()
             .find(|snapshot| snapshot.id == id)
             .cloned()
-            .ok_or_else(|| Error::NotListed(id.to_owned()))
+            .ok_or(Error::NoSnapshot)
     }
 
     fn each_image(&self, mut act: impl FnMut(&str) -> Result<()>) -> Result<()> {

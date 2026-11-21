@@ -32,6 +32,8 @@ pub enum Error {
         actual: String,
     },
     NotListed(String),
+    NoSnapshot,
+    NoShare,
     Tool {
         program: String,
         status: ExitStatus,
@@ -68,6 +70,8 @@ impl fmt::Display for Error {
                 "{file} is not in the vendor’s checksums.",
                 file = file.clone()
             )),
+            Self::NoSnapshot => f.write_str(&tr!("This snapshot no longer exists.")),
+            Self::NoShare => f.write_str(&tr!("This shared folder no longer exists.")),
             Self::Tool {
                 program,
                 status,
@@ -111,6 +115,8 @@ impl Error {
             self,
             Self::Checksum { .. }
                 | Self::NotListed(_)
+                | Self::NoSnapshot
+                | Self::NoShare
                 | Self::Missing(_)
                 | Self::Signature(_)
                 | Self::NeedsShutDown

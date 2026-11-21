@@ -13,6 +13,12 @@ msgstr "Hämtningen är skadad: kontrollsumman är {actual}, inte {expected}."
 msgid "{file} is not in the vendor’s checksums."
 msgstr "{file} finns inte bland utgivarens kontrollsummor."
 
+msgid "This snapshot no longer exists."
+msgstr "Ögonblicksbilden finns inte längre."
+
+msgid "This shared folder no longer exists."
+msgstr "Den delade mappen finns inte längre."
+
 msgid "{what} is not available."
 msgstr "{what} är inte tillgängligt."
 

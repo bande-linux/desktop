@@ -393,11 +393,7 @@ impl Host {
 
     pub(crate) fn share_command(&self, machine: &Machine, index: usize) -> Result<Vec<String>> {
         let virtiofsd = Self::virtiofsd().ok_or(Error::Missing("virtiofsd".into()))?;
-        let share = machine
-            .manifest
-            .shares
-            .get(index)
-            .ok_or_else(|| Error::NotListed(index.to_string()))?;
+        let share = machine.manifest.shares.get(index).ok_or(Error::NoShare)?;
         Ok(vec![
             utf8(&virtiofsd)?.to_owned(),
             "--socket-path".into(),

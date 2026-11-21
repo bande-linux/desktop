@@ -5,7 +5,8 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Settings</name>
   <name xml:lang="sv">Inställningar</name>
-  <summary>Change the appearance, taskbar and lock screen</summary>
+  <summary>Set up the desktop, devices, network and privacy</summary>
+  <summary xml:lang="sv">Ställ in skrivbordet, enheter, nätverk och integritet</summary>
   <description>
     <p>Set up displays, networks, Bluetooth, sound, keyboard, mouse and trackpad, users, privacy and software updates for the Bande desktop.</p>
   </description>

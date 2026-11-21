@@ -1,5 +1,4 @@
 
-/* Options that no longer exist in Bande's Browser. */
 setting-group[groupid^="defaultBrowser"],
 setting-group[groupid="dataCollection"],
 [data-srd-groupid="dataCollection"] { display: none !important; }

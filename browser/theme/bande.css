@@ -1,4 +1,3 @@
-/* Bande's Datum tokens over Firefox's chrome variables. Appended to browser/themes/linux/browser.css. */
 :root {
   --bande-chassis: #ECEAE7;
   --bande-sheet: #FCFBF9;
@@ -65,11 +64,6 @@ menupopup, panel { --panel-border-radius: 10px; }
 menuitem, menu { border-radius: 6px; min-height: 28px; }
 #TabsToolbar, #nav-bar, #PersonalToolbar, #navigator-toolbox { background: var(--bande-chassis) !important; color: var(--bande-ink) !important; }
 
-/* Tabs and Bande's window controls in one row. The compositor draws the real control well over the
-   last 78 px of a client-side org.bande.Browser window and takes the clicks there (WindowControls
-   in title_bar.rs, frame.rs). The numbers copy title_bar.rs: WINDOW_HEADER_HEIGHT 48,
-   window_controls_width 78, MENU_GAP 6, HEADER_LEADING 12. The well stays on the right in every
-   locale, so the gap uses physical sides. Fullscreen has no well, so Firefox's restore button is the mouse way out. */
 #main-window {
   --bande-row-height: 48px;
   --bande-well-gap: 84px;
@@ -113,14 +107,12 @@ menuitem, menu { border-radius: 6px; min-height: 28px; }
 :root[inFullscreen] #TabsToolbar .titlebar-spacer[type="post-tabs"],
 :root[inFullscreen] #TabsToolbar .titlebar-spacer[type="pre-tabs"] { display: none !important; }
 
-/* The app menu is the ⋮ button left of the well, as in Bande's own apps. */
 #PanelUI-button { margin: 0 !important; padding: 0 !important; align-self: center; }
 #PanelUI-menu-button {
   list-style-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.25" fill="context-fill"/><circle cx="8" cy="8" r="1.25" fill="context-fill"/><circle cx="8" cy="12.5" r="1.25" fill="context-fill"/></svg>') !important;
   --toolbarbutton-border-radius: 12px;
 }
 
-/* The Bookmarks Toolbar is Bande's favorites bar, shown in every window. */
 #PersonalToolbar {
   min-height: 32px !important;
   padding: 0 10px 4px !important;

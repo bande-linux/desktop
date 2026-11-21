@@ -10,11 +10,13 @@ cd "$src"
 export QUILT_PATCHES=debian/patches QUILT_PC=.pc
 
 debver=$(dpkg-parsechangelog -S Version)
+suite=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
+maintainer='Mikael Hug <mikaelhug@gmail.com>'
 major=${debver%%.*}
 patches=$repo/patches/$major
 [ -f "$patches/series" ] || { echo "prepare: no patches for ESR $major" >&2; exit 4; }
 
-quilt push -a -q > /dev/null 2>&1 || [ "$(quilt next 2>/dev/null || true)" = "" ]
+quilt push -a -q > /dev/null || [ "$(quilt next 2>/dev/null || true)" = "" ]
 mkdir -p debian/patches/bande
 while read -r patch; do
     [ -n "$patch" ] && [ "${patch#\#}" = "$patch" ] || continue
@@ -30,11 +32,11 @@ fi
 find . -type f -name '*.yaml' -not -path './third_party/*' -exec sed -i 's/follows_collection_enabled: false/follows_collection_enabled: true/' {} +
 
 {
-    echo "bande-browser ($version) unstable; urgency=medium"
+    echo "bande-browser ($version) $suite; urgency=medium"
     echo
     echo "  * Bande's Browser: Debian firefox-esr $debver with the patches of bande-linux/web."
     echo
-    echo " -- Bande <noreply@bande-linux.github.io>  $(date -R)"
+    echo " -- $maintainer  $(date -R)"
     echo
     cat debian/changelog
 } > debian/changelog.new
@@ -71,15 +73,20 @@ s = s.replace('%if browser != firefox\ndebian/firefox usr/bin\n%endif\n', '')
 open(install, 'w').write(s)
 PY
 sed -i "s/^%define RAW_DESCRIPTION .*/%define RAW_DESCRIPTION Bande's web browser, based on Mozilla Firefox source code/" debian/control.in
-sed -i 's/^Depends: ${shlibs:Depends},/Depends: bande-compositor (>= 0.1.8), ${shlibs:Depends},/' debian/control.in
+sed -i 's/^Depends: ${shlibs:Depends},/Depends: bande-compositor, ${shlibs:Depends},/' debian/control.in
+sed -i -e "s/^Maintainer: .*/Maintainer: $maintainer/" -e '/^Uploaders:/d' debian/control.in
 rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-symbolic.svg.in \
     debian/browser.preinst.in debian/browser.postrm.in debian/firefox.in
 sed -i 's/^stamps\/dh_install:: debian\/noinstall debian\/$($(PRODUCT))-symbolic.svg/stamps\/dh_install:: debian\/noinstall/' debian/rules
 cp "$repo/prefs/bande.js" debian/00-bande.js
-for window in PictureInPicture:Picture-in-Picture Sharing:Sharing\ Indicator; do
-    printf '[Desktop Entry]\nType=Application\nName=%s\nIcon=org.bande.Browser\nExec=bande-browser\nNoDisplay=true\n' "${window#*:}" > "debian/org.bande.Browser.${window%%:*}.desktop"
-    cp "$repo/branding/org.bande.Browser.svg" "debian/org.bande.Browser.${window%%:*}.svg"
-done
+while IFS=: read -r window name name_sv; do
+    printf '[Desktop Entry]\nType=Application\nName=%s\nName[sv]=%s\nIcon=org.bande.Browser\nExec=bande-browser\nNoDisplay=true\n' \
+        "$name" "$name_sv" > "debian/org.bande.Browser.$window.desktop"
+    cp "$repo/branding/org.bande.Browser.svg" "debian/org.bande.Browser.$window.svg"
+done <<'WINDOWS'
+PictureInPicture:Picture-in-Picture:Bild-i-bild
+Sharing:Sharing Indicator:Delningsindikator
+WINDOWS
 cp "$repo/branding/org.bande.Browser.desktop" "$repo/branding/org.bande.Browser.metainfo.xml" "$repo/branding/org.bande.Browser.svg" debian/
 
 b=browser/branding/bande
@@ -113,7 +120,6 @@ for lang in $(cat "$repo/l10n/languages"); do
     find "l10n-$lang" -type f \( -name '*.ftl' -o -name '*.properties' -o -name '*.dtd' \) \
         -exec sed -i -E '/^\s*(#|<!--)/! s/\bFirefox\b/Browser/g' {} +
 done
-printf '\nmain-context-menu-bande-look-up =\n    .label = Slå upp ”{ $word }”\n' >> l10n-sv-SE/browser/browser/browserContext.ftl
 python3 "$repo/scripts/fetch-tracking-lists.py" .
 python3 "$repo/scripts/gut.py" . browser/components/asrouter browser/components/ipprotection \
     toolkit/components/ipprotection browser/components/genai browser/components/aiwindow \
@@ -122,6 +128,8 @@ cp "$repo"/theme/pages/* browser/base/content/
 cp "$repo/l10n/en-US/bande.ftl" browser/locales/en-US/browser/
 for lang in $(cat "$repo/l10n/languages"); do
     [ ! -f "$repo/l10n/$lang/bande.ftl" ] || cp "$repo/l10n/$lang/bande.ftl" "l10n-$lang/browser/browser/"
+    [ ! -f "$repo/l10n/$lang/browserContext.ftl" ] ||
+        cat "$repo/l10n/$lang/browserContext.ftl" >> "l10n-$lang/browser/browser/browserContext.ftl"
 done
 cat "$repo/theme/preferences.css" >> browser/themes/shared/preferences/preferences.css
 
@@ -130,6 +138,39 @@ find browser toolkit -type f \( -iname '*fox*.svg' -o -name 'kit-*.svg' -o -name
 cp "$svg" browser/themes/shared/sidebar/firefox.svg
 cp "$svg" browser/themes/shared/icons/window-firefox.svg
 
+cat >> debian/copyright <<'COPYRIGHT'
+
+Files: browser/branding/bande/*
+Copyright: 1998-2026 Mozilla Foundation
+ 2026 Mikael Hug
+License: MPL-2.0
+
+Files: browser/base/content/bande-*
+ browser/locales/en-US/browser/bande.ftl
+ l10n-*/browser/browser/bande.ftl
+ debian/org.bande.Browser.desktop
+ debian/org.bande.Browser.*.desktop
+ debian/org.bande.Browser.svg
+ debian/org.bande.Browser.*.svg
+Copyright: 2026 Mikael Hug
+License: MPL-2.0
+
+Files: debian/org.bande.Browser.metainfo.xml
+Copyright: 2026 Mikael Hug
+License: CC0-1.0
+
+Files: debian/00-bande.js
+Copyright: 2026 Mikael Hug
+License: MIT or Apache-2.0
+
+License: Apache-2.0
+ On Debian systems, the complete text of the Apache License 2.0 can be found
+ in the file `/usr/share/common-licenses/Apache-2.0'.
+
+License: CC0-1.0
+ On Debian systems, the complete text of the CC0 1.0 Universal licence can be
+ found in the file `/usr/share/common-licenses/CC0-1.0'.
+COPYRIGHT
 debian/rules debian/control
 grep -q '^Source: bande-browser$' debian/control
 ! grep -q 'debian/firefox usr/bin' debian/browser.install.in

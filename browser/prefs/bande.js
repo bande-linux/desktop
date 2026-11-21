@@ -1,5 +1,3 @@
-// Second line of defence behind the removals in patches/: anything left that could phone home stays off.
-// Telemetry and data reporting
 pref("toolkit.telemetry.enabled", false, locked);
 pref("toolkit.telemetry.unified", false, locked);
 pref("toolkit.telemetry.server", "data:,", locked);
@@ -18,7 +16,6 @@ pref("browser.ping-centre.telemetry", false, locked);
 pref("browser.newtabpage.activity-stream.feeds.telemetry", false, locked);
 pref("browser.newtabpage.activity-stream.telemetry", false, locked);
 pref("dom.security.unexpected_system_load_telemetry_enabled", false, locked);
-// Experiments and studies
 pref("app.normandy.enabled", false, locked);
 pref("app.normandy.api_url", "", locked);
 pref("app.shield.optoutstudies.enabled", false, locked);
@@ -30,12 +27,10 @@ pref("browser.preferences.experimental.hidden", true, locked);
 pref("browser.preferences.moreFromMozilla", false, locked);
 pref("browser.preferences.aiControls", false, locked);
 pref("browser.settings-redesign.promo.dismissed", true);
-// Crash reports
 pref("breakpad.reportURL", "", locked);
 pref("browser.tabs.crashReporting.sendReport", false, locked);
 pref("browser.crashReports.unsubmittedCheck.enabled", false, locked);
 pref("browser.crashReports.unsubmittedCheck.autoSubmit2", false, locked);
-// New tab: no sponsored content, stories, weather or promos
 pref("browser.newtabpage.activity-stream.showSponsored", false, locked);
 pref("browser.newtabpage.activity-stream.system.showSponsored", false, locked);
 pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false, locked);
@@ -69,7 +64,6 @@ pref("startup.homepage_override_nimbus_disable_wnp", true, locked);
 pref("browser.startup.homepage_override.mstone", "ignore");
 pref("startup.homepage_welcome_url", "");
 pref("startup.homepage_override_url", "");
-// Firefox Suggest
 pref("browser.urlbar.suggest.quicksuggest.sponsored", false, locked);
 pref("browser.urlbar.suggest.quicksuggest.nonsponsored", false, locked);
 pref("browser.urlbar.suggest.quicksuggest.all", false, locked);
@@ -84,7 +78,6 @@ pref("browser.urlbar.weather.featureGate", false, locked);
 pref("browser.urlbar.yelp.featureGate", false, locked);
 pref("browser.urlbar.market.featureGate", false, locked);
 pref("browser.urlbar.importantDates.featureGate", false, locked);
-// No default search engine until the first-launch choice
 pref("keyword.enabled", false);
 pref("browser.search.update", false, locked);
 pref("browser.search.suggest.enabled", false);
@@ -93,13 +86,10 @@ pref("browser.search.serpEventTelemetryCategorization.enabled", false, locked);
 pref("browser.search.region", "US");
 pref("browser.region.update.enabled", false, locked);
 pref("browser.region.network.url", "", locked);
-// The new tab page is our own, in the browser; the built-in add-on is gone
 pref("browser.newtabpage.enabled", false, locked);
 pref("browser.startup.homepage", "about:newtab");
-// Default-browser prompts
 pref("browser.shell.checkDefaultBrowser", false, locked);
 pref("browser.shell.didSkipDefaultBrowserCheckOnFirstRun", true);
-// Updates come from apt
 pref("app.update.enabled", false, locked);
 pref("app.update.auto", false, locked);
 pref("app.update.staging.enabled", false, locked);
@@ -107,13 +97,10 @@ pref("app.update.langpack.enabled", false, locked);
 pref("extensions.systemAddon.update.enabled", false, locked);
 pref("extensions.systemAddon.update.url", "", locked);
 pref("media.gmp-gmpopenh264.enabled", false);
-// DRM video: nothing downloads and nothing connects until the user turns this on
 pref("media.eme.enabled", false);
-// Remote settings: nothing fetched, only the data shipped in each update; translation, once on, fetches its models
-pref("bande.services.settings.allowedCollectionsFromDump", "main/tracking-protection-lists,security-state/*,main/content-classifier-lists,main/change-password-urls,main/webcompat-interventions,main/addons-data-leak-blocker-domains,main/mfcdm-origins-list,main/url-classifier-exceptions,main/ml-model-allow-deny-list,main/third-party-cookie-blocking-exempt-urls,main/backup-common-passwords-list,main/bounce-tracking-protection-exceptions,main/fingerprinting-protection-overrides,main/password-rules,main/websites-with-shared-credential-backends,main/password-recipes,main/partitioning-exempt-urls,blocklists/addons-bloomfilters,main/tracking-protection-lists,main/anti-tracking-url-decoration,main/hijack-blocklists,main/fxmonitor-breaches,main/language-dictionaries,blocklists/gfx,blocklists/addons,blocklists/plugins,main/moz-essential-domain-fallbacks,main/url-parser-default-unknown-schemes-interventions,main/urlbar-persisted-search-terms,main/devtools-devices,main/devtools-compatibility-browsers,main/ms-images,main/tippytop,main/search-config-icons,main/search-config-v2,main/search-config-overrides-v2,main/search-default-override-allowlist,main/translations-models-v2,main/translations-wasm-v2", locked);
+pref("bande.services.settings.allowedCollectionsFromDump", "main/tracking-protection-lists,security-state/*,main/content-classifier-lists,main/change-password-urls,main/webcompat-interventions,main/addons-data-leak-blocker-domains,main/mfcdm-origins-list,main/url-classifier-exceptions,main/ml-model-allow-deny-list,main/third-party-cookie-blocking-exempt-urls,main/backup-common-passwords-list,main/bounce-tracking-protection-exceptions,main/fingerprinting-protection-overrides,main/password-rules,main/websites-with-shared-credential-backends,main/password-recipes,main/partitioning-exempt-urls,blocklists/addons-bloomfilters,main/anti-tracking-url-decoration,main/hijack-blocklists,main/fxmonitor-breaches,main/language-dictionaries,blocklists/gfx,blocklists/addons,blocklists/plugins,main/moz-essential-domain-fallbacks,main/url-parser-default-unknown-schemes-interventions,main/urlbar-persisted-search-terms,main/devtools-devices,main/devtools-compatibility-browsers,main/ms-images,main/tippytop,main/search-config-icons,main/search-config-v2,main/search-config-overrides-v2,main/search-default-override-allowlist,main/translations-models-v2,main/translations-wasm-v2", locked);
 pref("security.remote_settings.crlite_filters.enabled", false);
 pref("security.remote_settings.intermediates.enabled", false);
-// Safe Browsing: no calls to Google. Tracking Protection stays, on the lists shipped in each update
 pref("browser.safebrowsing.malware.enabled", false, locked);
 pref("browser.safebrowsing.phishing.enabled", false, locked);
 pref("browser.safebrowsing.blockedURIs.enabled", false, locked);
@@ -121,8 +108,6 @@ pref("browser.safebrowsing.downloads.enabled", false, locked);
 pref("browser.safebrowsing.downloads.remote.enabled", false, locked);
 pref("browser.safebrowsing.downloads.remote.url", "", locked);
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "", locked);
-// Unsolicited network checks and speculation
-// Sites may not use push; the connection opens only for a signed-in account
 pref("dom.push.enabled", false);
 pref("dom.push.connection.enabled", false);
 pref("network.captive-portal-service.enabled", false, locked);
@@ -140,7 +125,6 @@ pref("doh-rollout.uri", "", locked);
 pref("network.trr.mode", 5);
 pref("network.trr.confirmationNS", "skip");
 pref("browser.send_pings", false, locked);
-// Add-on promos; add-on updates stay for what the user installs
 pref("extensions.getAddons.cache.enabled", false, locked);
 pref("extensions.getAddons.get.url", "", locked);
 pref("extensions.getAddons.discovery.api_url", "", locked);
@@ -153,12 +137,10 @@ pref("browser.discovery.enabled", false, locked);
 pref("extensions.webcompat-reporter.enabled", false, locked);
 pref("extensions.unsignedScopes", 12);
 pref("extensions.autoDisableScopes", 3);
-// Translation: off until turned on in Settings
 pref("browser.translations.enable", false);
 pref("browser.translations.select.enable", false);
 pref("browser.translations.quickAction.enabled", false);
 pref("browser.ai.control.translations", "available", locked);
-// AI features
 pref("browser.ml.enable", false, locked);
 pref("browser.ml.chat.enabled", false, locked);
 pref("browser.ml.chat.menu", false, locked);
@@ -170,14 +152,10 @@ pref("browser.ai.control.default", "blocked", locked);
 pref("extensions.ml.enabled", false, locked);
 pref("pdfjs.enableAltText", false);
 pref("pdfjs.enableGuessAltText", false);
-// Accounts: stay out of the way until asked for
 pref("identity.fxaccounts.toolbar.enabled", false);
-// The Bookmarks Toolbar is the favorites bar, shown in every window
 pref("browser.toolbars.bookmarks.visibility", "always");
-// Debian
 pref("distribution.searchplugins.defaultLocale", "en-US");
 pref("spellchecker.dictionary_path", "/usr/share/hunspell");
-// Bande: portal seams; tabs share the row with the control well the compositor draws
 pref("widget.use-xdg-desktop-portal.file-picker", 1);
 pref("widget.use-xdg-desktop-portal.mime-handler", 1);
 pref("widget.use-xdg-desktop-portal.settings", 1);

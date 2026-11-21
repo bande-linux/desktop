@@ -13,7 +13,7 @@
 8. **Scripts**: event-driven where anything waits.
 
 ## Building
-- Build through `build-run` with `BUILD_NO_MINI=1` and `scripts/local-build.sh`; see `README.md`. Use a temporary `HOME` for anything that runs the browser.
+- Build with `scripts/local-build.sh`; see `README.md`. Use a temporary `HOME` for anything that runs the browser.
 
 ## Workflow
 - Merge a branch when it builds and passes the checks. Shared rules: the workspace `../CLAUDE.md`.

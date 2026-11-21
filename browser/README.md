@@ -17,13 +17,11 @@ This repository holds no browser source. It holds what we change in Debian's:
 ## Build
 
 ```
-BUILD_NO_MINI=1 BUILD_FETCH=/var/tmp/bande-browser/out BUILD_TIME_LIMIT=21600 build-run . \
-    env BROWSER_JOBS=3 scripts/local-build.sh "$(scripts/debian-version.sh)" /var/tmp/bande-browser
+BROWSER_JOBS=3 scripts/local-build.sh "$(scripts/debian-version.sh)" /var/tmp/bande-browser
 ```
 
-Memory: with thin Rust LTO and 3 jobs the peak is 6.5 GB of real memory (48 min on 8 CPUs). 5 jobs was
-killed at the 10.2 GB limit of a 13 GB build machine. `BROWSER_RUST_LTO=-Clto=off` is for quick test
-builds; `scripts/mem-peak.sh` measures a build.
+With thin Rust LTO, 3 jobs peak at about 6.5 GB of memory; `BROWSER_RUST_LTO=-Clto=off` is for quick
+test builds, and `scripts/mem-peak.sh` measures a build.
 
 `local-build.sh` needs no root: a Debian chroot (`SUITE`, default forky) from `mmdebstrap --mode=unshare`. It fetches
 unstable's source through apt, runs `prepare.sh` and Debian's own build. `prepare.sh` exits 3 if a
@@ -45,6 +43,7 @@ In the prepared tree, `export QUILT_PATCHES=debian/patches QUILT_PC=.pc`, then `
 
 ## Licence
 
-Patches, branding text and anything from Firefox or LibreWolf: MPL 2.0. Our own scripts:
-MIT OR Apache-2.0. Mozilla and Firefox are trademarks of the Mozilla Foundation; this browser is
+Patches, branding, the new tab and rights pages, and anything from Firefox or LibreWolf: MPL 2.0.
+Our own scripts and prefs: MIT OR Apache-2.0. The metainfo's metadata: CC0-1.0. `prepare.sh`
+adds Bande's files to the package's `debian/copyright`. Mozilla and Firefox are trademarks of the Mozilla Foundation; this browser is
 based on their source and is not made or endorsed by Mozilla.

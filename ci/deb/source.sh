@@ -15,7 +15,9 @@ ci/deb/orig.sh "$out" "$upstream"
 ci/deb/vendor.sh "$out" "$upstream"
 tar -xJf "$out/bande-desktop_$upstream.orig.tar.xz" -C "$out"
 tar -xJf "$out/bande-desktop_$upstream.orig-vendor.tar.xz" -C "$tree"
-git archive --format=tar HEAD debian | tar -x -C "$tree"
+GIT_INDEX_FILE=$out/index git read-tree --prefix=debian/ HEAD:debian
+GIT_INDEX_FILE=$out/index git checkout-index --all --prefix="$tree/"
+rm "$out/index"
 ci/deb/changelog-entry.sh "$tree/debian/changelog" "$version" unstable "Snapshot of $(git rev-parse --short=7 HEAD)."
 (cd "$out" && dpkg-source --build "bande-desktop-$upstream")
 rm -rf "$tree"

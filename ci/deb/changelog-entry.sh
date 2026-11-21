@@ -1,12 +1,16 @@
 #!/bin/bash
 # changelog-entry.sh <changelog> <version> <distribution> <text>: adds an entry for <version> on
 # top of a debian/changelog whose newest entry is another version, by its maintainer and dated
-# $SOURCE_DATE_EPOCH, so the same build writes the same entry.
+# $SOURCE_DATE_EPOCH or a second after that entry, whichever is later, so the same build writes
+# the same entry.
 set -euo pipefail
 changelog=$1 version=$2 distribution=$3 text=$4
 [ "$(dpkg-parsechangelog -l "$changelog" -S Version)" != "$version" ] || exit 0
+: "${SOURCE_DATE_EPOCH:?}"
 maintainer=$(dpkg-parsechangelog -l "$changelog" -S Maintainer)
-date=$(date -R -u -d "@${SOURCE_DATE_EPOCH:?}")
+previous=$(dpkg-parsechangelog -l "$changelog" -S Timestamp)
+epoch=$((SOURCE_DATE_EPOCH > previous ? SOURCE_DATE_EPOCH : previous + 1))
+date=$(date -R -u -d "@$epoch")
 {
     printf 'bande-desktop (%s) %s; urgency=medium\n\n  * %s\n\n -- %s  %s\n\n' \
         "$version" "$distribution" "$text" "$maintainer" "$date"

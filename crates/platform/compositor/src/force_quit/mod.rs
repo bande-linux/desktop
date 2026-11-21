@@ -25,6 +25,7 @@ use smithay::utils::{Logical, Point, Rectangle, Size};
 
 pub(crate) use self::kill::Process;
 use self::view::{CONTENT, Effect, ForceQuitView, Listed, SHELL_KEY};
+use crate::input::{BTN_LEFT, BTN_MIDDLE, BTN_RIGHT};
 use crate::shell::toplevel_names;
 use crate::state::{ClientState, Compositor, OutputElement, State};
 
@@ -32,9 +33,6 @@ type Frame = Rectangle<f64, Logical>;
 
 const SHADOW: f32 = 32.0;
 const ICON_POINTS: f64 = 32.0;
-const BTN_LEFT: u32 = 0x110;
-const BTN_RIGHT: u32 = 0x111;
-const BTN_MIDDLE: u32 = 0x112;
 
 struct Painted {
     scale: f64,

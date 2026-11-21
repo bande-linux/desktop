@@ -26,6 +26,9 @@ use crate::keyboard_monitor::KeyEvent;
 use crate::state::{Compositor, State};
 use crate::tile::Direction;
 
+pub(crate) const BTN_LEFT: u32 = 0x110;
+pub(crate) const BTN_RIGHT: u32 = 0x111;
+pub(crate) const BTN_MIDDLE: u32 = 0x112;
 const EVDEV_OFFSET: u32 = 8;
 const ABOVE_TAB: u32 = 41;
 

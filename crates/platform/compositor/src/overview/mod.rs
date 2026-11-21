@@ -14,6 +14,7 @@ use smithay::wayland::shell::wlr_layer::Layer;
 use self::layout::lerp;
 pub(crate) use self::layout::{arrange, real_rect};
 use crate::gesture::Tracker;
+use crate::input::BTN_MIDDLE;
 use crate::label::Label;
 use crate::motion::{Look, Motion, Tick};
 use crate::shell::toplevel_names;
@@ -42,8 +43,6 @@ enum Hit {
     Add(usize),
     Nothing,
 }
-
-const BTN_MIDDLE: u32 = 0x112;
 
 #[derive(Debug, Clone)]
 struct Press {

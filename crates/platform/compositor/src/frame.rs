@@ -18,15 +18,13 @@ use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle
 
 use crate::cursor_set::Pointer;
 use crate::grab::resize_pointer;
+use crate::input::{BTN_LEFT, BTN_RIGHT};
 use crate::label::Labels;
 use crate::menu_button::menu_address;
 use crate::scene::Piece;
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, Placed, State};
 use crate::window::Window;
-
-const BTN_LEFT: u32 = 0x110;
-const BTN_RIGHT: u32 = 0x111;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Zone {

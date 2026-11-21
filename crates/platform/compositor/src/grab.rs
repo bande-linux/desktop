@@ -15,6 +15,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Clock, Logical, Monotonic, Point, Rectangle, SERIAL_COUNTER, Serial};
 
 use crate::cursor_set::{Heading, Pointer};
+use crate::input::{BTN_LEFT, BTN_RIGHT};
 use crate::motion::Look;
 use crate::state::State;
 use crate::tile::Tile;
@@ -57,8 +58,6 @@ pub(crate) struct WindowGrab {
     held: Option<(WlSurface, Operation)>,
 }
 
-const BTN_LEFT: u32 = 0x110;
-const BTN_RIGHT: u32 = 0x111;
 const DETACH_DISTANCE: i32 = 4;
 
 fn edge_toward(window: Rectangle<i32, Logical>, point: Point<i32, Logical>) -> ResizeEdge {

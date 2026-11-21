@@ -286,8 +286,8 @@ msgstr "Filer"
 msgid "Files Settings"
 msgstr "Inställningar för Filer"
 
-msgid "Quick Look"
-msgstr "Snabbtitt"
+msgid "Glance"
+msgstr "Glimt"
 
 msgid "Clear Menu"
 msgstr "Rensa menyn"
@@ -415,8 +415,8 @@ msgstr "Visa dolda filer"
 msgid "Show or Hide Status Bar"
 msgstr "Visa eller dölj statusfältet"
 
-msgid "Quick Look in Full Screen"
-msgstr "Snabbtitt i helskärm"
+msgid "Glance in Full Screen"
+msgstr "Glimt i helskärm"
 
 msgid "Back"
 msgstr "Bakåt"

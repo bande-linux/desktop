@@ -417,7 +417,7 @@ impl FilesView {
         if self.search_focused() {
             return self.search_key(key, modifiers);
         }
-        if self.quick_look_key(key, modifiers) {
+        if self.glance_key(key, modifiers) {
             return true;
         }
         if key == Key::Escape && self.shown_table().is_some_and(Table::is_moving_column) {
@@ -1360,7 +1360,7 @@ impl FilesView {
         cancel: Option<WidgetId>,
     ) {
         self.finish_rename(false);
-        self.close_quick_look();
+        self.close_glance();
         self.ui.present_sheet(widget);
         self.ui
             .layout(Size::new(self.size.0.max(1.0), self.size.1.max(1.0)));

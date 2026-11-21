@@ -27,7 +27,7 @@ pub enum Command {
     Sort(SortBy),
     CleanUp,
     Open,
-    QuickLook,
+    Glance,
     OpenWith(String),
     Info,
     Rename,
@@ -86,7 +86,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
         items.push(MenuItem::submenu(&tr!("Open With"), Menu::new(apps)));
     }
     items.push(MenuItem::separator());
-    items.push(item(text!("Quick Look"), "quick-look").shortcut("Space"));
+    items.push(item(text!("Glance"), "glance").shortcut("Space"));
     items.push(item(text!("Get Info"), "info").shortcut("Ctrl+I"));
     items.push(
         item(text!("Rename"), "rename")
@@ -142,7 +142,7 @@ pub fn command(action: &str) -> Option<Command> {
         "change-wallpaper" => Command::ChangeWallpaper,
         "clean-up" => Command::CleanUp,
         "open" => Command::Open,
-        "quick-look" => Command::QuickLook,
+        "glance" => Command::Glance,
         "info" => Command::Info,
         "rename" => Command::Rename,
         "duplicate" => Command::Duplicate,

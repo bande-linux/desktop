@@ -781,7 +781,7 @@
     <request name="set_panel" since="5">
       <description summary="make one of the app's windows a panel that never takes the keyboard">
         Makes the toplevel a floating panel, as a non-activating panel on a
-        Mac (Quick Look): it stays in front of every other window, never
+        Mac (Glance): it stays in front of every other window, never
         becomes the key window and never takes the keyboard, whether it maps,
         is clicked, asks for activation or goes full screen, so the app's key
         window keeps its keys and its menus. Pointer input reaches it as

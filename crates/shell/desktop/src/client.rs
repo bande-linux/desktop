@@ -23,8 +23,8 @@ use bande_fs::{
     Action, Answer, Change, Entry, ExtensionChange, FolderWatch, Operations, Purpose, Resolution,
     Task, Trash,
 };
+use bande_glance::{GlanceLink, Subject};
 use bande_inbox::{Inbox, Outbox};
-use bande_quick_look::{QuickLookLink, Subject};
 use bande_thumbnails::{Request as ThumbnailRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::{Event, frame_time};
 use bande_toolkit::{
@@ -42,7 +42,7 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::PropertiesProxy;
 
-const QUICK_LOOK_ICON: u32 = 256;
+const GLANCE_ICON: u32 = 256;
 const BUSY: &str = "busy";
 const PDF: &str = "application/pdf";
 const WALLPAPER_CACHE: &str = "bande/wallpapers";
@@ -100,7 +100,7 @@ pub struct DesktopSurface {
     scheme: Scheme,
     viewport: Option<((u32, u32), f64)>,
     confirming: Option<Confirming>,
-    quick_look: Option<QuickLookLink>,
+    glance: Option<GlanceLink>,
 }
 
 impl DesktopSurface {
@@ -561,7 +561,7 @@ impl DesktopSurface {
             .and_then(|(_, picture)| picture.clone().flatten());
         let icon = thumbnail.or_else(|| {
             let names = self.icon_names(&item);
-            self.icon(&names, QUICK_LOOK_ICON)
+            self.icon(&names, GLANCE_ICON)
         });
         let desktop = self.view.desktop();
         let origin = desktop.slot_of(path).map(|slot| {
@@ -578,8 +578,8 @@ impl DesktopSurface {
         })
     }
 
-    fn quick_look(&mut self) {
-        let Some(link) = self.quick_look.clone() else {
+    fn glance(&mut self) {
+        let Some(link) = self.glance.clone() else {
             return;
         };
         if link.borrow().is_shown() {
@@ -609,8 +609,8 @@ impl DesktopSurface {
         }
     }
 
-    fn follow_quick_look(&mut self) {
-        let Some(link) = self.quick_look.clone() else {
+    fn follow_glance(&mut self) {
+        let Some(link) = self.glance.clone() else {
             return;
         };
         let Some(shown) = link.borrow().follows().cloned() else {
@@ -631,9 +631,9 @@ impl DesktopSurface {
     fn run_requests(&mut self, window: &mut Window) {
         for request in self.view.take_requests() {
             match request {
-                Request::QuickLook => self.quick_look(),
-                Request::QuickLookKey(key, modifiers) => {
-                    if let Some(link) = &self.quick_look {
+                Request::Glance => self.glance(),
+                Request::GlanceKey(key, modifiers) => {
+                    if let Some(link) = &self.glance {
                         link.borrow_mut().key(key, modifiers);
                     }
                 }
@@ -734,7 +734,7 @@ impl DesktopSurface {
                 }
             }
         }
-        self.follow_quick_look();
+        self.follow_glance();
         self.save_layouts();
         window.request_redraw();
     }
@@ -960,7 +960,7 @@ impl App for DesktopSurface {
                     self.start_files_without_window(window);
                 }
                 self.view.set_focused(focused);
-                if let Some(link) = self.quick_look.as_ref().filter(|_| !focused)
+                if let Some(link) = self.glance.as_ref().filter(|_| !focused)
                     && link.borrow().is_shown()
                 {
                     link.borrow_mut().close();
@@ -1193,7 +1193,7 @@ impl DesktopSurface {
         config: &Config,
         text: TextSystem,
         apps: Rc<RefCell<Apps>>,
-        quick_look: Option<QuickLookLink>,
+        glance: Option<GlanceLink>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = std::env::var_os("HOME").map(PathBuf::from);
         let bar_changes = Inbox::new()?;
@@ -1265,9 +1265,9 @@ impl DesktopSurface {
             scheme: appearance.scheme,
             viewport: None,
             confirming: None,
-            quick_look: quick_look.clone(),
+            glance: glance.clone(),
         };
-        surface.view.set_quick_look(quick_look);
+        surface.view.set_glance(glance);
         let folder = surface.desktop_dir.clone();
         surface.view.set_folder(folder);
         if let Some(files) = surface.files_app()

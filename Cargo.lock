@@ -707,9 +707,9 @@ dependencies = [
  "bande-bar",
  "bande-config",
  "bande-fs",
+ "bande-glance",
  "bande-inbox",
  "bande-l10n",
- "bande-quick-look",
  "bande-thumbnails",
  "bande-toolkit",
  "bande-volumes",
@@ -772,9 +772,9 @@ dependencies = [
  "bande-content",
  "bande-datetime",
  "bande-fs",
+ "bande-glance",
  "bande-inbox",
  "bande-l10n",
- "bande-quick-look",
  "bande-search",
  "bande-sound",
  "bande-thumbnails",
@@ -807,6 +807,23 @@ dependencies = [
  "tar",
  "tempfile",
  "zip",
+]
+
+[[package]]
+name = "bande-glance"
+version = "0.1.10"
+dependencies = [
+ "accesskit",
+ "bande-content",
+ "bande-fs",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-media-view",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-xdg",
+ "parley",
+ "tracing",
 ]
 
 [[package]]
@@ -1177,23 +1194,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-quick-look"
-version = "0.1.10"
-dependencies = [
- "accesskit",
- "bande-content",
- "bande-fs",
- "bande-inbox",
- "bande-l10n",
- "bande-media-view",
- "bande-toolkit",
- "bande-volumes",
- "bande-xdg",
- "parley",
- "tracing",
-]
-
-[[package]]
 name = "bande-recovery"
 version = "0.1.10"
 dependencies = [
@@ -1418,12 +1418,12 @@ dependencies = [
  "bande-config",
  "bande-controlcenter",
  "bande-desktop-surface",
+ "bande-glance",
  "bande-l10n",
  "bande-launcher",
  "bande-log",
  "bande-notifications",
  "bande-protocols",
- "bande-quick-look",
  "bande-status",
  "bande-test-bus",
  "bande-test-wayland",

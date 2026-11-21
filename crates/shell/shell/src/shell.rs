@@ -14,11 +14,11 @@ use bande_bar::surfaces::{self, Display, Restart, Services, status_hub};
 use bande_bluetooth::register_agent;
 use bande_config::{Config, config_path};
 use bande_controlcenter::ControlCenter;
-use bande_desktop_surface::{DesktopSurface, QuickLookSurface, quick_look_role};
+use bande_desktop_surface::{DesktopSurface, GlanceSurface, glance_role};
+use bande_glance::GlanceLink;
 use bande_l10n::tr;
 use bande_launcher::LauncherShell;
 use bande_notifications::Notifications;
-use bande_quick_look::QuickLookLink;
 use bande_status::captive::{follow_captive_portal, open_page};
 use bande_status::hub::StatusHub;
 use bande_status::memory::{
@@ -39,7 +39,7 @@ enum Place {
     Launcher,
     Desktop(Display),
     Bar(Display),
-    QuickLook(Display),
+    Glance(Display),
     LowMemory,
 }
 
@@ -54,7 +54,7 @@ struct Context {
     config_home: Option<PathBuf>,
     home: Option<PathBuf>,
     app_slice: Option<PathBuf>,
-    quick_look: QuickLookLink,
+    glance: GlanceLink,
 }
 
 impl Context {
@@ -89,7 +89,7 @@ impl Context {
             config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
             home: std::env::var_os("HOME").map(PathBuf::from),
             app_slice: own_app_slice(),
-            quick_look: QuickLookLink::default(),
+            glance: GlanceLink::default(),
         })
     }
 
@@ -151,19 +151,15 @@ impl Context {
                     &self.config(),
                     self.text.sharing_fonts(),
                     Rc::clone(&self.apps),
-                    display.main.then(|| Rc::clone(&self.quick_look)),
+                    display.main.then(|| Rc::clone(&self.glance)),
                 )?;
                 Ok((vec![(window, Box::new(part))], None))
             }
-            Place::QuickLook(display) => {
-                let mut window =
-                    beside.open_beside_on(&display.output, quick_look_role(), (0, 0))?;
+            Place::Glance(display) => {
+                let mut window = beside.open_beside_on(&display.output, glance_role(), (0, 0))?;
                 window.share_fonts(&self.text);
-                let part = QuickLookSurface::new(
-                    &window,
-                    self.text.sharing_fonts(),
-                    Rc::clone(&self.quick_look),
-                );
+                let part =
+                    GlanceSurface::new(&window, self.text.sharing_fonts(), Rc::clone(&self.glance));
                 Ok((vec![(window, Box::new(part))], None))
             }
             Place::Bar(display) => {
@@ -243,8 +239,8 @@ impl Shell {
                 output,
                 main: index == 0,
             };
-            if display.main && self.context.quick_look.borrow().is_open() {
-                wanted.push(Place::QuickLook(display.clone()));
+            if display.main && self.context.glance.borrow().is_open() {
+                wanted.push(Place::Glance(display.clone()));
             }
             wanted.push(Place::Desktop(display.clone()));
             wanted.push(Place::Bar(display));
@@ -298,12 +294,12 @@ impl Shell {
         Ok(())
     }
 
-    fn quick_look_changed(&self) -> bool {
+    fn glance_changed(&self) -> bool {
         let shown = self
             .parts
             .iter()
-            .any(|(place, _)| matches!(place, Place::QuickLook(_)));
-        shown != self.context.quick_look.borrow().is_open()
+            .any(|(place, _)| matches!(place, Place::Glance(_)));
+        shown != self.context.glance.borrow().is_open()
     }
 
     fn reconcile(&mut self) {
@@ -316,8 +312,8 @@ impl Shell {
             }
             if let Err(error) = self.open(place.clone()) {
                 tracing::warn!("cannot open {place:?}: {error}");
-                if matches!(place, Place::QuickLook(_)) {
-                    self.context.quick_look.borrow_mut().abandon();
+                if matches!(place, Place::Glance(_)) {
+                    self.context.glance.borrow_mut().abandon();
                 }
             }
         }
@@ -373,7 +369,7 @@ impl Surfaces for Shell {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        let now = (self.reconcile || self.quick_look_changed()).then(Instant::now);
+        let now = (self.reconcile || self.glance_changed()).then(Instant::now);
         self.parts
             .iter()
             .filter_map(|(_, app)| app.deadline())
@@ -399,7 +395,7 @@ impl Surfaces for Shell {
         for display in rearranged {
             self.rearrange_bar(display);
         }
-        if self.reconcile || self.quick_look_changed() {
+        if self.reconcile || self.glance_changed() {
             self.reconcile();
         }
     }

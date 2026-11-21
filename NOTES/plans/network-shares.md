@@ -52,7 +52,7 @@ Every place the code audit found a path on a mount reaching a blocking call on a
 | search `recents.rs` is_file, from launcher | Recent documents | guarded |
 | Files `search.rs` metadata | Kind or date filter | reduced: hits on servers pass the filter |
 | Files `view.rs` open, `.desktop` check | Open a file | guarded: name-based mime; launchers on servers are not trusted |
-| Files `quick_look.rs` | Space | guarded |
+| Files `glance.rs` | Space | guarded |
 | Files `context.rs` single file, menus | Menu rebuild | reduced: Print off for server files |
 | Files `context.rs` apps for selection | Right click | guarded |
 | Files `view.rs` inspector mime | Get Info | guarded |
@@ -75,7 +75,7 @@ Every place the code audit found a path on a mount reaching a blocking call on a
 | launcher `client.rs` default app | Open recent | guarded |
 | launcher `client.rs` preview worker | Preview recent | reduced: no preview for server files |
 | Files `loader.rs` | Previews | off: one thread per server request |
-| `quick-look/loader.rs` | Quick Look | off: one thread per server request |
+| `glance/loader.rs` | Glance | off: one thread per server request |
 | `thumbnails/service.rs` | Thumbnails | off: a lane of its own |
 | `search/index.rs` watch | Search root | guarded |
 | `search/index.rs` read_dir | Search root | off: that search's own worker |

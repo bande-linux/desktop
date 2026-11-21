@@ -49,7 +49,7 @@ impl Loader {
         let latest = Arc::clone(&generation);
         let (requests, receiver) = mpsc::channel::<(u64, PathBuf, String)>();
         thread::Builder::new()
-            .name("quick look".to_owned())
+            .name("glance".to_owned())
             .spawn(move || {
                 for (asked, path, mime) in receiver {
                     if latest.load(Ordering::Relaxed) != asked {
@@ -61,7 +61,7 @@ impl Loader {
                     }
                     let (latest, outbox) = (Arc::clone(&latest), outbox.clone());
                     let spawned = thread::Builder::new()
-                        .name("quick look on a server".to_owned())
+                        .name("glance on a server".to_owned())
                         .spawn(move || load_one(asked, &path, &mime, &latest, &outbox));
                     if let Err(error) = spawned {
                         tracing::warn!("cannot preview a file on a server: {error}");

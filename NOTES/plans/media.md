@@ -3,12 +3,12 @@
 ## What the user gets
 Double-click a song or film: Bande Player opens and plays it, as QuickTime does: one window, controls
 that fade over the picture, Space, arrows, full screen, speed, audio and subtitle tracks. `Space` in
-Files plays it in Quick Look. Media keys and the Control Center drive it through MPRIS, and a playing
+Files plays it in Glance. Media keys and the Control Center drive it through MPRIS, and a playing
 video keeps the display awake. A codec that crashes takes down neither Files nor the window.
 
 ## Design
 - **Engine process.** `bande-media-engine` (apps repo, `apps/player`, the one thing linking GStreamer)
-  demuxes, decodes, keeps A/V sync and plays sound. The app and Quick Look talk to it over a
+  demuxes, decodes, keeps A/V sync and plays sound. The app and Glance talk to it over a
   `SOCK_SEQPACKET` pair with `bande-media` (desktop repo: protocol and client, no GStreamer). The
   desktop neither links nor builds GStreamer; Files shows the icon when the engine is not installed.
 - **GStreamer, not libav directly.** It is the only Debian path to V4L2 stateless decoders
@@ -22,7 +22,7 @@ video keeps the display awake. A codec that crashes takes down neither Files nor
   decode gets a small package of its `v4l2codecs` and `videoparsersbad` plugins.
 
 ## Stages
-1. Done: engine, Player, MPRIS, media keys, keep awake, Quick Look.
+1. Done: engine, Player, MPRIS, media keys, keep awake, Glance.
 2. Done: NV12 dmabufs (`udmabuf` for software decode, BT.709 with the engine converting anything
    else), sampled in place by the compositor's `video` shader (copied first when stride or offsets are not
    multiples of 16, or on a CPU renderer). XRGB in shared memory is the fallback. A video width

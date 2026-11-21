@@ -21,10 +21,10 @@ wait 400ms
 key right
 wait 800ms
 shot "two folders deep"
-note "Space shows a quick look of the selection"
+note "Space shows a glance of the selection"
 key space
 wait 1200ms
-shot "quick look"
+shot "glance"
 key escape
 wait 500ms
 note "Alt+Up goes to the enclosing folder"

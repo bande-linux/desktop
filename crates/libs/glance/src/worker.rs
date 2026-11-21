@@ -14,8 +14,8 @@ use bande_fs::archive_contents;
 use bande_toolkit::{Color, CpuRenderer, Item, Point, Scene, TextStyle, TextSystem};
 use bande_xdg::wait_for_exit;
 
-const FONT_FLAG: &str = "--quick-look-font";
-const ARCHIVE_FLAG: &str = "--quick-look-archive";
+const FONT_FLAG: &str = "--glance-font";
+const ARCHIVE_FLAG: &str = "--glance-archive";
 const FONT_BYTES: u64 = 64 << 20;
 const ARCHIVE_ENTRIES: u64 = 100_000;
 const WORKER_TIME: Duration = Duration::from_secs(15);
@@ -136,7 +136,7 @@ fn run(flag: &str, path: &Path) -> Option<Vec<u8>> {
         .ok()?;
     let stdout = child.stdout.take()?;
     let reader = thread::Builder::new()
-        .name("quick look reader".to_owned())
+        .name("glance reader".to_owned())
         .spawn(move || {
             let mut out = Vec::new();
             stdout

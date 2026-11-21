@@ -6,7 +6,7 @@ use accesskit::{
 use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
 
-use crate::{Hit, QuickLook};
+use crate::{Glance, Hit};
 
 const ROOT: NodeId = NodeId(1);
 const FIRST: u64 = 2;
@@ -20,7 +20,7 @@ fn bounds(rect: Rect) -> accesskit::Rect {
     }
 }
 
-impl QuickLook {
+impl Glance {
     fn label(&self, hit: Hit) -> Option<String> {
         let id = match hit {
             Hit::Close => text!("Close"),
@@ -54,7 +54,7 @@ impl QuickLook {
 
     pub fn accessibility(&self) -> TreeUpdate {
         let mut root = Node::new(Role::Dialog);
-        root.set_label(tr!("Quick Look"));
+        root.set_label(tr!("Glance"));
         root.set_live(Live::Polite);
         if let Some(subject) = self.subject() {
             let mut description = format!("{}, {}", subject.entry.name, subject.kind);

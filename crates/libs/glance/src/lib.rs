@@ -18,10 +18,10 @@ use bande_xdg::{DesktopEntry, state_home};
 use crate::content::Shown;
 use crate::loader::Loader;
 
-pub use panel::{Link, Panel, QuickLookLink};
+pub use panel::{GlanceLink, Link, Panel};
 pub use worker::serve_worker;
 
-const SIZE_FILE: &str = "bande/quick-look-size";
+const SIZE_FILE: &str = "bande/glance-size";
 const DEFAULT_SIZE: (f32, f32) = (720.0, 540.0);
 const MIN_SIZE: (f32, f32) = (360.0, 260.0);
 const ZOOM_STEP: f32 = 1.25;
@@ -86,7 +86,7 @@ struct Resizing {
     size: (f32, f32),
 }
 
-pub struct QuickLook {
+pub struct Glance {
     subjects: Vec<Subject>,
     at: usize,
     full_screen: bool,
@@ -136,11 +136,11 @@ fn remember_size(size: (f32, f32)) {
     };
     let text = format!("{} {}\n", size.0.round(), size.1.round());
     if let Err(error) = bande_xdg::replace_file(&file, &text) {
-        tracing::warn!("cannot remember the Quick Look size: {error}");
+        tracing::warn!("cannot remember the Glance size: {error}");
     }
 }
 
-impl QuickLook {
+impl Glance {
     pub fn open(
         subjects: Vec<Subject>,
         at: usize,
@@ -151,7 +151,7 @@ impl QuickLook {
     ) -> std::io::Result<Self> {
         let mut presence = Animated::new(if windowed { 1.0 } else { 0.0 });
         presence.animate_at(now, reduce_motion, 1.0, Spring::STANDARD);
-        let mut quick_look = Self {
+        let mut glance = Self {
             at: at.min(subjects.len().saturating_sub(1)),
             subjects,
             full_screen,
@@ -179,8 +179,8 @@ impl QuickLook {
             password: String::new(),
             actions: Vec::new(),
         };
-        quick_look.load();
-        Ok(quick_look)
+        glance.load();
+        Ok(glance)
     }
 
     fn load(&mut self) {

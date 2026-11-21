@@ -22,7 +22,7 @@ crates/
   apps/      files, settings, file-chooser, secrets-prompt
   services/  config, notify, power, sound, clipboard, tray, automount, portal, polkit,
              secrets, secrets-pam
-  libs/      app, app-menu, app-settings, settings-panes, xdg, fs, content, quick-look, thumbnails,
+  libs/      app, app-menu, app-settings, settings-panes, xdg, fs, content, glance, thumbnails,
              search, status, taskbar-model, packages, audio, network, bluetooth, volumes,
              keyboard, datetime, l10n, log, bus, inbox, watch, wallpaper, edid, spring
   testing/   test-bus, test-wayland, bench, sample, review
@@ -53,8 +53,8 @@ these crates at a pinned revision.
   operations with their running queue and undo, and watching; `content` decodes what a file
   holds without any toolkit type (image pyramids and animations, PDF pages from a confined
   `hayro` child process, text with cheap syntax colours, Markdown, RTF and HTML as blocks,
-  fonts, folder and archive totals), shared by Files, the launcher, Quick Look and the apps
-  repository's Preview; `quick-look` is the one Quick Look panel that Files and the desktop
+  fonts, folder and archive totals), shared by Files, the launcher, Glance and the apps
+  repository's Preview; `glance` is the one Glance panel that Files and the desktop
   show (it draws with the toolkit, an exception to "without UI").
 - **`testing/`**: `test-bus` (private D-Bus buses and fakes of system services),
   `test-wayland`, the benchmarks, the toolkit sample and `review` (records a scenario on a live

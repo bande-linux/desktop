@@ -22,7 +22,7 @@ bande-backup.workspace = true
 bande-datetime.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
-bande-quick-look.workspace = true
+bande-glance.workspace = true
 bande-search.workspace = true
 bande-sound.workspace = true
 bande-thumbnails.workspace = true
@@ -43,7 +43,7 @@ depends = "$auto, bande-icon-theme, fonts-dejavu-core, fonts-inter, fonts-manrop
 extended-description = """\
 The file manager of the Bande desktop: folders open in Miller columns \
 driven by the arrow keys, as in the Finder's column view, and Space shows \
-the selected file in Quick Look."""
+the selected file in Glance."""
 assets = [
     ["target/release/bande-files", "usr/bin/", "755"],
     ["data/org.bande.Files.desktop", "usr/share/applications/", "644"],

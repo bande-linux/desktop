@@ -15,7 +15,7 @@ Delete each line when it ships; delete the file when the list is empty.
    Sidebar), Go menu, Recents, a path bar, search that scopes sensibly, new windows on the
    folder they want.
 3. **See what a file is**: Get Info (name and extension, kind, size, where, dates, permissions,
-   Open With and Change All), Quick Look, previews and thumbnails.
+   Open With and Change All), Glance, previews and thumbnails.
 4. **Arrange folders their way**: icons, list, columns (gallery), sort, groups, per-folder view
    options remembered, folders on top, hidden files.
 4. **Other apps hand them to Files**: "Show in Folder" from browsers and editors
@@ -30,7 +30,7 @@ Delete each line when it ships; delete the file when the list is empty.
   headed sections in list and icon views (Date Added is the status-change time, which moving a
   file into a folder sets); in icon view each group is one sideways-scrolling row with Show All /
   Show Less, and arrow keys move between rows by position;
-  status bar and path bar; hidden files; Quick Look with full screen.
+  status bar and path bar; hidden files; Glance with full screen.
 - Screen readers: every view is in the accessibility tree. List view is a table; icon,
   column (one list per column) and gallery views are lists of items with name, kind
   (description), selected state and position, group headings as level 2 headings and Show All /

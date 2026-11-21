@@ -251,9 +251,9 @@ impl FilesView {
                     self.requests.push(Request::LookUp(stem));
                 }
             }
-            Command::QuickLook => {
-                if !self.quick_look_shown() {
-                    self.open_quick_look(false);
+            Command::Glance => {
+                if !self.glance_shown() {
+                    self.open_glance(false);
                 }
             }
             Command::Info => self.show_inspector(),
@@ -300,7 +300,7 @@ impl FilesView {
             Command::Gallery => self.set_mode(ViewMode::Gallery),
             Command::ToggleHidden => self.toggle_hidden(),
             Command::ToggleStatusBar => self.toggle_status_bar(),
-            Command::QuickLookFullScreen => self.toggle_quick_look_full_screen(),
+            Command::GlanceFullScreen => self.toggle_glance_full_screen(),
             Command::MoveHere => self.paste(true),
             Command::EjectCurrent => self.eject_current(),
             Command::GoTo(place) => self.go(match place {

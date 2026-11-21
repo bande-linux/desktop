@@ -99,7 +99,7 @@ fn media_stage(path: &Path) -> Option<Box<Stage>> {
     match session.load(path, true) {
         Ok(()) => Some(Box::new(Stage::new(session))),
         Err(error) => {
-            tracing::info!("no media playback in Quick Look: {error}");
+            tracing::info!("no media playback in Glance: {error}");
             None
         }
     }

@@ -24,9 +24,9 @@ use bande_files::{
     without_bookmark,
 };
 use bande_fs::{History, Running, Trash};
+use bande_glance::{Action, GlanceLink, Panel, remembered_size, serve_worker};
 use bande_inbox::{Inbox, Outbox};
 use bande_l10n::tr;
-use bande_quick_look::{Action, Panel, QuickLookLink, remembered_size, serve_worker};
 use bande_search::{recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{Event, frame_time};
@@ -49,7 +49,7 @@ use zbus::{MatchRule, message};
 
 const APP_ID: &str = "org.bande.Files";
 const WINDOW_SIZE: (u32, u32) = (1040, 620);
-const QUICK_LOOK: &str = "quick-look";
+const GLANCE: &str = "glance";
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -122,28 +122,28 @@ impl BrowserPane {
 
 enum Pane {
     Browser(Box<BrowserPane>),
-    QuickLook(Box<QuickLookPane>),
+    Glance(Box<GlancePane>),
 }
 
 impl Pane {
     fn browser(&self) -> Option<&BrowserPane> {
         match self {
             Self::Browser(pane) => Some(pane),
-            Self::QuickLook(_) => None,
+            Self::Glance(_) => None,
         }
     }
 
     fn inner(&mut self) -> &mut dyn View {
         match self {
             Self::Browser(pane) => pane.as_mut(),
-            Self::QuickLook(pane) => pane.as_mut(),
+            Self::Glance(pane) => pane.as_mut(),
         }
     }
 
     fn shared(&self) -> &dyn View {
         match self {
             Self::Browser(pane) => pane.as_ref(),
-            Self::QuickLook(pane) => pane.as_ref(),
+            Self::Glance(pane) => pane.as_ref(),
         }
     }
 }
@@ -151,7 +151,7 @@ impl Pane {
 fn browser(cx: &mut Cx<Files>, id: WindowId) -> Option<(&mut Window, &mut BrowserPane)> {
     match cx.window(id)? {
         (window, Pane::Browser(pane)) => Some((window, pane)),
-        (_, Pane::QuickLook(_)) => None,
+        (_, Pane::Glance(_)) => None,
     }
 }
 
@@ -238,11 +238,11 @@ impl View for Pane {
     }
 }
 
-struct QuickLookPane {
+struct GlancePane {
     panel: Panel,
 }
 
-impl QuickLookPane {
+impl GlancePane {
     fn act(&mut self, window: &mut Window) {
         for action in self.panel.take_actions() {
             let done = match action {
@@ -264,13 +264,13 @@ impl QuickLookPane {
                 Action::FullScreen(_) => Ok(()),
             };
             if let Err(error) = done {
-                tracing::warn!("Quick Look cannot do that: {error}");
+                tracing::warn!("Glance cannot do that: {error}");
             }
         }
     }
 }
 
-impl View for QuickLookPane {
+impl View for GlancePane {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let now = frame_time().presentation;
         let (width, height) = window.size();
@@ -444,7 +444,7 @@ struct Files {
     recent_folders: Vec<PathBuf>,
     history: Rc<RefCell<History>>,
     trash: Trash,
-    quick_look: QuickLookLink,
+    glance: GlanceLink,
     panel: Option<WindowId>,
     carrying: Rc<Cell<bool>>,
     carry: TabCarry,
@@ -945,7 +945,7 @@ impl Files {
         view.set_search_excluded(self.search_excluded.clone());
         view.set_media(media_roots(&std::env::var("USER").unwrap_or_default()));
         view.set_nearby(self.nearby.clone());
-        view.set_quick_look(Rc::clone(&self.quick_look));
+        view.set_glance(Rc::clone(&self.glance));
         Ok(view)
     }
 
@@ -994,30 +994,25 @@ impl Files {
         self.carrying.set(self.carry.is_carrying());
     }
 
-    fn show_quick_look(&mut self, cx: &mut Cx<Self>) {
+    fn show_glance(&mut self, cx: &mut Cx<Self>) {
         if self.panel.is_some_and(|panel| cx.view(panel).is_some()) {
             return;
         }
-        let link = Rc::clone(&self.quick_look);
+        let link = Rc::clone(&self.glance);
         let (width, height) = remembered_size();
         let size = (width.round() as u32, height.round() as u32);
-        match cx.open(
-            Kind::Panel(QUICK_LOOK),
-            &tr!("Quick Look"),
-            size,
-            |appearance| {
-                Pane::QuickLook(Box::new(QuickLookPane {
-                    panel: Panel::new(link, TextSystem::new(), appearance, true),
-                }))
-            },
-        ) {
+        match cx.open(Kind::Panel(GLANCE), &tr!("Glance"), size, |appearance| {
+            Pane::Glance(Box::new(GlancePane {
+                panel: Panel::new(link, TextSystem::new(), appearance, true),
+            }))
+        }) {
             Ok(panel) => self.panel = Some(panel),
-            Err(error) => tracing::warn!("cannot show Quick Look: {error}"),
+            Err(error) => tracing::warn!("cannot show Glance: {error}"),
         }
     }
 
-    fn copy_from_quick_look(&mut self, cx: &mut Cx<Self>) {
-        let Some(path) = self.quick_look.borrow_mut().take_copied() else {
+    fn copy_from_glance(&mut self, cx: &mut Cx<Self>) {
+        let Some(path) = self.glance.borrow_mut().take_copied() else {
             return;
         };
         let key = cx.focused().filter(|id| browser(cx, *id).is_some());
@@ -1026,11 +1021,11 @@ impl Files {
         }
     }
 
-    fn place_quick_look(&mut self, cx: &mut Cx<Self>, owner: WindowId) {
+    fn place_glance(&mut self, cx: &mut Cx<Self>, owner: WindowId) {
         let Some(panel) = self.panel.filter(|_| browser(cx, owner).is_some()) else {
             return;
         };
-        let Some(rect) = self.quick_look.borrow_mut().take_origin() else {
+        let Some(rect) = self.glance.borrow_mut().take_origin() else {
             return;
         };
         let Some(anchor) = browser(cx, owner).and_then(|(window, _)| window.anchor(rect)) else {
@@ -1039,7 +1034,7 @@ impl Files {
         if let Some((window, _)) = cx.window(panel)
             && let Err(error) = window.set_panel_origin(&anchor)
         {
-            tracing::warn!("Quick Look cannot zoom from the item: {error}");
+            tracing::warn!("Glance cannot zoom from the item: {error}");
         }
     }
 
@@ -1078,9 +1073,9 @@ impl Files {
     }
 
     fn serve(&mut self, cx: &mut Cx<Self>, id: WindowId, request: Request) {
-        if let Request::ShowQuickLook = request {
-            self.show_quick_look(cx);
-            self.place_quick_look(cx, id);
+        if let Request::ShowGlance = request {
+            self.show_glance(cx);
+            self.place_glance(cx, id);
             return;
         }
         if let Request::NewWindow = request {
@@ -1212,7 +1207,7 @@ impl Files {
             Request::Eject(volume) => self.eject(volume, false),
             Request::ForceEject(volume) => self.eject(volume, true),
             Request::NewWindow
-            | Request::ShowQuickLook
+            | Request::ShowGlance
             | Request::StopAndLeave { .. }
             | Request::Leave { .. }
             | Request::OperationsDone
@@ -1311,7 +1306,7 @@ impl Program for Files {
             recent_folders,
             history: Rc::default(),
             trash,
-            quick_look: QuickLookLink::default(),
+            glance: GlanceLink::default(),
             panel: None,
             carrying: Rc::new(Cell::new(false)),
             carry: TabCarry::default(),
@@ -1431,7 +1426,7 @@ impl Program for Files {
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
-        self.copy_from_quick_look(cx);
+        self.copy_from_glance(cx);
         let requests = browser(cx, window)
             .map(|(_, pane)| pane.view.take_requests())
             .unwrap_or_default();
@@ -1450,7 +1445,7 @@ impl Program for Files {
             shown.set_cursor(pane.view.cursor());
             shown.request_redraw();
         }
-        self.place_quick_look(cx, window);
+        self.place_glance(cx, window);
         self.watch_network(cx);
         cx.refresh_menus();
     }
@@ -1458,8 +1453,8 @@ impl Program for Files {
     fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Pane) {
         if self.panel == Some(window) {
             self.panel = None;
-            if self.quick_look.borrow().is_open() {
-                self.show_quick_look(cx);
+            if self.glance.borrow().is_open() {
+                self.show_glance(cx);
             }
         }
         if let Pane::Browser(mut closed) = view {

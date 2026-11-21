@@ -130,7 +130,7 @@ Layer is the toolkit `editor` unless said, so every `TextField` and `TextView` g
 | Emoji and symbols | Picker | Exists (`Super+.`). Keywords are English only: add Swedish CLDR names | S |
 | Dictation | [Start key, on-device varies by language](https://support.apple.com/guide/mac-help/dictate-your-messages-and-documents-mh40584/mac) | Later, on-demand on-device model through input-method-v2 (engine not evaluated) | L |
 | Writing Tools | [Rewrite, proofread, summarise; Apple Intelligence](https://support.apple.com/guide/mac-help/use-writing-tools-mchldcd6c260/mac) | No: no on-device model that is good and small here. Revisit | - |
-| Live Text | Select text in images; in Language & Region | Later in Preview and Quick Look: Debian's Tesseract, on demand (not measured) | M |
+| Live Text | Select text in images; in Language & Region | Later in Preview and Glance: Debian's Tesseract, on demand (not measured) | M |
 | Data detectors | Smart Links for URLs and addresses; dates and more (memory) | URLs and email in Mail and read-only text; rest later | S |
 | Grammar | Dotted underline, some languages | No: no good offline Swedish checker known (memory) | - |
 

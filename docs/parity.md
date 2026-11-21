@@ -24,7 +24,7 @@ the left by default (or any other edge); each window's menu button (⋮) holds t
 | Control Center, status items, volume and brightness HUD, Now Playing | parity | |
 | Desktop: wallpaper, icons, menus | parity | |
 | Lock screen, login window | basic | no user picker, accessibility or power menus at login |
-| Files | basic | icons, list, columns and gallery, Quick Look, Get Info, tabs, batch rename, settings, failure alerts, Show in Folder for other apps; no network locations or tags |
+| Files | basic | icons, list, columns and gallery, Glance, Get Info, tabs, batch rename, settings, failure alerts, Show in Folder for other apps; no network locations or tags |
 | Settings | basic | grouped panes with search; no custom shortcuts or scanners |
 | Terminal, Activity Monitor | basic | apps repo; Terminal has tabs, splits and profiles |
 | Software, Package Installer, software updates | basic | live updates, offline only for reboot-class packages; Debian packages; Flatpak apps only once the user installs `flatpak` |

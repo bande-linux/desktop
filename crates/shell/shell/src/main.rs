@@ -10,7 +10,7 @@ use bande_status::session::Ending;
 fn main() -> ExitCode {
     bande_log::init("bande-shell");
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    if let Some(code) = bande_quick_look::serve_worker(&arguments) {
+    if let Some(code) = bande_glance::serve_worker(&arguments) {
         return code;
     }
     let result = match arguments

@@ -2,7 +2,7 @@ use bande_l10n::tr;
 
 use crate::view::{FilesView, Hit, Request};
 use bande_fs::Entry;
-use bande_quick_look::{QuickLookLink, Subject};
+use bande_glance::{GlanceLink, Subject};
 use bande_thumbnails::ThumbnailSize;
 use bande_toolkit::Rect;
 use bande_toolkit::ui::{Key, Modifiers};
@@ -11,12 +11,12 @@ const ICON_PIXELS: u32 = 256;
 const FOLDER_MIME: &str = "inode/directory";
 
 impl FilesView {
-    pub fn set_quick_look(&mut self, link: QuickLookLink) {
-        self.quick_look = Some(link);
+    pub fn set_glance(&mut self, link: GlanceLink) {
+        self.glance = Some(link);
     }
 
-    pub(crate) fn quick_look_shown(&self) -> bool {
-        self.quick_look
+    pub(crate) fn glance_shown(&self) -> bool {
+        self.glance
             .as_ref()
             .is_some_and(|link| link.borrow().is_shown())
     }
@@ -63,21 +63,21 @@ impl FilesView {
         }
     }
 
-    pub(crate) fn close_quick_look(&mut self) {
-        if let Some(link) = self.quick_look.as_ref().filter(|_| self.quick_look_shown()) {
+    pub(crate) fn close_glance(&mut self) {
+        if let Some(link) = self.glance.as_ref().filter(|_| self.glance_shown()) {
             link.borrow_mut().close();
         }
     }
 
-    pub(crate) fn toggle_quick_look(&mut self) {
-        match self.quick_look_shown() {
-            true => self.close_quick_look(),
-            false => self.open_quick_look(false),
+    pub(crate) fn toggle_glance(&mut self) {
+        match self.glance_shown() {
+            true => self.close_glance(),
+            false => self.open_glance(false),
         }
     }
 
-    pub(crate) fn open_quick_look(&mut self, full_screen: bool) {
-        let Some(link) = self.quick_look.clone() else {
+    pub(crate) fn open_glance(&mut self, full_screen: bool) {
+        let Some(link) = self.glance.clone() else {
             return;
         };
         let selection = self
@@ -107,11 +107,11 @@ impl FilesView {
             .map(|entry| self.subject(entry))
             .collect();
         link.borrow_mut().open(subjects, at, full_screen);
-        self.requests.push(Request::ShowQuickLook);
+        self.requests.push(Request::ShowGlance);
     }
 
-    pub(crate) fn follow_selection_in_quick_look(&mut self, selected: Option<&Entry>) {
-        let Some(link) = self.quick_look.clone() else {
+    pub(crate) fn follow_selection_in_glance(&mut self, selected: Option<&Entry>) {
+        let Some(link) = self.glance.clone() else {
             return;
         };
         let Some(shown) = link.borrow().follows().cloned() else {
@@ -127,15 +127,15 @@ impl FilesView {
         }
     }
 
-    pub(crate) fn toggle_quick_look_full_screen(&mut self) {
-        match (&self.quick_look, self.quick_look_shown()) {
+    pub(crate) fn toggle_glance_full_screen(&mut self) {
+        match (&self.glance, self.glance_shown()) {
             (Some(link), true) => link.borrow_mut().toggle_full_screen(),
-            _ => self.open_quick_look(true),
+            _ => self.open_glance(true),
         }
     }
 
-    pub(crate) fn quick_look_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        let Some(link) = &self.quick_look else {
+    pub(crate) fn glance_key(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        let Some(link) = &self.glance else {
             return false;
         };
         let taken = link.borrow().takes_key(key, modifiers);

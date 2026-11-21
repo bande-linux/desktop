@@ -2,7 +2,7 @@ use std::os::fd::BorrowedFd;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_quick_look::{Action, Panel, QuickLookLink};
+use bande_glance::{Action, GlanceLink, Panel};
 use bande_toolkit::ui::{Event, frame_time};
 use bande_toolkit::{
     App, Color, Edges, KeyboardFocus, LayerKind, LayerOptions, Rect, Role, Scene, TextSystem,
@@ -10,9 +10,9 @@ use bande_toolkit::{
 };
 use bande_xdg::{file_uri, launch_with};
 
-const NAMESPACE: &str = "quick-look";
+const NAMESPACE: &str = "glance";
 
-pub fn quick_look_role() -> Role {
+pub fn glance_role() -> Role {
     Role::Layer(LayerOptions {
         layer: LayerKind::Overlay,
         anchor: Edges::ALL,
@@ -22,12 +22,12 @@ pub fn quick_look_role() -> Role {
     })
 }
 
-pub struct QuickLookSurface {
+pub struct GlanceSurface {
     panel: Panel,
 }
 
-impl QuickLookSurface {
-    pub fn new(window: &Window, text: TextSystem, link: QuickLookLink) -> Self {
+impl GlanceSurface {
+    pub fn new(window: &Window, text: TextSystem, link: GlanceLink) -> Self {
         Self {
             panel: Panel::new(link, text, window.appearance(), false),
         }
@@ -51,7 +51,7 @@ impl QuickLookSurface {
     }
 }
 
-impl App for QuickLookSurface {
+impl App for GlanceSurface {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let now = frame_time().presentation;
         let (width, height) = window.size();

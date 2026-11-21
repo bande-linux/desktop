@@ -136,7 +136,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   it is never pulled in silently);
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
-- `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Quick Look; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
+- `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Glance; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` depends on `gst-launch-1.0`, `pipewiresrc` and the VP8 encoder, so screen
   recording always works, and recommends the H.264 encoder for MP4;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).

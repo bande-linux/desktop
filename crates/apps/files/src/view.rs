@@ -14,9 +14,9 @@ use bande_fs::{
     History, Kind, Operations, Purpose, RenameError, Resolution, Running, Sort, Step, Task,
     TrashItem, archive_path, can_extract,
 };
+use bande_glance::GlanceLink;
 use bande_inbox::Inbox;
 use bande_l10n::{tr, trn};
-use bande_quick_look::QuickLookLink;
 use bande_search::{Usage, recent_files, recently_used};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{
@@ -189,7 +189,7 @@ pub enum Request {
         request: ServerRequest,
         packages: Vec<String>,
     },
-    ShowQuickLook,
+    ShowGlance,
     StopAndLeave {
         quitting: bool,
     },
@@ -267,7 +267,7 @@ pub struct FilesView {
     pub(crate) strip: TabStrip,
     pub(crate) sheet_cancel: Option<WidgetId>,
     pub(crate) size: (f32, f32),
-    pub(crate) quick_look: Option<QuickLookLink>,
+    pub(crate) glance: Option<GlanceLink>,
     pub(crate) inspector: bool,
     pub(crate) info: Option<Info>,
     pub(crate) inspector_controls: Option<crate::inspector::InspectorControls>,
@@ -433,7 +433,7 @@ impl FilesView {
             strip: TabStrip::new(),
             sheet_cancel: None,
             size: (0.0, 0.0),
-            quick_look: None,
+            glance: None,
             inspector: false,
             info: None,
             inspector_controls: None,
@@ -601,7 +601,7 @@ impl FilesView {
 
     pub fn set_window_active(&mut self, active: bool) -> bool {
         if !active {
-            self.close_quick_look();
+            self.close_glance();
         }
         self.server_window_active(active);
         self.ui.set_window_active(active)
@@ -1030,7 +1030,7 @@ impl FilesView {
         self.watch.watch(&self.watched());
         self.loader.forget_pending();
         let entry = self.browser.selected().cloned();
-        self.follow_selection_in_quick_look(entry.as_ref());
+        self.follow_selection_in_glance(entry.as_ref());
         if self.inspector {
             self.update_info();
         } else {
@@ -1702,7 +1702,7 @@ impl FilesView {
         let alt = modifiers.alt;
         let plain = !command && !alt;
         match key {
-            Key::Space if plain => self.toggle_quick_look(),
+            Key::Space if plain => self.toggle_glance(),
             Key::Escape if self.searching.is_some() => self.end_search(),
             Key::Character('f' | 'F') if command && !shift => self.focus_search(),
             Key::Character('h' | 'H') if command && !shift => self.toggle_hidden(),

@@ -17,7 +17,7 @@ use parley::{Alignment, AlignmentOptions, FontFamily, FontFamilyName, StylePrope
 use crate::content::{CodeView, DocumentView, FontView, Picture, Shown};
 use crate::pdf::{GAP, PdfView, render};
 use crate::worker::SAMPLE_WIDTH;
-use crate::{Hit, MIN_SIZE, QuickLook, Resizing, Subject};
+use crate::{Glance, Hit, MIN_SIZE, Resizing, Subject};
 
 const HEADER: f32 = 44.0;
 const PADDING: f32 = 16.0;
@@ -335,7 +335,7 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
     vec![subject.kind.clone(), size, modified]
 }
 
-impl QuickLook {
+impl Glance {
     fn target(&self, bounds: Rect) -> Rect {
         if self.full_screen || self.windowed {
             return bounds;

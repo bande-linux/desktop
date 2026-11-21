@@ -11,7 +11,7 @@ pub enum Command {
     NewDocument(String),
     OpenWith(String),
     OpenWithOther,
-    QuickLook,
+    Glance,
     LookUp,
     Info,
     BrowseBackups,
@@ -39,7 +39,7 @@ pub enum Command {
     Gallery,
     ToggleHidden,
     ToggleStatusBar,
-    QuickLookFullScreen,
+    GlanceFullScreen,
     MoveHere,
     EjectCurrent,
     ShareMail,
@@ -72,7 +72,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("open-in-terminal", Command::OpenInTerminal),
     ("open-with-other", Command::OpenWithOther),
     ("open-place-in-new-tab", Command::OpenPlaceInNewTab),
-    ("quick-look", Command::QuickLook),
+    ("glance", Command::Glance),
     ("look-up", Command::LookUp),
     ("info", Command::Info),
     ("rename", Command::Rename),
@@ -112,7 +112,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("gallery", Command::Gallery),
     ("toggle-hidden", Command::ToggleHidden),
     ("toggle-status-bar", Command::ToggleStatusBar),
-    ("quick-look-full-screen", Command::QuickLookFullScreen),
+    ("glance-full-screen", Command::GlanceFullScreen),
     ("move-here", Command::MoveHere),
     ("eject-current", Command::EjectCurrent),
     ("share-mail", Command::ShareMail),
@@ -192,7 +192,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
         items.push(item(text!("Restore"), &Command::RestoreFromBackup));
         items.push(MenuItem::separator());
         items.push(item(text!("Open"), &Command::Open).shortcut("Ctrl+O"));
-        items.push(item(text!("Quick Look"), &Command::QuickLook).shortcut("Space"));
+        items.push(item(text!("Glance"), &Command::Glance).shortcut("Space"));
         items.push(item(text!("Copy"), &Command::Copy).shortcut("Ctrl+C"));
         items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
         return Menu::new(items);
@@ -204,7 +204,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
                 .shortcut("Shift+Delete"),
         );
         items.push(MenuItem::separator());
-        items.push(item(text!("Quick Look"), &Command::QuickLook).shortcut("Space"));
+        items.push(item(text!("Glance"), &Command::Glance).shortcut("Space"));
         items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
         return Menu::new(items);
     }
@@ -228,7 +228,7 @@ pub fn items_menu(selection: &Selection) -> Menu {
         items.push(MenuItem::submenu(&tr!("Open With"), Menu::new(apps)));
     }
     items.push(MenuItem::separator());
-    items.push(item(text!("Quick Look"), &Command::QuickLook).shortcut("Space"));
+    items.push(item(text!("Glance"), &Command::Glance).shortcut("Space"));
     items.push(item(text!("Get Info"), &Command::Info).shortcut("Ctrl+I"));
     if selection.can_browse_backups && count == 1 {
         items.push(item(text!("Browse Backups…"), &Command::BrowseBackups));

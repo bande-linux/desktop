@@ -13,7 +13,7 @@ use crate::model::{
 use crate::places::Layouts;
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate};
 use bande_fs::same_volume;
-use bande_quick_look::QuickLookLink;
+use bande_glance::GlanceLink;
 use bande_toolkit::ui::{
     Animated, ClipboardRequest, Context, Event, FreeLayout, Key, Modifiers, Pointer, PointerButton,
     Size, Spring, TextField, TypeSelect, Ui, Widget, WidgetId, past_drag_slop,
@@ -84,8 +84,8 @@ pub enum Request {
     Eject(Vec<PathBuf>),
     SetWallpaper(PathBuf),
     ChangeWallpaper,
-    QuickLook,
-    QuickLookKey(Key, Modifiers),
+    Glance,
+    GlanceKey(Key, Modifiers),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -175,7 +175,7 @@ pub struct DesktopView {
     populated: bool,
     animating: bool,
     requests: Vec<Request>,
-    quick_look: Option<QuickLookLink>,
+    glance: Option<GlanceLink>,
 }
 
 fn rect(bounds: Bounds) -> Rect {
@@ -274,7 +274,7 @@ impl DesktopView {
             arriving: None,
             appearance,
             focused: false,
-            quick_look: None,
+            glance: None,
             size: (1.0, 1.0),
             scale: 1.0,
             gesture: Gesture::Idle,
@@ -402,8 +402,8 @@ impl DesktopView {
         self.labels.clear();
     }
 
-    pub fn set_quick_look(&mut self, link: Option<QuickLookLink>) {
-        self.quick_look = link;
+    pub fn set_glance(&mut self, link: Option<GlanceLink>) {
+        self.glance = link;
     }
 
     pub fn set_focused(&mut self, focused: bool) {
@@ -1028,25 +1028,23 @@ impl DesktopView {
         if modifiers.logo {
             return false;
         }
-        let quick_look_shown = self
-            .quick_look
+        let glance_shown = self
+            .glance
             .as_ref()
             .is_some_and(|link| link.borrow().is_shown());
         if self
-            .quick_look
+            .glance
             .as_ref()
             .is_some_and(|link| link.borrow().takes_key(key, modifiers))
         {
-            self.requests.push(Request::QuickLookKey(key, modifiers));
+            self.requests.push(Request::GlanceKey(key, modifiers));
             return true;
         }
         let selected = self.desktop.selected();
         let command = modifiers.control;
         match key {
-            Key::Space
-                if !command && !modifiers.alt && (!selected.is_empty() || quick_look_shown) =>
-            {
-                self.requests.push(Request::QuickLook);
+            Key::Space if !command && !modifiers.alt && (!selected.is_empty() || glance_shown) => {
+                self.requests.push(Request::Glance);
             }
             Key::Left => self.desktop.navigate(Direction::Left, modifiers.shift),
             Key::Right => self.desktop.navigate(Direction::Right, modifiers.shift),
@@ -1135,7 +1133,7 @@ impl DesktopView {
             Command::NewFolder => Request::NewFolder,
             Command::ChangeWallpaper => Request::ChangeWallpaper,
             Command::Open => Request::Open(selected),
-            Command::QuickLook => Request::QuickLook,
+            Command::Glance => Request::Glance,
             Command::OpenWith(app) => Request::OpenWith {
                 app,
                 paths: selected,

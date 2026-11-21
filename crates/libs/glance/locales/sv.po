@@ -40,8 +40,8 @@ msgstr "Öppna med {app}"
 msgid "Page {number}"
 msgstr "Sida {number}"
 
-msgid "Quick Look"
-msgstr "Snabbtitt"
+msgid "Glance"
+msgstr "Glimt"
 
 msgid "{at} of {count}"
 msgstr "{at} av {count}"

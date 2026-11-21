@@ -137,7 +137,7 @@ impl FilesView {
     fn leave_tab(&mut self) {
         self.commit_rename();
         self.end_search();
-        self.close_quick_look();
+        self.close_glance();
         self.band = None;
         self.table_synced = None;
     }

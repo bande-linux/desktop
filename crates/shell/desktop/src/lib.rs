@@ -1,20 +1,20 @@
 mod backdrop;
 mod client;
 mod confirm;
+mod glance;
 mod menus;
 mod model;
 mod places;
-mod quick_look;
 mod view;
 
 pub use backdrop::{Key as WallpaperKey, Layer, Luma};
 pub use client::{DesktopSurface, confirm, confirm_extension, report_eject_failure, role};
 pub use confirm::{CONFIRM_DELETE_FLAG, CONFIRM_EXTENSION_FLAG, EJECT_FAILED_FLAG, confirm_delete};
+pub use glance::{GlanceSurface, glance_role};
 pub use menus::{Command, Selection, command, desktop_menu, items_menu};
 pub use model::{
     Bounds, CELL_HEIGHT, CELL_WIDTH, Desktop, Direction, GRID_PADDING, Grid, ICON_SIZE, Item, Kind,
     Positions, Slot, SortBy, icon_bounds, label_bounds,
 };
 pub use places::{Layouts, format_layouts, layouts_path, parse_layouts, save_layouts};
-pub use quick_look::{QuickLookSurface, quick_look_role};
 pub use view::{Artwork, DesktopView, Request, fitted_label};

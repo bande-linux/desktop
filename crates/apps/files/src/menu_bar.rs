@@ -188,8 +188,8 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                     "Ctrl+H",
                 ),
                 plain(text!("Show or Hide Status Bar"), "toggle-status-bar"),
-                shortcut(text!("Quick Look"), "Space"),
-                plain(text!("Quick Look in Full Screen"), "quick-look-full-screen"),
+                shortcut(text!("Glance"), "Space"),
+                plain(text!("Glance in Full Screen"), "glance-full-screen"),
             ],
         ),
         submenu(

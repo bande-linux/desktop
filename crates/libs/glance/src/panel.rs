@@ -8,7 +8,7 @@ use accesskit::{ActionRequest, TreeUpdate};
 use bande_toolkit::ui::{Cursor, Event, Key, Modifiers};
 use bande_toolkit::{Appearance, Item, Palette, Point, Rect, TextSystem, Window};
 
-use crate::{Action, QuickLook, Subject};
+use crate::{Action, Glance, Subject};
 
 enum Message {
     Open {
@@ -35,7 +35,7 @@ pub struct Link {
     copied: Option<PathBuf>,
 }
 
-pub type QuickLookLink = Rc<RefCell<Link>>;
+pub type GlanceLink = Rc<RefCell<Link>>;
 
 impl Link {
     pub fn is_open(&self) -> bool {
@@ -139,8 +139,8 @@ impl Link {
 }
 
 pub struct Panel {
-    link: QuickLookLink,
-    shown: Option<QuickLook>,
+    link: GlanceLink,
+    shown: Option<Glance>,
     text: TextSystem,
     palette: Palette,
     reduce_motion: bool,
@@ -149,12 +149,7 @@ pub struct Panel {
 }
 
 impl Panel {
-    pub fn new(
-        link: QuickLookLink,
-        text: TextSystem,
-        appearance: Appearance,
-        windowed: bool,
-    ) -> Self {
+    pub fn new(link: GlanceLink, text: TextSystem, appearance: Appearance, windowed: bool) -> Self {
         let mut panel = Self {
             link,
             shown: None,
@@ -168,7 +163,7 @@ impl Panel {
         panel
     }
 
-    pub fn link(&self) -> &QuickLookLink {
+    pub fn link(&self) -> &GlanceLink {
         &self.link
     }
 
@@ -179,8 +174,8 @@ impl Panel {
 
     fn sync(&mut self) {
         let mut link = self.link.borrow_mut();
-        link.typing = self.shown.as_ref().is_some_and(QuickLook::wants_typing);
-        if self.shown.as_ref().is_some_and(QuickLook::is_closing) {
+        link.typing = self.shown.as_ref().is_some_and(Glance::wants_typing);
+        if self.shown.as_ref().is_some_and(Glance::is_closing) {
             link.shown = false;
         }
     }
@@ -214,7 +209,7 @@ impl Panel {
                     },
                     _,
                 ) => {
-                    let opened = QuickLook::open(
+                    let opened = Glance::open(
                         subjects,
                         at,
                         full_screen,
@@ -225,7 +220,7 @@ impl Panel {
                     match opened {
                         Ok(shown) => self.shown = Some(shown),
                         Err(error) => {
-                            tracing::warn!("cannot start Quick Look: {error}");
+                            tracing::warn!("cannot start Glance: {error}");
                             self.link.borrow_mut().abandon();
                         }
                     }
@@ -261,17 +256,17 @@ impl Panel {
     }
 
     pub fn is_full_screen(&self) -> bool {
-        self.shown.as_ref().is_some_and(QuickLook::is_full_screen)
+        self.shown.as_ref().is_some_and(Glance::is_full_screen)
     }
 
     pub fn size(&self) -> Option<(f32, f32)> {
-        self.shown.as_ref().map(QuickLook::size)
+        self.shown.as_ref().map(Glance::size)
     }
 
     pub fn input_region(&self) -> Vec<Rect> {
         self.shown
             .as_ref()
-            .map(QuickLook::input_region)
+            .map(Glance::input_region)
             .unwrap_or_default()
     }
 
@@ -291,15 +286,12 @@ impl Panel {
     pub fn take_actions(&mut self) -> Vec<Action> {
         self.shown
             .as_mut()
-            .map(QuickLook::take_actions)
+            .map(Glance::take_actions)
             .unwrap_or_default()
     }
 
     pub fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.shown
-            .as_ref()
-            .map(QuickLook::sources)
-            .unwrap_or_default()
+        self.shown.as_ref().map(Glance::sources).unwrap_or_default()
     }
 
     pub fn source_ready(&mut self, window: &mut Window, index: usize) -> bool {
@@ -313,7 +305,7 @@ impl Panel {
 
     pub fn deadline(&self) -> Option<Instant> {
         let now = self.link.borrow().posted().filter(|_| !self.finished);
-        [now, self.shown.as_ref().and_then(QuickLook::deadline)]
+        [now, self.shown.as_ref().and_then(Glance::deadline)]
             .into_iter()
             .flatten()
             .min()
@@ -332,7 +324,7 @@ impl Panel {
     }
 
     pub fn accessibility(&self) -> Option<TreeUpdate> {
-        self.shown.as_ref().map(QuickLook::accessibility)
+        self.shown.as_ref().map(Glance::accessibility)
     }
 
     pub fn perform(&mut self, request: &ActionRequest, now: Instant) -> bool {

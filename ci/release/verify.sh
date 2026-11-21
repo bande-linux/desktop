@@ -8,7 +8,7 @@ export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
 unset VK_LOADER_DRIVERS_DISABLE VK_LOADER_DRIVERS_SELECT VK_ICD_FILENAMES VK_ADD_DRIVER_FILES
 export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json
-export CARGO_BUILD_RUSTFLAGS="${CARGO_BUILD_RUSTFLAGS:-} --remap-path-prefix=$PWD=/build --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${RUSTUP_HOME:-$HOME/.rustup}=/rustup"
+export CARGO_BUILD_RUSTFLAGS="${CARGO_BUILD_RUSTFLAGS:-} --remap-path-prefix=$PWD=/build --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo"
 
 setup=0
 [ "${1:-}" != --setup ] || { setup=1; shift; }
@@ -28,9 +28,9 @@ packages() {
         test) echo libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin at-spi2-core libfontconfig1 \
             libwayland-client0 procps fonts-inter ;;
         debs) echo dpkg-dev jq libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd dbus-user-session ;;
-        all) echo build-essential debhelper dpkg-dev lintian distro-info-data ;;
+        all) echo build-essential debhelper dpkg-dev lintian distro-info-data cargo rustc ;;
     esac
-    [ "$1" = all ] || grep -vx rustup ci/release/build-depends
+    [ "$1" = all ] || cat ci/release/build-depends
 }
 
 actionlint() {
@@ -64,14 +64,11 @@ prepare() {
     mapfile -t wanted < <(packages "$stage" | xargs -n1)
     if [ $setup = 1 ]; then
         ci/apt-install.sh "${wanted[@]}"
-        command -v rustup > /dev/null || ci/apt-install.sh rustup
-        ci/release/toolchain.sh
         return
     fi
     for package in "${wanted[@]}"; do
         [ "$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null)" = installed ] || missing+=("$package")
     done
-    command -v rustup > /dev/null || missing+=(rustup)
     [ ${#missing[@]} -eq 0 ] ||
         { echo "verify.sh: the $stage stage needs ${missing[*]}; install them (ci/apt-install.sh does)" >&2; exit 1; }
 }

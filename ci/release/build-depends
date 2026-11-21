@@ -1,5 +1,8 @@
 build-essential
-rustup
+cargo
+rustc
+rustfmt
+rust-clippy
 pkg-config
 libxkbcommon-dev
 libx11-data

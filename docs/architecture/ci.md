@@ -14,10 +14,10 @@ local gate call it, so CI holds no check the gate skips:
 | `gate` | `lint test all debs` |
 
 `verify.sh` sets the environment the stages share (no incremental, no debug info, build paths
-remapped to `/build`, `/cargo` and `/rustup`) and checks that the Debian packages each stage
-needs are installed, failing with the list of what is missing rather than skipping a step;
-`verify.sh --setup STAGE` installs them, the toolchain and the pinned `cargo-deb` instead (what
-CI does). `VERIFY_PROFILE` picks the cargo profile of the debs (default `dist`).
+remapped to `/build` and `/cargo`) and checks that the Debian packages each stage needs are
+installed, failing with the list of what is missing rather than skipping a step; `verify.sh --setup
+STAGE` installs them and the pinned `cargo-deb` instead (what CI does). `VERIFY_PROFILE` picks the
+cargo profile of the debs (default `dist`).
 
 Only these run in CI alone:
 
@@ -66,9 +66,10 @@ on pushes or pull requests. It runs on GitHub-hosted runners (`ubuntu-24.04-arm`
 `ubuntu-24.04`). Every job runs once per supported Debian release, in a `debian:<suite>`
 container: the `suites` job reads the list from the APT repository's `conf/suites`
 (through its reusable `suites.yml`), now `forky` only. Each job installs what it needs with
-`ci/apt-install.sh` (build libraries in `ci/release/build-depends`) and the toolchain pinned in
-`rust-toolchain.toml`. Rendering runs on lavapipe, Mesa's CPU Vulkan, so no job needs a GPU or
-a display; the compositor tests run it headless.
+`ci/apt-install.sh` (build libraries and the suite's own `rustc`, `cargo`, `rustfmt` and
+`rust-clippy` in `ci/release/build-depends`), so each suite builds with its Debian toolchain; cargo
+refuses a `rust-version` newer than that `rustc`. Rendering runs on lavapipe, Mesa's CPU Vulkan, so
+no job needs a GPU or a display; the compositor tests run it headless.
 
 ### Jobs
 

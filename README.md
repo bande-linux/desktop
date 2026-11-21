@@ -27,13 +27,12 @@ metapackage, `ci/` the release and packaging scripts, `data/` wallpapers, icons 
 
 ## Building and testing
 
-On Debian forky, install the build and test dependencies (with `sudo`, Debian's `rustup`
-included) and the toolchain pinned in `rust-toolchain.toml`:
+On Debian forky, install the build and test dependencies (with `sudo`; Debian's own `rustc`,
+`cargo`, `rustfmt` and `rust-clippy` included):
 
 ```bash
 xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 \
     libwayland-client0 procps fonts-inter < ci/release/build-depends
-ci/release/toolchain.sh
 ```
 
 The gate is the release checks: fmt, clippy, the layering rules, the tests on a private D-Bus bus

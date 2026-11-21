@@ -6,7 +6,7 @@ members = ["crates/*/*"]
 version = "0.1.10"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.95"
+rust-version = "1.98"
 repository = "https://github.com/bande-linux/desktop"
 
 [workspace.lints.clippy]

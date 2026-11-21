@@ -150,7 +150,7 @@ session="$root/usr/share/wayland-sessions/bande.desktop"
 grep -qx 'Type=Application' "$session"
 grep -qx 'Name=Bande' "$session"
 grep -qx 'Exec=bande-session' "$session"
-grep -qx 'DesktopNames=Bande' "$session"
+grep -qx 'DesktopNames=X-Bande' "$session"
 test -x "$root/usr/bin/bande-session"
 sh -n "$root/usr/bin/bande-session"
 units="$scratch/units"
@@ -172,5 +172,17 @@ service="$root/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.ban
 grep -qx 'DBusName=org.freedesktop.impl.portal.desktop.bande' "$portal"
 grep -qx 'Name=org.freedesktop.impl.portal.desktop.bande' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
-grep -qx 'default=bande;' "$root/usr/share/xdg-desktop-portal/bande-portals.conf"
+grep -qx 'default=bande;' "$root/usr/share/xdg-desktop-portal/x-bande-portals.conf"
+
+echo "== lintian"
+lintian=(lintian --fail-on "error,warning")
+if [ "$(id -u)" = 0 ]; then
+    linted=$(mktemp -d -p "$scratch")
+    chmod 755 "$scratch" "$linted"
+    cp "$debs"/*.deb "$linted/"
+    chmod 644 "$linted"/*.deb
+    runuser -u nobody -- "${lintian[@]}" "$linted"/*.deb
+else
+    "${lintian[@]}" "$debs"/*.deb
+fi
 echo "the $architecture packages passed"

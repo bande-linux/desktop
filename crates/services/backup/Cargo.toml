@@ -42,6 +42,7 @@ Settings chooses the disk; Files browses and restores past versions."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-backup/copyright", "usr/share/doc/bande-backup/copyright", "644"],
+    ["target/release/deb-assets/bande-backup/changelog.gz", "usr/share/doc/bande-backup/", "644"],
     ["target/release/bande-backupd", "usr/libexec/", "755"],
     ["target/release/bande-backup-alerts", "usr/libexec/", "755"],
     ["data/bande-backup-alerts.service", "usr/lib/systemd/user/", "644"],

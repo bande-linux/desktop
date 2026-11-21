@@ -5,4 +5,4 @@ Comment[sv]=Skrivbordet Bande
 Exec=bande-session
 TryExec=bande-session
 Type=Application
-DesktopNames=Bande
+DesktopNames=X-Bande

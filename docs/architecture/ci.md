@@ -86,7 +86,7 @@ with `verify.sh --setup` and runs one stage:
   the native target and the shared-library dependencies from that release's `dpkg-shlibdeps`.
   `check-debs.sh` checks that every package is there for `dpkg --print-architecture` at that
   version with no build paths inside, the D-Bus activation files, the user units, the portal
-  backend's registration and the login session; `smoke.sh` starts the packaged settings service
+  backend's registration and the login session, and lints them with `lintian`; `smoke.sh` starts the packaged settings service
   on a private bus to read a property and the packaged compositor headless. The job uploads
   `bande-debs-<suite>-<arch>` and `bande-debug-symbols-<suite>-<arch>`.
 - `deb-all (<suite>)`: `verify.sh all` builds the architecture-independent meta-package `bande-desktop`,

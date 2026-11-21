@@ -8,7 +8,7 @@ use bande_xdg::{replace_file, state_home};
 use super::{CHECK_SLACK, Reboot, SoftwareState};
 
 const FILE: &str = "bande/software-badge";
-const PACKAGES: &str = "/var/lib/dpkg/status";
+const PACKAGE_LOG: &str = "/var/log/dpkg.log";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Remembered {
@@ -110,7 +110,7 @@ pub(crate) fn glance(every: Option<Duration>, restart_pending: bool) -> Glance {
     if restart_pending {
         return Glance::Known(Some(tr!("Restart to finish updating")));
     }
-    let packages_changed = modified(PACKAGES)
+    let packages_changed = modified(PACKAGE_LOG)
         .zip(checked)
         .is_some_and(|(packages, checked)| packages > checked);
     Glance::Known(match remembered {

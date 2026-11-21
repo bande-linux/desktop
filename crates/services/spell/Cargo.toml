@@ -28,6 +28,7 @@ text is first checked; holds one copy of each dictionary and exits when \
 idle. Dictionaries are Debian's hunspell packages."""
 assets = [
     ["target/release/deb-assets/bande-spell/copyright", "usr/share/doc/bande-spell/copyright", "644"],
+    ["target/release/deb-assets/bande-spell/changelog.gz", "usr/share/doc/bande-spell/", "644"],
     ["target/release/bande-spell", "usr/libexec/", "755"],
     ["data/org.bande.Spell.service", "usr/share/dbus-1/services/", "644"],
     ["data/bande-spell.service", "usr/lib/systemd/user/", "644"],

@@ -40,6 +40,9 @@ for each user and sends them over IPP, with CUPS queues too where CUPS is \
 installed. It starts when asked and exits when nothing is left to do."""
 assets = [
     ["target/release/deb-assets/bande-printd/copyright", "usr/share/doc/bande-printd/copyright", "644"],
+    ["target/release/deb-assets/bande-printd/changelog.gz", "usr/share/doc/bande-printd/", "644"],
+    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-printd", "644"],
+    ["target/release/deb-assets/bande-printd/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-printd", "usr/bin/", "755"],
     ["data/org.bande.Print.service", "usr/share/dbus-1/services/", "644"],
     ["data/bande-printd.service", "usr/lib/systemd/user/", "644"],

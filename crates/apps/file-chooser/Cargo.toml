@@ -44,6 +44,8 @@ questions, adding an app or web app to Applications, sharing the account's \
 name and picture, and setting the desktop picture."""
 assets = [
     ["target/release/deb-assets/bande-file-chooser/copyright", "usr/share/doc/bande-file-chooser/copyright", "644"],
+    ["target/release/deb-assets/bande-file-chooser/changelog.gz", "usr/share/doc/bande-file-chooser/", "644"],
+    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-file-chooser", "644"],
     ["target/release/bande-file-chooser", "usr/libexec/", "755"],
     ["target/release/l10n/development/bande-file-chooser/*", "usr/share/bande/l10n/bande-file-chooser/", "644"],
 ]

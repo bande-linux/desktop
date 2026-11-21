@@ -35,7 +35,11 @@ profiles. Sizes are in [performance.md](performance.md).
   `copyright` from `ci/copyright.py` (`ci/copyright` for this tree, then a paragraph per crate
   linked into it with the authors and licence from its `Cargo.toml`, or `ci/copyright.d/<crate>`
   for a crate that carries third-party material, then each licence's text from `ci/licenses`),
-  and each metainfo with its release, the version and the date of the crate's last commit. `bande-shell` installs the one
+  its `changelog.gz` and a manual page for each program in `/usr/bin` from `ci/release/deb-docs.py`
+  (the Cargo description of the crate that builds it, or `data/<program>.1` for a package's second
+  program), and each metainfo with its release, the version and the date of the crate's last commit. A package
+  that renders PDF text through hayro ships a lintian override for `embedded-library freetype`: the
+  pure-Rust skrifa carries FreeType's list of hint-reliant fonts, not FreeType. `bande-shell` installs the one
   shell binary that hosts the desktop, the bar, the notifications, Quick Settings and the
   launcher, together with the Bande wallpapers; the crates of those parts are
   libraries and build no package of their own.
@@ -59,7 +63,7 @@ profiles. Sizes are in [performance.md](performance.md).
   need nothing more; support for USB and older printers comes from Settings ▸ Printers.
   `debian/default-apps.sh` turns that file into the `${bande:Recommends}` substitution variable
   at build time, so any default app can be removed or replaced. It installs
-  `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which opens
+  `/usr/share/applications/x-bande-mimeapps.list`, read only in a Bande session, which opens
   folders in Files, `.deb` files in the Package Installer, plain text (with source code and
   logs, its subtypes) in Text Editor when it is installed and archives (zip, tar, gzip, bzip2, xz,
   zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive

@@ -42,6 +42,8 @@ graphical session."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-automount/copyright", "usr/share/doc/bande-automount/copyright", "644"],
+    ["target/release/deb-assets/bande-automount/changelog.gz", "usr/share/doc/bande-automount/", "644"],
+    ["target/release/deb-assets/bande-automount/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-automount", "usr/bin/", "755"],
     ["target/release/bande-mount-helper", "usr/libexec/", "755"],
     ["data/bande-automount.service", "usr/lib/systemd/user/", "644"],

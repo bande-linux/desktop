@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-export XDG_CURRENT_DESKTOP=Bande
+export XDG_CURRENT_DESKTOP=X-Bande
 export XDG_CONFIG_HOME="$(mktemp -d)"
 mkdir -p "$XDG_CONFIG_HOME/bande"
 echo 'appearance "dark"' > "$XDG_CONFIG_HOME/bande/config.kdl"

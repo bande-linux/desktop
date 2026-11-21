@@ -23,7 +23,7 @@ echo "== bande-desktop pins its packages at $version"
 field bande-desktop Depends | grep -qF "bande-compositor (= $version)"
 field bande-desktop Recommends | grep -qF "bande-files (= $version)"
 dpkg-deb --extract "$(deb bande-desktop "$version")" "$scratch/desktop"
-grep -qx 'inode/directory=org.bande.Files.desktop;' "$scratch/desktop/usr/share/applications/bande-mimeapps.list"
+grep -qx 'inode/directory=org.bande.Files.desktop;' "$scratch/desktop/usr/share/applications/x-bande-mimeapps.list"
 
 echo "== bande-desktop brings a login, sound and the system around the desktop"
 relation() { field bande-desktop "$1" | tr ',' '\n' | sed 's/^ *//' | grep -qxF "$2"; }

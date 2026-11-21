@@ -35,6 +35,8 @@ and installs them as the Bande XDG sound theme for other apps."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-sound/copyright", "usr/share/doc/bande-sound/copyright", "644"],
+    ["target/release/deb-assets/bande-sound/changelog.gz", "usr/share/doc/bande-sound/", "644"],
+    ["target/release/deb-assets/bande-sound/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-sound", "usr/bin/", "755"],
     ["data/bande-sound.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Sound.service", "usr/share/dbus-1/services/", "644"],

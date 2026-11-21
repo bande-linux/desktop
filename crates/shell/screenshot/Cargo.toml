@@ -48,6 +48,8 @@ bande-compositor starts it and keeps it running."""
 assets = [
     "$auto",
     ["target/release/deb-assets/bande-screenshot/copyright", "usr/share/doc/bande-screenshot/copyright", "644"],
+    ["target/release/deb-assets/bande-screenshot/changelog.gz", "usr/share/doc/bande-screenshot/", "644"],
+    ["target/release/deb-assets/bande-screenshot/man/*", "usr/share/man/man1/", "644"],
 ]
 
 [lints]

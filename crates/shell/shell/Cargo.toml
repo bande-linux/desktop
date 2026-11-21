@@ -40,6 +40,9 @@ depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-
 recommends = "network-manager-config-connectivity-debian, pipewire, wireplumber, bande-tray, xdg-user-dirs"
 assets = [
     ["target/release/deb-assets/bande-shell/copyright", "usr/share/doc/bande-shell/copyright", "644"],
+    ["target/release/deb-assets/bande-shell/changelog.gz", "usr/share/doc/bande-shell/", "644"],
+    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-shell", "644"],
+    ["target/release/deb-assets/bande-shell/man/*", "usr/share/man/man1/", "644"],
     ["../launcher/data/emoji/*", "usr/share/bande/emoji/", "644"],
     ["target/release/bande-shell", "usr/bin/", "755"],
     ["../../../data/wallpapers/*.svg", "usr/share/bande/wallpapers/", "644"],

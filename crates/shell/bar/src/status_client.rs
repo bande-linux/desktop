@@ -32,7 +32,7 @@ use bande_status::unread::{ClockMark, set_do_not_disturb};
 use bande_status::{Command, Update};
 use bande_toolkit::ui::{Event, Menu, MenuItem, PointerButton};
 use bande_toolkit::{
-    App, Image, MenuPlacement, Panel, Rect, Scene, SessionEnd, Window, WindowEvent,
+    App, Image, MenuPlacement, Panel, Rect, Scene, SessionEnd, Window, WindowEvent, report,
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, app_name, data_dirs, find_app, find_icon, launch_action,
@@ -77,12 +77,6 @@ pub struct StatusClient {
     can_sleep: bool,
     cannot_sleep: Inbox<()>,
     dates: DateFormats,
-}
-
-pub(crate) fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
-    if let Err(error) = result {
-        tracing::warn!("cannot {what}: {error}");
-    }
 }
 
 fn confirm_session_end(window: &mut Window, ending: SessionEnd) {

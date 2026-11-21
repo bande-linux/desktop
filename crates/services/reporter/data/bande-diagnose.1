@@ -1,0 +1,26 @@
+.TH "BANDE-DIAGNOSE" "1" "" "bande-reporter" "User Commands"
+.SH NAME
+bande\-diagnose \- make a fault report of this computer by hand
+.SH SYNOPSIS
+.B bande\-diagnose
+.RB [ \-\-send ]
+.RB [ \-\-describe
+.IR text ]
+.SH DESCRIPTION
+Makes a report with this boot's and the previous boot's logs, the kernel's
+saved crash records, the list of core dumps, the processes, disks and kernel
+modules, and anything a hang left behind, scrubbed of personal details. It asks
+the Bande report service, or makes the report itself when run as root without
+the service, so it also works from a text console. Without a report server it
+saves the report as a text file in the home folder.
+.SH OPTIONS
+.TP
+.B \-\-send
+Send the report to the configured report server.
+.TP
+.BI \-\-describe " text"
+Add a description of what happened to the report.
+.SH FILES
+.TP
+.I /etc/bande/reports.conf
+The report server, if any.

@@ -49,7 +49,7 @@ use wayland_protocols::xdg::toplevel_tag::v1::client::xdg_toplevel_tag_manager_v
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
-pub use self::error::WindowError;
+pub use self::error::{WindowError, report};
 pub use self::gpu::RENDERER_VARIABLE;
 use self::gpu::{Gpu, start_gpu};
 pub use self::layer::{Edges, KeyboardFocus, LayerKind, LayerOptions};

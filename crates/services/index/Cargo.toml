@@ -38,6 +38,9 @@ priority and is woken only by changes."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-indexer/copyright", "usr/share/doc/bande-indexer/copyright", "644"],
+    ["target/release/deb-assets/bande-indexer/changelog.gz", "usr/share/doc/bande-indexer/", "644"],
+    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-indexer", "644"],
+    ["target/release/deb-assets/bande-indexer/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-indexer", "usr/bin/", "755"],
     ["data/bande-indexer.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Search.service", "usr/share/dbus-1/services/", "644"],

@@ -36,6 +36,9 @@ connected display that has one, through its backlight or DDC/CI."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-power/copyright", "usr/share/doc/bande-power/copyright", "644"],
+    ["target/release/deb-assets/bande-power/changelog.gz", "usr/share/doc/bande-power/", "644"],
+    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-power", "644"],
+    ["target/release/deb-assets/bande-power/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-power", "usr/bin/", "755"],
     ["data/bande-power.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Power.service", "usr/share/dbus-1/services/", "644"],

@@ -29,6 +29,7 @@ maintainer-scripts = "debian/"
 name = "libpam-bande-secrets"
 assets = [
     ["target/release/deb-assets/libpam-bande-secrets/copyright", "usr/share/doc/libpam-bande-secrets/copyright", "644"],
+    ["target/release/deb-assets/libpam-bande-secrets/changelog.gz", "usr/share/doc/libpam-bande-secrets/", "644"],
     ["target/release/libpam_bande_secrets.so", "usr/lib/aarch64-linux-gnu/security/pam_bande_secrets.so", "644"],
     ["data/bande-secrets", "usr/share/pam-configs/", "644"],
 ]
@@ -37,6 +38,7 @@ assets = [
 name = "libpam-bande-secrets"
 assets = [
     ["target/release/deb-assets/libpam-bande-secrets/copyright", "usr/share/doc/libpam-bande-secrets/copyright", "644"],
+    ["target/release/deb-assets/libpam-bande-secrets/changelog.gz", "usr/share/doc/libpam-bande-secrets/", "644"],
     ["target/release/libpam_bande_secrets.so", "usr/lib/x86_64-linux-gnu/security/pam_bande_secrets.so", "644"],
     ["data/bande-secrets", "usr/share/pam-configs/", "644"],
 ]

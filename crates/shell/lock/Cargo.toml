@@ -39,6 +39,8 @@ depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, libpam0g, libpam
 recommends = "bande-shell"
 assets = [
     ["target/release/deb-assets/bande-lock/copyright", "usr/share/doc/bande-lock/copyright", "644"],
+    ["target/release/deb-assets/bande-lock/changelog.gz", "usr/share/doc/bande-lock/", "644"],
+    ["target/release/deb-assets/bande-lock/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-lock", "usr/bin/", "755"],
     ["data/bande-lock.pam", "etc/pam.d/bande-lock", "644"],
     ["target/release/l10n/development/bande-lock/*", "usr/share/bande/l10n/bande-lock/", "644"],

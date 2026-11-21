@@ -1,0 +1,10 @@
+.TH "BANDE-SESSION" "1" "" "bande-compositor" "User Commands"
+.SH NAME
+bande\-session \- start a Bande desktop session
+.SH SYNOPSIS
+.B bande\-session
+.SH DESCRIPTION
+Starts the Bande compositor and the session services in the user's systemd
+manager and waits until the session ends. A display manager runs it from the
+Bande session entry; it refuses to start a second session while one is
+running.

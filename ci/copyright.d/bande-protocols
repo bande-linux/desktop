@@ -12,5 +12,5 @@ Comment: The interfaces of plasma-wayland-protocols' appmenu.xml.
 
 Files: crates/platform/protocols/protocols/gtk-shell.xml
 Copyright: The GTK authors
-License: LGPL-2+
+License: LGPL-2.1-or-later
 Comment: The interfaces of GTK's gdk/wayland/protocol/gtk-shell.xml.

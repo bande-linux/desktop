@@ -251,7 +251,7 @@ graph LR
   the permission store, and `PickColor`) and `ScreenCast` (sessions, source and cursor
   validation, PipeWire streams, `persist_mode` with restore data that skips the picker, closing
   stops the streams) are implemented over `FileChooserUi`, `ScreenshotUi` and
-  `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
+  `ScreenCastBackend` traits. `x-bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=X-Bande`)
   sends every interface to Bande, including `Secret`: only for calls from
   `xdg-desktop-portal` itself, it hands a sandboxed app the 64-byte key it keeps in the
   keyring under `app_id`; no GTK or GNOME backend is used. `Print` (`PreparePrint` shows the Bande print dialog and remembers the choice under a token; `Print` with that token goes straight to `bande-printd`, without one it shows the dialog with the app's PDF as the preview). Not implemented: GlobalShortcuts, InputCapture,
@@ -622,7 +622,7 @@ layouts are those in `/etc/default/keyboard` (`XKBLAYOUT`, `XKBVARIANT`); Settin
 offers "Use at Login Screen", which writes the user's layouts there through `bande-locale-helper`. After authentication the greeter asks greetd to
 start `bande-session` (the wrapper the `bande.desktop` session entry runs, which starts
 `bande-compositor.service` in the user's manager) with `XDG_SESSION_TYPE=wayland`,
-`XDG_CURRENT_DESKTOP=Bande` and `XDG_SESSION_DESKTOP=bande`, so `pam_systemd` registers a
+`XDG_CURRENT_DESKTOP=X-Bande` and `XDG_SESSION_DESKTOP=bande`, so `pam_systemd` registers a
 Wayland session; the greeter then exits, its compositor with it, releasing the seat and VT
 before greetd runs the session. When the session ends greetd starts the greeter again.
 

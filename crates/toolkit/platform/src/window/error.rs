@@ -55,3 +55,10 @@ impl From<DrawError> for WindowError {
         Self::Render(error)
     }
 }
+
+/// Logs a failed `what` ("cannot {what}: {error}") for a call whose failure leaves nothing to undo.
+pub fn report<E: fmt::Display>(what: &str, result: Result<(), E>) {
+    if let Err(error) = result {
+        tracing::warn!("cannot {what}: {error}");
+    }
+}

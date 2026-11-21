@@ -46,6 +46,9 @@ driven by the arrow keys, and Space shows \
 the selected file in Glance."""
 assets = [
     ["target/release/deb-assets/bande-files/copyright", "usr/share/doc/bande-files/copyright", "644"],
+    ["target/release/deb-assets/bande-files/changelog.gz", "usr/share/doc/bande-files/", "644"],
+    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-files", "644"],
+    ["target/release/deb-assets/bande-files/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-files", "usr/bin/", "755"],
     ["data/org.bande.Files.desktop", "usr/share/applications/", "644"],
     ["target/release/deb-assets/bande-files/org.bande.Files.metainfo.xml", "usr/share/metainfo/", "644"],

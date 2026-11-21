@@ -27,7 +27,7 @@ packages() {
         lint) echo curl ca-certificates shellcheck python3 ;;
         test) echo libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin at-spi2-core libfontconfig1 \
             libwayland-client0 procps fonts-inter ;;
-        debs) echo dpkg-dev jq libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd dbus-user-session ;;
+        debs) echo dpkg-dev jq lintian libvulkan1 mesa-vulkan-drivers dbus-daemon dbus-bin systemd dbus-user-session ;;
         all) echo build-essential debhelper dpkg-dev lintian distro-info-data cargo rustc ;;
     esac
     [ "$1" = all ] || cat ci/release/build-depends

@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 pub const SESSION: &str = "bande-session";
 pub const SESSION_ENVIRONMENT: [&str; 3] = [
     "XDG_SESSION_TYPE=wayland",
-    "XDG_CURRENT_DESKTOP=Bande",
+    "XDG_CURRENT_DESKTOP=X-Bande",
     "XDG_SESSION_DESKTOP=bande",
 ];
 

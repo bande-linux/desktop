@@ -13,7 +13,7 @@ use bande_notify::client::NotificationCenter;
 use bande_notify::{BUS_NAME, Picture, Presentation};
 use bande_toolkit::{
     App, Edges, Image, KeyboardFocus, LayerKind, LayerOptions, Panel, Radius, Rect, Role, Scene,
-    TextSystem, Window, WindowEvent,
+    TextSystem, Window, WindowEvent, report,
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app,
@@ -49,12 +49,6 @@ pub struct Notifications {
     keyboard: Option<bool>,
     hide_pending: bool,
     next_refresh: Option<Instant>,
-}
-
-fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
-    if let Err(error) = result {
-        tracing::warn!("cannot {what}: {error}");
-    }
 }
 
 fn image_named(name: &str, directories: &[PathBuf]) -> Option<Image> {

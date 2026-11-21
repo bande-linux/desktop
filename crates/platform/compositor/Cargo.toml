@@ -55,6 +55,8 @@ libinput and composes windows with its own Vulkan renderer, scanning \
 full-screen clients out directly when it can."""
 assets = [
     ["target/release/deb-assets/bande-compositor/copyright", "usr/share/doc/bande-compositor/copyright", "644"],
+    ["target/release/deb-assets/bande-compositor/changelog.gz", "usr/share/doc/bande-compositor/", "644"],
+    ["target/release/deb-assets/bande-compositor/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-compositor", "usr/bin/", "755"],
     ["data/bande-session", "usr/bin/", "755"],
     ["data/bande-compositor.service", "usr/lib/systemd/user/", "644"],

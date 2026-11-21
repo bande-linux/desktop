@@ -29,7 +29,7 @@ use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, S
 use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
     MenuPlacement, Palette, Panel, Point, Radius, Rect, Role, Scene, SessionEnd, TextSystem,
-    VolumeKey, Window, WindowEvent,
+    VolumeKey, Window, WindowEvent, report,
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
@@ -152,12 +152,6 @@ fn follow_connected(
             tracing::warn!("Quick Settings does not follow Wi-Fi and Bluetooth: {error}");
             None
         }
-    }
-}
-
-fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
-    if let Err(error) = result {
-        tracing::warn!("cannot {what}: {error}");
     }
 }
 

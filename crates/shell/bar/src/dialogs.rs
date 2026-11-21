@@ -1,6 +1,5 @@
 use bande_l10n::tr;
 
-use crate::status_client::report;
 use bande_config::{BUS_NAME, Config, OBJECT_PATH, config_path};
 use bande_inbox::Inbox;
 use bande_status::devices::end_session;
@@ -12,7 +11,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{
     App, Appearance, Image, Item, Palette, Point, Rect, Role, Scene, Sizing, TextAlign, TextStyle,
-    TextSystem, Window, WindowEvent,
+    TextSystem, Window, WindowEvent, report,
 };
 use bande_xdg::{
     ICON_THEMES, Locale, applications, crashed_apps_file, current_desktops, data_dirs, find_app,

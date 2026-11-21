@@ -30,6 +30,8 @@ offers ext-data-control on that connection only."""
 assets = [
     "$auto",
     ["target/release/deb-assets/bande-clipboard/copyright", "usr/share/doc/bande-clipboard/copyright", "644"],
+    ["target/release/deb-assets/bande-clipboard/changelog.gz", "usr/share/doc/bande-clipboard/", "644"],
+    ["target/release/deb-assets/bande-clipboard/man/*", "usr/share/man/man1/", "644"],
 ]
 
 [lints]

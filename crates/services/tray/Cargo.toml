@@ -24,6 +24,8 @@ Bande Taskbar finds them. Started with the graphical session."""
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-tray/copyright", "usr/share/doc/bande-tray/copyright", "644"],
+    ["target/release/deb-assets/bande-tray/changelog.gz", "usr/share/doc/bande-tray/", "644"],
+    ["target/release/deb-assets/bande-tray/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-tray", "usr/bin/", "755"],
     ["data/bande-tray.service", "usr/lib/systemd/user/", "644"],
     ["data/org.bande.Tray.service", "usr/share/dbus-1/services/", "644"],

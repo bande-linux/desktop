@@ -14,6 +14,6 @@ fi
 if [ "$1" = "configure" ] && [ -d /run/systemd/system ]; then
 	systemctl --system daemon-reload >/dev/null || true
 	if [ -e /var/lib/bande-backup/state.json ]; then
-		systemctl try-restart bande-backup.service >/dev/null || true
+		deb-systemd-invoke try-restart bande-backup.service >/dev/null || true
 	fi
 fi

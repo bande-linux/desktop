@@ -1,0 +1,3 @@
+# The rule lets the console user reach the DDC/CI bus of any display adapter for monitor
+# brightness; it is not support for a particular device, so there is no modalias to announce.
+appstream-metadata-missing-modalias-provide usr/lib/udev/rules.d/70-bande-ddc.rules

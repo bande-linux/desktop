@@ -37,6 +37,8 @@ chosen in its settings, and shows Look Up in a small panel at the pointer. \
 Started only when asked; nothing stays running."""
 assets = [
     ["target/release/deb-assets/bande-lookup/copyright", "usr/share/doc/bande-lookup/copyright", "644"],
+    ["target/release/deb-assets/bande-lookup/changelog.gz", "usr/share/doc/bande-lookup/", "644"],
+    ["target/release/deb-assets/bande-lookup/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-lookup", "usr/bin/", "755"],
     ["data/org.bande.Lookup.desktop", "usr/share/applications/", "644"],
     ["target/release/deb-assets/bande-lookup/org.bande.Lookup.metainfo.xml", "usr/share/metainfo/", "644"],

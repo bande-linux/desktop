@@ -1,4 +1,4 @@
-bande-mimeapps.list usr/share/applications/
+x-bande-mimeapps.list usr/share/applications/
 systemd/zram-generator.conf.d usr/lib/systemd/
 systemd/system.conf.d usr/lib/systemd/
 systemd/user.conf.d usr/lib/systemd/

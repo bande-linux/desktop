@@ -7,13 +7,13 @@ use bande_l10n::tr;
 use bande_toolkit::ui::Event;
 use bande_toolkit::{
     App, Item, KeyboardFocus, LayerKind, LayerOptions, Point, Radius, Rect, Role, Scene, Shape,
-    Window, WindowEvent,
+    Window, WindowEvent, report,
 };
 
 use crate::rail::{
     BarForm, bar_outline, bar_zone, cross_margin, edge_band, owns_node, surface_size,
 };
-use crate::status_client::{StatusClient, report};
+use crate::status_client::StatusClient;
 use crate::taskbar_client::Taskbar;
 use crate::taskbar_client::anchor;
 

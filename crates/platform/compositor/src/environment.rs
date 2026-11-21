@@ -10,8 +10,6 @@ use zbus::blocking::Connection;
 
 use crate::CursorTheme;
 
-const DESKTOP_NAME: &str = "Bande";
-
 #[zbus::proxy(
     interface = "org.freedesktop.systemd1.Manager",
     default_service = "org.freedesktop.systemd1",
@@ -39,7 +37,7 @@ pub fn cursor_environment(cursor: &CursorTheme) -> [(&'static str, String); 2] {
 
 pub(crate) fn desktop_environment() -> [(&'static str, &'static str); 2] {
     [
-        ("XDG_CURRENT_DESKTOP", DESKTOP_NAME),
+        ("XDG_CURRENT_DESKTOP", bande_xdg::CURRENT_DESKTOP),
         ("XDG_SESSION_TYPE", "wayland"),
     ]
 }

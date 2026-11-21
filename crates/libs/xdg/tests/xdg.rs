@@ -13,7 +13,7 @@ fn app(exec: &str) -> DesktopEntry {
         Path::new("/usr/share/applications/test.desktop"),
         &format!("[Desktop Entry]\nType=Application\nName=Test App\nIcon=test-icon\nExec={exec}\n"),
         None,
-        &["Bande".to_owned()],
+        &["X-Bande".to_owned()],
     )
     .expect("a shown application")
 }

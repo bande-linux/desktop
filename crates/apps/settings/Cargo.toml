@@ -78,6 +78,8 @@ recommends = "accountsservice, bande-polkit, bluez, pipewire, wireplumber, bande
 maintainer-scripts = "debian/"
 assets = [
     ["target/release/deb-assets/bande-settings/copyright", "usr/share/doc/bande-settings/copyright", "644"],
+    ["target/release/deb-assets/bande-settings/changelog.gz", "usr/share/doc/bande-settings/", "644"],
+    ["target/release/deb-assets/bande-settings/man/*", "usr/share/man/man1/", "644"],
     ["target/release/bande-settings", "usr/bin/", "755"],
     ["data/org.bande.Settings.desktop", "usr/share/applications/", "644"],
     ["target/release/deb-assets/bande-settings/org.bande.Settings.metainfo.xml", "usr/share/metainfo/", "644"],

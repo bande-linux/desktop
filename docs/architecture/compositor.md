@@ -422,7 +422,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | pointer and keyboard implemented, touch not |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | implemented where the device supports syncobj eventfds |
-| `xdg_wm_base` | Application windows and popups | implemented; `wm_capabilities` lists maximize, fullscreen, minimize and the window menu; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
+| `xdg_wm_base` | Application windows and popups | implemented; `wm_capabilities` lists maximize, fullscreen, minimize and the window menu; `set_fullscreen` moves the window to the output it names; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | implemented |
 | `wp_presentation` | Presentation timing, VSync | implemented |

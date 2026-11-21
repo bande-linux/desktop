@@ -1,6 +1,7 @@
 use bande_spring::Spring;
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 use smithay::wayland::compositor::{TraversalAction, with_surface_tree_downward};
@@ -69,6 +70,12 @@ impl State {
         }
         self.layer_screen(&root)
             .unwrap_or_else(|| self.pointer_screen())
+    }
+
+    pub(crate) fn screen_of_output(&self, output: &WlOutput) -> Option<usize> {
+        self.screens
+            .iter()
+            .position(|screen| screen.output.owns(output))
     }
 
     pub(crate) fn sync_surface_outputs(&self) {
@@ -220,6 +227,17 @@ impl State {
         if let Some(screen) = self.screen_beside(from, direction) {
             self.move_window_to_screen(index, screen, None);
             self.focus(Some(surface.clone()));
+        }
+    }
+
+    pub(crate) fn move_to_screen(&mut self, surface: &WlSurface, screen: usize) {
+        let Some(index) = self.window_index(surface) else {
+            return;
+        };
+        let index = self.root_index(index);
+        if self.screens[screen].mirror.is_none() && !self.on_full_screen_space(&self.windows[index])
+        {
+            self.move_window_to_screen(index, screen, None);
         }
     }
 

@@ -6,7 +6,7 @@ tables below.
 > **Datum**: a fixed reference point that everything else is measured from.
 > **Quiet surfaces. One signal. Exact edges.**
 
-Bande should feel like a well-made instrument, like a good radio or synthesizer, rather than a pane of glass. Surfaces are solid, warm and calm. Exactly one colour, the *signal*, marks what is selected, focused or live. Edges, radii and spacing follow a few strict rules that anyone can check with a ruler. Motion is smooth. The look is our own.
+Bande should feel like a well-made instrument, like a good radio or synthesizer. Surfaces are solid, warm and calm. Exactly one colour, the *signal*, marks what is selected, focused or live. Edges, radii and spacing follow a few strict rules that anyone can check with a ruler. Motion is smooth. The look is our own.
 
 ---
 
@@ -150,14 +150,14 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 
 ## 5. Typography
 
-**UI text: Inter** (already installed, `fonts-inter`, SIL OFL), set apart from SF with Inter 4's own features:
-`cv05` (lowercase l with tail: disambiguates Il1 in file names), `cv08` (capital I with serifs), `ss07` and `ss08` (square punctuation and quotes: the square motif at the size of a full stop), and `tnum` wherever numbers are in columns (tables, clock, sizes, sliders). parley already sets `FontFeatures`, so this is a one-line change in `text.rs`.
+**UI text: Inter** (already installed, `fonts-inter`, SIL OFL), with Inter 4's own features:
+`cv05` (lowercase l with tail: disambiguates Il1 in file names), `cv08` (capital I with serifs), `ss07` and `ss08` (square punctuation and quotes: the square motif at the size of a full stop), and `tnum` wherever numbers are in columns (tables, clock, sizes, sliders).
 
-**Display and voice: Manrope** (`fonts-manrope`, Debian main, SIL OFL; weights 200–800). It is a modern geometric grotesk with open apertures and a slightly wide stance, clearly not SF Pro Display. It is used from 15 pt up: window titles, page titles, alert headings and the lock screen. It is what makes a screenshot recognisable as Bande.
+**Display and voice: Manrope** (`fonts-manrope`, Debian main, SIL OFL; weights 200–800). It is a modern geometric grotesk with open apertures and a slightly wide stance. It is used from 15 pt up: window titles, page titles, alert headings and the lock screen. It is what makes a screenshot recognisable as Bande.
 
 **Mono: JetBrains Mono** (`fonts-jetbrains-mono`, OFL; with `zero` slashed) replaces DejaVu Sans Mono in the terminal and code.
 
-Considered and not chosen: Geist (not packaged in Debian, and now Nothing's and Vercel's identity); IBM Plex (corporate in tone); Atkinson Hyperlegible (only Regular and Bold in Debian; we propose it as the *Larger Text / Hyperlegible* accessibility option); Figtree (not packaged).
+Considered and not chosen: Geist and Figtree (not packaged in Debian); IBM Plex (corporate in tone); Atkinson Hyperlegible (only Regular and Bold in Debian).
 
 | Style | Face | Size / line | Weight | Notes |
 |---|---|---|---|---|
@@ -221,7 +221,7 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 | Stepper | one 96 pt `well` capsule: − value + (value in tnum) |
 | Slider | 4 pt track (`well`), accent fill, and a **fader knob**: a 7×20 rounded bar, white with an edge. It reads as an instrument fader, not a ball. Optional tick marks 1.5×4 `ink3` |
 | Progress | **segmented**: 24 cells of 2 gap, radius 1, accent on `well`. Indeterminate = a 4-cell block gliding (the `standard` spring) |
-| Menus | `overlay`, radius 10, 4 inset, 28 rows, highlight = accent radius 6; shortcut column right-aligned in `ink3`, written as words in GNOME order ("Shift+Ctrl+N", "Alt+Super+8"; no modifier symbols); submenus open on the `quick` spring; a menu never leaves the screen: it flips, then slides, then shortens to scroll between 20 pt bands with a single `ink2` chevron (behaviour: `docs/architecture/behaviour.md`, Popup placement) |
+| Menus | `overlay`, radius 10, 4 inset, 28 rows, highlight = accent radius 6; shortcut column right-aligned in `ink3`, written as words in the order Shift, Ctrl, Alt, Super ("Shift+Ctrl+N", "Alt+Super+8"; no modifier symbols); submenus open on the `quick` spring; a menu never leaves the screen: it flips, then slides, then shortens to scroll between 20 pt bands with a single `ink2` chevron (behaviour: `docs/architecture/behaviour.md`, Popup placement) |
 | Alerts | card radius 16: the body on `overlay` with a 36 pt app disc, a Manrope 17 heading and body in `ink2`; a **footer tray** on `chassis` holding the buttons (default right, cancel left of it, an alternative such as "Don't Quit" as a quiet button on the far left). App-modal alerts are centred over the window with a scrim; document-modal alerts drop from under the header |
 | Tooltip | `ink` fill with `chassis` text (inverted), radius 6, 12/500; no arrow |
 | Notifications | `overlay`, radius 16, app disc 18 + LABEL-style app name + time, title 13.5/600, body 13 `ink2`; actions appear as quiet buttons on hover |

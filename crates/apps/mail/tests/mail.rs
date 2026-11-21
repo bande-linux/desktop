@@ -4,15 +4,18 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use bande_mail::compose::{Draft, Outgoing, from_mailto};
-use bande_mail::imap::Session;
+use bande_mail::donate::{DOMAIN, MESSAGE_ARGUMENT, offer_to_search};
+use bande_mail::imap::{Fetched, Folder, Session};
 use bande_mail::message::Address;
 use bande_mail::net::{Network, Security, Server};
 use bande_mail::store::{Account, Store};
 use bande_mail::worker::{Command as Order, Event, Mailroom, Status, Worker};
+use bande_search::Donation;
+use zbus::blocking::Connection;
 
 const DOVECOT: &str = "/usr/sbin/dovecot";
 const USER: &str = "ann@bande.test";
@@ -26,6 +29,19 @@ fn local(port: u16) -> Server {
         host: "127.0.0.1".to_owned(),
         port,
         security: Security::Plain,
+    }
+}
+
+fn account(email: &str, imap: Server, smtp: Server) -> Account {
+    Account {
+        id: 0,
+        name: "Ann".to_owned(),
+        email: email.to_owned(),
+        user: email.to_owned(),
+        imap,
+        smtp,
+        signature: String::new(),
+        enabled: true,
     }
 }
 
@@ -135,16 +151,7 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
     let sent = Sent::default();
     let path = dovecot.folder.path().join("mail.sqlite3");
     let store = Store::open(&path).unwrap();
-    let mut account = Account {
-        id: 0,
-        name: "Ann".to_owned(),
-        email: USER.to_owned(),
-        user: USER.to_owned(),
-        imap: local(dovecot.port),
-        smtp: local(smtp_server(sent.clone())),
-        signature: String::new(),
-        enabled: true,
-    };
+    let mut account = account(USER, local(dovecot.port), local(smtp_server(sent.clone())));
     account.id = store.add_account(&account).unwrap();
     let id = account.id;
     let mut mailroom = Mailroom::new().unwrap();
@@ -206,4 +213,105 @@ fn a_mailto_link_cannot_add_hidden_recipients_or_attachments() {
     assert_eq!(draft.cc, [person("cat@example.org")]);
     assert!(draft.bcc.is_empty());
     assert!(draft.attachments.is_empty());
+}
+
+#[derive(Default)]
+struct Taken {
+    items: Vec<Donation>,
+    forgotten: Vec<String>,
+    cursor: String,
+}
+
+struct Index(Arc<Mutex<Taken>>);
+
+#[zbus::interface(name = "org.bande.Search")]
+impl Index {
+    fn donate(&self, domain: String, items: Vec<Donation>, cursor: String) {
+        assert_eq!(domain, DOMAIN);
+        let mut taken = self.0.lock().unwrap();
+        taken.items.extend(items);
+        taken.cursor = cursor;
+    }
+
+    fn cursor(&self, _domain: String) -> String {
+        self.0.lock().unwrap().cursor.clone()
+    }
+
+    fn forget(&self, _domain: String, ids: Vec<String>) {
+        self.0.lock().unwrap().forgotten.extend(ids);
+    }
+}
+
+fn offer<'a>(store: &Store, taken: &'a Mutex<Taken>) -> MutexGuard<'a, Taken> {
+    offer_to_search(store);
+    taken.lock().unwrap()
+}
+
+fn item<'a>(taken: &'a Taken, kind: &str) -> &'a Donation {
+    taken.items.iter().find(|item| item.kind == kind).unwrap()
+}
+
+#[test]
+fn search_is_told_of_new_mail_its_text_and_its_removal_and_catches_up_after_losing_its_index() {
+    let taken = Arc::new(Mutex::new(Taken::default()));
+    let service = Connection::session().unwrap();
+    let index = Index(Arc::clone(&taken));
+    service
+        .object_server()
+        .at("/org/bande/Search", index)
+        .unwrap();
+    service.request_name("org.bande.Search").unwrap();
+    let folder = tempfile::tempdir().unwrap();
+    let mut store = Store::open(&folder.path().join("mail.sqlite3")).unwrap();
+    let id = store
+        .add_account(&account(USER, local(1), local(1)))
+        .unwrap();
+    let inbox = Folder {
+        path: "INBOX".to_owned(),
+        name: "Inbox".to_owned(),
+        delimiter: None,
+        role: None,
+        selectable: true,
+    };
+    store.replace_mailboxes(id, &[inbox]).unwrap();
+    let mailbox = store.mailboxes(id).unwrap()[0].id;
+    let header = b"From: Ada <ada@example.org>\r\nSubject: Lunch\r\n\r\n";
+    let fetched = Fetched {
+        uid: 7,
+        flags: None,
+        size: Some(10),
+        internal_date: Some(1),
+        header: Some(header.to_vec()),
+        body: None,
+    };
+    store.insert_headers(mailbox, &[fetched]).unwrap();
+    let given = offer(&store, &taken);
+    let mail = item(&given, "mail");
+    assert_eq!(
+        (mail.title.as_str(), mail.detail.as_str()),
+        ("Lunch", "Ada")
+    );
+    assert!(mail.target.starts_with(MESSAGE_ARGUMENT));
+    assert_eq!(item(&given, "contact").target, "mailto:ada@example.org");
+    drop(given);
+
+    let text = [&header[..], b"The vermilion place\r\n"].concat();
+    store.store_body(mailbox, 7, &text).unwrap();
+    let has_text = |taken: &Taken| {
+        taken
+            .items
+            .iter()
+            .any(|item| item.body.contains("vermilion"))
+    };
+    assert!(
+        has_text(&offer(&store, &taken)),
+        "the text reaches search with the body"
+    );
+    *taken.lock().unwrap() = Taken::default();
+    assert!(
+        has_text(&offer(&store, &taken)),
+        "an index that lost everything gets it all again"
+    );
+    store.remove_uids(mailbox, &[7]).unwrap();
+    assert_eq!(offer(&store, &taken).forgotten.len(), 1);
 }

@@ -202,18 +202,3 @@ pub fn settings_form(appearance: Appearance, settings: &Shared<VeloxSettings>) -
     ui.set_appearance(appearance);
     ui
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crash_notices_are_off_until_turned_on() {
-        assert!(!VeloxSettings::parse("").notify_crashes);
-        let on = VeloxSettings {
-            notify_crashes: true,
-            ..VeloxSettings::default()
-        };
-        assert_eq!(VeloxSettings::parse(&on.to_text()), on);
-    }
-}

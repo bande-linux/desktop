@@ -1,7 +1,7 @@
 [Unit]
 Description=Bande crash reports
 Documentation=https://github.com/bande-linux/desktop/blob/main/docs/architecture/session.md
-After=systemd-journald.socket systemd-pstore.service
+After=systemd-journald.socket
 Conflicts=shutdown.target
 Before=shutdown.target
 

@@ -3,11 +3,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bande_reporter::config::Config;
-use bande_reporter::diagnose::previous_boot_tail;
 use bande_reporter::elfcore::read_core;
 use bande_reporter::facts;
-use bande_reporter::fault::{Fault, push_text};
-use bande_reporter::scrub::Scrubber;
+use bande_reporter::fault::Fault;
 use bande_reporter::spool::{Attachment, Spool};
 use bande_reporter::stacks::parse_coredump;
 use jiff::Timestamp;
@@ -19,7 +17,6 @@ const SPOOL: &str = "/var/lib/bande/reports";
 const CONFIG: &str = "/etc/bande/reports.conf";
 const HANG_KINDS: [&str; 4] = ["app-hang", "force-quit", "compositor-stall", "shell-stall"];
 const HANG_MERGE_SECONDS: i64 = 40;
-const PREVIOUS_BOOT: &str = "-1";
 const QUIT_SIGNAL: &str = "SIGQUIT";
 const PANIC_PREFIX: &str = "panicked at ";
 
@@ -220,37 +217,4 @@ pub fn of_entry(entry: &Entry) -> Result<(), Box<dyn Error>> {
     } else {
         failed_unit(entry, &spool, &config)
     }
-}
-
-pub fn of_previous_boot(saved_kernel_log: &str, time: Timestamp) -> Result<(), Box<dyn Error>> {
-    let spool = Spool::open(Path::new(SPOOL))?;
-    let scrubber = Scrubber::for_this_computer();
-    let panicked = !saved_kernel_log.trim().is_empty();
-    let mut fault = Fault::new(if panicked {
-        "kernel-panic"
-    } else {
-        "unexpected-restart"
-    });
-    fault.time = time;
-    fault.program = Some("kernel".to_owned());
-    fault.boot = Some(PREVIOUS_BOOT.to_owned());
-    fault.signature_text = saved_kernel_log
-        .lines()
-        .find(|line| line.contains("Kernel panic"))
-        .map(|line| {
-            line.split_once("Kernel panic")
-                .map_or(line, |(_, rest)| rest)
-                .split_whitespace()
-                .filter(|word| !word.bytes().any(|byte| byte.is_ascii_digit()))
-                .collect::<Vec<_>>()
-                .join(" ")
-        });
-    push_text(
-        &mut fault.attachments,
-        "pstore.txt",
-        scrubber.text(saved_kernel_log),
-    );
-    previous_boot_tail(&mut fault, &scrubber, Path::new(SPOOL));
-    fault.store(&spool, &config(), Path::new(SPOOL))?;
-    Ok(())
 }

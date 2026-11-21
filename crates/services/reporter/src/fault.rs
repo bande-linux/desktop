@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Receiver;
@@ -22,8 +22,6 @@ use crate::stacks::{Stacks, parse_eu_stack};
 
 const PARTIAL: &str = "partial";
 const FRAME_FORMAT: u64 = 2;
-const DEVCOREDUMPS: &str = "/sys/class/devcoredump";
-const DEVICE_DUMP_LIMIT: u64 = 8 * 1024 * 1024;
 const IDLE_WAIT: &str = "do_epoll_wait";
 const SAMPLE_GAP: Duration = Duration::from_millis(500);
 const SAMPLE_PATIENCE: Duration = Duration::from_secs(2);
@@ -450,67 +448,4 @@ pub fn capture_hang(
         tracing::debug!("cannot remove a finished snapshot: {error}");
     }
     Capture { idle, end }
-}
-
-pub fn attach_device_dumps(fault: &mut Fault) {
-    let Ok(dumps) = fs::read_dir(DEVCOREDUMPS) else {
-        return;
-    };
-    for dump in dumps.flatten() {
-        let path = dump.path();
-        let driver = fs::read_link(path.join("failing_device/driver"))
-            .ok()
-            .and_then(|driver| driver.file_name()?.to_str().map(str::to_owned))
-            .unwrap_or_else(|| "device".to_owned());
-        let mut bytes = Vec::new();
-        let read = File::open(path.join("data"))
-            .and_then(|data| data.take(DEVICE_DUMP_LIMIT).read_to_end(&mut bytes));
-        if let Err(error) = read {
-            tracing::debug!("cannot read a device core dump: {error}");
-            continue;
-        }
-        fault.attachments.push(Attachment {
-            name: format!("devcoredump-{driver}.bin"),
-            bytes,
-        });
-        if let Err(error) = fs::write(path.join("data"), b"1") {
-            tracing::debug!("cannot release a device core dump: {error}");
-        }
-    }
-}
-
-pub fn stuck_tasks() -> String {
-    let mut text = String::new();
-    let Ok(entries) = fs::read_dir("/proc") else {
-        return text;
-    };
-    for entry in entries.flatten() {
-        let Some(pid) = entry.file_name().into_string().ok() else {
-            continue;
-        };
-        if !pid.bytes().all(|b| b.is_ascii_digit()) {
-            continue;
-        }
-        for tid in thread_ids(&pid) {
-            let stat =
-                fs::read_to_string(format!("/proc/{pid}/task/{tid}/stat")).unwrap_or_default();
-            if stat
-                .rsplit_once(") ")
-                .is_some_and(|(_, rest)| rest.starts_with('D'))
-            {
-                text.push_str(&kernel_state(&pid, &tid));
-            }
-        }
-    }
-    text
-}
-
-pub fn mount_stall_details(stuck: &str, fault: &mut Fault) {
-    if let Some(protocol) = network_filesystem_in(stuck) {
-        fault.kind = "mount-stall".to_owned();
-        fault.detail.insert("protocol".to_owned(), json!(protocol));
-        fault
-            .detail
-            .insert("servers_hashed".to_owned(), hashed_servers(protocol));
-    }
 }

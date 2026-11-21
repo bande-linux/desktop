@@ -7,9 +7,9 @@ bande\-diagnose \- make a fault report of this computer by hand
 .RB [ \-\-describe
 .IR text ]
 .SH DESCRIPTION
-Makes a report with this boot's and the previous boot's logs, the kernel's
-saved crash records, the list of core dumps, the processes, disks and kernel
-modules, and anything a hang left behind, scrubbed of personal details. It asks
+Makes a report with this boot's and the previous boot's logs, the list of core
+dumps, the processes, failed services and disk use, and anything a hang left
+behind, scrubbed of personal details. It asks
 the Bande report service, or makes the report itself when run as root without
 the service, so it also works from a text console. Without a report server it
 saves the report as a text file in the home folder.

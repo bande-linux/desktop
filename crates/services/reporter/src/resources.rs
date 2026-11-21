@@ -10,6 +10,7 @@ use serde_json::json;
 
 use crate::checkin;
 use crate::config::Config;
+use crate::facts;
 use crate::fault::{Fault, push_text, user_stacks};
 use crate::hang::Sampler;
 use crate::spool::Spool;
@@ -168,7 +169,7 @@ struct Trigger {
 fn report(trigger: Trigger, spool: &Spool, config: &Config, spool_root: &Path) -> Option<String> {
     let pid = trigger.pid.to_string();
     let executable = fs::read_link(format!("/proc/{pid}/exe")).ok()?;
-    if !bande_log::is_installed_program(&executable) {
+    if !facts::is_bande_program(&executable) {
         return None;
     }
     let program = executable.file_name()?.to_str()?.to_owned();

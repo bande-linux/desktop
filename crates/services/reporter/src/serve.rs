@@ -19,7 +19,7 @@ use crate::config::{self, Config};
 use crate::counters;
 use crate::diagnose::diagnose;
 use crate::facts;
-use crate::fault::{Fault, attach_device_dumps, capture_hang};
+use crate::fault::{Fault, capture_hang};
 use crate::hang::{HangEnd, HangEnds};
 use crate::identity::Identity;
 use crate::send;
@@ -28,6 +28,7 @@ use crate::spool::{MANIFEST, STATE, Spool, Status};
 const FAILED: &str = "failed";
 const LONGEST_UNIT: usize = 200;
 const NOT_INSTALLED: &str = "only installed programs leave fault reports";
+const NOT_BANDE: &str = "fault reports are only about Bande's programs";
 const FROM_INSTALLED_PROGRAMS: [&str; 3] = ["fault", "count", "hang-over"];
 const FIRST_LISTEN_FD: i32 = 3;
 const IDLE_EXIT: Duration = Duration::from_secs(30);
@@ -35,6 +36,7 @@ const REQUEST_LIMIT: u64 = 16 * 1024;
 const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
 const MOST_CAPTURES: usize = 2;
 const ADMIN_GROUP: &str = "sudo";
+const BANDE_APP_ID: &str = "org.bande.";
 const SESSION_KINDS: [&str; 9] = [
     "oom",
     "jank",
@@ -91,6 +93,13 @@ fn executable(pid: &str) -> Option<PathBuf> {
 
 fn runs_elsewhere(executable: Option<&Path>) -> bool {
     executable.is_some_and(|path| !bande_log::is_installed_program(path))
+}
+
+fn is_bande_unit(unit: &str, app: Option<&str>) -> bool {
+    app.is_some_and(|app| app.starts_with(BANDE_APP_ID))
+        || unit.starts_with("bande-")
+        || unit.contains(BANDE_APP_ID)
+        || unit.contains("-bande-")
 }
 
 fn collector(failed_unit: Option<&str>) -> String {
@@ -172,8 +181,8 @@ impl Service {
                 return Err("that process belongs to someone else".into());
             }
             let executable = executable(pid);
-            if runs_elsewhere(executable.as_deref()) {
-                return Err(NOT_INSTALLED.into());
+            if !executable.as_deref().is_some_and(facts::is_bande_program) {
+                return Err(NOT_BANDE.into());
             }
             fault.program = executable
                 .as_deref()
@@ -191,9 +200,6 @@ impl Service {
                 .detail
                 .entry("termination")
                 .or_insert_with(|| json!("force-quit"));
-        }
-        if kind == "gpu-reset" {
-            attach_device_dumps(&mut fault);
         }
         if kind == "oom" {
             self.oom(&mut fault, request)?;
@@ -279,13 +285,13 @@ impl Service {
 
     fn oom(&self, fault: &mut Fault, request: &Map<String, Value>) -> Result<(), Box<dyn Error>> {
         let unit = field(request, "unit").unwrap_or_default();
+        let app = field(request, "app").filter(|app| !app.is_empty());
+        if !is_bande_unit(unit, app) {
+            return Err(NOT_BANDE.into());
+        }
         let reason = facts::oomd_reason(unit, fault.time.as_second())
-            .ok_or("no systemd-oomd kill of that unit; the kernel watcher reports kernel kills")?;
-        fault.program = field(request, "app")
-            .filter(|app| !app.is_empty())
-            .unwrap_or(unit)
-            .to_owned()
-            .into();
+            .ok_or("no systemd-oomd kill of that unit")?;
+        fault.program = Some(app.unwrap_or(unit).to_owned());
         fault.detail.insert("unit".to_owned(), json!(unit));
         fault.detail.insert("termination".to_owned(), json!("oomd"));
         fault.detail.insert("limit".to_owned(), json!(reason));

@@ -21,15 +21,12 @@ const MEMORY_FIELDS: [&str; 6] = [
     "Slab",
 ];
 const PRESSURES: [&str; 3] = ["cpu", "memory", "io"];
-const OTHER_PACKAGES: [&str; 5] = [
+const OTHER_PACKAGES: [&str; 4] = [
     "linux-image-*",
     "mesa-vulkan-drivers",
     "libgl1-mesa-dri",
-    "firmware-*",
     "systemd",
 ];
-const MODEL_FILES: [&str; 2] = ["/proc/device-tree/model", "/sys/class/dmi/id/product_name"];
-const FIRMWARE_FILES: [&str; 1] = ["/sys/class/dmi/id/bios_version"];
 const DRM: &str = "/sys/class/drm";
 const JOURNAL_LINES: &str = "200";
 const OOM_TOP: usize = 12;
@@ -41,10 +38,6 @@ fn read_trimmed(path: &str) -> Option<String> {
     let text = String::from_utf8_lossy(&bytes);
     let text = text.trim_matches(['\0', '\n', ' ']);
     (!text.is_empty()).then(|| text.to_owned())
-}
-
-fn first_of(paths: &[&str]) -> Option<String> {
-    paths.iter().find_map(|path| read_trimmed(path))
 }
 
 fn command_text(program: &str, arguments: &[&str]) -> String {
@@ -77,11 +70,23 @@ fn package_versions() -> Value {
     Value::Object(packages)
 }
 
-pub fn package_version_of(executable: &Path) -> Option<String> {
+fn package_of(executable: &Path) -> Option<String> {
     let path = executable.to_str()?.trim_end_matches(" (deleted)");
     let owners = command_text("dpkg-query", &["-S", path]);
     let (packages, _) = owners.lines().next()?.split_once(": ")?;
-    installed_version(packages.split(", ").next()?)
+    packages.split(", ").next().map(str::to_owned)
+}
+
+pub fn package_version_of(executable: &Path) -> Option<String> {
+    installed_version(&package_of(executable)?)
+}
+
+/// Whether `executable` is an installed program from one of Bande's packages, the only programs
+/// fault reports are about.
+pub fn is_bande_program(executable: &Path) -> bool {
+    bande_log::is_installed_program(executable)
+        && package_of(executable)
+            .is_some_and(|package| package.starts_with("bande-") || package.ends_with("-bande"))
 }
 
 pub fn installed_version(package: &str) -> Option<String> {
@@ -170,8 +175,6 @@ pub fn machine() -> Map<String, Value> {
         "kernel".to_owned(),
         json!(read_trimmed("/proc/sys/kernel/osrelease")),
     );
-    facts.insert("model".to_owned(), json!(first_of(&MODEL_FILES)));
-    facts.insert("firmware".to_owned(), json!(first_of(&FIRMWARE_FILES)));
     facts.insert("displays".to_owned(), displays());
     facts.insert("memory".to_owned(), memory());
     facts.insert("pressure".to_owned(), pressure());

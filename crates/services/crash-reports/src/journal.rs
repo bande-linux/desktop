@@ -117,17 +117,3 @@ pub fn killed_by_watchdog(unit_field: &str, unit: &str, time: Timestamp) -> bool
     ])
     .is_ok_and(|text| text.lines().any(|line| line.contains(WATCHDOG_MESSAGE)))
 }
-
-pub fn previous_boot_ended_cleanly() -> bool {
-    let last_line = journalctl(&["--boot=-1", "-n", "1"]).unwrap_or_default();
-    last_line.trim().is_empty()
-        || !journalctl(&["--boot=-1", "-n", "1", "UNIT=shutdown.target"])
-            .unwrap_or_default()
-            .trim()
-            .is_empty()
-}
-
-pub fn previous_boot_end() -> Option<Timestamp> {
-    let text = journalctl(&["--boot=-1", "-n", "1", "--output=json"]).ok()?;
-    Some(entries(&text).next()?.time())
-}

@@ -18,4 +18,3 @@ pub mod spool;
 pub mod stacks;
 pub mod throttle;
 pub mod wait;
-pub mod watch;

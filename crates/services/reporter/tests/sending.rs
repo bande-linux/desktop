@@ -208,7 +208,7 @@ fn a_busy_faulting_program_sends_within_its_budget_in_batches() {
     let _sender = Killed(reporter(&spool, &config, &["send"]).spawn().unwrap());
     wait_for(&server, DAILY_REPORTS);
     assert!(
-        store(&spool, &config, "kernel-panic", "panic")
+        store(&spool, &config, "manual", "by hand")
             .status
             .success()
     );
@@ -224,7 +224,7 @@ fn a_busy_faulting_program_sends_within_its_budget_in_batches() {
             .iter()
             .all(|upload| upload.connection == batch[0].connection)
     );
-    assert_eq!(late[0].manifest["kind"], "kernel-panic");
+    assert_eq!(late[0].manifest["kind"], "manual");
     assert_ne!(late[0].connection, batch[0].connection);
     assert!(late[0].at.duration_since(batch[0].at) >= Duration::from_secs(MIN_INTERVAL));
     assert!(

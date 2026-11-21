@@ -266,15 +266,10 @@ fn kind_label(kind: &str) -> String {
         }
         "compositor-stall" | "shell-stall" => tr!("Desktop stalled"),
         "failed-unit" => tr!("Failed to run"),
-        "kernel-panic" | "kernel-oops" | "kernel-warning" | "lockup" | "hung-task" => {
-            tr!("Kernel problem")
-        }
-        "unexpected-restart" => tr!("Unexpected restart"),
         "oom" => tr!("Out of memory"),
-        "gpu-reset" | "gpu-error" => tr!("Graphics problem"),
-        "display-failure" | "display-error" => tr!("Display problem"),
-        "sleep-failed" | "wake-failure" => tr!("Sleep or wake problem"),
-        "storage-error" => tr!("Disk problem"),
+        "gpu-reset" => tr!("Graphics problem"),
+        "display-failure" => tr!("Display problem"),
+        "wake-failure" => tr!("Wake problem"),
         "mount-stall" => tr!("Network drive stalled"),
         "manual" => tr!("Report by hand"),
         _ => tr!("Problem"),

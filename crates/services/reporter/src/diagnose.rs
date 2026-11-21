@@ -5,14 +5,13 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use crate::config::Config;
-use crate::fault::{Fault, partial_snapshots, push_text, stuck_tasks};
+use crate::fault::{Fault, partial_snapshots, push_text};
 use crate::scrub::Scrubber;
 use crate::spool::{MANIFEST, STATE, Spool};
 
 const SOCKET: &str = "/run/bande/report.sock";
-const PSTORE: &str = "/var/lib/systemd/pstore";
 const DESCRIPTION_LIMIT: usize = 8192;
-const SECTIONS: [(&str, &str, &[&str]); 9] = [
+const SECTIONS: [(&str, &str, &[&str]); 5] = [
     (
         "journal-warnings.txt",
         "journalctl",
@@ -24,11 +23,6 @@ const SECTIONS: [(&str, &str, &[&str]); 9] = [
             "-n",
             "3000",
         ],
-    ),
-    (
-        "kernel.txt",
-        "journalctl",
-        &["-b", "-k", "--no-pager", "--output=short-iso", "-n", "3000"],
     ),
     (
         "processes.txt",
@@ -45,14 +39,11 @@ const SECTIONS: [(&str, &str, &[&str]); 9] = [
         "coredumpctl",
         &["list", "--no-pager", "--no-legend"],
     ),
-    ("disks.txt", "lsblk", &["-o", "TYPE,SIZE,FSTYPE,ROTA,RO"]),
     (
         "disk-use.txt",
         "df",
         &["-h", "--output=fstype,size,used,pcent", "--local"],
     ),
-    ("network.txt", "ip", &["-brief", "link"]),
-    ("modules.txt", "lsmod", &[]),
 ];
 
 fn output_of(program: &str, arguments: &[&str]) -> String {
@@ -65,29 +56,13 @@ fn output_of(program: &str, arguments: &[&str]) -> String {
         .unwrap_or_default()
 }
 
-pub fn previous_boot_tail(fault: &mut Fault, scrubber: &Scrubber, spool_root: &Path) {
+fn previous_boot_evidence(fault: &mut Fault, scrubber: &Scrubber, spool_root: &Path) {
     push_text(
         &mut fault.attachments,
         "previous-boot-journal.txt",
         scrubber.text(&output_of(
             "journalctl",
             &["-b", "-1", "--no-pager", "--output=short-iso", "-n", "1500"],
-        )),
-    );
-    push_text(
-        &mut fault.attachments,
-        "previous-boot-kernel.txt",
-        scrubber.text(&output_of(
-            "journalctl",
-            &[
-                "-b",
-                "-1",
-                "-k",
-                "--no-pager",
-                "--output=short-iso",
-                "-n",
-                "1500",
-            ],
         )),
     );
     for (name, text) in partial_snapshots(spool_root) {
@@ -97,26 +72,6 @@ pub fn previous_boot_tail(fault: &mut Fault, scrubber: &Scrubber, spool_root: &P
             scrubber.text(&text),
         );
     }
-}
-
-fn previous_boot_evidence(fault: &mut Fault, scrubber: &Scrubber, spool_root: &Path) {
-    previous_boot_tail(fault, scrubber, spool_root);
-    let pstore: String = fs::read_dir(PSTORE)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|entry| {
-            format!(
-                "--- {}\n{}\n",
-                entry.file_name().to_string_lossy(),
-                output_of(
-                    "sh",
-                    &["-c", &format!("tail -n 400 {}/*", entry.path().display())]
-                )
-            )
-        })
-        .collect();
-    push_text(&mut fault.attachments, "pstore.txt", scrubber.text(&pstore));
 }
 
 pub fn diagnose(
@@ -141,11 +96,6 @@ pub fn diagnose(
             scrubber.text(&output_of(program, arguments)),
         );
     }
-    push_text(
-        &mut fault.attachments,
-        "stuck-tasks.txt",
-        scrubber.text(&stuck_tasks()),
-    );
     previous_boot_evidence(&mut fault, &scrubber, spool_root);
     let reports: String = spool
         .all()

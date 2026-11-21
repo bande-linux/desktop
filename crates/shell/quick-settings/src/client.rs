@@ -51,7 +51,7 @@ enum Mode {
     Panel { ui: Box<Ui>, height: f32 },
 }
 
-pub struct ControlCenter {
+pub struct QuickSettings {
     mode: Mode,
     shown: Animated,
     surface_shown: bool,
@@ -149,7 +149,7 @@ fn follow_connected(
     match started {
         Ok(_) => Some(refresh),
         Err(error) => {
-            tracing::warn!("Control Center does not follow Wi-Fi and Bluetooth: {error}");
+            tracing::warn!("Quick Settings does not follow Wi-Fi and Bluetooth: {error}");
             None
         }
     }
@@ -230,7 +230,7 @@ fn load_artworks(outbox: Outbox<(String, Option<Image>)>) -> Option<Sender<(Stri
     match started {
         Ok(_) => Some(requests),
         Err(error) => {
-            tracing::warn!("Control Center shows no artwork: {error}");
+            tracing::warn!("Quick Settings shows no artwork: {error}");
             None
         }
     }
@@ -274,7 +274,7 @@ fn moved(event: &Event, offset: Point) -> Event {
     }
 }
 
-impl ControlCenter {
+impl QuickSettings {
     fn notification_center(&self) -> Option<NotificationCenter<'_>> {
         NotificationCenter::new(self.session.as_ref()?).ok()
     }
@@ -860,7 +860,7 @@ impl ControlCenter {
     }
 }
 
-impl App for ControlCenter {
+impl App for QuickSettings {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         let now = Instant::now();
@@ -913,7 +913,7 @@ impl App for ControlCenter {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
-            WindowEvent::TogglePanel(Panel::ControlCenter) => self.toggle_panel(window),
+            WindowEvent::TogglePanel(Panel::QuickSettings) => self.toggle_panel(window),
             WindowEvent::TogglePanel(Panel::NotificationCenter)
                 if matches!(self.mode, Mode::Panel { .. }) =>
             {
@@ -923,7 +923,7 @@ impl App for ControlCenter {
                 self.dismiss(window);
             }
             WindowEvent::PanelAnchor {
-                panel: Panel::ControlCenter,
+                panel: Panel::QuickSettings,
                 edge,
                 rect,
                 ..
@@ -1074,11 +1074,11 @@ pub fn role() -> Role {
         anchor: Edges::ALL,
         exclusive_zone: 0,
         keyboard: KeyboardFocus::None,
-        namespace: "control-center".to_owned(),
+        namespace: "quick-settings".to_owned(),
     })
 }
 
-impl ControlCenter {
+impl QuickSettings {
     pub fn new(
         window: &mut Window,
         text: TextSystem,

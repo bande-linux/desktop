@@ -163,7 +163,7 @@ def bell(off=False):
     return layers(shape)
 
 
-def control_center():
+def quick_settings():
     return layers(S().frame(1.4, 2.2, 13.2, 4.8, 2.4, 1.3).circle(12.2, 4.6, 1.5)
                   .frame(1.4, 9, 13.2, 4.8, 2.4, 1.3).circle(3.8, 11.4, 1.5))
 
@@ -690,7 +690,7 @@ STATUS = {
     'notifications-symbolic': bell,
     'preferences-system-notifications-symbolic': bell,
     'notifications-disabled-symbolic': lambda: bell(off=True),
-    'bande-control-center-symbolic': control_center,
+    'bande-quick-settings-symbolic': quick_settings,
     'input-keyboard-symbolic': keyboard,
     'dialog-information-symbolic': info,
     'help-about-symbolic': info,

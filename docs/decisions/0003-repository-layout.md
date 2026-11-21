@@ -17,7 +17,7 @@ Crates are grouped by role:
 crates/
   platform/  compositor, render, protocols
   toolkit/   toolkit, design, graphics, platform, widgets
-  shell/     shell, bar, desktop, notifications, controlcenter, launcher,
+  shell/     shell, bar, desktop, notifications, quick-settings, launcher,
              screenshot, lock, greeter
   apps/      files, settings, file-chooser, secrets-prompt
   services/  config, notify, power, sound, clipboard, tray, automount, portal, polkit,
@@ -40,7 +40,7 @@ these crates at a pinned revision.
   surfaces, and the accessibility adapter. `widgets` holds the UI tree, the widgets and
   animation.
 - **`shell/`**: one crate per shell client or shell part. `shell` is `bande-shell`, the one
-  process that hosts the parts `desktop`, `bar`, `notifications`, `controlcenter` and `launcher`
+  process that hosts the parts `desktop`, `bar`, `notifications`, `quick-settings` and `launcher`
   (library crates, see [overview](../architecture/overview.md)); `screenshot`, `lock` and
   `greeter` stay processes of their own.
 - **`apps/`**: one crate per app built here, each on `bande-app` (`libs/app`), and the dialog

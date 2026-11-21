@@ -53,7 +53,7 @@ graph TB
             DOCK[Taskbar]
             NOTES[Notifications]
             LAUNCHER[Launcher]
-            CC[Control Center]
+            CC[Quick Settings]
         end
         SHOT[Screenshot]
         LOCK[Lock screen]
@@ -90,10 +90,10 @@ graph TB
     SETTINGS & DOCK & CC <-->|D-Bus| CONFIG
 ```
 
-The desktop and the taskbar of every display, the notifications, Control Center and the
+The desktop and the taskbar of every display, the notifications, Quick Settings and the
 launcher are one process, `bande-shell` (`crates/shell/shell`), with one Wayland connection, one
 GPU device, one font database and one connection per D-Bus bus. Each part is a library crate
-(`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-controlcenter`,
+(`bande-desktop-surface`, `bande-bar`, `bande-notifications`, `bande-quick-settings`,
 `bande-launcher`) whose surfaces the shell hosts; the taskbar's models live in
 `bande-taskbar-model` and `bande-status` (`crates/libs`).
 
@@ -107,7 +107,7 @@ thinks of it as part of the system:
   every client hangs: Force Quit, the window menu, the switcher and overview, and title bars
   for apps that ask for server-side ones. Everything else is drawn by clients.
 - **Shell clients.** Wayland clients that make up the desktop around the apps: the shell (desktop,
-  taskbar, notifications, launcher, Control Center), the screenshot tool, the lock screen
+  taskbar, notifications, launcher, Quick Settings), the screenshot tool, the lock screen
   and the greeter. The compositor starts them on
   socket pairs and restarts them when they exit; only these connections see the private
   `bande_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
@@ -157,7 +157,7 @@ own apps and third-party apps use the same keys, so the compositor translates no
 | Modifier | Role | Examples |
 | :--- | :--- | :--- |
 | **`Ctrl`** | Shortcuts inside apps and text fields | `Ctrl+C` (copy), `Ctrl+V` (paste), `Ctrl+X` (cut), `Ctrl+Z` (undo), `Ctrl+W` (close window), `Ctrl+Q` (quit), `Ctrl+F` (find), `Ctrl+click` (toggle an item in a selection) |
-| **`Super`** | The system only, never an app action | a tap of `Super` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Control Center), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
+| **`Super`** | The system only, never an app action | a tap of `Super` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Quick Settings), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
 | **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Tab` (switcher), `Alt+Click` (toggle disclosure) |
 | **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V`, `Shift+Drag` (move) |
 

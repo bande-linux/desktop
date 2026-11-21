@@ -55,7 +55,7 @@ motion, cursor size, flash screen, sticky/slow/bounce keys (the screen reader sw
 while Orca is not installed, as now in the image). Missing: zoom style and keyboard
 shortcut to zoom, pointer colour, shake to locate, hover text, captions.
 
-**Control Center.** Missing: which modules show in the bar and in Control Center (Wi-Fi,
+**Quick Settings.** Missing: which modules show in the bar and in Quick Settings (Wi-Fi,
 Bluetooth, Sound, Battery percentage exists under Power).
 
 **Desktop & Dock.** Taskbar has layout, position, size and auto-hide; the owner removed hot

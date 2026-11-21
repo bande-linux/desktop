@@ -29,7 +29,7 @@ key escape
 wait 800ms
 key super+s
 wait 1200ms
-shot "dark control center"
+shot "dark quick settings"
 key escape
 wait 800ms
 key super

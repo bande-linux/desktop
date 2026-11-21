@@ -32,7 +32,7 @@ Bande should feel like a well-made instrument: a Braun radio or a Teenage Engine
 | `radius.s` | 6 | buttons, fields, pop-ups, steppers, list and menu selection, tooltips |
 | `radius.m` | 8 | the content sheet inside a window, segmented track, search field, sidebar groups |
 | `radius.l` | 10 | menus, popovers, the hover label |
-| `radius.xl` | 16 | windows, alerts, notifications, launcher, bar panels (Control Center, calendar) |
+| `radius.xl` | 16 | windows, alerts, notifications, launcher, bar panels (Quick Settings, calendar) |
 | `radius.full` | h/2 | **only** switch, slider track, badge, progress segments (1) |
 
 **Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). This is Apple's own "concentric shape" concept, but our values are smaller and our corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
@@ -134,7 +134,7 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 |---|---|---|---|
 | **Refined Solid** (default) | opaque `chassis` | opaque `overlay` | none, the most efficient |
 | **Wallpaper-Lit** | `chassis` at 74 % over a blurred copy of the wallpaper, sampled at the surface's position; other windows never show through | opaque `overlay` | one small texture, made once per wallpaper |
-| **Glass** | `chassis` at 68 % over live blur, three passes, saturated 1.35× | menus at 72 % `overlay`, Control Center and the notification list at 72 % `chassis`, over live blur; notification banners and the launcher card stay opaque | the blur is redone when what lies under it changes, never at idle |
+| **Glass** | `chassis` at 68 % over live blur, three passes, saturated 1.35× | menus at 72 % `overlay`, Quick Settings and the notification list at 72 % `chassis`, over live blur; notification banners and the launcher card stay opaque | the blur is redone when what lies under it changes, never at idle |
 
 - **The material is only ever behind the frame.** The sheet is opaque and declared so, which also spares the compositor drawing under it.
 - **Readable over anything.** The backdrop's luminance is limited before the frame goes on it, to at most .16 in dark and at least .60 in light. That bound gives `ink` ≥ 7:1, `ink2` ≥ 4.5:1 and `ink3` ≥ 3:1 over any picture; a test in the design crate enumerates it.
@@ -271,5 +271,5 @@ The Taskbar is an edge-anchored bar, 64 pt at the default icon size , plus its m
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 16 panels).
 - The clock is Inter 15/600 tnum stacked "14 / 32".
 - The mark is a "B" knocked out of a rounded square in `ink`, stroked at the weight of the bar glyphs.
-- Bar pop-overs (Control Center, calendar, notifications) are `overlay` panels with radius 16 that slide out from the bar along its normal axis (`standard`).
+- Bar pop-overs (Quick Settings, calendar, notifications) are `overlay` panels with radius 16 that slide out from the bar along its normal axis (`standard`).
 - Horizontal placement uses the same rules with the square on the bottom edge.

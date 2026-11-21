@@ -52,7 +52,7 @@ pub enum Action {
     ShowClipboardHistory,
     ShowEmojiPicker,
     ShowNotificationCenter,
-    ShowControlCenter,
+    ShowQuickSettings,
     LockScreen,
     ForceQuit,
     RestartDesktop,
@@ -82,7 +82,7 @@ impl Action {
             | Self::ShowClipboardHistory
             | Self::ShowEmojiPicker
             | Self::ShowNotificationCenter
-            | Self::ShowControlCenter
+            | Self::ShowQuickSettings
             | Self::LockScreen
             | Self::ForceQuit
             | Self::RestartDesktop
@@ -112,7 +112,7 @@ impl Action {
             Self::ShowClipboardHistory => tr!("Show what you copied recently"),
             Self::ShowEmojiPicker => tr!("Show emoji and symbols"),
             Self::ShowNotificationCenter => tr!("Open or close the Notification Center"),
-            Self::ShowControlCenter => tr!("Open or close Control Center"),
+            Self::ShowQuickSettings => tr!("Open or close Quick Settings"),
             Self::LockScreen => tr!("Lock Screen"),
             Self::ForceQuit => tr!("Force Quit"),
             Self::RestartDesktop => tr!("Restart the desktop (press twice)"),
@@ -264,7 +264,7 @@ pub const SHORTCUTS: [Shortcut; 28] = [
     shortcut(Action::ShowClipboardHistory, SUPER, Key::Character('v')),
     shortcut(Action::ShowEmojiPicker, SUPER, Key::Character('.')),
     shortcut(Action::ShowNotificationCenter, SUPER, Key::Character('n')),
-    shortcut(Action::ShowControlCenter, SUPER, Key::Character('s')),
+    shortcut(Action::ShowQuickSettings, SUPER, Key::Character('s')),
     shortcut(Action::LockScreen, SUPER, Key::Character('l')),
     shortcut(Action::ForceQuit, CTRL_ALT, Key::Escape),
     shortcut(Action::RestartDesktop, SHIFT_CTRL_ALT, Key::Escape),

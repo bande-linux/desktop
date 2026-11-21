@@ -243,7 +243,7 @@ impl App for Notifications {
                 self.screen.toggle(now);
                 self.carry_out(window);
             }
-            WindowEvent::TogglePanel(Panel::ControlCenter) => {
+            WindowEvent::TogglePanel(Panel::QuickSettings) => {
                 self.screen.make_way(now);
                 self.carry_out(window);
             }

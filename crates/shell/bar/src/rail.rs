@@ -51,7 +51,7 @@ const IN_USE_DOT: f32 = 6.0;
 const HOVER_ALPHA: u8 = 18;
 const OPEN_ALPHA: u8 = 30;
 const NODE_BASE: u64 = 1 << 40;
-const CONTROL_CENTER_GLYPH: &str = "bande-control-center-symbolic";
+const QUICK_SETTINGS_GLYPH: &str = "bande-quick-settings-symbolic";
 const BATTERY_UNAVAILABLE_GLYPH: &str = "battery-missing-symbolic";
 const WIFI_UNAVAILABLE_GLYPH: &str = "network-wireless-no-route-symbolic";
 const BLUETOOTH_UNAVAILABLE_GLYPH: &str = "bluetooth-disconnected-symbolic";
@@ -65,7 +65,7 @@ pub enum Slot {
     Sound,
     Wifi,
     Battery,
-    ControlCenter,
+    QuickSettings,
     Clock,
     MoreStatusItems,
     Workspace(usize),
@@ -240,8 +240,8 @@ pub fn in_use(capturing: &[Capture]) -> Vec<String> {
         .collect()
 }
 
-fn control_center_label(status: &Status) -> String {
-    let mut parts = vec![tr!("Control Center")];
+fn quick_settings_label(status: &Status) -> String {
+    let mut parts = vec![tr!("Quick Settings")];
     parts.extend(in_use(&status.capturing));
     parts.join(", ")
 }
@@ -464,7 +464,7 @@ impl TaskbarView {
         let status_cross = status_cross.min(thick - 2.0 * STATUS_INSET);
         end -= status_along + GROUP_GAP;
         let status = place(end, status_along, status_cross);
-        slots.push((Slot::ControlCenter, status));
+        slots.push((Slot::QuickSettings, status));
         let (column_width, row_height) = (status.width / 2.0, status.height / 2.0);
         for (index, (slot, _)) in self.glyph_slots().into_iter().enumerate() {
             let column = (index % 2) as f32;
@@ -619,7 +619,7 @@ impl TaskbarView {
         }
         let status_rect = slots
             .iter()
-            .find(|(slot, _)| *slot == Slot::ControlCenter)
+            .find(|(slot, _)| *slot == Slot::QuickSettings)
             .map(|(_, rect)| *rect);
         if let Some(rect) = status_rect {
             items.push(Item::Fill {
@@ -630,7 +630,7 @@ impl TaskbarView {
         for (slot, rect) in &slots {
             self.highlight(*slot, *rect, &mut items);
         }
-        let mut placeholder = Some(CONTROL_CENTER_GLYPH.to_owned());
+        let mut placeholder = Some(QUICK_SETTINGS_GLYPH.to_owned());
         let glyph = self.sized(GLYPH);
         let mark = self.sized(MARK_SIZE).round();
         let badge_size = self.sized(BADGE_SIZE);
@@ -756,7 +756,7 @@ impl TaskbarView {
                 Slot::Clock => self.paint_clock(rect, scale, &mut items),
                 _ => {}
             }
-            if slot == Slot::ControlCenter && !self.status.capturing.is_empty() {
+            if slot == Slot::QuickSettings && !self.status.capturing.is_empty() {
                 items.push(in_use_dot(rect, &palette));
             }
         }
@@ -861,7 +861,7 @@ impl TaskbarView {
                 }
                 Reading::Absent => String::new(),
             },
-            Slot::ControlCenter => control_center_label(&self.status),
+            Slot::QuickSettings => quick_settings_label(&self.status),
             Slot::Clock => {
                 let clock = format!("{} {}", self.clock.time, self.clock.day);
                 match self.clock_mark {
@@ -948,7 +948,7 @@ impl TaskbarView {
         });
         match (button, glyph, found.first()) {
             (PointerButton::Secondary, Some(glyph), _) => Some(glyph),
-            (_, Some(_), _) => Some(Slot::ControlCenter),
+            (_, Some(_), _) => Some(Slot::QuickSettings),
             (PointerButton::Secondary, None, found) => found.copied(),
             (_, None, Some(Slot::BandeMenu)) => Some(Slot::Search),
             (_, None, found) => found.copied(),
@@ -1036,7 +1036,7 @@ impl TaskbarView {
             }
             let mut node = AccessNode::new(Role::Button);
             node.set_label(self.describe(*slot));
-            if *slot == Slot::ControlCenter {
+            if *slot == Slot::QuickSettings {
                 let glyphs = [Slot::Wifi, Slot::Sound, Slot::Bluetooth, Slot::Battery]
                     .into_iter()
                     .filter(|glyph| self.slots.iter().any(|(known, _)| known == glyph))

@@ -1,6 +1,6 @@
 [package]
 name = "bande-shell"
-description = "Bande shell: the desktop, the bar, the notifications, Control Center and the launcher in one process"
+description = "Bande shell: the desktop, the bar, the notifications, Quick Settings and the launcher in one process"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ bande-bar.workspace = true
 bande-l10n.workspace = true
 bande-bluetooth.workspace = true
 bande-config.workspace = true
-bande-controlcenter.workspace = true
+bande-quick-settings.workspace = true
 bande-desktop-surface.workspace = true
 bande-launcher.workspace = true
 bande-log.workspace = true
@@ -51,9 +51,9 @@ variants with the files of the Desktop folder and the plugged-in drives \
 as icons, and the bar: the apps kept in it and the running apps with \
 their badges and progress, the Trash, the system menu, the active app \
 with its menus, the status notifier items of apps, Bluetooth, sound, \
-Wi-Fi and battery, Control Center and the clock, which opens the \
+Wi-Fi and battery, Quick Settings and the clock, which opens the \
 Notification Center. It \
-also shows notification banners, Control Center with the volume and \
+also shows notification banners, Quick Settings with the volume and \
 brightness HUD, and the launcher that a tap of Super opens to find apps, \
 files and answers. bande-compositor starts it and keeps it running. It \
 installs the Bande wallpapers, which the lock screen and the login \

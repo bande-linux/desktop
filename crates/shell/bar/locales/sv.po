@@ -247,8 +247,8 @@ msgstr "{app} använder kameran"
 msgid "{app} is using the microphone and camera"
 msgstr "{app} använder mikrofonen och kameran"
 
-msgid "Control Center"
-msgstr "Kontrollcenter"
+msgid "Quick Settings"
+msgstr "Snabbinställningar"
 
 msgid "{percent}%"
 msgstr "{percent} %"

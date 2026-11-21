@@ -9,9 +9,9 @@ NetworkManager" (settings/src/network.rs:56) with no address and hides the IPv4 
 sidebar summary says "Ethernet not connected" (header.rs:157-161) while the VM is online.
 systemd-networkd links are different: NM marks them "connected (externally)" (state 100, seen
 for docker0). Bande shows those as connected, but offers Configure IPv4 on NM's generated
-external connection, and an edit there would fight networkd. The bar and Control Center show only
-Wi-Fi (bar/menu_bar.rs:383, controlcenter/lib.rs:186), so a wired-only VM shows nothing there.
-That matches macOS, which has no Ethernet menu-bar item or Control Center module.
+external connection, and an edit there would fight networkd. The bar and Quick Settings show only
+Wi-Fi (bar/menu_bar.rs:383, quick-settings/lib.rs:186), so a wired-only VM shows nothing there.
+That matches macOS, which has no Ethernet menu-bar item or Quick Settings module.
 
 **Handover cannot go through D-Bus.** Setting `Device.Managed=true` overrides udev and
 NetworkManager.conf unmanaged flags, but not `NM_UNMANAGED_USER_SETTINGS`, which ifupdown sets
@@ -82,4 +82,4 @@ change is NM, ifupdown and polkit plumbing that a private bus cannot exercise.
   either. The image needs nothing because it has no ifupdown. Settings offers the button instead.
 - **networkd handover:** recommend read-only only for now. networkd users chose it on purpose.
   Add the button later if asked.
-- **Ethernet in the bar or Control Center:** recommend **none**, as on macOS.
+- **Ethernet in the bar or Quick Settings:** recommend **none**, as on macOS.

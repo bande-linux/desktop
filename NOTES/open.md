@@ -22,7 +22,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - After `rebuild-desktop` and a new login: Ctrl shortcuts everywhere and Super only for the
   system; taskbar icons of third-party apps; resize zones; snapping against the taskbar edge;
   sidebar selection.
-- Brightness: the Control Center and Settings bar and the brightness keys dim the
+- Brightness: the Quick Settings and Settings bar and the brightness keys dim the
   HDMI monitor, it stays dimmed after replugging, and idle dimming lowers it and restores it.
 - DDC/CI needs a machine with a DDC adapter (`ls /sys/class/drm/*/ddc`): real monitor follows the
   bar and its own buttons show after reopening the panel.
@@ -74,7 +74,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - Mouse scroll speed: add a setting (scales wheel deltas in `input.rs`), or not.
 - Settings options: drop Scroll method, Trackpad acceleration and Disable while typing; where `reopen-apps` lives (Log Out
   checkbox, always on or always off).
-- A click on the clock or Control Center while the launcher is open: open the panel too, or only
+- A click on the clock or Quick Settings while the launcher is open: open the panel too, or only
   close the launcher (today).
 - Several displays: banners on the main display or on the one with the active window.
 - Sleep: after ten clean suspend and wake cycles on the build machine, set `AllowSuspend=yes` in
@@ -103,7 +103,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - The compositor's window menu keeps its own `Labels` to follow text size; give the shared
   overlay label renderer a per-use text size.
 - Footprint: the typed property follower; the bar's own desktop-entry parsing; worker threads
-  and timeouts for the remaining blocking D-Bus calls (Control Center setters, tray).
+  and timeouts for the remaining blocking D-Bus calls (Quick Settings setters, tray).
 - Text size: menus at 200 % and long labels; Activity Monitor's CPU-core strip (apps repo).
 - A Super tap or `Ctrl+Alt+T` pressed before the shell connects is lost.
 - The low-memory dialog has no test hook: it shows only on a real PSI stall with memory nearly

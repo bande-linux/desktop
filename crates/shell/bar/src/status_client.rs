@@ -144,7 +144,7 @@ impl StatusClient {
         }
         let edge = display_edge(self.bar.edge());
         for (panel, slot) in [
-            (Panel::ControlCenter, Slot::ControlCenter),
+            (Panel::QuickSettings, Slot::QuickSettings),
             (Panel::NotificationCenter, Slot::Clock),
         ] {
             let Some(rect) = self.bar.slot_rect(slot) else {
@@ -416,10 +416,10 @@ impl StatusClient {
             return;
         }
         match slot {
-            Slot::ControlCenter | Slot::Wifi | Slot::Sound | Slot::Bluetooth | Slot::Battery => {
+            Slot::QuickSettings | Slot::Wifi | Slot::Sound | Slot::Bluetooth | Slot::Battery => {
                 report(
-                    "open Control Center",
-                    window.toggle_panel(Panel::ControlCenter),
+                    "open Quick Settings",
+                    window.toggle_panel(Panel::QuickSettings),
                 );
             }
             Slot::Clock => report(
@@ -584,7 +584,7 @@ impl App for StatusClient {
             WindowEvent::Input(Event::Scroll(scroll)) => {
                 let over_sound = matches!(
                     self.bar.slot_at(scroll.position, PointerButton::Secondary),
-                    Some(Slot::Sound | Slot::ControlCenter)
+                    Some(Slot::Sound | Slot::QuickSettings)
                 );
                 if over_sound && scroll.delta.y != 0.0 {
                     let delta = -scroll.delta.y.signum() * SCROLL_STEP;

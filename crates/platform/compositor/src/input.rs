@@ -242,7 +242,7 @@ impl State {
             Action::LockScreen => self.lock_screen_requested = !self.is_locked(),
             Action::ForceQuit | Action::RestartDesktop => self.open_force_quit(),
             Action::ShowNotificationCenter => self.toggle_panel(Panel::NotificationCenter),
-            Action::ShowControlCenter => self.toggle_panel(Panel::ControlCenter),
+            Action::ShowQuickSettings => self.toggle_panel(Panel::QuickSettings),
             Action::NextApp => self.switch_apps(false),
             Action::PreviousApp => self.switch_apps(true),
             Action::Overview => self.toggle_overview(None),

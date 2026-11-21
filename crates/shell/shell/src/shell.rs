@@ -13,12 +13,12 @@ use bande_bar::pairing::PairingDialogs;
 use bande_bar::surfaces::{self, Display, Restart, Services, status_hub};
 use bande_bluetooth::register_agent;
 use bande_config::{Config, config_path};
-use bande_controlcenter::ControlCenter;
 use bande_desktop_surface::{DesktopSurface, GlanceSurface, glance_role};
 use bande_glance::GlanceLink;
 use bande_l10n::tr;
 use bande_launcher::LauncherShell;
 use bande_notifications::Notifications;
+use bande_quick_settings::QuickSettings;
 use bande_status::captive::{follow_captive_portal, open_page};
 use bande_status::hub::StatusHub;
 use bande_status::memory::{
@@ -35,7 +35,7 @@ use zbus::blocking::Connection;
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Place {
     Notifications,
-    ControlCenter,
+    QuickSettings,
     Launcher,
     Desktop(Display),
     Bar(Display),
@@ -121,10 +121,10 @@ impl Context {
                 let part = self.notifications(&mut window)?;
                 Ok((vec![(window, part)], None))
             }
-            Place::ControlCenter => {
-                let mut window = beside.open_beside(bande_controlcenter::role(), (0, 0))?;
+            Place::QuickSettings => {
+                let mut window = beside.open_beside(bande_quick_settings::role(), (0, 0))?;
                 window.share_fonts(&self.text);
-                let part = ControlCenter::new(
+                let part = QuickSettings::new(
                     &mut window,
                     self.text.sharing_fonts(),
                     self.session.as_ref(),
@@ -245,7 +245,7 @@ impl Shell {
             wanted.push(Place::Desktop(display.clone()));
             wanted.push(Place::Bar(display));
         }
-        wanted.push(Place::ControlCenter);
+        wanted.push(Place::QuickSettings);
         if self.streak.alerting() {
             wanted.push(Place::LowMemory);
         }

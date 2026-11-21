@@ -23,7 +23,7 @@ use bande_toolkit::{
 
 use modules::{Caption, Module, Tile, TileSpec};
 
-pub use client::{ControlCenter, role};
+pub use client::{QuickSettings, role};
 use media::{Command, Player};
 pub use now_playing::clock;
 

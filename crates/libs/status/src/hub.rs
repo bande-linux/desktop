@@ -81,7 +81,7 @@ fn relay_updates(mut inbox: Inbox<Update>, relay: &Mutex<Relay>) {
         if let Err(error) = poll(&mut fds, None)
             && error != rustix::io::Errno::INTR
         {
-            tracing::warn!("the bar and Control Center stop following the status: {error}");
+            tracing::warn!("the bar and Quick Settings stop following the status: {error}");
             return;
         }
         let updates = inbox.drain();

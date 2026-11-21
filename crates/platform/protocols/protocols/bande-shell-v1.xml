@@ -66,7 +66,7 @@
 
     <request name="toggle_panel">
       <description summary="open or close a panel">
-        Sent by the bar when its Control Center item or its clock is clicked.
+        Sent by the bar when its Quick Settings item or its clock is clicked.
         The compositor relays it to every shell client as toggle_panel, so the
         client that draws the panel opens or closes it and the other panel
         closes.
@@ -332,7 +332,7 @@
     </request>
 
     <enum name="panel">
-      <entry name="control_center" value="0" summary="Control Center"/>
+      <entry name="quick_settings" value="0" summary="Quick Settings"/>
       <entry name="notification_center" value="1" summary="the Notification Center"/>
     </enum>
 
@@ -368,7 +368,7 @@
         named by output (the area left beside the exclusive zones of bars,
         where a layer surface with an exclusive zone of 0 is placed) and the
         edge the bar lies on. An item inside a bar therefore has a negative
-        coordinate on the bar's side. Control Center and the Notification
+        coordinate on the bar's side. Quick Settings and the Notification
         Center open beside it, away from that edge.
       </description>
       <arg name="panel" type="uint" enum="panel"/>
@@ -462,7 +462,7 @@
     <event name="toggle_panel">
       <description summary="the user asked to open or close a panel">
         Sent to every shell client when the bar or a keyboard shortcut asks
-        for Control Center or the Notification Center. The client that draws
+        for Quick Settings or the Notification Center. The client that draws
         the panel opens it, or closes it when it is open; the client that
         draws the other panel closes it, so one panel is open at a time.
       </description>

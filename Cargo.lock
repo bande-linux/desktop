@@ -651,26 +651,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-controlcenter"
-version = "0.1.10"
-dependencies = [
- "accesskit",
- "bande-audio",
- "bande-bluetooth",
- "bande-inbox",
- "bande-l10n",
- "bande-network",
- "bande-notify",
- "bande-power",
- "bande-sound",
- "bande-status",
- "bande-toolkit",
- "bande-xdg",
- "tracing",
- "zbus",
-]
-
-[[package]]
 name = "bande-crash-reports"
 version = "0.1.10"
 dependencies = [
@@ -1194,6 +1174,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-quick-settings"
+version = "0.1.10"
+dependencies = [
+ "accesskit",
+ "bande-audio",
+ "bande-bluetooth",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-network",
+ "bande-notify",
+ "bande-power",
+ "bande-sound",
+ "bande-status",
+ "bande-toolkit",
+ "bande-xdg",
+ "tracing",
+ "zbus",
+]
+
+[[package]]
 name = "bande-recovery"
 version = "0.1.10"
 dependencies = [
@@ -1416,7 +1416,6 @@ dependencies = [
  "bande-bus",
  "bande-compositor",
  "bande-config",
- "bande-controlcenter",
  "bande-desktop-surface",
  "bande-glance",
  "bande-l10n",
@@ -1424,6 +1423,7 @@ dependencies = [
  "bande-log",
  "bande-notifications",
  "bande-protocols",
+ "bande-quick-settings",
  "bande-status",
  "bande-test-bus",
  "bande-test-wayland",

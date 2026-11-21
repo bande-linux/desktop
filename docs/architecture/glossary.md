@@ -21,8 +21,8 @@ Bande follows them. "In code" is what the code calls the part today.
 | Desktop dots | The workspace dots, the active one a pill; a click switches, on the active one opens the Overview | Spaces | `Slot::Workspace`, `workspace` |
 | Status items | The tray icons of other programs, two per row, with `•••` for the rest | menu bar extras | `Slot::StatusItem`, `Slot::MoreStatusItems`, StatusNotifierItem |
 | Input menu | The short name of the active input source (SV, EN), with more than one source | Input menu | `Slot::InputSource` |
-| Control Center button | One button with the Wi-Fi, Sound, Bluetooth and Battery glyphs; a click opens Control Center | Control Center | `Slot::ControlCenter`, `Slot::Wifi`… |
-| Control Center | The panel the button opens | Control Center | crate `bande-controlcenter` |
+| Quick Settings button | One button with the Wi-Fi, Sound, Bluetooth and Battery glyphs; a click opens Quick Settings | Quick Settings | `Slot::QuickSettings`, `Slot::Wifi`… |
+| Quick Settings | The panel the button opens | Quick Settings | crate `bande-quick-settings` |
 | Clock | Time over the short day, with a notification dot or a Do Not Disturb moon; a click opens Notification Center | clock | `Slot::Clock`, `ClockMark` |
 | Notification Center | The sheet of notifications beside the taskbar | Notification Center | crate `bande-notifications` |
 | Position | The Taskbar's edge, set in Settings ▸ Taskbar; there is no separate menu bar | Dock & Menu Bar settings | `BarEdge`, `bar { edge }` |

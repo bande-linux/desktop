@@ -8,7 +8,7 @@ growth or a weaker boundary than documented; **low** edge cases and hygiene.
 
 ## Workspace
 
-- high: Control Center still runs `scan`, `networks`, `sign_in_page` and the Wi-Fi, Bluetooth and Do Not Disturb setters on the shell's UI thread (bounded by the 25 s bus timeout); tray/dbusmenu calls in `status/tray.rs` and `low_memory.rs` `force_quit` too.
+- high: Quick Settings still runs `scan`, `networks`, `sign_in_page` and the Wi-Fi, Bluetooth and Do Not Disturb setters on the shell's UI thread (bounded by the 25 s bus timeout); tray/dbusmenu calls in `status/tray.rs` and `low_memory.rs` `force_quit` too.
 - high: notification, MPRIS and tray images are decoded on the shell's UI thread (capped at 16 MiB); decode on a worker.
 - medium: the clipboard daemon reads offers one MIME at a time with no total deadline or MIME cap, and `pipe()` EMFILE ends it (`clipboard/src/main.rs`); undecodable and `.partial` history files are never deleted.
 - medium: `wlr-output-management` `SetMode` accepts another head's mode and a failed `use_mode` is silent (`management.rs`).
@@ -50,7 +50,7 @@ growth or a weaker boundary than documented; **low** edge cases and hygiene.
 
 ## Shell
 
-- low: Control Center shows the last Wi-Fi and Bluetooth state for its first frame and does not follow signals while open.
+- low: Quick Settings shows the last Wi-Fi and Bluetooth state for its first frame and does not follow signals while open.
 - low: the status hub broadcasts `Update::Menu` to every bar; with several displays a bar may show another bar's tray menu (needs a requester id on `Errand::ShowMenu`).
 - low: Trash checks on overlapping threads can finish out of order.
 - low: redrawable wallpapers are redrawn synchronously on the UI thread when the GPU drops them.

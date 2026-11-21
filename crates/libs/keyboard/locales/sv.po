@@ -79,8 +79,8 @@ msgstr "Visa emojier och symboler"
 msgid "Open or close the Notification Center"
 msgstr "Öppna eller stäng Notiscentret"
 
-msgid "Open or close Control Center"
-msgstr "Öppna eller stäng Kontrollcenter"
+msgid "Open or close Quick Settings"
+msgstr "Öppna eller stäng Snabbinställningar"
 
 msgid "Lock Screen"
 msgstr "Låsskärm"

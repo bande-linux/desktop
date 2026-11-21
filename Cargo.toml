@@ -101,7 +101,7 @@ bande-clipboard = { path = "crates/services/clipboard" }
 bande-compositor = { path = "crates/platform/compositor" }
 bande-config = { path = "crates/services/config" }
 bande-content = { path = "crates/libs/content" }
-bande-controlcenter = { path = "crates/shell/controlcenter" }
+bande-quick-settings = { path = "crates/shell/quick-settings" }
 bande-datetime = { path = "crates/libs/datetime" }
 bande-design = { path = "crates/toolkit/design" }
 bande-desktop-surface = { path = "crates/shell/desktop" }

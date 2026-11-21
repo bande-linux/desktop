@@ -8,7 +8,7 @@ Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable
 |---|---|---|---|---|
 | Settings | Inställningar | | Files | Filer |
 | Desktop | Skrivbord | | Taskbar | Aktivitetsfält |
-| Control Center | Kontrollcenter | | Trash | Papperskorg |
+| Quick Settings | Snabbinställningar | | Trash | Papperskorg |
 | Folder | Mapp | | File | Fil |
 | Window | Fönster | | Tab | Flik |
 | Browser | Webbläsare | | Mail | E-post |

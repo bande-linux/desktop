@@ -1,4 +1,4 @@
-# Post notifications from a terminal, watch the banners, then open the Notification Center and Control Center.
+# Post notifications from a terminal, watch the banners, then open the Notification Center and Quick Settings.
 key super
 wait 600ms
 type "terminal"
@@ -28,9 +28,9 @@ shot "notification center"
 key escape
 wait 800ms
 shot "notification center closed"
-note "Super+S opens Control Center"
+note "Super+S opens Quick Settings"
 key super+s
 wait 1200ms
-shot "control center"
+shot "quick settings"
 key escape
 wait 800ms

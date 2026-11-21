@@ -123,9 +123,9 @@ graph LR
   backlight, or the monitor over DDC) and restores them on activity; others are left as they are.
 - **Display brightness**: `bande-power` owns one model for all displays, `org.bande.Brightness`
   (`Displays`: connector, name and level per display; `SetLevel`; `Refresh`), so Settings and
-  Control Center show one bar per display and never block on hardware. Brightness only ever
+  Quick Settings show one bar per display and never block on hardware. Brightness only ever
   changes the display's own light, never a software darkening: `Displays` lists only displays
-  with real control, so one without gets no bar, in Settings, Control Center or the brightness
+  with real control, so one without gets no bar, in Settings, Quick Settings or the brightness
   keys. The connected displays come from the compositor's `org.bande.Displays` (`Connected`).
   Each has its own worker thread, idle until asked, and one of two controls:
   the backlight through logind's `Session.SetBrightness` for an internal panel (`eDP`, `LVDS`,
@@ -344,7 +344,7 @@ graph LR
 - PipeWire and WirePlumber, with per-device volume memory (headphone volume is restored when
   they are plugged in) and media keys with an on-screen level. `crates/libs/audio` is the
   client library; the compositor forwards volume keys to the shell over `bande_shell_v1`.
-- Every device list (Settings ▸ Sound, Control Center, the sound menu) leaves out a device whose
+- Every device list (Settings ▸ Sound, Quick Settings, the sound menu) leaves out a device whose
   port is unavailable, judged as WirePlumber's `haveAvailableRoutes` does and followed live
   through the card's `Route` and `EnumRoute` params, so Headphones and Headset Microphone appear
   only while something is plugged into the jack. As on a Mac, plugging in makes the jack the
@@ -354,7 +354,7 @@ graph LR
   as apps, and a node marked `hide-parent` hides its raw speaker node from clients. Settings ▸ Sound
   shows a Left–Right balance for a stereo (FL, FR) output, set through its channel volumes.
 - The display and keyboard brightness keys go the same way (`brightness_key`, also while
-  locked): Control Center moves the display under the pointer (through `org.bande.Brightness`)
+  locked): Quick Settings moves the display under the pointer (through `org.bande.Brightness`)
   or the `kbd_backlight` LED (through logind) one of 16 steps (a quarter step with Option and
   Shift) and shows the level in the same HUD as the volume, a quarter step filling a quarter
   segment. With several displays the HUD names the display.
@@ -452,7 +452,7 @@ made again.
   `bande-polkit-agent`. `bande-notify`, `bande-spell` (spelling; exits after a minute idle) and
   the portal backend are started by D-Bus activation, and `bande-clipboard` and the shell
   clients by the compositor ([behaviour](behaviour.md)): `bande-shell`, one process for the
-  desktop, the bar, the notifications, Control Center and the launcher of every display, and
+  desktop, the bar, the notifications, Quick Settings and the launcher of every display, and
   `bande-screenshot`. The lock screen, the greeter, the screenshot tool and the file chooser
   stay processes of their own: the lock screen must hold the session even when the shell
   crashes, the greeter runs before any session exists, the screenshot tool owns the trusted
@@ -517,14 +517,14 @@ made again.
     (which also hands the active app to the frontmost other window when the app has none),
     Hide Others and Show All (`show_app` for every running app).
 - **Network and Bluetooth**: NetworkManager (`org.freedesktop.NetworkManager`) and BlueZ
-  (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Control Center and Settings, through
+  (`org.bluez`) for Wi-Fi selection and Bluetooth pairing in Quick Settings and Settings, through
   `crates/libs/network` and `crates/libs/bluetooth`.
-- **Service outages**: the bar, Control Center and Settings tell a stopped service from missing
+- **Service outages**: the bar, Quick Settings and Settings tell a stopped service from missing
   hardware (`bande_bus::Reading`: present, absent, unavailable). A failed UPower,
   NetworkManager or BlueZ read counts as absent only when the kernel has no battery
   (`/sys/class/power_supply`, system scope), Wi-Fi radio (`/sys/class/ieee80211`) or Bluetooth
   adapter (`/sys/class/bluetooth`); otherwise the item stays with a short reason. The bar and Settings
-  follow each service's `NameOwnerChanged` and recover when it starts; Control Center reads
+  follow each service's `NameOwnerChanged` and recover when it starts; Quick Settings reads
   afresh whenever it opens.
 - **Removable media**: `org.freedesktop.UDisks2` mounts USB drives and posts notifications
   with an eject action.
@@ -745,7 +745,7 @@ what the one before could not save. What happens for each:
   `xdg_wm_base` ping and kills its whole scope, after `SIGQUIT` if it is not responding, so its stack is kept ([behaviour](behaviour.md)).
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon it started when they exit, at most once every 10 seconds. A crash of the shell takes
-  the bar, the desktop, Control Center and the launcher away for a moment but never the session
+  the bar, the desktop, Quick Settings and the launcher away for a moment but never the session
   or its apps; notifications live in `bande-notify` and reappear with the shell. Shell clients
   answer `bande_shell_v1.ping`, so a hung shell shows in Force Quit as "Taskbar & Desktop (Not
   Responding)" with Relaunch, as macOS lists the Finder; Relaunch kills it and the supervisor

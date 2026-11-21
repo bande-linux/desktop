@@ -3,7 +3,7 @@
 ## What the user gets
 Double-click a song or film: Bande Player opens and plays it, as QuickTime does: one window, controls
 that fade over the picture, Space, arrows, full screen, speed, audio and subtitle tracks. `Space` in
-Files plays it in Glance. Media keys and the Control Center drive it through MPRIS, and a playing
+Files plays it in Glance. Media keys and the Quick Settings drive it through MPRIS, and a playing
 video keeps the display awake. A codec that crashes takes down neither Files nor the window.
 
 ## Design

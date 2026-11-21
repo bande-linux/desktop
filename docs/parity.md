@@ -21,7 +21,7 @@ the left by default (or any other edge); each window's menu button (⋮) holds t
 | App menus (menu button in the title bar) with search | parity | from every `bande-app` app, dbusmenu exporters (`org_kde_kwin_appmenu`) and GTK 3 and GTK 4 application menu bars (`gtk_shell1`) |
 | Launcher: apps, settings, files, calculator, recents, clipboard history, emoji | parity | file names only, not contents |
 | Notifications: banners, Notification Center, Do Not Disturb | parity | no schedules, no inline reply, nothing on the lock screen |
-| Control Center, status items, volume and brightness HUD, Now Playing | parity | |
+| Quick Settings, status items, volume and brightness HUD, Now Playing | parity | |
 | Desktop: wallpaper, icons, menus | parity | |
 | Lock screen, login window | basic | no user picker, accessibility or power menus at login |
 | Files | basic | icons, list, columns and gallery, Glance, Get Info, tabs, batch rename, settings, failure alerts, Show in Folder for other apps; no network locations or tags |

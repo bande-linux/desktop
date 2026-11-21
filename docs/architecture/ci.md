@@ -96,7 +96,8 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   backend's registration, the login session, the pointers and the English catalogs, that
   `bande-desktop` asks for its packages at the build's version, depends on `bande-greeter |
   x-display-manager`, `pipewire` and `wireplumber`, recommends `bande-greeter`,
-  `bande-reporter`, `bande-crash-reports` and `pipewire-pulse` and only Bande packages built here,
+  `bande-reporter`, `bande-crash-reports`, `pipewire-pulse` and `bande-browser` and otherwise only
+  Bande packages built here,
   that `bande-greeter` provides `x-display-manager` from its own unit,
   and that the language packs hold only catalogs; then `lintian --fail-on error,warning` on the
   `.changes` and the `.dsc`. The job uploads `bande-debs-<suite>-<arch>`, amd64 also

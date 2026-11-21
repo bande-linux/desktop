@@ -190,8 +190,9 @@ for recommended in "bande-greeter (>= $version)" "bande-reporter (>= $version)" 
     relation Recommends "$recommended"
 done
 
-echo "== bande-desktop recommends only packages built here at $version, or Debian's"
-desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | while read -r package relation; do
+echo "== bande-desktop recommends only packages built here at $version, the browser, or Debian's"
+relation Recommends bande-browser
+desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | grep -vx bande-browser | while read -r package relation; do
     [ "$relation" = "(>= $version)" ] || { echo "bande-desktop recommends $package $relation"; exit 1; }
     printf '%s\n' "${packages[@]}" "${independent[@]}" | grep -qxF "$package" || { echo "$package is not built here"; exit 1; }
 done

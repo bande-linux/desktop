@@ -109,12 +109,13 @@ are in [performance.md](performance.md).
   `libpam-systemd`, on PipeWire and WirePlumber, and on `bande-greeter | x-display-manager`, so there is always
   a way to log in: the Bande login window, or the display manager the system already has. It
   recommends `bande-greeter` anyway (debconf then asks which display manager to start; see
-  [session.md](session.md#display-manager-and-greeter)), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
+  [session.md](session.md#display-manager-and-greeter)), Bande's Browser (`bande-browser`, built
+  from `browser/` on its own rhythm, so unversioned), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
   clipboard daemon, the screenshot tool, Files, Settings, the tray, file indexing
   (`bande-indexer`), automount, backups (`bande-backup`), the file chooser, the polkit agent, the keyring's PAM module and the default apps (every app but Velox),
   all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack); being recommends, any of them can be removed or replaced. It
-  recommends no apps from Debian; a browser comes from Software. Network printers
+  recommends no apps from Debian. Network printers
   need nothing more; support for USB and older printers comes from Settings ▸ Printers. It installs
   `/usr/share/applications/x-bande-mimeapps.list` (`data/x-bande-mimeapps.list`), read only in a Bande session, which opens
   folders in Files, `.deb` files in the Package Installer, plain text (with source code and

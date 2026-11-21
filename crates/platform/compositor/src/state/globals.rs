@@ -115,6 +115,7 @@ impl Globals {
                     xdg_toplevel::WmCapabilities::Maximize,
                     xdg_toplevel::WmCapabilities::Fullscreen,
                     xdg_toplevel::WmCapabilities::Minimize,
+                    xdg_toplevel::WmCapabilities::WindowMenu,
                 ],
             ),
             shm_state: ShmState::new::<State>(handle, []),

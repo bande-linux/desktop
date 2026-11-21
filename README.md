@@ -7,7 +7,7 @@ XWayland anywhere. It is early and not yet a daily driver.
 
 ## This repository
 
-One Cargo workspace with the desktop itself, grouped by role in `crates/`
+One Cargo workspace with the desktop and its apps, grouped by role in `crates/`
 ([decision 0003](docs/decisions/0003-repository-layout.md)):
 
 | Directory | What |
@@ -15,15 +15,41 @@ One Cargo workspace with the desktop itself, grouped by role in `crates/`
 | `platform/` | `bande-compositor` (Smithay with its own Vulkan renderer, `bande-render`) and the private Wayland protocols |
 | `toolkit/` | `bande-toolkit`: Datum design tokens, Vello drawing, Parley text, widgets, Wayland windows, AccessKit |
 | `shell/` | `bande-shell` (desktop, Taskbar, notifications, Quick Settings, launcher in one process), screenshots, lock screen, greeter |
-| `apps/` | Files, Settings, Dictionary (Look Up), the portal's file chooser and the keyring prompt |
+| `apps/` | the apps (below), the template a new app starts from, the portal's file chooser and the keyring prompt |
 | `services/` | config (`config.kdl` over D-Bus), notifications, power, sound, clipboard, tray, automount, backups, search index, printing, spell checking, fault reports and crash collection, portal backend, polkit agent, keyring (Secret Service and its PAM module) |
-| `libs/` | shared logic, including `bande-app`, the framework every app is built on |
+| `libs/` | shared logic, including `bande-app`, the framework every app is built on, and what apps share (`bande-keyring`, `bande-discovery`, `bande-terminal-view`, `bande-vm`) |
 | `testing/` | the test bus, a Wayland test client, benchmarks, a sample app and the review recorder |
 
-The other Bande apps live in
-[bande-linux/apps](https://github.com/bande-linux/apps), built on `bande-app` at a pinned revision
-of this repository and released on their own. `packaging/` holds the `bande-desktop`
-metapackage, `ci/` the release and packaging scripts, `data/` wallpapers, icons and sounds.
+`packaging/` holds the `bande-desktop` metapackage, `ci/` the release and packaging scripts,
+`data/` wallpapers, icons and sounds.
+
+## Apps
+
+Each app is `crates/apps/<name>`, packaged as `bande-<name>`:
+
+| App | Package |
+| :--- | :--- |
+| Files | `bande-files` |
+| Settings | `bande-settings` |
+| Dictionary | `bande-lookup` (Look Up) |
+| Terminal | `bande-terminal` |
+| Software | `bande-software` |
+| Package Installer | `bande-installer` (opens `.deb` files) |
+| System Monitor | `bande-monitor` |
+| Mail | `bande-mail` (IMAP and SMTP) |
+| Calendar | `bande-calendar` (CalDAV and iCalendar files) |
+| Velox | `bande-velox` (containers of Docker Engine or Podman, and QEMU virtual machines) |
+| Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
+| Player | `bande-player` (audio and video; decoding runs in the `bande-media-engine` child process, the only part linking GStreamer) |
+| Viewer | `bande-viewer` (images and PDF documents; PDFs render in a child process) |
+| Clock | `bande-clock` (alarms, timers, a stopwatch and a world clock; rings with its window closed) |
+| Text Editor | `bande-text-editor` (plain and rich text, Markdown, HTML, Office Open XML and OpenDocument) |
+| Disks | `bande-disks` (disks, volumes and disk images through UDisks2) |
+| Archives | `bande-archive` (zip, tar, gzip, bzip2, xz, zstd and 7-Zip; Files' Compress) |
+
+`ci/new-app.sh mail-merge MailMerge "Mail Merge"` makes `crates/apps/mail-merge` (`bande-mail-merge`,
+`org.bande.MailMerge`) from the template and prints what else to add. How an app is built is in
+[`docs/architecture/apps.md`](docs/architecture/apps.md).
 
 ## Building and testing
 
@@ -32,7 +58,7 @@ On Debian forky, install the build and test dependencies (with `sudo`; Debian's 
 
 ```bash
 xargs ci/apt-install.sh libvulkan1 mesa-vulkan-drivers dbus-daemon at-spi2-core libfontconfig1 \
-    libwayland-client0 procps fonts-inter < ci/release/build-depends
+    libwayland-client0 procps fonts-inter fonts-manrope fonts-jetbrains-mono < ci/release/build-depends
 ```
 
 The gate is the release checks: fmt, clippy, the layering rules, the tests on a private D-Bus bus
@@ -48,15 +74,16 @@ VERIFY_PROFILE=dev ci/release/verify.sh gate
 On the build machine, `desktop-check <worktree> -p <crate>` (fmt and `cargo check`) is all a
 change needs; branches are queued with `desktop-enqueue <branch>` and the merge train runs the full gate,
 `ci/release/verify.sh gate` (the release checks CI runs), on each batch. These scripts live in `~/bande-linux/bin`,
-outside this repository. The desktop keeps only a few end-to-end and regression tests and no
+outside this repository. Bande keeps only a few end-to-end and regression tests and no
 screenshot tests; [`docs/quality/tests.md`](docs/quality/tests.md) lists them and the rules.
 
 ## Releases
 
-GitHub CI runs only on version tags (and on manual dispatch for an unpublished build). A release
+GitHub CI runs only on version tags (and on manual dispatch for an unpublished build). Every
+package, desktop and apps, is released together at one version. A release
 is: bump `[workspace.package] version` in `Cargo.toml`, merge to `main` through the train, whose
 gate runs the same checks, and tag `vX.Y.Z`. The tag's
-`release.yml` lints, tests, builds the packages for arm64 and amd64 and install-tests them in a
+`release.yml` lints, tests, builds every package for arm64 and amd64 and install-tests them in a
 clean Debian forky; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
 publishes a fully green tag run on its own. Details: [`docs/architecture/ci.md`](docs/architecture/ci.md).
 
@@ -76,8 +103,7 @@ sudo apt install bande-desktop
 ```
 
 `bande-desktop` brings the desktop, its login window under greetd, NetworkManager and PipeWire,
-and recommends the Bande apps listed in
-[`packaging/bande-desktop/default-apps`](packaging/bande-desktop/default-apps); other apps, such as a browser, install from Software. With `--no-install-recommends` it
+and recommends the Bande apps (all but Velox); other apps, such as a browser, install from Software. With `--no-install-recommends` it
 brings only the desktop, a login and sound. Pick the **Bande** session at login. Updates arrive with `sudo apt upgrade` or
 Settings ▸ Software Update. The archive is signed with the key
 `04FC EAF9 B799 98D9 828C  256B 7963 AC44 9BD9 992E`.

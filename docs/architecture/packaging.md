@@ -26,7 +26,10 @@ profiles. Sizes are in [performance.md](performance.md).
   `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
-  `bande-settings`, `bande-file-chooser`, `bande-lookup`). The Look Up dictionary packs
+  `bande-settings`, `bande-file-chooser`, `bande-lookup`, `bande-terminal`, `bande-software`,
+  `bande-installer`, `bande-monitor`, `bande-mail`, `bande-calendar`, `bande-velox`,
+  `bande-calculator`, `bande-player`, `bande-viewer`, `bande-clock`, `bande-text-editor`,
+  `bande-disks`, `bande-archive`). The Look Up dictionary packs
   (`bande-dict-en`, `bande-dict-sv`, `bande-dict-sv-wiktionary`) are made from their source data
   by `packaging/dict/build.py`, not from this tree's code; see [lookup.md](lookup.md). Package names stay `bande-*` whatever directory the crate lives in
   ([decision 0003](../decisions/0003-repository-layout.md)). Crates in `ci/release/bundled` build with them and ship inside another package
@@ -55,14 +58,11 @@ profiles. Sizes are in [performance.md](performance.md).
   a way to log in: the Bande login window under greetd, or the display manager the system
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
   start), fault reporting (`bande-reporter`, `bande-crash-reports`), the screenshot tool, Files, Settings, the tray, automount, file
-  chooser, polkit agent and the keyring's PAM module, all built here at the same version, and the few Debian packages in
-  [Runtime stack](#runtime-stack). It also recommends, unversioned, the default apps listed in
-  `packaging/bande-desktop/default-apps`, built in
-  [bande-linux/apps](https://github.com/bande-linux/apps); an app is added there when it gets its
-  first APT release. It recommends no apps from Debian; a browser comes from Software. Network printers
-  need nothing more; support for USB and older printers comes from Settings ▸ Printers.
-  `debian/default-apps.sh` turns that file into the `${bande:Recommends}` substitution variable
-  at build time, so any default app can be removed or replaced. It installs
+  chooser, polkit agent, the keyring's PAM module and the default apps (every app but Velox),
+  all built here at the same version, and the few Debian packages in
+  [Runtime stack](#runtime-stack); being recommends, any of them can be removed or replaced. It
+  recommends no apps from Debian; a browser comes from Software. Network printers
+  need nothing more; support for USB and older printers comes from Settings ▸ Printers. It installs
   `/usr/share/applications/x-bande-mimeapps.list`, read only in a Bande session, which opens
   folders in Files, `.deb` files in the Package Installer, plain text (with source code and
   logs, its subtypes) in Text Editor when it is installed and archives (zip, tar, gzip, bzip2, xz,
@@ -76,8 +76,9 @@ profiles. Sizes are in [performance.md](performance.md).
   display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
   the desktop, a login and sound and nothing else.
 - **Language packs** (`bande-l10n-tool debs`, architecture `all`, section `localization`):
-  `bande-desktop-l10n-<lang>` (`sv`, `en-gb`) holds one catalog per program of this tree,
-  `/usr/share/bande/l10n/<program>/<lang>.mo`, and enhances `bande-desktop`. Each program's
+  `bande-desktop-l10n-<lang>` (`sv`, `en-gb`) holds one catalog per program of the packages in
+  `ci/release/packages`, the apps' included, `/usr/share/bande/l10n/<program>/<lang>.mo`, and
+  enhances `bande-desktop`. Each program's
   own package carries its English catalog, `en.mo`, through the cargo-deb asset
   `target/release/l10n/development/<program>/*`, which `bande-l10n-tool check` requires. See
   [localisation.md](localisation.md).
@@ -130,7 +131,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   it is never pulled in silently);
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
-- `bande-player` (apps repo) is the one package linking GStreamer: its engine process plays for Player and Glance; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
+- `bande-player` is the one package linking GStreamer: its engine process plays for Player and Glance; `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` depends on `gst-launch-1.0`, `pipewiresrc` and the VP8 encoder, so screen
   recording always works, and recommends the H.264 encoder for MP4;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
@@ -140,7 +141,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   `xdg-desktop-portal-backend` and serves every interface itself (no `xdg-desktop-portal-gtk`);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.
 
-Every program the desktop runs and every system file it reads by path is listed in
+Every program Bande runs and every system file it reads by path is listed in
 `ci/runtime-deps` with the Debian package that ships it ([ci.md](ci.md#runtime-dependencies)).
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none

@@ -1,10 +1,17 @@
 # Apps
 
-Every Bande app is built on `bande-app` (`crates/libs/app`): Files, Settings and Look Up in this
-repo, and every app in [`bande-linux/apps`](https://github.com/bande-linux/apps) and its app
-template, which is one
-Cargo workspace pinning the desktop crates at one revision. `ci/check-apps.sh` checks that every
-app here is built this way.
+Every Bande app is built on `bande-app` (`crates/libs/app`) and lives in `crates/apps/<name>`,
+packaged as `bande-<name>`: Files, Settings, Dictionary (Look Up), Terminal, Software, Package
+Installer, System Monitor, Mail, Calendar, Velox, Calculator, Player, Viewer, Clock, Text Editor,
+Disks and Archives. The file chooser portal and the keyring prompt are the two programs there that
+are not. `crates/apps/template` is the starting point of a new app (`ci/new-app.sh <dir> <Id>
+"<Name>"`), a real app that is checked and tested with the others and never released. Code that
+several apps share is a library in `crates/libs` (`bande-discovery`: DNS SRV and TXT service
+discovery for account setup; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
+machines in systemd user units; `bande-keyring`: passwords in the Secret Service).
+`ci/check-apps.sh` checks that every app is built and packaged this way. A crate's own
+`README.md` describes an app where it needs more than its metainfo (Mail, Calendar, Clock,
+Velox).
 
 ## The boundary
 
@@ -31,18 +38,18 @@ app here is built this way.
 | In the background | an app whose `Program::runs_in_background` says so (Calendar while its "Show alerts when Calendar is closed" setting is on) can start with `--background` (from its XDG autostart entry) and Quit leaves it running there too, so its alerts keep working: it has no window and is no running app (not in the Taskbar, Force Quit, the switcher or the apps reopened at login) and its sources and deadlines keep running. `Cx::launched_in_background` tells `Program::start` to open no window. A later launch reaches it through single instance and `Program::reopen` opens its window; from its first window it is an ordinary running app until Quit. `--background` exits at once when the app does not run in the background or is already running |
 | Memory without windows | a closed window takes its renderer with it: the GPU device once no window uses it, glyph and image atlases, the shown scene and the window's text caches; with no window left `bande-app` hands freed heap back (`malloc_trim`). A program keeps a closed window's view (`Program::window_closed`) and shows it again on Reopen: a kept view costs 1–2 MB beyond its data (Terminal, which keeps none, ends 3.4 MB of private memory after its window closes; Mail 5.4, Calendar 4.7 against 2.7 started in the background) and brings back unsent text, selection and scroll in 25–80 ms, so views are kept, not rebuilt, unless one holds large caches of its own, which it drops in `window_closed`. Mesa's Vulkan drivers and LLVM stay loaded once a window has drawn on the GPU: about 9 MB more private memory and 55–60 MB of shared library pages until the app exits. `bande-background` measures it |
 | Appearance | every view gets each change; a view is built with the window's real appearance |
-| Other apps | an action that opens another app (Show in Files, Open in Terminal, Software Update) is left out while that app is not installed, so no menu offers what cannot work: a menu built when it opens asks `bande_xdg::is_installed`; menus and views that stay up ask `Cx::installed`, which follows the XDG `applications` folders with inotify from the first call, rebuilds the menus and calls `Program::installed_changed` when they change |
+| Other apps | Show in Files is `bande_app::show_in_files`, `org.freedesktop.FileManager1.ShowItems` off the UI thread. An action that opens another app (Show in Files, Open in Terminal, Software Update) is left out while that app is not installed, so no menu offers what cannot work: a menu built when it opens asks `bande_xdg::is_installed`; menus and views that stay up ask `Cx::installed`, which follows the XDG `applications` folders with inotify from the first call, rebuilds the menus and calls `Program::installed_changed` when they change |
 | Tabs | a tab dragged out of a window's `TabStrip` floats in a new window that follows the pointer and can be dropped into another window's strip: the view implements `TabHost` (release, adopt, slide, insertion index, grab point), its drag events go through `TabDropTarget`, `move_tab` reorders a window's list and keeps the active tab active, and the program keeps one `TabCarry` that moves the tab between windows and puts it back when the drag is cancelled |
 
-## Runtime contracts
+## Contracts with the shell
 
-Apps built at an older pin run against a newer shell, so these only ever gain properties:
-the dbusmenu export at `/org/bande/MenuBar` with `x-bande-shell-action` and `x-bande-version`;
-`bande_app_v1.keep_running` (version 2, sent with the first window and undone by destroying the object for the background; an older compositor makes the app quit with its last window);
-the app id as the bus name; `org.freedesktop.Application` (`Activate`, `Open` with
-`activation-token` and `x-bande-directory` in the platform data) at the path the specification
-derives from the app id; `<package> --version`; the state (`$XDG_STATE_HOME/bande/`) and config
-(`$XDG_CONFIG_HOME/bande/`) paths.
+The shell and an app meet at: the dbusmenu export at `/org/bande/MenuBar` with
+`x-bande-shell-action` and `x-bande-version`; `bande_app_v1.keep_running` (sent with the first
+window and undone by destroying the object for the background); the app id as the bus name;
+`org.freedesktop.Application` (`Activate`, `Open` with `activation-token` and
+`x-bande-directory` in the platform data) at the path the specification derives from the app id;
+`<package> --version`; the state (`$XDG_STATE_HOME/bande/`) and config (`$XDG_CONFIG_HOME/bande/`)
+paths.
 
 ## Services and popovers
 A program whose `Program::waits_for_activation` says so (Dictionary, for Look Up) is started by D-Bus with no

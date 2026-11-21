@@ -7,11 +7,10 @@ amd64 and arm64. It has its own structure, feature set and look, and aims to fee
 in every basic a modern desktop needs. The principles that decide
 design questions are in [`../design/DESIGN.md`](../design/DESIGN.md).
 
-The desktop lives in one Cargo workspace in this repository: compositor, renderer, toolkit,
-shell clients, session services, Files, Settings, libraries and test harnesses. Its layout is
-recorded in [`../decisions/0003-repository-layout.md`](../decisions/0003-repository-layout.md).
-The other Bande apps live in [bande-linux/apps](https://github.com/bande-linux/apps), built on the same
-toolkit and app framework ([apps.md](apps.md)).
+Bande lives in one Cargo workspace in this repository: compositor, renderer, toolkit, shell
+clients, session services, every app, libraries and test harnesses. Its layout is recorded in
+[`../decisions/0003-repository-layout.md`](../decisions/0003-repository-layout.md); the apps are
+in [apps.md](apps.md).
 
 The architecture is split by subject:
 
@@ -61,7 +60,7 @@ graph TB
     subgraph "Apps (bande-app)"
         FILES[Files]
         SETTINGS[Settings]
-        TERM["Terminal, System Monitor, Software, ... (bande-linux/apps)"]
+        TERM["Terminal, System Monitor, Software, Mail, ..."]
     end
 
     subgraph "Session services"
@@ -111,7 +110,7 @@ thinks of it as part of the system:
   `bande_shell_v1` protocol and `ext-foreign-toplevel-list-v1`
   ([behaviour](behaviour.md)).
 - **Apps.** Ordinary Wayland clients started by the user, each one process for all its windows
-  on `bande-app` ([apps](apps.md)): Files and Settings here, the rest in bande-linux/apps.
+  on `bande-app` ([apps](apps.md)).
   Settings and System Monitor have no special access. Closing an app's last window leaves it
   running until Quit.
 - **Session services.** Processes without windows that own D-Bus names for the session

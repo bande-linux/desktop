@@ -7,8 +7,8 @@ local gate call it, so CI holds no check the gate skips:
 
 | Stage | What it runs |
 |---|---|
-| `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland) `ci/check-apps.sh` and `ci/check-runtime-deps.py` |
-| `test` | the workspace tests on the hermetic bus with lavapipe |
+| `lint` | `actionlint` (pinned release binary, with shellcheck) over the workflows, `ci/deb/version-test.sh`, then `ci/release/lint.sh`: `cargo fmt --all --check`, workspace clippy `-D warnings`, the dependency rules (no session service except the polkit agent depends on the widget crates; graphics and widgets stay off Wayland), `ci/check-apps.sh` (every app in `crates/apps`, the template included, is a `bande-app` app packaged like the others: package `bande-<dir>`, the app id naming its `.desktop` file, `Icon=` and metainfo, `Exec=`, `StartupNotify=true`, the toolkit's fonts in Depends, no loop or menu export of its own) and `ci/check-runtime-deps.py` |
+| `test` | the workspace tests, every app's included, on the hermetic bus with lavapipe |
 | `all` | `ci/release/build-all.sh`: the `bande-desktop` metapackage, its relations and `lintian` |
 | `debs` | `ci/release/build-debs.sh`, `ci/release/check-debs.sh`, `ci/release/smoke.sh` |
 | `gate` | `lint test all debs` |
@@ -46,7 +46,7 @@ directories, so it never D-Bus-activates the services installed on the machine.
 
 ## Runtime dependencies
 
-`ci/runtime-deps` lists every program the desktop runs (`Command::new`) and every system path it
+`ci/runtime-deps` lists every program Bande runs (`Command::new`) and every system path it
 reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
 `required` (Debian priority required), `depends` (the package that runs or reads it, or for a
 shared library one package using it, declares it in Depends), `optional` (the code checks
@@ -80,19 +80,22 @@ with `verify.sh --setup` and runs one stage:
 - `lint` (arm64, first suite): `verify.sh lint`.
 - `test (<suite>)` (arm64): `verify.sh test`.
 - `debs (<suite>, arm64)`, `debs (<suite>, amd64)`: each on its native runner, `verify.sh debs`: `cargo build
-  --profile dist` for the crates in `ci/release/packages` and `ci/release/bundled` (built with
+  --profile dist` for the crates in `ci/release/packages` (the desktop's and every app's) and `ci/release/bundled` (built with
   them, shipped inside another package: `bande-secrets-prompt` in `bande-secrets`) and `cargo
   deb` for each at the version from `ci/deb/version.sh`. cargo-deb takes the architecture from
   the native target and the shared-library dependencies from that release's `dpkg-shlibdeps`.
   `check-debs.sh` checks that every package is there for `dpkg --print-architecture` at that
-  version with no build paths inside, the D-Bus activation files, the user units, the portal
-  backend's registration and the login session, and lints them with `lintian`; `smoke.sh` starts the packaged settings service
+  version with no build paths inside, that each app's desktop entry and metainfo pass
+  `desktop-file-validate` and `appstreamcli validate` and its program's `--version` names it, the
+  D-Bus activation files, the user units, the portal backend's registration and the login
+  session, and lints them with `lintian`; `smoke.sh` starts the packaged settings service
   on a private bus to read a property and the packaged compositor headless. The job uploads
   `bande-debs-<suite>-<arch>` and `bande-debug-symbols-<suite>-<arch>`.
 - `deb-all (<suite>)`: `verify.sh all` builds the architecture-independent meta-package `bande-desktop`,
   checks that it pins its packages at the build's version, that it depends on `bande-greeter |
   x-display-manager`, `pipewire`, `wireplumber` and `pipewire-pulse` and recommends
-  `bande-greeter`, `bande-reporter` and `bande-crash-reports`, and lints it with `lintian`.
+  `bande-greeter`, `bande-reporter` and `bande-crash-reports`, that every Bande package it
+  recommends is built here at that version, and the language packs, and lints them with `lintian`.
   It uploads `bande-debs-<suite>-all`. The APT source and keyring packages are built by the APT
   repository itself.
 - `install (<suite>, <arch>)`: in a clean `debian:<suite>` on the native runner,
@@ -163,7 +166,7 @@ PipeWire restarts, and new Settings must run on the old compositor. It needs `qe
 
 A published version is never moved or deleted. A bad release is fixed forward with the next
 patch version; a tag whose run failed before apt published it may be deleted and pushed again.
-Apps in bande-linux/apps are released the same way with `<app>-vX.Y.Z` tags in that repository.
+Every package, the apps included, is released together at the one version.
 
 ## Soak and fuzz
 

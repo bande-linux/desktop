@@ -330,7 +330,7 @@ Static-Built-Using: ${cargo:Static-Built-Using}
 Section: misc
 Depends: ${shlibs:Depends},
  ${misc:Depends}
-Description: Bande clipboard daemon: keeps the selection after the copying app quits and remembers recent copies
+Description: Bande clipboard daemon: keeps the selection and remembers recent copies
  Takes over each new clipboard and primary selection through
  ext-data-control-v1 and serves it after the copying application has
  quit. It also keeps the last 100 copies of the past week (never ones
@@ -386,7 +386,7 @@ Section: misc
 Depends: ${shlibs:Depends},
  default-dbus-session-bus | dbus-session-bus,
  ${misc:Depends}
-Description: Bande print service: finds network printers and sends documents to them, without CUPS
+Description: Bande print service: prints to network printers without CUPS
  Serves org.bande.Print on the session bus: finds IPP Everywhere
  (driverless) printers on the network with its own mDNS browser, keeps a
  queue of documents for each user and sends them over IPP, with CUPS
@@ -403,7 +403,7 @@ Depends: ${shlibs:Depends},
  init-system-helpers (>= 1.66),
  elfutils,
  ${misc:Depends}
-Description: Bande fault reports: keeps a local report of each fault and sends it if sending is switched on
+Description: Bande fault reports: a local report of each fault, sent when switched on
  Keeps a small report of each fault in a root-only folder. Reports leave
  the computer only once sending is switched on in Settings. Only the
  resource sampler stays running: collecting starts at a fault, and
@@ -421,7 +421,7 @@ Depends: ${shlibs:Depends},
  systemd-coredump,
  libdw1t64,
  ${misc:Depends}
-Description: Bande crash reports: one local, dated report for every crash and hang of a Bande program
+Description: Bande crash reports: a local report of every crash and hang of a Bande program
  Keeps a report of every crash of a Bande program, every hang that was
  stopped and every failed Bande service, with a stack trace and the last
  log lines. Settings shows the reports. This service has no network at
@@ -501,7 +501,7 @@ Depends: ${shlibs:Depends},
  fonts-inter,
  fonts-manrope,
  ${misc:Depends}
-Description: Bande dialogs for xdg-desktop-portal-bande: Open and Save, Open With, permissions
+Description: Bande portal dialogs: Open and Save, Open With and permissions
  The dialogs of xdg-desktop-portal-bande: the Bande Open and Save dialogs
  (favourite places and volumes in a sidebar, a path bar, a sortable list
  with type-to-jump, file type filters, New Folder when saving, and the
@@ -668,7 +668,7 @@ Recommends: network-manager-config-connectivity-debian,
  wireplumber,
  bande-tray (= ${binary:Version}),
  xdg-user-dirs
-Description: Bande shell: the desktop, the bar, the notifications, Quick Settings and the launcher in one process
+Description: Bande shell: the desktop, the bar, notifications and the launcher
  The shell of the Bande desktop, one process for the whole session. On
  every display it draws the desktop, the wallpaper in its light and dark
  variants with the files of the Desktop folder and the plugged-in drives
@@ -753,7 +753,7 @@ Depends: ${shlibs:Depends},
  ${misc:Depends}
 Recommends: bande-dict-en,
  bande-dict-sv
-Description: Bande Dictionary: look up words in the installed and online sources, and Look Up at the pointer
+Description: Bande Dictionary: looks up words, and Look Up at the pointer
  Dictionary looks up words in the dictionaries, thesauruses and online
  sources chosen in its settings, and shows Look Up in a small panel at
  the pointer. Started only when asked; nothing stays running.

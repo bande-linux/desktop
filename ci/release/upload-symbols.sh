@@ -1,8 +1,8 @@
 #!/bin/bash
-# upload-symbols.sh <-dbgsym ddeb>... <endpoint>: sends the debug files of the packages' -dbgsym
+# upload-symbols.sh <-dbgsym deb>... <endpoint>: sends the debug files of the packages' -dbgsym
 # packages to the log server, by build id.
 set -euo pipefail
-[ $# -ge 2 ] || { echo "usage: upload-symbols.sh <-dbgsym ddeb>... <endpoint>" >&2; exit 2; }
+[ $# -ge 2 ] || { echo "usage: upload-symbols.sh <-dbgsym deb>... <endpoint>" >&2; exit 2; }
 endpoint=${*: -1}
 endpoint=${endpoint%/}
 [ -n "${LOGS_SYMBOLS_KEY:-}" ] || { echo "upload-symbols: LOGS_SYMBOLS_KEY is not set" >&2; exit 2; }
@@ -10,8 +10,8 @@ IFS=', ' read -r -a keys <<<"$LOGS_SYMBOLS_KEY"
 
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-for ddeb in "${@:1:$#-1}"; do
-    dpkg-deb -x "$ddeb" "$scratch/root"
+for dbgsym in "${@:1:$#-1}"; do
+    dpkg-deb -x "$dbgsym" "$scratch/root"
 done
 
 key=0

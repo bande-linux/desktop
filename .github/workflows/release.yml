@@ -165,7 +165,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: bande-debs-${{ matrix.suite }}-${{ matrix.arch }}
-          path: debs/*_${{ matrix.arch }}.deb
+          path: |
+            debs/*_${{ matrix.arch }}.deb
+            !debs/*-dbgsym_*
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         if: matrix.arch == 'amd64'
@@ -176,7 +178,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: bande-debug-symbols-${{ matrix.suite }}-${{ matrix.arch }}
-          path: debs/*.ddeb
+          path: debs/*-dbgsym_*.deb
           if-no-files-found: error
 
   install:

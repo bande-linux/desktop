@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
+if [ -z "$DPKG_ROOT" ] && [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
 if [ "$1" = purge ]; then
+	if [ -x /usr/bin/deb-systemd-helper ]; then
+		deb-systemd-helper purge bande-crash-reports@.service >/dev/null || true
+	fi
 	rm -rf /var/lib/bande/crash-reports
 fi
 #DEBHELPER#

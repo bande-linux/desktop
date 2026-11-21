@@ -81,7 +81,9 @@ override_dh_auto_test-indep override_dh_auto_install override_dh_dwz:
 
 override_dh_installsystemd:
 	dh_installsystemd -pbande-backup --no-enable --no-start bande-backup.timer bande-backup.service
-	dh_installsystemd -pbande-crash-reports --no-start
+	dh_installsystemd -pbande-greeter --no-start bande-console-fallback.service
+	dh_installsystemd -pbande-reporter --no-start bande-reporter.service bande-reporter-send.service
+	dh_installsystemd -pbande-reporter bande-reporter-send.path bande-reporter.socket bande-reporter-resources.service
 	dh_installsystemd --remaining-packages
 
 override_dh_installman:

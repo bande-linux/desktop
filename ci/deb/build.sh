@@ -20,5 +20,5 @@ trap 'rm -rf "$scratch"' EXIT
 dpkg-source --extract "$dsc" "$scratch/source"
 ci/deb/changelog-entry.sh "$scratch/source/debian/changelog" "$version" "$codename" "Build for Debian $codename."
 (cd "$scratch/source" && env -u SOURCE_DATE_EPOCH CARGO_NET_OFFLINE=true dpkg-buildpackage --unsigned-source --unsigned-changes "$@")
-find "$scratch" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.ddeb' -o -name '*.changes' -o -name '*.buildinfo' \) \
+find "$scratch" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.changes' -o -name '*.buildinfo' \) \
     -exec mv -t "$out" {} +

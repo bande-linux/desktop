@@ -39,9 +39,9 @@ if [ "${PROFILE:-dist}" = dist ]; then
 fi
 
 echo "== every package is built for $architecture at $version, each with its debug symbols"
-[ "$(find "$debs" -name "*_$architecture.deb" | wc -l)" = "${#packages[@]}" ]
+[ "$(find "$debs" -name "*_$architecture.deb" ! -name '*-dbgsym_*' | wc -l)" = "${#packages[@]}" ]
 for package in "${packages[@]}"; do
-    test -e "$debs/$package-dbgsym_${version}_$architecture.ddeb" || { echo "$package has no -dbgsym package"; exit 1; }
+    test -e "$debs/$package-dbgsym_${version}_$architecture.deb" || { echo "$package has no -dbgsym package"; exit 1; }
     deb="$debs/${package}_${version}_$architecture.deb"
     dpkg-deb --info "$deb"
     dpkg-deb --contents "$deb"

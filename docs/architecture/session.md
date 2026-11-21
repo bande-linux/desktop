@@ -85,8 +85,7 @@ graph LR
   through `bande-audio`), the portal's suspend flag (`org.bande.Power.KeepAwake`, `Hold` and
   `Release`, freed when the caller leaves the bus) and someone else's logind `sleep` block
   inhibitor. When the last one ends, the computer sleeps after a full `suspend-after` more.
-- Sleep is off until s2idle survives ten clean cycles on the mini
-  (`~/bande-linux/bin/s2idle-test.sh`, which overrides the switch for its own cycles). The one
+- Sleep is off until suspend and wake survive ten clean cycles on the build machine. The one
   switch is the line `AllowSuspend=no` in `crates/services/power/data/sleep.conf`: `CanSuspend`
   then answers `na`, so Sleep leaves the menus and idle stays awake. Changing it to `yes` brings
   all of it back, including the power button: logind's press always locks, and the compositor
@@ -140,8 +139,7 @@ graph LR
   brightness key is pressed on it; its bar appears once it answers and goes when it stops
   answering. Access: `bande-power` ships
   `i2c-dev` in `modules-load.d` and a udev rule giving the active session `uaccess` to I2C
-  adapters of PCI display controllers only, never other buses. Apple's `appledrm` exposes no
-  DDC adapter, so external displays on a Mac have no brightness bar.
+  adapters of PCI display controllers only, never other buses.
 
 ### XDG desktop portal backend (`xdg-desktop-portal-bande`)
 
@@ -352,8 +350,8 @@ graph LR
   only while something is plugged into the jack. As on a Mac, plugging in makes the jack the
   default (`bande-sound` does it, once per session); a later choice holds until the next
   plug-in, and unplugging falls back to WirePlumber's previous choice, the speaker.
-  Filter-chain streams (`node.link-group`, such as Asahi's speaker DSP output) are never listed
-  as apps, and Asahi's `hide-parent` hides the raw speaker node from clients. Settings ▸ Sound
+  Filter-chain streams (`node.link-group`, such as a speaker DSP output) are never listed
+  as apps, and a node marked `hide-parent` hides its raw speaker node from clients. Settings ▸ Sound
   shows a Left–Right balance for a stereo (FL, FR) output, set through its channel volumes.
 - The display and keyboard brightness keys go the same way (`brightness_key`, also while
   locked): Control Center moves the display under the pointer (through `org.bande.Brightness`)
@@ -619,9 +617,8 @@ something to show.
 
 | Stage | What shows | How |
 |---|---|---|
-| bootloader, U-Boot | the mark, centred on black | the bootloader's logos; U-Boot's console is silent (`silent=1`) until an EFI program starts, or until no boot entry is found, when it lists what it scanned |
-| systemd-boot, kernel | the mark | `timeout 0`; the kernel's console logo (`logo_bande_clut224.ppm`, `fbcon=logo-count:1 fbcon=logo-pos:center`) on the firmware framebuffer, drawn under `quiet` thanks to our kernel patch `fbcon: Draw the logo under quiet`; `quiet` also silences the EFI stub |
-| `apple-drm` binds | the mark again after the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer (the kernel's own logo is only drawn during boot and never for a module) |
+| systemd-boot, kernel | what the firmware left on screen | `timeout 0`; `quiet` silences the kernel and the EFI stub |
+| the GPU driver binds | the mark, once the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer |
 | disk unlock, on an encrypted disk | the mark, a password field and the layout's short name | `bande-unlock`, see below |
 | login window | black with the mark, cross-fading to the login window | the compositor holds frames until the greeter is mapped; the greeter draws the same mark and opens once the desktop picture is decoded |
 | session | the picture the login window ended on, then the bar and icons fade in | below |

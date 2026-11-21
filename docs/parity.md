@@ -30,7 +30,7 @@ the left by default (or any other edge); each window's menu button (⋮) holds t
 | Software, Package Installer, software updates | basic | live updates, offline only for reboot-class packages; Debian packages; Flatpak apps only once the user installs `flatpak` |
 | Screenshots, recording, Markup | parity | |
 | Force Quit, Not Responding, low-memory window | parity | in the compositor, works when the shell hangs |
-| Sleep and wake | basic | display sleep works; system sleep is off on the M2 mini until s2idle is reliable |
+| Sleep and wake | basic | display sleep works; system sleep is off until suspend and wake are proven reliable |
 | Accessibility: screen reader, zoom, contrast, motion, text size, sticky/slow/bounce keys | basic | no colour filters or on-screen keyboard |
 | Input methods (CJK) | basic | work in apps; not offered as input sources in Settings |
 | First-run setup | none | |

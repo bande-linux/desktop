@@ -184,7 +184,7 @@ writes a hex value, a corner radius or a font name of its own.
   only that driver itself and hands it to the loader through `VK_LUNARG_direct_driver_loading`,
   so the loader opens no other driver, lavapipe and its LLVM included; anything else takes the
   loader's usual path. No app changes its own environment, so programs it starts inherit nothing
-  from this. On the M2 that cuts a window's Vulkan start from about 40 to
+  from this. Measured on an arm64 machine, that cuts a window's Vulkan start from about 40 to
   17 ms and its resident memory by 4 MB anonymous and 47 MB file-backed (LLVM is no longer
   mapped); the shell drops from 153 to 83 MiB. A
   window whose background is opaque declares its window rectangle as its opaque region, so

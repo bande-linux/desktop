@@ -158,7 +158,7 @@ Settings ▸ Appearance ▸ Style, `style` in `config.kdl`. The tokens live in `
 
 **Mono: JetBrains Mono** (`fonts-jetbrains-mono`, OFL; with `zero` slashed) replaces DejaVu Sans Mono in the terminal and code.
 
-Considered and not chosen: Geist (not packaged in Debian, and now Nothing's and Vercel's identity); IBM Plex (not in Debian trixie, and corporate in tone); Atkinson Hyperlegible (only Regular and Bold in Debian; we propose it as the *Larger Text / Hyperlegible* accessibility option); Figtree (not packaged).
+Considered and not chosen: Geist (not packaged in Debian, and now Nothing's and Vercel's identity); IBM Plex (corporate in tone); Atkinson Hyperlegible (only Regular and Bold in Debian; we propose it as the *Larger Text / Hyperlegible* accessibility option); Figtree (not packaged).
 
 | Style | Face | Size / line | Weight | Notes |
 |---|---|---|---|---|

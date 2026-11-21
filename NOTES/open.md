@@ -8,7 +8,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 ## First release (owner)
 
 - Before tagging: delete stale ISO artifacts (the org hit its artifact storage quota on
-  2026-10-31) and check apt's `state/owners` lists only apt and kernel.
+  2026-10-31) and check apt's `state/owners` lists only apt.
 - Apps first, from apps `main`: `<app>-v0.1.0` for terminal, software, installer, monitor, mail,
   calendar, each published by apt before the next; then desktop `v0.1.0`
   ([ci.md](../docs/architecture/ci.md#releasing)); then switch the apps' desktop pin to `v0.1.0`
@@ -17,12 +17,12 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - `origin/wip/userland-efficiency` still has the old `ci.yml` that runs on every push: delete
   the file or the branch before pushing it again.
 
-## Owner checks at the mini
+## Owner checks on the build machine
 
 - After `rebuild-desktop` and a new login: Ctrl shortcuts everywhere and Super only for the
   system; taskbar icons of third-party apps; resize zones; snapping against the taskbar edge;
   sidebar selection.
-- Brightness on the mini: the Control Center and Settings bar and the brightness keys dim the
+- Brightness: the Control Center and Settings bar and the brightness keys dim the
   HDMI monitor, it stays dimmed after replugging, and idle dimming lowers it and restores it.
 - DDC/CI needs a machine with a DDC adapter (`ls /sys/class/drm/*/ddc`): real monitor follows the
   bar and its own buttons show after reopening the panel.
@@ -41,7 +41,7 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   login window comes back (`journalctl -u systemd-logind` says "Secure Attention Key", and
   `-u bande-recovery` says it restarted the desktop); after a new login
   `sysctl kernel.panic` says 10 and `systemctl show -p RuntimeWatchdogUSec` says 2min.
-- Panic logs on the mini: whether RAM survives its reboot is unknown. Test with one normal reboot:
+- Panic logs: whether RAM survives a reboot is unknown. Test with one normal reboot:
   `reserve_mem=2M:16384:oops ramoops.mem_name=oops ramoops.console_size=262144` in
   `/etc/kernel/cmdline` and `ramoops` in `modules-load.d`; `/sys/fs/pstore` then has the previous
   boot's console if it does. Ship it in the images only then. A saved kernel log then appears in Crash Reports by itself.
@@ -49,22 +49,18 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
   names is under Settings ▸ About ▸ Crash Reports within seconds and Copy works; pulling the power gives
   "Restart without a clean shutdown" at the next boot; a `kill -STOP`ped app that is force quit is killed
   within 8 s (a stopped process cannot dump); force quitting a truly hung app leaves a "Not responding" report.
-- Recovery on the mini: `Ctrl+Alt+Fn+F2` reaches a text console and `Ctrl+Alt+Fn+F7` comes back
+- Recovery: `Ctrl+Alt+F2` reaches a text console and `Ctrl+Alt+F7` comes back
   (also from the login window); `kill -STOP` of `bande-shell` shows "Taskbar & Desktop (Not
   Responding)" in Force Quit and Relaunch brings the bar back; `kill -STOP` of `bande-lock` while
   locked brings a new lock screen within about 15 s; after `apt install systemd-oomd` and a new
   login, `oomctl` lists `app.slice` and `systemctl show user.slice -p MemoryLow` says 640M. GPU
-  loss recovery (a new Vulkan device after `VK_ERROR_DEVICE_LOST`) is untested on asahi: the
+  loss recovery (a new Vulkan device after `VK_ERROR_DEVICE_LOST`) is untested on real hardware: the
   journal says "starting the renderer again" when it happens.
 - Footprint on the real GPU: shell and greeter memory, the greeter's unveil after sign-in, the
   shell's PipeWire clients with two displays.
-- Login: no text and no black from power-on to the desktop on the mini (kernel, cmdline, bootloader
-  and U-Boot of `gap-login-look`), Space at power-on opens the menu and "(boot messages)" boots with
-  text, the bar flicker at login, time to desktop.
-- Apple hardware: DDC/CI through DCP's I2C in `appledrm` (external displays are dimmed by the
-  compositor until then; needs reverse engineering of the firmware's calls).
-- Apple hardware: Night Light gamma on the DCP; direct scanout of a full-screen window (a shell surface on an overlay plane is confirmed working); the
-  `VK_KHR_external_semaphore_fd` release path and dma-buf modifiers on Honeykrisp; the GPU
+- Login: the bar flicker at login, time to desktop.
+- Displays: direct scanout of a full-screen window; the
+  `VK_KHR_external_semaphore_fd` release path and dma-buf modifiers on the real GPU; the GPU
   fence wait each frame; input-to-photon latency with a camera; swapping or moving the only display, unplugging it and
   plugging it back (`NOTES/plans/displays.md`).
 - Software (apps repo): install and remove a Debian app; catalogue icons once
@@ -81,10 +77,8 @@ are in [gaps.md](gaps.md) and [gaps2.md](gaps2.md), open review findings in
 - A click on the clock or Control Center while the launcher is open: open the panel too, or only
   close the launcher (today).
 - Several displays: banners on the main display or on the one with the active window.
-- Sleep: ten clean cycles with `sudo ~/bande-linux/bin/s2idle-test.sh keyboard` (at least two of
-  them `desktop`; the script counts), then set `AllowSuspend=yes` in `crates/services/power/data/sleep.conf`,
-  unmask the targets on the mini and remove `suspend-after "never"` from its `config.kdl`. Or wait for
-  Asahi.
+- Sleep: after ten clean suspend and wake cycles on the build machine, set `AllowSuspend=yes` in
+  `crates/services/power/data/sleep.conf`.
 - The lock screen ignores logind's `Unlock` (`loginctl unlock-session`): honour it or not.
 - Naming: the clash with Debian's `bande` DNS resolver packages; the `org.bande.*` domain.
 - Product: which UI languages first.

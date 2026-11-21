@@ -1,8 +1,9 @@
 # Bande
 
-Bande is a Linux desktop environment written in Rust for Debian 14 (forky) on arm64 and amd64, with
-Apple Silicon as its primary hardware. It has its own compositor, shell, session services and
-apps, holds itself to the polish of macOS, and is pure Wayland: no X11 or XWayland anywhere.
+Bande is a Linux desktop environment written in Rust for Debian 14 (forky) on amd64 and arm64. It
+follows forky while it is Debian testing and aims to be ready when forky is released as stable.
+It has its own compositor, shell, session services and apps, holds itself to the polish of
+macOS, and is pure Wayland: no X11 or XWayland anywhere.
 It is early and not yet a daily driver; [`docs/parity.md`](docs/parity.md) shows where it stands.
 
 ## This repository

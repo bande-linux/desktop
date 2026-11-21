@@ -3,7 +3,7 @@
 ## Goal
 
 Bande (`bande-desktop`) is a Linux desktop environment written in Rust for Debian 14 (forky) on
-arm64 and amd64, with Apple Silicon as the primary hardware. It is its own desktop: macOS is the bar for
+amd64 and arm64. It is its own desktop: macOS is the bar for
 how polished, smooth and finished it feels, and the main reference for which basics a modern
 desktop needs, but the structure, feature set and look are ours. The principles that decide
 design questions are in [`../design/DESIGN.md`](../design/DESIGN.md).

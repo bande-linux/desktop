@@ -57,7 +57,7 @@ Desktop done (`docs/architecture/ci.md`): `l10n-YYYYMMDD` tags build only the pa
 
 ## Measured
 
-Release builds on the mini, Swedish session, median of 21 runs: the cost of loading a program's translations and showing its first string. Before is Fluent with every domain the program links parsed (Swedish and English); after is listing the program's folder, reading its `sv.mo` and one lookup.
+Release builds, Swedish session, median of 21 runs: the cost of loading a program's translations and showing its first string. Before is Fluent with every domain the program links parsed (Swedish and English); after is listing the program's folder, reading its `sv.mo` and one lookup.
 
 | Program | Before | Heap before | After | Heap after (= catalog size) |
 |---|---|---|---|---|
@@ -80,7 +80,7 @@ The language packs are 65 KB (`sv`) and 3 KB (`en-GB`) as `.deb`.
 4. **Translation-only releases** (desktop done; the APT repository and apps left).
 5. **Browser:** Settings and the rule pick up `bande-browser-l10n-*`.
 
-**Stages 1 and 3 reach the owner's mini together, with their packs.** The desktop release and the app releases built on it go in one `apt` run that also installs `bande-desktop-l10n-sv` and every installed app's `bande-<app>-l10n-sv`; otherwise a Swedish session shows English. Until stage 2 does this by itself, main installs the packs by hand with each such release.
+**Stages 1 and 3 reach the owner's machine together, with their packs.** The desktop release and the app releases built on it go in one `apt` run that also installs `bande-desktop-l10n-sv` and every installed app's `bande-<app>-l10n-sv`; otherwise a Swedish session shows English. Until stage 2 does this by itself, main installs the packs by hand with each such release.
 
 ## Risks
 

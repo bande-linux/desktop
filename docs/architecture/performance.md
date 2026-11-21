@@ -6,9 +6,9 @@ time targets are in [`../decisions/0001-rendering.md`](../decisions/0001-renderi
 ## How to measure
 
 Measure when a change is about memory, CPU or wake-ups: before and after, with release builds of
-both sides from the same worktree and its own target directory, on the mini
+both sides from the same worktree and its own target directory, on the build machine
 (`build-run --here <worktree> …`, so that the numbers are this machine's). Live numbers
-on the mini are read from `/proc` only; nothing restarts the owner's session. The tools are in
+are read from `/proc` only; nothing restarts the owner's session. The tools are in
 `crates/testing/bench` and run on a headless compositor inside a private bus, so they never
 reach a running session.
 
@@ -37,7 +37,7 @@ reach a running session.
   repainted. `bande-toolkit-bench` measures the toolkit sample (`crates/testing/sample`).
 - **Files at 100 000 items:** `bande-files-bench` drives `FilesView` in-process over a folder of
   100 000 files and prints UI-thread time per step.
-- **Flips on the real display:** while something on the screen changes, record DCP's swaps for ten seconds and read them with `bande-flip-report`, which needs no rate: `sudo perf record -o /tmp/flip.data -a -e dcp:iomfb_swap_submit,dcp:iomfb_swap_complete -- sleep 10`, then `sudo perf script -i /tmp/flip.data | bande-flip-report`. It prints the fitted refresh, swaps that missed their flip, gaps between flips in refreshes, and misses by time left before the flip. Nothing restarts. The simulator in `clock.rs`'s tests drives the same logic against a display with a commit cut-off in the gate.
+- **Flips:** the simulator in `clock.rs`'s tests drives the same logic against a display with a commit cut-off in the gate.
 - **Wake-ups by hand:** sum `voluntary_ctxt_switches` over `/proc/<pid>/task/*/status` twice
   and divide by the interval; the threads' `comm` shows which one wakes. `bande-idle` counts the
   same. Leave out `nonvoluntary_ctxt_switches`: they are preemptions of a running thread, and
@@ -46,12 +46,12 @@ reach a running session.
   codegen unit, `panic = "abort"`, stripped); crate counts with
   `cargo tree -e normal -p <package> --prefix none | sort -u | wc -l`.
 
-lavapipe draws on the CPU, so its GPU memory shows up as process memory; on Apple Silicon GPU
-memory is system memory too, but the real numbers need the mini's GPU.
+lavapipe draws on the CPU, so its GPU memory shows up as process memory; real GPU numbers
+need a real GPU.
 
 ## Where it stands
 
-Measured 2026-11-01. Idle at the login window on the mini (installed dist packages, one
+Measured 2026-11-01. Idle at the login window on an arm64 machine (installed dist packages, one
 2560×1440 display): the greeter's compositor 50 MB RSS and the greeter 40 MB, every user service
 2–4 MB and asleep in `epoll` with no timer; the compositor wakes only for its systemd watchdog.
 Under `bande-footprint` on the CPU path the shell holds about 78 MiB anonymous memory and the

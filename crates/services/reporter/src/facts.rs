@@ -29,11 +29,7 @@ const OTHER_PACKAGES: [&str; 5] = [
     "systemd",
 ];
 const MODEL_FILES: [&str; 2] = ["/proc/device-tree/model", "/sys/class/dmi/id/product_name"];
-const FIRMWARE_FILES: [&str; 3] = [
-    "/proc/device-tree/chosen/asahi,os-fw-version",
-    "/proc/device-tree/chosen/asahi,system-fw-version",
-    "/sys/class/dmi/id/bios_version",
-];
+const FIRMWARE_FILES: [&str; 1] = ["/sys/class/dmi/id/bios_version"];
 const DRM: &str = "/sys/class/drm";
 const JOURNAL_LINES: &str = "200";
 const OOM_TOP: usize = 12;

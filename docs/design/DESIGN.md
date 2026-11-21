@@ -93,5 +93,5 @@ better.
 
 Where a spec or the code is silent, these principles decide; decisions taken that way are
 recorded in [`../architecture/behaviour.md`](../architecture/behaviour.md). The look is
-[Datum](datum.md). A change to what people see is checked by eye in light and dark and on the
-mini before it is called done.
+[Datum](datum.md). A change to what people see is checked by eye in light and dark and on real
+hardware before it is called done.

@@ -3,10 +3,12 @@
 Status: **decided** (October 2026). Scope: how the compositor composes frames, how the
 toolkit and apps draw, and which performance numbers every change is held to.
 
+The Apple hardware target was dropped on 2026-11-21; the decisions stand for any GPU with a Mesa
+Vulkan driver.
+
 ## Context
 
-- Bande targets Apple Silicon, whose Asahi GPU stack ships Honeykrisp, a Vulkan 1.4 conformant
-  Mesa driver [5]. Without a usable GPU, everything renders on lavapipe (Mesa's CPU Vulkan).
+- Bande targets the GPUs Debian's Mesa drives, through its Vulkan drivers. Without a usable GPU, everything renders on lavapipe (Mesa's CPU Vulkan).
 - `linux-drm-syncobj-v1` (explicit sync) is P0. Its acquire and release points are DRM
   timeline syncobjs, which Vulkan timeline semaphores are modelled on and which convert to and
   from `sync_file` fds [3][4].
@@ -22,9 +24,8 @@ renderer in the compositor. Smithay stays the kernel and protocol layer.
 | Explicit sync | no external semaphore or `sync_file` import/export in the API [1] | EGL native fences | timeline semaphores and `sync_file` directly |
 | Direct scanout, overlay planes | not applicable | `DrmCompositor` assigns planes [2] | `DrmCompositor` assigns planes once the renderer implements Smithay's renderer traits [2] |
 | Control of submission, memory, queues | hidden behind portability layer | GLES 2 model | full: persistent textures, partial uploads, async compute for blur |
-| Availability on Apple Silicon | via Vulkan | Asahi GL 4.6 / GLES 3.2 | Honeykrisp Vulkan 1.4 [5] |
 
-Smithay ships GLES, pixman and multi-GPU renderers but no Vulkan renderer [6], and
+Smithay ships GLES, pixman and multi-GPU renderers but no Vulkan renderer [5], and
 `wgpu` would hide exactly the parts that decide latency: when a buffer is read, which
 fence is waited on, and whether a frame is repainted at all.
 
@@ -38,14 +39,14 @@ Design rules for `bande-render`:
    Smithay's `DrmSyncPointBlocker` before a commit is latched [3], so a late client never
    blocks the compositor's queue. Release points are signalled from the frame's
    completion: by `sync_file` export from a Vulkan semaphore where the driver has
-   `VK_KHR_external_semaphore_fd` (Honeykrisp), otherwise from the CPU when the frame's
+   `VK_KHR_external_semaphore_fd`, otherwise from the CPU when the frame's
    fence signals (lavapipe).
 4. **Smithay renderer traits.** For the DRM backend the renderer implements Smithay's
    `Renderer`, `ImportDma` and `ImportMem` traits so that `DrmCompositor` keeps doing
    plane assignment, direct scanout and overlay planes; elements that fail the atomic
    test are composed by us on the primary plane [2].
 
-Plane assignment, direct scanout on Apple's display controller and the semaphore `sync_file`
+Plane assignment, direct scanout and the semaphore `sync_file`
 path still need checking on the hardware; the CPU release path covers drivers without them.
 
 ## Decision 2: the toolkit draws with Vello and lays out text with Parley
@@ -53,10 +54,10 @@ path still need checking on the hardware; the CPU release path covers drivers wi
 `bande-toolkit` replaces its rectangle-and-atlas renderer with Linebender's Vello
 sparse-strips renderers and Parley.
 
-- **Vello** [7]: `vello_cpu` (multithreaded, SIMD, currently the most mature) and
+- **Vello** [6]: `vello_cpu` (multithreaded, SIMD, currently the most mature) and
   `vello_gpu` (CPU path preprocessing, GPU rasterisation, no compute shaders required)
   share one scene model. The compute renderer is experimental and is not used.
-- **Parley** [8]: rich text layout with shaping by HarfRust, bidi and font fallback,
+- **Parley** [7]: rich text layout with shaping by HarfRust, bidi and font fallback,
   which the CJK and accessibility requirements need and which `ab_glyph` cannot do.
 - Extending our own renderer would mean rebuilding path filling, anti-aliasing,
   gradients, clips, rounded rectangles and shaping ourselves, with no speed advantage.
@@ -70,7 +71,7 @@ How it is used:
 
 ## Decision 3: performance targets
 
-Targets on hardware (Apple Silicon, 120 Hz ProMotion panel, refresh interval 8.33 ms):
+Targets on hardware (a 120 Hz display, refresh interval 8.33 ms):
 
 | Metric | Target |
 | :--- | :--- |
@@ -97,8 +98,7 @@ input-to-photon latency needs a camera on a real Mac.
 2. Smithay `backend::drm::compositor` (plane assignment, direct scanout): <https://docs.rs/smithay/latest/smithay/backend/drm/compositor/index.html>
 3. Smithay `wayland::drm_syncobj` (blocker, release on buffer drop): <https://docs.rs/smithay/latest/smithay/wayland/drm_syncobj/index.html>
 4. wlroots `drm_syncobj.h` (timelines modelled on Vulkan timeline semaphores, `sync_file` conversion): <https://wlroots.pages.freedesktop.org/wlroots/wlr/render/drm_syncobj.h.html>; protocol: <https://isaacfreund.com/docs/wayland/linux-drm-syncobj-v1>
-5. Alyssa Rosenzweig, "Vulkan 1.4 sur Asahi Linux": <https://rosenzweig.io/blog/vulkan-14-sur-asahi-linux.html>
-6. Smithay `backend::renderer` (GLES, pixman, multi-GPU; no Vulkan): <https://docs.rs/smithay/latest/smithay/backend/renderer/index.html>
-7. Vello repository (sparse strips, `vello_cpu`, `vello_gpu`, status): <https://github.com/linebender/vello>
-8. Parley: <https://docs.rs/parley/>
-9. Linux kernel, multiplane overlay constraints (example of per-driver plane limits): <https://docs.kernel.org/next/gpu/amdgpu/display/mpo-overview.html>
+5. Smithay `backend::renderer` (GLES, pixman, multi-GPU; no Vulkan): <https://docs.rs/smithay/latest/smithay/backend/renderer/index.html>
+6. Vello repository (sparse strips, `vello_cpu`, `vello_gpu`, status): <https://github.com/linebender/vello>
+7. Parley: <https://docs.rs/parley/>
+8. Linux kernel, multiplane overlay constraints (example of per-driver plane limits): <https://docs.kernel.org/next/gpu/amdgpu/display/mpo-overview.html>

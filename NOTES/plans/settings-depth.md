@@ -43,8 +43,7 @@ sound effects, volume feedback. Missing: "play sound on startup".
 large files and Empty Trash; Software Update with offline updates. Date & Time: automatic
 time, manual date and time, time zone, 24-hour clock. Language & Region: languages, region,
 login keyboard layouts. Login Items: apps that open at login. Missing: Sharing (remote login
-over SSH, file sharing over Samba, the local hostname shown with `.local`), Startup Disk (not on
-Apple silicon under Linux: U-Boot owns it), a "Transfer or Reset" equivalent (out of scope), a
+over SSH, file sharing over Samba, the local hostname shown with `.local`), Startup Disk, a "Transfer or Reset" equivalent (out of scope), a
 storage breakdown bar in About. Apps ▸ Reopen switches reopening at login and after a crash.
 
 **Appearance.** Has: light/dark/automatic, accent colours, text size, tinted frame. Missing:
@@ -85,7 +84,7 @@ own choice.
 **Battery / Energy.** Has: level and history, power mode, low power on battery, lid on power,
 sleep timers, battery percentage in the bar. Missing: wake for network access (Wake-on-LAN
 through NetworkManager `802-3-ethernet.wake-on-lan`), "start up automatically after a power
-failure" (needs the SMC driver), scheduled sleep and wake.
+failure", scheduled sleep and wake.
 
 **Users & Groups.** Has: the accounts with picture, full name and kind; per account a page
 with picture (file chooser, crop to the circle), full name, the administrator flag, Delete
@@ -98,8 +97,7 @@ Bande doesn't need it).
 **Passwords.** Out of scope.
 
 **Keyboard.** Has: input sources with search, login layouts, repeat rate and delay, Caps Lock
-behaviour, shortcuts page. Missing: editable shortcuts, keyboard brightness (no backlight on the
-mini), input methods (fcitx5, deferred by decision), dictation (out of scope).
+behaviour, shortcuts page. Missing: editable shortcuts, keyboard brightness, input methods (fcitx5, deferred by decision), dictation (out of scope).
 
 **Mouse / Trackpad.** Has: speed, acceleration, natural scrolling, primary button; trackpad tap,
 dragging, secondary click, scroll method, gestures. Missing: double-click speed, scroll speed.

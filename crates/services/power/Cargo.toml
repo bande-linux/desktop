@@ -32,7 +32,7 @@ inhibitor, makes the power button lock the session, posts low and critical batte
 serves org.freedesktop.ScreenSaver so applications can keep the screen \
 on, holding a logind idle inhibitor for each request, and keeps the \
 computer from sleeping when idle while a sound stream runs. Sleep is off \
-until s2idle is reliable on Apple silicon. Controls the brightness of each \
+until suspend and wake are proven reliable. Controls the brightness of each \
 connected display that has one, through its backlight or DDC/CI."""
 maintainer-scripts = "debian/"
 assets = [

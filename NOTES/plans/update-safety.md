@@ -18,7 +18,7 @@ An update can never leave the computer unusable. Branch `fix-update-safety`; aud
 
 ## Disk layout (new installs, shared with fix-first-run, fix-security, fix-backup)
 GPT: ESP (FAT32, 1 GB), Recovery (6 GB, read-only, fix-first-run), Root (LUKS2, fix-security)
-holding one btrfs. The mini stays on ext4 and is not reinstalled.
+holding one btrfs.
 
 | Subvolume at the btrfs top level | Mounted at | Rolled back |
 |---|---|---|
@@ -54,7 +54,7 @@ subvolume with `@system/<id>.info` next to it (created, why, what changed).
 version, runs apt in a chroot of the clone with services blocked, and on success writes its kernel
 and initrd to the ESP and then its entry. The entry is the single atomic step (a rename on the
 ESP). Any failure before that deletes the clone. It replaces PackageKit's offline mode on this
-layout; a machine without it, such as the mini on ext4, keeps PackageKit's offline mode.
+layout; a machine without it, such as one on ext4, keeps PackageKit's offline mode.
 
 **Everything else** (`Class::Live`, a terminal `apt`): apt's `DPkg::Pre-Invoke`, which runs once per
 transaction, keeps an unchanged copy as a version and re-arms boot counting on the running one,
@@ -69,15 +69,12 @@ go up, systemd-boot picks the newest with tries left. `boot-complete.target` nee
 `/run/bande/login-ready` once the login window or the desktop is really shown, and reboots after
 5 minutes. Only a counted boot runs it. On a counted boot emergency and rescue mode reboot at once
 and `panic=10` covers the kernel and initramfs, so no failure waits for someone at a console. The
-running system's `systemd-bless-boot` removes the counter. U-Boot and systemd-boot rename the entry
+running system's `systemd-bless-boot` removes the counter. systemd-boot renames the entry
 on the FAT ESP; EFI variables are not needed for writing.
 
 **ESP.** Kernels and initrds are named by content hash (`/bande/<hash>/`), so versions share them
 and an initrd rebuilt for one version never changes another. `layout=bande` in
-`/etc/kernel/install.conf` replaces kernel-install's own entry writing. `unboot/boot.bin` (m1n1,
-U-Boot, devicetrees) is shared by all versions and cannot be rolled back this way: a bad one needs
-macOS recovery or the tether. An older kernel can also run with a newer devicetree until Restore
-rewrites `boot.bin` from the version it restores.
+`/etc/kernel/install.conf` replaces kernel-install's own entry writing.
 
 **State that follows you.** On the first boot of a version, before anything else starts, it copies
 from the version the computer last ran: human accounts (UID 1000 and up, with shadow entries and
@@ -87,7 +84,7 @@ machine id. It is one list in one place, so a prepared update also gets a passwo
 before the restart.
 
 **Restore** creates a new version from the chosen one and boots it, so a restore can itself be
-undone. The tool is shell plus btrfs-progs in `bande-scripts`; Settings calls it through a system
+undone. The tool is shell plus btrfs-progs in `bande-system`; Settings calls it through a system
 service, and the recovery OS (fix-first-run) calls it from its menu.
 
 **How often.** The daily user timer `bande-update-check.timer` stays the one timer. It reminds about
@@ -117,12 +114,11 @@ free space is short. Failed versions go at the next update.
   except the list above.
 
 ## Stages
-1. Boot assessment: entries with tries, health check, deadline. Proved in QEMU with U-Boot and
+1. Boot assessment: entries with tries, health check, deadline. Proved in QEMU with
    systemd-boot.
-2. Layout and versions: `bande-system`, the btrfs image, rollback proved in QEMU, 16K kernel.
+2. Layout and versions: `bande-system`, the btrfs image, rollback proved in QEMU.
 3. Settings: prepared updates, Previous Versions, the went-back message.
 4. Recovery: Restore in the recovery OS.
 5. How often to check: the setting above.
 
-m1n1 cannot run in QEMU. It takes no part in choosing an entry, so the mini's own check is one owner
-step: install a new image and pull the plug during a boot.
+The owner's check on real hardware: install a new image and pull the plug during a boot.

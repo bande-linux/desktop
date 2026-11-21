@@ -85,7 +85,7 @@ TN2123 could not be read at Apple (the archive URL redirects). A [mirror](https:
 | Kill code `0x8badf00d` | `SIGQUIT` from Force Quit, `SIGABRT` from the watchdog | `termination` field: who ended it and why |
 | `.gpuRestart` | Compositor's device-lost path; `devcoredump`; kernel log | Fault from the compositor; attach `devcd` data when present |
 | Display failures | Compositor's failed-frame and restart path | Fault at the 3 s renderer reset, not per failed frame |
-| Panic through NVRAM | `pstore` (ramoops or efi-pstore), `systemd-pstore` | Use as `bande-crash-reports` does. To be tested in KVM; whether the mini's boot chain keeps it is an owner check |
+| Panic through NVRAM | `pstore` (ramoops or efi-pstore), `systemd-pstore` | Use as `bande-crash-reports` does. To be tested in KVM; whether real hardware keeps it is an owner check |
 | Panic stackshot | `kdump` | Not used: reserves memory and needs a second kernel on hardware where it is unproven. Stays an option |
 | Unexplained restart | Journal `--boot=-1`, no `shutdown.target` | Use as `bande-crash-reports` does |
 | Kernel oops, hung tasks, lockups | `/dev/kmsg` watcher, `hung_task` | Small root service blocked on kmsg; wakes on kernel messages only |

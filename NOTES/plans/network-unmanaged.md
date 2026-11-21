@@ -7,8 +7,8 @@ desktop task put NetworkManager in the target, and NM's `[ifupdown] managed=fals
 device state 10 (unmanaged). So the pane shows only "Set up by the system, outside
 NetworkManager" (settings/src/network.rs:56) with no address and hides the IPv4 controls, and the
 sidebar summary says "Ethernet not connected" (header.rs:157-161) while the VM is online.
-systemd-networkd links are different: NM marks them "connected (externally)" (state 100, seen on
-the mini for docker0). Bande shows those as connected, but offers Configure IPv4 on NM's generated
+systemd-networkd links are different: NM marks them "connected (externally)" (state 100, seen
+for docker0). Bande shows those as connected, but offers Configure IPv4 on NM's generated
 external connection, and an edit there would fight networkd. The bar and Control Center show only
 Wi-Fi (bar/menu_bar.rs:383, controlcenter/lib.rs:186), so a wired-only VM shows nothing there.
 That matches macOS, which has no Ethernet menu-bar item or Control Center module.

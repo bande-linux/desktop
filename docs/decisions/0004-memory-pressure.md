@@ -69,7 +69,7 @@ where `swappiness=180` is wrong.
 - The few session-critical services Bande does not own get the same floor as the compositor,
   `OOMScoreAdjust=100`, through vendor drop-ins: `dbus.service` (the session bus),
   `pipewire.service`, `pipewire-pulse.service`, `wireplumber.service` and
-  `xdg-desktop-portal.service`. On 2026-10-31 a global OOM on the mini killed `dbus.service` six
+  `xdg-desktop-portal.service`. On 2026-10-31 a global OOM on the arm64 build machine killed `dbus.service` six
   times and PipeWire over and over, 59 kills of processes under 10 MB, while the eight 1.9 GB
   `rustc` at adj 0 that caused it lived: at 200, a 10 MB service scores about 196k pages
   against 119k for the build. At 100 it scores about 98k, below any process over about 1.5 GB.

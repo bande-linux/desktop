@@ -21,11 +21,11 @@ CI does). `VERIFY_PROFILE` picks the cargo profile of the debs (default `dist`).
 
 Only these run in CI alone:
 
-- `install` (`ci/deb/install-test/`): it installs the packages as root into a clean Debian
-  testing and switches display managers, which needs a throwaway system; the build machine
+- `install` (`ci/deb/install-test/`): it installs the packages as root into a clean Debian 14
+  (forky) and switches display managers, which needs a throwaway system; the build machine
   runs no containers.
 - The check that a released commit is on `main`: the train only ever pushes `main`.
-- The amd64 debs: the build machine is arm64; both architectures build from the same scripts.
+- The arm64 debs: the build machine is amd64; both architectures build from the same scripts.
 - Fat LTO: the build machine's release-batch gate builds the `dist` debs one crate at a time
   with thin LTO (`CARGO_PROFILE_DIST_LTO=thin`), since a fat-LTO link of the shell needs more
   memory than the build machine spares next to the session, and systemd-oomd stops it.
@@ -34,7 +34,7 @@ Only these run in CI alone:
 
 Each change only has to compile: `desktop-check <worktree> -p <crate>` runs `cargo fmt` and
 `cargo check --all-targets` through the build queue, `build-run`, which runs anything heavy on the
-next free compute node (the mini or one in `~/bande-linux/builders`, a list, all equal; a machine
+next free compute node (this machine or one in `~/bande-linux/builders`, a list, all equal; a machine
 that goes away re-queues the job and never counts as a failure). Finished branches are queued
 with `desktop-enqueue <branch>`; the merge train (`desktop-train`) merges the queued branches onto `main`, runs `desktop-gate` on the
 batch and pushes `main` when it is green. `desktop-gate <worktree>` is `ci/release/verify.sh
@@ -158,7 +158,7 @@ build-run <worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the
    architectures.
 5. Check: `curl -s https://bande-linux.github.io/apt/dists/<suite>/main/binary-amd64/Packages`, for each suite,
    lists `bande-compositor` at the new version for `amd64`, and the same for `arm64`.
-6. On the mini, `send-symbols --tag vX.Y.Z` sends that run's `bande-debug-symbols` debs to the
+6. On the build machine, `send-symbols --tag vX.Y.Z` sends that run's `bande-debug-symbols` debs to the
    log server with `ci/release/upload-symbols.sh`, which is on the LAN where GitHub cannot reach
    it. `rebuild-desktop` sends the symbols of each build it installs the same way.
 
@@ -175,7 +175,7 @@ and launcher, a second display with scale changes, lock and unlock (for the run,
 permits any password; the script runs only on a machine with `~/bande-linux/builder-ok`), memory pressure and
 killed apps and shells. After each cycle it samples memory, file descriptors, threads, renderer memory and
 frame times, and flags growth over the second half, a stall over 5 s or a client not answering for 30 s. Lavapipe's GPU
-memory is process memory, so GPU growth shows as RSS; a leak only in Asahi's driver cannot show here. Results go
+memory is process memory, so GPU growth shows as RSS; a leak only in a hardware GPU driver cannot show here. Results go
 to `--out` (`result.txt`, `summary.txt`, `samples.tsv`, `crashes.txt` with the stack of any crash the soak did not
 cause). The fuzzers in `fuzz/` (`cargo fuzz run --sanitizer none <target>`, outside the workspace) then run: the
 Wayland wire against the real compositor, file previews, text formats, config and `.desktop` files, and the lines privileged

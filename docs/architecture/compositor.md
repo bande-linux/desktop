@@ -320,6 +320,69 @@ when they reach the screen is Bande's own.
   and restarts them (see [behaviour](behaviour.md)); `bande-compositor --greeter` runs only
   the greeter ([session](session.md#display-manager-and-greeter)).
 
+## Popups
+
+Each placement states where it wants to be and how it may yield, through the `xdg_positioner`
+rules, and the compositor solves it. A menu at the pointer opens below and to the right and flips
+up or left; a menu below a rect flips above; a submenu opens to the right of its item, overlapping
+its menu by 2 pt, and flips only left (it slides rather than flipping up, so the item stays beside
+it). What still does not fit slides along the edge, and a menu taller than the room is shortened
+to no fewer than three rows and gets a 20 pt chevron band at each end with more items: resting on
+one scrolls at 300 pt/s, and the wheel and keyboard navigation scroll too. The room is the display
+holding the anchor minus the bars' exclusive zones. This holds for popups of windows, nested
+popups and layer surfaces; a layer popup is placed again once the layer adopts it, since its
+parent is known only after `xdg_surface.get_popup`.
+
+## Tab tear-off
+
+An app that tears tabs off (`Window::set_detachable_tabs`) starts a drag and drop with
+`Window::start_window_drag` and attaches a new window holding the tab with
+`Window::attach_to_drag` (`xdg_toplevel_drag_v1`). The compositor moves the attached window with
+the pointer, leaves it out of the drop-target search and maps it under the pointer at the grabbed
+point. Released where no window takes it, the drag reports a drop (`dnd_drop_performed` before
+`cancelled`) and the window stays; Escape cancels and the app puts the tab back. A drag and drop
+is used rather than `xdg_toplevel.move`, because a move hides the pointer from every client until
+release, so no other window could offer to take the tab and Escape could not be told from a drop.
+Header tabs are marked with `Header::tabs`; free space in rows below the header moves the window
+once the app names it with `Window::set_move_areas`.
+
+## Night Light
+
+`night-light { on schedule from to warmth }` in `config.kdl`: the sun times come from the time
+zone's main city in `zone.tab` through `bande-datetime`'s `daylight`, or `schedule "custom"` with
+`from` and `to`. `warmth` 0–100 runs from 5000 K to 2700 K. Each CRTC's gamma ramp is set from a
+white point normalised to 6500 K, so it is the identity when off. Scheduled changes fade over a
+minute, switching fades in 1.5 s and a new warmth applies at once; it wakes every 50 ms only while
+fading. A display with no gamma ramp is left alone with one log line, and ramps are set again after
+a session switch or wake once the first frame has flipped.
+
+## Sleep and wake
+
+1. *Before sleep.* `bande-power` holds a logind `delay` inhibitor for sleep. On
+   `PrepareForSleep(true)` it locks the session unless locked; the compositor starts `bande-lock`
+   and sets `LockedHint` only once a frame of the lock screen is presented on every display.
+   `bande-power` waits for that change, at most 3 s, then releases the inhibitor, so a lock screen
+   that never draws leaves the displays blank rather than holding sleep back. Input devices are
+   suspended, so keys held into sleep are released.
+2. *On wake.* `bande-power` takes a new inhibitor. The compositor resets every display's DRM state
+   for a full commit, rescans connectors (a different display on the same port is set up afresh),
+   restarts each frame scheduler so a lost page flip cannot stall it, reopens input devices and
+   counts the wake as activity. A frame a display refuses is dropped and logged.
+3. *Clocks.* Frame, animation and idle timing use monotonic time, which stops during sleep. Wall
+   clocks wake on `CLOCK_REALTIME` timers with `TFD_TIMER_CANCEL_ON_SET`, which fire on resume;
+   notification expiry runs on `CLOCK_BOOTTIME`.
+
+The power button: `bande-power` ships a logind drop-in with `HandlePowerKey=lock` and
+`HandlePowerKeyLongPress=poweroff`. Where `CanSuspend` is `yes`, the compositor also suspends on a
+press released within five seconds, seen through libinput, so logind's lock still works while the
+compositor is hung. Where the computer cannot sleep, the displays turn off after a minute on the
+locked screen.
+
+When every display is off and one lights up, the compositor drops key presses and their releases
+before the accessibility key filters and the screen reader's monitor see them, until a frame has
+been presented, and lets keys through at once when the wake fails (no display lit, a modeset
+error, a lost GPU, a renderer restart, frame recovery). It keeps no timer of its own.
+
 ## Who may do what
 
 A client is a **session client** (started on a socket pair with a role: `Shell`, `LockScreen`,

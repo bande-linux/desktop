@@ -37,7 +37,7 @@ Architecture: all
 Multi-Arch: foreign
 Depends: ${misc:Depends}
 Enhances: bande-lookup
-Description: Swedish-English dictionary and Swedish thesaurus for Dictionary (Folkets lexikon, Synlex)
+Description: Swedish-English dictionary and Swedish thesaurus for Dictionary
  Folkets lexikon, the Swedish-English dictionary of KTH, and Synlex, its
  Swedish thesaurus, converted to the pack format that Bande's Dictionary and
  Look Up read from /usr/share/bande/dict.

@@ -208,15 +208,22 @@ fn read(system: &Connection) -> Option<PowerState> {
     let profiles = PowerProfilesProxyBlocking::builder(system)
         .cache_properties(zbus::proxy::CacheProperties::No)
         .build()
+        .inspect_err(|error| tracing::warn!("cannot reach the power profiles: {error}"))
         .ok();
     Some(PowerState {
         battery,
         on_battery,
-        lid: upower.lid_is_present().unwrap_or(false),
+        lid: upower
+            .lid_is_present()
+            .inspect_err(|error| tracing::warn!("cannot read whether there is a lid: {error}"))
+            .unwrap_or(false),
         profiles: profiles.as_ref().map_or(Profiles::Missing, profile_names),
-        profile: profiles
-            .as_ref()
-            .and_then(|profiles| profiles.active_profile().ok()),
+        profile: profiles.as_ref().and_then(|profiles| {
+            profiles
+                .active_profile()
+                .inspect_err(|error| tracing::debug!("cannot read the power profile: {error}"))
+                .ok()
+        }),
     })
 }
 

@@ -304,20 +304,23 @@ fn transact(
                         flatpak_progress(Status::Installing, percent),
                     ));
                 };
-                let needs_x11 = flatpak::facts(&remote, &reference, false)
-                    .is_ok_and(|facts| flatpak_needs_x11(&facts.metadata));
-                if needs_x11 {
-                    Message::Failed(
+                match flatpak::facts(&remote, &reference, false) {
+                    Err(error) => {
+                        tracing::warn!("cannot read the permissions of {reference}: {error}");
+                        flatpak_settled(key, Err(error))
+                    }
+                    Ok(facts) if flatpak_needs_x11(&facts.metadata) => Message::Failed(
                         key,
                         Failure {
                             problem: Problem::NeedsX11,
                             details: String::new(),
                         },
-                    )
-                } else {
-                    let installed = flatpak::install(&remote, &reference, &progress, flatpaks)
-                        .map(|()| Message::Installed(key.clone()));
-                    flatpak_settled(key, installed)
+                    ),
+                    Ok(_) => {
+                        let installed = flatpak::install(&remote, &reference, &progress, flatpaks)
+                            .map(|()| Message::Installed(key.clone()));
+                        flatpak_settled(key, installed)
+                    }
                 }
             }
             Job::FlatpakRemove { key, reference } => {

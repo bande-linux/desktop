@@ -305,11 +305,20 @@ impl SettingsView {
         view
     }
 
+    fn read<T>(
+        &self,
+        what: &str,
+        read: impl FnOnce(&Store) -> crate::error::Result<T>,
+    ) -> Option<T> {
+        let store = self.store.as_ref()?;
+        read(store)
+            .inspect_err(|error| tracing::warn!("cannot read {what}: {error}"))
+            .ok()
+    }
+
     fn load_accounts(&mut self) -> bool {
         let accounts = self
-            .store
-            .as_ref()
-            .and_then(|store| store.accounts().ok())
+            .read("the accounts", Store::accounts)
             .unwrap_or_default();
         if accounts == self.accounts {
             return false;
@@ -451,9 +460,7 @@ impl SettingsView {
 
     fn remote_senders(&self) -> Option<FormLine> {
         let count = self
-            .store
-            .as_ref()
-            .and_then(|store| store.remote_senders().ok())
+            .read("the remote content senders", Store::remote_senders)
             .filter(|count| *count > 0)?;
         Some(FormLine::Row(
             trn!(
@@ -500,14 +507,13 @@ impl SettingsView {
             .collect::<Vec<_>>();
         let actions = self.rule_actions();
         let mut lines = vec![heading(text!("Rules"))];
-        let rules = self
-            .store
-            .as_ref()
-            .and_then(|store| store.rules().ok())
-            .unwrap_or_default();
-        if rules.is_empty() {
-            lines.push(note(text!("No rules yet.")));
+        let rules = self.read("the rules", Store::rules);
+        match &rules {
+            None => lines.push(note(text!("Mail cannot read its rules."))),
+            Some(rules) if rules.is_empty() => lines.push(note(text!("No rules yet."))),
+            Some(_) => {}
         }
+        let rules = rules.unwrap_or_default();
         for rule in rules {
             let action = actions
                 .iter()
@@ -638,9 +644,7 @@ impl SettingsView {
     fn edit_rule(&mut self, id: i64) {
         let actions = self.rule_actions();
         let Some(rule) = self
-            .store
-            .as_ref()
-            .and_then(|store| store.rules().ok())
+            .read("the rules", Store::rules)
             .and_then(|rules| rules.into_iter().find(|rule| rule.id == id))
         else {
             return;

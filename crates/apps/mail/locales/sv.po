@@ -330,6 +330,9 @@ msgstr "Markera som läst"
 msgid "Move to {mailbox} ({account})"
 msgstr "Flytta till {mailbox} ({account})"
 
+msgid "Mail cannot read its rules."
+msgstr "E-post kan inte läsa sina regler."
+
 msgid "No rules yet."
 msgstr "Inga regler ännu."
 

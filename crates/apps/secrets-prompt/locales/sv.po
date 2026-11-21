@@ -10,33 +10,33 @@ msgstr ""
 msgid "An app"
 msgstr "En app"
 
-msgid "“{app}” wants to use the “{keychain}” keychain."
-msgstr "”{app}” vill använda nyckelringen ”{keychain}”."
+msgid "“{app}” wants to use the “{keyring}” keyring."
+msgstr "”{app}” vill använda nyckelringen ”{keyring}”."
 
-msgid "Enter the keychain password."
+msgid "Enter the keyring password."
 msgstr "Ange nyckelringens lösenord."
 
-msgid "“{app}” wants to use your confidential information stored in “{item}” in your keychain."
-msgid_plural "“{app}” wants to use {count} passwords stored in your keychain."
+msgid "“{app}” wants to use your confidential information stored in “{item}” in your keyring."
+msgid_plural "“{app}” wants to use {count} passwords stored in your keyring."
 msgstr[0] "”{app}” vill använda din känsliga information som är lagrad i ”{item}” i din nyckelring."
 msgstr[1] "”{app}” vill använda {count} lösenord som är lagrade i din nyckelring."
 
-msgid "To allow this, enter the “{keychain}” keychain password."
-msgstr "För att tillåta det anger du lösenordet för nyckelringen ”{keychain}”."
+msgid "To allow this, enter the “{keyring}” keyring password."
+msgstr "För att tillåta det anger du lösenordet för nyckelringen ”{keyring}”."
 
-msgid "“{app}” wants to create a new keychain, “{keychain}”."
-msgstr "”{app}” vill skapa en ny nyckelring, ”{keychain}”."
+msgid "“{app}” wants to create a new keyring, “{keyring}”."
+msgstr "”{app}” vill skapa en ny nyckelring, ”{keyring}”."
 
-msgid "Choose a password for the new keychain."
+msgid "Choose a password for the new keyring."
 msgstr "Välj ett lösenord för den nya nyckelringen."
 
 msgid "Enter the password again to verify it."
 msgstr "Ange lösenordet igen för att verifiera det."
 
-msgid "Your login keychain was not unlocked with your login password."
+msgid "Your login keyring was not unlocked with your login password."
 msgstr "Din inloggningsnyckelring låstes inte upp med ditt inloggningslösenord."
 
-msgid "Enter the keychain’s old password to update it to your login password, or create a new keychain. The old keychain is kept."
+msgid "Enter the keyring’s old password to update it to your login password, or create a new keyring. The old keyring is kept."
 msgstr "Ange nyckelringens gamla lösenord för att uppdatera det till ditt inloggningslösenord, eller skapa en ny nyckelring. Den gamla nyckelringen sparas."
 
 msgid "“{app}” wants to show your saved passwords."
@@ -75,7 +75,7 @@ msgstr "Skapa"
 msgid "Join"
 msgstr "Anslut"
 
-msgid "Create New Keychain"
+msgid "Create New Keyring"
 msgstr "Skapa ny nyckelring"
 
 msgid "Not Now"

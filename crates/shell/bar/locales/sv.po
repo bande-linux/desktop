@@ -55,8 +55,8 @@ msgstr "App"
 msgid "Force Quit"
 msgstr "Tvinga avslut"
 
-msgid "Activity Monitor"
-msgstr "Aktivitetskontroll"
+msgid "System Monitor"
+msgstr "Systemövervakare"
 
 msgid "Close"
 msgstr "Stäng"

@@ -145,7 +145,7 @@ impl Secret {
             Ok(Some(key)) => key,
             Ok(None) => return CANCELLED,
             Err(error) => {
-                tracing::warn!("cannot get the keychain key for {app_id}: {error}");
+                tracing::warn!("cannot get the keyring key for {app_id}: {error}");
                 return OTHER;
             }
         };
@@ -153,7 +153,7 @@ impl Secret {
         match file.write_all(&key) {
             Ok(()) => SUCCESS,
             Err(error) => {
-                tracing::warn!("cannot hand {app_id} its keychain key: {error}");
+                tracing::warn!("cannot hand {app_id} its keyring key: {error}");
                 OTHER
             }
         }

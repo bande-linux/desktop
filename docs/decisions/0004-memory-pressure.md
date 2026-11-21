@@ -34,10 +34,10 @@ compression-algorithm = zstd
 
 This is Fedora's rule (Debian's default is `min(ram / 2, 4096)` with the kernel's lz4). zram is
 created with priority 100, so an existing swap partition stays as overflow. Debian's kernel has
-`CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends, and the
-VM compresses before it writes. This is the macOS compressor model.
+`CONFIG_ZRAM_BACKEND_ZSTD=y`. With zram, oomd has time to act, as its manual recommends,, and the
+VM compresses before it writes.
 
-zram stacked over a disk swap partition is a known bad pairing: Fedora Asahi saw premature OOM
+zram stacked over a disk swap partition is a known bad pairing: Fedora saw premature OOM
 kills (Firefox) with it and moved swapfile systems to zswap. We add no disk swap. An admin who
 does should prefer zswap (`zswap.enabled=1`) and turn zram off with an empty
 `/etc/systemd/zram-generator.conf` and an empty `/etc/systemd/zram-generator.conf.d/50-bande.conf`.
@@ -92,7 +92,7 @@ where `swappiness=180` is wrong.
 
 The shell (one process, always running, fonts already loaded) opens a PSI trigger on
 `/proc/pressure/memory`: `full 100000 2000000`, a full stall of at least 5 % in a 2 s window.
-That is Activity Monitor's "Critical" level (full avg10 ≥ 5 %), so the window and the graph
+That is System Monitor's "Critical" level (full avg10 ≥ 5 %), so the window and the graph
 agree. It is the system-wide file, because thrashing hurts the whole machine whoever causes it.
 `/proc/pressure/*` is mode 0666 on Debian 13 (Linux 6.12), and a 2 s window is allowed for
 unprivileged users. The fd sits in the shell's `poll()` set. Idle cost is zero: no timer, no
@@ -105,15 +105,15 @@ until memory has been calm for 60 s, so it never nags during one bad build.
 The window (in the shell process, not a new one, because starting a process when memory is
 short is exactly what must be avoided) is a toplevel kept on top:
 
-- Activity Monitor's icon as the alert disc, the heading "Your computer is running low on
+- System Monitor's icon as the alert disc, the heading "Your computer is running low on
   memory", and a line telling the user to quit apps they are not using.
 - The six heaviest apps, read from each app scope's `memory.current + memory.swap.current` and
   grouped by app (two windows of one app add up), with icon, name and size. The list refreshes
   every 2 s while the window is open, and only then.
 - **Force Quit** asks first ("Force quit Terminal? Any unsaved changes in it are lost.") and
   then calls systemd's `KillUnit(scope, "all", SIGKILL)`, which kills the app's whole cgroup.
-- **Activity Monitor** opens it on the Memory tab (`bande-monitor --memory`), where the
-  pressure graph is; the button is hidden when Activity Monitor is not installed.
+- **System Monitor** opens it on the Memory tab (`bande-monitor --memory`), where the
+  pressure graph is; the button is hidden when System Monitor is not installed.
 - **Close** (Escape) dismisses it.
 
 ### 4. The notification
@@ -122,7 +122,7 @@ short is exactly what must be avoided) is a toplevel kept on top:
 only sends unit signals while someone is subscribed) and watches `PropertiesChanged` on
 `/org/freedesktop/systemd1/unit/*`. Since systemd 248 both a kernel OOM kill and a systemd-oomd
 kill set a scope's or service's `Result` to `oom-kill`. The unit name is decoded from the bus
-path, the app from the unit name (the same decoder Activity Monitor uses, now shared), and the
+path, the app from the unit name (the same decoder System Monitor uses, now shared), and the
 notification says "Terminal was closed because memory ran low". Clicking it opens the app again,
 as the crash notice does. Units that are not apps (a build in `run-*.scope`, a service) get "A
 background task was stopped because memory ran low", naming the unit.
@@ -139,34 +139,20 @@ background task was stopped because memory ran low", naming the unit.
   Revisit if oomd turns out too slow on low-RAM machines.
 - **uresourced** (protection moved to the active user as seats change). It is not in Debian,
   and with one person at the screen the static values above do the same.
-- **Pausing apps (SIGSTOP) like macOS.** Wayland clients that stop answering pings are shown as
+- **Pausing apps (SIGSTOP).** Wayland clients that stop answering pings are shown as
   hung, and a stopped app holds its memory. The user chooses in the window instead.
 
 ## Sources
 
-1. Apple, Activity Monitor User Guide, "View memory usage in Activity Monitor on Mac",
-   https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/mac
-2. Apple Developer, "Responding to low-memory warnings",
-   https://developer.apple.com/documentation/xcode/responding-to-low-memory-warnings
-3. XNU, `doc/vm/memorystatus_notify.md` (pressure levels and dispatch flags).
-4. Apple Community threads on "Your system has run out of application memory", e.g.
-   https://discussions.apple.com/thread/7520039
-5. Microsoft Learn, "Introduction to the page file",
-   https://learn.microsoft.com/windows/client-management/introduction-page-file
-6. Microsoft Learn, `CreateMemoryResourceNotification`,
-   https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-creatememoryresourcenotification
-7. Microsoft, Resource Exhaustion Detector and Resolver events (Windows Server 2008 R2 docs),
-   https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-r2-and-2008/cc774657(v=ws.10)
-8. Fedora, "Changes/EnableSystemdOomd", https://fedoraproject.org/wiki/Changes/EnableSystemdOomd
-9. GLib, `gio/gmemorymonitorpsi.c`,
+1. Fedora, "Changes/EnableSystemdOomd", https://fedoraproject.org/wiki/Changes/EnableSystemdOomd
+2. GLib, `gio/gmemorymonitorpsi.c`,
    https://gitlab.gnome.org/GNOME/glib/-/blob/main/gio/gmemorymonitorpsi.c
-10. KDE, plasma-workspace merge request 4204 (oom-notifier),
-    https://invent.kde.org/plasma/plasma-workspace/-/merge_requests/4204
-11. Launchpad bug 1972159, "systemd-oomd frequently kills firefox and visual studio code",
-    and https://www.phoronix.com/news/Ubuntu-Drops-Swap-Kill
-12. Android, "Low memory killer daemon", https://source.android.com/docs/core/perf/lmkd
-13. Linux kernel, "PSI - Pressure Stall Information", https://docs.kernel.org/accounting/psi.html
-14. Linux kernel, "Multi-Gen LRU", https://docs.kernel.org/admin-guide/mm/multigen_lru.html
-15. systemd 257 manuals: `systemd.resource-control(5)` (ManagedOOM*), `systemd-oomd.service(8)`,
-    `oomd.conf(5)`; systemd v257 `src/core/cgroup.c` (`unit_check_oomd_kill`) and
-    `src/core/scope.c` (`SCOPE_FAILURE_OOM_KILL`); `zram-generator.conf(5)`.
+3. KDE, plasma-workspace merge request 4204 (oom-notifier),
+   https://invent.kde.org/plasma/plasma-workspace/-/merge_requests/4204
+4. Ubuntu bug 1972159 (Launchpad), "systemd-oomd frequently kills firefox and visual studio code",
+   and https://www.phoronix.com/news/Ubuntu-Drops-Swap-Kill
+5. Linux kernel, "PSI - Pressure Stall Information", https://docs.kernel.org/accounting/psi.html
+6. Linux kernel, "Multi-Gen LRU", https://docs.kernel.org/admin-guide/mm/multigen_lru.html
+7. systemd 257 manuals: `systemd.resource-control(5)` (ManagedOOM*), `systemd-oomd.service(8)`,
+   `oomd.conf(5)`; systemd v257 `src/core/cgroup.c` (`unit_check_oomd_kill`) and
+   `src/core/scope.c` (`SCOPE_FAILURE_OOM_KILL`); `zram-generator.conf(5)`.

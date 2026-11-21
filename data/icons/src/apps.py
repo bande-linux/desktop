@@ -71,7 +71,7 @@ def installer():
     return tile(top, bottom, body)
 
 
-def archive_utility():
+def archives():
     top, bottom = hue_field(250, 0.60, 0.07)
     body = rect(11, 15, 26, 22, 3, PAPER) + rect(9.5, 11, 29, 6.5, 2, PAPER)
     body += rect(9.5, 16.2, 29, 1.3, 0, bottom, 'opacity="0.35"')
@@ -99,7 +99,7 @@ def velox():
     return tile(top, bottom, body)
 
 
-def disk_utility():
+def disks():
     top, bottom = hue_field(80, 0.40, 0.012)
     tube = tone(80, 0.88, 0.006)
     body = (rect(8, 25, 32, 13, 3, PAPER)
@@ -248,18 +248,18 @@ ICONS = {
     'org.bande.Files': files,
     'org.bande.Terminal': terminal,
     'org.bande.Settings': settings,
-    'org.bande.ActivityMonitor': monitor,
+    'org.bande.SystemMonitor': monitor,
     'org.bande.Installer': installer,
-    'org.bande.ArchiveUtility': archive_utility,
+    'org.bande.Archives': archives,
     'org.bande.Velox': velox,
-    'org.bande.DiskUtility': disk_utility,
+    'org.bande.Disks': disks,
     'org.bande.Calculator': calculator,
-    'org.bande.Preview': image_viewer,
+    'org.bande.Viewer': image_viewer,
     'org.bande.Player': video_player,
     'org.bande.Launcher': launcher,
     'org.bande.About': about,
     'org.bande.Screenshot': screenshot,
-    'org.bande.TextEdit': text_editor,
+    'org.bande.TextEditor': text_editor,
     'org.gnome.TextEditor': text_editor,
     'org.gnome.Loupe': image_viewer,
     'org.gnome.Papers': document_viewer,

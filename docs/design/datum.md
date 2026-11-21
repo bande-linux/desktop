@@ -7,17 +7,17 @@ tables below.
 > **Datum**: a fixed reference point that everything else is measured from.
 > **Quiet surfaces. One signal. Exact edges.**
 
-Bande should feel like a well-made instrument: a Braun radio or a Teenage Engineering synth rather than a pane of glass. Surfaces are solid, warm and calm. Exactly one colour, the *signal*, marks what is selected, focused or live. Edges, radii and spacing follow a few strict rules that anyone can check with a ruler. The smoothness stays macOS-level. The look is our own.
+Bande should feel like a well-made instrument, like a good radio or synthesizer, rather than a pane of glass. Surfaces are solid, warm and calm. Exactly one colour, the *signal*, marks what is selected, focused or live. Edges, radii and spacing follow a few strict rules that anyone can check with a ruler. Motion is smooth. The look is our own.
 
 ---
 
-## 3. Principles (and how they differ from macOS)
+## 3. Principles
 
 1. **Material is a choice, legibility is not.** Depth comes from *tone* (frame vs sheet), a lit edge and one shadow. Content always sits on an opaque sheet. What the frame and the bar are made of is the user's **style** (§6), independent of light and dark, and every style keeps the same text contrast.
 2. **One signal.** Exactly one chromatic colour carries meaning at a time: the accent marks *selected, focused, active, live*. Everything else is warm greys. Semantic red, amber and green appear only for status. App icons are the only place several hues meet.
-3. **Frame and sheet.** Every window is a *frame* (the chassis: title bar, toolbar, sidebar) holding an inset *sheet* (the content), whose radius is concentric with the window. You always see where the controls end and your work begins. macOS draws a flat white window with a translucent sidebar instead.
+3. **Frame and sheet.** Every window is a *frame* (the chassis: title bar, toolbar, sidebar) holding an inset *sheet* (the content), whose radius is concentric with the window. You always see where the controls end and your work begins.
 4. **Exact edges.** Radii come from one concentric rule, spacing from a 4 pt scale, and every hairline lands on a device pixel. Nothing is "about 7".
-5. **Visible controls.** Glyphs on window controls are always visible. Control boundaries meet 3:1 in Increase Contrast and are never below 1.9:1 by default. A field always looks like a field. macOS hides glyphs until hover and uses very faint outlines.
+5. **Visible controls.** Glyphs on window controls are always visible. Control boundaries meet 3:1 in Increase Contrast and are never below 1.9:1 by default. A field always looks like a field.
 6. **Labelled like an instrument.** Section labels are small tracked caps, numbers are tabular, and the clock and sizes line up. A square motif (the mark, the running indicator, the cursor in icons) is our dot-matrix: used sparingly.
 7. **Precise motion.** The existing springs, critically damped, with movement along straight axes from a visible source. Bounce only when a gesture has momentum. No genie, no wobble.
 
@@ -35,7 +35,7 @@ Bande should feel like a well-made instrument: a Braun radio or a Teenage Engine
 | `radius.xl` | 16 | windows, alerts, notifications, launcher, bar panels (Quick Settings, calendar) |
 | `radius.full` | h/2 | **only** switch, slider track, badge, progress segments (1) |
 
-**Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). This is Apple's own "concentric shape" concept, but our values are smaller and our corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
+**Concentric rule:** `inner = max(outer − inset, 4)`. Examples: window 16 − sheet inset 6 = sheet 10; menu 10 − item inset 4 = item 6; segmented track 8 − 2 = pill 6. A child that stands alone (a button in an alert, 16 from the edge) falls back to its fixed token (6). Corners are plain circular arcs, **not continuous squircles**. Arcs read crisper and more technical and are cheaper to draw.
 
 The compositor's window corners are 16, on maximised and tiled windows too: a window is always rounded, with its shadow and lit edge, whichever style and however the Taskbar sits. Only true full screen, which has no window edges, is square.
 
@@ -73,7 +73,7 @@ Defined in **OKLCH** and generated, Linear-style, from a few inputs: a neutral h
 | `ink3` | `#83807A` | `#8D9198` | labels, placeholders, disabled, timestamps |
 | `deep` | `#201E1A` | `#161A21` (L .215) | dark text on light fills (Amber, Graphite, warning), the terminal's Midnight background |
 
-Light keeps the warm hue (paper and stone). Dark is a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .008 so the tint is felt without reading as blue. In dark, content is recessed and what is raised is lighter: sheet < chassis < overlay < well < hairline < edge. Whether light moves to the same slate family is an open owner decision (plan `NOTES/plans/dark-theme.md`, milestone 6).
+Light keeps the warm hue (paper and stone). Dark is a lifted "dusk slate": hue 262, between Breeze/GitHub (248–258) and GNOME (286) and next to the Ultramarine accent, with chroma .008 so the tint is felt without reading as blue. In dark, content is recessed and what is raised is lighter: sheet < chassis < overlay < well < hairline < edge.
 
 ### Measured contrast (WCAG 2 ratio)
 | Pair | Light | Dark |
@@ -95,7 +95,7 @@ Targets: body text Lc ≥ 90 in light; in dark Lc 75–90, because APCA gives Lc
 **Dimmed items:** an item that is normally hidden, shown on request (a dotfile in Files and the file chooser), steps down one ink: its name in `ink2`, its details in `ink3` (`ink2` on an unfocused selection, so they stay readable on `well`), and its icon or thumbnail at `Palette::DIMMED_ALPHA` (50 %). On an accent selection the text is `on_accent` as usual and the icon stays dimmed.
 
 ### The signal: accent strategy
-- **Default accent: Ultramarine.** Light `#4859DD` (oklch .53 .20 272), dark `#7E96FB` (oklch .70 .15 272). It is bluer-violet than Apple's azure `#007AFF` and sits with the existing blue-violet wallpapers. It is chosen because selection must read as neutral "this one", and a warm signal would read as a warning.
+- **Default accent: Ultramarine.** Light `#4859DD` (oklch .53 .20 272), dark `#7E96FB` (oklch .70 .15 272). It is a blue-violet that sits with the existing blue-violet wallpapers. It is chosen because selection must read as neutral "this one", and a warm signal would read as a warning.
 - **Dark selections are mid-tone fills with white text.** Each accent has a dark *fill* tone, solved to luminance ≈ 0.175 so white text reaches ≥ 4.5:1 and the fill stays ≥ 3:1 on chassis and sheet; the brighter tone is the dark *text* tone (links, focus rings, carets, chart lines, ANSI colours). This halves the brightest area on a dark screen. Amber and Graphite keep a light fill with `deep` text, since white cannot reach 4.5:1 on them.
 - **User accents** (8), all generated at matched lightness so each passes the same contrast tests:
 
@@ -220,9 +220,9 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 | Segmented | `well` track radius 8, raised chip radius 6 (`overlay` in light, `edge` in dark) with the small shadow; selected label 600 `ink` |
 | Pop-up | `well` fill, single down-chevron (not the ⌃⌄ pair) |
 | Stepper | one 96 pt `well` capsule: − value + (value in tnum) |
-| Slider | 4 pt track (`well`), accent fill, and a **fader knob**: a 7×20 rounded bar, white with an edge. It reads as an instrument fader, not an iOS ball. Optional tick marks 1.5×4 `ink3` |
+| Slider | 4 pt track (`well`), accent fill, and a **fader knob**: a 7×20 rounded bar, white with an edge. It reads as an instrument fader, not a ball. Optional tick marks 1.5×4 `ink3` |
 | Progress | **segmented**: 24 cells of 2 gap, radius 1, accent on `well`. Indeterminate = a 4-cell block gliding (the `standard` spring) |
-| Menus | `overlay`, radius 10, 4 inset, 28 rows, highlight = accent radius 6; shortcut column right-aligned in `ink3`, written as words in GNOME order ("Shift+Ctrl+N", "Alt+Super+8"; no ⌘, ⌃, ⌥ or ⇧ symbols); submenus open on the `quick` spring; a menu never leaves the screen: it flips, then slides, then shortens to scroll between 20 pt bands with a single `ink2` chevron (behaviour: `docs/architecture/behaviour.md`, Popup placement) |
+| Menus | `overlay`, radius 10, 4 inset, 28 rows, highlight = accent radius 6; shortcut column right-aligned in `ink3`, written as words in GNOME order ("Shift+Ctrl+N", "Alt+Super+8"; no modifier symbols); submenus open on the `quick` spring; a menu never leaves the screen: it flips, then slides, then shortens to scroll between 20 pt bands with a single `ink2` chevron (behaviour: `docs/architecture/behaviour.md`, Popup placement) |
 | Alerts | card radius 16: the body on `overlay` with a 36 pt app disc, a Manrope 17 heading and body in `ink2`; a **footer tray** on `chassis` holding the buttons (default right, cancel left of it, an alternative such as "Don't Quit" as a quiet button on the far left). App-modal alerts are centred over the window with a scrim; document-modal alerts drop from under the header |
 | Tooltip | `ink` fill with `chassis` text (inverted), radius 6, 12/500; no arrow |
 | Notifications | `overlay`, radius 16, app disc 18 + LABEL-style app name + time, title 13.5/600, body 13 `ink2`; actions appear as quiet buttons on hover |
@@ -265,7 +265,7 @@ A dry, short, *wooden-percussive* palette: soft-attack mallet and click tones un
 
 ## 13. The shell: the Taskbar
 
-The Taskbar is an edge-anchored bar, 64 pt at the default icon size , plus its margins when floating, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly, and fixes the parts of those mockups that still read as macOS (traffic lights, squircle icons, blue folders, a gear):
+The Taskbar is an edge-anchored bar, 64 pt at the default icon size, plus its margins when floating, on the left holding: the mark, the app menu block, apps, Trash, desktops, a status cluster and the clock. Datum fits it directly:
 - Bar surface = the same tone, material (§6), radius (`radius.xl`), lit edge and shadow as a window frame, so bar and windows read as one family. In every style it floats by default: 8 pt from the screen on all sides, and 8 pt from maximised and tiled windows, which is 2 × 8 pt added to the space it reserves. The 8 pt on the screen side counts as part of it for the pointer, so a throw to the screen edge still lands on it. Settings ▸ Taskbar turns floating off (`bar { floating #false }`): it then attaches to its screen edge, keeps 8 pt from the ends and rounds its inner corners, and reserves only its own thickness. "Tinted chassis" applies here too.
 - **Active app = a `focus` frame** around its icon: 4 pt outside it, a 1.5 pt `focus` line over a `focus` plate at 14 % (22 % hovered, 30 % pressed), radius concentric with the icon. It is the one `focus` shape on the bar and glides to the next active app on `quick` (a cross-fade under Reduce Motion). **Other running apps = a 3×3 `ink2` square** on the screen-edge side (the square motif; a dot would be macOS).
 - The app-menu block and the status cluster are `well` groups with radius 8 (concentric with 16 panels).

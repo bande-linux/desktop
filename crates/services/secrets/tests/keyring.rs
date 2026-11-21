@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use bande_secrets::pam;
 use bande_secrets::service::{Daemon, SERVICE_PATH, WireSecret, collection_path, item_path};
-use bande_secrets::store::{CREATOR, Keychain};
+use bande_secrets::store::{CREATOR, Store};
 use bande_test_bus::SessionBus;
 use oo7::{Key, Secret, crypto};
 use zbus::blocking::Connection;
@@ -129,7 +129,7 @@ fn times_shown(home: &Path) -> usize {
 fn another_apps_item(home: &Path) -> OwnedObjectPath {
     async_io::block_on(async {
         let daemon = Daemon::new(
-            Keychain::load(home.to_path_buf()).await,
+            Store::load(home.to_path_buf()).await,
             PathBuf::from("/nonexistent"),
         );
         assert!(daemon.login(Secret::text(PASSWORD)).await);
@@ -146,7 +146,7 @@ fn another_apps_item(home: &Path) -> OwnedObjectPath {
 
 fn serve(bus: &SessionBus, home: &Path, prompter: PathBuf) -> (Arc<Daemon>, zbus::Connection) {
     async_io::block_on(async {
-        let daemon = Daemon::new(Keychain::load(home.to_path_buf()).await, prompter);
+        let daemon = Daemon::new(Store::load(home.to_path_buf()).await, prompter);
         let connection = zbus::connection::Builder::address(bus.address())
             .unwrap()
             .build()
@@ -218,7 +218,7 @@ fn collection_locked(client: &Connection) -> bool {
 }
 
 #[test]
-fn another_apps_item_opens_only_with_the_keychain_password_and_until_settings_locks() {
+fn another_apps_item_opens_only_with_the_store_password_and_until_settings_locks() {
     let bus = SessionBus::start().unwrap();
     let home = tempfile::tempdir().unwrap();
     let item = another_apps_item(home.path());
@@ -245,7 +245,7 @@ fn another_apps_item_opens_only_with_the_keychain_password_and_until_settings_lo
     );
     assert!(
         !collection_locked(&client),
-        "the keychain itself stays unlocked"
+        "the keyring itself stays unlocked"
     );
 
     let (unlocked, locked) = search(&client, ("network", "home"));
@@ -394,10 +394,10 @@ fn only_root_can_pass_a_login_password_and_a_wrong_old_password_changes_nothing(
             !daemon
                 .change_login(Secret::text("a guess"), Secret::text("attacker"))
                 .await,
-            "an open keychain still needs its old password"
+            "an open keyring still needs its old password"
         );
         let restarted = Daemon::new(
-            Keychain::load(home.path().to_path_buf()).await,
+            Store::load(home.path().to_path_buf()).await,
             PathBuf::from("/nonexistent"),
         );
         assert!(!restarted.login(Secret::text("attacker")).await);

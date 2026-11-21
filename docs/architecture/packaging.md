@@ -43,12 +43,12 @@ profiles. Sizes are in [performance.md](performance.md).
   `metapackages`): the one package that installs a complete Bande system, the way `gnome-core`
   or `kde-plasma-desktop` do.
   It depends on the compositor, the core session services, the shell, the lock
-  screen, the keychain (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
+  screen, the keyring (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
   `libpam-systemd`, on PipeWire, and on `bande-greeter | x-display-manager`, so there is always
   a way to log in: the Bande login window under greetd, or the display manager the system
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
   start), `bande-apt-source`, the screenshot tool, Files, Settings, the tray, automount, file
-  chooser, polkit agent and the keychain's PAM module, all built here at the same version, and the few Debian packages in
+  chooser, polkit agent and the keyring's PAM module, all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack). It also recommends, unversioned, every Bande app, listed in
   `packaging/bande-desktop/default-apps`: an app built in
   [bande-linux/apps](https://github.com/bande-linux/apps) is added there when it gets its first
@@ -58,8 +58,8 @@ profiles. Sizes are in [performance.md](performance.md).
   at build time, so any default app can be removed or replaced. It installs
   `/usr/share/applications/bande-mimeapps.list`, read only in a Bande session, which opens
   folders in Files, `.deb` files in the Package Installer, plain text (with source code and
-  logs, its subtypes) in TextEdit when it is installed and archives (zip, tar, gzip, bzip2, xz,
-  zstd, 7-Zip) in Archive Utility, which also makes Files' Compress; Files expands an archive
+  logs, its subtypes) in Text Editor when it is installed and archives (zip, tar, gzip, bzip2, xz,
+  zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
   itself only when no app opens it; other types open in an installed app
   whose desktop entry declares them, and a person's own choice in
   `~/.config/mimeapps.list` still wins. A file no installed app opens gets the Open With sheet in
@@ -114,7 +114,7 @@ another package's recommends. `bande-desktop` itself keeps:
 - `apt-config-icons-hidpi`: the AppStream icons Software shows, at 2×;
 - `systemd-oomd`, `systemd-zram-generator`: run the memory policy it ships.
 
-It does not pull in `gnome-keyring` (the Bande keychain replaces it and conflicts with it, so the
+It does not pull in `gnome-keyring` (the Bande keyring replaces it and conflicts with it, so the
 bus name has one owner), `pipewire-alsa`, `needrestart` (Bande has
 `/usr/libexec/bande-desktop/restart-services`, below), `cups` or `avahi-daemon` (`bande-printd` prints to
 network printers without them; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for USB
@@ -159,3 +159,8 @@ Every program the desktop runs and every system file it reads by path is listed 
 
 No package depends on an X server, XWayland or an X session; the `install` jobs check that none
 comes along.
+
+Bande ships no firewall rules: with SSH not installed and LLMNR off, only mDNS listens by default,
+and a default-deny ruleset would only break what a person turns on (file sharing, a development
+server). Flatpak is the sandbox and the portal asks for access; other programs run with the user's
+full access, and Settings ▸ Privacy & Security says so.

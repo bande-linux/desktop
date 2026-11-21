@@ -35,15 +35,8 @@ pub(crate) fn edid_profile(edid: &Edid) -> Option<Profile> {
     Profile::from_primaries(primaries, point(edid.primaries.white), curve)
 }
 
-const DCP_SRGB_SURFACES: &str = "/sys/module/appledrm/parameters/srgb_surfaces";
-
-fn display_engine_converts() -> bool {
-    std::fs::read_to_string(DCP_SRGB_SURFACES).is_ok_and(|value| value.trim() == "Y")
-}
-
 fn profile(choice: Option<&str>, display: Option<&Profile>) -> Option<Profile> {
     match choice.unwrap_or(DISPLAY) {
-        DISPLAY if display_engine_converts() => None,
         DISPLAY => display.cloned(),
         SRGB | UNMANAGED => None,
         DISPLAY_P3 => Profile::display_p3(),

@@ -476,7 +476,7 @@ impl FilesView {
         .on_edit(move |text: &str| edit(Signal::Server(ServerField::Password(text.to_owned()))));
         let send = sender(&self.signals);
         let remember = Checkbox::new(
-            &tr!("Remember this password in the keychain"),
+            &tr!("Remember this password in the keyring"),
             CheckState::On,
             move |on| send(Signal::Server(ServerField::Remember(on))),
         );

@@ -7,7 +7,7 @@ use super::{Context, Event, Key, Modifiers, Size, Widget, WidgetId};
 const MODIFIER_NAMES: [(&[&str], Text); 4] = [
     (&["Shift"], text!("Shift")),
     (&["Ctrl", "Control"], text!("Ctrl")),
-    (&["Alt", "Option"], text!("Alt")),
+    (&["Alt"], text!("Alt")),
     (&["Super", "Logo", "Meta"], text!("Super")),
 ];
 

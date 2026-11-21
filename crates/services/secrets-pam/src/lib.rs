@@ -154,13 +154,11 @@ fn send_all(stream: &UnixStream, mut bytes: &[u8]) -> Option<()> {
 fn send(uid: libc::uid_t, message: &[u8]) -> Result<(), Failure> {
     let socket = format!("/run/user/{uid}/bande-secrets/pam");
     let mut stream = UnixStream::connect(socket)
-        .map_err(|_| warning(c"cannot reach the keychain login socket"))?;
+        .map_err(|_| warning(c"cannot reach the keyring login socket"))?;
     if !peer_is(&stream, uid) {
-        return Err(warning(
-            c"the keychain login socket belongs to another user",
-        ));
+        return Err(warning(c"the keyring login socket belongs to another user"));
     }
-    let unsent = || warning(c"cannot send to the keychain login socket");
+    let unsent = || warning(c"cannot send to the keyring login socket");
     stream
         .set_write_timeout(Some(SEND_TIMEOUT))
         .map_err(|_| unsent())?;
@@ -172,13 +170,13 @@ fn send(uid: libc::uid_t, message: &[u8]) -> Result<(), Failure> {
     let mut answer = [1u8];
     stream
         .read_exact(&mut answer)
-        .map_err(|_| warning(c"the keychain did not answer, or refused this process"))?;
+        .map_err(|_| warning(c"the keyring did not answer, or refused this process"))?;
     if answer[0] == 0 {
         Ok(())
     } else {
         Err(Failure {
             priority: LOG_INFO,
-            text: c"the password does not open the login keychain",
+            text: c"the password does not open the login keyring",
         })
     }
 }

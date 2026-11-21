@@ -1,6 +1,6 @@
 # Swedish glossary
 
-Natural Swedish as on a Swedish Mac or phone. Use "du" and short sentences. Sentence case in menus and titles, never English title case. Buttons are imperative ("Spara"), status lines say what happened ("Lösenordet har ändrats."). No "vänligen". Quotes ”så här”, ellipsis …, a space before units, 24-hour clock.
+Natural, everyday Swedish. Use "du" and short sentences. Sentence case in menus and titles, never English title case. Buttons are imperative ("Spara"), status lines say what happened ("Lösenordet har ändrats."). No "vänligen". Quotes ”så här”, ellipsis …, a space before units, 24-hour clock.
 
 Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable where needed; rephrase rather than leave a broken sentence ("Filen ”{ $name }” finns redan").
 
@@ -13,8 +13,8 @@ Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable
 | Window | Fönster | | Tab | Flik |
 | Browser | Webbläsare | | Mail | E-post |
 | Calendar | Kalender | | Calculator | Kalkylator |
-| Clock | Klocka | | Preview | Förhandsvisning |
-| Disks | Skivor | | Activity Monitor | Aktivitetskontroll |
+| Clock | Klocka | | Viewer | Visare |
+| Disks | Skivor | | System Monitor | Systemövervakare |
 | Software | Programvara | | Software Update | Programuppdatering |
 | Archive | Arkiv | | Text Editor | Textredigerare |
 | Terminal | Terminal | | Search | Sök |
@@ -25,7 +25,7 @@ Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable
 | Delete | Radera | | Remove | Ta bort |
 | Save / Save As | Spara / Spara som | | Open | Öppna |
 | Log in / out | Logga in / ut | | Lock screen | Låsskärm |
-| Password | Lösenord | | Keychain | Nyckelring |
+| Password | Lösenord | | Keyring | Nyckelring |
 | User / Account | Användare / Konto | | Administrator | Administratör |
 | Notification | Notis | | Do Not Disturb | Stör ej |
 | Sleep / Restart / Shut Down | Vila / Starta om / Stäng av | | Battery | Batteri |

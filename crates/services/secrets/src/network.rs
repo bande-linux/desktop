@@ -359,14 +359,14 @@ pub async fn serve(daemon: Arc<Daemon>, system: Connection) -> zbus::Result<()> 
         .receive_name_owner_changed_with_args(&[(0, BUS_NAME)])
         .await?;
     if let Err(error) = register(&system).await {
-        tracing::info!("NetworkManager does not take the keychain's secret agent yet: {error}");
+        tracing::info!("NetworkManager does not take the keyring's secret agent yet: {error}");
     }
     while let Some(change) = appearances.next().await {
         let appeared = change
             .args()
             .is_ok_and(|arguments| arguments.new_owner().is_some());
         if appeared && let Err(error) = register(&system).await {
-            tracing::warn!("cannot register the keychain's secret agent: {error}");
+            tracing::warn!("cannot register the keyring's secret agent: {error}");
         }
     }
     Ok(())

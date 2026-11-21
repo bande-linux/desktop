@@ -241,7 +241,7 @@ impl PaneId {
             Self::Power => tr!("Battery, power mode and what the lid does"),
             Self::LockScreen => tr!("Screen saver, display off, sleep and the password"),
             Self::Users => tr!("Your account and the others on this computer"),
-            Self::Passwords => tr!("The passwords apps and networks keep in your keychain"),
+            Self::Passwords => tr!("The passwords apps and networks keep in your keyring"),
             Self::PrivacySecurity => {
                 tr!("Which apps may use the camera, take screenshots or share the screen")
             }
@@ -275,7 +275,7 @@ impl PaneId {
                 tr!("bar, dock, menu bar, launcher, taskbar, panel, favourites, favorites")
             }
             Self::Notifications => tr!("alerts, banners"),
-            Self::Search => tr!("spotlight, launcher, super, results, recents, privacy"),
+            Self::Search => tr!("launcher, super, results, recents, privacy"),
             Self::Accessibility => tr!("a11y, disability, assistive, vision, hearing, motor"),
             Self::Displays => tr!("monitor, screen, resolution, brightness, night light"),
             Self::NightLight => tr!(
@@ -298,7 +298,7 @@ impl PaneId {
             ),
             Self::Users => tr!("account, user, password, login, administrator, admin"),
             Self::Passwords => tr!(
-                "keychain, keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
+                "keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
             ),
             Self::PrivacySecurity => {
                 tr!("permissions, screen recording, camera access, privacy, security, clipboard")
@@ -328,7 +328,7 @@ impl PaneId {
                 tr!("bug, report, problem, freeze, crash, feedback, send, diagnose")
             }
             Self::Backup => {
-                tr!("time machine, restore, versions, external disk, history, snapshot, recover")
+                tr!("restore, versions, external disk, history, snapshot, recover")
             }
         }
     }
@@ -1872,7 +1872,7 @@ fn system_panes() -> Vec<Pane> {
             PaneId::Passwords,
             vec![section(
                 None,
-                vec![list(SettingId::SavedPasswords, tr!("Saved passwords"), tr!("show password, copy password, change password, delete password, keychain"),
+                vec![list(SettingId::SavedPasswords, tr!("Saved passwords"), tr!("show password, copy password, change password, delete password, keyring"),
                     List::Passwords,
                 )],
             )],

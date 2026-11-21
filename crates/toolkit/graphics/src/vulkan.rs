@@ -20,8 +20,7 @@ const LOADER_OVERRIDES: [&str; 5] = [
     "VK_LOADER_DRIVERS_DISABLE",
 ];
 const ENTRY_POINT: &[u8] = b"vk_icdGetInstanceProcAddr\0";
-const HARDWARE_DRIVERS: [(&str, &[&str]); 9] = [
-    ("asahi", &["asahi"]),
+const HARDWARE_DRIVERS: [(&str, &[&str]); 8] = [
     ("radeon", &["amdgpu", "radeon"]),
     ("intel", &["i915", "xe"]),
     ("intel_hasvk", &["i915"]),

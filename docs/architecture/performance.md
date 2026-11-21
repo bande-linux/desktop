@@ -78,7 +78,7 @@ eventfds. These are the only timers left; each runs only while its condition hol
 | Countdowns (log out, screenshot timer), Now Playing | at each second boundary while shown | the display unit |
 | Notification Center | when an age label next changes, while open | the display unit (minutes, hours, midnight) |
 | Banners, alarms, calendar alerts | at their deadline | real deadlines |
-| Activity Monitor, the low memory window | every 2 s while a window is on screen | `/proc` has no change events |
+| System Monitor, the low memory window | every 2 s while a window is on screen | `/proc` has no change events |
 | Settings' Sound pane | 20 times a second while on screen | the input level meter |
 | Disk space (automount) | every 10 min | free space has no kernel event |
 | Server health (automount) | every 8 s while a server is connected | a server that stops answering sends nothing |

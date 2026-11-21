@@ -184,7 +184,7 @@ msgstr "Skärmsläckare, skärm av, vila och lösenordet"
 msgid "Your account and the others on this computer"
 msgstr "Ditt konto och de andra på den här datorn"
 
-msgid "The passwords apps and networks keep in your keychain"
+msgid "The passwords apps and networks keep in your keyring"
 msgstr "Lösenorden som appar och nätverk förvarar i din nyckelring"
 
 msgid "Which apps may use the camera, take screenshots or share the screen"
@@ -247,8 +247,8 @@ msgstr "fält, dock, menyrad, startare, aktivitetsfält, panel, favoriter"
 msgid "alerts, banners"
 msgstr "aviseringar, banners"
 
-msgid "spotlight, launcher, super, results, recents, privacy"
-msgstr "spotlight, startare, super, resultat, senaste, integritet"
+msgid "launcher, super, results, recents, privacy"
+msgstr "startare, super, resultat, senaste, integritet"
 
 msgid "a11y, disability, assistive, vision, hearing, motor"
 msgstr "a11y, funktionsnedsättning, hjälpmedel, syn, hörsel, motorik"
@@ -289,7 +289,7 @@ msgstr "automatisk låsning, lås vid inaktivitet, säkerhet, inaktiv, skärmsl�
 msgid "account, user, password, login, administrator, admin"
 msgstr "konto, användare, lösenord, inloggning, administratör, admin"
 
-msgid "keychain, keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
+msgid "keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
 msgstr "nyckelring, nyckelknippa, sparade lösenord, hemligheter, wi-fi-lösenord, webbplatslösenord, konton"
 
 msgid "permissions, screen recording, camera access, privacy, security, clipboard"
@@ -331,8 +331,8 @@ msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, kernel pan
 msgid "bug, report, problem, freeze, crash, feedback, send, diagnose"
 msgstr "fel, rapport, problem, frysning, krasch, återkoppling, skicka, diagnos"
 
-msgid "time machine, restore, versions, external disk, history, snapshot, recover"
-msgstr "time machine, återställ, versioner, extern skiva, historik, ögonblicksbild, återskapa"
+msgid "restore, versions, external disk, history, snapshot, recover"
+msgstr "återställ, versioner, extern skiva, historik, ögonblicksbild, återskapa"
 
 msgid "When available"
 msgstr "När de finns"
@@ -1176,7 +1176,7 @@ msgstr "ändra lösenord, lösenord, administratör, standard, inloggningsnamn, 
 msgid "Saved passwords"
 msgstr "Sparade lösenord"
 
-msgid "show password, copy password, change password, delete password, keychain"
+msgid "show password, copy password, change password, delete password, keyring"
 msgstr "visa lösenord, kopiera lösenord, ändra lösenord, radera lösenord, nyckelring"
 
 msgid "disk, encryption, encrypted, filevault, luks, remote login, ssh, security"

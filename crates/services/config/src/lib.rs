@@ -1642,7 +1642,7 @@ impl Parser<'_> {
                 self.at_entry(
                     entry,
                     format!(
-                        "`{}` needs the display's name such as \"Dell Inc. DELL U2720Q 7ZD5K53\"",
+                        "`{}` needs the display's name such as \"Example EX27 0001\"",
                         node.name().value()
                     ),
                 )

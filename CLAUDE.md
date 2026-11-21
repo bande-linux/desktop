@@ -12,7 +12,7 @@
 7. **Never select the "easiest" solution**: Always think about the solution you plan to implement, is that the best solution for the user? Never select a solution because it is the easiest or fastest, always prioritize the solution that is better for the user, higher quality and which follows best practice.
 
 ## Apps
-- Every app (`crates/apps/*` except the file chooser portal and the keychain prompt, and every app in `bande-linux/apps`) is a `bande-app` app: `bande_app::run` in `src/main.rs`, windows through `Cx::open`. Windows, menus, standard keys, appearance, Settings… and single instance come from `bande-app`, never from the app; `ci/check-apps.sh` checks it. See `docs/architecture/apps.md`.
+- Every app (`crates/apps/*` except the file chooser portal and the keyring prompt, and every app in `bande-linux/apps`) is a `bande-app` app: `bande_app::run` in `src/main.rs`, windows through `Cx::open`. Windows, menus, standard keys, appearance, Settings… and single instance come from `bande-app`, never from the app; `ci/check-apps.sh` checks it. See `docs/architecture/apps.md`.
 
 ## Factory Verification
 - **No panics**: No `.unwrap()` or `.expect()` in production code. Use proper error handling.

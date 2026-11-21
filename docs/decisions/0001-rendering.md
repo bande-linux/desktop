@@ -3,8 +3,7 @@
 Status: **decided** (October 2026). Scope: how the compositor composes frames, how the
 toolkit and apps draw, and which performance numbers every change is held to.
 
-The Apple hardware target was dropped on 2026-11-21; the decisions stand for any GPU with a Mesa
-Vulkan driver.
+The decisions hold for any GPU with a Mesa Vulkan driver.
 
 ## Context
 
@@ -85,7 +84,7 @@ Targets on hardware (a 120 Hz display, refresh interval 8.33 ms):
 These are measured by hand with the tools in [performance.md](../architecture/performance.md)
 (`bande-session-bench`, `bande-toolkit-bench`, `bande-idle`); CI does not gate on them. The frame
 scheduler reads time through an injected clock, so its latency rules hold on virtual time. True
-input-to-photon latency needs a camera on a real Mac.
+input-to-photon latency needs a camera on real hardware.
 
 ## Consequences
 

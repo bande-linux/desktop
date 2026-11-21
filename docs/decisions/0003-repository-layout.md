@@ -45,7 +45,7 @@ these crates at a pinned revision.
   `greeter` stay processes of their own.
 - **`apps/`**: one crate per app built here, each on `bande-app` (`libs/app`), and the dialog
   processes of services: `file-chooser` is the portal's dialog and `secrets-prompt` the
-  keychain's (`bande-secrets-prompt`, installed by `bande-secrets`).
+  keyring's (`bande-secrets-prompt`, installed by `bande-secrets`).
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
   `mimeapps.list`, user directories and `Apps`, the one answer to "which apps open this path";
@@ -54,7 +54,7 @@ these crates at a pinned revision.
   holds without any toolkit type (image pyramids and animations, PDF pages from a confined
   `hayro` child process, text with cheap syntax colours, Markdown, RTF and HTML as blocks,
   fonts, folder and archive totals), shared by Files, the launcher, Glance and the apps
-  repository's Preview; `glance` is the one Glance panel that Files and the desktop
+  repository's Viewer; `glance` is the one Glance panel that Files and the desktop
   show (it draws with the toolkit, an exception to "without UI").
 - **`testing/`**: `test-bus` (private D-Bus buses and fakes of system services),
   `test-wayland`, the benchmarks, the toolkit sample and `review` (records a scenario on a live
@@ -86,6 +86,6 @@ Rules:
 ## Consequences
 
 - The `shell/`, `apps/` and `services/` split is by process role, not by "system" versus "user"
-  software. Settings and Activity Monitor are ordinary apps with no special access.
+  software. Settings and System Monitor are ordinary apps with no special access.
 - Shared assets live in `data/` at the root; everything else a package installs stays with its
   crate.

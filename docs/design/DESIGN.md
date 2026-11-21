@@ -2,11 +2,9 @@
 
 Status: draft, awaiting the owner's edit.
 
-Bande is its own desktop. macOS is the bar for quality: how elegant, smooth and finished
-things feel. It is also the main reference for which basics a modern desktop needs. The
-structure, the feature set and the look are ours. Where a spec is silent, these principles
-decide; where they do not, look at how macOS handles it and ask whether the simpler answer is
-better.
+Bande is its own desktop, with its own structure, feature set and look. It aims to feel
+elegant, smooth and finished, and to cover every basic a modern desktop needs. Where a spec is
+silent, these principles decide; where they do not, take the simpler answer.
 
 ## 1. Simple yet powerful
 
@@ -76,18 +74,18 @@ better.
 - **Accessible by construction.** Every widget publishes its role, name and actions; a screen
   reader can operate everything the pointer can.
 
-## 6. Where Bande deliberately differs from macOS
+## 6. Deliberate choices
 
 - One bar, the Taskbar ([behaviour](../architecture/behaviour.md)), on the left edge by default
   or any edge the user picks, holds the launcher mark, the apps, status and the clock; there is
   no separate top menu bar, and each window's menu button holds its app's menus.
 - Window controls sit on the right as one neutral pill, close at the far right, where GTK, Qt
   and Firefox put theirs, so every window agrees.
-- Ctrl runs app shortcuts and Super the system, as on GNOME and KDE, not Command as on macOS.
+- Ctrl runs app shortcuts and Super the system, following the Linux desktop convention.
 - Pure Wayland; no X11 compatibility layer.
 - Configuration is a human-readable file (`config.kdl`); every Settings control writes to it.
-- Not planned, by design: Taskbar magnification, a separate Launchpad grid (the launcher's empty
-  query is the app grid), widgets or a Today view, Focus modes beyond Do Not Disturb, a hot
+- Not planned, by design: Taskbar magnification, a separate full-screen app grid (the launcher's
+  empty query is the app grid), widgets or a Today view, Focus modes beyond Do Not Disturb, a hot
   corner by default.
 
 ## How this document is used

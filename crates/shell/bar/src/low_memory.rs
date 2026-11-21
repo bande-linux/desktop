@@ -22,7 +22,7 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 
 pub const LOW_MEMORY_SIZE: (u32, u32) = (460, 410);
-pub const ACTIVITY_MONITOR: &str = "org.bande.ActivityMonitor";
+pub const SYSTEM_MONITOR: &str = "org.bande.SystemMonitor";
 const MONITOR_COMMAND: [&str; 2] = ["bande-monitor", "--memory"];
 const APPS_SHOWN: usize = 6;
 const REFRESH: Duration = Duration::from_secs(2);
@@ -44,7 +44,7 @@ enum Signal {
     Selected(Vec<String>),
     ForceQuit,
     Chosen(String),
-    ActivityMonitor,
+    SystemMonitor,
     Close,
 }
 
@@ -58,7 +58,7 @@ fn sender(signals: &Signals, signal: Signal) -> impl FnMut() + 'static {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Effect {
     ForceQuit,
-    ActivityMonitor,
+    SystemMonitor,
     Close,
 }
 
@@ -113,8 +113,8 @@ impl LowMemoryView {
         let table = layout.insert(table, Rect::default());
         let monitor = monitor.then(|| {
             Button::new(
-                &tr!("Activity Monitor"),
-                sender(&signals, Signal::ActivityMonitor),
+                &tr!("System Monitor"),
+                sender(&signals, Signal::SystemMonitor),
             )
             .quiet()
         });
@@ -362,7 +362,7 @@ impl LowMemoryView {
                             effects.push((Effect::ForceQuit, app));
                         }
                     }
-                    Signal::ActivityMonitor => effects.push((Effect::ActivityMonitor, None)),
+                    Signal::SystemMonitor => effects.push((Effect::SystemMonitor, None)),
                     Signal::Close => effects.push((Effect::Close, None)),
                 }
             }
@@ -404,14 +404,14 @@ impl LowMemory {
     ) -> Self {
         let pixels = |points: f32| (f64::from(points) * window.scale().max(2.0)).round() as u32;
         let disc_pixels = pixels(DISC);
-        let disc = find_icon(ACTIVITY_MONITOR, disc_pixels, &ICON_THEMES, &data_dirs())
+        let disc = find_icon(SYSTEM_MONITOR, disc_pixels, &ICON_THEMES, &data_dirs())
             .and_then(|path| Image::load(&path, disc_pixels));
         let entries = applications(
             &data_dirs(),
             Locale::from_env().as_ref(),
             &current_desktops(),
         );
-        let monitor = find_app(&entries, ACTIVITY_MONITOR).is_some();
+        let monitor = find_app(&entries, SYSTEM_MONITOR).is_some();
         let mut view = LowMemoryView::new(window.appearance().palette(), text, disc, monitor);
         view.ui().set_appearance(window.appearance());
         let mut low_memory = Self {
@@ -456,10 +456,10 @@ impl LowMemory {
                     }
                     self.refresh(Instant::now());
                 }
-                (Effect::ActivityMonitor, _) => {
+                (Effect::SystemMonitor, _) => {
                     let command = MONITOR_COMMAND.map(str::to_owned);
-                    if let Err(error) = spawn_detached(ACTIVITY_MONITOR, &command, None, None) {
-                        tracing::warn!("cannot open Activity Monitor: {error}");
+                    if let Err(error) = spawn_detached(SYSTEM_MONITOR, &command, None, None) {
+                        tracing::warn!("cannot open System Monitor: {error}");
                     }
                 }
                 (Effect::Close, _) => window.close(),

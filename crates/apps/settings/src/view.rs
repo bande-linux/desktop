@@ -35,7 +35,7 @@ use crate::locale::{DEFAULT_LOCALE, LocaleCommand, LocaleState, same_locale};
 use crate::login::{App, LoginCommand, LoginItems, app_matches, login_matches};
 use crate::night::clock_text;
 use crate::notifications::{AppNotifications, NotificationCommand};
-use crate::passwords::{Keychain, PasswordCommand};
+use crate::passwords::{PasswordCommand, SavedPasswords};
 use crate::permissions::Grants;
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
@@ -319,7 +319,7 @@ pub struct SettingsView {
     pub(crate) spelling: crate::spelling::SpellingState,
     pub(crate) replacing: Option<crate::spelling::Replacing>,
     pub(crate) security: crate::security_status::SecurityStatus,
-    pub(crate) keychain: Keychain,
+    pub(crate) passwords: SavedPasswords,
     pub(crate) stale: bool,
     rebuilt: bool,
     pub(crate) focus_next: Option<Anchor>,
@@ -429,7 +429,7 @@ impl SettingsView {
             spelling: Default::default(),
             replacing: None,
             security: crate::security_status::SecurityStatus::default(),
-            keychain: Keychain::default(),
+            passwords: SavedPasswords::default(),
             stale: true,
             rebuilt: false,
             focus_next: None,
@@ -910,7 +910,9 @@ impl SettingsView {
             Update::PictureChosen(login, image) => self.picture_chosen(login, image),
             Update::AccountCreated(error) => self.account_created(error),
             Update::Passwords(unlocked, items) => self.take_passwords(unlocked, items),
-            Update::RevealedPassword(path, secret) => self.keychain.revealed = Some((path, secret)),
+            Update::RevealedPassword(path, secret) => {
+                self.passwords.revealed = Some((path, secret))
+            }
             Update::CopiedPassword(secret) => self.commands.push(Command::CopySecret(secret)),
             Update::Password(outcome) => self.password_changed(outcome),
             Update::PrinterAdded(added) => {
@@ -1510,7 +1512,7 @@ impl SettingsView {
                 Intent::ReplacementText(..) => {}
                 Intent::Passwords(command) => self.password_command(command),
                 Intent::PasswordQuery(query) => {
-                    self.keychain.query = query;
+                    self.passwords.query = query;
                     self.focus_next = Some(Anchor::Picker);
                 }
                 Intent::ChangePassword(path) => {
@@ -1518,7 +1520,7 @@ impl SettingsView {
                         Some(_) => Anchor::Password,
                         None => Anchor::Setting(SettingId::SavedPasswords, None),
                     });
-                    self.keychain.changing = path;
+                    self.passwords.changing = path;
                 }
                 Intent::Network(command) => self.commands.push(Command::Network(command)),
                 Intent::ImportVpn => self.commands.push(Command::ImportVpn),

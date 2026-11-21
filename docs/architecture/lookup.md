@@ -1,7 +1,7 @@
 # Dictionary and Look Up
 
 `bande-lookup` (`crates/apps/lookup`, app id `org.bande.Lookup`, shown as Dictionary) is both the
-Dictionary app and Look Up, as Dictionary.app is on a Mac:
+Dictionary app and Look Up:
 
 - **Dictionary window**: a search field; local sources answer as you type, online sources once
   typing pauses.
@@ -42,9 +42,8 @@ optional `.syn`) or a dictd one (`.index` with `.dict` or `.dict.dz`), or a tarb
 (unpacked with `tar`). It is converted on a worker thread into a pack in
 `~/.local/share/bande/dict/`, serving any language (`*`); markup is reduced to text. A DICT server
 (`dict://host[:port]/database`, RFC 2229, unencrypted) is checked and added as a `.source` with
-`protocol=dict`. An unsupported or broken file gets a message naming it. Apple `.dictionary`
-bundles are not imported: their `Body.data` format is undocumented and changes between macOS
-versions, and the dictionaries Apple ships are licensed for macOS only.
+`protocol=dict`. An unsupported or broken file gets a message naming it. Formats without a public
+specification are not imported.
 
 ## Pack format
 

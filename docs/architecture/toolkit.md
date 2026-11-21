@@ -3,7 +3,7 @@
 Every Bande shell client and app draws with one shared toolkit, `bande-toolkit`, so that
 look, shortcuts and accessibility are the same everywhere. It draws with Vello and lays out text
 with Parley ([`../decisions/0001-rendering.md`](../decisions/0001-rendering.md), Decision 2).
-How it grows to AppKit depth is decided in
+How it grows to full desktop depth is decided in
 [`../decisions/0002-toolkit.md`](../decisions/0002-toolkit.md).
 
 ## Crates
@@ -100,7 +100,7 @@ writes a hex value, a corner radius or a font name of its own.
   - Curves are flattened by the toolkit at 0.004 px instead of Vello's 0.25 px, so edges are
     within 1/255 of their exact area coverage. Glyph outlines come from `skrifa`, unhinted and in
     font units (no 26.6 rounding), are cached per glyph and size, and are drawn at fractional
-    pen positions with grayscale antialiasing, as macOS does since 10.14. Colour glyphs (COLR,
+    pen positions with grayscale antialiasing. Colour glyphs (COLR,
     CBDT, sbix, SVG) go through Vello's glyph renderer.
   - Shadows are Gaussian with σ = blur radius / 2, as CSS `box-shadow`. Vello's blurred rounded
     rectangle falls off as if its `std_dev` were σ/√2 (8 px outside an edge it gives 0.157 of the
@@ -114,8 +114,7 @@ writes a hex value, a corner radius or a font name of its own.
   family a `TextSystem` was given with `set_monospace_family` (Terminal's font). A missing
   face falls back (Manrope to Inter, JetBrains Mono to DejaVu Sans Mono, then fontconfig's
   generic family), so nothing breaks without the fonts; `bande-desktop` depends on
-  `fonts-inter`, `fonts-manrope` and `fonts-jetbrains-mono`. Baselines sit on whole pixels, as
-  in AppKit.
+  `fonts-inter`, `fonts-manrope` and `fonts-jetbrains-mono`. Baselines sit on whole pixels.
 - **Windows.** `Window` opens an `xdg_toplevel`, a `zwlr_layer_surface_v1` or a session-lock
   surface through libwayland, loaded at run time, so that Vulkan's WSI can present on the same
   connection. The first frame is drawn by `CpuRenderer` into a `wl_shm` buffer while a thread
@@ -194,9 +193,9 @@ writes a hex value, a corner radius or a font name of its own.
 - **Widgets.** `ui` holds the widget tree: `Stack` (rows and columns with spacing and padding; a
   column stretches its children across, a row centres them), `Label`, `Shortcut`, the controls
   below, `Table`, `ScrollView`, `Disclosure` and `FreeLayout`, laid out, painted into a `Scene`
-  and driven by `Ui`. `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside, as in AppKit. Tab moves focus
-  between text fields only unless `keyboard_navigation` is set, as macOS's Keyboard navigation
-  setting (off by default) does; tabbing into a field selects its text. A widget opens a menu
+  and driven by `Ui`. `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside. Tab moves focus
+  between text fields only unless `keyboard_navigation` is set (the Keyboard navigation
+  setting, off by default); tabbing into a field selects its text. A widget opens a menu
   of its own (a pop-up button's choices) with `Context::show_menu`; the choice comes back to it
   through `menu_action`.
 - **Controls** (Datum §9). Regular controls are
@@ -249,7 +248,7 @@ writes a hex value, a corner radius or a font name of its own.
   the far left. When they do not fit side by side they stack, default on top. The parent dims
   with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header (`Ui::set_sheet_top` for an app whose content covers the header),
   `Ui::present_dialog` centres it.
-- **Tables**. Rows 32 (24 with `Table::compact` for dense lists such as Activity Monitor), header 28 with `Label`-style
+- **Tables**. Rows 32 (24 with `Table::compact` for dense lists such as System Monitor), header 28 with `Label`-style
   tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no
   stripes and no column separators. Contiguous selected rows form one block of radius 6 inset
   4 × 1: accent with `on_accent` text while focused, `well` otherwise. A single selected run
@@ -270,7 +269,7 @@ writes a hex value, a corner radius or a font name of its own.
   sorts (on release). The first column never moves. Column and `Sort` indices keep the app's
   order, so moving needs no new rows: the app stores what `Table::on_column_order` reports and
   restores it with `set_column_order`; `Table::move_column` is the menu and keyboard way. The
-  slide itself is `Reorder`, which `TabStrip` also uses and a hand-drawn list can too. Scroll bars are macOS overlay scrollers
+  slide itself is `Reorder`, which `TabStrip` also uses and a hand-drawn list can too. Scroll bars are overlay scrollers
   (`Scrollbar`, also usable on its own by views that scroll themselves, such as Terminal): a
   6 pt `ink3` knob shown while scrolling or when the pointer is in the right 14 pt, widening to
   10 pt over a faint lane on hover; drag the knob, click the lane to page; it fades 0.9 s
@@ -285,8 +284,8 @@ writes a hex value, a corner radius or a font name of its own.
   `.caption(title, span)` adds a 20 pt `Label` caption above the well (title centred, span at
   the right) and a `hairline` outline around it; without one the graph is a bare sparkline.
   `set_note` puts a tabular label in its top-left corner (a scale or a name), `set_bands` 3 pt
-  status strips along the bottom (Activity Monitor's charging spans). It never animates or
-  wakes: it draws again only when the app sets new data. Activity Monitor draws its graphs
+  status strips along the bottom (System Monitor's charging spans). It never animates or
+  wakes: it draws again only when the app sets new data. System Monitor draws its graphs
   with it.
 - **Tooltips.** A widget that returns `Widget::tooltip` (buttons and pop-up buttons through
   `.tooltip(...)`) shows it after the pointer rests on it for `TOOLTIP_DELAY`, or after Tab
@@ -314,7 +313,7 @@ writes a hex value, a corner radius or a font name of its own.
   the Compose key work in every window without an input method: the seat follows xkbcommon's
   Compose table of the session's locale (read at the first dead key) and reports the pending accent
   as `Event::Preedit` and the result as ordinary `Key::Character` events, so every field, password
-  entry and terminal gets it. As on macOS, a dead key and Space type the accent itself (on a layout with no key of its own for
+  entry and terminal gets it. A dead key and Space type the accent itself (on a layout with no key of its own for
   `'` or `"`, such as US International, that character instead), a key that
   cannot combine types the accent and then that key (`~` then `/` is `~/`), and Backspace or Escape
   abandon the accent. Shortcuts with Ctrl, Alt or Super never compose. Text is
@@ -388,8 +387,8 @@ writes a hex value, a corner radius or a font name of its own.
   captures: the window inhibits the compositor's shortcuts (`zwp_keyboard_shortcuts_inhibit_v1`,
   so Super and Alt+Tab reach the guest), confines or locks the pointer
   (`zwp_pointer_constraints_v1`, with `zwp_relative_pointer_v1` motion while locked, the cursor
-  hidden), and delivers every key as `Event::Captured(Captured::Key)` instead of text. As in
-  macOS VM apps, Ctrl+Alt (`RELEASE_CHORD`) releases, and a hint "Press Ctrl+Alt to release"
+  hidden), and delivers every key as `Event::Captured(Captured::Key)` instead of text. Ctrl+Alt
+  (`RELEASE_CHORD`) releases, and a hint "Press Ctrl+Alt to release"
   shows for 3 s; leaving the window, losing the lock or a sheet appearing releases too, and held
   keys are sent up first. Widgets ask through `Context::capture_input`/`release_input`;
   `Window::capture_input`/`release_input` do it for apps without `Ui`.

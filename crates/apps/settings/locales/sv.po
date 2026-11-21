@@ -1134,10 +1134,10 @@ msgstr "Skärm"
 msgid "Unknown device"
 msgstr "Okänd enhet"
 
-msgid "The keychain"
+msgid "The keyring"
 msgstr "Nyckelringen"
 
-msgid "The keychain locked. Unlock it again to continue."
+msgid "The keyring locked. Unlock it again to continue."
 msgstr "Nyckelringen låstes. Lås upp den igen för att fortsätta."
 
 msgid "Network"
@@ -1146,10 +1146,10 @@ msgstr "Nätverk"
 msgid "Unknown app"
 msgstr "Okänd app"
 
-msgid "Couldn't open the keychain."
+msgid "Couldn't open the keyring."
 msgstr "Det gick inte att öppna nyckelringen."
 
-msgid "Couldn't show the keychain prompt."
+msgid "Couldn't show the keyring prompt."
 msgstr "Det gick inte att visa nyckelringens fråga."
 
 msgid "Couldn't read this password."
@@ -1170,7 +1170,7 @@ msgstr "Lås upp…"
 msgid "Your passwords are locked."
 msgstr "Dina lösenord är låsta."
 
-msgid "Enter your keychain password to see, copy, change or delete them."
+msgid "Enter your keyring password to see, copy, change or delete them."
 msgstr "Ange ditt nyckelringslösenord för att visa, kopiera, ändra eller radera dem."
 
 msgid "Website, account or app"

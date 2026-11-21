@@ -22,18 +22,18 @@ key enter
 wait-for-window "org.bande.Settings"
 wait 1500ms
 shot "settings"
-note "Activity Monitor"
+note "System Monitor"
 key super
 wait 600ms
 type "activity"
 wait 500ms
 key enter
-wait-for-window "org.bande.ActivityMonitor"
+wait-for-window "org.bande.SystemMonitor"
 wait 2s
-shot "activity monitor"
+shot "system monitor"
 click right 1500 700
 wait 1s
-shot "activity monitor context menu"
+shot "system monitor context menu"
 key escape
 wait 500ms
 note "Terminal"

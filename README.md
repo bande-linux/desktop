@@ -2,9 +2,8 @@
 
 Bande is a Linux desktop environment written in Rust for Debian 14 (forky) on amd64 and arm64. It
 follows forky while it is Debian testing and aims to be ready when forky is released as stable.
-It has its own compositor, shell, session services and apps, holds itself to the polish of
-macOS, and is pure Wayland: no X11 or XWayland anywhere.
-It is early and not yet a daily driver; [`docs/parity.md`](docs/parity.md) shows where it stands.
+It has its own compositor, shell, session services and apps, and is pure Wayland: no X11 or
+XWayland anywhere. It is early and not yet a daily driver.
 
 ## This repository
 
@@ -16,12 +15,12 @@ One Cargo workspace with the desktop itself, grouped by role in `crates/`
 | `platform/` | `bande-compositor` (Smithay with its own Vulkan renderer, `bande-render`) and the private Wayland protocols |
 | `toolkit/` | `bande-toolkit`: Datum design tokens, Vello drawing, Parley text, widgets, Wayland windows, AccessKit |
 | `shell/` | `bande-shell` (desktop, Taskbar, notifications, Quick Settings, launcher in one process), screenshots, lock screen, greeter |
-| `apps/` | Files, Settings, the portal's file chooser and the keychain prompt |
-| `services/` | config (`config.kdl` over D-Bus), notifications, power, sound, clipboard, tray, automount, portal backend, polkit agent, keychain (Secret Service and its PAM module) |
+| `apps/` | Files, Settings, the portal's file chooser and the keyring prompt |
+| `services/` | config (`config.kdl` over D-Bus), notifications, power, sound, clipboard, tray, automount, portal backend, polkit agent, keyring (Secret Service and its PAM module) |
 | `libs/` | shared logic, including `bande-app`, the framework every app is built on |
 | `testing/` | the test bus, a Wayland test client, benchmarks |
 
-Terminal, Activity Monitor, Software, the Package Installer, Mail and Calendar live in
+Terminal, System Monitor, Software, the Package Installer, Mail and Calendar live in
 [bande-linux/apps](https://github.com/bande-linux/apps), built on `bande-app` at a pinned revision
 of this repository and released on their own. `packaging/` holds the `bande-desktop`
 metapackage, `ci/` the release and packaging scripts, `data/` wallpapers, icons and sounds.
@@ -78,7 +77,7 @@ sudo apt install bande-desktop
 ```
 
 `bande-desktop` brings the desktop, its login window under greetd, NetworkManager, PipeWire, the
-Bande apps Terminal, Software, Package Installer, Activity Monitor and Archive Utility, and compressed swap in
+Bande apps Terminal, Software, Package Installer, System Monitor and Archives, and compressed swap in
 memory; other apps, such as a browser, install from Software. With `--no-install-recommends` it
 brings only the desktop, a login and sound. Pick the **Bande** session at login. Updates arrive with `sudo apt upgrade` or
 Settings ▸ Software Update. The archive is signed with the key
@@ -87,8 +86,7 @@ Settings ▸ Software Update. The archive is signed with the key
 ## Documentation
 
 [`docs/README.md`](docs/README.md) is the index; start with
-[`docs/architecture/overview.md`](docs/architecture/overview.md). Open work and owner decisions
-are in [`NOTES/`](NOTES/open.md).
+[`docs/architecture/overview.md`](docs/architecture/overview.md).
 
 ## License
 

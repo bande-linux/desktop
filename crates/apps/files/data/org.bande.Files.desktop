@@ -11,7 +11,7 @@ Exec=bande-files %U
 StartupNotify=true
 MimeType=inode/directory;
 Categories=System;FileTools;FileManager;
-Keywords=folder;finder;browse;directory;
+Keywords=folder;browse;directory;
 Keywords[sv]=mapp;filer;bläddra;katalog;utforskare;
 Actions=new-window;
 

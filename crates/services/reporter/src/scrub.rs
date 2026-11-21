@@ -323,7 +323,7 @@ mod tests {
             "panicked at crates/shell/shell/src/bar.rs:10:5",
             "output \"HDMI-A-1\" failed with -110",
             "bande_shell::bar::draw at bande-compositor.service",
-            "[drm:apple_drm] *ERROR* flip_done timed out",
+            "[drm:drm_atomic_helper_wait_for_flip_done] *ERROR* flip_done timed out",
         ] {
             assert_eq!(scrubber.line(line), line);
         }

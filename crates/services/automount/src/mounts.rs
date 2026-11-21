@@ -518,7 +518,7 @@ impl Mounts {
         for entry in removed {
             if let Some(server) = Server::parse(&entry.url)
                 && let Ok(keyring) = Keyring::open(KEYRING_APP)
-                && let Err(error) = keyring.forget(&keychain_key(&server.origin(), &entry.user))
+                && let Err(error) = keyring.forget(&password_key(&server.origin(), &entry.user))
             {
                 tracing::warn!("cannot forget the password for {url}: {error}");
             }
@@ -595,7 +595,7 @@ impl Mounts {
         if request.remember && !request.password.is_empty() {
             let saved = Keyring::open(KEYRING_APP).and_then(|keyring| {
                 keyring.save(
-                    &keychain_key(&server.origin(), user),
+                    &password_key(&server.origin(), user),
                     &tr!("Server password for {server}", server = server.origin()),
                     &request.password,
                 )
@@ -1010,14 +1010,14 @@ pub enum Started {
     Failed(String),
 }
 
-fn keychain_key<'a>(origin: &'a str, user: &'a str) -> [(&'a str, &'a str); 2] {
+fn password_key<'a>(origin: &'a str, user: &'a str) -> [(&'a str, &'a str); 2] {
     [("server", origin), ("user", user)]
 }
 
 fn stored_password(origin: &str, user: &str) -> Option<String> {
     Keyring::open(KEYRING_APP)
-        .and_then(|keyring| keyring.password(&keychain_key(origin, user)))
-        .inspect_err(|error| tracing::warn!("cannot read the keychain: {error}"))
+        .and_then(|keyring| keyring.password(&password_key(origin, user)))
+        .inspect_err(|error| tracing::warn!("cannot read the keyring: {error}"))
         .ok()
         .flatten()
 }

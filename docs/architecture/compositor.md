@@ -77,8 +77,7 @@ when they reach the screen is Bande's own.
   of the window: inside its rounded clip and shadow, in the opening, closing and overview
   animations. The window's geometry includes the bar, so placement, zoom and tiling size the
   app to what is left below it. Dragging the bar moves the window (with snapping), a double
-  click zooms, the buttons close, minimise and zoom (a press that slides off does nothing, as
-  in AppKit), and a band from the rounded outline to 8 pt outside resizes it with the matching
+  click zooms, the buttons close, minimise and zoom (a press that slides off does nothing), and a band from the rounded outline to 8 pt outside resizes it with the matching
   cursor, the corner cut-outs included, and a corner resizes both ways for 32 pt along each edge
   and 16 pt out diagonally (`resize_zone` in `bande-graphics`, shared with the toolkit); nothing inside the outline resizes, so the bar's top pixel moves the window. A
   floating client-side window gets the outside band too wherever its own input region leaves
@@ -86,10 +85,10 @@ when they reach the screen is Bande's own.
   no room outside, so the compositor takes a 3 pt band inside it before any client
   (`walled_resize_zone`); a top side there has none, and a press on it moves the window. A
   window never opens with its title bar above the top of the screen.
-- **Pointers.** As on macOS, apps ask for a pointer by kind and the compositor draws it from
+- **Pointers.** Apps ask for a pointer by kind and the compositor draws it from
   Bande's own set, so none can be missing. Each pointer is one SVG in
   `crates/platform/compositor/data/cursors/` (24 × 24, its hotspot in `data-hotspot` on the root),
-  drawn in macOS's manner but our own: a slim black arrow with a white rim and a soft shadow,
+  drawn in Bande's own style: a slim black arrow with a white rim and a soft shadow,
   white hands with black outlines, an I-beam, slim two-way resize arrows, wall-bar one-way
   arrows, badges for menu, copy, alias, help and not allowed, a dark spinner. `cursor_set.rs`
   maps every `wp_cursor_shape_v1` kind to a drawing; the compositor embeds the SVGs and renders
@@ -100,7 +99,7 @@ when they reach the screen is Bande's own.
   `XCURSOR_THEME` and the portal as `cursor-theme`. While the pointer is on a frame zone of ours,
   or a move or resize holds a window (from our edges or `xdg_toplevel.move`/`resize`), the
   compositor's pointer wins over the client's: the arrow for a move, the edge's two-way arrow
-  for a resize, or as on macOS a one-way arrow against a wall bar when the window is at its
+  for a resize, or a one-way arrow against a wall bar when the window is at its
   minimum or maximum size and that edge can only move one way.
 - **Controls over the Browser's own row.** A client-side window of `org.bande.Browser` keeps its
   tabs in its top row and has no title bar of ours; the compositor draws only the control well
@@ -183,13 +182,12 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Size of text and controls (Default, then Larger Text to More Space, each
-  shown as the size the desktop looks like at the native resolution, as macOS lists scaled
-  resolutions), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation and Colour profile. Every change is written to
+  shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation and Colour profile. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
-  settings?" with Keep and Revert and comes back by itself after 15 s, as macOS does.
+  settings?" with Keep and Revert and comes back by itself after 15 s.
 
 - **Colour.** Each display has a colour profile (`colour-profile` in its settings, Settings ▸
-  Displays ▸ Colour profile, as macOS's list): "This display" (the default) builds a profile from
+  Displays ▸ Colour profile): "This display" (the default) builds a profile from
   the EDID's primaries, white point and gamma, unless the EDID says the default colour space is
   sRGB or its primaries are within 0.02 of sRGB's; "sRGB" and "None (show colours as sent)" leave
   frames alone; "Display P3"; and any ICC matrix-and-curve display profile in
@@ -226,7 +224,7 @@ when they reach the screen is Bande's own.
   with another display, where the pointer must rest 250 ms so a window can still be dragged
   across. Releasing over a shown preview springs the window into it. `Super+Left/Right` tile halves,
   `Up/Down` on a half give its top or bottom quarter and on a quarter go back to the half,
-  `Up` zooms a free window and `Down` returns a zoomed one. A tile is only a shape, as on macOS:
+  `Up` zooms a free window and `Down` returns a zoomed one. A tile is only a shape:
   no gaps, but the window keeps its rounded corners, shadow and resize edges, and gets no
   xdg-shell tiled states, since clients drop their resize edges for those (GTK) and would have
   none to offer. `bande_app_v1.window_tiled` tells toolkit apps instead. Dragging the edge two
@@ -259,11 +257,11 @@ when they reach the screen is Bande's own.
   claims three-finger swipes: once the fingers have moved 16 units the axis locks, and a
   horizontal swipe switches workspaces, a swipe up opens the overview and a swipe down shows
   the focused app's windows (below). Two- and four-finger swipes go to apps.
-- **Workspaces.** Each display has its own row of workspaces (macOS's "Displays have separate Spaces"); swipes and switching shortcuts act on the display with the pointer, the overview opens on every display with that display's windows and strip (a window dropped on another display moves there), and shell clients learn the row of the display with the key window. A window opens on the active one
+- **Workspaces.** Each display has its own row of workspaces; swipes and switching shortcuts act on the display with the pointer, the overview opens on every display with that display's windows and strip (a window dropped on another display moves there), and shell clients learn the row of the display with the key window. A window opens on the active one
   (a window of another app opened while a full-screen workspace is active opens on that
   workspace's home). Workspaces are made on demand: moving a window past the last one adds
   one, and so does going full screen, which gives the window a workspace of its own right
-  of its home, as on a Mac; leaving full screen takes the window home and the full-screen
+  of its home; leaving full screen takes the window home and the full-screen
   workspace goes away. An empty workspace goes away once the view has settled elsewhere,
   except the home of a full-screen workspace and the last ordinary one. Switching slides
   the whole row with `standard`: windows move with it while the wallpaper stays, and the
@@ -280,10 +278,9 @@ when they reach the screen is Bande's own.
   window, Alt+Tab, an activation token) shows its workspace first. Shell clients learn the
   row through `bande_shell_v1`: `workspaces(count, active)`, sent on binding and on
   every change. With Reduce Motion a switch crossfades the two workspaces in place.
-- **Overview.** The Mission Control key (`XF86LaunchA`, F3 on Apple
-  keyboards, without Super) or a three-finger swipe up (300 units for the whole way, tracked
+- **Overview.** The LaunchA key (`XF86LaunchA`, without Super) or a three-finger swipe up (300 units for the whole way, tracked
   1:1 and released like the other swipes) open it; the same key, `Escape`, a click on empty
-  space or a swipe down close it. There are no hot corners (removed by the owner). Every
+  space or a swipe down close it. There are no hot corners. Every
   window of the active workspace flies from where it is to a layout without overlap (rows by original height, left to right by
   original position, one common scale, never enlarged) under the workspace strip, and back
   when the overview closes, with `standard`; the drawing is the window's own live buffer
@@ -299,7 +296,7 @@ when they reach the screen is Bande's own.
   filter. Keys never reach the app while the overview is open, except Super shortcuts, so
   `Ctrl+Super+Left/Right` and a horizontal swipe move between workspaces inside it, each
   workspace with its own layout. Empty workspaces are kept until the overview closes. App
-  windows (App Exposé) show only one app's windows from every workspace without the strip:
+  windows show only one app's windows from every workspace without the strip:
   a three-finger swipe down for the focused app, and
   `bande_shell_v1.show_windows(app_id)` (an empty app id opens the plain overview) for
   the taskbar. With Reduce Motion the windows stay where they are and fade out while the
@@ -347,8 +344,7 @@ not writable by others, is the same inode in the compositor's mount namespace, a
 interpreter). Anything else cannot be granted. Sandboxed clients never see layer shell, output
 management, output power, the idle notifier or the security context manager.
 
-Reading keys (`zwp_input_method_v2`) and typing (`zwp_virtual_keyboard_v1`) need the person's consent,
-as Input Monitoring on macOS. `/var/lib/bande/consent/<uid>` lists it, one `read-keys|type-keys
+Reading keys (`zwp_input_method_v2`) and typing (`zwp_virtual_keyboard_v1`) need the person's consent. `/var/lib/bande/consent/<uid>` lists it, one `read-keys|type-keys
 program|sandboxed <name>` a line; only `bande-consent` writes it, through polkit with the password
 each time, so no program can grant itself. Without consent `get_input_method` answers `unavailable`
 and `create_virtual_keyboard` the protocol's `unauthorized`. The first refusal records the identity
@@ -369,7 +365,7 @@ next session.
 
 ## Wayland protocol matrix
 
-Priority: **P0** is needed for a daily-driver desktop, **P1** for full parity, **P2** later.
+Priority: **P0** is needed for a daily-driver desktop, **P1** for a complete desktop, **P2** later.
 Status is what `crates/platform/compositor` serves on `main`.
 
 | Protocol | Purpose | Priority | Status |

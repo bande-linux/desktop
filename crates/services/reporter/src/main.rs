@@ -40,9 +40,7 @@ fn pause_for(outcome: Outcome, retry: Duration) -> Pause {
         Outcome::Stored | Outcome::OverBudget => Pause::None,
         Outcome::Unauthorized | Outcome::Revoked => Pause::UntilConfigChanges,
         Outcome::Later(wait) => Pause::Server(wait.unwrap_or(retry)),
-        Outcome::NotSupported | Outcome::TooLarge | Outcome::UnknownToken | Outcome::BadFormat => {
-            Pause::Server(retry)
-        }
+        Outcome::TooLarge | Outcome::UnknownToken | Outcome::BadFormat => Pause::Server(retry),
         Outcome::NoRoute(error) => {
             if matches!(
                 error.kind(),
@@ -78,12 +76,6 @@ fn check_in(spool: &Spool, sender: &mut Sender, retry: Duration) -> Option<Pause
             Outcome::BadFormat | Outcome::TooLarge => {
                 tracing::warn!("the server refused the check-in for {day}");
                 checkin::sent(spool.root(), day)
-            }
-            Outcome::NotSupported => {
-                if let Err(error) = checkin::not_yet_supported(spool.root()) {
-                    tracing::warn!("cannot note when to check in again: {error}");
-                }
-                break;
             }
             outcome => return Some(pause_for(outcome, retry)),
         };

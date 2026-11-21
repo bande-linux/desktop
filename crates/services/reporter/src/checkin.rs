@@ -25,36 +25,13 @@ const MOST_DAYS: i64 = 7;
 const SESSION_LOOKBACK_DAYS: i64 = 7;
 const MICROS: i64 = 1_000_000;
 
-#[derive(Default)]
-struct State {
-    last_day: Option<Date>,
-    not_before: i64,
-}
-
-fn read_state(root: &Path) -> State {
-    let Some(state) = fs::read(root.join(STATE))
+fn last_day(root: &Path) -> Option<Date> {
+    fs::read(root.join(STATE))
         .ok()
-        .and_then(|bytes| serde_json::from_slice::<Map<String, Value>>(&bytes).ok())
-    else {
-        return State::default();
-    };
-    State {
-        last_day: state
-            .get("last_day")
-            .and_then(Value::as_str)
-            .and_then(|day| day.parse().ok()),
-        not_before: state.get("not_before").and_then(Value::as_i64).unwrap_or(0),
-    }
-}
-
-fn write_state(root: &Path, state: &State) -> io::Result<()> {
-    let text = json!({
-        "last_day": state.last_day.map(|day| day.to_string()),
-        "not_before": state.not_before,
-    });
-    let staged = root.join(format!(".{STATE}.new"));
-    fs::write(&staged, serde_json::to_vec(&text)?)?;
-    fs::rename(staged, root.join(STATE))
+        .and_then(|bytes| serde_json::from_slice::<Map<String, Value>>(&bytes).ok())?
+        .get("last_day")
+        .and_then(Value::as_str)
+        .and_then(|day| day.parse().ok())
 }
 
 pub fn yesterday() -> Option<Date> {
@@ -66,16 +43,11 @@ pub fn yesterday() -> Option<Date> {
 }
 
 pub fn due_days(root: &Path) -> Vec<Date> {
-    let state = read_state(root);
     let Some(last) = yesterday() else {
         return Vec::new();
     };
-    if Timestamp::now().as_second() < state.not_before {
-        return Vec::new();
-    }
     let earliest = last.checked_sub((MOST_DAYS - 1).days()).unwrap_or(last);
-    let first = state
-        .last_day
+    let first = last_day(root)
         .and_then(|day| day.tomorrow().ok())
         .map_or(last, |day| day.max(earliest));
     first
@@ -113,9 +85,10 @@ pub fn queue_if_due(spool: &Spool, config: &Config) {
 }
 
 pub fn sent(root: &Path, day: Date) -> io::Result<()> {
-    let mut state = read_state(root);
-    state.last_day = Some(day);
-    write_state(root, &state)
+    let text = json!({"last_day": day.to_string()});
+    let staged = root.join(format!(".{STATE}.new"));
+    fs::write(&staged, serde_json::to_vec(&text)?)?;
+    fs::rename(staged, root.join(STATE))
 }
 
 pub fn forget(root: &Path) -> io::Result<()> {
@@ -130,12 +103,6 @@ pub fn is_empty(payload: &Value) -> bool {
         .iter()
         .all(|name| payload.get(name).and_then(Value::as_u64) == Some(0))
         && payload.get("active_hours").and_then(Value::as_f64) == Some(0.0)
-}
-
-pub fn not_yet_supported(root: &Path) -> io::Result<()> {
-    let mut state = read_state(root);
-    state.not_before = Timestamp::now().as_second() + DAY_SECONDS;
-    write_state(root, &state)
 }
 
 fn journal(arguments: &[&str]) -> Vec<Map<String, Value>> {

@@ -9,7 +9,6 @@ const SHIPPED: &str = "/usr/share/bande/reports.conf";
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Config {
     pub endpoint: Option<String>,
-    pub key: Option<String>,
     pub ca: Option<PathBuf>,
     pub send: bool,
     pub stack_memory: bool,
@@ -51,7 +50,6 @@ impl Config {
             let value = value.trim();
             match name.trim() {
                 "endpoint" => config.endpoint = Some(value.trim_end_matches('/').to_owned()),
-                "key" => config.key = Some(value.to_owned()),
                 "ca" => config.ca = Some(PathBuf::from(value)),
                 "send" => config.send = value == "on",
                 "stack_memory" => config.stack_memory = value == "on",

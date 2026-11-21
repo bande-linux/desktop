@@ -207,11 +207,7 @@ fn a_busy_faulting_program_sends_within_its_budget_in_batches() {
 
     let _sender = Killed(reporter(&spool, &config, &["send"]).spawn().unwrap());
     wait_for(&server, DAILY_REPORTS);
-    assert!(
-        store(&spool, &config, "manual", "by hand")
-            .status
-            .success()
-    );
+    assert!(store(&spool, &config, "manual", "by hand").status.success());
     wait_for(&server, DAILY_REPORTS + 1);
     std::thread::sleep(Duration::from_secs(2 * MIN_INTERVAL));
 

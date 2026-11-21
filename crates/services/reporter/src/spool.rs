@@ -12,7 +12,6 @@ use crate::{counters, facts};
 const REPORTS: &str = "reports";
 const OUTBOX: &str = "outbox";
 const STAGING: &str = "tmp";
-const INSTALL_ID: &str = "machine";
 pub const MANIFEST: &str = "manifest.json";
 pub const STATE: &str = "state.json";
 const UUID_SOURCE: &str = "/proc/sys/kernel/random/uuid";
@@ -169,19 +168,6 @@ impl Spool {
 
     pub fn forgotten(&self) -> io::Result<()> {
         self.unqueue(FORGET)
-    }
-
-    pub fn install_id(&self) -> io::Result<String> {
-        let path = self.root.join(INSTALL_ID);
-        match fs::read_to_string(&path) {
-            Ok(id) if !id.trim().is_empty() => return Ok(id.trim().to_owned()),
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
-        }
-        let id = new_uuid()?;
-        replace_synced(&self.root, INSTALL_ID, id.as_bytes())?;
-        Ok(id)
     }
 
     fn fill_manifest(&self, manifest: &mut Map<String, Value>) -> io::Result<String> {

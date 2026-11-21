@@ -22,7 +22,6 @@ const ATTEMPTS: usize = 2;
 
 pub enum Outcome {
     Stored,
-    NotSupported,
     BadFormat,
     Unauthorized,
     UnknownToken,
@@ -49,7 +48,6 @@ fn outcome_of(answer: &Answer) -> Outcome {
         (401, Some("unknown_token")) => Outcome::UnknownToken,
         (401, Some("revoked")) => Outcome::Revoked,
         (401 | 403, _) => Outcome::Unauthorized,
-        (404, _) => Outcome::NotSupported,
         (413, _) => Outcome::TooLarge,
         _ => Outcome::Later(answer.retry_after),
     }
@@ -68,19 +66,10 @@ struct Body {
     attachments: Vec<String>,
 }
 
-fn body_of(
-    report: &Stored,
-    machine: Option<&str>,
-    counts_only: bool,
-    without: &[String],
-) -> io::Result<Body> {
+fn body_of(report: &Stored, counts_only: bool, without: &[String]) -> io::Result<Body> {
     let mut manifest = report.manifest.clone();
     manifest.insert("occurrences".to_owned(), json!(report.occurrences));
     manifest.remove("owner_uid");
-    manifest.remove("machine");
-    if let Some(machine) = machine {
-        manifest.insert("machine".to_owned(), json!(machine));
-    }
     let mut attachments: Vec<(String, Vec<u8>)> = Vec::new();
     if report.status != Status::Sent && !counts_only {
         for entry in fs::read_dir(&report.path)?.flatten() {
@@ -137,15 +126,9 @@ pub fn attachment_bytes(report: &Stored) -> u64 {
     })
 }
 
-enum Credential {
-    Token(String),
-    SharedKey(String, String),
-}
-
 pub struct Sender<'a> {
     session: Session,
     spool: &'a Spool,
-    shared_key: Option<String>,
     pub identity: Identity,
     pub contacted: bool,
 }
@@ -170,7 +153,6 @@ impl<'a> Sender<'a> {
         Some(Self {
             session: Session::new(target, config.ca.as_deref()),
             spool,
-            shared_key: config.key.clone(),
             identity,
             contacted: false,
         })
@@ -195,20 +177,14 @@ impl<'a> Sender<'a> {
         Ok(answer)
     }
 
-    fn credential(&self) -> io::Result<Option<Credential>> {
+    fn token(&self) -> Option<String> {
         if self.identity.revoked {
-            return Ok(None);
+            return None;
         }
-        if let Some(credentials) = &self.identity.credentials {
-            return Ok(Some(Credential::Token(credentials.token.clone())));
-        }
-        match &self.shared_key {
-            Some(key) => Ok(Some(Credential::SharedKey(
-                key.clone(),
-                self.spool.install_id()?,
-            ))),
-            None => Ok(None),
-        }
+        self.identity
+            .credentials
+            .as_ref()
+            .map(|credentials| credentials.token.clone())
     }
 
     fn enroll(&mut self) -> Outcome {
@@ -317,7 +293,7 @@ impl<'a> Sender<'a> {
             return Ok(());
         }
         let enrolled = self.enroll();
-        if self.identity.credentials.is_some() || self.shared_key.is_some() {
+        if self.identity.credentials.is_some() {
             return Ok(());
         }
         Err(match enrolled {
@@ -330,16 +306,13 @@ impl<'a> Sender<'a> {
         &mut self,
         path: &str,
         headers: &str,
-        body: impl Fn(Option<&str>) -> io::Result<Vec<u8>>,
+        body: impl Fn() -> io::Result<Vec<u8>>,
     ) -> (Outcome, u64) {
         for _ in 0..ATTEMPTS {
-            let (token, machine) = match self.credential() {
-                Ok(Some(Credential::Token(token))) => (token, None),
-                Ok(Some(Credential::SharedKey(key, machine))) => (key, Some(machine)),
-                Ok(None) => return (Outcome::Unauthorized, 0),
-                Err(error) => return (Outcome::NoRoute(error), 0),
+            let Some(token) = self.token() else {
+                return (Outcome::Unauthorized, 0);
             };
-            let bytes = match body(machine.as_deref()) {
+            let bytes = match body() {
                 Ok(bytes) => bytes,
                 Err(error) => {
                     tracing::warn!("cannot build a request: {error}");
@@ -357,10 +330,7 @@ impl<'a> Sender<'a> {
                 Err(error) => Outcome::NoRoute(error),
             };
             self.lost(&outcome);
-            if matches!(outcome, Outcome::UnknownToken)
-                && machine.is_none()
-                && self.prepare().is_ok()
-            {
+            if matches!(outcome, Outcome::UnknownToken) && self.prepare().is_ok() {
                 continue;
             }
             return (outcome, bytes.len() as u64);
@@ -380,7 +350,7 @@ impl<'a> Sender<'a> {
             boundary(&report.id)
         );
         loop {
-            let names = match body_of(report, None, counts_only, &without) {
+            let names = match body_of(report, counts_only, &without) {
                 Ok(body) if !allowed(body.bytes.len() as u64) => return (Outcome::OverBudget, 0),
                 Ok(body) => body.attachments,
                 Err(error) => {
@@ -389,8 +359,8 @@ impl<'a> Sender<'a> {
                 }
             };
             let dropped = without.clone();
-            let (outcome, bytes) = self.authorised(REPORTS, &headers, |machine| {
-                body_of(report, machine, counts_only, &dropped).map(|body| body.bytes)
+            let (outcome, bytes) = self.authorised(REPORTS, &headers, || {
+                body_of(report, counts_only, &dropped).map(|body| body.bytes)
             });
             match outcome {
                 Outcome::TooLarge => match names.last() {
@@ -403,14 +373,8 @@ impl<'a> Sender<'a> {
     }
 
     pub fn checkin(&mut self, payload: &Value) -> Outcome {
-        self.authorised(CHECKINS, JSON, |machine| {
-            let mut payload = payload.clone();
-            if let (Some(machine), Some(fields)) = (machine, payload.as_object_mut()) {
-                fields.insert("machine".to_owned(), json!(machine));
-            }
-            Ok(serde_json::to_vec(&payload)?)
-        })
-        .0
+        self.authorised(CHECKINS, JSON, || Ok(serde_json::to_vec(payload)?))
+            .0
     }
 }
 
@@ -433,7 +397,6 @@ pub fn forget(request: &Map<String, Value>, ca: Option<&Path>) -> Outcome {
             | Outcome::UnknownToken
             | Outcome::Revoked
             | Outcome::Unauthorized
-            | Outcome::NotSupported
             | Outcome::BadFormat,
         ) => Outcome::Stored,
         Ok(outcome) => outcome,

@@ -10,7 +10,6 @@
 - `outbox/<id>`: a marker for a report waiting to be sent; it holds `asked` when someone sent it by hand. `outbox/checkin` and `outbox/forget` (a token to delete from the server) wait the same way.
 - `identity` (`0600`): `{endpoint, machine, token, rotate_after, checkin_minute, policy}`, what the server handed out at enrollment and its last collection policy (see Protocol).
 - `sending.json`: what went out this UTC day (reports, bytes, exempt reports) and when the last upload run was.
-- `machine`: a random install id, sent only with a shared submit key (see Enrollment).
 
 Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and rejected reports go first, then the oldest. With under 512 MiB free on the disk a report keeps its manifest and drops its attachments, and names them in `attachments_dropped`. A repeat of a signature within an hour, or within a day while the first is unsent, only adds to `occurrences`; if the first was already sent, the manifest goes again without attachments so the server keeps count. A program makes at most 25 reports a UTC day (`manual` aside); after that a repeat of any of its signatures that day only adds to `occurrences`, and a new signature is only counted, as `program-limit` in the counters.
 
@@ -33,7 +32,6 @@ ca = /usr/share/bande/reports-ca.pem
 send = on
 endpoint = https://host:port
 ca = /path/to/ca.pem
-key = <shared submit key, while a server still takes one>
 ```
 
 `bande-reporter sending on|off` and Settings write `send`; `endpoint` names the server, and Settings offers the switch only once one is set.
@@ -45,8 +43,6 @@ A daily check-in rides on the same sender: at boot, at login, when `serve` start
 ### Enrollment
 
 No key is built in. The first time something is to be sent, the sender enrolls: it asks `GET /v1/enroll` for a challenge, solves the proof of work and keeps the `{machine, token}` from `POST /v1/enroll` in `identity`. Reports and check-ins then carry `Authorization: Bearer <token>` and no `machine`: the server knows the computer only by the id it chose. The token is rotated (`POST /v1/rotate`) once `rotate_after` has passed or an answer says `"rotate": true`. `401 unknown_token` enrolls afresh; `401 revoked` stops sending until the settings change. Switching sending off removes `identity` and queues `outbox/forget`, which `DELETE /v1/me` erases from the server once it can be reached; switching it on again enrolls under a new id, so the two periods cannot be linked. A different `endpoint` forgets the old server the same way.
-
-While a server still takes a shared `key` from the settings file, it is used only when enrollment is not possible (an older server), with the install id as `machine`.
 
 ### Throttling
 
@@ -76,7 +72,7 @@ While a server still takes a shared `key` from the settings file, it is used onl
 - **Out of memory:** a kill by `systemd-oomd` of a Bande app (`org.bande.*`) or a Bande session service, which the Taskbar & Desktop already sees to tell the person, asks `serve` for an `oom` report named after the app, with oomd's reason as `limit`. A failed Bande service with result `oom-kill` gets the same fields, with `limit` from oomd or `termination` `kernel-oom`. Each carries `largest_processes` (the top 12 by resident and swap) and `largest_units` (the top 12 scopes and services by memory, with anon, file and swap from `memory.stat`), and PSI as every report does.
 - **Waking and the GPU:** the compositor reports `wake-failure` when the displays and input cannot be woken after sleep, and `gpu-reset` when it lost its GPU context.
 - **`bande-reporter-resources.service`** wakes every 10 minutes (with 5 minutes of timer slack, so the kernel can fold it into other wake-ups; its clock stops while asleep) and reads, for every scope and service under `user.slice` and every `system.slice/bande-*` service, `cpu.stat`, the written bytes of `io.stat`, and the context switches of its processes as the measure of wake-ups. Over the 10 minutes it reports `cpu-resource` above 90 % of one core, `wakeups-resource` above 150 a second, and `disk-writes-resource` above 2 GiB written in a day. The report names the busiest process in that unit, only if it is a Bande program, and the app of an app scope, carries the figures and three `eu-stack` samples 1 s apart (`stack-samples.txt`, the format of `hang-tree.txt`), and comes at most once a day per program and kind. The same wake-up queues the daily check-in when one is due. Nothing else runs on an idle computer.
-- **Jank:** while the compositor animates, it compares each frame with its vblank. More than 5 % missed over 10 s, or one frame over 250 ms, is a `jank` report (at most one an hour), with frames, missed frames, the slowest render and the longest frame. Its cause is `compositor-render` when a render took longer than a refresh, else `compositor-schedule` (the frame started late). Late client commits are not measured yet.
+- **Jank:** while the compositor animates, it compares each frame with its vblank. More than 5 % missed over 10 s, or one frame over 250 ms, is a `jank` report (at most one an hour), with frames, missed frames, the slowest render and the longest frame. Its cause is `compositor-render` when a render took longer than a refresh, else `compositor-schedule` (the frame started late).
 - **Who ended it:** `termination` comes from Force Quit (the compositor's report, and the `SIGQUIT` core dump after it), a systemd watchdog abort (the unit's "Watchdog timeout" message before the core dump, or result `watchdog`), a service stop timeout (result `timeout`), OOM kills as above, and log-out: an app still not answering 10 s after log-out was asked is reported, or its hang report finished, with `logout-timeout`.
 - **A hang:** the compositor pings a program after input and times the answer. Over 250 ms it counts `microhang:<app id>`; at 2 s the wait cursor shows and the program is Not Responding; at 10 s it asks for a report (`app-hang`, `shell-stall`). When the program answers or goes away, the compositor tells `serve`, which finishes the report with `hang_seconds` and `recovered` (it waits up to 2 minutes for that). Also Force Quit (`force-quit`, before `SIGQUIT`), and for the compositor a stall thread (`compositor-stall` at 6 s: the watchdog is pinged every 10 s and aborts 20 s after the last ping, so its abort can come 10 s into a hang). The thread sleeps until the event loop wakes, so an idle desktop costs nothing. Capture takes the kernel stacks of every thread and fsyncs that first snapshot, then samples user stacks with `eu-stack` every 500 ms: up to 10 s for a pinged hang, ending early when it answers, 3 s for Force Quit and the compositor. The samples merge into `hang-tree.txt`, and the most frequent main-thread stack becomes the report's threads. If the main thread waits in a read or a one-descriptor poll on a socket or pipe, the process at the other end (the socket's peer credentials, or the pipe's writer) is `blocked_on`, sampled the same way unless it is the compositor, which answers pings and is not stopped for this. A hang inside `cifs`, `nfs` or `fuse` becomes `mount-stall`, with the protocol and a hash of the server. A hang (not Force Quit) whose main thread sat in `epoll_wait` through every sample, with that epoll set ready neither at the start nor at the end, was idle, not hung: it is dropped and only counted as `idle-hang-dropped`, which rides along with the next report. Crashes, panics, OOM kills and failed services have no such guard.
 
@@ -99,13 +95,12 @@ During a total freeze nothing runs. What survives: the journal up to its last sy
 
 ## Protocol
 
-The contract with the log server. Every field added after protocol v1 is optional, so an older client or server keeps working.
+The contract with the log server.
 
 ### Manifest
 
 - `desktop_version`: the Debian version of the package that owns the faulting program, else of `bande-desktop`. `os_version` stays the system's name and kernel.
 - `threads`: `[{id, faulting, frames}]`, one thread `faulting: true` (the crashed one, or the main thread of a hang). Each frame is `{symbol?, module, build_id?, offset}`: `module` is the file name of the ELF object, `build_id` its GNU build id in hex, `offset` the program counter minus the module's load address, as elfutils reports it (one less than the return address for every frame but the innermost, so it points into the call). Address randomisation leaves it unchanged, and with the build id it symbolicates. Frames with no module are left out.
-- `frame_format`: `2` on every report made by `Fault`, whose frames (in `threads` and `blocked_on`) follow the rule above on both the `eu-stack` and the core dump path. Without it, core dump caller frames are the return address itself.
 - `signature_text`: an extra first frame for the signature (a signal name, a failed unit and its result, the first kernel frame of a hang with no user stack), scrubbed, as hashed.
 - `limit`: on `oom` and `failed-unit` with `oom-kill`, systemd-oomd's reason.
 - `largest_processes` `[{name, resident_kib, swap_kib}]` and `largest_units` `[{unit, current_kib, anon_kib, file_kib, swap_kib}]`: on `oom` and `failed-unit` with `oom-kill`.
@@ -131,11 +126,11 @@ The symbol may hold spaces; the last field is always the module and offset. Oute
 
 ### Check-in
 
-`POST <endpoint>/v1/checkins`, the same token, JSON: `{os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers; `active_hours` (one decimal) the time that day a desktop session (logind class `user`, type `wayland`) was open and the computer awake; `sessions` the desktop sessions started and `boots` the boots that day, all from the journal. Only while sending is on: the first covers yesterday, later ones each day since the last, at most 7, and days with no use are skipped; switching sending off forgets where it was. 200 or 201: done; 404: the server does not know check-ins yet, tried again a day later; anything else follows the table above.
+`POST <endpoint>/v1/checkins`, the same token, JSON: `{os_version, desktop_version, arch, active_hours, sessions, boots, day}`. `day` is the UTC date (`YYYY-MM-DD`) it covers; `active_hours` (one decimal) the time that day a desktop session (logind class `user`, type `wayland`) was open and the computer awake; `sessions` the desktop sessions started and `boots` the boots that day, all from the journal. Only while sending is on: the first covers yesterday, later ones each day since the last, at most 7, and days with no use are skipped; switching sending off forgets where it was. 200 or 201: done; anything else follows the table above.
 
 ### Symbols
 
-`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not the submit key) and the `.debug` file as `application/octet-stream`; its debug sections are zlib-compressed (`SHF_COMPRESSED`). `ci/release/upload-symbols.sh <deb> <endpoint>` sends every `.debug` of a `bande-debug-symbols` deb (2xx is success). `LOGS_SYMBOLS_KEY` may list several keys separated by commas: on a 401 the next one is tried and kept, so the server's keys can be rotated without a gap. The owner's machines run it over the internet like every other client: `send-symbols` on the build machine after `rebuild-desktop` installs a build and after a release tag's run is green, with `LOGS_SYMBOLS_KEY` from `~/bande-linux/logs-keys.env` or `/etc/bande/reports.conf`.
+`PUT <endpoint>/v1/symbols/<build-id>` with `Authorization: Bearer <LOGS_SYMBOLS_KEY>` (a key of its own, not a report token) and the `.debug` file as `application/octet-stream`; its debug sections are zlib-compressed (`SHF_COMPRESSED`). `ci/release/upload-symbols.sh <deb> <endpoint>` sends every `.debug` of a `bande-debug-symbols` deb (2xx is success). `LOGS_SYMBOLS_KEY` may list several keys separated by commas: on a 401 the next one is tried and kept, so the server's keys can be rotated without a gap. The owner's machines run it over the internet like every other client: `send-symbols` on the build machine after `rebuild-desktop` installs a build and after a release tag's run is green, with `LOGS_SYMBOLS_KEY` from `~/bande-linux/logs-keys.env` or `/etc/bande/reports.conf`.
 
 ### Signature
 

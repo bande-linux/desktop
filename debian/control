@@ -558,8 +558,8 @@ Recommends: cifs-utils,
  go-mtpfs,
  gphotofs,
  libmtp-common,
- fuse3,
- systemd-resolved
+ fuse3
+Suggests: systemd-resolved
 Description: Bande removable media mounting
  Mounts removable drives through UDisks2 as they appear, connects to SMB,
  SFTP and WebDAV servers as ordinary mounts with passwords in the

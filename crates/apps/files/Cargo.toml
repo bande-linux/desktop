@@ -42,7 +42,7 @@ section = "misc"
 depends = "$auto, bande-icon-theme, fonts-dejavu-core, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 extended-description = """\
 The file manager of the Bande desktop: folders open in Miller columns \
-driven by the arrow keys, as in the Finder's column view, and Space shows \
+driven by the arrow keys, and Space shows \
 the selected file in Glance."""
 assets = [
     ["target/release/bande-files", "usr/bin/", "755"],

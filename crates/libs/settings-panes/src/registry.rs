@@ -275,7 +275,7 @@ impl PaneId {
                 tr!("bar, dock, menu bar, launcher, taskbar, panel, favourites, favorites")
             }
             Self::Notifications => tr!("alerts, banners"),
-            Self::Search => tr!("spotlight, launcher, super, results, recents, privacy"),
+            Self::Search => tr!("launcher, super, results, recents, privacy"),
             Self::Accessibility => tr!("a11y, disability, assistive, vision, hearing, motor"),
             Self::Displays => tr!("monitor, screen, resolution, brightness, night light"),
             Self::NightLight => tr!(
@@ -328,7 +328,7 @@ impl PaneId {
                 tr!("bug, report, problem, freeze, crash, feedback, send, diagnose")
             }
             Self::Backup => {
-                tr!("time machine, restore, versions, external disk, history, snapshot, recover")
+                tr!("restore, versions, external disk, history, snapshot, recover")
             }
         }
     }

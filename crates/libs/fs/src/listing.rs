@@ -165,7 +165,7 @@ impl Default for Sort {
 
 pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
     let order = match sort.by {
-        SortBy::Name => finder_order(&a.name, &b.name),
+        SortBy::Name => natural_order(&a.name, &b.name),
         SortBy::Modified => b.modified.cmp(&a.modified),
         SortBy::Size => b.size.cmp(&a.size),
         SortBy::Kind => kind_key(a)
@@ -174,7 +174,7 @@ pub fn compare(a: &Entry, b: &Entry, sort: Sort) -> Ordering {
             .cmp(kind_key(b).chars().flat_map(char::to_lowercase)),
         SortBy::Created => b.created.cmp(&a.created),
     }
-    .then_with(|| finder_order(&a.name, &b.name));
+    .then_with(|| natural_order(&a.name, &b.name));
     let folders = match sort.folders_first {
         true => b.is_folder().cmp(&a.is_folder()),
         false => Ordering::Equal,
@@ -325,7 +325,7 @@ pub fn same_volume(a: &Path, b: &Path) -> bool {
     }
 }
 
-pub fn finder_order(a: &str, b: &str) -> Ordering {
+pub fn natural_order(a: &str, b: &str) -> Ordering {
     let (mut left, mut right) = (a.chars().peekable(), b.chars().peekable());
     loop {
         match (left.peek().copied(), right.peek().copied()) {

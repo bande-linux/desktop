@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use bande_fs::finder_order;
+use bande_fs::natural_order;
 
 pub const CELL_WIDTH: f32 = 104.0;
 pub const CELL_HEIGHT: f32 = 112.0;
@@ -193,13 +193,13 @@ fn compare(by: SortBy, a: &Item, b: &Item) -> Ordering {
         SortBy::None | SortBy::Name => Ordering::Equal,
         SortBy::Kind => (b.kind == Kind::Folder)
             .cmp(&(a.kind == Kind::Folder))
-            .then_with(|| finder_order(&a.kind_name, &b.kind_name)),
+            .then_with(|| natural_order(&a.kind_name, &b.kind_name)),
         SortBy::DateAdded => b.added.cmp(&a.added),
         SortBy::Size => b.size.cmp(&a.size),
     };
     volumes_first
         .then(order)
-        .then_with(|| finder_order(&a.name, &b.name))
+        .then_with(|| natural_order(&a.name, &b.name))
 }
 
 impl Desktop {
@@ -524,7 +524,7 @@ impl Desktop {
             .items
             .iter()
             .filter(|item| item.label.to_lowercase() >= prefix)
-            .min_by(|a, b| finder_order(&a.label, &b.label))
+            .min_by(|a, b| natural_order(&a.label, &b.label))
             .map(|item| item.path.clone());
         match found {
             Some(path) => {

@@ -247,8 +247,8 @@ msgstr "fält, dock, menyrad, startare, aktivitetsfält, panel, favoriter"
 msgid "alerts, banners"
 msgstr "aviseringar, banners"
 
-msgid "spotlight, launcher, super, results, recents, privacy"
-msgstr "spotlight, startare, super, resultat, senaste, integritet"
+msgid "launcher, super, results, recents, privacy"
+msgstr "startare, super, resultat, senaste, integritet"
 
 msgid "a11y, disability, assistive, vision, hearing, motor"
 msgstr "a11y, funktionsnedsättning, hjälpmedel, syn, hörsel, motorik"
@@ -331,8 +331,8 @@ msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, kernel pan
 msgid "bug, report, problem, freeze, crash, feedback, send, diagnose"
 msgstr "fel, rapport, problem, frysning, krasch, återkoppling, skicka, diagnos"
 
-msgid "time machine, restore, versions, external disk, history, snapshot, recover"
-msgstr "time machine, återställ, versioner, extern skiva, historik, ögonblicksbild, återskapa"
+msgid "restore, versions, external disk, history, snapshot, recover"
+msgstr "återställ, versioner, extern skiva, historik, ögonblicksbild, återskapa"
 
 msgid "When available"
 msgstr "När de finns"

@@ -2183,7 +2183,7 @@ impl FilesView {
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
             .filter(|name| !bande_fs::is_hidden(name))
             .collect::<Vec<_>>();
-        names.sort_by(|a, b| bande_fs::finder_order(a, b));
+        names.sort_by(|a, b| bande_fs::natural_order(a, b));
         names
     }
 

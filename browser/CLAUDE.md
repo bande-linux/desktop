@@ -14,7 +14,7 @@
 9. **Scripts**: no comments beyond a usage header; event-driven where anything waits.
 
 ## Building
-- Never build on the mini. `build-run` with `BUILD_NO_MINI=1` and `scripts/local-build.sh`; see `README.md`. Use a temporary `HOME` for anything that runs the browser.
+- Build through `build-run` with `BUILD_NO_MINI=1` and `scripts/local-build.sh`; see `README.md`. Use a temporary `HOME` for anything that runs the browser.
 
 ## Workflow
 - Trunk-based: `main` builds. Work on a short branch from `main`, merge when it builds and passes the checks. Never force-push or rewrite history: `apps/browser` pins old commits of this repository.

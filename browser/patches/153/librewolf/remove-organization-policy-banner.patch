@@ -1,0 +1,18 @@
+Description: Remove the banner in the settings when policies are being used
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/ui-patches/remove-organization-policy-banner.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
+Index: firefox-esr-153.6.0esr/browser/components/preferences/preferences.js
+===================================================================
+--- firefox-esr-153.6.0esr.orig/browser/components/preferences/preferences.js
++++ firefox-esr-153.6.0esr/browser/components/preferences/preferences.js
+@@ -590,8 +590,6 @@ function init_all() {
+     gotoPref(event.target.view);
+   });
+ 
+-  maybeDisplayPoliciesNotice();
+-
+   window.addEventListener("hashchange", onHashChange);
+   window.addEventListener("beforeunload", onBeforeunload);
+ 

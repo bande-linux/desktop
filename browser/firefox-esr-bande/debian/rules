@@ -1,0 +1,7 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+execute_after_dh_install:
+	install -D -m 644 settings.js debian/bande-firefox-esr-settings/etc/firefox-esr/bande-settings.js

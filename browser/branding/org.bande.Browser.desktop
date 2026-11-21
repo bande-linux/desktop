@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Name=Browser
+Name[sv]=Webbläsare
+Comment=Browse the web
+Comment[sv]=Surfa på webben
+GenericName=Web Browser
+GenericName[sv]=Webbläsare
+Icon=org.bande.Browser
+Exec=bande-browser %u
+Terminal=false
+StartupNotify=true
+StartupWMClass=org.bande.Browser
+Categories=Network;WebBrowser;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;application/xhtml+xml;application/pdf;
+Actions=new-window;new-private-window;
+
+[Desktop Action new-window]
+Name=New Window
+Name[sv]=Nytt fönster
+Exec=bande-browser --new-window %u
+
+[Desktop Action new-private-window]
+Name=New Private Window
+Name[sv]=Nytt privat fönster
+Exec=bande-browser --private-window %u

@@ -3,7 +3,7 @@
 # bande-desktop_<version>.orig-vendor.tar.xz with every crate of Cargo.lock (cargo vendor
 # --versioned-dirs), which the pkg.bande.vendor build profile builds from. A crate that no Linux
 # build on amd64 or arm64 uses keeps only its Cargo.toml, which cargo still reads to resolve, and
-# an empty src/lib.rs.
+# an empty src/lib.rs. cargo package's Cargo.toml.orig, which dpkg-source ignores, is left out.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 out=$(realpath "${1:?usage: vendor.sh <out dir> <upstream version>}")
@@ -17,6 +17,11 @@ for triple in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
     cargo metadata --locked --offline --format-version 1 --filter-platform "$triple" |
         jq -r '.resolve.nodes[].id as $id | .packages[] | select(.id == $id and .source != null) | "\(.name)-\(.version)"'
 done | sort -u > "$scratch/linux"
+find "$scratch/vendor" -name Cargo.toml.orig -delete
+for checksum in "$scratch"/vendor/*/.cargo-checksum.json; do
+    jq -c '.files |= with_entries(select(.key | endswith("Cargo.toml.orig") | not))' "$checksum" > "$scratch/checksum"
+    mv "$scratch/checksum" "$checksum"
+done
 for crate in "$scratch"/vendor/*; do
     grep -qxF "$(basename "$crate")" "$scratch/linux" && continue
     find "$crate" -mindepth 1 -maxdepth 1 ! -name Cargo.toml ! -name .cargo-checksum.json -exec rm -rf {} +

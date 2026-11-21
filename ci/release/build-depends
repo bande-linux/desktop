@@ -4,6 +4,7 @@ rustc
 rustfmt
 rust-clippy
 pkg-config
+libwayland-dev
 libxkbcommon-dev
 libx11-data
 libgbm-dev

@@ -9,7 +9,7 @@ the accessibility tree, the Wayland protocol, D-Bus and files. At most a couple 
 or feature; a new test replaces or merges with an old one before the total grows.
 
 The guide is about 1,500 lines of tests for the desktop and 80–100 per app. Today there are
-4,302: 3,765 lines in `crates/**/tests/*.rs` (`wc -l`) and 537 lines in the 17 `#[cfg(test)]`
+4,344: 3,768 lines in `crates/**/tests/*.rs` (`wc -l`) and 576 lines in the 18 `#[cfg(test)]`
 modules under `crates/**/src` (each counted from its `#[cfg(test)]` line to its closing brace).
 The keyring boundary (406), the compositor's input and lock boundaries (312) and Mail's
 end-to-end test with dovecot are most of the excess; trim them before adding anything.
@@ -53,6 +53,7 @@ Paths are under `crates/`.
 | `toolkit/toolkit/tests/accessibility.rs` | Toolkit: a screen reader finds a button over AT-SPI in a window on the headless compositor and presses it. |
 | `libs/l10n-source/src/plural.rs` | Parser: gettext plural rules pick the forms their languages need. |
 | `libs/content/src/import.rs` | Parser: words split across Word XML runs stay whole and paragraphs stay apart in the indexed text. |
+| `services/index/src/store.rs` | Parser and tokenizer: a search matches regardless of case and accents (`ø` as `o`), the word being typed as a prefix, quoted words as a phrase and a CJK character on its own; a replaced or removed file's text is no longer found. |
 | `services/printd/src/mdns.rs` | Parser of untrusted network input: a printer announcement with compressed DNS names resolves to its address. |
 | `services/printd/src/raster.rs` (2 tests) | Encoding: raster lines pack runs and literals, and equal lines repeat, as the printer formats define. |
 | `services/reporter/src/scrub.rs` | Privacy boundary: nothing personal survives in a fault report's text while diagnostics do. |

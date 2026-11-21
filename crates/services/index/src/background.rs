@@ -6,13 +6,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use bande_search::{CACHE_TAG, Stamp, is_excluded, skipped_name};
 use bande_watch::FolderWatch;
 use rustix::fs::{AtFlags, CWD, FileType, StatxFlags, statx};
-use tantivy::schema::TantivyDocument;
-use tantivy::{Index, IndexReader, IndexWriter, Term, doc};
 
 use crate::import::{MAX_TEXT, open_quietly, text_of};
-use crate::store::{Entry, Fields, entry_document};
+use crate::store::{Entry, Writer};
 
-const WRITER_MEMORY: usize = 32_000_000;
 const COMMIT_EVERY_BYTES: usize = 128 << 20;
 const ENCRYPTED_ATTRIBUTE: u64 = 0x800;
 const KEEP_PRIORITY_VARIABLE: &str = "BANDE_INDEXER_KEEP_PRIORITY";
@@ -130,12 +127,9 @@ pub enum Reply {
 }
 
 pub struct Background {
-    pub index: Index,
-    pub reader: IndexReader,
-    pub fields: Fields,
+    pub writer: Writer,
     pub root_mount: Option<u64>,
     pub watcher: Option<Arc<FolderWatch>>,
-    pub writer: Option<IndexWriter>,
     pub written: usize,
     pub watch_failed: bool,
 }
@@ -174,19 +168,7 @@ impl Background {
                 return;
             }
         }
-        if let Some(writer) = self.writer.take() {
-            let _ = writer.wait_merging_threads();
-        }
-    }
-
-    fn writer(&mut self) -> Option<&mut IndexWriter> {
-        if self.writer.is_none() {
-            match self.index.writer_with_num_threads(1, WRITER_MEMORY) {
-                Ok(writer) => self.writer = Some(writer),
-                Err(error) => tracing::warn!("cannot write the search index: {error}"),
-            }
-        }
-        self.writer.as_mut()
+        self.commit();
     }
 
     fn work(&mut self, job: Job) -> Reply {
@@ -210,22 +192,20 @@ impl Background {
             }
             Job::Commit => {
                 self.commit();
-                self.reload();
                 Reply::Committed
             }
             Job::Purge => {
-                self.purge();
-                self.reload();
+                self.written = 0;
+                if let Err(error) = self.writer.compact() {
+                    tracing::warn!("cannot rewrite the search index: {error}");
+                }
                 Reply::Committed
             }
             Job::Rest => {
-                self.commit();
-                if let Some(writer) = self.writer.take()
-                    && let Err(error) = writer.wait_merging_threads()
-                {
-                    tracing::warn!("cannot finish merging the search index: {error}");
+                self.written = 0;
+                if let Err(error) = self.writer.rest() {
+                    tracing::warn!("cannot save the search index: {error}");
                 }
-                self.reload();
                 // SAFETY: malloc_trim only returns free heap pages to the kernel; it has no
                 // preconditions.
                 unsafe { libc::malloc_trim(0) };
@@ -234,74 +214,24 @@ impl Background {
         }
     }
 
-    fn reload(&self) {
-        if let Err(error) = self.reader.reload() {
-            tracing::warn!("cannot reopen the search index: {error}");
-        }
-    }
-
     fn commit(&mut self) {
         self.written = 0;
-        if let Some(writer) = self.writer()
-            && let Err(error) = writer.commit()
-        {
+        if let Err(error) = self.writer.commit() {
             tracing::warn!("cannot save the search index: {error}");
         }
     }
 
-    fn purge(&mut self) {
-        self.commit();
-        let segments = self.index.searchable_segment_ids().unwrap_or_default();
-        if !segments.is_empty()
-            && let Some(writer) = self.writer()
-        {
-            let merged = writer.merge(&segments).wait();
-            if let Err(error) = merged {
-                tracing::warn!("cannot rewrite the search index: {error}");
-            }
-            let collected = writer.garbage_collect_files().wait();
-            if let Err(error) = collected {
-                tracing::warn!("cannot clear old search index files: {error}");
-            }
-        }
-    }
-
     fn apply(&mut self, edits: Vec<Edit>) {
-        let fields = self.fields;
-        let Some(writer) = self.writer() else {
-            return;
-        };
         for edit in edits {
-            match edit {
-                Edit::Put(entry) => {
-                    writer.delete_term(Term::from_field_u64(fields.entry, u64::from(entry.id)));
-                    add(writer, entry_document(&fields, &entry));
-                }
-                Edit::Remove(id) => {
-                    writer.delete_term(Term::from_field_u64(fields.entry, u64::from(id)));
-                    writer.delete_term(Term::from_field_u64(fields.content, u64::from(id)));
-                }
-                Edit::PutItem(item) => {
-                    writer.delete_term(Term::from_field_text(fields.item, &item.key));
-                    add(
-                        writer,
-                        doc!(
-                            fields.item => item.key,
-                            fields.domain => item.domain,
-                            fields.kind => item.kind,
-                            fields.title => item.title.as_str(),
-                            fields.detail => item.detail,
-                            fields.target => item.target,
-                            fields.body => format!("{}\n{}", item.title, item.body),
-                        ),
-                    );
-                }
-                Edit::ForgetItem(key) => {
-                    writer.delete_term(Term::from_field_text(fields.item, &key));
-                }
-                Edit::ForgetDomain(domain) => {
-                    writer.delete_term(Term::from_field_text(fields.domain, &domain));
-                }
+            let applied = match &edit {
+                Edit::Put(entry) => self.writer.put_entry(entry),
+                Edit::Remove(id) => self.writer.remove_entry(*id),
+                Edit::PutItem(item) => self.writer.put_item(item),
+                Edit::ForgetItem(key) => self.writer.forget_item(key),
+                Edit::ForgetDomain(domain) => self.writer.forget_domain(domain),
+            };
+            if let Err(error) = applied {
+                tracing::warn!("cannot write the search index: {error}");
             }
         }
     }
@@ -356,19 +286,18 @@ impl Background {
             .ok()
             .and_then(|file| text_of(path, file))
             .filter(|text| !text.trim().is_empty());
-        let fields = self.fields;
-        let Some(writer) = self.writer() else {
-            return Reply::Imported { id, stamp: None };
-        };
-        writer.delete_term(Term::from_field_u64(fields.content, u64::from(id)));
         let mut size = 0;
-        if let Some(mut text) = text {
-            text.truncate(text.floor_char_boundary(MAX_TEXT));
-            size = text.len();
-            add(
-                writer,
-                doc!(fields.content => u64::from(id), fields.body => format!("{name}\n{text}")),
-            );
+        let written = match text {
+            Some(mut text) => {
+                text.truncate(text.floor_char_boundary(MAX_TEXT));
+                size = text.len();
+                self.writer.put_text(id, &format!("{name}\n{text}"))
+            }
+            None => self.writer.forget_text(id),
+        };
+        if let Err(error) = written {
+            tracing::warn!("cannot add to the search index: {error}");
+            return Reply::Imported { id, stamp: None };
         }
         self.written += size;
         if self.written >= COMMIT_EVERY_BYTES {
@@ -378,11 +307,5 @@ impl Background {
             id,
             stamp: Some(stamp),
         }
-    }
-}
-
-fn add(writer: &IndexWriter, document: TantivyDocument) {
-    if let Err(error) = writer.add_document(document) {
-        tracing::warn!("cannot add to the search index: {error}");
     }
 }

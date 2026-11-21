@@ -10,7 +10,7 @@ repository.workspace = true
 [dependencies]
 libc.workspace = true
 rustix = { workspace = true, features = ["fs", "process"] }
-tantivy.workspace = true
+rusqlite.workspace = true
 tracing.workspace = true
 bande-bus.workspace = true
 bande-config.workspace = true
@@ -20,6 +20,9 @@ bande-search.workspace = true
 bande-watch.workspace = true
 bande-xdg.workspace = true
 zbus.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"

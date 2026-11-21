@@ -15,7 +15,7 @@ use bande_watch::{Changes, FolderWatch};
 
 use crate::background::{Background, Child, Edit, Job, Offered, Reply, admitted, inspect};
 use crate::bus;
-use crate::store::{Entry, Hit, Store};
+use crate::store::{self, Entry, Hit, Store};
 
 const SETTLE: Duration = Duration::from_millis(300);
 const FIRST_SAVE: Duration = Duration::from_secs(2);
@@ -91,7 +91,7 @@ struct Service {
 }
 
 pub fn run(home: PathBuf, folder: PathBuf) -> io::Result<()> {
-    let store = Store::open(&folder).map_err(io::Error::other)?;
+    let (store, writer) = store::open(&folder).map_err(io::Error::other)?;
     let (messages, received) = channel();
     let changes = messages.clone();
     let overflows = messages.clone();
@@ -111,12 +111,9 @@ pub fn run(home: PathBuf, folder: PathBuf) -> io::Result<()> {
     let (done, replies) = channel();
     let root_mount = inspect(&home).map(|inspected| inspected.mount);
     let background = Background {
-        index: store.index.clone(),
-        reader: store.reader(),
-        fields: store.fields,
+        writer,
         root_mount,
         watcher,
-        writer: None,
         written: 0,
         watch_failed: false,
     };
@@ -790,7 +787,7 @@ impl Service {
             .collect()
     }
 
-    fn scope(&self, within: &str) -> Option<(PathBuf, Arc<Vec<bool>>)> {
+    fn scope(&self, within: &str) -> Option<(PathBuf, Vec<bool>)> {
         let within = PathBuf::from(within);
         if within.as_os_str().is_empty() || within == self.home {
             return None;
@@ -806,7 +803,7 @@ impl Service {
                 }
             }
         }
-        Some((within, Arc::new(allowed)))
+        Some((within, allowed))
     }
 
     fn find(&mut self, text: &str, within: &str, limit: usize) -> Vec<Found> {
@@ -841,7 +838,7 @@ impl Service {
             .search(
                 text,
                 limit.saturating_mul(OVERFETCH),
-                scope.map(|(_, allowed)| allowed),
+                scope.as_ref().map(|(_, allowed)| allowed.as_slice()),
             )
             .inspect_err(|error| tracing::warn!("cannot search the index: {error}"))
             .unwrap_or_default();

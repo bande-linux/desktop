@@ -12,7 +12,7 @@ fn main() -> ExitCode {
             None => ExitCode::FAILURE,
         };
     }
-    bande_log::init_quieting("bande-indexer", &["tantivy"]);
+    bande_log::init("bande-indexer");
     match bande_indexer::serve() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

@@ -47,25 +47,15 @@ fn name_process(identifier: &str) {
 }
 
 pub fn init(identifier: &str) {
-    init_quieting(identifier, &[]);
-}
-
-pub fn init_quieting(identifier: &str, chatty: &[&str]) {
     name_process(identifier);
-    let filter = chatty.iter().fold(
-        targets(std::env::var(FILTER_VARIABLE).ok().as_deref()),
-        |filter, target| filter.with_target(*target, LevelFilter::WARN),
-    );
+    let filter = targets(std::env::var(FILTER_VARIABLE).ok().as_deref());
     let in_memory = (runs_installed() && !HOLDS_PASSWORDS.contains(&identifier))
         .then(|| ring::Ring::open(identifier).ok())
         .flatten()
         .map(|ring| {
-            let filter = chatty.iter().fold(
-                Targets::new()
-                    .with_default(LevelFilter::INFO)
-                    .with_target(OWN_TARGETS, LevelFilter::DEBUG),
-                |filter, target| filter.with_target(*target, LevelFilter::WARN),
-            );
+            let filter = Targets::new()
+                .with_default(LevelFilter::INFO)
+                .with_target(OWN_TARGETS, LevelFilter::DEBUG);
             ring::RingLayer(ring).with_filter(filter)
         });
     let journal = tracing_journald::layer().ok().map(|journal| {

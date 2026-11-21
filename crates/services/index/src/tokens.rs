@@ -1,23 +1,6 @@
-use tantivy::tokenizer::{
-    AsciiFoldingFilter, LowerCaser, RemoveLongFilter, TextAnalyzer, Token, TokenStream, Tokenizer,
-};
-
-pub const ANALYZER: &str = "bande";
 const LONGEST_WORD: usize = 64;
 
-#[derive(Clone, Default)]
-struct Words {
-    token: Token,
-}
-
-struct WordStream<'a> {
-    text: &'a str,
-    at: usize,
-    position: usize,
-    token: &'a mut Token,
-}
-
-fn stands_alone(character: char) -> bool {
+pub fn stands_alone(character: char) -> bool {
     matches!(character,
         '\u{3040}'..='\u{30ff}'
         | '\u{3400}'..='\u{4dbf}'
@@ -27,75 +10,52 @@ fn stands_alone(character: char) -> bool {
         | '\u{20000}'..='\u{2fa1f}')
 }
 
-impl Tokenizer for Words {
-    type TokenStream<'a> = WordStream<'a>;
-
-    fn token_stream<'a>(&'a mut self, text: &'a str) -> WordStream<'a> {
-        self.token.reset();
-        WordStream {
-            text,
-            at: 0,
-            position: 0,
-            token: &mut self.token,
-        }
-    }
+fn spelled_out(character: char) -> Option<&'static str> {
+    Some(match character {
+        'æ' | 'Æ' => "ae",
+        'ð' | 'Ð' | 'đ' | 'Đ' => "d",
+        'ı' => "i",
+        'ł' | 'Ł' => "l",
+        'ø' | 'Ø' => "o",
+        'œ' | 'Œ' => "oe",
+        'ß' | 'ẞ' => "ss",
+        'þ' | 'Þ' => "th",
+        _ => return None,
+    })
 }
 
-impl TokenStream for WordStream<'_> {
-    fn advance(&mut self) -> bool {
-        let rest = self.text.get(self.at..).unwrap_or_default();
-        let Some((skip, first)) = rest
-            .char_indices()
-            .find(|(_, character)| character.is_alphanumeric())
-        else {
-            self.at = self.text.len();
-            return false;
-        };
-        let start = self.at + skip;
-        let mut end = start + first.len_utf8();
-        if !stands_alone(first) {
-            let word = self.text.get(end..).unwrap_or_default();
-            end += word
-                .char_indices()
-                .find(|(_, character)| !character.is_alphanumeric() || stands_alone(*character))
-                .map_or(word.len(), |(index, _)| index);
+fn folded(word: &str) -> String {
+    let mut folded = String::with_capacity(word.len());
+    for character in word.chars() {
+        match spelled_out(character) {
+            Some(letters) => folded.push_str(letters),
+            None => folded.push(character),
         }
-        self.at = end;
-        self.token.offset_from = start;
-        self.token.offset_to = end;
-        self.token.position = self.position;
-        self.token.position_length = 1;
-        self.token.text.clear();
-        self.token
-            .text
-            .push_str(self.text.get(start..end).unwrap_or_default());
-        self.position += 1;
-        true
     }
-
-    fn token(&self) -> &Token {
-        self.token
-    }
-
-    fn token_mut(&mut self) -> &mut Token {
-        self.token
-    }
-}
-
-pub fn analyzer() -> TextAnalyzer {
-    TextAnalyzer::builder(Words::default())
-        .filter(RemoveLongFilter::limit(LONGEST_WORD))
-        .filter(LowerCaser)
-        .filter(AsciiFoldingFilter)
-        .build()
+    folded
 }
 
 pub fn words(text: &str) -> Vec<String> {
-    let mut analyzer = analyzer();
-    let mut stream = analyzer.token_stream(text);
     let mut words = Vec::new();
-    while stream.advance() {
-        words.push(stream.token().text.clone());
+    let mut rest = text;
+    while let Some(start) = rest.find(char::is_alphanumeric) {
+        rest = rest.get(start..).unwrap_or_default();
+        let mut characters = rest.char_indices();
+        let end = match characters.next() {
+            Some((_, first)) if stands_alone(first) => first.len_utf8(),
+            _ => characters
+                .find(|(_, character)| !character.is_alphanumeric() || stands_alone(*character))
+                .map_or(rest.len(), |(index, _)| index),
+        };
+        let word = rest.get(..end).unwrap_or_default();
+        if word.len() < LONGEST_WORD {
+            words.push(folded(word));
+        }
+        rest = rest.get(end..).unwrap_or_default();
     }
     words
+}
+
+pub fn indexed(text: &str) -> String {
+    words(text).join(" ")
 }

@@ -49,7 +49,7 @@ const APPS: [(&str, &str); 4] = [
     ("bande-files", "org.bande.Files"),
     ("bande-settings", "org.bande.Settings"),
     ("bande-terminal", "org.bande.Terminal"),
-    ("bande-monitor", "org.bande.ActivityMonitor"),
+    ("bande-monitor", "org.bande.SystemMonitor"),
 ];
 
 struct Options {

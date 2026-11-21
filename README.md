@@ -21,7 +21,7 @@ One Cargo workspace with the desktop itself, grouped by role in `crates/`
 | `libs/` | shared logic, including `bande-app`, the framework every app is built on |
 | `testing/` | the test bus, a Wayland test client, benchmarks |
 
-Terminal, Activity Monitor, Software, the Package Installer, Mail and Calendar live in
+Terminal, System Monitor, Software, the Package Installer, Mail and Calendar live in
 [bande-linux/apps](https://github.com/bande-linux/apps), built on `bande-app` at a pinned revision
 of this repository and released on their own. `packaging/` holds the `bande-desktop`
 metapackage, `ci/` the release and packaging scripts, `data/` wallpapers, icons and sounds.
@@ -78,7 +78,7 @@ sudo apt install bande-desktop
 ```
 
 `bande-desktop` brings the desktop, its login window under greetd, NetworkManager, PipeWire, the
-Bande apps Terminal, Software, Package Installer, Activity Monitor and Archive Utility, and compressed swap in
+Bande apps Terminal, Software, Package Installer, System Monitor and Archives, and compressed swap in
 memory; other apps, such as a browser, install from Software. With `--no-install-recommends` it
 brings only the desktop, a login and sound. Pick the **Bande** session at login. Updates arrive with `sudo apt upgrade` or
 Settings ▸ Software Update. The archive is signed with the key

@@ -6,7 +6,7 @@ Linux equivalent), **basic** works but is thinner, **none** is missing. Open wor
 [`architecture/behaviour.md`](architecture/behaviour.md).
 
 Bande's own apps are Files, Settings, the launcher (Spotlight) and, in bande-linux/apps,
-Terminal, Activity Monitor, Software, the Package Installer, Mail and Calendar. No Debian apps
+Terminal, System Monitor, Software, the Package Installer, Mail and Calendar. No Debian apps
 come preinstalled; a browser, viewers and editors install from Software. The Taskbar sits on
 the left by default (or any other edge); each window's menu button (⋮) holds the app's menus.
 
@@ -26,7 +26,7 @@ the left by default (or any other edge); each window's menu button (⋮) holds t
 | Lock screen, login window | basic | no user picker, accessibility or power menus at login |
 | Files | basic | icons, list, columns and gallery, Glance, Get Info, tabs, batch rename, settings, failure alerts, Show in Folder for other apps; no network locations or tags |
 | Settings | basic | grouped panes with search; no custom shortcuts or scanners |
-| Terminal, Activity Monitor | basic | apps repo; Terminal has tabs, splits and profiles |
+| Terminal, System Monitor | basic | apps repo; Terminal has tabs, splits and profiles |
 | Software, Package Installer, software updates | basic | live updates, offline only for reboot-class packages; Debian packages; Flatpak apps only once the user installs `flatpak` |
 | Screenshots, recording, Markup | parity | |
 | Force Quit, Not Responding, low-memory window | parity | in the compositor, works when the shell hangs |

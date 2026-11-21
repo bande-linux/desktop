@@ -171,7 +171,7 @@ pub enum Hit {
     GroupToggle(usize),
 }
 
-const ARCHIVE_UTILITY_DESKTOP_ID: &str = "org.bande.ArchiveUtility.desktop";
+const ARCHIVES_DESKTOP_ID: &str = "org.bande.Archives.desktop";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -2254,7 +2254,7 @@ impl FilesView {
         if self.browser.in_trash() {
             return;
         }
-        if let Some(app) = self.apps.find(ARCHIVE_UTILITY_DESKTOP_ID) {
+        if let Some(app) = self.apps.find(ARCHIVES_DESKTOP_ID) {
             self.requests.push(Request::Compress {
                 app: Box::new(app.clone()),
                 files: sources,

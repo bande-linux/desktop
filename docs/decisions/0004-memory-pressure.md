@@ -92,7 +92,7 @@ where `swappiness=180` is wrong.
 
 The shell (one process, always running, fonts already loaded) opens a PSI trigger on
 `/proc/pressure/memory`: `full 100000 2000000`, a full stall of at least 5 % in a 2 s window.
-That is Activity Monitor's "Critical" level (full avg10 ≥ 5 %), so the window and the graph
+That is System Monitor's "Critical" level (full avg10 ≥ 5 %), so the window and the graph
 agree. It is the system-wide file, because thrashing hurts the whole machine whoever causes it.
 `/proc/pressure/*` is mode 0666 on Debian 13 (Linux 6.12), and a 2 s window is allowed for
 unprivileged users. The fd sits in the shell's `poll()` set. Idle cost is zero: no timer, no
@@ -105,15 +105,15 @@ until memory has been calm for 60 s, so it never nags during one bad build.
 The window (in the shell process, not a new one, because starting a process when memory is
 short is exactly what must be avoided) is a toplevel kept on top:
 
-- Activity Monitor's icon as the alert disc, the heading "Your computer is running low on
+- System Monitor's icon as the alert disc, the heading "Your computer is running low on
   memory", and a line telling the user to quit apps they are not using.
 - The six heaviest apps, read from each app scope's `memory.current + memory.swap.current` and
   grouped by app (two windows of one app add up), with icon, name and size. The list refreshes
   every 2 s while the window is open, and only then.
 - **Force Quit** asks first ("Force quit Terminal? Any unsaved changes in it are lost.") and
   then calls systemd's `KillUnit(scope, "all", SIGKILL)`, which kills the app's whole cgroup.
-- **Activity Monitor** opens it on the Memory tab (`bande-monitor --memory`), where the
-  pressure graph is; the button is hidden when Activity Monitor is not installed.
+- **System Monitor** opens it on the Memory tab (`bande-monitor --memory`), where the
+  pressure graph is; the button is hidden when System Monitor is not installed.
 - **Close** (Escape) dismisses it.
 
 ### 4. The notification
@@ -122,7 +122,7 @@ short is exactly what must be avoided) is a toplevel kept on top:
 only sends unit signals while someone is subscribed) and watches `PropertiesChanged` on
 `/org/freedesktop/systemd1/unit/*`. Since systemd 248 both a kernel OOM kill and a systemd-oomd
 kill set a scope's or service's `Result` to `oom-kill`. The unit name is decoded from the bus
-path, the app from the unit name (the same decoder Activity Monitor uses, now shared), and the
+path, the app from the unit name (the same decoder System Monitor uses, now shared), and the
 notification says "Terminal was closed because memory ran low". Clicking it opens the app again,
 as the crash notice does. Units that are not apps (a build in `run-*.scope`, a service) get "A
 background task was stopped because memory ran low", naming the unit.
@@ -144,7 +144,7 @@ background task was stopped because memory ran low", naming the unit.
 
 ## Sources
 
-1. Apple, Activity Monitor User Guide, "View memory usage in Activity Monitor on Mac",
+1. Apple, System Monitor User Guide, "View memory usage in System Monitor on Mac",
    https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/mac
 2. Apple Developer, "Responding to low-memory warnings",
    https://developer.apple.com/documentation/xcode/responding-to-low-memory-warnings

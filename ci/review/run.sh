@@ -10,7 +10,7 @@ packages=(
     bande-settings bande-greeter
 )
 screenshot=/usr/bin/bande-screenshot
-apps_repo=(org.bande.Terminal:bande-terminal org.bande.Software:bande-software org.bande.Installer:bande-installer org.bande.ActivityMonitor:bande-monitor)
+apps_repo=(org.bande.Terminal:bande-terminal org.bande.Software:bande-software org.bande.Installer:bande-installer org.bande.SystemMonitor:bande-monitor)
 runtime="${XDG_RUNTIME_DIR:?needs a user session}/bande-review"
 build=1
 take_over=0

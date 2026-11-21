@@ -11,7 +11,7 @@ design questions are in [`../design/DESIGN.md`](../design/DESIGN.md).
 The desktop lives in one Cargo workspace in this repository: compositor, renderer, toolkit,
 shell clients, session services, Files, Settings, libraries and test harnesses. Its layout is
 recorded in [`../decisions/0003-repository-layout.md`](../decisions/0003-repository-layout.md).
-The other Bande apps (Terminal, Activity Monitor, Software, the Package Installer, Mail,
+The other Bande apps (Terminal, System Monitor, Software, the Package Installer, Mail,
 Calendar) live in [bande-linux/apps](https://github.com/bande-linux/apps), built on the same
 toolkit and app framework ([apps.md](apps.md)).
 
@@ -63,7 +63,7 @@ graph TB
     subgraph "Apps (bande-app)"
         FILES[Files]
         SETTINGS[Settings]
-        TERM["Terminal, Activity Monitor, Software, ... (bande-linux/apps)"]
+        TERM["Terminal, System Monitor, Software, ... (bande-linux/apps)"]
     end
 
     subgraph "Session services"
@@ -114,7 +114,7 @@ thinks of it as part of the system:
   ([behaviour](behaviour.md)).
 - **Apps.** Ordinary Wayland clients started by the user, each one process for all its windows
   on `bande-app` ([apps](apps.md)): Files and Settings here, the rest in bande-linux/apps.
-  Settings and Activity Monitor have no special access. Closing an app's last window leaves it
+  Settings and System Monitor have no special access. Closing an app's last window leaves it
   running until Quit, as on macOS.
 - **Session services.** Processes without windows that own D-Bus names for the session
   (configuration, notifications, power, sound, clipboard, tray, automount, portal, polkit). They are

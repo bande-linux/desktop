@@ -248,7 +248,7 @@ writes a hex value, a corner radius or a font name of its own.
   the far left. When they do not fit side by side they stack, default on top. The parent dims
   with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header (`Ui::set_sheet_top` for an app whose content covers the header),
   `Ui::present_dialog` centres it.
-- **Tables**. Rows 32 (24 with `Table::compact` for dense lists such as Activity Monitor), header 28 with `Label`-style
+- **Tables**. Rows 32 (24 with `Table::compact` for dense lists such as System Monitor), header 28 with `Label`-style
   tracked capitals in `ink3` (`ink2` for the sorted column) over a `hairline` underline, no
   stripes and no column separators. Contiguous selected rows form one block of radius 6 inset
   4 × 1: accent with `on_accent` text while focused, `well` otherwise. A single selected run
@@ -284,8 +284,8 @@ writes a hex value, a corner radius or a font name of its own.
   `.caption(title, span)` adds a 20 pt `Label` caption above the well (title centred, span at
   the right) and a `hairline` outline around it; without one the graph is a bare sparkline.
   `set_note` puts a tabular label in its top-left corner (a scale or a name), `set_bands` 3 pt
-  status strips along the bottom (Activity Monitor's charging spans). It never animates or
-  wakes: it draws again only when the app sets new data. Activity Monitor draws its graphs
+  status strips along the bottom (System Monitor's charging spans). It never animates or
+  wakes: it draws again only when the app sets new data. System Monitor draws its graphs
   with it.
 - **Tooltips.** A widget that returns `Widget::tooltip` (buttons and pop-up buttons through
   `.tooltip(...)`) shows it after the pointer rests on it for `TOOLTIP_DELAY`, or after Tab

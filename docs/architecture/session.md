@@ -536,8 +536,8 @@ made again.
     manual mounts from Files are unaffected; a drive removed while still mounted posts "Disk Not Ejected Properly", as macOS
     does. Encrypted volumes wait for the UI.
   - `bande-volumes` holds the one UDisks2 client (`udisks::Udisks`: the managed objects, kept
-    current from the daemon's signals) that automount, Files, the desktop and Disk Utility share.
-    Eject (Files, the desktop, Disk Utility) unmounts every filesystem of the volume's drive and
+    current from the daemon's signals) that automount, Files, the desktop and Disks share.
+    Eject (Files, the desktop, Disks) unmounts every filesystem of the volume's drive and
     locks its unlocked encrypted volumes, then calls `Drive.Eject` when the drive is `Ejectable`
     (optical and removable media, a VM's USB ISO: the device stays), else `PowerOff` when it
     `CanPowerOff` (USB disks), else nothing more; a disk image's loop device is deleted when this

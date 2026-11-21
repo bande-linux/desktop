@@ -86,6 +86,6 @@ Rules:
 ## Consequences
 
 - The `shell/`, `apps/` and `services/` split is by process role, not by "system" versus "user"
-  software. Settings and Activity Monitor are ordinary apps with no special access.
+  software. Settings and System Monitor are ordinary apps with no special access.
 - Shared assets live in `data/` at the root; everything else a package installs stays with its
   crate.

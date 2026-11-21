@@ -13,8 +13,8 @@ Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable
 | Window | Fönster | | Tab | Flik |
 | Browser | Webbläsare | | Mail | E-post |
 | Calendar | Kalender | | Calculator | Kalkylator |
-| Clock | Klocka | | Preview | Förhandsvisning |
-| Disks | Skivor | | Activity Monitor | Aktivitetskontroll |
+| Clock | Klocka | | Viewer | Visare |
+| Disks | Skivor | | System Monitor | Systemövervakare |
 | Software | Programvara | | Software Update | Programuppdatering |
 | Archive | Arkiv | | Text Editor | Textredigerare |
 | Terminal | Terminal | | Search | Sök |

@@ -31,7 +31,7 @@ relation Depends "bande-greeter (= $version) | x-display-manager"
 for depended in pipewire wireplumber pipewire-pulse; do
     relation Depends "$depended"
 done
-for recommended in "bande-greeter (= $version)" bande-apt-source; do
+for recommended in "bande-greeter (= $version)" "bande-reporter (= $version)" "bande-crash-reports (= $version)"; do
     relation Recommends "$recommended"
 done
 

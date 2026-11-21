@@ -13,8 +13,6 @@ Depends: bande-compositor (= ${binary:Version}),
          bande-config (= ${binary:Version}),
          bande-power (= ${binary:Version}),
          bande-printd (= ${binary:Version}),
-         bande-reporter (= ${binary:Version}),
-         bande-crash-reports (= ${binary:Version}),
          bande-sound (= ${binary:Version}),
          bande-spell (= ${binary:Version}),
          bande-notify (= ${binary:Version}),
@@ -37,7 +35,8 @@ Depends: bande-compositor (= ${binary:Version}),
          ${misc:Depends}
 Recommends: ${bande:Recommends},
             bande-greeter (= ${binary:Version}),
-            bande-apt-source,
+            bande-reporter (= ${binary:Version}),
+            bande-crash-reports (= ${binary:Version}),
             bande-screenshot (= ${binary:Version}),
             bande-files (= ${binary:Version}),
             bande-settings (= ${binary:Version}),
@@ -51,24 +50,15 @@ Recommends: ${bande:Recommends},
             libpam-bande-secrets (= ${binary:Version}),
             systemd-oomd
 Description: Bande desktop environment
- The Bande desktop: a pure Wayland desktop with its own compositor, shell,
- session services, login window and applications, on Debian 14 (forky).
+ Bande is a Wayland desktop with its own compositor, shell, session
+ services, login window and applications.
  .
- It brings a way to log in: the Bande login window under greetd, or the
- display manager the system already has. With recommends, the login
- window comes along anyway, and debconf asks which display manager to
- start; "dpkg-reconfigure greetd" asks again later. Sound runs on PipeWire.
- .
- It recommends the Bande apps. The passwords that apps and networks keep
- live in the Bande keyring, unlocked when you log in. Other apps, such as a
- browser, come from Software.
- .
- It recommends systemd-oomd and makes the apps' slice the place where it
- closes an app when memory stays under pressure, so the session keeps
- running.
- .
- Updates install while the computer runs; Software Update in Settings
- handles the session and the apps.
+ This metapackage installs a complete Bande session: the compositor, the
+ shell and lock screen, the keyring, the portal backend, PipeWire for
+ sound and a way to log in (the Bande login window under greetd, or the
+ display manager the system already has). It recommends the Bande apps,
+ fault reporting and systemd-oomd, which closes an app when memory stays
+ under pressure.
 
 Package: bande-icon-theme
 Architecture: all

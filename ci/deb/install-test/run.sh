@@ -30,7 +30,7 @@ done < "$(dirname "$0")/../../runtime-deps"
 
 echo "== every package bande-desktop recommends is in this Debian release or built here"
 default_apps="$(dirname "$0")/../../../packaging/bande-desktop/default-apps"
-from_the_archive=" bande-apt-source $(grep -E '^[a-z0-9]' "$default_apps" | xargs) "
+from_the_archive=" $(grep -E '^[a-z0-9]' "$default_apps" | xargs) "
 apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
     while read -r recommended; do
         [ -n "$recommended" ] && [[ $from_the_archive != *" $recommended "* ]] || continue

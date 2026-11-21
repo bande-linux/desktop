@@ -92,15 +92,14 @@ with `verify.sh --setup` and runs one stage:
 - `deb-all (<suite>)`: `verify.sh all` builds the architecture-independent meta-package `bande-desktop`,
   checks that it pins its packages at the build's version, that it depends on `bande-greeter |
   x-display-manager`, `pipewire`, `wireplumber` and `pipewire-pulse` and recommends
-  `bande-greeter` and `bande-apt-source`, and lints it with `lintian`.
+  `bande-greeter`, `bande-reporter` and `bande-crash-reports`, and lints it with `lintian`.
   It uploads `bande-debs-<suite>-all`. The APT source and keyring packages are built by the APT
   repository itself.
 - `install (<suite>, <arch>)`: in a clean `debian:<suite>` on the native runner,
   `ci/deb/install-test/run.sh` installs `bande-desktop` from that architecture's packages and
   the `all` packages alone without recommends and checks that it brings the login window,
   greetd and PipeWire, then installs every package and checks that they have the same version,
-  that every package it recommends has an installation candidate (`bande-apt-source` comes from
-  the APT repository), that no X server, XWayland or X session came along, that greetd is the
+  that every package it recommends has an installation candidate, that no X server, XWayland or X session came along, that greetd is the
   display manager with the Bande login window, the greeter's wallpaper permissions, and that the
   installed compositor serves Wayland clients. Last, next to LightDM: installing the greeter keeps
   LightDM the default and offers greetd, `dpkg-reconfigure greetd` switches to it, removing

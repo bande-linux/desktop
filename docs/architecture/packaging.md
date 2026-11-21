@@ -54,7 +54,7 @@ profiles. Sizes are in [performance.md](performance.md).
   `libpam-systemd`, on PipeWire, and on `bande-greeter | x-display-manager`, so there is always
   a way to log in: the Bande login window under greetd, or the display manager the system
   already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
-  start), `bande-apt-source`, the screenshot tool, Files, Settings, the tray, automount, file
+  start), fault reporting (`bande-reporter`, `bande-crash-reports`), the screenshot tool, Files, Settings, the tray, automount, file
   chooser, polkit agent and the keyring's PAM module, all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack). It also recommends, unversioned, every Bande app, listed in
   `packaging/bande-desktop/default-apps`: an app built in

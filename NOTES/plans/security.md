@@ -7,7 +7,7 @@ assistant, `fix-update-safety` the btrfs layout inside the LUKS volume, `fix-bac
 
 | # | Who | What they get today | Answer | Real boundary? |
 |---|---|---|---|---|
-| 1 | Thief with the computer or the disk | every file, saved Wi-Fi keys, keychain | LUKS on root, on by default in first run | yes, while powered off |
+| 1 | Thief with the computer or the disk | every file, saved Wi-Fi keys, keyring | LUKS on root, on by default in first run | yes, while powered off |
 | 2 | Someone at a locked computer, or a program acting while it is locked | virtual keyboard types into the lock field; input method can feed it | nothing but the lock client's own wl_keyboard reaches the lock surface; `bande-lock` gets its own role | yes |
 | 3 | A sandboxed app (Flatpak) | reads every key, types anywhere, reconfigures displays, overlays the screen | `wp_security_context_v1`; privileged protocols refused unless consented | yes |
 | 4 | Others on the network | SSH with password login is on in the image; LLMNR answers | SSH off until asked for (Remote Login, key or password chosen there); LLMNR off; firewall below | yes |
@@ -94,7 +94,7 @@ English.
 
 **One password.** On success `bande-unlock` puts the passphrase in the kernel keyring (`user`
 keyring, timed), and the login path takes it from there to sign the one matching user in and unlock
-their keychain. Each user with disk access has their own labelled slot; changing the login password
+their keyring. Each user with disk access has their own labelled slot; changing the login password
 changes the slot in the same PAM step. The passphrase is never written anywhere.
 
 **Recovery key:** 128 bits random in eight groups, in its own labelled slot, shown once. No escrow.

@@ -32,11 +32,11 @@ impl fmt::Display for Error {
         match self {
             Self::File(error) => write!(f, "keyring file: {error}"),
             Self::Io(error) => write!(f, "{error}"),
-            Self::WrongPassword => f.write_str("the password does not open the keychain"),
-            Self::Locked => f.write_str("the keychain is locked"),
-            Self::NoSuchCollection => f.write_str("no such keychain"),
+            Self::WrongPassword => f.write_str("the password does not open the keyring"),
+            Self::Locked => f.write_str("the keyring is locked"),
+            Self::NoSuchCollection => f.write_str("no such keyring"),
             Self::NoSuchItem => f.write_str("no such item"),
-            Self::Protected => f.write_str("the login and session keychains cannot be deleted"),
+            Self::Protected => f.write_str("the login and session keyrings cannot be deleted"),
         }
     }
 }
@@ -197,14 +197,14 @@ pub fn valid_name(name: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
-pub struct Keychain {
+pub struct Store {
     data_home: PathBuf,
     collections: Vec<Collection>,
     default: String,
     next_id: u64,
 }
 
-impl Keychain {
+impl Store {
     pub async fn load(data_home: PathBuf) -> Self {
         let data_home = data_home.join(OWN_FOLDER);
         let directory = data_home.join(KEYRINGS);
@@ -218,16 +218,16 @@ impl Keychain {
             .map(|text| text.trim().to_owned())
             .filter(|name| names.contains(name))
             .unwrap_or_else(|| LOGIN.to_owned());
-        let mut keychain = Self {
+        let mut store = Self {
             data_home,
             collections: Vec::new(),
             default,
             next_id: 1,
         };
         for name in names {
-            let path = keychain.file(&name);
+            let path = store.file(&name);
             let created = modified_seconds(&path).unwrap_or_else(now);
-            keychain.collections.push(Collection {
+            store.collections.push(Collection {
                 label: label_of(&name),
                 name,
                 created,
@@ -241,18 +241,18 @@ impl Keychain {
                 slots: Vec::new(),
             }),
             Err(error) => {
-                tracing::warn!("cannot make the session keychain: {error}");
+                tracing::warn!("cannot make the session keyring: {error}");
                 None
             }
         };
-        keychain.collections.push(Collection {
+        store.collections.push(Collection {
             name: SESSION.to_owned(),
             label: label_of(SESSION),
             created: now(),
             modified: now(),
             open: session,
         });
-        keychain
+        store
     }
 
     fn directory(&self) -> PathBuf {

@@ -184,7 +184,7 @@ msgstr "Skärmsläckare, skärm av, vila och lösenordet"
 msgid "Your account and the others on this computer"
 msgstr "Ditt konto och de andra på den här datorn"
 
-msgid "The passwords apps and networks keep in your keychain"
+msgid "The passwords apps and networks keep in your keyring"
 msgstr "Lösenorden som appar och nätverk förvarar i din nyckelring"
 
 msgid "Which apps may use the camera, take screenshots or share the screen"
@@ -289,7 +289,7 @@ msgstr "automatisk låsning, lås vid inaktivitet, säkerhet, inaktiv, skärmsl�
 msgid "account, user, password, login, administrator, admin"
 msgstr "konto, användare, lösenord, inloggning, administratör, admin"
 
-msgid "keychain, keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
+msgid "keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
 msgstr "nyckelring, nyckelknippa, sparade lösenord, hemligheter, wi-fi-lösenord, webbplatslösenord, konton"
 
 msgid "permissions, screen recording, camera access, privacy, security, clipboard"
@@ -1176,7 +1176,7 @@ msgstr "ändra lösenord, lösenord, administratör, standard, inloggningsnamn, 
 msgid "Saved passwords"
 msgstr "Sparade lösenord"
 
-msgid "show password, copy password, change password, delete password, keychain"
+msgid "show password, copy password, change password, delete password, keyring"
 msgstr "visa lösenord, kopiera lösenord, ändra lösenord, radera lösenord, nyckelring"
 
 msgid "disk, encryption, encrypted, filevault, luks, remote login, ssh, security"

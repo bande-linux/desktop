@@ -42,7 +42,7 @@ screenshots and screen sharing, the desktop picture, notifications \
 through the Bande notification center, keeping the screen or the \
 computer awake, writing email in the default mail app, running in the \
 background, adding web apps to Applications, sharing the account's \
-name and picture, and a key in the Bande keychain for each sandboxed \
+name and picture, and a key in the Bande keyring for each sandboxed \
 app's own passwords. No GTK or GNOME backend is needed."""
 assets = [
     ["target/release/xdg-desktop-portal-bande", "usr/libexec/", "755"],

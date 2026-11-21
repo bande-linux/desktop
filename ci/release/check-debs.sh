@@ -115,7 +115,7 @@ for entry in bande-config:org.bande.Config:org.bande.Config \
     test -x "$root/DEBIAN/postinst"
 done
 
-echo "== the keychain and its PAM module"
+echo "== the keyring and its PAM module"
 root=$(extract bande-secrets)
 service="$root/usr/share/dbus-1/services/org.bande.Secrets.service"
 grep -qx 'Name=org.freedesktop.secrets' "$service"

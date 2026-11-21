@@ -257,7 +257,7 @@ graph LR
   `ScreenCastBackend` traits. `bande-portals.conf` (picked when `XDG_CURRENT_DESKTOP=Bande`)
   sends every interface to Bande, including `Secret`: only for calls from
   `xdg-desktop-portal` itself, it hands a sandboxed app the 64-byte key it keeps in the
-  keychain under `app_id`; no GTK or GNOME backend is used. `Print` (`PreparePrint` shows the Bande print dialog and remembers the choice under a token; `Print` with that token goes straight to `bande-printd`, without one it shows the dialog with the app's PDF as the preview). Not implemented: GlobalShortcuts, InputCapture,
+  keyring under `app_id`; no GTK or GNOME backend is used. `Print` (`PreparePrint` shows the Bande print dialog and remembers the choice under a token; `Print` with that token goes straight to `bande-printd`, without one it shows the dialog with the app's PDF as the preview). Not implemented: GlobalShortcuts, InputCapture,
   RemoteDesktop, Clipboard and Usb; Lockdown is the frontend's own default (nothing locked
   down).
 - **Capture lives in the screenshot tool.** The portal process has no Wayland connection: its
@@ -370,7 +370,7 @@ graph LR
   `org.freedesktop.secrets` (Secret Service: Service, Collection, Item, Session and Prompt
   objects; `plain` and `dh-ietf1024-sha256-aes128-cbc-pkcs7` sessions). It is D-Bus activated
   and socket-activated through `bande-secrets.socket`, and idles blocked in epoll.
-- Keychains are oo7's v1 files in `~/.local/share/bande/keyrings/v1/<name>.keyring`
+- Keyrings are oo7's v1 files in `~/.local/share/bande/keyrings/v1/<name>.keyring`
   (PBKDF2-SHA256, AES-128-CBC with HMAC-SHA256, written 0600 through a temporary file):
   `login` (alias `default`), the in-memory `session`, and any an app creates. GNOME Keyring's
   files are not read.
@@ -379,20 +379,20 @@ graph LR
   `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (the module checks
   the socket belongs to the user, the daemon takes messages only from root) and waits for the
   answer (a failed send is logged through `pam_syslog`, never the password), and `password` passes the old and new passwords so
-  `passwd` and Users & Groups re-encrypt the login keychain, only when the old password opens
+  `passwd` and Users & Groups re-encrypt the login keyring, only when the old password opens
   it. The lock screen runs `auth` only,
-  so it unlocks nothing; as on macOS the login keychain stays unlocked while the screen is
-  locked. When the login password does not open the keychain, the next unlock offers to update
+  so it unlocks nothing; as on macOS the login keyring stays unlocked while the screen is
+  locked. When the login password does not open the keyring, the next unlock offers to update
   its password or start a new one (the old file is kept).
 - The daemon is also NetworkManager's secret agent (`org.bande.Secrets`, re-registered when
   NetworkManager restarts, answering only NetworkManager's bus name): agent-owned Wi-Fi, 802.1X,
-  mobile, PPPoE and VPN secrets are kept in the login keychain under libnm's attributes
+  mobile, PPPoE and VPN secrets are kept in the login keyring under libnm's attributes
   (`connection-uuid`, `setting-name`, `setting-key`), and when NetworkManager needs a new
-  Wi-Fi or 802.1X password it asks through the keychain prompt. Wi-Fi joined from Bande keeps
-  its password system-wide, as macOS keeps it in the System keychain.
+  Wi-Fi or 802.1X password it asks through the keyring prompt. Wi-Fi joined from Bande keeps
+  its password system-wide, as macOS keeps it in the System keyring.
 - Items record the app that saved them (`bande:creator`: the Flatpak id or the executable of
   the D-Bus peer). Another app sees such an item as locked and gets it after confirming with
-  the keychain password (`bande:allowed` remembers "Always Allow"). Prompts are
+  the keyring password (`bande:allowed` remembers "Always Allow"). Prompts are
   `bande-secrets-prompt` processes (`crates/apps/secrets-prompt`, installed by `bande-secrets`
   next to the daemon in `/usr/libexec`), so the daemon never links the toolkit; the daemon is not dumpable and has no core limit.
 

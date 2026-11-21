@@ -25,7 +25,7 @@ Plurals in Fluent: Swedish has `[one]` and `*[other]`. Inflect around a variable
 | Delete | Radera | | Remove | Ta bort |
 | Save / Save As | Spara / Spara som | | Open | Öppna |
 | Log in / out | Logga in / ut | | Lock screen | Låsskärm |
-| Password | Lösenord | | Keychain | Nyckelring |
+| Password | Lösenord | | Keyring | Nyckelring |
 | User / Account | Användare / Konto | | Administrator | Administratör |
 | Notification | Notis | | Do Not Disturb | Stör ej |
 | Sleep / Restart / Shut Down | Vila / Starta om / Stäng av | | Battery | Batteri |

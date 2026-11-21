@@ -33,7 +33,7 @@ enum Mode {
 
 struct Request {
     mode: Mode,
-    keychain: String,
+    keyring: String,
     app: String,
     items: Vec<String>,
 }
@@ -67,7 +67,7 @@ fn request() -> Option<Request> {
         "--reveal" => Mode::Reveal,
         _ => return None,
     };
-    let mut keychain = String::new();
+    let mut keyring = String::new();
     let mut app = None;
     let mut items = Vec::new();
     for line in std::io::stdin().lines() {
@@ -76,7 +76,7 @@ fn request() -> Option<Request> {
             break;
         }
         match line.split_once('\t')? {
-            ("keychain", value) => value.clone_into(&mut keychain),
+            ("keyring", value) => value.clone_into(&mut keyring),
             ("app", value) => app = Some(value.to_owned()),
             ("item", value) => items.push(value.to_owned()),
             _ => {}
@@ -84,7 +84,7 @@ fn request() -> Option<Request> {
     }
     Some(Request {
         mode,
-        keychain,
+        keyring,
         app: app_name(app.as_deref()),
         items,
     })
@@ -120,62 +120,62 @@ impl Prompt {
     fn texts(&self, note: Option<String>) -> (String, String) {
         let request = &self.request;
         let app = || request.app.clone();
-        let keychain = || request.keychain.clone();
+        let keyring = || request.keyring.clone();
         let (title, message) = match (request.mode, self.first.is_some()) {
             (Mode::Unlock, _) => (
                 tr!(
-                    "“{app}” wants to use the “{keychain}” keychain.",
+                    "“{app}” wants to use the “{keyring}” keyring.",
                     app = app(),
-                    keychain = keychain()
+                    keyring = keyring()
                 ),
-                tr!("Enter the keychain password."),
+                tr!("Enter the keyring password."),
             ),
             (Mode::Allow, _) => (
                 trn!(
-                    "“{app}” wants to use your confidential information stored in “{item}” in your keychain.",
-                    "“{app}” wants to use {count} passwords stored in your keychain.",
+                    "“{app}” wants to use your confidential information stored in “{item}” in your keyring.",
+                    "“{app}” wants to use {count} passwords stored in your keyring.",
                     count = request.items.len(),
                     app = app(),
                     item = request.items.first().cloned().unwrap_or_default(),
                 ),
                 tr!(
-                    "To allow this, enter the “{keychain}” keychain password.",
-                    keychain = keychain()
+                    "To allow this, enter the “{keyring}” keyring password.",
+                    keyring = keyring()
                 ),
             ),
             (Mode::Create, false) => (
                 tr!(
-                    "“{app}” wants to create a new keychain, “{keychain}”.",
+                    "“{app}” wants to create a new keyring, “{keyring}”.",
                     app = app(),
-                    keychain = keychain()
+                    keyring = keyring()
                 ),
-                tr!("Choose a password for the new keychain."),
+                tr!("Choose a password for the new keyring."),
             ),
             (Mode::Create, true) => (
                 tr!(
-                    "“{app}” wants to create a new keychain, “{keychain}”.",
+                    "“{app}” wants to create a new keyring, “{keyring}”.",
                     app = app(),
-                    keychain = keychain()
+                    keyring = keyring()
                 ),
                 tr!("Enter the password again to verify it."),
             ),
             (Mode::UpdateLogin, _) => (
-                tr!("Your login keychain was not unlocked with your login password."),
+                tr!("Your login keyring was not unlocked with your login password."),
                 tr!(
-                    "Enter the keychain’s old password to update it to your login password, or create a new keychain. The old keychain is kept."
+                    "Enter the keyring’s old password to update it to your login password, or create a new keyring. The old keyring is kept."
                 ),
             ),
             (Mode::Reveal, _) => (
                 tr!("“{app}” wants to show your saved passwords.", app = app()),
                 tr!(
-                    "To allow this, enter the “{keychain}” keychain password.",
-                    keychain = keychain()
+                    "To allow this, enter the “{keyring}” keyring password.",
+                    keyring = keyring()
                 ),
             ),
             (Mode::Network, _) => (
                 tr!(
                     "The network “{network}” requires a password.",
-                    network = keychain()
+                    network = keyring()
                 ),
                 tr!("Enter the password to join it."),
             ),
@@ -222,7 +222,7 @@ impl Prompt {
                 .cancel(&tr!("Cancel"), "cancel")
                 .primary(&tr!("Join"), "allow"),
             Mode::UpdateLogin => alert
-                .other(&tr!("Create New Keychain"), "new")
+                .other(&tr!("Create New Keyring"), "new")
                 .cancel(&tr!("Not Now"), "cancel")
                 .primary(&tr!("Update Password"), "allow"),
         };

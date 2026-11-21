@@ -64,7 +64,7 @@ Measured behaviours the design rests on:
   cleanly and resumes next time. A blank or foreign disk can be erased from Settings after a warning naming
   the whole drive and what is on it: UDisks makes a GPT disk with one ext4 partition.
 - **Network:** `smb://` and `nfs://` are mounted by the service with the same soft options as Connect to Server,
-  because there may be no session and the share password can't come from a person's keychain; the password
+  because there may be no session and the share password can't come from a person's keyring; the password
   sits in `/var/lib/bande-backup/share-password` (0400). restic's rest server is used directly (`rest:https://...`);
   `sftp:` isn't offered, as it has no unattended sign-in for root. A server that goes silent: a TCP probe on each
   progress line stops restic, a forced unmount clears the mount, and it counts as a disk that is away.

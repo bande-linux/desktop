@@ -5,7 +5,7 @@ Delete each stage when it ships; delete the file when the list is empty.
 ## What the user experiences
 
 Go ▸ Connect to Server (Ctrl+K) takes `smb://nas`, `sftp://host` or `https://host/dav`. A server with
-several shares offers a list. Passwords are asked once, kept in the Bande keychain if the user says so
+several shares offers a list. Passwords are asked once, kept in the Bande keyring if the user says so
 and never asked again; a server marked Reconnect at Login comes back by itself after login. Every
 connected server, phone and camera is an ordinary folder under Locations in the sidebar, the desktop
 and the file chooser, with an eject button, and every other app can open its files. Servers on the network
@@ -20,7 +20,7 @@ or a connected place.
 **Everything is a real mount**, so Files' copy, trash, thumbnails and every other app work unchanged.
 All mounts sit in `$XDG_RUNTIME_DIR/bande/volumes/<name>`, a new root in `bande_volumes::media_roots`;
 Files, the desktop and the file chooser already follow mountinfo for those roots. The session service
-`bande-automount` owns them (`org.bande.Mounts`): connect, disconnect, keychain, reconnecting and the
+`bande-automount` owns them (`org.bande.Mounts`): connect, disconnect, keyring, reconnecting and the
 device watch, so mounts outlive Files and every client sees the same state.
 
 | Protocol | Tool (Debian) | Why |

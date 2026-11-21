@@ -45,7 +45,7 @@ these crates at a pinned revision.
   `greeter` stay processes of their own.
 - **`apps/`**: one crate per app built here, each on `bande-app` (`libs/app`), and the dialog
   processes of services: `file-chooser` is the portal's dialog and `secrets-prompt` the
-  keychain's (`bande-secrets-prompt`, installed by `bande-secrets`).
+  keyring's (`bande-secrets-prompt`, installed by `bande-secrets`).
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
   `mimeapps.list`, user directories and `Apps`, the one answer to "which apps open this path";

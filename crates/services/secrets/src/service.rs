@@ -16,7 +16,7 @@ use crate::dialog::{Dialog, Kind, Reply, Request};
 use crate::network::NETWORK_MANAGER;
 use crate::peer;
 use crate::session::{self, Session};
-use crate::store::{self, ALLOWED, CREATOR, Keychain, LOGIN, SESSION};
+use crate::store::{self, ALLOWED, CREATOR, LOGIN, SESSION, Store};
 
 pub const BUS_NAME: &str = "org.freedesktop.secrets";
 pub const SERVICE_PATH: &str = "/org/freedesktop/secrets";
@@ -51,7 +51,7 @@ fn failed(message: impl ToString) -> Error {
 impl From<store::Error> for Error {
     fn from(error: store::Error) -> Self {
         match error {
-            store::Error::Locked => Self::IsLocked("the keychain is locked".to_owned()),
+            store::Error::Locked => Self::IsLocked("the keyring is locked".to_owned()),
             store::Error::NoSuchCollection | store::Error::NoSuchItem => {
                 Self::NoSuchObject(error.to_string())
             }
@@ -103,7 +103,7 @@ enum Target {
     Item(String, u64),
 }
 
-fn target(keychain: &Keychain, path: &str) -> Option<Target> {
+fn target(store: &Store, path: &str) -> Option<Target> {
     let (collection, rest) = if let Some(rest) = path.strip_prefix(COLLECTIONS) {
         let (name, rest) = rest.split_once('/').unwrap_or((rest, ""));
         (name.to_owned(), rest)
@@ -111,13 +111,13 @@ fn target(keychain: &Keychain, path: &str) -> Option<Target> {
         let rest = path.strip_prefix(ALIASES)?;
         let (alias, rest) = rest.split_once('/').unwrap_or((rest, ""));
         let name = match alias {
-            store::DEFAULT => keychain.default_collection().to_owned(),
+            store::DEFAULT => store.default_collection().to_owned(),
             SESSION => SESSION.to_owned(),
             _ => return None,
         };
         (name, rest)
     };
-    keychain.collection(&collection)?;
+    store.collection(&collection)?;
     if rest.is_empty() {
         Some(Target::Collection(collection))
     } else {
@@ -190,7 +190,7 @@ struct Pending {
 }
 
 pub struct Daemon {
-    keychain: AsyncMutex<Keychain>,
+    store: AsyncMutex<Store>,
     searching: AsyncMutex<()>,
     registered: AsyncMutex<HashSet<OwnedObjectPath>>,
     sessions: Mutex<HashMap<OwnedObjectPath, Session>>,
@@ -237,9 +237,9 @@ fn keep_internal(
 }
 
 impl Daemon {
-    pub fn new(keychain: Keychain, prompter: PathBuf) -> Arc<Self> {
+    pub fn new(store: Store, prompter: PathBuf) -> Arc<Self> {
         Arc::new(Self {
-            keychain: AsyncMutex::new(keychain),
+            store: AsyncMutex::new(store),
             searching: AsyncMutex::new(()),
             registered: AsyncMutex::new(HashSet::new()),
             sessions: Mutex::new(HashMap::new()),
@@ -255,7 +255,7 @@ impl Daemon {
     fn connection(&self) -> Result<&Connection> {
         self.connection
             .get()
-            .ok_or_else(|| failed("the keychain is not on the bus yet"))
+            .ok_or_else(|| failed("the keyring is not on the bus yet"))
     }
 
     fn next(&self) -> u64 {
@@ -265,7 +265,7 @@ impl Daemon {
     pub async fn serve(self: &Arc<Self>, connection: &Connection) -> zbus::Result<()> {
         if self.connection.set(connection.clone()).is_err() {
             return Err(zbus::Error::Failure(
-                "the keychain is already serving".to_owned(),
+                "the keyring is already serving".to_owned(),
             ));
         }
         let server = connection.object_server();
@@ -286,7 +286,7 @@ impl Daemon {
             )
             .await?;
         let names = self
-            .keychain
+            .store
             .lock()
             .await
             .collections()
@@ -321,7 +321,7 @@ impl Daemon {
     }
 
     async fn register_aliases(self: &Arc<Self>) -> zbus::Result<()> {
-        let default = self.keychain.lock().await.default_collection().to_owned();
+        let default = self.store.lock().await.default_collection().to_owned();
         let server = self
             .connection()
             .map_err(|_| zbus::Error::Failure("not connected".to_owned()))?
@@ -347,8 +347,8 @@ impl Daemon {
             return;
         };
         let wanted = {
-            let keychain = self.keychain.lock().await;
-            keychain
+            let store = self.store.lock().await;
+            store
                 .collections()
                 .iter()
                 .flat_map(|collection| {
@@ -517,7 +517,7 @@ impl Daemon {
         };
         let server = connection.object_server();
         let mut paths = vec![collection_path(name)];
-        let default = self.keychain.lock().await.default_collection().to_owned();
+        let default = self.store.lock().await.default_collection().to_owned();
         if default == name {
             paths.push(object_path(format!("{ALIASES}{}", store::DEFAULT)));
         }
@@ -534,7 +534,7 @@ impl Daemon {
 
     pub async fn login(self: &Arc<Self>, password: Secret) -> bool {
         let unlocked = self
-            .keychain
+            .store
             .lock()
             .await
             .unlock(LOGIN, password.clone())
@@ -547,12 +547,12 @@ impl Daemon {
                 true
             }
             Err(store::Error::WrongPassword) => {
-                tracing::info!("the login password does not open the login keychain");
+                tracing::info!("the login password does not open the login keyring");
                 *guard(&self.login_attempt) = Some(password);
                 false
             }
             Err(error) => {
-                tracing::warn!("cannot open the login keychain: {error}");
+                tracing::warn!("cannot open the login keyring: {error}");
                 false
             }
         }
@@ -560,7 +560,7 @@ impl Daemon {
 
     pub async fn change_login(self: &Arc<Self>, old: Secret, new: Secret) -> bool {
         let locked = self
-            .keychain
+            .store
             .lock()
             .await
             .collection(LOGIN)
@@ -569,18 +569,18 @@ impl Daemon {
             if !self.login(old).await && !self.login(new.clone()).await {
                 return false;
             }
-        } else if let Err(error) = self.keychain.lock().await.verify(LOGIN, &old).await {
-            tracing::info!("kept the login keychain password: {error}");
+        } else if let Err(error) = self.store.lock().await.verify(LOGIN, &old).await {
+            tracing::info!("kept the login keyring password: {error}");
             return false;
         }
-        let changed = self.keychain.lock().await.change_password(LOGIN, new).await;
+        let changed = self.store.lock().await.change_password(LOGIN, new).await;
         match changed {
             Ok(()) => {
                 self.sync().await;
                 true
             }
             Err(error) => {
-                tracing::warn!("cannot change the login keychain password: {error}");
+                tracing::warn!("cannot change the login keyring password: {error}");
                 false
             }
         }
@@ -606,9 +606,9 @@ impl Daemon {
         wanted: &HashMap<String, String>,
         interactive: bool,
     ) -> Vec<(HashMap<String, String>, Secret)> {
-        let default = self.keychain.lock().await.default_collection().to_owned();
+        let default = self.store.lock().await.default_collection().to_owned();
         let locked = self
-            .keychain
+            .store
             .lock()
             .await
             .collection(&default)
@@ -622,8 +622,8 @@ impl Daemon {
         {
             return Vec::new();
         }
-        let keychain = self.keychain.lock().await;
-        keychain
+        let store = self.store.lock().await;
+        store
             .collections()
             .iter()
             .flat_map(store::Collection::entries)
@@ -640,23 +640,23 @@ impl Daemon {
     ) {
         attributes.insert(CREATOR.to_owned(), NETWORK_MANAGER.to_owned());
         let stored = {
-            let mut keychain = self.keychain.lock().await;
-            let default = keychain.default_collection().to_owned();
-            let existing = keychain.collection(&default).and_then(|collection| {
+            let mut store = self.store.lock().await;
+            let default = store.default_collection().to_owned();
+            let existing = store.collection(&default).and_then(|collection| {
                 collection
                     .entries()
                     .find(|entry| store::same_attributes(entry.item.attributes(), &attributes))
                     .map(|entry| entry.id)
             });
             match existing {
-                Some(id) => keychain
+                Some(id) => store
                     .update_item(&default, id, |item| {
                         item.set_label(label);
                         item.set_secret(secret);
                     })
                     .await
                     .map(|()| None),
-                None => keychain
+                None => store
                     .create_item(&default, label, &attributes, secret)
                     .await
                     .map(|id| Some((default, id))),
@@ -675,8 +675,8 @@ impl Daemon {
     pub async fn delete_internal(self: &Arc<Self>, wanted: &HashMap<String, String>) {
         let mut deleted = Vec::new();
         {
-            let mut keychain = self.keychain.lock().await;
-            let doomed = keychain
+            let mut store = self.store.lock().await;
+            let doomed = store
                 .collections()
                 .iter()
                 .flat_map(|collection| {
@@ -688,7 +688,7 @@ impl Daemon {
                 })
                 .collect::<Vec<_>>();
             for (name, id) in doomed {
-                match keychain.delete_item(&name, id).await {
+                match store.delete_item(&name, id).await {
                     Ok(()) => deleted.push((name, id)),
                     Err(error) => tracing::warn!("cannot delete a network secret: {error}"),
                 }
@@ -704,7 +704,7 @@ impl Daemon {
         let request = Request {
             kind: Kind::Network,
             app: None,
-            keychain: network.to_owned(),
+            keyring: network.to_owned(),
             items: Vec::new(),
         };
         let mut dialog = self.dialog(&request).await?;
@@ -722,7 +722,7 @@ impl Daemon {
         match Dialog::open(&self.prompter, connection, request).await {
             Ok(dialog) => Some(dialog),
             Err(error) => {
-                tracing::warn!("cannot show the keychain prompt: {error}");
+                tracing::warn!("cannot show the keyring prompt: {error}");
                 None
             }
         }
@@ -730,10 +730,10 @@ impl Daemon {
 
     async fn ask_unlock(self: &Arc<Self>, name: &str, app: Option<String>, asking: Kind) -> Answer {
         let (label, exists) = {
-            let keychain = self.keychain.lock().await;
-            match keychain.collection(name) {
+            let store = self.store.lock().await;
+            match store.collection(name) {
                 Some(collection) if !collection.locked() => return Answer::Open,
-                Some(collection) => (collection.label.clone(), keychain.exists(name)),
+                Some(collection) => (collection.label.clone(), store.exists(name)),
                 None => return Answer::Failed,
             }
         };
@@ -748,7 +748,7 @@ impl Daemon {
         let request = Request {
             kind,
             app,
-            keychain: label,
+            keyring: label,
             items: Vec::new(),
         };
         let Some(mut dialog) = self.dialog(&request).await else {
@@ -763,32 +763,27 @@ impl Daemon {
                         return Answer::Declined;
                     };
                     let created = {
-                        let mut keychain = self.keychain.lock().await;
-                        match keychain.set_aside(LOGIN) {
-                            Ok(()) => keychain.unlock(LOGIN, attempt).await,
+                        let mut store = self.store.lock().await;
+                        match store.set_aside(LOGIN) {
+                            Ok(()) => store.unlock(LOGIN, attempt).await,
                             Err(error) => Err(error),
                         }
                     };
                     if let Err(error) = created {
-                        tracing::warn!("cannot make a new login keychain: {error}");
+                        tracing::warn!("cannot make a new login keyring: {error}");
                         return Answer::Failed;
                     }
                     break;
                 }
                 Reply::Allow(password) | Reply::Always(password) => password,
             };
-            let unlocked = self.keychain.lock().await.unlock(name, password).await;
+            let unlocked = self.store.lock().await.unlock(name, password).await;
             match unlocked {
                 Ok(()) => {
                     if let Some(login) = attempt.clone() {
-                        let changed = self
-                            .keychain
-                            .lock()
-                            .await
-                            .change_password(LOGIN, login)
-                            .await;
+                        let changed = self.store.lock().await.change_password(LOGIN, login).await;
                         if let Err(error) = changed {
-                            tracing::warn!("cannot update the login keychain password: {error}");
+                            tracing::warn!("cannot update the login keyring password: {error}");
                         }
                     }
                     break;
@@ -799,7 +794,7 @@ impl Daemon {
                     }
                 }
                 Err(error) => {
-                    tracing::warn!("cannot unlock the {name} keychain: {error}");
+                    tracing::warn!("cannot unlock the {name} keyring: {error}");
                     return Answer::Failed;
                 }
             }
@@ -822,14 +817,14 @@ impl Daemon {
             return Answer::Open;
         };
         let (label, labels) = {
-            let keychain = self.keychain.lock().await;
-            let label = keychain
+            let store = self.store.lock().await;
+            let label = store
                 .collection(&name)
                 .map(|collection| collection.label.clone())
                 .unwrap_or_default();
             let labels = items
                 .iter()
-                .filter_map(|(collection, id)| keychain.find(collection, *id).ok())
+                .filter_map(|(collection, id)| store.find(collection, *id).ok())
                 .map(|item| item.label().to_owned())
                 .collect();
             (label, labels)
@@ -837,7 +832,7 @@ impl Daemon {
         let request = Request {
             kind,
             app: caller.identity.clone(),
-            keychain: label,
+            keyring: label,
             items: labels,
         };
         let Some(mut dialog) = self.dialog(&request).await else {
@@ -852,13 +847,13 @@ impl Daemon {
                     (password, kind == Kind::Allow && caller.identity.is_some())
                 }
             };
-            let verified = self.keychain.lock().await.verify(&name, &password).await;
+            let verified = self.store.lock().await.verify(&name, &password).await;
             match verified {
                 Ok(()) => {
                     if always && let Some(identity) = &caller.identity {
-                        let mut keychain = self.keychain.lock().await;
+                        let mut store = self.store.lock().await;
                         for (collection, id) in &items {
-                            let added = keychain
+                            let added = store
                                 .update_item(collection, *id, |item| {
                                     let mut attributes = item.attributes().clone();
                                     let mut list = allowed_list(item)
@@ -892,7 +887,7 @@ impl Daemon {
                     }
                 }
                 Err(error) => {
-                    tracing::warn!("cannot check the keychain password: {error}");
+                    tracing::warn!("cannot check the keyring password: {error}");
                     return Answer::Failed;
                 }
             }
@@ -908,23 +903,23 @@ impl Daemon {
             })
             .collect::<String>();
         let base = if base.is_empty() {
-            "keychain".to_owned()
+            "keyring".to_owned()
         } else {
             base
         };
         let name = {
-            let keychain = self.keychain.lock().await;
+            let store = self.store.lock().await;
             (1..)
                 .map(|number| match number {
                     1 => base.clone(),
                     number => format!("{base}_{number}"),
                 })
-                .find(|name| keychain.collection(name).is_none() && !keychain.exists(name))?
+                .find(|name| store.collection(name).is_none() && !store.exists(name))?
         };
         let request = Request {
             kind: Kind::Create,
             app: caller.identity.clone(),
-            keychain: label.to_owned(),
+            keyring: label.to_owned(),
             items: Vec::new(),
         };
         let mut dialog = self.dialog(&request).await?;
@@ -933,20 +928,20 @@ impl Daemon {
             Reply::Cancel | Reply::CreateNew | Reply::Gone => return None,
         };
         let created = {
-            let mut keychain = self.keychain.lock().await;
-            let created = keychain.create_collection(&name, password).await;
+            let mut store = self.store.lock().await;
+            let created = store.create_collection(&name, password).await;
             if created.is_ok() {
-                let _ = keychain.rename(&name, label);
+                let _ = store.rename(&name, label);
             }
             created
         };
         dialog.finish().await;
         if let Err(error) = created {
-            tracing::warn!("cannot make the keychain: {error}");
+            tracing::warn!("cannot make the keyring: {error}");
             return None;
         }
         if let Err(error) = self.register_collection(&name).await {
-            tracing::warn!("cannot publish the keychain: {error}");
+            tracing::warn!("cannot publish the keyring: {error}");
         }
         Some(name)
     }
@@ -954,12 +949,12 @@ impl Daemon {
     async fn unlock_for_search(self: &Arc<Self>, caller: &Caller) {
         let _searching = self.searching.lock().await;
         let default = {
-            let keychain = self.keychain.lock().await;
-            let default = keychain.default_collection().to_owned();
-            let waiting = keychain
+            let store = self.store.lock().await;
+            let default = store.default_collection().to_owned();
+            let waiting = store
                 .collection(&default)
                 .is_some_and(store::Collection::locked)
-                && keychain.exists(&default);
+                && store.exists(&default);
             if !waiting {
                 return;
             }
@@ -988,10 +983,10 @@ impl Daemon {
         only: Option<&str>,
         attributes: &HashMap<String, String>,
     ) -> (Vec<OwnedObjectPath>, Vec<OwnedObjectPath>) {
-        let keychain = self.keychain.lock().await;
+        let store = self.store.lock().await;
         let mut unlocked = Vec::new();
         let mut locked = Vec::new();
-        for collection in keychain.collections() {
+        for collection in store.collections() {
             if only.is_some_and(|only| only != collection.name) {
                 continue;
             }
@@ -1045,10 +1040,10 @@ impl Daemon {
         match job {
             Job::Unlock(objects) => {
                 let targets = {
-                    let keychain = self.keychain.lock().await;
+                    let store = self.store.lock().await;
                     objects
                         .iter()
-                        .filter_map(|path| target(&keychain, path.as_str()))
+                        .filter_map(|path| target(&store, path.as_str()))
                         .collect::<Vec<_>>()
                 };
                 let mut collections = Vec::new();
@@ -1067,12 +1062,12 @@ impl Daemon {
                     }
                 }
                 let refused = {
-                    let keychain = self.keychain.lock().await;
+                    let store = self.store.lock().await;
                     targets
                         .iter()
                         .filter_map(|target| match target {
                             Target::Item(name, id) => {
-                                let item = keychain.find(name, *id).ok()?;
+                                let item = store.find(name, *id).ok()?;
                                 (!self.may_use(&caller, &item_path(name, *id), item))
                                     .then(|| (name.clone(), *id))
                             }
@@ -1088,7 +1083,7 @@ impl Daemon {
                 Outcome::of(Value::from(objects).try_into_owned().ok())
             }
             Job::Reveal => {
-                let default = self.keychain.lock().await.default_collection().to_owned();
+                let default = self.store.lock().await.default_collection().to_owned();
                 let unlocked = self
                     .ask_unlock(&default, caller.identity.clone(), Kind::Reveal)
                     .await;
@@ -1098,8 +1093,8 @@ impl Daemon {
                     Answer::Failed => return Outcome::Failed,
                 }
                 let items = {
-                    let keychain = self.keychain.lock().await;
-                    keychain
+                    let store = self.store.lock().await;
+                    store
                         .collections()
                         .iter()
                         .flat_map(|collection| {
@@ -1133,11 +1128,11 @@ impl Daemon {
                     return Outcome::Dismissed;
                 };
                 if alias == store::DEFAULT {
-                    let set = self.keychain.lock().await.set_default(&name);
+                    let set = self.store.lock().await.set_default(&name);
                     if let Err(error) = set {
-                        tracing::warn!("cannot make the new keychain the default: {error}");
+                        tracing::warn!("cannot make the new keyring the default: {error}");
                     } else if let Err(error) = self.register_aliases().await {
-                        tracing::warn!("cannot publish the default keychain: {error}");
+                        tracing::warn!("cannot publish the default keyring: {error}");
                     }
                 }
                 self.emit_collection_created(&name).await;
@@ -1263,9 +1258,9 @@ impl ServiceObject {
         #[zbus(header)] header: Header<'_>,
     ) -> Result<(OwnedObjectPath, OwnedObjectPath)> {
         let existing = {
-            let keychain = self.daemon.keychain.lock().await;
+            let store = self.daemon.store.lock().await;
             match alias {
-                store::DEFAULT => Some(keychain.default_collection().to_owned()),
+                store::DEFAULT => Some(store.default_collection().to_owned()),
                 SESSION => Some(SESSION.to_owned()),
                 _ => None,
             }
@@ -1276,7 +1271,7 @@ impl ServiceObject {
         let label = properties
             .get(COLLECTION_LABEL)
             .and_then(|value| String::try_from(value.try_clone().ok()?).ok())
-            .unwrap_or_else(|| "Keychain".to_owned());
+            .unwrap_or_else(|| "Keyring".to_owned());
         let caller = self.daemon.caller(&header).await;
         let prompt = self
             .daemon
@@ -1310,13 +1305,13 @@ impl ServiceObject {
         let mut unlocked = Vec::new();
         let mut waiting = Vec::new();
         {
-            let keychain = self.daemon.keychain.lock().await;
+            let store = self.daemon.store.lock().await;
             for path in objects {
-                let open = match target(&keychain, path.as_str()) {
-                    Some(Target::Collection(name)) => keychain
+                let open = match target(&store, path.as_str()) {
+                    Some(Target::Collection(name)) => store
                         .collection(&name)
                         .is_some_and(|collection| !collection.locked()),
-                    Some(Target::Item(name, id)) => keychain
+                    Some(Target::Item(name, id)) => store
                         .find(&name, id)
                         .is_ok_and(|item| self.daemon.may_use(&caller, &path, item)),
                     None => continue,
@@ -1345,14 +1340,14 @@ impl ServiceObject {
         let mut locked = Vec::new();
         let mut names = Vec::new();
         {
-            let mut keychain = self.daemon.keychain.lock().await;
+            let mut store = self.daemon.store.lock().await;
             for path in objects {
                 let (Some(Target::Collection(name)) | Some(Target::Item(name, _))) =
-                    target(&keychain, path.as_str())
+                    target(&store, path.as_str())
                 else {
                     continue;
                 };
-                if name != SESSION && keychain.lock(&name).is_ok() {
+                if name != SESSION && store.lock(&name).is_ok() {
                     locked.push(path);
                     names.push(name);
                 }
@@ -1374,13 +1369,13 @@ impl ServiceObject {
     ) -> Result<HashMap<OwnedObjectPath, WireSecret>> {
         let caller = self.daemon.caller(&header).await;
         self.daemon.session_for(&session, &caller.sender)?;
-        let keychain = self.daemon.keychain.lock().await;
+        let store = self.daemon.store.lock().await;
         let mut secrets = HashMap::new();
         for path in items {
-            let Some(Target::Item(name, id)) = target(&keychain, path.as_str()) else {
+            let Some(Target::Item(name, id)) = target(&store, path.as_str()) else {
                 continue;
             };
-            let Ok(item) = keychain.find(&name, id) else {
+            let Ok(item) = store.find(&name, id) else {
                 continue;
             };
             if !self.daemon.may_use(&caller, &path, item) {
@@ -1395,9 +1390,9 @@ impl ServiceObject {
     }
 
     async fn read_alias(&self, name: &str) -> OwnedObjectPath {
-        let keychain = self.daemon.keychain.lock().await;
+        let store = self.daemon.store.lock().await;
         match name {
-            store::DEFAULT => collection_path(keychain.default_collection()),
+            store::DEFAULT => collection_path(store.default_collection()),
             SESSION => collection_path(SESSION),
             _ => no_prompt(),
         }
@@ -1410,11 +1405,11 @@ impl ServiceObject {
             )));
         }
         {
-            let mut keychain = self.daemon.keychain.lock().await;
-            let Some(Target::Collection(target)) = target(&keychain, collection.as_str()) else {
-                return Err(Error::NoSuchObject("no such keychain".to_owned()));
+            let mut store = self.daemon.store.lock().await;
+            let Some(Target::Collection(target)) = target(&store, collection.as_str()) else {
+                return Err(Error::NoSuchObject("no such keyring".to_owned()));
             };
-            keychain.set_default(&target)?;
+            store.set_default(&target)?;
         }
         self.daemon.register_aliases().await?;
         Ok(())
@@ -1423,7 +1418,7 @@ impl ServiceObject {
     #[zbus(property)]
     async fn collections(&self) -> Vec<OwnedObjectPath> {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .collections()
@@ -1497,7 +1492,7 @@ impl CollectionObject {
 impl CollectionObject {
     async fn delete(&self) -> Result<OwnedObjectPath> {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .delete_collection(&self.name)?;
@@ -1509,7 +1504,7 @@ impl CollectionObject {
             .remove::<CollectionObject, _>(&path)
             .await?;
         if let Err(error) = self.daemon.register_aliases().await {
-            tracing::warn!("cannot publish the default keychain: {error}");
+            tracing::warn!("cannot publish the default keyring: {error}");
         }
         let emitter = SignalEmitter::new(connection, SERVICE_PATH)?;
         ServiceObject::collection_deleted(&emitter, path.as_ref()).await?;
@@ -1549,12 +1544,12 @@ impl CollectionObject {
             .map(client_attributes)
             .unwrap_or_default();
         let replaced = {
-            let mut keychain = self.daemon.keychain.lock().await;
-            let collection = keychain
+            let mut store = self.daemon.store.lock().await;
+            let collection = store
                 .collection(&self.name)
-                .ok_or_else(|| Error::NoSuchObject("no such keychain".to_owned()))?;
+                .ok_or_else(|| Error::NoSuchObject("no such keyring".to_owned()))?;
             if collection.locked() {
-                return Err(Error::IsLocked("the keychain is locked".to_owned()));
+                return Err(Error::IsLocked("the keyring is locked".to_owned()));
             }
             let existing = replace
                 .then(|| {
@@ -1582,7 +1577,7 @@ impl CollectionObject {
                 }
                 Some((id, stored, true)) => {
                     let attributes = keep_internal(&stored, attributes.clone());
-                    keychain
+                    store
                         .update_item(&self.name, id, |item| {
                             item.set_label(&label);
                             item.set_attributes(&attributes);
@@ -1603,7 +1598,7 @@ impl CollectionObject {
         }
         let id = self
             .daemon
-            .keychain
+            .store
             .lock()
             .await
             .create_item(&self.name, &label, &attributes, secret)
@@ -1616,7 +1611,7 @@ impl CollectionObject {
     #[zbus(property)]
     async fn items(&self) -> Vec<OwnedObjectPath> {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .collection(&self.name)
@@ -1632,7 +1627,7 @@ impl CollectionObject {
     #[zbus(property)]
     async fn label(&self) -> String {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .collection(&self.name)
@@ -1643,7 +1638,7 @@ impl CollectionObject {
     #[zbus(property)]
     async fn set_label(&mut self, label: String) -> zbus::fdo::Result<()> {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .rename(&self.name, &label)
@@ -1653,7 +1648,7 @@ impl CollectionObject {
     #[zbus(property)]
     async fn locked(&self) -> bool {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .collection(&self.name)
@@ -1663,7 +1658,7 @@ impl CollectionObject {
     #[zbus(property)]
     async fn created(&self) -> u64 {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .collection(&self.name)
@@ -1674,7 +1669,7 @@ impl CollectionObject {
     #[zbus(property)]
     async fn modified(&self) -> u64 {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .collection(&self.name)
@@ -1705,8 +1700,8 @@ impl ItemObject {
 
     async fn usable(&self, header: &Header<'_>) -> Result<Caller> {
         let caller = self.daemon.caller(header).await;
-        let keychain = self.daemon.keychain.lock().await;
-        let item = keychain.find(&self.collection, self.id)?;
+        let store = self.daemon.store.lock().await;
+        let item = store.find(&self.collection, self.id)?;
         if self.daemon.may_use(&caller, &self.path(), item) {
             Ok(caller)
         } else {
@@ -1727,7 +1722,7 @@ impl ItemObject {
                 .map_err(|_| zbus::fdo::Error::AccessDenied("the item is locked".to_owned()))?;
         }
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .update_item(&self.collection, self.id, change)
@@ -1743,7 +1738,7 @@ impl ItemObject {
 
     async fn read<T>(&self, read: impl FnOnce(&UnlockedItem) -> T) -> Option<T> {
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .find(&self.collection, self.id)
@@ -1757,7 +1752,7 @@ impl ItemObject {
     async fn delete(&self, #[zbus(header)] header: Header<'_>) -> Result<OwnedObjectPath> {
         self.usable(&header).await?;
         self.daemon
-            .keychain
+            .store
             .lock()
             .await
             .delete_item(&self.collection, self.id)

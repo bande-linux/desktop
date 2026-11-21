@@ -740,7 +740,7 @@ msgstr "Anslutningen misslyckades."
 msgid "Password"
 msgstr "Lösenord"
 
-msgid "Remember this password in the keychain"
+msgid "Remember this password in the keyring"
 msgstr "Kom ihåg det här lösenordet i nyckelringen"
 
 msgid "Sign in to {server}"

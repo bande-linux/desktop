@@ -21,7 +21,7 @@ fn a_request_written_after_the_prompt_started_is_still_read_and_a_failed_window_
         .stdin
         .as_mut()
         .unwrap()
-        .write_all(b"keychain\tLogin\n\n")
+        .write_all(b"keyring\tLogin\n\n")
         .unwrap();
 
     let finished = prompt.wait_with_output().unwrap();

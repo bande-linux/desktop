@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use bande_secrets::dialog::PROGRAM;
 use bande_secrets::service::Daemon;
-use bande_secrets::store::Keychain;
+use bande_secrets::store::Store;
 use bande_secrets::{lock, network, pam};
 use rustix::process::{DumpableBehavior, Resource, Rlimit, set_dumpable_behavior, setrlimit};
 
@@ -25,7 +25,7 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         .map(PathBuf::from)
         .ok_or("no XDG_RUNTIME_DIR")?;
     let listener = pam::listener(&runtime_dir)?;
-    let daemon = Daemon::new(Keychain::load(data_home).await, PathBuf::from(PROGRAM));
+    let daemon = Daemon::new(Store::load(data_home).await, PathBuf::from(PROGRAM));
     let connection = zbus::connection::Builder::session()?.build().await?;
     daemon.serve(&connection).await?;
     match zbus::connection::Builder::system()?.build().await {

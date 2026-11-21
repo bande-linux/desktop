@@ -35,7 +35,7 @@ depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpe
 recommends = "cifs-utils, smbclient, sshfs, davfs2, go-mtpfs, gphotofs, libmtp-common, fuse3, systemd-resolved"
 extended-description = """\
 Mounts removable drives through UDisks2 as they appear, connects to SMB, \
-SFTP and WebDAV servers as ordinary mounts with passwords in the keychain, \
+SFTP and WebDAV servers as ordinary mounts with passwords in the keyring, \
 mounts phones and cameras, warns when a mounted drive is disconnected without being ejected, and warns once when \
 the startup disk or the home folder runs out of space. Started with the \
 graphical session."""

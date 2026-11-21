@@ -67,7 +67,7 @@ pub enum PasswordCommand {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Keychain {
+pub struct SavedPasswords {
     pub unlocked: bool,
     pub items: Vec<Saved>,
     pub query: String,
@@ -77,12 +77,12 @@ pub struct Keychain {
 
 type WireSecret = (OwnedObjectPath, Vec<u8>, Vec<u8>, String);
 
-fn keychain_failure(what: bande_l10n::Text, error: &zbus::Error) -> Update {
+fn passwords_failure(what: bande_l10n::Text, error: &zbus::Error) -> Update {
     tracing::warn!("{what:?}: {error}");
     let failure = if unresponsive(error) {
-        not_responding(text!("The keychain"))
+        not_responding(text!("The keyring"))
     } else if NO_LONGER_OPEN.contains(&kind(error).as_str()) {
-        tr!("The keychain locked. Unlock it again to continue.")
+        tr!("The keyring locked. Unlock it again to continue.")
     } else {
         what.tr()
     };
@@ -158,13 +158,11 @@ impl Client {
             })
             .await;
             let Some(signal) = finished else {
-                return Err(zbus::Error::Failure("the keychain stopped".to_owned()));
+                return Err(zbus::Error::Failure("the keyring stopped".to_owned()));
             };
             let (dismissed, result): (bool, OwnedValue) = signal.body().deserialize()?;
             if dismissed && String::try_from(result).is_ok() {
-                return Err(zbus::Error::Failure(
-                    "the keychain prompt failed".to_owned(),
-                ));
+                return Err(zbus::Error::Failure("the keyring prompt failed".to_owned()));
             }
             Ok(!dismissed)
         })
@@ -184,7 +182,7 @@ impl Client {
                 )
             });
         if let Err(error) = closed {
-            tracing::warn!("cannot close the keychain session: {error}");
+            tracing::warn!("cannot close the keyring session: {error}");
         }
     }
 
@@ -254,7 +252,7 @@ impl Client {
 
 fn follow_lock(system: &Connection, commands: Sender<PasswordCommand>) {
     let system = system.clone();
-    spawn("keychain-lock", move || {
+    spawn("keyring-lock", move || {
         let follow = || -> zbus::Result<()> {
             let rule = MatchRule::builder()
                 .msg_type(Type::Signal)
@@ -288,7 +286,7 @@ fn follow_lock(system: &Connection, commands: Sender<PasswordCommand>) {
 
 fn follow_owner(session: &Connection, commands: Sender<PasswordCommand>) {
     let session = session.clone();
-    spawn("keychain-owner", move || {
+    spawn("keyring-owner", move || {
         let follow = || -> zbus::Result<()> {
             let rule = MatchRule::builder()
                 .msg_type(Type::Signal)
@@ -309,14 +307,14 @@ fn follow_owner(session: &Connection, commands: Sender<PasswordCommand>) {
             Ok(())
         };
         if let Err(error) = follow() {
-            tracing::warn!("cannot follow the keychain service: {error}");
+            tracing::warn!("cannot follow the keyring service: {error}");
         }
     });
 }
 
 fn follow_items(session: &Connection, commands: Sender<PasswordCommand>) {
     let session = session.clone();
-    spawn("keychain-items", move || {
+    spawn("keyring-items", move || {
         let follow = || -> zbus::Result<()> {
             let rule = MatchRule::builder()
                 .msg_type(Type::Signal)
@@ -331,7 +329,7 @@ fn follow_items(session: &Connection, commands: Sender<PasswordCommand>) {
             Ok(())
         };
         if let Err(error) = follow() {
-            tracing::warn!("cannot follow the keychain: {error}");
+            tracing::warn!("cannot follow the keyring: {error}");
         }
     });
 }
@@ -373,8 +371,8 @@ pub fn follow_passwords(
                 Ok(open) => open,
                 Err(error) => {
                     unlocked = false;
-                    updates.send(keychain_failure(
-                        text!("Couldn't open the keychain."),
+                    updates.send(passwords_failure(
+                        text!("Couldn't open the keyring."),
                         &error,
                     ));
                     updates.send(Update::Passwords(false, Vec::new()));
@@ -382,7 +380,7 @@ pub fn follow_passwords(
                 }
             };
             let what = match &command {
-                PasswordCommand::Unlock => text!("Couldn't show the keychain prompt."),
+                PasswordCommand::Unlock => text!("Couldn't show the keyring prompt."),
                 PasswordCommand::Reveal(_) | PasswordCommand::Copy(_) => {
                     text!("Couldn't read this password.")
                 }
@@ -407,7 +405,7 @@ pub fn follow_passwords(
                 PasswordCommand::Refresh | PasswordCommand::Lock => Ok(()),
             };
             if let Err(error) = &result {
-                updates.send(keychain_failure(what, error));
+                updates.send(passwords_failure(what, error));
                 if NO_LONGER_OPEN.contains(&kind(error).as_str()) {
                     unlocked = false;
                 }
@@ -415,7 +413,7 @@ pub fn follow_passwords(
             let items = match unlocked {
                 true => open.items().unwrap_or_else(|error| {
                     unlocked = false;
-                    updates.send(keychain_failure(
+                    updates.send(passwords_failure(
                         text!("Couldn't list your saved passwords."),
                         &error,
                     ));
@@ -444,7 +442,7 @@ fn matches(item: &Saved, query: &str) -> bool {
 impl SettingsView {
     pub(crate) fn take_passwords(&mut self, unlocked: bool, items: Vec<Saved>) {
         if !unlocked {
-            self.keychain = Keychain::default();
+            self.passwords = SavedPasswords::default();
             return;
         }
         let known = |path: &Option<String>| {
@@ -453,35 +451,35 @@ impl SettingsView {
         };
         if !known(
             &self
-                .keychain
+                .passwords
                 .revealed
                 .as_ref()
                 .map(|(path, _)| path.clone()),
         ) {
-            self.keychain.revealed = None;
+            self.passwords.revealed = None;
         }
-        if !known(&self.keychain.changing) {
-            self.keychain.changing = None;
+        if !known(&self.passwords.changing) {
+            self.passwords.changing = None;
         }
-        self.keychain.unlocked = true;
-        self.keychain.items = items;
+        self.passwords.unlocked = true;
+        self.passwords.items = items;
     }
 
     pub(crate) fn password_command(&mut self, command: PasswordCommand) {
         match &command {
             PasswordCommand::Reveal(path) => {
                 if self
-                    .keychain
+                    .passwords
                     .revealed
                     .as_ref()
                     .is_some_and(|(shown, _)| shown == path)
                 {
-                    self.keychain.revealed = None;
+                    self.passwords.revealed = None;
                     return;
                 }
             }
-            PasswordCommand::Lock => self.keychain = Keychain::default(),
-            PasswordCommand::Change(..) => self.keychain.changing = None,
+            PasswordCommand::Lock => self.passwords = SavedPasswords::default(),
+            PasswordCommand::Change(..) => self.passwords.changing = None,
             _ => {}
         }
         if let PasswordCommand::Reveal(path) | PasswordCommand::Copy(path) = &command {
@@ -490,8 +488,8 @@ impl SettingsView {
         self.commands.push(Command::Passwords(command));
     }
 
-    pub(crate) fn keychain_rows(&mut self) -> Widgets {
-        if !self.keychain.unlocked {
+    pub(crate) fn saved_password_rows(&mut self) -> Widgets {
+        if !self.passwords.unlocked {
             let mut unlock = intent(&self.intents, |()| {
                 Intent::Passwords(PasswordCommand::Unlock)
             });
@@ -505,7 +503,7 @@ impl SettingsView {
                 )
                 .detail(
                     Text::new(
-                        &tr!("Enter your keychain password to see, copy, change or delete them."),
+                        &tr!("Enter your keyring password to see, copy, change or delete them."),
                         Tone::Muted,
                     )
                     .caption(),
@@ -514,7 +512,7 @@ impl SettingsView {
         }
         let field = SearchField::new(
             &tr!("Website, account or app"),
-            &self.keychain.query,
+            &self.passwords.query,
             submit(&self.intents, Intent::PasswordQuery),
         );
         self.anchors.push((Anchor::Picker, field.id()));
@@ -532,26 +530,26 @@ impl SettingsView {
             ))),
         ))];
         let items = self
-            .keychain
+            .passwords
             .items
             .iter()
-            .filter(|item| matches(item, &self.keychain.query))
+            .filter(|item| matches(item, &self.passwords.query))
             .cloned()
             .collect::<Vec<_>>();
         if items.is_empty() {
-            rows.push(muted_row(&if self.keychain.query.trim().is_empty() {
+            rows.push(muted_row(&if self.passwords.query.trim().is_empty() {
                 tr!("No saved passwords.")
             } else {
                 tr!("No passwords match.")
             }));
         }
         for item in items {
-            rows.push(self.keychain_row(item));
+            rows.push(self.saved_password_row(item));
         }
         rows
     }
 
-    fn keychain_row(&mut self, item: Saved) -> Box<dyn Widget> {
+    fn saved_password_row(&mut self, item: Saved) -> Box<dyn Widget> {
         let target = Forget::Password(item.path.clone());
         if self.forgetting.as_ref() == Some(&target) {
             return self.confirm_row(
@@ -561,7 +559,7 @@ impl SettingsView {
             );
         }
         let anchor = format!("password:{}", item.path);
-        if self.keychain.changing.as_deref() == Some(item.path.as_str()) {
+        if self.passwords.changing.as_deref() == Some(item.path.as_str()) {
             let path = item.path.clone();
             let mut change = intent(&self.intents, move |password: String| {
                 Intent::Passwords(PasswordCommand::Change(
@@ -589,7 +587,7 @@ impl SettingsView {
             );
         }
         let revealed = self
-            .keychain
+            .passwords
             .revealed
             .as_ref()
             .filter(|(path, _)| *path == item.path)

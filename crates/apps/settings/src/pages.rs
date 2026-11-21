@@ -818,7 +818,7 @@ impl SettingsView {
             List::SecurityStatus => self.security_status_rows(),
             List::SearchExcluded => self.excluded_rows(),
             List::Permissions(permission) => self.permission_rows(permission),
-            List::Passwords => self.keychain_rows(),
+            List::Passwords => self.saved_password_rows(),
         }
     }
 

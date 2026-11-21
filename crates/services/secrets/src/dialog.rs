@@ -48,7 +48,7 @@ pub enum Reply {
 pub struct Request {
     pub kind: Kind,
     pub app: Option<String>,
-    pub keychain: String,
+    pub keyring: String,
     pub items: Vec<String>,
 }
 
@@ -56,7 +56,7 @@ impl Request {
     fn header(&self) -> String {
         let line =
             |key: &str, value: &str| format!("{key}\t{}\n", value.replace(['\n', '\t'], " "));
-        let mut header = line("keychain", &self.keychain);
+        let mut header = line("keyring", &self.keyring);
         if let Some(app) = &self.app {
             header.push_str(&line("app", app));
         }

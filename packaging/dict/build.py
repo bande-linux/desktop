@@ -404,7 +404,7 @@ def main():
         case ["packs", sources, work, out, *packages]:
             WORK = pathlib.Path(work)
             WORK.mkdir(parents=True, exist_ok=True)
-            packs(pathlib.Path(sources), pathlib.Path(out), packages)
+            packs(pathlib.Path(sources).resolve(), pathlib.Path(out), packages)
         case _:
             sys.exit(__doc__)
 

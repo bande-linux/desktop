@@ -51,6 +51,14 @@ Each app is `crates/apps/<name>`, packaged as `bande-<name>`:
 `org.bande.MailMerge`) from the template and prints what else to add. How an app is built is in
 [`docs/architecture/apps.md`](docs/architecture/apps.md).
 
+## Browser
+
+Bande's Browser (`bande-browser`) is Debian's `firefox-esr` with Bande's patches, branding, prefs
+and theme, in `browser/`, outside the Cargo workspace and with its own release rhythm: it builds
+whenever Debian uploads a new `firefox-esr`. `browser/firefox-esr-bande/` is the
+`bande-firefox-esr-settings` package for Debian's own `firefox-esr`. See
+[`browser/README.md`](browser/README.md).
+
 ## Building and testing
 
 On Debian forky, install the build and test dependencies (with `sudo`; Debian's own `rustc`,

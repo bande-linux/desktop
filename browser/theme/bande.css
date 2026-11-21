@@ -1,0 +1,135 @@
+:root {
+  --bande-chassis: #ECEAE7;
+  --bande-sheet: #FCFBF9;
+  --bande-overlay: #FFFFFF;
+  --bande-well: #E2DFDB;
+  --bande-hairline: #D4D0CB;
+  --bande-edge: #BAB7B2;
+  --bande-ink: #201E1A;
+  --bande-ink2: #5B5752;
+  --bande-ink3: #83807A;
+  --bande-accent: AccentColor;
+  --bande-danger: #D42F34;
+  @media (prefers-color-scheme: dark) {
+    --bande-chassis: #1F2329;
+    --bande-sheet: #272A30;
+    --bande-overlay: #34373C;
+    --bande-well: #31343A;
+    --bande-hairline: #3B3F45;
+    --bande-edge: #575B62;
+    --bande-ink: #E4E6EA;
+    --bande-ink2: #B9BEC6;
+    --bande-ink3: #8D9198;
+    --bande-danger: #CF4040;
+  }
+  --toolbox-bgcolor: var(--bande-chassis) !important;
+  --toolbox-bgcolor-inactive: var(--bande-chassis) !important;
+  --toolbox-textcolor: var(--bande-ink) !important;
+  --toolbox-textcolor-inactive: var(--bande-ink3) !important;
+  --toolbar-bgcolor: var(--bande-chassis) !important;
+  --toolbar-color: var(--bande-ink) !important;
+  --toolbarbutton-icon-fill: var(--bande-ink2) !important;
+  --toolbarbutton-border-radius: 6px !important;
+  --chrome-content-separator-color: transparent !important;
+  --tabs-navbar-separator-style: none !important;
+  --toolbarseparator-color: var(--bande-hairline) !important;
+  --urlbar-box-bgcolor: var(--bande-well) !important;
+  --urlbar-box-focus-bgcolor: var(--bande-sheet) !important;
+  --urlbar-box-hover-bgcolor: var(--bande-well) !important;
+  --urlbar-box-text-color: var(--bande-ink) !important;
+  --toolbar-field-background-color: var(--bande-well) !important;
+  --toolbar-field-focus-background-color: var(--bande-sheet) !important;
+  --toolbar-field-color: var(--bande-ink) !important;
+  --toolbar-field-focus-color: var(--bande-ink) !important;
+  --toolbar-field-border-color: transparent !important;
+  --focus-outline-color: var(--bande-accent) !important;
+  --tab-selected-bgcolor: var(--bande-sheet) !important;
+  --tab-selected-textcolor: var(--bande-ink) !important;
+  --tab-hover-background-color: var(--bande-well) !important;
+  --tab-border-radius: 8px !important;
+  --arrowpanel-background: var(--bande-overlay) !important;
+  --arrowpanel-color: var(--bande-ink) !important;
+  --arrowpanel-border-color: var(--bande-hairline) !important;
+  --arrowpanel-border-radius: 10px !important;
+  --panel-background: var(--bande-overlay) !important;
+  --panel-color: var(--bande-ink) !important;
+  --font-family-system: Inter, sans-serif !important;
+}
+
+#navigator-toolbox { border-bottom: none; }
+#main-window { font-family: Inter, sans-serif; }
+#urlbar-background, #searchbar { border-radius: 8px; }
+.tab-label { font-size: 13px; }
+menupopup, panel { --panel-border-radius: 10px; }
+menuitem, menu { border-radius: 6px; min-height: 28px; }
+#TabsToolbar, #nav-bar, #PersonalToolbar, #navigator-toolbox { background: var(--bande-chassis) !important; color: var(--bande-ink) !important; }
+
+#main-window {
+  --bande-row-height: 48px;
+  --bande-well-gap: 84px;
+  --bande-row-leading: 12px;
+}
+#tabbrowser-tabs {
+  --tab-min-height: 28px !important;
+  --tab-block-margin: 10px !important;
+}
+#tabbrowser-tabs[orient="horizontal"]::before { display: none !important; }
+:root:not([inFullscreen]) .titlebar-buttonbox-container,
+#firefox-view-button { display: none !important; }
+:root[inFullscreen] .titlebar-min,
+:root[inFullscreen] .titlebar-max,
+:root[inFullscreen] .titlebar-close,
+:root[inFullscreen] #toolbar-menubar .titlebar-buttonbox-container,
+:root[inFullscreen] #nav-bar .titlebar-buttonbox-container { display: none !important; }
+:root[inFullscreen] #TabsToolbar .titlebar-buttonbox-container { display: flex !important; }
+:root[inFullscreen] #TabsToolbar .titlebar-restore {
+  display: flex !important;
+  padding-inline: 12px !important;
+  color: var(--bande-ink2);
+  &:hover { color: var(--bande-ink); }
+  > .toolbarbutton-icon {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 12px;
+    background-color: var(--bande-well) !important;
+    background-size: 16px !important;
+    background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M7.5 3.5V7.5H3.5M8.5 12.5V8.5H12.5" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>') !important;
+  }
+}
+#TabsToolbar { min-height: var(--bande-row-height) !important; }
+:root:not([inFullscreen]) #TabsToolbar { padding-right: var(--bande-well-gap) !important; }
+#appMenu-report-broken-site-button, #help_reportBrokenSite, #appMenu-help-report-site-issue { display: none !important; }
+#TabsToolbar .titlebar-spacer[type="pre-tabs"] {
+  display: flex !important;
+  width: var(--bande-row-leading) !important;
+}
+#TabsToolbar .titlebar-spacer[type="post-tabs"] { display: flex !important; }
+:root[inFullscreen] #TabsToolbar .titlebar-spacer[type="post-tabs"],
+:root[inFullscreen] #TabsToolbar .titlebar-spacer[type="pre-tabs"] { display: none !important; }
+
+#PanelUI-button { margin: 0 !important; padding: 0 !important; align-self: center; }
+#PanelUI-menu-button {
+  list-style-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.25" fill="context-fill"/><circle cx="8" cy="8" r="1.25" fill="context-fill"/><circle cx="8" cy="12.5" r="1.25" fill="context-fill"/></svg>') !important;
+  --toolbarbutton-border-radius: 12px;
+}
+
+#PersonalToolbar {
+  min-height: 32px !important;
+  padding: 0 10px 4px !important;
+  --toolbarbutton-inner-padding: 4px !important;
+}
+#PersonalToolbar toolbarbutton.bookmark-item:not(.subviewbutton) {
+  margin: 0 1px !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  color: var(--bande-ink) !important;
+  font-size: 12.5px;
+  &:hover, &[open] { background-color: var(--bande-well) !important; }
+  &:hover:active { background-color: var(--bande-hairline) !important; }
+  > .toolbarbutton-icon { fill: var(--bande-ink2) !important; }
+}
+#personal-toolbar-empty-description {
+  color: var(--bande-ink3) !important;
+  font-size: 12.5px;
+  > .text-link { color: var(--bande-accent) !important; text-decoration: none !important; }
+}

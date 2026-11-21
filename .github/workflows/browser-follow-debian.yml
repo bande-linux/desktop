@@ -1,0 +1,183 @@
+name: browser follow Debian
+run-name: "${{ github.event_name == 'schedule' && 'Browser: every 6 hours, follow Debian firefox-esr' || (inputs.debian_version != '' && format('Browser: test build of Debian firefox-esr {0}', inputs.debian_version) || 'Browser: build Debian firefox-esr') }}"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'browser/**'
+      - '.github/workflows/browser-follow-debian.yml'
+  schedule:
+    - cron: '37 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if the archive already serves this version
+        type: boolean
+        default: false
+      debian_version:
+        description: Test-build this Debian firefox-esr version instead of unstable's; never published
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    working-directory: browser
+
+jobs:
+  suites:
+    uses: bande-linux/apt/.github/workflows/suites.yml@main
+
+  check:
+    needs: suites
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    outputs:
+      debian: ${{ steps.versions.outputs.debian }}
+      version: ${{ steps.versions.outputs.version }}
+      build: ${{ steps.versions.outputs.build }}
+    steps:
+      - name: Check out (actions/checkout v7)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Compare Debian with the archive
+        id: versions
+        env:
+          FORCE: ${{ inputs.force }}
+          TEST_VERSION: ${{ inputs.debian_version }}
+          GH_TOKEN: ${{ github.token }}
+          SUITE: ${{ fromJSON(needs.suites.outputs.list)[0] }}
+        run: |
+          debian=${TEST_VERSION:-$(scripts/debian-version.sh)}
+          version=$(scripts/version.sh "$debian")
+          published=$(scripts/published.sh "$SUITE" || true)
+          built=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bande-version-$version" \
+            --jq '[.artifacts[] | select(.expired | not)] | length')
+          build=true
+          if [ -z "$TEST_VERSION" ] && [ "$FORCE" != true ] && { [ "$published" = "$version" ] || [ "$built" -gt 0 ]; }; then
+            build=false
+          fi
+          echo "Debian: firefox-esr $debian; ours: $version; published: ${published:-none}; built: $built; build: $build"
+          {
+            echo "debian=$debian"
+            echo "version=$version"
+            echo "build=$build"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [suites, check]
+    if: needs.check.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.suites.outputs.list) }}
+        arch: [arm64, amd64]
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: amd64
+            runner: ubuntu-24.04
+    name: build (${{ matrix.suite }}, ${{ matrix.arch }})
+    concurrency:
+      group: browser-follow-debian-${{ matrix.suite }}-${{ matrix.arch }}-${{ inputs.debian_version || 'unstable' }}
+      cancel-in-progress: false
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 350
+    env:
+      DEBIAN_VERSION: ${{ needs.check.outputs.debian }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - name: Check out (actions/checkout v7)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache /usr/local/share/boost
+          df -h /
+
+      - name: Start the Debian ${{ matrix.suite }} container
+        run: |
+          mkdir -p "$RUNNER_TEMP/work" "$RUNNER_TEMP/out"
+          docker run -d --privileged --name build -v "$PWD:/repo" -v "$RUNNER_TEMP/work:/work" -v "$RUNNER_TEMP/out:/out" \
+            "debian:${{ matrix.suite }}" sleep infinity
+
+      - name: Version the package for this Debian release
+        run: |
+          docker exec build sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends distro-info-data > /dev/null'
+          echo "PACKAGE_VERSION=$VERSION$(docker exec build /repo/scripts/debian-release.sh)" >> "$GITHUB_ENV"
+
+      - name: Fetch Debian's source
+        run: docker exec build /repo/scripts/build.sh fetch "$DEBIAN_VERSION" /work
+
+      - name: Prepare it with our patches
+        id: prepare
+        run: |
+          set +e
+          docker exec build sh -c '/repo/scripts/prepare.sh /work/firefox-esr-*/ "$0"' "$PACKAGE_VERSION"
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          [ $rc = 0 ] || [ $rc = 3 ]
+
+      - name: Refresh our patches with Claude
+        if: steps.prepare.outputs.rc == '3'
+        timeout-minutes: 120
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || { echo "A patch doesn't apply and CLAUDE_CODE_OAUTH_TOKEN isn't set"; exit 1; }
+          docker exec build sh -c 'apt-get install -y -qq curl bash >/dev/null && useradd -m fixer && chown -R fixer /work /repo/patches'
+          docker exec -u fixer build bash -c 'curl -fsSL https://claude.ai/install.sh | bash -s stable >/dev/null'
+          docker exec -u fixer -e CLAUDE_CODE_OAUTH_TOKEN -w /work build bash -c '
+            src=$(ls -d /work/firefox-esr-*/)
+            series=/repo/patches/$(echo "'"$DEBIAN_VERSION"'" | cut -d. -f1)
+            ~/.local/bin/claude -p "$(cat /repo/scripts/refresh-prompt.md)
+          The Debian source is $src, version '"$DEBIAN_VERSION"'. Our patches are in $series/, listed in $series/series." \
+              --model claude-opus-5-5 --effort high --permission-mode dontAsk --max-turns 200 \
+              --add-dir /repo/patches \
+              --allowedTools "Read" "Edit" "Write" "Glob" "Grep" "Bash(quilt *)" "Bash(cd *)" "Bash(ls *)" \
+                "Bash(diff *)" "Bash(patch *)" "Bash(cp *)" "Bash(cat *)" "Bash(grep *)"'
+          docker exec build sh -c 'rm -rf /work/*'
+          docker exec build /repo/scripts/build.sh fetch "$DEBIAN_VERSION" /work
+          docker exec build sh -c '/repo/scripts/prepare.sh /work/firefox-esr-*/ "$0"' "$PACKAGE_VERSION"
+
+      - name: Build
+        run: docker exec -e BROWSER_JOBS=3 build /repo/scripts/build.sh compile "$PACKAGE_VERSION" /work /out
+
+      - name: Build the settings package
+        if: matrix.arch == 'arm64'
+        run: docker exec build /repo/scripts/settings-package.sh "$PACKAGE_VERSION" /out
+
+      - name: Prove a fresh profile stays silent
+        run: docker exec build sh -c '/repo/scripts/check-package.sh /out/bande-browser_*.deb'
+
+      - name: Name the version
+        run: echo "$VERSION" > "$RUNNER_TEMP/version"
+
+      - name: Upload the packages (actions/upload-artifact v7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: bande-debs-${{ matrix.suite }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/out/*_${{ matrix.arch }}.deb
+          if-no-files-found: error
+
+      - name: Upload the architecture-independent packages (actions/upload-artifact v7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: matrix.arch == 'arm64'
+        with:
+          name: bande-debs-${{ matrix.suite }}-all
+          path: ${{ runner.temp }}/out/*_all.deb
+          if-no-files-found: error
+
+      - name: Upload the version (actions/upload-artifact v7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: inputs.debian_version == '' && matrix.arch == 'arm64' && matrix.suite == fromJSON(needs.suites.outputs.list)[0]
+        with:
+          name: bande-version-${{ needs.check.outputs.version }}
+          path: ${{ runner.temp }}/version

@@ -1,0 +1,26 @@
+Source: bande-firefox-esr-settings
+Section: web
+Priority: optional
+Maintainer: Mikael Hug <mikaelhug@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.4
+Rules-Requires-Root: no
+Homepage: https://github.com/bande-linux/desktop/tree/main/browser
+Vcs-Browser: https://github.com/bande-linux/desktop/tree/main/browser/firefox-esr-bande
+Vcs-Git: https://github.com/bande-linux/desktop.git [browser/firefox-esr-bande]
+
+Package: bande-firefox-esr-settings
+Architecture: all
+Multi-Arch: foreign
+Depends: firefox-esr, ${misc:Depends}
+Enhances: firefox-esr
+Description: Bande's browser settings for firefox-esr
+ Preferences and enterprise policies that give Debian's firefox-esr the
+ settings of Bande's Browser: no telemetry, studies or remote experiments, no
+ sponsored content or recommendations, no Remote Settings downloads, no
+ Safe Browsing or network geolocation, no prefetching, DRM content and web
+ push off by default, and the tab strip in the title bar.
+ .
+ Settings are applied system-wide. Users can change those that are not locked
+ in about:config; a policies.json under /etc/firefox/policies replaces the one
+ this package installs.

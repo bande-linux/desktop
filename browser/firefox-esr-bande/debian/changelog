@@ -1,0 +1,5 @@
+bande-firefox-esr-settings (1) unstable; urgency=medium
+
+  * Bande's browser settings for Debian's firefox-esr.
+
+ -- Mikael Hug <mikaelhug@gmail.com>  Sat, 21 Nov 2026 15:07:39 +0100

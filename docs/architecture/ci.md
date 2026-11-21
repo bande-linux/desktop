@@ -57,6 +57,9 @@ a new one is declared in the change that adds it; the `install` job checks that 
 
 ## GitHub CI
 
+`browser-follow-debian.yml` builds Bande's Browser on its own rhythm, whenever Debian uploads a new
+`firefox-esr` or `browser/` changes on `main`: see [`browser/README.md`](../../browser/README.md).
+
 Besides `dict.yml`, which builds the dictionary packs from a `dict-YYYYMMDD` tag (see
 [lookup.md](lookup.md)), and `l10n.yml`, which builds only the language packs from an
 `l10n-YYYYMMDD` tag (`.N` for another the same day) at `<last release>~debNN+l10nYYYYMMDD`

@@ -1,1 +1,2 @@
-debian/ export-ignore
+/browser export-ignore
+/debian export-ignore

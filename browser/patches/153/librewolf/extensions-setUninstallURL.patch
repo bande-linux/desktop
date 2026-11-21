@@ -1,0 +1,18 @@
+Description: Prevent extensions from using setUninstallURL due to potential abuse of this feature
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/extensions-setUninstallURL.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
+diff --git a/toolkit/components/extensions/parent/ext-runtime.js b/toolkit/components/extensions/parent/ext-runtime.js
+index 0d7a3e5..473e4f1 100644
+--- a/toolkit/components/extensions/parent/ext-runtime.js
++++ b/toolkit/components/extensions/parent/ext-runtime.js
+@@ -353,7 +353,7 @@ this.runtime = class extends ExtensionAPIPersistent {
+         },
+ 
+         setUninstallURL: function (url) {
+-          if (url === null || url.length === 0) {
++          if (true) {
+             extension.uninstallURL = null;
+             return Promise.resolve();
+           }

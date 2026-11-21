@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*/*"]
 
 [workspace.package]
-version = "0.1.10"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.98"
@@ -18,60 +18,79 @@ undocumented_unsafe_blocks = "deny"
 [workspace.dependencies]
 accesskit = "=0.25.2"
 accesskit_unix = "=0.24.1"
+alacritty_terminal = { version = "=0.26.0", default-features = false }
 ash = "=0.38.0"
 async-channel = "=2.5.0"
 async-executor = "=1.14.0"
 async-io = "=2.6.0"
 async-lock = "=3.4.2"
 async-process = "=2.5.0"
+base64 = "=0.22.1"
 blocking = "=1.6.2"
 bzip2 = "=0.6.1"
+data-encoding = "2.11"
+encoding_rs = "=0.8.44"
+fatfs = { version = "=0.3.6", default-features = false, features = ["std", "alloc"] }
 flate2 = "=1.1.10"
 fontique = { version = "=0.12.0", features = ["fontconfig-dlopen"] }
 futures-lite = "=2.6.1"
+gstreamer = "=0.25.4"
+gstreamer-app = "=0.25.2"
+gstreamer-video = "=0.25.4"
 hayro = "=0.8.0"
+html5ever = "0.40"
+httparse = "=1.10.1"
 icu_calendar = "=2.4.0"
 icu_datetime = "=2.4.0"
 icu_locale_core = "=2.4.0"
-image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
+image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png"] }
 jiff = "=0.2.38"
+jxl-oxide = { version = "=0.12.6", default-features = false }
 kamadak-exif = "=0.6.1"
 kdl = { version = "=6.7.1", default-features = false, features = ["span"] }
+krilla = { version = "=0.8.2", default-features = false, features = ["raster-images"] }
 libc = "=0.2.191"
 libloading = "=0.8.9"
 lzma-rust2 = { version = "=0.23.0", default-features = false, features = ["std", "xz", "encoder"] }
+mailparse = "0.18"
 md-5 = "=0.10.6"
 naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 oo7 = { version = "=0.7.0-beta", default-features = false, features = ["async-std", "native_crypto", "unstable"] }
-krilla = { version = "=0.8.2", default-features = false, features = ["raster-images"] }
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
 png = "=0.18.1"
 pollster = "=1.0.1"
 proc-macro2 = "=1.0.107"
+quick-xml = "=0.41.0"
 quote = "=1.0.47"
 raw-window-handle = "=0.6.2"
-quick-xml = "=0.41.0"
-ring = "=0.17.14"
+regex = "=1.13.1"
 resvg = { version = "=0.49.0", default-features = false }
+ring = "=0.17.14"
 roxmltree = "=0.21.2"
+rusqlite = "0.41"
 rustc-demangle = "=0.1.28"
-rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 rustix = { version = "=1.1.6", features = ["event", "param", "process"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["aws-lc-rs", "logging", "prefer-post-quantum", "std", "tls12"] }
+rustls-platform-verifier = "=0.7.1"
 ruzstd = "=0.9.1"
-sevenz-rust2 = { version = "=0.24.2", default-features = false, features = ["aes256", "bzip2", "deflate", "ppmd"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
+serde_yaml_ng = "=0.10.0"
+sevenz-rust2 = { version = "=0.24.2", default-features = false, features = ["aes256", "bzip2", "deflate", "ppmd"] }
+sha2 = { version = "=0.11.1", default-features = false }
 skrifa = "=0.44.0"
+smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 spellbook = "=0.4.2"
 syn = "=2.0.119"
-smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend"] }
 tantivy = { version = "=0.25.0", default-features = false, features = ["mmap", "lz4-compression"] }
 tar = "=0.4.46"
 tempfile = "=3.27.0"
 tracing = "=0.1.44"
 tracing-journald = "=0.3.2"
 tracing-subscriber = { version = "=0.3.23", default-features = false, features = ["ansi", "fmt", "registry", "std", "tracing-log"] }
+udev = "=0.9.3"
+ureq = { version = "=3.5.0", default-features = false, features = ["gzip", "platform-verifier", "rustls-no-provider"] }
 vello_cpu = "=0.3.0"
 vello_gpu = { version = "=0.3.0", default-features = false, features = ["wgpu", "text"] }
 wayland-backend = { version = "=0.3.17", features = ["log"] }
@@ -84,7 +103,6 @@ wayland-server = "=0.31.14"
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
 writeable = "=0.6.4"
 xkbcommon = "=0.8.0"
-udev = "=0.9.3"
 zbus = "=5.19.0"
 zeroize = { version = "=1.8.1", features = ["serde"] }
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2"] }
@@ -99,66 +117,69 @@ bande-bench = { path = "crates/testing/bench" }
 bande-bluetooth = { path = "crates/libs/bluetooth" }
 bande-bus = { path = "crates/libs/bus" }
 bande-clipboard = { path = "crates/services/clipboard" }
+bande-colour = { path = "crates/libs/colour" }
 bande-compositor = { path = "crates/platform/compositor" }
 bande-config = { path = "crates/services/config" }
 bande-content = { path = "crates/libs/content" }
-bande-quick-settings = { path = "crates/shell/quick-settings" }
+bande-crash-reports = { path = "crates/services/crash-reports" }
 bande-datetime = { path = "crates/libs/datetime" }
 bande-design = { path = "crates/toolkit/design" }
 bande-desktop-surface = { path = "crates/shell/desktop" }
-bande-taskbar-model = { path = "crates/libs/taskbar-model" }
-bande-colour = { path = "crates/libs/colour" }
+bande-dict = { path = "crates/libs/dict" }
+bande-discovery = { path = "crates/libs/discovery" }
 bande-edid = { path = "crates/libs/edid" }
 bande-files = { path = "crates/apps/files" }
-bande-lookup = { path = "crates/apps/lookup" }
 bande-fs = { path = "crates/libs/fs" }
+bande-glance = { path = "crates/libs/glance" }
 bande-graphics = { path = "crates/toolkit/graphics" }
-bande-pdf = { path = "crates/toolkit/pdf" }
 bande-greeter = { path = "crates/shell/greeter" }
-bande-indexer = { path = "crates/services/index" }
-bande-inbox = { path = "crates/libs/inbox" }
 bande-https = { path = "crates/libs/https" }
-bande-dict = { path = "crates/libs/dict" }
-bande-keyring = { path = "crates/libs/keyring" }
+bande-inbox = { path = "crates/libs/inbox" }
+bande-indexer = { path = "crates/services/index" }
 bande-keyboard = { path = "crates/libs/keyboard" }
-bande-l10n-macros = { path = "crates/libs/l10n-macros" }
+bande-keyring = { path = "crates/libs/keyring" }
 bande-l10n = { path = "crates/libs/l10n" }
+bande-l10n-macros = { path = "crates/libs/l10n-macros" }
 bande-l10n-source = { path = "crates/libs/l10n-source" }
 bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
+bande-lookup = { path = "crates/apps/lookup" }
 bande-media = { path = "crates/libs/media" }
 bande-media-view = { path = "crates/libs/media-view" }
 bande-network = { path = "crates/libs/network" }
-bande-printers = { path = "crates/libs/printers" }
-bande-glance = { path = "crates/libs/glance" }
-bande-packages = { path = "crates/libs/packages" }
 bande-notifications = { path = "crates/shell/notifications" }
 bande-notify = { path = "crates/services/notify" }
-bande-printd = { path = "crates/services/printd" }
+bande-packages = { path = "crates/libs/packages" }
+bande-pdf = { path = "crates/toolkit/pdf" }
 bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
-bande-crash-reports = { path = "crates/services/crash-reports" }
-bande-reporter = { path = "crates/services/reporter" }
+bande-printd = { path = "crates/services/printd" }
+bande-printers = { path = "crates/libs/printers" }
 bande-protocols = { path = "crates/platform/protocols" }
+bande-quick-settings = { path = "crates/shell/quick-settings" }
 bande-render = { path = "crates/platform/render" }
+bande-reporter = { path = "crates/services/reporter" }
 bande-review = { path = "crates/testing/review" }
 bande-sample = { path = "crates/testing/sample" }
 bande-screenshot = { path = "crates/shell/screenshot" }
-bande-secrets = { path = "crates/services/secrets" }
 bande-search = { path = "crates/libs/search" }
+bande-secrets = { path = "crates/services/secrets" }
 bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }
 bande-sound = { path = "crates/services/sound", default-features = false }
 bande-spring = { path = "crates/libs/spring" }
 bande-status = { path = "crates/libs/status" }
+bande-taskbar-model = { path = "crates/libs/taskbar-model" }
+bande-terminal-view = { path = "crates/libs/terminal-view" }
 bande-test-bus = { path = "crates/testing/test-bus" }
 bande-test-wayland = { path = "crates/testing/test-wayland" }
 bande-thumbnails = { path = "crates/libs/thumbnails" }
 bande-toolkit = { path = "crates/toolkit/toolkit" }
 bande-toolkit-platform = { path = "crates/toolkit/platform" }
 bande-tray = { path = "crates/services/tray" }
+bande-vm = { path = "crates/libs/vm" }
 bande-volumes = { path = "crates/libs/volumes" }
 bande-wallpaper = { path = "crates/libs/wallpaper" }
 bande-watch = { path = "crates/libs/watch" }

@@ -1,7 +1,7 @@
 [package]
 name = "bande-viewer"
 description = "image and PDF viewer for the Bande desktop"
-version = "0.1.6"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

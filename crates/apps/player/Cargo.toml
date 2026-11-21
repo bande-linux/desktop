@@ -1,7 +1,7 @@
 [package]
 name = "bande-player"
 description = "audio and video player for the Bande desktop"
-version = "0.1.2"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

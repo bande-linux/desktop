@@ -24,6 +24,10 @@ The architecture is split by subject:
 | [`ci.md`](ci.md) | the local gate, the release workflow and how a release is cut |
 | [`packaging.md`](packaging.md) | Debian packages and the meta-package |
 | [`performance.md`](performance.md) | how to measure memory, CPU and wake-ups, and the current numbers |
+| [`localisation.md`](localisation.md) | translatable strings, catalogs and the language packs |
+| [`fault-reports.md`](fault-reports.md) | crash and hang reports, their sending and the report protocol |
+| [`lookup.md`](lookup.md) | the Dictionary app, Look Up and the dictionary packs |
+| [`glossary.md`](glossary.md) | the names of the taskbar's parts |
 
 ## Component map
 

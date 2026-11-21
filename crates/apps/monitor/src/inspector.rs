@@ -18,12 +18,12 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, HEADER_LEADING, Header, Palette, Rect, SHEET_INSET, Scene, TextSystem,
+    Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Palette, Rect, SHEET_INSET, Scene,
+    TextSystem,
 };
 
 pub const INSPECTOR_SIZE: (u32, u32) = (680, 520);
 const HEADER: f32 = bande_toolkit::WINDOW_HEADER_HEIGHT as f32;
-const SIDE: f32 = 12.0;
 const BUTTON_SIZE: f32 = 28.0;
 const ITEM_GAP: f32 = 16.0;
 const SEGMENT_WIDTH: f32 = 96.0;
@@ -600,11 +600,18 @@ impl InspectorView {
         }
     }
 
+    fn trailing(&self) -> f32 {
+        match self.full_screen {
+            true => HEADER_LEADING,
+            false => HEADER_TRAILING,
+        }
+    }
+
     fn toolbar_frames(&self) -> [(WidgetId, Rect); 2] {
         let middle = |height: f32| ((HEADER - height) / 2.0).round();
         let width = SEGMENT_WIDTH * Section::ALL.len() as f32;
         let sections = Rect::new(
-            self.size.0 - SIDE - width,
+            self.size.0 - self.trailing() - width,
             middle(SEGMENTED_HEIGHT),
             width,
             SEGMENTED_HEIGHT,
@@ -762,10 +769,7 @@ impl Screen for InspectorView {
 
     fn header(&self) -> Option<Header> {
         Some(Header {
-            title_x: match self.full_screen {
-                true => SIDE,
-                false => HEADER_LEADING,
-            },
+            title_x: HEADER_LEADING,
             items: self
                 .toolbar_frames()
                 .into_iter()

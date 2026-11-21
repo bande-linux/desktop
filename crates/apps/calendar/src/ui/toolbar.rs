@@ -3,12 +3,11 @@ use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, FreeLayout, SEGMENTED_HEIGHT, SearchField, SegmentedControl,
     TEXT_FIELD_HEIGHT, WidgetId,
 };
-use bande_toolkit::{HEADER_LEADING, Image, Rect, WINDOW_HEADER_HEIGHT};
+use bande_toolkit::{HEADER_LEADING, HEADER_TRAILING, Image, Rect, WINDOW_HEADER_HEIGHT};
 
 use super::{Mode, Signal, Signals, sender};
 
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
-const SIDE: f32 = 12.0;
 const GAP: f32 = 8.0;
 const SYMBOL_BUTTON: f32 = 28.0;
 const TODAY_WIDTH: f32 = 64.0;
@@ -93,18 +92,14 @@ impl Toolbar {
         }
     }
 
-    fn leading(&self) -> f32 {
-        HEADER_LEADING
-    }
-
     pub fn title_x(&self) -> f32 {
-        self.leading() + SYMBOL_BUTTON + 2.0 * GAP
+        HEADER_LEADING + SYMBOL_BUTTON + 2.0 * GAP
     }
 
     pub fn frames(&self, width: f32) -> [(WidgetId, Rect); 6] {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
         let search = Rect::new(
-            width - SIDE - SEARCH_WIDTH,
+            width - HEADER_TRAILING - SEARCH_WIDTH,
             middle(TEXT_FIELD_HEIGHT),
             SEARCH_WIDTH,
             TEXT_FIELD_HEIGHT,
@@ -135,7 +130,7 @@ impl Toolbar {
             SYMBOL_BUTTON,
         );
         let add = Rect::new(
-            self.leading(),
+            HEADER_LEADING,
             middle(SYMBOL_BUTTON),
             SYMBOL_BUTTON,
             SYMBOL_BUTTON,

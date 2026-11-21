@@ -18,8 +18,8 @@ use bande_toolkit::ui::{
     shortcut_pressed,
 };
 use bande_toolkit::{
-    Appearance, HEADER_LEADING, Header, Image, Item, Palette, Point, Radius, Rect, Scene, Shape,
-    TextAlign, TextRole, TextStyle, TextSystem,
+    Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Item, Palette, Point, Radius, Rect,
+    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem,
 };
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
@@ -30,7 +30,6 @@ const LABEL_WIDTH: f32 = 64.0;
 const FIELD_ROW: f32 = 36.0;
 const FIELD_FONT: f32 = 13.0;
 const SYMBOL_PIXELS: u32 = 32;
-const TRAILING_INSET: f32 = 12.0;
 const BODY_GAP: f32 = 10.0;
 const CHIP_HEIGHT: f32 = 26.0;
 const CHIP_PADDING: f32 = 10.0;
@@ -262,7 +261,7 @@ impl ComposeView {
         let (width, height) = self.size;
         let button = |slot: f32| {
             Rect::new(
-                width - TRAILING_INSET - slot * BUTTON_HEIGHT,
+                width - HEADER_TRAILING - slot * BUTTON_HEIGHT,
                 ((TOOLBAR_HEIGHT - BUTTON_HEIGHT) / 2.0).round(),
                 BUTTON_HEIGHT,
                 BUTTON_HEIGHT,

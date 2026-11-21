@@ -1,6 +1,6 @@
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{Context, Size, Widget, WidgetId};
-use bande_toolkit::{Item, Rect, Shape};
+use bande_toolkit::{HEADER_TRAILING, Item, Rect, Shape};
 
 pub struct Slot {
     id: WidgetId,
@@ -147,7 +147,7 @@ pub struct Bar {
     toolbar: f32,
     start: f32,
     gap: f32,
-    inset: f32,
+    trailing: f32,
     sizes: Vec<Size>,
     frame: Rect,
 }
@@ -169,7 +169,7 @@ impl Bar {
             toolbar,
             start,
             gap: 8.0,
-            inset: 12.0,
+            trailing: HEADER_TRAILING,
             sizes: Vec::new(),
             frame: Rect::default(),
         }
@@ -184,14 +184,14 @@ impl Bar {
         self.children.extend(tools);
     }
 
-    pub fn set_start(&mut self, start: f32) {
-        self.start = start;
+    pub fn set_trailing(&mut self, trailing: f32) {
+        self.trailing = trailing;
     }
 
     pub fn tool_frames(&self) -> Vec<Rect> {
         let width: f32 = self.sizes.iter().map(|size| size.width).sum::<f32>()
             + self.gap * self.sizes.len().saturating_sub(1) as f32;
-        let mut x = (self.frame.width - self.inset - width).max(self.start);
+        let mut x = (self.frame.width - self.trailing - width).max(self.start);
         self.sizes
             .iter()
             .map(|size| {

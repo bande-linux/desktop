@@ -15,8 +15,8 @@ use bande_toolkit::ui::{
     SegmentedControl, Stack, Stepper, Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, HEADER_LEADING, Header, Image, Rect, Scene, TextSystem, WINDOW_HEADER_HEIGHT,
-    Window, WindowEvent,
+    Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Rect, Scene, TextSystem,
+    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use jiff::civil::{Date, Weekday, date};
 use jiff::tz::TimeZone;
@@ -1040,23 +1040,30 @@ impl ClockView {
     }
 
     fn header(&self, width: f32) -> (Rect, Rect) {
+        let end = width - HEADER_TRAILING;
+        let (add, end) = match self.can_add() {
+            true => {
+                let add = Rect::new(
+                    end - BUTTON_HEIGHT,
+                    ((HEADER - BUTTON_HEIGHT) / 2.0).round(),
+                    BUTTON_HEIGHT,
+                    BUTTON_HEIGHT,
+                );
+                (add, add.x - SIDE)
+            }
+            false => (Rect::default(), end),
+        };
         let tabs_width = SEGMENT_WIDTH * Page::ALL.len() as f32;
-        let x = ((width - tabs_width) / 2.0).round().max(HEADER_LEADING);
+        let x = ((width - tabs_width) / 2.0)
+            .round()
+            .min(end - tabs_width)
+            .max(HEADER_LEADING);
         let tabs = Rect::new(
             x,
             ((HEADER - SEGMENTED_HEIGHT) / 2.0).round(),
             tabs_width,
             SEGMENTED_HEIGHT,
         );
-        let add = match self.can_add() {
-            true => Rect::new(
-                width - SIDE - BUTTON_HEIGHT,
-                ((HEADER - BUTTON_HEIGHT) / 2.0).round(),
-                BUTTON_HEIGHT,
-                BUTTON_HEIGHT,
-            ),
-            false => Rect::default(),
-        };
         (tabs, add)
     }
 }

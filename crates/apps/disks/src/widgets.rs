@@ -4,14 +4,13 @@ use std::rc::Rc;
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{BUTTON_HEIGHT, Context, Size, Widget, WidgetId};
 use bande_toolkit::{
-    Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Shape, Spacing, TextAlign,
-    TextRole, TextStyle, WINDOW_HEADER_HEIGHT,
+    Color, HEADER_LEADING, HEADER_TRAILING, Image, Item, Paragraph, Point, Radius, Rect,
+    SHEET_INSET, Shape, Spacing, TextAlign, TextRole, TextStyle, WINDOW_HEADER_HEIGHT,
 };
 
 pub const SIDEBAR_WIDTH: f32 = 240.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SIDEBAR_INSET: f32 = Spacing::S as f32;
-const TRAILING_INSET: f32 = 12.0;
 const TOOL_GAP: f32 = 6.0;
 const ICON: f32 = 48.0;
 const ICON_GAP: f32 = 14.0;
@@ -86,8 +85,15 @@ impl Root {
         )
     }
 
+    fn trailing(&self) -> f32 {
+        match self.inset > 0.0 {
+            true => HEADER_TRAILING,
+            false => HEADER_LEADING,
+        }
+    }
+
     pub fn tool_frames(&self) -> Vec<Rect> {
-        let mut x = self.frame.width - TRAILING_INSET;
+        let mut x = self.frame.width - self.trailing();
         let mut frames: Vec<Rect> = self
             .sizes
             .iter()

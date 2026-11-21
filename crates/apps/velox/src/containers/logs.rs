@@ -17,8 +17,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, HEADER_LEADING, Header, Item, Rect, Scene, Shape, TextRole,
-    TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Item, Rect, Scene, Shape,
+    TextRole, TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use serde::Deserialize;
 
@@ -574,6 +574,12 @@ impl View for LogsView {
                 false => 0.0,
             },
         });
+        if let Some(root) = self.ui.widget_as::<LogsRoot>(self.root) {
+            root.trailing = match full_screen {
+                true => HEADER_LEADING,
+                false => HEADER_TRAILING,
+            };
+        }
         let scene = View::scene(&mut self.ui, window);
         window.set_header(self.header());
         scene
@@ -638,6 +644,7 @@ struct LogsRoot {
     children: Vec<Box<dyn Widget>>,
     sizes: Vec<Size>,
     frame: Rect,
+    trailing: f32,
 }
 
 impl LogsRoot {
@@ -652,11 +659,12 @@ impl LogsRoot {
             children,
             sizes: Vec::new(),
             frame: Rect::default(),
+            trailing: HEADER_TRAILING,
         }
     }
 
     fn tool_frames(&self) -> Vec<Rect> {
-        let mut right = self.frame.width - INSET;
+        let mut right = self.frame.width - self.trailing;
         let mut frames: Vec<Rect> = self.sizes[Self::TOOLS.min(self.sizes.len())..]
             .iter()
             .rev()

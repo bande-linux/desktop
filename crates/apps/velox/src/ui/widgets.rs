@@ -1,15 +1,14 @@
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{BUTTON_HEIGHT, Context, Size, TEXT_FIELD_HEIGHT, Widget, WidgetId};
 use bande_toolkit::{
-    Color, Image, Item, Paragraph, Point, Radius, Rect, SHEET_INSET, Shape, Spacing, TextAlign,
-    TextRole, TextStyle, WINDOW_HEADER_HEIGHT,
+    Color, HEADER_LEADING, HEADER_TRAILING, Image, Item, Paragraph, Point, Radius, Rect,
+    SHEET_INSET, Shape, Spacing, TextAlign, TextRole, TextStyle, WINDOW_HEADER_HEIGHT,
 };
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SIDEBAR_INSET: f32 = Spacing::S as f32;
 const PILL_HEIGHT: f32 = 36.0;
-const TRAILING_INSET: f32 = 12.0;
 const TOOL_GAP: f32 = 4.0;
 const SEARCH_GAP: f32 = 12.0;
 const SEARCH_WIDTH: f32 = 200.0;
@@ -87,12 +86,19 @@ impl Root {
         )
     }
 
+    fn trailing(&self) -> f32 {
+        match self.inset > 0.0 {
+            true => HEADER_TRAILING,
+            false => HEADER_LEADING,
+        }
+    }
+
     pub fn tool_frames(&self) -> Vec<Rect> {
         let tools = self.children.len().saturating_sub(Self::TOOLS);
         let Some(buttons) = tools.checked_sub(1) else {
             return Vec::new();
         };
-        let right = self.frame.width - TRAILING_INSET;
+        let right = self.frame.width - self.trailing();
         let search_x = right - SEARCH_WIDTH;
         let button_y = ((TOOLBAR_HEIGHT - BUTTON_HEIGHT) / 2.0).round();
         let mut x = search_x - SEARCH_GAP - buttons as f32 * (BUTTON_HEIGHT + TOOL_GAP) + TOOL_GAP;

@@ -14,8 +14,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, HEADER_LEADING, Header, Image, Radius, Rect, SHEET_INSET, Scene,
-    TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Image, Radius, Rect,
+    SHEET_INSET, Scene, TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 
 use crate::canvas::{Canvas, Zoom};
@@ -866,14 +866,19 @@ impl FileView {
         let searching = self.is_document();
         let search_room = if searching { SEARCH_WIDTH + SIDE } else { 0.0 };
         let count = self.toolbar.tools.len() as f32;
-        let mut x = width - SIDE - search_room - count * SYMBOL_BUTTON - (count - 1.0) * GAP;
+        let right = width
+            - match self.full_screen {
+                true => HEADER_LEADING,
+                false => HEADER_TRAILING,
+            };
+        let mut x = right - search_room - count * SYMBOL_BUTTON - (count - 1.0) * GAP;
         for id in self.toolbar.tools {
             frames.push((id, Rect::new(x, middle, SYMBOL_BUTTON, SYMBOL_BUTTON)));
             x += SYMBOL_BUTTON + GAP;
         }
         let search = match searching {
             true => Rect::new(
-                width - SIDE - SEARCH_WIDTH,
+                right - SEARCH_WIDTH,
                 ((TOOLBAR_HEIGHT - TEXT_FIELD_HEIGHT) / 2.0).round(),
                 SEARCH_WIDTH,
                 TEXT_FIELD_HEIGHT,

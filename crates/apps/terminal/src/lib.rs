@@ -25,7 +25,7 @@ pub use settings::{
     Settings,
 };
 pub use settings_view::{SETTINGS_SIZE, settings_view};
-pub use tabs::{FULL_SCREEN_LEADING, STRIP_HEIGHT};
+pub use tabs::STRIP_HEIGHT;
 
 pub const COLUMNS: usize = 80;
 pub const ROWS: usize = 24;

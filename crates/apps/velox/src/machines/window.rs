@@ -11,8 +11,8 @@ use bande_toolkit::ui::{
     Stepper, Table, TextField, Toggle, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, FrameRegions, HEADER_LEADING, Header, Palette, Rect, Scene, TextSystem,
-    WINDOW_HEADER_HEIGHT, Window, WindowEvent,
+    Appearance, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Palette, Rect, Scene,
+    TextSystem, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 
 use super::backend::{Act, Change};
@@ -960,12 +960,12 @@ impl View for MachineWindow {
         let full_screen = window.header_height() == 0;
         if full_screen != self.full_screen {
             self.full_screen = full_screen;
-            let start = match full_screen {
-                true => TITLE_ROOM,
-                false => HEADER_LEADING + TITLE_ROOM,
+            let trailing = match full_screen {
+                true => HEADER_LEADING,
+                false => HEADER_TRAILING,
             };
             if let Some(bar) = self.ui.widget_as::<Bar>(self.bar) {
-                bar.set_start(start);
+                bar.set_trailing(trailing);
             }
         }
         window.set_frame_regions(FrameRegions {
@@ -991,10 +991,7 @@ impl View for MachineWindow {
             .map(Bar::tool_frames)
             .unwrap_or_default();
         window.set_header(Header {
-            title_x: match full_screen {
-                true => 16.0,
-                false => HEADER_LEADING,
-            },
+            title_x: HEADER_LEADING,
             items,
             tabs: Vec::new(),
         });

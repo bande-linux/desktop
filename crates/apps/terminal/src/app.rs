@@ -13,11 +13,11 @@ use bande_l10n::{tr, trn};
 use bande_spring::{Decay, State as SpringState};
 use bande_terminal::ShellCommand;
 use bande_terminal::{
-    Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, FULL_SCREEN_LEADING,
-    GridSize, Layout, Link, MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice, Painter,
-    Pane, STRIP_HEIGHT, SearchDirection, SelectionKind, Session, Settings, Terminal,
-    TerminalContext, bracketed, dropped_text, encode_key, is_openable, look_up_text, mouse_report,
-    next_font_size, reports_mouse, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
+    Axis, Banner, BannerAction, CellPoint, CloseAsk, Command, Divider, GridSize, Layout, Link,
+    MenuCommand, MouseButton, MouseKind, NewTabFolder, Notice, Painter, Pane, STRIP_HEIGHT,
+    SearchDirection, SelectionKind, Session, Settings, Terminal, TerminalContext, bracketed,
+    dropped_text, encode_key, is_openable, look_up_text, mouse_report, next_font_size,
+    reports_mouse, shortcut, tab_menu, terminal_menu, wants_scroll_as_arrows,
 };
 use bande_toolkit::ui::{
     Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton, Scroll, ScrollExtent, ScrollPhase,
@@ -25,8 +25,8 @@ use bande_toolkit::ui::{
     TabsShown,
 };
 use bande_toolkit::{
-    Appearance, DragAction, DragEvent, FrameRegions, HEADER_LEADING, Header, Item, MenuPlacement,
-    Point, Radius, Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowEvent,
+    Appearance, DragAction, DragEvent, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Item,
+    MenuPlacement, Point, Radius, Rect, SHEET_INSET, Scene, Shape, Transfer, Window, WindowEvent,
 };
 
 use crate::APP_ID;
@@ -295,21 +295,13 @@ impl TerminalWindow {
         self.header > 0.0 || self.tabs.len() > 1
     }
 
-    fn leading(&self) -> f32 {
-        if self.header > 0.0 {
-            HEADER_LEADING
-        } else {
-            FULL_SCREEN_LEADING
-        }
-    }
-
     fn tab_layout(&self) -> TabStripLayout {
-        TabStripLayout::new(
-            self.tabs.len(),
-            self.size.0 as f32,
-            self.leading(),
-            STRIP_HEIGHT,
-        )
+        let width = self.size.0 as f32;
+        let strip_width = match self.header > 0.0 {
+            true => width - HEADER_TRAILING + HEADER_LEADING,
+            false => width,
+        };
+        TabStripLayout::new(self.tabs.len(), strip_width, HEADER_LEADING, STRIP_HEIGHT)
     }
 
     fn sync_strip(&mut self) -> TabStripLayout {
@@ -353,7 +345,7 @@ impl TerminalWindow {
         let title_x = if self.tabs.len() > 1 {
             self.size.0 as f32
         } else {
-            self.leading()
+            HEADER_LEADING
         };
         let (items, tabs) = if self.header > 0.0 {
             (vec![layout.new_tab], layout.tabs)

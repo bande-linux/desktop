@@ -10,8 +10,8 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Color, HEADER_LEADING, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET,
-    Scene, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
+    Appearance, Color, HEADER_LEADING, HEADER_TRAILING, Header, Item, Palette, Point, Radius, Rect,
+    SHEET_INSET, Scene, Shape, TextAlign, TextRole, TextSize, TextStyle, TextSystem, grown_line,
 };
 
 use crate::list::{List, Signal, group_id, sender};
@@ -441,20 +441,23 @@ impl MonitorView {
 
     fn toolbar_frames(&self) -> [(WidgetId, Rect); 4] {
         let middle = |height: f32| ((TOOLBAR_HEIGHT - height) / 2.0).round();
-        let leading = match self.full_screen {
-            true => SIDE,
-            false => HEADER_LEADING + self.title_width + ITEM_GAP,
+        let (leading, trailing) = match self.full_screen {
+            true => (HEADER_LEADING, HEADER_LEADING),
+            false => (
+                HEADER_LEADING + self.title_width + ITEM_GAP,
+                HEADER_TRAILING,
+            ),
         };
         let count = self.tabs.len() as f32;
         let tabs_for =
             |padding: f32| (self.segment_width + 2.0 * padding) * count + 2.0 * SEGMENT_INSET;
-        let fixed = 2.0 * BUTTON_SIZE + BUTTON_GAP + 2.0 * ITEM_GAP + SIDE;
+        let fixed = 2.0 * BUTTON_SIZE + BUTTON_GAP + 2.0 * ITEM_GAP + trailing;
         let room = self.size.0 - leading - fixed;
         let tabs_width = (room - SEARCH_MIN_WIDTH)
             .clamp(tabs_for(SEGMENT_MIN_PADDING), tabs_for(SEGMENT_PADDING));
         let search_width = (room - tabs_width).clamp(SEARCH_MIN_WIDTH, SEARCH_WIDTH);
         let search = Rect::new(
-            self.size.0 - SIDE - search_width,
+            self.size.0 - trailing - search_width,
             middle(TEXT_FIELD_HEIGHT),
             search_width,
             TEXT_FIELD_HEIGHT,
@@ -465,12 +468,8 @@ impl MonitorView {
             tabs_width,
             SEGMENTED_HEIGHT,
         );
-        let floor = match self.full_screen {
-            true => SIDE,
-            false => HEADER_LEADING,
-        };
-        let inspect_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(floor);
-        let stop_x = (inspect_x - BUTTON_GAP - BUTTON_SIZE).max(floor);
+        let inspect_x = (tabs.x - ITEM_GAP - BUTTON_SIZE).max(HEADER_LEADING);
+        let stop_x = (inspect_x - BUTTON_GAP - BUTTON_SIZE).max(HEADER_LEADING);
         [
             (
                 self.toolbar.stop,

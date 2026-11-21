@@ -48,12 +48,8 @@ fn events_around_replies_and_jobs_are_kept_in_order() -> Result<(), Box<dyn std:
     let mut qmp = Qmp::handshake(client)?;
     assert_eq!(qmp.status()?, RunState::Paused);
     qmp.snapshot_save("before-upgrade", "disk", &["disk", "vars"])?;
-    let events: Vec<String> = qmp
-        .drain_events()?
-        .into_iter()
-        .map(|event| event.name)
-        .collect();
-    assert_eq!(events, ["STOP", "RESUME"]);
+    assert_eq!(qmp.next_event()?.name, "STOP");
+    assert_eq!(qmp.next_event()?.name, "RESUME");
     drop(qmp);
     qemu.join().map_err(|_| "fake QEMU panicked")??;
     Ok(())

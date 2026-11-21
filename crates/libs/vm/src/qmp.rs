@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, ErrorKind, IoSlice, Write};
+use std::io::{BufRead, BufReader, IoSlice, Write};
 use std::mem::MaybeUninit;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
@@ -146,23 +146,6 @@ impl Qmp {
                 return Ok(event);
             }
         }
-    }
-
-    pub fn drain_events(&mut self) -> Result<Vec<Event>> {
-        self.writer.set_nonblocking(true)?;
-        let read = loop {
-            match self.read_message() {
-                Ok(mut message) => {
-                    if let Some(event) = Event::from_message(&mut message) {
-                        self.events.push_back(event);
-                    }
-                }
-                Err(Error::Io(error)) if error.kind() == ErrorKind::WouldBlock => break Ok(()),
-                Err(error) => break Err(error),
-            }
-        };
-        self.writer.set_nonblocking(false)?;
-        read.map(|()| self.events.drain(..).collect())
     }
 
     pub fn status(&mut self) -> Result<RunState> {

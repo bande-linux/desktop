@@ -212,10 +212,6 @@ impl Glance {
         self.closing
     }
 
-    pub fn follows_selection(&self) -> bool {
-        self.subjects.len() < 2 && !self.closing
-    }
-
     pub fn position(&self) -> Option<(usize, usize)> {
         (self.subjects.len() > 1).then_some((self.at + 1, self.subjects.len()))
     }

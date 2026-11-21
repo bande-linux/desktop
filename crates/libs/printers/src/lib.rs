@@ -357,11 +357,4 @@ impl Cups {
     }
 }
 
-pub fn spooler_signal(message: &zbus::Message) -> bool {
-    message
-        .header()
-        .interface()
-        .is_some_and(|interface| interface.as_str() == SPOOLER)
-}
-
 pub const SPOOLER: &str = "com.redhat.PrinterSpooler";

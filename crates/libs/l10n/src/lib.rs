@@ -80,7 +80,6 @@ pub fn translate_plural(
 
 struct Catalogs {
     folder: PathBuf,
-    installed: Vec<String>,
     chain: Vec<(String, OnceLock<Option<Catalog>>)>,
     others: Vec<String>,
     development: OnceLock<Option<Catalog>>,
@@ -105,7 +104,6 @@ impl Catalogs {
             .collect();
         Self {
             folder: folder.to_owned(),
-            installed,
             chain,
             others,
             development: OnceLock::new(),
@@ -182,10 +180,6 @@ fn installed_in(folder: &Path) -> Vec<String> {
         .collect::<Vec<_>>();
     languages.sort();
     languages
-}
-
-pub fn installed_languages() -> &'static [String] {
-    &PROGRAM.installed
 }
 
 fn parent(tag: &str) -> Option<&str> {

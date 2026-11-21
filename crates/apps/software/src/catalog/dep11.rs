@@ -203,7 +203,7 @@ pub fn parse(yaml: &str, icon_root: &Path, locale: Option<&Locale>) -> Vec<Compo
     };
     let mut components = Vec::new();
     let mut failed_at = None;
-    for raw in serde_yaml_ng::Deserializer::from_str(yaml) {
+    for raw in serde_norway::Deserializer::from_str(yaml) {
         let document = match Document::deserialize(raw) {
             Ok(document) => document,
             Err(error) => {

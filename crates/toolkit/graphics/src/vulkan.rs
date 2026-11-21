@@ -140,7 +140,7 @@ pub(crate) fn hardware_instance() -> Option<wgpu::Instance> {
     let instance = unsafe { create(drivers) }
         .inspect_err(|error| tracing::debug!("loading the Vulkan drivers directly failed: {error}"))
         .ok()?;
-    let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::VULKAN));
+    let adapters = futures_lite::future::block_on(instance.enumerate_adapters(wgpu::Backends::VULKAN));
     (!adapters.is_empty()).then_some(instance)
 }
 

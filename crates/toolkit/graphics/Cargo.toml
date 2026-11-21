@@ -14,7 +14,7 @@ image.workspace = true
 libc.workspace = true
 libloading = { workspace = true, optional = true }
 parley.workspace = true
-pollster = { workspace = true, optional = true }
+futures-lite = { workspace = true, optional = true }
 resvg.workspace = true
 serde_json = { workspace = true, optional = true }
 skrifa.workspace = true
@@ -28,7 +28,7 @@ wgpu = { workspace = true, optional = true }
 gpu = [
     "dep:ash",
     "dep:libloading",
-    "dep:pollster",
+    "dep:futures-lite",
     "dep:serde_json",
     "dep:vello_gpu",
     "dep:wgpu",

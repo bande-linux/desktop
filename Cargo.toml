@@ -59,7 +59,6 @@ oo7 = { version = "=0.7.0-beta", default-features = false, features = ["async-st
 parley = { version = "=0.12.0", features = ["complex-scripts"] }
 pipewire = "=0.10.1"
 png = "=0.18.1"
-pollster = "=1.0.1"
 proc-macro2 = "=1.0.107"
 quick-xml = "=0.41.0"
 quote = "=1.0.47"
@@ -76,7 +75,7 @@ rustls-platform-verifier = "=0.7.1"
 ruzstd = "=0.9.1"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
-serde_yaml_ng = "=0.10.0"
+serde_norway = "0.9.42"
 sevenz-rust2 = { version = "=0.24.2", default-features = false, features = ["aes256", "bzip2", "deflate", "ppmd"] }
 sha2 = { version = "=0.11.1", default-features = false }
 skrifa = "=0.44.0"

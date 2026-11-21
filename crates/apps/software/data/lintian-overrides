@@ -1,3 +1,3 @@
-# serde_yaml_ng reads the YAML app catalogues through unsafe-libyaml, libyaml translated to Rust
-# and packaged in Debian as its own crate (rust-unsafe-libyaml), not a bundled copy of the C library.
+# serde_norway reads the YAML app catalogues through unsafe-libyaml-norway, libyaml translated to Rust
+# (Debian builds serde_norway with rust-unsafe-libyaml instead), not a bundled copy of the C library.
 embedded-library libyaml [usr/bin/bande-software]

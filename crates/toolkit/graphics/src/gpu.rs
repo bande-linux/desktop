@@ -44,7 +44,7 @@ impl GpuDevice {
     fn offscreen() -> Result<Self, DrawError> {
         let instance = vulkan_instance();
         let adapter =
-            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+            futures_lite::future::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
                 .map_err(DrawError::Adapter)?;
         Self::open(instance, adapter)
     }
@@ -80,7 +80,7 @@ impl GpuDevice {
         // SAFETY: the caller of shared_for guarantees the handles in target outlive the surface.
         let surface = unsafe { instance.create_surface_unsafe(target) }
             .map_err(|error| DrawError::Gpu(error.to_string()))?;
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        let adapter = futures_lite::future::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: Some(&surface),
             ..wgpu::RequestAdapterOptions::default()
         }))
@@ -97,7 +97,7 @@ impl GpuDevice {
 
     fn open(instance: wgpu::Instance, adapter: wgpu::Adapter) -> Result<Self, DrawError> {
         let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+            futures_lite::future::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
                 .map_err(DrawError::Device)?;
         device.on_uncaptured_error(Arc::new(|error| tracing::error!(%error, "GPU error")));
         Ok(Self {
@@ -120,9 +120,9 @@ impl GpuDevice {
         let internal = self.device.push_error_scope(wgpu::ErrorFilter::Internal);
         surface.configure(&self.device, config);
         let errors = [
-            pollster::block_on(internal.pop()),
-            pollster::block_on(memory.pop()),
-            pollster::block_on(validation.pop()),
+            futures_lite::future::block_on(internal.pop()),
+            futures_lite::future::block_on(memory.pop()),
+            futures_lite::future::block_on(validation.pop()),
         ];
         match errors.into_iter().flatten().next() {
             Some(error) => Err(DrawError::Gpu(error.to_string())),

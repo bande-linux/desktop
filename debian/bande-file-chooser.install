@@ -1,0 +1,2 @@
+debian/build/bin/bande-file-chooser usr/libexec/
+debian/build/l10n/development/bande-file-chooser/* usr/share/bande/l10n/bande-file-chooser/

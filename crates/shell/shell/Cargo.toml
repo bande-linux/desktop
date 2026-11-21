@@ -33,35 +33,5 @@ bande-test-bus.workspace = true
 bande-test-wayland.workspace = true
 tempfile.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-mono, fonts-noto-color-emoji, hicolor-icon-theme, bande-notify, upower, network-manager, bluez"
-recommends = "network-manager-config-connectivity-debian, pipewire, wireplumber, bande-tray, xdg-user-dirs"
-assets = [
-    ["target/release/deb-assets/bande-shell/copyright", "usr/share/doc/bande-shell/copyright", "644"],
-    ["target/release/deb-assets/bande-shell/changelog.gz", "usr/share/doc/bande-shell/", "644"],
-    ["data/lintian-overrides", "usr/share/lintian/overrides/bande-shell", "644"],
-    ["target/release/deb-assets/bande-shell/man/*", "usr/share/man/man1/", "644"],
-    ["../launcher/data/emoji/*", "usr/share/bande/emoji/", "644"],
-    ["target/release/bande-shell", "usr/bin/", "755"],
-    ["../../../data/wallpapers/*.svg", "usr/share/bande/wallpapers/", "644"],
-    ["target/release/l10n/development/bande-shell/*", "usr/share/bande/l10n/bande-shell/", "644"],
-]
-extended-description = """\
-The shell of the Bande desktop, one process for the whole session. On \
-every display it draws the desktop, the wallpaper in its light and dark \
-variants with the files of the Desktop folder and the plugged-in drives \
-as icons, and the bar: the apps kept in it and the running apps with \
-their badges and progress, the Trash, the system menu, the active app \
-with its menus, the status notifier items of apps, Bluetooth, sound, \
-Wi-Fi and battery, Quick Settings and the clock, which opens the \
-Notification Center. It \
-also shows notification banners, Quick Settings with the volume and \
-brightness HUD, and the launcher that a tap of Super opens to find apps, \
-files and answers. bande-compositor starts it and keeps it running. It \
-installs the Bande wallpapers, which the lock screen and the login \
-window also show, and the Bande icon theme."""
-
 [lints]
 workspace = true

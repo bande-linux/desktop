@@ -19,23 +19,3 @@ bande-xdg.workspace = true
 
 [lints]
 workspace = true
-
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
-extended-description = """\
-The calculator of the Bande desktop: Basic, Scientific and Programmer modes \
-with exact decimal arithmetic, operator precedence, degrees and radians, \
-hexadecimal, octal and binary with bitwise operations and word sizes, \
-Reverse Polish Notation and a paper tape."""
-assets = [
-    ["target/release/bande-calculator", "usr/bin/", "755"],
-    ["data/org.bande.Calculator.desktop", "usr/share/applications/", "644"],
-    ["target/release/deb-assets/bande-calculator/org.bande.Calculator.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["target/release/deb-assets/bande-calculator/copyright", "usr/share/doc/bande-calculator/copyright", "644"],
-    ["target/release/deb-assets/bande-calculator/changelog.gz", "usr/share/doc/bande-calculator/", "644"],
-    ["target/release/deb-assets/bande-calculator/man/*", "usr/share/man/man1/", "644"],
-    ["data/org.bande.Calculator.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["target/release/l10n/development/bande-calculator/*", "usr/share/bande/l10n/bande-calculator/", "644"],
-]

@@ -33,26 +33,3 @@ tempfile.workspace = true
 
 [lints]
 workspace = true
-
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, fonts-jetbrains-mono, fonts-inter, fonts-manrope"
-recommends = "bande-files, bande-sound"
-provides = "x-terminal-emulator"
-maintainer-scripts = "debian/"
-extended-description = """\
-The terminal of the Bande desktop: xterm-compatible emulation with \
-10,000 lines of scrollback, Shift+Ctrl+C and Shift+Ctrl+V for the clipboard so \
-that Ctrl+C stays the interrupt, and the system's light or dark \
-appearance."""
-assets = [
-    ["target/release/bande-terminal", "usr/bin/", "755"],
-    ["data/org.bande.Terminal.desktop", "usr/share/applications/", "644"],
-    ["target/release/deb-assets/bande-terminal/org.bande.Terminal.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["target/release/deb-assets/bande-terminal/copyright", "usr/share/doc/bande-terminal/copyright", "644"],
-    ["target/release/deb-assets/bande-terminal/changelog.gz", "usr/share/doc/bande-terminal/", "644"],
-    ["target/release/deb-assets/bande-terminal/man/*", "usr/share/man/man1/", "644"],
-    ["data/org.bande.Terminal.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["target/release/l10n/development/bande-terminal/*", "usr/share/bande/l10n/bande-terminal/", "644"],
-]

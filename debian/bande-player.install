@@ -1,0 +1,7 @@
+debian/build/bin/bande-player usr/bin/
+debian/build/bin/bande-media-engine usr/bin/
+crates/apps/player/data/org.bande.Player.desktop usr/share/applications/
+debian/build/metainfo/org.bande.Player.metainfo.xml usr/share/metainfo/
+crates/apps/player/data/org.bande.Player.svg usr/share/icons/hicolor/scalable/apps/
+debian/build/l10n/development/bande-media-engine/* usr/share/bande/l10n/bande-media-engine/
+debian/build/l10n/development/bande-player/* usr/share/bande/l10n/bande-player/

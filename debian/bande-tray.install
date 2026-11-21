@@ -1,0 +1,3 @@
+debian/build/bin/bande-tray usr/bin/
+crates/services/tray/data/bande-tray.service usr/lib/systemd/user/
+crates/services/tray/data/org.bande.Tray.service usr/share/dbus-1/services/

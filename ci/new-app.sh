@@ -23,9 +23,10 @@ cargo metadata -q --format-version 1 > /dev/null
 ci/check-apps.sh "$target"
 cat <<NEXT
 new-app: $target is bande-$dir (org.bande.$id). Next:
-- describe it: description and extended-description in Cargo.toml, the metainfo
+- describe it: description in Cargo.toml, the metainfo
 - draw its Bande theme icon in data/icons/src/apps.py
-- release it: add bande-$dir to ci/release/packages and the apps table in README.md
-- if it is a default app, add it to bande-desktop's Recommends in packaging/bande-desktop/debian/control
+- release it: a bande-$dir stanza in debian/control (copy another app's, with its description),
+  debian/bande-$dir.install (copy another app's) and a row in the apps table in README.md
+- if it is a default app, add it to bande-desktop's Recommends in debian/control
 - compile it: cargo check --locked -p bande-$dir
 NEXT

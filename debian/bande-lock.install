@@ -1,0 +1,2 @@
+debian/build/bin/bande-lock usr/bin/
+debian/build/l10n/development/bande-lock/* usr/share/bande/l10n/bande-lock/

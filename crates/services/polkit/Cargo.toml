@@ -23,25 +23,5 @@ bande-toolkit.workspace = true
 zbus.workspace = true
 zeroize.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, bande-icon-theme, polkitd (>= 127), fonts-inter, fonts-manrope, init-system-helpers (>= 1.66)"
-extended-description = """\
-The polkit authentication agent of the Bande desktop. When an app asks \
-for an administrator's permission, for example Settings changing the time \
-zone or the computer's name, it shows a password dialog with the reason \
-polkit gives, says who is asked for, shakes and asks again after a wrong \
-password, and cancels with Escape. Started with the graphical session."""
-maintainer-scripts = "debian/"
-assets = [
-    ["target/release/deb-assets/bande-polkit/copyright", "usr/share/doc/bande-polkit/copyright", "644"],
-    ["target/release/deb-assets/bande-polkit/changelog.gz", "usr/share/doc/bande-polkit/", "644"],
-    ["target/release/deb-assets/bande-polkit/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-polkit-agent", "usr/bin/", "755"],
-    ["data/bande-polkit-agent.service", "usr/lib/systemd/user/", "644"],
-    ["target/release/l10n/development/bande-polkit-agent/*", "usr/share/bande/l10n/bande-polkit-agent/", "644"],
-]
-
 [lints]
 workspace = true

@@ -20,25 +20,5 @@ zbus.workspace = true
 [dev-dependencies]
 bande-test-bus.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, default-dbus-session-bus | dbus-session-bus"
-provides = "notification-daemon"
-extended-description = """\
-Serves org.freedesktop.Notifications (specification 1.2) on the session \
-bus, and the Notification Center under its own name, org.bande.NotificationCenter, \
-so that apps allowed to post notifications cannot read or dismiss others'. \
-The bus starts it on the first notification through D-Bus activation."""
-assets = [
-    ["target/release/deb-assets/bande-notify/copyright", "usr/share/doc/bande-notify/copyright", "644"],
-    ["target/release/deb-assets/bande-notify/changelog.gz", "usr/share/doc/bande-notify/", "644"],
-    ["target/release/deb-assets/bande-notify/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-notify", "usr/bin/", "755"],
-    ["data/org.bande.Notify.service", "usr/share/dbus-1/services/", "644"],
-    ["data/org.bande.NotificationCenter.service", "usr/share/dbus-1/services/", "644"],
-    ["data/bande-notify.service", "usr/lib/systemd/user/", "644"],
-]
-
 [lints]
 workspace = true

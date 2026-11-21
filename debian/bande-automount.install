@@ -1,0 +1,11 @@
+debian/build/bin/bande-automount usr/bin/
+debian/build/bin/bande-mount-helper usr/libexec/
+crates/services/automount/data/bande-automount.service usr/lib/systemd/user/
+crates/services/automount/data/org.bande.Mounts.service usr/share/dbus-1/services/
+crates/services/automount/data/org.bande.mount-helper.policy usr/share/polkit-1/actions/
+crates/services/automount/data/bande-davfs2.conf usr/share/bande/
+crates/services/automount/data/bande-mount-cleanup.conf usr/lib/systemd/system/user-runtime-dir@.service.d/
+crates/services/automount/data/bande-mdns.conf usr/lib/systemd/resolved.conf.d/
+crates/services/automount/data/bande-mdns-networkmanager.conf usr/lib/NetworkManager/conf.d/
+debian/build/l10n/development/bande-automount/* usr/share/bande/l10n/bande-automount/
+debian/build/l10n/development/bande-mount-helper/* usr/share/bande/l10n/bande-mount-helper/

@@ -19,43 +19,5 @@ rustix = { workspace = true, features = ["fs", "net", "stdio", "thread"] }
 serde_json.workspace = true
 tracing.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, systemd (>= 257), init-system-helpers (>= 1.66), elfutils"
-extended-description = """\
-Keeps a small report of each fault in a root-only folder. Reports leave the \
-computer only once sending is switched on in Settings. Only the resource sampler \
-stays running: collecting starts at a fault, and sending starts when a report \
-waits and waits on network changes rather than polling."""
-maintainer-scripts = "debian/"
-assets = [
-    ["target/release/deb-assets/bande-reporter/copyright", "usr/share/doc/bande-reporter/copyright", "644"],
-    ["target/release/deb-assets/bande-reporter/changelog.gz", "usr/share/doc/bande-reporter/", "644"],
-    ["target/release/deb-assets/bande-reporter/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-reporter", "usr/libexec/", "755"],
-    ["target/release/bande-diagnose", "usr/bin/", "755"],
-    ["data/reports.conf", "usr/share/bande/reports.conf", "644"],
-    ["data/reports-ca.pem", "usr/share/bande/reports-ca.pem", "644"],
-    ["data/report-failure-system.conf", "usr/lib/systemd/system/bande-.service.d/50-bande-report-failure.conf", "644"],
-    ["data/no-report-failure.conf", "usr/lib/systemd/system/bande-crash-reports@.service.d/50-bande-report-failure.conf", "644"],
-    ["data/report-failure-user.conf", "usr/lib/systemd/user/bande-.service.d/50-bande-report-failure.conf", "644"],
-    ["data/report-bande-failure@.service", "usr/lib/systemd/user/", "644"],
-    ["data/bande-reporter-send.service", "usr/lib/systemd/system/", "644"],
-    ["data/bande-reporter-send.path", "usr/lib/systemd/system/", "644"],
-    ["data/bande-reporter.socket", "usr/lib/systemd/system/", "644"],
-    ["data/bande-reporter.service", "usr/lib/systemd/system/", "644"],
-    ["data/bande-reporter-resources.service", "usr/lib/systemd/system/", "644"],
-    ["data/bande-reporter.tmpfiles", "usr/lib/tmpfiles.d/bande-reporter.conf", "644"],
-]
-
-[[bin]]
-name = "bande-reporter"
-path = "src/main.rs"
-
-[[bin]]
-name = "bande-diagnose"
-path = "src/bin/diagnose.rs"
-
 [lints]
 workspace = true

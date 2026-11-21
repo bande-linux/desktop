@@ -1,6 +1,0 @@
-#!/bin/sh
-set -e
-if [ "$1" = "remove" ]; then
-	deb-systemd-helper disable bande-backup.timer >/dev/null || true
-	deb-systemd-invoke stop bande-backup.timer bande-backup.service >/dev/null || true
-fi

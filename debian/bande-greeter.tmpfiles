@@ -1,0 +1,2 @@
+d /var/lib/bande-greeter 0755 root root -
+d /var/lib/bande-greeter/pictures 3733 root _greetd -

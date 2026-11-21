@@ -26,29 +26,5 @@ bande-toolkit.workspace = true
 zbus.workspace = true
 zeroize.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, bande-icon-theme, fonts-inter, fonts-manrope, fonts-jetbrains-mono, greetd (>= 0.10.3-6), bande-compositor, kbd, locales"
-extended-description = """\
-The login window of the Bande desktop: greetd runs it as its greeter \
-inside bande-compositor --greeter, and it lists the people who can \
-sign in, asks for the chosen person's password and has greetd start \
-their Bande session. It becomes greetd's greeter through a drop-in for \
-greetd.service; greetd itself asks which display manager to start when \
-another one is installed."""
-maintainer-scripts = "debian/"
-assets = [
-    ["target/release/deb-assets/bande-greeter/copyright", "usr/share/doc/bande-greeter/copyright", "644"],
-    ["target/release/deb-assets/bande-greeter/changelog.gz", "usr/share/doc/bande-greeter/", "644"],
-    ["target/release/deb-assets/bande-greeter/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-greeter", "usr/bin/", "755"],
-    ["data/bande-greeter-session", "usr/libexec/", "755"],
-    ["data/bande-console-fallback.service", "usr/lib/systemd/system/", "644"],
-    ["data/config.toml", "usr/share/bande-greeter/greetd-config.toml", "644"],
-    ["data/greetd.service.conf", "usr/lib/systemd/system/greetd.service.d/bande.conf", "644"],
-    ["target/release/l10n/development/bande-greeter/*", "usr/share/bande/l10n/bande-greeter/", "644"],
-]
-
 [lints]
 workspace = true

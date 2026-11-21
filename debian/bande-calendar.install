@@ -1,0 +1,6 @@
+debian/build/bin/bande-calendar usr/bin/
+crates/apps/calendar/data/org.bande.Calendar.desktop usr/share/applications/
+crates/apps/calendar/data/org.bande.CalendarAgent.desktop etc/xdg/autostart/
+debian/build/metainfo/org.bande.Calendar.metainfo.xml usr/share/metainfo/
+crates/apps/calendar/data/org.bande.Calendar.svg usr/share/icons/hicolor/scalable/apps/
+debian/build/l10n/development/bande-calendar/* usr/share/bande/l10n/bande-calendar/

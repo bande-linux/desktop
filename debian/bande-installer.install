@@ -1,0 +1,5 @@
+debian/build/bin/bande-installer usr/bin/
+crates/apps/installer/data/org.bande.Installer.desktop usr/share/applications/
+debian/build/metainfo/org.bande.Installer.metainfo.xml usr/share/metainfo/
+crates/apps/installer/data/org.bande.Installer.svg usr/share/icons/hicolor/scalable/apps/
+debian/build/l10n/development/bande-installer/* usr/share/bande/l10n/bande-installer/

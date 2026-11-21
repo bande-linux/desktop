@@ -1,0 +1,4 @@
+debian/build/bin/bande-notify usr/bin/
+crates/services/notify/data/org.bande.Notify.service usr/share/dbus-1/services/
+crates/services/notify/data/org.bande.NotificationCenter.service usr/share/dbus-1/services/
+crates/services/notify/data/bande-notify.service usr/lib/systemd/user/

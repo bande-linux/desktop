@@ -22,27 +22,5 @@ bande-bus = { workspace = true, optional = true }
 bande-log = { workspace = true, optional = true }
 zbus.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66)"
-recommends = "pipewire, wireplumber, bande-config"
-extended-description = """\
-Plays the Bande desktop's event sounds (alerts, notifications, the \
-volume tick, screenshots, emptying the Trash, plugging in power and low \
-battery) through PipeWire, following the sound settings in config.kdl, \
-and installs them as the Bande XDG sound theme for other apps."""
-maintainer-scripts = "debian/"
-assets = [
-    ["target/release/deb-assets/bande-sound/copyright", "usr/share/doc/bande-sound/copyright", "644"],
-    ["target/release/deb-assets/bande-sound/changelog.gz", "usr/share/doc/bande-sound/", "644"],
-    ["target/release/deb-assets/bande-sound/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-sound", "usr/bin/", "755"],
-    ["data/bande-sound.service", "usr/lib/systemd/user/", "644"],
-    ["data/org.bande.Sound.service", "usr/share/dbus-1/services/", "644"],
-    ["../../../data/sounds/Bande/index.theme", "usr/share/sounds/Bande/", "644"],
-    ["../../../data/sounds/Bande/stereo/*.wav", "usr/share/sounds/Bande/stereo/", "644"],
-]
-
 [lints]
 workspace = true

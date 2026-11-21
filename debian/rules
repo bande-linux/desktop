@@ -1,0 +1,106 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/pkg-info.mk
+include /usr/share/dpkg/architecture.mk
+include /usr/share/dpkg/buildflags.mk
+include /usr/share/rustc/architecture.mk
+export CFLAGS CXXFLAGS CPPFLAGS LDFLAGS DEB_HOST_RUST_TYPE DEB_HOST_GNU_TYPE DEB_HOST_MULTIARCH
+
+CARGO := /usr/share/cargo/bin/cargo
+export CARGO_HOME := $(CURDIR)/debian/cargo_home
+export DEB_CARGO_CRATE := bande-desktop_$(DEB_VERSION_UPSTREAM)
+export CARGO_TARGET_DIR ?= $(CURDIR)/target
+export CARGO_NET_OFFLINE := true
+export RUSTFLAGS := -C debuginfo=line-tables-only --remap-path-prefix=$(CURDIR)=/build \
+	--remap-path-prefix=$(CARGO_TARGET_DIR)=/build/target
+export CFLAGS += -ffile-prefix-map=$(CARGO_TARGET_DIR)=/build/target
+
+PROFILE ?= dist
+OUT := $(CARGO_TARGET_DIR)/$(DEB_HOST_RUST_TYPE)/$(if $(filter dev,$(PROFILE)),debug,$(PROFILE))
+BUILD := debian/build
+PROGRAMS := $(sort $(shell sed -n 's|^debian/build/bin/\([^ ]*\) .*|\1|p' debian/*.install))
+RELEASE := $(firstword $(subst ~, ,$(subst +, ,$(DEB_VERSION_UPSTREAM))))
+RELEASED := $(shell date -u -d @$(SOURCE_DATE_EPOCH) +%Y-%m-%d)
+
+ifneq (,$(filter pkg.bande.vendor,$(DEB_BUILD_PROFILES)))
+REGISTRY := vendor
+LOCKED := --locked
+else
+REGISTRY := debian/cargo_registry --link-from-system
+LOCKED :=
+endif
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	rm -rf $(BUILD) debian/cargo_home debian/cargo_registry
+	if [ -e debian/Cargo.lock.upstream ]; then mv debian/Cargo.lock.upstream Cargo.lock; fi
+	if [ "$(CARGO_TARGET_DIR)" = "$(CURDIR)/target" ]; then rm -rf target; fi
+
+override_dh_auto_configure:
+ifneq (,$(filter pkg.bande.vendor,$(DEB_BUILD_PROFILES)))
+	test -d vendor || { echo "the pkg.bande.vendor profile builds from vendor/, which is missing"; exit 1; }
+else
+	test ! -e vendor || { echo "vendor/ is present: build with the pkg.bande.vendor profile"; exit 1; }
+	mv Cargo.lock debian/Cargo.lock.upstream
+endif
+	$(CARGO) prepare-debian $(REGISTRY)
+
+override_dh_auto_build-indep:
+	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool
+	$(MAKE) -f debian/rules catalogs
+
+override_dh_auto_build-arch:
+	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool --bin bande-cursor-theme $(PROGRAMS:%=--bin %)
+	$(CARGO) build $(LOCKED) --profile $(PROFILE) --package libpam-bande-secrets --lib
+	$(MAKE) -f debian/rules catalogs
+	mkdir -p $(BUILD)/security $(BUILD)/metainfo
+	ln -sfn $(OUT) $(BUILD)/bin
+	cp $(OUT)/libpam_bande_secrets.so $(BUILD)/security/pam_bande_secrets.so
+	$(OUT)/bande-cursor-theme $(BUILD)/cursors/Bande-Cursors
+	for metainfo in crates/*/*/data/*.metainfo.xml; do \
+		sed 's|^</component>$$|  <releases>\n    <release version="$(RELEASE)" date="$(RELEASED)"/>\n  </releases>\n</component>|' \
+			"$$metainfo" > $(BUILD)/metainfo/$$(basename "$$metainfo"); \
+	done
+
+catalogs:
+	$(OUT)/bande-l10n-tool check ci/l10n-complete
+	$(OUT)/bande-l10n-tool pack $(BUILD)/l10n
+	for program in $(BUILD)/l10n/packs/*/*; do \
+		case " $(PROGRAMS) " in *" $$(basename $$program) "*) ;; *) rm -r "$$program" ;; esac; \
+	done
+
+override_dh_auto_test-arch:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS) $(DEB_BUILD_PROFILES)))
+	VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json dbus-run-session \
+		--config-file=crates/testing/test-bus/data/session.conf -- $(CARGO) test $(LOCKED) --workspace
+endif
+
+override_dh_auto_test-indep override_dh_auto_install override_dh_dwz:
+
+override_dh_installsystemd:
+	dh_installsystemd -pbande-backup --no-enable --no-start bande-backup.timer bande-backup.service
+	dh_installsystemd -pbande-crash-reports --no-start
+	dh_installsystemd --remaining-packages
+
+override_dh_installman:
+	debian/manpages.py $(BUILD)/man $(DEB_VERSION_UPSTREAM)
+	for package in $$(dh_listpackages); do \
+		if [ -d $(BUILD)/man/$$package ]; then dh_installman -p$$package $(BUILD)/man/$$package/*; fi; \
+	done
+
+override_dh_strip:
+	debian/gnu-debugdata.sh names $(BUILD)/names $$(dh_listpackages -a)
+	dh_strip
+	debian/gnu-debugdata.sh add $(BUILD)/names $$(dh_listpackages -a)
+
+override_dh_gencontrol:
+ifneq (,$(filter pkg.bande.vendor,$(DEB_BUILD_PROFILES)))
+	dh_gencontrol -- -Vcargo:Built-Using= -Vcargo:Static-Built-Using=
+else
+	for package in $$(dh_listpackages -a); do \
+		CARGO_BUILT_USING_TARGET_DIR=$(OUT) /usr/share/cargo/bin/dh-cargo-built-using $$package; \
+	done
+	dh_gencontrol
+endif

@@ -1,0 +1,5 @@
+debian/build/bin/bande-printd usr/bin/
+crates/services/printd/data/org.bande.Print.service usr/share/dbus-1/services/
+crates/services/printd/data/bande-printd.service usr/lib/systemd/user/
+crates/services/printd/data/bande-print-resume.service usr/lib/systemd/user/
+debian/build/l10n/development/bande-printd/* usr/share/bande/l10n/bande-printd/

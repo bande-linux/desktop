@@ -13,23 +13,5 @@ bande-bus.workspace = true
 bande-log.workspace = true
 zbus.workspace = true
 
-[package.metadata.deb]
-maintainer = "Mikael Hug <mikaelhug@gmail.com>"
-section = "misc"
-depends = "$auto, default-dbus-session-bus | dbus-session-bus, init-system-helpers (>= 1.66)"
-extended-description = """\
-Serves org.kde.StatusNotifierWatcher, the registry through which \
-applications such as Steam and Nextcloud publish tray icons and the \
-Bande Taskbar finds them. Started with the graphical session."""
-maintainer-scripts = "debian/"
-assets = [
-    ["target/release/deb-assets/bande-tray/copyright", "usr/share/doc/bande-tray/copyright", "644"],
-    ["target/release/deb-assets/bande-tray/changelog.gz", "usr/share/doc/bande-tray/", "644"],
-    ["target/release/deb-assets/bande-tray/man/*", "usr/share/man/man1/", "644"],
-    ["target/release/bande-tray", "usr/bin/", "755"],
-    ["data/bande-tray.service", "usr/lib/systemd/user/", "644"],
-    ["data/org.bande.Tray.service", "usr/share/dbus-1/services/", "644"],
-]
-
 [lints]
 workspace = true

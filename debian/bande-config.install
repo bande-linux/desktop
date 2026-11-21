@@ -1,0 +1,4 @@
+debian/build/bin/bande-config usr/bin/
+crates/services/config/data/bande-config.service usr/lib/systemd/user/
+crates/services/config/data/org.bande.Config.service usr/share/dbus-1/services/
+debian/build/l10n/development/bande-config/* usr/share/bande/l10n/bande-config/

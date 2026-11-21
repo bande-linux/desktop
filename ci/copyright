@@ -6,6 +6,15 @@ Files: *
 Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
 License: Apache-2.0 or MIT
 
+Files: data/icons/Bande/scalable/mimetypes/*
+ data/icons/Bande/*/mimetypes/*
+Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
+ 2020 The JetBrains Mono Project Authors
+License: (Apache-2.0 or MIT) and OFL-1.1
+Comment: The labels of the file icons are outlines of JetBrains Mono Bold,
+ drawn by data/icons/src/generate.py; the icons are installed by
+ bande-icon-theme.
+
 License: Apache-2.0
  Licensed under the Apache License, Version 2.0 (the "License"); you may not
  use this file except in compliance with the License.
@@ -31,3 +40,7 @@ License: MIT
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
+
+License: OFL-1.1
+ On Debian systems, the full text of the SIL Open Font License, Version 1.1
+ can be found in /usr/share/common-licenses/OFL-1.1.

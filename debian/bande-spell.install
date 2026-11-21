@@ -1,0 +1,5 @@
+debian/build/bin/bande-spell usr/libexec/
+crates/services/spell/data/org.bande.Spell.service usr/share/dbus-1/services/
+crates/services/spell/data/bande-spell.service usr/lib/systemd/user/
+crates/services/spell/data/text/* usr/share/bande/text/
+debian/build/l10n/development/bande-spell/* usr/share/bande/l10n/bande-spell/

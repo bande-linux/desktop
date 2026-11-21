@@ -1,0 +1,4 @@
+debian/build/bin/bande-indexer usr/bin/
+crates/services/index/data/bande-indexer.service usr/lib/systemd/user/
+crates/services/index/data/org.bande.Search.service usr/share/dbus-1/services/
+debian/build/l10n/development/bande-indexer/* usr/share/bande/l10n/bande-indexer/

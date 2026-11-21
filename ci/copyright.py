@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-# copyright.py <crate>...: the DEP-5 copyright file of the package built from these crates, on
-# stdout. ci/copyright covers this repository; each crate linked into them (cargo tree, without
-# build, dev and proc-macro crates) gets a paragraph with its authors and licence from its Cargo.toml, or
-# ci/copyright.d/<crate> instead ({version} is its version) where it needs more, such as bundled
-# C code or embedded data; then the text of every licence named, from ci/copyright and
+# copyright.py [--check]: debian/copyright, the DEP-5 copyright file of the whole source package,
+# on stdout, or with --check, fails when debian/copyright differs from it. ci/copyright covers
+# this repository and ci/copyright.d/* the third-party material in it; every crate of Cargo.lock,
+# which the source carries in vendor/<crate>-<version>, gets a paragraph with its authors and
+# licence from its Cargo.toml; then the text of every licence named, from ci/copyright and
 # ci/licenses/<name> (spaces as _). Fails on a licence with no text.
 import json
 import re
@@ -12,11 +12,6 @@ import sys
 from pathlib import Path
 
 ci = Path(__file__).resolve().parent
-
-
-def cargo(*args):
-    return subprocess.run(["cargo", *args, "--locked"], cwd=ci.parent, check=True,
-                          capture_output=True, text=True).stdout
 
 
 def paragraphs(text):
@@ -44,32 +39,26 @@ def indented(text):
     return "\n".join(" " + line.rstrip() if line.strip() else " ." for line in lines)
 
 
-def main():
-    crates = sys.argv[1:]
-    metadata = json.loads(cargo("metadata", "--format-version", "1"))
-    packages = {(p["name"], p["version"]): p for p in metadata["packages"]}
-    selected = [argument for crate in crates for argument in ("-p", crate)]
-    tree = cargo("tree", "-q", *selected, "-e", "normal,no-proc-macro", "--prefix", "none",
-                 "--format", "{p}")
-    linked = sorted({(line.split()[0], line.split()[1].lstrip("v")) for line in tree.splitlines() if line})
-
+def copyright():
+    metadata = json.loads(subprocess.run(
+        ["cargo", "metadata", "--format-version", "1", "--locked", "--offline"],
+        cwd=ci.parent, check=True, capture_output=True, text=True).stdout)
     own = paragraphs((ci / "copyright").read_text())
     head = [p for p in own if not p.startswith("License:")]
     texts = {p.splitlines()[0].removeprefix("License: "): "\n".join(p.splitlines()[1:]) for p in own
              if p.startswith("License:")}
+    for extra in sorted((ci / "copyright.d").iterdir()):
+        head += paragraphs(extra.read_text())
     found = []
-    for name, version in linked:
-        crate = packages[(name, version)]
-        extra = ci / "copyright.d" / name
-        if extra.exists():
-            found += paragraphs(extra.read_text().replace("{version}", version))
-        elif crate["source"] is not None:
-            if not crate["license"]:
-                sys.exit(f"copyright: {name} {version} names no licence")
-            holders = crate["authors"] or [f"the {name} authors"]
-            found.append(f"Files: crates.io/{name}-{version}/*\nCopyright: " + "\n ".join(holders)
-                          + f"\nLicense: {dep5(crate['license'])}")
-
+    for crate in sorted(metadata["packages"], key=lambda crate: (crate["name"], crate["version"])):
+        if crate["source"] is None:
+            continue
+        name, version = crate["name"], crate["version"]
+        if not crate["license"]:
+            sys.exit(f"copyright: {name} {version} names no licence")
+        holders = crate["authors"] or [f"the {name} authors"]
+        found.append(f"Files: vendor/{name}-{version}/*\nCopyright: " + "\n ".join(holders)
+                     + f"\nLicense: {dep5(crate['license'])}")
     used = sorted(set().union(*(licences(p) for p in head + found)))
     standalone = []
     for name in used:
@@ -80,7 +69,16 @@ def main():
             standalone.append(f"License: {name}\n{indented(file.read_text())}")
         else:
             sys.exit(f"copyright: no text for the licence {name}: add ci/licenses/{file.name}")
-    print("\n\n".join(head + found + standalone))
+    return "\n\n".join(head + found + standalone) + "\n"
+
+
+def main():
+    text = copyright()
+    if sys.argv[1:] == ["--check"]:
+        if (ci.parent / "debian" / "copyright").read_text() != text:
+            sys.exit("copyright: debian/copyright is stale: write it with ci/copyright.py > debian/copyright")
+        return
+    sys.stdout.write(text)
 
 
 main()

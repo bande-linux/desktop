@@ -1,0 +1,5 @@
+bande-desktop (0.2.0-1) unstable; urgency=medium
+
+  * Build every Bande package from one Debian source package.
+
+ -- Mikael Hug <mikaelhug@gmail.com>  Sat, 21 Nov 2026 15:59:25 +0100

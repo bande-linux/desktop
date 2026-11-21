@@ -1,0 +1,3176 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Bande
+Source: https://github.com/bande-linux/desktop
+
+Files: *
+Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: data/icons/Bande/scalable/mimetypes/*
+ data/icons/Bande/*/mimetypes/*
+Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
+ 2020 The JetBrains Mono Project Authors
+License: (Apache-2.0 or MIT) and OFL-1.1
+Comment: The labels of the file icons are outlines of JetBrains Mono Bold,
+ drawn by data/icons/src/generate.py; the icons are installed by
+ bande-icon-theme.
+
+Files: crates/shell/launcher/data/emoji.tsv
+ crates/shell/launcher/data/emoji/*
+Copyright: 1991-2025 Unicode, Inc.
+License: Unicode-3.0
+Comment: Emoji names and keywords from the Unicode CLDR annotations.
+
+Files: crates/platform/protocols/protocols/xdg-session-management-v1.xml
+Copyright: 2018 Mike Blumenkrantz
+ 2018 Samsung Electronics Co., Ltd
+ 2018 Red Hat Inc.
+License: MIT
+Comment: Wayland protocols the generated code is built from.
+
+Files: crates/platform/protocols/protocols/kde-appmenu.xml
+Copyright: 2017 David Edmundson
+License: MIT
+Comment: The interfaces of plasma-wayland-protocols' appmenu.xml.
+
+Files: crates/platform/protocols/protocols/gtk-shell.xml
+Copyright: The GTK authors
+License: LGPL-2.1-or-later
+Comment: The interfaces of GTK's gdk/wayland/protocol/gtk-shell.xml.
+
+Files: crates/services/spell/data/text/en.common
+ crates/services/spell/data/text/sv.common
+Copyright: 2018 Hermit Dave
+License: CC-BY-SA-4.0
+Comment: The 30,000 most frequent words of FrequencyWords
+ (https://github.com/hermitdave/FrequencyWords), derived from OpenSubtitles.
+
+Files: crates/libs/vm/data/ubuntu.gpg crates/libs/vm/data/fedora.gpg
+Copyright: none
+License: public-domain
+ OpenPGP public keys, not subject to copyright: Canonical's Ubuntu cloud image
+ signing key and the Fedora Project's release keys, embedded to check the
+ signed checksums of downloaded cloud images.
+
+Files: vendor/accesskit-0.25.2/*
+Copyright: The AccessKit contributors
+License: MIT or Apache-2.0
+
+Files: vendor/accesskit_atspi_common-0.21.1/*
+Copyright: The AccessKit contributors
+License: MIT or Apache-2.0
+
+Files: vendor/accesskit_consumer-0.39.2/*
+Copyright: The AccessKit contributors
+License: MIT or Apache-2.0
+
+Files: vendor/accesskit_unix-0.24.1/*
+Copyright: The AccessKit contributors
+License: MIT or Apache-2.0
+
+Files: vendor/adler2-2.0.1/*
+Copyright: Jonas Schievink <jonasschievink@gmail.com>
+ oyvindln <oyvindln@users.noreply.github.com>
+License: 0BSD or MIT or Apache-2.0
+
+Files: vendor/aes-0.9.1/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/aho-corasick-1.1.5/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/alacritty_terminal-0.26.0/*
+Copyright: Christian Duerr <contact@christianduerr.com>
+ Joe Wilm <joe@jwilm.com>
+License: Apache-2.0
+
+Files: vendor/alloc-no-stdlib-2.0.4/*
+Copyright: Daniel Reiter Horn <danielrh@dropbox.com>
+License: BSD-3-Clause
+
+Files: vendor/alloc-stdlib-0.2.4/*
+Copyright: Daniel Reiter Horn <danielrh@dropbox.com>
+License: BSD-3-Clause
+
+Files: vendor/allocator-api2-0.2.21/*
+Copyright: Zakarum <zaq.dev@icloud.com>
+License: MIT or Apache-2.0
+
+Files: vendor/android_system_properties-0.1.6/*
+Copyright: Nicolas Silva <nical@fastmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/annotate-snippets-0.11.5/*
+Copyright: the annotate-snippets authors
+License: MIT or Apache-2.0
+
+Files: vendor/annotate-snippets-0.12.17/*
+Copyright: the annotate-snippets authors
+License: MIT or Apache-2.0
+
+Files: vendor/anstyle-1.0.14/*
+Copyright: the anstyle authors
+License: MIT or Apache-2.0
+
+Files: vendor/appendlist-1.4.0/*
+Copyright: Daniel Dulaney <dan@dulaney.xyz>
+License: MIT
+
+Files: vendor/approx-0.4.0/*
+Copyright: Brendan Zabarauskas <bjzaba@yahoo.com.au>
+License: Apache-2.0
+
+Files: vendor/arrayref-0.3.9/*
+Copyright: David Roundy <roundyd@physics.oregonstate.edu>
+License: BSD-2-Clause
+
+Files: vendor/arrayvec-0.7.8/*
+Copyright: bluss
+License: MIT or Apache-2.0
+
+Files: vendor/ascii-canvas-4.0.0/*
+Copyright: Niko Matsakis <niko@alum.mit.edu>
+License: Apache-2.0 or MIT
+
+Files: vendor/ash-0.38.0+1.3.281/*
+Copyright: Maik Klein <maikklein@googlemail.com>
+ Benjamin Saunders <ben.e.saunders@gmail.com>
+ Marijn Suijten <marijn@traverseresearch.nl>
+License: MIT or Apache-2.0
+
+Files: vendor/ashpd-0.13.13/*
+Copyright: Bilal Elmoussaoui <bil.elmoussaoui@gmail.com>
+License: MIT
+
+Files: vendor/async-broadcast-0.7.2/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ Yoshua Wuyts <yoshuawuyts@gmail.com>
+ Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT or Apache-2.0
+
+Files: vendor/async-channel-2.5.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-executor-1.14.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ John Nunley <dev@notgull.net>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-fs-2.2.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-io-2.6.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-lock-3.4.2/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-process-2.5.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-recursion-1.2.0/*
+Copyright: Robert Usher <266585+dcchut@users.noreply.github.com>
+License: MIT or Apache-2.0
+
+Files: vendor/async-signal-0.2.14/*
+Copyright: John Nunley <dev@notgull.net>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-task-4.7.1/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/async-trait-0.1.92/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/atomic-waker-1.1.2/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ Contributors to futures-rs
+License: Apache-2.0 or MIT
+
+Files: vendor/atomic_float-1.1.0/*
+Copyright: Thom Chiovoloni <chiovolonit@gmail.com>
+License: Apache-2.0 or MIT or Unlicense
+
+Files: vendor/atomic_refcell-0.1.14/*
+Copyright: Bobby Holley <bobbyholley@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/atspi-0.29.0/*
+Copyright: Alberto Tirla <albertotirla@gmail.com>
+ DataTriny <datatriny@gmail.com>
+ Luuk van der Duim <luukvanderduim@gmail.com>
+ Michael Connor Buchan <mikey@blindcomputing.org>
+ Tait Hoyem <tait@tait.tech>
+License: Apache-2.0 or MIT
+
+Files: vendor/atspi-common-0.13.0/*
+Copyright: the atspi-common authors
+License: Apache-2.0 or MIT
+
+Files: vendor/atspi-proxies-0.13.0/*
+Copyright: the atspi-proxies authors
+License: Apache-2.0 or MIT
+
+Files: vendor/autocfg-1.5.1/*
+Copyright: Josh Stone <cuviper@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/base64-0.22.1/*
+Copyright: Marshall Pierce <marshall@mpierce.org>
+License: MIT or Apache-2.0
+
+Files: vendor/base64-0.23.1/*
+Copyright: Marshall Pierce <marshall@mpierce.org>
+License: MIT or Apache-2.0
+
+Files: vendor/bindgen-0.72.1/*
+Copyright: Jyun-Yan You <jyyou.tw@gmail.com>
+ Emilio Cobos Álvarez <emilio@crisal.io>
+ Nick Fitzgerald <fitzgen@gmail.com>
+ The Servo project developers
+License: BSD-3-Clause
+
+Files: vendor/bit-set-0.10.0/*
+Copyright: Alexis Beingessner <a.beingessner@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/bit-set-0.8.0/*
+Copyright: Alexis Beingessner <a.beingessner@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/bit-vec-0.8.0/*
+Copyright: Alexis Beingessner <a.beingessner@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/bit-vec-0.9.1/*
+Copyright: Alexis Beingessner <a.beingessner@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/bitflags-1.3.2/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/bitflags-2.13.2/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/block-buffer-0.10.4/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/block-buffer-0.12.1/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/block-padding-0.4.2/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/blocking-1.6.2/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/brotli-8.0.4/*
+Copyright: Daniel Reiter Horn <danielrh@dropbox.com>
+ The Brotli Authors
+License: BSD-3-Clause and MIT
+
+Files: vendor/brotli-decompressor-5.0.3/*
+Copyright: Daniel Reiter Horn <danielrh@dropbox.com>
+ The Brotli Authors
+License: BSD-3-Clause or MIT
+
+Files: vendor/bumpalo-3.20.3/*
+Copyright: Nick Fitzgerald <fitzgen@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/bytemuck-1.25.2/*
+Copyright: Lokathor <zefria@gmail.com>
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/bytemuck_derive-1.12.1/*
+Copyright: Lokathor <zefria@gmail.com>
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/byteorder-1.5.0/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/byteorder-lite-0.1.0/*
+Copyright: the byteorder-lite authors
+License: Unlicense or MIT
+
+Files: vendor/bytes-1.12.1/*
+Copyright: Carl Lerche <me@carllerche.com>
+ Sean McArthur <sean@seanmonstar.com>
+License: MIT
+
+Files: vendor/bzip2-0.6.1/*
+Copyright: the bzip2 authors
+License: MIT or Apache-2.0
+
+Files: vendor/calendrical_calculations-0.2.4/*
+Copyright: The ICU4X Project Developers
+License: Apache-2.0
+
+Files: vendor/calloop-0.14.5/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/cbc-0.2.1/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/cc-1.10.0/*
+Copyright: the cc authors
+License: MIT or Apache-2.0
+
+Files: vendor/cesu8-1.1.0/*
+Copyright: Eric Kidd <git@randomhacks.net>
+License: Apache-2.0 or MIT
+
+Files: vendor/cexpr-0.6.0/*
+Copyright: Jethro Beekman <jethro@jbeekman.nl>
+License: Apache-2.0 or MIT
+
+Files: vendor/cfg-expr-0.20.10/*
+Copyright: Embark <opensource@embark-studios.com>
+ Jake Shadle <jake.shadle@embark-studios.com>
+License: MIT or Apache-2.0
+
+Files: vendor/cfg-if-1.0.5/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/cfg_aliases-0.2.2/*
+Copyright: Zicklag <zicklag@katharostech.com>
+License: MIT
+
+Files: vendor/cgmath-0.18.0/*
+Copyright: Rust game-developers
+License: Apache-2.0
+
+Files: vendor/charset-0.1.5/*
+Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
+License: Apache-2.0 or MIT
+
+Files: vendor/cipher-0.5.2/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/clang-sys-1.9.1/*
+Copyright: Kyle Mayes <kyle@mayeses.com>
+License: Apache-2.0
+
+Files: vendor/cmov-0.5.4/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/codespan-reporting-0.13.1/*
+Copyright: Brendan Zabarauskas <bjzaba@yahoo.com.au>
+License: Apache-2.0
+
+Files: vendor/color-0.3.3/*
+Copyright: the color authors
+License: Apache-2.0 or MIT
+
+Files: vendor/color_quant-1.1.0/*
+Copyright: nwin <nwin@users.noreply.github.com>
+License: MIT
+
+Files: vendor/combine-4.6.9/*
+Copyright: Markus Westerlind <marwes91@gmail.com>
+License: MIT
+
+Files: vendor/concurrent-queue-2.5.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ Taiki Endo <te316e89@gmail.com>
+ John Nunley <dev@notgull.net>
+License: Apache-2.0 or MIT
+
+Files: vendor/const-oid-0.10.2/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/convert_case-0.10.0/*
+Copyright: rutrum <dave@rutrum.net>
+License: MIT
+
+Files: vendor/cookie-factory-0.3.3/*
+Copyright: Geoffroy Couprie <geo.couprie@gmail.com>
+ Pierre Chifflier <chifflier@wzdftpd.net>
+License: MIT
+
+Files: vendor/core-foundation-0.10.1/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/core-foundation-sys-0.8.7/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/core_maths-0.1.1/*
+Copyright: Robert Bastian <me@robertbastian.dev
+License: MIT
+
+Files: vendor/cpubits-0.1.1/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/cpufeatures-0.2.17/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/cpufeatures-0.3.1/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/crc32fast-1.5.3/*
+Copyright: Sam Rijs <srijs@airpost.net>
+ Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/crossbeam-utils-0.8.23/*
+Copyright: the crossbeam-utils authors
+License: MIT or Apache-2.0
+
+Files: vendor/crunchy-0.2.4/*
+Copyright: Eira Fransham <jackefransham@gmail.com>
+License: MIT
+
+Files: vendor/crypto-common-0.1.7/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/crypto-common-0.2.2/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/ctutils-0.4.7/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/cursor-icon-1.2.0/*
+Copyright: Kirill Chibisov <contact@kchibisov.com>
+License: MIT or Apache-2.0 or Zlib
+
+Files: vendor/data-encoding-2.11.1/*
+Copyright: the data-encoding authors
+License: MIT
+
+Files: vendor/data-url-0.3.2/*
+Copyright: Simon Sapin <simon.sapin@exyr.org>
+License: MIT or Apache-2.0
+
+Files: vendor/defmt-1.2.0/*
+Copyright: The Knurling-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/defmt-macros-1.2.0/*
+Copyright: The Knurling-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/defmt-parser-1.1.0/*
+Copyright: The Knurling-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/derive_more-2.1.1/*
+Copyright: Jelte Fennema <github-tech@jeltef.nl>
+License: MIT
+
+Files: vendor/derive_more-impl-2.1.1/*
+Copyright: Jelte Fennema <github-tech@jeltef.nl>
+License: MIT
+
+Files: vendor/digest-0.10.7/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/digest-0.11.3/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/dispatch2-0.3.1/*
+Copyright: Mads Marquart <mads@marquart.dk>
+ Mary <mary@mary.zone>
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/displaydoc-0.2.7/*
+Copyright: Jane Lusby <jlusby@yaah.dev>
+License: MIT or Apache-2.0
+
+Files: vendor/dlib-0.5.3/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/document-features-0.2.12/*
+Copyright: Slint Developers <info@slint.dev>
+License: MIT or Apache-2.0
+
+Files: vendor/downcast-rs-1.2.1/*
+Copyright: Ashish Myles <marcianx@gmail.com>
+ Runji Wang <wangrunji0408@163.com>
+License: MIT or Apache-2.0
+
+Files: vendor/drm-0.14.1/*
+Copyright: Tyler Slabinski <tslabinski@slabity.net>
+ Victoria Brekenfeld <crates-io@drakulix.de>
+License: MIT
+
+Files: vendor/drm-ffi-0.9.1/*
+Copyright: Tyler Slabinski <tslabinski@slabity.net>
+License: MIT
+
+Files: vendor/drm-fourcc-2.2.0/*
+Copyright: Daniel Franklin <daniel@danielzfranklin.org>
+License: MIT
+
+Files: vendor/drm-sys-0.8.1/*
+Copyright: Tyler Slabinski <tslabinski@slabity.net>
+License: MIT
+
+Files: vendor/either-1.19.0/*
+Copyright: the either authors
+License: MIT or Apache-2.0
+
+Files: vendor/ena-0.14.4/*
+Copyright: Niko Matsakis <niko@alum.mit.edu>
+License: MIT or Apache-2.0
+
+Files: vendor/encoding_rs-0.8.35/*
+Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
+License: (Apache-2.0 or MIT) and BSD-3-Clause
+
+Files: vendor/endi-1.1.1/*
+Copyright: Zeeshan Ali Khan <zeenix@gmail.com>
+License: MIT
+
+Files: vendor/enumflags2-0.7.12/*
+Copyright: maik klein <maikklein@googlemail.com>
+ Maja Kądziołka <maya@compilercrim.es>
+License: MIT or Apache-2.0
+
+Files: vendor/enumflags2_derive-0.7.12/*
+Copyright: maik klein <maikklein@googlemail.com>
+ Maja Kądziołka <maya@compilercrim.es>
+License: MIT or Apache-2.0
+
+Files: vendor/equivalent-1.0.3/*
+Copyright: the equivalent authors
+License: Apache-2.0 or MIT
+
+Files: vendor/errno-0.3.14/*
+Copyright: Chris Wong <lambda.fairy@gmail.com>
+ Dan Gohman <dev@sunfishcode.online>
+License: MIT or Apache-2.0
+
+Files: vendor/euclid-0.22.14/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/event-listener-5.4.2/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ John Nunley <dev@notgull.net>
+License: Apache-2.0 or MIT
+
+Files: vendor/event-listener-strategy-0.5.4/*
+Copyright: John Nunley <dev@notgull.net>
+License: Apache-2.0 or MIT
+
+Files: vendor/fallible-iterator-0.3.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/fallible-streaming-iterator-0.1.9/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/fastrand-2.5.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/fatfs-0.3.6/*
+Copyright: Rafał Harabień <rafalh92@outlook.com>
+License: MIT
+
+Files: vendor/fdeflate-0.3.7/*
+Copyright: The image-rs Developers
+License: MIT or Apache-2.0
+
+Files: vendor/fearless_simd-0.4.1/*
+Copyright: Raph Levien <raph.levien@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/fearless_simd-0.7.0/*
+Copyright: Raph Levien <raph.levien@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/fearless_simd-1.2.0/*
+Copyright: Raph Levien <raph.levien@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/filetime-0.2.29/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/find-msvc-tools-0.1.15/*
+Copyright: the find-msvc-tools authors
+License: MIT or Apache-2.0
+
+Files: vendor/fixed_decimal-0.7.3/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/fixedbitset-0.5.7/*
+Copyright: bluss
+License: MIT or Apache-2.0
+
+Files: vendor/flate2-1.1.10/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+ Josh Triplett <josh@joshtriplett.org>
+License: MIT or Apache-2.0
+
+Files: vendor/float-cmp-0.9.0/*
+Copyright: Mike Dilger <mike@mikedilger.com>
+License: MIT
+
+Files: vendor/fnv-1.0.7/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: Apache-2.0  or  MIT
+
+Files: vendor/foldhash-0.2.0/*
+Copyright: Orson Peters <orsonpeters@gmail.com>
+License: Zlib
+
+Files: vendor/font-types-0.11.3/*
+Copyright: the font-types authors
+License: MIT or Apache-2.0
+
+Files: vendor/font-types-0.12.7/*
+Copyright: the font-types authors
+License: MIT or Apache-2.0
+
+Files: vendor/fontconfig-parser-0.5.8/*
+Copyright: the fontconfig-parser authors
+License: MIT
+
+Files: vendor/fontdb-0.24.0/*
+Copyright: Yevhenii Reizner <razrfalcon@gmail.com>
+License: MIT
+
+Files: vendor/fontique-0.12.0/*
+Copyright: the fontique authors
+License: Apache-2.0 or MIT
+
+Files: vendor/futures-channel-0.3.34/*
+Copyright: the futures-channel authors
+License: MIT or Apache-2.0
+
+Files: vendor/futures-core-0.3.34/*
+Copyright: the futures-core authors
+License: MIT or Apache-2.0
+
+Files: vendor/futures-executor-0.3.34/*
+Copyright: the futures-executor authors
+License: MIT or Apache-2.0
+
+Files: vendor/futures-io-0.3.34/*
+Copyright: the futures-io authors
+License: MIT or Apache-2.0
+
+Files: vendor/futures-lite-2.6.1/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ Contributors to futures-rs
+License: Apache-2.0 or MIT
+
+Files: vendor/futures-macro-0.3.34/*
+Copyright: the futures-macro authors
+License: MIT or Apache-2.0
+
+Files: vendor/futures-sink-0.3.34/*
+Copyright: the futures-sink authors
+License: MIT or Apache-2.0
+
+Files: vendor/futures-task-0.3.34/*
+Copyright: the futures-task authors
+License: MIT or Apache-2.0
+
+Files: vendor/futures-util-0.3.34/*
+Copyright: the futures-util authors
+License: MIT or Apache-2.0
+
+Files: vendor/gbm-0.18.0/*
+Copyright: Victoria Brekenfeld <github@drakulix.de>
+License: MIT
+
+Files: vendor/gbm-sys-0.4.0/*
+Copyright: Drakulix (Victor Brekenfeld)
+License: MIT
+
+Files: vendor/generic-array-0.14.7/*
+Copyright: Bartłomiej Kamiński <fizyk20@gmail.com>
+ Aaron Trent <novacrazy@gmail.com>
+License: MIT
+
+Files: vendor/getrandom-0.2.17/*
+Copyright: The Rand Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/getrandom-0.3.4/*
+Copyright: The Rand Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/getrandom-0.4.3/*
+Copyright: The Rand Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/gif-0.14.2/*
+Copyright: The image-rs Developers
+License: MIT or Apache-2.0
+
+Files: vendor/gio-sys-0.22.9/*
+Copyright: The gtk-rs Project Developers
+License: MIT
+
+Files: vendor/glib-0.22.10/*
+Copyright: The gtk-rs Project Developers
+License: MIT
+
+Files: vendor/glib-macros-0.22.9/*
+Copyright: The gtk-rs Project Developers
+License: MIT
+
+Files: vendor/glib-sys-0.22.9/*
+Copyright: The gtk-rs Project Developers
+License: MIT
+
+Files: vendor/glifo-0.4.0/*
+Copyright: the glifo authors
+License: Apache-2.0 or MIT
+
+Files: vendor/glob-0.3.4/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/gobject-sys-0.22.9/*
+Copyright: The gtk-rs Project Developers
+License: MIT
+
+Files: vendor/gpu-allocator-0.28.0/*
+Copyright: Traverse Research <opensource@traverseresearch.nl>
+License: MIT or Apache-2.0
+
+Files: vendor/gstreamer-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT or Apache-2.0
+
+Files: vendor/gstreamer-app-0.25.2/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT or Apache-2.0
+
+Files: vendor/gstreamer-app-sys-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT
+
+Files: vendor/gstreamer-base-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT or Apache-2.0
+
+Files: vendor/gstreamer-base-sys-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT
+
+Files: vendor/gstreamer-sys-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT
+
+Files: vendor/gstreamer-video-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT or Apache-2.0
+
+Files: vendor/gstreamer-video-sys-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT
+
+Files: vendor/guillotiere-0.7.0/*
+Copyright: Nicolas Silva <nical@fastmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/half-2.7.1/*
+Copyright: Kathryn Long <squeeself@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/harfrust-0.12.0/*
+Copyright: the harfrust authors
+License: MIT
+
+Files: vendor/hashbrown-0.16.1/*
+Copyright: Amanieu d'Antras <amanieu@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/hashbrown-0.17.1/*
+Copyright: the hashbrown authors
+License: MIT or Apache-2.0
+
+Files: vendor/hashlink-0.12.2/*
+Copyright: the hashlink authors
+License: MIT or Apache-2.0
+
+Files: vendor/hayro-0.8.0/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-ccitt-0.4.0/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-cmap-0.1.0/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-interpret-0.8.0/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-jbig2-0.3.1/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-jpeg2000-0.3.5/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-jpeg2000-0.4.1/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-postscript-0.1.0/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-syntax-0.7.2/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-syntax-0.8.0/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/hayro-write-0.7.0/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/heck-0.5.0/*
+Copyright: the heck authors
+License: MIT or Apache-2.0
+
+Files: vendor/hermit-abi-0.3.9/*
+Copyright: Stefan Lankes
+License: MIT or Apache-2.0
+
+Files: vendor/hermit-abi-0.5.3/*
+Copyright: the hermit-abi authors
+License: MIT or Apache-2.0
+
+Files: vendor/hex-0.4.3/*
+Copyright: KokaKiwi <kokakiwi@kokakiwi.net>
+License: MIT or Apache-2.0
+
+Files: vendor/hkdf-0.13.0/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/hmac-0.13.0/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/home-0.5.12/*
+Copyright: Brian Anderson <andersrb@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/html5ever-0.40.1/*
+Copyright: The html5ever Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/http-1.5.0/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+ Carl Lerche <me@carllerche.com>
+ Sean McArthur <sean@seanmonstar.com>
+License: MIT or Apache-2.0
+
+Files: vendor/httparse-1.10.1/*
+Copyright: Sean McArthur <sean@seanmonstar.com>
+License: MIT or Apache-2.0
+
+Files: vendor/hybrid-array-0.4.15/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/icu_calendar-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_calendar_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_collections-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_datetime-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_datetime_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_decimal-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_decimal_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_locale_core-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_locale_fallback-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_locale_fallback_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_normalizer-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_normalizer_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_pattern-0.5.1/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_plurals-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_plurals_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_properties-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_properties_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_provider-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_segmenter-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_segmenter_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_time-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_time_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/image-0.25.10/*
+Copyright: The image-rs Developers
+License: MIT or Apache-2.0
+
+Files: vendor/image-webp-0.2.4/*
+Copyright: the image-webp authors
+License: MIT or Apache-2.0
+
+Files: vendor/imagesize-0.14.0/*
+Copyright: Maid Dog <maiddogsrl@gmail.com>
+License: MIT
+
+Files: vendor/imagesize-0.15.0/*
+Copyright: Maid Dog <maiddogsrl@gmail.com>
+License: MIT
+
+Files: vendor/indexmap-2.14.2/*
+Copyright: the indexmap authors
+License: Apache-2.0 or MIT
+
+Files: vendor/inout-0.2.5/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/input-0.9.1/*
+Copyright: Drakulix (Victoria Brekenfeld)
+License: MIT
+
+Files: vendor/input-sys-1.19.0/*
+Copyright: Victoria Brekenfeld (Drakulix) <github@drakulix.de>
+License: MIT
+
+Files: vendor/io-lifetimes-1.0.11/*
+Copyright: Dan Gohman <dev@sunfishcode.online>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/itertools-0.13.0/*
+Copyright: bluss
+License: MIT or Apache-2.0
+
+Files: vendor/itertools-0.14.0/*
+Copyright: bluss
+License: MIT or Apache-2.0
+
+Files: vendor/itertools-0.15.0/*
+Copyright: bluss
+License: MIT or Apache-2.0
+
+Files: vendor/itoa-1.0.18/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/ixdtf-0.6.7/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/jiff-0.2.37/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/jiff-core-0.1.1/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/jiff-static-0.2.37/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/jiff-tzdb-0.1.9/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/jiff-tzdb-platform-0.1.3/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/jni-0.21.1/*
+Copyright: Josh Chase <josh@prevoty.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jni-0.22.4/*
+Copyright: jni team
+License: MIT or Apache-2.0
+
+Files: vendor/jni-macros-0.22.4/*
+Copyright: the jni-macros authors
+License: MIT or Apache-2.0
+
+Files: vendor/jni-sys-0.3.1/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jni-sys-0.4.1/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+ Robert Bragg <robert@sixbynine.org>
+License: MIT or Apache-2.0
+
+Files: vendor/jni-sys-macros-0.4.1/*
+Copyright: Robert Bragg <robert@sixbynine.org>
+License: MIT or Apache-2.0
+
+Files: vendor/js-sys-0.3.106/*
+Copyright: The wasm-bindgen Developers
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-bitstream-1.1.0/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-coding-1.0.1/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-color-0.11.0/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-frame-0.13.3/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-grid-0.6.2/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-image-0.13.0/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-jbr-0.2.1/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-modular-0.11.3/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-oxide-0.12.6/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-oxide-common-1.0.0/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-render-0.12.4/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-threadpool-1.0.0/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/jxl-vardct-0.11.1/*
+Copyright: Wonwoo Choi <chwo9843@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/kamadak-exif-0.6.1/*
+Copyright: KAMADA Ken'ichi <kamada@nanohz.org>
+License: BSD-2-Clause
+
+Files: vendor/kdl-6.7.1/*
+Copyright: Kat Marchán <kzm@zkat.tech>
+ KDL Community
+License: Apache-2.0
+
+Files: vendor/keccak-0.1.6/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/krilla-0.8.2/*
+Copyright: Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/kstring-2.0.2/*
+Copyright: Ed Page <eopage@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/kurbo-0.13.1/*
+Copyright: the kurbo authors
+License: Apache-2.0 or MIT
+
+Files: vendor/lalrpop-0.22.2/*
+Copyright: Niko Matsakis <niko@alum.mit.edu>
+License: Apache-2.0 or MIT
+
+Files: vendor/lalrpop-util-0.22.2/*
+Copyright: Niko Matsakis <niko@alum.mit.edu>
+License: Apache-2.0 or MIT
+
+Files: vendor/lazy_static-1.5.1/*
+Copyright: Marvin Löbel <loebel.marvin@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lexical-7.0.5/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lexical-core-1.0.6/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lexical-parse-float-1.0.6/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lexical-parse-integer-1.0.6/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lexical-util-1.0.7/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lexical-write-float-1.0.6/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lexical-write-integer-1.0.6/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/libbz2-rs-sys-0.2.6/*
+Copyright: the libbz2-rs-sys authors
+License: bzip2-1.0.6
+
+Files: vendor/libc-0.2.186/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/libloading-0.8.9/*
+Copyright: Simonas Kazlauskas <libloading@kazlauskas.me>
+License: ISC
+
+Files: vendor/libm-0.2.16/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+ Amanieu d'Antras <amanieu@gmail.com>
+ Jorge Aparicio <japaricious@gmail.com>
+ Trevor Gross <tg@trevorgross.com>
+License: MIT
+
+Files: vendor/libseat-0.2.4/*
+Copyright: Poly <marynczak.bartlomiej@gmail.com>
+License: MIT
+
+Files: vendor/libseat-sys-0.2.0/*
+Copyright: Poly <marynczak.bartlomiej@gmail.com>
+License: MIT
+
+Files: vendor/libspa-0.10.1/*
+Copyright: Tom Wagner <tom.a.wagner@protonmail.com>
+ Guillaume Desmottes <guillaume.desmottes@collabora.com>
+License: MIT
+
+Files: vendor/libspa-sys-0.10.1/*
+Copyright: Tom Wagner <tom.a.wagner@protonmail.com>
+ Guillaume Desmottes <guillaume.desmottes@collabora.com>
+License: MIT
+
+Files: vendor/libsqlite3-sys-0.38.2/*
+Copyright: The rusqlite developers
+License: MIT
+
+Files: vendor/libudev-sys-0.1.4/*
+Copyright: David Cuddeback <david.cuddeback@gmail.com>
+License: MIT
+
+Files: vendor/linebender_resource_handle-0.1.1/*
+Copyright: the linebender_resource_handle authors
+License: Apache-2.0 or MIT
+
+Files: vendor/linux-raw-sys-0.12.1/*
+Copyright: Dan Gohman <dev@sunfishcode.online>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/linux-raw-sys-0.4.15/*
+Copyright: Dan Gohman <dev@sunfishcode.online>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/linux-raw-sys-0.9.4/*
+Copyright: Dan Gohman <dev@sunfishcode.online>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/litemap-0.8.3/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/litrs-1.0.1/*
+Copyright: Lukas Kalbertodt <lukas.kalbertodt@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lock_api-0.4.14/*
+Copyright: Amanieu d'Antras <amanieu@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/log-0.4.34/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/logos-0.16.1/*
+Copyright: Maciej Hirsz <hello@maciej.codes>
+ Jérome Eertmans (maintainer) <jeertmans@icloud.com>
+License: MIT or Apache-2.0
+
+Files: vendor/logos-codegen-0.16.1/*
+Copyright: Maciej Hirsz <hello@maciej.codes>
+ Jérome Eertmans (maintainer) <jeertmans@icloud.com>
+License: MIT or Apache-2.0
+
+Files: vendor/logos-derive-0.16.1/*
+Copyright: Maciej Hirsz <hello@maciej.codes>
+ Jérome Eertmans (maintainer) <jeertmans@icloud.com>
+License: MIT or Apache-2.0
+
+Files: vendor/lzma-rust2-0.19.0/*
+Copyright: the lzma-rust2 authors
+License: Apache-2.0
+
+Files: vendor/mailparse-0.16.1/*
+Copyright: Kartikaya Gupta
+License: 0BSD
+
+Files: vendor/markup5ever-0.40.0/*
+Copyright: The html5ever Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/md-5-0.10.6/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/md-5-0.11.0/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/memchr-2.8.3/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+ bluss
+License: Unlicense or MIT
+
+Files: vendor/memmap2-0.9.12/*
+Copyright: Dan Burkert <dan@danburkert.com>
+ Yevhenii Reizner <razrfalcon@gmail.com>
+ The Contributors
+License: MIT or Apache-2.0
+
+Files: vendor/memoffset-0.9.1/*
+Copyright: Gilad Naaman <gilad.naaman@gmail.com>
+License: MIT
+
+Files: vendor/miette-7.6.0/*
+Copyright: Kat Marchán <kzm@zkat.tech>
+License: Apache-2.0
+
+Files: vendor/minimal-lexical-0.2.1/*
+Copyright: Alex Huszagh <ahuszagh@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/miniz_oxide-0.8.9/*
+Copyright: Frommi <daniil.liferenko@gmail.com>
+ oyvindln <oyvindln@users.noreply.github.com>
+ Rich Geldreich richgel99@gmail.com
+License: MIT or Zlib or Apache-2.0
+
+Files: vendor/miniz_oxide-0.9.1/*
+Copyright: Frommi <daniil.liferenko@gmail.com>
+ oyvindln <oyvindln@users.noreply.github.com>
+ Rich Geldreich richgel99@gmail.com
+License: MIT or Zlib or Apache-2.0
+
+Files: vendor/miow-0.6.1/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/moxcms-0.8.1/*
+Copyright: Radzivon Bartoshyk
+License: BSD-3-Clause or Apache-2.0
+
+Files: vendor/muldiv-1.0.1/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT
+
+Files: vendor/mutate_once-0.1.2/*
+Copyright: KAMADA Ken'ichi <kamada@nanohz.org>
+License: BSD-2-Clause
+
+Files: vendor/naga-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/naga-types-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/new_debug_unreachable-1.0.6/*
+Copyright: Matt Brubeck <mbrubeck@limpet.net>
+ Jonathan Reem <jonathan.reem@gmail.com>
+License: MIT
+
+Files: vendor/nix-0.31.3/*
+Copyright: the nix authors
+License: MIT
+
+Files: vendor/nom-7.1.3/*
+Copyright: contact@geoffroycouprie.com
+License: MIT
+
+Files: vendor/nom-8.0.0/*
+Copyright: contact@geoffroycouprie.com
+License: MIT
+
+Files: vendor/nu-ansi-term-0.50.3/*
+Copyright: ogham@bsago.me
+ Ryan Scheel (Havvy) <ryan.havvy@gmail.com>
+ Josh Triplett <josh@joshtriplett.org>
+ The Nushell Project Developers
+License: MIT
+
+Files: vendor/num-0.4.3/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/num-bigint-0.4.8/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/num-bigint-dig-0.9.1/*
+Copyright: dignifiedquire <dignifiedquire@gmail.com>
+ The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/num-complex-0.4.6/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/num-integer-0.1.47/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/num-iter-0.1.46/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/num-rational-0.4.2/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/num-traits-0.2.19/*
+Copyright: The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/objc2-0.6.5/*
+Copyright: Mads Marquart <mads@marquart.dk>
+License: MIT
+
+Files: vendor/objc2-core-foundation-0.3.2/*
+Copyright: the objc2-core-foundation authors
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/objc2-core-text-0.3.2/*
+Copyright: the objc2-core-text authors
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/objc2-encode-4.1.0/*
+Copyright: Mads Marquart <mads@marquart.dk>
+License: MIT
+
+Files: vendor/objc2-foundation-0.3.2/*
+Copyright: the objc2-foundation authors
+License: MIT
+
+Files: vendor/objc2-metal-0.3.2/*
+Copyright: the objc2-metal authors
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/objc2-quartz-core-0.3.2/*
+Copyright: the objc2-quartz-core authors
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/once_cell-1.21.4/*
+Copyright: Aleksey Kladov <aleksey.kladov@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/oo7-0.7.0-beta/*
+Copyright: Bilal Elmoussaoui
+ Sophie Herold
+ Maximiliano Sandoval
+License: MIT
+
+Files: vendor/openssl-probe-0.2.2/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/option-operations-0.6.1/*
+Copyright: François Laignel <fengalin@free.fr>
+License: MIT or Apache-2.0
+
+Files: vendor/ordered-float-5.5.1/*
+Copyright: Jonathan Reem <jonathan.reem@gmail.com>
+ Matt Brubeck <mbrubeck@limpet.net>
+License: MIT
+
+Files: vendor/ordered-stream-0.2.0/*
+Copyright: Daniel De Graaf <code@danieldg.net>
+ Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT or Apache-2.0
+
+Files: vendor/parking-2.2.1/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ The Rust Project Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/parking_lot-0.12.5/*
+Copyright: Amanieu d'Antras <amanieu@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/parking_lot_core-0.9.12/*
+Copyright: Amanieu d'Antras <amanieu@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/parlance-0.1.1/*
+Copyright: the parlance authors
+License: Apache-2.0 or MIT
+
+Files: vendor/parley-0.12.0/*
+Copyright: the parley authors
+License: Apache-2.0 or MIT
+
+Files: vendor/parley_data-0.12.0/*
+Copyright: the parley_data authors
+License: Apache-2.0 or MIT
+
+Files: vendor/parley_emoji-0.12.0/*
+Copyright: the parley_emoji authors
+License: MIT
+
+Files: vendor/parley_engine-0.12.0/*
+Copyright: the parley_engine authors
+License: Apache-2.0 or MIT
+
+Files: vendor/pastey-0.2.3/*
+Copyright: Aditya Kumar <git@adityais.dev>
+ David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/pbkdf2-0.13.0/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/pdf-writer-0.15.0/*
+Copyright: Laurenz <laurmaedje@gmail.com>
+ Martin Haug <mhaug@live.de>
+License: MIT or Apache-2.0
+
+Files: vendor/peniko-0.6.1/*
+Copyright: the peniko authors
+License: Apache-2.0 or MIT
+
+Files: vendor/percent-encoding-2.3.2/*
+Copyright: The rust-url developers
+License: MIT or Apache-2.0
+
+Files: vendor/petgraph-0.7.1/*
+Copyright: bluss
+ mitchmindtree
+License: MIT or Apache-2.0
+
+Files: vendor/phf-0.13.1/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf-0.14.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_codegen-0.14.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_generator-0.13.1/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_generator-0.14.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_macros-0.13.1/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_macros-0.14.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_shared-0.11.3/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_shared-0.13.1/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/phf_shared-0.14.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+License: MIT
+
+Files: vendor/pic-scale-0.7.12/*
+Copyright: Radzivon Bartoshyk
+License: BSD-3-Clause or Apache-2.0
+
+Files: vendor/pico-args-0.5.0/*
+Copyright: Yevhenii Reizner <razrfalcon@gmail.com>
+License: MIT
+
+Files: vendor/pin-project-lite-0.2.17/*
+Copyright: the pin-project-lite authors
+License: Apache-2.0 or MIT
+
+Files: vendor/piper-0.2.5/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ John Nunley <dev@notgull.net>
+License: MIT or Apache-2.0
+
+Files: vendor/pipewire-0.10.1/*
+Copyright: Tom Wagner <tom.a.wagner@protonmail.com>
+ Guillaume Desmottes <guillaume.desmottes@collabora.com>
+License: MIT
+
+Files: vendor/pipewire-sys-0.10.1/*
+Copyright: Tom Wagner <tom.a.wagner@protonmail.com>
+ Guillaume Desmottes <guillaume.desmottes@collabora.com>
+License: MIT
+
+Files: vendor/pkg-config-0.3.34/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/png-0.18.1/*
+Copyright: The image-rs Developers
+License: MIT or Apache-2.0
+
+Files: vendor/polling-3.11.0/*
+Copyright: Stjepan Glavina <stjepang@gmail.com>
+ John Nunley <dev@notgull.net>
+License: Apache-2.0 or MIT
+
+Files: vendor/polycool-0.4.0/*
+Copyright: the polycool authors
+License: MIT or Apache-2.0
+
+Files: vendor/portable-atomic-1.15.0/*
+Copyright: the portable-atomic authors
+License: Apache-2.0 or MIT
+
+Files: vendor/portable-atomic-util-0.2.8/*
+Copyright: the portable-atomic-util authors
+License: Apache-2.0 or MIT
+
+Files: vendor/potential_utf-0.1.6/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/ppmd-rust-1.5.2/*
+Copyright: the ppmd-rust authors
+License: CC0-1.0 or MIT-0
+
+Files: vendor/ppv-lite86-0.2.21/*
+Copyright: The CryptoCorrosion Contributors
+License: MIT or Apache-2.0
+
+Files: vendor/precomputed-hash-0.1.1/*
+Copyright: Emilio Cobos Álvarez <emilio@crisal.io>
+License: MIT
+
+Files: vendor/presser-0.3.1/*
+Copyright: Embark <opensource@embark-studios.com>
+ Gray Olson <gray@grayolson.com
+License: MIT or Apache-2.0
+
+Files: vendor/proc-macro-crate-3.5.0/*
+Copyright: Bastian Köcher <git@kchr.de>
+License: MIT or Apache-2.0
+
+Files: vendor/proc-macro2-1.0.107/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+ Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/profiling-1.0.18/*
+Copyright: Philip Degarmo <aclysma@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/profiling-procmacros-1.0.18/*
+Copyright: Philip Degarmo <aclysma@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/pxfm-0.1.30/*
+Copyright: Radzivon Bartoshyk
+License: BSD-3-Clause or Apache-2.0
+
+Files: vendor/quick-error-2.0.1/*
+Copyright: Paul Colomiets <paul@colomiets.name>
+ Colin Kiegel <kiegel@gmx.de>
+License: MIT or Apache-2.0
+
+Files: vendor/quick-xml-0.38.4/*
+Copyright: the quick-xml authors
+License: MIT
+
+Files: vendor/quick-xml-0.41.0/*
+Copyright: the quick-xml authors
+License: MIT
+
+Files: vendor/quote-1.0.47/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/quoted_printable-0.5.2/*
+Copyright: Kartikaya Gupta <kats@seldon.staktrace.com>
+License: 0BSD
+
+Files: vendor/r-efi-5.3.0/*
+Copyright: the r-efi authors
+License: MIT or Apache-2.0 or LGPL-2.1-or-later
+
+Files: vendor/r-efi-6.0.0/*
+Copyright: the r-efi authors
+License: MIT or Apache-2.0 or LGPL-2.1-or-later
+
+Files: vendor/rand-0.9.5/*
+Copyright: The Rand Project Developers
+ The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/rand_chacha-0.9.0/*
+Copyright: The Rand Project Developers
+ The Rust Project Developers
+ The CryptoCorrosion Contributors
+License: MIT or Apache-2.0
+
+Files: vendor/rand_core-0.9.5/*
+Copyright: The Rand Project Developers
+ The Rust Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/raw-window-handle-0.6.2/*
+Copyright: Osspial <osspial@gmail.com>
+License: MIT or Apache-2.0 or Zlib
+
+Files: vendor/raw-window-metal-1.1.0/*
+Copyright: the raw-window-metal authors
+License: MIT or Apache-2.0
+
+Files: vendor/read-fonts-0.39.2/*
+Copyright: the read-fonts authors
+License: MIT or Apache-2.0
+
+Files: vendor/read-fonts-0.41.0/*
+Copyright: the read-fonts authors
+License: MIT or Apache-2.0
+
+Files: vendor/read-fonts-0.43.3/*
+Copyright: the read-fonts authors
+License: MIT or Apache-2.0
+
+Files: vendor/redox_syscall-0.5.18/*
+Copyright: Jeremy Soller <jackpot51@gmail.com>
+License: MIT
+
+Files: vendor/regex-1.13.1/*
+Copyright: The Rust Project Developers
+ Andrew Gallant <jamslam@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/regex-automata-0.4.18/*
+Copyright: The Rust Project Developers
+ Andrew Gallant <jamslam@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/regex-syntax-0.8.11/*
+Copyright: The Rust Project Developers
+ Andrew Gallant <jamslam@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/renderdoc-sys-1.1.0/*
+Copyright: Eyal Kalderon <ebkalderon@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/resvg-0.48.1/*
+Copyright: the resvg authors
+License: Apache-2.0 or MIT
+
+Files: vendor/rgb-0.8.53/*
+Copyright: Kornel Lesiński <kornel@geekhood.net>
+ James Forster <james.forsterer@gmail.com>
+License: MIT
+
+Files: vendor/ring-0.17.14/*
+Copyright: the ring authors
+License: Apache-2.0 and ISC
+
+Files: vendor/roxmltree-0.20.0/*
+Copyright: Yevhenii Reizner <razrfalcon@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/roxmltree-0.21.2/*
+Copyright: Yevhenii Reizner <razrfalcon@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/rsqlite-vfs-0.1.1/*
+Copyright: the rsqlite-vfs authors
+License: MIT
+
+Files: vendor/rusqlite-0.40.2/*
+Copyright: The rusqlite developers
+License: MIT
+
+Files: vendor/rustc-demangle-0.1.28/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/rustc-hash-1.1.0/*
+Copyright: The Rust Project Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/rustc-hash-2.1.3/*
+Copyright: The Rust Project Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/rustc_version-0.4.1/*
+Copyright: the rustc_version authors
+License: MIT or Apache-2.0
+
+Files: vendor/rustix-0.38.44/*
+Copyright: Dan Gohman <dev@sunfishcode.online>
+ Jakub Konka <kubkon@jakubkonka.com>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/rustix-1.1.6/*
+Copyright: Dan Gohman <dev@sunfishcode.online>
+ Jakub Konka <kubkon@jakubkonka.com>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/rustix-openpty-0.2.0/*
+Copyright: Dan Gohman <dev@sunfishcode.online>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/rustls-0.23.46/*
+Copyright: the rustls authors
+License: Apache-2.0 or ISC or MIT
+
+Files: vendor/rustls-native-certs-0.8.5/*
+Copyright: the rustls-native-certs authors
+License: Apache-2.0 or ISC or MIT
+
+Files: vendor/rustls-pki-types-1.15.1/*
+Copyright: the rustls-pki-types authors
+License: MIT or Apache-2.0
+
+Files: vendor/rustls-platform-verifier-0.6.2/*
+Copyright: the rustls-platform-verifier authors
+License: MIT or Apache-2.0
+
+Files: vendor/rustls-platform-verifier-0.7.1/*
+Copyright: the rustls-platform-verifier authors
+License: MIT or Apache-2.0
+
+Files: vendor/rustls-platform-verifier-android-0.1.1/*
+Copyright: the rustls-platform-verifier-android authors
+License: MIT or Apache-2.0
+
+Files: vendor/rustls-platform-verifier-android-0.2.0/*
+Copyright: the rustls-platform-verifier-android authors
+License: MIT or Apache-2.0
+
+Files: vendor/rustls-webpki-0.103.16/*
+Copyright: the rustls-webpki authors
+License: ISC
+
+Files: vendor/rustversion-1.0.23/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/ruzstd-0.9.1/*
+Copyright: Moritz Borcherding <moritz.borcherding@web.de>
+License: MIT
+
+Files: vendor/ryu-1.0.23/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: Apache-2.0 or BSL-1.0
+
+Files: vendor/same-file-1.0.6/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/schannel-0.1.30/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+ Steffen Butzer <steffen.butzer@outlook.com>
+License: MIT
+
+Files: vendor/scoped-tls-1.0.1/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/scopeguard-1.2.0/*
+Copyright: bluss
+License: MIT or Apache-2.0
+
+Files: vendor/security-framework-3.7.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+ Kornel <kornel@geekhood.net>
+License: MIT or Apache-2.0
+
+Files: vendor/security-framework-sys-2.17.0/*
+Copyright: Steven Fackler <sfackler@gmail.com>
+ Kornel <kornel@geekhood.net>
+License: MIT or Apache-2.0
+
+Files: vendor/semver-1.0.28/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/serde-1.0.229/*
+Copyright: Erick Tryzelaar <erick.tryzelaar@gmail.com>
+ David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/serde_bytes-0.11.19/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/serde_core-1.0.229/*
+Copyright: Erick Tryzelaar <erick.tryzelaar@gmail.com>
+ David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/serde_derive-1.0.229/*
+Copyright: Erick Tryzelaar <erick.tryzelaar@gmail.com>
+ David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/serde_json-1.0.154/*
+Copyright: the serde_json authors
+License: MIT or Apache-2.0
+
+Files: vendor/serde_norway-0.9.42/*
+Copyright: Christina Sørensen <christina@cafkafk.com>
+ David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/serde_repr-0.1.21/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/serde_spanned-1.1.2/*
+Copyright: the serde_spanned authors
+License: MIT or Apache-2.0
+
+Files: vendor/sevenz-rust2-0.21.6/*
+Copyright: the sevenz-rust2 authors
+License: Apache-2.0
+
+Files: vendor/sha2-0.10.9/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/sha2-0.11.1/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/sha3-0.10.9/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/sharded-slab-0.1.7/*
+Copyright: Eliza Weisman <eliza@buoyant.io>
+License: MIT
+
+Files: vendor/shlex-1.3.0/*
+Copyright: comex <comexk@gmail.com>
+ Fenhl <fenhl@fenhl.net>
+ Adrian Taylor <adetaylor@chromium.org>
+ Alex Touchet <alextouchet@outlook.com>
+ Daniel Parks <dp+git@oxidized.org>
+ Garrett Berg <googberg@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/shlex-2.0.1/*
+Copyright: comex <comexk@gmail.com>
+ Fenhl <fenhl@fenhl.net>
+ Adrian Taylor <adetaylor@chromium.org>
+ Alex Touchet <alextouchet@outlook.com>
+ Daniel Parks <dp+git@oxidized.org>
+ Garrett Berg <googberg@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/signal-hook-0.4.5/*
+Copyright: Michal 'vorner' Vaner <vorner@vorner.cz>
+ Thomas Himmelstoss <thimm@posteo.de>
+License: MIT or Apache-2.0
+
+Files: vendor/signal-hook-registry-1.4.8/*
+Copyright: Michal 'vorner' Vaner <vorner@vorner.cz>
+ Masaki Hara <ackie.h.gmai@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/simd-adler32-0.3.10/*
+Copyright: Marvin Countryman <me@maar.vin>
+License: MIT
+
+Files: vendor/simd_cesu8-1.2.0/*
+Copyright: Sean C. Roach <me@seancroach.dev>
+License: Apache-2.0 or MIT
+
+Files: vendor/simdutf8-0.1.5/*
+Copyright: Hans Kratz <hans@appfour.com>
+License: MIT or Apache-2.0
+
+Files: vendor/simplecss-0.2.2/*
+Copyright: the simplecss authors
+License: Apache-2.0 or MIT
+
+Files: vendor/siphasher-1.0.4/*
+Copyright: Frank Denis <github@pureftpd.org>
+License: MIT or Apache-2.0
+
+Files: vendor/skrifa-0.42.1/*
+Copyright: the skrifa authors
+License: MIT or Apache-2.0
+
+Files: vendor/skrifa-0.44.0/*
+Copyright: the skrifa authors
+License: MIT or Apache-2.0
+
+Files: vendor/skrifa-0.46.2/*
+Copyright: the skrifa authors
+License: MIT or Apache-2.0
+
+Files: vendor/slab-0.4.12/*
+Copyright: Carl Lerche <me@carllerche.com>
+License: MIT
+
+Files: vendor/slotmap-1.1.1/*
+Copyright: Orson Peters <orsonpeters@gmail.com>
+License: Zlib
+
+Files: vendor/smallvec-1.16.4/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/smithay-0.7.0/*
+Copyright: Victor Berger <victor.berger@m4x.org>
+ Drakulix (Victoria Brekenfeld)
+License: MIT
+
+Files: vendor/spellbook-0.4.2/*
+Copyright: Michael Davis <mcarsondavis@gmail.com>
+License: MPL-2.0
+
+Files: vendor/spirv-0.4.0+sdk-1.4.341.0/*
+Copyright: Lei Zhang <antiagainst@gmail.com>
+License: Apache-2.0
+
+Files: vendor/sqlite-wasm-rs-0.5.5/*
+Copyright: Spxg <unsafe@outlook.es>
+License: MIT
+
+Files: vendor/stable_deref_trait-1.2.1/*
+Copyright: Robert Grosse <n210241048576@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/static_assertions-1.1.0/*
+Copyright: Nikolai Vazquez
+License: MIT or Apache-2.0
+
+Files: vendor/strict-num-0.1.1/*
+Copyright: Yevhenii Reizner <razrfalcon@gmail.com>
+License: MIT
+
+Files: vendor/string_cache-0.11.0/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/string_cache-0.8.9/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/string_cache_codegen-0.11.2/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/subsetter-0.2.6/*
+Copyright: Laurenz Mädje <laurmaedje@gmail.com>
+ Laurenz Stampfl <laurenz.stampfl@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/subtle-2.6.1/*
+Copyright: Isis Lovecruft <isis@patternsinthevoid.net>
+ Henry de Valence <hdevalence@hdevalence.ca>
+License: BSD-3-Clause
+
+Files: vendor/svgtypes-0.16.1/*
+Copyright: the svgtypes authors
+License: Apache-2.0 or MIT
+
+Files: vendor/syn-2.0.119/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/syn-3.0.9/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/synstructure-0.14.0/*
+Copyright: Nika Layzell <nika@thelayzells.com>
+License: MIT
+
+Files: vendor/system-deps-7.0.8/*
+Copyright: Guillaume Desmottes <guillaume.desmottes@collabora.com>
+ Josh Triplett <josh@joshtriplett.org>
+License: MIT or Apache-2.0
+
+Files: vendor/system-deps-9.0.1/*
+Copyright: Guillaume Desmottes <guillaume.desmottes@collabora.com>
+ Josh Triplett <josh@joshtriplett.org>
+License: MIT or Apache-2.0
+
+Files: vendor/tar-0.4.46/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: MIT or Apache-2.0
+
+Files: vendor/target-lexicon-0.13.5/*
+Copyright: Dan Gohman <sunfish@mozilla.com>
+License: Apache-2.0 with LLVM exception
+
+Files: vendor/tempfile-3.27.0/*
+Copyright: Steven Allen <steven@stebalien.com>
+ The Rust Project Developers
+ Ashley Mannix <ashleymannix@live.com.au>
+ Jason White <me@jasonwhite.io>
+License: MIT or Apache-2.0
+
+Files: vendor/tendril-0.5.1/*
+Copyright: Keegan McAllister <mcallister.keegan@gmail.com>
+ Simon Sapin <simon.sapin@exyr.org>
+ Chris Morgan <me@chrismorgan.info>
+License: MIT or Apache-2.0
+
+Files: vendor/term-1.2.1/*
+Copyright: The Rust Project Developers
+ Steven Allen
+License: MIT or Apache-2.0
+
+Files: vendor/thiserror-1.0.69/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/thiserror-2.0.21/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/thiserror-impl-1.0.69/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/thiserror-impl-2.0.21/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/thread_local-1.1.10/*
+Copyright: Amanieu d'Antras <amanieu@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/tiny-skia-0.12.0/*
+Copyright: Yevhenii Reizner <razrfalcon@gmail.com>
+License: BSD-3-Clause
+
+Files: vendor/tiny-skia-path-0.12.0/*
+Copyright: Yevhenii Reizner <razrfalcon@gmail.com>
+License: BSD-3-Clause
+
+Files: vendor/tinystr-0.8.5/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/tinyvec-1.13.3/*
+Copyright: Lokathor <zefria@gmail.com>
+License: Zlib or Apache-2.0 or MIT
+
+Files: vendor/tokio-1.54.1/*
+Copyright: Tokio Contributors <team@tokio.rs>
+License: MIT
+
+Files: vendor/toml-1.1.8+spec-1.1.0/*
+Copyright: the toml authors
+License: MIT or Apache-2.0
+
+Files: vendor/toml_datetime-1.1.2+spec-1.1.0/*
+Copyright: the toml_datetime authors
+License: MIT or Apache-2.0
+
+Files: vendor/toml_edit-0.25.17+spec-1.1.0/*
+Copyright: the toml_edit authors
+License: MIT or Apache-2.0
+
+Files: vendor/toml_parser-1.1.5+spec-1.1.0/*
+Copyright: the toml_parser authors
+License: MIT or Apache-2.0
+
+Files: vendor/toml_writer-1.1.3+spec-1.1.0/*
+Copyright: the toml_writer authors
+License: MIT or Apache-2.0
+
+Files: vendor/tracing-0.1.44/*
+Copyright: Eliza Weisman <eliza@buoyant.io>
+ Tokio Contributors <team@tokio.rs>
+License: MIT
+
+Files: vendor/tracing-attributes-0.1.31/*
+Copyright: Tokio Contributors <team@tokio.rs>
+ Eliza Weisman <eliza@buoyant.io>
+ David Barsky <dbarsky@amazon.com>
+License: MIT
+
+Files: vendor/tracing-core-0.1.36/*
+Copyright: Tokio Contributors <team@tokio.rs>
+License: MIT
+
+Files: vendor/tracing-journald-0.3.2/*
+Copyright: Benjamin Saunders <ben.e.saunders@gmail.com>
+License: MIT
+
+Files: vendor/tracing-log-0.2.0/*
+Copyright: Tokio Contributors <team@tokio.rs>
+License: MIT
+
+Files: vendor/tracing-subscriber-0.3.23/*
+Copyright: Eliza Weisman <eliza@buoyant.io>
+ David Barsky <me@davidbarsky.com>
+ Tokio Contributors <team@tokio.rs>
+License: MIT
+
+Files: vendor/twox-hash-2.1.5/*
+Copyright: Jake Goulding <jake.goulding@gmail.com>
+License: MIT
+
+Files: vendor/typed-path-0.13.0/*
+Copyright: Chip Senkbeil <chip@senkbeil.org>
+License: MIT or Apache-2.0
+
+Files: vendor/typenum-1.20.1/*
+Copyright: the typenum authors
+License: MIT or Apache-2.0
+
+Files: vendor/udev-0.9.3/*
+Copyright: David Cuddeback <david.cuddeback@gmail.com>
+ Victoria Brekenfeld <github@drakulix.de>
+License: MIT
+
+Files: vendor/uds_windows-1.2.1/*
+Copyright: Azure IoT Edge Devs
+ Harald Hoyer <harald@redhat.com>
+License: MIT
+
+Files: vendor/unicode-bidi-0.3.18/*
+Copyright: The Servo Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/unicode-ident-1.0.27/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: (MIT or Apache-2.0) and Unicode-3.0
+
+Files: vendor/unicode-script-0.5.9/*
+Copyright: Manish Goregaokar <manishsmail@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/unicode-segmentation-1.13.3/*
+Copyright: kwantam <kwantam@gmail.com>
+ Manish Goregaokar <manishsmail@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/unicode-vo-0.1.0/*
+Copyright: Evgeniy Reizner <razrfalcon@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/unicode-width-0.1.14/*
+Copyright: kwantam <kwantam@gmail.com>
+ Manish Goregaokar <manishsmail@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/unicode-width-0.2.2/*
+Copyright: kwantam <kwantam@gmail.com>
+ Manish Goregaokar <manishsmail@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/unicode-xid-0.2.6/*
+Copyright: erick.tryzelaar <erick.tryzelaar@gmail.com>
+ kwantam <kwantam@gmail.com>
+ Manish Goregaokar <manishsmail@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/unsafe-libyaml-norway-0.2.15/*
+Copyright: Christina Sørensen <christina@cafkafk.com>
+ David Tolnay <dtolnay@gmail.com>
+License: MIT
+
+Files: vendor/untrusted-0.9.0/*
+Copyright: Brian Smith <brian@briansmith.org>
+License: ISC
+
+Files: vendor/ureq-3.4.2/*
+Copyright: Martin Algesten <martin@algesten.se>
+ Jacob Hoffman-Andrews <ureq@hoffman-andrews.com>
+License: MIT or Apache-2.0
+
+Files: vendor/ureq-proto-0.6.5/*
+Copyright: Martin Algesten <martin@algesten.se>
+License: MIT or Apache-2.0
+
+Files: vendor/usvg-0.48.1/*
+Copyright: the usvg authors
+License: Apache-2.0 or MIT
+
+Files: vendor/utf8-zero-0.8.1/*
+Copyright: Simon Sapin <simon.sapin@exyr.org>
+ Martin Algesten <martin@algesten.se>
+License: MIT or Apache-2.0
+
+Files: vendor/utf8_iter-1.0.4/*
+Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
+License: Apache-2.0 or MIT
+
+Files: vendor/uuid-1.29.0/*
+Copyright: Ashley Mannix<ashleymannix@live.com.au>
+ Dylan DPC<dylan.dpc@gmail.com>
+ Hunar Roop Kahlon<hunar.roop@gmail.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/valuable-0.1.1/*
+Copyright: the valuable authors
+License: MIT
+
+Files: vendor/vcpkg-0.2.15/*
+Copyright: Jim McGrath <jimmc2@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/vello_common-0.3.0/*
+Copyright: the vello_common authors
+License: Apache-2.0 or MIT
+
+Files: vendor/vello_cpu-0.3.0/*
+Copyright: the vello_cpu authors
+License: Apache-2.0 or MIT
+
+Files: vendor/vello_gpu-0.3.0/*
+Copyright: the vello_gpu authors
+License: Apache-2.0 or MIT
+
+Files: vendor/vello_gpu_shaders-0.3.0/*
+Copyright: the vello_gpu_shaders authors
+License: Apache-2.0 or MIT
+
+Files: vendor/version-compare-0.2.1/*
+Copyright: Tim Visee <3a4fb3964f@sinenomine.email>
+License: MIT
+
+Files: vendor/version_check-0.9.5/*
+Copyright: Sergio Benitez <sb@sergio.bz>
+License: MIT or Apache-2.0
+
+Files: vendor/vte-0.15.0/*
+Copyright: Joe Wilm <joe@jwilm.com>
+ Christian Duerr <contact@christianduerr.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/walkdir-2.5.0/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/wasi-0.11.1+wasi-snapshot-preview1/*
+Copyright: The Cranelift Project Developers
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/wasip2-1.0.4+wasi-0.2.12/*
+Copyright: the wasip2 authors
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/wasm-bindgen-0.2.129/*
+Copyright: The wasm-bindgen Developers
+License: MIT or Apache-2.0
+
+Files: vendor/wasm-bindgen-futures-0.4.79/*
+Copyright: The wasm-bindgen Developers
+License: MIT or Apache-2.0
+
+Files: vendor/wasm-bindgen-macro-0.2.129/*
+Copyright: The wasm-bindgen Developers
+License: MIT or Apache-2.0
+
+Files: vendor/wasm-bindgen-macro-support-0.2.129/*
+Copyright: The wasm-bindgen Developers
+License: MIT or Apache-2.0
+
+Files: vendor/wasm-bindgen-shared-0.2.129/*
+Copyright: The wasm-bindgen Developers
+License: MIT or Apache-2.0
+
+Files: vendor/wayland-backend-0.3.17/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/wayland-client-0.31.15/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/wayland-protocols-0.32.13/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/wayland-protocols-misc-0.3.12/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/wayland-protocols-wlr-0.3.12/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/wayland-scanner-0.31.11/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/wayland-server-0.31.14/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/wayland-sys-0.31.11/*
+Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/web-sys-0.3.106/*
+Copyright: The wasm-bindgen Developers
+License: MIT or Apache-2.0
+
+Files: vendor/web_atoms-0.3.0/*
+Copyright: The html5ever Project Developers
+License: MIT or Apache-2.0
+
+Files: vendor/webpki-root-certs-1.0.11/*
+Copyright: the webpki-root-certs authors
+License: CDLA-Permissive-2.0
+
+Files: vendor/weezl-0.1.12/*
+Copyright: The image-rs Developers
+License: MIT or Apache-2.0
+
+Files: vendor/wesl-0.4.0/*
+Copyright: the wesl authors
+License: MIT or Apache-2.0
+
+Files: vendor/wesl-macros-0.4.0/*
+Copyright: the wesl-macros authors
+License: MIT or Apache-2.0
+
+Files: vendor/wgpu-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/wgpu-core-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/wgpu-core-deps-windows-linux-android-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/wgpu-hal-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/wgpu-naga-bridge-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/wgpu-types-30.0.1/*
+Copyright: gfx-rs developers
+License: MIT or Apache-2.0
+
+Files: vendor/wgsl-parse-0.4.0/*
+Copyright: the wgsl-parse authors
+License: MIT or Apache-2.0
+
+Files: vendor/wgsl-types-0.4.0/*
+Copyright: the wgsl-types authors
+License: MIT or Apache-2.0
+
+Files: vendor/winapi-util-0.1.11/*
+Copyright: Andrew Gallant <jamslam@gmail.com>
+License: Unlicense or MIT
+
+Files: vendor/windows-0.62.2/*
+Copyright: the windows authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-collections-0.3.2/*
+Copyright: the windows-collections authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-core-0.62.2/*
+Copyright: the windows-core authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-future-0.3.2/*
+Copyright: the windows-future authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-implement-0.60.2/*
+Copyright: the windows-implement authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-interface-0.59.3/*
+Copyright: the windows-interface authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-link-0.2.1/*
+Copyright: the windows-link authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-numerics-0.3.1/*
+Copyright: the windows-numerics authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-result-0.4.1/*
+Copyright: the windows-result authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-strings-0.5.1/*
+Copyright: the windows-strings authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-sys-0.45.0/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows-sys-0.48.0/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows-sys-0.52.0/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows-sys-0.59.0/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows-sys-0.61.2/*
+Copyright: the windows-sys authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows-targets-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows-targets-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows-targets-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows-threading-0.2.1/*
+Copyright: the windows-threading authors
+License: MIT or Apache-2.0
+
+Files: vendor/windows_aarch64_gnullvm-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_aarch64_gnullvm-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_aarch64_gnullvm-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_aarch64_msvc-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_aarch64_msvc-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_aarch64_msvc-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_i686_gnu-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_i686_gnu-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_i686_gnu-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_i686_gnullvm-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_i686_msvc-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_i686_msvc-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_i686_msvc-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_gnu-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_gnu-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_gnu-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_gnullvm-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_gnullvm-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_gnullvm-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_msvc-0.42.2/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_msvc-0.48.5/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/windows_x86_64_msvc-0.52.6/*
+Copyright: Microsoft
+License: MIT or Apache-2.0
+
+Files: vendor/winnow-0.7.15/*
+Copyright: the winnow authors
+License: MIT
+
+Files: vendor/winnow-1.0.4/*
+Copyright: the winnow authors
+License: MIT
+
+Files: vendor/wit-bindgen-0.57.1/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
+
+Files: vendor/write-fonts-0.48.1/*
+Copyright: the write-fonts authors
+License: MIT or Apache-2.0
+
+Files: vendor/writeable-0.6.4/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/xattr-1.7.0/*
+Copyright: Steven Allen <steven@stebalien.com>
+License: MIT or Apache-2.0
+
+Files: vendor/xkbcommon-0.8.0/*
+Copyright: Remi THEBAULT <remi.thebault@gmail.com>
+License: MIT
+
+Files: vendor/xkbcommon-0.9.0/*
+Copyright: Remi THEBAULT <remi.thebault@gmail.com>
+License: MIT
+
+Files: vendor/xkeysym-0.2.1/*
+Copyright: John Nunley <jtnunley01@gmail.com>
+License: MIT or Apache-2.0 or Zlib
+
+Files: vendor/xmlwriter-0.1.0/*
+Copyright: Evgeniy Reizner <razrfalcon@gmail.com>
+License: MIT
+
+Files: vendor/xmp-writer-0.3.3/*
+Copyright: Martin Haug <mhaug@live.de>
+License: MIT or Apache-2.0
+
+Files: vendor/yeslogic-fontconfig-sys-6.0.1/*
+Copyright: Austin Bonander <austin.bonander@gmail.com>
+ The Servo Project Developers
+ YesLogic Pty. Ltd. <info@yeslogic.com>
+License: MIT
+
+Files: vendor/yoke-0.8.4/*
+Copyright: Manish Goregaokar <manishsmail@gmail.com>
+License: Unicode-3.0
+
+Files: vendor/yoke-derive-0.8.4/*
+Copyright: Manish Goregaokar <manishsmail@gmail.com>
+License: Unicode-3.0
+
+Files: vendor/zbus-5.19.0/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zbus-lockstep-0.5.2/*
+Copyright: Luuk van der Duim <luukvanderduim@gmail.com>
+ Tait Hoyem<tait@tait.tech>
+License: MIT
+
+Files: vendor/zbus-lockstep-macros-0.5.2/*
+Copyright: Luuk van der Duim <luukvanderduim@gmail.com>
+License: MIT
+
+Files: vendor/zbus_macros-5.19.0/*
+Copyright: Marc-André Lureau <marcandre.lureau@redhat.com>
+ Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zbus_names-4.3.5/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zbus_xml-5.2.1/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zcheapstr-1.1.0/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zerocopy-0.8.63/*
+Copyright: the zerocopy authors
+License: BSD-2-Clause or Apache-2.0 or MIT
+
+Files: vendor/zerocopy-derive-0.8.63/*
+Copyright: the zerocopy-derive authors
+License: BSD-2-Clause or Apache-2.0 or MIT
+
+Files: vendor/zerofrom-0.1.8/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/zerofrom-derive-0.1.8/*
+Copyright: Manish Goregaokar <manishsmail@gmail.com>
+License: Unicode-3.0
+
+Files: vendor/zeroize-1.8.1/*
+Copyright: The RustCrypto Project Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/zeroize_derive-1.5.0/*
+Copyright: The RustCrypto Project Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/zerotrie-0.2.5/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/zerovec-0.11.9/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/zerovec-derive-0.11.7/*
+Copyright: Manish Goregaokar <manishsmail@gmail.com>
+License: Unicode-3.0
+
+Files: vendor/zgvariant-1.2.0/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zgvariant_derive-1.2.0/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zip-9.1.3/*
+Copyright: Mathijs van de Nes <git@mathijs.vd-nes.nl>
+ Marli Frost <marli@frost.red>
+ Ryan Levick <ryan.levick@gmail.com>
+ Chris Hennick <hennickc@amazon.com>
+License: MIT
+
+Files: vendor/zlib-rs-0.6.8/*
+Copyright: the zlib-rs authors
+License: Zlib
+
+Files: vendor/zmij-1.0.23/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT
+
+Files: vendor/zune-core-0.5.3/*
+Copyright: the zune-core authors
+License: MIT or Apache-2.0 or Zlib
+
+Files: vendor/zune-jpeg-0.5.15/*
+Copyright: caleb <etemesicaleb@gmail.com>
+License: MIT or Apache-2.0 or Zlib
+
+Files: vendor/zvariant-5.15.1/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zvariant_derive-5.15.1/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+License: MIT
+
+Files: vendor/zvariant_utils-4.2.0/*
+Copyright: Zeeshan Ali Khan <zeeshanak@gnome.org>
+ turbocooler <turbocooler@cocaine.ninja>
+License: MIT
+
+License: 0BSD
+ Permission to use, copy, modify, and/or distribute this software for any
+ purpose with or without fee is hereby granted.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+ REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+ OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ PERFORMANCE OF THIS SOFTWARE.
+
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ use this file except in compliance with the License.
+ .
+ On Debian systems, the full text of the Apache License, Version 2.0 can be
+ found in /usr/share/common-licenses/Apache-2.0.
+
+License: Apache-2.0 with LLVM exception
+ On Debian systems, the full text of the Apache License, Version 2.0 can be
+ found in /usr/share/common-licenses/Apache-2.0.
+ .
+ --- LLVM Exceptions to the Apache 2.0 License ----
+ .
+ As an exception, if, as a result of your compiling your source code, portions
+ of this Software are embedded into an Object form of such source code, you
+ may redistribute such embedded portions in such Object form without complying
+ with the conditions of Sections 4(a), 4(b) and 4(d) of the License.
+ .
+ In addition, if you combine or link compiled forms of this Software with
+ software that is licensed under the GPLv2 ("Combined Software") and if a
+ court of competent jurisdiction determines that the patent provision (Section
+ 3), the indemnity provision (Section 9) or other Section of the License
+ conflicts with the conditions of the GPLv2, you may retroactively and
+ prospectively choose to deem waived or otherwise exclude such Section(s) of
+ the License, but only in their entirety and only with respect to the Combined
+ Software.
+
+License: BSD-2-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+ .
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the
+    distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+ .
+ 1. Redistributions of source code must retain the above copyright
+ notice, this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright
+ notice, this list of conditions and the following disclaimer in the
+ documentation and/or other materials provided with the distribution.
+ .
+ 3. Neither the name of the copyright holder nor the names of its
+ contributors may be used to endorse or promote products derived from
+ this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+ TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSL-1.0
+ On Debian systems, the full text of the Boost Software License 1.0 can be
+ found in /usr/share/common-licenses/BSL-1.0.
+
+License: CC-BY-SA-4.0
+ On Debian systems, the full text of the Creative Commons Attribution-ShareAlike 4.0
+ International licence can be found in /usr/share/common-licenses/CC-BY-SA-4.0.
+
+License: CC0-1.0
+ On Debian systems, the full text of the Creative Commons CC0 1.0 Universal
+ Public Domain Dedication can be found in /usr/share/common-licenses/CC0-1.0.
+
+License: CDLA-Permissive-2.0
+ # Community Data License Agreement - Permissive - Version 2.0
+ .
+ This is the Community Data License Agreement - Permissive, Version
+ 2.0 (the "agreement"). Data Provider(s) and Data Recipient(s) agree
+ as follows:
+ .
+ ## 1. Provision of the Data
+ .
+ 1.1. A Data Recipient may use, modify, and share the Data made
+ available by Data Provider(s) under this agreement if that Data
+ Recipient follows the terms of this agreement.
+ .
+ 1.2. This agreement does not impose any restriction on a Data
+ Recipient's use, modification, or sharing of any portions of the
+ Data that are in the public domain or that may be used, modified,
+ or shared under any other legal exception or limitation.
+ .
+ ## 2. Conditions for Sharing Data
+ .
+ 2.1. A Data Recipient may share Data, with or without modifications, so
+ long as the Data Recipient makes available the text of this agreement
+ with the shared Data.
+ .
+ ## 3. No Restrictions on Results
+ .
+ 3.1. This agreement does not impose any restriction or obligations
+ with respect to the use, modification, or sharing of Results.
+ .
+ ## 4. No Warranty; Limitation of Liability
+ .
+ 4.1. All Data Recipients receive the Data subject to the following
+ terms:
+ .
+ THE DATA IS PROVIDED ON AN "AS IS" BASIS, WITHOUT REPRESENTATIONS,
+ WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED
+ INCLUDING, WITHOUT LIMITATION, ANY WARRANTIES OR CONDITIONS OF TITLE,
+ NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+ .
+ NO DATA PROVIDER SHALL HAVE ANY LIABILITY FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING
+ WITHOUT LIMITATION LOST PROFITS), HOWEVER CAUSED AND ON ANY THEORY OF
+ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE DATA OR RESULTS,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+ .
+ ## 5. Definitions
+ .
+ 5.1. "Data" means the material received by a Data Recipient under
+ this agreement.
+ .
+ 5.2. "Data Provider" means any person who is the source of Data
+ provided under this agreement and in reliance on a Data Recipient's
+ agreement to its terms.
+ .
+ 5.3. "Data Recipient" means any person who receives Data directly
+ or indirectly from a Data Provider and agrees to the terms of this
+ agreement.
+ .
+ 5.4. "Results" means any outcome obtained by computational analysis
+ of Data, including for example machine learning models and models'
+ insights.
+
+License: ISC
+ Permission to use, copy, modify, and/or distribute this software for any
+ purpose with or without fee is hereby granted, provided that the above
+ copyright notice and this permission notice appear in all copies.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+License: LGPL-2.1-or-later
+ This library is free software; you can redistribute it and/or modify it under the
+ terms of the GNU Lesser General Public License as published by the Free Software
+ Foundation; either version 2.1 of the License, or (at your option) any later version.
+ .
+ On Debian systems, the full text of the GNU Lesser General Public License, Version
+ 2.1 can be found in /usr/share/common-licenses/LGPL-2.1.
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+
+License: MIT-0
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this
+ software and associated documentation files (the "Software"), to deal in the Software
+ without restriction, including without limitation the rights to use, copy, modify,
+ merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+ permit persons to whom the Software is furnished to do so.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+ PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+License: MPL-2.0
+ On Debian systems, the full text of the Mozilla Public License, Version 2.0 can be
+ found in /usr/share/common-licenses/MPL-2.0.
+
+License: OFL-1.1
+ On Debian systems, the full text of the SIL Open Font License, Version 1.1
+ can be found in /usr/share/common-licenses/OFL-1.1.
+
+License: Unicode-3.0
+ NOTICE TO USER: Carefully read the following legal agreement. BY
+ DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING DATA FILES, AND/OR
+ SOFTWARE, YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
+ TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT
+ DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE THE DATA FILES OR SOFTWARE.
+ .
+ Permission is hereby granted, free of charge, to any person obtaining a
+ copy of data files and any associated documentation (the "Data Files") or
+ software and any associated documentation (the "Software") to deal in the
+ Data Files or Software without restriction, including without limitation
+ the rights to use, copy, modify, merge, publish, distribute, and/or sell
+ copies of the Data Files or Software, and to permit persons to whom the
+ Data Files or Software are furnished to do so, provided that either (a)
+ this copyright and permission notice appear with all copies of the Data
+ Files or Software, or (b) this copyright and permission notice appear in
+ associated Documentation.
+ .
+ THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+ KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+ THIRD PARTY RIGHTS.
+ .
+ IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE
+ BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,
+ OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+ WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA
+ FILES OR SOFTWARE.
+ .
+ Except as contained in this notice, the name of a copyright holder shall
+ not be used in advertising or otherwise to promote the sale, use or other
+ dealings in these Data Files or Software without prior written
+ authorization of the copyright holder.
+
+License: Unlicense
+ This is free and unencumbered software released into the public domain.
+ .
+ Anyone is free to copy, modify, publish, use, compile, sell, or
+ distribute this software, either in source code form or as a compiled
+ binary, for any purpose, commercial or non-commercial, and by any
+ means.
+ .
+ In jurisdictions that recognize copyright laws, the author or authors
+ of this software dedicate any and all copyright interest in the
+ software to the public domain. We make this dedication for the benefit
+ of the public at large and to the detriment of our heirs and
+ successors. We intend this dedication to be an overt act of
+ relinquishment in perpetuity of all present and future rights to this
+ software under copyright law.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ OTHER DEALINGS IN THE SOFTWARE.
+ .
+ For more information, please refer to <http://unlicense.org/>
+
+License: Zlib
+ This software is provided 'as-is', without any express or implied warranty. In
+ no event will the authors be held liable for any damages arising from the use of
+ this software.
+ .
+ Permission is granted to anyone to use this software for any purpose, including
+ commercial applications, and to alter it and redistribute it freely, subject to
+ the following restrictions:
+ .
+ 1. The origin of this software must not be misrepresented; you must not claim
+    that you wrote the original software. If you use this software in a product,
+    an acknowledgment in the product documentation would be appreciated but is
+    not required.
+ .
+ 2. Altered source versions must be plainly marked as such, and must not be
+    misrepresented as being the original software.
+ .
+ 3. This notice may not be removed or altered from any source distribution.
+
+License: bzip2-1.0.6
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ .
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ .
+ 2. The origin of this software must not be misrepresented; you must
+    not claim that you wrote the original software.  If you use this
+    software in a product, an acknowledgment in the product
+    documentation would be appreciated but is not required.
+ .
+ 3. Altered source versions must be plainly marked as such, and must
+    not be misrepresented as being the original software.
+ .
+ 4. The name of the author may not be used to endorse or promote
+    products derived from this software without specific prior written
+    permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
+ OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

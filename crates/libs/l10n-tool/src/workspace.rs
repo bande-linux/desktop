@@ -10,7 +10,8 @@ use proc_macro2::TokenStream;
 use serde_json::Value;
 
 const RUNTIME: &str = "bande-l10n";
-const DEVELOPMENT_ASSET: &str = "target/release/l10n/development";
+const PROGRAMS: &str = "debian/build/bin/";
+const DEVELOPMENT_CATALOGS: &str = "debian/build/l10n/development";
 
 #[derive(Debug, Clone)]
 pub struct Key {
@@ -48,7 +49,6 @@ impl Crate {
 
 pub struct Program {
     pub name: String,
-    pub package: Option<String>,
     closure: BTreeSet<String>,
 }
 
@@ -147,26 +147,14 @@ impl Workspace {
             .filter_map(Value::as_str)
             .filter_map(|id| by_id.get(id).map(|package| (id, *package)))
             .collect::<Vec<_>>();
-        let assets = members
-            .iter()
-            .flat_map(|(_, package)| {
-                let owner = package["name"].as_str().unwrap_or_default().to_owned();
-                package["metadata"]["deb"]["assets"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(move |asset| {
-                        Some((owner.clone(), asset.get(0)?.as_str()?.to_owned()))
-                    })
-            })
-            .collect::<Vec<_>>();
-        let shipped = assets
+        let installed = metadata["workspace_root"]
+            .as_str()
+            .map_or_else(|| Ok(Vec::new()), |root| installed(Path::new(root)))
+            .map_err(|problem| vec![problem])?;
+        let shipped = installed
             .iter()
             .filter_map(|(owner, source)| {
-                Some((
-                    source.strip_prefix("target/release/")?.to_owned(),
-                    owner.clone(),
-                ))
+                Some((source.strip_prefix(PROGRAMS)?.to_owned(), owner.clone()))
             })
             .collect::<BTreeMap<_, _>>();
         let mut programs = Vec::new();
@@ -179,7 +167,7 @@ impl Workspace {
                     continue;
                 };
                 let owner = shipped.get(name);
-                if !assets.is_empty() && owner.is_none() {
+                if !installed.is_empty() && owner.is_none() {
                     continue;
                 }
                 let mut closure = BTreeSet::new();
@@ -193,19 +181,18 @@ impl Workspace {
                 }
                 let program = Program {
                     name: name.to_owned(),
-                    package: owner.cloned(),
                     closure,
                 };
                 let has_keys = crates
                     .iter()
                     .any(|krate| !krate.keys.is_empty() && program.closure.contains(&krate.name));
                 if let Some(owner) = owner.filter(|_| has_keys) {
-                    let asset = format!("{DEVELOPMENT_ASSET}/{name}/*");
-                    if !assets
+                    let source = format!("{DEVELOPMENT_CATALOGS}/{name}/*");
+                    if !installed
                         .iter()
-                        .any(|(holder, source)| holder == owner && *source == asset)
+                        .any(|(holder, installed)| holder == owner && *installed == source)
                     {
-                        packaging.push(format!("{owner}: ship {name}'s English with the asset [\"{asset}\", \"usr/share/bande/l10n/{name}/\", \"644\"]"));
+                        packaging.push(format!("debian/{owner}.install: ship {name}'s English with the line \"{source} usr/share/bande/l10n/{name}/\""));
                     }
                 }
                 programs.push(program);
@@ -322,4 +309,32 @@ fn keys_of(folder: &Path, problems: &mut Vec<String>) -> Vec<Key> {
         }
     }
     keys
+}
+
+fn installed(root: &Path) -> Result<Vec<(String, String)>, String> {
+    let folder = root.join("debian");
+    let entries = match std::fs::read_dir(&folder) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("{}: {error}", folder.display())),
+    };
+    let mut found = Vec::new();
+    for entry in entries {
+        let path = entry
+            .map_err(|error| format!("{}: {error}", folder.display()))?
+            .path();
+        let Some(owner) = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_suffix(".install"))
+        else {
+            continue;
+        };
+        let text = std::fs::read_to_string(&path)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        found.extend(text.lines().filter_map(|line| {
+            Some((owner.to_owned(), line.split_whitespace().next()?.to_owned()))
+        }));
+    }
+    Ok(found)
 }

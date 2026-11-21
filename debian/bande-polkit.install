@@ -1,0 +1,3 @@
+debian/build/bin/bande-polkit-agent usr/bin/
+crates/services/polkit/data/bande-polkit-agent.service usr/lib/systemd/user/
+debian/build/l10n/development/bande-polkit-agent/* usr/share/bande/l10n/bande-polkit-agent/

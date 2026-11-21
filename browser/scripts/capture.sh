@@ -12,33 +12,53 @@ report() {
     echo "capture: $(grep -cE ' IP6? ' "$log" || true) packets"
     grep -oE '(A|AAAA|HTTPS)\? [a-z0-9.-]+' "$log" | sed 's/.*? //' | sort | uniq -c | sort -rn
 }
+start_dump() {
+    local interface=$1 fifo line err; shift
+    fifo=$(mktemp -u)
+    mkfifo "$fifo"
+    : > "$log.err"
+    tcpdump -Z root -l -n --immediate-mode -i "$interface" -s 512 "$@" > "$log" 2> "$fifo" &
+    dump=$!
+    exec {err}< "$fifo"
+    rm "$fifo"
+    while IFS= read -r line <&"$err"; do
+        printf '%s\n' "$line" >> "$log.err"
+        [[ $line != *"listening on"* ]] || break
+    done
+    cat <&"$err" >> "$log.err" &
+    exec {err}<&-
+    [[ $line == *"listening on"* ]] || { cat "$log.err" >&2; return 1; }
+}
+stop_dump() {
+    kill "$dump"
+    wait
+}
+export -f report start_dump stop_dump
 if [ -n "$live" ]; then
-    unshare --net sleep infinity &
-    holder=$!
-    sleep 0.5
-    target=$(pgrep -P "$holder" sleep || echo "$holder")
-    slirp4netns --configure --mtu=65520 "$target" tap0 > "$log.slirp" 2>&1 &
+    coproc holder { exec unshare --net bash -c 'echo $$; exec sleep infinity'; }
+    read -r target <&"${holder[0]}"
+    ready=$(mktemp -u)
+    mkfifo "$ready"
+    slirp4netns --configure --mtu=65520 --ready-fd=3 "$target" tap0 > "$log.slirp" 2>&1 3> "$ready" &
     slirp=$!
-    sleep 1
+    read -r -n 1 < "$ready" || { cat "$log.slirp" >&2; kill "$target"; exit 1; }
+    rm "$ready"
     echo "nameserver 1.1.1.1" > /etc/resolv.conf
     set +e
     nsenter -t "$target" -n bash -c '
+        log=$0 seconds=$1; shift 2
         ip link set lo up
-        tcpdump -Z root -l -n -i tap0 -s 512 "port 53" > "$0" 2> "$0.err" &
-        dump=$!
-        sleep 1
-        timeout "$1" "${@:2}"
+        start_dump tap0 "port 53" || exit 1
+        timeout "$seconds" "$@"
         status=$?
-        sleep 1
-        kill $dump
+        stop_dump
         exit $status
     ' "$log" "$seconds" "$@"
     status=$?
-    kill "$slirp" "$holder" 2>/dev/null
+    kill "$slirp" "$target" 2>/dev/null
     report
     exit "$status"
 fi
-export -f report
 exec unshare --net bash -c '
     seconds=$0 log=$1; shift
     ip link set lo up
@@ -47,16 +67,9 @@ exec unshare --net bash -c '
     ip link set dummy0 up
     ip route add default via 10.0.2.2
     echo "nameserver 10.0.2.3" > /etc/resolv.conf
-    tcpdump -Z root -l -n -i dummy0 -s 512 -v > "$log" 2> "$log.err" &
-    dump=$!
-    sleep 1
-    "$@" &
-    app=$!
-    sleep "$seconds"
-    kill $app 2>/dev/null || true
-    sleep 1
-    kill $dump
-    wait 2>/dev/null || true
+    start_dump dummy0 -v || exit 1
+    timeout "$seconds" "$@"
+    stop_dump
     report
     ! grep -E " IP6? " "$log" | grep -vqE "ICMP6|igmp|ff02::"
 ' "$seconds" "$log" "$@"

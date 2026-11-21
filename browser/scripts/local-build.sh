@@ -12,7 +12,6 @@ debver=$1 dir=$(realpath -m "$2"); shift 2
 repo=$(dirname "$(dirname "$(realpath "$0")")")
 version=${BROWSER_VERSION:-$("$repo/scripts/version.sh" "$debver")}
 steps=("$@"); [ ${#steps[@]} -gt 0 ] || steps=(chroot fetch prepare compile)
-# The package version ends in the chroot's Debian release suffix (debian-release.sh).
 package_version() {
     [ -n "${BROWSER_VERSION:-}" ] && { echo "$version"; return; }
     echo "$version$(OS_RELEASE=$dir/chroot/etc/os-release DISTRO_INFO_CSV=$dir/chroot/usr/share/distro-info/debian.csv \

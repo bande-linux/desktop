@@ -6,12 +6,14 @@ deb=$(realpath "$1")
 repo=$(dirname "$(dirname "$(realpath "$0")")")
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends ca-certificates tcpdump iproute2 python3 dbus \
+apt-get install -y -qq --no-install-recommends ca-certificates curl tcpdump iproute2 python3 dbus \
     mesa-vulkan-drivers > /dev/null
-install -m 644 "$repo/scripts/bande-archive-key.asc" /usr/share/keyrings/bande-archive-key.asc
-printf 'Types: deb\nURIs: https://bande-linux.github.io/apt\nSuites: %s\nComponents: main\nSigned-By: /usr/share/keyrings/bande-archive-key.asc\n' \
-    "$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release | tr -d '"')" \
-    > /etc/apt/sources.list.d/bande.sources
+suite=$(. /etc/os-release && echo "$VERSION_CODENAME")
+release=https://github.com/bande-linux/apt/releases/latest/download
+sources=$(mktemp -d)
+curl -fsSL -o "$sources/bande-archive-keyring.deb" "$release/bande-archive-keyring.deb"
+curl -fsSL -o "$sources/bande-apt-source-$suite.deb" "$release/bande-apt-source-$suite.deb"
+apt-get install -y -qq "$sources/bande-archive-keyring.deb" "$sources/bande-apt-source-$suite.deb" > /dev/null
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends bande-compositor bande-config xdg-desktop-portal-bande "$deb" > /dev/null
 profile=$(mktemp -d)

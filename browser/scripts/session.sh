@@ -17,17 +17,28 @@ export HOME=${HOME:-/root} XDG_CONFIG_HOME=${TEST_CONFIG:-$run/config} XDG_DATA_
 mkdir -p "$XDG_CONFIG_HOME"
 exec dbus-run-session -- bash -c '
     run=$0
-    bande-compositor --headless > "$run/compositor.out" 2> "$run/compositor.err" &
-    for _ in $(seq 100); do grep -q "^WAYLAND_DISPLAY=" "$run/compositor.out" 2>/dev/null && break; sleep 0.2; done
-    display=$(grep "^WAYLAND_DISPLAY=" "$run/compositor.out") || { cat "$run/compositor.err" >&2; exit 1; }
+    mkfifo "$run/compositor.pipe"
+    bande-compositor --headless > "$run/compositor.pipe" 2> "$run/compositor.err" &
+    compositor=$!
+    exec {out}< "$run/compositor.pipe"
+    rm "$run/compositor.pipe"
+    display=
+    while IFS= read -r -t 20 line <&"$out"; do
+        printf "%s\n" "$line" >> "$run/compositor.out"
+        [[ $line != WAYLAND_DISPLAY=* ]] || { display=$line; break; }
+    done
+    [ -n "$display" ] || { cat "$run/compositor.err" >&2; exit 1; }
+    cat <&"$out" >> "$run/compositor.out" &
+    exec {out}<&-
     export "$display"
     bande-config > "$run/config.log" 2>&1 &
+    config=$!
     /usr/libexec/xdg-desktop-portal-bande > "$run/portal.log" 2>&1 &
+    portal=$!
     set +e
     "$@"
     status=$?
-    kill $(jobs -p) 2>/dev/null
-    sleep 1
-    kill -9 $(jobs -p) 2>/dev/null
+    kill "$compositor" "$config" "$portal" 2>/dev/null
+    wait
     exit $status
 ' "$run" "$@"

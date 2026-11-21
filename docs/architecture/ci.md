@@ -95,7 +95,7 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   is there for `dpkg --print-architecture` at that version with its `-dbgsym`, each program
   stripped to its `.gnu_debugdata`, the D-Bus activation files, the user units, the portal
   backend's registration, the login session, the pointers and the English catalogs, that
-  `bande-desktop` pins its packages at the build's version, depends on `bande-greeter |
+  `bande-desktop` asks for its packages at the build's version, depends on `bande-greeter |
   x-display-manager`, `pipewire`, `wireplumber` and `pipewire-pulse`, recommends
   `bande-greeter`, `bande-reporter` and `bande-crash-reports` and only Bande packages built here,
   and that the language packs hold only catalogs; then `lintian --fail-on error,warning` on the

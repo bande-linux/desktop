@@ -169,27 +169,27 @@ grep -qx 'Name=org.freedesktop.impl.portal.desktop.bande' "$service"
 test -x "$root$(sed -n 's/^Exec=//p' "$service")"
 grep -qx 'default=bande;' "$root/usr/share/xdg-desktop-portal/x-bande-portals.conf"
 
-echo "== bande-desktop pins its packages at $version"
+echo "== bande-desktop asks for its packages at $version"
 all() { echo "$debs/$1_${version}_all.deb"; }
 desktop() { dpkg-deb --field "$(all bande-desktop)" "$1"; }
-desktop Depends | grep -qF "bande-compositor (= $version)"
-desktop Recommends | grep -qF "bande-files (= $version)"
+desktop Depends | grep -qF "bande-compositor (>= $version)"
+desktop Recommends | grep -qF "bande-files (>= $version)"
 dpkg-deb --extract "$(all bande-desktop)" "$scratch/desktop"
 grep -qx 'inode/directory=org.bande.Files.desktop;' "$scratch/desktop/usr/share/applications/x-bande-mimeapps.list"
 
 echo "== bande-desktop brings a login, sound and the system around the desktop"
 relation() { desktop "$1" | tr ',' '\n' | sed 's/^ *//' | grep -qxF "$2"; }
-relation Depends "bande-greeter (= $version) | x-display-manager"
+relation Depends "bande-greeter (>= $version) | x-display-manager"
 for depended in pipewire wireplumber pipewire-pulse; do
     relation Depends "$depended"
 done
-for recommended in "bande-greeter (= $version)" "bande-reporter (= $version)" "bande-crash-reports (= $version)"; do
+for recommended in "bande-greeter (>= $version)" "bande-reporter (>= $version)" "bande-crash-reports (>= $version)"; do
     relation Recommends "$recommended"
 done
 
 echo "== bande-desktop recommends only packages built here at $version, or Debian's"
 desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | while read -r package relation; do
-    [ "$relation" = "(= $version)" ] || { echo "bande-desktop recommends $package $relation"; exit 1; }
+    [ "$relation" = "(>= $version)" ] || { echo "bande-desktop recommends $package $relation"; exit 1; }
     printf '%s\n' "${packages[@]}" "${independent[@]}" | grep -qxF "$package" || { echo "$package is not built here"; exit 1; }
 done
 

@@ -28,7 +28,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   presence of `vendor/` disagree. Most crates Bande uses are in Debian; `ci/deb/debian-gap.py`
   reports the rest ([ci.md](ci.md#jobs)).
 - **`debian/control`** holds every binary package; siblings are pinned at `(=
-  ${binary:Version})` (`${source:Version}` for the architecture-independent icon theme).
+  ${binary:Version})`, the architecture-independent ones at `${source:Version}` (`bande-desktop`
+  asks for the others at `>= ${source:Version}`, which a binNMU of them still meets).
   `debian/<package>.install` lists what each ships: the programs from `debian/build/bin`
   (the cargo output), files from the crates' `data/` and `data/` at the root under their
   installed names, and what `debian/rules` generates in `debian/build`: the pointers

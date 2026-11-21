@@ -1922,6 +1922,7 @@ name = "bande-vm"
 version = "0.2.0"
 dependencies = [
  "bande-https",
+ "bande-l10n",
  "bande-xdg",
  "fatfs",
  "libc",

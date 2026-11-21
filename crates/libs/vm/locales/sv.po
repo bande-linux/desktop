@@ -1,0 +1,41 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "The download is damaged: its checksum is {actual}, not {expected}."
+msgstr "Hämtningen är skadad: kontrollsumman är {actual}, inte {expected}."
+
+msgid "{file} is not in the vendor’s checksums."
+msgstr "{file} finns inte bland utgivarens kontrollsummor."
+
+msgid "{what} is not available."
+msgstr "{what} är inte tillgängligt."
+
+msgid "The vendor’s checksums are not signed correctly: {message}"
+msgstr "Utgivarens kontrollsummor är inte korrekt signerade: {message}"
+
+msgid "Shut the machine down first."
+msgstr "Stäng av maskinen först."
+
+msgid "A machine with snapshots can only be cloned in full."
+msgstr "En maskin med ögonblicksbilder kan bara klonas helt."
+
+msgid "Canceled."
+msgstr "Avbrutet."
+
+msgid "Velox needs pkexec to ask for an administrator’s password. Install the pkexec package."
+msgstr "Velox behöver pkexec för att fråga efter en administratörs lösenord. Installera paketet pkexec."
+
+msgid "The Velox helper is missing. Reinstall Velox."
+msgstr "Velox hjälpprogram saknas. Installera om Velox."
+
+msgid "The administrator’s password was not given, or this account is not allowed to do this."
+msgstr "Administratörslösenordet angavs inte, eller så får det här kontot inte göra detta."
+
+msgid "The Velox helper refused: {reason}"
+msgstr "Velox hjälpprogram vägrade: {reason}"

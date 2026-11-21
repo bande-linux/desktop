@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitStatus;
 
 use bande_https::ureq;
+use bande_l10n::tr;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -58,34 +59,65 @@ impl fmt::Display for Error {
             Self::Http(error) => write!(f, "download: {error}"),
             Self::Qmp { class, description } => write!(f, "QEMU: {description} ({class})"),
             Self::Protocol(message) => write!(f, "QMP protocol: {message}"),
-            Self::Checksum { expected, actual } => {
-                write!(f, "checksum mismatch: expected {expected}, got {actual}")
-            }
-            Self::NotListed(file) => write!(f, "{file} is not in the vendor checksums"),
+            Self::Checksum { expected, actual } => f.write_str(&tr!(
+                "The download is damaged: its checksum is {actual}, not {expected}.",
+                actual = actual.clone(),
+                expected = expected.clone()
+            )),
+            Self::NotListed(file) => f.write_str(&tr!(
+                "{file} is not in the vendor’s checksums.",
+                file = file.clone()
+            )),
             Self::Tool {
                 program,
                 status,
                 stderr,
             } => write!(f, "{program} failed ({status}): {}", stderr.trim()),
             Self::Unit { unit, result } => write!(f, "{unit} did not start: {result}"),
-            Self::Missing(what) => write!(f, "{what} is not available"),
+            Self::Missing(what) => {
+                f.write_str(&tr!("{what} is not available.", what = what.clone()))
+            }
             Self::NotUtf8(path) => write!(f, "{} is not a UTF-8 path", path.display()),
-            Self::Signature(message) => {
-                write!(
-                    f,
-                    "the vendor's checksums are not signed correctly: {message}"
-                )
+            Self::Signature(message) => f.write_str(&tr!(
+                "The vendor’s checksums are not signed correctly: {message}",
+                message = message.clone()
+            )),
+            Self::NeedsShutDown => f.write_str(&tr!("Shut the machine down first.")),
+            Self::HasSnapshots => f.write_str(&tr!(
+                "A machine with snapshots can only be cloned in full."
+            )),
+            Self::Cancelled => f.write_str(&tr!("Canceled.")),
+            Self::Helper(HelperFailure::NoPkexec) => f.write_str(&tr!(
+                "Velox needs pkexec to ask for an administrator’s password. Install the pkexec package."
+            )),
+            Self::Helper(HelperFailure::NoHelper) => {
+                f.write_str(&tr!("The Velox helper is missing. Reinstall Velox."))
             }
-            Self::NeedsShutDown => write!(f, "shut the machine down first"),
-            Self::HasSnapshots => {
-                write!(f, "a machine with snapshots can only be cloned in full")
-            }
-            Self::Cancelled => f.write_str("cancelled"),
-            Self::Helper(HelperFailure::NoPkexec) => f.write_str("pkexec is not installed"),
-            Self::Helper(HelperFailure::NoHelper) => f.write_str("velox-helper is not installed"),
-            Self::Helper(HelperFailure::NotAuthorized) => f.write_str("not authorized"),
-            Self::Helper(HelperFailure::Refused(reason)) => f.write_str(reason),
+            Self::Helper(HelperFailure::NotAuthorized) => f.write_str(&tr!(
+                "The administrator’s password was not given, or this account is not allowed to do this."
+            )),
+            Self::Helper(HelperFailure::Refused(reason)) => f.write_str(&tr!(
+                "The Velox helper refused: {reason}",
+                reason = reason.clone()
+            )),
         }
+    }
+}
+
+impl Error {
+    /// Whether the text says what went wrong in terms the user can act on, rather than a technical detail for the log.
+    pub fn explains(&self) -> bool {
+        matches!(
+            self,
+            Self::Checksum { .. }
+                | Self::NotListed(_)
+                | Self::Missing(_)
+                | Self::Signature(_)
+                | Self::NeedsShutDown
+                | Self::HasSnapshots
+                | Self::Cancelled
+                | Self::Helper(_)
+        )
     }
 }
 

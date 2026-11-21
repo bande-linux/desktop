@@ -13,8 +13,8 @@ use std::time::{Duration, SystemTime};
 
 use bande_l10n::tr;
 use bande_vm::{
-    ActiveState, CloudImage, CloudInit, Forward, HelperFailure, Host, ImageStore, Installer,
-    Library, Machine, Manifest, Network, NewClone, NewMachine, Qmp, Share, Units, UsbDevice,
+    ActiveState, CloudImage, CloudInit, Forward, Host, ImageStore, Installer, Library, Machine,
+    Manifest, Network, NewClone, NewMachine, Qmp, Share, Units, UsbDevice,
 };
 use bande_watch::{Changes, FolderWatch};
 use serde::{Deserialize, Serialize};
@@ -175,22 +175,22 @@ struct Shared {
 }
 
 fn describe(error: bande_vm::Error) -> String {
-    match error {
-        bande_vm::Error::Helper(failure) => match failure {
-            HelperFailure::NoPkexec => tr!(
-                "Velox needs pkexec to ask for an administrator’s password. Install the pkexec package."
-            ),
-            HelperFailure::NoHelper => tr!("The Velox helper is missing. Reinstall Velox."),
-            HelperFailure::NotAuthorized => tr!(
-                "The administrator’s password was not given, or this account is not allowed to do this."
-            ),
-            HelperFailure::Refused(reason) => {
-                tr!("The Velox helper refused: {reason}", reason = reason)
-            }
-        },
-        bande_vm::Error::Cancelled => tr!("The password prompt was canceled."),
-        error => error.to_string(),
+    if error.explains() {
+        return error.to_string();
     }
+    tracing::warn!("virtual machines: {error}");
+    match error {
+        bande_vm::Error::Io(error) => error.to_string(),
+        bande_vm::Error::Http(_) => {
+            tr!("The download failed. Check the network connection and try again.")
+        }
+        bande_vm::Error::Unit { .. } => tr!("The virtual machine did not start."),
+        _ => tr!("Something went wrong. The system log has the details."),
+    }
+}
+
+fn not_ready() -> String {
+    tr!("Virtualization is not ready.")
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -224,16 +224,16 @@ impl Worker {
     }
 
     fn library() -> Result<Library, String> {
-        Library::open().map_err(|error| error.to_string())
+        Library::open().map_err(describe)
     }
 
     fn machine(id: &str) -> Result<Machine, String> {
         Self::library()?
             .machines()
-            .map_err(|error| error.to_string())?
+            .map_err(describe)?
             .into_iter()
             .find(|machine| machine.manifest.id == id)
-            .ok_or_else(|| "the machine is gone".to_owned())
+            .ok_or_else(|| tr!("The machine is gone."))
     }
 
     fn probe(&self) {
@@ -365,23 +365,23 @@ impl Worker {
     fn usb(&self, id: &str, key: &str) -> Result<(), String> {
         let text = describe;
         let machine = Self::machine(id)?;
-        let units = self.units().ok_or("virtualization is not ready")?;
-        let mut qmp = Qmp::connect(&machine.control_socket()).map_err(text)?;
-        let attached = qmp.attached_usb().map_err(text)?;
+        let units = self.units().ok_or_else(not_ready)?;
+        let mut qmp = Qmp::connect(&machine.control_socket()).map_err(describe)?;
+        let attached = qmp.attached_usb().map_err(describe)?;
         if attached.iter().any(|attached| attached == key) {
-            qmp.detach_usb(key).map_err(text)?;
+            qmp.detach_usb(key).map_err(describe)?;
         } else {
             let device = bande_vm::usb_devices()
                 .into_iter()
                 .find(|device| device.key() == key)
-                .ok_or("the USB device is gone")?;
-            let pid = units.main_pid(&machine.unit()).map_err(text)?;
+                .ok_or_else(|| tr!("The USB device is gone."))?;
+            let pid = units.main_pid(&machine.unit()).map_err(describe)?;
             match qmp.attach_usb(pid, &device) {
                 Ok(()) | Err(bande_vm::Error::Cancelled) => {}
                 Err(error) => return Err(text(error)),
             }
         }
-        let attached = qmp.attached_usb().map_err(text)?;
+        let attached = qmp.attached_usb().map_err(describe)?;
         self.out.send(Update::Usb(id.to_owned(), attached));
         Ok(())
     }
@@ -468,7 +468,7 @@ impl Worker {
 
     fn start(&self, machine: &Machine) -> Result<(), String> {
         let (Some(host), Some(units)) = (self.host(), self.units()) else {
-            return Err("virtualization is not ready".to_owned());
+            return Err(not_ready());
         };
         let (qmp, without_3d) = units.boot(&host, machine).map_err(describe)?;
         if without_3d {
@@ -481,23 +481,22 @@ impl Worker {
 
     fn snapshot(&self, id: &str, op: SnapshotOp) -> Result<(), String> {
         let (Some(host), Some(units)) = (self.host(), self.units()) else {
-            return Err("virtualization is not ready".to_owned());
+            return Err(not_ready());
         };
-        let text = |error: bande_vm::Error| error.to_string();
         let mut machine = Self::machine(id)?;
-        let running = units.state(&machine.unit()).map_err(text)?.is_running();
+        let running = units.state(&machine.unit()).map_err(describe)?.is_running();
         let mut qmp = match running {
-            true => Some(Qmp::connect(&machine.control_socket()).map_err(text)?),
+            true => Some(Qmp::connect(&machine.control_socket()).map_err(describe)?),
             false => None,
         };
         match op {
             SnapshotOp::Take(name) => machine
                 .take_snapshot(&host, qmp.as_mut(), &name)
-                .map_err(text),
+                .map_err(describe),
             SnapshotOp::Revert(tag) => {
                 machine
                     .revert_snapshot(&host, qmp.as_mut(), &tag)
-                    .map_err(text)?;
+                    .map_err(describe)?;
                 match machine.manifest.resume_from.is_some() {
                     true => self.start(&machine),
                     false => Ok(()),
@@ -505,7 +504,7 @@ impl Worker {
             }
             SnapshotOp::Delete(tag) => machine
                 .delete_snapshot(&host, qmp.as_mut(), &tag)
-                .map_err(text),
+                .map_err(describe),
         }
     }
 
@@ -514,10 +513,8 @@ impl Worker {
         machine: &Machine,
         stop: impl FnOnce() -> Result<(), String>,
     ) -> Result<(), String> {
-        let units = self.units().ok_or("virtualization is not ready")?;
-        let (state, events) = units
-            .watch(&machine.unit())
-            .map_err(|error| error.to_string())?;
+        let units = self.units().ok_or_else(not_ready)?;
+        let (state, events) = units.watch(&machine.unit()).map_err(describe)?;
         if !state.is_running() {
             return Ok(());
         }
@@ -533,7 +530,7 @@ impl Worker {
     fn power_down(machine: &Machine) -> Result<(), String> {
         Qmp::connect(&machine.control_socket())
             .and_then(|mut qmp| qmp.shut_down())
-            .map_err(|error| error.to_string())
+            .map_err(describe)
     }
 
     fn act(&self, id: &str, act: Act) -> Result<(), String> {
@@ -542,25 +539,19 @@ impl Worker {
             Act::Start => self.start(&machine),
             Act::ShutDown => self.until_stopped(&machine, || Self::power_down(&machine)),
             Act::ForceStop => self.until_stopped(&machine, || {
-                let units = self.units().ok_or("virtualization is not ready")?;
-                units
-                    .stop(&machine.unit())
-                    .map_err(|error| error.to_string())
+                let units = self.units().ok_or_else(not_ready)?;
+                units.stop(&machine.unit()).map_err(describe)
             }),
             Act::Restart => {
                 self.until_stopped(&machine, || Self::power_down(&machine))?;
                 self.start(&machine)
             }
             Act::Delete => {
-                let units = self.units().ok_or("virtualization is not ready")?;
-                if units
-                    .state(&machine.unit())
-                    .map_err(|error| error.to_string())?
-                    .is_running()
-                {
-                    return Err("shut the machine down first".to_owned());
+                let units = self.units().ok_or_else(not_ready)?;
+                if units.state(&machine.unit()).map_err(describe)?.is_running() {
+                    return Err(bande_vm::Error::NeedsShutDown.to_string());
                 }
-                let host = self.host().ok_or("virtualization is not ready")?;
+                let host = self.host().ok_or_else(not_ready)?;
                 if let Err(error) = units.remove_autostart(&machine) {
                     tracing::warn!("cannot remove the login start: {error}");
                 }
@@ -570,23 +561,18 @@ impl Worker {
                 {
                     tracing::warn!("cannot remove the machine's bridge port: {error}");
                 }
-                Self::library()?
-                    .delete(&host, machine)
-                    .map_err(|error| error.to_string())
+                Self::library()?.delete(&host, machine).map_err(describe)
             }
             Act::Pause => Qmp::connect(&machine.control_socket())
                 .and_then(|mut qmp| qmp.pause())
-                .map_err(|error| error.to_string()),
+                .map_err(describe),
             Act::Resume => Qmp::connect(&machine.control_socket())
                 .and_then(|mut qmp| qmp.resume())
-                .map_err(|error| error.to_string()),
+                .map_err(describe),
             Act::Suspend => self.until_stopped(&machine, || {
                 let mut suspended = Self::machine(id)?;
-                let mut qmp =
-                    Qmp::connect(&suspended.control_socket()).map_err(|error| error.to_string())?;
-                suspended
-                    .suspend(&mut qmp)
-                    .map_err(|error| error.to_string())
+                let mut qmp = Qmp::connect(&suspended.control_socket()).map_err(describe)?;
+                suspended.suspend(&mut qmp).map_err(describe)
             }),
             Act::TakeSnapshot | Act::Revert | Act::DeleteSnapshot | Act::Clone => Ok(()),
         }
@@ -595,11 +581,11 @@ impl Worker {
     fn change(&self, id: &str, change: Change) -> Result<(), String> {
         let mut machine = Self::machine(id)?;
         if let Change::StartAtLogin(on) = change {
-            let units = self.units().ok_or("virtualization is not ready")?;
+            let units = self.units().ok_or_else(not_ready)?;
             let program = std::env::current_exe().map_err(|error| error.to_string())?;
             return units
                 .set_starts_at_login(&machine, &program, on)
-                .map_err(|error| error.to_string());
+                .map_err(describe);
         }
         let manifest = &mut machine.manifest;
         match change {
@@ -637,40 +623,39 @@ impl Worker {
                 });
             }
         }
-        machine.save().map_err(|error| error.to_string())
+        machine.save().map_err(describe)
     }
 
     fn clone_machine(&self, id: &str, new: NewClone) -> Result<String, String> {
-        let host = self.host().ok_or("virtualization is not ready")?;
-        let units = self.units().ok_or("virtualization is not ready")?;
-        let text = |error: bande_vm::Error| error.to_string();
+        let host = self.host().ok_or_else(not_ready)?;
+        let units = self.units().ok_or_else(not_ready)?;
         let mut source = Self::machine(id)?;
-        if units.state(&source.unit()).map_err(text)?.is_running() {
-            return Err("shut the machine down first".to_owned());
+        if units.state(&source.unit()).map_err(describe)?.is_running() {
+            return Err(bande_vm::Error::NeedsShutDown.to_string());
         }
         let clone = Self::library()?
             .clone_machine(&host, &mut source, new)
-            .map_err(text)?;
+            .map_err(describe)?;
         write_login(clone.dir(), &read_login(source.dir())).map_err(|error| error.to_string())?;
         Ok(clone.manifest.id)
     }
 
     fn create(&self, job: u64, plan: Plan, cancelled: &AtomicBool) -> Result<String, String> {
-        let mut host = Host::detect().map_err(|error| error.to_string())?;
-        host.accel = self.host().ok_or("virtualization is not ready")?.accel;
+        let mut host = Host::detect().map_err(describe)?;
+        host.accel = self.host().ok_or_else(not_ready)?.accel;
         let (image, cloud_init) = match plan.source {
             Source::Cloud(image, cloud_init) => (image, cloud_init),
             Source::Iso(installer) => {
                 self.out.send(Update::Job(job, Phase::Creating));
                 let machine = Self::library()?
                     .create_from_iso(&host, plan.new, &installer)
-                    .map_err(|error| error.to_string())?;
+                    .map_err(describe)?;
                 write_login(machine.dir(), &plan.login).map_err(|error| error.to_string())?;
                 self.out.send(Update::Opened(machine.manifest.id.clone()));
                 return Ok(machine.manifest.id);
             }
         };
-        let store = ImageStore::open().map_err(|error| error.to_string())?;
+        let store = ImageStore::open().map_err(describe)?;
         let mut shown = None;
         let base = store
             .fetch(&image, &mut |done, total| {
@@ -689,12 +674,12 @@ impl Worker {
             })
             .map_err(|error| match error {
                 bande_vm::Error::Cancelled => String::new(),
-                error => error.to_string(),
+                error => describe(error),
             })?;
         self.out.send(Update::Job(job, Phase::Creating));
         let machine = Self::library()?
             .create(&host, plan.new, &base, &cloud_init)
-            .map_err(|error| error.to_string())?;
+            .map_err(describe)?;
         write_login(machine.dir(), &plan.login).map_err(|error| error.to_string())?;
         Ok(machine.manifest.id)
     }

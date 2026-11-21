@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 bande-https.workspace = true
+bande-l10n.workspace = true
 bande-xdg.workspace = true
 fatfs.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "net", "process", "rand"] }

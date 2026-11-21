@@ -454,20 +454,23 @@ msgstr "Startar fristående. Den nya containern visas under Containrar."
 msgid "Run"
 msgstr "Kör"
 
-msgid "Velox needs pkexec to ask for an administrator’s password. Install the pkexec package."
-msgstr "Velox behöver pkexec för att fråga efter en administratörs lösenord. Installera paketet pkexec."
+msgid "The download failed. Check the network connection and try again."
+msgstr "Hämtningen misslyckades. Kontrollera nätverksanslutningen och försök igen."
 
-msgid "The Velox helper is missing. Reinstall Velox."
-msgstr "Velox hjälpprogram saknas. Installera om Velox."
+msgid "The virtual machine did not start."
+msgstr "Den virtuella maskinen startade inte."
 
-msgid "The administrator’s password was not given, or this account is not allowed to do this."
-msgstr "Administratörslösenordet angavs inte, eller så får det här kontot inte göra detta."
+msgid "Something went wrong. The system log has the details."
+msgstr "Något gick fel. Detaljerna finns i systemloggen."
 
-msgid "The Velox helper refused: {reason}"
-msgstr "Velox hjälpprogram vägrade: {reason}"
+msgid "Virtualization is not ready."
+msgstr "Virtualiseringen är inte redo."
 
-msgid "The password prompt was canceled."
-msgstr "Lösenordsfrågan avbröts."
+msgid "The machine is gone."
+msgstr "Maskinen finns inte längre."
+
+msgid "The USB device is gone."
+msgstr "USB-enheten finns inte längre."
 
 msgid "Guest display"
 msgstr "Gästens skärm"

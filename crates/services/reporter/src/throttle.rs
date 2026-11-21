@@ -13,7 +13,7 @@ use serde_json::{Map, Value, json};
 use crate::policy::Policy;
 
 const FILE: &str = "sending.json";
-const EXEMPT_KINDS: [&str; 3] = ["kernel-panic", "failed-boot", "manual"];
+const EXEMPT_KINDS: [&str; 2] = ["kernel-panic", "manual"];
 const EXEMPT_DAILY_REPORTS: u64 = 10;
 const JITTER_PERCENT: u64 = 20;
 const NEXT_DAY_SPREAD: u64 = 60 * 60;

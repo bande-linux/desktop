@@ -43,8 +43,8 @@ msgstr "Välj en avbildning"
 msgid "Open Disk Image"
 msgstr "Öppna skivavbildning"
 
-msgid "Disk Utility"
-msgstr "Skivverktyg"
+msgid "Disks"
+msgstr "Skivor"
 
 msgid "Mount"
 msgstr "Montera"
@@ -154,8 +154,8 @@ msgstr "Intern"
 msgid "External"
 msgstr "Extern"
 
-msgid "Disk Utility is still working."
-msgstr "Skivverktyg arbetar fortfarande."
+msgid "Disks is still working."
+msgstr "Skivor arbetar fortfarande."
 
 msgid "Wait until the operation finishes before quitting."
 msgstr "Vänta tills åtgärden är klar innan du avslutar."

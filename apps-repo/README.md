@@ -15,22 +15,22 @@ apt install bande-<name>
 | Terminal | `bande-terminal` |
 | Software | `bande-software` (its AppStream catalog is a module) |
 | Package Installer | `bande-installer` (the desktop maps `.deb` files to it) |
-| Activity Monitor | `bande-monitor` |
+| System Monitor | `bande-monitor` |
 | Mail | `bande-mail` |
 | Calendar | `bande-calendar` |
 | Velox | `bande-velox` (containers of Docker Engine or Podman, and virtual machines on QEMU) |
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
 | Player | `bande-player` (audio and video files; the default player of both; decoding runs in the `bande-media-engine` child process, the only part linking GStreamer) |
-| Preview | `bande-preview` (images and PDF documents, the default viewer of both; PDFs render in a child process) |
+| Viewer | `bande-viewer` (images and PDF documents, the default viewer of both; PDFs render in a child process) |
 | Clock | `bande-clock` (alarms, timers, a stopwatch and a world clock; rings with its window closed) |
-| TextEdit | `bande-textedit` (plain and rich text, Markdown, HTML, Word and OpenDocument; the desktop maps `text/plain` to it) |
-| Disk Utility | `bande-disks` (disks, volumes and disk images through UDisks2; replaces gnome-disk-utility) |
-| Archive Utility | `bande-archive` (the desktop maps zip, tar, gzip, bzip2, xz, zstd and 7-Zip files to it, and Files' Compress) |
+| Text Editor | `bande-text-editor` (plain and rich text, Markdown, HTML, Word and OpenDocument; the desktop maps `text/plain` to it) |
+| Disks | `bande-disks` (disks, volumes and disk images through UDisks2) |
+| Archives | `bande-archive` (the desktop maps zip, tar, gzip, bzip2, xz, zstd and 7-Zip files to it, and Files' Compress) |
 
-Every app is a `bande-app` app: like on macOS, it keeps running after its last window closes and
+Every app is a `bande-app` app: it keeps running after its last window closes and
 reopens a window when activated, until Quit (Ctrl+Q). After a log out, restart or crash its windows come back: `start` opens only what its arguments ask for, `reopen` is the default window, `save_window` and `restore_window` carry each window's own state. Without a window its menus stay full:
 items that act on a window's content are disabled, the rest work and open the window they need,
-and the Window menu names the main window (Message Viewer, Calendar, Activity Monitor, Calculator).
+and the Window menu names the main window (Message Viewer, Calendar, System Monitor, Calculator).
 
 ## Layout
 
@@ -77,13 +77,13 @@ CI runs only for releases and translation-only tags. To release an app, set its 
 git tag mail-v0.1.0 && git push origin mail-v0.1.0
 ```
 
-The tag builds that one app for arm64 and amd64, once per Debian release the archive supports
+The tag builds that one app for amd64 and arm64, once per Debian release the archive supports
 (its `conf/suites`, now `forky`), on GitHub's runners in `debian:<suite>`:
 `ci/setup.sh install`, `ci/build-app.sh` (release profile) and `ci/smoke.sh --install`. A tag whose
 commit isn't on `main`, or whose version doesn't match `Cargo.toml`, fails. The package version is
 `X.Y.Z~debNN`, the Debian release suffix of the release it was built on (`ci/debian-release.sh`;
 forky is `~deb14`), so upgrading Debian upgrades the app. A green run uploads
-`bande-debs-<suite>-arm64` and `bande-debs-<suite>-amd64`; the archive's scheduled publish picks them up within 30
+`bande-debs-<suite>-amd64` and `bande-debs-<suite>-arm64`; the archive's scheduled publish picks them up within 30
 minutes, taking only the package named after the tagged app and never a name the desktop publishes.
 
 Each app's release carries its language packs, `bande-<app>-l10n-<lang>`. A corrected translation

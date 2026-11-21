@@ -7,17 +7,14 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Archive Utility"
-msgstr "Arkivverktyg"
-
-msgid "Archive Utility Settings"
-msgstr "Inställningar för Arkivverktyg"
-
-msgid "Archive Utility could not start: {error}"
-msgstr "Arkivverktyg kunde inte starta: {error}"
-
 msgid "Archives"
 msgstr "Arkiv"
+
+msgid "Archives Settings"
+msgstr "Inställningar för Arkiv"
+
+msgid "Archives could not start: {error}"
+msgstr "Arkiv kunde inte starta: {error}"
 
 msgid "Choose an archive to expand"
 msgstr "Välj ett arkiv att packa upp"

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Viewer
+Name[sv]=Visare
+Comment=View images and PDF documents
+Comment[sv]=Visa bilder och PDF-dokument
+Icon=org.bande.Viewer
+Exec=bande-viewer %U
+StartupNotify=true
+MimeType=image/png;image/jpeg;image/pjpeg;image/gif;image/webp;image/svg+xml;application/pdf;
+Categories=Graphics;Viewer;

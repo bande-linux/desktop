@@ -22,10 +22,10 @@ const WINDOW_SIZE: (u32, u32) = (920, 600);
 const SHOW_MAIN: &str = "show-main";
 
 static INFO: Info = Info {
-    id: "org.bande.DiskUtility",
+    id: "org.bande.Disks",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || tr!("Disk Utility"),
+    name: || tr!("Disks"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -128,7 +128,7 @@ impl Disks {
         let abilities = self.abilities.clone();
         let opened = cx.open(
             Kind::Main,
-            &tr!("Disk Utility"),
+            &tr!("Disks"),
             WINDOW_SIZE,
             |appearance| {
                 let mut view = DisksView::new(appearance);
@@ -219,7 +219,7 @@ impl Program for Disks {
         ]);
         Menus {
             menus: vec![Entry::submenu(&tr!("File"), file), edit],
-            window: vec![Entry::item(&tr!("Disk Utility"), SHOW_MAIN)],
+            window: vec![Entry::item(&tr!("Disks"), SHOW_MAIN)],
         }
     }
 

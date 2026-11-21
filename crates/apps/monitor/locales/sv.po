@@ -186,8 +186,8 @@ msgstr "Skrivanrop"
 msgid "Only its owner or an administrator can see this."
 msgstr "Bara ägaren eller en administratör kan se detta."
 
-msgid "Activity Monitor"
-msgstr "Aktivitetskontroll"
+msgid "System Monitor"
+msgstr "Systemövervakare"
 
 msgid "Hangup (SIGHUP)"
 msgstr "Lägg på (SIGHUP)"

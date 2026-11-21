@@ -19,13 +19,13 @@ use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use zbus::blocking::Connection;
 
 static INFO: Info = Info {
-    id: "org.bande.ArchiveUtility",
+    id: "org.bande.Archives",
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || tr!("Archive Utility"),
+    name: || tr!("Archives"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || tr!("Archive Utility Settings"),
+        title: || tr!("Archives Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),
@@ -194,7 +194,7 @@ impl Utility {
             }
             Err(error) => self.alerts.push_back((
                 tr!(
-                    "Archive Utility could not start: {error}",
+                    "Archives could not start: {error}",
                     error = error.to_string()
                 ),
                 String::new(),
@@ -244,7 +244,7 @@ impl Utility {
             .unwrap_or_default();
         let opened = cx.open(
             Kind::Dialog("password"),
-            &tr!("Archive Utility"),
+            &tr!("Archives"),
             PROMPT_SIZE,
             |appearance| Pane(Panel::password(appearance, &name, wrong)),
         );
@@ -273,7 +273,7 @@ impl Utility {
         let rows = self.rows();
         let opened = cx.open(
             Kind::Main,
-            &tr!("Archive Utility"),
+            &tr!("Archives"),
             PANEL_SIZE,
             |appearance| {
                 let mut panel = Panel::progress(appearance);
@@ -394,7 +394,7 @@ impl Program for Utility {
         let expand = Entry::item(&tr!("Expand Archive…"), EXPAND_ARCHIVE).shortcut("Ctrl+O");
         Menus {
             menus: vec![Entry::submenu(&tr!("File"), vec![expand])],
-            window: vec![Entry::item(&tr!("Archive Utility"), SHOW_PANEL)],
+            window: vec![Entry::item(&tr!("Archives"), SHOW_PANEL)],
         }
     }
 

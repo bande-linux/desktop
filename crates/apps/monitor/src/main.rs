@@ -20,7 +20,7 @@ use bande_xdg::{
     spawn_detached,
 };
 
-const APP_ID: &str = "org.bande.ActivityMonitor";
+const APP_ID: &str = "org.bande.SystemMonitor";
 const WINDOW_SIZE: (u32, u32) = (960, 640);
 const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
@@ -35,7 +35,7 @@ static INFO: Info = Info {
     id: APP_ID,
     package: env!("CARGO_PKG_NAME"),
     version: env!("CARGO_PKG_VERSION"),
-    name: || tr!("Activity Monitor"),
+    name: || tr!("System Monitor"),
     keys: Keys::Standard,
     settings: None,
 };
@@ -105,7 +105,7 @@ impl View for Pane {
     }
 }
 
-struct ActivityMonitor {
+struct SystemMonitor {
     main: Option<WindowId>,
     closed_menus: Vec<Entry>,
     sampling: bool,
@@ -117,7 +117,7 @@ struct ActivityMonitor {
 }
 
 fn measured(
-    cx: &Cx<ActivityMonitor>,
+    cx: &Cx<SystemMonitor>,
     windows: &[WindowId],
     measures: fn(&dyn Screen) -> bool,
 ) -> bool {
@@ -127,7 +127,7 @@ fn measured(
         .any(|pane| measures(&*pane.0))
 }
 
-impl ActivityMonitor {
+impl SystemMonitor {
     fn sample(&mut self, cx: &mut Cx<Self>) {
         let windows: Vec<WindowId> = cx.windows().collect();
         self.sampler
@@ -281,7 +281,7 @@ fn serve_in(window: &mut Window, request: Request) {
     }
 }
 
-fn save_state(cx: &Cx<ActivityMonitor>, text: &str) {
+fn save_state(cx: &Cx<SystemMonitor>, text: &str) {
     let Some(file) = cx.state_file(STATE_FILE) else {
         return;
     };
@@ -302,7 +302,7 @@ fn show_in_files(window: &mut Window, path: &Path) {
 }
 
 fn open_main(
-    cx: &mut Cx<ActivityMonitor>,
+    cx: &mut Cx<SystemMonitor>,
     sampler: &mut Sampler,
     memory: bool,
 ) -> Result<(WindowId, Snapshot), bande_app::Error> {
@@ -324,7 +324,7 @@ fn open_main(
     let mut snapshot = Snapshot::default();
     let main = cx.open(
         Kind::Main,
-        &tr!("Activity Monitor"),
+        &tr!("System Monitor"),
         WINDOW_SIZE,
         |appearance| {
             let mut screen =
@@ -342,7 +342,7 @@ fn open_main(
     Ok((main, snapshot))
 }
 
-impl ActivityMonitor {
+impl SystemMonitor {
     fn show_main(&mut self, cx: &mut Cx<Self>) {
         if self.main.is_none() {
             return self.reopen(cx);
@@ -352,12 +352,12 @@ impl ActivityMonitor {
                 .activation_token(APP_ID)
                 .and_then(|token| window.activate(&token))
         {
-            tracing::warn!("cannot raise Activity Monitor: {error}");
+            tracing::warn!("cannot raise System Monitor: {error}");
         }
     }
 }
 
-impl Program for ActivityMonitor {
+impl Program for SystemMonitor {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
@@ -389,7 +389,7 @@ impl Program for ActivityMonitor {
                 .and_then(|main| cx.view(main))
                 .and_then(|pane| pane.0.app_menus(true, cx.installed(FILES_APP_ID)))
                 .unwrap_or_else(|| self.closed_menus.clone()),
-            window: vec![Entry::item(&tr!("Activity Monitor"), SHOW_MONITOR)],
+            window: vec![Entry::item(&tr!("System Monitor"), SHOW_MONITOR)],
         }
     }
 
@@ -434,7 +434,7 @@ impl Program for ActivityMonitor {
                 self.sampling = true;
                 self.next_sample = Instant::now() + FIRST_INTERVAL;
             }
-            Err(error) => tracing::warn!("cannot open Activity Monitor: {error}"),
+            Err(error) => tracing::warn!("cannot open System Monitor: {error}"),
         }
     }
 
@@ -466,7 +466,7 @@ impl Program for ActivityMonitor {
     }
 }
 
-fn on_screen(cx: &mut Cx<ActivityMonitor>) -> bool {
+fn on_screen(cx: &mut Cx<SystemMonitor>) -> bool {
     cx.windows().collect::<Vec<_>>().into_iter().any(|window| {
         cx.window(window)
             .is_some_and(|(shown, _)| !shown.toplevel_state().suspended)
@@ -519,5 +519,5 @@ fn first_sample(sampler: &mut Sampler, screen: &mut impl Screen) -> Snapshot {
 }
 
 fn main() -> ExitCode {
-    bande_app::run::<ActivityMonitor>(&INFO)
+    bande_app::run::<SystemMonitor>(&INFO)
 }

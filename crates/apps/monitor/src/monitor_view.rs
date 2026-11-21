@@ -489,7 +489,7 @@ impl MonitorView {
         let palette = self.palette;
         let text = self.list.text();
         let title = text.paragraph(
-            &tr!("Activity Monitor"),
+            &tr!("System Monitor"),
             TextStyle::role(TextRole::WindowTitle, palette.ink),
             None,
             TextAlign::Start,

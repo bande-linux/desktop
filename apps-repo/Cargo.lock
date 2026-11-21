@@ -917,27 +917,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-preview"
-version = "0.1.6"
-dependencies = [
- "accesskit",
- "bande-app",
- "bande-app-menu",
- "bande-content",
- "bande-fs",
- "bande-inbox",
- "bande-l10n",
- "bande-thumbnails",
- "bande-toolkit",
- "bande-volumes",
- "bande-xdg",
- "image",
- "serde",
- "tempfile",
- "tracing",
-]
-
-[[package]]
 name = "bande-protocols"
 version = "0.1.9"
 source = "git+https://github.com/bande-linux/desktop?rev=d466583ab5bfce535b2ff05f11bc96384ef27f55#d466583ab5bfce535b2ff05f11bc96384ef27f55"
@@ -1082,7 +1061,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "bande-textedit"
+name = "bande-text-editor"
 version = "0.1.5"
 dependencies = [
  "accesskit",
@@ -1184,6 +1163,27 @@ dependencies = [
  "tempfile",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-viewer"
+version = "0.1.6"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-content",
+ "bande-fs",
+ "bande-inbox",
+ "bande-l10n",
+ "bande-thumbnails",
+ "bande-toolkit",
+ "bande-volumes",
+ "bande-xdg",
+ "image",
+ "serde",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]

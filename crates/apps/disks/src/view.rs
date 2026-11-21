@@ -300,7 +300,7 @@ impl DisksView {
 
     pub fn warn_busy(&mut self) {
         self.notice(
-            &tr!("Disk Utility is still working."),
+            &tr!("Disks is still working."),
             &tr!("Wait until the operation finishes before quitting."),
         );
     }

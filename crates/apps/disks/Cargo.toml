@@ -1,6 +1,6 @@
 [package]
 name = "bande-disks"
-description = "Disk Utility: drives, volumes and disk images on Bande"
+description = "Bande Disks: drives, volumes and disk images"
 version = "0.1.5"
 edition.workspace = true
 license.workspace = true
@@ -34,7 +34,7 @@ depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono, udisks2"
 recommends = "dosfstools, e2fsprogs, exfatprogs"
 suggests = "ntfs-3g"
 extended-description = """\
-Disk Utility shows the computer's internal and external disks, their \
+Disks shows the computer's internal and external disks, their \
 partitions and volumes and the disk images that are open, with their \
 capacity, format, connection and S.M.A.R.T. health. It mounts, unmounts and \
 ejects them, erases and partitions disks, checks and repairs volumes with \
@@ -44,8 +44,8 @@ authorization. The disk the computer started up from and Apple's own \
 partitions on a Mac are shown read-only."""
 assets = [
     ["target/release/bande-disks", "usr/bin/", "755"],
-    ["data/org.bande.DiskUtility.desktop", "usr/share/applications/", "644"],
-    ["data/org.bande.DiskUtility.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["data/org.bande.DiskUtility.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/org.bande.Disks.desktop", "usr/share/applications/", "644"],
+    ["data/org.bande.Disks.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/org.bande.Disks.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-disks/*", "usr/share/bande/l10n/bande-disks/", "644"],
 ]

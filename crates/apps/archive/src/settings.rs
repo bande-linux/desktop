@@ -75,7 +75,7 @@ impl ArchiveSettings {
 }
 
 impl Stored for ArchiveSettings {
-    const FILE: &'static str = "archive-utility.conf";
+    const FILE: &'static str = "archives.conf";
 
     fn parse(text: &str) -> Self {
         let mut settings = Self::default();
@@ -229,7 +229,7 @@ fn format_choice(settings: &Shared<ArchiveSettings>) -> Box<dyn Widget> {
 
 pub fn settings_form(appearance: Appearance, settings: &Shared<ArchiveSettings>) -> Ui {
     let form = Form::new(
-        &tr!("Archive Utility Settings"),
+        &tr!("Archives Settings"),
         vec![
             FormLine::Heading(tr!("Expanding")),
             FormLine::Row(

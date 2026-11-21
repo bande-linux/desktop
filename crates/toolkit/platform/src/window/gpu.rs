@@ -79,8 +79,10 @@ pub(super) fn start_gpu(connection: &Connection, surface: &WlSurface, atlas: (u3
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
         let opened = open_gpu(display, wl_surface, atlas, allow_software);
-        if let Err(error @ DrawError::Software(_)) = &opened {
-            tracing::info!("drawing on the CPU: {error}");
+        match &opened {
+            Ok(_) => {}
+            Err(error @ DrawError::Software(_)) => tracing::info!("drawing on the CPU: {error}"),
+            Err(error) => tracing::warn!("drawing on the CPU, the GPU did not open: {error}"),
         }
         let _ = sender.send(opened);
     });

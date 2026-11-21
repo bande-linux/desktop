@@ -9,7 +9,7 @@ the accessibility tree, the Wayland protocol, D-Bus and files. At most a couple 
 or feature; a new test replaces or merges with an old one before the total grows.
 
 The guide is about 1,500 lines of tests for the desktop and 80–100 per app. Today there are
-4,344: 3,768 lines in `crates/**/tests/*.rs` (`wc -l`) and 576 lines in the 18 `#[cfg(test)]`
+4,394: 3,818 lines in `crates/**/tests/*.rs` (`wc -l`) and 576 lines in the 18 `#[cfg(test)]`
 modules under `crates/**/src` (each counted from its `#[cfg(test)]` line to its closing brace).
 The keyring boundary (406), the compositor's input and lock boundaries (312) and Mail's
 end-to-end test with dovecot are most of the excess; trim them before adding anything.
@@ -31,6 +31,7 @@ Paths are under `crates/`.
 | `…compositor.rs` `only_the_screen_reader_may_grab_the_keyboard_and_it_lets_go_when_it_leaves` | The keyboard monitor serves only the screen reader's bus name, and a vanished reader releases the keyboard. |
 | `…compositor.rs` `a_hung_app_is_force_quit_from_the_keyboard` | Force Quit marks a hung separate process and kills it from the keyboard without keys reaching the app. |
 | `…compositor.rs` `the_browser_row_gives_the_well_to_the_compositor_and_the_rest_to_the_browser` | On the Browser's own tab row, a click on the control well minimizes through the compositor and any other click reaches the Browser. |
+| `…compositor.rs` `idle_surfaces_that_ask_for_a_frame_without_new_content_still_get_one` | Regression guard for `wl_surface.frame`: an idle window, and a desynchronised subsurface, that ask for a frame without new content still get their callback, or apps waiting on it stall. |
 | `platform/compositor/src/clock.rs` (3 tests) | Regressions in the frame clock: the first frame is drawn although timers wake late, unusable flip times fall back to classic timing, and a render longer than a refresh aims at a slot it can still start for instead of spinning. |
 | `services/secrets/tests/keyring.rs` | The keyring boundary: an app keeps a secret over an encrypted session and cannot name another owner; another app's item opens only with the password, with one prompt from Settings, and only until `Conceal`; a cancelled or impossible prompt opens nothing; only root may pass a login password (`an_ordinary_process_sends_a_login_message` is the helper the test reruns as `nobody`); a wrong old password changes nothing. |
 | `apps/secrets-prompt/tests/prompt.rs` | Regression: the keyring prompt reads a request written after it started, and a window that fails to open is no answer. |

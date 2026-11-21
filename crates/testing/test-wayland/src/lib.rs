@@ -6,6 +6,7 @@ pub use separate::{SeparateApp, act_as_separate_app};
 pub use toplevel::PopupRequest;
 pub use wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment;
 mod drive;
+mod frames;
 mod ime;
 pub mod keys;
 mod lock;
@@ -24,6 +25,7 @@ use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
+use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, delegate_noop};
 use wayland_protocols::xdg::shell::client::xdg_surface::{self, XdgSurface};
@@ -72,6 +74,7 @@ struct Globals {
     toplevels: toplevel::Toplevels,
     lock: lock::SessionLock,
     input_method: ime::InputMethod,
+    frames_done: u32,
 }
 
 pub struct TestClient {
@@ -79,6 +82,7 @@ pub struct TestClient {
     queue: EventQueue<Globals>,
     globals: Globals,
     windows: Vec<(WlSurface, XdgSurface, XdgToplevel)>,
+    children: Vec<(WlSurface, WlSubsurface)>,
 }
 
 impl TestClient {
@@ -97,6 +101,7 @@ impl TestClient {
             queue,
             globals: Globals::default(),
             windows: Vec::new(),
+            children: Vec::new(),
         };
         client.exchange(server);
         client

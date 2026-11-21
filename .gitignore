@@ -12,6 +12,7 @@
 !/debian/source/
 !/debian/tests/
 !/debian/upstream/
+!/debian/po/
 /debian/debhelper-build-stamp
 /debian/files
 /debian/*.substvars

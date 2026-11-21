@@ -61,10 +61,12 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   binNMU-style build without the architecture-independent packages, so an sbuild build takes
   a source package with that entry.
 - **Tests**: `debian/tests` holds the autopkgtests: `desktop` (bande-desktop alone brings a
-  login window and sound, no X server, greetd as the display manager, the login window's
-  pictures folder), `every-package` (the one version, every program and file in
+  login window and sound, no X server, the login window as the display manager with greetd's
+  own service and configuration untouched, its pictures folder, and purging it handing the
+  display to greetd), `every-package` (the one version, every program and file in
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
-  `display-manager` (next to LightDM, greetd is offered and not imposed), `services` (the
+  `display-manager` (next to LightDM, the login window is offered and not imposed,
+  `dpkg-reconfigure` switches both ways, and removing it gives the display back to LightDM), `services` (the
   settings service on a private bus, the compositor headless), `portal` (the colour scheme
   through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).
 
@@ -105,9 +107,9 @@ are in [performance.md](performance.md).
   It depends on the compositor, the core session services, the shell, the lock
   screen, the keyring (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
   `libpam-systemd`, on PipeWire and WirePlumber, and on `bande-greeter | x-display-manager`, so there is always
-  a way to log in: the Bande login window under greetd, or the display manager the system
-  already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
-  start), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
+  a way to log in: the Bande login window, or the display manager the system already has. It
+  recommends `bande-greeter` anyway (debconf then asks which display manager to start; see
+  [session.md](session.md#display-manager-and-greeter)), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
   clipboard daemon, the screenshot tool, Files, Settings, the tray, file indexing
   (`bande-indexer`), automount, backups (`bande-backup`), the file chooser, the polkit agent, the keyring's PAM module and the default apps (every app but Velox),
   all built here at the same version, and the few Debian packages in
@@ -198,7 +200,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   Mono, and `bande-clock` the notification and sound services, which ring its alarms;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
-  `greetd (>= 0.10.3-6)`;
+  `greetd (>= 0.10.3-6)`, which it runs from its own `bande-greeter.service`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
   `xdg-desktop-portal-backend` and serves every interface itself (no `xdg-desktop-portal-gtk`);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.

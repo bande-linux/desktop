@@ -1,0 +1,33 @@
+#!/bin/sh
+set -e
+
+. /usr/share/debconf/confmodule
+
+chosen_file=/etc/X11/default-display-manager
+alias_link=/etc/systemd/system/display-manager.service
+
+chosen_daemon() {
+	grep -v '^[[:space:]]*#' $chosen_file 2> /dev/null | head -n 1
+}
+
+if [ "$1" = configure ]; then
+	db_get shared/default-x-display-manager
+	chosen=$RET
+	if [ -n "$chosen" ] && [ "$chosen" != "$(basename "$(chosen_daemon)")" ] && db_get "$chosen/daemon_name"; then
+		mkdir -p "$(dirname $chosen_file)"
+		echo "$RET" > $chosen_file
+	fi
+	daemon=$(chosen_daemon)
+	if [ -n "$daemon" ] && [ -d "$(dirname $alias_link)" ]; then
+		unit=/usr/lib/systemd/system/$(basename "$daemon").service
+		if [ "$(readlink $alias_link)" = /dev/null ]; then
+			echo "display-manager.service is masked: leaving it so" >&2
+		elif [ -e "$unit" ]; then
+			ln -sf "$unit" $alias_link
+		fi
+	fi
+fi
+
+db_stop
+
+#DEBHELPER#

@@ -2,8 +2,8 @@ Source: bande-dict
 Section: text
 Priority: optional
 Maintainer: Mikael Hug <mikaelhug@gmail.com>
-Build-Depends-Indep: debhelper-compat (= 14),
- python3,
+Build-Depends: debhelper-compat (= 14)
+Build-Depends-Indep: python3,
  unzip,
 Standards-Version: 4.7.2
 Rules-Requires-Root: no

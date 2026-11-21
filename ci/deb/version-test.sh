@@ -27,7 +27,7 @@ expect() {
 
 commit 0.1.0 '2026-10-29T08:00:00Z'
 first=$(build)
-expect "$first" "0.0.0+git20261029.1.$(git -C "$repo" rev-parse --short=7 HEAD)-1~deb14" "a build before any tag counts from 0.0.0"
+expect "$first" "0.1.0~git20261029.1.$(git -C "$repo" rev-parse --short=7 HEAD)-1~deb14" "a snapshot of an unreleased version sorts below its release"
 commit 0.1.0 '2026-10-29T09:00:00Z'
 same_day=$(build)
 git -C "$repo" tag v0.1.0
@@ -42,6 +42,8 @@ commit 0.1.0 '2026-10-30T08:00:00Z'
 later=$(build)
 expect "${later%.*}" "0.1.0+git20261030.2" "builds after a tag count from it"
 commit 0.1.1 '2026-10-31T08:00:00Z'
+unreleased=$(build)
+expect "${unreleased%%~*}" 0.1.1 "a snapshot names the Cargo.toml version, not the last tag"
 git -C "$repo" tag v0.1.1
 next_release=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.1.1 "$version" "$repo")
 
@@ -61,7 +63,7 @@ expect "$next_debian" 0.1.2-1~deb15 "the build for the next Debian release carri
 next_translations=$(GITHUB_REF_TYPE=tag GITHUB_REF_NAME=l10n-20261101 "$version" "$repo")
 
 previous=
-for v in "$first" "$same_day" "$release" "$at_tag" "$after" "$later" "$next_release" "$packaging" "$translations" "$second" "$following" "$next_translations" "$next_debian"; do
+for v in "$first" "$same_day" "$release" "$at_tag" "$after" "$later" "$unreleased" "$next_release" "$packaging" "$translations" "$second" "$following" "$next_translations" "$next_debian"; do
     if [ -n "$previous" ]; then
         if dpkg --compare-versions "$previous" lt "$v"; then
             echo "ok   $previous < $v"

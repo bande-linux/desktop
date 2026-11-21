@@ -3,8 +3,9 @@
 # (ci/deb/debian-release.sh); with --source, the version of the source package, which has none.
 # A vX.Y.Z or vX.Y.Z-R tag builds the debian/changelog version, which must be X.Y.Z-R (R is 1
 # for vX.Y.Z) with X.Y.Z the Cargo.toml version; an l10n-YYYYMMDD[.N] tag builds the changelog
-# version with +l10nYYYYMMDD[.N] after the suffix; any other build is a snapshot,
-# <last release>+git<date>.<commits since it>.<sha>-1.
+# version with +l10nYYYYMMDD[.N] after the suffix; any other build is a snapshot of the
+# Cargo.toml version, <version>+git<date>.<commits since the last tag>.<sha>-1, with ~git instead
+# of +git while that version is not released yet, so it sorts below its release.
 set -euo pipefail
 
 source=0
@@ -34,13 +35,15 @@ fi
 
 last=$(git -C "$repo" describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null || true)
 if [ -n "$last" ]; then
-    base=${last#v}
-    base=${base%-*}
+    released=${last#v}
+    released=${released%-*}
     count=$(git -C "$repo" rev-list --count "$last..HEAD")
 else
-    base=0.0.0
+    released=0.0.0
     count=$(git -C "$repo" rev-list --count HEAD)
 fi
+separator=+
+dpkg --compare-versions "$declared" le "$released" || separator='~'
 date=$(TZ=UTC git -C "$repo" log -1 --format=%cd --date=format-local:%Y%m%d)
 sha=$(git -C "$repo" rev-parse --short=7 HEAD)
-echo "$base+git$date.$count.$sha-1$suffix"
+echo "$declared${separator}git$date.$count.$sha-1$suffix"

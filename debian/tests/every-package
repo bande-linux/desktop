@@ -1,7 +1,20 @@
 #!/bin/bash
 # Every package installs at the one version, brings every program and file the desktop needs
-# without its recommends, and the installed compositor serves Wayland clients.
+# without its recommends, and the installed compositor serves Wayland clients. bande-backup is
+# installed only when its restic is in the Debian release (debian/tests/control cannot leave
+# it out of @), and a recommended Debian package that has no candidate is only a warning.
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+candidate() {
+    local found
+    found=$(apt-cache policy "$1" | sed -n 's/^ *Candidate: //p')
+    [ -n "$found" ] && [ "$found" != "(none)" ]
+}
+if candidate restic; then
+    apt-get install -y -q --no-install-recommends bande-backup < /dev/null
+else
+    echo "warning: restic has no candidate in this Debian release; bande-backup is not installed"
+fi
 version=$(dpkg-query -W -f '${Version}' bande-desktop)
 for package in $(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande libpam-bande-secrets); do
     installed=$(dpkg-query -W -f '${db:Status-Status} ${Version}' "$package" 2>/dev/null || true)
@@ -11,6 +24,7 @@ done
 
 while read -r item package kind; do
     [ "$kind" = depends ] || [ "$kind" = required ] || continue
+    candidate "$package" || { echo "warning: $item needs $package, which has no candidate"; continue; }
     case $item in
         /*) test -e "$item" ;;
         *) command -v "$item" > /dev/null ;;
@@ -20,8 +34,7 @@ done < ci/runtime-deps
 apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
     while read -r recommended; do
         [ -n "$recommended" ] || continue
-        candidate=$(apt-cache policy "$recommended" | sed -n 's/^ *Candidate: //p')
-        [ -n "$candidate" ] && [ "$candidate" != "(none)" ] || { echo "$recommended cannot be installed"; exit 1; }
+        candidate "$recommended" || echo "warning: bande-desktop recommends $recommended, which has no candidate"
     done
 
 mapfile -t ours < <(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande)

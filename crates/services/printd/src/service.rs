@@ -18,10 +18,15 @@ fn failed(error: impl std::fmt::Display) -> fdo::Error {
 
 #[zbus::interface(name = "org.bande.Print")]
 impl Service {
-    fn watch(&self, #[zbus(header)] header: Header<'_>) {
+    async fn watch(&self, #[zbus(header)] header: Header<'_>) {
         if let Some(sender) = header.sender() {
-            self.spool.watch(sender.to_string());
+            let (spool, sender) = (Arc::clone(&self.spool), sender.to_string());
+            blocking::unblock(move || spool.watch(sender)).await;
         }
+    }
+
+    fn needs_avahi(&self) -> bool {
+        self.spool.needs_avahi()
     }
 
     fn printers(&self) -> Vec<PrinterInfo> {

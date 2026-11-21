@@ -39,7 +39,7 @@ use crate::passwords::{PasswordCommand, SavedPasswords};
 use crate::permissions::Grants;
 use crate::pictures::{Pair, PictureCommand};
 use crate::pointing::PointingDevices;
-use crate::printers::{PrinterCommand, PrintersState};
+use crate::printers::{PrinterCommand, PrintersState, Support};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
@@ -124,7 +124,7 @@ pub(crate) enum Intent {
     Sharing(SharingCommand),
     PrinterAddress(String),
     AddPrinterAddress,
-    InstallPrinting,
+    InstallPrinting(Support),
     CancelJob(u32),
     CancelQueuedJob(i32),
     PausePrinter((String, bool)),
@@ -289,7 +289,7 @@ pub struct SettingsView {
     pub(crate) installing_sharing: bool,
     pub(crate) installing_vpn_plugin: bool,
     pub(crate) adding_printer: bool,
-    pub(crate) installing_printing: bool,
+    pub(crate) installing_printing: Option<Support>,
     pub(crate) printer_address: String,
     pub(crate) accounts: Option<Vec<Account>>,
     pub(crate) accounts_managed: bool,
@@ -399,7 +399,7 @@ impl SettingsView {
             installing_sharing: false,
             installing_vpn_plugin: false,
             adding_printer: false,
-            installing_printing: false,
+            installing_printing: None,
             printer_address: String::new(),
             accounts: None,
             accounts_managed: false,
@@ -905,7 +905,7 @@ impl SettingsView {
                 }
                 self.printers = Some(printers);
             }
-            Update::PrintingInstalled => self.installing_printing = false,
+            Update::PrintingInstalled => self.installing_printing = None,
             Update::Accounts(accounts, managed) => self.take_accounts(accounts, managed),
             Update::PictureChosen(login, image) => self.picture_chosen(login, image),
             Update::AccountCreated(error) => self.account_created(error),
@@ -1609,10 +1609,10 @@ impl SettingsView {
                     );
                     self.commands.push(Command::Sharing(command));
                 }
-                Intent::InstallPrinting => {
-                    self.installing_printing = true;
+                Intent::InstallPrinting(support) => {
+                    self.installing_printing = Some(support);
                     self.commands
-                        .push(Command::Printers(PrinterCommand::InstallPrinting));
+                        .push(Command::Printers(PrinterCommand::InstallPrinting(support)));
                 }
                 Intent::AddPrinterAddress => {
                     let address = self.printer_address.trim().to_owned();

@@ -1,12 +1,13 @@
 //! Service discovery from the DNS records of the user's own domain: SRV (RFC 2782) and TXT
 //! lookups for RFC 6186 (mail) and RFC 6764 (CalDAV, CardDAV), through the nameservers in
-//! `/etc/resolv.conf`.
+//! `/etc/resolv.conf`; [`nearby`] browses the local network through Avahi.
 
 use std::hash::{BuildHasher, RandomState};
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream, UdpSocket};
 use std::time::Duration;
 
+pub mod nearby;
 #[cfg(feature = "testing")]
 pub mod testing;
 

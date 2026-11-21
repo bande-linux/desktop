@@ -1,5 +1,5 @@
 mod link;
-mod mdns;
+mod nearby;
 mod printer;
 mod queue;
 mod raster;

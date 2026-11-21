@@ -51,7 +51,6 @@ Paths are under `crates/`.
 | `libs/l10n-source/src/plural.rs` | Parser: gettext plural rules pick the forms their languages need. |
 | `libs/content/src/import.rs` | Parser: words split across Word XML runs stay whole and paragraphs stay apart in the indexed text. |
 | `services/index/src/store.rs` | Parser and tokenizer: a search matches regardless of case and accents (`ø` as `o`), the word being typed as a prefix, quoted words as a phrase and a CJK character on its own; a replaced or removed file's text is no longer found. |
-| `services/printd/src/mdns.rs` | Parser of untrusted network input: a printer announcement with compressed DNS names resolves to its address. |
 | `services/printd/src/raster.rs` (2 tests) | Encoding: raster lines pack runs and literals, and equal lines repeat, as the printer formats define. |
 | `services/reporter/src/scrub.rs` | Privacy boundary: nothing personal survives in a fault report's text while diagnostics do. |
 | `services/reporter/src/signature.rs` | The documented fault signature test vectors, which the report server relies on to group reports. |

@@ -387,9 +387,10 @@ Section: misc
 Depends: ${shlibs:Depends},
  default-dbus-session-bus | dbus-session-bus,
  ${misc:Depends}
+Recommends: avahi-daemon
 Description: Bande print service: prints to network printers without CUPS
  Serves org.bande.Print on the session bus: finds IPP Everywhere
- (driverless) printers on the network with its own mDNS browser, keeps a
+ (driverless) printers on the network through Avahi, keeps a
  queue of documents for each user and sends them over IPP, with CUPS
  queues too where CUPS is installed. It starts when asked and exits when
  nothing is left to do.

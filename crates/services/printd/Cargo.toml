@@ -1,6 +1,6 @@
 [package]
 name = "bande-printd"
-description = "Bande print service: finds network printers and sends documents to them, without CUPS"
+description = "Bande print service: finds network printers through Avahi and sends documents to them, without CUPS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 bande-bus.workspace = true
 bande-content.workspace = true
+bande-discovery.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-notify.workspace = true
@@ -17,7 +18,7 @@ bande-printers.workspace = true
 bande-xdg.workspace = true
 blocking.workspace = true
 ring.workspace = true
-rustix = { workspace = true, features = ["event", "net", "time"] }
+rustix = { workspace = true, features = ["event"] }
 rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -15,6 +15,7 @@ udev.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "mount", "net", "process"] }
 tracing.workspace = true
 bande-bus.workspace = true
+bande-discovery.workspace = true
 bande-fs.workspace = true
 bande-keyring.workspace = true
 bande-l10n.workspace = true

@@ -25,6 +25,7 @@ bande-bluetooth.workspace = true
 bande-config.workspace = true
 bande-backup.workspace = true
 bande-datetime.workspace = true
+bande-discovery.workspace = true
 bande-fs.workspace = true
 bande-keyboard.workspace = true
 bande-l10n.workspace = true

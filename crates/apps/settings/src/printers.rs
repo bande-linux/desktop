@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 
+use bande_discovery::nearby::PACKAGES as AVAHI_PACKAGES;
 use bande_l10n::{text, tr, trn};
 use bande_packages::Client;
 use bande_printers::{
@@ -32,6 +33,7 @@ const PRINTING_PACKAGES: [&str; 3] = ["cups", "cups-pk-helper", "ipp-usb"];
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PrintersState {
     pub cups_installed: bool,
+    pub needs_avahi: bool,
     pub may_change: bool,
     pub printers: Vec<PrinterInfo>,
     pub jobs: Vec<JobInfo>,
@@ -48,21 +50,38 @@ pub enum PrinterCommand {
     CancelQueued(i32),
     Cancel(u32),
     AddAddress(String),
-    InstallPrinting,
+    InstallPrinting(Support),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Support {
+    Cups,
+    Avahi,
+}
+
+impl Support {
+    fn packages(self) -> &'static [&'static str] {
+        match self {
+            Self::Cups => &PRINTING_PACKAGES,
+            Self::Avahi => &AVAHI_PACKAGES,
+        }
+    }
 }
 
 fn read(session: &Connection, cups: &Cups, system: &Connection) -> Option<PrintersState> {
     let client = PrintClient::new(session).ok()?;
-    let (printers, jobs) = match (client.printers(), client.jobs()) {
-        (Ok(printers), Ok(jobs)) => (printers, jobs),
-        (Err(error), _) | (_, Err(error)) => {
-            tracing::warn!("cannot reach the print service: {error}");
-            return None;
-        }
-    };
+    let (printers, jobs, needs_avahi) =
+        match (client.printers(), client.jobs(), client.needs_avahi()) {
+            (Ok(printers), Ok(jobs), Ok(needs_avahi)) => (printers, jobs, needs_avahi),
+            (Err(error), ..) | (_, Err(error), _) | (.., Err(error)) => {
+                tracing::warn!("cannot reach the print service: {error}");
+                return None;
+            }
+        };
     let cups_installed = cups.installed();
     Some(PrintersState {
         cups_installed,
+        needs_avahi,
         may_change: administers_printers() || mechanism_available(system),
         printers,
         jobs,
@@ -77,8 +96,8 @@ fn read(session: &Connection, cups: &Cups, system: &Connection) -> Option<Printe
     })
 }
 
-fn install_printing(system: &Connection) -> Result<(), bande_packages::Error> {
-    Client::new(system).install_missing(&PRINTING_PACKAGES)
+fn install_printing(system: &Connection, support: Support) -> Result<(), bande_packages::Error> {
+    Client::new(system).install_missing(support.packages())
 }
 
 fn administers_printers() -> bool {
@@ -226,12 +245,15 @@ pub fn follow_printers(
                         .map_err(|error| sentence(&error))
                 }
                 PrinterCommand::Cancel(job) => service(&|client| client.cancel(job)),
-                PrinterCommand::InstallPrinting => {
-                    let installed = install_printing(&bus);
+                PrinterCommand::InstallPrinting(support) => {
+                    let installed = install_printing(&bus, support);
                     updates.send(Update::PrintingInstalled);
                     installed.map_err(|error| {
-                        tracing::warn!("cannot install printing: {error}");
-                        tr!("Couldn't install printing support.")
+                        tracing::warn!("cannot install {support:?}: {error}");
+                        match support {
+                            Support::Cups => tr!("Couldn't install printing support."),
+                            Support::Avahi => tr!("Couldn't install Avahi."),
+                        }
                     })
                 }
                 PrinterCommand::AddAddress(address) => {
@@ -338,12 +360,18 @@ impl SettingsView {
         let Some(state) = self.printers.clone() else {
             return vec![muted_row(&tr!("Looking for printers on this network…"))];
         };
-        if state.printers.is_empty() {
-            return vec![muted_row(&tr!(
-                "No printers on this network yet. They appear here as soon as they are found."
-            ))];
-        }
         let mut rows = Vec::new();
+        if state.needs_avahi {
+            rows.push(self.install_avahi_row());
+        }
+        if state.printers.is_empty() {
+            if rows.is_empty() {
+                rows.push(muted_row(&tr!(
+                    "No printers on this network yet. They appear here as soon as they are found."
+                )));
+            }
+            return rows;
+        }
         for printer in &state.printers {
             let text = state_text(
                 printer,
@@ -430,11 +458,31 @@ impl SettingsView {
         rows
     }
 
-    fn install_printing_row(&mut self) -> Box<dyn Widget> {
-        let mut install = intent(&self.intents, |()| Intent::InstallPrinting);
+    fn install_avahi_row(&mut self) -> Box<dyn Widget> {
+        let mut install = intent(&self.intents, |()| Intent::InstallPrinting(Support::Avahi));
         let mut button = Button::new(&tr!("Install"), move || install(()));
-        button.set_enabled(!self.installing_printing);
-        let detail = if self.installing_printing {
+        button.set_enabled(self.installing_printing.is_none());
+        let detail = if self.installing_printing == Some(Support::Avahi) {
+            tr!("Installing…")
+        } else {
+            tr!("Avahi isn’t installed. Printers added by address work without it")
+        };
+        self.anchors
+            .push((Anchor::Item("printers-avahi".to_owned()), button.id()));
+        boxed(
+            Row::new(
+                Text::new(&tr!("Finding printers nearby needs Avahi"), Tone::Primary),
+                Some(boxed(button)),
+            )
+            .detail(Text::new(&detail, Tone::Muted).caption()),
+        )
+    }
+
+    fn install_printing_row(&mut self) -> Box<dyn Widget> {
+        let mut install = intent(&self.intents, |()| Intent::InstallPrinting(Support::Cups));
+        let mut button = Button::new(&tr!("Install"), move || install(()));
+        button.set_enabled(self.installing_printing.is_none());
+        let detail = if self.installing_printing == Some(Support::Cups) {
             tr!("Installing…")
         } else {
             tr!(

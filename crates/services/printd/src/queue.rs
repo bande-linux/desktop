@@ -4,13 +4,14 @@ use std::io::{self, Write};
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
+use bande_discovery::nearby::{Addresses, Availability, Browser};
 use bande_l10n::tr;
 
 use crate::link::{Address, is_identity_change, send_document};
-use crate::mdns::Found;
+use crate::nearby::{Found, KINDS, printers};
 use crate::printer::{
     Payload, RemoteState, abilities, accepted_job, cancel_job, job_state, payload_for,
     print_request, printer_state_reasons,
@@ -64,7 +65,6 @@ struct Inner {
     jobs: Vec<Job>,
     sending_to: HashSet<String>,
     next_job: u32,
-    stop_browsing: Option<std::os::unix::net::UnixStream>,
     last_busy: Option<Instant>,
 }
 
@@ -72,6 +72,8 @@ pub struct Spool {
     inner: Mutex<Inner>,
     changed: Condvar,
     pins: Pins,
+    nearby: Browser,
+    browsing: Mutex<bool>,
     session: Connection,
     announce: Box<dyn Fn() + Send + Sync>,
 }
@@ -112,12 +114,21 @@ impl Spool {
             }
         }
         inner.jobs.sort_by_key(|job| job.stored.id);
-        let spool = Arc::new(Self {
-            inner: Mutex::new(inner),
-            changed: Condvar::new(),
-            pins: Pins::load(),
-            session,
-            announce,
+        let spool = Arc::new_cyclic(|spool: &Weak<Self>| {
+            let spool = spool.clone();
+            Self {
+                inner: Mutex::new(inner),
+                changed: Condvar::new(),
+                pins: Pins::load(),
+                nearby: Browser::new(&KINDS, Addresses::Ipv4, move || {
+                    if let Some(spool) = spool.upgrade() {
+                        spool.found(printers(spool.nearby.services()));
+                    }
+                }),
+                browsing: Mutex::new(false),
+                session,
+                announce,
+            }
         });
         spool.start_workers();
         spool
@@ -172,42 +183,31 @@ impl Spool {
     }
 
     fn update_browsing(self: &Arc<Self>) {
-        let mut inner = self.lock();
-        let wanted = !inner.watchers.is_empty()
-            || inner
-                .jobs
-                .iter()
-                .any(|job| !job.stored.printer.starts_with(CUPS_PREFIX));
-        match (wanted, inner.stop_browsing.is_some()) {
-            (true, false) => {
-                let (keep, wake) = match std::os::unix::net::UnixStream::pair() {
-                    Ok(pair) => pair,
-                    Err(error) => {
-                        tracing::warn!("cannot start looking for printers: {error}");
-                        return;
-                    }
-                };
-                inner.stop_browsing = Some(keep);
-                drop(inner);
+        let wanted = {
+            let inner = self.lock();
+            !inner.watchers.is_empty()
+                || inner
+                    .jobs
+                    .iter()
+                    .any(|job| !job.stored.printer.starts_with(CUPS_PREFIX))
+        };
+        let mut browsing = self.browsing.lock().unwrap_or_else(PoisonError::into_inner);
+        if wanted == *browsing {
+            return;
+        }
+        *browsing = wanted;
+        match wanted {
+            true => {
                 let usb = Arc::clone(self);
                 std::thread::spawn(move || usb.look_for_usb_printers());
-                let spool = Arc::clone(self);
-                std::thread::spawn(move || {
-                    let browsing = crate::mdns::browse(&wake, |found| {
-                        spool.found(found);
-                        true
-                    });
-                    if let Err(error) = browsing {
-                        tracing::warn!("cannot look for printers: {error}");
-                    }
-                });
+                self.nearby.start();
             }
-            (false, true) => {
-                inner.stop_browsing = None;
-                inner.found.clear();
-            }
-            _ => {}
+            false => self.nearby.stop(),
         }
+    }
+
+    pub fn needs_avahi(&self) -> bool {
+        self.nearby.availability() == Availability::Missing
     }
 
     fn look_for_usb_printers(&self) {

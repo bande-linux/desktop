@@ -203,6 +203,8 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   D-Bus interface (Samba announces shares through it too), and `libnss-mdns`, so the `.local`
   names it finds resolve when mounting; neither touches `/etc/resolv.conf` or the network setup;
   without them the Network folder offers to install them;
+- `bande-printd` recommends `avahi-daemon` too, which it browses for driverless printers; without
+  it Settings ▸ Printers offers to install it and printers added by address still print;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides

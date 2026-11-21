@@ -507,6 +507,7 @@ version = "0.2.0"
 dependencies = [
  "async-io",
  "bande-bus",
+ "bande-discovery",
  "bande-fs",
  "bande-keyring",
  "bande-l10n",
@@ -819,7 +820,9 @@ dependencies = [
 name = "bande-discovery"
 version = "0.2.0"
 dependencies = [
+ "bande-bus",
  "tracing",
+ "zbus",
 ]
 
 [[package]]
@@ -1357,6 +1360,7 @@ version = "0.2.0"
 dependencies = [
  "bande-bus",
  "bande-content",
+ "bande-discovery",
  "bande-l10n",
  "bande-log",
  "bande-notify",
@@ -1556,6 +1560,7 @@ dependencies = [
  "bande-colour",
  "bande-config",
  "bande-datetime",
+ "bande-discovery",
  "bande-edid",
  "bande-fs",
  "bande-keyboard",

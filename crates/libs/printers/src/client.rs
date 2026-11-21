@@ -116,6 +116,10 @@ impl<'a> PrintClient<'a> {
             .call("Submit", &(title, printer, options, Fd::from(document)))
     }
 
+    pub fn needs_avahi(&self) -> zbus::Result<bool> {
+        self.proxy.call("NeedsAvahi", &())
+    }
+
     pub fn jobs(&self) -> zbus::Result<Vec<JobInfo>> {
         self.proxy.call("Jobs", &())
     }

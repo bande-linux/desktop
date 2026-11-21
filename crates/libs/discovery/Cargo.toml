@@ -5,14 +5,16 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Finds an account's servers from the DNS records of the user's own domain"
+description = "Finds an account's servers from its domain's DNS records and nearby services through Avahi"
 publish = false
 
 [features]
 testing = []
 
 [dependencies]
+bande-bus.workspace = true
 tracing.workspace = true
+zbus.workspace = true
 
 [lints]
 workspace = true

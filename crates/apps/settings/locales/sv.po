@@ -1316,6 +1316,9 @@ msgstr "Det gick inte att ändra skrivaren."
 msgid "Couldn't install printing support."
 msgstr "Det gick inte att installera utskriftsstöd."
 
+msgid "Couldn't install Avahi."
+msgstr "Det gick inte att installera Avahi."
+
 msgid "Couldn't add “{name}”. Check that it is turned on and on this network."
 msgstr "Det gick inte att lägga till ”{name}”. Kontrollera att den är påslagen och finns i det här nätverket."
 
@@ -1390,6 +1393,12 @@ msgstr "Installera"
 
 msgid "Installing…"
 msgstr "Installerar…"
+
+msgid "Avahi isn’t installed. Printers added by address work without it"
+msgstr "Avahi är inte installerat. Skrivare som lagts till med adress fungerar utan det"
+
+msgid "Finding printers nearby needs Avahi"
+msgstr "Avahi behövs för att hitta skrivare i närheten"
 
 msgid "Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
 msgstr "Nätverksskrivare behöver inget mer. USB-skrivare och skrivare som behöver en drivrutin använder utskriftssystemet CUPS, från Debian-arkivet"

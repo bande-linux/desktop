@@ -1162,7 +1162,7 @@ fn new_event_asked(arguments: Vec<String>) -> (bool, Vec<String>) {
 fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Path) -> bool {
     let mut offered = false;
     for argument in arguments {
-        if let Some(uid) = argument.strip_prefix(bande_calendar::donate::EVENT_ARGUMENT) {
+        if let Some(uid) = argument.strip_prefix(bande_calendar::offer::EVENT_ARGUMENT) {
             view.show_event(uid);
             continue;
         }

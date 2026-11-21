@@ -92,7 +92,7 @@ pub fn watched_folders(candidates: &[PathBuf]) -> Vec<PathBuf> {
                 .map(Path::to_path_buf)
         })
         .collect();
-    folders.push(PathBuf::from("/var/lib/dpkg"));
+    folders.extend(crate::readiness::binary_folders());
     folders.sort();
     folders.dedup();
     folders

@@ -3,9 +3,11 @@
 # gate: ci/check-app.sh, the package version (ci/version.sh), ci/check.sh, then the binaries in
 # the Cargo profile (default release; the gate's `gate` profile is release without its slow
 # optimisations), the generated package data in <target>/<profile>/deb-assets/bande-<app> (the
-# copyright file from ci/copyright.py, the metainfo with its release: the Cargo version and the
-# date of the app's last commit), bande-<app>_<version>_<arch>.deb with its name, architecture
-# and version checked, its language packs (bande-l10n-tool debs) and ci/smoke.sh on them all. Leaves the .debs in <out dir>.
+# copyright file from ci/copyright.py, the changelog and manual pages from ci/deb-docs.py, the
+# metainfo with its release: the Cargo version and the date of the app's last commit),
+# bande-<app>_<version>_<arch>.deb with its name, architecture and version checked and lintian
+# clean, its language packs (bande-l10n-tool debs) and ci/smoke.sh on them all. Leaves the .debs
+# in <out dir>.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 app=${1:?usage: build-app.sh <app> <out dir> [profile]} out=$(realpath -m "${2:?usage: build-app.sh <app> <out dir> [profile]}")
@@ -29,6 +31,7 @@ assets=$target/$profile/deb-assets/$name
 rm -rf "$assets"
 mkdir -p "$assets"
 ci/copyright.py "$name" > "$assets/copyright"
+ci/deb-docs.py "$name" "$version" "$assets"
 released=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%d -- "$dir")
 for metainfo in "$dir"/data/*.metainfo.xml; do
     sed "s|^</component>$|  <releases>\n    <release version=\"${version%%[~+]*}\" date=\"$released\"/>\n  </releases>\n</component>|" \
@@ -40,6 +43,14 @@ deb=$(cargo deb --no-build --locked -q --profile "$profile" -p "$name" --deb-ver
 [ "$(dpkg-deb -f "$deb" Package)" = "$name" ] && [ "$(dpkg-deb -f "$deb" Architecture)" = "$arch" ] &&
     [ "$(dpkg-deb -f "$deb" Version)" = "$version" ] ||
     { echo "build-app: $deb has the wrong name, architecture or version" >&2; exit 1; }
+lintian=(lintian --fail-on "error,warning")
+if [ "$(id -u)" = 0 ]; then
+    chmod 755 "$work"
+    chmod 644 "$deb"
+    runuser -u nobody -- "${lintian[@]}" "$deb"
+else
+    "${lintian[@]}" "$deb"
+fi
 mkdir -p "$out"
 cp "$deb" "$out/"
 ci/l10n-tool.sh debs "$target/$profile/l10n" "$out" "$version" "$name" ci/copyright

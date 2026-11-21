@@ -2224,7 +2224,7 @@ impl MailView {
             return;
         };
         self.workers.retain(|worker| worker.account != id);
-        std::thread::spawn(crate::donate::forget_in_search);
+        std::thread::spawn(crate::offer::forget_in_search);
         if let Err(error) = self.store.remove_account(id) {
             tracing::warn!("cannot remove {}: {error}", account.email);
         }

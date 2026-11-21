@@ -57,6 +57,8 @@ assets = [
     ["data/org.bande.Mail.desktop", "usr/share/applications/", "644"],
     ["target/release/deb-assets/bande-mail/org.bande.Mail.metainfo.xml", "usr/share/metainfo/", "644"],
     ["target/release/deb-assets/bande-mail/copyright", "usr/share/doc/bande-mail/copyright", "644"],
+    ["target/release/deb-assets/bande-mail/changelog.gz", "usr/share/doc/bande-mail/", "644"],
+    ["target/release/deb-assets/bande-mail/man/*", "usr/share/man/man1/", "644"],
     ["data/org.bande.Mail.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-mail/*", "usr/share/bande/l10n/bande-mail/", "644"],
 ]

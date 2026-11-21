@@ -8,4 +8,4 @@ Exec=bande-clock --background
 TryExec=bande-clock
 Icon=org.bande.Clock
 NoDisplay=true
-OnlyShowIn=Bande;
+OnlyShowIn=X-Bande;

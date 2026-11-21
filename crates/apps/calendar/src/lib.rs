@@ -1,10 +1,10 @@
 pub mod alerts;
 pub mod caldav;
-pub mod donate;
 pub mod edit;
 pub mod ical;
 pub mod invite;
 pub mod notice;
+pub mod offer;
 pub mod online;
 pub mod portal;
 pub mod settings;

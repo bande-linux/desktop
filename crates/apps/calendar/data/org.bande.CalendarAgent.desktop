@@ -8,4 +8,4 @@ Exec=bande-calendar --background
 TryExec=bande-calendar
 Icon=org.bande.Calendar
 NoDisplay=true
-OnlyShowIn=Bande;
+OnlyShowIn=X-Bande;

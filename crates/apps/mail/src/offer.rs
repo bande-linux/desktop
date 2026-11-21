@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use bande_search::{Donation, IndexProxyBlocking};
+use bande_search::{IndexProxyBlocking, Offer};
 use zbus::blocking::{Connection, connection};
 
 use crate::error::Result;
@@ -18,7 +18,7 @@ fn session() -> zbus::Result<Connection> {
         .build()
 }
 
-fn donations(change: &SearchChange) -> Vec<Donation> {
+fn offers(change: &SearchChange) -> Vec<Offer> {
     let Some(content) = &change.content else {
         return Vec::new();
     };
@@ -26,7 +26,7 @@ fn donations(change: &SearchChange) -> Vec<Donation> {
         true => content.sender_email.clone(),
         false => content.sender_name.clone(),
     };
-    let mut items = vec![Donation {
+    let mut items = vec![Offer {
         id: change.message.to_string(),
         kind: "mail".to_owned(),
         title: content.subject.clone(),
@@ -38,7 +38,7 @@ fn donations(change: &SearchChange) -> Vec<Donation> {
         ),
     }];
     if !content.sender_email.is_empty() {
-        items.push(Donation {
+        items.push(Offer {
             id: format!("contact:{}", content.sender_email.to_lowercase()),
             kind: "contact".to_owned(),
             title: sender,
@@ -62,11 +62,8 @@ fn offer(store: &Store, session: &Connection) -> Result<()> {
         };
         let (present, removed): (Vec<_>, Vec<_>) =
             changes.iter().partition(|change| change.content.is_some());
-        let items = present
-            .iter()
-            .flat_map(|change| donations(change))
-            .collect();
-        index.donate(DOMAIN, items, CURSOR)?;
+        let items = present.iter().flat_map(|change| offers(change)).collect();
+        index.offer(DOMAIN, items, CURSOR)?;
         let gone = removed
             .iter()
             .map(|change| change.message.to_string())

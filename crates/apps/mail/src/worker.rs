@@ -535,7 +535,7 @@ impl Runner {
             }
         }
         self.emit(Event::Synced(self.account.id, mailbox.id));
-        crate::donate::offer_to_search(&self.store);
+        crate::offer::offer_to_search(&self.store);
         Ok(())
     }
 

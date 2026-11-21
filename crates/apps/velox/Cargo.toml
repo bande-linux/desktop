@@ -54,6 +54,8 @@ assets = [
     ["data/org.bande.Velox.desktop", "usr/share/applications/", "644"],
     ["target/release/deb-assets/bande-velox/org.bande.Velox.metainfo.xml", "usr/share/metainfo/", "644"],
     ["target/release/deb-assets/bande-velox/copyright", "usr/share/doc/bande-velox/copyright", "644"],
+    ["target/release/deb-assets/bande-velox/changelog.gz", "usr/share/doc/bande-velox/", "644"],
+    ["target/release/deb-assets/bande-velox/man/*", "usr/share/man/man1/", "644"],
     ["data/org.bande.Velox.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/velox-helper", "usr/libexec/bande-velox/", "755"],
     ["data/org.bande.velox.policy", "usr/share/polkit-1/actions/", "644"],

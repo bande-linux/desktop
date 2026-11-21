@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use std::sync::mpsc::{Sender, channel};
 use std::thread;
 
-use bande_search::{Donation, IndexProxyBlocking};
+use bande_search::{IndexProxyBlocking, Offer};
 use zbus::blocking::Connection;
 
 use crate::store::Calendar;
@@ -12,26 +12,26 @@ use crate::store::Calendar;
 pub const DOMAIN: &str = "org.bande.Calendar";
 pub const EVENT_ARGUMENT: &str = "event:";
 
-struct Offer {
+struct Snapshot {
     fingerprint: String,
-    items: Vec<Donation>,
+    items: Vec<Offer>,
 }
 
-fn take_offer(offer: Offer) -> zbus::Result<()> {
+fn take_snapshot(snapshot: Snapshot) -> zbus::Result<()> {
     let session = Connection::session()?;
     let index = IndexProxyBlocking::new(&session)?;
-    if index.cursor(DOMAIN)? != offer.fingerprint {
+    if index.cursor(DOMAIN)? != snapshot.fingerprint {
         index.forget_all(DOMAIN)?;
-        index.donate(DOMAIN, offer.items, &offer.fingerprint)?;
+        index.offer(DOMAIN, snapshot.items, &snapshot.fingerprint)?;
     }
     Ok(())
 }
 
-fn offers() -> Option<&'static Sender<Offer>> {
-    static OFFERS: OnceLock<Option<Sender<Offer>>> = OnceLock::new();
+fn offers() -> Option<&'static Sender<Snapshot>> {
+    static OFFERS: OnceLock<Option<Sender<Snapshot>>> = OnceLock::new();
     OFFERS
         .get_or_init(|| {
-            let (sender, received) = channel::<Offer>();
+            let (sender, received) = channel::<Snapshot>();
             thread::Builder::new()
                 .name("search-offers".to_owned())
                 .spawn(move || {
@@ -39,7 +39,7 @@ fn offers() -> Option<&'static Sender<Offer>> {
                         while let Ok(newer) = received.try_recv() {
                             offer = newer;
                         }
-                        if let Err(error) = take_offer(offer) {
+                        if let Err(error) = take_snapshot(offer) {
                             tracing::debug!("search has not taken the events: {error}");
                         }
                     }
@@ -63,7 +63,7 @@ pub fn offer_to_search(calendars: &[Calendar]) {
             else {
                 continue;
             };
-            items.push(Donation {
+            items.push(Offer {
                 id: event.uid.clone(),
                 kind: "event".to_owned(),
                 title: event.summary.clone(),
@@ -74,7 +74,7 @@ pub fn offer_to_search(calendars: &[Calendar]) {
         }
     }
     if let Some(offers) = offers() {
-        let _ = offers.send(Offer {
+        let _ = offers.send(Snapshot {
             fingerprint: format!("{:016x}", hasher.finish()),
             items,
         });

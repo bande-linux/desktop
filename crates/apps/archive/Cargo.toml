@@ -44,6 +44,8 @@ assets = [
     ["data/org.bande.Archives.desktop", "usr/share/applications/", "644"],
     ["target/release/deb-assets/bande-archive/org.bande.Archives.metainfo.xml", "usr/share/metainfo/", "644"],
     ["target/release/deb-assets/bande-archive/copyright", "usr/share/doc/bande-archive/copyright", "644"],
+    ["target/release/deb-assets/bande-archive/changelog.gz", "usr/share/doc/bande-archive/", "644"],
+    ["target/release/deb-assets/bande-archive/man/*", "usr/share/man/man1/", "644"],
     ["data/org.bande.Archives.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-archive/*", "usr/share/bande/l10n/bande-archive/", "644"],
 ]

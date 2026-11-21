@@ -23,7 +23,7 @@ use super::readiness::{self, Blocker};
 
 const LOGIN_FILE: &str = "velox.json";
 const SSH_PORT: u16 = 22;
-const READINESS_FOLDERS: [&str; 2] = ["/var/lib/dpkg", "/etc"];
+const GROUPS_FOLDER: &str = "/etc";
 const USB_NODES: &str = "/dev/bus/usb";
 const PAUSED: &str = "STOP";
 const RESUMED: &str = "RESUME";
@@ -780,9 +780,14 @@ impl Backend {
                 .filter_map(Result::ok)
                 .map(|entry| entry.path());
             let usb = std::iter::once(PathBuf::from(USB_NODES)).chain(buses);
-            for folder in READINESS_FOLDERS
-                .iter()
-                .map(PathBuf::from)
+            let packages = Host::package_folders().into_iter().filter_map(|folder| {
+                folder
+                    .ancestors()
+                    .find(|ancestor| ancestor.is_dir())
+                    .map(Path::to_path_buf)
+            });
+            for folder in std::iter::once(PathBuf::from(GROUPS_FOLDER))
+                .chain(packages)
                 .chain(vms)
                 .chain(usb)
             {

@@ -27,7 +27,6 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 const SHOT_UNUSED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const SHOT_CACHE_BYTES: u64 = 200 << 20;
 const SYSTEM_APPLICATIONS: &str = "/usr/share/applications";
-const DPKG_STATUS: &str = "/var/lib/dpkg/status";
 const USER_AGENT: &str = concat!("bande-software/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -401,7 +400,6 @@ fn fingerprint() -> Option<SystemTime> {
         .iter()
         .flat_map(|root| [Path::new(root).join("xml"), Path::new(root).join("yaml")])
         .chain([
-            PathBuf::from(DPKG_STATUS),
             PathBuf::from(catalog::METAINFO),
             PathBuf::from(SYSTEM_APPLICATIONS),
         ])

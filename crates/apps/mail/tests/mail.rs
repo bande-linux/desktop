@@ -8,13 +8,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use bande_mail::compose::{Draft, Outgoing, from_mailto};
-use bande_mail::donate::{DOMAIN, MESSAGE_ARGUMENT, offer_to_search};
 use bande_mail::imap::{Fetched, Folder, Session};
 use bande_mail::message::Address;
 use bande_mail::net::{Network, Security, Server};
+use bande_mail::offer::{DOMAIN, MESSAGE_ARGUMENT, offer_to_search};
 use bande_mail::store::{Account, Store};
 use bande_mail::worker::{Command as Order, Event, Mailroom, Status, Worker};
-use bande_search::Donation;
+use bande_search::Offer;
 use zbus::blocking::Connection;
 
 const DOVECOT: &str = "/usr/sbin/dovecot";
@@ -217,7 +217,7 @@ fn a_mailto_link_cannot_add_hidden_recipients_or_attachments() {
 
 #[derive(Default)]
 struct Taken {
-    items: Vec<Donation>,
+    items: Vec<Offer>,
     forgotten: Vec<String>,
     cursor: String,
 }
@@ -226,7 +226,7 @@ struct Index(Arc<Mutex<Taken>>);
 
 #[zbus::interface(name = "org.bande.Search")]
 impl Index {
-    fn donate(&self, domain: String, items: Vec<Donation>, cursor: String) {
+    fn offer(&self, domain: String, items: Vec<Offer>, cursor: String) {
         assert_eq!(domain, DOMAIN);
         let mut taken = self.0.lock().unwrap();
         taken.items.extend(items);
@@ -247,7 +247,7 @@ fn offer<'a>(store: &Store, taken: &'a Mutex<Taken>) -> MutexGuard<'a, Taken> {
     taken.lock().unwrap()
 }
 
-fn item<'a>(taken: &'a Taken, kind: &str) -> &'a Donation {
+fn item<'a>(taken: &'a Taken, kind: &str) -> &'a Offer {
     taken.items.iter().find(|item| item.kind == kind).unwrap()
 }
 

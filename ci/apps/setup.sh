@@ -12,7 +12,7 @@ shift
 cargo_deb=3.8.0
 packages=(build-essential cargo rustc rustfmt rust-clippy pkg-config jq libxkbcommon-dev libfontconfig1
     libwayland-client0 libvulkan1 mesa-vulkan-drivers dbus-daemon fonts-inter fonts-manrope
-    fonts-jetbrains-mono desktop-file-utils appstream python3 distro-info-data)
+    fonts-jetbrains-mono desktop-file-utils appstream python3 distro-info-data lintian)
 for app in "$@"; do
     [ -f "apps/$app/Cargo.toml" ] || { echo "setup: no app apps/$app" >&2; exit 1; }
     mapfile -t -O ${#packages[@]} packages < <(grep -v '^#' "apps/$app/build-depends" 2>/dev/null | xargs -rn1)

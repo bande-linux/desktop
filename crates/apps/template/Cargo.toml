@@ -30,6 +30,8 @@ assets = [
     ["data/org.bande.Template.desktop", "usr/share/applications/", "644"],
     ["target/release/deb-assets/bande-template/org.bande.Template.metainfo.xml", "usr/share/metainfo/", "644"],
     ["target/release/deb-assets/bande-template/copyright", "usr/share/doc/bande-template/copyright", "644"],
+    ["target/release/deb-assets/bande-template/changelog.gz", "usr/share/doc/bande-template/", "644"],
+    ["target/release/deb-assets/bande-template/man/*", "usr/share/man/man1/", "644"],
     ["data/org.bande.Template.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["target/release/l10n/development/bande-template/*", "usr/share/bande/l10n/bande-template/", "644"],
 ]

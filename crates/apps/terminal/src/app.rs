@@ -1111,7 +1111,7 @@ impl TerminalWindow {
 
     fn show_in_files(&mut self, window: &mut Window, path: &Path) {
         let token = window
-            .activation_token(APP_ID)
+            .activation_token(FILES_APP_ID)
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
         let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];

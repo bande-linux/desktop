@@ -315,7 +315,7 @@ impl Mail {
 
     fn open_argument(&mut self, cx: &mut Cx<Self>, argument: &str) {
         if let Some(message) = argument
-            .strip_prefix(bande_mail::donate::MESSAGE_ARGUMENT)
+            .strip_prefix(bande_mail::offer::MESSAGE_ARGUMENT)
             .and_then(|message| message.parse().ok())
         {
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
@@ -342,18 +342,18 @@ impl Mail {
             .next()
             .unwrap_or("https")
             .to_ascii_lowercase();
-        let token = cx.window(window).and_then(|(window, _)| {
-            window
-                .activation_token(APP_ID)
-                .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
-                .ok()
-        });
         let entry = self
             .apps()
             .default_for(&format!("x-scheme-handler/{scheme}"))
             .cloned();
         match entry {
             Some(entry) => {
+                let token = cx.window(window).and_then(|(window, _)| {
+                    window
+                        .activation_token(entry.app_id())
+                        .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+                        .ok()
+                });
                 if let Err(error) =
                     bande_xdg::launch_with_arguments(&entry, &[url.to_owned()], token.as_deref())
                 {
@@ -365,12 +365,12 @@ impl Mail {
     }
 
     fn open_file(&mut self, cx: &mut Cx<Self>, window: WindowId, path: &Path) {
-        let token = cx
-            .window(window)
-            .and_then(|(window, _)| window.activation_token(APP_ID).ok());
         let entry = self.apps().default_for_path(path).cloned();
         match entry {
             Some(entry) => {
+                let token = cx
+                    .window(window)
+                    .and_then(|(window, _)| window.activation_token(entry.app_id()).ok());
                 if let Err(error) =
                     bande_xdg::launch_with(&entry, &[path.to_path_buf()], token.as_deref())
                 {

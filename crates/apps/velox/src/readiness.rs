@@ -173,12 +173,18 @@ impl Readiness {
     }
 }
 
-fn installed(binary: &str) -> bool {
+pub(crate) fn binary_folders() -> Vec<PathBuf> {
     std::env::var_os("PATH")
         .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
         .unwrap_or_default()
         .into_iter()
         .chain(BINARY_FOLDERS.iter().map(PathBuf::from))
+        .collect()
+}
+
+fn installed(binary: &str) -> bool {
+    binary_folders()
+        .iter()
         .any(|folder| folder.join(binary).is_file())
 }
 

@@ -116,12 +116,13 @@ impl Accel {
     }
 }
 
-fn has_dbus_display() -> bool {
+fn dbus_display() -> PathBuf {
     let architecture = std::env::consts::ARCH;
-    Path::new(&format!(
-        "/usr/lib/{architecture}-linux-gnu/qemu/ui-dbus.so"
-    ))
-    .is_file()
+    PathBuf::from(format!("/usr/lib/{architecture}-linux-gnu/qemu/ui-dbus.so"))
+}
+
+fn has_dbus_display() -> bool {
+    dbus_display().is_file()
 }
 
 impl Host {
@@ -155,6 +156,23 @@ impl Host {
         }
         missing.dedup();
         missing
+    }
+
+    /// The folders that hold what `missing_packages` looks for, to watch for an install.
+    pub fn package_folders() -> Vec<PathBuf> {
+        let binaries = std::env::var_os("PATH")
+            .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+            .unwrap_or_default();
+        let files = REQUIRED
+            .iter()
+            .map(|(path, _)| PathBuf::from(path))
+            .filter(|path| path.is_absolute())
+            .chain([dbus_display()])
+            .filter_map(|path| path.parent().map(Path::to_path_buf));
+        let mut folders: Vec<PathBuf> = binaries.into_iter().chain(files).collect();
+        folders.sort();
+        folders.dedup();
+        folders
     }
 
     pub fn render_node() -> Option<PathBuf> {

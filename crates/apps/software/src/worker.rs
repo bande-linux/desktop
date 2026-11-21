@@ -3,7 +3,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use bande_inbox::{Inbox, Outbox};
 use bande_packages::flatpak::{self, Canceller as FlatpakCanceller};
-use bande_packages::{Client, Error, ErrorCode, Info, Mode, Package, Progress, Status, native};
+use bande_packages::{
+    Client, Error, ErrorCode, Info, Mode, Package, Progress, Status, native, schedule,
+};
 
 use crate::catalog::flatpak_needs_x11;
 use crate::media::Loaded;
@@ -341,6 +343,9 @@ fn transact(
 }
 
 fn ask(client: &Client, arch: &str, queries: &Receiver<Query>, out: &Outbox<Message>) {
+    let session = zbus::blocking::Connection::session()
+        .inspect_err(|error| tracing::warn!("cannot reach the session bus: {error}"))
+        .ok();
     for query in queries {
         let message = match query {
             Query::PlanRemoval { key, package } => {
@@ -372,7 +377,10 @@ fn ask(client: &Client, arch: &str, queries: &Receiver<Query>, out: &Outbox<Mess
                 }
             },
             Query::Updates => {
-                let flatpaks = flatpak::updates().unwrap_or_else(|error| {
+                let due = session
+                    .as_ref()
+                    .is_some_and(|session| schedule::check_due(session, client));
+                let flatpaks = flatpak::updates(due).unwrap_or_else(|error| {
                     if error != flatpak::Error::Missing {
                         tracing::warn!("cannot look for Flatpak updates: {error}");
                     }

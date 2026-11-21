@@ -809,7 +809,9 @@ and adds a remote to their own installation (`flatpak remote-add --user`), Softw
 for the command at launch) shows that remote's apps; Bande adds no remote itself. `bande_packages::flatpak` drives the `flatpak` command line on worker threads. Software
 Update lists `flatpak remote-ls --user --updates` beside the Debian updates, refreshes their
 AppStream with the package lists and installs them first with `flatpak update --user`, without a
-password or a restart. Their desktop entries and icons come from
+password or a restart. Software's Updates list reads the remotes' cached summaries
+(`--cached`) and asks the remotes only when `bande_packages::schedule::check_due` says the user's
+automatic check is due, the same rule Software Update follows. Their desktop entries and icons come from
 `~/.local/share/flatpak/exports/share` on `XDG_DATA_DIRS`, which flatpak's systemd user
 environment generator (`60-flatpak`) and `/etc/profile.d/flatpak.sh` set; the Taskbar watches the
 nearest existing folder of every `applications` folder there, so the first Flatpak app appears

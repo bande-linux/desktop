@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 use bande_l10n::{tr, trn};
+use bande_packages::schedule::CHECK_SLACK;
 use bande_xdg::{replace_file, state_home};
 
-use super::{CHECK_SLACK, Reboot, SoftwareState};
+use super::{Reboot, SoftwareState};
 
 const FILE: &str = "bande/software-badge";
 const PACKAGE_LOG: &str = "/var/log/dpkg.log";

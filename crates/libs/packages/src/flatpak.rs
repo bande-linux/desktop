@@ -259,14 +259,15 @@ pub fn installed() -> Result<Vec<Installed>, Error> {
         .collect())
 }
 
-pub fn updates() -> Result<Vec<Update>, Error> {
+pub fn updates(fetch: bool) -> Result<Vec<Update>, Error> {
     if !has_remotes() {
         return Ok(Vec::new());
     }
-    let listed = output(
-        "remote-ls",
-        &["--updates", "--columns=application,name,version,ref"],
-    )?;
+    let mut args = vec!["--updates", "--columns=application,name,version,ref"];
+    if !fetch {
+        args.push("--cached");
+    }
+    let listed = output("remote-ls", &args)?;
     Ok(columns(&listed)
         .filter_map(|row| match row.as_slice() {
             [id, name, version, reference, ..] => Some(Update {

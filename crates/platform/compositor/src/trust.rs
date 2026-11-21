@@ -23,8 +23,44 @@ const SETTINGS: &str = "bande-settings";
 const PRIVACY_PANE: &str = "privacy-security";
 const NOTICE_TIMEOUT: i32 = 0;
 const INTERPRETERS: &[&str] = &[
-    "bash", "dash", "env", "fish", "java", "lua", "node", "perl", "python", "python3", "ruby",
-    "sh", "zsh",
+    "awk",
+    "bash",
+    "busybox",
+    "cjs",
+    "csh",
+    "dash",
+    "env",
+    "expect",
+    "fish",
+    "gawk",
+    "gjs",
+    "guile",
+    "java",
+    "julia",
+    "ksh",
+    "lua",
+    "luajit",
+    "mawk",
+    "mksh",
+    "nawk",
+    "node",
+    "nodejs",
+    "original-awk",
+    "perl",
+    "php",
+    "pwsh",
+    "pypy",
+    "python",
+    "R",
+    "Rscript",
+    "ruby",
+    "sh",
+    "tclsh",
+    "tcsh",
+    "toybox",
+    "wish",
+    "yash",
+    "zsh",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,10 +121,14 @@ pub(crate) fn verified_program(pid: i32) -> Option<Claimant> {
         && running.ino() == installed.ino()
         && installed.uid() == 0
         && installed.mode() & 0o022 == 0
-        && !INTERPRETERS
-            .iter()
-            .any(|interpreter| name.split('.').next() == Some(interpreter));
+        && !runs_other_code(name);
     trustworthy.then_some(Claimant::Program(path))
+}
+
+fn runs_other_code(name: &str) -> bool {
+    let unversioned = name.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.');
+    let dynamic_loader = name.starts_with("ld") && name.contains(".so");
+    dynamic_loader || INTERPRETERS.contains(&unversioned)
 }
 
 pub(crate) fn is_sandboxed(client: &Client) -> bool {

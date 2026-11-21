@@ -104,12 +104,13 @@ selected event, Ctrl+W close and Ctrl+Q quit.
 | `src/main.rs` | the app: window, menus, sync timers, alerts, files and links |
 
 It is a `bande-app` app on the desktop's toolkit, design tokens and theme, like Files and
-Settings; the desktop pin is shared by the workspace (see `../../README.md`).
+Settings.
 
 ## Tests
 
-`tests/untrusted.rs` opens a hostile `.ics` file without panicking, refuses a FIFO or a file over
-64 MiB, and never sends a password over plain HTTP to anything but this computer.
-`tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
-exceptions and end follow. The repo's whole test list and the reason for each is in
-`NOTES/tests.md`.
+`tests/untrusted.rs` opens a hostile `.ics` file without panicking and refuses a FIFO or a file
+over 64 MiB. `tests/accounts.rs` finds a CalDAV server from a domain's records and signs in with
+Digest after a wrong password, and never sends a password over plain HTTP to anything but this
+computer. `tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
+exceptions and end follow. The whole test list and the reason for each is in
+`docs/quality/tests.md`.

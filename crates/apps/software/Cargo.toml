@@ -43,7 +43,7 @@ section = "admin"
 depends = "$auto, appstream, packagekit, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
 recommends = "bande-polkit, bande-settings"
 extended-description = """\
-The app store of the Bande desktop: browse and search the apps Debian \
+Software, the software centre of the Bande desktop: browse and search the apps Debian \
 describes with AppStream, read about them before installing, and hide apps \
 that need X11, which Bande does not run. When flatpak is installed and a \
 Flatpak remote is configured, it lists that remote's apps too."""

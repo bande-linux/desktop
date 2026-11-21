@@ -541,7 +541,7 @@ impl Installer {
                         tr!("There isn't enough disk space. Free up some space and try again.")
                     }
                     Problem::Dependencies => tr!(
-                        "It needs packages that can't be installed right now. Install pending updates in Settings › Software Update, then try again."
+                        "It needs packages that can't be installed right now. Install pending updates in Settings ▸ Software Update, then try again."
                     ),
                     Problem::Install => tr!(
                         "The package couldn't be installed. Try again, or open Details to see what went wrong."

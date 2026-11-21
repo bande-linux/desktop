@@ -373,7 +373,7 @@ impl SettingsView {
                 ),
                 heading(text!("Default Email Reader")),
                 note(text!(
-                    "To open email links in Mail, choose it in Settings → Default Apps."
+                    "To open email links in Mail, choose it in Settings ▸ Apps."
                 )),
             ],
         )
@@ -630,7 +630,7 @@ impl SettingsView {
         lines.extend([
             row(text!("Then"), action),
             buttons(finish),
-            note(text!("Rules act on new unread mail in the Inbox while Mail is open, in this order. Message → Apply Rules runs them on the messages you choose.")),
+            note(text!("Rules act on new unread mail in the Inbox while Mail is open, in this order. Message ▸ Apply Rules runs them on the messages you choose.")),
         ]);
         Form::new(&Tab::Rules.title(), lines)
     }

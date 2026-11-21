@@ -1613,7 +1613,7 @@ impl MailView {
             self.ui.present_sheet(
                 Alert::new(
                     &trn!("A Message Is Waiting to Be Sent", "{count} Messages Are Waiting to Be Sent", count = count),
-                    &tr!("{email} is turned off. Mail sends what is waiting when you turn the account on again in Settings → Accounts. If you quit Mail first, it opens again as an unsent message.", email = account.email.clone()),
+                    &tr!("{email} is turned off. Mail sends what is waiting when you turn the account on again in Mail Settings ▸ Accounts. If you quit Mail first, it opens again as an unsent message.", email = account.email.clone()),
                     |_| {},
                 )
                 .primary(&tr!("OK"), "ok"),

@@ -232,8 +232,8 @@ msgstr "Sök"
 msgid "No file is open"
 msgstr "Ingen fil är öppen"
 
-msgid "Open an image or a PDF document with File › Open… or from Files."
-msgstr "Öppna en bild eller ett PDF-dokument med Arkiv › Öppna… eller från Filer."
+msgid "Open an image or a PDF document with File ▸ Open… or from Files."
+msgstr "Öppna en bild eller ett PDF-dokument med Arkiv ▸ Öppna… eller från Filer."
 
 msgid "{name} (page {page} of {count})"
 msgstr "{name} (sida {page} av {count})"

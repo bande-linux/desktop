@@ -14,7 +14,7 @@
     <name>Bande</name>
   </developer>
   <launchable type="desktop-id">org.bande.Viewer.desktop</launchable>
-  <url type="homepage">https://github.com/bande-linux/apps</url>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
   <provides>
     <mediatype>image/png</mediatype>
     <mediatype>image/jpeg</mediatype>

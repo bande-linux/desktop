@@ -275,8 +275,8 @@ msgstr "Spela upp ett ljud"
 msgid "Default Email Reader"
 msgstr "Standardprogram för e-post"
 
-msgid "To open email links in Mail, choose it in Settings → Default Apps."
-msgstr "Om du vill öppna e-postlänkar i E-post väljer du det i Inställningar → Standardappar."
+msgid "To open email links in Mail, choose it in Settings ▸ Apps."
+msgstr "Om du vill öppna e-postlänkar i E-post väljer du det i Inställningar ▸ Appar."
 
 msgid "None"
 msgstr "Ingen"
@@ -396,8 +396,8 @@ msgstr "Spara regel"
 msgid "Add Rule"
 msgstr "Lägg till regel"
 
-msgid "Rules act on new unread mail in the Inbox while Mail is open, in this order. Message → Apply Rules runs them on the messages you choose."
-msgstr "Regler tillämpas på nya olästa meddelanden i inkorgen medan E-post är öppet, i den här ordningen. Meddelande → Tillämpa regler kör dem på de meddelanden du väljer."
+msgid "Rules act on new unread mail in the Inbox while Mail is open, in this order. Message ▸ Apply Rules runs them on the messages you choose."
+msgstr "Regler tillämpas på nya olästa meddelanden i inkorgen medan E-post är öppet, i den här ordningen. Meddelande ▸ Tillämpa regler kör dem på de meddelanden du väljer."
 
 msgid "Account of the selected mailbox"
 msgstr "Kontot för den markerade brevlådan"
@@ -659,8 +659,8 @@ msgid_plural "{count} Messages Are Waiting to Be Sent"
 msgstr[0] "Ett meddelande väntar på att skickas"
 msgstr[1] "{count} meddelanden väntar på att skickas"
 
-msgid "{email} is turned off. Mail sends what is waiting when you turn the account on again in Settings → Accounts. If you quit Mail first, it opens again as an unsent message."
-msgstr "{email} är avstängt. E-post skickar det som väntar när du slår på kontot igen i Inställningar → Konton. Om du avslutar E-post först öppnas det igen som ett oskickat meddelande."
+msgid "{email} is turned off. Mail sends what is waiting when you turn the account on again in Mail Settings ▸ Accounts. If you quit Mail first, it opens again as an unsent message."
+msgstr "{email} är avstängt. E-post skickar det som väntar när du slår på kontot igen i Inställningar för E-post ▸ Konton. Om du avslutar E-post först öppnas det igen som ett oskickat meddelande."
 
 msgid "The mailbox could not be changed"
 msgstr "Brevlådan kunde inte ändras"

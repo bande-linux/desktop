@@ -1236,7 +1236,7 @@ impl Software {
                 "Your apps and system are up to date."
             ))));
             if self.settings_app {
-                widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings › Software Update, which also restarts what needs it.")).secondary()));
+                widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings ▸ Software Update, which also restarts what needs it.")).secondary()));
                 widgets.push(row(vec![boxed(
                     self.button(&tr!("Check for Updates…"), Intent::SoftwareUpdate),
                 )]));
@@ -1250,7 +1250,7 @@ impl Software {
             count = count
         ))));
         if self.settings_app {
-            widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings › Software Update, which also restarts what needs it.")).secondary()));
+            widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings ▸ Software Update, which also restarts what needs it.")).secondary()));
             widgets.push(row(vec![boxed(
                 self.button(&tr!("Update All…"), Intent::SoftwareUpdate)
                     .primary(),

@@ -209,8 +209,8 @@ msgstr "Inga appar från katalogen är installerade."
 msgid "Your apps and system are up to date."
 msgstr "Dina appar och ditt system är uppdaterade."
 
-msgid "Updates are installed in Settings › Software Update, which also restarts what needs it."
-msgstr "Uppdateringar installeras i Inställningar › Programuppdatering, som också startar om det som behöver det."
+msgid "Updates are installed in Settings ▸ Software Update, which also restarts what needs it."
+msgstr "Uppdateringar installeras i Inställningar ▸ Programuppdatering, som också startar om det som behöver det."
 
 msgid "Check for Updates…"
 msgstr "Sök efter uppdateringar…"

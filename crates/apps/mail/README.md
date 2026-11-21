@@ -27,7 +27,7 @@ apt install bande-mail
   Remote Content in one of their messages. Composing: the account new messages are sent from and whether replies
   quote the original. Rules (each can be edited or removed): if any or all of several conditions hold (From, To or Cc, or
   Subject contains a text), move new unread Inbox mail to a mailbox, flag it or mark it read,
-  while Mail is open; Message → Apply Rules runs them on the chosen messages. They are kept in
+  while Mail is open; Message ▸ Apply Rules runs them on the chosen messages. They are kept in
   `~/.config/bande/mail.conf`; signatures, servers and rules in the offline store.
 - **Finding servers** asks only the address's own domain, in this order: DNS SRV records (RFC
   6186: `_imaps`, `_imap`, `_submissions`, `_submission`), the domain's published autoconfig
@@ -47,7 +47,7 @@ apt install bande-mail
   paperclip. Messages of one conversation (the first `References` entry, else the
   `Message-ID`; a reply that has neither joins the latest message of the account with the same
   subject in the 30 days before it) share one row with a count; clicking the count, or Right and Left, shows and
-  hides the earlier ones, and acting on a closed conversation acts on all of it (Settings →
+  hides the earlier ones, and acting on a closed conversation acts on all of it (Settings ▸
   Viewing turns this off). The reader shows the whole conversation, oldest first, with your
   replies from Sent and the account's other mailboxes (not Trash or Junk): the chosen message and
   unread ones open, the others as a line that opens on a click. Each open message shows its
@@ -63,25 +63,25 @@ apt install bande-mail
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
   remote pictures are not fetched until **Load Remote Content** is clicked in the reader's
-  banner, which Mail then remembers for that sender (or by themselves when Settings → Viewing
+  banner, which Mail then remembers for that sender (or by themselves when Settings ▸ Viewing
   allows it), and then only over HTTPS, at
   most 20 per message, 10 MB each, decoded with limits on their size.
 - **Toolbar and keys.** Get Mail (F5), New Message (Ctrl+N), Archive (Shift+Ctrl+A),
   Delete (Delete or Backspace), Junk, Reply (Ctrl+R), Reply All (Shift+Ctrl+R),
-  Forward (Shift+Ctrl+F), Flag (Message → Flag picks one of seven colours, kept
+  Forward (Shift+Ctrl+F), Flag (Message ▸ Flag picks one of seven colours, kept
   on the server), Mark as Read or Unread, Send
   (Ctrl+Enter), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which finds messages
   with every word in their sender, recipients, subject or text; `from:`, `to:` and `subject:`
   keep a word to that field, and quotes keep words together. View sorts the list by date, sender, subject, size or unread first,
-  either way. Mailbox → Mark All as Read marks the shown mailbox read, and Message → Move To files the
+  either way. Mailbox ▸ Mark All as Read marks the shown mailbox read, and Message ▸ Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
   act on all of them, and dragging them onto a mailbox in the sidebar moves them. Undo (Ctrl+Z)
   puts moved or deleted messages back, up to 20 steps, and a mailbox that messages were moved
-  to is synced right after the move. Mailbox → New Mailbox… and a mailbox's menu in the sidebar
+  to is synced right after the move. Mailbox ▸ New Mailbox… and a mailbox's menu in the sidebar
   create, rename and delete mailboxes on the server; the special mailboxes keep their names.
 - **Compose** opens its own window, with From when there are several accounts, and Bcc when
-  View → Bcc Address Field is on or the message has Bcc recipients. Replies quote the
+  View ▸ Bcc Address Field is on or the message has Bcc recipients. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and replaces the previous account's signature when From
   changes. Files are
@@ -103,7 +103,7 @@ apt install bande-mail
 - **New mail.** A second connection IDLEs on the Inbox; servers without IDLE are polled every
   five minutes. New unread mail shows a notification through `org.freedesktop.Notifications`.
 - **Integration.** `org.bande.Mail.desktop` registers Mail for `mailto:` links (choose it in
-  Settings → Default Apps). A second `bande-mail mailto:…` hands the link to the running Mail.
+  Settings ▸ Apps). A second `bande-mail mailto:…` hands the link to the running Mail.
 
 ## Robustness
 
@@ -114,21 +114,13 @@ backoff from 5 s to 5 min. A changed `UIDVALIDITY` starts the mailbox over, a se
 `MOVE` gets `COPY` + `EXPUNGE`, and one without `SPECIAL-USE` has its folders recognised by
 their usual English names.
 
-## Building and testing
+## Tests
 
-```
-ci/gate.sh mail
-```
-
-`tests/send.rs` starts Debian's `dovecot` as the current user on a free loopback port, with a
+`tests/mail.rs` starts Debian's `dovecot` as the current user on a free loopback port, with a
 small SMTP listener beside it, and checks that a message sent after the IMAP session went stale
 goes out once, without injected headers or its Bcc, and is kept in Sent. It skips itself when
 `/usr/sbin/dovecot` is not installed. It also checks that a `mailto:` link cannot add Bcc
-recipients or attachments. The repo's whole test list is in `NOTES/tests.md`.
-
-Mail is a `bande-app` app; the `bande-*` crates come from
-[bande-linux/desktop](https://github.com/bande-linux/desktop) at the workspace's one pin
-(`ci/bump-desktop.sh`, see `../../README.md`).
+recipients or attachments. The whole test list is in `docs/quality/tests.md`.
 
 ## Dependencies
 

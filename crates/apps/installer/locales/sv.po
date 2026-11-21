@@ -177,8 +177,8 @@ msgstr "Det gick inte att hämta de paket som behövs. Kontrollera din interneta
 msgid "There isn't enough disk space. Free up some space and try again."
 msgstr "Det finns inte tillräckligt med diskutrymme. Frigör lite utrymme och försök igen."
 
-msgid "It needs packages that can't be installed right now. Install pending updates in Settings › Software Update, then try again."
-msgstr "Paketet behöver andra paket som inte kan installeras just nu. Installera väntande uppdateringar i Inställningar › Programuppdatering och försök sedan igen."
+msgid "It needs packages that can't be installed right now. Install pending updates in Settings ▸ Software Update, then try again."
+msgstr "Paketet behöver andra paket som inte kan installeras just nu. Installera väntande uppdateringar i Inställningar ▸ Programuppdatering och försök sedan igen."
 
 msgid "The package couldn't be installed. Try again, or open Details to see what went wrong."
 msgstr "Det gick inte att installera paketet. Försök igen, eller öppna Detaljer för att se vad som gick fel."

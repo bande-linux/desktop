@@ -51,7 +51,6 @@ s = re.sub(r'ac_add_options --with-(google-location-service|google-safebrowsing|
 s += '''ac_add_options --disable-crashreporter
 ac_add_options --disable-debug-symbols
 ac_add_options --disable-default-browser-agent
-ac_add_options --disable-eme
 ac_add_options --enable-proxy-bypass-protection
 export MOZ_TELEMETRY_REPORTING=
 mk_add_options MOZ_CRASHREPORTER=0

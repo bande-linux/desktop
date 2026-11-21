@@ -1,0 +1,18 @@
+Media plugins download only once the user has turned on DRM content
+
+--- a/toolkit/modules/GMPInstallManager.sys.mjs
++++ b/toolkit/modules/GMPInstallManager.sys.mjs
+@@ -287,8 +287,11 @@
+       return Promise.reject({ type: "alreadycalled" });
+     }
+ 
+-    if (!GMPPrefs.getBool(GMPPrefs.KEY_UPDATE_ENABLED, true)) {
+-      log.info("Updates are disabled via media.gmp-manager.updateEnabled");
++    if (
++      !GMPPrefs.getBool(GMPPrefs.KEY_UPDATE_ENABLED, true) ||
++      !GMPPrefs.getBool(GMPPrefs.KEY_EME_ENABLED, false)
++    ) {
++      log.info("Updates are off until DRM content is turned on");
+       return { usedFallback: true, addons: [] };
+     }
+ 

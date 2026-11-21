@@ -10,7 +10,6 @@ const KVM: &str = "/dev/kvm";
 const ACL_XATTR: &str = "system.posix_acl_access";
 const ACL_USER: u16 = 2;
 const ACL_READ_WRITE: u16 = 6;
-pub const INSTALL: &str = "sudo apt install qemu-system-arm qemu-efi-aarch64 qemu-utils passt";
 pub const KVM_GROUP: &str = "sudo usermod -aG kvm $USER";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

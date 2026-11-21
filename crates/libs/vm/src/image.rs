@@ -46,17 +46,45 @@ pub struct CloudImage {
 
 const GPGV: &str = "gpgv";
 
+#[cfg(target_arch = "x86_64")]
+macro_rules! arch {
+    (debian) => {
+        "amd64"
+    };
+    (kernel) => {
+        "x86_64"
+    };
+}
+
+#[cfg(target_arch = "aarch64")]
+macro_rules! arch {
+    (debian) => {
+        "arm64"
+    };
+    (kernel) => {
+        "aarch64"
+    };
+}
+
 const CATALOG: &[CloudImage] = &[
     CloudImage {
         os: "Debian 13",
-        url: "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-arm64.qcow2",
+        url: concat!(
+            "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-",
+            arch!(debian),
+            ".qcow2"
+        ),
         checksums: "https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS",
         algorithm: Algorithm::Sha512,
         signed: Signed::Https,
     },
     CloudImage {
         os: "Ubuntu 26.04 LTS",
-        url: "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-arm64.img",
+        url: concat!(
+            "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-",
+            arch!(debian),
+            ".img"
+        ),
         checksums: "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS",
         algorithm: Algorithm::Sha256,
         signed: Signed::Detached {
@@ -66,8 +94,20 @@ const CATALOG: &[CloudImage] = &[
     },
     CloudImage {
         os: "Fedora Cloud 43",
-        url: "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-43-1.6.aarch64.qcow2",
-        checksums: "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/aarch64/images/Fedora-Cloud-43-1.6-aarch64-CHECKSUM",
+        url: concat!(
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/",
+            arch!(kernel),
+            "/images/Fedora-Cloud-Base-Generic-43-1.6.",
+            arch!(kernel),
+            ".qcow2"
+        ),
+        checksums: concat!(
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/",
+            arch!(kernel),
+            "/images/Fedora-Cloud-43-1.6-",
+            arch!(kernel),
+            "-CHECKSUM"
+        ),
         algorithm: Algorithm::Sha256,
         signed: Signed::Inline {
             keys: include_bytes!("../data/fedora.gpg"),

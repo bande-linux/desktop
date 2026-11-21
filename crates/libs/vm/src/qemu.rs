@@ -10,10 +10,70 @@ use crate::manifest::{MAX_DISPLAYS, Network, Preset};
 use crate::passthrough::tap_name;
 use crate::{Error, Result};
 
-const FIRMWARE_CODE: &str = "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd";
-const FIRMWARE_VARS: &str = "/usr/share/AAVMF/AAVMF_VARS.fd";
-const SECURE_CODE: &str = "/usr/share/AAVMF/AAVMF_CODE.ms.fd";
-const SECURE_VARS: &str = "/usr/share/AAVMF/AAVMF_VARS.ms.fd";
+struct Platform {
+    qemu: &'static str,
+    qemu_package: &'static str,
+    firmware_code: &'static str,
+    firmware_vars: &'static str,
+    secure_code: &'static str,
+    secure_vars: &'static str,
+    firmware_package: &'static str,
+    machine: &'static str,
+    secure_machine: &'static str,
+    secure_globals: &'static [&'static str],
+    emulated_cpu: &'static str,
+    gpu: &'static str,
+    gpu_3d: &'static str,
+    basic_display: &'static str,
+    tpm: &'static str,
+    install: &'static str,
+}
+
+#[cfg(target_arch = "x86_64")]
+const PLATFORM: Platform = Platform {
+    qemu: "qemu-system-x86_64",
+    qemu_package: "qemu-system-x86",
+    firmware_code: "/usr/share/OVMF/OVMF_CODE_4M.fd",
+    firmware_vars: "/usr/share/OVMF/OVMF_VARS_4M.fd",
+    secure_code: "/usr/share/OVMF/OVMF_CODE_4M.ms.fd",
+    secure_vars: "/usr/share/OVMF/OVMF_VARS_4M.ms.fd",
+    firmware_package: "ovmf",
+    machine: "q35",
+    secure_machine: "q35,smm=on",
+    secure_globals: &[
+        "-global",
+        "ICH9-LPC.disable_s3=1",
+        "-global",
+        "driver=cfi.pflash01,property=secure,value=on",
+    ],
+    emulated_cpu: "max",
+    gpu: "virtio-vga",
+    gpu_3d: "virtio-vga-gl",
+    basic_display: "VGA",
+    tpm: "tpm-crb",
+    install: "sudo apt install qemu-system-x86 ovmf qemu-system-modules-opengl qemu-utils passt",
+};
+
+#[cfg(target_arch = "aarch64")]
+const PLATFORM: Platform = Platform {
+    qemu: "qemu-system-aarch64",
+    qemu_package: "qemu-system-arm",
+    firmware_code: "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd",
+    firmware_vars: "/usr/share/AAVMF/AAVMF_VARS.fd",
+    secure_code: "/usr/share/AAVMF/AAVMF_CODE.ms.fd",
+    secure_vars: "/usr/share/AAVMF/AAVMF_VARS.ms.fd",
+    firmware_package: "qemu-efi-aarch64",
+    machine: "virt,gic-version=3",
+    secure_machine: "virt,gic-version=3",
+    secure_globals: &[],
+    emulated_cpu: "max,pauth-impdef=on",
+    gpu: "virtio-gpu-pci",
+    gpu_3d: "virtio-gpu-gl-pci",
+    basic_display: "ramfb",
+    tpm: "tpm-tis-device",
+    install: "sudo apt install qemu-system-arm qemu-efi-aarch64 qemu-system-modules-opengl qemu-utils passt",
+};
+
 const VIRTIOFSD: &str = "/usr/libexec/virtiofsd";
 const RENDER_NODE: &str = "/dev/dri/renderD128";
 const SWTPM: &str = "swtpm";
@@ -21,11 +81,11 @@ const MIB: u64 = 1024 * 1024;
 const OVERHEAD_MIB: u64 = 512;
 const TRANSLATION_CACHE_MIB: u64 = 256;
 const REQUIRED: [(&str, &str); 5] = [
-    ("qemu-system-aarch64", "qemu-system-arm"),
+    (PLATFORM.qemu, PLATFORM.qemu_package),
     ("qemu-img", "qemu-utils"),
     ("passt", "passt"),
-    (FIRMWARE_CODE, "qemu-efi-aarch64"),
-    (FIRMWARE_VARS, "qemu-efi-aarch64"),
+    (PLATFORM.firmware_code, PLATFORM.firmware_package),
+    (PLATFORM.firmware_vars, PLATFORM.firmware_package),
 ];
 const DBUS_DISPLAY_PACKAGE: &str = "qemu-system-modules-opengl";
 const SANDBOX: &str = "on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny";
@@ -65,6 +125,8 @@ fn has_dbus_display() -> bool {
 }
 
 impl Host {
+    pub const INSTALL: &str = PLATFORM.install;
+
     pub fn detect() -> Result<Self> {
         let [qemu, qemu_img, passt, firmware_code, firmware_vars] =
             REQUIRED.map(|(path, package)| locate(path).ok_or(Error::Missing(package.into())));
@@ -128,7 +190,7 @@ impl Host {
             Accel::Kvm => ("kvm".to_owned(), "host"),
             Accel::Tcg => (
                 format!("tcg,thread=multi,tb-size={TRANSLATION_CACHE_MIB}"),
-                "max,pauth-impdef=on",
+                PLATFORM.emulated_cpu,
             ),
         };
         let file = |node: &str, path: &Path, read_only: bool| -> Result<String> {
@@ -172,11 +234,18 @@ impl Host {
         push(&["-boot", "menu=on,splash-time=0"]);
         let windows = manifest.preset == Preset::Windows;
         let has_shares = !manifest.shares.is_empty();
-        let mut machine_options = "virt,gic-version=3,pflash0=firmware,pflash1=vars".to_owned();
+        let machine_type = match windows {
+            true => PLATFORM.secure_machine,
+            false => PLATFORM.machine,
+        };
+        let mut machine_options = format!("{machine_type},pflash0=firmware,pflash1=vars");
         if has_shares {
             machine_options.push_str(",memory-backend=shared-memory");
         }
         push(&["-machine", &machine_options]);
+        if windows {
+            push(PLATFORM.secure_globals);
+        }
         push(&["-accel", &accel, "-cpu", cpu]);
         push(&["-smp", &manifest.cpus.to_string()]);
         push(&["-m", &format!("{}M", manifest.memory_mib)]);
@@ -190,7 +259,7 @@ impl Host {
             ]);
         }
         let code = match windows {
-            true => Path::new(SECURE_CODE),
+            true => Path::new(PLATFORM.secure_code),
             false => self.firmware_code.as_path(),
         };
         push(&["-blockdev", &file("firmware", code, true)?]);
@@ -248,9 +317,9 @@ impl Host {
             displays => format!("{device},max_outputs={}", displays.min(MAX_DISPLAYS)),
         };
         match (windows, accelerated) {
-            (true, _) => push(&["-device", "ramfb"]),
-            (false, true) => push(&["-device", &gpu("virtio-gpu-gl-pci")]),
-            (false, false) => push(&["-device", &gpu("virtio-gpu-pci")]),
+            (true, _) => push(&["-device", PLATFORM.basic_display]),
+            (false, true) => push(&["-device", &gpu(PLATFORM.gpu_3d)]),
+            (false, false) => push(&["-device", &gpu(PLATFORM.gpu)]),
         }
         push(&["-device", "qemu-xhci,id=usb"]);
         push(&["-device", "usb-kbd,bus=usb.0"]);
@@ -266,7 +335,7 @@ impl Host {
         if windows {
             push(&["-chardev", &socket_client("tpm", &machine.tpm_socket())?]);
             push(&["-tpmdev", "emulator,id=tpm,chardev=tpm"]);
-            push(&["-device", "tpm-tis-device,tpmdev=tpm"]);
+            push(&["-device", &format!("{},tpmdev=tpm", PLATFORM.tpm)]);
         }
         for (index, share) in manifest.shares.iter().enumerate() {
             let id = format!("share{index}");
@@ -402,7 +471,7 @@ impl Host {
     pub(crate) fn create_vars_for(&self, vars: &Path, preset: Preset) -> Result<()> {
         let source = match preset {
             Preset::Linux => self.firmware_vars.as_path(),
-            Preset::Windows => Path::new(SECURE_VARS),
+            Preset::Windows => Path::new(PLATFORM.secure_vars),
         };
         self.qemu_img(&[
             "convert",

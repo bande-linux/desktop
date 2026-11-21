@@ -2,8 +2,9 @@ use std::rc::Rc;
 
 use bande_l10n::tr;
 use bande_toolkit::ui::{Axis, Button, Label, ScrollView, Stack, Widget};
+use bande_vm::Host;
 
-use super::readiness::{Blocker, INSTALL, KVM_GROUP};
+use super::readiness::{Blocker, KVM_GROUP};
 use super::{Intent, Intents, push};
 use crate::ui::{Centered, Code, Ends};
 
@@ -66,7 +67,7 @@ pub fn not_ready(blocker: &Blocker, intents: &Intents) -> Box<dyn Widget> {
             ));
             children.push(steps(
                 &tr!("Install QEMU, its firmware and passt"),
-                INSTALL,
+                Host::INSTALL,
                 intents,
             ));
         }

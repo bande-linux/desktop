@@ -102,27 +102,6 @@ impl NewTabFolder {
     }
 }
 
-pub const FONTS: [&str; 18] = [
-    "JetBrains Mono",
-    "DejaVu Sans Mono",
-    "Noto Sans Mono",
-    "Liberation Mono",
-    "Ubuntu Mono",
-    "Fira Code",
-    "Fira Mono",
-    "Hack",
-    "Source Code Pro",
-    "Cascadia Code",
-    "Cascadia Mono",
-    "Iosevka",
-    "IBM Plex Mono",
-    "Inconsolata",
-    "Roboto Mono",
-    "Victor Mono",
-    "Go Mono",
-    "Terminus",
-];
-
 pub const COLUMN_RANGE: (usize, usize) = (20, 400);
 pub const ROW_RANGE: (usize, usize) = (5, 200);
 

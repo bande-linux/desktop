@@ -4,8 +4,8 @@ use std::rc::Rc;
 use bande_l10n::{Text, text, tr};
 
 use crate::settings::{
-    COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, FONTS, NewTabFolder, ROW_RANGE,
-    SCROLLBACK_CHOICES, Settings,
+    COLUMN_RANGE, CloseAsk, CursorStyle, FONT_SIZES, NewTabFolder, ROW_RANGE, SCROLLBACK_CHOICES,
+    Settings,
 };
 use accesskit::{Node, Role};
 use bande_terminal_view::{Profile, Theme};
@@ -15,6 +15,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{
     Appearance, Item, Point, Radius, Rect, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+    Typeface,
 };
 
 pub const SETTINGS_SIZE: (u32, u32) = (520, 600);
@@ -327,12 +328,13 @@ fn form(settings: &SharedSettings, fonts: &[String]) -> Form {
 
 pub fn settings_view(appearance: Appearance, settings: &SharedSettings) -> Ui {
     let mut text = TextSystem::new();
-    let mut fonts: Vec<String> = FONTS
-        .iter()
-        .enumerate()
-        .filter(|(index, family)| *index == 0 || text.has_family(family))
-        .map(|(_, family)| (*family).to_owned())
-        .collect();
+    let default = Typeface::Monospace.family();
+    let mut fonts = vec![default.to_owned()];
+    fonts.extend(
+        text.monospace_families()
+            .into_iter()
+            .filter(|family| family != default),
+    );
     let chosen = settings.borrow().font.clone();
     if !chosen.is_empty() && !fonts.contains(&chosen) {
         fonts.push(chosen);

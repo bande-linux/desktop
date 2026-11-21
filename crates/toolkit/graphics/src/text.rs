@@ -11,12 +11,25 @@ use parley::{
     FontFamilyName, FontWeight, Layout, LayoutContext, LineHeight, PositionedLayoutItem,
     RangedBuilder, Selection, StyleProperty,
 };
+use skrifa::MetadataProvider;
 
 use crate::Rect;
 
 const DISPLAY_SIZE: f32 = 20.0;
 const ELLIPSIS: char = '\u{2026}';
 const KEPT_TAIL: usize = 7;
+const MONOSPACE_PROBE: &str = "iMW.";
+const WEIGHT_NAMES: [&str; 9] = [
+    "Thin",
+    "ExtraLight",
+    "Light",
+    "Regular",
+    "Medium",
+    "SemiBold",
+    "Bold",
+    "ExtraBold",
+    "Black",
+];
 const CACHED_PARAGRAPHS: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -309,6 +322,64 @@ impl TextSystem {
 
     pub fn has_family(&mut self, family: &str) -> bool {
         self.fonts.collection.family_id(family).is_some()
+    }
+
+    /// The installed families whose letters all have the same width, sorted by name.
+    pub fn monospace_families(&mut self) -> Vec<String> {
+        let names: Vec<String> = self
+            .fonts
+            .collection
+            .family_names()
+            .map(str::to_owned)
+            .collect();
+        let mut found: Vec<String> = names
+            .into_iter()
+            .filter(|name| self.is_monospace(name))
+            .collect();
+        found.sort_unstable_by_key(|name| name.to_lowercase());
+        found.dedup();
+        let weight_of_another = |name: &str| {
+            name.rsplit_once(' ').is_some_and(|(family, weight)| {
+                WEIGHT_NAMES.contains(&weight) && found.iter().any(|other| other == family)
+            })
+        };
+        found
+            .iter()
+            .filter(|name| !weight_of_another(name))
+            .cloned()
+            .collect()
+    }
+
+    fn is_monospace(&mut self, family: &str) -> bool {
+        let Some(font) = self
+            .fonts
+            .collection
+            .family_id(family)
+            .and_then(|id| self.fonts.collection.family(id))
+            .and_then(|family| family.default_font().cloned())
+        else {
+            return false;
+        };
+        let Some(blob) = font.load(Some(&mut self.fonts.source_cache)) else {
+            return false;
+        };
+        let Ok(face) = skrifa::FontRef::from_index(blob.as_ref(), font.index()) else {
+            return false;
+        };
+        let charmap = face.charmap();
+        let metrics = face.glyph_metrics(
+            skrifa::instance::Size::unscaled(),
+            skrifa::instance::LocationRef::default(),
+        );
+        let mut advances = MONOSPACE_PROBE.chars().map(|letter| {
+            charmap
+                .map(letter)
+                .and_then(|glyph| metrics.advance_width(glyph))
+        });
+        match advances.next().flatten() {
+            Some(first) => advances.all(|advance| advance == Some(first)),
+            None => false,
+        }
     }
 
     pub fn set_size(&mut self, size: TextSize) {

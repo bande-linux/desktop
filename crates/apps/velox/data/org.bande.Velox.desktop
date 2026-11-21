@@ -1,13 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=Velox
-GenericName=Container Manager
-GenericName[sv]=Containerhanterare
-Comment=See, start and stop your containers
-Comment[sv]=Se, starta och stoppa dina containrar
+GenericName=Container and Virtual Machine Manager
+GenericName[sv]=Hanterare för containrar och virtuella maskiner
+Comment=Run your containers and virtual machines
+Comment[sv]=Kör dina containrar och virtuella maskiner
 Icon=org.bande.Velox
 Exec=bande-velox
 StartupNotify=true
 Categories=System;
-Keywords=docker;podman;container;compose;engine;
-Keywords[sv]=docker;podman;container;containrar;compose;motor;
+Keywords=docker;podman;container;compose;engine;qemu;vm;virtual machine;
+Keywords[sv]=docker;podman;container;containrar;compose;motor;qemu;vm;virtuell maskin;

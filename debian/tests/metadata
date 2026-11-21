@@ -2,7 +2,8 @@
 # The installed desktop entries, metainfo and units validate, each app's program names itself,
 # and the session's user units load.
 set -euo pipefail
-mapfile -t ours < <(dpkg-query -W -f '${Package}\n' 'bande-*' xdg-desktop-portal-bande libpam-bande-secrets)
+mapfile -t ours < <(dpkg-query -W -f '${db:Status-Status} ${Package}\n' 'bande-*' xdg-desktop-portal-bande libpam-bande-secrets |
+    awk '$1 == "installed" { print $2 }')
 mapfile -t desktops < <(dpkg -L "${ours[@]}" | grep -E '^/usr/share/applications/.*\.desktop$')
 desktop-file-validate "${desktops[@]}"
 mapfile -t metainfos < <(dpkg -L "${ours[@]}" | grep -E '^/usr/share/metainfo/.*\.xml$')

@@ -122,11 +122,7 @@ fn offset(direction: Direction) -> (i32, i32) {
 
 fn allowed(action: Action, locked: bool, inhibited: bool) -> bool {
     (!locked || action.area() == Area::Accessibility)
-        && (!inhibited
-            || matches!(
-                action,
-                Action::LockScreen | Action::ForceQuit | Action::RestartDesktop
-            ))
+        && (!inhibited || matches!(action, Action::LockScreen | Action::ForceQuit))
         && (action != Action::ToggleScreenReader || crate::assistive::screen_reader_installed())
 }
 
@@ -243,7 +239,7 @@ impl State {
             Action::CaptureArea => self.capture_area(),
             Action::CaptureOptions => self.show_capture_options(),
             Action::LockScreen => self.lock_screen_requested = !self.is_locked(),
-            Action::ForceQuit | Action::RestartDesktop => self.open_force_quit(),
+            Action::ForceQuit => self.open_force_quit(),
             Action::ShowNotificationCenter => self.toggle_panel(Panel::NotificationCenter),
             Action::ShowQuickSettings => self.toggle_panel(Panel::QuickSettings),
             Action::NextApp => self.switch_apps(false),

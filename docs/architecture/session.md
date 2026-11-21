@@ -593,79 +593,23 @@ Bande uses `greetd` for the privileged part of login and keeps its own UI unpriv
 3. **Handover**: after authentication, `greetd` opens the PAM session through `pam_systemd.so`
    and starts the user's session, which runs `bande-compositor`.
 
-### First run and recovery
+### From the login window to the desktop
 
-While `/var/lib/bande/setup-pending` exists, `bande-compositor --greeter` runs `bande-setup` in place
-of `bande-greeter`, in the same role and as the same unprivileged user. It asks for language,
-keyboard, account and password (default: the same password encrypts the disk, then the recovery
-key is shown once), Wi-Fi, appearance, automatic updates and whether to share Bande Analytics
-(fault reports, off unless switched on), in that order so that no secret reaches
-the disk before encryption has started. The steps needing root go through `pkexec` to
-`/usr/libexec/bande-first-run` in the image, which a polkit rule allows `_greetd` only while the
-file exists. The last step removes it and signs in over greetd's IPC, so finishing goes straight to
-the desktop.
-
-Recovery boots the image's read-only system partition with `boot=bande-live`: squashfs below, tmpfs
-above. greetd there starts an ordinary session for a `recovery` user with no password, with
-`bande-recovery-tools` open; this user gets polkit's yes only while `/run/bande-live/device` exists,
-so the name means nothing on an installed system. The USB installer is this same system. See
-`images/README.md` for the image and the engine.
-
-### From power-on to the desktop
-
-The picture never goes black between stages; each one leaves the last on screen until the next has
-something to show.
+The picture never goes black between the login window and the desktop; each stage leaves the last
+on screen until the next has something to show.
 
 | Stage | What shows | How |
 |---|---|---|
-| systemd-boot, kernel | what the firmware left on screen | `timeout 0`; `quiet` silences the kernel and the EFI stub |
-| the GPU driver binds | the mark, once the display comes up | `bande-display-keeper@<card>` draws it into the console's framebuffer |
-| disk unlock, on an encrypted disk | the mark, a password field and the layout's short name | `bande-unlock`, see below |
-| login window | black with the mark, cross-fading to the login window | the compositor holds frames until the greeter is mapped; the greeter draws the same mark and opens once the desktop picture is decoded |
+| login window | the login window, with the blurred picture fading in once decoded | the compositor holds frames until the greeter is mapped |
 | session | the picture the login window ended on, then the bar and icons fade in | below |
 
-Plymouth was the alternative: its graphical plugins are in `plymouth-themes`, which brings Pango,
-Cairo, fontconfig and fonts into the initramfs, it needs root to quit after the first frame, and
-it would add a third owner of the display during boot. The console path needs none of this, and
-shows text by itself: the mark sits in the console's own framebuffer, so anything the kernel or
-systemd prints (a failing boot, the emergency shell) appears over it.
+A compositor leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`, which leaves
+them on their planes while the device stays open, and the next compositor's first commit replaces
+the frame, without a modeset when the mode is the same. Unlocking is one compositor: the last lock
+frame stays over the desktop and fades out, so input reaches the desktop at once.
 
-**Disk unlock.** Root is LUKS2, opened in the initramfs by Debian's `cryptsetup-initramfs` with
-`bande-unlock-script` as its keyscript. While the image's provisional key is there the script hands it
-over and nothing is asked. Otherwise `bande-unlock`, a small program with no fonts or xkb data of its
-own, draws on `/dev/fb0` in the same place as the mark and reads evdev keyboards directly (USB
-and built-in; Bluetooth does not work this early). `bande-unlock-assets` writes
-`bande/unlock.assets` on the ESP whenever the system keyboard or language changes: a key table for
-each system layout, dead-key pairs, and the prompt's text already drawn. Control+Space switches
-layout, Tab asks for the recovery key. If there is no framebuffer, the console's `askpass` asks.
-
-`bande-disk-encryption` (in `bande-settings`, root) is the only writer: `set-passphrase` adds the
-person's slot and a recovery key, removes the provisional one and, on an image with a shared volume
-key, starts an online reencrypt that `bande-disk-encryption.service` resumes at each boot. The disk does
-not count as encrypted until that finishes, and `/run/bande-disk-encryption/status` says so to
-Privacy & Security. On a one-person computer the greeter signs in with the password the disk was
-just unlocked with (`for-login`, in RAM, readable only by the greeter, emptied on read), and PAM's
-password step keeps the disk slot in step with the login password.
-
-Diagnostics stay one key away: holding Space at power-on opens systemd-boot's menu, where each
-kernel has a "(boot messages)" entry without `quiet` (`95-bande-boot-messages.install`);
 `Ctrl+Alt+F2` reaches a text console at any time, and when greetd gives up
 `bande-console-fallback.service` brings the console to the front.
-
-**Keeping a frame through the handover.** Three parts of the kernel would otherwise clear the
-screen when one compositor ends and the next has not drawn: closing the last reference to a
-framebuffer turns its plane off (`drm_fb_release`), closing the last file of the device restores
-the console's framebuffer (`drm_lastclose`), and logind and greetd setting the VT back to `KD_TEXT`
-makes the console repaint. So a compositor leaving the screen closes its framebuffers with
-`DRM_IOCTL_MODE_CLOSEFB`, which leaves them on their planes;
-`bande-display-keeper@<card>` (started by udev for each card with a connector, unprivileged,
-asleep in `pause()`) keeps the device open with no master; and `fbcon=vc:1-6` leaves VT 7, greetd's, without a console. The
-next compositor takes the master and its first commit replaces the frame, without a modeset when
-the mode is the same. This was checked under QEMU with virtio-gpu; on a system without the kernel
-argument, the keeper or a kernel of at least 6.8, the same steps work with a black gap.
-
-Unlocking is one compositor and needs none of this: the last lock frame stays over the desktop and
-fades out, so input reaches the desktop at once.
 
 Implemented in `crates/shell/greeter`: greetd's IPC inside `bande-compositor --greeter`,
 which runs only the greeter and exits with it. The conversation runs on the greeter's event
@@ -759,13 +703,6 @@ what the one before could not save. What happens for each:
   resets the DRM state of each display; apps keep running. After 15 s it exits, which ends the
   session as a crash does. The login window has no work to lose: when it cannot reach the display
   for 15 s on a computer up for over 5 minutes it asks logind to restart the computer.
-- **The desktop is stuck and the keyboard is all that is left**: pressing `Shift+Ctrl+Alt+Esc`
-  twice within 5 s restarts the desktop, whatever state the session is in. It is logind's Secure
-  Attention Key (`logind.conf(5)`), which logind reads from the keyboard itself and signals on the
-  system bus. `bande-recovery`, a small root service with no other input, counts the presses and
-  ends the active graphical session through its cgroup (`cgroup.kill` of the compositor service)
-  and `KillSession`; the login window comes back. It leaves text console sessions alone. The first
-  press also opens Force Quit when the compositor can still draw, which names the second press.
 - **The compositor crashes or hangs**: `bande-compositor.service` has `WatchdogSec=20s` and the
   compositor's event loop pings it, so a hung compositor is aborted (then killed after
   `TimeoutAbortSec=10s`); a crash or abort ends the session and greetd shows the login window.
@@ -792,10 +729,6 @@ what the one before could not save. What happens for each:
   `-tray`, `-polkit-agent`, `-automount`, `-notify`, the portal backend) has
   `Restart=on-failure` with systemd's start limit (5 in 10 s), runs in `session.slice` and is
   restarted by D-Bus activation on the next call after that.
-- **The kernel fails**: a panic, an oops, or a CPU stuck past the lockup detectors restarts the
-  computer after 10 s (`50-bande-recovery.conf` in `sysctl.d`), and systemd feeds the hardware
-  watchdog (`RuntimeWatchdogSec=2min`), so a kernel that stops scheduling restarts it too.
-  Neither needs the power button.
 - **Too many processes**: each app scope gets the user manager's default `TasksMax` (15 % of
   the kernel's limit) and `app.slice` together 25 %, under logind's 33 % for the user, so a
   fork bomb in an app leaves room for the session.
@@ -811,18 +744,17 @@ what the one before could not save. What happens for each:
   2 GB in all, 4 GB of disk kept free; `DefaultLimitCORE=infinity` for both managers, since the soft limit is
   otherwise 0 and no dump is stored; dumps go after two weeks). The programs that hold passwords
   (`bande-lock`, `bande-greeter`, `bande-polkit`, `bande-secrets`, `bande-clipboard`) are not dumpable, so
-  only their panic text is recorded. Force Quit of a not-responding app and the keyboard's last resort send
-  `SIGQUIT` first and wait up to 8 s and 5 s, so a hang leaves a stack too. Symbols are in [packaging](packaging.md).
+  only their panic text is recorded. Force Quit of a not-responding app sends
+  `SIGQUIT` first and waits up to 8 s, so a hang leaves a stack too. Symbols are in [packaging](packaging.md).
 
 ## Backups
 
 Scheduled, versioned backups with `restic`.
-`crates/services/backup` builds three programs. `bande-backupd` is a system service
-(`org.bande.Backup`), root because a whole-system restore needs every file. It runs `restic` as a child
+`crates/services/backup` builds two programs. `bande-backupd` is a system service
+(`org.bande.Backup`), root because a backup of the whole computer reads every file. It runs `restic` as a child
 and talks to it through exit codes and `--json`. A timer that exists once a disk is chosen, a udev rule
 for a new disk or mains power, and D-Bus start it; it exits after a minute with nothing to do.
 `bande-backup-alerts` runs only when there is something to say: the service writes its problem to the world-readable `/run/bande-backup-alert`, a user path unit starts the program when that file changes (and once at login), and it posts one notification per problem and exits once it is answered or closed.
-`bande-backup-restore` is for the recovery environment, without a bus.
 
 A repository is `BandeBackups/<machine-id>` on any filesystem on any drive but the startup one, or on an SMB or NFS
 share or a restic rest server. Settings can erase a blank or foreign disk to make one. Two restic
@@ -836,15 +768,7 @@ read-only snapshots of `/home` while the destination is away appear beside them.
 
 ## Updates
 
-Packages come from Bande's signed APT repository ([packaging](packaging.md)). Settings ▸
-On a new install's btrfs layout (`/run/bande/versions` exists) system updates are versions of the
-system: `bande-system prepare`, started through `bande-system-prepare.service`, installs them on a
-copy that boots at the next restart, and a boot that never shows the login window falls back by
-itself. Settings lists the versions under Previous Versions and restores one through
-`bande-system-restore@<id>.service`. Without that layout the offline path below applies. The
-compositor sends `READY=1` to `/run/bande/login-ready` once the first frame with the login window or
-the desktop has been flipped onto a display, so a boot that only draws black is not called good;
-`bande-boot-health.service` waits for it on a counted boot.
+Packages come from Bande's signed APT repository ([packaging](packaging.md)).
 
 How often it checks is `update-check-every` in `config.kdl` (Settings: When available, Every day,
 Every 7 days, Every 31 days; unset is When available). With an interval, the daily timer and an

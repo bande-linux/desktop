@@ -39,7 +39,6 @@ pub const PAM_SERVICE: &str = "bande-lock";
 pub const SHAKE_DURATION: Duration = Duration::from_millis(480);
 const SHAKE_KICK: f64 = 600.0;
 const CHECKING_SHOWN_AFTER: Duration = Duration::from_millis(200);
-const OPENING_WAIT: Duration = Duration::from_millis(1500);
 const TIME_SIZE: f32 = 112.0;
 const TIME_WEIGHT: f32 = 300.0;
 const CLOCK_TOP: f32 = 0.11;
@@ -53,8 +52,6 @@ const FIELD_FONT: f32 = 15.0;
 const GAP: f32 = 12.0;
 const NAME_GAP: f32 = 14.0;
 const FIELD_GAP: f32 = 16.0;
-const LARGE_DISPLAY_LINES: u32 = 2000;
-const BOOT_MARK_PIXELS: (u32, u32) = (128, 256);
 const MESSAGE_WIDTH: f32 = 360.0;
 const PEER: f32 = 6.0;
 const PEER_GAP: f32 = 6.0;
@@ -82,13 +79,6 @@ enum PowerPress {
     Confirm,
 }
 
-pub fn boot_mark_pixels(pixel_height: u32) -> u32 {
-    match pixel_height >= LARGE_DISPLAY_LINES {
-        true => BOOT_MARK_PIXELS.1,
-        false => BOOT_MARK_PIXELS.0,
-    }
-}
-
 pub fn night(appearance: Appearance) -> Palette {
     Appearance {
         scheme: Scheme::Dark,
@@ -112,14 +102,6 @@ pub fn shake_offset(elapsed: Duration) -> f32 {
 
 pub fn clock_texts(formats: &DateFormats, now: &jiff::Zoned) -> (String, String) {
     (formats.long_date(now), formats.time(now).0)
-}
-
-#[derive(Clone)]
-struct Opening {
-    mark: Option<Image>,
-    shown: Animated,
-    began: bool,
-    deadline: Instant,
 }
 
 struct Model {
@@ -150,8 +132,6 @@ struct Model {
     identity_shown: Animated,
     resting: bool,
     rests_at: Option<Instant>,
-    opening: Option<Opening>,
-    pixel_height: u32,
     power_labels: Vec<String>,
 }
 
@@ -314,20 +294,7 @@ impl Widget for LockView {
     }
 
     fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
-        let backdrop = Shape::rect(self.frame);
-        let opened = self.paint_opening(items);
-        if opened <= 0.0 {
-            return;
-        }
-        let mut below = Vec::new();
-        self.paint_screen(cx, backdrop, &mut below);
-        match opened >= 1.0 {
-            true => items.extend(below),
-            false => items.push(Item::Opacity {
-                alpha: opened,
-                items: below,
-            }),
-        }
+        self.paint_screen(cx, Shape::rect(self.frame), items);
     }
 
     fn access(&self, _cx: &Context) -> Node {
@@ -374,36 +341,6 @@ impl Widget for LockView {
 }
 
 impl LockView {
-    fn paint_opening(&self, items: &mut Vec<Item>) -> f32 {
-        let model = self.model.borrow();
-        let Some(opening) = &model.opening else {
-            return 1.0;
-        };
-        let (shown, _) = opening.shown.value_at(model.now);
-        if shown >= 1.0 {
-            return 1.0;
-        }
-        items.push(Item::Fill {
-            shape: Shape::rect(self.frame),
-            paint: Color::BLACK.into(),
-        });
-        if let Some(mark) = &opening.mark {
-            let scale = model.scale;
-            let width = mark.width() as f32 / scale as f32;
-            let height = mark.height() as f32 / scale as f32;
-            items.push(Item::Image {
-                rect: Rect::new(
-                    snap(self.frame.x + (self.frame.width - width) / 2.0, scale),
-                    snap(self.frame.y + (self.frame.height - height) / 2.0, scale),
-                    width,
-                    height,
-                ),
-                image: mark.clone(),
-            });
-        }
-        shown.max(0.0)
-    }
-
     fn paint_screen(&self, cx: &Context, backdrop: Shape, items: &mut Vec<Item>) {
         items.push(Item::Fill {
             shape: backdrop,
@@ -748,8 +685,6 @@ impl LockScreen {
             identity_shown: Animated::new(1.0),
             resting: false,
             rests_at: None,
-            opening: None,
-            pixel_height: 0,
             power_labels: Vec::new(),
         }));
         let submitted = model.clone();
@@ -924,53 +859,6 @@ impl LockScreen {
         self.model.borrow_mut().scale = scale;
     }
 
-    pub fn open_from_boot_mark(&mut self, now: Instant) {
-        self.model.borrow_mut().opening = Some(Opening {
-            mark: None,
-            shown: Animated::new(0.0),
-            began: false,
-            deadline: now + OPENING_WAIT,
-        });
-    }
-
-    pub fn prepare_opening(&mut self, pixel_height: u32, scale: f64) {
-        let mut model = self.model.borrow_mut();
-        let model = &mut *model;
-        model.scale = scale;
-        model.pixel_height = pixel_height;
-        let Some(opening) = model
-            .opening
-            .as_mut()
-            .filter(|opening| opening.mark.is_none())
-        else {
-            return;
-        };
-        let pixels = boot_mark_pixels(pixel_height);
-        let side = (f64::from(pixels) / scale) as f32;
-        let color = night(Appearance::default()).ink;
-        opening.mark = model
-            .symbols
-            .image_at(Symbol::Logo, color, (side, side), scale);
-    }
-
-    pub fn opening_deadline(&self) -> Option<Instant> {
-        let model = self.model.borrow();
-        model
-            .opening
-            .as_ref()
-            .filter(|opening| !opening.began)
-            .map(|opening| opening.deadline)
-    }
-
-    pub fn begin_opening(&mut self, now: Instant) {
-        if let Some(opening) = self.model.borrow_mut().opening.as_mut()
-            && !opening.began
-        {
-            opening.began = true;
-            opening.shown.animate_at(now, false, 1.0, Spring::GENTLE);
-        }
-    }
-
     pub fn set_position(&mut self, index: usize, count: usize) {
         self.model.borrow_mut().position = (index, count);
     }
@@ -1105,10 +993,6 @@ impl LockScreen {
     pub fn set_backdrop(&mut self, image: Image, now: Instant) {
         let mut model = self.model.borrow_mut();
         model.backdrop = Some(image);
-        if model.opening.is_some() {
-            model.backdrop_shown = Animated::new(1.0);
-            return;
-        }
         model
             .backdrop_shown
             .animate_at(now, false, 1.0, Spring::FADE);
@@ -1145,10 +1029,6 @@ impl LockScreen {
             || model.identity_shown.value_at(model.now).1
             || model.content_shown.value_at(model.now).1
             || model.checking.is_some()
-            || model
-                .opening
-                .as_ref()
-                .is_some_and(|opening| opening.shown.value_at(model.now).1)
             || model
                 .shake_from
                 .is_some_and(|from| model.now < from + SHAKE_DURATION)

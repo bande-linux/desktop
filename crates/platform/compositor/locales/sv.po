@@ -61,8 +61,8 @@ msgstr "Tvinga avslut"
 msgid "Relaunch"
 msgstr "Starta om"
 
-msgid "If an app does not respond for a while, select its name and click Force Quit. If the whole desktop stops responding, press Shift+Ctrl+Alt+Esc twice to restart it."
-msgstr "Om en app inte svarar på ett tag markerar du dess namn och klickar på Tvinga avslut. Om hela skrivbordet slutar svara trycker du på Skift+Ctrl+Alt+Esc två gånger för att starta om det."
+msgid "If an app does not respond for a while, select its name and click Force Quit."
+msgstr "Om en app inte svarar på ett tag markerar du dess namn och klickar på Tvinga avslut."
 
 msgid "You can open this window with Ctrl+Alt+Esc."
 msgstr "Du kan öppna det här fönstret med Ctrl+Alt+Esc."

@@ -88,9 +88,6 @@ msgstr "Låsskärm"
 msgid "Force Quit"
 msgstr "Tvinga avslut"
 
-msgid "Restart the desktop (press twice)"
-msgstr "Starta om skrivbordet (tryck två gånger)"
-
 msgid "Switch to a text console (F1 to F12)"
 msgstr "Växla till en textkonsol (F1 till F12)"
 

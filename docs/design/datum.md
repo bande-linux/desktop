@@ -162,7 +162,7 @@ Considered and not chosen: Geist (not packaged in Debian, and now Nothing's and 
 
 | Style | Face | Size / line | Weight | Notes |
 |---|---|---|---|---|
-| Display | Manrope | 28 / 34 | 700 | Settings hero, setup, lock |
+| Display | Manrope | 28 / 34 | 700 | Settings hero, lock |
 | Title | Manrope | 22 / 28 | 700 | page headings |
 | Heading | Manrope | 17 / 22 | 700 | alerts, sheets, group titles |
 | Window title | Manrope | 15 / 20 | 700 | flush-left in header |

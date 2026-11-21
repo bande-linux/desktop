@@ -55,7 +55,6 @@ pub enum Action {
     ShowQuickSettings,
     LockScreen,
     ForceQuit,
-    RestartDesktop,
     TextConsole,
     ToggleZoom,
     ZoomIn,
@@ -85,7 +84,6 @@ impl Action {
             | Self::ShowQuickSettings
             | Self::LockScreen
             | Self::ForceQuit
-            | Self::RestartDesktop
             | Self::TextConsole => Area::System,
         }
     }
@@ -115,7 +113,6 @@ impl Action {
             Self::ShowQuickSettings => tr!("Open or close Quick Settings"),
             Self::LockScreen => tr!("Lock Screen"),
             Self::ForceQuit => tr!("Force Quit"),
-            Self::RestartDesktop => tr!("Restart the desktop (press twice)"),
             Self::TextConsole => tr!("Switch to a text console (F1 to F12)"),
             Self::ToggleZoom => tr!("Turn zoom on or off"),
             Self::ZoomIn => tr!("Zoom in"),
@@ -147,10 +144,6 @@ const SHIFT: Modifiers = Modifiers {
 const ALT: Modifiers = Modifiers { alt: true, ..NONE };
 const SHIFT_ALT: Modifiers = Modifiers { shift: true, ..ALT };
 const CTRL_ALT: Modifiers = Modifiers { ctrl: true, ..ALT };
-const SHIFT_CTRL_ALT: Modifiers = Modifiers {
-    shift: true,
-    ..CTRL_ALT
-};
 const SHIFT_SUPER: Modifiers = Modifiers {
     shift: true,
     ..SUPER
@@ -244,7 +237,7 @@ const fn shortcut(action: Action, modifiers: Modifiers, key: Key) -> Shortcut {
     }
 }
 
-pub const SHORTCUTS: [Shortcut; 28] = [
+pub const SHORTCUTS: [Shortcut; 27] = [
     shortcut(Action::CloseWindow, ALT, Key::Function(4)),
     shortcut(Action::MinimizeWindow, SUPER, Key::Character('h')),
     shortcut(Action::TileWindow, SUPER, Key::AnyArrow),
@@ -267,7 +260,6 @@ pub const SHORTCUTS: [Shortcut; 28] = [
     shortcut(Action::ShowQuickSettings, SUPER, Key::Character('s')),
     shortcut(Action::LockScreen, SUPER, Key::Character('l')),
     shortcut(Action::ForceQuit, CTRL_ALT, Key::Escape),
-    shortcut(Action::RestartDesktop, SHIFT_CTRL_ALT, Key::Escape),
     shortcut(Action::TextConsole, CTRL_ALT, Key::AnyFunction),
     shortcut(Action::ToggleZoom, ALT_SUPER, Key::Character('8')),
     shortcut(Action::ZoomIn, ALT_SUPER, Key::Character('=')),

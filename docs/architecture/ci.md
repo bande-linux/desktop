@@ -50,8 +50,7 @@ directories, so it never D-Bus-activates the services installed on the machine.
 reads (`/usr/...`, `/bin`, `/sbin`), each with the Debian package that ships it and a kind:
 `required` (Debian priority required), `depends` (the package that runs or reads it, or for a
 shared library one package using it, declares it in Depends), `optional` (the code checks
-first and shows the user why a feature is off) or `image` (put in place by the `images`
-repository's system images, not by a package). `ci/check-runtime-deps.py` in `lint` fails on a
+first and shows the user why a feature is off). `ci/check-runtime-deps.py` in `lint` fails on a
 path or program missing from the list and on a `depends` entry its package does not declare, so
 a new one is declared in the change that adds it; the `install` job checks that every
 `required` and `depends` entry is on a system installed with `--no-install-recommends`.

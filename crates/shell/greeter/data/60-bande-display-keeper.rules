@@ -1,3 +1,0 @@
-SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", KERNEL=="card[0-9]*", ENV{BANDE_DISPLAY_CARD}="%k"
-SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_connector", ACTION!="remove", IMPORT{parent}="BANDE_DISPLAY_CARD"
-SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_connector", ACTION!="remove", ENV{BANDE_DISPLAY_CARD}=="card[0-9]*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="bande-display-keeper@$env{BANDE_DISPLAY_CARD}.service"

@@ -16,7 +16,7 @@ Kept: 30 days, at most 200 reports and 256 MiB, 16 MiB a report. Sent and reject
 
 ## Sending
 
-Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until the person agrees: first setup asks once ("Share Bande Analytics", off unless switched on, with the server's `/privacy` address), and Settings ▸ Privacy & Security ▸ Diagnostics changes it later, shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
+Nothing leaves the computer unless sending is on, or someone sends one report by hand. Sending is off until the person switches on "Send reports automatically" in Settings ▸ Privacy & Security ▸ Diagnostics, which links the server's `/privacy` address and also shows what is sent and has "Delete reports sent from this computer", which forgets the identity and erases the server's copy (see Enrollment).
 
 `/usr/share/bande/reports.conf` (shipped) holds the server every installation uses:
 
@@ -94,7 +94,7 @@ File contents, typed text, window titles and the clipboard are not read. Every t
 
 ## By hand, and after a freeze
 
-Settings ▸ General ▸ About ▸ Send Report… or `bande-diagnose [--send] [--describe TEXT]`. It makes a `manual` report with this boot's and the previous boot's logs, pstore, core dump list, processes, disks, modules and anything a hang left behind. Settings shows it first, with Send Now, Copy, Delete, and Save to File when no server is configured. `bande-diagnose` works without the service as root, so it also runs from a text console or Recovery; with no server it saves a text file in the home folder.
+Settings ▸ General ▸ About ▸ Send Report… or `bande-diagnose [--send] [--describe TEXT]`. It makes a `manual` report with this boot's and the previous boot's logs, pstore, core dump list, processes, disks, modules and anything a hang left behind. Settings shows it first, with Send Now, Copy, Delete, and Save to File when no server is configured. `bande-diagnose` works without the service as root, so it also runs from a text console; with no server it saves a text file in the home folder.
 
 During a total freeze nothing runs. What survives: the journal up to its last fsync (`SyncIntervalSec=15s`, at once for critical messages), hang snapshots already fsynced, and pstore if the kernel panicked. A hardware watchdog reset leaves no pstore record.
 

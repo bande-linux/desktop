@@ -8,7 +8,10 @@ use bande_l10n::{text, tr};
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use bande_settings_panes::{PaneId, SettingId};
-use zbus::blocking::Connection;
+use zbus::MatchRule;
+use zbus::blocking::{Connection, MessageIterator};
+use zbus::proxy::MethodFlags;
+use zbus::zvariant::OwnedObjectPath;
 
 pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_locales};
 
@@ -28,6 +31,40 @@ pub const REGION_CATEGORIES: [&str; 5] = [
     "LC_MEASUREMENT",
     "LC_PAPER",
 ];
+
+const SYSTEMD: &str = "org.freedesktop.systemd1";
+const MANAGER_PATH: &str = "/org/freedesktop/systemd1";
+const MANAGER: &str = "org.freedesktop.systemd1.Manager";
+
+fn run_unit(system: &Connection, unit: &str) -> zbus::Result<()> {
+    let rule = MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .sender(SYSTEMD)?
+        .interface(MANAGER)?
+        .member("JobRemoved")?
+        .build();
+    let mut removed = MessageIterator::for_match_rule(rule, system, None)?;
+    let manager = zbus::blocking::Proxy::new(system, SYSTEMD, MANAGER_PATH, MANAGER)?;
+    manager.call_method("Subscribe", &())?;
+    let job: OwnedObjectPath = manager
+        .call_with_flags(
+            "StartUnit",
+            MethodFlags::AllowInteractiveAuth.into(),
+            &(unit, "replace"),
+        )?
+        .ok_or(zbus::Error::InvalidReply)?;
+    let finished = removed.find_map(|message| {
+        let message = message.ok()?;
+        let (_, path, _, result): (u32, OwnedObjectPath, String, String) =
+            message.body().deserialize().ok()?;
+        (path == job).then_some(result)
+    });
+    match finished.as_deref() {
+        Some("done") => Ok(()),
+        Some(result) => Err(zbus::Error::Failure(format!("{unit}: {result}"))),
+        None => Err(zbus::Error::InvalidReply),
+    }
+}
 
 #[zbus::proxy(
     interface = "org.freedesktop.locale1",
@@ -442,9 +479,7 @@ fn follow_packs(
 
 pub(crate) fn fetch_language_packs(done: impl FnOnce(bool) + Send + 'static) {
     spawn("language-packs", move || {
-        let fetched = bande_bus::system()
-            .map_err(Into::into)
-            .and_then(|system| crate::software::versions::run_unit(&system, LANGUAGE_PACKS));
+        let fetched = bande_bus::system().and_then(|system| run_unit(&system, LANGUAGE_PACKS));
         done(
             fetched
                 .inspect_err(|error| tracing::warn!("cannot fetch the language packs: {error}"))

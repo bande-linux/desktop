@@ -836,12 +836,10 @@ dependencies = [
  "bande-bus",
  "bande-config",
  "bande-datetime",
- "bande-inbox",
  "bande-keyboard",
  "bande-l10n",
  "bande-lock",
  "bande-log",
- "bande-network",
  "bande-status",
  "bande-toolkit",
  "libc",
@@ -849,7 +847,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
- "xkbcommon",
  "zbus",
  "zeroize",
 ]
@@ -1192,32 +1189,6 @@ dependencies = [
  "bande-xdg",
  "tracing",
  "zbus",
-]
-
-[[package]]
-name = "bande-recovery"
-version = "0.1.10"
-dependencies = [
- "bande-log",
- "rustix 1.1.6",
- "tracing",
- "zbus",
-]
-
-[[package]]
-name = "bande-recovery-tools"
-version = "0.1.10"
-dependencies = [
- "accesskit",
- "bande-app",
- "bande-inbox",
- "bande-l10n",
- "bande-toolkit",
- "bande-xdg",
- "serde",
- "serde_json",
- "tracing",
- "zeroize",
 ]
 
 [[package]]

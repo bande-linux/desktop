@@ -1179,8 +1179,8 @@ msgstr "Sparade lösenord"
 msgid "show password, copy password, change password, delete password, keyring"
 msgstr "visa lösenord, kopiera lösenord, ändra lösenord, radera lösenord, nyckelring"
 
-msgid "disk, encryption, encrypted, filevault, luks, remote login, ssh, security"
-msgstr "skiva, kryptering, krypterad, filevault, luks, fjärrinloggning, ssh, säkerhet"
+msgid "remote login, ssh, security"
+msgstr "fjärrinloggning, ssh, säkerhet"
 
 msgid "App permissions"
 msgstr "Appbehörigheter"

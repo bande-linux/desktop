@@ -228,9 +228,7 @@ impl ForceQuitView {
         let text = &mut self.ui.context().text;
         let hint = paragraph(
             text,
-            &tr!(
-                "If an app does not respond for a while, select its name and click Force Quit. If the whole desktop stops responding, press Shift+Ctrl+Alt+Esc twice to restart it."
-            ),
+            &tr!("If an app does not respond for a while, select its name and click Force Quit."),
             TextStyle::role(TextRole::Callout, palette.ink2),
             text_width,
         );
@@ -394,7 +392,9 @@ impl ForceQuitView {
         if let Some((_, root)) = update.nodes.first_mut() {
             root.set_role(Role::Dialog);
             root.set_label(tr!("Force Quit Apps"));
-            root.set_description(tr!("If an app does not respond for a while, select its name and click Force Quit. If the whole desktop stops responding, press Shift+Ctrl+Alt+Esc twice to restart it."));
+            root.set_description(tr!(
+                "If an app does not respond for a while, select its name and click Force Quit."
+            ));
         }
         update
     }

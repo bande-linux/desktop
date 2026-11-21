@@ -20,7 +20,7 @@ The architecture is split by subject:
 | :--- | :--- |
 | [`compositor.md`](compositor.md) | the compositor, its renderer, frame pacing and the Wayland protocol matrix |
 | [`toolkit.md`](toolkit.md) | the UI toolkit that the shell and the apps draw with |
-| [`session.md`](session.md) | session services, D-Bus, the greeter, supervision, setup and updates |
+| [`session.md`](session.md) | session services, D-Bus, the greeter, supervision and updates |
 | [`behaviour.md`](behaviour.md) | recorded behaviour decisions and their reasons |
 | [`apps.md`](apps.md) | the app framework every app is built on |
 | [`ci.md`](ci.md) | the local gate, the release workflow and how a release is cut |

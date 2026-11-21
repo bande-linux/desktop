@@ -83,7 +83,6 @@ struct Greeter {
     powers: Vec<PowerAction>,
     devices: Option<Devices>,
     corner: (Option<Battery>, Option<Wifi>),
-    signing_in_after_unlock: bool,
 }
 
 impl Greeter {
@@ -148,9 +147,8 @@ impl Greeter {
         for (look, image) in drawn {
             match look {
                 Look::Blurred => {
-                    let now = frame_time().on_screen();
-                    self.screen.set_backdrop(image.clone(), now);
-                    self.screen.begin_opening(now);
+                    self.screen
+                        .set_backdrop(image.clone(), frame_time().on_screen());
                     self.wallpaper = Some(image);
                 }
                 Look::Sharp => self.screen.set_wallpaper(image),
@@ -218,9 +216,7 @@ impl Greeter {
         let Some(finished) = self.conversation.take() else {
             return;
         };
-        let automatic = std::mem::take(&mut self.signing_in_after_unlock);
         match finished.rejection {
-            Some(Rejection::WrongPassword) if automatic => {}
             None if finished.started => {
                 self.started = true;
                 tracing::info!("signed in; handing the screen to the session");
@@ -271,48 +267,14 @@ impl Greeter {
     }
 }
 
-const UNLOCK_PASSWORD: &str = "/run/bande-disk-encryption/for-login";
-
-fn take_unlock_password() -> Option<Zeroizing<String>> {
-    let mut file = match std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(UNLOCK_PASSWORD)
-    {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
-        Err(error) => {
-            tracing::warn!("cannot open {UNLOCK_PASSWORD}: {error}");
-            return None;
-        }
-    };
-    let mut password = Zeroizing::new(String::new());
-    let read = std::io::Read::read_to_string(&mut file, &mut password);
-    if let Err(error) = file.set_len(0) {
-        tracing::warn!("cannot empty {UNLOCK_PASSWORD}: {error}");
-        if let Err(error) = std::fs::remove_file(UNLOCK_PASSWORD) {
-            tracing::warn!("cannot remove {UNLOCK_PASSWORD}, so not signing in with it: {error}");
-            return None;
-        }
-    }
-    if let Err(error) = read {
-        tracing::warn!("cannot read {UNLOCK_PASSWORD}: {error}");
-        return None;
-    }
-    (!password.is_empty()).then_some(password)
-}
-
 impl App for Greeter {
     fn scene(&mut self, window: &mut Window) -> Scene {
         let (width, height) = window.size();
         if self.backdrop_size.is_none() && width > 0 && height > 0 {
             self.backdrop_size = Some((width, height));
             self.backdrop = self.request_backdrop((width, height), vec![Look::Blurred]);
-            if self.backdrop.is_none() {
-                self.screen.begin_opening(frame_time().on_screen());
-            }
         }
-        self.screen.prepare_opening(height, window.scale());
+        self.screen.set_scale(window.scale());
         self.screen.advance(frame_time().presentation);
         self.screen.scene(width, height)
     }
@@ -422,16 +384,7 @@ impl App for Greeter {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.finished()
-            .then(Instant::now)
-            .or_else(|| self.screen.opening_deadline())
-    }
-
-    fn tick(&mut self, window: &mut Window, now: Instant) {
-        if self.screen.opening_deadline().is_some_and(|due| now >= due) {
-            self.screen.begin_opening(now);
-            window.request_redraw();
-        }
+        self.finished().then(Instant::now)
     }
 
     fn animating(&self) -> bool {
@@ -477,7 +430,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap_or_default();
     screen.offer_power(&powers);
-    screen.open_from_boot_mark(Instant::now());
     let picture = login_picture(Path::new(LOGIN_PICTURES), chosen.uid).map(Arc::new);
     let mut window = Window::open(
         Role::Layer(LayerOptions {
@@ -513,14 +465,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         powers,
         devices,
         corner: (None, None),
-        signing_in_after_unlock: false,
     };
-    if greeter.users.len() == 1
-        && let Some(password) = take_unlock_password()
-    {
-        greeter.signing_in_after_unlock = true;
-        greeter.sign_in(password);
-    }
     bande_toolkit::run(&mut window, &mut greeter)?;
     Ok(())
 }

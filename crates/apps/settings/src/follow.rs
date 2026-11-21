@@ -425,7 +425,6 @@ pub struct Services {
     sharing: Sender<SharingCommand>,
     users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
-    _security: Option<FolderWatch>,
 }
 
 impl Services {
@@ -440,6 +439,7 @@ impl Services {
             follow_privileges(system, updates.clone());
             hide_sleep_if_unavailable(system, updates.clone());
         }
+        follow_security_status(system, updates);
         let listed = updates.clone();
         spawn("colour-profiles", move || {
             listed.send(Update::ColourProfiles(crate::colour::installed()));
@@ -466,7 +466,6 @@ impl Services {
             permissions: follow_permissions(session, updates.clone()),
             keyboard_access: follow_keyboard_access(updates.clone()),
             spelling: follow_spelling(updates.clone()),
-            _security: follow_security_status(system, updates.clone()),
             passwords: follow_passwords(session, system, updates.clone()),
             brightness: follow_brightness(session, updates.clone()),
             printers: system.map(|system| follow_printers(system, session, updates.clone())),

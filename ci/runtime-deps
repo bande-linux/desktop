@@ -13,7 +13,6 @@ apt-cache apt required
 timeout coreutils required
 mount mount required
 umount mount required
-blkid util-linux required
 lsblk util-linux required
 unshare util-linux required
 /usr/bin/pkexec pkexec depends
@@ -64,14 +63,10 @@ flatpak flatpak optional
 /usr/bin/bande-lock bande-lock depends
 /usr/bin/bande-review bande-review optional
 /usr/bin/bande-screenshot bande-screenshot depends
-/usr/bin/bande-setup bande-greeter depends
 /usr/bin/bande-shell bande-shell depends
 /usr/libexec/bande-backupd bande-backup optional
 /usr/libexec/bande-consent bande-settings depends
-/usr/libexec/bande-disk-encryption bande-settings optional
 /usr/libexec/bande-file-chooser bande-file-chooser depends
-/usr/libexec/bande-first-run images image
-/usr/libexec/bande-install images image
 /usr/libexec/bande-locale-helper bande-settings depends
 /usr/libexec/bande-mount-helper bande-automount depends
 /usr/libexec/bande-secrets-prompt bande-secrets depends

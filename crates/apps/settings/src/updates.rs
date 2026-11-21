@@ -1,7 +1,6 @@
 use bande_l10n::{tr, trn};
 
 use crate::pages::{Widgets, boxed};
-use crate::software::versions::{self, Condition, Version};
 use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage, restart_hint};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
@@ -165,51 +164,6 @@ impl SettingsView {
         rows
     }
 
-    fn version_row(&mut self, version: &Version, dates: &DateFormats) -> Box<dyn Widget> {
-        let title = Timestamp::from_second(version.created)
-            .map(|at| dates.long_date(&at.to_zoned(TimeZone::system())))
-            .unwrap_or_default();
-        let detail = match version.condition {
-            Condition::Failed => tr!("This version couldn't start"),
-            _ if version.changed > 0 => trn!(
-                "1 update: {names}",
-                "{count} updates: {names}",
-                count = version.changed,
-                names = version.names.clone()
-            ),
-            _ => tr!("Copy kept before a change"),
-        };
-        let control = match version.running {
-            true => boxed(Label::new(&tr!("Running now"))),
-            false => self.software_button(
-                &tr!("Restore"),
-                Intent::Software(SoftwareCommand::Restore(version.id)),
-                false,
-            ),
-        };
-        self.status_row(&title, Some(&detail), Some(control))
-    }
-
-    fn version_rows(&mut self) -> Widgets {
-        let found = versions::read();
-        if found.len() < 2 {
-            return Vec::new();
-        }
-        let dates = DateFormats::from_env();
-        let mut rows = vec![self.status_row(
-            &tr!("Previous Versions"),
-            Some(&tr!("Bring back an earlier system. Your files, accounts, passwords and Wi-Fi networks stay as they are now")),
-            None,
-        )];
-        for version in found
-            .iter()
-            .filter(|version| version.condition != Condition::Pending)
-        {
-            rows.push(self.version_row(version, &dates));
-        }
-        rows
-    }
-
     fn last_check_row(&mut self) -> Option<Box<dyn Widget>> {
         let checked = Timestamp::from_second(self.software_checked?).ok()?;
         let date = DateFormats::from_env().long_date(&checked.to_zoned(TimeZone::system()));
@@ -219,7 +173,6 @@ impl SettingsView {
     pub(crate) fn software_rows(&mut self) -> Widgets {
         let mut rows = self.update_rows();
         rows.extend(self.last_check_row());
-        rows.extend(self.version_rows());
         rows
     }
 

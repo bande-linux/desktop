@@ -1472,26 +1472,11 @@ msgstr "Sök i den här mappen igen"
 msgid "Files in these folders never appear in search"
 msgstr "Filer i de här mapparna visas aldrig i sökresultat"
 
-msgid "Off. Anyone with this computer can read your files. Turning it on needs a new install."
-msgstr "Av. Alla som har tillgång till datorn kan läsa dina filer. För att slå på den krävs en ny installation."
-
-msgid "Off. Anyone with this computer can read your files."
-msgstr "Av. Alla som har tillgång till datorn kan läsa dina filer."
-
-msgid "Encrypting, {percent}% done. Your files are not fully protected until this finishes."
-msgstr "Krypterar, {percent} % klart. Dina filer är inte helt skyddade förrän det är klart."
-
-msgid "On. Your files can only be read with your password or recovery key."
-msgstr "På. Dina filer kan bara läsas med ditt lösenord eller din återställningsnyckel."
-
 msgid "On. Others on your network can try to sign in over SSH."
 msgstr "På. Andra i ditt nätverk kan försöka logga in via SSH."
 
 msgid "Off."
 msgstr "Av."
-
-msgid "Disk encryption"
-msgstr "Diskkryptering"
 
 msgid "Remote Login"
 msgstr "Fjärrinloggning"
@@ -1610,17 +1595,8 @@ msgstr "Skrivbordet fortsätter köra sin gamla version tills du loggar ut"
 msgid "Show Updates"
 msgstr "Visa uppdateringar"
 
-msgid "The update is ready. If it can't start, your computer goes back to this version by itself"
-msgstr "Uppdateringen är klar. Om den inte kan starta går datorn tillbaka till den här versionen av sig själv"
-
 msgid "Updates install while the computer restarts"
 msgstr "Uppdateringarna installeras medan datorn startar om"
-
-msgid "The update couldn't start"
-msgstr "Uppdateringen kunde inte starta"
-
-msgid "Your computer went back to the previous version. Your files are as you left them"
-msgstr "Datorn gick tillbaka till den tidigare versionen. Dina filer är som du lämnade dem"
 
 msgid "1 update was installed"
 msgid_plural "{count} updates were installed"
@@ -1733,29 +1709,6 @@ msgstr "{version} · Flatpak"
 
 msgid "and {count} more"
 msgstr "och {count} till"
-
-msgid "This version couldn't start"
-msgstr "Den här versionen kunde inte starta"
-
-msgid "1 update: {names}"
-msgid_plural "{count} updates: {names}"
-msgstr[0] "1 uppdatering: {names}"
-msgstr[1] "{count} uppdateringar: {names}"
-
-msgid "Copy kept before a change"
-msgstr "Kopia sparad före en ändring"
-
-msgid "Running now"
-msgstr "Körs nu"
-
-msgid "Restore"
-msgstr "Återställ"
-
-msgid "Previous Versions"
-msgstr "Tidigare versioner"
-
-msgid "Bring back an earlier system. Your files, accounts, passwords and Wi-Fi networks stay as they are now"
-msgstr "Återställ ett tidigare system. Dina filer, konton, lösenord och Wi-Fi-nätverk förblir som de är nu"
 
 msgid "Last checked {date}"
 msgstr "Senast sökt {date}"

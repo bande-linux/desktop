@@ -6,12 +6,12 @@ use std::time::{Duration, Instant};
 use bande_compositor::{
     Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings, REFRESH,
-    REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SETUP,
-    SETUP_PENDING, SHELL, SessionRequest, SessionRole, SessionUpkeep, Sleep,
-    export_session_environment, follow_alerts, follow_appearance, follow_input_settings,
-    follow_session, follow_shutdown, follow_sleep, follow_system_keyboard, notify_service_manager,
-    render_material, serve_app_states, serve_displays, serve_keyboard_monitor, sleep_on_request,
-    user_config, watchdog_keepalive_interval,
+    REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
+    SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
+    follow_appearance, follow_input_settings, follow_session, follow_shutdown, follow_sleep,
+    follow_system_keyboard, notify_service_manager, render_material, serve_app_states,
+    serve_displays, serve_keyboard_monitor, sleep_on_request, user_config,
+    watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_datetime::ClockChanges;
@@ -128,14 +128,9 @@ struct Greeter {
 
 impl Greeter {
     fn start(compositor: &mut Compositor) -> Self {
-        let program = if Path::new(SETUP_PENDING).exists() {
-            SETUP
-        } else {
-            GREETER
-        };
         let child = compositor
-            .spawn_shell_client(Path::new(program))
-            .inspect_err(|error| compositor.report_start_failure(Path::new(program), error))
+            .spawn_shell_client(Path::new(GREETER))
+            .inspect_err(|error| compositor.report_start_failure(Path::new(GREETER), error))
             .ok();
         Self {
             child,
@@ -341,7 +336,6 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
         let Some((name, vblank)) = flipped else {
             return Ok(());
         };
-        app.compositor.frame_presented();
         if !app.shown {
             app.shown = true;
             tracing::info!(

@@ -7,7 +7,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TABLE = ROOT / "ci" / "runtime-deps"
-KINDS = {"depends", "required", "optional", "image"}
+KINDS = {"depends", "required", "optional"}
 PATH = re.compile(r'"((?:/usr)?/(?:s?bin|libexec|share|lib)/[A-Za-z0-9._+/-]+)"')
 PROGRAM = re.compile(r'Command::new\(\s*"([A-Za-z0-9._+-]+)"\s*\)')
 CONSTANT = re.compile(r'const ([A-Z_]+): &str = "([A-Za-z0-9._+/-]+)";')

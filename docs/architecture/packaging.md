@@ -22,7 +22,7 @@ profiles. Sizes are in [performance.md](performance.md).
 ## Packages
 
 - **Per crate** (`cargo deb`, one build per architecture; the list is `ci/release/packages`): `bande-compositor`, the session services
-  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-recovery`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
+  (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
   `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
@@ -67,7 +67,7 @@ profiles. Sizes are in [performance.md](performance.md).
   Files. The `install` jobs install without the third-party recommends and check that each of
   them has an installation candidate in Debian forky. Installing it adds "Bande" to the sessions a
   display manager such as GDM, SDDM or greetd offers. With `--no-install-recommends` it brings
-  the desktop, a login and sound and nothing else; the images install it that way.
+  the desktop, a login and sound and nothing else.
 - **Language packs** (`bande-l10n-tool debs`, architecture `all`, section `localization`):
   `bande-desktop-l10n-<lang>` (`sv`, `en-gb`) holds one catalog per program of this tree,
   `/usr/share/bande/l10n/<program>/<lang>.mo`, and enhances `bande-desktop`. Each program's
@@ -91,8 +91,7 @@ profiles. Sizes are in [performance.md](performance.md).
   fetched, and says when it will come once the computer is online. Settings starts
   the service when a language changes (a polkit rule lets an active local user start this one
   unit) and follows the job's `JobRemoved` signal on its own thread, so region and keyboard
-  changes never wait behind apt's lock; the setup assistant starts it at its end. The images install the packs of every language
-  (`language-packs --every-language`), so a first start in any language works offline.
+  changes never wait behind apt's lock.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.

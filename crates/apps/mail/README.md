@@ -126,11 +126,12 @@ Mail is a `bande-app` app; the `bande-*` crates come from
 
 ## Dependencies
 
-Each one is in Debian, except where noted:
+Each crate is packaged in Debian, some at an older version than the one used here, except where
+noted:
 
 | Crate | Why |
 |---|---|
-| `rustls`, `rustls-platform-verifier` | TLS 1.2 and 1.3 for IMAP, SMTP and HTTPS on aws-lc-rs (not in Debian; the provider the Browser needs for post-quantum key exchange), checked against the system's CA store; the same TLS stack and crypto provider as Calendar, Software, Velox and Browser |
+| `rustls`, `rustls-platform-verifier` | TLS 1.2 and 1.3 for IMAP, SMTP and HTTPS, checked against the system's CA store, on the aws-lc-rs crypto provider (not in Debian) for its post-quantum hybrid key exchange (X25519MLKEM768), which keeps recorded mail sessions safe from later decryption; the same TLS stack as Calendar, Software and Velox |
 | `mailparse` | MIME parsing, charsets and encoded words of incoming mail |
 | `rusqlite` | the offline store, on the system `libsqlite3` |
 | `html5ever` | a correct HTML tokenizer for turning mail HTML into safe text |

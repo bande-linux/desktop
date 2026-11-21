@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn rich_formats_read_styles_and_write_them_back() {
-        let source = "# Title\n\nSome **bold**, *italic*, `code`, ~~gone~~ and a [link](https://bande.org).\n\n- one\n  - nested\n\n1. first\n2. second\n\n```\nfn main() {}\n\nlet x = 1;\n```\n\n> quoted\n";
+        let source = "# Title\n\nSome **bold**, *italic*, `code`, ~~gone~~ and a [link](https://example.org).\n\n- one\n  - nested\n\n1. first\n2. second\n\n```\nfn main() {}\n\nlet x = 1;\n```\n\n> quoted\n";
         let rich = markdown::read(source);
         assert_eq!(
             rich.text,
@@ -291,7 +291,7 @@ mod tests {
         assert_eq!(rtf::read(rtf::write(&rtf).as_bytes()), rtf);
 
         let page = "<head><title>T</title><script>alert(1)</script></head><h1>Heading</h1>\
-            <p align=center>Some <b>bold</b> and <a href=\"https://bande.org\">a link</a> &amp; more</p>\
+            <p align=center>Some <b>bold</b> and <a href=\"https://example.org\">a link</a> &amp; more</p>\
             <ul><li>one<ol><li>deep</li></ol></li></ul><table><tr><td>a</td><td>b</td></tr></table>";
         let html = html::read(page);
         assert_eq!(

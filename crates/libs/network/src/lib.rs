@@ -8,6 +8,8 @@ pub use connections::{
 };
 use std::collections::HashMap;
 use std::fmt;
+
+use bande_l10n::{text, tr};
 pub use wifi::{ConnectionChange, KnownNetwork, PrivateAddress, WifiLink};
 
 use proxy::{
@@ -51,13 +53,19 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Bus(error) => write!(f, "NetworkManager: {error}"),
-            Self::NoWifiDevice => f.write_str("this computer has no Wi-Fi device"),
-            Self::PasswordRequired => f.write_str("the network requires a password"),
-            Self::Refused(reason) => f.write_str(reason),
-            Self::Unsupported(security) => write!(f, "cannot join {security:?} networks yet"),
-        }
+        f.write_str(&match self {
+            Self::Bus(error) => tr!(
+                "NetworkManager did not answer ({error})",
+                error = error.to_string()
+            ),
+            Self::NoWifiDevice => tr!("this computer has no Wi-Fi device"),
+            Self::PasswordRequired => tr!("the network needs a password"),
+            Self::Refused(reason) => reason.clone(),
+            Self::Unsupported(security) => tr!(
+                "joining {security} networks is not supported yet",
+                security = security.label()
+            ),
+        })
     }
 }
 
@@ -120,6 +128,16 @@ impl Security {
 
     pub fn needs_password(self) -> bool {
         self != Self::Open
+    }
+
+    pub fn label(self) -> String {
+        match self {
+            Self::Open => tr!("None"),
+            Self::Personal { sae_only: false } => tr!("WPA2 Personal"),
+            Self::Personal { sae_only: true } => tr!("WPA3 Personal"),
+            Self::Enterprise => tr!("WPA Enterprise"),
+            Self::Wep => tr!("WEP"),
+        }
     }
 }
 
@@ -218,21 +236,22 @@ pub enum JoinOutcome {
 
 impl fmt::Display for JoinOutcome {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Joined => "joined",
-            Self::WrongPassword => "the password is not correct",
+        let reason = match self {
+            Self::Joined => text!("joined"),
+            Self::WrongPassword => text!("the password is not correct"),
             Self::Failed { reason } => match *reason {
-                2 => "the connection was turned off",
-                3 => "the Wi-Fi device disconnected",
-                4 | 7 | 8 => "a network service stopped or did not start",
-                5 => "the network gave no usable address",
-                6 => "the network did not answer in time",
-                11 => "the saved network was removed",
-                12 => "a connection it depends on failed",
-                13 | 14 => "the Wi-Fi device went away",
-                _ => "the connection failed",
+                2 => text!("the connection was turned off"),
+                3 => text!("the Wi-Fi device disconnected"),
+                4 | 7 | 8 => text!("a network service stopped or did not start"),
+                5 => text!("the network gave no usable address"),
+                6 => text!("the network did not answer in time"),
+                11 => text!("the saved network was removed"),
+                12 => text!("a connection it depends on failed"),
+                13 | 14 => text!("the Wi-Fi device went away"),
+                _ => text!("the connection failed"),
             },
-        })
+        };
+        f.write_str(&reason.tr())
     }
 }
 

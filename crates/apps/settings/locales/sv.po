@@ -1911,15 +1911,6 @@ msgstr "Ange en tid som 22:00."
 msgid "Type the date and time as year-month-day hours:minutes, such as 2026-10-30 14:05."
 msgstr "Skriv datum och tid som år-månad-dag timmar:minuter, till exempel 2026-10-30 14:05."
 
-msgid "None"
-msgstr "Ingen"
-
-msgid "WPA2 Personal"
-msgstr "WPA2 Personal"
-
-msgid "WPA3 Personal"
-msgstr "WPA3 Personal"
-
 msgid "Fixed"
 msgstr "Fast"
 

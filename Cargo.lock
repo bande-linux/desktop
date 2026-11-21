@@ -1234,6 +1234,7 @@ dependencies = [
 name = "bande-network"
 version = "0.2.0"
 dependencies = [
+ "bande-l10n",
  "bande-log",
  "zbus",
 ]

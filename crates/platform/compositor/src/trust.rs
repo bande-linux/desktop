@@ -163,16 +163,24 @@ fn already_asked(line: &str) -> bool {
 
 fn tell_person(session: Connection, access: Access, program: String) {
     thread::spawn(move || {
-        let Ok(notifications) = zbus::blocking::Proxy::new(
+        let notifications = match zbus::blocking::Proxy::new(
             &session,
             "org.freedesktop.Notifications",
             "/org/freedesktop/Notifications",
             "org.freedesktop.Notifications",
-        ) else {
-            return;
+        ) {
+            Ok(notifications) => notifications,
+            Err(error) => {
+                tracing::warn!("cannot reach notifications to ask for consent: {error}");
+                return;
+            }
         };
-        let Ok(invoked) = notifications.receive_signal("ActionInvoked") else {
-            return;
+        let invoked = match notifications.receive_signal("ActionInvoked") {
+            Ok(invoked) => invoked,
+            Err(error) => {
+                tracing::warn!("cannot follow consent notification actions: {error}");
+                return;
+            }
         };
         let message = match access {
             Access::ReadKeys => text!("{program} wants to read what you type."),
@@ -198,8 +206,12 @@ fn tell_person(session: Connection, access: Access, program: String) {
                 NOTICE_TIMEOUT,
             ),
         );
-        let Ok(id) = shown else {
-            return;
+        let id = match shown {
+            Ok(id) => id,
+            Err(error) => {
+                tracing::warn!("cannot show the consent notification: {error}");
+                return;
+            }
         };
         for signal in invoked {
             let Ok((invoked_id, _)) = signal.body().deserialize::<(u32, String)>() else {

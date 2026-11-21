@@ -323,7 +323,9 @@ impl State {
                 tv_nsec: i64::from(SLOW_KEYS_DELAY.subsec_nanos()),
             },
         };
-        let _ = timerfd_settime(timer, TimerfdTimerFlags::empty(), &delay);
+        if let Err(error) = timerfd_settime(timer, TimerfdTimerFlags::empty(), &delay) {
+            tracing::warn!("cannot arm the slow keys timer: {error}");
+        }
     }
 
     fn accept_slow_key(&mut self) {

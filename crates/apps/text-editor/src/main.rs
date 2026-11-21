@@ -115,7 +115,14 @@ impl TextEditor {
 
     fn new_document(&mut self, cx: &mut Cx<Self>) {
         let untitled = self.next_untitled();
-        let opened = self.open_view(cx, new_id(), untitled, now(), Settings::RICH, Format::Rtf);
+        let opened = self.open_view(
+            cx,
+            new_id(),
+            untitled,
+            now(),
+            Settings::PLAIN,
+            Format::Plain,
+        );
         if let Some((window, _)) = opened {
             self.serve(cx, window);
         }

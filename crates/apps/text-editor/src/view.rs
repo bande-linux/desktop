@@ -583,6 +583,11 @@ impl DocumentView {
             {
                 self.format = chosen;
             }
+            (true, None) if self.format != Format::Markdown => {
+                self.drop_formatting();
+                self.format = Format::Plain;
+                self.changed_format();
+            }
             (false, Some(Format::Markdown)) => self.format = Format::Markdown,
             (false, _) if self.format != Format::Markdown => self.format = Format::Plain,
             _ => {}
@@ -1134,6 +1139,14 @@ impl DocumentView {
                 &[("make-plain-confirm", true), ("cancel", false)],
             );
         }
+        self.drop_formatting();
+        if self.format != Format::Markdown {
+            self.retarget(Format::Plain);
+        }
+        self.changed_format();
+    }
+
+    fn drop_formatting(&mut self) {
         let rich = self
             .ui
             .widget_ref::<TextView>(self.editor)
@@ -1147,12 +1160,8 @@ impl DocumentView {
             editor.set_text(&text);
         }
         self.rich = false;
-        if self.format != Format::Markdown {
-            self.retarget(Format::Plain);
-        }
         self.settings = Settings::PLAIN;
         self.apply_settings();
-        self.changed_format();
     }
 
     pub fn make_rich(&mut self) {

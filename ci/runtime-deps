@@ -54,6 +54,7 @@ nmcli network-manager optional
 /usr/sbin/ipp-usb ipp-usb optional
 /usr/sbin/lpadmin cups-client optional
 /usr/share/pixmaps hicolor-icon-theme optional
+/usr/share/hwdata/pnp.ids hwdata optional
 btrfs btrfs-progs optional
 tune2fs e2fsprogs optional
 flatpak flatpak optional

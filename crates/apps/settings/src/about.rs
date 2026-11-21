@@ -14,7 +14,6 @@ const HOSTNAME: &str = "org.freedesktop.hostname1";
 const HOSTNAME_PATH: &str = "/org/freedesktop/hostname1";
 const MAX_HOSTNAME: usize = 63;
 const GIBIBYTE: f64 = 1024.0 * 1024.0 * 1024.0;
-const APPLE_IMPLEMENTER: &str = "0x61";
 
 #[zbus::proxy(
     interface = "org.freedesktop.hostname1",
@@ -53,24 +52,7 @@ pub enum AboutCommand {
     Rename(String),
 }
 
-pub fn chip_name(compatible: &str, cpuinfo: &str) -> String {
-    let soc = compatible
-        .split('\0')
-        .find_map(|entry| entry.strip_prefix("apple,t"));
-    let name = match soc {
-        Some("8103") => Some("Apple M1"),
-        Some("6000") => Some("Apple M1 Pro"),
-        Some("6001") => Some("Apple M1 Max"),
-        Some("6002") => Some("Apple M1 Ultra"),
-        Some("8112") => Some("Apple M2"),
-        Some("6020") => Some("Apple M2 Pro"),
-        Some("6021") => Some("Apple M2 Max"),
-        Some("6022") => Some("Apple M2 Ultra"),
-        _ => None,
-    };
-    if let Some(name) = name {
-        return name.to_owned();
-    }
+pub fn chip_name(cpuinfo: &str) -> String {
     let field = |name: &str| {
         cpuinfo.lines().find_map(|line| {
             let (key, value) = line.split_once(':')?;
@@ -85,13 +67,7 @@ pub fn chip_name(compatible: &str, cpuinfo: &str) -> String {
                 .is_some_and(|key| key.trim() == "processor")
         })
         .count();
-    let family = match field("model name") {
-        Some(model) => model,
-        None if field("CPU implementer").as_deref() == Some(APPLE_IMPLEMENTER) => {
-            "Apple silicon".to_owned()
-        }
-        None => std::env::consts::ARCH.to_owned(),
-    };
+    let family = field("model name").unwrap_or_else(|| std::env::consts::ARCH.to_owned());
     if cores > 1 {
         tr!(
             "{family} ({cores} cores)",
@@ -186,10 +162,7 @@ fn read_about(hostname: &HostnameProxyBlocking<'_>) -> About {
             pretty
         },
         model: model(hostname),
-        chip: chip_name(
-            &read("/proc/device-tree/compatible").unwrap_or_default(),
-            &read("/proc/cpuinfo").unwrap_or_default(),
-        ),
+        chip: chip_name(&read("/proc/cpuinfo").unwrap_or_default()),
         memory: memory_bytes(&read("/proc/meminfo").unwrap_or_default()),
         capacity,
         available,

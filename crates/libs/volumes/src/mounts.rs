@@ -1,5 +1,7 @@
 use rustix::mount::{UnmountFlags, unmount};
+use std::ffi::OsString;
 use std::fs::File;
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, Once, PoisonError};
 
@@ -167,9 +169,9 @@ pub fn mounted(mountinfo: &str) -> impl Iterator<Item = Mounted> + '_ {
         let (_, tail) = line.split_once(" - ")?;
         let mut tail = tail.split(' ');
         Some(Mounted {
-            point: PathBuf::from(unescape(point)),
+            point: unescape_path(point),
             fs_type: tail.next()?.to_owned(),
-            source: unescape(tail.next()?),
+            source: String::from_utf8_lossy(&unescape(tail.next()?)).into_owned(),
         })
     })
 }
@@ -189,7 +191,7 @@ pub fn volume_icon(mountinfo: &str, point: &Path) -> &'static str {
     }
 }
 
-fn unescape(field: &str) -> String {
+fn unescape(field: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(field.len());
     let bytes = field.as_bytes();
     let mut index = 0;
@@ -210,14 +212,18 @@ fn unescape(field: &str) -> String {
             }
         }
     }
-    String::from_utf8_lossy(&out).into_owned()
+    out
+}
+
+fn unescape_path(field: &str) -> PathBuf {
+    PathBuf::from(OsString::from_vec(unescape(field)))
 }
 
 pub fn mounted_volumes(mountinfo: &str, roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut volumes: Vec<PathBuf> = mountinfo
         .lines()
         .filter_map(|line| line.split(' ').nth(4))
-        .map(|field| PathBuf::from(unescape(field)))
+        .map(unescape_path)
         .filter(|point| {
             roots
                 .iter()

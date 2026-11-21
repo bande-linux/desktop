@@ -611,12 +611,15 @@ impl Canvas for GpuCanvas<'_> {
     }
 
     fn fill_glyphs(&mut self, run: &GlyphRun, glyphs: &[Glyph]) {
-        let _ = self
+        if let Err(error) = self
             .scene
             .glyph_run(self.resources, &run.font)
             .font_size(run.size)
             .hint(false)
             .normalized_coords(&run.coords)
-            .fill_glyphs(glyphs.iter().copied());
+            .fill_glyphs(glyphs.iter().copied())
+        {
+            tracing::warn!("cannot draw glyphs: {error}");
+        }
     }
 }

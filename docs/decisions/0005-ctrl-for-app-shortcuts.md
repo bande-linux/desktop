@@ -46,7 +46,7 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
   Minimize is `Super+H`; `F11` enters and leaves full screen (Window menu, not panels); `Ctrl+Y`
   runs any `Shift+Ctrl+Z` redo item. Hide and Hide Other Apps stay in the app menu without a chord.
 - **Apps take the usual Linux bindings** where they differ from a plain swap: Files has
-  `Delete` to the Trash, `Alt+Up` to the enclosing folder, `Alt+Left/Right` back and
+  `Delete` to the Trash, `Alt+Up` to the parent folder, `Alt+Left/Right` back and
   forward, `Ctrl+L` Go to Location, `Ctrl+H` hidden files, `F2` rename; Terminal puts its commands
   on `Shift+Ctrl` and sends every plain Ctrl+letter to the shell; Settings goes back with
   `Alt+Left`.
@@ -60,9 +60,3 @@ Option 1. Ctrl runs app shortcuts; Super belongs to the compositor and the shell
 - One parser in `widgets/src/shortcut.rs` reads a menu's shortcut string ("Shift+Ctrl+N") back
   into a key and modifiers; `bande-app` runs the menu entry for a key the view did not take, so
   an app's menus are its shortcut table ([apps](../architecture/apps.md)).
-
-## Sources
-
-1. GNOME Human Interface Guidelines, Keyboard: developer.gnome.org/hig/guidelines/keyboard.html
-   and developer.gnome.org/hig/reference/keyboard.html.
-2. KDE: Meta for KWin and Plasma global shortcuts, Ctrl in apps (KDE HIG, keyboard shortcuts).

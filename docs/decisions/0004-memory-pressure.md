@@ -5,11 +5,10 @@ from the kernel up to what the user sees. Everything here uses Debian packages o
 
 ## Context
 
-On 2026-10-30 the dev VM (16 GB RAM, a 3.4 GB swap partition, no zram, no userspace OOM
-killer) froze twice under heavy builds. The kernel never logged an OOM kill: as long as it can
-still reclaim page cache and push anonymous pages to swap, it counts that as progress, so it
-keeps thrashing instead of killing. The machine was "alive" by the kernel's measure and useless
-by the user's. Waiting for the kernel OOM killer is not a policy. A desktop needs its own.
+Under heavy memory use the kernel rarely kills: as long as it can still reclaim page cache and
+push anonymous pages to swap, it counts that as progress, so it keeps thrashing instead of
+killing. The computer is "alive" by the kernel's measure and useless by the user's. Waiting for
+the kernel OOM killer is not a policy. A desktop needs its own.
 
 ## Decision
 
@@ -45,14 +44,14 @@ memory settings stay the system's own.
 - The few session-critical services Bande does not own get the same floor as the compositor,
   `OOMScoreAdjust=100`, through vendor drop-ins: `dbus.service` (the session bus),
   `pipewire.service`, `pipewire-pulse.service`, `wireplumber.service` and
-  `xdg-desktop-portal.service`. On 2026-10-31 a global OOM on the arm64 build machine killed `dbus.service` six
-  times and PipeWire over and over, 59 kills of processes under 10 MB, while the eight 1.9 GB
-  `rustc` at adj 0 that caused it lived: at 200, a 10 MB service scores about 196k pages
-  against 119k for the build. At 100 it scores about 98k, below any process over about 1.5 GB.
-  Once the session bus is gone, no session service or app reconnects.
+  `xdg-desktop-portal.service`. At 200, a 10 MB service would score about 196k pages, above a
+  1.9 GB process at adj 0 (about 119k), so a global OOM would kill small session services over
+  and over while the process that caused it lived. At 100 it scores about 98k, below any process
+  over about 1.5 GB. Once the session bus is gone, no session service or app reconnects.
 - The session bus, PipeWire, WirePlumber and the portal also get `ManagedOOMPreference=avoid`,
   so Debian's backstop on `user@.service` passes them over while an app remains.
-- Swap kill stays off (`ManagedOOMSwap=auto`, Debian's default), for the reason Ubuntu found.
+- Swap kill stays off (`ManagedOOMSwap=auto`, Debian's default): killing on swap use closes
+  large apps that are only idle, not thrashing.
 - No `oomd.conf` drop-in: Debian already sets `DefaultMemoryPressureDurationSec=20s`, and the
   per-unit limit above is the only threshold we change.
 
@@ -90,7 +89,7 @@ short is exactly what must be avoided) is a toplevel kept on top:
 only sends unit signals while someone is subscribed) and watches `PropertiesChanged` on
 `/org/freedesktop/systemd1/unit/*`. Since systemd 248 both a kernel OOM kill and a systemd-oomd
 kill set a scope's or service's `Result` to `oom-kill`. The unit name is decoded from the bus
-path, the app from the unit name (the same decoder System Monitor uses, now shared), and the
+path, the app from the unit name (the decoder System Monitor uses too), and the
 notification says "Terminal was closed because memory ran low". Clicking it opens the app again,
 as the crash notice does. Units that are not apps (a build in `run-*.scope`, a service) get "A
 background task was stopped because memory ran low", naming the unit.
@@ -99,7 +98,7 @@ background task was stopped because memory ran low", naming the unit.
 
 - **earlyoom.** It is in Debian, but it acts on free memory and swap, not on stall time, and it
   kills processes, not cgroups. systemd-oomd is the systemd-native, cgroup-aware choice that
-  Fedora, Ubuntu and Debian's own defaults build on.
+  Debian's own defaults build on.
 - **Our own killer in the shell.** That would duplicate oomd and run in the session it must
   protect.
 - **`min_ttl_ms` by default.** The MGLRU knob makes the kernel kill rather than thrash, but the
@@ -110,15 +109,8 @@ background task was stopped because memory ran low", naming the unit.
 
 ## Sources
 
-1. Fedora, "Changes/EnableSystemdOomd", https://fedoraproject.org/wiki/Changes/EnableSystemdOomd
-2. GLib, `gio/gmemorymonitorpsi.c`,
-   https://gitlab.gnome.org/GNOME/glib/-/blob/main/gio/gmemorymonitorpsi.c
-3. KDE, plasma-workspace merge request 4204 (oom-notifier),
-   https://invent.kde.org/plasma/plasma-workspace/-/merge_requests/4204
-4. Ubuntu bug 1972159 (Launchpad), "systemd-oomd frequently kills firefox and visual studio code",
-   and https://www.phoronix.com/news/Ubuntu-Drops-Swap-Kill
-5. Linux kernel, "PSI - Pressure Stall Information", https://docs.kernel.org/accounting/psi.html
-6. Linux kernel, "Multi-Gen LRU", https://docs.kernel.org/admin-guide/mm/multigen_lru.html
-7. systemd 257 manuals: `systemd.resource-control(5)` (ManagedOOM*), `systemd-oomd.service(8)`,
+1. Linux kernel, "PSI - Pressure Stall Information", https://docs.kernel.org/accounting/psi.html
+2. Linux kernel, "Multi-Gen LRU", https://docs.kernel.org/admin-guide/mm/multigen_lru.html
+3. systemd 257 manuals: `systemd.resource-control(5)` (ManagedOOM*), `systemd-oomd.service(8)`,
    `oomd.conf(5)`; systemd v257 `src/core/cgroup.c` (`unit_check_oomd_kill`) and
    `src/core/scope.c` (`SCOPE_FAILURE_OOM_KILL`).

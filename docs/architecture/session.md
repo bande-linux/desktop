@@ -208,7 +208,7 @@ graph LR
 - `org.freedesktop.impl.portal.Background`: lets the frontend export RequestBackground (run in
   the background and start at login; since 1.19 the frontend writes the autostart file itself,
   hence `xdg-desktop-portal (>= 1.20)`). `GetAppState` asks the compositor's `org.bande.Apps`
-  (`GetRunningApplications`, shaped like GNOME Shell's Introspect: each app with a mapped
+  (`GetRunningApplications`: each app with a mapped
   window, its Flatpak id as `sandboxed-app-id` from the client's `/.flatpak-info`, and
   `active-on-seats` for the frontmost app) and answers running (1) or active (2) per app,
   keyed by the Flatpak id; anything else is in the background, as windowless apps are. Its
@@ -663,7 +663,7 @@ starting with whoever signed in last (remembered in the greeter user's
 `$XDG_STATE_HOME/bande-greeter/last-user`, on Debian under `/var/lib/greetd`, the home that
 greetd's package creates owned by `_greetd`, so no state directory of our own is
 needed). Debian's
-AccountsService lacks Ubuntu's `SetBackgroundFile`, and Debian creates homes as 0700, so
+AccountsService has no login background, and Debian creates homes as 0700, so
 `bande-config` copies the dark picture (at most 64 MiB) whenever the wallpaper changes into
 `/var/lib/bande-greeter/pictures/<uid>`, and removes it when the person returns to the
 default. The package creates that folder as `root:_greetd` with mode 3733: everyone may create

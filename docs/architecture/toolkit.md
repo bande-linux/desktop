@@ -231,7 +231,7 @@ writes a hex value, a corner radius or a font name of its own.
   | `Spinner` | 12 `ink2` spokes |
   | `Disclosure` | chevron that turns, content fades in; the header row takes the row hover fill |
   | Tooltip | `ink` fill with `chassis` text 12/500, radius 6, no arrow |
-  | `Shortcut::new("Shift+Ctrl+N")` | the shortcut as words in `ink2`, modifiers in GNOME order (Shift, Ctrl, Alt, Super), arrows as arrow symbols, "Page Up", "Esc"; `shortcut_label` writes the label, `parse_shortcut` reads a shortcut string back into a key and modifiers (`Ctrl` or `Control`), and `shortcut_pressed` tells whether a key event matches one |
+  | `Shortcut::new("Shift+Ctrl+N")` | the shortcut as words in `ink2`, modifiers in the order Shift, Ctrl, Alt, Super, arrows as arrow symbols, "Page Up", "Esc"; `shortcut_label` writes the label, `parse_shortcut` reads a shortcut string back into a key and modifiers (`Ctrl` or `Control`), and `shortcut_pressed` tells whether a key event matches one |
 
 - **Menus**. Opaque `overlay`, radius 10
   (`MENU_RADIUS`) with the Datum overlay shadow pair and no blur; 4 pt inset, 28 pt rows, 9 pt

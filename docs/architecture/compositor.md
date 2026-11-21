@@ -219,7 +219,7 @@ when they reach the screen is Bande's own.
   keeps its size. Filling the other half fills what the tile next to it leaves free.
 - **Drag and drop.** The compositor draws the drag icon a client passes to `start_drag` at the
   pointer, offset by the icon's attach offset, below the pointer. Holding Ctrl makes a
-  drop a copy and Shift a move (as in GTK and KDE), when source and destination offer it; otherwise the
+  drop a copy and Shift a move, when source and destination offer it; otherwise the
   destination's preferred action wins. The choice is made when the destination sets its
   actions; pressing or releasing Ctrl or Shift mid-drag sends the destination a motion at the
   same place, so a destination that sets its actions again on motion (ours and GTK do) gets the

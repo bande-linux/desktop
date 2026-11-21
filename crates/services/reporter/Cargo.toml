@@ -19,9 +19,6 @@ rustix = { workspace = true, features = ["fs", "net", "stdio", "thread"] }
 serde_json.workspace = true
 tracing.workspace = true
 
-[dev-dependencies]
-tempfile.workspace = true
-
 [package.metadata.deb]
 maintainer = "Mikael Hug <mikaelhug@gmail.com>"
 section = "misc"

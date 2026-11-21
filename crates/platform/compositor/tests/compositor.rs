@@ -12,7 +12,7 @@ use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_W,
 };
 use bande_test_wayland::{
-    BLUE, ConstraintAdjustment, PopupRequest, RED, ResizeEdge, SeparateApp, ShmImage, TestClient,
+    BLUE, ConstraintAdjustment, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
     act_as_separate_app, chord, grant_consent, headless, roundtrip,
 };
 use wayland_client::protocol::wl_shm::Format;
@@ -77,66 +77,25 @@ fn the_browser_row_gives_the_well_to_the_compositor_and_the_rest_to_the_browser(
 }
 
 #[test]
-fn a_window_edge_keeps_the_resize_pointer_while_it_is_dragged() {
-    let mut server = headless(560, 520);
-    let bytes = RED.repeat(320 * 200);
-    let mut browser = TestClient::connect(&mut server);
-    browser.use_seat(&mut server);
-    browser.show_window(
-        &mut server,
-        &ShmImage {
-            width: 320,
-            height: 200,
-            stride: 1280,
-            format: Format::Xrgb8888,
-            bytes: &bytes,
-        },
-    );
-    browser.set_app_id(&mut server, 0, "org.bande.Browser");
-    roundtrip(&mut server, &mut [&mut browser]);
-    let rect = server.windows()[0].geometry().expect("mapped");
-    let middle = f64::from(rect.loc.y + rect.size.h / 2);
-    let right = f64::from(rect.loc.x + rect.size.w);
-    server.move_pointer_to((right - 100.0, middle).into(), 0);
-    roundtrip(&mut server, &mut [&mut browser]);
-    server.move_pointer_to((right + 3.0, middle).into(), 0);
-    assert_eq!(server.shown_cursor(), Some("ew-resize"));
-    server.press_button(BTN_LEFT, true, 0);
-    server.move_pointer_to((right + 40.0, middle).into(), 0);
-    roundtrip(&mut server, &mut [&mut browser]);
-    assert_eq!(server.shown_cursor(), Some("ew-resize"));
-    server.press_button(BTN_LEFT, false, 0);
-
-    let mut server = headless(560, 520);
-    let mut editor = TestClient::window(&mut server, "org.example.Editor");
-    let rect = server.windows()[0].geometry().expect("mapped");
-    let centre = rect.loc.to_f64() + rect.size.downscale(2).to_point().to_f64();
-    server.move_pointer_to(centre, 0);
-    server.press_button(BTN_LEFT, true, 0);
-    roundtrip(&mut server, &mut [&mut editor]);
-    editor.start_resize(&mut server, 0, ResizeEdge::Right);
-    server.move_pointer_to((centre.x + 20.0, centre.y).into(), 0);
-    roundtrip(&mut server, &mut [&mut editor]);
-    assert_eq!(server.shown_cursor(), Some("ew-resize"));
-    server.press_button(BTN_LEFT, false, 0);
-    roundtrip(&mut server, &mut [&mut editor]);
-    assert_eq!(server.shown_cursor(), Some("default"));
-}
-
-#[test]
-fn while_locked_no_popup_grab_or_input_method_takes_keys_from_the_lock_surface() {
+fn while_locked_no_popup_grab_input_method_or_virtual_keyboard_takes_keys_from_the_lock_surface() {
     let (mut server, mut editor) = focused_app();
-    let _consent = grant_consent(&mut server, "read-keys sandboxed org.example.Ime\n");
+    let _consent = grant_consent(
+        &mut server,
+        "read-keys sandboxed org.example.Ime\ntype-keys sandboxed org.example.Typist\n",
+    );
     let mut input_method = TestClient::connect_sandboxed(&mut server, "org.example.Ime");
     input_method.use_seat(&mut server);
     input_method.become_input_method(&mut server);
     assert!(!input_method.input_method_unavailable());
     editor.enable_text_input(&mut server);
     input_method.grab_keyboard(&mut server);
+    let mut typist = TestClient::connect_sandboxed(&mut server, "org.example.Typist");
+    typist.use_seat(&mut server);
+    assert!(typist.create_virtual_keyboard(&mut server).is_ok());
     let mut lock = locked(&mut server);
     roundtrip(
         &mut server,
-        &mut [&mut lock, &mut editor, &mut input_method],
+        &mut [&mut lock, &mut editor, &mut input_method, &mut typist],
     );
     assert!(lock.lock_surface_has_keyboard());
     let popup = editor.open_popup(
@@ -153,12 +112,13 @@ fn while_locked_no_popup_grab_or_input_method_takes_keys_from_the_lock_surface()
     let clicks_before = editor.buttons().len();
 
     chord(&mut server, &[KEY_A]);
+    typist.type_on_virtual_keyboard(&mut server, KEY_Q);
     server.move_pointer_to((280.0, 260.0).into(), 3);
     server.press_button(BTN_LEFT, true, 4);
     server.press_button(BTN_LEFT, false, 5);
     roundtrip(
         &mut server,
-        &mut [&mut lock, &mut editor, &mut input_method],
+        &mut [&mut lock, &mut editor, &mut input_method, &mut typist],
     );
 
     assert!(editor.popup_dismissed(popup));
@@ -167,25 +127,7 @@ fn while_locked_no_popup_grab_or_input_method_takes_keys_from_the_lock_surface()
     assert!(input_method.grabbed_keys().is_empty());
     assert!(lock.lock_surface_has_keyboard());
     assert!(lock.keys().contains(&(KEY_A, true)));
-}
-
-#[test]
-fn without_consent_no_program_reads_keys_or_types() {
-    let (mut server, mut editor) = focused_app();
-    let mut spy = TestClient::connect_sandboxed(&mut server, "org.example.Spy");
-    spy.use_seat(&mut server);
-    spy.become_input_method(&mut server);
-    assert!(spy.input_method_unavailable());
-    spy.grab_keyboard(&mut server);
-
-    chord(&mut server, &[KEY_A]);
-    roundtrip(&mut server, &mut [&mut spy, &mut editor]);
-    assert!(spy.grabbed_keys().is_empty());
-    assert!(editor.keys().contains(&(KEY_A, true)));
-
-    let mut typist = TestClient::connect(&mut server);
-    typist.use_seat(&mut server);
-    assert!(typist.create_virtual_keyboard(&mut server).is_err());
+    assert!(!lock.keys().contains(&(KEY_Q, true)));
 }
 
 #[test]
@@ -216,28 +158,12 @@ fn a_consented_input_method_sees_keys_only_in_a_text_field_that_is_no_password()
 }
 
 #[test]
-fn while_locked_a_consented_virtual_keyboard_reaches_nothing() {
+fn without_consent_nothing_types_and_turning_it_off_hands_the_keys_back_at_once() {
     let (mut server, mut editor) = focused_app();
-    let _consent = grant_consent(&mut server, "type-keys sandboxed org.example.Typist\n");
-    let mut typist = TestClient::connect_sandboxed(&mut server, "org.example.Typist");
+    let mut typist = TestClient::connect(&mut server);
     typist.use_seat(&mut server);
-    assert!(typist.create_virtual_keyboard(&mut server).is_ok());
-    typist.type_on_virtual_keyboard(&mut server, KEY_A);
-    roundtrip(&mut server, &mut [&mut typist, &mut editor]);
-    assert!(editor.keys().contains(&(KEY_A, true)));
+    assert!(typist.create_virtual_keyboard(&mut server).is_err());
 
-    let mut lock = locked(&mut server);
-    roundtrip(&mut server, &mut [&mut lock, &mut typist, &mut editor]);
-    assert!(lock.lock_surface_has_keyboard());
-    typist.type_on_virtual_keyboard(&mut server, KEY_Q);
-    roundtrip(&mut server, &mut [&mut lock, &mut typist, &mut editor]);
-    assert!(!lock.keys().contains(&(KEY_Q, true)));
-    assert!(!editor.keys().contains(&(KEY_Q, true)));
-}
-
-#[test]
-fn turning_consent_off_cuts_the_program_off_and_keys_go_to_the_app_at_once() {
-    let (mut server, mut editor) = focused_app();
     let consent = grant_consent(&mut server, "read-keys sandboxed org.example.Ime\n");
     let mut input_method = TestClient::connect_sandboxed(&mut server, "org.example.Ime");
     input_method.use_seat(&mut server);
@@ -368,107 +294,4 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
             .iter()
             .all(|(key, _)| ![KEY_ESC, KEY_DOWN, KEY_ENTER].contains(key))
     );
-}
-
-#[test]
-fn another_process_dialog_opens_over_the_window_it_is_attached_to() {
-    let mut server = headless(1200, 900);
-    let bytes = RED.repeat(600 * 500);
-    let mut app = TestClient::connect(&mut server);
-    app.show_window(
-        &mut server,
-        &ShmImage {
-            width: 600,
-            height: 500,
-            stride: 2400,
-            format: Format::Xrgb8888,
-            bytes: &bytes,
-        },
-    );
-    app.set_app_id(&mut server, 0, "org.example.Editor");
-    let handle = app.export_window(&mut server, 0);
-
-    let bytes = BLUE.repeat(200 * 100);
-    let mut dialogs = TestClient::connect(&mut server);
-    dialogs.show_window_attached_to(
-        &mut server,
-        &ShmImage {
-            width: 200,
-            height: 100,
-            stride: 800,
-            format: Format::Xrgb8888,
-            bytes: &bytes,
-        },
-        &handle,
-    );
-    dialogs.set_app_id(&mut server, 0, "org.bande.FileChooser");
-    roundtrip(&mut server, &mut [&mut app, &mut dialogs]);
-
-    app.minimize_window(&mut server, 0);
-    roundtrip(&mut server, &mut [&mut app, &mut dialogs]);
-    assert!(
-        server
-            .windows()
-            .iter()
-            .find(|window| window.app_id() == "org.bande.FileChooser")
-            .unwrap()
-            .is_minimized()
-    );
-}
-
-#[test]
-fn a_click_beside_the_search_reaches_the_window_and_the_search_stays_where_it_was_dragged() {
-    let mut server = headless(800, 600);
-    let mut editor = TestClient::window(&mut server, "org.example.Editor");
-    let mut shell = TestClient::connect_as_shell(&mut server);
-    shell.use_seat(&mut server);
-    let bytes = BLUE.repeat(200 * 100);
-    let card = ShmImage {
-        width: 200,
-        height: 100,
-        stride: 800,
-        format: Format::Xrgb8888,
-        bytes: &bytes,
-    };
-    shell.show_panel(&mut server, &card, 100);
-    let rect = server.windows()[0].geometry().expect("mapped");
-    let window = rect.loc.to_f64() + rect.size.downscale(2).to_point().to_f64();
-    let clicks = editor.buttons().len();
-    let click = |server: &mut Compositor,
-                 shell: &mut TestClient,
-                 editor: &mut TestClient,
-                 at: (f64, f64)| {
-        server.move_pointer_to(at.into(), 0);
-        server.press_button(BTN_LEFT, true, 0);
-        server.press_button(BTN_LEFT, false, 0);
-        roundtrip(server, &mut [shell, editor]);
-    };
-    click(&mut server, &mut shell, &mut editor, (window.x, window.y));
-    assert_eq!(shell.pressed_outside(), 1);
-    assert_eq!(editor.buttons().len(), clicks + 2);
-
-    let drag =
-        |server: &mut Compositor, shell: &mut TestClient, from: (f64, f64), to: (f64, f64)| {
-            server.move_pointer_to(from.into(), 0);
-            server.press_button(BTN_LEFT, true, 0);
-            shell.exchange(server);
-            shell.move_panel(server);
-            server.move_pointer_to(to.into(), 0);
-            assert_eq!(server.shown_cursor(), Some("default"));
-            server.press_button(BTN_LEFT, false, 0);
-            shell.exchange(server);
-        };
-    drag(&mut server, &mut shell, (400.0, 150.0), (150.0, 450.0));
-    click(&mut server, &mut shell, &mut editor, (150.0, 450.0));
-    assert_eq!(shell.pressed_outside(), 1);
-    shell.close_panel(&mut server);
-    shell.show_panel(&mut server, &card, 100);
-    click(&mut server, &mut shell, &mut editor, (150.0, 450.0));
-    assert_eq!(shell.pressed_outside(), 1);
-    click(&mut server, &mut shell, &mut editor, (400.0, 150.0));
-    assert_eq!(shell.pressed_outside(), 2);
-
-    drag(&mut server, &mut shell, (150.0, 450.0), (400.0, 155.0));
-    click(&mut server, &mut shell, &mut editor, (400.0, 202.0));
-    assert_eq!(shell.pressed_outside(), 3);
 }

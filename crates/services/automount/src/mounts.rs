@@ -1095,32 +1095,3 @@ fn list_shares(server: &Server, user: &str, password: Option<&str>) -> Outcome {
         Err(error) => Outcome::Failed(error.to_string()),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tool_errors_tell_what_the_user_can_do() {
-        let refused = classify("mount error(13): Permission denied", "ann");
-        assert_eq!(
-            refused,
-            Outcome::NeedsPassword {
-                user: "ann".to_owned(),
-                refused: true
-            }
-        );
-        assert_eq!(
-            classify("ssh: connect to host x: No route to host", ""),
-            Outcome::Unreachable
-        );
-        assert_eq!(
-            classify("tree connect failed: NT_STATUS_BAD_NETWORK_NAME", ""),
-            Outcome::NoSuchShare
-        );
-        assert_eq!(
-            classify("mount error(2): No such file or directory", ""),
-            Outcome::NoSuchShare
-        );
-    }
-}

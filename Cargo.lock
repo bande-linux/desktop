@@ -454,7 +454,6 @@ dependencies = [
 name = "bande-audio"
 version = "0.1.10"
 dependencies = [
- "bande-xdg",
  "pipewire",
  "rustix 1.1.6",
  "serde_json",
@@ -705,7 +704,6 @@ version = "0.1.10"
 dependencies = [
  "bande-l10n",
  "bande-xdg",
- "tempfile",
  "tracing",
 ]
 
@@ -722,14 +720,11 @@ dependencies = [
  "bande-content",
  "bande-files",
  "bande-fs",
- "bande-graphics",
  "bande-inbox",
  "bande-l10n",
  "bande-log",
  "bande-pdf",
  "bande-printers",
- "bande-test-bus",
- "bande-test-wayland",
  "bande-toolkit",
  "bande-volumes",
  "bande-wallpaper",
@@ -874,16 +869,13 @@ dependencies = [
  "bande-content",
  "bande-log",
  "bande-search",
- "bande-test-bus",
  "bande-watch",
  "bande-xdg",
  "libc",
  "rustix 1.1.6",
  "tantivy",
- "tempfile",
  "tracing",
  "zbus",
- "zip",
 ]
 
 [[package]]
@@ -1011,7 +1003,6 @@ dependencies = [
  "bande-xdg",
  "flate2",
  "serde_json",
- "tempfile",
  "tracing",
 ]
 
@@ -1133,13 +1124,10 @@ version = "0.1.10"
 dependencies = [
  "bande-bus",
  "bande-content",
- "bande-graphics",
  "bande-l10n",
  "bande-log",
  "bande-notify",
- "bande-pdf",
  "bande-printers",
- "bande-test-bus",
  "bande-xdg",
  "blocking",
  "ring",
@@ -1196,7 +1184,6 @@ name = "bande-render"
 version = "0.1.10"
 dependencies = [
  "ash",
- "libc",
  "naga",
  "smithay",
  "tracing",
@@ -1215,7 +1202,6 @@ dependencies = [
  "rustix 1.1.6",
  "rustls",
  "serde_json",
- "tempfile",
  "tracing",
 ]
 
@@ -1481,7 +1467,6 @@ version = "0.1.10"
 dependencies = [
  "bande-compositor",
  "bande-protocols",
- "libc",
  "smithay",
  "tempfile",
  "wayland-client",

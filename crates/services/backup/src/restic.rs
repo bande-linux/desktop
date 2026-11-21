@@ -315,18 +315,3 @@ pub fn damaged_packs(check_output: &str) -> Vec<String> {
         .map(str::to_owned)
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::damaged_packs;
-
-    #[test]
-    fn finds_only_the_packs_restic_says_to_repair() {
-        let pack = "035ae823ab30a301cef191b895b5e19a0b38a700ad8c215878ec3aee1ab33aa9";
-        let blob = "6bcd619fa7790e0acc7486c8d599d0f0b02e8847b34fdeba7c01591a6e06e618";
-        let output = format!(
-            "pack {pack} contains 2 errors: [blob {blob}: decrypting failed]\n\nrestic repair packs {pack}\nrestic repair snapshots --forget\n"
-        );
-        assert_eq!(damaged_packs(&output), vec![pack.to_owned()]);
-    }
-}

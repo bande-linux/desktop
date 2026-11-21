@@ -291,13 +291,6 @@ impl Compositor {
         (elements, drawn, icon)
     }
 
-    pub fn shown_cursor(&self) -> Option<&'static str> {
-        match self.state.drawn_cursor() {
-            Shown::Pointer(pointer) => Some(pointer.name()),
-            Shown::Hidden | Shown::Surface(_) => None,
-        }
-    }
-
     pub(crate) fn cursor_elements(
         &self,
         renderer: &mut VulkanRenderer,

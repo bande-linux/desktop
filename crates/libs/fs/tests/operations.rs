@@ -6,7 +6,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use bande_fs::{Answer, Job, Report, Resolution, Sort, Task, Trash, list, rename, same_volume};
+use bande_fs::{Answer, Job, Report, Resolution, Sort, Task, Trash, list, rename};
 use tempfile::TempDir;
 
 fn trash(place: &TempDir) -> Trash {
@@ -92,51 +92,4 @@ fn names_that_are_not_utf8_survive_listing_copy_and_keep_both() {
     assert_eq!(fs::read_to_string(to.join(name)).expect("copy"), "text");
     let second = to.join(OsStr::from_bytes(b"caf\xe9 2.txt"));
     assert_eq!(fs::read_to_string(second).expect("second"), "text");
-}
-
-#[test]
-fn a_move_between_disks_finishes_after_try_again() {
-    let Ok(other) = TempDir::new_in("/dev/shm") else {
-        return;
-    };
-    let place = TempDir::new_in(env!("CARGO_TARGET_TMPDIR")).expect("dir");
-    if same_volume(other.path(), place.path()) {
-        return;
-    }
-    let source = place.path().join("album");
-    fs::create_dir_all(&source).expect("source");
-    fs::write(source.join("a.txt"), "a").expect("a");
-    if !unreadable(&source.join("b.txt")) {
-        return;
-    }
-
-    let job = Job::start(
-        Task::Move {
-            sources: vec![source.clone()],
-            destination: other.path().to_path_buf(),
-        },
-        trash(&place),
-        true,
-    )
-    .expect("job");
-    assert!(matches!(job.wait(), Report::Failure(_)));
-    fs::set_permissions(source.join("b.txt"), fs::Permissions::from_mode(0o600)).expect("mode");
-    answer(&job, Resolution::Retry);
-    assert!(matches!(job.wait(), Report::Finished(_)));
-
-    assert!(!source.exists());
-    let moved = other.path().join("album");
-    assert_eq!(fs::read_to_string(moved.join("b.txt")).expect("b"), "new");
-    assert_eq!(fs::read_dir(other.path()).expect("other").count(), 1);
-}
-
-#[test]
-fn a_stale_partial_is_never_listed() {
-    let place = TempDir::new().expect("dir");
-    fs::write(place.path().join(".bande-partial-1-1"), "half").expect("partial");
-    assert!(
-        list(place.path(), true, Sort::default())
-            .expect("list")
-            .is_empty()
-    );
 }

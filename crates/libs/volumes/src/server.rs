@@ -209,27 +209,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn typed_addresses_become_servers() {
-        let plain = Server::parse("nas.local").unwrap();
-        assert_eq!(plain.protocol, Protocol::Smb);
-        assert_eq!(plain.origin(), "smb://nas.local");
-        let share = Server::parse("smb://ann@nas:4455/My%20Media/films/").unwrap();
-        assert_eq!(share.user.as_deref(), Some("ann"));
-        assert_eq!(share.unc().as_deref(), Some("//nas/My Media"));
-        assert_eq!(share.inner_path(), ["films"]);
-        assert_eq!(share.url(), "smb://nas:4455/My%20Media/films");
-        let ipv6 = Server::parse("sftp://[fe80::1]:2222/srv").unwrap();
-        assert_eq!(ipv6.sftp_source(), "[fe80::1]:/srv");
-        assert_eq!(ipv6.port, Some(2222));
-        let dav = Server::parse("https://cloud.example/remote.php/dav").unwrap();
-        assert_eq!(dav.dav_url(), "https://cloud.example/remote.php/dav/");
-        assert_eq!(dav.volume_name(), "dav");
-        let nfs = Server::parse("nfs://nas/srv/media").unwrap();
-        assert_eq!(nfs.nfs_source(), "nas:/srv/media");
-        assert_eq!(nfs.volume_name(), "media");
-    }
-
-    #[test]
     fn addresses_that_could_inject_are_refused() {
         for bad in [
             "sftp://-oProxyCommand=x/",

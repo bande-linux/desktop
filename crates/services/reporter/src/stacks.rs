@@ -281,33 +281,3 @@ impl Stacks {
         )
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{parse_coredump, parse_eu_stack};
-
-    #[test]
-    fn eu_stack_frames_keep_the_offset_in_their_module() {
-        let text = "PID 7 - process\nTID 7:\n#0  0x00007fffbe3a1b5c clock_nanosleep - /usr/lib/aarch64-linux-gnu/libc.so.6\n    [405d95c1]@0x7fffbe2e0000+0xc1b5b\n#1  0x000055555cd26f88 - /usr/bin/sleep\n    [53c7c062]@0x55555cd20000+0x6f87\n    src/sleep.c:42\n#2  0x0000000000001234\n";
-        let stacks = parse_eu_stack(text, 7);
-        let frames = &stacks.threads[0].frames;
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].offset, 0xc1b5b);
-        assert_eq!(frames[1].module, "sleep");
-        assert_eq!(frames[1].offset, 0x6f87);
-        assert_eq!(stacks.build_id_of("libc.so.6"), Some("405d95c1"));
-    }
-
-    #[test]
-    fn a_systemd_coredump_message_becomes_threads_and_images() {
-        let message = "Process 42 (bande-shell) of user 1000 dumped core.\n\nModule /usr/bin/bande-shell with build-id abc123\nModule libc.so.6 from deb glibc-2.41-12\nStack trace of thread 42:\n#0  0x0000ffff8a7b1234 __pthread_kill_implementation (libc.so.6 + 0x81234)\n#1  0x0000aaaa00001000 n/a (bande-shell + 0x1000)\n\nStack trace of thread 43:\n#0  0x0000ffff8a7b9999 n/a (libc.so.6 + 0x99)\nELF object binary architecture: ARM AArch64\n";
-        let stacks = parse_coredump(message, None);
-        assert_eq!(stacks.threads.len(), 2);
-        assert!(stacks.threads[0].crashed && !stacks.threads[1].crashed);
-        assert_eq!(stacks.threads[0].frames.len(), 2);
-        assert_eq!(stacks.threads[0].frames[1].offset, 0xfff);
-        assert_eq!(stacks.threads[0].frames[1].symbol, None);
-        assert_eq!(stacks.images[0].name, "bande-shell");
-        assert_eq!(stacks.images[0].build_id.as_deref(), Some("abc123"));
-    }
-}

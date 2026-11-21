@@ -12,8 +12,5 @@ tracing.workspace = true
 bande-l10n.workspace = true
 bande-xdg.workspace = true
 
-[dev-dependencies]
-tempfile.workspace = true
-
 [lints]
 workspace = true

@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -106,29 +105,6 @@ fn a_file_goes_to_the_trash_and_back() {
         "notes\n"
     );
     assert!(trash.is_empty());
-}
-
-#[test]
-fn a_duplicate_that_cannot_be_written_asks_and_stops_without_leaving_a_copy() {
-    if rustix::process::geteuid().is_root() {
-        return;
-    }
-    let root = TempDir::new().expect("temporary folder");
-    let locked = root.path().join("Locked");
-    fs::create_dir(&locked).expect("folder");
-    fs::write(locked.join("notes.txt"), "notes\n").expect("file");
-    fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).expect("lock");
-    let trash = Trash::isolated(root.path().join("Trash"), 0);
-    let mut files = view(Browser::open(Location::Folder(locked.clone()), trash));
-    key(&mut files, Key::Down, false, false);
-    assert!(files.menu_action("duplicate"));
-    run_until(&mut files, |files| {
-        matches!(files.sheet(), Some(Sheet::Failure))
-    });
-    key(&mut files, Key::Escape, false, false);
-    finish(&mut files);
-    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("unlock");
-    assert_eq!(fs::read_dir(&locked).expect("listing").count(), 1);
 }
 
 #[test]

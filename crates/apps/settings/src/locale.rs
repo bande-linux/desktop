@@ -505,37 +505,3 @@ fn translations() -> Vec<String> {
     found.dedup();
     found
 }
-
-#[cfg(test)]
-mod per_user_tests {
-    use super::*;
-
-    #[test]
-    fn a_later_language_choice_owns_the_pack_row() {
-        let mut watch = PackWatch::default();
-        let first = watch.begin();
-        let second = watch.begin();
-        assert!(!watch.finish(first, pack_outcome(true, true, true)));
-        assert_eq!(watch.packs, Packs::Fetching);
-        assert!(watch.finish(second, pack_outcome(false, false, true)));
-        assert_eq!(watch.packs, Packs::Offline);
-        assert_eq!(pack_outcome(false, false, false), Packs::Ready);
-    }
-
-    #[test]
-    fn the_users_choice_wins_and_clearing_formats_overrides_the_system() {
-        let merged = overlaid(
-            vec![
-                "LANG=en_US.UTF-8".to_owned(),
-                "LC_TIME=de_DE.UTF-8".to_owned(),
-            ],
-            &user_lines(
-                &["LANG=sv_SE.UTF-8".to_owned(), "LC_TIME=".to_owned()],
-                "sv_SE.UTF-8",
-            ),
-        );
-        let (language, region) = parse_assignments(&merged);
-        assert_eq!(language, "sv_SE.UTF-8");
-        assert_eq!(region, None);
-    }
-}

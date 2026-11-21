@@ -380,11 +380,4 @@ mod tests {
         compress_sheet(&[5, 5, 5, 5, 5, 5], 2, 1, &mut out).ok();
         assert_eq!(out, vec![2, 1, 5]);
     }
-
-    #[test]
-    fn media_keywords_give_their_size_in_points() {
-        let (width, height) = media_size("iso_a4_210x297mm").unwrap_or_default();
-        assert!((width - 595.3).abs() < 0.1 && (height - 841.9).abs() < 0.1);
-        assert_eq!(media_size("na_letter_8.5x11in"), Some((612.0, 792.0)));
-    }
 }

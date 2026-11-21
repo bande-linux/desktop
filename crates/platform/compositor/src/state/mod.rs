@@ -540,10 +540,6 @@ impl Compositor {
         self.display.flush_clients()
     }
 
-    pub fn output_size(&self) -> Size<i32, Physical> {
-        self.state.main_screen().mode_size()
-    }
-
     pub fn set_output_scale(&mut self, scale: f64) {
         let name = self.state.main_screen().name();
         let settings = OutputSettings {

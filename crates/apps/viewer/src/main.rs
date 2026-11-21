@@ -225,7 +225,10 @@ impl Viewer {
         let Some(path) = view.path().map(Path::to_path_buf) else {
             return;
         };
-        let token = shown.activation_token(FILES_APP_ID).ok();
+        let token = shown
+            .activation_token(FILES_APP_ID)
+            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+            .ok();
         let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
         if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
             tracing::warn!("cannot show {} in Files: {error}", path.display());

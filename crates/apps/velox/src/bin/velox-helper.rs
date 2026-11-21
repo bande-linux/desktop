@@ -1,3 +1,4 @@
+use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind, IoSlice, Write};
 use std::mem::MaybeUninit;
@@ -179,24 +180,36 @@ fn send_fd(fd: BorrowedFd<'_>) -> io::Result<()> {
     Ok(())
 }
 
-fn give_back(device: &Path, address: &str) {
+fn give_back(device: &Path, address: &str) -> io::Result<()> {
     if read(&device.join("devnum")) != address {
-        return;
+        return Ok(());
     }
-    let Ok(interfaces) = interfaces(device) else {
-        return;
-    };
-    for interface in interfaces {
+    for interface in interfaces(device)? {
         if interface.join("driver").exists() {
             continue;
         }
         let Some(name) = interface.file_name() else {
             continue;
         };
-        if let Ok(mut probe) = OpenOptions::new().write(true).open(DRIVERS_PROBE) {
-            let _ = probe.write_all(name.to_string_lossy().as_bytes());
-        }
+        OpenOptions::new()
+            .write(true)
+            .open(DRIVERS_PROBE)?
+            .write_all(name.to_string_lossy().as_bytes())?;
     }
+    Ok(())
+}
+
+fn log_to_system(message: &str) {
+    let message = CString::new(message.replace('\0', "")).unwrap_or_default();
+    // SAFETY: the format and the message are NUL-terminated strings that outlive the call, and
+    // the format takes exactly one string argument.
+    unsafe {
+        libc::syslog(
+            libc::LOG_WARNING,
+            c"velox-helper: %s".as_ptr(),
+            message.as_ptr(),
+        )
+    };
 }
 
 fn detach_stdio() {
@@ -234,7 +247,12 @@ fn usb(uid: u32, arguments: &[String]) -> io::Result<()> {
             unsafe { libc::setsid() };
             detach_stdio();
             wait_for_exit(&pidfd);
-            give_back(&device, &address.to_string());
+            if let Err(error) = give_back(&device, &address.to_string()) {
+                log_to_system(&format!(
+                    "cannot give {} back to its drivers: {error}",
+                    device.display()
+                ));
+            }
             std::process::exit(0)
         }
         _ => Ok(()),

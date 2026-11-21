@@ -342,9 +342,12 @@ impl Mail {
             .next()
             .unwrap_or("https")
             .to_ascii_lowercase();
-        let token = cx
-            .window(window)
-            .and_then(|(window, _)| window.activation_token(APP_ID).ok());
+        let token = cx.window(window).and_then(|(window, _)| {
+            window
+                .activation_token(APP_ID)
+                .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+                .ok()
+        });
         let entry = self
             .apps()
             .default_for(&format!("x-scheme-handler/{scheme}"))

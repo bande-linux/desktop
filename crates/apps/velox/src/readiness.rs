@@ -78,7 +78,13 @@ fn podman_alternative() -> Steps {
 }
 
 fn debian_without_docker() -> bool {
-    let release = std::fs::read_to_string(OS_RELEASE).unwrap_or_default();
+    let release = match std::fs::read_to_string(OS_RELEASE) {
+        Ok(release) => release,
+        Err(error) => {
+            tracing::warn!("cannot read {OS_RELEASE}: {error}");
+            return false;
+        }
+    };
     let field = |name: &str| {
         release.lines().find_map(|line| {
             line.strip_prefix(name)?

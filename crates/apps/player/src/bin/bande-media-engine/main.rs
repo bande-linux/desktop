@@ -113,7 +113,7 @@ impl Engine {
         let Ok(uri) = gst::glib::filename_to_uri(path, None) else {
             return self.failed(FailureKind::Unreadable, path.display().to_string());
         };
-        let _ = self.playbin.set_state(gst::State::Ready);
+        self.set_state(gst::State::Ready);
         if let Ok(mut status) = self.status.lock() {
             status.info = MediaInfo::default();
             status.ended = false;
@@ -147,8 +147,14 @@ impl Engine {
         }
     }
 
+    fn set_state(&self, state: gst::State) {
+        if let Err(error) = self.playbin.set_state(state) {
+            eprintln!("bande-media-engine: cannot go to {state:?}: {error}");
+        }
+    }
+
     fn step(&self, forward: bool) {
-        let _ = self.playbin.set_state(gst::State::Paused);
+        self.set_state(gst::State::Paused);
         if forward {
             let step = gst::event::Step::new(gst::format::Buffers::ONE, 1.0, true, false);
             self.video.send_event(step);
@@ -185,7 +191,7 @@ impl Engine {
             Command::Open(path) => self.open(&path),
             Command::Play => self.play(),
             Command::Pause => {
-                let _ = self.playbin.set_state(gst::State::Paused);
+                self.set_state(gst::State::Paused);
             }
             Command::Seek { position_ms, exact } => {
                 if let Ok(mut status) = self.status.lock() {
@@ -271,7 +277,7 @@ impl Engine {
                 if let Ok(mut status) = self.status.lock() {
                     status.ended = true;
                 }
-                let _ = self.playbin.set_state(gst::State::Paused);
+                self.set_state(gst::State::Paused);
                 emit(&self.channel, &Event::State(Playback::Ended));
             }
             MessageView::Error(error) => {

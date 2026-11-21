@@ -108,7 +108,14 @@ impl Pane {
                 Request::Watch(engine, ids) => self.informer.watch("overview", &engine, ids),
                 Request::Containers(ContainerRequest::Shell(target)) => self.shells.push(target),
                 Request::Containers(request) => {
-                    let token = || window.activation_token(RUNNING_ID).ok();
+                    let token = || {
+                        window
+                            .activation_token(RUNNING_ID)
+                            .map_err(|error| {
+                                tracing::warn!("cannot get an activation token: {error}")
+                            })
+                            .ok()
+                    };
                     self.logs.extend(self.work.serve(request, token));
                 }
                 Request::EngineLogs(target) => self.logs.push(target),
@@ -119,7 +126,10 @@ impl Pane {
     }
 
     fn open_link(&mut self, window: &mut Window, link: &str) {
-        let token = window.activation_token(RUNNING_ID).ok();
+        let token = window
+            .activation_token(RUNNING_ID)
+            .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+            .ok();
         let apps = self
             .apps
             .get_or_insert_with(|| Apps::load(data_dirs(), &config_dirs()));

@@ -179,18 +179,18 @@ The lock-screen clock is Manrope 300 at 96 pt with `tnum`.
 
 ## 8. Window chrome
 
-**Header (48 pt, `chassis`)**: from the left: window controls, 16 gap, back/forward (when relevant), the **title flush left** in Manrope 15/700, toolbar items, then search on the right (`well`, radius 8). No separator line: the sheet's top edge is the division.
+**Header (48 pt, `chassis`)**: from the left, 12 pt in: back/forward (when relevant), the **title flush left** in Manrope 15/700, toolbar items, search (`well`, radius 8), a 16 gap, then the menu button and the window controls on the right. No separator line: the sheet's top edge is the division.
 
-**Window controls (left, ours, not traffic lights)**: one **well**, a 66×24 pill with radius 12 (`well` fill), holding three neutral glyphs on a 21 pt pitch:
-- **Close**: an × with 7 pt arms and a 1.5 stroke, round caps.
+**Window controls (right, ours)**: one **well**, a 66×24 pill with radius 12 (`well` fill) 12 pt from the right edge, holding three neutral glyphs on a 21 pt pitch, from the left minimise, zoom, close, so close is at the far right as in GTK, Qt and Firefox. The menu button (⋮), a 24×24 well, sits 6 pt left of it.
 - **Minimise**: an 8 pt bar.
 - **Zoom**: two opposing corner brackets (expand). It changes to inward brackets while zoomed or full screen, so the glyph tells the state.
+- **Close**: an × with 7 pt arms and a 1.5 stroke, round caps.
 - **Rest**: glyphs `ink2`, **always visible** (honest, and discoverable on first use).
 - **Hover over the well**: all glyphs go to `ink`. The hovered *close* gets a 16 pt danger disc with a white ×. Zoom and minimise get no colour (one signal: only the destructive action turns red).
 - **Press**: a disc of `ink` at 12 % behind the glyph, plus the `quick` spring.
 - **Inactive window**: the well becomes a 1 pt `hairline` outline and the glyphs go to `ink3`.
 - **Alt held**: zoom shows a "+" (zoom to fit) instead of brackets, following DESIGN §1's progressive disclosure.
-- The hit target is the full 24×21 cell; the whole well area to the screen corner is clickable when maximised (Fitts).
+- The hit target is the full 24×21 cell; close's cell reaches the window's right edge, so the top-right screen corner closes a maximised window (Fitts).
 
 **Sidebar**: on `chassis` (part of the frame). It uses tracked labels ("PLACES"), 16 pt line symbols in `ink2`, a 28 pt row and a tone-only selection with radius 6: `well` in the active window, `hairline` while the sidebar has the keyboard, and `well` halfway to `chassis` in an inactive window. The selected symbol turns `ink`; sidebar rows get no accent and no focus ring. Content selection (on the sheet) is accent-filled, so "where I am" (grey) and "what I picked" (signal) are never confused.
 

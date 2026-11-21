@@ -2,7 +2,7 @@ use accesskit::{Action, Affine, Node, NodeId, Role, TreeUpdate};
 use bande_graphics::{
     Color, ControlHover, Cut, Item, Palette, Paragraph, Point, Radius, Rect, ResizeEdge, Scene,
     Shape, TextAlign, TextStyle, TextSystem, TitleBar, WindowControls, menu_button_area,
-    past_drag_slop, resize_zone, shortened, title_style,
+    past_drag_slop, resize_zone, shortened, title_style, window_controls_width,
 };
 use bande_l10n::tr;
 
@@ -85,14 +85,14 @@ pub struct Header {
 }
 
 impl Header {
-    fn title_area(&self, width: f32) -> Rect {
+    fn title_area(&self, width: f32, menu: bool) -> Rect {
         let end = self
             .items
             .iter()
             .chain(&self.tabs)
             .map(|item| item.x)
             .filter(|x| *x > self.title_x)
-            .fold(width, f32::min);
+            .fold(width - window_controls_width(menu), f32::min);
         Rect::new(
             self.title_x,
             0.0,
@@ -190,7 +190,7 @@ impl Frame {
         if window.contains(point) {
             let local = Point::new(point.x - window.x, point.y - window.y);
             if local.y < self.title {
-                return Control::at(local, self.title, self.menu)
+                return Control::at(local, self.width, self.title, self.menu)
                     .map_or(Zone::TitleBar, Zone::Control);
             }
             return if self.content().contains(local) {
@@ -207,7 +207,7 @@ impl Frame {
     }
 
     pub(crate) fn menu_button(&self) -> Option<Rect> {
-        (self.menu && self.title > 0.0).then(|| menu_button_area(self.title))
+        (self.menu && self.title > 0.0).then(|| menu_button_area(self.width, self.title))
     }
 }
 
@@ -339,7 +339,7 @@ impl Chrome {
         for control in Control::shown(menu) {
             let mut button = Node::new(Role::Button);
             button.set_label(control_label(control));
-            button.set_bounds(bounds(control.area(frame.title)));
+            button.set_bounds(bounds(control.area(frame.width, frame.title)));
             if control == Control::Zoom && self.fixed {
                 button.set_disabled();
             } else {
@@ -476,7 +476,7 @@ impl Chrome {
             Some(header) => {
                 let text = self.text.get_or_insert_with(TextSystem::new);
                 let empty = text.paragraph("", style, None, TextAlign::Start);
-                let area = header.title_area(frame.width);
+                let area = header.title_area(frame.width, frame.menu_button().is_some());
                 let title = match title.width() > area.width {
                     true => {
                         let shown = shortened(&self.title, Cut::End, |candidate| {
@@ -499,9 +499,9 @@ impl Chrome {
         self.animating = closing || minimizing || zooming || menu_fading;
         items.extend(
             TitleBar {
-                width: frame.width,
                 title,
                 controls: WindowControls {
+                    width: frame.width,
                     height: frame.title,
                     palette,
                     active: look.active,

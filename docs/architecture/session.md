@@ -237,8 +237,8 @@ graph LR
   mix into `chassis`. `org.gnome.desktop.interface` adds `icon-theme` (`Bande`, or
   `Bande-<Accent>` for the accent's folder tabs) and `org.gnome.desktop.sound` turns
   `event-sounds` off with the Sound effects switch. `org.gnome.desktop.wm.preferences`
-  serves `button-layout` `close,minimize,maximize:`, so GTK and libadwaita put their window
-  controls on the left in our order. libadwaita snaps `accent-color` to its nine
+  serves `button-layout` `:minimize,maximize,close`, so GTK and libadwaita (and Firefox and
+  Qt's decorations, which read the same key) put their window controls on the right in our order. libadwaita snaps `accent-color` to its nine
   presets, so the portal also writes `~/.config/gtk-4.0/bande.css` (the accent, `on_accent`,
   frame, sheet, overlay and semantic colours as libadwaita's CSS variables, plus rules that
   draw client-side header bars like our title bar: the `windowcontrols` pill in `well` with

@@ -131,11 +131,12 @@ writes a hex value, a corner radius or a font name of its own.
   rendered region by region on the CPU) and only they are damaged on `wl_shm` buffers.
   Text input v3 and the clipboard are supported.
   - **Window frame.** A toplevel gets its frame from the toolkit, in Datum's frame and sheet:
-    the window is `chassis`, with a 48 pt header holding the window controls at the left and
-    the title flush left after them in Manrope 15/20 bold (no separator line), and the content
+    the window is `chassis`, with a 48 pt header holding the title flush left in Manrope 15/20
+    bold and the window controls at the right (no separator line), and the content
     is a `sheet` inset 6 pt left, right and bottom, rounded 8 (concentric with the window's 14),
-    with a `hairline` edge in dark mode. The controls are one 66×24 pill (`well`) with ×, − and
-    corner brackets in `ink2`, and the menu button its own 24×24 `well` beside it. Each control
+    with a `hairline` edge in dark mode. The controls are one 66×24 pill (`well`) with −, corner
+    brackets and × in `ink2`, 12 pt from the right edge, and the menu button its own 24×24
+    `well` left of it. Each control
     is its own button with the same 18 pt disc: pointing at one fades in a backfill of `ink` at
     12 % and turns its glyph `ink` (the close control a `danger` disc with an `on_danger` ×), and
     a press deepens it to 22 % (`danger` darkened by 15 %). A disabled zoom (fixed-size windows)

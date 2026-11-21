@@ -63,8 +63,8 @@ headerbar {
   box-shadow: none;
 }
 
-headerbar windowcontrols.start {
-  margin-left: 6px;
+headerbar windowcontrols.end {
+  margin-right: 6px;
 }
 
 windowcontrols {

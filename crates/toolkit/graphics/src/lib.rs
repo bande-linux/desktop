@@ -37,8 +37,8 @@ pub use text::{
     Cut, GlyphRun, Paragraph, PositionedGlyph, TextAlign, TextRun, TextStyle, TextSystem, shortened,
 };
 pub use title_bar::{
-    ControlHover, FRAME_HEADER_HEIGHT, HEADER_LEADING, PLACEMENTS_AFTER_HOLD,
+    ControlHover, FRAME_HEADER_HEIGHT, HEADER_LEADING, HEADER_TRAILING, PLACEMENTS_AFTER_HOLD,
     PLACEMENTS_AFTER_REST, RESIZE_MARGIN, RESIZE_WALL_BAND, ResizeEdge, TitleBar,
     WINDOW_HEADER_HEIGHT, WalledSides, WindowControl, WindowControls, menu_button_area,
-    resize_zone, title_style, walled_resize_zone, window_controls_end,
+    resize_zone, title_style, walled_resize_zone, window_controls_width,
 };

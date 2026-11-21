@@ -3,7 +3,7 @@ use std::time::Duration;
 use bande_graphics::{
     Color, ControlHover, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
     Scheme, TextAlign, TitleBar, WalledSides, WindowControl, WindowControls, resize_zone,
-    title_style, walled_resize_zone, window_controls_end,
+    title_style, walled_resize_zone, window_controls_width,
 };
 use bande_render::{VulkanRenderer, VulkanTexture};
 use smithay::backend::allocator::Fourcc;
@@ -57,6 +57,7 @@ struct Look {
     zoomable: bool,
     alternate: bool,
     menu: Option<bool>,
+    offset: i32,
     height: i32,
     over_content: bool,
 }
@@ -101,7 +102,7 @@ fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
         return None;
     }
     let menu = menu_address(window.surface()).is_some();
-    match WindowControl::at(point, height as f32, menu) {
+    match WindowControl::at(point, frame.width, height as f32, menu) {
         Some(control) => Some(Zone::Control(control)),
         None => (bar > 0).then_some(Zone::TitleBar),
     }
@@ -418,9 +419,10 @@ impl State {
             let (title, width) = if bar > 0 {
                 (toplevel_names(window.surface()).0, rect.size.w)
             } else {
-                let well = window_controls_end(menu.is_some()).ceil() as i32;
+                let well = window_controls_width(menu.is_some()).ceil() as i32;
                 (String::new(), well.min(rect.size.w))
             };
+            let offset = rect.size.w - width;
             let look = Look {
                 title,
                 width,
@@ -433,6 +435,7 @@ impl State {
                 zoomable: !window.fixed_size(),
                 alternate,
                 menu,
+                offset,
                 height,
                 over_content: bar == 0,
             };
@@ -474,6 +477,7 @@ fn paint_title_bar(
     renderer: &mut VulkanRenderer,
 ) -> Option<VulkanTexture> {
     let controls = WindowControls {
+        width: look.width as f32,
         height: look.height as f32,
         palette,
         active: look.active,
@@ -495,12 +499,7 @@ fn paint_title_bar(
             None,
             TextAlign::Start,
         );
-        TitleBar {
-            width: look.width as f32,
-            title,
-            controls,
-        }
-        .items()
+        TitleBar { title, controls }.items()
     };
     let scene = Scene {
         width: look.width.unsigned_abs(),
@@ -526,8 +525,11 @@ impl Window {
             bande_graphics::pixels(painted.look.width.unsigned_abs(), scale) as i32,
             bande_graphics::pixels(painted.look.height.unsigned_abs(), scale) as i32,
         );
-        let location: Point<i32, Physical> =
-            self.location.to_f64().to_physical(scale).to_i32_round();
+        let offset: Point<i32, Logical> = (painted.look.offset, 0).into();
+        let location: Point<i32, Physical> = (self.location + offset)
+            .to_f64()
+            .to_physical(scale)
+            .to_i32_round();
         Some(Piece {
             id: painted.id.clone(),
             texture: painted.texture.clone(),

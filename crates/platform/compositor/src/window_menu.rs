@@ -399,7 +399,7 @@ impl State {
             0 => WINDOW_HEADER_HEIGHT as f32,
             bar => bar as f32,
         };
-        let control = WindowControl::Zoom.area(bar);
+        let control = WindowControl::Zoom.area(geometry.size.w as f32, bar);
         Some(Rectangle {
             loc: (
                 f64::from(geometry.loc.x) + f64::from(control.x),

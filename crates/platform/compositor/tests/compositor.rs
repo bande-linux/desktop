@@ -57,16 +57,20 @@ fn the_browser_row_gives_the_well_to_the_compositor_and_the_rest_to_the_browser(
     );
     browser.set_app_id(&mut server, 0, "org.bande.Browser");
     roundtrip(&mut server, &mut [&mut browser]);
-    let at = server.windows()[0].geometry().expect("mapped").loc;
-    let click = |server: &mut Compositor, x: i32| {
-        server.move_pointer_to((f64::from(at.x + x), f64::from(at.y + 24)).into(), 0);
+    let rect = server.windows()[0].geometry().expect("mapped");
+    let right = rect.loc.x + rect.size.w;
+    let click = |server: &mut Compositor, from_right: i32| {
+        server.move_pointer_to(
+            (f64::from(right - from_right), f64::from(rect.loc.y + 24)).into(),
+            0,
+        );
         server.press_button(BTN_LEFT, true, 0);
         server.press_button(BTN_LEFT, false, 0);
     };
     click(&mut server, 90);
     roundtrip(&mut server, &mut [&mut browser]);
     assert_eq!(browser.buttons(), [(BTN_LEFT, true), (BTN_LEFT, false)]);
-    click(&mut server, 45);
+    click(&mut server, 66);
     roundtrip(&mut server, &mut [&mut browser]);
     assert_eq!(browser.buttons().len(), 2);
     assert!(server.windows()[0].is_minimized());

@@ -10,10 +10,11 @@ pub const RESIZE_MARGIN: u32 = 8;
 pub const RESIZE_WALL_BAND: f32 = 3.0;
 pub const PLACEMENTS_AFTER_REST: Duration = Duration::from_millis(800);
 pub const PLACEMENTS_AFTER_HOLD: Duration = Duration::from_millis(500);
-pub const HEADER_LEADING: f32 = window_controls_end(true) + TITLE_GAP;
+pub const HEADER_LEADING: f32 = EDGE_INSET;
+pub const HEADER_TRAILING: f32 = window_controls_width(true) + TITLE_GAP;
 const RESIZE_CORNER_MARGIN: f32 = 16.0;
 const RESIZE_CORNER_REACH: f32 = 32.0;
-const WELL_X: f32 = 12.0;
+const EDGE_INSET: f32 = 12.0;
 const WELL_WIDTH: f32 = 66.0;
 const WELL_HEIGHT: f32 = 24.0;
 const MENU_GAP: f32 = 6.0;
@@ -23,7 +24,6 @@ const MENU_DOT_PITCH: f32 = 4.5;
 const CELL_PITCH: f32 = 21.0;
 const FIRST_GLYPH: f32 = 12.0;
 const TITLE_GAP: f32 = 16.0;
-const TRAILING_INSET: f32 = 12.0;
 const GLYPH_STROKE: f32 = 1.5;
 const DISC_RADIUS: f32 = 9.0;
 const HOVER_OPACITY: f32 = 0.12;
@@ -40,59 +40,61 @@ pub enum WindowControl {
 }
 
 impl WindowControl {
-    pub const ALL: [Self; 3] = [Self::Close, Self::Minimize, Self::Zoom];
+    pub const ALL: [Self; 3] = [Self::Minimize, Self::Zoom, Self::Close];
 
     pub fn shown(menu: bool) -> impl Iterator<Item = Self> {
-        Self::ALL.into_iter().chain(menu.then_some(Self::Menu))
+        menu.then_some(Self::Menu).into_iter().chain(Self::ALL)
     }
 
-    pub fn area(self, height: f32) -> Rect {
-        let centre = self.centre(height).x;
+    pub fn area(self, width: f32, height: f32) -> Rect {
+        let well = well_start(width);
+        let centre = self.centre(width, height).x;
         let start = match self {
-            Self::Close => 0.0,
-            Self::Minimize | Self::Zoom => centre - CELL_PITCH / 2.0,
-            Self::Menu => WELL_X + WELL_WIDTH,
+            Self::Minimize => well,
+            Self::Zoom | Self::Close => centre - CELL_PITCH / 2.0,
+            Self::Menu => width - window_controls_width(true) - MENU_REACH,
         };
         let end = match self {
-            Self::Zoom => WELL_X + WELL_WIDTH,
-            Self::Close | Self::Minimize => centre + CELL_PITCH / 2.0,
-            Self::Menu => window_controls_end(true) + MENU_REACH,
+            Self::Close => width,
+            Self::Minimize | Self::Zoom => centre + CELL_PITCH / 2.0,
+            Self::Menu => well,
         };
         Rect::new(start, 0.0, end - start, height)
     }
 
-    pub fn at(point: Point, height: f32, menu: bool) -> Option<Self> {
-        Self::shown(menu).find(|control| control.area(height).contains(point))
+    pub fn at(point: Point, width: f32, height: f32, menu: bool) -> Option<Self> {
+        Self::shown(menu).find(|control| control.area(width, height).contains(point))
     }
 
-    fn centre(self, height: f32) -> Point {
+    fn centre(self, width: f32, height: f32) -> Point {
+        let well = well_start(width);
         let x = match self {
-            Self::Close => WELL_X + FIRST_GLYPH,
-            Self::Minimize => WELL_X + FIRST_GLYPH + CELL_PITCH,
-            Self::Zoom => WELL_X + FIRST_GLYPH + 2.0 * CELL_PITCH,
-            Self::Menu => WELL_X + WELL_WIDTH + MENU_GAP + WELL_HEIGHT / 2.0,
+            Self::Minimize => well + FIRST_GLYPH,
+            Self::Zoom => well + FIRST_GLYPH + CELL_PITCH,
+            Self::Close => well + FIRST_GLYPH + 2.0 * CELL_PITCH,
+            Self::Menu => well - MENU_GAP - WELL_HEIGHT / 2.0,
         };
         Point::new(x, height / 2.0)
     }
 }
 
-fn menu_well(height: f32) -> Rect {
+fn well_start(width: f32) -> f32 {
+    width - EDGE_INSET - WELL_WIDTH
+}
+
+pub fn menu_button_area(width: f32, height: f32) -> Rect {
     Rect::new(
-        WELL_X + WELL_WIDTH + MENU_GAP,
+        well_start(width) - MENU_GAP - WELL_HEIGHT,
         ((height - WELL_HEIGHT) / 2.0).round(),
         WELL_HEIGHT,
         WELL_HEIGHT,
     )
 }
 
-pub fn menu_button_area(height: f32) -> Rect {
-    menu_well(height)
-}
-
-pub const fn window_controls_end(menu: bool) -> f32 {
+pub const fn window_controls_width(menu: bool) -> f32 {
     match menu {
-        true => WELL_X + WELL_WIDTH + MENU_GAP + WELL_HEIGHT,
-        false => WELL_X + WELL_WIDTH,
+        true => EDGE_INSET + WELL_WIDTH + MENU_GAP + WELL_HEIGHT,
+        false => EDGE_INSET + WELL_WIDTH,
     }
 }
 
@@ -197,28 +199,28 @@ impl ControlHover {
 }
 
 pub struct TitleBar<'a> {
-    pub width: f32,
     pub title: Paragraph,
     pub controls: WindowControls<'a>,
 }
 
 impl TitleBar<'_> {
     pub fn items(&self) -> Vec<Item> {
-        let height = self.controls.height;
+        let (width, height) = (self.controls.width, self.controls.height);
         let mut items = Vec::new();
         let frame = self.controls.palette.frame;
         if frame.a == u8::MAX {
             items.push(Item::Fill {
-                shape: Shape::rect(Rect::new(0.0, 0.0, self.width, height)),
+                shape: Shape::rect(Rect::new(0.0, 0.0, width, height)),
                 paint: frame.into(),
             });
         }
         items.extend(self.controls.items());
-        let title_x = window_controls_end(self.controls.menu_open.is_some()) + TITLE_GAP;
+        let title_x = HEADER_LEADING;
+        let controls = window_controls_width(self.controls.menu_open.is_some());
         let available = Rect::new(
             title_x,
             0.0,
-            (self.width - title_x - TRAILING_INSET).max(0.0),
+            (width - title_x - controls - TITLE_GAP).max(0.0),
             height,
         );
         items.push(Item::Clip {
@@ -233,6 +235,7 @@ impl TitleBar<'_> {
 }
 
 pub struct WindowControls<'a> {
+    pub width: f32,
     pub height: f32,
     pub palette: &'a Palette,
     pub active: bool,
@@ -248,7 +251,7 @@ impl WindowControls<'_> {
     pub fn items(&self) -> Vec<Item> {
         let mut items = Vec::new();
         let well = Rect::new(
-            WELL_X,
+            well_start(self.width),
             ((self.height - WELL_HEIGHT) / 2.0).round(),
             WELL_WIDTH,
             WELL_HEIGHT,
@@ -258,7 +261,7 @@ impl WindowControls<'_> {
             self.control(control, &mut items);
         }
         if self.menu_open.is_some() {
-            self.well(menu_well(self.height), &mut items);
+            self.well(menu_button_area(self.width, self.height), &mut items);
             self.control(WindowControl::Menu, &mut items);
         }
         items
@@ -291,7 +294,7 @@ impl WindowControls<'_> {
 
     fn control(&self, control: WindowControl, items: &mut Vec<Item>) {
         let palette = self.palette;
-        let centre = control.centre(self.height);
+        let centre = control.centre(self.width, self.height);
         let disc = Shape::rounded(
             Rect::new(
                 centre.x - DISC_RADIUS,

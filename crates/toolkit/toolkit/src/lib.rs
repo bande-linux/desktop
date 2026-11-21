@@ -3,10 +3,10 @@ mod alert;
 pub use alert::ask;
 pub use bande_graphics::{
     Appearance, Blend, Color, ControlSize, CpuRenderer, Cut, DrawError, Elevation, FontData,
-    GlyphRun, GpuRenderer, HEADER_LEADING, Image, Item, Paint, Palette, Paragraph, Path, Picture,
-    Point, PositionedGlyph, Radius, Rect, Region, Scene, Scheme, Shape, Snapshot, Spacing, Stop,
-    TextAlign, TextRole, TextSize, TextStyle, TextSystem, Transform, Typeface, grown_line, pixels,
-    shortened,
+    GlyphRun, GpuRenderer, HEADER_LEADING, HEADER_TRAILING, Image, Item, Paint, Palette, Paragraph,
+    Path, Picture, Point, PositionedGlyph, Radius, Rect, Region, Scene, Scheme, Shape, Snapshot,
+    Spacing, Stop, TextAlign, TextRole, TextSize, TextStyle, TextSystem, Transform, Typeface,
+    grown_line, pixels, shortened,
 };
 pub use bande_toolkit_platform::{
     ACTIVATION_TOKEN_VARIABLE, Anchor, App, AppConnection, AppRequest, AppWindow, BrightnessKey,

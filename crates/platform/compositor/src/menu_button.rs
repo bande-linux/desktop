@@ -80,8 +80,9 @@ impl State {
         let window = &self.windows[index];
         let bar = window.title_bar_height();
         if bar > 0 {
+            let width = window.geometry().map_or(0, |rect| rect.size.w);
             return menu_address(window.surface()).map(|_| {
-                let area = menu_button_area(bar as f32);
+                let area = menu_button_area(width as f32, bar as f32);
                 Rectangle::new(
                     (area.x.round() as i32, area.y.round() as i32).into(),
                     (area.width.round() as i32, area.height.round() as i32).into(),

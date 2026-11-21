@@ -7,11 +7,10 @@ use bande_toolkit::ui::{
     BUTTON_HEIGHT, Button, SEGMENTED_HEIGHT, SearchField, SegmentedControl, TEXT_FIELD_HEIGHT,
     WidgetId,
 };
-use bande_toolkit::{HEADER_LEADING, Header, Rect, WINDOW_HEADER_HEIGHT};
+use bande_toolkit::{HEADER_LEADING, HEADER_TRAILING, Header, Rect, WINDOW_HEADER_HEIGHT};
 
 pub const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const TITLE_GAP: f32 = 12.0;
-const TRAILING_INSET: f32 = 12.0;
 const ITEM_GAP: f32 = 12.0;
 const SEARCH_WIDTH: f32 = 240.0;
 const MIN_SEARCH_WIDTH: f32 = 140.0;
@@ -146,7 +145,7 @@ impl FilesView {
     pub(crate) fn toolbar_frames(&self) -> [(WidgetId, Rect); 4] {
         let back_x = HEADER_LEADING;
         let button_y = centred(BUTTON_HEIGHT);
-        let right = self.size.0 - TRAILING_INSET;
+        let right = self.size.0 - HEADER_TRAILING;
         let view_width = ViewMode::ALL.len() as f32 * SYMBOL_SEGMENT;
         let room = right - (back_x + 2.0 * BUTTON_HEIGHT + 120.0 + view_width + ITEM_GAP);
         let search_width = SEARCH_WIDTH.min(room).max(MIN_SEARCH_WIDTH);

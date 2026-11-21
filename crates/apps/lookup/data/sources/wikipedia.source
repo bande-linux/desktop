@@ -5,4 +5,4 @@ languages=*
 kind.*=encyclopedia
 protocol=wikimedia-summary
 url=https://{language}.wikipedia.org/api/rest_v1/page/summary/{word}
-default=on
+default=off

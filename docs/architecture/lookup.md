@@ -87,5 +87,5 @@ publishes to `main`, as it does the desktop's releases.
 | `bande-dict-sv-wiktionary` | Svenska ord: Swedish words from Wiktionary through kaikki.org | CC BY-SA 4.0 |
 | `bande-dict-en-wiktionary` | English Wiktionary, optional and off by default (41 MB download, 168 MB) | CC BY-SA 4.0 |
 
-`bande-lookup` ships `wikipedia.source` (Wikipedia, every language, on by default; the row says that
+`bande-lookup` ships `wikipedia.source` (Wikipedia, every language, off until the user turns it on in Dictionary Settings; the row says that
 each word looked up is sent to Wikipedia).

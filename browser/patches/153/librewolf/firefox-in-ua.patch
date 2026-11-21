@@ -1,3 +1,8 @@
+Description: Set Firefox for the User Agent string
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/firefox-in-UA.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 Index: firefox-esr-153.6.0esr/toolkit/moz.configure
 ===================================================================
 --- firefox-esr-153.6.0esr.orig/toolkit/moz.configure

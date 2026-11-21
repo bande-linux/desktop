@@ -1,4 +1,7 @@
-about:rights is ours; about:telemetry and about:glean are gone
+Description: about:rights is ours; about:telemetry and about:glean are gone
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- a/browser/components/about/AboutRedirector.cpp
 +++ b/browser/components/about/AboutRedirector.cpp

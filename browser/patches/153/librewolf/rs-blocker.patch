@@ -1,3 +1,9 @@
+Description: Allow setting which Remote Settings buckets may be fetched remotely or read from the bundled dump
+ Adapted to Bande's pref names.
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/rs-blocker.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 Index: firefox-esr-153.6.0esr/services/settings/RemoteSettings.worker.mjs
 ===================================================================
 --- firefox-esr-153.6.0esr.orig/services/settings/RemoteSettings.worker.mjs

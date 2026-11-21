@@ -1,4 +1,7 @@
-Remove the default-browser prompt from Settings
+Description: Remove the default-browser prompt from Settings
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- a/browser/components/preferences/main.inc.xhtml
 +++ b/browser/components/preferences/main.inc.xhtml

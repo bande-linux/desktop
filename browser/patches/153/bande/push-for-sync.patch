@@ -1,4 +1,7 @@
-Push connects only for a signed-in account; dom.push.enabled now only decides whether sites may use it
+Description: Push connects only for a signed-in account; dom.push.enabled now only decides whether sites may use it
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- a/dom/push/PushComponents.sys.mjs
 +++ b/dom/push/PushComponents.sys.mjs

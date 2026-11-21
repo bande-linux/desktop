@@ -1,3 +1,8 @@
+Description: Support the new .config profile paths
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/xdg-dir.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 diff --git a/toolkit/xre/nsXREDirProvider.cpp b/toolkit/xre/nsXREDirProvider.cpp
 index b54980f..7ca2406 100644
 --- a/toolkit/xre/nsXREDirProvider.cpp

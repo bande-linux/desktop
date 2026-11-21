@@ -1,4 +1,7 @@
-Remove Safe Browsing's Google providers and Google geolocation, with the Settings group
+Description: Remove Safe Browsing's Google providers and Google geolocation, with the Settings group
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- a/browser/components/preferences/privacy.inc.xhtml
 +++ b/browser/components/preferences/privacy.inc.xhtml

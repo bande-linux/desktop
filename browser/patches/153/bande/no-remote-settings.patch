@@ -1,4 +1,7 @@
-Remove Remote Settings fetching: only the data shipped in each update is used
+Description: Remove Remote Settings fetching: only the data shipped in each update is used
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- firefox-esr-153.6.0esr.orig/services/settings/Utils.sys.mjs
 +++ firefox-esr-153.6.0esr/services/settings/Utils.sys.mjs

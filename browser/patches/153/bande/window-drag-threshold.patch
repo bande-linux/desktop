@@ -1,4 +1,7 @@
-Start moving a window from its title bar after 1 px, so it does not trail the pointer
+Description: Start moving a window from its title bar after 1 px, so it does not trail the pointer
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- firefox-esr-153.6.0esr.orig/widget/gtk/nsWindow.cpp
 +++ firefox-esr-153.6.0esr/widget/gtk/nsWindow.cpp

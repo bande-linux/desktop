@@ -1,4 +1,7 @@
-Translation is off until turned on in Settings; only then may Remote Settings fetch, and only its models
+Description: Translation is off until turned on in Settings; only then may Remote Settings fetch, and only its models
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-08
 
 --- firefox-esr-153.6.0esr.orig/services/settings/Utils.sys.mjs
 +++ firefox-esr-153.6.0esr/services/settings/Utils.sys.mjs

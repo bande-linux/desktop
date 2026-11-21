@@ -1,3 +1,9 @@
+Description: Use the browser's own data and extension paths while retaining Mozilla native-manifest paths for compatibility
+ Adapted to Bande's directory names.
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/mozilla-dirs.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 Index: firefox-esr-153.6.0esr/toolkit/components/extensions/NativeManifests.sys.mjs
 ===================================================================
 --- firefox-esr-153.6.0esr.orig/toolkit/components/extensions/NativeManifests.sys.mjs

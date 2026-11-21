@@ -1,3 +1,8 @@
+Description: Remove the OpenAI backend from the machine learning component
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/remove-openai.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 From 8ca2d1361a3f0a36f71b7e692319b800cf5c11c8 Mon Sep 17 00:00:00 2001
 From: celenity <celenity@celenity.dev>
 Date: Wed, 4 Feb 2026 04:27:07 +0000

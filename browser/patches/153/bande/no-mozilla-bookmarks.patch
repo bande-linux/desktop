@@ -1,4 +1,7 @@
-Start with no bookmarks: the Mozilla folder of links goes
+Description: Start with no bookmarks: the Mozilla folder of links goes
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-08
 
 --- firefox-esr-153.6.0esr.orig/browser/base/content/default-bookmarks.html
 +++ firefox-esr-153.6.0esr/browser/base/content/default-bookmarks.html

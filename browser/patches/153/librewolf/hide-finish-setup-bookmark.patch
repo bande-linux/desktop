@@ -1,3 +1,8 @@
+Description: Hide the onboarding checklist's finish-setup entry
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/4ef3d41ce37daca1d284781aa7a1aff31ecc39ca/patches/ui-patches/hide-finish-setup-bookmark.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 diff --git a/browser/components/asrouter/modules/OnboardingMessageProvider.sys.mjs b/browser/components/asrouter/modules/OnboardingMessageProvider.sys.mjs
 index 3bf3e12062a2..8032c6d7c4b0 100644
 --- a/browser/components/asrouter/modules/OnboardingMessageProvider.sys.mjs

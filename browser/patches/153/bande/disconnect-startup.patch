@@ -1,4 +1,7 @@
-Disconnect promos, VPN, AI, report-broken-site, Suggest, DoH rollout and usage telemetry from startup
+Description: Disconnect promos, VPN, AI, report-broken-site, Suggest, DoH rollout and usage telemetry from startup
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- a/browser/components/BrowserComponents.manifest
 +++ b/browser/components/BrowserComponents.manifest

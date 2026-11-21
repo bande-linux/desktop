@@ -1,4 +1,7 @@
-Read the Tracking Protection lists from the build instead of downloading them
+Description: Read the Tracking Protection lists from the build instead of downloading them
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- a/toolkit/components/url-classifier/UrlClassifierRemoteSettingsService.sys.mjs
 +++ b/toolkit/components/url-classifier/UrlClassifierRemoteSettingsService.sys.mjs

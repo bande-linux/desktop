@@ -1,4 +1,7 @@
-Look Up the selected word with the desktop's bande-lookup, beside Search for
+Description: Look Up the selected word with the desktop's bande-lookup, beside Search for
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-08
 
 --- a/browser/base/content/browser-context.inc.xhtml
 +++ b/browser/base/content/browser-context.inc.xhtml

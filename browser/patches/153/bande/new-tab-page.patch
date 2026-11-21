@@ -1,4 +1,7 @@
-Our own new tab page in place of the built-in add-on
+Description: Our own new tab page in place of the built-in add-on
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- a/browser/components/newtab/AboutNewTabRedirector.sys.mjs
 +++ b/browser/components/newtab/AboutNewTabRedirector.sys.mjs

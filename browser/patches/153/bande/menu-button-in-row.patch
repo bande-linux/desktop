@@ -1,4 +1,7 @@
-Put the app menu button beside the window controls
+Description: Put the app menu button beside the window controls
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-21
 
 --- a/browser/base/content/navigator-toolbox.inc.xhtml
 +++ b/browser/base/content/navigator-toolbox.inc.xhtml

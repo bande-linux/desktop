@@ -1,3 +1,8 @@
+Description: Remove the pingsender binary from the build
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/remove-pingsender.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 diff --git a/browser/app/macbuild/Contents/MacOS-files.in b/browser/app/macbuild/Contents/MacOS-files.in
 index 2f420f7..3551c66 100644
 --- a/browser/app/macbuild/Contents/MacOS-files.in

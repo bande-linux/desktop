@@ -1,3 +1,9 @@
+Description: Set our own default values
+ Adapted to Bande's vendor and app name.
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/moz-configure.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 diff --git a/toolkit/moz.configure b/toolkit/moz.configure
 index e5e517635d639..4482baba59699 100644
 --- a/toolkit/moz.configure

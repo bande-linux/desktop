@@ -1,3 +1,8 @@
+Description: Fix ExperimentAPI.ready() waiting indefinitely when Nimbus is disabled
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/6b2020e47b816077230718fd8973460d19c58fb0/patches/newtab-fix.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 diff --git a/browser/modules/AboutNewTab.sys.mjs b/browser/modules/AboutNewTab.sys.mjs
 index 66ec2a2..79e4615 100644
 --- a/browser/modules/AboutNewTab.sys.mjs

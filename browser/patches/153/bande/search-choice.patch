@@ -1,4 +1,7 @@
-Ask for a search engine on first launch: no default until the user picks one
+Description: Ask for a search engine on first launch: no default until the user picks one
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-08
 
 --- /dev/null
 +++ firefox-esr-153.6.0esr/browser/base/content/bande-search-choice.js

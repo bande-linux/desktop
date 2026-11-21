@@ -1,4 +1,7 @@
-Media plugins download only once the user has turned on DRM content
+Description: Media plugins download only once the user has turned on DRM content
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-21
 
 --- a/toolkit/modules/GMPInstallManager.sys.mjs
 +++ b/toolkit/modules/GMPInstallManager.sys.mjs

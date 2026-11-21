@@ -1,4 +1,7 @@
-Only the main browser window draws its own title bar and carries the app id the compositor puts its control well over; picture-in-picture and the sharing indicator get their own
+Description: Only the main browser window draws its own title bar and carries the app id the compositor puts its control well over; picture-in-picture and the sharing indicator get their own
+Author: Mikael Hug <mikaelhug@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-11-07
 
 --- firefox-esr-153.6.0esr.orig/browser/base/content/webrtcIndicator.xhtml
 +++ firefox-esr-153.6.0esr/browser/base/content/webrtcIndicator.xhtml

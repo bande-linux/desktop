@@ -1,3 +1,8 @@
+Description: Remove the Firefox View button
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/dfdcbbf6556774f47926d9634d7245c01e7d03d5/patches/ui-patches/firefox-view.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 diff --git a/browser/base/content/navigator-toolbox.inc.xhtml b/browser/base/content/navigator-toolbox.inc.xhtml
 index eb2d8670874b..e57694a72bd3 100644
 --- a/browser/base/content/navigator-toolbox.inc.xhtml

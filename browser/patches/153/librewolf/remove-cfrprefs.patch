@@ -1,3 +1,8 @@
+Description: Remove CFR recommendations
+Origin: vendor, https://codeberg.org/librewolf/source/src/commit/553f147001a60076faf3bbbb45a532dc6907dfd8/patches/ui-patches/remove-cfrprefs.patch
+Forwarded: not-needed
+Last-Update: 2026-11-07
+
 diff --git a/browser/components/preferences/config/tabs-browsing.mjs b/browser/components/preferences/config/tabs-browsing.mjs
 index 0c03ff7..8b8ad18 100644
 --- a/browser/components/preferences/config/tabs-browsing.mjs

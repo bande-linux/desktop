@@ -1,0 +1,3 @@
+# The Build-Depends name every crate the workspace uses directly, with its features, for a
+# build from Debian's packaged crates (ci/deb/build-depends.py); the field cannot be shorter.
+field-too-long Build-Depends *

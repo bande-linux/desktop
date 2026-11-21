@@ -1,10 +1,22 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: Bande
 Source: https://github.com/bande-linux/desktop
+Files-Excluded: vendor/libloading-*/tests/*.dll
+ vendor/vcpkg-*/test-data
+ vendor/sevenz-rust2-*/tests/resources/*.exe
+ vendor/pdf-writer-*/examples/sRGB_v4.icc
+Comment: The vendored crates come without their prebuilt Windows test programs and
+ pdf-writer's example ICC profile, whose licence does not allow modification; none
+ is built.
 
 Files: *
 Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
 License: Apache-2.0 or MIT
+
+Files: crates/*/*/data/*.metainfo.xml
+Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
+License: CC0-1.0
+Comment: The AppStream metadata, as each file's metadata_license says.
 
 Files: data/icons/Bande/scalable/mimetypes/*
  data/icons/Bande/*/mimetypes/*

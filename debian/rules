@@ -86,6 +86,16 @@ override_dh_installsystemd:
 	dh_installsystemd -pbande-reporter bande-reporter-send.path bande-reporter.socket bande-reporter-resources.service
 	dh_installsystemd --remaining-packages
 
+override_dh_installdocs:
+	dh_installdocs
+ifneq (,$(filter pkg.bande.vendor,$(DEB_BUILD_PROFILES)))
+	for package in $$(dh_listpackages -a); do \
+		for notice in vendor/*/NOTICE; do \
+			install -D -m644 "$$notice" "debian/$$package/usr/share/doc/$$package/$$notice"; \
+		done; \
+	done
+endif
+
 override_dh_installman:
 	debian/manpages.py $(BUILD)/man $(DEB_VERSION_UPSTREAM)
 	for package in $$(dh_listpackages); do \

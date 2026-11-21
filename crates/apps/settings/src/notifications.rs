@@ -1,7 +1,7 @@
 use std::sync::mpsc::{self, Sender};
 
 use bande_l10n::{text, tr};
-use bande_notify::client::NotificationCenter;
+use bande_notify::client::NotificationsProxy;
 use bande_xdg::{Locale, applications, current_desktops, data_dirs, notifying_app_name};
 use zbus::blocking::Connection;
 
@@ -30,7 +30,7 @@ pub enum NotificationCommand {
     Set(AppNotifications),
 }
 
-fn read(rules: &NotificationCenter<'_>) -> zbus::Result<Vec<AppNotifications>> {
+fn read(rules: &NotificationsProxy<'_>) -> zbus::Result<Vec<AppNotifications>> {
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),
@@ -61,7 +61,7 @@ pub fn follow_app_notifications(
     let (sender, receiver) = mpsc::channel();
     let session = session.clone();
     spawn("notification-apps", move || {
-        let Ok(rules) = NotificationCenter::new(&session) else {
+        let Ok(rules) = NotificationsProxy::new(&session) else {
             return;
         };
         for command in receiver {
@@ -109,9 +109,9 @@ fn summary(app: &AppNotifications) -> String {
     }
     let banners = banner_label(&app.banners);
     match (app.banners.as_str(), app.in_center) {
-        ("off", true) => tr!("Notification Center only"),
+        ("off", true) => tr!("Notifications only"),
         ("off", false) => tr!("Off"),
-        (_, true) => tr!("{banners} banners, Notification Center", banners = banners),
+        (_, true) => tr!("{banners} banners, Notifications", banners = banners),
         (_, false) => tr!("{banners} banners", banners = banners),
     }
 }
@@ -179,14 +179,12 @@ impl SettingsView {
             format!("banners:{}", app.group),
         ));
         let mut center = rule_setter(&self.intents, app, |app, on| app.in_center = on == 1);
-        let toggle = Toggle::new(
-            &tr!("Show in Notification Center"),
-            app.in_center,
-            move |on| center(usize::from(on)),
-        );
+        let toggle = Toggle::new(&tr!("Show in Notifications"), app.in_center, move |on| {
+            center(usize::from(on))
+        });
         let focus = toggle.id();
         rows.push(self.rule_row(
-            &tr!("Show in Notification Center"),
+            &tr!("Show in Notifications"),
             boxed(toggle),
             focus,
             format!("center:{}", app.group),

@@ -180,8 +180,12 @@ impl Spool {
                 .any(|job| !job.stored.printer.starts_with(CUPS_PREFIX));
         match (wanted, inner.stop_browsing.is_some()) {
             (true, false) => {
-                let Ok((keep, wake)) = std::os::unix::net::UnixStream::pair() else {
-                    return;
+                let (keep, wake) = match std::os::unix::net::UnixStream::pair() {
+                    Ok(pair) => pair,
+                    Err(error) => {
+                        tracing::warn!("cannot start looking for printers: {error}");
+                        return;
+                    }
                 };
                 inner.stop_browsing = Some(keep);
                 drop(inner);

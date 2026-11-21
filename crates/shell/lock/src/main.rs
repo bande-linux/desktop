@@ -85,7 +85,9 @@ impl Locker {
                     REJECTED
                 }
             };
-            let _ = sender.write_all(&[verdict]);
+            if let Err(error) = sender.write_all(&[verdict]) {
+                tracing::warn!("cannot pass on the password verdict: {error}");
+            }
         });
     }
 }

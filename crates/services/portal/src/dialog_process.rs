@@ -282,10 +282,18 @@ impl DialogProcess {
             Err(error) => tracing::warn!("cannot watch {}: {error}", self.program.display()),
         }
         let mut output = Vec::new();
-        if let Some(mut stdout) = child.stdout.take() {
-            let _ = stdout.read_to_end(&mut output);
+        if let Some(mut stdout) = child.stdout.take()
+            && let Err(error) = stdout.read_to_end(&mut output)
+        {
+            tracing::warn!("cannot read from {}: {error}", self.program.display());
         }
-        let status = child.wait().ok().and_then(|status| status.code());
+        let status = child
+            .wait()
+            .inspect_err(|error| {
+                tracing::warn!("cannot wait for {}: {error}", self.program.display());
+            })
+            .ok()
+            .and_then(|status| status.code());
         Some((status.filter(|_| !cancellation.is_cancelled()), output))
     }
 }

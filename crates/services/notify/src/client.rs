@@ -56,13 +56,13 @@ pub fn notify(connection: &Connection, request: &Request<'_>) -> zbus::Result<u3
 }
 
 #[zbus::proxy(
-    interface = "org.bande.NotificationCenter",
-    default_service = "org.bande.NotificationCenter",
+    interface = "org.bande.Notifications",
+    default_service = "org.bande.Notifications",
     default_path = "/org/freedesktop/Notifications",
     gen_async = false,
-    blocking_name = "NotificationCenter"
+    blocking_name = "NotificationsProxy"
 )]
-pub trait NotificationCenter {
+pub trait Notifications {
     fn get_presentation(&self) -> zbus::Result<WirePresentation>;
 
     fn activate(&self, id: u32, action_key: &str, activation_token: &str) -> zbus::Result<bool>;

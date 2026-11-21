@@ -373,7 +373,7 @@ graph TD
         end
         subgraph "Project-owned interfaces (org.bande.*)"
             OWN1["org.bande.Config (bande-config)"]
-            OWN2["org.bande.NotificationCenter (bande-notify)"]
+            OWN2["org.bande.Notifications (bande-notify)"]
             OWN3["org.bande.Clipboard (bande-clipboard)"]
             OWN4["org.bande.Screenshot (bande-screenshot)"]
             OWN5["org.bande.Sound (bande-sound)"]

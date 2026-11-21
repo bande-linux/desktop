@@ -888,11 +888,11 @@ msgctxt "banners"
 msgid "None"
 msgstr "Inga"
 
-msgid "Notification Center only"
-msgstr "Endast Notiscenter"
+msgid "Notifications only"
+msgstr "Endast Notiser"
 
-msgid "{banners} banners, Notification Center"
-msgstr "{banners} banners, Notiscenter"
+msgid "{banners} banners, Notifications"
+msgstr "{banners} banners, Notiser"
 
 msgid "{banners} banners"
 msgstr "{banners} banners"
@@ -903,8 +903,8 @@ msgstr "Tillåt notiser"
 msgid "Banner style"
 msgstr "Bannerstil"
 
-msgid "Show in Notification Center"
-msgstr "Visa i Notiscenter"
+msgid "Show in Notifications"
+msgstr "Visa i Notiser"
 
 msgid "Play sound for notifications"
 msgstr "Spela upp ljud för notiser"

@@ -76,8 +76,8 @@ msgstr "Visa det du nyligen kopierat"
 msgid "Show emoji and symbols"
 msgstr "Visa emojier och symboler"
 
-msgid "Open or close the Notification Center"
-msgstr "Öppna eller stäng Notiscentret"
+msgid "Open or close Notifications"
+msgstr "Öppna eller stäng Notiser"
 
 msgid "Open or close Quick Settings"
 msgstr "Öppna eller stäng Snabbinställningar"

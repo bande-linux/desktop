@@ -239,7 +239,7 @@ impl State {
             Action::CaptureOptions => self.show_capture_options(),
             Action::LockScreen => self.lock_screen_requested = !self.is_locked(),
             Action::ForceQuit => self.open_force_quit(),
-            Action::ShowNotificationCenter => self.toggle_panel(Panel::NotificationCenter),
+            Action::ShowNotifications => self.toggle_panel(Panel::Notifications),
             Action::ShowQuickSettings => self.toggle_panel(Panel::QuickSettings),
             Action::NextApp => self.switch_apps(false),
             Action::PreviousApp => self.switch_apps(true),

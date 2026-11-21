@@ -1,4 +1,4 @@
-# Post notifications from a terminal, watch the banners, then open the Notification Center and Quick Settings.
+# Post notifications from a terminal, watch the banners, then open Notifications and Quick Settings.
 key super
 wait 600ms
 type "terminal"
@@ -21,13 +21,13 @@ shot "banner hovered"
 move 1500 900
 wait 7s
 shot "banners gone"
-note "Super+N opens the Notification Center"
+note "Super+N opens Notifications"
 key super+n
 wait 1200ms
-shot "notification center"
+shot "notifications"
 key escape
 wait 800ms
-shot "notification center closed"
+shot "notifications closed"
 note "Super+S opens Quick Settings"
 key super+s
 wait 1200ms

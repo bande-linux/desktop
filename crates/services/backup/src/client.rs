@@ -195,17 +195,27 @@ impl Drop for Browsing {
 }
 
 pub fn open_browser() -> Result<Browsing, CannotBrowse> {
-    let system = Connection::system().map_err(|_| CannotBrowse::Failed)?;
-    let proxy = BackupProxy::new(&system).map_err(|_| CannotBrowse::Failed)?;
-    let first = proxy.status().map_err(|_| CannotBrowse::NotInstalled)?;
+    let system = Connection::system().map_err(failed)?;
+    let proxy = BackupProxy::new(&system).map_err(failed)?;
+    let first = proxy.status().map_err(|error| {
+        if bande_bus::is_unowned(&error) {
+            CannotBrowse::NotInstalled
+        } else {
+            failed(error)
+        }
+    })?;
     if first.phase == phase::NO_DISK {
         return Err(CannotBrowse::NoDisk);
     }
     let (sender, outcome) = mpsc::channel();
     let mut asked = false;
     follow_status(&system, move |status| {
-        let Ok(status) = status else {
-            return true;
+        let status = match status {
+            Ok(status) => status,
+            Err(error) => {
+                tracing::warn!("cannot read the backup status: {error}");
+                return true;
+            }
         };
         let answer = if !status.browse_root.is_empty() {
             Some(Ok(()))
@@ -223,13 +233,16 @@ pub fn open_browser() -> Result<Browsing, CannotBrowse> {
             None => true,
         }
     })
-    .map_err(|_| CannotBrowse::Failed)?;
-    proxy.open_browser().map_err(|_| CannotBrowse::Failed)?;
+    .map_err(failed)?;
+    proxy.open_browser().map_err(failed)?;
     let browsing = Browsing { system };
-    outcome
-        .recv_timeout(OPEN_TIMEOUT)
-        .map_err(|_| CannotBrowse::Failed)??;
+    outcome.recv_timeout(OPEN_TIMEOUT).map_err(failed)??;
     Ok(browsing)
+}
+
+fn failed(error: impl std::fmt::Display) -> CannotBrowse {
+    tracing::warn!("cannot open the backups: {error}");
+    CannotBrowse::Failed
 }
 
 fn times_in(root: &str) -> Vec<String> {

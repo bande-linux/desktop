@@ -18,7 +18,7 @@ use bande_audio::{Audio, Level, Meter, meter_level};
 use bande_bluetooth::{Bluetooth, adapter_in_kernel};
 use bande_inbox::{Inbox, Outbox};
 use bande_network::{NetworkManager, wifi_in_kernel};
-use bande_notify::client::NotificationCenter;
+use bande_notify::client::NotificationsProxy;
 use bande_power::logind::own_session;
 use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
 use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
@@ -120,7 +120,7 @@ fn read_connected(
             Reading::from_answer("BlueZ", powered, adapter_in_kernel)
         }),
         do_not_disturb: session
-            .and_then(|session| NotificationCenter::new(session).ok())
+            .and_then(|session| NotificationsProxy::new(session).ok())
             .and_then(|center| center.do_not_disturb().ok())
             .unwrap_or(false),
     }
@@ -269,8 +269,8 @@ fn moved(event: &Event, offset: Point) -> Event {
 }
 
 impl QuickSettings {
-    fn notification_center(&self) -> Option<NotificationCenter<'_>> {
-        NotificationCenter::new(self.session.as_ref()?).ok()
+    fn notifications(&self) -> Option<NotificationsProxy<'_>> {
+        NotificationsProxy::new(self.session.as_ref()?).ok()
     }
 
     fn set_light(&mut self, connector: String, level: f32) {
@@ -449,7 +449,7 @@ impl QuickSettings {
                 self.refresh();
             }
             Change::DoNotDisturb(on) => {
-                if let Some(center) = self.notification_center() {
+                if let Some(center) = self.notifications() {
                     report("switch Do Not Disturb", center.set_do_not_disturb(on));
                 }
                 self.refresh();
@@ -914,7 +914,7 @@ impl App for QuickSettings {
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
         match event {
             WindowEvent::TogglePanel(Panel::QuickSettings) => self.toggle_panel(window),
-            WindowEvent::TogglePanel(Panel::NotificationCenter)
+            WindowEvent::TogglePanel(Panel::Notifications)
                 if matches!(self.mode, Mode::Panel { .. }) =>
             {
                 self.dismiss(window);

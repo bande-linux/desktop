@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use bande_notify::client::NotificationCenter;
+use bande_notify::client::NotificationsProxy;
 use bande_notify::{BUS_NAME, NotificationServer, OBJECT_PATH, Presentation};
 use bande_test_bus::SessionBus;
 use zbus::zvariant::Value;
@@ -20,7 +20,7 @@ fn a_notification_shows_as_a_banner_and_only_the_center_name_can_read_or_dismiss
     .expect("notification server");
     let app = bus.connect().expect("app connection");
     let shell = bus.connect().expect("shell connection");
-    let center = NotificationCenter::new(&shell).expect("center proxy");
+    let center = NotificationsProxy::new(&shell).expect("center proxy");
     let changes = center
         .receive_presentation_changed()
         .expect("subscribe to the presentation");
@@ -65,7 +65,7 @@ fn a_notification_shows_as_a_banner_and_only_the_center_name_can_read_or_dismiss
         let refused = app.call_method(
             Some(BUS_NAME),
             OBJECT_PATH,
-            Some("org.bande.NotificationCenter"),
+            Some("org.bande.Notifications"),
             method,
             &(),
         );

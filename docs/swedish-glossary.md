@@ -42,7 +42,7 @@ Plurals: Swedish has two forms (`Plural-Forms: nplurals=2; plural=(n != 1);`), `
 | Attachment | Bilaga | | Inbox | Inkorg |
 | Bookmark | Bokmärke | | Download | Hämta / Hämtningar |
 | Error | Fel | | Couldn't X | Det gick inte att X |
-| Night Light | Nattljus | | Notification Center | Notiscenter |
+| Night Light | Nattljus | | Notifications | Notiser |
 | Accent colour | Dekorfärg | | Trackpad | Styrplatta |
 | Glance | Glimt | | Sticky Keys | Tröga tangenter |
 | Force Quit | Tvinga avslut | | Clipboard | Urklipp |

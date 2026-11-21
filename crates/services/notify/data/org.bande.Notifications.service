@@ -1,4 +1,4 @@
 [D-BUS Service]
-Name=org.bande.NotificationCenter
+Name=org.bande.Notifications
 Exec=/usr/bin/bande-notify
 SystemdService=bande-notify.service

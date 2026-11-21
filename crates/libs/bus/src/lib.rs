@@ -33,3 +33,19 @@ pub fn warn_unsent(signal: &str, sent: zbus::Result<()>) {
 pub fn serve_until_closed(connection: &Connection) {
     for _ in MessageIterator::from(connection) {}
 }
+
+/// Whether `error` says that no program owns the called bus name.
+pub fn is_unowned(error: &zbus::Error) -> bool {
+    match error {
+        zbus::Error::FDO(error) => matches!(
+            **error,
+            zbus::fdo::Error::ServiceUnknown(_) | zbus::fdo::Error::NameHasNoOwner(_)
+        ),
+        zbus::Error::MethodError(name, _, _) => matches!(
+            name.as_str(),
+            "org.freedesktop.DBus.Error.ServiceUnknown"
+                | "org.freedesktop.DBus.Error.NameHasNoOwner"
+        ),
+        _ => false,
+    }
+}

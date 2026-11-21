@@ -23,8 +23,44 @@ const SETTINGS: &str = "bande-settings";
 const PRIVACY_PANE: &str = "privacy-security";
 const NOTICE_TIMEOUT: i32 = 0;
 const INTERPRETERS: &[&str] = &[
-    "bash", "dash", "env", "fish", "java", "lua", "node", "perl", "python", "python3", "ruby",
-    "sh", "zsh",
+    "awk",
+    "bash",
+    "busybox",
+    "cjs",
+    "csh",
+    "dash",
+    "env",
+    "expect",
+    "fish",
+    "gawk",
+    "gjs",
+    "guile",
+    "java",
+    "julia",
+    "ksh",
+    "lua",
+    "luajit",
+    "mawk",
+    "mksh",
+    "nawk",
+    "node",
+    "nodejs",
+    "original-awk",
+    "perl",
+    "php",
+    "pwsh",
+    "pypy",
+    "python",
+    "R",
+    "Rscript",
+    "ruby",
+    "sh",
+    "tclsh",
+    "tcsh",
+    "toybox",
+    "wish",
+    "yash",
+    "zsh",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,10 +121,14 @@ pub(crate) fn verified_program(pid: i32) -> Option<Claimant> {
         && running.ino() == installed.ino()
         && installed.uid() == 0
         && installed.mode() & 0o022 == 0
-        && !INTERPRETERS
-            .iter()
-            .any(|interpreter| name.split('.').next() == Some(interpreter));
+        && !runs_other_code(name);
     trustworthy.then_some(Claimant::Program(path))
+}
+
+fn runs_other_code(name: &str) -> bool {
+    let unversioned = name.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.');
+    let dynamic_loader = name.starts_with("ld") && name.contains(".so");
+    dynamic_loader || INTERPRETERS.contains(&unversioned)
 }
 
 pub(crate) fn is_sandboxed(client: &Client) -> bool {
@@ -123,16 +163,24 @@ fn already_asked(line: &str) -> bool {
 
 fn tell_person(session: Connection, access: Access, program: String) {
     thread::spawn(move || {
-        let Ok(notifications) = zbus::blocking::Proxy::new(
+        let notifications = match zbus::blocking::Proxy::new(
             &session,
             "org.freedesktop.Notifications",
             "/org/freedesktop/Notifications",
             "org.freedesktop.Notifications",
-        ) else {
-            return;
+        ) {
+            Ok(notifications) => notifications,
+            Err(error) => {
+                tracing::warn!("cannot reach notifications to ask for consent: {error}");
+                return;
+            }
         };
-        let Ok(invoked) = notifications.receive_signal("ActionInvoked") else {
-            return;
+        let invoked = match notifications.receive_signal("ActionInvoked") {
+            Ok(invoked) => invoked,
+            Err(error) => {
+                tracing::warn!("cannot follow consent notification actions: {error}");
+                return;
+            }
         };
         let message = match access {
             Access::ReadKeys => text!("{program} wants to read what you type."),
@@ -158,8 +206,12 @@ fn tell_person(session: Connection, access: Access, program: String) {
                 NOTICE_TIMEOUT,
             ),
         );
-        let Ok(id) = shown else {
-            return;
+        let id = match shown {
+            Ok(id) => id,
+            Err(error) => {
+                tracing::warn!("cannot show the consent notification: {error}");
+                return;
+            }
         };
         for signal in invoked {
             let Ok((invoked_id, _)) = signal.body().deserialize::<(u32, String)>() else {

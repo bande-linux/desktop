@@ -26,8 +26,8 @@ msgid_plural "{count} more notifications"
 msgstr[0] "1 notis till"
 msgstr[1] "{count} notiser till"
 
-msgid "Notification Center"
-msgstr "Notiscenter"
+msgid "Notifications"
+msgstr "Notiser"
 
 msgid "Clear All"
 msgstr "Rensa alla"

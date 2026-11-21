@@ -224,7 +224,7 @@ impl PaneId {
                 tr!("Light, dark or automatic, accent color, wallpaper and text size")
             }
             Self::Bar => tr!("Where the taskbar sits and how it behaves"),
-            Self::Notifications => tr!("Banners and Notification Center"),
+            Self::Notifications => tr!("Banners and Notifications"),
             Self::Search => tr!("What the launcher finds and which folders it leaves out"),
             Self::Accessibility => {
                 tr!("Make the screen, sound, keyboard and pointer easier to use")
@@ -1161,7 +1161,7 @@ fn desktop_panes() -> Vec<Pane> {
                         SettingId::AppNotifications,
                         tr!("Application notifications"),
                         tr!(
-                            "per app, apps, banners, alerts, allow notifications, persistent, notification center, block, silence an app"
+                            "per app, apps, banners, alerts, allow notifications, persistent, notification list, block, silence an app"
                         ),
                         List::NotificationApps,
                     )],

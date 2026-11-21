@@ -139,7 +139,7 @@ impl StatusClient {
         let edge = display_edge(self.bar.edge());
         for (panel, slot) in [
             (Panel::QuickSettings, Slot::QuickSettings),
-            (Panel::NotificationCenter, Slot::Clock),
+            (Panel::Notifications, Slot::Clock),
         ] {
             let Some(rect) = self.bar.slot_rect(slot) else {
                 continue;
@@ -417,8 +417,8 @@ impl StatusClient {
                 );
             }
             Slot::Clock => report(
-                "open the Notification Center",
-                window.toggle_panel(Panel::NotificationCenter),
+                "open Notifications",
+                window.toggle_panel(Panel::Notifications),
             ),
             Slot::StatusItem(index) => self.open_tray(window, index, anchor, false),
             Slot::Workspace(index) if index == self.workspaces.1 => {

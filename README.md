@@ -80,18 +80,17 @@ PROFILE=dev ci/release/verify.sh gate
 
 `cargo run -p bande-compositor -- --headless` starts the compositor without a display.
 
-On the build machine, `desktop-check <worktree> -p <crate>` (fmt and `cargo check`) is all a
-change needs; branches are queued with `desktop-enqueue <branch>` and the merge train runs the full gate,
-`ci/release/verify.sh gate` (the release checks CI runs), on each batch. These scripts live in `~/bande-linux/bin`,
-outside this repository. Bande keeps only a few end-to-end and regression tests and no
-screenshot tests; [`docs/quality/tests.md`](docs/quality/tests.md) lists them and the rules.
+Each change only has to compile (`cargo fmt --all --check`, `cargo check --all-targets`); the
+full gate, `ci/release/verify.sh gate` (the release checks CI runs), runs before a branch is
+merged to `main`. Bande keeps only a few end-to-end and regression tests and no screenshot tests;
+[`docs/quality/tests.md`](docs/quality/tests.md) lists them and the rules.
 
 ## Releases
 
-GitHub CI runs only on version tags (and on manual dispatch for an unpublished build). Every
+`release.yml` runs only on version tags (and on manual dispatch for an unpublished build). Every
 package, desktop and apps, is released together at one version. A release
 is: bump `[workspace.package] version` in `Cargo.toml` and add the `X.Y.Z-1` entry to
-`debian/changelog`, merge to `main` through the train, whose gate runs the same checks, and tag
+`debian/changelog`, merge to `main` once the gate passes, and tag
 `vX.Y.Z`. The tag's `release.yml` lints, tests, makes the source package, builds every package
 from it offline for arm64 and amd64 and runs its autopkgtests in a clean Debian forky; the APT repository ([bande-linux/apt](https://github.com/bande-linux/apt))
 publishes a fully green tag run on its own. Details: [`docs/architecture/ci.md`](docs/architecture/ci.md).

@@ -22,25 +22,18 @@ installs them instead (what CI does). `PROFILE` picks the cargo profile of the d
 Only these run in CI alone:
 
 - `install`, the autopkgtests (`debian/tests`): they install the packages as root into a clean
-  Debian 14 (forky) and switch display managers, which needs a throwaway system; the build
-  machine runs no containers.
-- The check that a released commit is on `main`: the train only ever pushes `main`.
-- The arm64 debs: the build machine is amd64; both architectures build from the same scripts.
-- Fat LTO: the build machine's release-batch gate builds the `dist` debs one crate at a time
-  with thin LTO (`CARGO_PROFILE_DIST_LTO=thin`, which cargo reads through `debian/rules`), since a fat-LTO link of the shell needs more
-  memory than the build machine spares next to the session, and systemd-oomd stops it.
+  Debian 14 (forky) and switch display managers, which needs a throwaway system.
+- The check that a released commit is on `main`.
+- The arm64 debs; both architectures build from the same scripts.
 
 ## The local gate
 
-Each change only has to compile: `desktop-check <worktree> -p <crate>` runs `cargo fmt` and
-`cargo check --all-targets` through the build queue, `build-run`, which runs anything heavy on the
-next free compute node (this machine or one in `~/bande-linux/builders`, a list, all equal; a machine
-that goes away re-queues the job and never counts as a failure). Finished branches are queued
-with `desktop-enqueue <branch>`; the merge train (`desktop-train`) merges the queued branches onto `main`, runs `desktop-gate` on the
-batch and pushes `main` when it is green. `desktop-gate <worktree>` is `ci/release/verify.sh
-gate` through the queue with the debs built with the `dev` profile, a few minutes; a batch
-that changes `[workspace.package] version` builds them with `dist`, as the release does. These
-scripts live in `~/bande-linux/bin` on the build machine, outside this repository. The tests and
+Each change only has to compile: `cargo fmt --all --check` and `cargo check --all-targets`. A
+finished branch passes `ci/release/verify.sh gate` before it is merged to `main` and `main` is
+pushed; `PROFILE=dev` builds the debs with the `dev` profile, a few minutes, and a change of
+`[workspace.package] version` is gated with `dist`, as the release builds. A fat-LTO link of the
+shell needs much memory; `CARGO_PROFILE_DIST_LTO=thin`, which cargo reads through
+`debian/rules`, builds the `dist` debs with thin LTO on a machine that lacks it. The tests and
 why they exist are in [`../quality/tests.md`](../quality/tests.md). A test bus lists no service
 directories, so it never D-Bus-activates the services installed on the machine.
 
@@ -57,23 +50,29 @@ every `required` and `depends` entry is on a system installed with `--no-install
 
 ## GitHub CI
 
-`browser-follow-debian.yml` builds Bande's Browser on its own rhythm, whenever Debian uploads a new
-`firefox-esr` or `browser/` changes on `main`: see [`browser/README.md`](../../browser/README.md).
+The workflows and what starts them:
 
-Besides `dict.yml`, which builds the dictionary packs' source package `bande-dict` from a
-`dict-YYYYMMDD` tag (see [lookup.md](lookup.md)), `l10n.yml`, which builds only the language
-packs from an `l10n-YYYYMMDD` tag (`.N` for another the same day), with the build profile
-`pkg.bande.l10n-only`, so a corrected translation ships without a release, `reproducible.yml`
-and `debian-mode.yml` (below), the one workflow, `release.yml`, runs on version tags (`vX.Y.Z`,
-`vX.Y.Z-R`) and on manual dispatch, never on pushes or pull requests. It runs on GitHub-hosted runners (`ubuntu-24.04-arm` and
-`ubuntu-24.04`). Every job runs once per supported Debian release, in a `debian:<suite>`
-container: the `suites` job reads the list from the APT repository's `conf/suites`
-(through its reusable `suites.yml`), now `forky` only. Each job installs what it needs with
-`verify.sh --setup` (the Build-Depends of `debian/control`, the suite's own `rustc` and `cargo`
-among them, and `rustfmt` and `rust-clippy` for lint), so each suite builds with its Debian
-toolchain; cargo
-refuses a `rust-version` newer than that `rustc`. Rendering runs on lavapipe, Mesa's CPU Vulkan, so
-no job needs a GPU or a display; the compositor tests run it headless.
+- `release.yml`: version tags (`vX.Y.Z`, `vX.Y.Z-R`) and manual dispatch; below.
+- `l10n.yml`: `l10n-YYYYMMDD` tags (`.N` for another the same day); builds only the language
+  packs with the build profile `pkg.bande.l10n-only`, so a corrected translation ships without
+  a release.
+- `dict.yml`: `dict-YYYYMMDD` tags; builds the dictionary packs' source package `bande-dict`
+  ([lookup.md](lookup.md)).
+- `browser-follow-debian.yml`: every six hours, to follow Debian's `firefox-esr` uploads,
+  pushes to `main` that change `browser/`, and dispatch; builds Bande's Browser
+  ([`browser/README.md`](../../browser/README.md)).
+- `reproducible.yml`: weekly and on dispatch; below.
+- `debian-mode.yml`: weekly, on dispatch and on pull requests that change `Cargo.toml`,
+  `Cargo.lock` or `debian/control`; below.
+
+`release.yml` runs on GitHub-hosted runners (`ubuntu-24.04-arm` and `ubuntu-24.04`). Every job
+runs once per supported Debian release, in a `debian:<suite>` container: the `suites` job reads
+the list from the APT repository's `conf/suites` (through its reusable `suites.yml`). Each job
+installs what it needs with `verify.sh --setup` (the Build-Depends of `debian/control`, the
+suite's own `rustc` and `cargo` among them, and `rustfmt` and `rust-clippy` for lint), so each
+suite builds with its Debian toolchain; cargo refuses a `rust-version` newer than that `rustc`.
+Rendering runs on lavapipe, Mesa's CPU Vulkan, so no job needs a GPU or a display; the
+compositor tests run it headless.
 
 ### Jobs
 
@@ -106,9 +105,9 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
   autopkgtests of the source package against that architecture's and the `all` packages
   (`autopkgtest --no-built-binaries <dsc> <debs> -- null`): `desktop`, `every-package`,
   `display-manager`, `services`, `portal` and `metadata` (see
-  [packaging.md](packaging.md#the-source-package)). A Debian package that the release lacks for
-  the moment (restic, which `bande-backup` depends on, is out of forky) is a warning: `bande-desktop`
-  only recommends `bande-backup`, and `every-package` installs it only when restic can be.
+  [packaging.md](packaging.md#the-source-package)). A Debian package that the release lacks is a
+  warning: `bande-desktop` only recommends `bande-backup`, and `every-package` installs it only
+  when its dependencies can be.
 - `release-source` (tags only, after `install`): attaches the source package to the tag's GitHub
   release; the vendored crates make it too big to keep in git.
 
@@ -160,15 +159,14 @@ user in on a headless compositor at the old version and upgrades with apt while 
 build must take over the session services and ask for a logout, while the shell and lock screen,
 killed after the update, come back as the old build and stay up. The shell must reconnect after
 PipeWire restarts, and new Settings must run on the old compositor. It needs `qemu-system`,
-`mtools` and `/dev/kvm`, so it runs by hand on a build machine before a release (`build-run
-<worktree> ci/upgrade-test/run.sh ...`); compare the new debs with the previous release's.
+`mtools` and `/dev/kvm`, so it runs by hand before a release; compare the new debs with the
+previous release's.
 
 ## Releasing
 
 1. Bump `[workspace.package] version` in `Cargo.toml` and add the entry `X.Y.Z-1` to
-   `debian/changelog` (`dch -v X.Y.Z-1 -D unstable`) in a commit "Release X.Y.Z" and queue it
-   with `desktop-enqueue`; the train runs the gate, with the `dist` debs for a version change,
-   and pushes `main`.
+   `debian/changelog` (`dch -v X.Y.Z-1 -D unstable`) in a commit "Release X.Y.Z", run
+   `ci/release/verify.sh gate` (with the `dist` debs), merge it to `main` and push `main`.
 2. Tag the release commit: `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`. The tag run
    builds and publishes, once.
 3. Watch it: `gh run list -R bande-linux/desktop -w release.yml -e push`, then
@@ -181,9 +179,6 @@ PipeWire restarts, and new Settings must run on the old compositor. It needs `qe
    architectures.
 5. Check: `curl -s https://bande-linux.github.io/apt/dists/<suite>/main/binary-amd64/Packages`, for each suite,
    lists `bande-compositor` at the new version for `amd64`, and the same for `arm64`.
-6. On the build machine, `send-symbols --tag vX.Y.Z` sends that run's `-dbgsym` packages to the
-   log server with `ci/release/upload-symbols.sh`, which is on the LAN where GitHub cannot reach
-   it. `rebuild-desktop` sends the symbols of each build it installs the same way.
 
 A published version is never moved or deleted. A bad release is fixed forward with the next
 patch version; a tag whose run failed before apt published it may be deleted and pushed again.
@@ -191,11 +186,11 @@ Every package, the apps included, is released together at the one version.
 
 ## Soak and fuzz
 
-`ci/soak/run.sh` (`--hours`, `--fuzz-seconds`, `--out`) is what proves stability, and runs on a build machine,
-never as a gate. `bande-soak` (`crates/testing/bench`, not a test) runs the compositor in-process on
+`ci/soak/run.sh` (`--hours`, `--fuzz-seconds`, `--out`) is what proves stability; it runs by
+hand, never as a gate. `bande-soak` (`crates/testing/bench`, not a test) runs the compositor in-process on
 lavapipe with the real shell, lock screen, Files and Settings and cycles through window churn, the overview
 and launcher, a second display with scale changes, lock and unlock (for the run, the machine's PAM file for `bande-lock`
-permits any password; the script runs only on a machine with `~/bande-linux/builder-ok`), memory pressure and
+permits any password, so run it only on a machine nobody else uses), memory pressure and
 killed apps and shells. After each cycle it samples memory, file descriptors, threads, renderer memory and
 frame times, and flags growth over the second half, a stall over 5 s or a client not answering for 30 s. Lavapipe's GPU
 memory is process memory, so GPU growth shows as RSS; a leak only in a hardware GPU driver cannot show here. Results go

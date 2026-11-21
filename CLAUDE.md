@@ -21,10 +21,9 @@ Bande's Browser is a patch queue on Debian's `firefox-esr` source: `browser/` ho
 - Scripts are event-driven where anything waits.
 - Build with `scripts/local-build.sh` (see `browser/README.md`). Use a temporary `HOME` for anything that runs the browser.
 
-## Factory Verification
-- **Build first, test once**: each change only needs to compile (`desktop-check <worktree> -p <crate>`: fmt and `cargo check`). Anything else heavy goes through the build queue: `build-run <worktree> cargo ...`, on whichever build machine is free (`build-run --here` to stay on this machine, for a benchmark or a binary you run next). The full gate (`ci/release/verify.sh gate`, the same release checks `release.yml` runs: fmt, clippy `-D warnings`, the layering rules, the tests on the hermetic bus, the debs with check-debs, smoke and lintian) runs once per merge-train batch; see `docs/architecture/ci.md`.
+## Verification
+- **Build first, test once**: each change only needs to compile: `cargo fmt --all --check` and `cargo check --all-targets -p <crate>`. The full gate (`ci/release/verify.sh gate`, the same release checks `release.yml` runs: fmt, clippy `-D warnings`, the layering rules, the tests on the hermetic bus, the debs with check-debs and lintian) runs once before a branch is merged to `main`; see `docs/architecture/ci.md`.
 
 ## Workflow
-- Trunk-based: `main` always builds. Each milestone is a short branch from `main`.
-- A finished branch has `origin/main` merged in, compiles, and is pushed and queued with `desktop-enqueue <branch>`; the merge train gates the batch and pushes `main`. GitHub CI (`release.yml`) runs on version tags (`vX.Y.Z`) and on dispatch; a green run for a tag on `main` publishes to the APT repository. A release is: bump `[workspace.package] version` (one version for every package, the apps included), merge to `main` through the train, tag.
-- Then merge `main` into the next branch and push only that branch; never push several stacked branches at once.
+- Trunk-based: `main` always builds. Each change is a short branch from `main`, merged to `main` once the gate passes; then push `main`.
+- GitHub CI (`release.yml`) runs on version tags (`vX.Y.Z`) and on dispatch; a green run for a tag on `main` publishes to the APT repository. A release is: bump `[workspace.package] version` (one version for every package, the apps included) and add the `debian/changelog` entry, merge to `main` after the gate, tag.

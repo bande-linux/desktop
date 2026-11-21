@@ -22,7 +22,7 @@ that list (`RUSTFLAGS` would replace it).
 
 ## Alternatives measured
 
-`dist` builds of both sides, on the arm64 build machine, against a headless compositor with private buses;
+`dist` builds of both sides, on an arm64 machine, against a headless compositor with private buses;
 time from exec to the first buffer the compositor receives, 45–48 launches per case.
 
 - **One multicall binary for the nine programs** (symlinks, dispatch on `argv[0]`): 35.8 MB

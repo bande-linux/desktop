@@ -7,7 +7,7 @@ use bande_printers::ipp::{Group, Request, parse, read_http};
 use bande_printers::{Error, Result};
 use ring::digest::{SHA256, digest};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::{CryptoProvider, ring as ring_provider};
+use rustls::crypto::{CryptoProvider, aws_lc_rs};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, ClientConnection, DigitallySignedStruct, SignatureScheme, StreamOwned};
 
@@ -122,7 +122,7 @@ fn connect(address: &Address, pins: &Pins, timeout: Duration) -> Result<Box<dyn 
     if !address.secure {
         return Ok(Box::new(tcp));
     }
-    let provider = Arc::new(ring_provider::default_provider());
+    let provider = Arc::new(aws_lc_rs::default_provider());
     let config = ClientConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
         .map_err(io::Error::other)?

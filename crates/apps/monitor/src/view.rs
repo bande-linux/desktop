@@ -1,0 +1,293 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+use accesskit::{ActionRequest, TreeUpdate};
+use bande_l10n::{tr, trn};
+use bande_toolkit::ui::{
+    Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
+};
+use bande_toolkit::{
+    Appearance, Color, Header, Image, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle,
+    TextSystem,
+};
+
+use crate::model::{StopTarget, stop_target};
+use crate::sampler::Snapshot;
+use crate::signal::{SignalError, Stop};
+use bande_app_menu::Entry;
+
+pub(crate) const QUIT: &str = "quit";
+pub(crate) const FORCE_QUIT: &str = "force-quit";
+pub(crate) const SEND: &str = "send";
+const CANCEL: &str = "cancel";
+pub(crate) const ALERT_ICON: &str = "org.bande.SystemMonitor";
+pub(crate) const INSPECT_SYMBOL: &str = "dialog-information-symbolic";
+const STOP_SYMBOL: &[u8] = include_bytes!("../data/process-stop-symbolic.svg");
+const SYMBOL_PIXELS: u32 = 32;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Request {
+    Resample,
+    ShowInFiles(PathBuf),
+    Copy(String),
+    Clipboard(ClipboardRequest),
+    EmojiPicker,
+    Menu(Menu, Point),
+    Inspect(u32),
+    SaveState(String),
+    QuitApp {
+        app_id: String,
+        roots: Vec<(u32, u64)>,
+    },
+}
+
+type FindIcon = Box<dyn Fn(&str) -> Option<Image>>;
+
+pub struct Icons {
+    loaded: HashMap<String, Option<Image>>,
+    find: FindIcon,
+}
+
+impl Icons {
+    pub fn new(find: impl Fn(&str) -> Option<Image> + 'static) -> Self {
+        Self {
+            loaded: HashMap::new(),
+            find: Box::new(find),
+        }
+    }
+
+    pub fn get(&mut self, name: &str) -> Option<Image> {
+        if let Some(image) = self.loaded.get(name) {
+            return image.clone();
+        }
+        let image = (self.find)(name);
+        self.loaded.insert(name.to_owned(), image.clone());
+        image
+    }
+}
+
+pub fn is_secondary(pointer: &Pointer) -> bool {
+    pointer.button == PointerButton::Secondary
+}
+
+pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+    key == Key::Menu || (key == Key::Function(10) && modifiers.shift && !modifiers.logo)
+}
+
+pub struct Painter<'a> {
+    pub text: &'a mut TextSystem,
+    pub items: Vec<Item>,
+}
+
+impl Painter<'_> {
+    pub fn text_in(&mut self, text: &str, style: TextStyle, frame: Rect, align: TextAlign) {
+        let paragraph = self.text.paragraph(text, style, Some(frame.width), align);
+        let y = frame.y + ((frame.height - paragraph.height()) / 2.0).round();
+        self.items.push(Item::Clip {
+            shape: Shape::rect(frame),
+            items: vec![Item::Text {
+                origin: Point::new(frame.x, y),
+                paragraph,
+            }],
+        });
+    }
+
+    pub fn fill(&mut self, shape: Shape, color: Color) {
+        self.items.push(Item::Fill {
+            shape,
+            paint: color.into(),
+        });
+    }
+}
+
+pub(crate) fn symbol_button(
+    symbol: Option<Image>,
+    label: &str,
+    on_click: impl FnMut() + 'static,
+) -> Button {
+    match symbol {
+        Some(symbol) => Button::symbol(symbol, label, on_click),
+        None => Button::new(label, on_click),
+    }
+}
+
+pub(crate) fn stop_button(on_click: impl FnMut() + 'static) -> Button {
+    symbol_button(
+        Image::from_svg(STOP_SYMBOL, SYMBOL_PIXELS, SYMBOL_PIXELS),
+        &tr!("Quit Process"),
+        on_click,
+    )
+}
+
+fn with_icon(alert: Alert, icon: Option<Image>) -> Alert {
+    match icon {
+        Some(icon) => alert.icon(icon),
+        None => alert,
+    }
+}
+
+pub(crate) fn stop_alert(
+    target: &StopTarget,
+    force: bool,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Alert {
+    let alert = match force {
+        true => Alert::new(
+            &trn!(
+                "Do you want to force quit “{name}”?",
+                "Do you want to force quit the {count} selected items?",
+                count = target.count,
+                name = target.name
+            ),
+            &tr!("Any unsaved changes are lost."),
+            choose,
+        )
+        .destructive(&tr!("Force Quit"), FORCE_QUIT),
+        false => Alert::new(
+            &trn!(
+                "Do you want to quit “{name}”?",
+                "Do you want to quit the {count} selected items?",
+                count = target.count,
+                name = target.name
+            ),
+            &tr!("Quit asks it to close. Force Quit ends it at once, and any unsaved changes are lost."),
+            choose,
+        )
+        .other(&tr!("Force Quit"), FORCE_QUIT)
+        .primary(&tr!("Quit"), QUIT),
+    };
+    with_icon(alert.cancel(&tr!("Cancel"), CANCEL), icon)
+}
+
+pub(crate) fn signal_alert(
+    target: &StopTarget,
+    how: Stop,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Alert {
+    let signal = crate::menu::signal_title(how);
+    let title = trn!(
+        "Do you want to send {signal} to “{name}”?",
+        "Do you want to send {signal} to the {count} selected items?",
+        count = target.count,
+        signal = signal,
+        name = target.name.clone()
+    );
+    let message = match how {
+        Stop::Pause => tr!(
+            "A paused process does nothing until it gets Continue. Pausing a part of the desktop can freeze the screen."
+        ),
+        _ => tr!(
+            "A process that doesn’t handle this signal ends at once, and any unsaved changes are lost."
+        ),
+    };
+    let alert = Alert::new(&title, &message, choose)
+        .primary(&tr!("Send"), SEND)
+        .cancel(&tr!("Cancel"), CANCEL);
+    with_icon(alert, icon)
+}
+
+pub(crate) fn answer_stop(
+    target: &StopTarget,
+    choice: &str,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Option<Alert> {
+    let how = match choice {
+        QUIT => Stop::Quit,
+        FORCE_QUIT => Stop::ForceQuit,
+        _ => return None,
+    };
+    send_signal(target, how, icon, choose)
+}
+
+pub(crate) fn send_signal(
+    target: &StopTarget,
+    how: Stop,
+    icon: Option<Image>,
+    choose: impl FnMut(&str) + 'static,
+) -> Option<Alert> {
+    match stop_target(target, how) {
+        Ok(()) => None,
+        Err(SignalError::PermissionDenied) => Some(with_icon(
+            Alert::new(
+                &tr!(
+                    "“{name}” belongs to another user.",
+                    name = target.name.clone()
+                ),
+                &tr!("Only its owner or an administrator can quit it."),
+                choose,
+            )
+            .primary(&tr!("OK"), CANCEL),
+            icon,
+        )),
+        Err(error) => {
+            tracing::warn!("cannot stop {}: {error:?}", target.name);
+            None
+        }
+    }
+}
+
+pub trait Screen {
+    fn scene(&mut self, width: u32, height: u32) -> Scene;
+    fn set_appearance(&mut self, appearance: Appearance);
+    fn set_focused(&mut self, focused: bool);
+    fn handle(&mut self, event: &Event) -> bool;
+    fn update(&mut self, snapshot: Snapshot);
+    fn measures_footprint(&self) -> bool;
+    fn take_requests(&mut self) -> Vec<Request>;
+    fn menu_action(&mut self, action: &str) -> bool;
+    fn menu_closed(&mut self) -> bool;
+    fn pasted(&mut self, text: &str) -> bool;
+    fn finished(&self) -> bool;
+    fn set_responding(&mut self, pid: u32, app_id: &str, responding: bool) -> bool;
+    fn accessibility(&self) -> Option<TreeUpdate>;
+    fn perform(&mut self, request: &ActionRequest) -> bool;
+    fn cursor(&self) -> Cursor;
+    fn animating(&self) -> bool;
+    fn deadline(&self) -> Option<Instant>;
+
+    fn header(&self) -> Option<Header> {
+        None
+    }
+
+    fn set_full_screen(&mut self, _full_screen: bool) {}
+
+    fn measures_gpu(&self) -> bool {
+        false
+    }
+
+    fn measures_wakeups(&self) -> bool {
+        false
+    }
+
+    fn measures_sleep_blockers(&self) -> bool {
+        false
+    }
+
+    fn measures_battery(&self) -> bool {
+        false
+    }
+
+    fn app_menus(&self, _windowed: bool, _files: bool) -> Option<Vec<Entry>> {
+        None
+    }
+
+    fn measures_disk(&self) -> bool {
+        false
+    }
+
+    fn measures_network(&self) -> bool {
+        false
+    }
+
+    fn inspects(&self, _pid: u32) -> bool {
+        false
+    }
+
+    fn interval(&self) -> Option<Duration> {
+        None
+    }
+}

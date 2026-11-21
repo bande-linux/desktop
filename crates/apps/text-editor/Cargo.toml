@@ -1,0 +1,58 @@
+[package]
+name = "bande-text-editor"
+description = "text editor for the Bande desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+bande-volumes.workspace = true
+accesskit.workspace = true
+encoding_rs.workspace = true
+html5ever.workspace = true
+regex.workspace = true
+roxmltree.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+zip.workspace = true
+bande-app.workspace = true
+bande-datetime.workspace = true
+jiff.workspace = true
+bande-app-menu.workspace = true
+bande-inbox.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+maintainer = "Mikael Hug <mikaelhug@gmail.com>"
+section = "editors"
+depends = "$auto, fonts-inter, fonts-manrope, fonts-jetbrains-mono"
+extended-description = """\
+The text editor of the Bande desktop: \
+plain text in any encoding and line ending, rich text, RTF, Markdown, HTML, \
+Office Open XML and OpenDocument files, find and replace with regular \
+expressions, and documents that are saved automatically and come back after \
+a crash or quit."""
+assets = [
+    ["target/release/bande-text-editor", "usr/bin/", "755"],
+    ["data/org.bande.TextEditor.desktop", "usr/share/applications/", "644"],
+    ["target/release/deb-assets/bande-text-editor/org.bande.TextEditor.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["target/release/deb-assets/bande-text-editor/copyright", "usr/share/doc/bande-text-editor/copyright", "644"],
+    ["target/release/deb-assets/bande-text-editor/changelog.gz", "usr/share/doc/bande-text-editor/", "644"],
+    ["target/release/deb-assets/bande-text-editor/man/*", "usr/share/man/man1/", "644"],
+    ["data/org.bande.TextEditor.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["target/release/l10n/development/bande-text-editor/*", "usr/share/bande/l10n/bande-text-editor/", "644"],
+]

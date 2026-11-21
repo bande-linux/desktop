@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=System Monitor
+Name[sv]=Systemövervakare
+Comment=See which apps use your CPU, memory, disk and network
+Comment[sv]=Se vilka appar som använder processor, minne, disk och nätverk
+Icon=org.bande.SystemMonitor
+Exec=bande-monitor
+StartupNotify=true
+Categories=System;Monitor;
+Keywords=process;task;cpu;memory;kill;force quit;
+Keywords[sv]=process;uppgift;cpu;minne;avsluta;tvinga avslut;

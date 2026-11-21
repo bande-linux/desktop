@@ -1,0 +1,18 @@
+[package]
+name = "bande-discovery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Finds an account's servers from the DNS records of the user's own domain"
+publish = false
+
+[features]
+testing = []
+
+[dependencies]
+tracing.workspace = true
+
+[lints]
+workspace = true

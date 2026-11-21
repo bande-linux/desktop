@@ -31,7 +31,7 @@ reach a running session.
   (`--cycles`), and prints anonymous and resident memory and wake-ups in each state and the time
   until each window shows.
 - **Frame times:** `bande-session-bench` runs the compositor in-process with the shell, Files and
-  Terminal (`bande-terminal` from bande-linux/apps in `target/release` or on `PATH`) and replays
+  Terminal (`bande-terminal` in `target/release` or on `PATH`) and replays
   typical actions (pointer over Files, dragging a window, typing, scrolling, the launcher, the
   overview, a context menu, banners); it prints frame time p50/p99, CPU per frame and pixels
   repainted. `bande-toolkit-bench` measures the toolkit sample (`crates/testing/sample`).

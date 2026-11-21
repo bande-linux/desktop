@@ -29,11 +29,10 @@ while read -r item package kind; do
 done < "$(dirname "$0")/../../runtime-deps"
 
 echo "== every package bande-desktop recommends is in this Debian release or built here"
-default_apps="$(dirname "$0")/../../../packaging/bande-desktop/default-apps"
-from_the_archive=" $(grep -E '^[a-z0-9]' "$default_apps" | xargs) "
+built=" ${ours[*]} "
 apt-cache show bande-desktop | sed -n 's/^Recommends: //p' | tr ',' '\n' | sed 's/^ *//; s/[ (].*//' |
     while read -r recommended; do
-        [ -n "$recommended" ] && [[ $from_the_archive != *" $recommended "* ]] || continue
+        [ -n "$recommended" ] && [[ $built != *" $recommended "* ]] || continue
         candidate=$(apt-cache policy "$recommended" | sed -n 's/^ *Candidate: //p')
         [ -n "$candidate" ] && [ "$candidate" != "(none)" ] || { echo "$recommended cannot be installed"; exit 1; }
     done

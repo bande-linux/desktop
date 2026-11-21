@@ -14,7 +14,7 @@ use bande_l10n_source::{DEVELOPMENT_HEADER, key};
 use crate::po::{File, Message, header_field};
 use crate::workspace::{Crate, Key, Workspace};
 
-const USAGE: &str = "usage: bande-l10n-tool check [complete-languages-file] | update | pack <folder> | debs <catalogs> <out> <version> <package> <copyright>";
+const USAGE: &str = "usage: bande-l10n-tool check [complete-languages-file] | update | pack <folder> | debs <catalogs> <out> <version> <package> <copyright> <released packages file>";
 
 fn main() -> ExitCode {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
@@ -31,17 +31,27 @@ fn main() -> ExitCode {
                 }),
             ["update"] => update(&workspace),
             ["pack", folder] => pack(&workspace, Path::new(folder)),
-            ["debs", catalogs, out, version, package, copyright] => debs::build(
-                &workspace,
-                &debs::Pack {
-                    catalogs: Path::new(catalogs),
-                    out: Path::new(out),
-                    version,
-                    package,
-                    copyright: Path::new(copyright),
-                },
-            )
-            .map_err(|problem| vec![problem]),
+            ["debs", catalogs, out, version, package, copyright, released] => {
+                std::fs::read_to_string(released)
+                    .map_err(|error| format!("cannot read {released}: {error}"))
+                    .and_then(|list| {
+                        debs::build(
+                            &workspace,
+                            &debs::Pack {
+                                catalogs: Path::new(catalogs),
+                                out: Path::new(out),
+                                version,
+                                package,
+                                copyright: Path::new(copyright),
+                                released: &list
+                                    .split_whitespace()
+                                    .map(str::to_owned)
+                                    .collect::<Vec<_>>(),
+                            },
+                        )
+                    })
+                    .map_err(|problem| vec![problem])
+            }
             _ => Err(vec![USAGE.to_owned()]),
         }
     });

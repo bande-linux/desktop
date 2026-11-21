@@ -22,7 +22,6 @@ const WINDOW_SIZE: (u32, u32) = (900, 720);
 const FEED: usize = 0;
 const PANE_ACTION: &str = "pane:";
 const FILES_APP_ID: &str = "org.bande.Files";
-const FILES: &str = "bande-files";
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -117,14 +116,6 @@ struct Settings {
     services: Services,
 }
 
-fn reveal(window: &mut Window, path: &Path) {
-    let token = window.activation_token(FILES_APP_ID).ok();
-    let command = [FILES.to_owned(), path.to_string_lossy().into_owned()];
-    if let Err(error) = spawn_detached(FILES_APP_ID, &command, None, token.as_deref()) {
-        tracing::warn!("cannot show {} in Files: {error}", path.display());
-    }
-}
-
 fn frame_regions(text: TextSize) -> FrameRegions {
     FrameRegions {
         sidebar: sidebar_width(text),
@@ -197,7 +188,7 @@ impl Settings {
         };
         for command in view.take_commands() {
             match command {
-                Command::Reveal(path) => reveal(window, &path),
+                Command::Reveal(path) => bande_app::show_in_files(Some(window), vec![path]),
                 Command::CopySecret(secret) => {
                     let copied =
                         bande_toolkit::ui::ClipboardRequest::CopySecret(secret.0.to_string());

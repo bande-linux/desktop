@@ -18,20 +18,19 @@ crates/
   toolkit/   toolkit, design, graphics, platform, widgets, pdf
   shell/     shell, bar, desktop, notifications, quick-settings, launcher,
              screenshot, lock, greeter
-  apps/      files, settings, lookup, file-chooser, secrets-prompt
+  apps/      files, settings, lookup, terminal, software, installer, monitor, mail, calendar,
+             velox, calculator, player, viewer, clock, text-editor, disks, archive, template,
+             file-chooser, secrets-prompt
   services/  config, notify, power, sound, clipboard, tray, automount, backup, index, printd,
              spell, reporter, crash-reports, portal, polkit, secrets, secrets-pam
   libs/      app, app-menu, app-settings, settings-panes, xdg, fs, content, glance, thumbnails,
              search, status, taskbar-model, packages, audio, network, bluetooth, volumes,
              keyboard, datetime, colour, dict, edid, https, inbox, keyring, media, media-view,
              printers, l10n, l10n-macros, l10n-source, l10n-tool, log, bus, watch, wallpaper,
-             spring
+             spring, discovery, terminal-view, vm
   testing/   test-bus, test-wayland, bench, sample, review
 data/        shared assets (wallpapers, icons, sounds)
 ```
-
-The other apps live in [bande-linux/apps](https://github.com/bande-linux/apps) and depend on
-these crates at a pinned revision.
 
 - **`platform/`**: the compositor, its Vulkan renderer and the private Wayland protocols.
 - **`toolkit/`**: `toolkit` is a facade that re-exports the others. `design` holds the Datum
@@ -44,7 +43,8 @@ these crates at a pinned revision.
   process that hosts the parts `desktop`, `bar`, `notifications`, `quick-settings` and `launcher`
   (library crates, see [overview](../architecture/overview.md)); `screenshot`, `lock` and
   `greeter` stay processes of their own.
-- **`apps/`**: one crate per app built here, each on `bande-app` (`libs/app`), and the dialog
+- **`apps/`**: one crate per app, each on `bande-app` (`libs/app`), the template new apps are
+  copied from, and the dialog
   processes of services: `file-chooser` is the portal's dialog and `secrets-prompt` the
   keyring's (`bande-secrets-prompt`, installed by `bande-secrets`).
 - **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
@@ -54,9 +54,9 @@ these crates at a pinned revision.
   operations with their running queue and undo, and watching; `content` decodes what a file
   holds without any toolkit type (image pyramids and animations, PDF pages from a confined
   `hayro` child process, text with cheap syntax colours, Markdown, RTF and HTML as blocks,
-  fonts, folder and archive totals), shared by Files, the launcher, Glance and the apps
-  repository's Viewer; `glance` is the one Glance panel that Files and the desktop
-  show (it draws with the toolkit, an exception to "without UI").
+  fonts, folder and archive totals), shared by Files, the launcher, Glance and Viewer; `glance` is the one Glance panel that Files and the desktop
+  show and `terminal-view` Terminal's terminal widget (both draw with the toolkit, the
+  exceptions to "without UI").
 - **`testing/`**: `test-bus` (private D-Bus buses and fakes of system services),
   `test-wayland`, the benchmarks, the toolkit sample and `review` (records a scenario on a live
   session).

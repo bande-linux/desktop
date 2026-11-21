@@ -1,5 +1,5 @@
 name: release
-run-name: "${{ github.ref_type == 'tag' && format('Release desktop {0}', github.ref_name) || format('Unpublished build of {0}', github.ref_name) }}"
+run-name: "${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || format('Unpublished build of {0}', github.ref_name) }}"
 
 on:
   push:

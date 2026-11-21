@@ -1,7 +1,8 @@
 #!/bin/bash
-# build-packs.sh <out> <version>: the language packs, bande-desktop-l10n-<lang>, checked against the
-# code's English and built from the translations alone. ci/release/build-all.sh and the
-# translation-only l10n-YYYYMMDD releases (.github/workflows/l10n.yml) run it.
+# build-packs.sh <out> <version>: the language packs, bande-desktop-l10n-<lang>, with the catalogs
+# of every program in ci/release/packages, checked against the code's English and built from the
+# translations alone. ci/release/build-all.sh and the translation-only l10n-YYYYMMDD releases
+# (.github/workflows/l10n.yml) run it.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -13,4 +14,4 @@ tool=$target/release/bande-l10n-tool
 "$tool" check ci/l10n-complete
 rm -rf "$target/l10n"
 "$tool" pack "$target/l10n"
-"$tool" debs "$target/l10n" "$out" "$version" bande-desktop ci/copyright
+"$tool" debs "$target/l10n" "$out" "$version" bande-desktop ci/copyright ci/release/packages

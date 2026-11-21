@@ -51,3 +51,9 @@ doc = false
 
 [profile.release]
 debug = "line-tables-only"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+undocumented_unsafe_blocks = "deny"

@@ -23,3 +23,6 @@ bande-test-wayland.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 wayland-client.workspace = true
+
+[lints]
+workspace = true

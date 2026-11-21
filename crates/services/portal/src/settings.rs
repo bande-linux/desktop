@@ -375,12 +375,15 @@ fn signal_changes(connection: &Connection, old: Look, new: Look) {
     for (namespace, values) in namespaces(new) {
         for (key, value) in values {
             if before.get(&(namespace, key)) != Some(&value) {
-                let _ = zbus::block_on(Settings::setting_changed(
-                    &emitter,
-                    namespace,
-                    key,
-                    Value::from(value),
-                ));
+                bande_bus::warn_unsent(
+                    "SettingChanged",
+                    zbus::block_on(Settings::setting_changed(
+                        &emitter,
+                        namespace,
+                        key,
+                        Value::from(value),
+                    )),
+                );
             }
         }
     }

@@ -523,11 +523,14 @@ impl Daemon {
         }
         for path in paths {
             if let Ok(interface) = server.interface::<_, CollectionObject>(&path).await {
-                let _ = interface
-                    .get()
-                    .await
-                    .locked_changed(interface.signal_emitter())
-                    .await;
+                bande_bus::warn_unsent(
+                    "Locked",
+                    interface
+                        .get()
+                        .await
+                        .locked_changed(interface.signal_emitter())
+                        .await,
+                );
             }
         }
     }
@@ -594,11 +597,17 @@ impl Daemon {
             return;
         };
         let path = item_path(name, id);
-        let _ = if created {
-            CollectionObject::item_created(&emitter, path.as_ref()).await
+        if created {
+            bande_bus::warn_unsent(
+                "ItemCreated",
+                CollectionObject::item_created(&emitter, path.as_ref()).await,
+            );
         } else {
-            CollectionObject::item_deleted(&emitter, path.as_ref()).await
-        };
+            bande_bus::warn_unsent(
+                "ItemDeleted",
+                CollectionObject::item_deleted(&emitter, path.as_ref()).await,
+            );
+        }
     }
 
     pub async fn internal_items(
@@ -1145,8 +1154,10 @@ impl Daemon {
         if let Ok(connection) = self.connection()
             && let Ok(emitter) = SignalEmitter::new(connection, SERVICE_PATH)
         {
-            let _ =
-                ServiceObject::collection_created(&emitter, collection_path(name).as_ref()).await;
+            bande_bus::warn_unsent(
+                "CollectionCreated",
+                ServiceObject::collection_created(&emitter, collection_path(name).as_ref()).await,
+            );
         }
     }
 
@@ -1172,7 +1183,10 @@ impl Daemon {
                         .unwrap_or(pending.refusal),
                 ),
             };
-            let _ = PromptObject::completed(&emitter, dismissed, result).await;
+            bande_bus::warn_unsent(
+                "Completed",
+                PromptObject::completed(&emitter, dismissed, result).await,
+            );
         }
         let _ = connection
             .object_server()
@@ -1480,11 +1494,17 @@ impl CollectionObject {
             return;
         };
         let path = item_path(&self.name, id);
-        let _ = if created {
-            Self::item_created(&emitter, path.as_ref()).await
+        if created {
+            bande_bus::warn_unsent(
+                "ItemCreated",
+                Self::item_created(&emitter, path.as_ref()).await,
+            );
         } else {
-            Self::item_changed(&emitter, path.as_ref()).await
-        };
+            bande_bus::warn_unsent(
+                "ItemChanged",
+                Self::item_changed(&emitter, path.as_ref()).await,
+            );
+        }
     }
 }
 
@@ -1731,7 +1751,10 @@ impl ItemObject {
         if let Ok(connection) = self.daemon.connection()
             && let Ok(emitter) = SignalEmitter::new(connection, collection_path(&self.collection))
         {
-            let _ = CollectionObject::item_changed(&emitter, self.path().as_ref()).await;
+            bande_bus::warn_unsent(
+                "ItemChanged",
+                CollectionObject::item_changed(&emitter, self.path().as_ref()).await,
+            );
         }
         Ok(())
     }

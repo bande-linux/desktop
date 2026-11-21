@@ -95,7 +95,7 @@ impl SoundService {
             return;
         };
         if matches!(sound, Sound::Alert(_)) {
-            let _ = Self::alert_played(&emitter).await;
+            bande_bus::warn_unsent("AlertPlayed", Self::alert_played(&emitter).await);
         }
         let Some(gain) = policy.gain(sound) else {
             return;

@@ -52,7 +52,9 @@ fn prompt(
     let mut completed = proxy.receive_signal("Completed")?;
     let dismiss = proxy.clone();
     cancellation.on_cancel(move || {
-        let _ = dismiss.call_method("Dismiss", &());
+        if let Err(error) = dismiss.call_method("Dismiss", &()) {
+            tracing::warn!("cannot dismiss the secret prompt: {error}");
+        }
     });
     proxy.call_method("Prompt", &(""))?;
     let Some(signal) = completed.next() else {

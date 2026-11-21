@@ -270,16 +270,19 @@ impl Notification {
         }
         let mut parameter = target;
         parameter.push(Value::from(platform));
-        let _ = self.session.emit_signal(
-            None::<&str>,
-            OBJECT_PATH,
-            INTERFACE,
+        bande_bus::warn_unsent(
             "ActionInvoked",
-            &(
-                app_id.as_str(),
-                name.as_str(),
-                action.name.as_str(),
-                parameter,
+            self.session.emit_signal(
+                None::<&str>,
+                OBJECT_PATH,
+                INTERFACE,
+                "ActionInvoked",
+                &(
+                    app_id.as_str(),
+                    name.as_str(),
+                    action.name.as_str(),
+                    parameter,
+                ),
             ),
         );
     }
@@ -440,14 +443,16 @@ impl Notification {
             }
             taken
         };
-        if let Some(posted) = &taken {
-            let _ = self.session.call_method(
+        if let Some(posted) = &taken
+            && let Err(error) = self.session.call_method(
                 Some(NOTIFICATIONS),
                 NOTIFICATIONS_PATH,
                 Some(NOTIFICATIONS),
                 "CloseNotification",
                 &posted.id,
-            );
+            )
+        {
+            tracing::warn!("cannot withdraw a notification: {error}");
         }
         self.forget(taken);
     }

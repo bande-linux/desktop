@@ -77,8 +77,9 @@ impl ScreenshotTool {
     fn cancel_on(&self, cancellation: &Cancellation) {
         let connection = self.connection.clone();
         cancellation.on_cancel(move || {
-            if let Ok(proxy) = ScreenshotService::new(&connection) {
-                let _ = proxy.cancel();
+            if let Err(error) = ScreenshotService::new(&connection).and_then(|proxy| proxy.cancel())
+            {
+                tracing::warn!("cannot cancel the screenshot: {error}");
             }
         });
     }

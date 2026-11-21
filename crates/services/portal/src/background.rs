@@ -58,7 +58,10 @@ impl Background {
         let emitting = session.clone();
         thread::spawn(move || {
             for _ in changes.flatten() {
-                let _ = emitting.emit_signal(None::<&str>, OBJECT_PATH, INTERFACE, CHANGED, &());
+                bande_bus::warn_unsent(
+                    CHANGED,
+                    emitting.emit_signal(None::<&str>, OBJECT_PATH, INTERFACE, CHANGED, &()),
+                );
             }
         });
         session.object_server().at(

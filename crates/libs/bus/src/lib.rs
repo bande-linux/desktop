@@ -23,6 +23,13 @@ pub fn system() -> zbus::Result<Connection> {
         .build()
 }
 
+/// Logs a signal that could not be sent; listeners miss that one change.
+pub fn warn_unsent(signal: &str, sent: zbus::Result<()>) {
+    if let Err(error) = sent {
+        tracing::warn!("cannot send {signal}: {error}");
+    }
+}
+
 pub fn serve_until_closed(connection: &Connection) {
     for _ in MessageIterator::from(connection) {}
 }

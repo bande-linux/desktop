@@ -82,8 +82,10 @@ impl ErrorNotifier {
         let (summary, body) = match result {
             Ok([]) => {
                 reported.clear();
-                if let Some(id) = shown.take() {
-                    let _ = client::close(&self.connection, id);
+                if let Some(id) = shown.take()
+                    && let Err(error) = client::close(&self.connection, id)
+                {
+                    tracing::warn!("cannot withdraw the settings problem notification: {error}");
                 }
                 return;
             }

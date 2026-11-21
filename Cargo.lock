@@ -1324,6 +1324,7 @@ dependencies = [
  "async-io",
  "async-lock",
  "async-process",
+ "bande-bus",
  "bande-log",
  "bande-test-bus",
  "bande-xdg",

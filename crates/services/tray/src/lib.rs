@@ -73,21 +73,31 @@ impl Watcher {
                 let watcher = interface.get();
                 zbus::block_on(async {
                     for id in &items {
-                        let _ =
+                        bande_bus::warn_unsent(
+                            "StatusNotifierItemUnregistered",
                             StatusNotifierWatcher::status_notifier_item_unregistered(emitter, id)
-                                .await;
+                                .await,
+                        );
                     }
                     if !items.is_empty() {
-                        let _ = watcher
-                            .registered_status_notifier_items_changed(emitter)
-                            .await;
+                        bande_bus::warn_unsent(
+                            "RegisteredStatusNotifierItems",
+                            watcher
+                                .registered_status_notifier_items_changed(emitter)
+                                .await,
+                        );
                     }
                     if hosts {
-                        let _ =
-                            StatusNotifierWatcher::status_notifier_host_unregistered(emitter).await;
-                        let _ = watcher
-                            .is_status_notifier_host_registered_changed(emitter)
-                            .await;
+                        bande_bus::warn_unsent(
+                            "StatusNotifierHostUnregistered",
+                            StatusNotifierWatcher::status_notifier_host_unregistered(emitter).await,
+                        );
+                        bande_bus::warn_unsent(
+                            "IsStatusNotifierHostRegistered",
+                            watcher
+                                .is_status_notifier_host_registered_changed(emitter)
+                                .await,
+                        );
                     }
                 });
             }

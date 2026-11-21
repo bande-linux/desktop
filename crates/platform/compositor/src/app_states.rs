@@ -103,12 +103,15 @@ pub fn serve_app_states(connection: &Connection) -> zbus::Result<AppStatesHandle
     let emitting = connection.clone();
     thread::spawn(move || {
         for () in received {
-            let _ = emitting.emit_signal(
-                None::<&str>,
-                PATH,
-                APPS_NAME,
+            bande_bus::warn_unsent(
                 "RunningApplicationsChanged",
-                &(),
+                emitting.emit_signal(
+                    None::<&str>,
+                    PATH,
+                    APPS_NAME,
+                    "RunningApplicationsChanged",
+                    &(),
+                ),
             );
         }
     });

@@ -239,9 +239,15 @@ async fn announce(
     match outcome {
         Outcome::Invoked { closed } => {
             if !activation_token.is_empty() {
-                let _ = Notifications::activation_token(emitter, id, activation_token).await;
+                bande_bus::warn_unsent(
+                    "ActivationToken",
+                    Notifications::activation_token(emitter, id, activation_token).await,
+                );
             }
-            let _ = Notifications::action_invoked(emitter, id, action_key).await;
+            bande_bus::warn_unsent(
+                "ActionInvoked",
+                Notifications::action_invoked(emitter, id, action_key).await,
+            );
             if *closed {
                 emit_closed(emitter, &[id], CloseReason::Dismissed).await;
             }

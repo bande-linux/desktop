@@ -73,12 +73,15 @@ impl Inhibit {
                 }
                 let watching: Vec<OwnedObjectPath> = lock(&monitors).iter().cloned().collect();
                 for monitor in watching {
-                    let _ = session.emit_signal(
-                        None::<&str>,
-                        OBJECT_PATH,
-                        INTERFACE,
+                    bande_bus::warn_unsent(
                         "StateChanged",
-                        &(monitor, state(now)),
+                        session.emit_signal(
+                            None::<&str>,
+                            OBJECT_PATH,
+                            INTERFACE,
+                            "StateChanged",
+                            &(monitor, state(now)),
+                        ),
                     );
                 }
             });
@@ -137,8 +140,8 @@ struct Inhibition {
 #[zbus::interface(name = "org.freedesktop.impl.portal.Request")]
 impl Inhibition {
     async fn close(&self, #[zbus(object_server)] server: &ObjectServer) {
-        if let Some(cookie) = self.cookie {
-            let _ = self
+        if let Some(cookie) = self.cookie
+            && let Err(error) = self
                 .session
                 .call_method(
                     Some(SCREENSAVER),
@@ -147,10 +150,12 @@ impl Inhibition {
                     "UnInhibit",
                     &cookie,
                 )
-                .await;
+                .await
+        {
+            tracing::warn!("cannot end the idle inhibition: {error}");
         }
-        if let Some(cookie) = self.awake {
-            let _ = self
+        if let Some(cookie) = self.awake
+            && let Err(error) = self
                 .session
                 .call_method(
                     Some(POWER),
@@ -159,7 +164,9 @@ impl Inhibition {
                     "Release",
                     &cookie,
                 )
-                .await;
+                .await
+        {
+            tracing::warn!("cannot end the suspend inhibition: {error}");
         }
         let _ = server.remove::<Self, _>(&self.path).await;
     }
@@ -178,7 +185,7 @@ impl Monitor {
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) {
         lock(&self.monitors).remove(&self.path);
-        let _ = Self::closed(&emitter).await;
+        bande_bus::warn_unsent("Closed", Self::closed(&emitter).await);
         let _ = server.remove::<Self, _>(&self.path).await;
     }
 
@@ -250,15 +257,18 @@ impl Inhibit {
             .executor()
             .spawn(
                 async move {
-                    let _ = after_reply
-                        .emit_signal(
-                            None::<&str>,
-                            OBJECT_PATH,
-                            INTERFACE,
-                            "StateChanged",
-                            &(path, state(locked)),
-                        )
-                        .await;
+                    bande_bus::warn_unsent(
+                        "StateChanged",
+                        after_reply
+                            .emit_signal(
+                                None::<&str>,
+                                OBJECT_PATH,
+                                INTERFACE,
+                                "StateChanged",
+                                &(path, state(locked)),
+                            )
+                            .await,
+                    );
                 },
                 "inhibit monitor state",
             )

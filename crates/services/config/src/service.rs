@@ -156,213 +156,214 @@ fn publish_changes(
 ) {
     let emitter = interface.signal_emitter();
     let guard = interface.get();
+    let announce = |sent| bande_bus::warn_unsent("a configuration change", sent);
     zbus::block_on(async {
         if before.appearance != after.appearance {
-            let _ = guard.appearance_changed(emitter).await;
+            announce(guard.appearance_changed(emitter).await);
         }
         if before.style != after.style {
-            let _ = guard.style_changed(emitter).await;
+            announce(guard.style_changed(emitter).await);
         }
         if before.accent != after.accent {
-            let _ = guard.accent_changed(emitter).await;
+            announce(guard.accent_changed(emitter).await);
         }
         if before.tinted_frame != after.tinted_frame {
-            let _ = guard.tinted_frame_changed(emitter).await;
+            announce(guard.tinted_frame_changed(emitter).await);
         }
         if before.show_previews != after.show_previews {
-            let _ = guard.show_previews_changed(emitter).await;
+            announce(guard.show_previews_changed(emitter).await);
         }
         if before.lock_message != after.lock_message {
-            let _ = guard.lock_message_changed(emitter).await;
+            announce(guard.lock_message_changed(emitter).await);
         }
         if before.reopen_apps != after.reopen_apps {
-            let _ = guard.reopen_apps_changed(emitter).await;
+            announce(guard.reopen_apps_changed(emitter).await);
         }
         if before.automatic_updates != after.automatic_updates {
-            let _ = guard.automatic_updates_changed(emitter).await;
+            announce(guard.automatic_updates_changed(emitter).await);
         }
         if before.update_check_every != after.update_check_every {
-            let _ = guard.update_check_every_changed(emitter).await;
+            announce(guard.update_check_every_changed(emitter).await);
         }
         if before.clock != after.clock {
-            let _ = guard.clock_format_changed(emitter).await;
+            announce(guard.clock_format_changed(emitter).await);
         }
         if before.power.show_battery_percentage != after.power.show_battery_percentage {
-            let _ = guard.show_battery_percentage_changed(emitter).await;
+            announce(guard.show_battery_percentage_changed(emitter).await);
         }
         if before.power.low_power_on_battery != after.power.low_power_on_battery {
-            let _ = guard.low_power_on_battery_changed(emitter).await;
+            announce(guard.low_power_on_battery_changed(emitter).await);
         }
         if before.power.lid_on_power != after.power.lid_on_power {
-            let _ = guard.lid_on_power_changed(emitter).await;
+            announce(guard.lid_on_power_changed(emitter).await);
         }
         let (was, is) = (&before.accessibility, &after.accessibility);
         if was.screen_reader != is.screen_reader {
-            let _ = guard.screen_reader_changed(emitter).await;
+            announce(guard.screen_reader_changed(emitter).await);
         }
         if was.zoom != is.zoom {
-            let _ = guard.zoom_changed(emitter).await;
+            announce(guard.zoom_changed(emitter).await);
         }
         if was.increase_contrast != is.increase_contrast {
-            let _ = guard.increase_contrast_changed(emitter).await;
+            announce(guard.increase_contrast_changed(emitter).await);
         }
         if was.reduce_transparency != is.reduce_transparency {
-            let _ = guard.reduce_transparency_changed(emitter).await;
+            announce(guard.reduce_transparency_changed(emitter).await);
         }
         if was.reduce_motion != is.reduce_motion {
-            let _ = guard.reduce_motion_changed(emitter).await;
+            announce(guard.reduce_motion_changed(emitter).await);
         }
         if was.text_size != is.text_size {
-            let _ = guard.text_size_changed(emitter).await;
+            announce(guard.text_size_changed(emitter).await);
         }
         if was.cursor_size != is.cursor_size {
-            let _ = guard.cursor_size_changed(emitter).await;
+            announce(guard.cursor_size_changed(emitter).await);
         }
         if was.flash_screen != is.flash_screen {
-            let _ = guard.flash_screen_changed(emitter).await;
+            announce(guard.flash_screen_changed(emitter).await);
         }
         if was.sticky_keys != is.sticky_keys {
-            let _ = guard.sticky_keys_changed(emitter).await;
+            announce(guard.sticky_keys_changed(emitter).await);
         }
         if was.slow_keys != is.slow_keys {
-            let _ = guard.slow_keys_changed(emitter).await;
+            announce(guard.slow_keys_changed(emitter).await);
         }
         if was.bounce_keys != is.bounce_keys {
-            let _ = guard.bounce_keys_changed(emitter).await;
+            announce(guard.bounce_keys_changed(emitter).await);
         }
         if before.bar.edge != after.bar.edge {
-            let _ = guard.bar_edge_changed(emitter).await;
+            announce(guard.bar_edge_changed(emitter).await);
         }
         if before.bar.apps != after.bar.apps {
-            let _ = guard.bar_apps_changed(emitter).await;
+            announce(guard.bar_apps_changed(emitter).await);
         }
         if before.bar.floating != after.bar.floating {
-            let _ = guard.bar_floating_changed(emitter).await;
+            announce(guard.bar_floating_changed(emitter).await);
         }
         if before.bar.gap != after.bar.gap {
-            let _ = guard.bar_gap_changed(emitter).await;
+            announce(guard.bar_gap_changed(emitter).await);
         }
         if before.bar.auto_hide != after.bar.auto_hide {
-            let _ = guard.bar_auto_hide_changed(emitter).await;
+            announce(guard.bar_auto_hide_changed(emitter).await);
         }
         if before.bar.icon_size != after.bar.icon_size {
-            let _ = guard.bar_icon_size_changed(emitter).await;
+            announce(guard.bar_icon_size_changed(emitter).await);
         }
         if before.idle.screen_saver_after != after.idle.screen_saver_after {
-            let _ = guard.idle_screen_saver_after_changed(emitter).await;
+            announce(guard.idle_screen_saver_after_changed(emitter).await);
         }
         if before.idle.display_off_after != after.idle.display_off_after {
-            let _ = guard.idle_display_off_after_changed(emitter).await;
+            announce(guard.idle_display_off_after_changed(emitter).await);
         }
         if before.idle.require_password_after != after.idle.require_password_after {
-            let _ = guard.idle_require_password_after_changed(emitter).await;
+            announce(guard.idle_require_password_after_changed(emitter).await);
         }
         if before.idle.suspend_after() != after.idle.suspend_after() {
-            let _ = guard.idle_suspend_after_changed(emitter).await;
+            announce(guard.idle_suspend_after_changed(emitter).await);
         }
         if (before.idle.suspend == Suspend::WithDisplayOff)
             != (after.idle.suspend == Suspend::WithDisplayOff)
         {
-            let _ = guard.idle_suspend_with_display_changed(emitter).await;
+            announce(guard.idle_suspend_with_display_changed(emitter).await);
         }
         if before.keyboard.repeat_rate != after.keyboard.repeat_rate {
-            let _ = guard.key_repeat_rate_changed(emitter).await;
+            announce(guard.key_repeat_rate_changed(emitter).await);
         }
         if before.keyboard.repeat_delay != after.keyboard.repeat_delay {
-            let _ = guard.key_repeat_delay_changed(emitter).await;
+            announce(guard.key_repeat_delay_changed(emitter).await);
         }
         if before.keyboard.input_sources != after.keyboard.input_sources {
-            let _ = guard.input_sources_changed(emitter).await;
+            announce(guard.input_sources_changed(emitter).await);
         }
         if before.keyboard.caps_lock != after.keyboard.caps_lock {
-            let _ = guard.caps_lock_changed(emitter).await;
+            announce(guard.caps_lock_changed(emitter).await);
         }
         if before.trackpad.tap_to_click != after.trackpad.tap_to_click {
-            let _ = guard.trackpad_tap_to_click_changed(emitter).await;
+            announce(guard.trackpad_tap_to_click_changed(emitter).await);
         }
         if before.trackpad.natural_scrolling != after.trackpad.natural_scrolling {
-            let _ = guard.trackpad_natural_scrolling_changed(emitter).await;
+            announce(guard.trackpad_natural_scrolling_changed(emitter).await);
         }
         if before.trackpad.speed != after.trackpad.speed {
-            let _ = guard.trackpad_speed_changed(emitter).await;
+            announce(guard.trackpad_speed_changed(emitter).await);
         }
         if before.trackpad.secondary_click != after.trackpad.secondary_click {
-            let _ = guard.trackpad_secondary_click_changed(emitter).await;
+            announce(guard.trackpad_secondary_click_changed(emitter).await);
         }
         if before.trackpad.disable_while_typing != after.trackpad.disable_while_typing {
-            let _ = guard.trackpad_disable_while_typing_changed(emitter).await;
+            announce(guard.trackpad_disable_while_typing_changed(emitter).await);
         }
         if before.trackpad.workspace_swipe != after.trackpad.workspace_swipe {
-            let _ = guard.trackpad_workspace_swipe_changed(emitter).await;
+            announce(guard.trackpad_workspace_swipe_changed(emitter).await);
         }
         if before.trackpad.overview_swipe != after.trackpad.overview_swipe {
-            let _ = guard.trackpad_overview_swipe_changed(emitter).await;
+            announce(guard.trackpad_overview_swipe_changed(emitter).await);
         }
         if before.trackpad.desktop_spread != after.trackpad.desktop_spread {
-            let _ = guard.trackpad_desktop_spread_changed(emitter).await;
+            announce(guard.trackpad_desktop_spread_changed(emitter).await);
         }
         if before.trackpad.launcher_pinch != after.trackpad.launcher_pinch {
-            let _ = guard.trackpad_launcher_pinch_changed(emitter).await;
+            announce(guard.trackpad_launcher_pinch_changed(emitter).await);
         }
         if before.mouse.natural_scrolling != after.mouse.natural_scrolling {
-            let _ = guard.mouse_natural_scrolling_changed(emitter).await;
+            announce(guard.mouse_natural_scrolling_changed(emitter).await);
         }
         if before.mouse.speed != after.mouse.speed {
-            let _ = guard.mouse_speed_changed(emitter).await;
+            announce(guard.mouse_speed_changed(emitter).await);
         }
         if before.trackpad.acceleration != after.trackpad.acceleration {
-            let _ = guard.trackpad_acceleration_changed(emitter).await;
+            announce(guard.trackpad_acceleration_changed(emitter).await);
         }
         if before.trackpad.dragging != after.trackpad.dragging {
-            let _ = guard.trackpad_dragging_changed(emitter).await;
+            announce(guard.trackpad_dragging_changed(emitter).await);
         }
         if before.trackpad.scroll_method != after.trackpad.scroll_method {
-            let _ = guard.trackpad_scroll_method_changed(emitter).await;
+            announce(guard.trackpad_scroll_method_changed(emitter).await);
         }
         if before.mouse.primary_button != after.mouse.primary_button {
-            let _ = guard.mouse_primary_button_changed(emitter).await;
+            announce(guard.mouse_primary_button_changed(emitter).await);
         }
         if before.mouse.acceleration != after.mouse.acceleration {
-            let _ = guard.mouse_acceleration_changed(emitter).await;
+            announce(guard.mouse_acceleration_changed(emitter).await);
         }
         if before.sound.effects != after.sound.effects {
-            let _ = guard.sound_effects_changed(emitter).await;
+            announce(guard.sound_effects_changed(emitter).await);
         }
         if before.sound.volume_feedback != after.sound.volume_feedback {
-            let _ = guard.volume_feedback_changed(emitter).await;
+            announce(guard.volume_feedback_changed(emitter).await);
         }
         if before.sound.alert != after.sound.alert {
-            let _ = guard.alert_sound_changed(emitter).await;
+            announce(guard.alert_sound_changed(emitter).await);
         }
         if before.sound.alert_volume != after.sound.alert_volume {
-            let _ = guard.alert_volume_changed(emitter).await;
+            announce(guard.alert_volume_changed(emitter).await);
         }
         if before.wallpaper.light != after.wallpaper.light {
-            let _ = guard.wallpaper_light_changed(emitter).await;
+            announce(guard.wallpaper_light_changed(emitter).await);
         }
         if before.wallpaper.dark != after.wallpaper.dark {
-            let _ = guard.wallpaper_dark_changed(emitter).await;
+            announce(guard.wallpaper_dark_changed(emitter).await);
         }
         if before.wallpaper.fit != after.wallpaper.fit {
-            let _ = guard.wallpaper_fit_changed(emitter).await;
+            announce(guard.wallpaper_fit_changed(emitter).await);
         }
         if before.focus_schedule != after.focus_schedule {
-            let _ = guard.focus_schedule_changed(emitter).await;
+            announce(guard.focus_schedule_changed(emitter).await);
         }
         if before.night_light != after.night_light {
-            let _ = guard.night_light_changed(emitter).await;
+            announce(guard.night_light_changed(emitter).await);
         }
         if before.search.hidden != after.search.hidden {
-            let _ = guard.search_shows_changed(emitter).await;
+            announce(guard.search_shows_changed(emitter).await);
         }
         if before.search.exclude != after.search.exclude {
-            let _ = guard.search_excluded_changed(emitter).await;
+            announce(guard.search_excluded_changed(emitter).await);
         }
         if before.displays != after.displays {
-            let _ = guard.displays_changed(emitter).await;
+            announce(guard.displays_changed(emitter).await);
         }
         if before.arrangements != after.arrangements {
-            let _ = guard.arrangements_changed(emitter).await;
+            announce(guard.arrangements_changed(emitter).await);
         }
     });
 }

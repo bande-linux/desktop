@@ -16,6 +16,7 @@ rustix = { workspace = true, features = ["event", "fs", "process"] }
 ruzstd.workspace = true
 sevenz-rust2.workspace = true
 tar.workspace = true
+tracing.workspace = true
 bande-datetime.workspace = true
 bande-l10n.workspace = true
 bande-volumes.workspace = true

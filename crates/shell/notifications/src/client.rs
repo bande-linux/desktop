@@ -218,7 +218,10 @@ impl App for Notifications {
         }
         let backdrop = self.screen.backdrop(now);
         if backdrop.is_some() {
-            let _ = window.set_corner_radius(Radius::XL as u32);
+            report(
+                "round the notification corners",
+                window.set_corner_radius(Radius::XL as u32),
+            );
         }
         window.set_backdrop(backdrop);
         self.screen.scene(now)

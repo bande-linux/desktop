@@ -304,7 +304,12 @@ fn take_over(
 fn serve(saved: Arc<Saved>, mime: String, fd: OwnedFd) {
     std::thread::spawn(move || {
         if let Some((_, bytes)) = saved.contents.iter().find(|(offered, _)| *offered == mime) {
-            let _ = File::from(fd).write_all(bytes);
+            match File::from(fd).write_all(bytes) {
+                Err(error) if error.kind() != std::io::ErrorKind::BrokenPipe => {
+                    tracing::warn!("cannot paste {mime}: {error}");
+                }
+                _ => {}
+            }
         }
     });
 }

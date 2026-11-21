@@ -13,7 +13,7 @@ use bande_toolkit::{
 use crate::rail::{
     BarForm, bar_outline, bar_zone, cross_margin, edge_band, owns_node, surface_size,
 };
-use crate::status_client::StatusClient;
+use crate::status_client::{StatusClient, report};
 use crate::taskbar_client::Taskbar;
 use crate::taskbar_client::anchor;
 
@@ -115,7 +115,10 @@ impl BarClient {
         );
         if translucent && !self.rounded {
             self.rounded = true;
-            let _ = window.set_corner_radius(Radius::XL as u32);
+            report(
+                "round the bar corners",
+                window.set_corner_radius(Radius::XL as u32),
+            );
         }
         window.set_backdrop(translucent.then_some(area));
     }

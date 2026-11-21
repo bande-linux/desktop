@@ -786,6 +786,7 @@ dependencies = [
  "sevenz-rust2",
  "tar",
  "tempfile",
+ "tracing",
  "zip",
 ]
 

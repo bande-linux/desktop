@@ -231,7 +231,9 @@ impl Displays {
         if let Err(error) = self.queue.dispatch_pending(&mut self.heads) {
             tracing::warn!("display events failed: {error}");
         }
-        let _ = self.connection.flush();
+        if let Err(error) = self.connection.flush() {
+            tracing::warn!("display requests not sent: {error}");
+        }
         std::mem::take(&mut self.heads.changed).then(|| self.list())
     }
 }

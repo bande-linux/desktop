@@ -3,6 +3,7 @@ use bande_l10n::{tr, trn};
 use crate::dialogs::DIALOGS;
 use crate::installed_apps::InstalledApps;
 use crate::rail::{BarForm, bar_zone, surface_size};
+use crate::status_client::report;
 use crate::taskbar::{
     MenuTarget, Shared, TaskbarAction, TaskbarApp, TaskbarLayout, TaskbarState, scene, taskbar_ui,
 };
@@ -742,7 +743,10 @@ impl Taskbar {
             .collect::<Vec<_>>();
         for app_id in forgotten {
             self.reported.remove(&app_id);
-            let _ = window.set_icon_rect(&app_id, Rect::default());
+            report(
+                "forget a taskbar button",
+                window.set_icon_rect(&app_id, Rect::default()),
+            );
         }
         for (app_id, rect) in rects {
             let rounded = Rect::new(

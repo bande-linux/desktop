@@ -384,7 +384,10 @@ fn copy_attributes(from: &File, to: &File) {
             && let name = OsStr::from_bytes(name)
             && let Ok(length) = fgetxattr(from, name, &mut value)
         {
-            let _ = fsetxattr(to, name, &value[..length], XattrFlags::empty());
+            match fsetxattr(to, name, &value[..length], XattrFlags::empty()) {
+                Ok(()) | Err(Errno::NOTSUP) => {}
+                Err(error) => tracing::warn!("cannot copy the attribute {name:?}: {error}"),
+            }
         }
     }
 }
@@ -1040,7 +1043,9 @@ impl Worker {
             if let Ok(original) = File::open(source) {
                 copy_attributes(&original, &folder);
             }
-            let _ = keep_metadata(&folder, metadata);
+            if let Err(error) = keep_metadata(&folder, metadata) {
+                tracing::warn!("cannot keep the permissions and dates of {target:?}: {error}");
+            }
         }
         Ok(Ok(()))
     }
@@ -1101,7 +1106,9 @@ impl Worker {
             }
         }
         copy_attributes(&input, &output);
-        let _ = keep_metadata(&output, metadata);
+        if let Err(error) = keep_metadata(&output, metadata) {
+            tracing::warn!("cannot keep the permissions and dates of {target:?}: {error}");
+        }
         Ok(Ok(()))
     }
 

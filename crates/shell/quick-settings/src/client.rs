@@ -404,7 +404,7 @@ impl QuickSettings {
             self.dismiss(window);
             return;
         }
-        let _ = network.scan();
+        report("look for Wi-Fi networks", network.scan());
         let choices: Vec<_> = network
             .networks()
             .unwrap_or_default()
@@ -895,8 +895,14 @@ impl App for QuickSettings {
             Rect::new(rect.x + lift.x, rect.y + lift.y, rect.width, rect.height)
         }));
         if translucent {
-            let _ = window.set_corner_radius(Radius::XL as u32);
-            let _ = window.set_backdrop_opacity(shown.clamp(0.0, 1.0));
+            report(
+                "round the panel corners",
+                window.set_corner_radius(Radius::XL as u32),
+            );
+            report(
+                "fade the panel backdrop",
+                window.set_backdrop_opacity(shown.clamp(0.0, 1.0)),
+            );
         }
         scene(
             width,

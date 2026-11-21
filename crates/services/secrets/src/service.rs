@@ -939,8 +939,10 @@ impl Daemon {
         let created = {
             let mut store = self.store.lock().await;
             let created = store.create_collection(&name, password).await;
-            if created.is_ok() {
-                let _ = store.rename(&name, label);
+            if created.is_ok()
+                && let Err(error) = store.rename(&name, label)
+            {
+                tracing::warn!("cannot name the keyring: {error}");
             }
             created
         };

@@ -204,7 +204,9 @@ impl Window {
             self.fading = Some(menus.close(&mut self.state, &handle, now));
             self.state.popup_input.clear();
             self.accessibility.request_tree();
-            let _ = self.flush();
+            if let Err(error) = self.flush() {
+                tracing::warn!("cannot close the menu: {error}");
+            }
         }
     }
 
@@ -221,7 +223,9 @@ impl Window {
                 }
             }
         }
-        let _ = self.flush();
+        if let Err(error) = self.flush() {
+            tracing::warn!("cannot fade out the menu: {error}");
+        }
     }
 
     pub(super) fn draw_menus(&mut self, now: FrameTime) -> Result<(), WindowError> {

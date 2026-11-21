@@ -166,8 +166,10 @@ fn run_bounded(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = command.spawn()?;
-    if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
-        let _ = stdin.write_all(input.as_bytes());
+    if let (Some(input), Some(mut stdin)) = (input, child.stdin.take())
+        && let Err(error) = stdin.write_all(input.as_bytes())
+    {
+        tracing::warn!("cannot pass the input to the mount tool: {error}");
     }
     let pid = i32::try_from(child.id()).ok().and_then(Pid::from_raw);
     let (done, finished) = mpsc::channel();

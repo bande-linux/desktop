@@ -66,7 +66,7 @@ raw-window-handle = "0.6.2"
 regex = "1.13.1"
 resvg = { version = "0.48", default-features = false }
 ring = "0.17.14"
-roxmltree = "0.20"
+roxmltree = "0.21.2"
 rusqlite = "0.40"
 rustc-demangle = "0.1.28"
 rustix = { version = "1.1.5", features = ["event", "param", "process"] }

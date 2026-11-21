@@ -635,7 +635,7 @@ dependencies = [
  "base64 0.22.1",
  "jiff",
  "md-5 0.10.6",
- "roxmltree 0.20.0",
+ "roxmltree 0.21.2",
  "rustix 1.1.6",
  "rustls",
  "serde",
@@ -1035,7 +1035,7 @@ name = "bande-keyboard"
 version = "0.2.0"
 dependencies = [
  "bande-l10n",
- "roxmltree 0.20.0",
+ "roxmltree 0.21.2",
 ]
 
 [[package]]
@@ -1180,7 +1180,7 @@ dependencies = [
  "image",
  "jiff",
  "mailparse",
- "roxmltree 0.20.0",
+ "roxmltree 0.21.2",
  "rusqlite",
  "rustix 1.1.6",
  "rustls",
@@ -1637,7 +1637,7 @@ dependencies = [
  "image",
  "jiff",
  "jxl-oxide",
- "roxmltree 0.20.0",
+ "roxmltree 0.21.2",
  "rustls",
  "serde",
  "serde_norway",
@@ -1795,7 +1795,7 @@ dependencies = [
  "html5ever",
  "jiff",
  "regex",
- "roxmltree 0.20.0",
+ "roxmltree 0.21.2",
  "rustix 1.1.6",
  "serde",
  "serde_json",

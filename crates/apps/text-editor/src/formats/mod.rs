@@ -22,10 +22,11 @@ pub struct Opened {
     pub lossy: bool,
 }
 
-pub fn options() -> roxmltree::ParsingOptions {
+pub fn options<'input>() -> roxmltree::ParsingOptions<'input> {
     roxmltree::ParsingOptions {
         allow_dtd: false,
         nodes_limit: MAX_XML_NODES,
+        ..roxmltree::ParsingOptions::default()
     }
 }
 

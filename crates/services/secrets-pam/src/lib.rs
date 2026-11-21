@@ -76,6 +76,8 @@ unsafe extern "C" fn forget(_handle: *mut PamHandle, data: *mut c_void, _status:
     }
 }
 
+/// # Safety
+/// `handle` is the live handle PAM passed to the calling hook.
 unsafe fn item(handle: *mut PamHandle, kind: c_int) -> Option<Password> {
     let mut value = std::ptr::null();
     // SAFETY: handle is the live handle PAM passed to the calling hook, and value is a valid out
@@ -89,6 +91,8 @@ unsafe fn item(handle: *mut PamHandle, kind: c_int) -> Option<Password> {
     (!bytes.is_empty() && bytes.len() <= LONGEST_FIELD).then(|| Zeroizing::new(bytes.to_vec()))
 }
 
+/// # Safety
+/// `handle` is the live handle PAM passed to the calling hook.
 unsafe fn user_id(handle: *mut PamHandle) -> Option<libc::uid_t> {
     let mut user = std::ptr::null();
     // SAFETY: handle is the live handle PAM passed to the calling hook; a null prompt asks PAM for

@@ -14,7 +14,6 @@ jiff.workspace = true
 ring.workspace = true
 bande-https.workspace = true
 rustc-demangle.workspace = true
-rustls.workspace = true
 rustix = { workspace = true, features = ["fs", "net", "stdio", "thread"] }
 serde_json.workspace = true
 tracing.workspace = true

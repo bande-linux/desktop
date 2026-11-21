@@ -1,18 +1,15 @@
-use std::io::{self, BufRead, Read, Write};
+use std::io::{self, BufRead, Write};
 use std::time::Duration;
 
 use bande_dict::{Entry, Hit, Line, Match, Pack};
-use bande_https::Timeouts;
 
 use crate::import;
 
-const PORT: u16 = 443;
 const ANSWER_LIMIT: u64 = 256 * 1024;
-const REDIRECTS: usize = 3;
-const TIMEOUTS: Timeouts = Timeouts {
-    connect: Duration::from_secs(5),
-    transfer: Duration::from_secs(10),
-};
+const REDIRECTS: u32 = 3;
+const NOT_FOUND: u16 = 404;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const TRANSFER_TIMEOUT: Duration = Duration::from_secs(15);
 const WIKIMEDIA_SUMMARY: &str = "wikimedia-summary";
 const DICT: &str = "dict";
 
@@ -28,39 +25,22 @@ fn encoded(word: &str) -> String {
         .collect()
 }
 
-fn get(host: &str, path: &str) -> io::Result<(u16, String, Vec<u8>)> {
-    let mut stream = bande_https::connect(host, PORT, None, TIMEOUTS)?;
-    write!(
-        stream,
-        "GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: BandeLookUp/{} (https://github.com/bande-linux/desktop)\r\nAccept: application/json\r\n\r\n",
-        env!("CARGO_PKG_VERSION")
-    )?;
-    stream.flush()?;
-    let mut answer = Vec::new();
-    match Read::take(&mut stream, ANSWER_LIMIT).read_to_end(&mut answer) {
-        Ok(_) => {}
-        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof && !answer.is_empty() => {}
-        Err(error) => return Err(error),
-    }
-    let split = answer
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .ok_or_else(|| io::Error::other("no HTTP header"))?;
-    let head = String::from_utf8_lossy(&answer[..split]).into_owned();
-    let status = head
-        .split_whitespace()
-        .nth(1)
-        .and_then(|code| code.parse().ok())
-        .ok_or_else(|| io::Error::other("no HTTP status"))?;
-    let location = head
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("location")
-                .then(|| value.trim().to_owned())
-        })
-        .unwrap_or_default();
-    Ok((status, location, answer[split + 4..].to_vec()))
+fn get(url: &str) -> Result<Vec<u8>, bande_https::ureq::Error> {
+    let agent: bande_https::ureq::Agent = bande_https::config("lookup")
+        .https_only(true)
+        .max_redirects(REDIRECTS)
+        .timeout_connect(Some(CONNECT_TIMEOUT))
+        .timeout_global(Some(TRANSFER_TIMEOUT))
+        .build()
+        .into();
+    agent
+        .get(url)
+        .header("Accept", "application/json")
+        .call()?
+        .body_mut()
+        .with_config()
+        .limit(ANSWER_LIMIT)
+        .read_to_vec()
 }
 
 pub fn look_up(source: &Pack, word: &str, language: &str) -> Option<Hit> {
@@ -89,28 +69,14 @@ fn wikimedia_summary(source: &Pack, url: &str, word: &str, language: &str) -> Op
     let address = url
         .replace("{language}", language)
         .replace("{word}", &encoded(word.trim()));
-    let rest = address.strip_prefix("https://")?;
-    let (host, first_path) = rest.split_at(rest.find('/')?);
-    let base = &first_path[..=first_path.rfind('/')?];
-    let mut path = first_path.to_owned();
-    for _ in 0..REDIRECTS {
-        let (status, location, body) = get(host, &path)
-            .inspect_err(|error| tracing::warn!("cannot reach {}: {error}", source.name))
-            .ok()?;
-        match status {
-            200 => return summary(source, &body, language),
-            301 | 302 | 303 | 307 | 308
-                if location.starts_with('/') || !location.contains("://") =>
-            {
-                path = match location.starts_with('/') {
-                    true => location,
-                    false => format!("{base}{location}"),
-                };
-            }
-            _ => return None,
+    match get(&address) {
+        Ok(body) => summary(source, &body, language),
+        Err(bande_https::ureq::Error::StatusCode(NOT_FOUND)) => None,
+        Err(error) => {
+            tracing::warn!("cannot ask {}: {error}", source.name);
+            None
         }
     }
-    None
 }
 
 fn summary(source: &Pack, body: &[u8], language: &str) -> Option<Hit> {

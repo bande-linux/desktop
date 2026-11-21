@@ -15,6 +15,7 @@ bande-app-menu.workspace = true
 bande-app-settings.workspace = true
 bande-discovery.workspace = true
 bande-fs.workspace = true
+bande-https.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-notify.workspace = true

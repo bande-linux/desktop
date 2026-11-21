@@ -9,6 +9,7 @@ description = "QEMU virtual machines for the Bande apps"
 publish = false
 
 [dependencies]
+bande-https.workspace = true
 bande-xdg.workspace = true
 fatfs.workspace = true
 rustix = { workspace = true, features = ["event", "fs", "net", "process", "rand"] }
@@ -16,8 +17,6 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tracing.workspace = true
-rustls.workspace = true
-ureq.workspace = true
 zbus = { workspace = true, features = ["p2p"] }
 libc.workspace = true
 

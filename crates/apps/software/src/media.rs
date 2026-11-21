@@ -6,14 +6,13 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
+use bande_https::ureq;
 use bande_inbox::Outbox;
 use bande_packages::flatpak::{self, Installed};
 use bande_toolkit::Image;
 use bande_xdg::DesktopEntry;
 use jxl_oxide::JxlImage;
-use rustls::crypto::ring;
 use sha2::{Digest, Sha256};
-use ureq::tls::{RootCerts, TlsConfig};
 
 use crate::catalog::{self, Bundle, Component, Icon};
 use crate::worker::Message;
@@ -27,7 +26,6 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 const SHOT_UNUSED: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 const SHOT_CACHE_BYTES: u64 = 200 << 20;
 const SYSTEM_APPLICATIONS: &str = "/usr/share/applications";
-const USER_AGENT: &str = concat!("bande-software/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShotError {
@@ -197,17 +195,11 @@ fn prune_shots() {
 }
 
 fn agent() -> ureq::Agent {
-    let tls = TlsConfig::builder()
-        .root_certs(RootCerts::PlatformVerifier)
-        .unversioned_rustls_crypto_provider(Arc::new(ring::default_provider()))
-        .build();
-    ureq::Agent::config_builder()
+    bande_https::config("software")
         .timeout_global(Some(TIMEOUT))
         .https_only(true)
-        .user_agent(USER_AGENT)
-        .tls_config(tls)
         .build()
-        .new_agent()
+        .into()
 }
 
 fn download(agent: &ureq::Agent, url: &str) -> Result<Vec<u8>, ShotError> {

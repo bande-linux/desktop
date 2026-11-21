@@ -3,12 +3,10 @@ use std::io::{Read, Write};
 use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::time::Duration;
 
-use rustls::crypto::ring;
+use bande_https::ureq;
 use sha2::{Digest, Sha256, Sha512};
-use ureq::tls::{RootCerts, TlsConfig};
 
 use crate::manifest::persist;
 use crate::{Error, Result};
@@ -191,16 +189,10 @@ impl ImageStore {
     }
 
     pub fn at(dir: PathBuf) -> Self {
-        let tls = TlsConfig::builder()
-            .root_certs(RootCerts::PlatformVerifier)
-            .unversioned_rustls_crypto_provider(Arc::new(ring::default_provider()))
-            .build();
-        let agent = ureq::Agent::config_builder()
-            .tls_config(tls)
+        let agent = bande_https::config("velox")
             .https_only(true)
             .timeout_connect(Some(CONNECT_TIMEOUT))
             .timeout_recv_response(Some(CONNECT_TIMEOUT))
-            .user_agent("bande-vm")
             .build()
             .into();
         Self { dir, agent }

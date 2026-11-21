@@ -3,6 +3,8 @@ use std::io;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 
+use bande_https::ureq;
+
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

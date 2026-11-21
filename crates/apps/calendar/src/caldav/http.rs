@@ -2,15 +2,13 @@ use std::hash::{BuildHasher, RandomState};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use bande_https::ureq;
 use base64::Engine;
 use md5::Md5;
-use rustls::crypto::ring;
 use sha2::Sha256;
-use ureq::tls::{RootCerts, TlsConfig};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 const BODY_LIMIT: u64 = 64 * 1024 * 1024;
-const USER_AGENT: &str = concat!("Bande-Calendar/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Credentials {
@@ -245,31 +243,19 @@ pub struct Http {
 }
 
 fn classify(url: &str, error: &ureq::Error) -> Error {
-    let text = error.to_string();
-    match error {
-        ureq::Error::Rustls(rustls::Error::InvalidCertificate(_)) => {
-            Error::Certificate(origin(url).to_owned())
-        }
-        _ if text.to_ascii_lowercase().contains("certificate") => {
-            Error::Certificate(origin(url).to_owned())
-        }
-        _ => Error::Network(text),
+    match bande_https::untrusted(error) {
+        true => Error::Certificate(origin(url).to_owned()),
+        false => Error::Network(error.to_string()),
     }
 }
 
 impl Http {
     pub fn new(credentials: Option<&Credentials>) -> Self {
-        let tls = TlsConfig::builder()
-            .root_certs(RootCerts::PlatformVerifier)
-            .unversioned_rustls_crypto_provider(Arc::new(ring::default_provider()))
-            .build();
-        let agent = ureq::Agent::config_builder()
+        let agent = bande_https::config("calendar")
             .http_status_as_error(false)
             .allow_non_standard_methods(true)
             .max_redirects(0)
             .timeout_global(Some(TIMEOUT))
-            .user_agent(USER_AGENT)
-            .tls_config(tls)
             .build()
             .new_agent();
         Self {

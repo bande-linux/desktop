@@ -1652,9 +1652,14 @@ impl MailView {
                 let pictures = sources
                     .into_iter()
                     .filter_map(|source| {
-                        let bytes = crate::http::get(&source, &network, MAX_PICTURE_BYTES)
-                            .inspect_err(|error| tracing::debug!("cannot load {source}: {error}"))
-                            .ok()?;
+                        let bytes = crate::http::get(
+                            &source,
+                            crate::http::IMAGES,
+                            &network,
+                            MAX_PICTURE_BYTES,
+                        )
+                        .inspect_err(|error| tracing::debug!("cannot load {source}: {error}"))
+                        .ok()?;
                         crate::picture::decode(&bytes).map(|picture| (source, picture))
                     })
                     .collect();

@@ -95,7 +95,7 @@ pub fn parse_config(xml: &str, email: &str) -> Option<Settings> {
 }
 
 fn from_config(url: &str, email: &str, network: &Network) -> Option<Settings> {
-    let body = http::get(url, network, CONFIG_LIMIT)
+    let body = http::get(url, http::XML, network, CONFIG_LIMIT)
         .inspect_err(|error| tracing::debug!("{url}: {error}"))
         .ok()?;
     parse_config(&String::from_utf8_lossy(&body), email)

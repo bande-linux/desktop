@@ -65,7 +65,7 @@ jobs:
           fetch-depth: 0
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Install the toolchain and packages
+      - name: Install the packages
         run: |
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
           ci/setup.sh install "${{ matrix.app }}"

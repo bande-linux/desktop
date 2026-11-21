@@ -42,10 +42,9 @@ and the Window menu names the main window (Message Viewer, Calendar, System Moni
 | `apps/<name>/smoke.sh` | optional: extra checks after `ci/smoke.sh`, once the package is installed; must exit 0 |
 | `libs/<name>/` | code shared by apps, the crate `bande-<name>` (`bande-keyring`: passwords in the Secret Service; `bande-vm`: QEMU virtual machines in systemd user units) |
 | `template/` | the starting point for a new app: a real, gated `bande-app` app, never published |
-| `rust-toolchain.toml` | the Rust toolchain for every app, the same as the desktop's |
 | `ci/` | the build, the same in CI and locally |
 | `ci/gate.sh [app...]` | the local merge gate: CI's own `ci/build-app.sh` on each app in the `gate` profile, `ci/check.sh` on the libs and the template, one `target/` (default: every app, the libs and the template) |
-| `ci/setup.sh install\|check <app>... \| source` | the toolchain, `cargo-deb` and Debian packages a build needs: CI installs them, the gate fails if one is missing; apps depend on desktop packages, so both add (`source`, as root) or need the Bande archive, pinned to the Bande packages, with the key in `ci/bande-archive-key.asc` |
+| `ci/setup.sh install\|check <app>... \| source` | the Debian packages a build needs (the suite's own `rustc`, `cargo`, `rustfmt` and `rust-clippy` among them) and `cargo-deb`: CI installs them, the gate fails if one is missing; apps depend on desktop packages, so both add (`source`, as root) or need the Bande archive, pinned to the Bande packages, with the key in `ci/bande-archive-key.asc` |
 | `ci/build-app.sh <app> <out> [profile]` | one app's build, the same in CI and the gate: `ci/check-app.sh`, `ci/version.sh`, `ci/check.sh`, the binaries, the `.deb` and `ci/smoke.sh` on it |
 | `ci/build-packs.sh <out>` | every released app's language packs from the translations alone, for an `l10n-YYYYMMDD` tag |
 | `ci/check.sh <package>` | fmt, clippy `--all-targets -D warnings` and the tests of one package, `--locked`, on a private session bus with software Vulkan |

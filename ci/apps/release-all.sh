@@ -4,7 +4,6 @@
 # changes no git state: run the printed commands when the owner asks for the releases.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[ ! -f ~/.cargo/env ] || . ~/.cargo/env
 tags=()
 for manifest in apps/*/Cargo.toml; do
     app=$(basename "$(dirname "$manifest")")

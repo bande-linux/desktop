@@ -20,7 +20,6 @@ find "$target" -type f -exec sed -i \
     -e "s/org\.bande\.Template/org.bande.$id/g" {} +
 find "$target/src" -type f -exec sed -i "s/Template/$id/g" {} +
 find "$target" -path "$target/src" -prune -o -type f -exec sed -i "s/Template/$name/g" {} +
-[ ! -f ~/.cargo/env ] || . ~/.cargo/env
 cargo metadata -q --format-version 1 > /dev/null
 ci/check-app.sh "$target"
 cat <<NEXT

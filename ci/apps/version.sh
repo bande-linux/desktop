@@ -23,7 +23,7 @@ if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
     echo "$declared$suffix"
     exit 0
 fi
-paths=("apps/$app" ci Cargo.toml Cargo.lock rust-toolchain.toml .github/workflows/build.yml)
+paths=("apps/$app" ci Cargo.toml Cargo.lock .github/workflows/build.yml)
 count=$(git rev-list --count HEAD -- "${paths[@]}")
 date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d -- "${paths[@]}")
 sha=$(git log -1 --format=%h --abbrev=7 -- "${paths[@]}")

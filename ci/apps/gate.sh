@@ -12,7 +12,6 @@ cd "$root"
 if [ -z "${BUILD_RUN_JOB:-}" ] && [ -x "$HOME/bande-linux/bin/build-run" ]; then
     exec "$HOME/bande-linux/bin/build-run" "$root" ci/gate.sh "$@"
 fi
-[ ! -f ~/.cargo/env ] || . ~/.cargo/env
 if [ $# -eq 0 ]; then
     mapfile -t apps < <(find apps -mindepth 2 -maxdepth 2 -name Cargo.toml -printf '%h\n' | xargs -rn1 basename | sort)
     others=(template libs/*/)

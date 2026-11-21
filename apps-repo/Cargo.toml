@@ -5,7 +5,7 @@ members = ["apps/*", "libs/*", "template"]
 [workspace.package]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.95"
+rust-version = "1.98"
 repository = "https://github.com/bande-linux/apps"
 
 [workspace.dependencies]
@@ -62,7 +62,7 @@ bande-packages = { git = "https://github.com/bande-linux/desktop", rev = "d46658
 bande-sound = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55", default-features = false }
 bande-search = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55" }
 bande-spring = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55" }
-bande-status = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55" }
+bande-status = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55", default-features = false }
 bande-thumbnails = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55" }
 bande-toolkit = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55" }
 bande-watch = { git = "https://github.com/bande-linux/desktop", rev = "d466583ab5bfce535b2ff05f11bc96384ef27f55" }

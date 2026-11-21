@@ -13,7 +13,6 @@ shift
 if [ -z "${BUILD_RUN_JOB:-}" ] && [ -x "$HOME/bande-linux/bin/build-run" ]; then
     BUILD_EXTRA_DIRS=$desktop exec "$HOME/bande-linux/bin/build-run" "$root" ci/with-desktop.sh "$desktop" "$@"
 fi
-[ ! -f ~/.cargo/env ] || . ~/.cargo/env
 source=https://github.com/bande-linux/desktop
 export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_TERM_COLOR=never
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$root/target}

@@ -7,7 +7,6 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
-[ ! -f ~/.cargo/env ] || . ~/.cargo/env
 repo=https://github.com/bande-linux/desktop
 rev=${1:-$(git ls-remote "$repo" refs/heads/main | cut -f1)}
 [[ $rev =~ ^[0-9a-f]{7,40}$ ]] || { echo "bump-desktop: $rev is not a commit id" >&2; exit 1; }

@@ -40,7 +40,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Check that the tagged commit is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - name: Install the toolchain
+      - name: Install the packages
         run: |
           ci/setup.sh install
           apt-get install -y -qq --no-install-recommends lintian

@@ -245,14 +245,19 @@ pub fn release_tap(tap: &str) -> Result<()> {
         .write(true)
         .custom_flags(libc::O_CLOEXEC)
         .open("/dev/net/tun")?;
+    // SAFETY: ifreq is a plain C struct of integers, arrays and a union of them, for which all
+    // zero bytes are a valid value.
     let mut request: libc::ifreq = unsafe { std::mem::zeroed() };
     for (slot, byte) in request.ifr_name.iter_mut().zip(bytes) {
         *slot = *byte as libc::c_char;
     }
     request.ifr_ifru.ifru_flags = IFF_TAP | IFF_NO_PI;
-    if unsafe { libc::ioctl(tun.as_raw_fd(), TUNSETIFF as _, &raw mut request) } == -1
-        || unsafe { libc::ioctl(tun.as_raw_fd(), TUNSETPERSIST as _, 0 as libc::c_ulong) } == -1
-    {
+    // SAFETY: tun is an open descriptor for the whole call; TUNSETIFF reads and writes the
+    // initialised request, which outlives the call, and TUNSETPERSIST takes an integer.
+    let failed = unsafe { libc::ioctl(tun.as_raw_fd(), TUNSETIFF as _, &raw mut request) } == -1
+        // SAFETY: as above.
+        || unsafe { libc::ioctl(tun.as_raw_fd(), TUNSETPERSIST as _, 0 as libc::c_ulong) } == -1;
+    if failed {
         return Err(std::io::Error::last_os_error().into());
     }
     Ok(())

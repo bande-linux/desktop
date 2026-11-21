@@ -36,10 +36,13 @@ fn wrap_memfd(device: &File, memory: &File, size: u64) -> std::io::Result<OwnedF
         offset: 0,
         size,
     };
+    // SAFETY: device is an open descriptor and request a UDMABUF_CREATE argument that lives
+    // through the call; the kernel only reads it.
     let result = unsafe { libc::ioctl(device.as_raw_fd(), UDMABUF_CREATE, &request) };
     if result < 0 {
         return Err(std::io::Error::last_os_error());
     }
+    // SAFETY: a successful UDMABUF_CREATE returns a new descriptor that nothing else owns.
     Ok(unsafe { OwnedFd::from_raw_fd(result) })
 }
 

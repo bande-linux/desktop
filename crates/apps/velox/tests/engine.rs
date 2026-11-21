@@ -58,6 +58,7 @@ fn next(informer: &Informer, queue: &mut Vec<Update>, wanted: fn(&Update) -> boo
 fn the_list_follows_events_and_reconciles_when_the_engine_stops_and_returns() {
     let folder = tempfile::tempdir().unwrap();
     let socket = folder.path().join("engine.sock");
+    // SAFETY: this binary's one test sets the variable before it starts any thread.
     unsafe { std::env::set_var("DOCKER_HOST", format!("unix://{}", socket.display())) };
     let informer = Informer::start(Target::default()).unwrap();
     let queue = &mut Vec::new();

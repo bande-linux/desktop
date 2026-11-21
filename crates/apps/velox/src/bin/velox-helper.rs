@@ -160,6 +160,7 @@ fn owner_of(pid: i32) -> io::Result<u32> {
 }
 
 fn send_fd(fd: BorrowedFd<'_>) -> io::Result<()> {
+    // SAFETY: standard output stays open for the whole life of the helper.
     let stdout = unsafe { BorrowedFd::borrow_raw(libc::STDOUT_FILENO) };
     if !rustix::fs::fstat(stdout)
         .map(|stat| rustix::fs::FileType::from_raw_mode(stat.st_mode).is_socket())
@@ -215,6 +216,8 @@ fn log_to_system(message: &str) {
 fn detach_stdio() {
     if let Ok(null) = File::options().read(true).write(true).open("/dev/null") {
         for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
+            // SAFETY: both are valid descriptors; replacing the standard streams leaves no Rust
+            // handle dangling, since the helper keeps none of them open.
             unsafe { libc::dup2(null.as_raw_fd(), fd) };
         }
     }
@@ -241,9 +244,11 @@ fn usb(uid: u32, arguments: &[String]) -> io::Result<()> {
         .open(format!("/dev/bus/usb/{bus:03}/{address:03}"))?;
     send_fd(node.as_fd())?;
     drop(node);
+    // SAFETY: the helper is single-threaded, so the child may run any code after fork.
     match unsafe { libc::fork() } {
         -1 => Err(io::Error::last_os_error()),
         0 => {
+            // SAFETY: setsid takes no arguments and only changes this child's session.
             unsafe { libc::setsid() };
             detach_stdio();
             wait_for_exit(&pidfd);
@@ -283,12 +288,16 @@ fn interface_name(name: &str) -> io::Result<[libc::c_char; libc::IFNAMSIZ]> {
 }
 
 fn request(name: &str) -> io::Result<libc::ifreq> {
+    // SAFETY: ifreq is a plain C struct of integers, arrays and a union of them, for which all
+    // zero bytes are a valid value.
     let mut ifreq: libc::ifreq = unsafe { std::mem::zeroed() };
     ifreq.ifr_name = interface_name(name)?;
     Ok(ifreq)
 }
 
 fn ioctl(fd: BorrowedFd<'_>, op: libc::c_ulong, argument: *mut libc::c_void) -> io::Result<()> {
+    // SAFETY: fd is open for the call, and every caller passes a pointer to an ifreq of its own
+    // that outlives the call, the argument each of these requests takes.
     match unsafe { libc::ioctl(fd.as_raw_fd(), op as _, argument) } {
         -1 => Err(io::Error::last_os_error()),
         _ => Ok(()),
@@ -296,6 +305,7 @@ fn ioctl(fd: BorrowedFd<'_>, op: libc::c_ulong, argument: *mut libc::c_void) -> 
 }
 
 fn ioctl_value(fd: BorrowedFd<'_>, op: libc::c_ulong, value: libc::c_ulong) -> io::Result<()> {
+    // SAFETY: fd is open for the call, and these requests take an integer, not a pointer.
     match unsafe { libc::ioctl(fd.as_raw_fd(), op as _, value) } {
         -1 => Err(io::Error::last_os_error()),
         _ => Ok(()),
@@ -348,6 +358,7 @@ fn tap(uid: u32, arguments: &[String]) -> io::Result<()> {
     )?;
     let mut index = request(name)?;
     ioctl(socket.as_fd(), libc::SIOCGIFINDEX, (&raw mut index).cast())?;
+    // SAFETY: SIOCGIFINDEX succeeded, so the kernel wrote the index member of the union.
     let tap_index = unsafe { index.ifr_ifru.ifru_ifindex };
     let master = fs::read_link(existing.join("master"))
         .ok()
@@ -367,6 +378,7 @@ fn tap(uid: u32, arguments: &[String]) -> io::Result<()> {
     }
     let mut flags = request(name)?;
     ioctl(socket.as_fd(), libc::SIOCGIFFLAGS, (&raw mut flags).cast())?;
+    // SAFETY: SIOCGIFFLAGS succeeded, so the kernel wrote the flags member of the union.
     unsafe { flags.ifr_ifru.ifru_flags |= libc::IFF_UP as libc::c_short };
     ioctl(socket.as_fd(), libc::SIOCSIFFLAGS, (&raw mut flags).cast())
 }

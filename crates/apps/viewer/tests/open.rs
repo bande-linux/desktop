@@ -89,6 +89,8 @@ fn a_folder_steps_through_pictures_and_hostile_files_never_panic_hang_or_wake() 
 
 #[test]
 fn a_pdf_renders_in_its_own_process_finds_text_and_lists_its_outline() {
+    // SAFETY: the other test of this binary reads the environment only through std::env, which
+    // serialises with set_var.
     unsafe { std::env::set_var("BANDE_PREVIEW_WORKER", env!("CARGO_BIN_EXE_bande-viewer")) };
     let folder = tempfile::tempdir().unwrap();
     write_pdf(&folder.path().join("doc.pdf"));

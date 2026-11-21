@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use bande_calendar::edit::{Alert, Details, EndRepeat, Repeat, Scope, apply_details};
 use bande_calendar::ical::CalendarObject;
 use jiff::Timestamp;

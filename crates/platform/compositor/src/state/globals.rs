@@ -118,7 +118,7 @@ impl Globals {
                 ],
             ),
             shm_state: ShmState::new::<State>(handle, []),
-            _output_manager_state: OutputManagerState::new(),
+            _output_manager_state: OutputManagerState::new_with_xdg_output::<State>(handle),
             _presentation_state: PresentationState::new::<State>(handle, MONOTONIC),
             layer_shell_state: WlrLayerShellState::new_with_filter::<State, _>(handle, |client| {
                 !trust::is_sandboxed(client)

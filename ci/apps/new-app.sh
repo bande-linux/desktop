@@ -24,6 +24,7 @@ cargo metadata -q --format-version 1 > /dev/null
 ci/check-app.sh "$target"
 cat <<NEXT
 new-app: apps/$dir is bande-$dir (org.bande.$id). Next:
+- describe it: description and extended-description in Cargo.toml, the metainfo
 - draw its Bande theme icon in the desktop's data/icons/src/apps.py
 - add it to the table in README.md
 - if it is a default app, add it to the desktop's packaging/bande-desktop/default-apps

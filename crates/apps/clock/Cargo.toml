@@ -1,6 +1,6 @@
 [package]
 name = "bande-clock"
-description = "Bande Clock: alarms, timers, a stopwatch and a world clock"
+description = "clock with alarms, timers and a stopwatch for the Bande desktop"
 version = "0.1.5"
 edition.workspace = true
 license.workspace = true

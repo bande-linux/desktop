@@ -1,6 +1,6 @@
 [package]
 name = "bande-velox"
-description = "Velox: containers and virtual machines on Bande"
+description = "container and virtual machine manager for the Bande desktop"
 version = "0.1.10"
 edition.workspace = true
 license.workspace = true

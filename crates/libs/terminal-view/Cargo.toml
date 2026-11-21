@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "A terminal emulator and its rendering over any byte stream, for the Bande apps"
+description = "terminal emulation and rendering for the Bande apps"
 publish = false
 
 [dependencies]

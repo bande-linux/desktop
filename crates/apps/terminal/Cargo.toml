@@ -1,6 +1,6 @@
 [package]
 name = "bande-terminal"
-description = "Bande terminal: a PTY terminal on the Bande toolkit"
+description = "terminal emulator for the Bande desktop"
 version = "0.1.7"
 edition.workspace = true
 license.workspace = true
@@ -45,7 +45,7 @@ maintainer-scripts = "debian/"
 extended-description = """\
 The terminal of the Bande desktop: xterm-compatible emulation with \
 10,000 lines of scrollback, Shift+Ctrl+C and Shift+Ctrl+V for the clipboard so \
-that Control+C stays the interrupt, and the system's light or dark \
+that Ctrl+C stays the interrupt, and the system's light or dark \
 appearance."""
 assets = [
     ["target/release/bande-terminal", "usr/bin/", "755"],

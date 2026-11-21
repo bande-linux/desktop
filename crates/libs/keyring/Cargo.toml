@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Passwords in the Secret Service keyring for the Bande apps"
+description = "Secret Service passwords for the Bande apps"
 publish = false
 
 [dependencies]

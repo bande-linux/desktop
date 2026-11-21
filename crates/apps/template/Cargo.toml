@@ -1,6 +1,6 @@
 [package]
 name = "bande-template"
-description = "Bande Template: a starting point for a Bande app"
+description = "app template for the Bande desktop"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true

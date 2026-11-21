@@ -1,6 +1,6 @@
 [package]
 name = "bande-viewer"
-description = "Bande Viewer: views images and PDF documents"
+description = "image and PDF viewer for the Bande desktop"
 version = "0.1.6"
 edition.workspace = true
 license.workspace = true

@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Bande Calendar: CalDAV, local and subscribed calendars"
+description = "calendar for the Bande desktop"
 publish = false
 
 [dependencies]

@@ -1,6 +1,6 @@
 [package]
 name = "bande-archive"
-description = "Bande Archives: expands and creates zip, tar and 7-Zip archives"
+description = "archive manager for the Bande desktop"
 version = "0.1.3"
 edition.workspace = true
 license.workspace = true

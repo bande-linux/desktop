@@ -1,6 +1,6 @@
 [package]
 name = "bande-calculator"
-description = "Bande Calculator: basic, scientific and programmer calculations with a paper tape"
+description = "calculator for the Bande desktop"
 version = "0.1.6"
 edition.workspace = true
 license.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "bande-monitor"
-description = "Bande System Monitor: CPU, memory, disk and network use per app"
+description = "system monitor for the Bande desktop"
 version = "0.1.6"
 edition.workspace = true
 license.workspace = true

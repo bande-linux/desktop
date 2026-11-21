@@ -1,6 +1,6 @@
 [package]
 name = "bande-player"
-description = "Bande Player: plays audio and video files"
+description = "audio and video player for the Bande desktop"
 version = "0.1.2"
 edition.workspace = true
 license.workspace = true

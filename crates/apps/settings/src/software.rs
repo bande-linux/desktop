@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use bande_l10n::{text, tr, trn};
 use bande_packages::offline::{self, Results};
+use bande_packages::schedule::{check_due, check_interval};
 use bande_packages::{
     Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, flatpak,
     running_release,
@@ -34,7 +35,6 @@ const REBOOT_REQUIRED: &str = "/run/reboot-required";
 const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
 const RESTART_FILE: &str = "bande/restart-pending";
 const INTERRUPTED: &str = "dpkg --configure -a";
-const CHECK_SLACK: Duration = Duration::from_secs(6 * 60 * 60);
 const NEVER_REFRESHED: u32 = u32::MAX;
 const IDLE_FOR: Duration = Duration::from_secs(5 * 60);
 
@@ -187,7 +187,7 @@ fn broken(during: Stage, error: &Error) -> SoftwareState {
 }
 
 fn flatpak_updates() -> Vec<Package> {
-    flatpak::updates()
+    flatpak::updates(true)
         .unwrap_or_else(|error| {
             if error != flatpak::Error::Missing {
                 tracing::warn!("cannot look for Flatpak updates: {error}");
@@ -295,38 +295,6 @@ fn waiting_offline(system: &Connection) -> Result<Option<SoftwareState>, Error> 
     }
     let prepared = offline::prepared(system)?;
     Ok((!prepared.is_empty()).then_some(SoftwareState::Prepared(prepared.len())))
-}
-
-fn check_interval(session: &Connection) -> Option<Duration> {
-    let seconds = ConfigProxyBlocking::new(session)
-        .and_then(|config| config.update_check_every())
-        .unwrap_or_else(|error| {
-            tracing::warn!("cannot read how often to check for updates: {error}");
-            0
-        });
-    (seconds > 0).then(|| Duration::from_secs(seconds))
-}
-
-fn checks_automatically(session: &Connection) -> bool {
-    ConfigProxyBlocking::new(session)
-        .and_then(|config| Ok(config.check_updates_automatically()? || config.automatic_updates()?))
-        .unwrap_or_else(|error| {
-            tracing::warn!("cannot read whether to check for updates automatically: {error}");
-            false
-        })
-}
-
-fn check_due(session: &Connection, client: &Client) -> bool {
-    if !checks_automatically(session) {
-        return false;
-    }
-    let Some(every) = check_interval(session) else {
-        return true;
-    };
-    client
-        .seconds_since_refresh()
-        .map(|since| u64::from(since) + CHECK_SLACK.as_secs() >= every.as_secs())
-        .unwrap_or(true)
 }
 
 pub fn last_check(client: &Client) -> Option<i64> {

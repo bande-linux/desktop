@@ -834,13 +834,19 @@ impl MailView {
     }
 
     fn reading_of(&self, summary: &Summary) -> Reading {
-        let body = self.store.body(summary.id).ok().flatten();
+        let body = self
+            .store
+            .body(summary.id)
+            .inspect_err(|error| tracing::warn!("cannot read a message: {error}"))
+            .ok()
+            .flatten();
         match body {
             Some(raw) => Reading::new(Content::parse(&raw), true, &self.settings),
             None => {
                 let header = self
                     .store
                     .header(summary.id)
+                    .inspect_err(|error| tracing::warn!("cannot read a message's header: {error}"))
                     .ok()
                     .flatten()
                     .unwrap_or_default();
@@ -1652,9 +1658,14 @@ impl MailView {
                 let pictures = sources
                     .into_iter()
                     .filter_map(|source| {
-                        let bytes = crate::http::get(&source, &network, MAX_PICTURE_BYTES)
-                            .inspect_err(|error| tracing::debug!("cannot load {source}: {error}"))
-                            .ok()?;
+                        let bytes = crate::http::get(
+                            &source,
+                            crate::http::IMAGES,
+                            &network,
+                            MAX_PICTURE_BYTES,
+                        )
+                        .inspect_err(|error| tracing::debug!("cannot load {source}: {error}"))
+                        .ok()?;
                         crate::picture::decode(&bytes).map(|picture| (source, picture))
                     })
                     .collect();
@@ -1937,7 +1948,13 @@ impl MailView {
         let sound = self.settings.sound;
         let arrived = ids
             .iter()
-            .filter_map(|id| self.store.summary(*id).ok().flatten())
+            .filter_map(|id| {
+                self.store
+                    .summary(*id)
+                    .inspect_err(|error| tracing::warn!("cannot read a new message: {error}"))
+                    .ok()
+                    .flatten()
+            })
             .collect::<Vec<_>>();
         if arrived.len() > NOTIFIED_AT_ONCE {
             self.requests.push(Request::Notify {

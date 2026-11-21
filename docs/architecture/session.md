@@ -542,7 +542,8 @@ runs, packagekitd holds a logind `shutdown:idle` inhibitor (not sleep).
 **Flatpak** is dormant by default: no Bande package depends on or recommends `flatpak`, and a
 missing `flatpak` command means no Flatpak apps. Once the user installs it and adds a remote to
 their own installation, Software shows that remote's apps (Bande adds no remote) and Software
-Update lists and installs `flatpak update --user` first, without a password or a restart. The
+Update lists and installs `flatpak update --user` first, without a password or a restart. Software reads the remotes' cached summaries and asks the
+remotes only when `bande_packages::schedule::check_due` says the automatic check is due. The
 Taskbar and Search watch the `applications` folders on `XDG_DATA_DIRS`, so a first Flatpak app
 appears without logging out.
 

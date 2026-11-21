@@ -123,6 +123,7 @@ pub enum Request {
     Reconnect,
     EngineLogs(crate::containers::LogsTarget),
     Engine(Lifecycle),
+    InstallPodman,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,6 +149,7 @@ enum Intent {
     CreateWorkspace(String, String),
     Reconnect,
     ShowLocal,
+    InstallPodman,
 }
 
 type Intents = Rc<RefCell<Vec<Intent>>>;
@@ -190,6 +192,7 @@ pub struct VeloxView {
     stats_round: std::collections::HashSet<String>,
     add_symbol: Option<Image>,
     controlling: Option<Lifecycle>,
+    installing: bool,
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
@@ -282,6 +285,7 @@ impl VeloxView {
             stats_round: std::collections::HashSet::new(),
             add_symbol: symbol(ADD_SYMBOL, palette.ink2),
             controlling: None,
+            installing: false,
         };
         view.refresh();
         view
@@ -670,6 +674,13 @@ impl VeloxView {
                     crate::resources::tell(&mut self.ui, &title, &message);
                 }
             }
+            Update::Installed(installed) => {
+                self.installing = false;
+                self.page_for = None;
+                if let Err(message) = installed {
+                    crate::resources::tell(&mut self.ui, &tr!("Cannot install Podman"), &message);
+                }
+            }
             update => self.containers.apply(&mut self.ui, update),
         }
         self.refresh();
@@ -781,6 +792,11 @@ impl VeloxView {
                 Intent::Copy(text) => self.ui.context().copy(text),
                 Intent::Open(link) => self.requests.push(Request::OpenLink((*link).to_owned())),
                 Intent::Alternative(open) => self.alternative = *open,
+                Intent::InstallPodman => {
+                    self.installing = true;
+                    self.page_for = None;
+                    self.requests.push(Request::InstallPodman);
+                }
             }
         }
         if intents.is_empty() && !pumped && !acted {
@@ -984,7 +1000,12 @@ impl VeloxView {
                 if self.shown != Shown::Page || self.page_for.as_ref() != Some(readiness) =>
             {
                 self.page_for = Some(readiness.clone());
-                Some(not_ready::page(readiness, &self.intents, self.alternative))
+                Some(not_ready::page(
+                    readiness,
+                    &self.intents,
+                    self.alternative,
+                    self.installing,
+                ))
             }
             Connection::Blocked(_) => None,
             _ => {

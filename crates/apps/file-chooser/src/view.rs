@@ -750,7 +750,7 @@ impl ChooserView {
             Mode::Save { .. } => {
                 let field = self.name_field();
                 self.focus = field.id();
-                children.push(Box::new(Label::new(&tr!("Save As:"))));
+                children.push(Box::new(Label::new(&tr!("Save as:"))));
                 children.push(Box::new(field));
                 Some((5, 6))
             }

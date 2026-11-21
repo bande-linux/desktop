@@ -1559,7 +1559,7 @@ impl SettingsView {
                     });
                 }
                 Intent::OtherSecurity(index) => {
-                    if let (Some(other), Some((security, _))) =
+                    if let (Some(other), Some(security)) =
                         (&mut self.other, HIDDEN_SECURITY.get(index))
                     {
                         other.security = *security;

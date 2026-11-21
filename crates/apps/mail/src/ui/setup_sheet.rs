@@ -50,10 +50,10 @@ pub enum Field {
 impl Field {
     fn label(self) -> String {
         match self {
-            Self::Kind => tr!("Account Type:"),
+            Self::Kind => tr!("Account type:"),
             Self::Name => tr!("Name:"),
-            Self::Email => tr!("Email Address:"),
-            Self::User => tr!("User Name:"),
+            Self::Email => tr!("Email address:"),
+            Self::User => tr!("User name:"),
             Self::Password => tr!("Password:"),
             Self::Incoming => tr!("Incoming (IMAP):"),
             Self::Outgoing => tr!("Outgoing (SMTP):"),

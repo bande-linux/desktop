@@ -1,0 +1,68 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "NetworkManager did not answer ({error})"
+msgstr "NetworkManager svarade inte ({error})"
+
+msgid "this computer has no Wi-Fi device"
+msgstr "den här datorn har ingen Wi-Fi-enhet"
+
+msgid "the network needs a password"
+msgstr "nätverket kräver ett lösenord"
+
+msgid "joining {security} networks is not supported yet"
+msgstr "det går inte att ansluta till {security}-nätverk än"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "WPA2 Personal"
+msgstr "WPA2 Personal"
+
+msgid "WPA3 Personal"
+msgstr "WPA3 Personal"
+
+msgid "WPA Enterprise"
+msgstr "WPA Enterprise"
+
+msgid "WEP"
+msgstr "WEP"
+
+msgid "joined"
+msgstr "ansluten"
+
+msgid "the password is not correct"
+msgstr "lösenordet är fel"
+
+msgid "the connection was turned off"
+msgstr "anslutningen stängdes av"
+
+msgid "the Wi-Fi device disconnected"
+msgstr "Wi-Fi-enheten kopplades från"
+
+msgid "a network service stopped or did not start"
+msgstr "en nätverkstjänst stannade eller startade inte"
+
+msgid "the network gave no usable address"
+msgstr "nätverket gav ingen användbar adress"
+
+msgid "the network did not answer in time"
+msgstr "nätverket svarade inte i tid"
+
+msgid "the saved network was removed"
+msgstr "det sparade nätverket togs bort"
+
+msgid "a connection it depends on failed"
+msgstr "en anslutning som den är beroende av misslyckades"
+
+msgid "the Wi-Fi device went away"
+msgstr "Wi-Fi-enheten försvann"
+
+msgid "the connection failed"
+msgstr "anslutningen misslyckades"

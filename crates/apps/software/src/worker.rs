@@ -3,7 +3,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use bande_inbox::{Inbox, Outbox};
 use bande_packages::flatpak::{self, Canceller as FlatpakCanceller};
-use bande_packages::{Client, Error, ErrorCode, Info, Mode, Package, Progress, Status, native};
+use bande_packages::{
+    Client, Error, ErrorCode, Info, Mode, Package, Progress, Status, native, schedule,
+};
 
 use crate::catalog::flatpak_needs_x11;
 use crate::media::Loaded;
@@ -302,20 +304,23 @@ fn transact(
                         flatpak_progress(Status::Installing, percent),
                     ));
                 };
-                let needs_x11 = flatpak::facts(&remote, &reference, false)
-                    .is_ok_and(|facts| flatpak_needs_x11(&facts.metadata));
-                if needs_x11 {
-                    Message::Failed(
+                match flatpak::facts(&remote, &reference, false) {
+                    Err(error) => {
+                        tracing::warn!("cannot read the permissions of {reference}: {error}");
+                        flatpak_settled(key, Err(error))
+                    }
+                    Ok(facts) if flatpak_needs_x11(&facts.metadata) => Message::Failed(
                         key,
                         Failure {
                             problem: Problem::NeedsX11,
                             details: String::new(),
                         },
-                    )
-                } else {
-                    let installed = flatpak::install(&remote, &reference, &progress, flatpaks)
-                        .map(|()| Message::Installed(key.clone()));
-                    flatpak_settled(key, installed)
+                    ),
+                    Ok(_) => {
+                        let installed = flatpak::install(&remote, &reference, &progress, flatpaks)
+                            .map(|()| Message::Installed(key.clone()));
+                        flatpak_settled(key, installed)
+                    }
                 }
             }
             Job::FlatpakRemove { key, reference } => {
@@ -341,6 +346,9 @@ fn transact(
 }
 
 fn ask(client: &Client, arch: &str, queries: &Receiver<Query>, out: &Outbox<Message>) {
+    let session = zbus::blocking::Connection::session()
+        .inspect_err(|error| tracing::warn!("cannot reach the session bus: {error}"))
+        .ok();
     for query in queries {
         let message = match query {
             Query::PlanRemoval { key, package } => {
@@ -372,7 +380,10 @@ fn ask(client: &Client, arch: &str, queries: &Receiver<Query>, out: &Outbox<Mess
                 }
             },
             Query::Updates => {
-                let flatpaks = flatpak::updates().unwrap_or_else(|error| {
+                let due = session
+                    .as_ref()
+                    .is_some_and(|session| schedule::check_due(session, client));
+                let flatpaks = flatpak::updates(due).unwrap_or_else(|error| {
                     if error != flatpak::Error::Missing {
                         tracing::warn!("cannot look for Flatpak updates: {error}");
                     }

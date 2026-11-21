@@ -1,41 +1,20 @@
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
 
 use bande_l10n::{Text, text, tr};
 
 use crate::engine::{Engine, EngineInfo, Error, Flavor};
 
 const DOCKER_INSTALL: &str = "\
-sudo apt install ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/debian/gpg \\
-  -o /etc/apt/keyrings/docker.asc
-sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/debian
-Suites: $(. /etc/os-release && echo \"$VERSION_CODENAME\")
-Components: stable
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-sudo apt update
-sudo apt install docker-ce docker-ce-cli containerd.io \\
-  docker-buildx-plugin docker-compose-plugin
+sudo apt install docker.io docker-compose docker-buildx
 sudo usermod -aG docker $USER";
-const CODENAME: &str = "$(. /etc/os-release && echo \"$VERSION_CODENAME\")";
-const STABLE_SUITE: &str = "trixie";
-const DOCKER_SUITES: [&str; 4] = ["buster", "bullseye", "bookworm", "trixie"];
-const OS_RELEASE: &str = "/etc/os-release";
-static DOCKER_INSTALL_FALLBACK: LazyLock<String> =
-    LazyLock::new(|| DOCKER_INSTALL.replace(CODENAME, STABLE_SUITE));
 const PODMAN_INSTALL: &str = "\
 sudo apt install podman
 systemctl --user enable --now podman.socket";
 const DOCKER_START: &str = "sudo systemctl enable --now docker";
 const PODMAN_START: &str = "systemctl --user enable --now podman.socket";
 const DOCKER_GROUP: &str = "sudo usermod -aG docker $USER";
-const INSTALL_LINK: &str = "https://docs.docker.com/engine/install/debian/";
 const ACCESS_LINK: &str = "https://docs.docker.com/engine/install/linux-postinstall/";
 const BINARY_FOLDERS: [&str; 4] = ["/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"];
 
@@ -72,29 +51,9 @@ pub struct Advice {
 
 fn podman_alternative() -> Steps {
     Steps {
-        title: tr!("Or Podman (rootless, from Debian)"),
+        title: tr!("Or Podman, rootless"),
         commands: PODMAN_INSTALL,
     }
-}
-
-fn debian_without_docker() -> bool {
-    let release = match std::fs::read_to_string(OS_RELEASE) {
-        Ok(release) => release,
-        Err(error) => {
-            tracing::warn!("cannot read {OS_RELEASE}: {error}");
-            return false;
-        }
-    };
-    let field = |name: &str| {
-        release.lines().find_map(|line| {
-            line.strip_prefix(name)?
-                .strip_prefix('=')
-                .map(|value| value.trim_matches('"'))
-        })
-    };
-    field("ID") == Some("debian")
-        && field("VERSION_CODENAME")
-            .is_none_or(|codename| codename == "testing" || !DOCKER_SUITES.contains(&codename))
 }
 
 impl Readiness {
@@ -113,22 +72,12 @@ impl Readiness {
             })
         };
         match self {
-            Self::NotInstalled if debian_without_docker() => Advice {
-                steps: steps(
-                    text!("Docker Engine (recommended)"),
-                    DOCKER_INSTALL_FALLBACK.as_str(),
-                ),
-                note: Some(tr!(
-                    "Docker publishes no packages for this Debian release yet, so these steps use trixie's."
-                )),
-                link: Some(INSTALL_LINK),
-                alternative: Some(podman_alternative()),
-                ..advice(text!("Install a container engine to continue"))
-            },
             Self::NotInstalled => Advice {
-                steps: steps(text!("Docker Engine (recommended)"), DOCKER_INSTALL),
-                link: Some(INSTALL_LINK),
-                alternative: Some(podman_alternative()),
+                steps: steps(text!("Podman, rootless (recommended)"), PODMAN_INSTALL),
+                alternative: Some(Steps {
+                    title: tr!("Or Docker Engine"),
+                    commands: DOCKER_INSTALL,
+                }),
                 ..advice(text!("Install a container engine to continue"))
             },
             Self::NotRunning(Flavor::Docker) => Advice {
@@ -150,10 +99,7 @@ impl Readiness {
                 ..advice(text!("No access to Docker"))
             },
             Self::Relogin => advice(text!("Log out and back in to finish")),
-            Self::TooOld => Advice {
-                link: Some(INSTALL_LINK),
-                ..advice(text!("Update Docker to continue"))
-            },
+            Self::TooOld => advice(text!("Update Docker to continue")),
             Self::Unreachable { host, reason } => {
                 let reason = reason.clone().filter(|reason| !reason.is_empty());
                 let headline = match reason {

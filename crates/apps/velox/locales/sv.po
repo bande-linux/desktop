@@ -454,20 +454,23 @@ msgstr "Startar fristående. Den nya containern visas under Containrar."
 msgid "Run"
 msgstr "Kör"
 
-msgid "Velox needs pkexec to ask for an administrator’s password. Install the pkexec package."
-msgstr "Velox behöver pkexec för att fråga efter en administratörs lösenord. Installera paketet pkexec."
+msgid "The download failed. Check the network connection and try again."
+msgstr "Hämtningen misslyckades. Kontrollera nätverksanslutningen och försök igen."
 
-msgid "The Velox helper is missing. Reinstall Velox."
-msgstr "Velox hjälpprogram saknas. Installera om Velox."
+msgid "The virtual machine did not start."
+msgstr "Den virtuella maskinen startade inte."
 
-msgid "The administrator’s password was not given, or this account is not allowed to do this."
-msgstr "Administratörslösenordet angavs inte, eller så får det här kontot inte göra detta."
+msgid "Something went wrong. The system log has the details."
+msgstr "Något gick fel. Detaljerna finns i systemloggen."
 
-msgid "The Velox helper refused: {reason}"
-msgstr "Velox hjälpprogram vägrade: {reason}"
+msgid "Virtualization is not ready."
+msgstr "Virtualiseringen är inte redo."
 
-msgid "The password prompt was canceled."
-msgstr "Lösenordsfrågan avbröts."
+msgid "The machine is gone."
+msgstr "Maskinen finns inte längre."
+
+msgid "The USB device is gone."
+msgstr "USB-enheten finns inte längre."
 
 msgid "Guest display"
 msgstr "Gästens skärm"
@@ -1171,14 +1174,14 @@ msgstr "Tar bort motordata som ingenting använder. Volymer innehåller verkliga
 msgid "Reclaim"
 msgstr "Frigör"
 
-msgid "Or Podman (rootless, from Debian)"
-msgstr "Eller Podman (rootless, från Debian)"
+msgid "Or Podman, rootless"
+msgstr "Eller Podman, rootless"
 
-msgid "Docker Engine (recommended)"
-msgstr "Docker Engine (rekommenderas)"
+msgid "Podman, rootless (recommended)"
+msgstr "Podman, rootless (rekommenderas)"
 
-msgid "Docker publishes no packages for this Debian release yet, so these steps use trixie's."
-msgstr "Docker publicerar inga paket för den här Debian-versionen än, så de här stegen använder paketen från trixie."
+msgid "Or Docker Engine"
+msgstr "Eller Docker Engine"
 
 msgid "Install a container engine to continue"
 msgstr "Installera en containermotor för att fortsätta"
@@ -1339,6 +1342,9 @@ msgstr "Det gick inte att starta motorn"
 msgid "Cannot stop the engine"
 msgstr "Det gick inte att stoppa motorn"
 
+msgid "Cannot install Podman"
+msgstr "Det gick inte att installera Podman"
+
 msgid "“{name}” already exists"
 msgstr "”{name}” finns redan"
 
@@ -1363,8 +1369,14 @@ msgstr "Starta {engine}"
 msgid "Stop {engine}"
 msgstr "Stoppa {engine}"
 
-msgid "Podman, rootless"
-msgstr "Podman, rootless"
+msgid "Installing Podman…"
+msgstr "Installerar Podman…"
+
+msgid "Install Podman"
+msgstr "Installera Podman"
+
+msgid "In a terminal"
+msgstr "I en terminal"
 
 msgid "Show This Computer"
 msgstr "Visa den här datorn"

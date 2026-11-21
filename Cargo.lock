@@ -627,9 +627,11 @@ dependencies = [
  "bande-datetime",
  "bande-design",
  "bande-discovery",
+ "bande-https",
  "bande-inbox",
  "bande-keyring",
  "bande-l10n",
+ "bande-network",
  "bande-search",
  "bande-toolkit",
  "bande-xdg",
@@ -638,13 +640,11 @@ dependencies = [
  "md-5 0.10.6",
  "roxmltree 0.21.2",
  "rustix 1.1.6",
- "rustls",
  "serde",
  "serde_json",
  "sha2 0.11.1",
  "tempfile",
  "tracing",
- "ureq",
  "zbus",
 ]
 
@@ -988,6 +988,7 @@ name = "bande-https"
 version = "0.2.0"
 dependencies = [
  "rustls",
+ "ureq",
 ]
 
 [[package]]
@@ -1172,6 +1173,7 @@ dependencies = [
  "bande-app-settings",
  "bande-discovery",
  "bande-fs",
+ "bande-https",
  "bande-inbox",
  "bande-keyring",
  "bande-l10n",
@@ -1236,6 +1238,7 @@ dependencies = [
 name = "bande-network"
 version = "0.2.0"
 dependencies = [
+ "bande-l10n",
  "bande-log",
  "zbus",
 ]
@@ -1428,7 +1431,6 @@ dependencies = [
  "ring",
  "rustc-demangle",
  "rustix 1.1.6",
- "rustls",
  "serde_json",
  "tracing",
 ]
@@ -1630,8 +1632,10 @@ dependencies = [
  "bande-app-menu",
  "bande-datetime",
  "bande-fs",
+ "bande-https",
  "bande-inbox",
  "bande-l10n",
+ "bande-network",
  "bande-notify",
  "bande-packages",
  "bande-search",
@@ -1642,12 +1646,10 @@ dependencies = [
  "jiff",
  "jxl-oxide",
  "roxmltree 0.21.2",
- "rustls",
  "serde",
  "serde_norway",
  "sha2 0.11.1",
  "tracing",
- "ureq",
  "zbus",
 ]
 
@@ -1880,6 +1882,7 @@ dependencies = [
  "bande-app-settings",
  "bande-fs",
  "bande-l10n",
+ "bande-packages",
  "bande-terminal-view",
  "bande-toolkit",
  "bande-vm",
@@ -1922,16 +1925,16 @@ dependencies = [
 name = "bande-vm"
 version = "0.2.0"
 dependencies = [
+ "bande-https",
+ "bande-l10n",
  "bande-xdg",
  "fatfs",
  "libc",
  "rustix 1.1.6",
- "rustls",
  "serde",
  "serde_json",
  "sha2 0.11.1",
  "tracing",
- "ureq",
  "zbus",
 ]
 

@@ -26,6 +26,12 @@ const CONTAINER_ATTRIBUTE: &str = "container";
 const RETRY: Duration = Duration::from_secs(1);
 const LONGEST_RETRY: Duration = Duration::from_secs(60);
 const STOP_SIGNALS: [i64; 2] = [130, 143];
+const PODMAN: &str = "podman";
+const PODMAN_START: Lifecycle = Lifecycle {
+    flavor: super::Flavor::Podman,
+    user: true,
+    start: true,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -68,6 +74,7 @@ pub enum Update {
         code: i64,
     },
     Controlled(Controlled),
+    Installed(Result<(), String>),
 }
 
 #[derive(Clone)]
@@ -392,6 +399,30 @@ impl Informer {
             });
         if let Err(error) = spawned {
             tracing::warn!("cannot reach systemd: {error}");
+        }
+    }
+
+    pub fn install_podman(&self) {
+        let out = self.sender.clone();
+        let recheck = self.recheck.clone();
+        let spawned = std::thread::Builder::new()
+            .name("velox-install".to_owned())
+            .spawn(move || {
+                let installed = zbus::blocking::Connection::system()
+                    .map_err(bande_packages::Error::from)
+                    .and_then(|system| {
+                        bande_packages::Client::new(&system).install_missing(&[PODMAN])
+                    })
+                    .map_err(|error| error.to_string());
+                let started = installed.and_then(|()| match PODMAN_START.run() {
+                    Controlled::Failed(message) => Err(message),
+                    Controlled::Done | Controlled::Refused => Ok(()),
+                });
+                out.send(Update::Installed(started));
+                let _ = recheck.send(());
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot start installing Podman: {error}");
         }
     }
 

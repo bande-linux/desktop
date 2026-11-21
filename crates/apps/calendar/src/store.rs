@@ -209,16 +209,19 @@ pub struct Summary {
 
 impl Summary {
     pub fn load(dir: &Path) -> Self {
-        let accounts: Vec<Account> = std::fs::read_to_string(dir.join(ACCOUNTS_FILE))
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default();
+        let accounts: Vec<Account> =
+            read_or_set_aside(&dir.join(ACCOUNTS_FILE)).unwrap_or_default();
         let mut calendars: Vec<CalendarInfo> = std::fs::read_dir(dir.join(CALENDARS_DIR))
             .into_iter()
             .flatten()
             .flatten()
-            .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
-            .filter_map(|text| serde_json::from_str::<Head>(&text).ok())
+            .filter(|entry| {
+                entry
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "json")
+            })
+            .filter_map(|entry| read_or_set_aside::<Head>(&entry.path()))
             .map(|head| head.info)
             .filter(|info| accounts.iter().any(|account| account.id == info.account))
             .collect();

@@ -17,7 +17,7 @@ const CHECKINS: &str = "/v1/checkins";
 const ENROLL: &str = "/v1/enroll";
 const ROTATE: &str = "/v1/rotate";
 const ME: &str = "/v1/me";
-const JSON: &str = "Content-Type: application/json\r\n";
+const JSON: &[(&str, &str)] = &[("Content-Type", "application/json")];
 const ATTEMPTS: usize = 2;
 
 pub enum Outcome {
@@ -193,7 +193,7 @@ impl<'a> Sender<'a> {
                 method: "GET",
                 path: ENROLL,
                 token: None,
-                headers: "",
+                headers: &[],
                 body: b"",
             }) {
                 Ok(answer) if answer.status == 200 => answer.json().unwrap_or_default(),
@@ -252,7 +252,7 @@ impl<'a> Sender<'a> {
             method: "POST",
             path: ROTATE,
             token: Some(&token),
-            headers: "",
+            headers: &[],
             body: b"",
         });
         match answer {
@@ -305,7 +305,7 @@ impl<'a> Sender<'a> {
     fn authorised(
         &mut self,
         path: &str,
-        headers: &str,
+        headers: &[(&str, &str)],
         body: impl Fn() -> io::Result<Vec<u8>>,
     ) -> (Outcome, u64) {
         for _ in 0..ATTEMPTS {
@@ -345,10 +345,11 @@ impl<'a> Sender<'a> {
         mut allowed: impl FnMut(u64) -> bool,
     ) -> (Outcome, u64) {
         let mut without = Vec::new();
-        let headers = format!(
-            "Content-Type: multipart/form-data; boundary={}\r\nContent-Encoding: gzip\r\n",
-            boundary(&report.id)
-        );
+        let content_type = format!("multipart/form-data; boundary={}", boundary(&report.id));
+        let headers = [
+            ("Content-Type", content_type.as_str()),
+            ("Content-Encoding", "gzip"),
+        ];
         loop {
             let names = match body_of(report, counts_only, &without) {
                 Ok(body) if !allowed(body.bytes.len() as u64) => return (Outcome::OverBudget, 0),
@@ -388,7 +389,7 @@ pub fn forget(request: &Map<String, Value>, ca: Option<&Path>) -> Outcome {
         method: "DELETE",
         path: ME,
         token: Some(token),
-        headers: "",
+        headers: &[],
         body: b"",
     });
     match answer.map(|answer| outcome_of(&answer)) {

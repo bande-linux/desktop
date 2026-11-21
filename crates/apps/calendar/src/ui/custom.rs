@@ -107,13 +107,13 @@ impl Custom {
         .collect();
         let send = sender(signals);
         let unit = panel.add(PopUpButton::new(
-            &tr!("every:"),
+            &tr!("Every:"),
             &units,
             frequency,
             move |index| send(Signal::CustomFrequency(index)),
         ));
         panel.line(Line::new(
-            Some(&tr!("every:")),
+            Some(&tr!("Every:")),
             vec![(count, Width::Fixed(56.0)), (unit, Width::Fill)],
             ROW,
         ));
@@ -134,7 +134,7 @@ impl Custom {
                 (panel.add(check), Width::Fill)
             })
             .collect();
-        let weekly = panel.line(Line::new(Some(&tr!("on:")), cells, ROW));
+        let weekly = panel.line(Line::new(Some(&tr!("On:")), cells, ROW));
         let weekday = weekday_name(formats, start);
         let on_the = tr!(
             "on the {nth} {weekday}",
@@ -144,13 +144,13 @@ impl Custom {
         let monthly_choices = [tr!("on day {day}", day = start.day()), on_the.clone()];
         let send = sender(signals);
         let monthly = panel.add(PopUpButton::new(
-            &tr!("on:"),
+            &tr!("On:"),
             &monthly_choices,
             usize::from(on_weekday[0]),
             move |index| send(Signal::CustomOnWeekday(0, index == 1)),
         ));
         let monthly = panel.line(Line::new(
-            Some(&tr!("on:")),
+            Some(&tr!("On:")),
             vec![(monthly, Width::Fill)],
             ROW,
         ));
@@ -161,13 +161,13 @@ impl Custom {
         ];
         let send = sender(signals);
         let yearly = panel.add(PopUpButton::new(
-            &tr!("on:"),
+            &tr!("On:"),
             &yearly_choices,
             usize::from(on_weekday[1]),
             move |index| send(Signal::CustomOnWeekday(1, index == 1)),
         ));
         let yearly = panel.line(Line::new(
-            Some(&tr!("on:")),
+            Some(&tr!("On:")),
             vec![(yearly, Width::Fill)],
             ROW,
         ));

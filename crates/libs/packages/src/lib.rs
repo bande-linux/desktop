@@ -1,5 +1,6 @@
 pub mod flatpak;
 pub mod offline;
+pub mod schedule;
 mod transaction;
 
 use std::collections::HashMap;

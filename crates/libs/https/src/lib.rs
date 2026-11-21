@@ -1,59 +1,52 @@
 use std::fs;
 use std::io;
-use std::net::{TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use rustls::crypto::ring;
-use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
+use ureq::config::ConfigBuilder;
+use ureq::tls::{PemItem, RootCerts, TlsConfig};
+use ureq::typestate::AgentScope;
 
-const SYSTEM_ROOTS: &str = "/etc/ssl/certs/ca-certificates.crt";
+pub use ureq;
 
-pub type Stream = StreamOwned<ClientConnection, TcpStream>;
-
-#[derive(Debug, Clone, Copy)]
-pub struct Timeouts {
-    pub connect: Duration,
-    pub transfer: Duration,
+pub fn user_agent(app: &str) -> String {
+    format!("bande-{app}/{}", env!("CARGO_PKG_VERSION"))
 }
 
-fn tls_config(ca: Option<&Path>) -> io::Result<Arc<ClientConfig>> {
-    let mut roots = RootCertStore::empty();
-    let source = ca.unwrap_or(Path::new(SYSTEM_ROOTS));
-    let pem = fs::read(source)?;
-    for certificate in CertificateDer::pem_slice_iter(&pem) {
-        let certificate = certificate.map_err(io::Error::other)?;
-        roots.add(certificate).map_err(io::Error::other)?;
-    }
-    let config = ClientConfig::builder_with_provider(Arc::new(ring::default_provider()))
-        .with_safe_default_protocol_versions()
-        .map_err(io::Error::other)?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    Ok(Arc::new(config))
+fn configured(app: &str, roots: RootCerts) -> ConfigBuilder<AgentScope> {
+    let tls = TlsConfig::builder()
+        .root_certs(roots)
+        .unversioned_rustls_crypto_provider(Arc::new(ring::default_provider()))
+        .build();
+    ureq::Agent::config_builder()
+        .user_agent(user_agent(app))
+        .tls_config(tls)
 }
 
-fn tcp(host: &str, port: u16, timeouts: Timeouts) -> io::Result<TcpStream> {
-    let mut last = io::Error::new(io::ErrorKind::NotFound, "no address");
-    for address in (host, port).to_socket_addrs()? {
-        match TcpStream::connect_timeout(&address, timeouts.connect) {
-            Ok(stream) => {
-                stream.set_read_timeout(Some(timeouts.transfer))?;
-                stream.set_write_timeout(Some(timeouts.transfer))?;
-                return Ok(stream);
-            }
-            Err(error) => last = error,
+/// An agent's configuration for `app`, trusting the system's certificate authorities.
+pub fn config(app: &str) -> ConfigBuilder<AgentScope> {
+    configured(app, RootCerts::PlatformVerifier)
+}
+
+/// An agent's configuration for `app`, trusting only the certificate authorities in the PEM file `ca`.
+pub fn pinned_config(app: &str, ca: &Path) -> io::Result<ConfigBuilder<AgentScope>> {
+    let mut certificates = Vec::new();
+    for item in ureq::tls::parse_pem(&fs::read(ca)?) {
+        if let PemItem::Certificate(certificate) = item.map_err(ureq::Error::into_io)? {
+            certificates.push(certificate);
         }
     }
-    Err(last)
+    Ok(configured(app, RootCerts::from(certificates)))
 }
 
-pub fn connect(host: &str, port: u16, ca: Option<&Path>, timeouts: Timeouts) -> io::Result<Stream> {
-    let tls = tls_config(ca)?;
-    let name = ServerName::try_from(host.to_owned()).map_err(io::Error::other)?;
-    let connection = ClientConnection::new(tls, name).map_err(io::Error::other)?;
-    Ok(StreamOwned::new(connection, tcp(host, port, timeouts)?))
+/// Whether `error` means the server's certificate is not trusted.
+pub fn untrusted(error: &ureq::Error) -> bool {
+    matches!(
+        error,
+        ureq::Error::Rustls(rustls::Error::InvalidCertificate(_))
+    ) || error
+        .to_string()
+        .to_ascii_lowercase()
+        .contains("certificate")
 }

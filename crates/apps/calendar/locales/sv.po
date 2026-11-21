@@ -127,11 +127,11 @@ msgstr "månader"
 msgid "years"
 msgstr "år"
 
-msgid "every:"
-msgstr "var:"
+msgid "Every:"
+msgstr "Var:"
 
-msgid "on:"
-msgstr "på:"
+msgid "On:"
+msgstr "På:"
 
 msgid "on the {nth} {weekday}"
 msgstr "den {nth} {weekday}"
@@ -268,8 +268,8 @@ msgstr "tackat nej"
 msgid "no reply"
 msgstr "inget svar"
 
-msgid "invitees:"
-msgstr "inbjudna:"
+msgid "Invitees:"
+msgstr "Inbjudna:"
 
 msgid "This calendar is read-only."
 msgstr "Den här kalendern är skrivskyddad."
@@ -277,23 +277,23 @@ msgstr "Den här kalendern är skrivskyddad."
 msgid "Add Location"
 msgstr "Lägg till plats"
 
-msgid "all-day:"
-msgstr "heldag:"
+msgid "All-day:"
+msgstr "Heldag:"
 
-msgid "starts:"
-msgstr "börjar:"
+msgid "Starts:"
+msgstr "Börjar:"
 
-msgid "ends:"
-msgstr "slutar:"
+msgid "Ends:"
+msgstr "Slutar:"
 
 msgid "Floating"
 msgstr "Flytande"
 
-msgid "time zone:"
-msgstr "tidszon:"
+msgid "Time zone:"
+msgstr "Tidszon:"
 
-msgid "repeat:"
-msgstr "upprepa:"
+msgid "Repeat:"
+msgstr "Upprepa:"
 
 msgid "After"
 msgstr "Efter"
@@ -301,14 +301,14 @@ msgstr "Efter"
 msgid "On Date"
 msgstr "På datum"
 
-msgid "end repeat:"
-msgstr "sluta upprepa:"
+msgid "End repeat:"
+msgstr "Sluta upprepa:"
 
 msgid "times or date"
 msgstr "gånger eller datum"
 
-msgid "alert:"
-msgstr "påminnelse:"
+msgid "Alert:"
+msgstr "Påminnelse:"
 
 msgid "going?"
 msgstr "kommer du?"
@@ -316,8 +316,8 @@ msgstr "kommer du?"
 msgid "Add Invitees"
 msgstr "Lägg till inbjudna"
 
-msgid "calendar:"
-msgstr "kalender:"
+msgid "Calendar:"
+msgstr "Kalender:"
 
 msgid "Add Notes"
 msgstr "Lägg till anteckningar"
@@ -370,11 +370,11 @@ msgstr "Ny kalender"
 msgid "Rename Calendar"
 msgstr "Byt namn på kalender"
 
-msgid "name:"
-msgstr "namn:"
+msgid "Name:"
+msgstr "Namn:"
 
-msgid "account:"
-msgstr "konto:"
+msgid "Account:"
+msgstr "Konto:"
 
 msgid "Create"
 msgstr "Skapa"
@@ -523,8 +523,8 @@ msgstr "Det finns ingen kalender på den här adressen. Kontrollera länken."
 msgid "There is no CalDAV calendar at this address. Check the server address and path your provider gives."
 msgstr "Det finns ingen CalDAV-kalender på den här adressen. Kontrollera serveradressen och sökvägen som din leverantör anger."
 
-msgid "password:"
-msgstr "lösenord:"
+msgid "Password:"
+msgstr "Lösenord:"
 
 msgid "Add a Calendar Account"
 msgstr "Lägg till ett kalenderkonto"
@@ -550,8 +550,8 @@ msgstr "CalDAV-konto"
 msgid "Calendar subscription (webcal or https link)"
 msgstr "Kalenderprenumeration (webcal- eller https-länk)"
 
-msgid "account type:"
-msgstr "kontotyp:"
+msgid "Account type:"
+msgstr "Kontotyp:"
 
 msgid "A CalDAV account keeps calendars in sync with a server. A subscription shows a published calendar, read-only."
 msgstr "Ett CalDAV-konto håller kalendrar synkroniserade med en server. En prenumeration visar en publicerad kalender som bara kan läsas."
@@ -559,8 +559,8 @@ msgstr "Ett CalDAV-konto håller kalendrar synkroniserade med en server. En pren
 msgid "Continue"
 msgstr "Fortsätt"
 
-msgid "address:"
-msgstr "adress:"
+msgid "Address:"
+msgstr "Adress:"
 
 msgid "jane@example.org"
 msgstr "anna@example.org"
@@ -571,14 +571,14 @@ msgstr "Kalender slår upp CalDAV-servern för adressens domän och visar den f�
 msgid "Enter Server Settings Manually"
 msgstr "Ange serverinställningar manuellt"
 
-msgid "server:"
-msgstr "server:"
+msgid "Server:"
+msgstr "Server:"
 
 msgid "https://dav.example.org/"
 msgstr "https://dav.example.org/"
 
-msgid "user name:"
-msgstr "användarnamn:"
+msgid "User name:"
+msgstr "Användarnamn:"
 
 msgid "Enter the server address your provider gives, with its port and path if it has them. Calendar sends the password only when the server asks for it."
 msgstr "Ange serveradressen som din leverantör anger, med port och sökväg om den har sådana. Kalender skickar lösenordet bara när servern ber om det."

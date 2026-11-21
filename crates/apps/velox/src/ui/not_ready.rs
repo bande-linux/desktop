@@ -25,9 +25,30 @@ fn steps(title: &str, commands: &'static str, intents: &Intents) -> Box<dyn Widg
     ))
 }
 
-pub(super) fn page(readiness: &Readiness, intents: &Intents, alternative: bool) -> Box<dyn Widget> {
+pub(super) fn page(
+    readiness: &Readiness,
+    intents: &Intents,
+    alternative: bool,
+    installing: bool,
+) -> Box<dyn Widget> {
     let advice = readiness.advice();
     let mut children = vec![boxed(Label::heading(&advice.headline))];
+    if *readiness == Readiness::NotInstalled {
+        let install = Rc::clone(intents);
+        let title = match installing {
+            true => tr!("Installing Podman…"),
+            false => tr!("Install Podman"),
+        };
+        let mut button =
+            Button::new(&title, move || push(&install, Intent::InstallPodman)).primary();
+        button.set_enabled(!installing);
+        children.push(boxed(Stack::new(
+            Axis::Horizontal,
+            0.0,
+            0.0,
+            vec![boxed(button)],
+        )));
+    }
     if let Some(shown) = &advice.steps {
         children.push(steps(&shown.title, shown.commands, intents));
     }
@@ -55,7 +76,7 @@ pub(super) fn page(readiness: &Readiness, intents: &Intents, alternative: bool) 
                 Axis::Vertical,
                 0.0,
                 0.0,
-                vec![steps(&tr!("Podman, rootless"), other.commands, intents)],
+                vec![steps(&tr!("In a terminal"), other.commands, intents)],
             ),
             move |open| push(&toggled, Intent::Alternative(open)),
         )));

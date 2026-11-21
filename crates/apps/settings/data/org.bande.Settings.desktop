@@ -2,7 +2,8 @@
 Type=Application
 Name=Settings
 Name[sv]=Inställningar
-Comment=Change the appearance, taskbar and lock screen
+Comment=Set up the desktop, devices, network and privacy
+Comment[sv]=Ställ in skrivbordet, enheter, nätverk och integritet
 Icon=org.bande.Settings
 Exec=bande-settings
 StartupNotify=true

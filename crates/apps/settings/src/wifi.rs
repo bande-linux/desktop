@@ -27,16 +27,10 @@ pub(crate) const WIFI_FIELDS: [(SettingId, bande_l10n::Text, bande_l10n::Text); 
     ),
 ];
 
-pub(crate) const HIDDEN_SECURITY: [(Security, bande_l10n::Text); 3] = [
-    (Security::Open, text!("None")),
-    (
-        Security::Personal { sae_only: false },
-        text!("WPA2 Personal"),
-    ),
-    (
-        Security::Personal { sae_only: true },
-        text!("WPA3 Personal"),
-    ),
+pub(crate) const HIDDEN_SECURITY: [Security; 3] = [
+    Security::Open,
+    Security::Personal { sae_only: false },
+    Security::Personal { sae_only: true },
 ];
 
 const PRIVATE_ADDRESS: [(PrivateAddress, bande_l10n::Text); 3] = [
@@ -242,11 +236,11 @@ impl SettingsView {
         ))];
         let labels: Vec<String> = HIDDEN_SECURITY
             .iter()
-            .map(|(_, label)| label.tr())
+            .map(|security| security.label())
             .collect();
         let selected = HIDDEN_SECURITY
             .iter()
-            .position(|(security, _)| *security == other.security);
+            .position(|security| *security == other.security);
         let choose = intent(&self.intents, Intent::OtherSecurity);
         let segmented = SegmentedControl::new(&tr!("Security"), &labels, selected, choose);
         self.anchors

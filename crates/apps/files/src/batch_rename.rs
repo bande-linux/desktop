@@ -423,7 +423,7 @@ impl FilesView {
                     ),
                 ),
                 (
-                    tr!("Custom Format:"),
+                    tr!("Custom format:"),
                     self.rename_field(RenameField::Name, &state.name),
                 ),
                 (

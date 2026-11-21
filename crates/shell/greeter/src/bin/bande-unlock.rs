@@ -291,7 +291,9 @@ struct Screen {
     large: bool,
 }
 
-fn ioctl<T>(fd: RawFd, request: libc::c_ulong, argument: *mut T) -> io::Result<()> {
+unsafe fn ioctl<T>(fd: RawFd, request: libc::c_ulong, argument: *mut T) -> io::Result<()> {
+    // SAFETY: the caller passes the argument that `request` expects: a pointer to a live
+    // value of the type the kernel reads or writes, or the integer it takes by value.
     match unsafe { libc::ioctl(fd, request, argument) } {
         -1 => Err(io::Error::last_os_error()),
         _ => Ok(()),
@@ -310,7 +312,9 @@ impl Screen {
     fn open() -> io::Result<Self> {
         let file = OpenOptions::new().read(true).write(true).open("/dev/fb0")?;
         let mut variable = VariableInfo::default();
-        ioctl(file.as_raw_fd(), FBIOGET_VSCREENINFO, &mut variable)?;
+        // SAFETY: FBIOGET_VSCREENINFO writes a `struct fb_var_screeninfo`, which `VariableInfo`
+        // mirrors field for field.
+        unsafe { ioctl(file.as_raw_fd(), FBIOGET_VSCREENINFO, &mut variable) }?;
         let mut fixed = FixedInfo {
             id: [0; 16],
             smem_start: 0,
@@ -324,11 +328,17 @@ impl Screen {
             line_length: 0,
             rest: [0; 64],
         };
-        ioctl(file.as_raw_fd(), FBIOGET_FSCREENINFO, &mut fixed)?;
-        if variable.bits_per_pixel != 32 {
-            return Err(io::Error::other("the framebuffer is not 32 bits per pixel"));
+        // SAFETY: FBIOGET_FSCREENINFO writes a `struct fb_fix_screeninfo`, which `FixedInfo`
+        // mirrors field for field.
+        unsafe { ioctl(file.as_raw_fd(), FBIOGET_FSCREENINFO, &mut fixed) }?;
+        if variable.bits_per_pixel != 32 || !fixed.line_length.is_multiple_of(4) {
+            return Err(io::Error::other(
+                "the framebuffer does not have word-aligned 32-bit pixels",
+            ));
         }
         let length = fixed.smem_len as usize;
+        // SAFETY: a fresh shared mapping at an address the kernel picks aliases no Rust memory;
+        // the framebuffer device stays mapped after `file` closes.
         let mapped = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
@@ -364,6 +374,9 @@ impl Screen {
         let pixel = channel(lit(colour[0]), self.red)
             | channel(lit(colour[1]), self.green)
             | channel(lit(colour[2]), self.blue);
+        // SAFETY: `at + 4 <= length`, the mapping is never unmapped, and `at` is a multiple of
+        // 4 because `open` only accepts a line length that is one; mmap returns a page-aligned
+        // address.
         unsafe { self.mapped.add(at).cast::<u32>().write_volatile(pixel) };
     }
 
@@ -557,7 +570,8 @@ fn draw_layout_tag(screen: &Screen, tag: &str, right: usize, top: usize, unit: u
 
 fn is_keyboard(file: &File) -> bool {
     let mut keys = [0u8; 64];
-    ioctl(file.as_raw_fd(), EVIOCGBIT_KEY, keys.as_mut_ptr()).is_ok()
+    // SAFETY: EVIOCGBIT_KEY encodes a 64-byte buffer, which `keys` is.
+    unsafe { ioctl(file.as_raw_fd(), EVIOCGBIT_KEY, keys.as_mut_ptr()) }.is_ok()
         && keys[usize::from(KEY_A / 8)] & (1 << (KEY_A % 8)) != 0
 }
 
@@ -584,11 +598,14 @@ fn open_new_keyboards(keyboards: &mut Vec<(String, File)>) {
 }
 
 fn watch_devices() -> Option<File> {
+    // SAFETY: inotify_init1 takes only flags and returns a new descriptor or -1.
     let watch = unsafe { libc::inotify_init1(libc::IN_CLOEXEC | libc::IN_NONBLOCK) };
     if watch < 0 {
         return None;
     }
+    // SAFETY: `watch` was just created and nothing else owns it.
     let file = unsafe { std::os::fd::FromRawFd::from_raw_fd(watch) };
+    // SAFETY: `watch` stays open while `file` lives, and the path is a NUL-terminated literal.
     let added = unsafe {
         libc::inotify_add_watch(
             watch,
@@ -611,18 +628,23 @@ impl Console {
             .open("/dev/tty1")
             .ok();
         if let Some(tty) = &tty {
-            let _ = ioctl(tty.as_raw_fd(), KDSKBMODE, K_OFF as *mut libc::c_void);
-            let _ = ioctl(tty.as_raw_fd(), KDSETMODE, KD_GRAPHICS as *mut libc::c_void);
+            let _ = set_console_mode(tty, KDSKBMODE, K_OFF);
+            let _ = set_console_mode(tty, KDSETMODE, KD_GRAPHICS);
         }
         Self { tty }
     }
 }
 
+fn set_console_mode(tty: &File, request: libc::c_ulong, mode: libc::c_int) -> io::Result<()> {
+    // SAFETY: KDSETMODE and KDSKBMODE take their mode as an integer argument, not a pointer.
+    unsafe { ioctl(tty.as_raw_fd(), request, mode as *mut libc::c_void) }
+}
+
 impl Drop for Console {
     fn drop(&mut self) {
         if let Some(tty) = &self.tty {
-            let _ = ioctl(tty.as_raw_fd(), KDSETMODE, KD_TEXT as *mut libc::c_void);
-            let _ = ioctl(tty.as_raw_fd(), KDSKBMODE, K_UNICODE as *mut libc::c_void);
+            let _ = set_console_mode(tty, KDSETMODE, KD_TEXT);
+            let _ = set_console_mode(tty, KDSKBMODE, K_UNICODE);
         }
     }
 }
@@ -686,6 +708,8 @@ fn run(assets: &Assets, wrong_before: bool) -> io::Result<String> {
                 revents: 0,
             });
         }
+        // SAFETY: `polled` holds `polled.len()` entries whose descriptors are kept open by
+        // `keyboards` and `watch` for the call.
         let ready = unsafe { libc::poll(polled.as_mut_ptr(), polled.len() as libc::nfds_t, -1) };
         if ready < 0 {
             let error = io::Error::last_os_error();
@@ -715,6 +739,8 @@ fn run(assets: &Assets, wrong_before: bool) -> io::Result<String> {
                 }
             };
             for chunk in bytes[..count].as_chunks::<EVENT_SIZE>().0 {
+                // SAFETY: `chunk` is `size_of::<InputEvent>()` bytes, and every bit pattern is a
+                // valid `InputEvent` because it holds only integers.
                 let event = unsafe { chunk.as_ptr().cast::<InputEvent>().read_unaligned() };
                 if event.kind != EV_KEY {
                     continue;

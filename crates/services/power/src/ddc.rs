@@ -37,7 +37,9 @@ pub struct I2cWire {
 impl I2cWire {
     pub fn open(path: &Path) -> io::Result<Self> {
         let device = OpenOptions::new().read(true).write(true).open(path)?;
+        // SAFETY: I2C_SLAVE takes the target address as a plain integer, not a pointer.
         let target = unsafe { ioctl::IntegerSetter::<I2C_SLAVE>::new_usize(DDC_ADDRESS) };
+        // SAFETY: device is an open I2C character device, and the request carries no pointer.
         unsafe { ioctl::ioctl(device.as_fd(), target) }?;
         Ok(Self { device })
     }

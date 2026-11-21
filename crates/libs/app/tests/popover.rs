@@ -74,6 +74,8 @@ fn launch(arguments: &[&str], display: UnixStream) -> JoinHandle<Result<(), Stri
 #[test]
 fn an_activated_service_waits_shows_a_popover_at_the_pointer_and_exits_when_it_closes() {
     let bus = SessionBus::start().expect("private session bus");
+    // SAFETY: this binary's only test sets these before it launches the service thread, so no other
+    // thread reads the environment yet.
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
         std::env::set_var(

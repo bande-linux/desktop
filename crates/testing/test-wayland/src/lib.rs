@@ -196,22 +196,29 @@ impl TestClient {
         let luma = width * height;
         let size = (luma + luma / 2).next_multiple_of(NV12_PAGE);
         let name = c"bande-test-nv12";
+        // SAFETY: name is a NUL-terminated C string.
         let memory = unsafe {
             libc::memfd_create(name.as_ptr(), libc::MFD_ALLOW_SEALING | libc::MFD_CLOEXEC)
         };
         assert!(memory >= 0, "memfd");
+        // SAFETY: memfd_create succeeded, so memory is a new fd that nothing else owns.
         let mut file = File::from(unsafe { OwnedFd::from_raw_fd(memory) });
         file.set_len(size as u64).expect("memfd size");
         let mut bytes = vec![nv12.luma; luma];
         bytes.extend([nv12.blue_difference, nv12.red_difference].repeat(luma / 4));
         file.write_all(&bytes).expect("memfd write");
         assert_eq!(
+            // SAFETY: memory is the memfd that file owns, still open; F_ADD_SEALS takes an integer
+            // argument.
             unsafe { libc::fcntl(memory, libc::F_ADD_SEALS, libc::F_SEAL_SHRINK) },
             0
         );
         let request = [memory as u32, 1, 0, 0, size as u32, 0];
+        // SAFETY: request is the 24 bytes of a little-endian struct udmabuf_create (memfd, flags =
+        // UDMABUF_FLAGS_CLOEXEC, offset 0, size) and lives across the call.
         let dmabuf = unsafe { libc::ioctl(device.as_raw_fd(), 0x4018_7542, request.as_ptr()) };
         assert!(dmabuf >= 0, "udmabuf");
+        // SAFETY: UDMABUF_CREATE succeeded, so dmabuf is a new fd that nothing else owns.
         let dmabuf = unsafe { OwnedFd::from_raw_fd(dmabuf) };
         let qh = self.queue.handle();
         let manager: ZwpLinuxDmabufV1 = self.bind("zwp_linux_dmabuf_v1", 3);

@@ -263,6 +263,9 @@ impl VulkanRenderer {
                 .ok_or(RenderError::BufferOutOfBounds)?;
             let destination = offset + row * row_bytes;
             debug_assert!(destination + row_bytes <= staging.capacity);
+            // SAFETY: `reserve` set aside `row_bytes * rows` bytes at `offset` in this mapped
+            // staging buffer, so each row's destination stays within it, and `bytes` is a separate
+            // slice of exactly `row_bytes`.
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     bytes.as_ptr(),
@@ -310,6 +313,7 @@ impl VulkanRenderer {
                     vk::ImageAspectFlags::PLANE_1,
                 )
                 .map(|chroma_view| (luma_view, chroma_view))
+                // SAFETY: `luma_view` was just created and never used.
                 .inspect_err(|_| unsafe { self.device.destroy_image_view(luma_view, None) })
             });
         let (luma_view, chroma_view) = match views {
@@ -577,6 +581,9 @@ impl ImportMemWl for VulkanRenderer {
     ) -> Result<VulkanTexture, RenderError> {
         with_buffer_contents(buffer, |pointer, length, data| {
             let format = shm_fourcc(data.format).ok_or(RenderError::UnsupportedFormat)?;
+            // SAFETY: `pointer` and `length` are smithay's mapping of the client's pool, valid
+            // for the whole closure (smithay survives the client shrinking it); the bytes are only
+            // copied into staging, never trusted as anything but pixels.
             let pool = unsafe { slice::from_raw_parts(pointer, length) };
             let (texture, fresh) =
                 self.surface_texture(surface, data.width, data.height, format)?;

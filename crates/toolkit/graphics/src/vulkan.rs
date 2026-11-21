@@ -110,9 +110,13 @@ fn library_path(manifest: &Path) -> Option<PathBuf> {
 
 fn open(manifest: &Path) -> Option<Driver> {
     let path = library_path(manifest)?;
+    // SAFETY: path is a Vulkan driver named by a manifest in the system ICD directories; loading it
+    // runs only that driver's own initialisers.
     let library = unsafe { Library::new(&path) }
         .inspect_err(|error| tracing::debug!(%error, "cannot open {}", path.display()))
         .ok()?;
+    // SAFETY: vk_icdGetInstanceProcAddr has this signature in the Vulkan loader-driver interface;
+    // the pointer is used only while Driver keeps library loaded.
     let entry = unsafe { library.get::<GetInstanceProcAddr>(ENTRY_POINT) }.ok()?;
     let get_instance_proc_addr = Some(*entry);
     Some(Driver {
@@ -131,6 +135,8 @@ fn load() -> Option<Vec<Driver>> {
 
 pub(crate) fn hardware_instance() -> Option<wgpu::Instance> {
     let drivers = DRIVERS.get_or_init(load).as_deref()?;
+    // SAFETY: drivers live in the static DRIVERS, so their libraries stay loaded as long as any
+    // instance made from them.
     let instance = unsafe { create(drivers) }
         .inspect_err(|error| tracing::debug!("loading the Vulkan drivers directly failed: {error}"))
         .ok()?;
@@ -139,7 +145,9 @@ pub(crate) fn hardware_instance() -> Option<wgpu::Instance> {
 }
 
 unsafe fn create(drivers: &[Driver]) -> Result<wgpu::Instance, String> {
+    // SAFETY: loads the system Vulkan loader; the Entry keeps it loaded for as long as it is used.
     let entry = unsafe { ash::Entry::load() }.map_err(|error| error.to_string())?;
+    // SAFETY: entry was just loaded and vkEnumerateInstanceVersion has no other preconditions.
     let version = unsafe { entry.try_enumerate_instance_version() }
         .map_err(|error| error.to_string())?
         .unwrap_or(vk::API_VERSION_1_0);
@@ -169,7 +177,11 @@ unsafe fn create(drivers: &[Driver]) -> Result<wgpu::Instance, String> {
         .application_info(&application)
         .enabled_extension_names(&names)
         .push_next(&mut list);
+    // SAFETY: info and everything it points to (application, names, list and infos) live across the
+    // call.
     let raw = unsafe { entry.create_instance(&info, None) }.map_err(|error| error.to_string())?;
+    // SAFETY: raw was just created from entry with EXTENSIONS and API 1.3 requested, and with no
+    // drop callback the hal instance takes sole ownership and destroys it.
     let instance = unsafe {
         hal::vulkan::Instance::from_raw(
             entry,
@@ -185,5 +197,6 @@ unsafe fn create(drivers: &[Driver]) -> Result<wgpu::Instance, String> {
         )
     }
     .map_err(|error| error.to_string())?;
+    // SAFETY: instance is a valid Vulkan hal instance that was just created.
     Ok(unsafe { wgpu::Instance::from_hal::<hal::api::Vulkan>(instance) })
 }

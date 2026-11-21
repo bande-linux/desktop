@@ -291,6 +291,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             },
         };
         for &rect in rects {
+            // SAFETY: the frame holds the renderer mutably from `begin_commands` until
+            // `finish_frame` ends the buffer, so `command_buffer` is recording and only this frame
+            // records into it; `rect` is clipped to the target inside the rendering begun by
+            // `begin_rendering`.
             unsafe {
                 self.renderer.device.cmd_clear_attachments(
                     self.renderer.command_buffer,
@@ -368,6 +372,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .pipelines
             .get(&(self.format, program))
             .ok_or(RenderError::UnsupportedFormat)?;
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
+        // `pipeline` lives until the renderer drops.
         unsafe {
             self.renderer.device.cmd_bind_pipeline(
                 self.renderer.command_buffer,
@@ -394,6 +401,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .dst_binding(2)
             .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
             .image_info(slice::from_ref(&image_info));
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
+        // `view` belongs to a texture or target that `collect_garbage` cannot destroy while the
+        // frame holds the renderer, and `submit_and_wait` finishes before the frame returns it.
         unsafe {
             self.renderer.push_descriptor.cmd_push_descriptor_set(
                 self.renderer.command_buffer,
@@ -413,6 +424,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .dst_binding(0)
             .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
             .image_info(slice::from_ref(&image_info));
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
+        // `view` belongs to a texture or target that `collect_garbage` cannot destroy while the
+        // frame holds the renderer, and `submit_and_wait` finishes before the frame returns it.
         unsafe {
             self.renderer.push_descriptor.cmd_push_descriptor_set(
                 self.renderer.command_buffer,
@@ -452,6 +467,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .collect();
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
+        // `constants` is exactly the `QUAD_BYTES` push-constant range of `pipeline_layout`.
         unsafe {
             device.cmd_push_constants(
                 commands,
@@ -462,6 +480,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             );
         }
         for &rect in rects {
+            // SAFETY: the frame holds the renderer mutably from `begin_commands` until
+            // `finish_frame` ends the buffer, so `command_buffer` is recording and only this frame
+            // records into it, inside rendering with a bound pipeline whose four-vertex strip needs
+            // no vertex buffers.
             unsafe {
                 device.cmd_set_scissor(commands, 0, slice::from_ref(&scissor(rect)));
                 device.cmd_draw(commands, 4, 1, 0, 0);
@@ -471,6 +493,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
 
     fn finish_frame(&mut self) -> Result<(), RenderError> {
         self.finished = true;
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
+        // and the rendering begun on the target is still open.
         unsafe {
             self.renderer
                 .device
@@ -501,6 +526,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             }
             self.record_readbacks(converted.unwrap_or(self.image), &readbacks);
         }
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
+        // and every rendering it began has ended.
         unsafe {
             self.renderer
                 .device
@@ -622,6 +650,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             drawn,
         );
         let device = &self.renderer.device;
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
+        // and the rendering begun on the scratch image is still open.
         unsafe { device.cmd_end_rendering(commands) };
         barrier(device, commands, scratch.0, blur::DRAWN, TRANSFER_SOURCE);
         Ok(scratch.0)
@@ -673,6 +704,11 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         if source == self.image {
             barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
         }
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
+        // `buffer` is the live import of the display dma-buf, `source` is in
+        // `TRANSFER_SRC_OPTIMAL`, and `regions` are rects drawn inside the target, which
+        // `device_export` checked fit in the buffer.
         unsafe {
             device.cmd_pipeline_barrier2(
                 commands,
@@ -717,6 +753,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     height: rect.height.unsigned_abs(),
                     depth: 1,
                 });
+            // SAFETY: the frame holds the renderer mutably from `begin_commands` until
+            // `finish_frame` ends the buffer, so `command_buffer` is recording and only this frame
+            // records into it; `source` is in `TRANSFER_SRC_OPTIMAL` and each region fits the
+            // staging space `reserve` set aside for its rect.
             unsafe {
                 device.cmd_copy_image_to_buffer(
                     commands,
@@ -735,6 +775,8 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
             .dst_stage_mask(vk::PipelineStageFlags2::HOST)
             .dst_access_mask(vk::AccessFlags2::HOST_READ);
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it.
         unsafe {
             device.cmd_pipeline_barrier2(
                 commands,
@@ -777,6 +819,8 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         dma_buf_sync(export, DMA_BUF_SYNC_START)?;
         let marked = rows_of(export, readbacks).map(|rows| {
             for (_, destination, length) in rows {
+                // SAFETY: `rows_of` checked that every row lies within the mapping, which lives as
+                // long as `export`.
                 unsafe {
                     std::ptr::write_bytes(export.mapping.add(destination), UNWRITTEN, length)
                 };
@@ -794,6 +838,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         let arrived = rows_of(export, readbacks).map(|rows| {
             rows.into_iter().all(|(source, destination, length)| {
                 let staging = self.renderer.staging[source.0].mapped;
+                // SAFETY: `rows_of` checked every row against the mapping, and the staging offsets
+                // lie within the space `reserve` set aside for each rect; `submit_and_wait`
+                // finished the GPU's writes to both.
                 unsafe {
                     slice::from_raw_parts(staging.add(source.1), length)
                         == slice::from_raw_parts(export.mapping.add(destination), length)
@@ -834,6 +881,10 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         readbacks: &[Readback],
     ) -> Result<(), RenderError> {
         for (source, destination, length) in rows_of(export, readbacks)? {
+            // SAFETY: `rows_of` checked every row against the mapping, and the staging offsets lie
+            // within the space `reserve` set aside for each rect; `submit_and_wait` finished the
+            // GPU's writes to the staging memory, which is host-coherent and distinct from the
+            // dma-buf mapping.
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     self.renderer.staging[source.0].mapped.add(source.1),
@@ -885,7 +936,10 @@ const DMA_BUF_SYNC_END: u64 = 4 | DMA_BUF_SYNC_WRITE;
 
 fn dma_buf_sync(export: &MappedExport, flags: u64) -> Result<(), RenderError> {
     const SYNC: ioctl::Opcode = ioctl::opcode::write::<u64>(b'b', 0);
+    // SAFETY: `DMA_BUF_IOCTL_SYNC` is `_IOW('b', 0, struct dma_buf_sync)`, whose only field is a
+    // `__u64` of flags.
     let request = unsafe { ioctl::Setter::<SYNC, u64>::new(flags) };
+    // SAFETY: `export.fd` is the dma-buf this request was encoded for.
     unsafe { ioctl::ioctl(&export.fd, request) }.map_err(std::io::Error::from)?;
     Ok(())
 }

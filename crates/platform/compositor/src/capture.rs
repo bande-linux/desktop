@@ -395,6 +395,8 @@ fn write_into(
             return Err(FailureReason::BufferConstraints);
         }
         for (index, source) in pixels.chunks_exact(row).take(rows).enumerate() {
+            // SAFETY: source is row bytes long; the bounds check above keeps offset + index *
+            // stride + row within the length bytes of the pool mapping that memory points to.
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     source.as_ptr(),

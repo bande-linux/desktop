@@ -610,6 +610,7 @@ fn end_greeter_when_hung<O: 'static>(
     handle: &LoopHandle<'static, App<O>>,
 ) -> Result<(), Box<dyn Error>> {
     handle.insert_source(Timer::immediate(), |_, _, _| {
+        // SAFETY: alarm takes only a number of seconds and touches no memory.
         unsafe { libc::alarm(GREETER_HANG_LIMIT_SECONDS) };
         TimeoutAction::ToDuration(GREETER_HANG_CHECK)
     })?;

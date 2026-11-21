@@ -52,6 +52,8 @@ impl Ring {
             .open(folder.join(name))?;
         let size = HEADER + TEXT;
         fallocate(file.as_fd(), FallocateFlags::empty(), 0, size as u64)?;
+        // SAFETY: a fresh shared mapping of the whole file, which fallocate has just grown to size
+        // bytes; nothing else in this process maps it.
         let mapped = unsafe {
             mmap(
                 null_mut(),
@@ -62,6 +64,9 @@ impl Ring {
                 0,
             )?
         };
+        // SAFETY: the mapping is size = HEADER + TEXT bytes, page-aligned, never unmapped (the Ring
+        // lives as long as the process), and every access goes through atomics, so other processes
+        // writing the same file cannot cause a data race.
         let (position, text) = unsafe {
             (
                 &*mapped.cast::<AtomicU64>(),

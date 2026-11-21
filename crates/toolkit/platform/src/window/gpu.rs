@@ -102,6 +102,9 @@ fn open_gpu(
         ))),
         raw_window_handle: RawWindowHandle::Wayland(WaylandWindowHandle::new(window)),
     };
+    // SAFETY: display and surface come from the Window's Connection and WlSurface, and Window waits
+    // for this thread and drops the GPU surface before it destroys the WlSurface or closes the
+    // connection.
     let (gpu, surface) = unsafe { GpuDevice::shared_for(target, allow_software) }?;
     let capabilities = surface.get_capabilities(gpu.adapter());
     let format = capabilities

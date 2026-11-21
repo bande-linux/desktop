@@ -75,7 +75,9 @@ struct FixedInfo {
     rest: [u8; 64],
 }
 
-fn ioctl<T>(file: &File, request: libc::c_ulong, argument: *mut T) -> io::Result<()> {
+unsafe fn ioctl<T>(file: &File, request: libc::c_ulong, argument: *mut T) -> io::Result<()> {
+    // SAFETY: the caller passes a request whose argument is a live #[repr(C)] T that matches the
+    // kernel's layout for it, or null for a request that takes none.
     match unsafe { libc::ioctl(file.as_raw_fd(), request, argument) } {
         0 => Ok(()),
         _ => Err(io::Error::last_os_error()),
@@ -114,7 +116,9 @@ fn draw_mark(name: &str) -> io::Result<()> {
         .write(true)
         .open(Path::new("/dev").join(name))?;
     let mut variable = VariableInfo::default();
-    ioctl(&file, FBIOGET_VSCREENINFO, &mut variable)?;
+    // SAFETY: FBIOGET_VSCREENINFO writes a `struct fb_var_screeninfo`, which `VariableInfo`
+    // mirrors field for field.
+    unsafe { ioctl(&file, FBIOGET_VSCREENINFO, &mut variable) }?;
     let mut fixed = FixedInfo {
         id: [0; 16],
         smem_start: 0,
@@ -128,11 +132,17 @@ fn draw_mark(name: &str) -> io::Result<()> {
         line_length: 0,
         rest: [0; 64],
     };
-    ioctl(&file, FBIOGET_FSCREENINFO, &mut fixed)?;
-    if variable.bits_per_pixel != FB_BITS {
-        return Err(io::Error::other("the framebuffer is not 32 bits per pixel"));
+    // SAFETY: FBIOGET_FSCREENINFO writes a `struct fb_fix_screeninfo`, which `FixedInfo`
+    // mirrors field for field.
+    unsafe { ioctl(&file, FBIOGET_FSCREENINFO, &mut fixed) }?;
+    if variable.bits_per_pixel != FB_BITS || !fixed.line_length.is_multiple_of(4) {
+        return Err(io::Error::other(
+            "the framebuffer is not 32 bits per pixel in whole pixels per line",
+        ));
     }
     let length = fixed.smem_len as usize;
+    // SAFETY: a fresh shared mapping of the framebuffer, length bytes as the driver reports in
+    // smem_len; it is unmapped below.
     let mapped = unsafe {
         libc::mmap(
             std::ptr::null_mut(),
@@ -174,6 +184,9 @@ fn draw_mark(name: &str) -> io::Result<()> {
             let pixel = channel(lit(INK[0]), variable.red)
                 | channel(lit(INK[1]), variable.green)
                 | channel(lit(INK[2]), variable.blue);
+            // SAFETY: at + 4 <= length keeps the write inside the mapping, and at is 4-aligned
+            // because the mapping is page-aligned and line_length was checked to be a multiple of
+            // 4.
             unsafe {
                 mapped
                     .cast::<u8>()
@@ -183,6 +196,8 @@ fn draw_mark(name: &str) -> io::Result<()> {
             };
         }
     }
+    // SAFETY: mapped and length are exactly what mmap returned and was given, and no pointer into
+    // the mapping outlives this call.
     unsafe { libc::munmap(mapped, length) };
     Ok(())
 }
@@ -191,13 +206,16 @@ fn run(card: &str) -> io::Result<()> {
     let path = Path::new("/dev/dri").join(card);
     let file = OpenOptions::new().read(true).write(true).open(path)?;
     let mut resources = CardResources::default();
-    match ioctl(&file, DRM_IOCTL_MODE_GETRESOURCES, &mut resources) {
+    // SAFETY: `CardResources` mirrors `struct drm_mode_card_res`; its array pointers are null,
+    // so the kernel only fills in the counts.
+    match unsafe { ioctl(&file, DRM_IOCTL_MODE_GETRESOURCES, &mut resources) } {
         Err(error) if error.raw_os_error() == Some(libc::EOPNOTSUPP) => return Ok(()),
         Err(error) => return Err(error),
         Ok(()) if resources.connector_count == 0 => return Ok(()),
         Ok(()) => {}
     }
-    if let Err(error) = ioctl(&file, DRM_IOCTL_DROP_MASTER, std::ptr::null_mut::<u8>())
+    // SAFETY: DRM_IOCTL_DROP_MASTER takes no argument.
+    if let Err(error) = unsafe { ioctl(&file, DRM_IOCTL_DROP_MASTER, std::ptr::null_mut::<u8>()) }
         && error.raw_os_error() != Some(libc::EINVAL)
     {
         eprintln!("cannot give up the display: {error}");
@@ -210,6 +228,7 @@ fn run(card: &str) -> io::Result<()> {
         eprintln!("cannot draw the mark on {framebuffer}: {error}");
     }
     loop {
+        // SAFETY: pause only waits for a signal and touches no memory.
         unsafe { libc::pause() };
     }
 }

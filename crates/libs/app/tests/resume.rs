@@ -124,6 +124,8 @@ fn windows_come_back_after_a_crash_and_not_after_quit() {
     let bus = SessionBus::start().expect("private session bus");
     let state = std::env::temp_dir().join(format!("bande-resume-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&state);
+    // SAFETY: this binary's only test sets these before it starts the app, so no other thread reads
+    // the environment yet.
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
         std::env::set_var("XDG_STATE_HOME", &state);

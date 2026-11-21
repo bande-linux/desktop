@@ -249,6 +249,9 @@ fn text_on_a_toolkit_page_stays_text_in_the_pdf() {
     let folder = Folder::new("bande-printd-text");
     let path = folder.0.join("page.pdf");
     std::fs::write(&path, document_bytes()).unwrap();
+    // SAFETY: the other tests in this binary read the environment only through std::env (zbus,
+    // Command), whose lock serialises it with set_var; the daemons they talk to are separate
+    // processes.
     unsafe { std::env::set_var("BANDE_PREVIEW_WORKER", env!("CARGO_BIN_EXE_bande-printd")) };
     let mut session = Session::open(&path).unwrap();
     let deadline = Instant::now() + Duration::from_secs(20);

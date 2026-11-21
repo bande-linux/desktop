@@ -263,6 +263,8 @@ struct MappedExport {
 
 impl Drop for MappedExport {
     fn drop(&mut self) {
+        // SAFETY: `mapping` and `length` are exactly what `mmap` returned in `mapped_export`, and
+        // this value is the mapping's only owner, so nothing reads it afterwards.
         let _ = unsafe { mm::munmap(self.mapping.cast(), self.length) };
     }
 }
@@ -428,6 +430,8 @@ fn samples_linear_nv12(instance: &ash::Instance, physical: vk::PhysicalDevice) -
     let linear = u64::from(Modifier::Linear);
     let mut list = vk::DrmFormatModifierPropertiesListEXT::default();
     let mut properties = vk::FormatProperties2::default().push_next(&mut list);
+    // SAFETY: `physical` was enumerated from this `instance`, and `properties` with its chained
+    // `list` outlives the call.
     unsafe {
         instance.get_physical_device_format_properties2(physical, VIDEO_FORMAT, &mut properties);
     }
@@ -438,6 +442,8 @@ fn samples_linear_nv12(instance: &ash::Instance, physical: vk::PhysicalDevice) -
     let mut list = vk::DrmFormatModifierPropertiesListEXT::default()
         .drm_format_modifier_properties(&mut modifiers);
     let mut properties = vk::FormatProperties2::default().push_next(&mut list);
+    // SAFETY: `physical` belongs to this `instance`; `list` now points at `modifiers`, which has
+    // room for the `drm_format_modifier_count` entries the first query reported.
     unsafe {
         instance.get_physical_device_format_properties2(physical, VIDEO_FORMAT, &mut properties);
     }
@@ -466,6 +472,8 @@ fn samples_linear_nv12(instance: &ash::Instance, physical: vk::PhysicalDevice) -
         .push_next(&mut external_info);
     let mut external = vk::ExternalImageFormatProperties::default();
     let mut result = vk::ImageFormatProperties2::default().push_next(&mut external);
+    // SAFETY: `physical` belongs to this `instance`; `info`, `result` and the structs chained into
+    // them outlive the call.
     let supported = unsafe {
         instance.get_physical_device_image_format_properties2(physical, &info, &mut result)
     };
@@ -477,14 +485,17 @@ fn samples_linear_nv12(instance: &ash::Instance, physical: vk::PhysicalDevice) -
 }
 
 fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
+    // SAFETY: `instance` is a live instance, not destroyed before `choose_device` returns.
     let physicals = unsafe { instance.enumerate_physical_devices() }?;
     physicals
         .into_iter()
         .filter_map(|physical| {
+            // SAFETY: `physical` was just enumerated from this live `instance`.
             let properties = unsafe { instance.get_physical_device_properties(physical) };
             if properties.api_version < vk::API_VERSION_1_3 {
                 return None;
             }
+            // SAFETY: `physical` was just enumerated from this live `instance`.
             let extensions =
                 unsafe { instance.enumerate_device_extension_properties(physical) }.ok()?;
             REQUIRED_EXTENSIONS
@@ -495,6 +506,7 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
                         .any(|extension| extension.extension_name_as_c_str() == Ok(*required))
                 })
                 .then_some(())?;
+            // SAFETY: `physical` was just enumerated from this live `instance`.
             let family = unsafe { instance.get_physical_device_queue_family_properties(physical) }
                 .iter()
                 .position(|family| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))?;
@@ -507,6 +519,8 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
             if knows_node {
                 properties2 = properties2.push_next(&mut node);
             }
+            // SAFETY: `physical` belongs to this `instance`; `node` is chained only when the device
+            // lists `VK_EXT_physical_device_drm`, and both chained structs outlive the call.
             unsafe { instance.get_physical_device_properties2(physical, &mut properties2) };
             let on_real_gpu = matches!(
                 properties.device_type,
@@ -575,10 +589,14 @@ fn linear_formats() -> FormatSet {
 
 impl VulkanRenderer {
     pub fn new() -> Result<Self, RenderError> {
+        // SAFETY: loading runs the system Vulkan loader's initialisers once; the returned `Entry`
+        // keeps the library loaded for as long as the renderer holds it in `_entry`.
         let entry = unsafe { ash::Entry::load() }?;
         let application = vk::ApplicationInfo::default()
             .application_name(c"bande-compositor")
             .api_version(vk::API_VERSION_1_3);
+        // SAFETY: `application` and the create info outlive the call; the instance is destroyed
+        // only by the error paths below or by `Drop`.
         let instance = unsafe {
             entry.create_instance(
                 &vk::InstanceCreateInfo::default().application_info(&application),
@@ -588,6 +606,8 @@ impl VulkanRenderer {
         let chosen = match choose_device(&instance) {
             Ok(chosen) => chosen,
             Err(error) => {
+                // SAFETY: `choose_device` failed, so `instance` has no child objects and is never
+                // used again.
                 unsafe { instance.destroy_instance(None) };
                 return Err(error);
             }
@@ -610,6 +630,8 @@ impl VulkanRenderer {
             )
             .map(|name| name.as_ptr())
             .collect();
+        // SAFETY: `chosen.physical` belongs to `instance`; `queue_info`, `priorities`, `vulkan13`
+        // and `extensions` (pointers into `'static` names) outlive the call.
         let device = match unsafe {
             instance.create_device(
                 chosen.physical,
@@ -622,6 +644,8 @@ impl VulkanRenderer {
         } {
             Ok(device) => device,
             Err(error) => {
+                // SAFETY: `create_device` failed, so `instance` has no child objects and is never
+                // used again.
                 unsafe { instance.destroy_instance(None) };
                 return Err(error.into());
             }
@@ -629,6 +653,8 @@ impl VulkanRenderer {
         let mut renderer = Self {
             push_descriptor: ash::khr::push_descriptor::Device::new(&instance, &device),
             external_memory_fd: ash::khr::external_memory_fd::Device::new(&instance, &device),
+            // SAFETY: the device was created with one queue in `chosen.family`, so queue 0 of that
+            // family exists.
             queue: unsafe { device.get_device_queue(chosen.family, 0) },
             queue_family: chosen.family,
             output_on_device: chosen.output_on_device,
@@ -637,6 +663,7 @@ impl VulkanRenderer {
             output_colour: None,
             encode_table: None,
             colour_scratch: HashMap::new(),
+            // SAFETY: `chosen.physical` belongs to the live `instance`.
             memory: unsafe { instance.get_physical_device_memory_properties(chosen.physical) },
             reduced_effects: chosen.info.software,
             info: chosen.info,
@@ -674,6 +701,8 @@ impl VulkanRenderer {
 
     fn create_objects(&mut self, family: u32) -> Result<(), RenderError> {
         let device = &self.device;
+        // SAFETY: `family` is the queue family the device was created with; the pool is destroyed
+        // only in `Drop`, after the device is idle.
         self.command_pool = unsafe {
             device.create_command_pool(
                 &vk::CommandPoolCreateInfo::default()
@@ -682,6 +711,8 @@ impl VulkanRenderer {
                 None,
             )
         }?;
+        // SAFETY: `command_pool` was just created from this device; the buffer is freed together
+        // with the pool.
         self.command_buffer = unsafe {
             device.allocate_command_buffers(
                 &vk::CommandBufferAllocateInfo::default()
@@ -693,8 +724,12 @@ impl VulkanRenderer {
         .into_iter()
         .next()
         .ok_or(RenderError::Vulkan(vk::Result::ERROR_UNKNOWN))?;
+        // SAFETY: the fence is created unsignalled and destroyed only in `Drop`, after the device
+        // is idle.
         self.fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }?;
 
+        // SAFETY: the sampler is destroyed only in `Drop`, after the pipeline layout and the
+        // descriptor set layout that use it as an immutable sampler.
         self.sampler = unsafe {
             device.create_sampler(
                 &vk::SamplerCreateInfo::default()
@@ -726,6 +761,8 @@ impl VulkanRenderer {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
+        // SAFETY: `bindings` and `samplers` outlive the call, and `VK_KHR_push_descriptor`, which
+        // `PUSH_DESCRIPTOR_KHR` needs, is a required extension of every chosen device.
         self.set_layout = unsafe {
             device.create_descriptor_set_layout(
                 &vk::DescriptorSetLayoutCreateInfo::default()
@@ -737,6 +774,8 @@ impl VulkanRenderer {
         let quad = vk::PushConstantRange::default()
             .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
             .size(frame::QUAD_BYTES);
+        // SAFETY: `set_layout` was created just above and `quad` covers exactly the `QUAD_BYTES`
+        // every draw pushes.
         self.pipeline_layout = unsafe {
             device.create_pipeline_layout(
                 &vk::PipelineLayoutCreateInfo::default()
@@ -774,6 +813,8 @@ impl VulkanRenderer {
             .iter()
             .map(|word| u32::from_le_bytes(*word))
             .collect();
+        // SAFETY: `words` is the build script's SPIR-V as properly aligned `u32`s and outlives the
+        // call.
         let module = unsafe {
             self.device
                 .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&words), None)
@@ -827,6 +868,8 @@ impl VulkanRenderer {
             .dynamic_state(&dynamic)
             .layout(self.pipeline_layout)
             .push_next(&mut rendering);
+        // SAFETY: `module`, `pipeline_layout` and every state struct `info` points to are alive
+        // until the call returns.
         let pipelines = unsafe {
             self.device.create_graphics_pipelines(
                 vk::PipelineCache::null(),
@@ -834,6 +877,7 @@ impl VulkanRenderer {
                 None,
             )
         };
+        // SAFETY: pipeline creation has returned, so nothing references `module` any more.
         unsafe { self.device.destroy_shader_module(module, None) };
         pipelines
             .map_err(|(_, result)| RenderError::Vulkan(result))?
@@ -926,6 +970,8 @@ impl VulkanRenderer {
             .copy_target_to(&readback, image, width, height)
             .map(|()| {
                 let mut pixels = vec![0u8; bytes];
+                // SAFETY: `copy_target_to` waited for the copy and its host-read barrier, and
+                // `readback` maps at least `bytes` bytes, as does `pixels`; the two never overlap.
                 unsafe {
                     std::ptr::copy_nonoverlapping(readback.mapped, pixels.as_mut_ptr(), bytes)
                 };
@@ -974,6 +1020,8 @@ impl VulkanRenderer {
         if width.unsigned_abs().max(height.unsigned_abs()) > self.info.max_image_side {
             return Err(RenderError::ImageTooLarge);
         }
+        // SAFETY: the create info outlives the call and the size was checked against
+        // `max_image_side`; the image is destroyed by `destroy_image` on failure or when forgotten.
         let image = unsafe {
             self.device.create_image(
                 &vk::ImageCreateInfo::default()
@@ -1026,6 +1074,8 @@ impl VulkanRenderer {
             .plane_layouts(layouts);
         let mut external = vk::ExternalMemoryImageCreateInfo::default()
             .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        // SAFETY: only reached when `samples_video` enabled `VK_EXT_image_drm_format_modifier`;
+        // `explicit` (borrowing `layouts`) and `external` outlive the call.
         let image = unsafe {
             self.device.create_image(
                 &vk::ImageCreateInfo::default()
@@ -1067,11 +1117,14 @@ impl VulkanRenderer {
 
     fn bind_imported_image(&self, image: &mut Image, mut file: File) -> Result<(), RenderError> {
         let size = file.seek(SeekFrom::End(0))?;
+        // SAFETY: `image.image` is a live image of this device without memory yet.
         let requirements = unsafe { self.device.get_image_memory_requirements(image.image) };
         if requirements.size > size {
             return Err(RenderError::BufferOutOfBounds);
         }
         let mut properties = vk::MemoryFdPropertiesKHR::default();
+        // SAFETY: `file` stays open across the call, and querying the fd does not take ownership of
+        // it.
         unsafe {
             self.external_memory_fd.get_memory_fd_properties(
                 vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
@@ -1097,10 +1150,14 @@ impl VulkanRenderer {
         ) {
             Ok(memory) => image.memory = memory,
             Err(error) => {
+                // SAFETY: the import failed, so Vulkan did not take ownership of `fd`, which
+                // `into_raw_fd` released from `file`; this is its only close.
                 unsafe { smithay::reexports::rustix::io::close(fd) };
                 return Err(error.into());
             }
         }
+        // SAFETY: `image.memory` was just imported as a dedicated allocation of the image's own
+        // size, and the image has no memory bound yet.
         unsafe { self.device.bind_image_memory(image.image, image.memory, 0) }?;
         Ok(())
     }
@@ -1111,6 +1168,8 @@ impl VulkanRenderer {
         format: vk::Format,
         aspect: vk::ImageAspectFlags,
     ) -> Result<vk::ImageView, RenderError> {
+        // SAFETY: `image` is a live multi-planar image of this device, and `aspect` names one of
+        // its planes.
         Ok(unsafe {
             self.device.create_image_view(
                 &vk::ImageViewCreateInfo::default()
@@ -1149,6 +1208,9 @@ impl VulkanRenderer {
                 .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .image(texture.image.image)
                 .subresource_range(COLOR_RANGE);
+            // SAFETY: called from `record_copies`, between `begin_commands` and the end of the
+            // buffer, so `command_buffer` is recording; the barrier acquires the live imported
+            // image from the foreign queue.
             unsafe {
                 self.device.cmd_pipeline_barrier2(
                     self.command_buffer,
@@ -1159,6 +1221,7 @@ impl VulkanRenderer {
     }
 
     fn allocate(&self, info: &vk::MemoryAllocateInfo) -> Result<vk::DeviceMemory, vk::Result> {
+        // SAFETY: `info` and every struct chained into it are borrowed for the call.
         unsafe { self.device.allocate_memory(info, None) }.inspect_err(|error| {
             if *error == vk::Result::ERROR_OUT_OF_DEVICE_MEMORY {
                 self.exhausted.store(true, Ordering::Relaxed);
@@ -1167,6 +1230,7 @@ impl VulkanRenderer {
     }
 
     fn bind_image_memory(&self, image: &mut Image) -> Result<(), RenderError> {
+        // SAFETY: `image.image` is a live image of this device.
         let requirements = unsafe { self.device.get_image_memory_requirements(image.image) };
         let kind = self
             .memory_type(
@@ -1184,6 +1248,8 @@ impl VulkanRenderer {
                 .allocation_size(requirements.size)
                 .memory_type_index(kind),
         )?;
+        // SAFETY: `image.memory` was just allocated from the image's own requirements, and the
+        // image has no memory bound yet.
         unsafe { self.device.bind_image_memory(image.image, image.memory, 0) }?;
         Ok(())
     }
@@ -1194,6 +1260,8 @@ impl VulkanRenderer {
         format: vk::Format,
         alpha: vk::ComponentSwizzle,
     ) -> Result<vk::ImageView, RenderError> {
+        // SAFETY: `image` is a live image of this device in a format the view can use, and the
+        // create info outlives the call.
         let view = unsafe {
             self.device.create_image_view(
                 &vk::ImageViewCreateInfo::default()
@@ -1212,6 +1280,9 @@ impl VulkanRenderer {
     }
 
     fn destroy_image(&self, image: &Image) {
+        // SAFETY: callers pass an image they no longer reach from the renderer's tables, after the
+        // synchronous `submit_and_wait` of every submission that used it; Vulkan ignores the null
+        // handles of a partly built image.
         unsafe {
             self.device.destroy_image_view(image.view, None);
             self.device.destroy_image(image.image, None);
@@ -1220,6 +1291,8 @@ impl VulkanRenderer {
     }
 
     fn destroy_imported(&self, imported: &Imported) {
+        // SAFETY: callers pass an import they no longer reach from the renderer's tables, after the
+        // synchronous `submit_and_wait` of every submission that used it.
         unsafe {
             self.device.destroy_buffer(imported.buffer, None);
             self.device.free_memory(imported.memory, None);
@@ -1227,6 +1300,7 @@ impl VulkanRenderer {
     }
 
     fn create_staging(&self, capacity: usize) -> Result<Staging, RenderError> {
+        // SAFETY: the create info outlives the call; the buffer is destroyed by `destroy_staging`.
         let buffer = unsafe {
             self.device.create_buffer(
                 &vk::BufferCreateInfo::default()
@@ -1253,6 +1327,7 @@ impl VulkanRenderer {
     }
 
     fn map_staging(&self, staging: &mut Staging) -> Result<(), RenderError> {
+        // SAFETY: `staging.buffer` is a live buffer of this device.
         let requirements = unsafe { self.device.get_buffer_memory_requirements(staging.buffer) };
         let kind = self.memory_type(
             requirements.memory_type_bits,
@@ -1263,6 +1338,9 @@ impl VulkanRenderer {
                 .allocation_size(requirements.size)
                 .memory_type_index(kind),
         )?;
+        // SAFETY: `staging.memory` was just allocated from the buffer's own requirements in a
+        // host-visible, coherent type, and is neither bound nor mapped yet; `WHOLE_SIZE` maps all
+        // of it, at least `capacity` bytes.
         unsafe {
             self.device
                 .bind_buffer_memory(staging.buffer, staging.memory, 0)?;
@@ -1280,6 +1358,9 @@ impl VulkanRenderer {
     }
 
     fn destroy_staging(&self, staging: &Staging) {
+        // SAFETY: staging buffers are dropped only after `submit_and_wait` returned for every
+        // submission that read them, or before they were ever used; freeing the memory also unmaps
+        // it.
         unsafe {
             self.device.destroy_buffer(staging.buffer, None);
             self.device.free_memory(staging.memory, None);
@@ -1329,6 +1410,8 @@ impl VulkanRenderer {
         let size = file.seek(SeekFrom::End(0))?;
         let mut external = vk::ExternalMemoryBufferCreateInfo::default()
             .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        // SAFETY: `external` is chained into a create info that outlives the call; the buffer is
+        // destroyed by `destroy_imported`, or below if binding fails.
         let buffer = unsafe {
             self.device.create_buffer(
                 &vk::BufferCreateInfo::default()
@@ -1346,6 +1429,7 @@ impl VulkanRenderer {
                 size,
             }),
             Err(error) => {
+                // SAFETY: binding failed, so the buffer was never used.
                 unsafe { self.device.destroy_buffer(buffer, None) };
                 Err(error)
             }
@@ -1358,11 +1442,14 @@ impl VulkanRenderer {
         file: File,
         size: u64,
     ) -> Result<vk::DeviceMemory, RenderError> {
+        // SAFETY: `buffer` is a live buffer of this device without memory yet.
         let requirements = unsafe { self.device.get_buffer_memory_requirements(buffer) };
         if requirements.size > size {
             return Err(RenderError::BufferOutOfBounds);
         }
         let mut properties = vk::MemoryFdPropertiesKHR::default();
+        // SAFETY: `file` stays open across the call, and querying the fd does not take ownership of
+        // it.
         unsafe {
             self.external_memory_fd.get_memory_fd_properties(
                 vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
@@ -1387,11 +1474,17 @@ impl VulkanRenderer {
         let memory = match memory {
             Ok(memory) => memory,
             Err(error) => {
+                // SAFETY: the import failed, so Vulkan did not take ownership of `fd`, which
+                // `into_raw_fd` released from `file`; this is its only close.
                 unsafe { smithay::reexports::rustix::io::close(fd) };
                 return Err(error.into());
             }
         };
+        // SAFETY: `memory` was just imported for `buffer`, which has no memory yet, and covers its
+        // requirements as checked above.
         if let Err(error) = unsafe { self.device.bind_buffer_memory(buffer, memory, 0) } {
+            // SAFETY: binding failed, so nothing uses `memory`; freeing it also closes the imported
+            // fd it owns.
             unsafe { self.device.free_memory(memory, None) };
             return Err(error.into());
         }
@@ -1570,6 +1663,9 @@ impl VulkanRenderer {
     fn submit_and_wait(&self) -> Result<(), RenderError> {
         let submit =
             vk::SubmitInfo::default().command_buffers(slice::from_ref(&self.command_buffer));
+        // SAFETY: the renderer is neither `Send` nor `Sync`, so the queue and fence are used from
+        // one thread; the buffer has ended, and the fence is unsignalled because each submission
+        // waits for and resets it (a failed wait marks the renderer lost, and it is replaced).
         unsafe {
             self.device
                 .queue_submit(self.queue, slice::from_ref(&submit), self.fence)
@@ -1593,6 +1689,8 @@ impl VulkanRenderer {
         }
         self.begin_commands()?;
         self.record_copies();
+        // SAFETY: `begin_commands` started the buffer on this thread and `record_copies` recorded
+        // into it.
         unsafe { self.device.end_command_buffer(self.command_buffer) }?;
         self.submit_and_wait()?;
         self.recycle_staging();
@@ -1600,6 +1698,8 @@ impl VulkanRenderer {
     }
 
     fn begin_commands(&self) -> Result<(), RenderError> {
+        // SAFETY: the buffer is not pending, as every submission is waited for by
+        // `submit_and_wait`, and its pool was created with `RESET_COMMAND_BUFFER`.
         unsafe {
             self.device
                 .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
@@ -1661,6 +1761,9 @@ impl VulkanRenderer {
                         height: copy.rect.height.unsigned_abs(),
                         depth: 1,
                     });
+                // SAFETY: recording since `begin_commands`; `copy.source` is a live staging or
+                // imported buffer (forgetting either drops its pending copies) and the barrier
+                // above moved `image` to `TRANSFER_DST_OPTIMAL`.
                 unsafe {
                     device.cmd_copy_buffer_to_image(
                         commands,
@@ -1708,6 +1811,8 @@ impl VulkanRenderer {
             });
         self.begin_commands()?;
         barrier(device, commands, image, ATTACHMENT, TRANSFER_SOURCE);
+        // SAFETY: recording since `begin_commands`; the barrier above moved the live target `image`
+        // to `TRANSFER_SRC_OPTIMAL`, and `readback` holds `width * height` pixels.
         unsafe {
             device.cmd_copy_image_to_buffer(
                 commands,
@@ -1723,6 +1828,8 @@ impl VulkanRenderer {
             .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
             .dst_stage_mask(vk::PipelineStageFlags2::HOST)
             .dst_access_mask(vk::AccessFlags2::HOST_READ);
+        // SAFETY: recording since `begin_commands` on this thread, and nothing else records into
+        // the buffer.
         unsafe {
             device.cmd_pipeline_barrier2(
                 commands,
@@ -1775,6 +1882,9 @@ impl VulkanRenderer {
         if end > length {
             return Err(RenderError::BufferOutOfBounds);
         }
+        // SAFETY: a new shared mapping of the dma-buf's whole `length`; `MappedExport` owns it and
+        // unmaps it on drop, and every access through it is bounds-checked against `length` by
+        // `rows_of`.
         let mapping = unsafe {
             mm::mmap(
                 std::ptr::null_mut(),
@@ -1920,6 +2030,7 @@ impl Drop for VulkanRenderer {
         if self.is_lost() {
             return;
         }
+        // SAFETY: `Drop` has the only access to the device, which is still alive.
         unsafe {
             let _ = self.device.device_wait_idle();
         }
@@ -1945,6 +2056,9 @@ impl Drop for VulkanRenderer {
         for (_, imported) in std::mem::take(&mut self.imports) {
             self.destroy_imported(&imported);
         }
+        // SAFETY: the device is idle and every image, buffer and allocation was destroyed above;
+        // these objects were created once by `create_objects`, and children go before the device
+        // and the device before the instance.
         unsafe {
             for (_, pipeline) in self.pipelines.drain() {
                 self.device.destroy_pipeline(pipeline, None);
@@ -2015,6 +2129,8 @@ fn barrier(
         .dst_access_mask(to.2)
         .image(image)
         .subresource_range(COLOR_RANGE);
+    // SAFETY: callers record between `begin_commands` and the end of the buffer, on the renderer's
+    // thread, with `image` a live image currently in the `from` layout.
     unsafe {
         device.cmd_pipeline_barrier2(
             commands,

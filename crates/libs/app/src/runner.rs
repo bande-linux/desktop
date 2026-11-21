@@ -147,6 +147,7 @@ fn restore_saved_windows<P: Program>(program: &mut P, cx: &mut Cx<P>) {
 }
 
 fn release_freed_memory() {
+    // SAFETY: malloc_trim only returns free heap pages to the kernel; it has no preconditions.
     unsafe {
         libc::malloc_trim(0);
     }

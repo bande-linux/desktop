@@ -769,8 +769,11 @@ impl Dispatch<WlKeyboard, ()> for State {
                 format: WEnum::Value(KeymapFormat::XkbV1),
                 fd,
                 size,
-            } => {
+            } if size > 0 => {
                 let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+                // SAFETY: `fd` is the keymap the compositor just handed over, owned by this call;
+                // it is mapped private and read-only, so nothing else can change the bytes xkb
+                // parses, and `size > 0` keeps xkbcommon's `size - 1` from wrapping.
                 let keymap = unsafe {
                     xkb::Keymap::new_from_fd(
                         &context,

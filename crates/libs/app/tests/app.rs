@@ -106,6 +106,8 @@ fn wait_for_windows(frames: &mut Frames, server: &mut Compositor, wanted: usize)
 #[test]
 fn a_second_launch_reaches_the_running_app_and_the_switcher_activates_it_windowless() {
     let bus = SessionBus::start().expect("private session bus");
+    // SAFETY: this binary's only test sets these before it starts the app, so no other thread reads
+    // the environment yet.
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
         std::env::set_var(

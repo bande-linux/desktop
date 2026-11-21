@@ -14,6 +14,8 @@ const ESP: &str = "/org/freedesktop/UDisks2/block_devices/sdb2";
 fn ejecting_a_removable_usb_iso_unmounts_all_its_volumes_and_ejects_without_powering_off_the_port()
 {
     let bus = SessionBus::start().unwrap();
+    // SAFETY: this binary's only test sets this before anything connects to the bus, so no other
+    // thread reads the environment yet.
     unsafe { std::env::set_var("DBUS_SYSTEM_BUS_ADDRESS", bus.address()) };
     let udisks = FakeUdisks::start(&bus).unwrap();
     let volumes = [(ISO, "/media/anna/Debian"), (ESP, "/media/anna/ESP")];

@@ -525,6 +525,8 @@ pub fn run(spool_root: &Path, config_path: &Path) -> Result<(), Box<dyn Error>> 
     if !listening {
         return Err("serve runs from its systemd socket".into());
     }
+    // SAFETY: LISTEN_FDS=1 and LISTEN_PID match this process, so systemd passed exactly one socket
+    // at fd 3; run is called once and nothing else in the process took that fd.
     let listen = unsafe { OwnedFd::from_raw_fd(FIRST_LISTEN_FD) };
     let listener = UnixListener::from(listen);
     let service = Arc::new(Service {

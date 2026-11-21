@@ -98,6 +98,7 @@ impl Device {
     }
 
     fn enable<const OPCODE: Opcode>(&self, value: u16) -> io::Result<()> {
+        // SAFETY: the UI_SET_*BIT requests take the bit number as a plain integer, not a pointer.
         unsafe {
             ioctl(
                 &self.0,
@@ -119,7 +120,10 @@ impl Device {
             name: device_name,
             ff_effects_max: 0,
         };
+        // SAFETY: UI_DEV_SETUP reads a struct uinput_setup, which UinputSetup matches; the Setter
+        // owns it for the call.
         unsafe { ioctl(&self.0, Setter::<UI_DEV_SETUP, UinputSetup>::new(setup)) }?;
+        // SAFETY: UI_DEV_CREATE takes no argument.
         unsafe { ioctl(&self.0, NoArg::<UI_DEV_CREATE>::new()) }?;
         Ok(())
     }
@@ -137,6 +141,8 @@ impl Device {
                 resolution,
             },
         };
+        // SAFETY: UI_ABS_SETUP reads a struct uinput_abs_setup, which AbsSetup matches; the Setter
+        // owns it for the call.
         unsafe { ioctl(&self.0, Setter::<UI_ABS_SETUP, AbsSetup>::new(setup)) }?;
         Ok(())
     }

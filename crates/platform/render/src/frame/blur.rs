@@ -177,6 +177,8 @@ impl VulkanFrame<'_, '_> {
     }
 
     fn pause(&mut self) {
+        // SAFETY: the frame holds the renderer mutably while `command_buffer` records, and the
+        // rendering on the target is open; `resume` begins it again.
         unsafe {
             self.renderer
                 .device
@@ -207,6 +209,9 @@ impl VulkanFrame<'_, '_> {
                 height: source.height.unsigned_abs(),
                 depth: 1,
             });
+        // SAFETY: the frame holds the renderer mutably while `command_buffer` records; the barriers
+        // above moved both live images to the copy layouts, and `source` lies within the target
+        // while level 0 has exactly its size.
         unsafe {
             device.cmd_copy_image(
                 commands,
@@ -257,6 +262,8 @@ impl VulkanFrame<'_, '_> {
         );
         self.bounds = target;
         self.renderer.counters.shaded_pixels += bounds.area();
+        // SAFETY: the frame holds the renderer mutably while `command_buffer` records, and this
+        // ends the rendering begun on `to` above.
         unsafe {
             self.renderer
                 .device
@@ -288,6 +295,9 @@ impl VulkanFrame<'_, '_> {
             .store_op(vk::AttachmentStoreOp::STORE);
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
+        // SAFETY: the frame holds the renderer mutably while `command_buffer` records, outside any
+        // rendering; `view` is a live view in `COLOR_ATTACHMENT_OPTIMAL` and `attachment` outlives
+        // the call.
         unsafe {
             device.cmd_begin_rendering(
                 commands,

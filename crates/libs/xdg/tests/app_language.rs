@@ -25,6 +25,8 @@ fn language_seen_by(app_id: &str, out: &Path) -> Vec<String> {
 fn an_app_starts_in_its_language_and_does_not_pass_it_on() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("seen");
+    // SAFETY: this binary's only test sets these before it launches anything, so no other thread
+    // reads the environment yet.
     unsafe {
         std::env::set_var("XDG_CONFIG_HOME", dir.path());
         std::env::set_var("LANGUAGE", "session");
@@ -38,6 +40,8 @@ fn an_app_starts_in_its_language_and_does_not_pass_it_on() {
     );
     assert_eq!(language_seen_by("org.example.Other", &out), ["session", ""]);
 
+    // SAFETY: the only other thread is the launch watcher, which reads the environment only through
+    // std::env, whose lock serialises it with set_var.
     unsafe {
         std::env::set_var("LANGUAGE", "xx_YY");
         std::env::set_var("BANDE_SESSION_LANGUAGE", "session");

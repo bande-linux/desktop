@@ -17,21 +17,29 @@ pub fn crypted(password: &str) -> Result<String, String> {
     let mut phrase = Zeroizing::new(Vec::with_capacity(password.len() + 1));
     phrase.extend_from_slice(password.as_bytes());
     phrase.push(0);
+    // SAFETY: libcrypt's initialisers have no preconditions on the loading process.
     let library = unsafe { Library::new(LIBRARY) }.map_err(|error| error.to_string())?;
+    // SAFETY: Gensalt matches the C prototype of crypt_gensalt_ra.
     let gensalt: Symbol<Gensalt> =
         unsafe { library.get(b"crypt_gensalt_ra\0") }.map_err(|error| error.to_string())?;
+    // SAFETY: Crypt matches the C prototype of crypt_ra.
     let crypt: Symbol<Crypt> =
         unsafe { library.get(b"crypt_ra\0") }.map_err(|error| error.to_string())?;
+    // SAFETY: null prefix and random bytes with count 0 ask for the default method and
+    // libcrypt's own randomness; the result is malloc'd and freed below.
     let setting = unsafe { gensalt(ptr::null(), 0, ptr::null(), 0) };
     if setting.is_null() {
         return Err("libcrypt has no default hashing method".to_owned());
     }
     let mut data: *mut c_void = ptr::null_mut();
     let mut size: c_int = 0;
+    // SAFETY: phrase and setting are NUL-terminated; data and size are the out pointers crypt_ra
+    // uses for its own reusable buffer, which we free below.
     let hashed = unsafe { crypt(phrase.as_ptr().cast(), setting, &mut data, &mut size) };
     let result = if hashed.is_null() {
         Err("libcrypt could not hash the password".to_owned())
     } else {
+        // SAFETY: a non-null hash is a NUL-terminated string inside data, freed only after this copy.
         let text = unsafe { CStr::from_ptr(hashed) }
             .to_string_lossy()
             .into_owned();
@@ -41,6 +49,8 @@ pub fn crypted(password: &str) -> Result<String, String> {
             Ok(text)
         }
     };
+    // SAFETY: data is crypt_ra's malloc'd buffer of size bytes and setting is
+    // crypt_gensalt_ra's malloc'd string; neither is used after this.
     unsafe {
         if !data.is_null() {
             ptr::write_bytes(data.cast::<u8>(), 0, usize::try_from(size).unwrap_or(0));

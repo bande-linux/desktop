@@ -29,6 +29,8 @@ pub(crate) struct Process {
 fn peer_pidfd(stream: &UnixStream) -> Option<OwnedFd> {
     let mut fd: libc::c_int = -1;
     let mut length = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+    // SAFETY: fd and length are live locals, and length says fd is exactly the c_int SO_PEERPIDFD
+    // writes.
     let found = unsafe {
         libc::getsockopt(
             stream.as_raw_fd(),
@@ -38,6 +40,8 @@ fn peer_pidfd(stream: &UnixStream) -> Option<OwnedFd> {
             &raw mut length,
         )
     };
+    // SAFETY: SO_PEERPIDFD succeeded, so fd is a new pidfd the kernel gave this process and nothing
+    // else owns.
     (found == 0 && fd >= 0).then(|| unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
@@ -133,6 +137,8 @@ impl Process {
         let released = std::thread::Builder::new()
             .name("release-memory".to_owned())
             .spawn(move || {
+                // SAFETY: process_mrelease takes only the pidfd, which this closure owns and keeps
+                // open for the call.
                 let result =
                     unsafe { libc::syscall(libc::SYS_process_mrelease, pidfd.as_raw_fd(), 0) };
                 if result != 0 {

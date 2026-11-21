@@ -24,11 +24,14 @@ struct Create {
 
 fn shared_buffer() -> Option<(File, Dmabuf)> {
     let length = (SIZE.0 * SIZE.1 * 4) as u64;
+    // SAFETY: the name is a NUL-terminated literal.
     let memory = unsafe { libc::memfd_create(c"display-buffer".as_ptr(), libc::MFD_ALLOW_SEALING) };
     assert!(memory >= 0);
+    // SAFETY: `memfd_create` succeeded, so `memory` is a new fd owned by nothing else.
     let memory = unsafe { File::from_raw_fd(memory) };
     memory.set_len(length.next_multiple_of(65536)).unwrap();
     assert_eq!(
+        // SAFETY: `memory` is an open memfd created with `MFD_ALLOW_SEALING`.
         unsafe { libc::fcntl(memory.as_raw_fd(), libc::F_ADD_SEALS, libc::F_SEAL_SHRINK) },
         0
     );
@@ -43,6 +46,8 @@ fn shared_buffer() -> Option<(File, Dmabuf)> {
         offset: 0,
         size: length.next_multiple_of(65536),
     };
+    // SAFETY: `UDMABUF_CREATE` is `_IOW('u', 0x42, struct udmabuf_create)`, which `Create` mirrors,
+    // and `request` outlives the call.
     let fd = unsafe { libc::ioctl(device.as_raw_fd(), UDMABUF_CREATE as _, &request) };
     assert!(fd >= 0);
     let mut builder = Dmabuf::builder(
@@ -52,6 +57,7 @@ fn shared_buffer() -> Option<(File, Dmabuf)> {
         DmabufFlags::empty(),
     );
     builder.add_plane(
+        // SAFETY: `UDMABUF_CREATE` succeeded, so `fd` is a new dma-buf owned by nothing else.
         unsafe { OwnedFd::from_raw_fd(fd) },
         0,
         0,

@@ -751,6 +751,8 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // SAFETY: main is still single-threaded here: the bus is a child process and logging starts
+    // afterwards.
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
     }

@@ -76,6 +76,8 @@ pub fn only_compute_from_now_on() -> bool {
         len,
         filter: filter.as_ptr().cast_mut(),
     };
+    // SAFETY: program points to filter, a valid BPF program of len instructions that outlives both
+    // prctl calls; the kernel copies it.
     unsafe {
         libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
             && libc::prctl(

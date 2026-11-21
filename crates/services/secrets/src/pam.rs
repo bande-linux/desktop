@@ -39,6 +39,8 @@ fn activated() -> bool {
 
 pub fn listener(runtime_dir: &Path) -> io::Result<UnixListener> {
     if activated() {
+        // SAFETY: LISTEN_PID and LISTEN_FDS say systemd passed this process exactly one socket, at
+        // fd 3; main calls listener once at startup, so nothing else owns that descriptor.
         let fd = unsafe { OwnedFd::from_raw_fd(FIRST_PASSED_FD) };
         fcntl_setfd(&fd, FdFlags::CLOEXEC)?;
         return Ok(UnixListener::from(fd));

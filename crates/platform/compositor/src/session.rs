@@ -346,6 +346,8 @@ impl Compositor {
             }
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
+        // SAFETY: the closure runs between fork and exec and only calls fcntl, which is async-
+        // signal-safe; inherited is client_end's fd, which stays open until after spawn returns.
         unsafe {
             command.pre_exec(move || {
                 fcntl_setfd(BorrowedFd::borrow_raw(inherited), FdFlags::empty())

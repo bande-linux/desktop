@@ -51,6 +51,8 @@ impl App for Greeting {
 #[test]
 fn a_screen_reader_finds_a_button_over_atspi_and_presses_it() {
     let bus = SessionBus::start().expect("private session and AT-SPI bus");
+    // SAFETY: this binary's only test sets these before it starts the registry or the compositor,
+    // so no other thread reads the environment yet.
     unsafe {
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());
         std::env::set_var("AT_SPI_BUS_ADDRESS", bus.address());

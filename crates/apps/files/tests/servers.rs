@@ -19,6 +19,8 @@ fn a_connected_folder_never_loads_on_the_ui_thread_and_connect_to_server_opens()
     let share = runtime.path().join("bande/volumes/share");
     fs::create_dir_all(&share).expect("share");
     fs::write(share.join("film.mkv"), b"x").expect("file");
+    // SAFETY: the other test in this binary reads the environment only through std::env, whose lock
+    // serialises it with set_var.
     unsafe { std::env::set_var("XDG_RUNTIME_DIR", runtime.path()) };
 
     let browser = Browser::open(

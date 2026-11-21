@@ -59,6 +59,8 @@ fn sound_comes_back_after_pipewire_restarts_or_starts_late() {
     }
     let directory = Path::new("/tmp").join(format!("bande-audio-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
+    // SAFETY: this binary's only test sets these before it starts the audio thread, so no other
+    // thread reads the environment yet.
     unsafe {
         std::env::set_var("XDG_RUNTIME_DIR", &directory);
         std::env::set_var("PIPEWIRE_RUNTIME_DIR", &directory);

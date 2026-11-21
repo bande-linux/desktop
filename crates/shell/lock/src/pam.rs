@@ -74,6 +74,8 @@ unsafe extern "C" fn converse(
     let Ok(count) = usize::try_from(count) else {
         return PAM_BUF_ERR;
     };
+    // SAFETY: calloc has no preconditions; the zeroed array is a valid [Response; count] (null
+    // texts) that PAM takes ownership of and frees.
     let answers =
         unsafe { libc::calloc(count, std::mem::size_of::<Response>()) }.cast::<Response>();
     if answers.is_null() {
@@ -81,19 +83,26 @@ unsafe extern "C" fn converse(
     }
     let secret = secret.cast::<c_char>();
     for index in 0..count {
+        // SAFETY: Linux-PAM passes count valid pointers to messages that live for this call.
         let message = unsafe { &**messages.add(index) };
         if matches!(message.style, PAM_PROMPT_ECHO_OFF | PAM_PROMPT_ECHO_ON) {
+            // SAFETY: secret is the NUL-terminated password that authenticate keeps alive for the
+            // whole PAM transaction.
             let copy = unsafe { libc::strdup(secret) };
             if copy.is_null() {
                 for filled in 0..index {
+                    // SAFETY: filled < count, and each text is either null or this call's strdup.
                     unsafe { libc::free((*answers.add(filled)).text.cast()) };
                 }
+                // SAFETY: answers came from calloc above and is not handed to PAM on failure.
                 unsafe { libc::free(answers.cast()) };
                 return PAM_BUF_ERR;
             }
+            // SAFETY: index < count, the length of the answers allocation.
             unsafe { (*answers.add(index)).text = copy };
         }
     }
+    // SAFETY: PAM passes a valid out pointer for the responses array.
     unsafe { *responses = answers };
     PAM_SUCCESS
 }
@@ -107,7 +116,9 @@ pub fn authenticate(service: &str, user: &str, password: &str) -> Result<(), Aut
     let mut secret = Zeroizing::new(Vec::with_capacity(password.len() + 1));
     secret.extend_from_slice(password.as_bytes());
     secret.push(0);
+    // SAFETY: libpam's initialisers have no preconditions on the loading process.
     let library = unsafe { Library::new(LIBRARY) }.map_err(AuthError::Library)?;
+    // SAFETY: library is libpam, and secret is NUL-terminated and outlives run.
     unsafe { run(&library, &service, &user, secret.as_mut_ptr().cast()) }
 }
 
@@ -117,9 +128,13 @@ unsafe fn run(
     user: &CString,
     secret: *mut c_void,
 ) -> Result<(), AuthError> {
+    // SAFETY: every name looked up with this closure is a libpam function with the Step signature
+    // int (pam_handle_t *, int).
     let symbol = |name: &[u8]| unsafe { library.get::<Step>(name) };
+    // SAFETY: Start matches the C prototype of pam_start.
     let start: Symbol<Start> =
         unsafe { library.get(b"pam_start\0") }.map_err(AuthError::Library)?;
+    // SAFETY: End matches the C prototype of pam_end.
     let end: Symbol<End> = unsafe { library.get(b"pam_end\0") }.map_err(AuthError::Library)?;
     let checks = [
         symbol(b"pam_authenticate\0").map_err(AuthError::Library)?,
@@ -128,20 +143,25 @@ unsafe fn run(
     let refresh = symbol(b"pam_setcred\0").map_err(AuthError::Library)?;
     let conversation = Conversation { converse, secret };
     let mut handle = ptr::null_mut();
+    // SAFETY: service and user are NUL-terminated, and conversation and the secret it points to
+    // outlive the transaction, which pam_end closes before this function returns.
     let started = unsafe { start(service.as_ptr(), user.as_ptr(), &conversation, &mut handle) };
     if started != PAM_SUCCESS {
         return Err(AuthError::Rejected(started));
     }
     let mut status = PAM_SUCCESS;
     for check in &checks {
+        // SAFETY: handle is the open transaction pam_start returned.
         status = unsafe { check(handle, 0) };
         if status != PAM_SUCCESS {
             break;
         }
     }
     if status == PAM_SUCCESS {
+        // SAFETY: handle is the open transaction pam_start returned.
         unsafe { refresh(handle, PAM_REFRESH_CRED) };
     }
+    // SAFETY: handle is the open transaction pam_start returned, ended exactly once here.
     unsafe { end(handle, status) };
     if status == PAM_SUCCESS {
         Ok(())

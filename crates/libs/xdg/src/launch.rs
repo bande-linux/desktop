@@ -437,6 +437,8 @@ pub fn spawn_detached(
     {
         process.current_dir(directory);
     }
+    // SAFETY: the closure runs between fork and exec and only makes the setsid, open and write
+    // system calls, which are async-signal-safe and do not allocate.
     unsafe {
         process.pre_exec(|| {
             rustix::process::setsid().map_err(io::Error::from)?;

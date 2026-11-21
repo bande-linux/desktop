@@ -26,6 +26,8 @@ fn a_helper_replaced_on_disk_still_starts_as_the_build_the_session_began_with() 
     }
     let state = tempfile::tempdir().expect("state dir");
     let bus = SessionBus::start().expect("private bus");
+    // SAFETY: this binary's only test sets these before it starts anything, so no other thread
+    // reads the environment yet.
     unsafe {
         std::env::set_var("DBUS_SYSTEM_BUS_ADDRESS", bus.address());
         std::env::set_var("DBUS_SESSION_BUS_ADDRESS", bus.address());

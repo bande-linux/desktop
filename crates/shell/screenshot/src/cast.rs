@@ -290,10 +290,14 @@ fn udmabuf_of(memory: &File, length: u64) -> io::Result<OwnedFd> {
         offset: 0,
         size: length,
     };
+    // SAFETY: UDMABUF_CREATE reads a struct udmabuf_create, which UdmabufCreate matches and which
+    // lives across the call; memory is an open, shrink-sealed memfd.
     let fd = unsafe { libc::ioctl(device.as_raw_fd(), UDMABUF_CREATE as _, &request) };
     if fd < 0 {
         return Err(io::Error::last_os_error());
     }
+    // SAFETY: UDMABUF_CREATE succeeded, so fd is a new dmabuf the kernel gave this process and
+    // nothing else owns.
     Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
@@ -361,6 +365,19 @@ fn add_buffer(producer: &Rc<RefCell<Producer>>, buffer: *mut pw::sys::pw_buffer)
             return;
         }
     };
+    let handed = memory.try_clone().and_then(|handed_memory| {
+        Ok((
+            handed_memory,
+            dmabuf.as_ref().map(OwnedFd::try_clone).transpose()?,
+        ))
+    });
+    let (handed_memory, handed_dmabuf) = match handed {
+        Ok(handed) => handed,
+        Err(error) => {
+            tracing::warn!("cannot share a screen cast buffer: {error}");
+            return;
+        }
+    };
     let fd = match (shared.dmabuf, &dmabuf) {
         (true, Some(dmabuf)) => dmabuf.as_raw_fd(),
         _ => memory.as_raw_fd(),
@@ -369,6 +386,8 @@ fn add_buffer(producer: &Rc<RefCell<Producer>>, buffer: *mut pw::sys::pw_buffer)
         true => spa::sys::SPA_DATA_DmaBuf,
         false => spa::sys::SPA_DATA_MemFd,
     };
+    // SAFETY: PipeWire hands add_buffer a live pw_buffer; the null and n_datas checks make datas[0]
+    // a valid spa_data to fill in. The fd it gets stays open in the slot below until remove_buffer.
     unsafe {
         let spa = (*buffer).buffer;
         if spa.is_null() || (*spa).n_datas == 0 || (*spa).datas.is_null() {
@@ -384,13 +403,6 @@ fn add_buffer(producer: &Rc<RefCell<Producer>>, buffer: *mut pw::sys::pw_buffer)
     }
     let slot = shared.next_slot;
     shared.next_slot += 1;
-    let handed = (
-        memory.try_clone(),
-        dmabuf.as_ref().map(OwnedFd::try_clone).transpose(),
-    );
-    let (Ok(handed_memory), Ok(handed_dmabuf)) = handed else {
-        return;
-    };
     shared.slots.insert(
         slot,
         Slot {
@@ -428,6 +440,8 @@ fn remove_buffer(producer: &Rc<RefCell<Producer>>, buffer: *mut pw::sys::pw_buff
 }
 
 fn describe(buffer: *mut pw::sys::pw_buffer, stride: u32, length: u32) {
+    // SAFETY: buffer is a live pw_buffer from slots (removed in remove_buffer before PipeWire frees
+    // it); the checks guard datas[0], its chunk and each of n_metas metas before they are written.
     unsafe {
         let spa = (*buffer).buffer;
         if spa.is_null() || (*spa).n_datas == 0 || (*spa).datas.is_null() {
@@ -470,11 +484,15 @@ fn process(producer: &Rc<RefCell<Producer>>) {
     for slot in std::mem::take(&mut shared.ready) {
         if let Some(entry) = shared.slots.get(&slot) {
             describe(entry.buffer, stride, length);
+            // SAFETY: raw is the live stream this producer owns, and entry.buffer is one of its
+            // buffers that PipeWire has not removed.
             unsafe { pw::sys::pw_stream_queue_buffer(raw, entry.buffer) };
         }
     }
     let mut freed = false;
     loop {
+        // SAFETY: raw is the live stream this producer owns; dequeue returns one of its buffers or
+        // null.
         let buffer = unsafe { pw::sys::pw_stream_dequeue_buffer(raw) };
         if buffer.is_null() {
             break;

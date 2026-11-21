@@ -779,6 +779,8 @@ fn close_framebuffer(device: &DrmDevice, framebuffer: framebuffer::Handle) -> io
         pad: 0,
     };
     let fd = device.device_fd().as_fd().as_raw_fd();
+    // SAFETY: DRM_IOCTL_MODE_CLOSEFB reads a struct drm_mode_closefb, which CloseFramebuffer
+    // matches field for field and which lives across the call.
     match unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_CLOSEFB, &request) } {
         0 => Ok(()),
         _ => Err(io::Error::last_os_error()),

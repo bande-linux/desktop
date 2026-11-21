@@ -74,28 +74,40 @@ type Password = Zeroizing<Vec<u8>>;
 
 unsafe extern "C" fn forget(_handle: *mut PamHandle, data: *mut c_void, _status: c_int) {
     if !data.is_null() {
+        // SAFETY: the only data stored under STASH with this cleanup is a Box<Password> leaked by
+        // pam_sm_authenticate, and PAM calls the cleanup once, when that data is replaced or the
+        // handle ends.
         drop(unsafe { Box::from_raw(data.cast::<Password>()) });
     }
 }
 
 unsafe fn item(handle: *mut PamHandle, kind: c_int) -> Option<Password> {
     let mut value = std::ptr::null();
+    // SAFETY: handle is the live handle PAM passed to the calling hook, and value is a valid out
+    // pointer.
     if unsafe { pam_get_item(handle, kind, &mut value) } != PAM_SUCCESS || value.is_null() {
         return None;
     }
+    // SAFETY: PAM_AUTHTOK and PAM_OLDAUTHTOK items are NUL-terminated strings owned by PAM; they
+    // stay valid until the item is set again, and the bytes are copied before this hook returns.
     let bytes = unsafe { CStr::from_ptr(value.cast::<c_char>()) }.to_bytes();
     (!bytes.is_empty() && bytes.len() <= LONGEST_FIELD).then(|| Zeroizing::new(bytes.to_vec()))
 }
 
 unsafe fn user_id(handle: *mut PamHandle) -> Option<libc::uid_t> {
     let mut user = std::ptr::null();
+    // SAFETY: handle is the live handle PAM passed to the calling hook; a null prompt asks PAM for
+    // its default one.
     if unsafe { pam_get_user(handle, &mut user, std::ptr::null()) } != PAM_SUCCESS || user.is_null()
     {
         return None;
     }
+    // SAFETY: passwd is plain C data (integers and pointers) for which all zeros is valid.
     let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
     let mut buffer = vec![0 as c_char; 16384];
     let mut found = std::ptr::null_mut();
+    // SAFETY: user is PAM's NUL-terminated user name, valid until the handle changes it; buffer is
+    // writable for buffer.len() bytes and outlives entry, whose string fields point into it.
     let status = unsafe {
         libc::getpwnam_r(
             user,
@@ -115,6 +127,7 @@ fn peer_is(stream: &UnixStream, uid: libc::uid_t) -> bool {
         gid: 0,
     };
     let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: credentials is a ucred and length its exact size, so the kernel writes within it.
     let status = unsafe {
         libc::getsockopt(
             stream.as_raw_fd(),
@@ -138,6 +151,7 @@ fn message(operation: u8, fields: &[&[u8]]) -> Zeroizing<Vec<u8>> {
 
 fn send_all(stream: &UnixStream, mut bytes: &[u8]) -> Option<()> {
     while !bytes.is_empty() {
+        // SAFETY: the pointer and length describe the borrowed bytes slice, which send only reads.
         let sent = unsafe {
             libc::send(
                 stream.as_raw_fd(),
@@ -183,6 +197,8 @@ fn send(uid: libc::uid_t, message: &[u8]) -> Result<(), Failure> {
 
 unsafe fn report(handle: *mut PamHandle, result: Result<(), Failure>) {
     if let Err(failure) = result {
+        // SAFETY: handle is the live handle PAM passed to the calling hook, and the "%s" format
+        // consumes exactly the one NUL-terminated string argument given.
         unsafe {
             pam_syslog(
                 handle,
@@ -201,11 +217,15 @@ pub unsafe extern "C" fn pam_sm_authenticate(
     _count: c_int,
     _arguments: *const *const c_char,
 ) -> c_int {
+    // SAFETY: handle is the live handle PAM passed to this hook.
     let Some(password) = (unsafe { item(handle, PAM_AUTHTOK) }) else {
         return PAM_IGNORE;
     };
     let data = Box::into_raw(Box::new(password)).cast::<c_void>();
+    // SAFETY: handle is live and STASH is NUL-terminated; on success PAM owns data and frees it
+    // through forget.
     if unsafe { pam_set_data(handle, STASH.as_ptr(), data, Some(forget)) } != PAM_SUCCESS {
+        // SAFETY: PAM refused data, so this is its only owner and it is freed exactly once.
         unsafe { forget(handle, data, 0) };
     }
     PAM_IGNORE
@@ -229,13 +249,20 @@ pub unsafe extern "C" fn pam_sm_open_session(
     _arguments: *const *const c_char,
 ) -> c_int {
     let mut data = std::ptr::null();
+    // SAFETY: handle is the live handle PAM passed to this hook and STASH is NUL-terminated.
     if unsafe { pam_get_data(handle, STASH.as_ptr(), &mut data) } != PAM_SUCCESS || data.is_null() {
         return PAM_IGNORE;
     }
+    // SAFETY: only pam_sm_authenticate stores data under STASH, always a Box<Password>; PAM keeps
+    // it alive until the pam_set_data below replaces it, after the last use of password.
     let password = unsafe { &*data.cast::<Password>() };
+    // SAFETY: handle is the live handle PAM passed to this hook.
     if let Some(uid) = unsafe { user_id(handle) } {
+        // SAFETY: handle is the live handle PAM passed to this hook.
         unsafe { report(handle, send(uid, &message(UNLOCK, &[password]))) };
     }
+    // SAFETY: handle is live and STASH is NUL-terminated; replacing the data makes PAM run forget
+    // on the password now instead of at the end of the handle.
     unsafe { pam_set_data(handle, STASH.as_ptr(), std::ptr::null_mut(), None) };
     PAM_SUCCESS
 }
@@ -286,14 +313,19 @@ pub unsafe extern "C" fn pam_sm_chauthtok(
     if flags & PAM_PRELIM_CHECK != 0 {
         return PAM_IGNORE;
     }
-    let (Some(old), Some(new)) = (unsafe { item(handle, PAM_OLDAUTHTOK) }, unsafe {
-        item(handle, PAM_AUTHTOK)
-    }) else {
+    // SAFETY: handle is the live handle PAM passed to this hook.
+    let old = unsafe { item(handle, PAM_OLDAUTHTOK) };
+    // SAFETY: handle is the live handle PAM passed to this hook.
+    let new = unsafe { item(handle, PAM_AUTHTOK) };
+    let (Some(old), Some(new)) = (old, new) else {
         return PAM_IGNORE;
     };
+    // SAFETY: handle is the live handle PAM passed to this hook.
     if let Some(uid) = unsafe { user_id(handle) } {
+        // SAFETY: handle is the live handle PAM passed to this hook.
         unsafe { report(handle, send(uid, &message(CHANGE, &[&old, &new]))) };
     }
+    // SAFETY: handle is the live handle PAM passed to this hook.
     unsafe { report(handle, change_disk_password(&old, &new)) };
     PAM_SUCCESS
 }

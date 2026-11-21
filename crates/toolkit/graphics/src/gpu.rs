@@ -62,6 +62,8 @@ impl GpuDevice {
     ) -> Result<(Arc<Self>, wgpu::Surface<'static>), DrawError> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(gpu) = shared.upgrade() {
+            // SAFETY: the caller of shared_for guarantees the handles in target outlive the
+            // surface.
             let surface = unsafe { gpu.instance.create_surface_unsafe(target) }
                 .map_err(|error| DrawError::Gpu(error.to_string()))?;
             if !gpu.adapter.is_surface_supported(&surface) {
@@ -75,6 +77,7 @@ impl GpuDevice {
             .then(crate::vulkan::hardware_instance)
             .flatten()
             .unwrap_or_else(vulkan_instance);
+        // SAFETY: the caller of shared_for guarantees the handles in target outlive the surface.
         let surface = unsafe { instance.create_surface_unsafe(target) }
             .map_err(|error| DrawError::Gpu(error.to_string()))?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

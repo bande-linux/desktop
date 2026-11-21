@@ -145,7 +145,10 @@ fn lower_own_priority() {
         return;
     }
     let parameter = libc::sched_param { sched_priority: 0 };
+    // SAFETY: sched_setscheduler reads only the sched_param that lives on this stack frame for the
+    // call.
     let scheduled = unsafe { libc::sched_setscheduler(0, libc::SCHED_IDLE, &raw const parameter) };
+    // SAFETY: ioprio_set takes only integers and changes this thread's I/O class.
     let io = unsafe {
         libc::syscall(
             libc::SYS_ioprio_set,
@@ -223,6 +226,8 @@ impl Background {
                     tracing::warn!("cannot finish merging the search index: {error}");
                 }
                 self.reload();
+                // SAFETY: malloc_trim only returns free heap pages to the kernel; it has no
+                // preconditions.
                 unsafe { libc::malloc_trim(0) };
                 Reply::Committed
             }

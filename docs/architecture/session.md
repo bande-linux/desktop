@@ -802,8 +802,8 @@ a logind `shutdown:idle` block inhibitor (not sleep), and Settings shows only th
 Per-user Flatpak apps are a fourth class, dormant by default: no Bande package depends on or
 recommends `flatpak`, and every Flatpak path treats a missing `flatpak` command as no Flatpak
 apps, so Software Update shows nothing about them. When the user installs `flatpak` with apt,
-Software (which looks for the command at launch) offers Settings… › Get apps from Flathub, which
-runs `flatpak remote-add --user`. `bande_packages::flatpak` drives the `flatpak` command line on worker threads. Software
+and adds a remote to their own installation (`flatpak remote-add --user`), Software (which looks
+for the command at launch) shows that remote's apps; Bande adds no remote itself. `bande_packages::flatpak` drives the `flatpak` command line on worker threads. Software
 Update lists `flatpak remote-ls --user --updates` beside the Debian updates, refreshes their
 AppStream with the package lists and installs them first with `flatpak update --user`, without a
 password or a restart. Their desktop entries and icons come from

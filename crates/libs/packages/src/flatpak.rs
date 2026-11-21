@@ -7,8 +7,6 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use rustix::process::{Pid, Signal, kill_process_group};
 
-pub const FLATHUB: &str = "flathub";
-const FLATHUB_REPO: &str = "https://dl.flathub.org/repo/flathub.flatpakrepo";
 const PROGRAM: &str = "flatpak";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -234,20 +232,6 @@ pub fn remotes() -> Result<Vec<String>, Error> {
 
 pub fn has_remotes() -> bool {
     remotes().is_ok_and(|remotes| !remotes.is_empty())
-}
-
-pub fn enable_flathub() -> Result<(), Error> {
-    output("remote-add", &["--if-not-exists", FLATHUB, FLATHUB_REPO])?;
-    output("remote-modify", &["--enable", FLATHUB])?;
-    output("update", &["--appstream", "--noninteractive", FLATHUB]).map(drop)
-}
-
-pub fn disable_flathub() -> Result<(), Error> {
-    let known = output("remotes", &["--show-disabled", "--columns=name"])?;
-    if !columns(&known).any(|row| row.first() == Some(&FLATHUB)) {
-        return Ok(());
-    }
-    output("remote-modify", &["--disable", FLATHUB]).map(drop)
 }
 
 pub fn refresh_catalogue() -> Result<(), Error> {

@@ -116,7 +116,9 @@ fn set_password(uid: u32) -> ExitCode {
     };
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
-        let _ = writeln!(stdin, "{password}\n{password}");
+        if let Err(error) = writeln!(stdin, "{password}\n{password}") {
+            eprintln!("cannot pass the password to smbpasswd: {error}");
+        }
     }
     match child.wait() {
         Ok(status) if status.success() => ExitCode::SUCCESS,

@@ -74,11 +74,15 @@ fn run(mut command: Command, password: Option<&str>) -> ExitCode {
 }
 
 fn mount_cifs(uid: u32, gid: u32, unc: &str, point: &Path, user: &str, port: &str) -> ExitCode {
-    let password = (!user.is_empty()).then(|| {
+    let password = if user.is_empty() {
+        None
+    } else {
         let mut line = String::new();
-        let _ = std::io::stdin().read_line(&mut line);
-        line.trim_end_matches('\n').to_owned()
-    });
+        if let Err(error) = std::io::stdin().read_line(&mut line) {
+            return fail(&format!("cannot read the password: {error}"));
+        }
+        Some(line.trim_end_matches('\n').to_owned())
+    };
     let mut options = format!("{SMB_SOFT_OPTIONS},uid={uid},gid={gid},forceuid,forcegid");
     if user.is_empty() {
         options.push_str(",guest");

@@ -188,7 +188,9 @@ impl DmabufHandler for State {
         };
         if planes_fit && dmabuf.format().modifier == Modifier::Linear {
             dmabuf.set_node(self.scanout_node);
-            let _ = notifier.successful::<State>();
+            if let Err(error) = notifier.successful::<State>() {
+                tracing::debug!("a dmabuf import was answered too late: {error:?}");
+            }
         } else {
             notifier.failed();
         }

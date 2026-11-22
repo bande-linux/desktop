@@ -39,7 +39,7 @@ use crate::notifications::{AppNotifications, NotificationCommand, follow_app_not
 use crate::passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 use crate::permissions::{Grants, PermissionCommand, follow_permissions};
 use crate::pictures::{Pair, PictureCommand, follow_pictures};
-use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
+use crate::pointing::follow_pointing;
 use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
@@ -55,6 +55,7 @@ use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiS
 use crate::storage::{Storage, StorageCommand, follow_storage};
 use crate::time::{TimeCommand, TimeState, follow_time};
 use crate::users::{Account, PasswordOutcome, UsersCommand, follow_users};
+use bande_status::pointing::{PointingDevices, UDEV_DATA};
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";

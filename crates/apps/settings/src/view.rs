@@ -41,7 +41,6 @@ use crate::notifications::{AppNotifications, NotificationCommand};
 use crate::passwords::{PasswordCommand, SavedPasswords};
 use crate::permissions::Grants;
 use crate::pictures::{Pair, PictureCommand};
-use crate::pointing::PointingDevices;
 use crate::printers::{PrinterCommand, PrintersState, Support};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
@@ -56,6 +55,7 @@ use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersComm
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
 use bande_network::Security;
+use bande_status::pointing::PointingDevices;
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);

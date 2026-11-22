@@ -65,6 +65,12 @@ views. Packaged as `bande-calendar`.
   times stay read-only), and on an event you organise in a CalDAV calendar you can add
   invitees by address; the server sends the mail. Your addresses come from
   `calendar-user-address-set`.
+- **Invitations by mail** (iMIP, RFC 6047), opened from Mail or as a file: a `REQUEST` that
+  invites one of your addresses asks Accept, Maybe or Decline, keeps the event with your
+  answer (Decline removes it) and opens a message to the organizer in Mail through a `mailto:`
+  link with the answer in words; the message carries no `REPLY` part, since `mailto:` cannot
+  attach one. A `REPLY` updates that invitee's answer in your event, and a `CANCEL` asks to
+  remove the event or the one cancelled occurrence (undoable). `METHOD` is never stored.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
   Snooze (5 minutes) and a click that opens Calendar on the event's day. Calendar also shows them when it was never opened or was quit: the autostart

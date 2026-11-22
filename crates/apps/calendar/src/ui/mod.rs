@@ -1,6 +1,7 @@
 mod access;
 mod custom;
 pub mod geometry;
+mod imip;
 mod input;
 mod inspector;
 mod naming;
@@ -75,6 +76,7 @@ pub enum Request {
         change: crate::worker::Change,
     },
     Changed,
+    Mail(String),
     Export {
         name: String,
         data: String,
@@ -182,6 +184,12 @@ pub(crate) enum Confirm {
         calendar: Option<usize>,
     },
     Delete(Found),
+    Invitation(Box<CalendarObject>),
+    Cancelled {
+        calendar: String,
+        uid: String,
+        occurrence: Option<InstanceKey>,
+    },
     RemoveAccount(String),
     Import(Vec<CalendarObject>, usize),
     DeleteCalendar(usize),
@@ -873,7 +881,7 @@ impl CalendarView {
         self.open_setup(setup::Start::Add);
     }
 
-    pub fn offer_import(&mut self, objects: Vec<CalendarObject>, file: &str) -> bool {
+    fn offer_import(&mut self, objects: Vec<CalendarObject>, file: &str) -> bool {
         let Some(calendar) = self.default_calendar() else {
             return false;
         };
@@ -1147,11 +1155,11 @@ impl CalendarView {
         }
     }
 
-    fn remember(&mut self, found: &Found) {
-        let Some(calendar) = self.library.calendars.get(found.calendar) else {
+    fn remember(&mut self, calendar: usize, object: usize) {
+        let Some(calendar) = self.library.calendars.get(calendar) else {
             return;
         };
-        let Some(stored) = calendar.objects.get(found.object) else {
+        let Some(stored) = calendar.objects.get(object) else {
             return;
         };
         if self.undo.len() == UNDO_DEPTH {
@@ -1189,7 +1197,7 @@ impl CalendarView {
     }
 
     pub(crate) fn apply_delete(&mut self, found: &Found, scope: Scope) {
-        self.remember(found);
+        self.remember(found.calendar, found.object);
         let Some(object) = self.library.object(found.calendar, found.object).cloned() else {
             return;
         };
@@ -1211,7 +1219,7 @@ impl CalendarView {
         all_day: bool,
         scope: Scope,
     ) {
-        self.remember(found);
+        self.remember(found.calendar, found.object);
         let Some(object) = self.library.object(found.calendar, found.object) else {
             return;
         };

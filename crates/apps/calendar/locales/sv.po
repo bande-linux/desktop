@@ -91,6 +91,9 @@ msgstr "{name}: {error}"
 msgid "Updated {time}"
 msgstr "Uppdaterad {time}"
 
+msgid "Can’t open Mail to send the answer."
+msgstr "Det gick inte att öppna E-post för att skicka svaret."
+
 msgid "Snooze"
 msgstr "Snooza"
 
@@ -173,6 +176,54 @@ msgstr "Avbryt"
 
 msgid "OK"
 msgstr "OK"
+
+msgid "Invitation to “{title}”"
+msgstr "Inbjudan till ”{title}”"
+
+msgid "From {organizer}, {when}"
+msgstr "Från {organizer}, {when}"
+
+msgid "Later"
+msgstr "Senare"
+
+msgid "Accepted: {title}"
+msgstr "Tackat ja: {title}"
+
+msgid "I will attend “{title}”, {when}."
+msgstr "Jag kommer till ”{title}”, {when}."
+
+msgid "Maybe: {title}"
+msgstr "Kanske: {title}"
+
+msgid "I might attend “{title}”, {when}."
+msgstr "Jag kanske kommer till ”{title}”, {when}."
+
+msgid "Declined: {title}"
+msgstr "Tackat nej: {title}"
+
+msgid "I will not attend “{title}”, {when}."
+msgstr "Jag kommer inte till ”{title}”, {when}."
+
+msgid "This answer is to an event that is not in your calendars."
+msgstr "Svaret gäller en händelse som inte finns i dina kalendrar."
+
+msgid "“{title}”: answer from {names}"
+msgstr "”{title}”: svar från {names}"
+
+msgid "A cancelled event that is not in your calendars was opened."
+msgstr "En inställd händelse som inte finns i dina kalendrar öppnades."
+
+msgid "“{title}” was cancelled"
+msgstr "”{title}” är inställd"
+
+msgid "Do you want to remove it from your calendar?"
+msgstr "Vill du ta bort den från din kalender?"
+
+msgid "Keep"
+msgstr "Behåll"
+
+msgid "Remove"
+msgstr "Ta bort"
 
 msgid "Red"
 msgstr "Röd"

@@ -689,6 +689,15 @@ impl CalendarApp {
                     self.check_alerts(view);
                     view.refresh_search();
                 }
+                Request::Mail(uri) => {
+                    let token = window
+                        .as_deref_mut()
+                        .and_then(|window| window.activation_token(APP_ID).ok());
+                    if let Err(error) = bande_xdg::open(&uri, token.as_deref()) {
+                        tracing::warn!("cannot hand the answer to Mail: {error}");
+                        view.set_status(Some(tr!("Can’t open Mail to send the answer.")));
+                    }
+                }
                 Request::Export { name, data } => choose(
                     self.chosen.outbox(),
                     self.session.clone(),
@@ -1272,7 +1281,7 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Pat
                 if let Some(first) = objects.first().and_then(|object| object.events.first()) {
                     view.go_to(first.start.date());
                 }
-                offered |= view.offer_import(objects, &name);
+                offered |= view.offer(objects, &name);
             }
             Ok(Ok(_)) => tracing::warn!("{} has no events", path.display()),
             Ok(Err(error)) => tracing::warn!("cannot read {}: {error}", path.display()),

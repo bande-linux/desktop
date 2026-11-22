@@ -1289,8 +1289,9 @@ impl SettingsView {
                 .bluetooth
                 .present()
                 .is_some_and(|bluetooth| bluetooth.powered),
-            SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
-            SettingId::DateAndTime | SettingId::TimeZone => self.time.is_some(),
+            SettingId::AutomaticTime | SettingId::DateAndTime | SettingId::TimeZone => {
+                self.time.is_some()
+            }
             _ => true,
         })
     }
@@ -1304,6 +1305,7 @@ impl SettingsView {
             SettingId::PowerMode => modes,
             SettingId::LowPowerOnBattery => modes && battery,
             SettingId::LidOnPower => power.is_some_and(|power| power.lid),
+            SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
             _ => true,
         }
     }

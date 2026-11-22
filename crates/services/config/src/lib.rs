@@ -1120,7 +1120,6 @@ impl Parser<'_> {
                     config.focus_schedule = self.focus_schedule(node);
                     Ok(())
                 }
-                "hot-corners" => Ok(()),
                 "search" => {
                     config.search = self.search(node);
                     Ok(())

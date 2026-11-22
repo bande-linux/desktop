@@ -764,11 +764,27 @@ dependencies = [
 name = "bande-contacts"
 version = "0.2.0"
 dependencies = [
+ "accesskit",
+ "bande-address-book",
  "bande-app",
  "bande-app-menu",
+ "bande-content-lines",
+ "bande-datetime",
+ "bande-dav",
+ "bande-discovery",
+ "bande-inbox",
+ "bande-keyring",
  "bande-l10n",
+ "bande-network",
+ "bande-search",
  "bande-toolkit",
+ "bande-xdg",
+ "image",
+ "jiff",
+ "tempfile",
  "tracing",
+ "zbus",
+ "zeroize",
 ]
 
 [[package]]

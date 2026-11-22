@@ -6,7 +6,7 @@ use crate::client::{Client, Precondition, Resource};
 use crate::http::{Error, same_resource};
 
 /// A local change that the server does not have yet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Pending {
     Create,
     Update,

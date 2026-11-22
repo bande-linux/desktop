@@ -1,0 +1,439 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "home"
+msgstr "hem"
+
+msgid "work"
+msgstr "arbete"
+
+msgid "mobile"
+msgstr "mobil"
+
+msgid "other"
+msgstr "annat"
+
+msgid "Phone"
+msgstr "Telefon"
+
+msgid "Phone number"
+msgstr "Telefonnummer"
+
+msgid "Email"
+msgstr "E-post"
+
+msgid "Email address"
+msgstr "E-postadress"
+
+msgid "{kind} label"
+msgstr "Etikett för {kind}"
+
+msgid "First name"
+msgstr "Förnamn"
+
+msgid "Last name"
+msgstr "Efternamn"
+
+msgid "Organization"
+msgstr "Organisation"
+
+msgid "Job title"
+msgstr "Befattning"
+
+msgid "Add Email"
+msgstr "Lägg till e-post"
+
+msgid "Add Phone"
+msgstr "Lägg till telefon"
+
+msgid "Address"
+msgstr "Adress"
+
+msgid "Address label"
+msgstr "Etikett för adress"
+
+msgid "Label"
+msgstr "Etikett"
+
+msgid "Street"
+msgstr "Gatuadress"
+
+msgid "City"
+msgstr "Ort"
+
+msgid "Region"
+msgstr "Region"
+
+msgid "Postal code"
+msgstr "Postnummer"
+
+msgid "Country"
+msgstr "Land"
+
+msgid "Add Address"
+msgstr "Lägg till adress"
+
+msgid "More"
+msgstr "Mer"
+
+msgid "No birthday"
+msgstr "Ingen födelsedag"
+
+msgid "Birthday month"
+msgstr "Födelsemånad"
+
+msgid "Birthday day"
+msgstr "Födelsedag i månaden"
+
+msgid "Year"
+msgstr "År"
+
+msgid "Birthday"
+msgstr "Födelsedag"
+
+msgid "Groups"
+msgstr "Grupper"
+
+msgid "Address book"
+msgstr "Adressbok"
+
+msgid "Note"
+msgstr "Anteckning"
+
+msgid "Choose Photo…"
+msgstr "Välj foto…"
+
+msgid "Remove Photo"
+msgstr "Ta bort foto"
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "Contact"
+msgstr "Kontakt"
+
+msgid "Contacts"
+msgstr "Mall"
+
+msgid "The picture is too large."
+msgstr "Bilden är för stor."
+
+msgid "A contact changed on another device too"
+msgid_plural "Contacts changed on another device too"
+msgstr[0] "En kontakt ändrades också på en annan enhet"
+msgstr[1] "Kontakter ändrades också på en annan enhet"
+
+msgid "{names}: Contacts kept the version on the server and your change as a second contact, so you can merge them."
+msgstr "{names}: Kontakter behöll versionen på servern och din ändring som en andra kontakt, så att du kan slå ihop dem."
+
+msgid "{address} could not be used for Contacts"
+msgstr "{address} kunde inte användas för Kontakter"
+
+msgid "The account could not be offered to Calendar"
+msgstr "Kontot kunde inte erbjudas till Kalender"
+
+msgid "Import Contacts"
+msgstr "Importera kontakter"
+
+msgid "Export Contacts"
+msgstr "Exportera kontakter"
+
+msgid "Pictures"
+msgstr "Bilder"
+
+msgid "Choose a Photo"
+msgstr "Välj ett foto"
+
+msgid "“{name}” could not be opened"
+msgstr "”{name}” kunde inte öppnas"
+
+msgid "The photo could not be used"
+msgstr "Fotot kunde inte användas"
+
+msgid "The contacts could not be exported"
+msgstr "Kontakterna kunde inte exporteras"
+
+msgid "New Contact"
+msgstr "Ny kontakt"
+
+msgid "Import…"
+msgstr "Importera…"
+
+msgid "Export…"
+msgstr "Exportera…"
+
+msgid "Add Account…"
+msgstr "Lägg till konto…"
+
+msgid "Edit Contact"
+msgstr "Redigera kontakt"
+
+msgid "Delete Contact"
+msgstr "Radera kontakt"
+
+msgid "Merge Duplicates…"
+msgstr "Slå ihop dubbletter…"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "Refresh"
+msgstr "Uppdatera"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Contacts could not reach the server. Check the address, and that this computer is online."
+msgstr "Kontakter kunde inte nå servern. Kontrollera adressen, och att datorn är ansluten till internet."
+
+msgid "The certificate of {server} could not be verified. Check that the address is exactly the one your provider gives."
+msgstr "Certifikatet för {server} kunde inte verifieras. Kontrollera att adressen är exakt den som din leverantör anger."
+
+msgid "The server did not accept the user name or password. Check both; some providers need a separate app password."
+msgstr "Servern godtog inte användarnamnet eller lösenordet. Kontrollera båda. Vissa leverantörer kräver ett separat applösenord."
+
+msgid "The server asks for a sign-in method Contacts does not support ({schemes}). Ask your provider for sign-in with a password."
+msgstr "Servern begär en inloggningsmetod som Kontakter inte stöder ({schemes}). Fråga din leverantör om inloggning med lösenord."
+
+msgid "{server} offers no encrypted connection, so Contacts does not send the password. Use an https:// address."
+msgstr "{server} erbjuder ingen krypterad anslutning, så Kontakter skickar inte lösenordet. Använd en https://-adress."
+
+msgid "The server answered with an error ({status}). Try again later."
+msgstr "Servern svarade med ett fel ({status}). Försök igen senare."
+
+msgid "There is no CardDAV address book at this address. Check the server address and path your provider gives."
+msgstr "Det finns ingen CardDAV-adressbok på den här adressen. Kontrollera serveradressen och sökvägen som din leverantör anger."
+
+msgid "Required"
+msgstr "Krävs"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Also use this account for Calendar"
+msgstr "Använd också det här kontot för Kalender"
+
+msgid "jane@example.org"
+msgstr "anna@exempel.se"
+
+msgid "Add a CardDAV Account"
+msgstr "Lägg till ett CardDAV-konto"
+
+msgid "Contacts looks up the CardDAV server of your address’s domain and shows it to you before it signs in."
+msgstr "Kontakter slår upp CardDAV-servern för adressens domän och visar den för dig innan den loggar in."
+
+msgid "https://dav.example.org/"
+msgstr "https://dav.exempel.se/"
+
+msgid "Server"
+msgstr "Server"
+
+msgid "User name"
+msgstr "Användarnamn"
+
+msgid "Sign in to “{name}”"
+msgstr "Logga in på ”{name}”"
+
+msgid "CardDAV Server Settings"
+msgstr "CardDAV-serverinställningar"
+
+msgid "Enter the server address your provider gives, with its port and path if it has them. Contacts sends the password only when the server asks for it."
+msgstr "Ange serveradressen som din leverantör anger, med port och sökväg om den har sådana. Kontakter skickar lösenordet bara när servern ber om det."
+
+msgid "The server did not accept the password for {user}. Enter it again, or check the server settings."
+msgstr "Servern godtog inte lösenordet för {user}. Ange det igen eller kontrollera serverinställningarna."
+
+msgid "Enter Server Settings Manually"
+msgstr "Ange serverinställningar manuellt"
+
+msgid "Back"
+msgstr "Tillbaka"
+
+msgid "Server Settings…"
+msgstr "Serverinställningar…"
+
+msgid "Continue"
+msgstr "Fortsätt"
+
+msgid "Sign In"
+msgstr "Logga in"
+
+msgid "Enter your address, such as jane@example.org."
+msgstr "Ange din adress, till exempel anna@exempel.se."
+
+msgid "Looking up the server…"
+msgstr "Slår upp servern…"
+
+msgid "Enter your password."
+msgstr "Ange ditt lösenord."
+
+msgid "Enter the address of the server."
+msgstr "Ange serverns adress."
+
+msgid "Enter your user name."
+msgstr "Ange ditt användarnamn."
+
+msgid "Signing in…"
+msgstr "Loggar in…"
+
+msgid "Contacts found a CardDAV server for {domain}. Check that it belongs to your provider, then sign in."
+msgstr "Kontakter hittade en CardDAV-server för {domain}. Kontrollera att den tillhör din leverantör och logga sedan in."
+
+msgid "Contacts found no CardDAV server for {domain}. Enter the server address your provider gives."
+msgstr "Kontakter hittade ingen CardDAV-server för {domain}. Ange serveradressen som din leverantör anger."
+
+msgid "Remove Account…"
+msgstr "Ta bort konto…"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Edit"
+msgstr "Redigera"
+
+msgid "Delete"
+msgstr "Radera"
+
+msgid "On This Computer"
+msgstr "På den här datorn"
+
+msgid "No Name"
+msgstr "Inget namn"
+
+msgid "All Contacts"
+msgstr "Alla kontakter"
+
+msgid "Account Settings"
+msgstr "Kontoinställningar"
+
+msgid "Offline"
+msgstr "Frånkopplad"
+
+msgid "Not Synced"
+msgstr "Inte synkad"
+
+msgid "Some changes could not be synced"
+msgstr "Vissa ändringar kunde inte synkas"
+
+msgid "No Contacts"
+msgstr "Inga kontakter"
+
+msgid "Add a contact, import a .vcf file, or add a CardDAV account to sync the contacts you keep on a server."
+msgstr "Lägg till en kontakt, importera en .vcf-fil eller lägg till ett CardDAV-konto för att synka kontakterna du har på en server."
+
+msgid "No Results"
+msgstr "Inga resultat"
+
+msgid "No contact matches “{query}”."
+msgstr "Ingen kontakt matchar ”{query}”."
+
+msgid "No Contact Selected"
+msgstr "Ingen kontakt vald"
+
+msgid "Choose a contact in the list, or type a name to find one."
+msgstr "Välj en kontakt i listan, eller skriv ett namn för att hitta en."
+
+msgid "New Message"
+msgstr "Nytt meddelande"
+
+msgid "birthday"
+msgstr "födelsedag"
+
+msgid "groups"
+msgstr "grupper"
+
+msgid "note"
+msgstr "anteckning"
+
+msgid "address book"
+msgstr "adressbok"
+
+msgid "Merge {count} duplicate contact?"
+msgid_plural "Merge {count} duplicate contacts?"
+msgstr[0] "Vill du slå ihop {count} dubblettkontakt?"
+msgstr[1] "Vill du slå ihop {count} dubblettkontakter?"
+
+msgid "Contacts that share a name or an email address become one, with every address, number and note of each: {names}."
+msgstr "Kontakter med samma namn eller e-postadress blir en, med alla adresser, nummer och anteckningar från var och en: {names}."
+
+msgid "Not Now"
+msgstr "Inte nu"
+
+msgid "Merge"
+msgstr "Slå ihop"
+
+msgid "There are no contacts in “{name}”."
+msgstr "Det finns inga kontakter i ”{name}”."
+
+msgid "The contacts in “{name}” could not be read."
+msgstr "Kontakterna i ”{name}” kunde inte läsas."
+
+msgid "Nothing to Import"
+msgstr "Inget att importera"
+
+msgid "Import {count} contact from “{name}”?"
+msgid_plural "Import {count} contacts from “{name}”?"
+msgstr[0] "Vill du importera {count} kontakt från ”{name}”?"
+msgstr[1] "Vill du importera {count} kontakter från ”{name}”?"
+
+msgid "Contacts that are already there are updated."
+msgstr "Kontakter som redan finns uppdateras."
+
+msgid "{skipped} contact in the file could not be read and is left out. Contacts that are already there are updated."
+msgid_plural "{skipped} contacts in the file could not be read and are left out. Contacts that are already there are updated."
+msgstr[0] "{skipped} kontakt i filen kunde inte läsas och utelämnas. Kontakter som redan finns uppdateras."
+msgstr[1] "{skipped} kontakter i filen kunde inte läsas och utelämnas. Kontakter som redan finns uppdateras."
+
+msgid "Into"
+msgstr "Till"
+
+msgid "Import"
+msgstr "Importera"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Remove “{name}”?"
+msgstr "Vill du ta bort ”{name}”?"
+
+msgid "Its contacts are removed from this computer and stay on the server."
+msgstr "Dess kontakter tas bort från den här datorn och finns kvar på servern."
+
+msgid "Remove"
+msgstr "Ta bort"
+
+msgid "“{name}” could not be synced"
+msgstr "”{name}” kunde inte synkas"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
+msgid "Photo of {name}"
+msgstr "Foto av {name}"
+
+msgid "Initials of {name}"
+msgstr "Initialer för {name}"
+
+msgid "Index"
+msgstr "Register"
+
+msgid "Contacts starting with {letter}"
+msgstr "Kontakter som börjar på {letter}"

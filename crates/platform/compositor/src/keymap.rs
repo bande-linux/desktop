@@ -18,6 +18,7 @@ const HUD_STYLE: LabelStyle = LabelStyle {
     look: Look::Card,
 };
 const HUD_HOLD: Duration = Duration::from_millis(800);
+const CAPS_LOCK_OPTIONS: [&str; 3] = ["ctrl:nocaps", "ctrl:swapcaps", "compose:caps"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyboardSettings {
@@ -33,10 +34,17 @@ impl KeyboardSettings {
         keyboard: &Keyboard,
         system: impl FnOnce() -> (Vec<InputSource>, Vec<String>),
     ) -> Self {
-        let (input_sources, options) = match keyboard.input_sources.is_empty() {
-            true => system(),
-            false => (keyboard.input_sources.clone(), Vec::new()),
+        let (system_sources, mut options) = system();
+        let input_sources = if keyboard.input_sources.is_empty() {
+            system_sources
+        } else {
+            keyboard.input_sources.clone()
         };
+        if keyboard.caps_lock != CapsLock::CapsLock {
+            options.retain(|option| {
+                !option.starts_with("caps:") && !CAPS_LOCK_OPTIONS.contains(&option.as_str())
+            });
+        }
         Self {
             input_sources,
             caps_lock: keyboard.caps_lock,
@@ -158,6 +166,35 @@ impl State {
         keyboard.with_xkb_state(self, |mut context| context.set_layout(layout));
         self.input_sources.active = index;
         self.announce_input_sources();
+    }
+
+    pub(crate) fn step_input_source(&mut self, forward: bool) {
+        let count = self.input_sources.count();
+        if count < 2 {
+            return;
+        }
+        let active = self.input_sources.active;
+        let next = if forward {
+            (active + 1) % count
+        } else {
+            (active + count - 1) % count
+        };
+        self.select_input_source(next);
+    }
+
+    pub(crate) fn follow_xkb_layout(&mut self) {
+        let Some(keyboard) = self.seat.get_keyboard() else {
+            return;
+        };
+        let Ok(layout) = usize::try_from(keyboard.modifier_state().serialized.layout_effective)
+        else {
+            return;
+        };
+        if layout != self.input_sources.active && layout < self.input_sources.count() {
+            self.input_sources.active = layout;
+            self.announce_input_sources();
+            self.show_source_hud();
+        }
     }
 
     pub(crate) fn select_input_source(&mut self, index: usize) {

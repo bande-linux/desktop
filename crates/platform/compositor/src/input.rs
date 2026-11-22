@@ -240,6 +240,8 @@ impl State {
             Action::CaptureOptions => self.show_capture_options(false),
             Action::LockScreen => self.lock_screen_requested = !self.is_locked(),
             Action::ForceQuit => self.open_force_quit(),
+            Action::NextInputSource => self.step_input_source(true),
+            Action::PreviousInputSource => self.step_input_source(false),
             Action::ShowNotifications => self.toggle_panel(Panel::Notifications),
             Action::ShowQuickSettings => self.toggle_panel(Panel::QuickSettings),
             Action::NextApp => self.switch_apps(false),
@@ -808,6 +810,9 @@ impl State {
             state.run(Shortcut::Bound(action, Key::Tap));
         }
         let after = keyboard.modifier_state();
+        if after.serialized.layout_effective != before.serialized.layout_effective {
+            state.follow_xkb_layout();
+        }
         if after.alt != before.alt && state.has_compositor_controls() {
             state.needs_redraw = true;
         }

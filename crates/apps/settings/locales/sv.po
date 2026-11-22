@@ -1511,8 +1511,20 @@ msgstr "Det gick inte att använda bilden som skrivbordsbild."
 msgid "{minutes} min"
 msgstr "{minutes} min"
 
+msgid "{hours} h"
+msgstr "{hours} h"
+
 msgid "{hours} h {minutes} min"
 msgstr "{hours} h {minutes} min"
+
+msgid "After {time} asleep on battery, the computer saves its state and turns off. Waking then takes a few seconds longer."
+msgstr "Efter {time} i vila på batteri sparar datorn sitt läge och stängs av. Då tar det några sekunder längre att vakna."
+
+msgid "After {time} asleep, the computer saves its state and turns off. Waking then takes a few seconds longer."
+msgstr "Efter {time} i vila sparar datorn sitt läge och stängs av. Då tar det några sekunder längre att vakna."
+
+msgid "When the battery runs low during sleep, the computer saves its state and turns off. Waking then takes a few seconds longer."
+msgstr "När batteriet börjar ta slut under vila sparar datorn sitt läge och stängs av. Då tar det några sekunder längre att vakna."
 
 msgid "Charged"
 msgstr "Laddat"
@@ -1579,9 +1591,6 @@ msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofil
 
 msgid "This computer doesn't offer power modes."
 msgstr "Den här datorn har inga strömlägen."
-
-msgid "After 3 hours asleep on battery, the computer saves its state and turns off. Waking then takes a few seconds longer."
-msgstr "Efter 3 timmars vila på batteri sparar datorn sitt läge och stängs av. Då tar det några sekunder längre att vakna."
 
 msgid "Hibernation isn't set up, so sleep lasts until the battery runs out."
 msgstr "Viloläge på disk är inte inställt, så vilan varar tills batteriet tar slut."

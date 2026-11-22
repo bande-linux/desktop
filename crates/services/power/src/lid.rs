@@ -3,6 +3,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
+use bande_bus::systemd_config;
 use bande_l10n::tr;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
@@ -13,6 +14,7 @@ use crate::logind::{self, ManagerProxyBlocking};
 
 const KEEP_RUNNING: &str = "keep-running";
 const SETTLES_AFTER_WAKE: Duration = Duration::from_secs(30);
+const SLEEP_ATTEMPTS: u8 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -67,7 +69,7 @@ struct Watcher {
     held: Option<(Mode, OwnedFd)>,
     closed: bool,
     left_until_opened: bool,
-    failed: bool,
+    failures: u8,
     wakes: u64,
 }
 
@@ -114,11 +116,13 @@ pub fn follow(system: &Connection, session: &Connection) -> zbus::Result<Option<
         manager,
         upower,
         config,
-        configured_by_admin: logind::logind_sets("HandleLidSwitch"),
+        configured_by_admin: ["HandleLidSwitch", "HandleLidSwitchExternalPower"]
+            .into_iter()
+            .any(|key| systemd_config::setting("logind.conf", key).is_some()),
         mode: Mode::LeftToLogind,
         held: None,
         left_until_opened: false,
-        failed: false,
+        failures: 0,
         wakes: 0,
     };
     let timer = events.clone();
@@ -135,7 +139,12 @@ impl Watcher {
                 Event::Lid(closed) => self.set_closed(closed),
                 Event::Woke { slept } => {
                     self.wakes += 1;
-                    self.failed |= !slept && self.closed;
+                    if !slept && self.closed {
+                        self.failures += 1;
+                        if self.failures >= SLEEP_ATTEMPTS {
+                            self.leave_to_logind();
+                        }
+                    }
                     let (wake, timer) = (self.wakes, timer.clone());
                     thread::spawn(move || {
                         thread::sleep(SETTLES_AFTER_WAKE);
@@ -159,7 +168,11 @@ impl Watcher {
     }
 
     fn follow(&mut self) {
-        let on_battery = self.upower.on_battery().unwrap_or(false);
+        let on_battery = self
+            .upower
+            .on_battery()
+            .inspect_err(|error| tracing::warn!("cannot tell whether on battery: {error}"))
+            .unwrap_or(false);
         let keep_running = !on_battery
             && self
                 .config
@@ -213,7 +226,7 @@ impl Watcher {
 
     fn opened(&mut self) {
         self.left_until_opened = false;
-        self.failed = false;
+        self.failures = 0;
         self.hold();
     }
 
@@ -223,7 +236,7 @@ impl Watcher {
     }
 
     fn sleep_if_closed(&mut self) {
-        if self.mode != Mode::SleepsHere || self.left_until_opened || self.failed {
+        if self.mode != Mode::SleepsHere || self.left_until_opened {
             return;
         }
         let docked = self.manager.docked().unwrap_or_else(|error| {

@@ -76,6 +76,9 @@ msgstr "Ny kalender…"
 msgid "Add Account…"
 msgstr "Lägg till konto…"
 
+msgid "Open Colleague’s Calendar…"
+msgstr "Öppna kollegas kalender…"
+
 msgid "Refresh Calendars"
 msgstr "Uppdatera kalendrar"
 
@@ -96,6 +99,17 @@ msgstr "”{title}” ändrades på annat håll. Båda versionerna har sparats."
 
 msgid "{name}: {error}"
 msgstr "{name}: {error}"
+
+msgid "{calendar} ({owner})"
+msgstr "{calendar} ({owner})"
+
+msgid "Added {count} calendar of {owner}."
+msgid_plural "Added {count} calendars of {owner}."
+msgstr[0] "La till {count} kalender från {owner}."
+msgstr[1] "La till {count} kalendrar från {owner}."
+
+msgid "Can’t open the calendars of {owner}: {error}"
+msgstr "Kan inte öppna kalendrarna för {owner}: {error}"
 
 msgid "Updated {time}"
 msgstr "Uppdaterad {time}"
@@ -119,6 +133,9 @@ msgstr[1] "{date}, {count} händelser"
 
 msgid "Calendars"
 msgstr "Kalendrar"
+
+msgid "read-only"
+msgstr "skrivskyddad"
 
 msgid "Next Month"
 msgstr "Nästa månad"
@@ -363,6 +380,9 @@ msgstr "Grafit"
 msgid "Rename…"
 msgstr "Byt namn…"
 
+msgid "Remove Calendar"
+msgstr "Ta bort kalender"
+
 msgid "Delete Calendar"
 msgstr "Radera kalender"
 
@@ -537,6 +557,12 @@ msgstr "Lokalt"
 msgid "Untitled"
 msgstr "Namnlös"
 
+msgid "Remove “{name}”?"
+msgstr "Vill du ta bort ”{name}”?"
+
+msgid "It stays on the server for its owner and anyone it is shared with."
+msgstr "Den finns kvar på servern för ägaren och alla den delas med."
+
 msgid "Delete “{name}”?"
 msgstr "Vill du radera ”{name}”?"
 
@@ -548,6 +574,12 @@ msgstr "Radera"
 
 msgid "You"
 msgstr "Du"
+
+msgid "Add a CalDAV account to open a colleague’s calendar."
+msgstr "Lägg till ett CalDAV-konto för att öppna en kollegas kalender."
+
+msgid "{owner} shares no calendars with you."
+msgstr "{owner} delar inga kalendrar med dig."
 
 msgid "Add {count} event to “{calendar}”?"
 msgid_plural "Add {count} events to “{calendar}”?"
@@ -565,9 +597,6 @@ msgstr "Bara den här händelsen"
 
 msgid "All Events"
 msgstr "Alla händelser"
-
-msgid "Remove “{name}”?"
-msgstr "Vill du ta bort ”{name}”?"
 
 msgid "Its calendars are removed from this computer. Nothing is deleted on the server."
 msgstr "Kontots kalendrar tas bort från den här datorn. Inget raderas på servern."

@@ -125,6 +125,11 @@ pub enum Request {
         account: String,
         text: String,
     },
+    OpenCalendars {
+        account: String,
+        home: String,
+        owner: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -819,7 +824,7 @@ impl CalendarView {
             naming::Target::Rename(index) => {
                 self.library.rename_calendar(index, &name);
                 let info = &self.library.calendars[index].info;
-                if let Some(url) = info.url.clone() {
+                if let Some(url) = info.url.clone().filter(|_| !info.opened) {
                     self.requests.push(Request::Collection {
                         account: info.account.clone(),
                         url,
@@ -868,6 +873,7 @@ impl CalendarView {
                             ctag: None,
                             sync_token: None,
                             refreshed: None,
+                            opened: false,
                         });
                     }
                 }
@@ -885,15 +891,23 @@ impl CalendarView {
         let Some(calendar) = self.library.calendars.get(index) else {
             return;
         };
-        let title = tr!("Delete “{name}”?", name = calendar.info.name.clone());
+        let name = calendar.info.name.clone();
+        let (title, message, action) = match calendar.info.opened {
+            true => (
+                tr!("Remove “{name}”?", name = name),
+                tr!("It stays on the server for its owner and anyone it is shared with."),
+                tr!("Remove"),
+            ),
+            false => (
+                tr!("Delete “{name}”?", name = name),
+                tr!("Its events are deleted too, also on the server."),
+                tr!("Delete"),
+            ),
+        };
         self.confirm = Some(Confirm::DeleteCalendar(index));
-        let alert = Alert::new(
-            &title,
-            &tr!("Its events are deleted too, also on the server."),
-            self.choice(),
-        )
-        .cancel(&tr!("Cancel"), "cancel")
-        .destructive(&tr!("Delete"), "accept");
+        let alert = Alert::new(&title, &message, self.choice())
+            .cancel(&tr!("Cancel"), "cancel")
+            .destructive(&action, "accept");
         self.ui.present_dialog(alert);
     }
 
@@ -906,7 +920,7 @@ impl CalendarView {
         else {
             return;
         };
-        if let Some(url) = info.url {
+        if let Some(url) = info.url.filter(|_| !info.opened) {
             self.requests.push(Request::Collection {
                 account: info.account,
                 url,
@@ -1109,17 +1123,41 @@ impl CalendarView {
         }
     }
 
-    pub(crate) fn open_directory(&mut self) {
-        if self.inspected_account().is_none() {
-            return;
-        }
-        let (panel, sheet) = directory::Sheet::build(&self.signals);
+    pub(crate) fn open_directory(&mut self, opening: Option<String>) {
+        let purpose = match opening {
+            Some(account) => directory::Purpose::Open(account),
+            None if self.inspected_account().is_some() => directory::Purpose::Invite,
+            None => return,
+        };
+        let (panel, sheet) = directory::Sheet::build(&self.signals, purpose);
         self.directory = Some(sheet);
         self.ui.present_sheet(panel);
     }
 
+    pub(crate) fn open_shared(&mut self, account: Option<&str>) {
+        let account = self
+            .library
+            .accounts
+            .iter()
+            .filter(|known| matches!(known.kind, AccountKind::CalDav { .. }))
+            .find(|known| account.is_none_or(|wanted| known.id == wanted))
+            .map(|known| known.id.clone());
+        match account {
+            Some(account) if self.inspector_closed() => self.open_directory(Some(account)),
+            Some(_) => {}
+            None => self.status = Some(tr!("Add a CalDAV account to open a colleague’s calendar.")),
+        }
+    }
+
+    fn directory_account(&self) -> Option<String> {
+        match &self.directory.as_ref()?.purpose {
+            directory::Purpose::Open(account) => Some(account.clone()),
+            directory::Purpose::Invite => self.inspected_account().map(|(account, _)| account),
+        }
+    }
+
     pub(crate) fn search_directory(&mut self) {
-        let (Some((account, _)), Some(sheet)) = (self.inspected_account(), &self.directory) else {
+        let (Some(account), Some(sheet)) = (self.directory_account(), &self.directory) else {
             return;
         };
         let text = sheet.text.trim().to_owned();
@@ -1141,9 +1179,28 @@ impl CalendarView {
             return;
         };
         sheet.close(&mut self.ui);
-        let picked = pick.and_then(|index| sheet.picked(index));
-        if let (Some(principal), Some(inspector)) = (picked, &mut self.inspector) {
-            inspector.add_invitee(&mut self.ui, principal);
+        let Some(principal) = pick.and_then(|index| sheet.picked(index)) else {
+            return;
+        };
+        match &sheet.purpose {
+            directory::Purpose::Invite => {
+                if let Some(inspector) = &mut self.inspector {
+                    inspector.add_invitee(&mut self.ui, principal);
+                }
+            }
+            directory::Purpose::Open(account) => match &principal.home {
+                Some(home) => self.requests.push(Request::OpenCalendars {
+                    account: account.clone(),
+                    home: home.clone(),
+                    owner: principal.name.clone(),
+                }),
+                None => {
+                    self.status = Some(tr!(
+                        "{owner} shares no calendars with you.",
+                        owner = principal.name.clone()
+                    ))
+                }
+            },
         }
     }
 

@@ -34,6 +34,8 @@ const ACTION_RENAME: &str = "calendar-rename:";
 const ACTION_DELETE_CALENDAR: &str = "calendar-delete:";
 const ACTION_NEW_CALENDAR: &str = "new-calendar";
 const ACTION_NEW_CALENDAR_IN: &str = "new-calendar:";
+const ACTION_OPEN_SHARED: &str = "open-shared";
+const ACTION_OPEN_SHARED_IN: &str = "open-shared:";
 
 const COLORS: [(Accent, Text); 8] = [
     (Accent::Rose, text!("Red")),
@@ -74,8 +76,12 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
         &format!("{ACTION_EXPORT_CALENDAR}{index}"),
     ));
     if !subscription && (calendar.info.account != crate::store::LOCAL_ACCOUNT || locals > 1) {
+        let title = match calendar.info.opened {
+            true => tr!("Remove Calendar"),
+            false => tr!("Delete Calendar"),
+        };
         items.push(MenuItem::new(
-            &tr!("Delete Calendar"),
+            &title,
             &format!("{ACTION_DELETE_CALENDAR}{index}"),
         ));
     }
@@ -108,7 +114,7 @@ fn recolor(view: &mut CalendarView, action: &str) -> bool {
     calendar.info.color = super::painter::color_text(accent.color(Scheme::Light));
     view.library.save(index);
     let info = &view.library.calendars[index].info;
-    if let Some(url) = info.url.clone() {
+    if let Some(url) = info.url.clone().filter(|_| !info.opened) {
         view.requests.push(Request::Collection {
             account: info.account.clone(),
             url,
@@ -149,6 +155,10 @@ pub fn menu_command(view: &mut CalendarView, action: &str) -> bool {
             return recolor(view, &other[ACTION_COLOR.len()..]);
         }
         ACTION_NEW_CALENDAR => view.open_new_calendar(None),
+        ACTION_OPEN_SHARED => view.open_shared(None),
+        other if other.starts_with(ACTION_OPEN_SHARED_IN) => {
+            view.open_shared(Some(&other[ACTION_OPEN_SHARED_IN.len()..]))
+        }
         other if other.starts_with(ACTION_NEW_CALENDAR_IN) => {
             let account = other[ACTION_NEW_CALENDAR_IN.len()..].to_owned();
             view.open_new_calendar(Some(&account));
@@ -587,6 +597,12 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
                         &format!("{ACTION_NEW_CALENDAR_IN}{id}"),
                     ));
                 }
+                if matches!(account.kind, crate::store::AccountKind::CalDav { .. }) {
+                    items.push(MenuItem::new(
+                        &tr!("Open Colleague’s Calendar…"),
+                        &format!("{ACTION_OPEN_SHARED_IN}{id}"),
+                    ));
+                }
                 if id != crate::store::LOCAL_ACCOUNT {
                     items.push(MenuItem::new(
                         &tr!("Remove Account"),
@@ -1003,7 +1019,7 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
         Signal::Availability => view.open_availability(),
         Signal::AvailabilityClose => view.finish_availability(None),
         Signal::Suggestion(index) => view.finish_availability(Some(index)),
-        Signal::Directory => view.open_directory(),
+        Signal::Directory => view.open_directory(None),
         Signal::DirectorySearch => view.search_directory(),
         Signal::DirectoryPick(index) => view.finish_directory(Some(index)),
         Signal::DirectoryClose => view.finish_directory(None),

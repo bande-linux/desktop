@@ -15,8 +15,14 @@ const LABEL_WIDTH: f32 = 70.0;
 const ROW: f32 = TEXT_FIELD_HEIGHT;
 const SHOWN: usize = 8;
 
+pub enum Purpose {
+    Invite,
+    Open(String),
+}
+
 pub struct Sheet {
     pub text: String,
+    pub purpose: Purpose,
     panel: WidgetId,
     cancel: WidgetId,
     status: WidgetId,
@@ -43,7 +49,7 @@ fn title(principal: &Principal) -> String {
 }
 
 impl Sheet {
-    pub fn build(signals: &Signals) -> (Panel, Self) {
+    pub fn build(signals: &Signals, purpose: Purpose) -> (Panel, Self) {
         let mut panel = Panel::new(Some(&tr!("People and Rooms")), WIDTH, LABEL_WIDTH).sheet();
         let send = sender(signals);
         let field = panel.add(TextField::new(&tr!("Name or address"), "", move |text| {
@@ -84,6 +90,7 @@ impl Sheet {
         let id = |index: usize| panel.id_of(index).unwrap_or_else(WidgetId::next);
         let sheet = Self {
             text: String::new(),
+            purpose,
             panel: bande_toolkit::ui::Widget::id(&panel),
             cancel: id(cancel),
             status: id(status),

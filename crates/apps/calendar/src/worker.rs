@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use bande_keyring::Keyring;
 
-use crate::caldav::{Availability, Client, Credentials, Error, Principal};
+use crate::caldav::{Availability, Client, Credentials, Error, Principal, RemoteCalendar};
 use crate::ical::freebusy::Period;
 use crate::store::{AccountKind, Calendar};
 use crate::sync::{Outcome, sync_calendar};
@@ -42,6 +42,12 @@ pub enum Job {
         home: String,
         text: String,
     },
+    OpenCalendars {
+        account: String,
+        user: String,
+        home: String,
+        owner: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +82,11 @@ pub enum Reply {
     ChangeFailed(String),
     Availability(Result<Vec<(String, Availability)>, String>),
     Directory(Result<Vec<Principal>, String>),
+    Opened {
+        account: String,
+        owner: String,
+        calendars: Result<Vec<RemoteCalendar>, String>,
+    },
 }
 
 pub struct Worker {
@@ -233,6 +244,21 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                 .and_then(|scheduling| client.search_principals(&scheduling.principal, &text))
                 .map_err(|error| error.to_string());
             reply(Reply::Directory(found));
+        }
+        Job::OpenCalendars {
+            account,
+            user,
+            home,
+            owner,
+        } => {
+            let calendars = signed_in(passwords, &account, user)
+                .calendars(&home)
+                .map_err(|error| error.to_string());
+            reply(Reply::Opened {
+                account,
+                owner,
+                calendars,
+            });
         }
         Job::Forget(account) => {
             passwords.known.remove(&account);

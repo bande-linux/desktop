@@ -53,6 +53,13 @@ views. Packaged as `bande-calendar`.
 - **Calendars.** New, rename and delete, on this computer or on a CalDAV server (MKCALENDAR,
   PROPPATCH of the name and colour, DELETE): File ▸ New Calendar…, or right-click a calendar or
   an account heading.
+- **Shared calendars.** Calendars others share with you are listed with your own, as the
+  server puts them in your calendar home; one where your `current-user-privilege-set` has no
+  write privilege is marked read-only in the sidebar and opens read-only. File ▸ Open
+  Colleague’s Calendar… (or the account heading's menu) searches the server's directory and
+  adds the calendars of the person picked that the server lets you see (RFC 3744 ACLs decide
+  whether you can read or write them); they stay through a new sign-in, and Remove Calendar
+  takes them off this computer only.
 - **Busy hours.** Overlapping events share the column and widen into free lanes; when there are
   more than fit readably, a "+N" chip opens that day in the Day view.
 - **Editing.** Drag on empty time to create, drag an event to move it (also between days in the

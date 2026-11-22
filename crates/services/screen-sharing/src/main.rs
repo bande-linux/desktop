@@ -15,7 +15,7 @@ use bande_screen_sharing::setup::PORT;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
-use crate::capture::{SCREENSHOT_INTERFACE, SCREENSHOT_PATH};
+use crate::capture::{SCREENSHOT, SCREENSHOT_INTERFACE, SCREENSHOT_PATH};
 use crate::host::{CLIPBOARD, CLIPBOARD_PATH, Desktop};
 
 const HOSTNAME: &str = "/proc/sys/kernel/hostname";
@@ -40,15 +40,20 @@ fn listen() -> std::io::Result<TcpListener> {
 fn follow_ended(session: &Connection, desktop: Weak<Desktop>) -> zbus::Result<()> {
     let rule = MatchRule::builder()
         .msg_type(message::Type::Signal)
+        .sender(SCREENSHOT)?
         .interface(SCREENSHOT_INTERFACE)?
         .path(SCREENSHOT_PATH)?
         .member("StreamsEnded")?
         .build();
     let signals = MessageIterator::for_match_rule(rule, session, None)?;
+    let bus = session.clone();
     thread::Builder::new()
         .name("ended".into())
         .spawn(move || {
-            for signal in signals.flatten() {
+            for signal in signals
+                .flatten()
+                .filter(|signal| bande_bus::sent_by(&bus, signal, SCREENSHOT))
+            {
                 let Some(desktop) = desktop.upgrade() else {
                     return;
                 };
@@ -64,15 +69,20 @@ fn follow_ended(session: &Connection, desktop: Weak<Desktop>) -> zbus::Result<()
 fn follow_clipboard(session: &Connection, desktop: Weak<Desktop>) -> zbus::Result<()> {
     let rule = MatchRule::builder()
         .msg_type(message::Type::Signal)
+        .sender(CLIPBOARD)?
         .interface(CLIPBOARD)?
         .path(CLIPBOARD_PATH)?
         .member("Changed")?
         .build();
     let signals = MessageIterator::for_match_rule(rule, session, None)?;
+    let bus = session.clone();
     thread::Builder::new()
         .name("clipboard".into())
         .spawn(move || {
-            for _ in signals.flatten() {
+            for _ in signals
+                .flatten()
+                .filter(|signal| bande_bus::sent_by(&bus, signal, CLIPBOARD))
+            {
                 let Some(desktop) = desktop.upgrade() else {
                     return;
                 };

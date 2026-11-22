@@ -2,7 +2,6 @@ use std::io::{self, Read, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, TcpStream};
 use std::os::fd::AsFd;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
@@ -20,7 +19,7 @@ use ring::rand::{SecureRandom, SystemRandom};
 use rustix::event::{PollFd, PollFlags, poll};
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
-use super::attempts::Attempts;
+use super::limits::{Limits, Seat};
 use super::{Host, Viewing};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
@@ -28,10 +27,16 @@ const HANDSHAKE_DEADLINE: Duration = Duration::from_secs(60);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const FAILURE_DELAY: Duration = Duration::from_secs(1);
 const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(5);
-const MOST_VIEWERS: usize = 4;
 const MOST_CREDENTIAL: usize = 1024;
 const MOST_UNPARSED: usize = MOST_CUT_TEXT + 64 * 1024;
 const SERVER_CUT_TEXT: u8 = 3;
+const BUTTONS: u8 = 3;
+const WHEEL: [(u8, i32, i32); 4] = [
+    (1 << 3, 0, -1),
+    (1 << 4, 0, 1),
+    (1 << 5, -1, 0),
+    (1 << 6, 1, 0),
+];
 const READ_CHUNK: usize = 64 * 1024;
 const FAILED: u32 = 1;
 
@@ -70,6 +75,7 @@ fn vencrypt(
     mut socket: TcpStream,
     tls: &Arc<ServerConfig>,
     password: &str,
+    older_viewers: bool,
 ) -> io::Result<(Transport, Checked)> {
     socket.write_all(&[0, 2])?;
     let version = read_array::<2>(&mut socket)?;
@@ -77,11 +83,16 @@ fn vencrypt(
         socket.write_all(&[1])?;
         return Err(refused("the viewer speaks another VeNCrypt version"));
     }
-    socket.write_all(&[0, 2])?;
-    socket.write_all(&VENCRYPT_X509_PLAIN.to_be_bytes())?;
-    socket.write_all(&VENCRYPT_X509_VNC.to_be_bytes())?;
+    let offered: &[u32] = match older_viewers {
+        true => &[VENCRYPT_X509_PLAIN, VENCRYPT_X509_VNC],
+        false => &[VENCRYPT_X509_PLAIN],
+    };
+    socket.write_all(&[0, offered.len() as u8])?;
+    for subtype in offered {
+        socket.write_all(&subtype.to_be_bytes())?;
+    }
     let chosen = read_u32(&mut socket)?;
-    if chosen != VENCRYPT_X509_PLAIN && chosen != VENCRYPT_X509_VNC {
+    if !offered.contains(&chosen) {
         socket.write_all(&[0])?;
         return Err(refused("the viewer chose no offered VeNCrypt type"));
     }
@@ -110,19 +121,19 @@ fn vencrypt(
     Ok((transport, checked))
 }
 
-fn handshake(
+fn shake_hands(
     mut socket: TcpStream,
     peer: IpAddr,
     host: &dyn Host,
     tls: &Arc<ServerConfig>,
-    attempts: &Attempts,
+    limits: &Arc<Limits>,
 ) -> io::Result<Option<Transport>> {
     socket.write_all(VERSION)?;
     let version = parse_version(&read_array::<12>(&mut socket)?)
         .ok_or_else(|| refused("the viewer speaks no known RFB version"))?;
     let password = host.password();
     let older_viewers = host.older_viewers();
-    let refusal = match (&password, attempts.blocked(peer)) {
+    let refusal = match (&password, limits.blocked(peer)) {
         (_, true) => Some("Too many wrong passwords. Try again later."),
         (None, _) => Some("Screen sharing has no password yet."),
         (Some(_), false) => None,
@@ -158,7 +169,7 @@ fn handshake(
             socket.write_all(offered)?;
             let [chosen] = read_array::<1>(&mut socket)?;
             match chosen {
-                SECURITY_VENCRYPT => vencrypt(socket, tls, &password)?,
+                SECURITY_VENCRYPT => vencrypt(socket, tls, &password, older_viewers)?,
                 SECURITY_VNC if older_viewers => {
                     let mut transport = Transport::Plain(socket);
                     let checked = vnc_authentication(&mut transport, &password)?;
@@ -176,7 +187,7 @@ fn handshake(
         transport.flush()
     };
     if checked == Checked::Wrong {
-        attempts.failed(peer);
+        limits.failed(peer);
         tracing::info!("a viewer at {peer} gave a wrong password");
         thread::sleep(FAILURE_DELAY);
         failure(&mut transport, "Wrong password.")?;
@@ -240,6 +251,22 @@ struct Viewer<'a> {
     checked: u64,
     size: (u16, u16),
     unparsed: Vec<u8>,
+    buttons: u8,
+    keys: Vec<u32>,
+    _seat: Seat,
+}
+
+impl Drop for Viewer<'_> {
+    fn drop(&mut self) {
+        for keysym in std::mem::take(&mut self.keys) {
+            self.viewing.input.key(keysym, false);
+        }
+        for button in 0..BUTTONS {
+            if self.buttons & (1 << button) != 0 {
+                self.viewing.input.button(button, false);
+            }
+        }
+    }
 }
 
 impl Viewer<'_> {
@@ -285,11 +312,12 @@ impl Viewer<'_> {
             self.sent = Some(Arc::clone(frame));
             return self.send(0, &body);
         }
+        let mut encoded = 0;
         for area in &areas {
-            self.encoder.encode(frame, *area, &mut body)?;
+            encoded += usize::from(self.encoder.encode(frame, *area, &mut body)?);
         }
         self.sent = Some(Arc::clone(frame));
-        let count = u16::try_from(rectangles.len() + areas.len()).unwrap_or(u16::MAX);
+        let count = u16::try_from(rectangles.len() + encoded).unwrap_or(u16::MAX);
         self.send(count, &body)
     }
 
@@ -330,12 +358,18 @@ impl Viewer<'_> {
                     None => Request { incremental, area },
                 });
             }
-            ClientMessage::Key { down, keysym } => self.viewing.input.key(keysym, down),
-            ClientMessage::Pointer { buttons, x, y } => {
-                self.viewing
-                    .input
-                    .pointer(u32::from(x), u32::from(y), buttons);
+            ClientMessage::Key { down, keysym } => {
+                let held = self.keys.iter().position(|key| *key == keysym);
+                match (down, held) {
+                    (true, None) => self.keys.push(keysym),
+                    (false, Some(at)) => {
+                        self.keys.remove(at);
+                    }
+                    _ => {}
+                }
+                self.viewing.input.key(keysym, down);
             }
+            ClientMessage::Pointer { buttons, x, y } => self.point(buttons, x, y),
             ClientMessage::CutText(text) => {
                 let outcome = self.clipboard.received(text);
                 if let Some(reply) = outcome.reply {
@@ -348,6 +382,25 @@ impl Viewer<'_> {
             }
         }
         Ok(())
+    }
+
+    fn point(&mut self, buttons: u8, x: u16, y: u16) {
+        let input = &self.viewing.input;
+        input.pointer(u32::from(x), u32::from(y));
+        let pressed = buttons & !self.buttons;
+        let released = self.buttons & !buttons;
+        for button in 0..BUTTONS {
+            let bit = 1 << button;
+            if pressed & bit != 0 || released & bit != 0 {
+                input.button(button, pressed & bit != 0);
+            }
+        }
+        for (bit, x, y) in WHEEL {
+            if pressed & bit != 0 {
+                input.scroll(x, y);
+            }
+        }
+        self.buttons = buttons;
     }
 
     fn send_cut_text(&mut self, text: &bande_rfb::protocol::CutText) -> io::Result<()> {
@@ -438,7 +491,8 @@ fn serve_viewer(
     peer: IpAddr,
     host: &dyn Host,
     tls: &Arc<ServerConfig>,
-    attempts: &Attempts,
+    limits: &Arc<Limits>,
+    handshake: super::limits::Handshake,
 ) -> io::Result<()> {
     socket.set_read_timeout(Some(HANDSHAKE_TIMEOUT))?;
     socket.set_write_timeout(Some(WRITE_TIMEOUT))?;
@@ -452,10 +506,14 @@ fn serve_viewer(
                 let _ = watched.shutdown(Shutdown::Both);
             }
         })?;
-    let shaken = handshake(socket, peer, host, tls, attempts);
+    let shaken = shake_hands(socket, peer, host, tls, limits);
     drop(finished);
+    drop(handshake);
     let Some(mut transport) = shaken? else {
         return Ok(());
+    };
+    let Some(seat) = limits.seat() else {
+        return Err(io::Error::other("four viewers are connected"));
     };
     let Some(viewing) = host.view(peer) else {
         return Err(io::Error::other("the screen cannot be shown"));
@@ -482,6 +540,9 @@ fn serve_viewer(
         checked: 0,
         size: (area.width, area.height),
         unparsed: Vec::new(),
+        buttons: 0,
+        keys: Vec::new(),
+        _seat: seat,
     };
     viewer.run()
 }
@@ -494,8 +555,7 @@ pub fn serve(
     tls: Arc<ServerConfig>,
     allowed: impl Fn(IpAddr) -> bool,
 ) -> io::Result<()> {
-    let attempts = Arc::new(Attempts::default());
-    let viewers = Arc::new(AtomicUsize::new(0));
+    let limits = Arc::new(Limits::default());
     loop {
         let (socket, address) = match listener.accept() {
             Ok(accepted) => accepted,
@@ -512,26 +572,19 @@ pub fn serve(
             tracing::info!("refused a viewer at {peer}, which is not on the local network");
             continue;
         }
-        if viewers.load(Ordering::Acquire) >= MOST_VIEWERS {
-            tracing::info!("refused a viewer at {peer}: {MOST_VIEWERS} are connected");
+        let Some(handshake) = limits.handshake(peer) else {
+            tracing::info!("refused a viewer at {peer}: it is already connecting");
             continue;
-        }
-        viewers.fetch_add(1, Ordering::AcqRel);
-        let (host, tls, attempts, counted) = (
-            Arc::clone(&host),
-            Arc::clone(&tls),
-            Arc::clone(&attempts),
-            Arc::clone(&viewers),
-        );
-        let spawned = thread::Builder::new().name("viewer".into()).spawn(move || {
-            match serve_viewer(socket, peer, host.as_ref(), &tls, &attempts) {
-                Ok(()) => tracing::info!("the viewer at {peer} left"),
-                Err(error) => tracing::info!("the viewer at {peer} left: {error}"),
-            }
-            counted.fetch_sub(1, Ordering::AcqRel);
-        });
+        };
+        let (host, tls, limits) = (Arc::clone(&host), Arc::clone(&tls), Arc::clone(&limits));
+        let spawned =
+            thread::Builder::new().name("viewer".into()).spawn(move || {
+                match serve_viewer(socket, peer, host.as_ref(), &tls, &limits, handshake) {
+                    Ok(()) => tracing::info!("the viewer at {peer} left"),
+                    Err(error) => tracing::info!("the viewer at {peer} left: {error}"),
+                }
+            });
         if let Err(error) = spawned {
-            viewers.fetch_sub(1, Ordering::AcqRel);
             tracing::warn!("cannot serve a viewer: {error}");
         }
     }

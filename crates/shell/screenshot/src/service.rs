@@ -22,7 +22,7 @@ pub const BUS_NAME: &str = "org.bande.Screenshot";
 pub const PATH: &str = "/org/bande/Screenshot";
 pub const INTERFACE: &str = "org.bande.Screenshot";
 pub const PORTAL: &str = "org.freedesktop.impl.portal.desktop.bande";
-const SCREEN_SHARING: &str = "/usr/libexec/bande-screen-sharing";
+const SCREEN_SHARING: &str = "bande-screen-sharing.service";
 pub const SCREEN_ID: &str = "monitor:screen";
 pub const MONITOR: u32 = 1;
 pub const WINDOW: u32 = 2;
@@ -313,14 +313,15 @@ async fn from_screen_sharing(
     let denied = || {
         zbus::fdo::Error::AccessDenied("only screen sharing may show the screen to a viewer".into())
     };
-    let bus = zbus::fdo::DBusProxy::new(connection).await?;
-    let sender = header.sender().ok_or_else(denied)?;
-    let caller = bus
-        .get_connection_unix_process_id(sender.clone().into())
-        .await?;
-    match std::fs::read_link(format!("/proc/{caller}/exe")) {
-        Ok(program) if program == std::path::Path::new(SCREEN_SHARING) => Ok(()),
-        _ => Err(denied()),
+    let sender = header.sender().ok_or_else(denied)?.to_owned();
+    let bus = Connection::from(connection.clone());
+    let allowed = blocking::unblock(move || {
+        bande_bus::is_main_process_of(&bus, sender.into(), SCREEN_SHARING)
+    })
+    .await?;
+    match allowed {
+        true => Ok(()),
+        false => Err(denied()),
     }
 }
 

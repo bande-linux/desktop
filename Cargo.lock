@@ -718,8 +718,10 @@ dependencies = [
 name = "bande-clipboard"
 version = "0.2.0"
 dependencies = [
+ "bande-bus",
  "bande-log",
  "bande-xdg",
+ "blocking",
  "rustix 1.1.6",
  "tracing",
  "wayland-client",
@@ -1680,6 +1682,7 @@ name = "bande-screenshot"
 version = "0.2.0"
 dependencies = [
  "accesskit",
+ "bande-bus",
  "bande-datetime",
  "bande-fs",
  "bande-graphics",

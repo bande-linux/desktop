@@ -122,8 +122,9 @@ pub enum Signal {
     Closed(u32),
 }
 
-/// Notification signals on a connection, received from the moment it is made.
-pub struct Listener(MessageIterator);
+/// Notification signals on a connection from the notification server, received from the moment
+/// it is made; signals other programs send are ignored.
+pub struct Listener(MessageIterator, Connection);
 
 impl Listener {
     /// Subscribes to notification signals on `connection`; make it before posting a notification
@@ -131,18 +132,23 @@ impl Listener {
     pub fn new(connection: &Connection) -> zbus::Result<Self> {
         let rule = MatchRule::builder()
             .msg_type(message::Type::Signal)
+            .sender(BUS_NAME)?
             .interface(INTERFACE)?
             .path(OBJECT_PATH)?
             .build();
-        Ok(Self(MessageIterator::for_match_rule(
-            rule, connection, None,
-        )?))
+        Ok(Self(
+            MessageIterator::for_match_rule(rule, connection, None)?,
+            connection.clone(),
+        ))
     }
 
     /// Passes every signal to `deliver` until `deliver` returns false.
     /// Blocks, so it runs on a thread of its own.
     pub fn listen(self, mut deliver: impl FnMut(Signal) -> bool) {
         for signal in self.0.flatten() {
+            if !bande_bus::sent_by(&self.1, &signal, BUS_NAME) {
+                continue;
+            }
             let header = signal.header();
             let body = signal.body();
             let signal = match header.member().map(|member| member.as_str()) {

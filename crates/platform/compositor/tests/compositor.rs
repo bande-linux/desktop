@@ -430,6 +430,8 @@ fn act_as_a_remote_viewer(socket: std::os::unix::net::UnixStream) {
             keys.device().frame(connection.serial(), 3);
             text.keysym(u32::from('a'), ei::keyboard::KeyState::Released);
             keys.device().frame(connection.serial(), 4);
+            text.keysym(u32::from('q'), ei::keyboard::KeyState::Press);
+            keys.device().frame(connection.serial(), 5);
             connection.flush().unwrap();
             return;
         }
@@ -437,15 +439,18 @@ fn act_as_a_remote_viewer(socket: std::os::unix::net::UnixStream) {
 }
 
 #[test]
-fn a_screen_sharing_viewer_clicks_and_types_through_the_screenshot_tools_connection() {
+fn a_screen_sharing_viewer_clicks_and_types_and_its_keys_are_released_when_it_leaves() {
     let mut server = headless(560, 520);
     let mut editor = TestClient::window(&mut server, "org.example.Editor");
-    let mut screenshot = TestClient::connect_as_shell(&mut server);
+    let mut shell = TestClient::connect_as_shell(&mut server);
+    let refused = shell.connect_remote_input(&mut server);
+    let mut screenshot = TestClient::connect_as_screenshot_tool(&mut server);
     let socket = screenshot.connect_remote_input(&mut server);
     let viewer = thread::spawn(move || act_as_a_remote_viewer(socket));
     let deadline = Instant::now() + Duration::from_secs(30);
     while !(editor.keys().contains(&(KEY_A, false))
-        && editor.buttons().contains(&(BTN_LEFT, false)))
+        && editor.buttons().contains(&(BTN_LEFT, false))
+        && editor.keys().contains(&(KEY_Q, false)))
     {
         assert!(
             Instant::now() < deadline,
@@ -458,4 +463,14 @@ fn a_screen_sharing_viewer_clicks_and_types_through_the_screenshot_tools_connect
     assert!(editor.keyboard_focus_on(0));
     assert!(editor.keys().contains(&(KEY_A, true)));
     assert!(editor.buttons().contains(&(BTN_LEFT, true)));
+    assert!(
+        editor.keys().contains(&(KEY_Q, true)),
+        "the key the viewer still held is released when it leaves"
+    );
+    let mut nothing = [0; 1];
+    assert_eq!(
+        std::io::Read::read(&mut &refused, &mut nothing).unwrap(),
+        0,
+        "only the screenshot tool gets remote input"
+    );
 }

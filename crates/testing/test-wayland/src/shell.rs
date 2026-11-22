@@ -17,6 +17,14 @@ impl TestClient {
         Self::from_socket(server, client_end)
     }
 
+    pub fn connect_as_screenshot_tool(server: &mut Compositor) -> Self {
+        let (client_end, server_end) = std::os::unix::net::UnixStream::pair().expect("socket pair");
+        server
+            .insert_session_client(server_end, SessionRole::Screenshot)
+            .expect("insert screenshot tool");
+        Self::from_socket(server, client_end)
+    }
+
     pub fn connect_as_lock_screen(server: &mut Compositor) -> Self {
         let (client_end, server_end) = std::os::unix::net::UnixStream::pair().expect("socket pair");
         server

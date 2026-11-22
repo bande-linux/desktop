@@ -79,3 +79,55 @@ fn a_notification_shows_as_a_banner_and_only_the_center_name_can_read_or_dismiss
     center.clear_all().expect("ClearAll");
     assert!(next().center.is_empty());
 }
+
+#[test]
+fn only_the_notification_server_can_answer_for_a_notification() {
+    let bus = SessionBus::start().expect("dbus-daemon");
+    let _server = NotificationServer::start(
+        &bus.connect().expect("server connection"),
+        &bus.connect().expect("center connection"),
+    )
+    .expect("notification server");
+    let app = bus.connect().expect("app connection");
+    let stranger = bus.connect().expect("stranger connection");
+    let listener = bande_notify::client::Listener::new(&app).expect("listener");
+    let id = bande_notify::client::notify(
+        &app,
+        &bande_notify::client::Request {
+            app_name: "Screen Sharing",
+            replaces_id: 0,
+            app_icon: "",
+            summary: "Let someone see and control this screen?",
+            body: "",
+            actions: &[("deny", "Deny"), ("allow", "Allow")],
+            urgency: bande_notify::Urgency::Critical,
+            sound: None,
+            desktop_entry: None,
+        },
+    )
+    .expect("Notify");
+    stranger
+        .emit_signal(
+            None::<()>,
+            OBJECT_PATH,
+            "org.freedesktop.Notifications",
+            "ActionInvoked",
+            &(id, "allow"),
+        )
+        .expect("forged answer");
+    bande_notify::client::close(&app, id).expect("close");
+    let (sender, heard) = mpsc::channel();
+    thread::spawn(move || {
+        listener.listen(|signal| {
+            let _ = sender.send(signal);
+            false
+        });
+    });
+    assert_eq!(
+        heard
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a signal"),
+        bande_notify::client::Signal::Closed(id),
+        "the forged Allow is ignored"
+    );
+}

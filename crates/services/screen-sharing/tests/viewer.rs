@@ -18,7 +18,8 @@ const PATIENCE: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Sent {
-    Pointer(u32, u32, u8),
+    Pointer(u32, u32),
+    Button(u8, bool),
     Key(u32, bool),
     Copied(String),
 }
@@ -27,9 +28,15 @@ enum Sent {
 struct Recorded(Mutex<Vec<Sent>>);
 
 impl Input for Recorded {
-    fn pointer(&self, x: u32, y: u32, buttons: u8) {
-        self.0.lock().unwrap().push(Sent::Pointer(x, y, buttons));
+    fn pointer(&self, x: u32, y: u32) {
+        self.0.lock().unwrap().push(Sent::Pointer(x, y));
     }
+
+    fn button(&self, button: u8, pressed: bool) {
+        self.0.lock().unwrap().push(Sent::Button(button, pressed));
+    }
+
+    fn scroll(&self, _x: i32, _y: i32) {}
 
     fn key(&self, keysym: u32, down: bool) {
         self.0.lock().unwrap().push(Sent::Key(keysym, down));
@@ -87,7 +94,8 @@ impl Prompter for Answers {
         panic!("the server offers encryption")
     }
 
-    fn credentials(&mut self, _user: bool) -> Option<Credentials> {
+    fn credentials(&mut self, _user: bool, encrypted: bool) -> Option<Credentials> {
+        assert!(encrypted, "the password goes over TLS");
         Some(Credentials {
             user: "guest".to_owned(),
             password: self.password.to_owned(),
@@ -180,7 +188,7 @@ fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clip
         password: PASSWORD,
         seen: None,
     };
-    let session = client::connect(connected(port), "127.0.0.1", &mut answers).unwrap();
+    let session = client::connect(connected(port), "127.0.0.1", false, &mut answers).unwrap();
     assert_eq!(answers.seen, Some(fingerprint(&certificate)));
     assert_eq!(
         (session.width, session.height, session.name.as_str()),
@@ -215,7 +223,8 @@ fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clip
     wait_for(
         &host,
         &[
-            Sent::Pointer(1, 1, 1),
+            Sent::Pointer(1, 1),
+            Sent::Button(0, true),
             Sent::Key(0x61, true),
             Sent::Copied("grüße ☃".to_owned()),
         ],
@@ -234,18 +243,48 @@ fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clip
     drop(commands);
     (&wake).write_all(&[1]).unwrap();
     viewer.join().unwrap();
+    wait_for(
+        &host,
+        &[
+            Sent::Pointer(1, 1),
+            Sent::Button(0, true),
+            Sent::Key(0x61, true),
+            Sent::Copied("grüße ☃".to_owned()),
+            Sent::Key(0x61, false),
+            Sent::Button(0, false),
+        ],
+    );
 }
 
 #[test]
 fn a_wrong_password_is_refused_and_older_viewers_need_permission() {
     let (port, _, host) = start(false);
-    let (_socket, types) = security_types(port);
+    let (mut socket, types) = security_types(port);
     assert_eq!(types, [19], "plain VNC authentication is off by default");
+    socket.write_all(&[19]).unwrap();
+    let mut version = [0; 2];
+    socket.read_exact(&mut version).unwrap();
+    socket.write_all(&[0, 2]).unwrap();
+    let mut subtypes = [0; 6];
+    socket.read_exact(&mut subtypes).unwrap();
+    assert_eq!(
+        subtypes,
+        [0, 1, 0, 0, 1, 6],
+        "only X509Plain, with the whole password, until older viewers are allowed"
+    );
+    let mut second = connected(port);
+    let mut greeting = [0; 12];
+    assert!(
+        second.read_exact(&mut greeting).is_err(),
+        "one handshake at a time from one address"
+    );
+    drop(socket);
+    thread::sleep(Duration::from_millis(200));
     let mut answers = Answers {
         password: "guessed",
         seen: None,
     };
-    match client::connect(connected(port), "127.0.0.1", &mut answers) {
+    match client::connect(connected(port), "127.0.0.1", false, &mut answers) {
         Err(Failure::Denied(reason)) => assert_eq!(reason, "Wrong password."),
         Err(other) => panic!("expected a refused password, got {other:?}"),
         Ok(_) => panic!("a wrong password got in"),

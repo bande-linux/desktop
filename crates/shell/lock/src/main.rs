@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
+use std::os::fd::{AsFd, BorrowedFd};
 use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -21,7 +21,6 @@ use bande_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
-use zbus::fdo::ConnectionCredentials;
 use zbus::names::BusName;
 use zeroize::Zeroizing;
 
@@ -106,8 +105,7 @@ impl Power {
     fn ask(&self) -> zbus::Result<bool> {
         let bus = zbus::blocking::fdo::DBusProxy::new(&self.bus)?;
         let owner = bus.get_name_owner(BusName::try_from(POWER_NAME)?)?;
-        let credentials = bus.get_connection_credentials(owner.as_ref().into())?;
-        if !self.runs_power_service(&credentials)? {
+        if !bande_bus::is_main_process_of(&self.bus, owner.as_ref().into(), POWER_UNIT)? {
             tracing::warn!(
                 "{owner} answers for {POWER_NAME} but is not the main process of {POWER_UNIT}"
             );
@@ -119,25 +117,6 @@ impl Power {
             .build()?
             .password_required()
     }
-
-    fn runs_power_service(&self, credentials: &ConnectionCredentials) -> zbus::Result<bool> {
-        let (Some(process), Some(handle)) = (credentials.process_id(), credentials.process_fd())
-        else {
-            return Ok(false);
-        };
-        Ok(pid_of_handle(handle.as_fd()) == Some(process)
-            && bande_bus::systemd::main_pid(&self.bus, POWER_UNIT)? == Some(process))
-    }
-}
-
-fn pid_of_handle(handle: BorrowedFd<'_>) -> Option<u32> {
-    std::fs::read_to_string(format!("/proc/self/fdinfo/{}", handle.as_raw_fd()))
-        .ok()?
-        .lines()
-        .find_map(|line| line.strip_prefix("Pid:"))?
-        .trim()
-        .parse()
-        .ok()
 }
 
 impl Locker {

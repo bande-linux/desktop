@@ -32,7 +32,7 @@ const KEY_H: u32 = 35;
 const SESSION_CLIENTS: [(&str, SessionRole); 3] = [
     (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
     (SHELL, SessionRole::Shell),
-    (SCREENSHOT, SessionRole::Shell),
+    (SCREENSHOT, SessionRole::Screenshot),
 ];
 const CONFIG: &str = "bande-config";
 const CONFIG_BUS_NAME: &str = "org.bande.Config";

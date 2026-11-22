@@ -1,6 +1,6 @@
 use bande_datetime::DateFormats;
 use bande_l10n::{tr, trn};
-use bande_notify::Notification;
+use bande_notify::{DEFAULT_ACTION, Notification};
 use bande_toolkit::ui::focus_ring_for;
 use bande_toolkit::{
     Color, ControlSize, Elevation, Image, Item, Palette, Paragraph, Point, Radius, Rect, Shape,
@@ -29,7 +29,6 @@ const MAX_ACTIONS: usize = 3;
 const PICTURE: f32 = 40.0;
 const PICTURE_GAP: f32 = Spacing::M as f32;
 pub const CLOSE_REACH: f32 = CLOSE_SIZE / 2.0 + 1.0;
-pub const DEFAULT_ACTION: &str = "default";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Part {

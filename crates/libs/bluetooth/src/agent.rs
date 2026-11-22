@@ -1,6 +1,8 @@
 use std::sync::Arc;
+use std::thread;
 
 use zbus::blocking::Connection;
+use zbus::blocking::fdo::DBusProxy;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
 
 pub const AGENT_PATH: &str = "/org/bande/bluetooth/agent";
@@ -150,10 +152,14 @@ impl Agent {
     }
 }
 
+fn announce(system: &Connection) -> zbus::Result<()> {
+    let manager = AgentManagerProxyBlocking::new(system)?;
+    let path = ObjectPath::try_from(AGENT_PATH)?;
+    manager.register_agent(&path, CAPABILITY)?;
+    manager.request_default_agent(&path)
+}
+
 pub fn register_agent(system: &Connection, prompt: Arc<dyn PairingPrompt>) -> zbus::Result<()> {
-    if !crate::bluez_running(system)? {
-        return Ok(());
-    }
     system.object_server().at(
         AGENT_PATH,
         Agent {
@@ -161,8 +167,23 @@ pub fn register_agent(system: &Connection, prompt: Arc<dyn PairingPrompt>) -> zb
             prompt,
         },
     )?;
-    let manager = AgentManagerProxyBlocking::new(system)?;
-    let path = ObjectPath::try_from(AGENT_PATH)?;
-    manager.register_agent(&path, CAPABILITY)?;
-    manager.request_default_agent(&path)
+    let owners =
+        DBusProxy::new(system)?.receive_name_owner_changed_with_args(&[(0, crate::SERVICE)])?;
+    let bus = system.clone();
+    thread::Builder::new()
+        .name("bluetooth-agent".to_owned())
+        .spawn(move || {
+            for change in owners {
+                let started = change
+                    .args()
+                    .is_ok_and(|change| change.new_owner().is_some());
+                if started && let Err(error) = announce(&bus) {
+                    tracing::warn!("Bluetooth pairing has no agent: {error}");
+                }
+            }
+        })?;
+    match crate::bluez_running(system)? {
+        true => announce(system),
+        false => Ok(()),
+    }
 }

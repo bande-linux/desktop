@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use bande_bluetooth::{Bluetooth as BlueZ, adapter_in_kernel, shown_change};
 use bande_inbox::{Inbox, Outbox};
+use bande_l10n::tr;
 use bande_network::{NetworkManager, set_strength, strength_signal, wifi_in_kernel};
+use bande_notify::Urgency;
+use bande_notify::client::{Request, notify};
 use serde::Deserialize;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
@@ -281,12 +284,55 @@ pub(crate) fn report<E: std::fmt::Display>(what: &str, result: Result<(), E>) {
 }
 
 fn paired(bluez: &BlueZ, address: &str) -> Option<bande_bluetooth::Device> {
-    bluez
+    let radio = bluez
         .radio()
-        .ok()??
+        .inspect_err(|error| tracing::warn!("cannot read the Bluetooth devices: {error}"))
+        .ok()??;
+    radio
         .paired
         .into_iter()
         .find(|device| device.address == address)
+}
+
+fn connect_advice(error: &zbus::Error) -> Option<String> {
+    let zbus::Error::MethodError(name, reason, _) = error else {
+        return Some(tr!("Make sure it’s turned on and nearby, then try again."));
+    };
+    let reason = reason.as_deref().unwrap_or_default();
+    match name.as_str() {
+        "org.bluez.Error.InProgress" | "org.bluez.Error.AlreadyConnected" => None,
+        "org.bluez.Error.NotReady" => Some(tr!("Turn Bluetooth on, then try again.")),
+        _ if reason.contains("profile-unavailable") || reason.contains("busy") => Some(tr!(
+            "It may be connected to another device, such as a phone. Disconnect it there, then try again."
+        )),
+        _ => Some(tr!("Make sure it’s turned on and nearby, then try again.")),
+    }
+}
+
+fn tell_not_connected(device: &bande_bluetooth::Device, error: &zbus::Error) {
+    let Some(body) = connect_advice(error) else {
+        return;
+    };
+    let summary = tr!("Couldn’t connect to {name}", name = device.name.clone());
+    let posted = bande_bus::session().and_then(|session| {
+        notify(
+            &session,
+            &Request {
+                app_name: &tr!("Bluetooth"),
+                replaces_id: 0,
+                app_icon: device.kind.symbol(),
+                summary: &summary,
+                body: &body,
+                actions: &[],
+                urgency: Urgency::Normal,
+                sound: None,
+                desktop_entry: None,
+            },
+        )
+    });
+    if let Err(error) = posted {
+        tracing::warn!("cannot tell that {} did not connect: {error}", device.name);
+    }
 }
 
 fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Command) {
@@ -323,12 +369,12 @@ pub fn run_bluetooth(bluez: &BlueZ, command: &Command) {
         }
         Command::ToggleGadget(address) => {
             if let Some(device) = paired(bluez, address) {
-                let result = if device.connected {
-                    bluez.disconnect(&device)
-                } else {
-                    bluez.connect(&device)
-                };
-                report("connect the device", result);
+                if device.connected {
+                    report("disconnect the device", bluez.disconnect(&device));
+                } else if let Err(error) = bluez.connect(&device) {
+                    tracing::warn!("cannot connect {}: {error}", device.name);
+                    tell_not_connected(&device, &error);
+                }
             }
         }
         _ => {}

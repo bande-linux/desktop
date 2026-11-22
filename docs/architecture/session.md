@@ -383,9 +383,12 @@ brings up the dialog.
   name has an owner, so it never D-Bus-activates an app. Items marked `x-bande-shell-action`
   (About, Hide, Hide Other Apps, Show All Apps) are performed by the shell through
   `bande_shell_v1`, since an app cannot hide itself.
-- **Network and Bluetooth**: NetworkManager and BlueZ for Wi-Fi and pairing in Quick Settings and
-  Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar and Quick Settings show
-  Wi-Fi alone.
+- **Network and Bluetooth**: NetworkManager and BlueZ for Wi-Fi in Quick Settings and Settings,
+  and pairing in Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar and Quick
+  Settings show Wi-Fi alone. The shell and Settings register the pairing agent again whenever
+  `org.bluez` gets an owner, the computer is discoverable while Settings ▸ Bluetooth is open, a
+  paired device that fails to connect from the Taskbar or Quick Settings posts why, and
+  `bande-power` warns once at 15% and again at 5% when a connected device's `Battery1` runs low.
   - Saved connections activate whatever their security; new WPA Enterprise networks (PEAP, TTLS,
     TLS) and wired 802.1X need a CA certificate file or the system store with a server domain.
     Hidden networks offer every security type, WEP with a warning. Every wired device is listed,

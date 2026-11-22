@@ -612,6 +612,7 @@ name = "bande-bluetooth"
 version = "0.2.0"
 dependencies = [
  "blocking",
+ "tracing",
  "zbus",
 ]
 
@@ -1433,6 +1434,7 @@ name = "bande-power"
 version = "0.2.0"
 dependencies = [
  "bande-audio",
+ "bande-bluetooth",
  "bande-bus",
  "bande-edid",
  "bande-l10n",

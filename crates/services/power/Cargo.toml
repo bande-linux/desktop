@@ -12,6 +12,7 @@ bande-edid.workspace = true
 rustix.workspace = true
 tracing.workspace = true
 bande-audio.workspace = true
+bande-bluetooth.workspace = true
 bande-bus.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true

@@ -1188,6 +1188,9 @@ msgstr "Datorn förblir vaken tills skärmen stängs av."
 msgid "The screen saver and the display are both set to Never, so the screen locks only when you lock it or the computer sleeps."
 msgstr "Skärmsläckaren och skärmen är båda inställda på Aldrig, så skärmen låses bara när du låser den eller datorn går i vila."
 
+msgid "While this page is open, nearby devices can find this computer as “{name}”."
+msgstr "Medan den här sidan är öppen kan enheter i närheten hitta datorn som ”{name}”."
+
 msgid "No devices paired yet"
 msgstr "Inga enheter har parats ihop än"
 

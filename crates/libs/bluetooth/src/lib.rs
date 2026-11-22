@@ -32,6 +32,9 @@ trait Adapter {
 
     #[zbus(property)]
     fn set_powered(&self, powered: bool) -> zbus::Result<()>;
+
+    #[zbus(property)]
+    fn set_discoverable(&self, discoverable: bool) -> zbus::Result<()>;
 }
 
 #[zbus::proxy(interface = "org.bluez.Device1", default_service = "org.bluez")]
@@ -152,7 +155,7 @@ impl Device {
 }
 
 const SHOWN: [(&str, &[&str]); 3] = [
-    (ADAPTER, &["Powered"]),
+    (ADAPTER, &["Powered", "Alias"]),
     (
         DEVICE,
         &["Address", "Alias", "Name", "Icon", "Paired", "Connected"],
@@ -216,6 +219,7 @@ fn bluez_running(bus: &Connection) -> zbus::Result<bool> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Radio {
     pub powered: bool,
+    pub name: String,
     pub paired: Vec<Device>,
     pub nearby: Vec<Device>,
 }
@@ -289,6 +293,7 @@ impl Bluetooth {
         nearby.retain(|device| device.named);
         Ok(Some(Radio {
             powered: property(adapter, "Powered").unwrap_or(false),
+            name: property(adapter, "Alias").unwrap_or_default(),
             paired,
             nearby,
         }))
@@ -303,15 +308,18 @@ impl Bluetooth {
         }
     }
 
+    /// Searches for nearby devices and lets them find this computer, or stops both.
     pub fn set_discovering(&self, discovering: bool) -> zbus::Result<()> {
         let Some(adapter) = self.adapter()? else {
             return Ok(());
         };
+        let visible = adapter.set_discoverable(discovering);
         if discovering {
-            adapter.start_discovery()
+            adapter.start_discovery()?;
         } else {
-            adapter.stop_discovery()
+            adapter.stop_discovery()?;
         }
+        visible
     }
 
     fn device(&self, device: &Device) -> zbus::Result<DeviceProxyBlocking<'static>> {

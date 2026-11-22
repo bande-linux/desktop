@@ -374,6 +374,19 @@ impl Library {
         library
     }
 
+    pub fn snapshot(&self) -> Self {
+        Self {
+            dir: None,
+            accounts: self.accounts.clone(),
+            calendars: self
+                .calendars
+                .iter()
+                .filter(|calendar| calendar.info.visible)
+                .cloned()
+                .collect(),
+        }
+    }
+
     fn ensure_local(&mut self) {
         if !self
             .accounts

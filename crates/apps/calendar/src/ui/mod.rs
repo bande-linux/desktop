@@ -21,7 +21,8 @@ use bande_inbox::Outbox;
 use bande_l10n::tr;
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
 use bande_toolkit::{
-    Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextSystem,
+    Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
+    TextStyle, TextSystem,
 };
 use jiff::civil::{Date, DateTime, Weekday};
 use jiff::tz::TimeZone;
@@ -39,6 +40,7 @@ pub use toolbar::TOOLBAR_HEIGHT;
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 const MAX_ZONES: usize = 12;
 const UNDO_DEPTH: usize = 50;
+const PRINT_TITLE: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -455,35 +457,72 @@ impl CalendarView {
         }
     }
 
-    pub fn printable(&self) -> (String, String) {
-        let first = self.focus.first_of_month();
-        let next = first.saturating_add(1.month());
-        let moment = |day: Date| {
-            day.to_zoned(self.zone.clone())
-                .map_or_else(|_| self.now.timestamp(), |zoned| zoned.timestamp())
+    pub fn printable(&self) -> (String, bande_app::Document) {
+        let title = self.title();
+        let heading = title.clone();
+        let library = self.library.snapshot();
+        let formats = self.formats.clone();
+        let first_weekday = self.first_weekday();
+        let work_hours = self.settings.work_hours();
+        let week_numbers = self.settings.week_numbers;
+        let hours_shown = self.settings.hours_shown;
+        let zone = self.zone.clone();
+        let now = self.now.clone();
+        let (mode, focus) = (self.mode, self.focus);
+        let hours_scrolled = self.scroll / self.hour_height;
+        let layout = move |setup: &bande_app::PageSetup, text: &mut TextSystem| {
+            let palette = Palette::for_scheme(bande_toolkit::Scheme::Light);
+            let area = setup.content();
+            let mut painter = painter::Painter::<Hit>::new(text);
+            painter.label(
+                &heading,
+                TextStyle::new(PRINT_TITLE, palette.ink).weight(TextStyle::SEMIBOLD),
+                Rect::new(area.x, area.y, area.width, PRINT_TITLE * 1.5),
+                TextAlign::Start,
+            );
+            let sheet = Rect::new(
+                area.x,
+                area.y + PRINT_TITLE * 2.0,
+                area.width,
+                (area.height - PRINT_TITLE * 2.0).max(0.0),
+            );
+            let scroll = paint::time_grid(mode, focus, first_weekday, sheet, 0.0, hours_shown)
+                .map_or(0.0, |grid| hours_scrolled * grid.hour_height);
+            let model = ViewModel {
+                library: &library,
+                palette,
+                formats: &formats,
+                first_weekday,
+                work_hours,
+                week_numbers,
+                hours_shown,
+                zone: &zone,
+                now: &now,
+                mode,
+                focus,
+                scroll,
+                drag: None,
+                selected: None,
+                hover: None,
+                results: &[],
+                search: "",
+                sheet,
+                day_ring: false,
+                calendar_ring: None,
+            };
+            let mut title_items = std::mem::take(&mut painter.items);
+            paint::view(&model, &mut painter);
+            title_items.push(Item::Clip {
+                shape: Shape::rounded(sheet, 0.0),
+                items: painter.items,
+            });
+            let mut page = bande_app::Page::new(setup);
+            for item in title_items {
+                page.draw(item);
+            }
+            vec![page]
         };
-        let mut found = self
-            .library
-            .occurrences(moment(first), moment(next), &self.zone);
-        found.sort_by(|a, b| a.occurrence.start.cmp(&b.occurrence.start));
-        let mut text = String::new();
-        let mut day = None;
-        for one in &found {
-            let start = &one.occurrence.start;
-            if day != Some(start.date()) {
-                day = Some(start.date());
-                text.push_str(&format!("\n{}\n", self.formats.long_date(start)));
-            }
-            let summary = self
-                .library
-                .event(one)
-                .map_or_else(String::new, |event| event.summary.clone());
-            match one.occurrence.all_day {
-                true => text.push_str(&format!("{summary}\n")),
-                false => text.push_str(&format!("{}  {summary}\n", self.formats.clock_time(start))),
-            }
-        }
-        (self.formats.month_title(first), text)
+        (title, bande_app::Document::Pages(Box::new(layout)))
     }
 
     pub fn title(&self) -> String {

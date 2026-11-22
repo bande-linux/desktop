@@ -1029,8 +1029,7 @@ impl Program for CalendarApp {
             bande_app_menu::PRINT => {
                 let mut printable = None;
                 self.with_view(cx, |_, view| printable = Some(view.printable()));
-                if let Some((title, text)) = printable {
-                    let document = bande_app::text_document(format!("{title}\n{text}"), false);
+                if let Some((title, document)) = printable {
                     cx.print(&title, document);
                 }
             }

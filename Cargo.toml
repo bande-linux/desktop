@@ -163,6 +163,7 @@ bande-quick-settings = { path = "crates/shell/quick-settings" }
 bande-render = { path = "crates/platform/render" }
 bande-reporter = { path = "crates/services/reporter" }
 bande-review = { path = "crates/testing/review" }
+bande-rich-text = { path = "crates/libs/rich-text" }
 bande-sample = { path = "crates/testing/sample" }
 bande-screenshot = { path = "crates/shell/screenshot" }
 bande-search = { path = "crates/libs/search" }

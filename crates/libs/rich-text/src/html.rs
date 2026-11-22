@@ -8,7 +8,7 @@ use html5ever::tokenizer::{
     BufferQueue, Tag, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts,
 };
 
-use super::{Builder, MAX_NESTING, code, heading, heading_level, is_code, link, paragraphs};
+use crate::{Builder, MAX_NESTING, code, heading, heading_level, is_code, link, paragraphs};
 
 const BLOCKS: [&str; 16] = [
     "p",
@@ -179,7 +179,7 @@ impl Reader {
                         .map(|family| family.trim().trim_matches(['\'', '"']).to_owned())
                         .or(face);
                     if let Some(named) = named {
-                        attributes.family = super::family(&named);
+                        attributes.family = crate::family(&named);
                     }
                 });
             }

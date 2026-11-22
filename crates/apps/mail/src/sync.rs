@@ -67,6 +67,10 @@ pub fn sync_mailbox(session: &mut Session, store: &mut Store, mailbox: &Mailbox)
     let selected = session.select(&mailbox.path)?;
     let (known_validity, known_next) = store.mailbox_state(mailbox.id)?;
     let first = known_validity != Some(selected.uid_validity);
+    let changed_since = match (first, selected.highest_modseq) {
+        (false, Some(_)) => store.modseq(mailbox.id)?,
+        _ => None,
+    };
     store.set_mailbox_state(mailbox.id, selected.uid_validity, selected.uid_next)?;
     let mut server = match selected.exists {
         0 => Vec::new(),
@@ -98,10 +102,11 @@ pub fn sync_mailbox(session: &mut Session, store: &mut Store, mailbox: &Mailbox)
         .copied()
         .collect::<Vec<_>>();
     let mut flags_changed = 0;
-    if !kept.is_empty() {
-        let flags = session.fetch_flags(&kept)?;
+    if !kept.is_empty() && (changed_since.is_none() || changed_since != selected.highest_modseq) {
+        let flags = session.fetch_flags(&kept, changed_since)?;
         flags_changed = store.update_flags(mailbox.id, &flags)?;
     }
+    store.set_modseq(mailbox.id, selected.highest_modseq)?;
     let arrived = match (first, known_next) {
         (false, Some(next)) => added.iter().filter(|uid| **uid >= next).copied().collect(),
         _ => Vec::new(),

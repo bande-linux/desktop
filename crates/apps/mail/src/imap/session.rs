@@ -26,6 +26,7 @@ pub struct Selected {
     pub uid_validity: u32,
     pub uid_next: Option<u32>,
     pub exists: u32,
+    pub highest_modseq: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -420,7 +421,11 @@ impl Session {
     }
 
     pub fn select(&mut self, path: &str) -> Result<Selected> {
-        let reply = self.run(&format!("SELECT {}", mailbox_argument(path)?))?;
+        let condstore = match self.has("CONDSTORE") {
+            true => " (CONDSTORE)",
+            false => "",
+        };
+        let reply = self.run(&format!("SELECT {}{condstore}", mailbox_argument(path)?))?;
         let exists = reply
             .data
             .iter()
@@ -435,6 +440,7 @@ impl Session {
             uid_next: code_number(&reply.codes, "UIDNEXT")
                 .and_then(|value| u32::try_from(value).ok()),
             exists: u32::try_from(exists).unwrap_or(u32::MAX),
+            highest_modseq: code_number(&reply.codes, "HIGHESTMODSEQ"),
         })
     }
 
@@ -463,9 +469,18 @@ impl Session {
     }
 
     fn fetch(&mut self, uids: &[u32], items: &str) -> Result<Vec<Fetched>> {
+        self.fetch_modified(uids, items, "")
+    }
+
+    fn fetch_modified(
+        &mut self,
+        uids: &[u32],
+        items: &str,
+        modifiers: &str,
+    ) -> Result<Vec<Fetched>> {
         let mut found = Vec::new();
         for set in uid_sets(uids) {
-            let reply = self.run(&format!("UID FETCH {set} ({items})"))?;
+            let reply = self.run(&format!("UID FETCH {set} ({items}){modifiers}"))?;
             found.extend(reply.data.iter().filter_map(|values| fetched(values)));
         }
         Ok(found)
@@ -475,8 +490,15 @@ impl Session {
         self.fetch(uids, "UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER]")
     }
 
-    pub fn fetch_flags(&mut self, uids: &[u32]) -> Result<Vec<Fetched>> {
-        self.fetch(uids, "UID FLAGS")
+    pub fn fetch_flags(
+        &mut self,
+        uids: &[u32],
+        changed_since: Option<u64>,
+    ) -> Result<Vec<Fetched>> {
+        let modifiers = changed_since
+            .map(|modseq| format!(" (CHANGEDSINCE {modseq})"))
+            .unwrap_or_default();
+        self.fetch_modified(uids, "UID FLAGS", &modifiers)
     }
 
     pub fn fetch_bodies(&mut self, uids: &[u32]) -> Result<Vec<Fetched>> {

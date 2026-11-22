@@ -42,6 +42,10 @@ CREATE TABLE IF NOT EXISTS mailboxes (
     uid_next INTEGER,
     UNIQUE (account, path)
 );
+CREATE TABLE IF NOT EXISTS mailbox_modseqs (
+    mailbox INTEGER PRIMARY KEY REFERENCES mailboxes(id) ON DELETE CASCADE,
+    highest INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY,
     mailbox INTEGER NOT NULL REFERENCES mailboxes(id) ON DELETE CASCADE,
@@ -779,6 +783,32 @@ impl Store {
             [mailbox],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?)
+    }
+
+    pub fn modseq(&self, mailbox: MailboxId) -> Result<Option<u64>> {
+        let highest = self
+            .connection
+            .query_row(
+                "SELECT highest FROM mailbox_modseqs WHERE mailbox = ?1",
+                [mailbox],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?;
+        Ok(highest.and_then(|highest| u64::try_from(highest).ok()))
+    }
+
+    pub fn set_modseq(&self, mailbox: MailboxId, highest: Option<u64>) -> Result<()> {
+        match highest.and_then(|highest| i64::try_from(highest).ok()) {
+            Some(highest) => self.connection.execute(
+                "INSERT INTO mailbox_modseqs (mailbox, highest) VALUES (?1, ?2) \
+                 ON CONFLICT (mailbox) DO UPDATE SET highest = excluded.highest",
+                params![mailbox, highest],
+            )?,
+            None => self
+                .connection
+                .execute("DELETE FROM mailbox_modseqs WHERE mailbox = ?1", [mailbox])?,
+        };
+        Ok(())
     }
 
     pub fn set_mailbox_state(

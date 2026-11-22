@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use bande_l10n::tr;
 
 use crate::label::{Label, LabelStyle, Look};
+use crate::session::SHELL;
 use crate::state::{Compositor, OutputElement, State};
 use bande_graphics::{Scheme, TextRole};
 use bande_render::VulkanRenderer;
@@ -71,6 +72,21 @@ impl State {
             executable,
             tr!("The taskbar and desktop keep stopping. Press Ctrl+Alt+Esc to log out."),
         );
+    }
+
+    pub(crate) fn alert_messages(&self) -> Vec<String> {
+        self.alerts
+            .alerts
+            .iter()
+            .map(|alert| alert.message.clone())
+            .collect()
+    }
+
+    pub(crate) fn shell_failing(&self) -> bool {
+        self.alerts
+            .alerts
+            .iter()
+            .any(|alert| alert.executable == Path::new(SHELL))
     }
 
     pub(crate) fn clear_alert(&mut self, executable: &Path) {

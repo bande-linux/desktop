@@ -73,6 +73,7 @@ pub(crate) struct ForceQuitView {
     listed: Vec<Listed>,
     selected: Vec<String>,
     confirming: Vec<String>,
+    alerts: Vec<String>,
 }
 
 fn paragraph(text: &mut TextSystem, content: &str, style: TextStyle, width: f32) -> Paragraph {
@@ -129,7 +130,12 @@ impl ForceQuitView {
             listed: Vec::new(),
             selected: Vec::new(),
             confirming: Vec::new(),
+            alerts: Vec::new(),
         }
+    }
+
+    pub(crate) fn set_alerts(&mut self, alerts: Vec<String>) {
+        self.alerts = alerts;
     }
 
     pub(crate) fn set_appearance(&mut self, appearance: Appearance) {
@@ -436,9 +442,11 @@ impl ForceQuitView {
         if let Some((_, root)) = update.nodes.first_mut() {
             root.set_role(Role::Dialog);
             root.set_label(tr!("Force Quit"));
-            root.set_description(tr!(
+            let mut description = self.alerts.clone();
+            description.push(tr!(
                 "When an app stops responding, choose it and click Force Quit to close it. Anything unsaved in it is lost."
             ));
+            root.set_description(description.join("\n"));
         }
         update
     }

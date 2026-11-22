@@ -308,6 +308,7 @@ impl State {
         let text = self.labels.get_mut().text().sharing_fonts();
         let mut view = ForceQuitView::new(self.force_quit_appearance(), text);
         view.set_apps(self.force_quit_listed(screen));
+        view.set_alerts(self.alert_messages());
         if let Some(front) = self
             .frontmost_key()
             .filter(|key| view.listed().iter().any(|app| app.key == *key))

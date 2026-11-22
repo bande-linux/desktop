@@ -298,6 +298,9 @@ impl SessionLockHandler for State {
             let next = previous.or_else(|| self.frontmost(None));
             self.focus(next);
         }
+        if self.shell_failing() {
+            self.open_force_quit();
+        }
     }
 
     fn new_surface(&mut self, surface: LockSurface, output: WlOutput) {

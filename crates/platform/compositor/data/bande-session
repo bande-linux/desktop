@@ -57,7 +57,7 @@ if [ -r "$proxy_settings" ]; then
 fi
 
 systemctl --user reset-failed
-systemctl --user set-property --runtime app.slice ManagedOOMMemoryPressure=kill ManagedOOMMemoryPressureLimit=40% TasksMax=25%
+systemctl --user set-property --runtime app.slice ManagedOOMMemoryPressure=kill ManagedOOMMemoryPressureLimit=40% TasksMax=25% CPUWeight=50
 for unit in dbus.service pipewire.service pipewire-pulse.service wireplumber.service xdg-desktop-portal.service; do
     systemctl --user set-property --runtime "$unit" ManagedOOMPreference=avoid
 done

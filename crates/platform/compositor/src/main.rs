@@ -9,9 +9,9 @@ use bande_compositor::{
     REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
     SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
     follow_appearance, follow_input_settings, follow_lid, follow_login_settings, follow_session,
-    follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, render_material,
-    serve_app_states, serve_displays, serve_global_shortcuts, serve_keyboard_monitor, user_config,
-    watchdog_keepalive_interval,
+    follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, raise_priority,
+    render_material, serve_app_states, serve_displays, serve_global_shortcuts,
+    serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
 use bande_datetime::ClockChanges;
@@ -407,6 +407,9 @@ fn run_drm(
     started: Duration,
     buses: Buses,
 ) -> Result<(), Box<dyn Error>> {
+    if let Some(system) = &buses.system {
+        raise_priority(system);
+    }
     let (backend, notifiers) = open_display(device)?;
     tracing::info!("driving {}", backend.path().display());
     let mut outputs = backend.outputs().into_iter();

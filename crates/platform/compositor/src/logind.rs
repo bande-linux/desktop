@@ -57,6 +57,28 @@ trait Manager {
     fn prepare_for_shutdown(&self, start: bool) -> zbus::Result<()>;
 }
 
+#[zbus::proxy(
+    interface = "org.freedesktop.RealtimeKit1",
+    default_service = "org.freedesktop.RealtimeKit1",
+    default_path = "/org/freedesktop/RealtimeKit1"
+)]
+trait RealtimeKit {
+    fn make_thread_high_priority(&self, thread: u64, priority: i32) -> zbus::Result<()>;
+}
+
+const HIGH_PRIORITY_NICE_LEVEL: i32 = -11;
+
+pub fn raise_priority(connection: &Connection) {
+    let thread = rustix::thread::gettid().as_raw_nonzero().get();
+    let raised = RealtimeKitProxyBlocking::new(connection).and_then(|rtkit| {
+        rtkit.make_thread_high_priority(thread.unsigned_abs().into(), HIGH_PRIORITY_NICE_LEVEL)
+    });
+    match raised {
+        Ok(()) => tracing::info!("drawing and input run at a higher priority"),
+        Err(error) => tracing::debug!("drawing and input keep the normal priority: {error}"),
+    }
+}
+
 const LOGIND_CONFIG_FOLDERS: [&str; 4] = [
     "/etc/systemd",
     "/run/systemd",

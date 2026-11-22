@@ -210,7 +210,8 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
   the session active on the seat, so it moves to the person's session at sign-in;
 - `libspa-0.2-bluetooth` (recommended): Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi` (recommended): the AppStream icons Software shows, at 2×;
-- `systemd-oomd` (recommended): closes an app when memory stays under pressure.
+- `systemd-oomd` (recommended): closes an app when memory stays under pressure;
+- `rtkit` (recommended by `bande-compositor`): a higher priority for drawing and input under load.
 
 It does not pull in `gnome-keyring` (it installs beside Bande's keyring, which runs only in a Bande
 session, so another desktop's keyring owns `org.freedesktop.secrets` there), `pipewire-alsa` or `cups` (`bande-printd` prints to network printers

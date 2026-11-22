@@ -55,8 +55,8 @@ pub enum PrinterCommand {
     AddAddress(String),
     InstallPrinting(Support),
     ScanCapabilities(String),
-    Scan(String, String, ScanOptions),
-    CancelScan(String),
+    Scan(String, String, u64, ScanOptions),
+    CancelScan(String, u64),
     SaveScan(String, Vec<Page>, Format),
 }
 
@@ -283,15 +283,15 @@ pub fn follow_printers(
                     });
                     Ok(())
                 }
-                PrinterCommand::Scan(scanner, name, options) => {
+                PrinterCommand::Scan(scanner, name, token, options) => {
                     let (session, updates) = (commands_session.clone(), updates.clone());
                     spawn("scan", move || {
-                        updates.send(scan::scan(&session, &scanner, &name, &options));
+                        updates.send(scan::scan(&session, &scanner, &name, token, &options));
                     });
                     Ok(())
                 }
-                PrinterCommand::CancelScan(scanner) => {
-                    scan::cancel(&commands_session, &scanner);
+                PrinterCommand::CancelScan(scanner, token) => {
+                    scan::cancel(&commands_session, &scanner, token);
                     Ok(())
                 }
                 PrinterCommand::SaveScan(scanner, pages, format) => {

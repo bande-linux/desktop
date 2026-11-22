@@ -175,17 +175,22 @@ impl<'a> PrintClient<'a> {
         self.proxy.call("ScanCapabilities", &(scanner,))
     }
 
-    pub fn scan(&self, scanner: &str, options: &ScanOptions) -> zbus::Result<Vec<(OwnedFd, u32)>> {
+    pub fn scan(
+        &self,
+        scanner: &str,
+        token: u64,
+        options: &ScanOptions,
+    ) -> zbus::Result<Vec<(OwnedFd, u32)>> {
         let pages: Vec<(zbus::zvariant::OwnedFd, u32)> =
-            self.proxy.call("Scan", &(scanner, options))?;
+            self.proxy.call("Scan", &(scanner, token, options))?;
         Ok(pages
             .into_iter()
             .map(|(page, dpi)| (OwnedFd::from(page), dpi))
             .collect())
     }
 
-    pub fn cancel_scan(&self, scanner: &str) -> zbus::Result<()> {
-        self.proxy.call("CancelScan", &(scanner,))
+    pub fn cancel_scan(&self, scanner: &str, token: u64) -> zbus::Result<()> {
+        self.proxy.call("CancelScan", &(scanner, token))
     }
 
     pub fn changes(&self) -> zbus::Result<zbus::blocking::proxy::SignalIterator<'a>> {

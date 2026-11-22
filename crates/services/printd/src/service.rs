@@ -92,11 +92,14 @@ impl Service {
     async fn scan(
         &self,
         scanner: String,
+        token: u64,
         options: ScanOptions,
     ) -> fdo::Result<Vec<(OwnedFd, u32)>> {
         let spool = Arc::clone(&self.spool);
-        let cancel = spool.begin_scan(&scanner).map_err(fdo::Error::Failed)?;
-        blocking::unblock(move || spool.scan(&scanner, &options, &cancel))
+        let running = spool
+            .begin_scan(&scanner, token)
+            .map_err(fdo::Error::Failed)?;
+        blocking::unblock(move || spool.scan(&running, &options))
             .await
             .map(|pages| {
                 pages
@@ -107,8 +110,8 @@ impl Service {
             .map_err(fdo::Error::Failed)
     }
 
-    fn cancel_scan(&self, scanner: String) {
-        self.spool.cancel_scan(&scanner);
+    fn cancel_scan(&self, scanner: String, token: u64) {
+        self.spool.cancel_scan(&scanner, token);
     }
 
     #[zbus(signal)]

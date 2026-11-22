@@ -68,8 +68,8 @@ struct Inner {
     found: HashMap<String, Found>,
     scanners: HashMap<String, Found>,
     scanning: usize,
-    scans: HashMap<String, Arc<Cancel>>,
-    early_cancels: HashMap<String, Instant>,
+    scans: HashMap<String, (u64, Arc<Cancel>)>,
+    early_cancels: HashMap<(String, u64), Instant>,
     usb: HashSet<String>,
     watchers: HashSet<String>,
     jobs: Vec<Job>,
@@ -112,6 +112,26 @@ fn keep_unprinted(record: &Path) -> Option<PathBuf> {
         Err(error) => {
             tracing::warn!("cannot keep the document {}: {error}", document.display());
             None
+        }
+    }
+}
+
+pub struct RunningScan {
+    spool: Arc<Spool>,
+    scanner: String,
+    token: u64,
+    cancel: Arc<Cancel>,
+}
+
+impl Drop for RunningScan {
+    fn drop(&mut self) {
+        let mut inner = self.spool.lock();
+        if inner
+            .scans
+            .get(&self.scanner)
+            .is_some_and(|(token, _)| *token == self.token)
+        {
+            inner.scans.remove(&self.scanner);
         }
     }
 }
@@ -495,52 +515,68 @@ impl Spool {
             .map_err(|error| error.sentence())
     }
 
-    pub fn begin_scan(&self, scanner: &str) -> std::result::Result<Arc<Cancel>, String> {
+    pub fn begin_scan(
+        self: &Arc<Self>,
+        scanner: &str,
+        token: u64,
+    ) -> std::result::Result<RunningScan, String> {
         let mut inner = self.lock();
         if inner.scans.contains_key(scanner) {
             return Err(ScanError::Busy.sentence());
         }
         let cancel = Arc::new(Cancel::default());
-        if inner
-            .early_cancels
-            .remove(scanner)
-            .is_some_and(|when| when.elapsed() < EARLY_CANCEL)
-        {
+        let key = (scanner.to_owned(), token);
+        if inner.early_cancels.remove(&key).is_some() {
             cancel.stop();
         }
-        inner.scans.insert(scanner.to_owned(), Arc::clone(&cancel));
-        Ok(cancel)
+        inner
+            .scans
+            .insert(scanner.to_owned(), (token, Arc::clone(&cancel)));
+        Ok(RunningScan {
+            spool: Arc::clone(self),
+            scanner: scanner.to_owned(),
+            token,
+            cancel,
+        })
     }
 
     pub fn scan(
         &self,
-        scanner: &str,
+        running: &RunningScan,
         options: &ScanOptions,
-        cancel: &Cancel,
     ) -> std::result::Result<Vec<(OwnedFd, u32)>, String> {
         let _scanning = Scanning::new(self);
         let mut pages = Vec::new();
-        let scanned = self
-            .reach_scanner(scanner)
-            .and_then(|(abilities, address, pins)| {
-                escl::scan(&address, &pins, &abilities, options, cancel, &mut |page| {
-                    pages.push(escl::clean_page(&page, options.color)?);
-                    Ok(())
-                })
-            });
-        self.lock().scans.remove(scanner);
+        let scanned =
+            self.reach_scanner(&running.scanner)
+                .and_then(|(abilities, address, pins)| {
+                    escl::scan(
+                        &address,
+                        &pins,
+                        &abilities,
+                        options,
+                        &running.cancel,
+                        &mut |page| {
+                            pages.push(escl::clean_page(&page, options.color)?);
+                            Ok(())
+                        },
+                    )
+                });
         let dpi = scanned.map_err(|error| error.sentence())?;
         Ok(pages.into_iter().map(|page| (page, dpi)).collect())
     }
 
-    pub fn cancel_scan(&self, scanner: &str) {
+    pub fn cancel_scan(&self, scanner: &str, token: u64) {
         let mut inner = self.lock();
         match inner.scans.get(scanner) {
-            Some(cancel) => cancel.stop(),
-            None => {
+            Some((running, cancel)) if *running == token => cancel.stop(),
+            _ => {
                 inner
                     .early_cancels
-                    .insert(scanner.to_owned(), Instant::now());
+                    .retain(|_, when| when.elapsed() < EARLY_CANCEL);
+                inner
+                    .early_cancels
+                    .insert((scanner.to_owned(), token), Instant::now());
             }
         }
     }

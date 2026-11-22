@@ -4,6 +4,7 @@ use std::io::{Cursor, Read, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use bande_app::choose_save_file;
 use bande_l10n::{tr, trn};
@@ -104,6 +105,7 @@ const SAVE: &str = "save";
 const DISCARD: &str = "discard";
 const CANCEL: &str = "cancel";
 const STOP: &str = "stop";
+static SCANS: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanIntent {
@@ -142,6 +144,7 @@ pub struct ScanState {
     busy: Option<Busy>,
     message: Option<String>,
     asking_discard: bool,
+    token: u64,
 }
 
 impl ScanState {
@@ -159,6 +162,7 @@ impl ScanState {
             busy: Some(Busy::Asking),
             message: None,
             asking_discard: false,
+            token: 0,
         }
     }
 
@@ -389,9 +393,15 @@ fn read_page(page: std::os::fd::OwnedFd, dpi: u32) -> Result<Page, String> {
     })
 }
 
-pub fn scan(session: &Connection, scanner: &str, name: &str, options: &ScanOptions) -> Update {
+pub fn scan(
+    session: &Connection,
+    scanner: &str,
+    name: &str,
+    token: u64,
+    options: &ScanOptions,
+) -> Update {
     let scanned = PrintClient::new(session)
-        .and_then(|client| client.scan(scanner, options))
+        .and_then(|client| client.scan(scanner, token, options))
         .map_err(reason)
         .and_then(|pages| {
             let pages = pages
@@ -447,8 +457,8 @@ fn encoded(pages: &[Page], format: Format) -> Result<Vec<u8>, String> {
     }
 }
 
-pub fn cancel(session: &Connection, scanner: &str) {
-    let cancelled = PrintClient::new(session).and_then(|client| client.cancel_scan(scanner));
+pub fn cancel(session: &Connection, scanner: &str, token: u64) {
+    let cancelled = PrintClient::new(session).and_then(|client| client.cancel_scan(scanner, token));
     if let Err(error) = cancelled {
         tracing::warn!("cannot stop a scan: {error}");
     }
@@ -510,7 +520,8 @@ impl SettingsView {
             return false;
         }
         if self.ui.has_sheet() {
-            self.ui.close_sheet();
+            self.leaving_after_sheet = Some(leaving);
+            return false;
         }
         self.leaving = Some(leaving);
         let mut answer = intent(&self.intents, Intent::UnsavedScans);
@@ -569,12 +580,12 @@ impl SettingsView {
                 for (id, scan) in &mut self.scans {
                     if scan.busy == Some(Busy::Scanning) {
                         scan.busy = Some(Busy::Cancelling);
-                        stopping.push(id.clone());
+                        stopping.push((id.clone(), scan.token));
                     }
                 }
-                for id in stopping {
+                for (id, token) in stopping {
                     self.commands
-                        .push(Command::Printers(PrinterCommand::CancelScan(id)));
+                        .push(Command::Printers(PrinterCommand::CancelScan(id, token)));
                 }
                 self.leaving = None;
                 self.leaving_after_scan = Some(leaving);
@@ -588,6 +599,17 @@ impl SettingsView {
                 self.commands.push(Command::Leave(leaving));
             }
             _ => self.leaving = None,
+        }
+    }
+
+    pub(crate) fn leave_once_sheet_closed(&mut self) {
+        if self.ui.has_sheet() {
+            return;
+        }
+        if let Some(leaving) = self.leaving_after_sheet.take()
+            && self.may_leave(leaving)
+        {
+            self.commands.push(Command::Leave(leaving));
         }
     }
 
@@ -798,14 +820,20 @@ impl SettingsView {
                     scan.busy = Some(Busy::Scanning);
                     scan.message = None;
                     scan.asking_discard = false;
-                    command = Some(PrinterCommand::Scan(id, scan.name.clone(), options));
+                    scan.token = SCANS.fetch_add(1, Ordering::Relaxed);
+                    command = Some(PrinterCommand::Scan(
+                        id,
+                        scan.name.clone(),
+                        scan.token,
+                        options,
+                    ));
                     focus = Some("scan");
                 }
             }
             ScanIntent::Cancel => {
                 if scan.busy == Some(Busy::Scanning) {
                     scan.busy = Some(Busy::Cancelling);
-                    command = Some(PrinterCommand::CancelScan(id));
+                    command = Some(PrinterCommand::CancelScan(id, scan.token));
                 }
             }
             ScanIntent::Save => {

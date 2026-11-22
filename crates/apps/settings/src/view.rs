@@ -339,6 +339,7 @@ pub struct SettingsView {
     pub(crate) scans: HashMap<String, ScanState>,
     pub(crate) leaving: Option<Leaving>,
     pub(crate) leaving_after_scan: Option<Leaving>,
+    pub(crate) leaving_after_sheet: Option<Leaving>,
     pub(crate) accounts: Option<Vec<Account>>,
     pub(crate) accounts_managed: bool,
     pub(crate) picture_edit: Option<PictureEdit>,
@@ -462,6 +463,7 @@ impl SettingsView {
             scans: HashMap::new(),
             leaving: None,
             leaving_after_scan: None,
+            leaving_after_sheet: None,
             accounts: None,
             accounts_managed: false,
             picture_edit: None,
@@ -1532,6 +1534,7 @@ impl SettingsView {
     fn process_intents(&mut self) {
         let (pane, sent) = (self.pane, self.commands.len());
         self.run_intents();
+        self.leave_once_sheet_closed();
         if self.pane == pane && self.commands.len() > sent {
             self.clear_failure();
         }

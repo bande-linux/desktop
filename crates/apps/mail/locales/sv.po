@@ -91,6 +91,12 @@ msgstr "Bifoga filer"
 msgid "{name} is larger than {limit} and was not attached."
 msgstr "{name} är större än {limit} och bifogades inte."
 
+msgid "{name} is a folder and was not attached."
+msgstr "{name} är en mapp och bifogades inte."
+
+msgid "{name} could not be read and was not attached."
+msgstr "{name} kunde inte läsas och bifogades inte."
+
 msgid "Message Viewer"
 msgstr "Meddelandevisare"
 

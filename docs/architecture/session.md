@@ -498,6 +498,23 @@ what the one before could not save:
   `bande-secrets`, `bande-clipboard`) are not dumpable, so only their panic text is recorded.
   Symbols are in [packaging](packaging.md).
 
+## Sharing
+
+Settings ▸ Sharing works with Debian's own Samba and SSH setup and never rewrites it.
+`bande-sharing-helper` runs under `pkexec` (`org.bande.sharing-helper`):
+
+- **File sharing** is `smbd` enabled and running with Debian's `/etc/samba/smb.conf`; turning it
+  off disables `smbd`. `nmbd` is left as the administrator set it. Installing Samba from Sharing
+  disables `smbd` and `nmbd`, which the package's own scripts start, so nothing listens until
+  the person turns sharing on.
+- **Folders** are Samba usershares (`net usershare`, which Debian's build enables in
+  `/var/lib/samba/usershares`, mode 1770 for `sambashare`): the helper runs `net` as the person,
+  with their own primary group and `sambashare` added, so their account is not changed. Listing
+  their own shares is `org.bande.sharing-helper.list`, allowed without a password in an active
+  session. When `testparm` reports `usershare max shares` as 0, the pane says so and offers no
+  folders. The sharing password is the person's Samba password (`smbpasswd -a`).
+- **Remote login** enables or disables `ssh.service`.
+
 ## Backups
 
 Scheduled, versioned backups with `restic` (`crates/services/backup`). `bande-backupd` is a

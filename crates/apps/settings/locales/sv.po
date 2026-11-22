@@ -1541,6 +1541,9 @@ msgstr "Fildelning"
 msgid "Other computers on this network can open the folders you share"
 msgstr "Andra datorer i det här nätverket kan öppna mapparna du delar"
 
+msgid "Samba’s setup on this computer doesn’t let people share their own folders. An administrator can allow it with “usershare max shares” in /etc/samba/smb.conf."
+msgstr "Samba är inställt så att ingen på den här datorn kan dela sina egna mappar. En administratör kan tillåta det med ”usershare max shares” i /etc/samba/smb.conf."
+
 msgid "Sharing password"
 msgstr "Delningslösenord"
 

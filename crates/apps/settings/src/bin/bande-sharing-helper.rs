@@ -1,15 +1,13 @@
-use std::fs;
-use std::io::Read;
-use std::os::unix::fs::PermissionsExt;
+use std::ffi::CStr;
+use std::io::{Read, Write};
 use std::process::{Command, ExitCode, Stdio};
 
 const SHARE_GROUP: &str = "sambashare";
-const SAMBA_CONFIG: &str = "/etc/samba/bande-smb.conf";
-const SAMBA_SETTINGS: &str = "[global]\nserver role = standalone server\nmap to guest = never\nserver min protocol = SMB2\nload printers = no\ndisable spoolss = yes\nusershare max shares = 100\nusershare allow guests = no\nusershare owner only = yes\n";
-const USERSHARES: &str = "/var/lib/samba/usershares";
-const SMBD_DROP_IN_FOLDER: &str = "/etc/systemd/system/smbd.service.d";
-const SMBD_DROP_IN: &str = "/etc/systemd/system/smbd.service.d/bande.conf";
-const SMBD_START: &str = "[Service]\nExecStart=\nExecStart=/usr/sbin/smbd --foreground --no-process-group -s /etc/samba/bande-smb.conf\n";
+
+struct Account {
+    name: String,
+    group: u32,
+}
 
 fn fail(message: &str) -> ExitCode {
     eprintln!("{message}");
@@ -21,35 +19,27 @@ fn run(command: &mut Command) -> ExitCode {
         .env_clear()
         .env("LC_ALL", "C")
         .env("PATH", "/usr/sbin:/usr/bin");
-    match command.stdout(Stdio::null()).status() {
+    match command.status() {
         Ok(status) if status.success() => ExitCode::SUCCESS,
-        Ok(_) => ExitCode::FAILURE,
-        Err(error) => fail(&format!("cannot run the tool: {error}")),
+        Ok(status) => {
+            eprintln!("{:?} ended with {status}", command.get_program());
+            ExitCode::FAILURE
+        }
+        Err(error) => fail(&format!("cannot run {:?}: {error}", command.get_program())),
     }
 }
 
 fn systemctl(arguments: &[&str]) -> ExitCode {
-    run(Command::new("/usr/bin/systemctl").args(arguments))
-}
-
-fn write_samba_setup() -> std::io::Result<()> {
-    fs::write(SAMBA_CONFIG, SAMBA_SETTINGS)?;
-    fs::set_permissions(USERSHARES, fs::Permissions::from_mode(0o1775))?;
-    fs::create_dir_all(SMBD_DROP_IN_FOLDER)?;
-    fs::write(SMBD_DROP_IN, SMBD_START)
+    run(Command::new("/usr/bin/systemctl")
+        .args(arguments)
+        .stdout(Stdio::null()))
 }
 
 fn file_sharing(on: bool) -> ExitCode {
-    if !on {
-        return systemctl(&["disable", "--now", "smbd.service", "nmbd.service"]);
+    match on {
+        true => systemctl(&["enable", "--now", "smbd.service"]),
+        false => systemctl(&["disable", "--now", "smbd.service"]),
     }
-    if let Err(error) = write_samba_setup() {
-        return fail(&format!("cannot change the setup: {error}"));
-    }
-    systemctl(&["daemon-reload"]);
-    systemctl(&["disable", "--now", "nmbd.service"]);
-    systemctl(&["enable", "smbd.service"]);
-    systemctl(&["restart", "smbd.service"])
 }
 
 fn remote_login(on: bool) -> ExitCode {
@@ -59,19 +49,42 @@ fn remote_login(on: bool) -> ExitCode {
     }
 }
 
-fn user_name(uid: u32) -> Option<String> {
-    let passwd = fs::read_to_string("/etc/passwd").ok()?;
-    passwd.lines().find_map(|line| {
-        let mut fields = line.split(':');
-        let name = fields.next()?;
-        (fields.nth(1)?.parse::<u32>().ok()? == uid).then(|| name.to_owned())
+fn account(uid: u32) -> Option<Account> {
+    // SAFETY: passwd is plain C data (integers and pointers) for which all zeros is valid.
+    let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut found = std::ptr::null_mut();
+    let mut buffer = vec![0u8; 4096];
+    loop {
+        // SAFETY: buffer is writable for buffer.len() bytes and outlives entry, whose string
+        // fields point into it and are read below.
+        let status = unsafe {
+            libc::getpwuid_r(
+                uid,
+                &mut entry,
+                buffer.as_mut_ptr().cast(),
+                buffer.len(),
+                &mut found,
+            )
+        };
+        match status {
+            0 => break,
+            libc::ERANGE => buffer.resize(buffer.len() * 2, 0),
+            _ => return None,
+        }
+    }
+    if found.is_null() || entry.pw_name.is_null() {
+        return None;
+    }
+    // SAFETY: getpwuid_r filled entry, and its non-null pw_name is a NUL-terminated string in
+    // buffer, which is still alive.
+    let name = unsafe { CStr::from_ptr(entry.pw_name) };
+    Some(Account {
+        name: name.to_str().ok()?.to_owned(),
+        group: entry.pw_gid,
     })
 }
 
-fn set_password(uid: u32) -> ExitCode {
-    let Some(user) = user_name(uid) else {
-        return fail("no such user");
-    };
+fn set_password(user: &Account) -> ExitCode {
     let mut password = String::new();
     if std::io::stdin()
         .take(4096)
@@ -85,7 +98,7 @@ fn set_password(uid: u32) -> ExitCode {
         return fail("bad password");
     }
     let child = Command::new("/usr/bin/smbpasswd")
-        .args(["-c", SAMBA_CONFIG, "-s", "-a", &user])
+        .args(["-s", "-a", &user.name])
         .env_clear()
         .env("LC_ALL", "C")
         .stdin(Stdio::piped())
@@ -95,15 +108,15 @@ fn set_password(uid: u32) -> ExitCode {
         Ok(child) => child,
         Err(error) => return fail(&format!("cannot run smbpasswd: {error}")),
     };
-    if let Some(mut stdin) = child.stdin.take() {
-        use std::io::Write;
-        if let Err(error) = writeln!(stdin, "{password}\n{password}") {
-            eprintln!("cannot pass the password to smbpasswd: {error}");
-        }
+    if let Some(mut stdin) = child.stdin.take()
+        && let Err(error) = writeln!(stdin, "{password}\n{password}")
+    {
+        eprintln!("cannot pass the password to smbpasswd: {error}");
     }
     match child.wait() {
         Ok(status) if status.success() => ExitCode::SUCCESS,
-        _ => ExitCode::FAILURE,
+        Ok(status) => fail(&format!("smbpasswd ended with {status}")),
+        Err(error) => fail(&format!("cannot wait for smbpasswd: {error}")),
     }
 }
 
@@ -116,21 +129,17 @@ fn share_name(name: &str) -> bool {
             .any(|c| c.is_control() || "%<>*?|/\\+=;:\",".contains(c))
 }
 
-fn as_user(uid: u32, arguments: &[&str]) -> ExitCode {
-    let uid = uid.to_string();
+fn usershare(uid: u32, user: &Account, arguments: &[&str]) -> ExitCode {
     let mut command = Command::new("/usr/bin/setpriv");
     command
         .args([
             "--reuid",
-            &uid,
+            &uid.to_string(),
             "--regid",
-            &uid,
-            "--groups",
-            SHARE_GROUP,
-            "--",
+            &user.group.to_string(),
         ])
-        .arg("/usr/bin/net")
-        .args(["-s", SAMBA_CONFIG, "usershare"])
+        .args(["--groups", SHARE_GROUP, "--"])
+        .args(["/usr/bin/net", "usershare"])
         .args(arguments);
     run(&mut command)
 }
@@ -142,18 +151,25 @@ fn main() -> ExitCode {
     else {
         return fail("run this through pkexec");
     };
+    let Some(user) = account(uid) else {
+        return fail("no such user");
+    };
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match words.as_slice() {
         ["file-sharing", "on"] => file_sharing(true),
         ["file-sharing", "off"] => file_sharing(false),
+        ["samba-installed"] => systemctl(&["disable", "--now", "smbd.service", "nmbd.service"]),
         ["remote-login", "on"] => remote_login(true),
         ["remote-login", "off"] => remote_login(false),
-        ["password"] => set_password(uid),
-        ["add", name, path] if share_name(name) && path.starts_with('/') => {
-            as_user(uid, &["add", name, path, "", "Everyone:F", "guest_ok=n"])
-        }
-        ["remove", name] if share_name(name) => as_user(uid, &["delete", name]),
+        ["password"] => set_password(&user),
+        ["list"] => usershare(uid, &user, &["info"]),
+        ["add", name, path] if share_name(name) && path.starts_with('/') => usershare(
+            uid,
+            &user,
+            &["add", name, path, "", "Everyone:F", "guest_ok=n"],
+        ),
+        ["remove", name] if share_name(name) => usershare(uid, &user, &["delete", name]),
         _ => fail("bad arguments"),
     }
 }

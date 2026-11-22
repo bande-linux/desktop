@@ -5,12 +5,27 @@
   <vendor>Bande</vendor>
   <action id="org.bande.sharing-helper">
     <description>Change what this computer shares</description>
+    <description xml:lang="sv">Ändra vad den här datorn delar</description>
     <message>Authentication is required to change what this computer shares</message>
+    <message xml:lang="sv">Autentisering krävs för att ändra vad den här datorn delar</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bande-sharing-helper</annotate>
+  </action>
+  <action id="org.bande.sharing-helper.list">
+    <description>See the folders you share</description>
+    <description xml:lang="sv">Se mapparna du delar</description>
+    <message>Authentication is required to see the folders you share</message>
+    <message xml:lang="sv">Autentisering krävs för att se mapparna du delar</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bande-sharing-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">list</annotate>
   </action>
 </policyconfig>

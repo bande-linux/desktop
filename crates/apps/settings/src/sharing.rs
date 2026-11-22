@@ -21,8 +21,7 @@ const AVAHI: &str = "avahi-daemon";
 const AVAHI_DAEMON: &str = "/usr/sbin/avahi-daemon";
 const SMBD: &str = "/usr/sbin/smbd";
 const SSHD: &str = "/usr/sbin/sshd";
-const NET: &str = "/usr/bin/net";
-const SAMBA_CONFIG: &str = "/etc/samba/bande-smb.conf";
+const TESTPARM: &str = "/usr/bin/testparm";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Share {
@@ -36,6 +35,7 @@ pub struct SharingState {
     pub ssh_installed: bool,
     pub avahi_installed: bool,
     pub file_sharing: bool,
+    pub folders_allowed: bool,
     pub remote_login: bool,
     pub shares: Vec<Share>,
     pub failed: bool,
@@ -78,25 +78,63 @@ fn parse_shares(listing: &str) -> Vec<Share> {
 }
 
 fn read_shares() -> Vec<Share> {
-    Command::new(NET)
-        .args(["-s", SAMBA_CONFIG, "usershare", "info"])
+    let listing = Command::new(PKEXEC)
+        .args([HELPER, "list"])
+        .stdin(Stdio::null())
+        .output();
+    match listing {
+        Ok(output) if output.status.success() => {
+            parse_shares(&String::from_utf8_lossy(&output.stdout))
+        }
+        Ok(output) => {
+            tracing::warn!(
+                "cannot list the shared folders: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            Vec::new()
+        }
+        Err(error) => {
+            tracing::warn!("cannot run the sharing helper: {error}");
+            Vec::new()
+        }
+    }
+}
+
+fn folders_allowed() -> bool {
+    let setting = Command::new(TESTPARM)
+        .args(["-s", "--parameter-name", "usershare max shares"])
         .env("LC_ALL", "C")
         .stdin(Stdio::null())
         .stderr(Stdio::null())
-        .output()
-        .map(|output| parse_shares(&String::from_utf8_lossy(&output.stdout)))
-        .unwrap_or_default()
+        .output();
+    match setting {
+        Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<u32>()
+            .is_ok_and(|most| most > 0),
+        Ok(output) => {
+            tracing::warn!("testparm cannot read Samba's setup: {}", output.status);
+            false
+        }
+        Err(error) => {
+            tracing::warn!("cannot run testparm: {error}");
+            false
+        }
+    }
 }
 
 fn read_state() -> SharingState {
     let samba_installed = Path::new(SMBD).exists();
+    let file_sharing = samba_installed && service_active("smbd.service");
+    let folders_allowed = file_sharing && folders_allowed();
     SharingState {
         samba_installed,
         ssh_installed: Path::new(SSHD).exists(),
         avahi_installed: Path::new(AVAHI_DAEMON).exists(),
-        file_sharing: samba_installed && service_active("smbd.service"),
+        file_sharing,
+        folders_allowed,
         remote_login: service_active("ssh.service"),
-        shares: match samba_installed {
+        shares: match folders_allowed {
             true => read_shares(),
             false => Vec::new(),
         },
@@ -121,8 +159,10 @@ fn helper(arguments: &[&str], input: Option<&str>) -> bool {
             return false;
         }
     };
-    if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
-        let _ = writeln!(stdin, "{input}");
+    if let (Some(input), Some(mut stdin)) = (input, child.stdin.take())
+        && let Err(error) = writeln!(stdin, "{input}")
+    {
+        tracing::warn!("cannot pass the input to the sharing helper: {error}");
     }
     child.wait().is_ok_and(|status| status.success())
 }
@@ -182,7 +222,9 @@ fn run(command: SharingCommand, system: Option<&Connection>, session: Option<&Co
             ],
             None,
         ),
-        SharingCommand::InstallSamba => install(system, SAMBA),
+        SharingCommand::InstallSamba => {
+            install(system, SAMBA) && helper(&["samba-installed"], None)
+        }
         SharingCommand::InstallAvahi => install(system, AVAHI),
         SharingCommand::Password(password) => helper(&["password"], Some(&password)),
         SharingCommand::Remove(name) => helper(&["remove", &name], None),
@@ -289,6 +331,12 @@ impl SettingsView {
         );
         rows.push(self.item_row("file-sharing".to_owned(), row));
         if !state.file_sharing {
+            return rows;
+        }
+        if !state.folders_allowed {
+            rows.push(crate::pages::muted_row(&tr!(
+                "Samba’s setup on this computer doesn’t let people share their own folders. An administrator can allow it with “usershare max shares” in /etc/samba/smb.conf."
+            )));
             return rows;
         }
         if !state.avahi_installed {

@@ -45,6 +45,7 @@ nmcli network-manager optional
 /usr/sbin/mount.nfs nfs-common optional
 /usr/sbin/showmount nfs-common optional
 /usr/bin/net samba-common-bin optional
+/usr/bin/testparm samba-common-bin optional
 /usr/bin/smbpasswd samba-common-bin optional
 /usr/sbin/smbd samba optional
 /usr/sbin/sshd openssh-server optional

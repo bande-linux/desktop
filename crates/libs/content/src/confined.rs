@@ -21,6 +21,9 @@ const PICTURE_TIME: Duration = Duration::from_secs(20);
 const PICTURE_BYTES: u64 = MAX_PIXELS * 6;
 const HEAD_BYTES: u64 = 1024;
 
+/// The exit status of a confined worker that lacks the decoder a file needs.
+pub const MISSING_DECODER_EXIT: u8 = 69;
+
 #[derive(Serialize, Deserialize)]
 enum Reply {
     Still {
@@ -41,6 +44,7 @@ enum Reply {
 pub enum WorkerFailure {
     NotStarted,
     TimedOut,
+    MissingDecoder,
     Failed,
 }
 
@@ -83,6 +87,9 @@ pub fn run_worker(
         Ok(None) => {
             tracing::warn!("a file reader took too long");
             Err(WorkerFailure::TimedOut)
+        }
+        Ok(Some(status)) if status.code() == Some(MISSING_DECODER_EXIT.into()) => {
+            Err(WorkerFailure::MissingDecoder)
         }
         Ok(Some(_)) => Err(WorkerFailure::Failed),
         Err(error) => {
@@ -237,6 +244,7 @@ pub fn decode_confined(path: &Path, longest: u32) -> Result<Decoded, Failure> {
         run_worker(&arguments, PICTURE_BYTES, PICTURE_TIME).map_err(|failure| match failure {
             WorkerFailure::NotStarted => Failure::Unreadable,
             WorkerFailure::TimedOut => Failure::TimedOut,
+            WorkerFailure::MissingDecoder => Failure::MissingDecoder,
             WorkerFailure::Failed => Failure::Damaged,
         })?;
     let mut input = out.as_slice();

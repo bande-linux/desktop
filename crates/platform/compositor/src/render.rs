@@ -42,6 +42,7 @@ struct Output {
 pub struct Renderer {
     vulkan: VulkanRenderer,
     outputs: HashMap<String, Output>,
+    frames: u64,
 }
 
 pub(crate) fn rendering_error(error: DamageError<RenderError>) -> RenderError {
@@ -53,10 +54,17 @@ pub(crate) fn rendering_error(error: DamageError<RenderError>) -> RenderError {
 
 impl Renderer {
     pub fn new() -> Result<Self, RenderError> {
+        let mut vulkan = VulkanRenderer::new(None)?;
+        vulkan.prove_unexported(|_| None);
         Ok(Self {
-            vulkan: VulkanRenderer::new(None)?,
+            vulkan,
             outputs: HashMap::new(),
+            frames: 0,
         })
+    }
+
+    pub fn frames(&self) -> u64 {
+        self.frames
     }
 
     pub fn device_info(&self) -> &DeviceInfo {
@@ -112,6 +120,7 @@ impl Renderer {
                 damage: OutputDamageTracker::new(size, scale, transform),
             },
         };
+        self.frames += 1;
         let elements = compositor.render_elements_on(&mut self.vulkan, name);
         let rendered = self
             .vulkan
@@ -203,7 +212,7 @@ impl FrameOutput for Renderer {
             },
         );
         self.outputs.clear();
-        self.vulkan = VulkanRenderer::new(None)?;
+        self.vulkan = self.vulkan.renew()?;
         Ok(())
     }
 }

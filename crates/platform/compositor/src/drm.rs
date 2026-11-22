@@ -4,7 +4,8 @@ use std::os::fd::{AsFd, AsRawFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use smithay::backend::allocator::{Fourcc, Modifier};
+use smithay::backend::allocator::dmabuf::AsDmabuf;
+use smithay::backend::allocator::{Allocator, Buffer, Fourcc, Modifier};
 use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
@@ -510,7 +511,19 @@ impl DrmBackend {
         let fd = device.device_fd().clone();
         let node = DrmNode::from_file(&fd)?;
         let gbm = GbmDevice::new(fd).ok();
-        let renderer = VulkanRenderer::new(Some(node.dev_id()))?;
+        let mut renderer = VulkanRenderer::new(Some(node.dev_id()))?;
+        let mut allocator = gbm
+            .clone()
+            .map(|gbm| GbmAllocator::new(gbm, GbmBufferFlags::RENDERING));
+        renderer.prove_unexported(|format| {
+            let buffer = allocator
+                .as_mut()?
+                .create_buffer(64, 64, format.code, &[format.modifier])
+                .ok()?;
+            (buffer.format() == format)
+                .then(|| buffer.export().ok())
+                .flatten()
+        });
         let info = renderer.device_info();
         tracing::info!("composing on {info} with {}", info.extensions.join(", "));
         let feedback_device = match node.node_with_type(NodeType::Render) {
@@ -1320,7 +1333,7 @@ impl DrmBackend {
             self.renderer.is_lost(),
             self.renderer.memory_use()
         );
-        self.renderer = VulkanRenderer::new(Some(self.node.dev_id()))?;
+        self.renderer = self.renderer.renew()?;
         for head in &mut self.heads {
             head.compositor.reset_buffers();
         }

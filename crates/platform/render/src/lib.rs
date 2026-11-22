@@ -3,7 +3,7 @@ mod frame;
 mod import;
 mod rect;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
 use std::fmt;
 use std::fs::File;
@@ -80,6 +80,7 @@ pub enum RenderError {
     ForeignResource,
     Interrupted,
     NothingRendered,
+    FailedBefore,
     Io(std::io::Error),
 }
 
@@ -105,6 +106,7 @@ impl fmt::Display for RenderError {
             }
             Self::Interrupted => f.write_str("waiting for a sync point was interrupted"),
             Self::NothingRendered => f.write_str("no frame has been rendered yet"),
+            Self::FailedBefore => f.write_str("this dma-buf failed to import before"),
             Self::Io(error) => write!(f, "cannot size the dma-buf: {error}"),
         }
     }
@@ -366,6 +368,7 @@ pub struct VulkanRenderer {
     output_on_device: bool,
     modifiers: formats::Modifiers,
     refused: Vec<Format>,
+    unproven: Vec<(vk::ImageUsageFlags, Format)>,
     output_colour: Option<OutputColour>,
     encode_table: Option<(Arc<[[u8; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
@@ -389,6 +392,8 @@ pub struct VulkanRenderer {
     dmabuf_targets: HashMap<WeakDmabuf, u64>,
     dmabuf_textures: HashMap<WeakDmabuf, VulkanTexture>,
     sampled_dmabufs: HashMap<WeakDmabuf, VulkanTexture>,
+    failed_dmabufs: HashSet<WeakDmabuf>,
+    linear_feedback: Option<smithay::wayland::dmabuf::DmabufFeedback>,
     imports: HashMap<WeakDmabuf, Imported>,
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
@@ -398,6 +403,7 @@ pub struct VulkanRenderer {
     exhausted: AtomicBool,
     created: Instant,
     messenger: Option<(ash::ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT)>,
+    display: Option<u64>,
     _entry: ash::Entry,
 }
 
@@ -630,6 +636,20 @@ fn linear(codes: &[Fourcc]) -> impl Iterator<Item = Format> + '_ {
 
 impl VulkanRenderer {
     pub fn new(display: Option<u64>) -> Result<Self, RenderError> {
+        Self::create(display, None)
+    }
+
+    pub fn renew(&self) -> Result<Self, RenderError> {
+        Self::create(
+            self.display,
+            Some((self.info.render_device, self.modifiers.clone())),
+        )
+    }
+
+    fn create(
+        display: Option<u64>,
+        proven: Option<(Option<u64>, formats::Modifiers)>,
+    ) -> Result<Self, RenderError> {
         // SAFETY: loading runs the system Vulkan loader's initialisers once; the returned `Entry`
         // keeps the library loaded for as long as the renderer holds it in `_entry`.
         let entry = unsafe { ash::Entry::load() }?;
@@ -738,6 +758,7 @@ impl VulkanRenderer {
             output_on_device: chosen.output_on_device,
             modifiers: chosen.modifiers,
             refused: Vec::new(),
+            unproven: Vec::new(),
             output_colour: None,
             encode_table: None,
             colour_scratch: HashMap::new(),
@@ -762,6 +783,8 @@ impl VulkanRenderer {
             dmabuf_targets: HashMap::new(),
             dmabuf_textures: HashMap::new(),
             sampled_dmabufs: HashMap::new(),
+            failed_dmabufs: HashSet::new(),
+            linear_feedback: None,
             imports: HashMap::new(),
             staging: Vec::new(),
             copies: Vec::new(),
@@ -771,12 +794,18 @@ impl VulkanRenderer {
             exhausted: AtomicBool::new(false),
             created: Instant::now(),
             messenger,
+            display,
             instance,
             device,
             _entry: entry,
         };
         renderer.create_objects(chosen.family)?;
-        renderer.prove_modifiers();
+        match proven {
+            Some((device, modifiers)) if device == renderer.info.render_device => {
+                renderer.modifiers = modifiers;
+            }
+            _ => renderer.prove_modifiers(),
+        }
         Ok(renderer)
     }
 
@@ -1235,49 +1264,175 @@ impl VulkanRenderer {
     fn prove_modifiers(&mut self) {
         let started = Instant::now();
         let mut proved = 0;
-        for usage in [formats::SAMPLED, formats::RENDERED] {
-            let supported = match usage {
-                formats::SAMPLED => &self.modifiers.sampled,
-                _ => &self.modifiers.rendered,
+        let pairs: Vec<_> = [formats::SAMPLED, formats::RENDERED]
+            .into_iter()
+            .flat_map(|usage| {
+                self.supported(usage)
+                    .listed()
+                    .map(move |(format, capability)| (usage, format, capability))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for (usage, format, capability) in pairs {
+            let Some(texel) = formats::texel(format.code) else {
+                continue;
             };
-            let listed: Vec<_> = supported.listed().collect();
-            for (format, capability) in listed {
-                let Some(texel) = formats::texel(format.code) else {
-                    continue;
-                };
-                if !capability.exportable {
-                    continue;
-                }
-                proved += 1;
-                if let Err(error) = self.round_trip(format, texel, (usage, capability)) {
-                    tracing::warn!(
-                        "{} reports {:?} with modifier {:?} for {usage:?} but cannot import it \
-                         ({error}); not offering it",
-                        self.info,
-                        format.code,
-                        format.modifier,
-                    );
-                    match usage {
-                        formats::SAMPLED => self.modifiers.sampled.remove(&format),
-                        _ => self.modifiers.rendered.remove(&format),
-                    }
-                    self.refused.push(format);
-                }
-            }
+            let exported = capability
+                .exportable
+                .then(|| self.exported(format, texel, (usage, capability)).ok())
+                .flatten();
+            let Some((image, dmabuf)) = exported else {
+                self.unproven.push((usage, format));
+                continue;
+            };
+            let proof = self.prove(&dmabuf, texel, (usage, capability));
+            self.destroy_image(&image);
+            self.judge(format, usage, proof);
+            proved += 1;
         }
+        self.exhausted.store(false, Ordering::Relaxed);
         tracing::info!(
-            "proved {proved} dma-buf formats on {} in {:.1?}",
+            "proved {proved} dma-buf formats on {} in {:.1?}, {} left to prove by allocation",
             self.info.name,
-            started.elapsed()
+            started.elapsed(),
+            self.unproven.len()
         );
     }
 
-    fn round_trip(
+    pub fn prove_unexported(&mut self, mut allocate: impl FnMut(Format) -> Option<Dmabuf>) {
+        for (usage, format) in std::mem::take(&mut self.unproven) {
+            let (Some(texel), Some(capability)) = (
+                formats::texel(format.code),
+                self.supported(usage).usable(&format),
+            ) else {
+                continue;
+            };
+            let proof = match allocate(format) {
+                Some(dmabuf) => self.prove(&dmabuf, texel, (usage, capability)),
+                None if format.modifier == Modifier::Linear => Ok(()),
+                None => Err(("allocate", RenderError::UnsupportedFormat)),
+            };
+            self.judge(format, usage, proof);
+        }
+        self.exhausted.store(false, Ordering::Relaxed);
+    }
+
+    fn supported(&self, usage: vk::ImageUsageFlags) -> &formats::Supported {
+        match usage {
+            formats::SAMPLED => &self.modifiers.sampled,
+            _ => &self.modifiers.rendered,
+        }
+    }
+
+    fn judge(
+        &mut self,
+        format: Format,
+        usage: vk::ImageUsageFlags,
+        proof: Result<(), (&'static str, RenderError)>,
+    ) {
+        let Err((stage, error)) = proof else {
+            return;
+        };
+        if matches!(
+            error,
+            RenderError::Vulkan(
+                vk::Result::ERROR_OUT_OF_DEVICE_MEMORY | vk::Result::ERROR_OUT_OF_HOST_MEMORY
+            )
+        ) {
+            tracing::warn!(
+                "keeping {:?} with modifier {:?} unproven: {stage} ran out of memory",
+                format.code,
+                format.modifier
+            );
+            return;
+        }
+        let action = match usage {
+            formats::SAMPLED => "sampling",
+            _ => "rendering",
+        };
+        tracing::warn!(
+            "{} lists {:?} with modifier {:?} for {action} but cannot {stage} it ({error}); not \
+             offering it",
+            self.info,
+            format.code,
+            format.modifier,
+        );
+        match usage {
+            formats::SAMPLED => self.modifiers.sampled.remove(&format),
+            _ => self.modifiers.rendered.remove(&format),
+        }
+        if !self.refused.contains(&format) {
+            self.refused.push(format);
+        }
+    }
+
+    fn prove(
+        &self,
+        dmabuf: &Dmabuf,
+        texel: formats::Texel,
+        (usage, capability): (vk::ImageUsageFlags, formats::Capability),
+    ) -> Result<(), (&'static str, RenderError)> {
+        let mut image = self
+            .import_image(dmabuf, texel, (usage, capability))
+            .map_err(|error| ("import", error))?;
+        let views = match usage {
+            formats::SAMPLED => self.sampled_views(image.image, texel),
+            _ => self
+                .create_view(image.image, texel.format, vk::ComponentSwizzle::IDENTITY)
+                .map(|view| (view, None)),
+        };
+        let proof = views
+            .map_err(|error| ("view", error))
+            .and_then(|(view, chroma)| {
+                image.view = view;
+                let handed = self.hand_over_once(image.image, usage);
+                if let Some(chroma) = chroma {
+                    // SAFETY: the submission that used the image has been waited for, and nothing
+                    // else holds `chroma`.
+                    unsafe { self.device.destroy_image_view(chroma, None) };
+                }
+                handed.map_err(|error| ("hand over", error))
+            });
+        self.destroy_image(&image);
+        proof
+    }
+
+    fn hand_over_once(
+        &self,
+        image: vk::Image,
+        usage: vk::ImageUsageFlags,
+    ) -> Result<(), RenderError> {
+        let using = match usage {
+            formats::SAMPLED => SAMPLED,
+            _ => DRAWING,
+        };
+        self.begin_commands()?;
+        hand_over(
+            &self.device,
+            self.command_buffer,
+            image,
+            self.queue_family,
+            (true, using),
+        );
+        hand_over(
+            &self.device,
+            self.command_buffer,
+            image,
+            self.queue_family,
+            (false, using),
+        );
+        // SAFETY: `begin_commands` started the buffer on this thread and only the two barriers
+        // were recorded into it.
+        unsafe { self.device.end_command_buffer(self.command_buffer) }?;
+        self.submit_and_wait()
+    }
+
+    fn exported(
         &self,
         format: Format,
         texel: formats::Texel,
         (usage, capability): (vk::ImageUsageFlags, formats::Capability),
-    ) -> Result<(), RenderError> {
+    ) -> Result<(Image, Dmabuf), RenderError> {
         const SIDE: u32 = 64;
         let modifiers = [u64::from(format.modifier)];
         let mut list =
@@ -1317,12 +1472,13 @@ impl VulkanRenderer {
             width: SIDE as i32,
             height: SIDE as i32,
         };
-        let imported = self
-            .export_image(&mut exported, capability.planes, format)
-            .and_then(|dmabuf| self.import_image(&dmabuf, texel, (usage, capability)));
-        self.destroy_image(&exported);
-        self.destroy_image(&imported?);
-        Ok(())
+        match self.export_image(&mut exported, capability.planes, format) {
+            Ok(dmabuf) => Ok((exported, dmabuf)),
+            Err(error) => {
+                self.destroy_image(&exported);
+                Err(error)
+            }
+        }
     }
 
     fn export_image(
@@ -1880,6 +2036,7 @@ impl VulkanRenderer {
     fn collect_garbage(&mut self) {
         self.dmabuf_textures.retain(|weak, _| !weak.is_gone());
         self.sampled_dmabufs.retain(|weak, _| !weak.is_gone());
+        self.failed_dmabufs.retain(|weak| !weak.is_gone());
         let gone_targets: Vec<u64> = self
             .dmabuf_targets
             .iter()

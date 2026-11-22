@@ -356,12 +356,16 @@ fn expect_frame(
 }
 
 #[test]
-fn idle_surfaces_that_ask_for_a_frame_without_new_content_still_get_one() {
+fn an_idle_window_is_not_drawn_again_and_still_gets_a_frame_when_it_asks() {
     let mut server = headless(640, 480);
     let mut client = TestClient::window(&mut server, "org.bande.FrameTest");
     let child = client.add_child(0);
     let mut frames = Frames::start();
     idle(&mut frames, &mut server, Duration::from_millis(1200));
+    let drawn = frames.rendered();
+    assert!(drawn > 0, "the window was never drawn");
+    idle(&mut frames, &mut server, Duration::from_millis(1200));
+    assert_eq!(frames.rendered(), drawn, "an idle window was drawn again");
 
     let before = client.frames_done();
     client.ask_for_frame(0);

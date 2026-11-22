@@ -15,7 +15,9 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_shm;
 use smithay::utils::{Buffer as BufferCoords, Rectangle, Size};
 use smithay::wayland::compositor::SurfaceData;
-use smithay::wayland::dmabuf::get_dmabuf;
+use smithay::wayland::dmabuf::{
+    DmabufFeedback, DmabufFeedbackBuilder, SurfaceDmabufFeedbackState, get_dmabuf,
+};
 use smithay::wayland::shm::with_buffer_contents;
 
 use crate::formats::{self, Kind};
@@ -234,6 +236,21 @@ fn shm_fourcc(format: wl_shm::Format) -> Option<Fourcc> {
 }
 
 impl VulkanRenderer {
+    fn linear_feedback(&mut self) -> Option<DmabufFeedback> {
+        if self.linear_feedback.is_none() {
+            let device = self.info.render_device?;
+            let linear = self
+                .dmabuf_planes()
+                .into_keys()
+                .filter(|format| format.modifier == Modifier::Linear);
+            self.linear_feedback = DmabufFeedbackBuilder::new(device, linear)
+                .build()
+                .inspect_err(|error| tracing::warn!("cannot build a LINEAR feedback: {error}"))
+                .ok();
+        }
+        self.linear_feedback.clone()
+    }
+
     fn create_texture(
         &mut self,
         width: i32,
@@ -390,6 +407,31 @@ impl VulkanRenderer {
         Ok(())
     }
 
+    pub(crate) fn sampled_views(
+        &self,
+        image: vk::Image,
+        texel: formats::Texel,
+    ) -> Result<(vk::ImageView, Option<vk::ImageView>), RenderError> {
+        let (luma, chroma) = match texel.kind {
+            Kind::Colour { opaque } => {
+                return Ok((
+                    self.create_view(image, texel.format, alpha_swizzle(opaque))?,
+                    None,
+                ));
+            }
+            Kind::Video { luma, chroma } => (luma, chroma),
+        };
+        let luma = self.plane_view(image, luma, vk::ImageAspectFlags::PLANE_0)?;
+        match self.plane_view(image, chroma, vk::ImageAspectFlags::PLANE_1) {
+            Ok(chroma) => Ok((luma, Some(chroma))),
+            Err(error) => {
+                // SAFETY: `luma` was just created and never used.
+                unsafe { self.device.destroy_image_view(luma, None) };
+                Err(error)
+            }
+        }
+    }
+
     fn sampled_dmabuf(
         &mut self,
         dmabuf: &Dmabuf,
@@ -399,35 +441,16 @@ impl VulkanRenderer {
         let texel = formats::texel(code).ok_or(RenderError::UnsupportedFormat)?;
         let image = self.import_image(dmabuf, texel, (formats::SAMPLED, capability))?;
         let size = (image.width, image.height);
-        let (luma_format, chroma_format) = match texel.kind {
-            Kind::Colour { opaque } => {
-                let view = match self.create_view(image.image, texel.format, alpha_swizzle(opaque))
-                {
-                    Ok(view) => view,
-                    Err(error) => {
-                        self.destroy_image(&image);
-                        return Err(error);
-                    }
-                };
-                let id = self.imported_texture(Image { view, ..image });
-                return Ok(self.texture_of(id, None, size, code));
-            }
-            Kind::Video { luma, chroma } => (luma, chroma),
-        };
-        let views = self
-            .plane_view(image.image, luma_format, vk::ImageAspectFlags::PLANE_0)
-            .and_then(|luma_view| {
-                self.plane_view(image.image, chroma_format, vk::ImageAspectFlags::PLANE_1)
-                    .map(|chroma_view| (luma_view, chroma_view))
-                    // SAFETY: `luma_view` was just created and never used.
-                    .inspect_err(|_| unsafe { self.device.destroy_image_view(luma_view, None) })
-            });
-        let (luma_view, chroma_view) = match views {
+        let (view, chroma_view) = match self.sampled_views(image.image, texel) {
             Ok(views) => views,
             Err(error) => {
                 self.destroy_image(&image);
                 return Err(error);
             }
+        };
+        let Some(chroma_view) = chroma_view else {
+            let id = self.imported_texture(Image { view, ..image });
+            return Ok(self.texture_of(id, None, size, code));
         };
         let chroma_size = chroma_size(size.0, size.1);
         let chroma_id = self.imported_texture(Image {
@@ -438,10 +461,7 @@ impl VulkanRenderer {
             height: chroma_size.1,
         });
         let chroma = self.texture_of(chroma_id, None, chroma_size, Fourcc::R8);
-        let id = self.imported_texture(Image {
-            view: luma_view,
-            ..image
-        });
+        let id = self.imported_texture(Image { view, ..image });
         Ok(self.texture_of(id, Some(Arc::new(chroma)), size, code))
     }
 
@@ -714,7 +734,34 @@ impl ImportDmaWl for VulkanRenderer {
         damage: &[Rectangle<i32, BufferCoords>],
     ) -> Result<VulkanTexture, RenderError> {
         let dmabuf = get_dmabuf(buffer).map_err(|_| RenderError::UnknownBuffer)?;
-        let imported = self.import_dmabuf_into(dmabuf, surface, Some(damage));
+        let weak = dmabuf.weak();
+        let imported = match self.failed_dmabufs.contains(&weak) {
+            true => Err(RenderError::FailedBefore),
+            false => self.import_dmabuf_into(dmabuf, surface, Some(damage)),
+        };
+        if let Err(error) = &imported
+            && !matches!(
+                error,
+                RenderError::Vulkan(
+                    vk::Result::ERROR_OUT_OF_DEVICE_MEMORY | vk::Result::ERROR_OUT_OF_HOST_MEMORY
+                )
+            )
+            && self.failed_dmabufs.insert(weak)
+        {
+            let format = dmabuf.format();
+            tracing::warn!(
+                "cannot show a {:?} dma-buf with modifier {:?}: {error}",
+                format.code,
+                format.modifier
+            );
+            if format.modifier != Modifier::Linear
+                && let Some(states) = surface
+                && let Some(feedback) = SurfaceDmabufFeedbackState::from_states(states)
+                && let Some(linear) = self.linear_feedback()
+            {
+                feedback.set_feedback(&linear);
+            }
+        }
         let Some(states) = surface else {
             return imported;
         };

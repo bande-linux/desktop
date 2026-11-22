@@ -43,15 +43,25 @@ fn hardware() -> Outcome<Option<Gpu>> {
             continue;
         };
         let device = file.metadata()?.rdev();
-        let Ok(renderer) = VulkanRenderer::new(Some(device)) else {
+        let Ok(mut renderer) = VulkanRenderer::new(Some(device)) else {
             continue;
         };
         let info = renderer.device_info();
         if !info.software && info.render_device == Some(device) {
             println!("testing {info} on {}", node.display());
+            let gbm = GbmDevice::new(Arc::new(file))?;
+            let mut allocator = GbmAllocator::new(gbm.clone(), GbmBufferFlags::RENDERING);
+            renderer.prove_unexported(|format| {
+                let buffer = allocator
+                    .create_buffer(64, 64, format.code, &[format.modifier])
+                    .ok()?;
+                (buffer.format() == format)
+                    .then(|| buffer.export().ok())
+                    .flatten()
+            });
             return Ok(Some(Gpu {
                 renderer,
-                gbm: GbmDevice::new(Arc::new(file))?,
+                gbm,
                 exporter: Exporter::new(device)?,
             }));
         }
@@ -405,16 +415,16 @@ fn allocate(
     }
 }
 
-fn sample(gpu: &mut Gpu, format: Format) -> Outcome {
+fn sample(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
     let (dmabuf, wanted) = match (packed(format.code, COLOUR), video(format.code)) {
         (Some(pixel), _) => {
             let Some(mut buffer) = allocate(&gpu.gbm, format, GbmBufferFlags::RENDERING) else {
-                return Ok(());
+                return Ok(false);
             };
             if let Err(error) = fill_colour(&mut buffer, pixel) {
                 if !gpu.renderer.render_formats().contains(&format) {
                     println!("skipped {format:?}: GBM cannot map it ({error})");
-                    return Ok(());
+                    return Ok(false);
                 }
                 println!("{format:?}: GBM cannot map it ({error}), drawing it instead");
                 let colour = COLOUR.map(|value| f32::from(value) / 255.0);
@@ -425,15 +435,15 @@ fn sample(gpu: &mut Gpu, format: Format) -> Outcome {
         (None, Some((texel, planes))) => {
             let dmabuf = match gpu.exporter.export(format, texel) {
                 Ok(Some(dmabuf)) => dmabuf,
-                Ok(None) => return Ok(()),
+                Ok(None) => return Ok(false),
                 Err(error) => {
                     println!("skipped {format:?}: Vulkan cannot export it ({error})");
-                    return Ok(());
+                    return Ok(false);
                 }
             };
             if let Err(error) = fill_planes(&dmabuf, planes) {
                 println!("skipped {format:?}: the CPU cannot fill it ({error})");
-                return Ok(());
+                return Ok(false);
             }
             (dmabuf, [GREY, GREY, GREY, 0xff])
         }
@@ -445,7 +455,7 @@ fn sample(gpu: &mut Gpu, format: Format) -> Outcome {
         close(found, wanted, 3),
         "{format:?} drew {found:?}, not {wanted:?}"
     );
-    Ok(())
+    Ok(true)
 }
 
 fn foreign_pixel(gbm: &GbmDevice<Arc<File>>, dmabuf: &Dmabuf) -> Outcome<[u8; 4]> {
@@ -479,10 +489,10 @@ fn foreign_pixel(gbm: &GbmDevice<Arc<File>>, dmabuf: &Dmabuf) -> Outcome<[u8; 4]
     Ok(pixel)
 }
 
-fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome {
+fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
     let flags = GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT;
     let Some(buffer) = allocate(&gpu.gbm, format, flags) else {
-        return Ok(());
+        return Ok(false);
     };
     let mut dmabuf = buffer.export()?;
     let colours = [[0.75, 0.25, 0.5], [0.25, 0.5, 0.75], [0.5, 0.75, 0.25]];
@@ -494,8 +504,10 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome {
     let found = match foreign_pixel(&gpu.gbm, &dmabuf) {
         Ok(found) => found,
         Err(error) => {
-            println!("drew {format:?}, but GBM cannot read it back ({error})");
-            return Ok(());
+            println!(
+                "skipped checking the scan-out of {format:?}: GBM cannot read it back ({error})"
+            );
+            return Ok(false);
         }
     };
     println!("scanned out {format:?}: {found:?}");
@@ -506,7 +518,7 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome {
         close(found, wanted, 1),
         "{format:?} scanned out {found:?}, not {wanted:?}"
     );
-    Ok(())
+    Ok(true)
 }
 
 #[test]
@@ -519,14 +531,23 @@ fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
     let order = |format: &Format| (format.code as u32, u64::from(format.modifier));
     let mut sampled: Vec<Format> = gpu.renderer.dmabuf_formats().iter().copied().collect();
     sampled.sort_by_key(order);
+    let sampled_total = sampled.len();
+    let mut sampled_verified = 0;
     for format in sampled {
-        sample(&mut gpu, format)?;
+        sampled_verified += usize::from(sample(&mut gpu, format)?);
     }
     let mut rendered: Vec<Format> = gpu.renderer.render_formats().iter().copied().collect();
     rendered.sort_by_key(order);
+    let rendered_total = rendered.len();
+    let mut rendered_verified = 0;
     for format in rendered {
-        scan_out(&mut gpu, format)?;
+        rendered_verified += usize::from(scan_out(&mut gpu, format)?);
     }
+    println!(
+        "verified {sampled_verified} of {sampled_total} sampled and {rendered_verified} of \
+         {rendered_total} scanned-out formats; the others are skipped above"
+    );
+    assert!(sampled_verified > 0, "no sampled format could be checked");
     let refused = gpu.renderer.refused_formats();
     assert!(refused.is_empty(), "the driver refused {refused:?}");
     assert_eq!(vulkan_errors(), 0, "Vulkan reported errors");

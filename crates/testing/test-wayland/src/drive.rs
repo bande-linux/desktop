@@ -60,6 +60,10 @@ impl Frames {
         }
     }
 
+    pub fn rendered(&self) -> u64 {
+        self.renderer.frames()
+    }
+
     pub fn run_until(&mut self, server: &mut Compositor, mut done: impl FnMut() -> bool) {
         let deadline = Instant::now() + PATIENCE;
         let start = self.start;

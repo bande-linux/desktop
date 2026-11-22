@@ -36,6 +36,12 @@ use smithay::wayland::viewporter::ViewporterState;
 use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
 use smithay::wayland::xdg_activation::XdgActivationState;
 use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
+use smithay::wayland::alpha_modifier::AlphaModifierState;
+use smithay::wayland::commit_timing::CommitTimingManagerState;
+use smithay::wayland::content_type::ContentTypeState;
+use smithay::wayland::fifo::FifoManagerState;
+use smithay::wayland::single_pixel_buffer::SinglePixelBufferState;
+use smithay::wayland::xdg_system_bell::XdgSystemBellState;
 
 use super::{ClientState, ScanoutDevice, State};
 use crate::session::SessionRole;
@@ -84,6 +90,12 @@ pub(crate) struct Globals {
     _relative_pointer_state: RelativePointerManagerState,
     pub(crate) session_lock_state: SessionLockManagerState,
     _security_context_state: SecurityContextState,
+    _fifo_state: FifoManagerState,
+    _commit_timing_state: CommitTimingManagerState,
+    _content_type_state: ContentTypeState,
+    _single_pixel_buffer_state: SinglePixelBufferState,
+    _alpha_modifier_state: AlphaModifierState,
+    _system_bell_state: XdgSystemBellState,
 }
 
 impl Globals {
@@ -167,6 +179,12 @@ impl Globals {
             _security_context_state: SecurityContextState::new::<State, _>(handle, |client| {
                 !trust::is_sandboxed(client)
             }),
+            _fifo_state: FifoManagerState::new::<State>(handle),
+            _commit_timing_state: CommitTimingManagerState::new::<State>(handle),
+            _content_type_state: ContentTypeState::new::<State>(handle),
+            _single_pixel_buffer_state: SinglePixelBufferState::new::<State>(handle),
+            _alpha_modifier_state: AlphaModifierState::new::<State>(handle),
+            _system_bell_state: XdgSystemBellState::new::<State>(handle),
         }
     }
 }

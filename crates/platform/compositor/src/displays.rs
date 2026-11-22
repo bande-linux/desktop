@@ -358,7 +358,8 @@ impl State {
         for layer in layer_map_for_output(&removed.output).layers() {
             layer.layer_surface().send_close();
         }
-        removed.retire(&self.display_handle);
+        let barriers = removed.retire(&self.display_handle);
+        self.signal_barriers(barriers);
         self.stop_captures_of_lost_targets();
         for index in 0..self.windows.len() {
             let workspace = self.windows[index].workspace;

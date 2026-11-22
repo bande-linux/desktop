@@ -10,6 +10,7 @@ use smithay::wayland::presentation::PresentationFeedbackCallback;
 
 use crate::frame_callbacks::{DueCallback, LatchedCallback};
 use crate::state::{REFRESH, State};
+use crate::timing::LatchedBarrier;
 use crate::window::Window;
 use crate::workspace::Workspaces;
 
@@ -126,6 +127,7 @@ pub(crate) struct Screen {
     pub(crate) latched_frame_callbacks: Vec<LatchedCallback>,
     pub(crate) due_callbacks: Vec<DueCallback>,
     pub(crate) latched_releases: Vec<Buffer>,
+    pub(crate) latched_barriers: Vec<LatchedBarrier>,
 }
 
 impl Screen {
@@ -165,6 +167,7 @@ impl Screen {
             latched_frame_callbacks: Vec::new(),
             due_callbacks: Vec::new(),
             latched_releases: Vec::new(),
+            latched_barriers: Vec::new(),
         };
         screen.apply(settings);
         screen
@@ -182,7 +185,7 @@ impl Screen {
         self.redraw = true;
     }
 
-    pub(crate) fn retire(self, display: &DisplayHandle) {
+    pub(crate) fn retire(self, display: &DisplayHandle) -> Vec<LatchedBarrier> {
         display.remove_global::<State>(self.global);
         for feedback in self.latched_feedback {
             feedback.discarded();
@@ -194,6 +197,7 @@ impl Screen {
         for callback in self.due_callbacks {
             callback.send_now(millis);
         }
+        self.latched_barriers
     }
 
     pub(crate) fn name(&self) -> String {

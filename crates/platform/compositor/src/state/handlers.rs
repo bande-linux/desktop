@@ -137,6 +137,7 @@ impl CompositorHandler for State {
 
     fn new_surface(&mut self, surface: &WlSurface) {
         crate::sync::wait_for_fences(surface);
+        crate::timing::wait_for_timed_commits(surface);
         crate::release::release_on_destruction(surface);
     }
 

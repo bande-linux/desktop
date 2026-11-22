@@ -440,6 +440,16 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | implemented |
 | `wp_presentation` | Presentation timing, VSync | implemented |
+| `wp_fifo_v1` | FIFO presentation without frame callbacks (Mesa WSI, SDL, Proton) | implemented: a barrier is lifted when the frame that latched it is presented, a hidden window's at the next presentation of its display |
+| `wp_commit_timing_v1` | Commits that wait for a presentation time | implemented: released at the start of the first frame shown at or after the time; a waiting commit keeps its display's frames coming |
+| `wp_content_type_v1` | Game, video or photo content | implemented |
+| `wp_single_pixel_buffer_v1` | One-colour buffers (backgrounds, letterboxing) | implemented, drawn as a solid fill |
+| `wp_alpha_modifier_v1` | Surface opacity set by the client | implemented |
+| `xdg_system_bell_v1` | The terminal bell | implemented: the window's app asks for attention in the taskbar unless it is focused |
+| `wp_tearing_control_v1` | Tearing page flips for games | not served: needs async page flips in Smithay's `DrmCompositor` |
+| `xdg_toplevel_icon_v1` | A window's own icon | not served: the taskbar shows the app's desktop entry icon, and `bande_shell_v1` has no way to pass a client icon |
+| `wp_drm_lease_v1` | Lease a VR headset's connector | not served |
+| `wp_color_management_v1` | HDR and wide-gamut client content | not served (see the colour paragraph above) |
 | `ext-session-lock-v1` | Screen locking | implemented, `bande-lock` only |
 | `wl_data_device_manager` | Clipboard and drag and drop | implemented |
 | `zwp_primary_selection_v1` | Middle-click paste | implemented |

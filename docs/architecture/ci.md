@@ -37,6 +37,19 @@ shell needs much memory; `CARGO_PROFILE_DIST_LTO=thin`, which cargo reads throug
 why they exist are in [`../quality/tests.md`](../quality/tests.md). A test bus lists no service
 directories, so it never D-Bus-activates the services installed on the machine.
 
+## Everyday development
+
+The packages are installed once (`ci/deb/source.sh` and `ci/deb/build.sh`, then `apt install`
+of the debs); they put the units, PAM, polkit and D-Bus files in place. After that, a change to a
+program is built and tried in place:
+
+- An app runs from the tree in a Bande session: `cargo run --release -p bande-mail`.
+- `ci/dev-install.sh bande-mail bande-shell …` builds those programs with the release profile in
+  the workspace's `target/`, installs each over its packaged copy and restarts the user services
+  that run it; it says when a system service needs a restart or the session a new login.
+- A change to packaging (units, PAM, polkit, maintainer scripts, data files, translations) needs
+  the packages rebuilt and installed again, which also replaces the programs installed in place.
+
 ## Runtime dependencies
 
 `ci/runtime-deps` lists every program Bande runs (`Command::new`) and every system path it

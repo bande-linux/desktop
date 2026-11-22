@@ -50,9 +50,13 @@ graph LR
   is a grace period: until it passes, any input dismisses the saver. Locks from `Super+L`,
   logind, sleep and the power button always ask: `bande-power` requires the password on
   logind's `Lock` and on `PrepareForSleep` before it lets the computer sleep, even when the
-  saver already rests within its grace period. The grace period is `org.bande.Power`'s
-  `PasswordRequired` property; any process of the user could lengthen it through `config.kdl`
-  anyway, so it adds no new trust.
+  saver already rests within its grace period. Only the idle lock `bande-power` asks for gets
+  one: a lock someone else asked logind for (`Super+L` included) never does. The grace period
+  is `org.bande.Power`'s `PasswordRequired` property, which ends at a fixed time on the boot
+  clock however long an inhibitor holds the display awake. The lock screen believes a "no"
+  only from the owner of the name running in `bande-power.service`, answering within a second;
+  any process of the user could lengthen it through `config.kdl` anyway, so it adds no new
+  trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
   when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row in
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
@@ -62,7 +66,10 @@ graph LR
   the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`
   (logind checks swap, resume and Secure Boot), so a sleeping laptop hibernates before its
   battery runs out (`HibernateDelaySec=` in `sleep.conf` decides when). Settings ▸ Power says
-  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`.
+  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`. While someone
+  holds logind's `handle-lid-switch` inhibitor (Settings ▸ Power keeping the computer running
+  with the lid closed on power), closing the lid locks the session through logind unless
+  logind counts the computer as `Docked`.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 
@@ -74,7 +81,8 @@ graph LR
   | `zwp_idle_inhibitor_v1` on a surface | Player, Glance, mpv, Chromium, Firefox | the compositor, while the surface's window is on screen (covered or not); not while minimized |
 
   `bande-power` holds one logind `idle` inhibitor per `ScreenSaver` request, so every one shows
-  in `systemd-inhibit --list`. Idle time restarts when the last inhibitor ends, so a finished
+  in `systemd-inhibit --list`. Behind a lock the user started, nothing holds the display awake:
+  it turns off after a minute, as without a video. Idle time restarts when the last inhibitor ends, so a finished
   film does not lock the screen at once.
 - **Keeping the computer awake** only holds back idle sleep; Sleep in a menu, the power button
   and the lid always work, so these are not logind `sleep` block inhibitors (those would turn
@@ -705,8 +713,9 @@ what the one before could not save:
 - **The processor is busy** (a big build): `bande-session` gives `app.slice` half the CPU weight
   of `session.slice`, and the compositor asks `rtkit` to raise its drawing and input thread to
   nice −11 (`MakeThreadHighPriority`), keeping the normal priority when rtkit is missing or
-  refuses, so the pointer and animations stay smooth. The clients it starts and the wallpaper
-  material thread go back to the normal priority.
+  refuses, so the pointer and animations stay smooth. That thread is also set to reset on
+  fork (`SCHED_RESET_ON_FORK`), so every thread and client started from it begins at the
+  normal priority; without that flag it is not raised at all.
 - **The disk is full**: configuration and state are written to a staging file and renamed
   (`bande_xdg::replace_file`), so a failed write leaves the old file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; after

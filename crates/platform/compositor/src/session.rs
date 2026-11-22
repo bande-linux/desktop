@@ -17,6 +17,7 @@ use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_server::Client;
 
 use crate::environment::{cursor_environment, desktop_environment};
+use crate::logind::SessionReport;
 use crate::state::{ClientState, Compositor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,8 +173,8 @@ impl Compositor {
         self.state.lock_screen_requested = !self.state.is_locked();
     }
 
-    pub fn report_lock_states(&mut self, states: std::sync::mpsc::Sender<bool>) {
-        self.state.lock_states = Some(states);
+    pub fn report_session(&mut self, states: std::sync::mpsc::Sender<SessionReport>) {
+        self.state.session_reports = Some(states);
     }
 
     fn keep_summoned(
@@ -386,14 +387,12 @@ impl Compositor {
             }
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
-        // SAFETY: the closure runs between fork and exec and only calls fcntl, an atomic load and
-        // setpriority, which are async-signal-safe; inherited is client_end's fd, which stays open
-        // until after spawn returns.
+        // SAFETY: the closure runs between fork and exec and only calls fcntl, which is async-
+        // signal-safe; inherited is client_end's fd, which stays open until after spawn returns.
         unsafe {
             command.pre_exec(move || {
                 fcntl_setfd(BorrowedFd::borrow_raw(inherited), FdFlags::empty())
-                    .map_err(io::Error::from)?;
-                crate::logind::normal_priority()
+                    .map_err(io::Error::from)
             });
         }
         let mut child = command.spawn()?;

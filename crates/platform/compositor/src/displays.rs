@@ -7,6 +7,7 @@ use smithay::utils::{Logical, Point, Rectangle, Size};
 use smithay::wayland::compositor::{TraversalAction, with_surface_tree_downward};
 use smithay::wayland::fractional_scale::with_fractional_scale;
 
+use crate::logind::SessionReport;
 use crate::motion::{Look, OPENING_SCALE};
 use crate::screen::{OutputConfig, OutputSettings, Screen};
 use crate::state::{Compositor, State};
@@ -648,8 +649,9 @@ impl Compositor {
         }
         tracing::info!("the lid was {}", if closed { "closed" } else { "opened" });
         self.state.lid_closed = closed;
-        if !closed {
-            self.state.note_activity();
+        match closed {
+            true => self.state.report_to_session(SessionReport::LidClosed),
+            false => self.state.note_activity(),
         }
         self.state.rebalance_withheld();
         self.state.arrange_screens();

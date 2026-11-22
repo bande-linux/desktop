@@ -9,8 +9,8 @@ use bande_compositor::{
     REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
     SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
     follow_appearance, follow_input_settings, follow_lid, follow_login_settings, follow_session,
-    follow_shutdown, follow_sleep, handle_power_key, normal_priority, notify_service_manager,
-    raise_priority, render_material, serve_app_states, serve_displays, serve_global_shortcuts,
+    follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, raise_priority,
+    render_material, serve_app_states, serve_displays, serve_global_shortcuts,
     serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
@@ -97,13 +97,13 @@ fn is_built_in(device: &LibinputDevice) -> bool {
     }
 }
 
-fn pressed_on(event: &InputEvent<LibinputInputBackend>) -> Option<LibinputDevice> {
+fn pressed_on(event: &InputEvent<LibinputInputBackend>) -> Option<(LibinputDevice, u32)> {
     match event {
         InputEvent::Keyboard { event } if event.state() == KeyState::Pressed => {
-            Some(event.device())
+            Some((event.device(), event.key_code().raw()))
         }
         InputEvent::PointerButton { event } if event.state() == ButtonState::Pressed => {
-            Some(event.device())
+            Some((event.device(), event.button_code()))
         }
         _ => None,
     }
@@ -123,8 +123,10 @@ fn follow_lid_input(app: &mut App<DrmBackend>, event: &InputEvent<LibinputInputB
         }
         _ => {
             if app.compositor.lid_closed()
-                && pressed_on(event).is_some_and(|device| app.lid.built_in.contains(&device))
+                && let Some((device, code)) = pressed_on(event)
+                && app.lid.built_in.contains(&device)
             {
+                tracing::info!("code {code} on {} counts as opening the lid", device.name());
                 app.lid.switched_since_wake = true;
                 lid_changed(app, false);
             }
@@ -772,9 +774,6 @@ fn follow_session_bus<O: FrameOutput + 'static>(
         let spawned = std::thread::Builder::new()
             .name("wallpaper material".to_owned())
             .spawn(move || {
-                if let Err(error) = normal_priority() {
-                    tracing::warn!("the wallpaper material competes with drawing: {error}");
-                }
                 if let Some(picture) = render_material(&request) {
                     let _ = materials.send(picture);
                 }
@@ -881,8 +880,8 @@ fn start_user_session<O: FrameOutput + 'static>(
     }
     let system = app.buses.system.clone();
     if let Some(system) = &system {
-        let (lock_states, reported) = std::sync::mpsc::channel();
-        app.compositor.report_lock_states(lock_states);
+        let (session_reports, reported) = std::sync::mpsc::channel();
+        app.compositor.report_session(session_reports);
         follow(
             &handle,
             "the logind session",

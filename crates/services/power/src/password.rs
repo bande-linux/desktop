@@ -1,45 +1,46 @@
+use std::sync::Arc;
+
 use zbus::blocking::Connection;
-use zbus::blocking::object_server::InterfaceRef;
+
+use crate::controller::IdleController;
 
 pub const BUS_NAME: &str = "org.bande.Power";
 pub const OBJECT_PATH: &str = "/org/bande/Power";
 
 struct Lock {
-    password_required: bool,
+    idle: Arc<IdleController>,
 }
 
 #[zbus::interface(name = "org.bande.Power")]
 impl Lock {
     #[zbus(property)]
     fn password_required(&self) -> bool {
-        self.password_required
+        self.idle.password_required()
     }
+}
+
+pub fn serve(session: &Connection, idle: Arc<IdleController>) -> zbus::Result<()> {
+    session.object_server().at(OBJECT_PATH, Lock { idle })?;
+    session.request_name(BUS_NAME)?;
+    Ok(())
 }
 
 pub struct PasswordPolicy {
-    lock: InterfaceRef<Lock>,
+    session: Connection,
 }
 
 impl PasswordPolicy {
-    pub fn serve(session: &Connection) -> zbus::Result<Self> {
-        let server = session.object_server();
-        server.at(
-            OBJECT_PATH,
-            Lock {
-                password_required: true,
-            },
-        )?;
-        let lock = server.interface::<_, Lock>(OBJECT_PATH)?;
-        session.request_name(BUS_NAME)?;
-        Ok(Self { lock })
+    pub fn new(session: &Connection) -> Self {
+        Self {
+            session: session.clone(),
+        }
     }
 
-    pub fn require(&self, required: bool) -> zbus::Result<()> {
-        self.lock.get_mut().password_required = required;
-        zbus::block_on(
-            self.lock
-                .get()
-                .password_required_changed(self.lock.signal_emitter()),
-        )
+    pub fn changed(&self) -> zbus::Result<()> {
+        let lock = self
+            .session
+            .object_server()
+            .interface::<_, Lock>(OBJECT_PATH)?;
+        zbus::block_on(lock.get().password_required_changed(lock.signal_emitter()))
     }
 }

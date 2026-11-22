@@ -101,8 +101,8 @@ pub use keyboard_monitor::{
 };
 pub use keymap::KeyboardSettings;
 pub use logind::{
-    SessionRequest, Sleep, follow_lid, follow_session, follow_shutdown, follow_sleep,
-    handle_power_key, normal_priority, raise_priority,
+    SessionReport, SessionRequest, Sleep, follow_lid, follow_session, follow_shutdown,
+    follow_sleep, handle_power_key, raise_priority,
 };
 pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;

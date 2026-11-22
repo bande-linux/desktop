@@ -2,7 +2,6 @@ use std::fs;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use std::sync::mpsc::Receiver;
 use std::thread;
 use std::time::Duration;
@@ -50,6 +49,12 @@ trait Manager {
     #[zbus(property)]
     fn lid_closed(&self) -> zbus::Result<bool>;
 
+    #[zbus(property)]
+    fn docked(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn block_inhibited(&self) -> zbus::Result<String>;
+
     fn suspend(&self, interactive: bool) -> zbus::Result<()>;
 
     #[zbus(signal)]
@@ -70,8 +75,6 @@ trait RealtimeKit {
 
 const HIGH_PRIORITY_NICE_LEVEL: i32 = -11;
 
-static NORMAL_NICE_LEVEL: OnceLock<i32> = OnceLock::new();
-
 pub fn raise_priority(connection: &Connection) {
     let normal = match rustix::process::getpriority_process(None) {
         Ok(normal) => normal,
@@ -84,19 +87,34 @@ pub fn raise_priority(connection: &Connection) {
     let raised = RealtimeKitProxyBlocking::new(connection).and_then(|rtkit| {
         rtkit.make_thread_high_priority(thread.unsigned_abs().into(), HIGH_PRIORITY_NICE_LEVEL)
     });
-    match raised {
-        Ok(()) => {
-            NORMAL_NICE_LEVEL.get_or_init(|| normal);
-            tracing::info!("drawing and input run at a higher priority");
+    if let Err(error) = raised {
+        tracing::debug!("drawing and input keep the normal priority: {error}");
+        return;
+    }
+    match keep_priority_from_new_threads() {
+        Ok(()) => tracing::info!("drawing and input run at a higher priority"),
+        Err(error) => {
+            tracing::warn!("drawing and input keep the normal priority: {error}");
+            if let Err(error) = rustix::process::setpriority_process(None, normal) {
+                tracing::warn!("cannot return to the normal priority: {error}");
+            }
         }
-        Err(error) => tracing::debug!("drawing and input keep the normal priority: {error}"),
     }
 }
 
-pub fn normal_priority() -> io::Result<()> {
-    match NORMAL_NICE_LEVEL.get() {
-        Some(&nice) => rustix::process::setpriority_process(None, nice).map_err(io::Error::from),
-        None => Ok(()),
+fn keep_priority_from_new_threads() -> io::Result<()> {
+    let parameters = libc::sched_param { sched_priority: 0 };
+    // SAFETY: sched_setscheduler only reads parameters, which outlives the call.
+    let set = unsafe {
+        libc::sched_setscheduler(
+            0,
+            libc::SCHED_OTHER | libc::SCHED_RESET_ON_FORK,
+            &raw const parameters,
+        )
+    };
+    match set {
+        0 => Ok(()),
+        _ => Err(io::Error::last_os_error()),
     }
 }
 
@@ -110,6 +128,13 @@ const LOGIND_CONFIG_FOLDERS: [&str; 4] = [
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRequest {
     Lock,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionReport {
+    LockStarted,
+    Locked(bool),
+    LidClosed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -291,14 +316,24 @@ pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus
     Ok(())
 }
 
+fn lid_left_to_the_session(manager: &ManagerProxyBlocking<'_>) -> zbus::Result<bool> {
+    Ok(!manager.docked()?
+        && manager
+            .block_inhibited()?
+            .split(':')
+            .any(|what| what == "handle-lid-switch"))
+}
+
 pub fn follow_session(
     connection: &Connection,
-    lock_states: Receiver<bool>,
+    lock_reports: Receiver<SessionReport>,
     requests: Sender<SessionRequest>,
 ) -> zbus::Result<()> {
-    let path = ManagerProxyBlocking::new(connection)?.get_session("auto")?;
+    let manager = ManagerProxyBlocking::builder(connection)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
     let session = SessionProxyBlocking::builder(connection)
-        .path(path)?
+        .path(manager.get_session("auto")?)?
         .build()?;
     let locks = session.receive_lock()?;
     thread::spawn(move || {
@@ -309,9 +344,27 @@ pub fn follow_session(
         }
     });
     thread::spawn(move || {
-        for locked in lock_states {
-            if let Err(error) = session.set_locked_hint(locked) {
-                tracing::warn!("cannot tell logind the session is locked: {error}");
+        for report in lock_reports {
+            match report {
+                SessionReport::LockStarted => {
+                    if let Err(error) = session.request_lock() {
+                        tracing::warn!("cannot tell logind about the lock: {error}");
+                    }
+                }
+                SessionReport::LidClosed => match lid_left_to_the_session(&manager) {
+                    Ok(false) => {}
+                    Ok(true) => {
+                        if let Err(error) = session.request_lock() {
+                            tracing::warn!("cannot lock with the lid closed: {error}");
+                        }
+                    }
+                    Err(error) => tracing::warn!("cannot tell who handles the lid: {error}"),
+                },
+                SessionReport::Locked(locked) => {
+                    if let Err(error) = session.set_locked_hint(locked) {
+                        tracing::warn!("cannot tell logind the session is locked: {error}");
+                    }
+                }
             }
         }
     });

@@ -122,6 +122,9 @@ msgstr "Sortera efter storlek"
 msgid "Sort by Unread"
 msgstr "Sortera efter olästa"
 
+msgid "This message is encrypted. Mail can’t open encrypted messages."
+msgstr "Meddelandet är krypterat. E-post kan inte öppna krypterade meddelanden."
+
 msgid "TLS"
 msgstr "TLS"
 

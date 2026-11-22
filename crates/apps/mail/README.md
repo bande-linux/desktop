@@ -58,7 +58,7 @@ apt install bande-mail
   reader has focus (after a click in it), and on the selected rows when the list has focus; a
   message moved out of the reader leaves the rest of the conversation open. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
   removed when Mail quits unless it was edited; its menu also saves it where you choose (the
-  desktop's file chooser) or to the Downloads folder.
+  desktop's file chooser) or to the Downloads folder. An encrypted message (PGP/MIME or S/MIME) says that it is encrypted, since Mail can't open it.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;

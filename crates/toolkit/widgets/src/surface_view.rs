@@ -38,6 +38,7 @@ pub enum SurfaceInput {
     },
     Key {
         code: u32,
+        keysym: u32,
         pressed: bool,
     },
     Captured(bool),
@@ -53,7 +54,7 @@ pub struct SurfaceView {
     cursor: Option<Cursor>,
     captured: bool,
     inside: bool,
-    held_keys: Vec<u32>,
+    held_keys: Vec<(u32, u32)>,
     held_buttons: Vec<PointerButton>,
     hint: Animated,
     hint_until: Option<Instant>,
@@ -151,9 +152,10 @@ impl SurfaceView {
     }
 
     fn end_capture(&mut self, cx: &Context) {
-        for code in std::mem::take(&mut self.held_keys) {
+        for (code, keysym) in std::mem::take(&mut self.held_keys) {
             (self.on_input)(SurfaceInput::Key {
                 code,
+                keysym,
                 pressed: false,
             });
         }
@@ -163,14 +165,26 @@ impl SurfaceView {
         (self.on_input)(SurfaceInput::Captured(false));
     }
 
-    fn key(&mut self, cx: &mut Context, code: u32, pressed: bool) {
-        match pressed {
-            true if !self.held_keys.contains(&code) => self.held_keys.push(code),
-            true => {}
-            false => self.held_keys.retain(|held| *held != code),
-        }
-        (self.on_input)(SurfaceInput::Key { code, pressed });
-        let held = |keys: [u32; 2]| keys.iter().any(|key| self.held_keys.contains(key));
+    fn key(&mut self, cx: &mut Context, code: u32, keysym: u32, pressed: bool) {
+        let held_at = self.held_keys.iter().position(|(held, _)| *held == code);
+        let keysym = match (pressed, held_at) {
+            (true, None) => {
+                self.held_keys.push((code, keysym));
+                keysym
+            }
+            (true, Some(_)) => keysym,
+            (false, Some(at)) => self.held_keys.remove(at).1,
+            (false, None) => keysym,
+        };
+        (self.on_input)(SurfaceInput::Key {
+            code,
+            keysym,
+            pressed,
+        });
+        let held = |keys: [u32; 2]| {
+            keys.iter()
+                .any(|key| self.held_keys.iter().any(|(held, _)| held == key))
+        };
         if pressed && held(CONTROL_KEYS) && held(ALT_KEYS) {
             cx.release_input();
             self.end_capture(cx);
@@ -310,8 +324,12 @@ impl Widget for SurfaceView {
                 });
                 true
             }
-            Event::Captured(Captured::Key { code, pressed }) => {
-                self.key(cx, *code, *pressed);
+            Event::Captured(Captured::Key {
+                code,
+                keysym,
+                pressed,
+            }) => {
+                self.key(cx, *code, *keysym, *pressed);
                 !self.captured
             }
             Event::Captured(Captured::Motion {

@@ -145,8 +145,15 @@ pub enum Cursor {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Captured {
-    Key { code: u32, pressed: bool },
-    Motion { delta: Point, unaccelerated: Point },
+    Key {
+        code: u32,
+        keysym: u32,
+        pressed: bool,
+    },
+    Motion {
+        delta: Point,
+        unaccelerated: Point,
+    },
     Ended,
 }
 

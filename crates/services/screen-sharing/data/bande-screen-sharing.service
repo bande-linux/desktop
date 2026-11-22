@@ -6,7 +6,7 @@ After=graphical-session.target
 [Service]
 Slice=session.slice
 Type=dbus
-BusName=org.bande.ScreenSharing
+BusName=org.bande.ScreenSharing.Server
 ExecStart=/usr/libexec/bande-screen-sharing
 Restart=on-failure
 NoNewPrivileges=yes

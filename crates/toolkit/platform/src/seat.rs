@@ -924,10 +924,17 @@ impl Dispatch<WlKeyboard, ()> for State {
                 input.serial = Some(serial);
                 if input.raw_keys {
                     let pressed = key_state == wl_keyboard::KeyState::Pressed;
+                    let keysym = input.keymap.as_ref().map_or(0, |keymap| {
+                        keymap
+                            .state
+                            .key_get_one_sym(Keycode::new(key + EVDEV_OFFSET))
+                            .raw()
+                    });
                     state
                         .events
                         .push(WindowEvent::Input(Event::Captured(Captured::Key {
                             code: key,
+                            keysym,
                             pressed,
                         })));
                     return;

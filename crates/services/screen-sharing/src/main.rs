@@ -20,7 +20,7 @@ use crate::host::{CLIPBOARD, CLIPBOARD_PATH, Desktop};
 
 const HOSTNAME: &str = "/proc/sys/kernel/hostname";
 const SERVICE_KIND: &str = "_rfb._tcp";
-const BUS_NAME: &str = "org.bande.ScreenSharing";
+const BUS_NAME: &str = "org.bande.ScreenSharing.Server";
 
 fn computer_name() -> String {
     std::fs::read_to_string(HOSTNAME)

@@ -671,8 +671,11 @@ Plymouth's scale, drawn by `bande-splash`. The compositor holds its frames until
 window's buffer is imported for its renderer, not merely attached (at most 2.5 s), as the
 session's compositor does for the wallpaper and the Taskbar. Once a frame in which every element
 was drawn and the login window was among them is on screen, the compositor creates `shown`
-there and the root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`; Plymouth is
-not dismissed onto a frame that left the login window out. The background is Datum's `deep`,
+there and the root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`. Plymouth
+is not dismissed onto a frame that left the login window out, except that once the 2.5 s are up
+the compositor creates `shown` anyway and logs which surfaces were not drawn, so boot always
+finishes. When the handover does not come within 3 s (the unit failed or is missing), the
+compositor logs it and takes the display anyway. The background is Datum's `deep`,
 which is also the compositor's clear colour. On a system without Plymouth none of this runs.
 
 **Ending the session.** Log Out stops `bande-compositor.service` in the user's manager, never

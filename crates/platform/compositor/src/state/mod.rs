@@ -174,7 +174,7 @@ pub struct State {
     pub(crate) needs_redraw: bool,
     pub(crate) key_press_serial: Option<Serial>,
     pub(crate) reveal: crate::reveal::Reveal,
-    pub(crate) awaited: Option<crate::reveal::Awaited>,
+    pub(crate) awaited: Option<(crate::reveal::Awaited, std::time::Duration)>,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
     pub(crate) cursor_status: CursorImageStatus,

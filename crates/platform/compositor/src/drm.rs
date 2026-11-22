@@ -1373,7 +1373,7 @@ impl DrmBackend {
         if empty {
             return Ok(Submission::Unchanged);
         }
-        head.shows_content = drew_everything && compositor.awaited_drawn(&self.renderer);
+        head.shows_content = compositor.awaited_shown(&self.renderer, drew_everything);
         match head.compositor.queue_frame(()) {
             Ok(()) => {
                 head.flip_pending = true;

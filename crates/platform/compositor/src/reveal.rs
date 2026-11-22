@@ -6,7 +6,7 @@ use smithay::backend::renderer::utils::{import_surface_tree, with_renderer_surfa
 use smithay::backend::renderer::{ContextId, Renderer as _};
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Rectangle, Size};
+use smithay::utils::{Clock, Logical, Monotonic, Rectangle, Size};
 use smithay::wayland::compositor::{RectangleKind, SurfaceAttributes, with_states};
 use smithay::wayland::shell::wlr_layer::Layer;
 
@@ -68,16 +68,16 @@ fn drawable(surface: &WlSurface, context: &ContextId<VulkanTexture>) -> bool {
 }
 
 impl State {
-    fn login_window(&self) -> Option<Vec<WlSurface>> {
+    fn login_window(&self) -> Option<Vec<(String, WlSurface)>> {
         let map = layer_map_for_output(&self.main_screen().output);
         map.layers()
             .find(|layer| {
                 layer.namespace() == LOGIN_WINDOW_NAMESPACE && is_mapped(layer.wl_surface())
             })
-            .map(|layer| vec![layer.wl_surface().clone()])
+            .map(|layer| vec![(layer.namespace().to_owned(), layer.wl_surface().clone())])
     }
 
-    fn shell(&self) -> Option<Vec<WlSurface>> {
+    fn shell(&self) -> Option<Vec<(String, WlSurface)>> {
         let mut surfaces = Vec::new();
         for screen in self.screens.iter().filter(|screen| screen.mirror.is_none()) {
             let map = layer_map_for_output(&screen.output);
@@ -90,12 +90,15 @@ impl State {
             let bar = map.layers().find(|layer| {
                 layer.namespace() == BAR_NAMESPACE && is_mapped(layer.wl_surface())
             })?;
-            surfaces.extend([wallpaper.wl_surface().clone(), bar.wl_surface().clone()]);
+            surfaces.extend(
+                [wallpaper, bar]
+                    .map(|layer| (layer.namespace().to_owned(), layer.wl_surface().clone())),
+            );
         }
         Some(surfaces)
     }
 
-    fn awaited(&self, awaited: Awaited) -> Option<Vec<WlSurface>> {
+    fn awaited(&self, awaited: Awaited) -> Option<Vec<(String, WlSurface)>> {
         match awaited {
             Awaited::Shell => self.shell(),
             Awaited::LoginWindow => self.login_window(),
@@ -175,7 +178,7 @@ impl State {
 
 impl Compositor {
     pub fn hold_frames_until(&mut self, ready: Awaited, since: Duration, deadline: Duration) {
-        self.state.awaited = Some(ready);
+        self.state.awaited = Some((ready, deadline));
         self.state.reveal = Reveal::Holding {
             since,
             deadline,
@@ -192,13 +195,15 @@ impl Compositor {
         let Some(surfaces) = self.state.awaited(ready) else {
             return;
         };
-        for surface in &surfaces {
+        for (_, surface) in &surfaces {
             if let Err(error) = import_surface_tree(renderer, surface) {
                 tracing::warn!("cannot draw what is awaited ({ready:?}) yet: {error}");
             }
         }
         let context = renderer.context_id();
-        if surfaces.iter().all(|surface| drawable(surface, &context))
+        if surfaces
+            .iter()
+            .all(|(_, surface)| drawable(surface, &context))
             && let Reveal::Holding { drawable, .. } = &mut self.state.reveal
         {
             *drawable = true;
@@ -206,13 +211,38 @@ impl Compositor {
         }
     }
 
-    pub fn awaited_drawn(&self, renderer: &VulkanRenderer) -> bool {
+    pub fn awaited_shown(&mut self, renderer: &VulkanRenderer, drew_everything: bool) -> bool {
+        let Some((awaited, deadline)) = self.state.awaited else {
+            return true;
+        };
         let context = renderer.context_id();
-        self.state.awaited.is_none_or(|awaited| {
-            self.state
-                .awaited(awaited)
-                .is_some_and(|surfaces| surfaces.iter().all(|surface| drawable(surface, &context)))
-        })
+        let undrawn: Option<Vec<String>> = self.state.awaited(awaited).map(|surfaces| {
+            surfaces
+                .into_iter()
+                .filter(|(_, surface)| !drawable(surface, &context))
+                .map(|(namespace, _)| namespace)
+                .collect()
+        });
+        let shown = drew_everything && undrawn.as_ref().is_some_and(Vec::is_empty);
+        let now = Duration::from(Clock::<Monotonic>::new().now());
+        if !shown && now < deadline {
+            return false;
+        }
+        match (shown, undrawn) {
+            (true, _) => {}
+            (false, None) => {
+                tracing::warn!("going on after {awaited:?} never showed: not every surface mapped")
+            }
+            (false, Some(undrawn)) if undrawn.is_empty() => tracing::warn!(
+                "going on after {awaited:?} never showed: an element could not be drawn"
+            ),
+            (false, Some(undrawn)) => tracing::warn!(
+                "going on after {awaited:?} never showed: {} not drawn",
+                undrawn.join(", ")
+            ),
+        }
+        self.state.awaited = None;
+        true
     }
 
     pub fn fade_in_over(&mut self, frames: Vec<ShownFrame>) {

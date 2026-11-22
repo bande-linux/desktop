@@ -68,7 +68,8 @@ pub fn take_display_from_boot_screen() {
     match ask_for_display() {
         Ok(true) => tracing::info!("the boot screen gave up the display"),
         Ok(false) => tracing::warn!(
-            "the boot screen kept the display for {} s; taking it anyway",
+            "the boot screen did not hand over the display within {} s \
+             (see bande-greeter-handover.service); taking it anyway",
             HANDOVER_LIMIT.as_secs()
         ),
         Err(error) => tracing::warn!("cannot ask the boot screen for the display: {error}"),

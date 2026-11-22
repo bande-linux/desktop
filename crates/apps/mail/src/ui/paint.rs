@@ -455,7 +455,7 @@ impl MailView {
         let right = rect.x + rect.width - LIST_TRAILING;
         let mut y = rect.y + LIST_PADDING;
         let date = self.ui.context().text.paragraph(
-            &list_date(summary.date, now, &self.zone),
+            &list_date(summary.date, now, &self.zone, &self.formats),
             TextStyle::role(TextRole::Callout, ink3),
             None,
             TextAlign::End,
@@ -619,6 +619,7 @@ impl MailView {
             .is_none_or(|(width, _)| *width != frame.width)
         {
             let zone = self.zone.clone();
+            let formats = self.formats.clone();
             let now = self.now.unwrap_or_else(Timestamp::now);
             let layout = lay_out(
                 thread,
@@ -626,7 +627,11 @@ impl MailView {
                 &mut self.ui.context().text,
                 &palette,
                 &mut self.symbols,
-                Clock { zone: &zone, now },
+                Clock {
+                    zone: &zone,
+                    formats: &formats,
+                    now,
+                },
             );
             self.layout = Some((frame.width, layout));
         }

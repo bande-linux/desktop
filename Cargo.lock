@@ -1178,6 +1178,7 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
+ "bande-datetime",
  "bande-discovery",
  "bande-fs",
  "bande-https",

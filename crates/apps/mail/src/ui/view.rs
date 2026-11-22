@@ -28,6 +28,7 @@ use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_app_settings::{Stored, settings_folder};
+use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
 use bande_toolkit::ui::{
     Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
@@ -237,6 +238,7 @@ pub struct MailView {
     pub(crate) hover: Option<Hit>,
     pub(crate) focus: Pane,
     pub(crate) zone: TimeZone,
+    pub(crate) formats: DateFormats,
     pub(crate) now: Option<Timestamp>,
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
@@ -296,6 +298,7 @@ impl MailView {
             hover: None,
             focus: Pane::List,
             zone: TimeZone::system(),
+            formats: DateFormats::from_env(),
             now: None,
             requests: Vec::new(),
             setup: None,
@@ -1439,7 +1442,7 @@ impl MailView {
             "On {date}, {name} wrote:",
             date = envelope
                 .date
-                .map(|date| full_date(date, &self.zone))
+                .map(|date| full_date(date, &self.zone, &self.formats))
                 .unwrap_or_default(),
             name = envelope.sender().shown().to_owned()
         );
@@ -1520,7 +1523,7 @@ impl MailView {
             from = names(&envelope.from),
             date = envelope
                 .date
-                .map(|date| full_date(date, &self.zone))
+                .map(|date| full_date(date, &self.zone, &self.formats))
                 .unwrap_or_default(),
             subject = envelope.subject.clone(),
             to = names(&envelope.to)

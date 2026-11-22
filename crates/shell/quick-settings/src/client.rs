@@ -17,13 +17,13 @@ use accesskit::TreeUpdate;
 use bande_audio::{Audio, Level, Meter, meter_level};
 use bande_bar::menus::bluetooth_menu;
 use bande_bluetooth::{Bluetooth, adapter_in_kernel};
+use bande_bus::logind::own_session;
+use bande_bus::power_profiles::{BALANCED, POWER_SAVER, power_profiles};
 use bande_config::{BUS_NAME as CONFIG_BUS, NightLightValue, OBJECT_PATH as CONFIG_PATH};
 use bande_inbox::{Inbox, Outbox};
-use bande_network::{airplane_mode, set_airplane_mode};
 use bande_network::{NetworkManager, wifi_in_kernel};
+use bande_network::{airplane_mode, set_airplane_mode};
 use bande_notify::client::NotificationsProxy;
-use bande_power::adapter::{POWER_SAVER, PowerProfilesProxyBlocking};
-use bande_power::logind::own_session;
 use bande_status::Command as StatusCommand;
 use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
 use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
@@ -45,7 +45,6 @@ use bande_xdg::{
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 
-const JOIN: &str = "join:";
 const SETTINGS_APP: &str = "org.bande.Settings";
 const SESSION: &str = "session:";
 const ARTWORK_PIXELS: u32 = 128;
@@ -54,7 +53,6 @@ const METER_INTERVAL: Duration = Duration::from_millis(50);
 const SLIDE: f32 = 8.0;
 const DARK: &str = "dark";
 const LIGHT: &str = "light";
-const BALANCED: &str = "balanced";
 
 enum Mode {
     Hidden,
@@ -136,12 +134,6 @@ fn read_dark_style(session: &Connection) -> zbus::Result<bool> {
 fn set_dark_style(session: &Connection, on: bool) -> zbus::Result<()> {
     config(session)?.set_property("Appearance", if on { DARK } else { LIGHT })?;
     Ok(())
-}
-
-fn power_profiles(system: &Connection) -> zbus::Result<PowerProfilesProxyBlocking<'static>> {
-    PowerProfilesProxyBlocking::builder(system)
-        .cache_properties(CacheProperties::No)
-        .build()
 }
 
 fn quietly<T>(what: &str, result: zbus::Result<T>) -> Option<T> {
@@ -320,17 +312,6 @@ fn artwork_key(player: &Player) -> String {
     )
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn unhex(text: &str) -> Option<Vec<u8>> {
-    (0..text.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(text.get(at..at + 2)?, 16).ok())
-        .collect()
-}
-
 fn moved(event: &Event, offset: Point) -> Event {
     let shift = |position: Point| Point::new(position.x - offset.x, position.y - offset.y);
     let pointer = |pointer: &Pointer| Pointer {
@@ -499,7 +480,7 @@ impl QuickSettings {
             .map(|found| {
                 (
                     found.name(),
-                    format!("{JOIN}{}", hex(&found.ssid)),
+                    StatusCommand::Join(found.ssid.clone()).action(),
                     found.current,
                 )
             })
@@ -1095,11 +1076,12 @@ impl App for QuickSettings {
                 self.run_changes(window);
             }
             WindowEvent::MenuAction(action) => {
-                if let Some(ssid) = action.strip_prefix(JOIN).and_then(unhex) {
-                    self.join(window, &ssid);
+                let command = StatusCommand::parse(&action);
+                if let Some(StatusCommand::Join(ssid)) = &command {
+                    self.join(window, ssid);
                 } else if let Some(keyword) = action.strip_prefix(SESSION) {
                     self.end_session(window, keyword);
-                } else if let Some(command) = StatusCommand::parse(&action).filter(|command| {
+                } else if let Some(command) = command.filter(|command| {
                     matches!(
                         command,
                         StatusCommand::SetBluetooth(_)

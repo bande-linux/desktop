@@ -10,8 +10,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use bande_audio::{Level, VolumeKey};
+use bande_bus::power_profiles::{PERFORMANCE, POWER_SAVER};
 use bande_l10n::tr;
-use bande_power::adapter::POWER_SAVER;
 use bande_status::brightness::DisplayLevel;
 use bande_status::status::Reading;
 use bande_toolkit::ui::{
@@ -301,7 +301,7 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             title: tr!("Power Saver"),
             detail: match mode.as_str() {
                 POWER_SAVER => on_off(true),
-                "performance" => tr!("Performance"),
+                PERFORMANCE => tr!("Performance"),
                 _ => tr!("Balanced"),
             },
             symbol: if saving {

@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod logind;
 pub mod portal_settings;
+pub mod power_profiles;
 mod reading;
 
 pub use reading::Reading;

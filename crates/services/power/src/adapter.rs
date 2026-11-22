@@ -2,12 +2,12 @@ use std::os::fd::OwnedFd;
 use std::sync::mpsc;
 use std::thread;
 
+use bande_bus::power_profiles::{POWER_SAVER, power_profiles};
 use bande_l10n::tr;
 
 use crate::logind;
 use zbus::blocking::Connection;
 
-pub const POWER_SAVER: &str = "power-saver";
 const KEEP_RUNNING: &str = "keep-running";
 
 #[zbus::proxy(
@@ -18,18 +18,6 @@ const KEEP_RUNNING: &str = "keep-running";
 trait UPower {
     #[zbus(property)]
     fn on_battery(&self) -> zbus::Result<bool>;
-}
-
-#[zbus::proxy(
-    interface = "org.freedesktop.UPower.PowerProfiles",
-    default_service = "org.freedesktop.UPower.PowerProfiles",
-    default_path = "/org/freedesktop/UPower/PowerProfiles"
-)]
-pub trait PowerProfiles {
-    #[zbus(property)]
-    fn active_profile(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_active_profile(&self, profile: &str) -> zbus::Result<()>;
 }
 
 #[zbus::proxy(
@@ -90,7 +78,7 @@ fn situation(upower: &UPowerProxyBlocking<'_>, config: &ConfigProxyBlocking<'_>)
 pub fn follow(system: &Connection, session: &Connection) -> zbus::Result<()> {
     let upower = UPowerProxyBlocking::new(system)?;
     let config = ConfigProxyBlocking::new(session)?;
-    let profiles = PowerProfilesProxyBlocking::new(system)?;
+    let profiles = power_profiles(system)?;
     let (changed, changes) = mpsc::channel();
     let battery = upower.receive_on_battery_changed();
     let low_power = config.receive_low_power_on_battery_changed();

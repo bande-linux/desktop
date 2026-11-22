@@ -79,11 +79,11 @@ msgstr "Vill du tvinga de {count} markerade apparna att avsluta?"
 msgid "You will lose any unsaved changes."
 msgstr "Ändringar som inte har sparats går förlorade."
 
-msgid "Remember the open apps to reopen them at the next login"
-msgstr "Kom ihåg öppna appar och öppna dem igen vid nästa inloggning"
-
 msgid "The power button locks the screen and puts the computer to sleep"
 msgstr "Strömbrytaren låser skärmen och försätter datorn i vila"
+
+msgid "Remember the open apps to reopen them at the next login"
+msgstr "Kom ihåg öppna appar och öppna dem igen vid nästa inloggning"
 
 msgid "App Switcher"
 msgstr "Appbytare"

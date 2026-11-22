@@ -1472,6 +1472,9 @@ msgstr "Sök i den här mappen igen"
 msgid "Files in these folders never appear in search"
 msgstr "Filer i de här mapparna visas aldrig i sökresultat"
 
+msgid "Couldn't change sign-in page detection."
+msgstr "Det gick inte att ändra upptäckten av inloggningssidor."
+
 msgid "On. Others on your network can try to sign in over SSH."
 msgstr "På. Andra i ditt nätverk kan försöka logga in via SSH."
 
@@ -1495,9 +1498,6 @@ msgstr "Kontaktar {server} varje gång ett nätverk ansluts, för att ta reda p�
 
 msgid "Contacts Debian’s server whenever a network connects, to find out whether it asks you to sign in"
 msgstr "Kontaktar Debians server varje gång ett nätverk ansluts, för att ta reda på om det vill att du loggar in"
-
-msgid "Couldn't change sign-in page detection."
-msgstr "Det gick inte att ändra upptäckten av inloggningssidor."
 
 msgid "Couldn't change the sound settings."
 msgstr "Det gick inte att ändra ljudinställningarna."

@@ -152,6 +152,56 @@ msgstr "E-post har inget sparat lösenord för kontot. Ange det igen."
 msgid "Mail could not save the account: {error}"
 msgstr "E-post kunde inte spara kontot: {error}"
 
+msgid "Offline"
+msgstr "Offline"
+
+msgid "1 unread"
+msgid_plural "{count} unread"
+msgstr[0] "1 oläst"
+msgstr[1] "{count} olästa"
+
+msgid "Mailboxes"
+msgstr "Brevlådor"
+
+msgid "No Subject"
+msgstr "Inget ämne"
+
+msgid "No Sender"
+msgstr "Ingen avsändare"
+
+msgid "From {sender}, {date}"
+msgstr "Från {sender}, {date}"
+
+msgid "Unread"
+msgstr "Oläst"
+
+msgid "Flagged"
+msgstr "Flaggade"
+
+msgid "Has Attachments"
+msgstr "Har bilagor"
+
+msgid "{count} messages"
+msgstr "{count} meddelanden"
+
+msgid "Expand Conversation"
+msgstr "Visa konversationen"
+
+msgid "Collapse Conversation"
+msgstr "Dölj konversationen"
+
+msgid "Show Message from {sender}"
+msgstr "Visa meddelandet från {sender}"
+
+msgid "Hide Quoted Text"
+msgstr "Dölj citerad text"
+
+msgid "Show Quoted Text"
+msgstr "Visa citerad text"
+
+msgid "Load Remote Content"
+msgstr "Ladda externt innehåll"
+
 msgid "To:"
 msgstr "Till:"
 
@@ -185,26 +235,17 @@ msgstr "OK"
 msgid "The message was not sent"
 msgstr "Meddelandet skickades inte"
 
+msgid "Remove “{name}”"
+msgstr "Ta bort ”{name}”"
+
 msgid "Yesterday"
 msgstr "Igår"
-
-msgid "No Subject"
-msgstr "Inget ämne"
-
-msgid "{count} messages"
-msgstr "{count} meddelanden"
-
-msgid "Offline"
-msgstr "Offline"
 
 msgid "No Messages"
 msgstr "Inga meddelanden"
 
 msgid "No Results"
 msgstr "Inga resultat"
-
-msgid "No Sender"
-msgstr "Ingen avsändare"
 
 msgid "No Message Selected"
 msgstr "Inget meddelande markerat"
@@ -218,20 +259,11 @@ msgstr "Till: {names}"
 msgid "Cc: {names}"
 msgstr "Kopia: {names}"
 
-msgid "Hide Quoted Text"
-msgstr "Dölj citerad text"
-
-msgid "Show Quoted Text"
-msgstr "Visa citerad text"
-
 msgid "Downloading the message…"
 msgstr "Hämtar meddelandet…"
 
 msgid "Remote content in this message was not loaded, to protect your privacy."
 msgstr "Externt innehåll i det här meddelandet laddades inte, för att skydda din integritet."
-
-msgid "Load Remote Content"
-msgstr "Ladda externt innehåll"
 
 msgid "Loading remote content…"
 msgstr "Laddar externt innehåll…"
@@ -597,12 +629,6 @@ msgstr "Papperskorg"
 
 msgid "All Mail"
 msgstr "All e-post"
-
-msgid "Flagged"
-msgstr "Flaggade"
-
-msgid "Mailboxes"
-msgstr "Brevlådor"
 
 msgid "Search"
 msgstr "Sök"

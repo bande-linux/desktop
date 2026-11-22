@@ -7,7 +7,7 @@ use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
-use bande_toolkit::ui::{Scroll, Size};
+use bande_toolkit::ui::{Key, Scroll, Size};
 use bande_toolkit::{
     Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
@@ -36,6 +36,7 @@ const ROW_INSET: f32 = 6.0;
 const BADGE_GAP: f32 = 10.0;
 const SMALL_SYMBOL: f32 = 13.0;
 const PAGE_OVERLAP: f32 = 40.0;
+const READER_LINE: f32 = 40.0;
 
 impl MailView {
     fn scale(&mut self) -> f32 {
@@ -723,11 +724,47 @@ impl MailView {
     }
 
     pub(crate) fn page_reader(&mut self) -> bool {
-        let frame = self.reader_frame();
+        self.scroll_reader(Key::PageDown)
+    }
+
+    pub(crate) fn scroll_reader(&mut self, key: Key) -> bool {
+        let page = self.reader_frame().height - PAGE_OVERLAP;
+        let line = (READER_LINE * self.scale()).round();
         let state = &mut self.scrolls[2];
         let cx = self.ui.context();
-        let target = state.offset(cx) + frame.height - PAGE_OVERLAP;
+        let offset = state.offset(cx);
+        let target = match key {
+            Key::Up => offset - line,
+            Key::Down => offset + line,
+            Key::PageUp => offset - page,
+            Key::PageDown => offset + page,
+            Key::Home => 0.0,
+            _ => f32::MAX,
+        };
         state.scroll_to(cx, target)
+    }
+
+    pub(crate) fn rows_per_page(&mut self) -> isize {
+        let rows = self.list_frame().height / self.row_height();
+        (rows.floor() as isize).max(1)
+    }
+
+    pub(crate) fn sidebar_rows_per_page(&mut self) -> isize {
+        let rows = self.sidebar_frame().height / self.sidebar_row_height();
+        (rows.floor() as isize).max(1)
+    }
+
+    pub(crate) fn reveal_place(&mut self, index: usize) {
+        let row_height = self.sidebar_row_height();
+        let heading_height = (SIDEBAR_HEADING * self.scale()).round();
+        let height = |row: &Row| match row {
+            Row::Heading(_) => heading_height,
+            Row::Place { .. } => row_height,
+        };
+        let top = SIDEBAR_INSET / 2.0 + self.sidebar.iter().take(index).map(height).sum::<f32>();
+        let state = &mut self.scrolls[0];
+        let cx = self.ui.context();
+        state.reveal(cx, top, top + row_height);
     }
 
     pub(crate) fn reveal_selected(&mut self) {

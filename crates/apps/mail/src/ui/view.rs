@@ -237,6 +237,7 @@ pub struct MailView {
     pub(crate) hits: Vec<(Rect, Hit)>,
     pub(crate) hover: Option<Hit>,
     pub(crate) focus: Pane,
+    pub(crate) access: WidgetId,
     pub(crate) zone: TimeZone,
     pub(crate) formats: DateFormats,
     pub(crate) now: Option<Timestamp>,
@@ -297,6 +298,7 @@ impl MailView {
             hits: Vec::new(),
             hover: None,
             focus: Pane::List,
+            access: WidgetId::next(),
             zone: TimeZone::system(),
             formats: DateFormats::from_env(),
             now: None,
@@ -544,11 +546,15 @@ impl MailView {
     }
 
     pub fn accessibility(&self) -> TreeUpdate {
-        self.ui.accessibility()
+        let mut tree = self.ui.accessibility();
+        self.describe_panes(&mut tree);
+        tree
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
-        let handled = self.ui.perform(request);
+        let handled = self
+            .perform_on_panes(request)
+            .unwrap_or_else(|| self.ui.perform(request));
         self.after_ui();
         handled
     }
@@ -944,7 +950,7 @@ impl MailView {
         }
     }
 
-    fn focus_entry(&mut self, id: MessageId) {
+    pub(crate) fn focus_entry(&mut self, id: MessageId) {
         if let Some(thread) = self.thread.as_mut()
             && thread.focus != id
         {
@@ -2480,12 +2486,21 @@ impl MailView {
         if modifiers.logo {
             return false;
         }
-        if self.search_focused() {
+        let bare = !modifiers.control && !modifiers.alt;
+        if key == Key::Function(6) && bare {
+            return self.cycle_pane(!modifiers.shift);
+        }
+        if self.ui.focus().is_some() {
             if key == Key::Escape {
                 self.ui.clear_focus();
                 return true;
             }
-            return self.ui.handle(&Event::Key { key, modifiers });
+            if self.search_focused() || key == Key::Tab {
+                return self.ui.handle(&Event::Key { key, modifiers });
+            }
+        }
+        if key == Key::Tab && bare {
+            return self.cycle_pane(!modifiers.shift);
         }
         let event = Event::Key { key, modifiers };
         if let Some((action, _)) = SHORTCUTS
@@ -2504,8 +2519,25 @@ impl MailView {
                 self.select_all();
                 true
             }
+            Key::Up | Key::Down | Key::Home | Key::End | Key::PageUp | Key::PageDown
+                if plain && self.focus != Pane::List =>
+            {
+                self.move_in_pane(key)
+            }
+            Key::Home if plain => self.step(isize::MIN),
+            Key::End if plain => self.step(isize::MAX),
+            Key::PageUp | Key::PageDown if plain => {
+                let page = self.rows_per_page();
+                self.step(if key == Key::PageUp { -page } else { page })
+            }
             Key::Up if plain && modifiers.shift => self.extend(-1),
             Key::Down if plain && modifiers.shift => self.extend(1),
+            Key::Enter if plain && self.focus == Pane::Sidebar => {
+                self.focus = Pane::List;
+                true
+            }
+            Key::Menu => self.keyboard_menu(),
+            Key::Backspace | Key::Delete if self.focus == Pane::Sidebar => false,
             Key::Right | Key::Left if plain && !modifiers.shift => {
                 let expanded = self.selected.is_some_and(|id| {
                     self.conversations.children.contains(&id)
@@ -2535,6 +2567,118 @@ impl MailView {
             }
             _ => self.ui.handle(&event),
         }
+    }
+
+    fn cycle_pane(&mut self, forward: bool) -> bool {
+        const PANES: [Pane; 3] = [Pane::Sidebar, Pane::List, Pane::Reader];
+        if self.ui.focus().is_some() {
+            self.ui.clear_focus();
+            self.focus = match forward {
+                true => Pane::Sidebar,
+                false => Pane::Reader,
+            };
+            return true;
+        }
+        let index = PANES
+            .iter()
+            .position(|pane| *pane == self.focus)
+            .unwrap_or(1);
+        let next = match forward {
+            true => Some(index + 1).filter(|next| *next < PANES.len()),
+            false => index.checked_sub(1),
+        };
+        match next {
+            Some(next) => self.focus = PANES[next],
+            None => {
+                let modifiers = Modifiers {
+                    shift: !forward,
+                    ..Modifiers::default()
+                };
+                self.ui.handle(&Event::Key {
+                    key: Key::Tab,
+                    modifiers,
+                });
+            }
+        }
+        true
+    }
+
+    fn move_in_pane(&mut self, key: Key) -> bool {
+        match self.focus {
+            Pane::Sidebar => {
+                let page = self.sidebar_rows_per_page();
+                self.step_place(match key {
+                    Key::Up => -1,
+                    Key::Down => 1,
+                    Key::Home => isize::MIN,
+                    Key::End => isize::MAX,
+                    Key::PageUp => -page,
+                    _ => page,
+                })
+            }
+            Pane::Reader => self.scroll_reader(key),
+            Pane::List => false,
+        }
+    }
+
+    fn step_place(&mut self, by: isize) -> bool {
+        let places = self
+            .sidebar
+            .iter()
+            .enumerate()
+            .filter_map(|(index, row)| match row {
+                Row::Place { place, .. } => Some((index, place.clone())),
+                Row::Heading(_) => None,
+            })
+            .collect::<Vec<_>>();
+        if places.is_empty() {
+            return false;
+        }
+        let next = places
+            .iter()
+            .position(|(_, place)| *place == self.place)
+            .map_or(0, |current| {
+                current.saturating_add_signed(by).min(places.len() - 1)
+            });
+        let (index, place) = places[next].clone();
+        if place == self.place {
+            return false;
+        }
+        self.choose_place(place);
+        self.focus = Pane::Sidebar;
+        self.reveal_place(index);
+        true
+    }
+
+    fn keyboard_menu(&mut self) -> bool {
+        let shown = match self.focus {
+            Pane::Sidebar => self.sidebar.iter().enumerate().find_map(|(index, row)| {
+                let Row::Place { place, .. } = row else {
+                    return None;
+                };
+                (*place == self.place)
+                    .then(|| self.mailbox_menu(place))
+                    .flatten()
+                    .map(|menu| (Hit::Place(index), menu))
+            }),
+            Pane::List => self
+                .selected
+                .map(|id| (Hit::Message(id), self.message_menu())),
+            Pane::Reader => None,
+        };
+        let Some((rect, menu)) = shown.and_then(|(wanted, menu)| {
+            self.hits
+                .iter()
+                .find(|(_, hit)| *hit == wanted)
+                .map(|(rect, _)| (*rect, menu))
+        }) else {
+            return false;
+        };
+        self.requests.push(Request::ShowMenu(
+            menu,
+            Point::new(rect.x + rect.width / 2.0, rect.y + rect.height),
+        ));
+        true
     }
 
     fn select_all(&mut self) {
@@ -2661,7 +2805,7 @@ impl MailView {
         true
     }
 
-    fn click_reader(&mut self, target: Target, pointer: &Pointer) {
+    pub(crate) fn click_reader(&mut self, target: Target, pointer: &Pointer) {
         let secondary = pointer.button == PointerButton::Secondary;
         match target {
             Target::Card(id) => self.focus_entry(id),

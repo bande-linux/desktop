@@ -64,7 +64,7 @@ fn with_attribute(tag: &str, name: &str, value: &str) -> String {
                 .rfind("/>")
                 .or_else(|| tag.rfind('>'))
                 .unwrap_or(tag.len());
-            format!("{} {name}=\"{value}\"{}", &tag[..at].trim_end(), &tag[at..])
+            format!("{} {name}=\"{value}\"{}", tag[..at].trim_end(), &tag[at..])
         }
     }
 }

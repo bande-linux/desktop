@@ -48,6 +48,7 @@ Each app is `crates/apps/<name>`, packaged as `bande-<name>`:
 | Text Editor | `bande-text-editor` (plain and rich text, Markdown, HTML, Office Open XML and OpenDocument) |
 | Disks | `bande-disks` (disks, volumes and disk images through UDisks2) |
 | Archives | `bande-archive` (zip, tar, gzip, bzip2, xz, zstd and 7-Zip; Files' Compress) |
+| Screen Sharing | `bande-screen-viewer` (VNC viewer for other computers' screens; Settings ▸ Sharing shares this one) |
 
 `ci/new-app.sh mail-merge MailMerge "Mail Merge"` makes `crates/apps/mail-merge` (`bande-mail-merge`,
 `org.bande.MailMerge`) from the template and prints what else to add. How an app is built is in

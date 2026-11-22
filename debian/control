@@ -797,6 +797,25 @@ Description: Bande screenshots: saves pictures of the screen or of a dragged-out
  sharing, the PipeWire streams, and screenshots apps ask for.
  bande-compositor starts it and keeps it running.
 
+Package: bande-screen-viewer
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: net
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Description: Bande Screen Sharing viewer: sees and controls other computers' screens
+ The VNC viewer of the Bande desktop. It connects to computers that share
+ their screen over RFB (RFC 6143), found nearby through Avahi or typed as a
+ vnc:// address, over TLS (VeNCrypt) when they offer it, remembering each
+ computer's certificate and pointing out a change. A connection without
+ encryption is made only after a clear warning. Passwords are kept in the
+ keyring, the picture scales to the window, keys and the pointer are
+ passed on after a click, and copied text crosses in both directions.
+
 Package: bande-screen-sharing
 Architecture: any
 Built-Using: ${cargo:Built-Using}
@@ -1257,6 +1276,7 @@ Recommends: bande-greeter (>= ${source:Version}),
  bande-crash-reports (>= ${source:Version}),
  bande-screenshot (>= ${source:Version}),
  bande-screen-sharing (>= ${source:Version}),
+ bande-screen-viewer (>= ${source:Version}),
  bande-files (>= ${source:Version}),
  bande-settings (>= ${source:Version}),
  bande-tray (>= ${source:Version}),

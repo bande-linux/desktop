@@ -8,8 +8,8 @@ use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 
 use bande_clipboard::{
-    BUS_NAME, ClipboardHistory, Contents, History, MAX_BYTES, OBJECT_PATH, Shared, is_sensitive,
-    lock, now, privacy_hint_unread,
+    BUS_NAME, ClipboardHistory, Contents, History, INTERFACE, MAX_BYTES, OBJECT_PATH, Shared,
+    is_sensitive, lock, now, privacy_hint_unread,
 };
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
@@ -181,7 +181,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let served = serve_history(&history)
         .inspect_err(|error| tracing::warn!("cannot offer the clipboard history: {error}"))
         .ok();
-    let (_bus, pasted, woken) = match served {
+    let (bus, pasted, woken) = match served {
         Some((bus, pasted, woken)) => (Some(bus), Some(pasted), Some(woken)),
         None => (None, None, None),
     };
@@ -212,8 +212,13 @@ fn run() -> Result<(), Box<dyn Error>> {
             {
                 continue;
             }
-            if selection == Selection::Clipboard {
-                lock(&history).record(contents.clone(), now());
+            if selection == Selection::Clipboard
+                && lock(&history).record(contents.clone(), now())
+                && let Some(bus) = &bus
+                && let Err(error) =
+                    bus.emit_signal(None::<()>, OBJECT_PATH, INTERFACE, "Changed", &())
+            {
+                tracing::debug!("cannot announce a new copy: {error}");
             }
             if !complete {
                 continue;

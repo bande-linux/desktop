@@ -2,24 +2,25 @@
 
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};
+use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_rfb::client::{self, Command, Credentials, Failure, Prompter, fingerprint};
 use bande_screen_sharing::rfb::identity::Identity;
 use bande_screen_sharing::rfb::{Frame, Host, Input, Screen, Viewing, serve};
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
-use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::{ClientConfig, ClientConnection, DigitallySignedStruct, SignatureScheme, StreamOwned};
 
 const PASSWORD: &str = "open sesame";
+const PATIENCE: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Sent {
     Pointer(u32, u32, u8),
     Key(u32, bool),
+    Copied(String),
 }
 
 #[derive(Default)]
@@ -62,59 +63,63 @@ impl Host for TestHost {
         })
     }
 
+    fn copied(&self, text: String) {
+        self.input.0.lock().unwrap().push(Sent::Copied(text));
+    }
+
     fn name(&self) -> String {
         "test screen".to_owned()
     }
 }
 
+struct Answers {
+    password: &'static str,
+    seen: Option<String>,
+}
+
+impl Prompter for Answers {
+    fn trust(&mut self, fingerprint: &str) -> bool {
+        self.seen = Some(fingerprint.to_owned());
+        true
+    }
+
+    fn unencrypted(&mut self) -> bool {
+        panic!("the server offers encryption")
+    }
+
+    fn credentials(&mut self, _user: bool) -> Option<Credentials> {
+        Some(Credentials {
+            user: "guest".to_owned(),
+            password: self.password.to_owned(),
+        })
+    }
+}
+
 #[derive(Debug)]
-struct Pinned(Vec<u8>, Arc<CryptoProvider>);
+enum Shown {
+    Picture(Frame),
+    Copied(String),
+}
 
-impl ServerCertVerifier for Pinned {
-    fn verify_server_cert(
-        &self,
-        end_entity: &CertificateDer<'_>,
-        _: &[CertificateDer<'_>],
-        _: &ServerName<'_>,
-        _: &[u8],
-        _: UnixTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
-        match end_entity.as_ref() == self.0 {
-            true => Ok(ServerCertVerified::assertion()),
-            false => Err(rustls::Error::General("another certificate".into())),
-        }
+struct Window(Sender<Shown>);
+
+impl client::Screen for Window {
+    fn resized(&mut self, _frame: &Frame) {}
+
+    fn painted(&mut self, frame: &Frame, _areas: &[bande_rfb::protocol::Area]) {
+        let _ = self.0.send(Shown::Picture(frame.clone()));
     }
 
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        certificate: &CertificateDer<'_>,
-        signed: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls12_signature(
-            message,
-            certificate,
-            signed,
-            &self.1.signature_verification_algorithms,
-        )
+    fn copied(&mut self, text: String) {
+        let _ = self.0.send(Shown::Copied(text));
     }
+}
 
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        certificate: &CertificateDer<'_>,
-        signed: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls13_signature(
-            message,
-            certificate,
-            signed,
-            &self.1.signature_verification_algorithms,
-        )
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.1.signature_verification_algorithms.supported_schemes()
+fn picture() -> Frame {
+    Frame {
+        width: 2,
+        height: 2,
+        pixels: vec![0x11_2233, 0x44_5566, 0x77_8899, 0xaa_bbcc],
     }
 }
 
@@ -122,11 +127,7 @@ fn start(older_viewers: bool) -> (u16, Vec<u8>, Arc<TestHost>) {
     let identity = Identity::generate("test").unwrap();
     let tls = identity.tls().unwrap();
     let screen = Arc::new(Screen::default());
-    screen.show(Frame {
-        width: 2,
-        height: 2,
-        pixels: vec![0x11_2233, 0x44_5566, 0x77_8899, 0xaa_bbcc],
-    });
+    screen.show(picture());
     let host = Arc::new(TestHost {
         screen,
         input: Arc::default(),
@@ -139,27 +140,26 @@ fn start(older_viewers: bool) -> (u16, Vec<u8>, Arc<TestHost>) {
     (port, identity.certificate, host)
 }
 
-fn read<const N: usize>(from: &mut impl Read) -> [u8; N] {
-    let mut bytes = [0; N];
-    from.read_exact(&mut bytes).unwrap();
-    bytes
+fn connected(port: u16) -> TcpStream {
+    let socket = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    socket.set_read_timeout(Some(PATIENCE)).unwrap();
+    socket
 }
 
 fn security_types(port: u16) -> (TcpStream, Vec<u8>) {
-    let mut socket = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    socket
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .unwrap();
-    assert_eq!(&read::<12>(&mut socket), b"RFB 003.008\n");
+    let mut socket = connected(port);
+    let mut version = [0; 12];
+    socket.read_exact(&mut version).unwrap();
     socket.write_all(b"RFB 003.008\n").unwrap();
-    let [count] = read::<1>(&mut socket);
-    let mut types = vec![0; usize::from(count)];
+    let mut count = [0];
+    socket.read_exact(&mut count).unwrap();
+    let mut types = vec![0; usize::from(count[0])];
     socket.read_exact(&mut types).unwrap();
     (socket, types)
 }
 
 fn wait_for(host: &TestHost, sent: &[Sent]) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + PATIENCE;
     while host.input.0.lock().unwrap().as_slice() != sent {
         assert!(
             Instant::now() < deadline,
@@ -169,90 +169,97 @@ fn wait_for(host: &TestHost, sent: &[Sent]) {
     }
 }
 
+fn next(shown: &Receiver<Shown>) -> Shown {
+    shown.recv_timeout(PATIENCE).unwrap()
+}
+
 #[test]
-fn a_viewer_with_the_password_sees_and_controls_the_screen_over_tls() {
+fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clipboard() {
     let (port, certificate, host) = start(false);
-    let (mut socket, types) = security_types(port);
+    let mut answers = Answers {
+        password: PASSWORD,
+        seen: None,
+    };
+    let session = client::connect(connected(port), "127.0.0.1", &mut answers).unwrap();
+    assert_eq!(answers.seen, Some(fingerprint(&certificate)));
     assert_eq!(
-        types,
-        [19],
-        "only VeNCrypt is offered unless older viewers are allowed"
-    );
-    socket.write_all(&[19]).unwrap();
-    assert_eq!(read::<2>(&mut socket), [0, 2]);
-    socket.write_all(&[0, 2]).unwrap();
-    assert_eq!(read::<2>(&mut socket), [0, 2]);
-    assert_eq!(read::<8>(&mut socket), [0, 0, 1, 6, 0, 0, 1, 5]);
-    socket.write_all(&262u32.to_be_bytes()).unwrap();
-    assert_eq!(read::<1>(&mut socket), [1]);
-
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let config = ClientConfig::builder_with_provider(Arc::clone(&provider))
-        .with_safe_default_protocol_versions()
-        .unwrap()
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(Pinned(certificate, provider)))
-        .with_no_client_auth();
-    let connection =
-        ClientConnection::new(Arc::new(config), ServerName::try_from("viewer").unwrap()).unwrap();
-    let mut tls = StreamOwned::new(connection, socket);
-    tls.write_all(&5u32.to_be_bytes()).unwrap();
-    tls.write_all(&(PASSWORD.len() as u32).to_be_bytes())
-        .unwrap();
-    tls.write_all(b"guest").unwrap();
-    tls.write_all(PASSWORD.as_bytes()).unwrap();
-    assert_eq!(
-        read::<4>(&mut tls),
-        [0, 0, 0, 0],
-        "the password is accepted"
+        (session.width, session.height, session.name.as_str()),
+        (2, 2, "test screen")
     );
 
-    tls.write_all(&[1]).unwrap();
-    let init = read::<24>(&mut tls);
-    assert_eq!(&init[..4], &[0, 2, 0, 2], "a 2×2 screen");
-    let mut name = vec![0; u32::from_be_bytes([init[20], init[21], init[22], init[23]]) as usize];
-    tls.read_exact(&mut name).unwrap();
-    assert_eq!(name, b"test screen");
+    let (commands, received) = mpsc::channel();
+    let (wake, woken) = UnixStream::pair().unwrap();
+    let (shown, seen) = mpsc::channel();
+    let viewer = thread::spawn(move || {
+        client::view(session, &received, &woken, &mut Window(shown)).unwrap();
+    });
+    let send = |command: Command| {
+        commands.send(command).unwrap();
+        (&wake).write_all(&[1]).unwrap();
+    };
+    match next(&seen) {
+        Shown::Picture(frame) => assert_eq!(frame, picture()),
+        other => panic!("expected the screen, got {other:?}"),
+    }
 
-    tls.write_all(&[2, 0, 0, 1, 0, 0, 0, 0]).unwrap();
-    tls.write_all(&[3, 0, 0, 0, 0, 0, 0, 2, 0, 2]).unwrap();
-    assert_eq!(read::<4>(&mut tls), [0, 0, 0, 1], "one rectangle");
-    assert_eq!(read::<12>(&mut tls), [0, 0, 0, 0, 0, 2, 0, 2, 0, 0, 0, 0]);
-    assert_eq!(
-        read::<16>(&mut tls),
-        [
-            0x33, 0x22, 0x11, 0, 0x66, 0x55, 0x44, 0, 0x99, 0x88, 0x77, 0, 0xcc, 0xbb, 0xaa, 0
-        ]
+    send(Command::Pointer {
+        x: 1,
+        y: 1,
+        buttons: 1,
+    });
+    send(Command::Key {
+        keysym: 0x61,
+        down: true,
+    });
+    send(Command::Copy("grüße ☃".to_owned()));
+    wait_for(
+        &host,
+        &[
+            Sent::Pointer(1, 1, 1),
+            Sent::Key(0x61, true),
+            Sent::Copied("grüße ☃".to_owned()),
+        ],
     );
 
-    tls.write_all(&[5, 1, 0, 1, 0, 1]).unwrap();
-    tls.write_all(&[4, 1, 0, 0, 0, 0, 0, 0x61]).unwrap();
-    wait_for(&host, &[Sent::Pointer(1, 1, 1), Sent::Key(0x61, true)]);
+    host.screen.copy("κόσμε\nline".to_owned());
+    loop {
+        match next(&seen) {
+            Shown::Copied(text) => {
+                assert_eq!(text, "κόσμε\nline");
+                break;
+            }
+            Shown::Picture(_) => {}
+        }
+    }
+    drop(commands);
+    (&wake).write_all(&[1]).unwrap();
+    viewer.join().unwrap();
 }
 
 #[test]
 fn a_wrong_password_is_refused_and_older_viewers_need_permission() {
     let (port, _, host) = start(false);
     let (_socket, types) = security_types(port);
-    assert!(
-        !types.contains(&2),
-        "plain VNC authentication is off by default"
-    );
+    assert_eq!(types, [19], "plain VNC authentication is off by default");
+    let mut answers = Answers {
+        password: "guessed",
+        seen: None,
+    };
+    match client::connect(connected(port), "127.0.0.1", &mut answers) {
+        Err(Failure::Denied(reason)) => assert_eq!(reason, "Wrong password."),
+        Err(other) => panic!("expected a refused password, got {other:?}"),
+        Ok(_) => panic!("a wrong password got in"),
+    }
 
     host.older_viewers.store(true, Ordering::SeqCst);
     let (mut socket, types) = security_types(port);
     assert_eq!(types, [19, 2]);
     socket.write_all(&[2]).unwrap();
-    let _challenge = read::<16>(&mut socket);
+    let mut challenge = [0; 16];
+    socket.read_exact(&mut challenge).unwrap();
     socket.write_all(&[0; 16]).unwrap();
-    assert_eq!(
-        read::<4>(&mut socket),
-        [0, 0, 0, 1],
-        "the wrong password is refused"
-    );
-    let length = u32::from_be_bytes(read::<4>(&mut socket));
-    let mut reason = vec![0; length as usize];
-    socket.read_exact(&mut reason).unwrap();
-    assert_eq!(reason, b"Wrong password.");
+    let mut result = [0; 4];
+    socket.read_exact(&mut result).unwrap();
+    assert_eq!(result, [0, 0, 0, 1], "the wrong password is refused");
     assert!(host.input.0.lock().unwrap().is_empty());
 }

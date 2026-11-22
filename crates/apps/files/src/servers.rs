@@ -99,6 +99,8 @@ fn share_url(server: &str, share: &str) -> String {
 }
 
 const MAIL_SCHEME: &str = "x-scheme-handler/mailto";
+const SCREEN_SCHEME: &str = "x-scheme-handler/vnc";
+const SCREEN_SCHEME_PREFIX: &str = "vnc://";
 const BANDE_MAIL: &str = "org.bande.Mail.desktop";
 
 impl FilesView {
@@ -391,6 +393,16 @@ impl FilesView {
     }
 
     pub(crate) fn connect_to(&mut self, url: String, name: String) {
+        if url.starts_with(SCREEN_SCHEME_PREFIX) {
+            match self.apps.default_for(SCREEN_SCHEME).cloned() {
+                Some(app) => self.requests.push(Request::Compose {
+                    app: Box::new(app),
+                    arguments: vec![url],
+                }),
+                None => tracing::warn!("no app opens {url}"),
+            }
+            return;
+        }
         let request = match &self.shares_of {
             Some(server) if url.starts_with(&format!("{}/", server.url.trim_end_matches('/'))) => {
                 ServerRequest {

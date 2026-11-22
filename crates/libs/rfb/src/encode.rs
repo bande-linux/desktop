@@ -2,7 +2,7 @@ use std::io;
 
 use flate2::{Compress, Compression, FlushCompress, Status};
 
-use crate::rfb::protocol::{
+use crate::protocol::{
     Area, Compact, ENCODING_DESKTOP_SIZE, ENCODING_RAW, ENCODING_ZRLE, PixelFormat,
     rectangle_header,
 };

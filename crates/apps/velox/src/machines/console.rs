@@ -76,7 +76,7 @@ fn pass_to_guest(input: &DisplayInput, gathered: &Cell<Point>, event: SurfaceInp
         SurfaceInput::PointerMoved(at) => input.pointer(at.x as u32, at.y as u32),
         SurfaceInput::Button { button, pressed } => input.button(guest_button(button), pressed),
         SurfaceInput::Scroll { delta, .. } => scroll_guest(input, gathered, delta),
-        SurfaceInput::Key { code, pressed } => input.key(code, pressed),
+        SurfaceInput::Key { code, pressed, .. } => input.key(code, pressed),
         SurfaceInput::PointerLeft | SurfaceInput::Motion { .. } | SurfaceInput::Captured(_) => {}
     }
 }

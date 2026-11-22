@@ -7,18 +7,21 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
+use bande_rfb::auth::{CHALLENGE, same, vnc_response};
+use bande_rfb::clipboard::Clipboard;
+use bande_rfb::encode::{Encoder, Frame, changed_areas};
+use bande_rfb::protocol::{
+    Area, ClientMessage, ENCODING_DESKTOP_SIZE, ENCODING_EXTENDED_CLIPBOARD, MOST_CUT_TEXT,
+    SECURITY_VENCRYPT, SECURITY_VNC, VENCRYPT_X509_PLAIN, VENCRYPT_X509_VNC, VERSION, Version,
+    cut_text_message, parse_message, parse_version, rectangle_header, server_init, update_header,
+};
+use bande_rfb::transport::{Transport, read_array, read_u32};
 use ring::rand::{SecureRandom, SystemRandom};
 use rustix::event::{PollFd, PollFlags, poll};
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
 
-use super::auth::{Attempts, CHALLENGE, same, vnc_response};
-use super::encode::{Encoder, changed_areas};
-use super::protocol::{
-    Area, ClientMessage, ENCODING_DESKTOP_SIZE, SECURITY_VENCRYPT, SECURITY_VNC,
-    VENCRYPT_X509_PLAIN, VENCRYPT_X509_VNC, VERSION, Version, parse_message, parse_version,
-    rectangle_header, server_init, update_header,
-};
-use super::{Frame, Host, Viewing};
+use super::attempts::Attempts;
+use super::{Host, Viewing};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const HANDSHAKE_DEADLINE: Duration = Duration::from_secs(60);
@@ -27,68 +30,10 @@ const FAILURE_DELAY: Duration = Duration::from_secs(1);
 const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 const MOST_VIEWERS: usize = 4;
 const MOST_CREDENTIAL: usize = 1024;
-const MOST_UNPARSED: usize = super::protocol::MOST_CUT_TEXT + 64 * 1024;
+const MOST_UNPARSED: usize = MOST_CUT_TEXT + 64 * 1024;
+const SERVER_CUT_TEXT: u8 = 3;
 const READ_CHUNK: usize = 64 * 1024;
 const FAILED: u32 = 1;
-
-enum Transport {
-    Plain(TcpStream),
-    Tls(Box<StreamOwned<ServerConnection, TcpStream>>),
-}
-
-impl Transport {
-    fn socket(&self) -> &TcpStream {
-        match self {
-            Self::Plain(socket) => socket,
-            Self::Tls(stream) => &stream.sock,
-        }
-    }
-
-    fn buffered(&mut self) -> bool {
-        match self {
-            Self::Plain(_) => false,
-            Self::Tls(stream) => stream
-                .conn
-                .process_new_packets()
-                .is_ok_and(|state| state.plaintext_bytes_to_read() > 0),
-        }
-    }
-}
-
-impl Read for Transport {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Plain(socket) => socket.read(buffer),
-            Self::Tls(stream) => stream.read(buffer),
-        }
-    }
-}
-
-impl Write for Transport {
-    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        match self {
-            Self::Plain(socket) => socket.write(buffer),
-            Self::Tls(stream) => stream.write(buffer),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self {
-            Self::Plain(socket) => socket.flush(),
-            Self::Tls(stream) => stream.flush(),
-        }
-    }
-}
-
-fn read_array<const N: usize>(from: &mut impl Read) -> io::Result<[u8; N]> {
-    let mut bytes = [0; N];
-    from.read_exact(&mut bytes)?;
-    Ok(bytes)
-}
-
-fn read_u32(from: &mut impl Read) -> io::Result<u32> {
-    read_array::<4>(from).map(u32::from_be_bytes)
-}
 
 fn refused(why: &str) -> io::Error {
     io::Error::new(io::ErrorKind::PermissionDenied, why.to_owned())
@@ -146,7 +91,7 @@ fn vencrypt(
     while stream.conn.is_handshaking() {
         stream.conn.complete_io(&mut stream.sock)?;
     }
-    let mut transport = Transport::Tls(Box::new(stream));
+    let mut transport = Transport::Server(Box::new(stream));
     if chosen == VENCRYPT_X509_VNC {
         let checked = vnc_authentication(&mut transport, password)?;
         return Ok((transport, checked));
@@ -281,9 +226,14 @@ fn clip_to(area: Area, size: (u16, u16)) -> Option<Area> {
     })
 }
 
-struct Viewer {
+struct Viewer<'a> {
     transport: Transport,
     viewing: Viewing,
+    host: &'a dyn Host,
+    clipboard: Clipboard,
+    announced: bool,
+    copy_serial: u64,
+    last_text: Option<String>,
     encoder: Encoder,
     request: Option<Request>,
     sent: Option<Arc<Frame>>,
@@ -292,7 +242,7 @@ struct Viewer {
     unparsed: Vec<u8>,
 }
 
-impl Viewer {
+impl Viewer<'_> {
     fn update(&mut self, frame: &Arc<Frame>) -> io::Result<()> {
         let Some(request) = self.request.take() else {
             return Ok(());
@@ -362,7 +312,14 @@ impl Viewer {
                     "the viewer asked for a pixel format without true colour",
                 ));
             }
-            ClientMessage::SetEncodings(encodings) => self.encoder.set_encodings(&encodings),
+            ClientMessage::SetEncodings(encodings) => {
+                self.encoder.set_encodings(&encodings);
+                if encodings.contains(&ENCODING_EXTENDED_CLIPBOARD) && !self.announced {
+                    self.announced = true;
+                    let announce = self.clipboard.announce();
+                    self.send_cut_text(&announce)?;
+                }
+            }
             ClientMessage::UpdateRequest { incremental, area } => {
                 self.checked = 0;
                 self.request = Some(match self.request.take() {
@@ -379,9 +336,37 @@ impl Viewer {
                     .input
                     .pointer(u32::from(x), u32::from(y), buttons);
             }
-            ClientMessage::CutText(_) => {}
+            ClientMessage::CutText(text) => {
+                let outcome = self.clipboard.received(text);
+                if let Some(reply) = outcome.reply {
+                    self.send_cut_text(&reply)?;
+                }
+                if let Some(text) = outcome.copied.filter(|text| !text.is_empty()) {
+                    self.last_text = Some(text.clone());
+                    self.host.copied(text);
+                }
+            }
         }
         Ok(())
+    }
+
+    fn send_cut_text(&mut self, text: &bande_rfb::protocol::CutText) -> io::Result<()> {
+        self.transport
+            .write_all(&cut_text_message(SERVER_CUT_TEXT, text))?;
+        self.transport.flush()
+    }
+
+    fn share_clipboard(&mut self, serial: u64, text: Option<String>) -> io::Result<()> {
+        if serial == self.copy_serial {
+            return Ok(());
+        }
+        self.copy_serial = serial;
+        let Some(text) = text.filter(|text| self.last_text.as_ref() != Some(text)) else {
+            return Ok(());
+        };
+        self.last_text = Some(text.clone());
+        let message = self.clipboard.copied_here(text);
+        self.send_cut_text(&message)
     }
 
     fn receive(&mut self) -> io::Result<()> {
@@ -418,6 +403,7 @@ impl Viewer {
             if latest.ended {
                 return Ok(());
             }
+            self.share_clipboard(latest.copy_serial, latest.copied)?;
             if let Some(frame) = &latest.frame
                 && self.request.is_some()
                 && latest.serial != self.checked
@@ -481,9 +467,15 @@ fn serve_viewer(
     let area = frame.area();
     transport.write_all(&server_init(area.width, area.height, &host.name()))?;
     transport.flush()?;
+    let copy_serial = viewing.screen.latest().copy_serial;
     let mut viewer = Viewer {
         transport,
         viewing,
+        host,
+        clipboard: Clipboard::default(),
+        announced: false,
+        copy_serial,
+        last_text: None,
         encoder: Encoder::default(),
         request: None,
         sent: None,

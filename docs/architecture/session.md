@@ -34,7 +34,9 @@ graph LR
   at most 16 MiB each and 64 MiB in all, in `$XDG_STATE_HOME/bande/clipboard` (folder 0700,
   files 0600). Copies marked `x-kde-passwordManagerHint: secret` or
   `application/x-nspasteboard-concealed-type` are never kept. The launcher reads it through
-  `org.bande.Clipboard` (`Items`, `Content`, `Paste`, `Remove`, `Clear`).
+  `org.bande.Clipboard` (`Items`, `Content`, `Paste`, `Remove`, `Clear`); Screen Sharing reads
+  the newest text (`Text`), is told of a new copy by `Changed` (no contents) and copies a
+  viewer's text with `CopyText`, which goes into the history like any copy.
 
 ### Screen lock and idle (`bande-lock`, `bande-power`)
 
@@ -779,7 +781,10 @@ Settings ▸ Sharing works with Debian's own Samba and SSH setup and never rewri
 **Screen Sharing** (`crates/services/screen-sharing`, package `bande-screen-sharing`) lets VNC
 viewers on other computers see and control the screen over RFB (RFC 6143). It is on while the
 user unit `bande-screen-sharing.service` is enabled (Settings ▸ Sharing; the package never
-enables it), and listens on port 5900 only then:
+enables it), and listens on port 5900 only then. The unit is ready once the certificate exists
+and the port is open (it takes `org.bande.ScreenSharing.Server`), so Settings shows the
+fingerprint as soon as sharing is on. The protocol code, both sides, is `bande-rfb`
+(`crates/libs/rfb`):
 
 - **Who may connect.** Only peers on a network one of this computer's interfaces is on (or the
   computer itself); others are dropped before a byte is read. Nothing changes the firewall and
@@ -803,11 +808,34 @@ enables it), and listens on port 5900 only then:
   viewer. The stream stops when the last viewer leaves or the service goes away.
 - **RFB.** Raw and ZRLE (zlib, solid, palette and raw tiles), DesktopSize when the display
   changes size, any true-colour pixel format; only changed 64×64 tiles are sent, when the viewer
-  asks. RFB keysyms are typed through `ei_text`; buttons 4 to 7 scroll. Clipboard text from a
-  viewer is not used.
+  asks. RFB keysyms are typed through `ei_text`; buttons 4 to 7 scroll.
+- **Clipboard.** While someone views, text crosses in both directions: over the extended
+  clipboard pseudo-encoding (UTF-8, zlib, notify, request and provide) when the viewer has it,
+  else as Latin-1. Text a viewer sent is not sent back to it.
 - **Found nearby.** While on, `_rfb._tcp` is announced through Avahi when it is installed
   (`bande_discovery::nearby::announce`); without it Settings offers to install it and shows the
   addresses to type.
+
+**The Screen Sharing app** (`crates/apps/screen-viewer`, `org.bande.ScreenSharing`, package
+`bande-screen-viewer`) views other computers. It lists the `_rfb._tcp` computers Avahi finds and
+takes typed addresses (`vnc://host:port`, `host:port`, `[address]:port`, a port below 100 being
+a display number); it is the default for `vnc://`, and Files ▸ Network lists the same computers
+(`bande-automount` browses `_rfb._tcp` too) and opens them here. Each window is one connection,
+run on its own thread:
+
+- **Security.** VeNCrypt (X509Plain, else X509Vnc) whenever the server offers it. The server's
+  certificate is trusted on first use: its SHA-256 fingerprint is shown to compare with the one
+  in Settings ▸ Sharing there and remembered in `$XDG_DATA_HOME/bande/screen-sharing/known-computers`;
+  a different one later is a warning whose safe choice is Cancel. A server that offers only plain
+  VNC authentication or none is used only after "This connection isn’t encrypted", and the
+  window title then says "(not encrypted)". Nothing secret is sent before the certificate is
+  trusted. Passwords are kept in the keyring (`org.bande.ScreenSharing`, by `host:port`) once
+  they worked, and asked again with the server's reason when refused.
+- **Viewing.** Raw, ZRLE (every tile type) and DesktopSize in 32-bit true colour, painted into
+  shared memory shown as an external surface, scaled to the window or at actual size (View
+  menu). A click passes keys and the pointer on (Ctrl+Alt releases them); keys go as the keysyms
+  this computer's layout makes, a key's release with its press's keysym. Copied text crosses in
+  both directions as on the server.
 
 ## Backups
 

@@ -1,16 +1,8 @@
-use std::collections::HashMap;
-use std::net::IpAddr;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
-
 use des::Des;
 use des::cipher::{Block, BlockCipherEncrypt, KeyInit};
 
 pub const CHALLENGE: usize = 16;
 pub const PASSWORD_BYTES: usize = 8;
-const MOST_FAILURES: usize = 5;
-const MOST_FAILURES_OVERALL: usize = 30;
-const FAILURE_MEMORY: Duration = Duration::from_secs(600);
 
 fn reversed_key(password: &str) -> [u8; PASSWORD_BYTES] {
     let mut key = [0; PASSWORD_BYTES];
@@ -38,41 +30,6 @@ pub fn same(left: &[u8], right: &[u8]) -> bool {
             .zip(right)
             .fold(0u8, |difference, (a, b)| difference | (a ^ b))
             == 0
-}
-
-#[derive(Default)]
-pub struct Attempts {
-    failures: Mutex<HashMap<IpAddr, Vec<Instant>>>,
-}
-
-impl Attempts {
-    fn recent(&self, peer: IpAddr) -> (usize, usize) {
-        let mut failures = self
-            .failures
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let now = Instant::now();
-        failures.retain(|_, times| {
-            times.retain(|time| now.duration_since(*time) < FAILURE_MEMORY);
-            !times.is_empty()
-        });
-        let overall = failures.values().map(Vec::len).sum();
-        (failures.get(&peer).map_or(0, Vec::len), overall)
-    }
-
-    pub fn blocked(&self, peer: IpAddr) -> bool {
-        let (from_peer, overall) = self.recent(peer);
-        from_peer >= MOST_FAILURES || overall >= MOST_FAILURES_OVERALL
-    }
-
-    pub fn failed(&self, peer: IpAddr) {
-        self.failures
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .entry(peer)
-            .or_default()
-            .push(Instant::now());
-    }
 }
 
 #[cfg(test)]

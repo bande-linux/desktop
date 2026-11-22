@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use sha2::{Digest, Sha256};
-
 /// The user unit that runs the server; Screen Sharing is on while it is enabled.
 pub const UNIT: &str = "bande-screen-sharing.service";
 /// The program the unit runs, the only one the screenshot tool shows the screen to.
@@ -25,11 +23,4 @@ pub fn certificate_file() -> Option<PathBuf> {
     folder().map(|folder| folder.join("certificate.der"))
 }
 
-/// The SHA-256 fingerprint of a DER certificate, as viewers show it: hex pairs split by colons.
-pub fn fingerprint(certificate: &[u8]) -> String {
-    Sha256::digest(certificate)
-        .iter()
-        .map(|byte| format!("{byte:02X}"))
-        .collect::<Vec<_>>()
-        .join(":")
-}
+pub use bande_rfb::client::fingerprint;

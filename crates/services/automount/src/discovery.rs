@@ -8,13 +8,15 @@ use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::names::BusName;
 
-const SERVICES: [(&str, &str); 5] = [
+const SERVICES: [(&str, &str); 6] = [
     ("_smb._tcp", "smb"),
     ("_nfs._tcp", "nfs"),
     ("_sftp-ssh._tcp", "sftp"),
     ("_webdav._tcp", "dav"),
     ("_webdavs._tcp", "davs"),
+    ("_rfb._tcp", "vnc"),
 ];
+const SCREEN: &str = "vnc://";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nearby {
@@ -43,7 +45,7 @@ fn url_of(scheme: &str, host: &str, port: u16, path: &str) -> String {
     };
     let default = matches!(
         (scheme, port),
-        ("smb", 445) | ("sftp", 22) | ("dav", 80) | ("davs", 443) | ("nfs", 2049)
+        ("smb", 445) | ("sftp", 22) | ("dav", 80) | ("davs", 443) | ("nfs", 2049) | ("vnc", 5900)
     );
     match default {
         true => format!("{scheme}://{host}{path}"),
@@ -149,7 +151,9 @@ impl Discovery {
                 .cmp(&b.name)
                 .then_with(|| preference(&a.url).cmp(&preference(&b.url)))
         });
-        list.dedup_by(|a, b| a.name == b.name);
+        list.dedup_by(|a, b| {
+            a.name == b.name && a.url.starts_with(SCREEN) == b.url.starts_with(SCREEN)
+        });
         list
     }
 

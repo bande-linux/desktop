@@ -1,0 +1,19 @@
+[package]
+name = "bande-rfb"
+description = "RFB (VNC) for Bande Screen Sharing: messages, encodings, authentication and the viewer's side"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+des.workspace = true
+flate2.workspace = true
+rustix = { workspace = true, features = ["event"] }
+rustls.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -1605,6 +1605,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-rfb"
+version = "0.2.0"
+dependencies = [
+ "des",
+ "flate2",
+ "rustix 1.1.6",
+ "rustls",
+ "sha2 0.11.1",
+ "tracing",
+]
+
+[[package]]
 name = "bande-rich-text"
 version = "0.2.0"
 dependencies = [
@@ -1632,9 +1644,8 @@ dependencies = [
  "bande-l10n",
  "bande-log",
  "bande-notify",
+ "bande-rfb",
  "bande-xdg",
- "des",
- "flate2",
  "libc",
  "pipewire",
  "rcgen",
@@ -1642,9 +1653,25 @@ dependencies = [
  "ring",
  "rustix 1.1.6",
  "rustls",
- "sha2 0.11.1",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-screen-viewer"
+version = "0.2.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-discovery",
+ "bande-keyring",
+ "bande-l10n",
+ "bande-rfb",
+ "bande-toolkit",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "tracing",
 ]
 
 [[package]]

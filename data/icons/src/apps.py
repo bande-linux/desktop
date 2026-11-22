@@ -185,6 +185,15 @@ def video_player():
     return tile(*hue_field(5, 0.58, 0.18), body)
 
 
+def screen_sharing():
+    body = rect(8, 11, 24, 17, 2.5, PAPER, 'opacity="0.55"')
+    body += rect(16, 18, 24, 17, 2.5, PAPER, 'opacity="0.96"')
+    body += rect(18.2, 20.2, 19.6, 12.6, 1.2, INK, 'opacity="0.16"')
+    body += stroke('M23 26.5h9.2M28.6 22.9l3.6 3.6-3.6 3.6', EMBER, 2, 'stroke-linecap="round" stroke-linejoin="round" fill="none"')
+    body += rect(25, 36.5, 6, 1.6, 0.8, PAPER, 'opacity="0.85"')
+    return tile(*hue_field(215, 0.46, 0.1), body)
+
+
 def calculator():
     body = rect(12, 10, 24, 7.5, 2, PAPER, 'opacity="0.9"')
     body += rect(25, 12.6, 8, 2.4, 1.2, INK, 'opacity="0.55"')
@@ -264,6 +273,7 @@ ICONS = {
     'org.bande.Velox': velox,
     'org.bande.Disks': disks,
     'org.bande.Calculator': calculator,
+    'org.bande.ScreenSharing': screen_sharing,
     'org.bande.Viewer': image_viewer,
     'org.bande.Player': video_player,
     'org.bande.Launcher': launcher,

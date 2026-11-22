@@ -392,7 +392,8 @@ writes a hex value, a corner radius or a font name of its own.
   aspect ratio, `Native` shows one buffer pixel per device pixel (shrunk only when it does not
   fit); `set_size(width, height)` gives the buffer's size.
 - **Input pass-through and capture.** `SurfaceView` sends `SurfaceInput` to `on_input`: the
-  pointer in buffer pixels, buttons, scrolling, and while captured raw evdev key codes and
+  pointer in buffer pixels, buttons, scrolling, and while captured raw evdev key codes (with the
+  keysym the layout makes, a release carrying its press's) and
   relative motion. With `.capture_on_click(PointerCapture::{Free, Confined, Locked})` a click
   captures: the window inhibits the compositor's shortcuts (`zwp_keyboard_shortcuts_inhibit_v1`,
   so Super and Alt+Tab reach the guest), confines or locks the pointer

@@ -63,6 +63,8 @@ pub enum Action {
     ZoomIn,
     ZoomOut,
     ToggleScreenReader,
+    NextInputSource,
+    PreviousInputSource,
 }
 
 impl Action {
@@ -91,7 +93,9 @@ impl Action {
             | Self::ShowQuickSettings
             | Self::LockScreen
             | Self::ForceQuit
-            | Self::TextConsole => Area::System,
+            | Self::TextConsole
+            | Self::NextInputSource
+            | Self::PreviousInputSource => Area::System,
         }
     }
 
@@ -128,6 +132,8 @@ impl Action {
             Self::ZoomIn => tr!("Zoom in"),
             Self::ZoomOut => tr!("Zoom out"),
             Self::ToggleScreenReader => tr!("Turn the screen reader on or off"),
+            Self::NextInputSource => tr!("Switch to the next keyboard layout"),
+            Self::PreviousInputSource => tr!("Switch to the previous keyboard layout"),
         }
     }
 }
@@ -255,7 +261,7 @@ const fn shortcut(action: Action, modifiers: Modifiers, key: Key) -> Shortcut {
     }
 }
 
-pub const SHORTCUTS: [Shortcut; 29] = [
+pub const SHORTCUTS: [Shortcut; 31] = [
     shortcut(Action::CloseWindow, ALT, Key::Function(4)),
     shortcut(Action::MinimizeWindow, SUPER, Key::Character('h')),
     shortcut(Action::TileWindow, SUPER, Key::AnyArrow),
@@ -289,6 +295,8 @@ pub const SHORTCUTS: [Shortcut; 29] = [
     shortcut(Action::LockScreen, SUPER, Key::Character('l')),
     shortcut(Action::ForceQuit, CTRL_ALT, Key::Escape),
     shortcut(Action::TextConsole, CTRL_ALT, Key::AnyFunction),
+    shortcut(Action::NextInputSource, SUPER, Key::Space),
+    shortcut(Action::PreviousInputSource, SHIFT_SUPER, Key::Space),
     shortcut(Action::ToggleZoom, ALT_SUPER, Key::Character('8')),
     shortcut(Action::ZoomIn, ALT_SUPER, Key::Character('=')),
     shortcut(Action::ZoomOut, ALT_SUPER, Key::Character('-')),

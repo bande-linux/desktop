@@ -830,3 +830,21 @@ fn append(document: &mut KdlDocument, text: &str, indent: &str) {
         document.nodes_mut().extend(parsed);
     }
 }
+
+pub(crate) fn displays_document<'a>(
+    displays: impl IntoIterator<Item = (&'a String, &'a DisplaySettings)>,
+) -> String {
+    let mut document = KdlDocument::new();
+    for (identity, display) in displays {
+        if *display == DisplaySettings::default() {
+            append(
+                &mut document,
+                &format!("display {}\n", repr(&identity.as_str().into())),
+                "",
+            );
+        } else {
+            set_display(&mut document, identity, display);
+        }
+    }
+    document.to_string()
+}

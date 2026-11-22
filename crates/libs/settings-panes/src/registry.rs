@@ -998,6 +998,18 @@ fn connection_panes() -> Vec<Pane> {
                 ),
             ],
         ),
+        pane(
+            PaneId::Sharing,
+            vec![section(
+                None,
+                vec![list(
+                    SettingId::Sharing,
+                    tr!("Sharing"),
+                    tr!("file sharing, samba, smb, remote login, ssh, shared folders"),
+                    List::Sharing,
+                )],
+            )],
+        ),
     ]
 }
 
@@ -1393,18 +1405,6 @@ fn device_panes() -> Vec<Pane> {
         ),
         mouse_pane(),
         trackpad_pane(),
-        pane(
-            PaneId::Sharing,
-            vec![section(
-                None,
-                vec![list(
-                    SettingId::Sharing,
-                    tr!("Sharing"),
-                    tr!("file sharing, samba, smb, remote login, ssh, shared folders"),
-                    List::Sharing,
-                )],
-            )],
-        ),
         pane(
             PaneId::Printers,
             vec![

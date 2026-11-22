@@ -31,6 +31,9 @@ msgstr "Avbryt"
 msgid "Accessibility"
 msgstr "Hjälpmedel"
 
+msgid "The taskbar and desktop keep stopping. Press Ctrl+Alt+Esc to log out."
+msgstr "Aktivitetsfältet och skrivbordet slutar hela tiden fungera. Tryck på Ctrl+Alt+Esc för att logga ut."
+
 msgid "it is not installed"
 msgstr "den inte är installerad"
 
@@ -64,6 +67,9 @@ msgstr "Appar"
 msgid "Relaunch"
 msgstr "Starta om"
 
+msgid "Log Out…"
+msgstr "Logga ut…"
+
 msgid "When an app stops responding, choose it and click Force Quit to close it. Anything unsaved in it is lost."
 msgstr "När en app slutar svara väljer du den och klickar på Tvinga avslut för att stänga den. Det som inte har sparats i den går förlorat."
 
@@ -81,6 +87,15 @@ msgstr "Vill du tvinga de {count} markerade apparna att avsluta?"
 
 msgid "You will lose any unsaved changes."
 msgstr "Ändringar som inte har sparats går förlorade."
+
+msgid "Do you want to log out now?"
+msgstr "Vill du logga ut nu?"
+
+msgid "Every app quits at once, and you will lose any unsaved changes."
+msgstr "Alla appar avslutas direkt, och osparade ändringar går förlorade."
+
+msgid "Log Out"
+msgstr "Logga ut"
 
 msgid "Close"
 msgstr "Stäng"

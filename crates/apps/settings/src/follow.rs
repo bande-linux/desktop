@@ -125,6 +125,8 @@ pub enum Update {
 pub enum Command {
     Set(SettingId, Value),
     Display(String, DisplaySettings),
+    TryDisplay(String, DisplaySettings),
+    KeepDisplays(bool),
     Arrangement(Vec<Placement>),
     Audio(AudioCommand),
     Network(NetworkCommand),
@@ -340,7 +342,8 @@ fn exclude_folder(session: &Connection) -> zbus::Result<()> {
 fn replaces(queued: &Command, command: &Command) -> bool {
     match (queued, command) {
         (Command::Set(queued, _), Command::Set(id, _)) => queued == id,
-        (Command::Display(queued, _), Command::Display(identity, _)) => queued == identity,
+        (Command::Display(queued, _), Command::Display(identity, _))
+        | (Command::TryDisplay(queued, _), Command::TryDisplay(identity, _)) => queued == identity,
         (Command::Arrangement(queued), Command::Arrangement(placements)) => {
             bande_config::same_displays(
                 queued,
@@ -377,6 +380,10 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                     Command::Display(identity, display) => {
                         (client.set_display(identity, display), Vec::new())
                     }
+                    Command::TryDisplay(identity, display) => {
+                        (client.try_display(identity, display), Vec::new())
+                    }
+                    Command::KeepDisplays(keep) => (client.keep_displays(*keep), Vec::new()),
                     Command::Arrangement(placements) => {
                         (client.set_arrangement(placements), Vec::new())
                     }
@@ -501,9 +508,11 @@ impl Services {
 
     pub fn send(&self, command: Command) {
         let sent = match command {
-            Command::Set(..) | Command::Display(..) | Command::Arrangement(..) => {
-                self.session.send(command).is_ok()
-            }
+            Command::Set(..)
+            | Command::Display(..)
+            | Command::TryDisplay(..)
+            | Command::KeepDisplays(..)
+            | Command::Arrangement(..) => self.session.send(command).is_ok(),
 
             Command::Audio(command) => self.audio.send(command).is_ok(),
             Command::Network(command) => self

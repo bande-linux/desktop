@@ -833,8 +833,14 @@ msgstr "Det gick inte att hämta Bande på {name}. Välj det igen när datorn ä
 msgid "Bande's own apps stay in English for now; other apps use this language."
 msgstr "Bandes egna appar förblir på engelska tills vidare, andra appar använder det här språket."
 
-msgid "Changes take effect the next time you log in"
-msgstr "Ändringarna träder i kraft nästa gång du loggar in"
+msgid "The login screen uses this language and region"
+msgstr "Inloggningsskärmen använder det här språket och den här regionen"
+
+msgid "Use at Login Screen and for New Users"
+msgstr "Använd på inloggningsskärmen och för nya användare"
+
+msgid "The login screen uses another language or region"
+msgstr "Inloggningsskärmen använder ett annat språk eller en annan region"
 
 msgid "Choose a language for {name}"
 msgstr "Välj ett språk för {name}"
@@ -851,8 +857,14 @@ msgstr "Region"
 msgid "Dates and times look like"
 msgstr "Datum och tider ser ut så här"
 
+msgid "Changes take effect the next time you log in"
+msgstr "Ändringarna träder i kraft nästa gång du loggar in"
+
 msgid "English (no country)"
 msgstr "Engelska (inget land)"
+
+msgid "Only an administrator can set up {name} on this computer."
+msgstr "Bara en administratör kan installera {name} på den här datorn."
 
 msgid "{name} can't be used on this computer."
 msgstr "{name} kan inte användas på den här datorn."

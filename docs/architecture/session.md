@@ -344,8 +344,10 @@ PipeWire's socket.
   greetd and a lingering user manager keep what they had, so a choice in Settings would
   otherwise need a restart. The login window reads the same file through
   `bande-greeter-session`.
-- Settings ▸ Language & Region writes the person's file and, for an administrator, the system
-  default through `bande-locale-helper` under `pkexec` (`org.bande.locale-helper`), since Debian
+- Settings ▸ Language & Region writes only the person's file, asking for an administrator only
+  when a chosen locale is not generated yet (`bande-locale-helper generate` under `pkexec`,
+  `org.bande.locale-helper`). "Use at Login Screen and for New Users" copies the person's
+  language and region to the system default through `bande-locale-helper locale`, since Debian
   forbids localed's `SetLocale` even to root; localed is only read. The helper accepts only UTF-8
   names from `/usr/share/i18n/SUPPORTED`, runs `locale-gen --keep-existing` before replacing
   `/etc/default/locale` atomically, and `/etc/locale.conf` too where it is a file of its own
@@ -651,7 +653,10 @@ what the one before could not save:
   `bande-notify`. A hung shell shows in Force Quit as "Taskbar & Desktop (Not Responding)" with
   Relaunch; at 2 s without an answer its keyboard-exclusive surfaces lose the keyboard, and at
   5 s the compositor kills `bande-shell` (never the lock screen, screenshots or a session dialog) through its pidfd (after `SIGQUIT`) for the supervisor to restart. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
-  while locked is killed and restarted.
+  while locked is killed and restarted. When the shell has stopped three times in a row within a
+  minute of starting, the compositor keeps restarting it but says "The taskbar and desktop keep
+  stopping. Press Ctrl+Alt+Esc to log out." and opens Force Quit, whose Log Out… button asks once
+  and then ends the session by the compositor exiting, with no shell needed.
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without
   a frame on every display the compositor makes a new renderer and resets each display's DRM

@@ -215,7 +215,10 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   and swaps it in atomically, so readers never see a mix.
 - **`org.bande.Config`** (`/org/bande/Config`, session bus) serves every value as a property and
   signals only the properties that changed. The scalar properties are writable, and
-  `SetDisplay` and `SetArrangement` replace one display's settings or one arrangement. A write
+  `SetDisplay` and `SetArrangement` replace one display's settings or one arrangement.
+  `TryDisplay` changes one display on trial: the settings before the trial are kept in
+  `$XDG_STATE_HOME/bande/display-trial.kdl` and restored after 15 s, or at the service's next
+  start, unless `KeepDisplays` arrives first; `RevertDisplays` restores them at once. A write
   edits only the affected node, keeping the user's comments and layout, validates the whole
   result and replaces the file by rename; a value the schema rejects fails with `InvalidArgs`,
   and a file that is not KDL is never overwritten.

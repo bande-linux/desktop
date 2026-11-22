@@ -30,6 +30,7 @@ const PROBE_WAITS: [Duration; 4] = [
 ];
 const OWN_WRITE_ECHO: Duration = Duration::from_secs(1);
 const READ_LIMIT: usize = 32;
+const BACKLIGHT_FLOOR_DIVISOR: u32 = 20;
 
 type ConnectedDisplay = (String, String, String);
 pub type OpenWire = Arc<dyn Fn(&str) -> Option<Box<dyn Wire>> + Send + Sync>;
@@ -412,7 +413,9 @@ impl Lamp {
         match &mut self.drive {
             Drive::Backlight(backlight) => {
                 let written = backlight.max_brightness().and_then(|maximum| {
-                    let raw = ((self.level * f64::from(maximum)).round() as u32).clamp(1, maximum);
+                    let floor = (maximum / BACKLIGHT_FLOOR_DIVISOR).max(1);
+                    let raw =
+                        ((self.level * f64::from(maximum)).round() as u32).clamp(floor, maximum);
                     let raw = match self.dimmed {
                         true => dimmed(raw).unwrap_or(raw),
                         false => raw,

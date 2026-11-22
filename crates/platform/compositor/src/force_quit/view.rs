@@ -21,6 +21,7 @@ const FOOTER: f32 = 60.0;
 const BUTTON_MIN_WIDTH: f32 = 96.0;
 const CAPTION_GAP: f32 = 12.0;
 const FORCE_QUIT: &str = "force-quit";
+const LOG_OUT: &str = "log-out";
 pub(crate) const SHELL_KEY: &str = ":shell";
 const CANCEL: &str = "cancel";
 
@@ -48,6 +49,7 @@ impl Listed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Effect {
     ForceQuit(Vec<String>),
+    LogOut,
     Close,
 }
 
@@ -55,6 +57,7 @@ pub(crate) enum Effect {
 enum Signal {
     Selected(Vec<String>),
     Ask,
+    AskLogOut,
     Chosen(String),
 }
 
@@ -65,6 +68,7 @@ pub(crate) struct ForceQuitView {
     layout: WidgetId,
     table: WidgetId,
     button: (WidgetId, f32),
+    log_out: (WidgetId, f32),
     signals: Signals,
     listed: Vec<Listed>,
     selected: Vec<String>,
@@ -100,8 +104,17 @@ impl ForceQuitView {
                     .width
             })
             .fold(BUTTON_MIN_WIDTH, f32::max);
+        let asking_log_out = signals.clone();
+        let mut log_out = Button::new(&tr!("Log Out…"), move || {
+            asking_log_out.borrow_mut().push(Signal::AskLogOut);
+        });
+        let log_out_width = log_out
+            .measure(&mut cx, Size::new(f32::MAX, BUTTON_HEIGHT))
+            .width
+            .max(BUTTON_MIN_WIDTH);
         let mut layout = FreeLayout::new();
         let table = layout.insert(table, Rect::default());
+        let log_out = layout.insert(log_out, Rect::default());
         let button = layout.insert(button, Rect::default());
         let layout_id = layout.id();
         let mut ui = Ui::new(Box::new(layout), cx);
@@ -111,6 +124,7 @@ impl ForceQuitView {
             layout: layout_id,
             table,
             button: (button, width),
+            log_out: (log_out, log_out_width),
             signals,
             listed: Vec::new(),
             selected: Vec::new(),
@@ -197,10 +211,20 @@ impl ForceQuitView {
 
     fn place_controls(&mut self, list: Rect, width: f32, height: f32, footer: f32) {
         let (button, button_width) = self.button;
+        let (log_out, log_out_width) = self.log_out;
         let button_height = BUTTON_HEIGHT + self.ui.context().grown_line();
         let y = height - footer + ((footer - button_height) / 2.0).round();
         let frames = [
             (self.table, list.inset(LIST_INSET)),
+            (
+                log_out,
+                Rect::new(
+                    width - 2.0 * PADDING - button_width - log_out_width,
+                    y,
+                    log_out_width,
+                    button_height,
+                ),
+            ),
             (
                 button,
                 Rect::new(
@@ -223,7 +247,7 @@ impl ForceQuitView {
         let text_size = self.ui.context().text.size();
         let footer = FOOTER + grown_line(text_size);
         let text_width = width - 2.0 * PADDING;
-        let caption_width = width - 3.0 * PADDING - self.button.1 - CAPTION_GAP;
+        let caption_width = width - 4.0 * PADDING - self.button.1 - self.log_out.1 - CAPTION_GAP;
         let empty = self.listed.is_empty();
         let text = &mut self.ui.context().text;
         let hint = paragraph(
@@ -342,6 +366,21 @@ impl ForceQuitView {
         None
     }
 
+    fn ask_log_out(&mut self) {
+        let signals = self.signals.clone();
+        let alert = Alert::new(
+            &tr!("Do you want to log out now?"),
+            &tr!("Every app quits at once, and you will lose any unsaved changes."),
+            move |choice| {
+                signals.borrow_mut().push(Signal::Chosen(choice.to_owned()));
+            },
+        )
+        .primary(&tr!("Log Out"), LOG_OUT)
+        .cancel(&tr!("Cancel"), CANCEL);
+        self.confirming.clear();
+        self.ui.present_dialog(alert);
+    }
+
     pub(crate) fn handle(&mut self, event: &Event) -> (bool, Vec<Effect>) {
         let handled = match event {
             Event::Key {
@@ -377,10 +416,13 @@ impl ForceQuitView {
                 match signal {
                     Signal::Selected(keys) => self.select(keys),
                     Signal::Ask => effects.extend(self.ask()),
+                    Signal::AskLogOut => self.ask_log_out(),
                     Signal::Chosen(choice) => {
                         let keys = std::mem::take(&mut self.confirming);
                         if choice == FORCE_QUIT && !keys.is_empty() {
                             effects.push(Effect::ForceQuit(keys));
+                        } else if choice == LOG_OUT {
+                            effects.push(Effect::LogOut);
                         }
                     }
                 }

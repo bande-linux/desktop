@@ -62,8 +62,8 @@ impl Engine {
         self.catalog.active = None;
     }
 
-    fn wanted_dictionaries(&self) -> Vec<String> {
-        let wanted: Vec<String> = if self.store.languages.is_empty() {
+    fn wanted_languages(&self) -> Vec<String> {
+        if self.store.languages.is_empty() {
             self.system_language
                 .iter()
                 .cloned()
@@ -72,9 +72,12 @@ impl Engine {
                 .collect()
         } else {
             self.store.languages.clone()
-        };
+        }
+    }
+
+    fn wanted_dictionaries(&self) -> Vec<String> {
         let mut active = Vec::new();
-        for language in wanted {
+        for language in self.wanted_languages() {
             if let Some(name) = best_for(
                 &language,
                 self.region_for(&language),
@@ -111,13 +114,24 @@ impl Engine {
     pub fn missing(&mut self) -> Vec<String> {
         self.refresh();
         let mut missing = Vec::new();
-        for name in self.catalog.active.iter().flatten() {
-            let language = language_of(name);
-            if let Some(region) = self.region_for(language) {
-                let wanted = format!("{language}_{region}");
-                if !self.catalog.installed.contains_key(&wanted) && !missing.contains(&wanted) {
-                    missing.push(wanted);
+        for language in self.wanted_languages() {
+            let language = language_of(&language);
+            let (wanted, covered) = match self.region_for(language) {
+                Some(region) => {
+                    let wanted = format!("{language}_{region}");
+                    let covered = self.catalog.installed.contains_key(&wanted);
+                    (wanted, covered)
                 }
+                None => (
+                    language.to_owned(),
+                    self.catalog
+                        .installed
+                        .keys()
+                        .any(|name| language_of(name) == language),
+                ),
+            };
+            if !covered && !missing.contains(&wanted) {
+                missing.push(wanted);
             }
         }
         missing

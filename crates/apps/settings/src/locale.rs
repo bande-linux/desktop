@@ -16,6 +16,8 @@ pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_lo
 
 const HELPER: &str = "/usr/libexec/bande-locale-helper";
 const PACKS: &str = "bande-desktop-l10n-";
+const BROWSER_PACKS: &str = "bande-browser-l10n-";
+const BROWSER: &str = "org.bande.Browser";
 const OWN_CATALOGS: &str = "bande-settings";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
@@ -49,6 +51,8 @@ pub struct LocaleState {
     pub available: Vec<AvailableLocale>,
     pub language: String,
     pub region: Option<String>,
+    pub login_language: String,
+    pub login_region: Option<String>,
     pub pending: Option<SettingId>,
     pub login_sources: Vec<String>,
     pub login_accessibility: String,
@@ -117,6 +121,7 @@ pub enum LocaleCommand {
     Read,
     Language(String),
     Region(Option<String>),
+    LoginLanguage,
     LoginKeyboard(Vec<String>),
     LoginAccessibility(String),
 }
@@ -214,7 +219,10 @@ fn run_helper(arguments: &[String]) -> Result<(), HelperFailure> {
 fn change_failure(failure: HelperFailure, code: &str, available: &[AvailableLocale]) -> String {
     let name = locale_label(available, code);
     match failure {
-        HelperFailure::NotAllowed => tr!("Only an administrator can change this."),
+        HelperFailure::NotAllowed => tr!(
+            "Only an administrator can set up {name} on this computer.",
+            name = name
+        ),
         HelperFailure::UnknownValue => tr!("{name} can't be used on this computer.", name = name),
         HelperFailure::Failed(reason) => {
             tracing::warn!("locale helper: {reason}");
@@ -273,16 +281,29 @@ fn write_user_file(contents: &str) -> std::io::Result<()> {
     bande_xdg::replace_file(&path, contents)
 }
 
-fn generated(code: &str) -> bool {
+fn missing_locales(wanted: &[String]) -> Vec<String> {
     let normal = |name: &str| name.to_lowercase().replace("utf-8", "utf8");
-    Command::new("/usr/bin/locale")
-        .arg("-a")
-        .output()
-        .is_ok_and(|output| {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .any(|name| normal(name) == normal(code))
-        })
+    let generated: Vec<String> = match Command::new("/usr/bin/locale").arg("-a").output() {
+        Ok(output) => String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(normal)
+            .collect(),
+        Err(error) => {
+            tracing::warn!("cannot list the generated locales: {error}");
+            Vec::new()
+        }
+    };
+    let mut missing: Vec<String> = wanted
+        .iter()
+        .filter(|assignment| !assignment.starts_with("LANGUAGE="))
+        .filter_map(|assignment| assignment.split_once('=').map(|(_, value)| value))
+        .filter(|value| !value.is_empty() && !same_locale(value, DEFAULT_LOCALE))
+        .filter(|value| !generated.contains(&normal(value)))
+        .map(str::to_owned)
+        .collect();
+    missing.sort();
+    missing.dedup();
+    missing
 }
 
 fn read(
@@ -290,11 +311,15 @@ fn read(
     available: &[AvailableLocale],
     watch: &SharedPacks,
 ) -> Option<LocaleState> {
-    let (language, region) = parse_assignments(&with_user_choices(locale.locale().ok()?));
+    let system = locale.locale().ok()?;
+    let (login_language, login_region) = parse_assignments(&system);
+    let (language, region) = parse_assignments(&with_user_choices(system));
     Some(LocaleState {
         available: available.to_vec(),
         language,
         region,
+        login_language,
+        login_region,
         pending: None,
         translations: translations(),
         packs: packs_now(watch),
@@ -358,20 +383,23 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 updates.send(Update::Locale(read(&locale, available, &watch)));
                 continue;
             }
+            let login = command == LocaleCommand::LoginLanguage;
             let (setting, chosen) = match command {
                 LocaleCommand::Language(language) => (SettingId::Language, Some(language)),
                 LocaleCommand::Region(region) => (SettingId::Region, region),
+                LocaleCommand::LoginLanguage => (SettingId::Language, None),
                 LocaleCommand::Read
                 | LocaleCommand::LoginKeyboard(_)
                 | LocaleCommand::LoginAccessibility(_) => continue,
             };
-            let current = match locale.locale() {
-                Ok(current) => with_user_choices(current),
+            let system_locale = locale.locale();
+            let current = match &system_locale {
+                Ok(current) => with_user_choices(current.clone()),
                 Err(error) => {
                     updates.send(Update::PaneFailed(
                         PaneId::LanguageTime,
                         explained(
-                            &error,
+                            error,
                             text!("The language service"),
                             text!("Couldn't read the current language and region."),
                         ),
@@ -381,6 +409,16 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 }
             };
             let (language, region) = parse_assignments(&current);
+            if login {
+                let system = system_locale.unwrap_or_default();
+                let mut arguments = vec!["locale".to_owned()];
+                arguments.extend(assignments(&system, &language, region.as_deref()));
+                if let Err(failure) = run_helper(&arguments) {
+                    updates.send(Update::Failed(setting, keyboard_failure(failure)));
+                }
+                updates.send(Update::Locale(read(&locale, available, &watch)));
+                continue;
+            }
             let wanted = if setting == SettingId::Language {
                 assignments(
                     &current,
@@ -397,11 +435,11 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
             };
             let needed = chosen.as_deref().unwrap_or(&language);
             let contents = user_lines(&wanted, &shown);
-            let mut arguments = vec!["locale".to_owned()];
-            arguments.extend(wanted);
-            let outcome = match run_helper(&arguments) {
-                Err(HelperFailure::NotAllowed) if generated(needed) => Ok(()),
-                other => other,
+            let missing = missing_locales(&wanted);
+            let outcome = if missing.is_empty() {
+                Ok(())
+            } else {
+                run_helper(&[vec!["generate".to_owned()], missing].concat())
             };
             match outcome {
                 Ok(()) => match write_user_file(&contents) {
@@ -466,10 +504,15 @@ fn pack_names(code: &str) -> Vec<String> {
         .unwrap_or(code)
         .to_lowercase()
         .replace('_', "-");
-    let mut names = vec![
-        format!("{PACKS}{regional}"),
-        format!("{PACKS}{}", tongue(code)),
-    ];
+    let tongue = tongue(code);
+    let mut prefixes = vec![PACKS];
+    if bande_xdg::is_installed(BROWSER) {
+        prefixes.push(BROWSER_PACKS);
+    }
+    let mut names: Vec<String> = prefixes
+        .into_iter()
+        .flat_map(|prefix| [format!("{prefix}{regional}"), format!("{prefix}{tongue}")])
+        .collect();
     names.dedup();
     names
 }

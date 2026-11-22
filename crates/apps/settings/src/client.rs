@@ -291,9 +291,39 @@ pub trait Config {
         identity: &str,
         settings: HashMap<&str, zbus::zvariant::Value<'_>>,
     ) -> zbus::Result<()>;
+    fn try_display(
+        &self,
+        identity: &str,
+        settings: HashMap<&str, zbus::zvariant::Value<'_>>,
+    ) -> zbus::Result<()>;
+    fn keep_displays(&self) -> zbus::Result<()>;
+    fn revert_displays(&self) -> zbus::Result<()>;
     #[zbus(property)]
     fn arrangements(&self) -> zbus::Result<Vec<Vec<ArrangedDisplay>>>;
     fn set_arrangement(&self, displays: Vec<ArrangedDisplay>) -> zbus::Result<()>;
+}
+
+fn display_values(display: &DisplaySettings) -> HashMap<&'static str, zbus::zvariant::Value<'_>> {
+    let mut settings = HashMap::new();
+    if let Some(resolution) = display.resolution {
+        settings.insert("resolution", resolution.into());
+    }
+    if let Some(scale) = display.scale {
+        settings.insert("scale", scale.into());
+    }
+    if let Some(rate) = display.refresh_rate {
+        settings.insert("refresh-rate", rate.into());
+    }
+    if let Some(rotation) = display.rotation {
+        settings.insert("rotation", rotation.degrees().into());
+    }
+    if let Some(profile) = &display.colour_profile {
+        settings.insert("colour-profile", profile.as_str().into());
+    }
+    if let Some(on) = display.variable_refresh {
+        settings.insert("variable-refresh", on.into());
+    }
+    settings
 }
 
 fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
@@ -464,26 +494,19 @@ impl SettingsClient {
     }
 
     pub fn set_display(&self, identity: &str, display: &DisplaySettings) -> zbus::Result<()> {
-        let mut settings = HashMap::new();
-        if let Some(resolution) = display.resolution {
-            settings.insert("resolution", resolution.into());
+        self.config.set_display(identity, display_values(display))
+    }
+
+    pub fn try_display(&self, identity: &str, display: &DisplaySettings) -> zbus::Result<()> {
+        self.config.try_display(identity, display_values(display))
+    }
+
+    pub fn keep_displays(&self, keep: bool) -> zbus::Result<()> {
+        if keep {
+            self.config.keep_displays()
+        } else {
+            self.config.revert_displays()
         }
-        if let Some(scale) = display.scale {
-            settings.insert("scale", scale.into());
-        }
-        if let Some(rate) = display.refresh_rate {
-            settings.insert("refresh-rate", rate.into());
-        }
-        if let Some(rotation) = display.rotation {
-            settings.insert("rotation", rotation.degrees().into());
-        }
-        if let Some(profile) = &display.colour_profile {
-            settings.insert("colour-profile", profile.as_str().into());
-        }
-        if let Some(on) = display.variable_refresh {
-            settings.insert("variable-refresh", on.into());
-        }
-        self.config.set_display(identity, settings)
     }
 
     pub fn arrangements(&self) -> zbus::Result<Vec<Vec<Placement>>> {

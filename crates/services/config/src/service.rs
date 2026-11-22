@@ -1,10 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::File;
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Duration;
 
 use bande_watch::{Changes, FolderWatch};
@@ -35,7 +34,8 @@ fn clock_time(text: &str) -> zbus::fdo::Result<ClockTime> {
 pub const BUS_NAME: &str = "org.bande.Config";
 pub const OBJECT_PATH: &str = "/org/bande/Config";
 
-const STAGING_NAME: &str = ".config.kdl.new";
+pub const DISPLAY_TRIAL: Duration = Duration::from_secs(15);
+const TRIAL_FILE: &str = "bande/display-trial.kdl";
 
 #[derive(Debug)]
 pub enum ServiceError {
@@ -68,20 +68,8 @@ impl From<io::Error> for ServiceError {
     }
 }
 
-fn replace(path: &Path, contents: &str) -> io::Result<()> {
-    let target = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let staging = target.with_file_name(STAGING_NAME);
-    let mut file = File::create(&staging)?;
-    if let Ok(existing) = std::fs::metadata(&target) {
-        file.set_permissions(existing.permissions())?;
-    }
-    file.write_all(contents.as_bytes())?;
-    file.sync_all()?;
-    std::fs::rename(&staging, &target)
-}
-
 pub struct ConfigService {
-    _watch: FolderWatch,
+    _watch: Arc<FolderWatch>,
     _connection: Connection,
 }
 
@@ -111,6 +99,7 @@ impl ConfigService {
             on_reload(store.reload(path));
         }
         let published = Arc::new(Mutex::new(store.current()));
+        let watching = Arc::new(OnceLock::new());
 
         connection.object_server().at(
             OBJECT_PATH,
@@ -118,6 +107,9 @@ impl ConfigService {
                 store: Arc::clone(&store),
                 path: path.to_path_buf(),
                 published: Arc::clone(&published),
+                watch: Arc::clone(&watching),
+                trial: Mutex::default(),
+                trial_path: bande_xdg::state_home().map(|state| state.join(TRIAL_FILE)),
             },
         )?;
         connection.request_name(BUS_NAME)?;
@@ -142,6 +134,11 @@ impl ConfigService {
             on_reload(reloaded);
         })?;
         watch.watch(directory)?;
+        let watch = Arc::new(watch);
+        if watching.set(Arc::clone(&watch)).is_err() {
+            tracing::warn!("the configuration folder is already watched");
+        }
+        recover_trial(connection);
         Ok(Self {
             _watch: watch,
             _connection: connection.clone(),
@@ -450,10 +447,69 @@ fn arranged(placement: &Placement) -> ArrangedDisplay {
     )
 }
 
+#[derive(Default)]
+struct Trial {
+    previous: BTreeMap<String, DisplaySettings>,
+    round: u64,
+}
+
 struct ConfigInterface {
     store: Arc<ConfigStore>,
     path: PathBuf,
     published: Published,
+    watch: Arc<OnceLock<Arc<FolderWatch>>>,
+    trial: Mutex<Trial>,
+    trial_path: Option<PathBuf>,
+}
+
+fn recover_trial(connection: &Connection) {
+    let interface = match connection
+        .object_server()
+        .interface::<_, ConfigInterface>(OBJECT_PATH)
+    {
+        Ok(interface) => interface,
+        Err(error) => {
+            tracing::warn!("cannot recover unconfirmed display settings: {error}");
+            return;
+        }
+    };
+    let guard = interface.get();
+    let Some(path) = &guard.trial_path else {
+        return;
+    };
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == ErrorKind::NotFound => return,
+        Err(error) => {
+            tracing::warn!("cannot read {}: {error}", path.display());
+            return;
+        }
+    };
+    match Config::parse(&source) {
+        Ok(config) => {
+            tracing::info!("restoring display settings that were never confirmed");
+            let mut trial = guard.lock_trial();
+            trial.previous = config.displays;
+            drop(trial);
+            guard.announce_revert(interface.signal_emitter(), None);
+        }
+        Err(error) => {
+            tracing::warn!("{} is invalid at {error}", path.display());
+            guard.forget_trial();
+        }
+    }
+}
+
+fn end_trial(connection: &Connection, round: u64) {
+    match connection
+        .object_server()
+        .interface::<_, ConfigInterface>(OBJECT_PATH)
+    {
+        Ok(interface) => interface
+            .get()
+            .announce_revert(interface.signal_emitter(), Some(round)),
+        Err(error) => tracing::warn!("cannot revert the display settings: {error}"),
+    }
 }
 
 impl ConfigInterface {
@@ -473,6 +529,43 @@ impl ConfigInterface {
 
     fn write(&self, setting: &Setting) -> zbus::fdo::Result<()> {
         self.write_from(|_| setting.clone())
+    }
+
+    fn lock_trial(&self) -> MutexGuard<'_, Trial> {
+        self.trial.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn forget_trial(&self) {
+        if let Some(path) = &self.trial_path
+            && let Err(error) = std::fs::remove_file(path)
+            && error.kind() != ErrorKind::NotFound
+        {
+            tracing::warn!("cannot remove {}: {error}", path.display());
+        }
+    }
+
+    fn revert(&self, round: Option<u64>) -> zbus::fdo::Result<bool> {
+        let mut trial = self.lock_trial();
+        if round.is_some_and(|round| round != trial.round) || trial.previous.is_empty() {
+            return Ok(false);
+        }
+        for (identity, display) in &trial.previous {
+            self.write(&Setting::Display(identity.clone(), display.clone()))?;
+        }
+        trial.previous.clear();
+        self.forget_trial();
+        Ok(true)
+    }
+
+    fn announce_revert(&self, emitter: &SignalEmitter<'_>, round: Option<u64>) {
+        match self.revert(round) {
+            Ok(true) => bande_bus::warn_unsent(
+                "the restored display settings",
+                zbus::block_on(self.displays_changed(emitter)),
+            ),
+            Ok(false) => {}
+            Err(error) => tracing::warn!("cannot restore the display settings: {error}"),
+        }
     }
 
     fn change_accessibility(
@@ -503,8 +596,13 @@ impl ConfigInterface {
         let edited = setting(&config)
             .apply(&source)
             .map_err(|error| InvalidArgs(error.message))?;
-        replace(&self.path, &edited)
+        bande_xdg::replace_file(&self.path, &edited)
             .map_err(|error| Failed(format!("cannot write the configuration: {error}")))?;
+        if let (Some(watch), Some(folder)) = (self.watch.get(), self.path.parent())
+            && let Err(error) = watch.rewatch(folder)
+        {
+            tracing::warn!("cannot watch {}: {error}", folder.display());
+        }
         *published = self
             .store
             .apply(&edited)
@@ -1428,6 +1526,60 @@ impl ConfigInterface {
         let before = self.store.current();
         self.write(&Setting::Display(identity, display_settings(&settings)?))?;
         if before.displays != self.store.current().displays {
+            self.displays_changed(&emitter).await?;
+        }
+        Ok(())
+    }
+
+    async fn try_display(
+        &self,
+        identity: String,
+        settings: HashMap<String, OwnedValue>,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let display = display_settings(&settings)?;
+        let round = {
+            let mut trial = self.lock_trial();
+            let before = self.store.current().display(&identity);
+            if before == display {
+                return Ok(());
+            }
+            trial.previous.entry(identity.clone()).or_insert(before);
+            trial.round += 1;
+            if let Some(path) = &self.trial_path {
+                bande_xdg::replace_file(path, crate::edit::displays_document(&trial.previous))
+                    .map_err(|error| {
+                        Failed(format!(
+                            "cannot remember the current display settings: {error}"
+                        ))
+                    })?;
+            }
+            self.write(&Setting::Display(identity, display))?;
+            trial.round
+        };
+        self.displays_changed(&emitter).await?;
+        let connection = Connection::from(connection.clone());
+        std::thread::Builder::new()
+            .name("display-trial".to_owned())
+            .spawn(move || {
+                std::thread::sleep(DISPLAY_TRIAL);
+                end_trial(&connection, round);
+            })
+            .map_err(|error| Failed(format!("cannot time the display settings: {error}")))?;
+        Ok(())
+    }
+
+    fn keep_displays(&self) {
+        self.lock_trial().previous.clear();
+        self.forget_trial();
+    }
+
+    async fn revert_displays(
+        &self,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        if self.revert(None)? {
             self.displays_changed(&emitter).await?;
         }
         Ok(())

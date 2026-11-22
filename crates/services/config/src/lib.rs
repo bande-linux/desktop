@@ -26,8 +26,8 @@ pub use login_picture::{
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{
-    ArrangedDisplay, BUS_NAME, ConfigService, FocusScheduleValue, NightLightValue, OBJECT_PATH,
-    ServiceError,
+    ArrangedDisplay, BUS_NAME, ConfigService, DISPLAY_TRIAL, FocusScheduleValue, NightLightValue,
+    OBJECT_PATH, ServiceError,
 };
 pub use store::{ConfigStore, Loaded, ReloadError};
 
@@ -1120,7 +1120,6 @@ impl Parser<'_> {
                     config.focus_schedule = self.focus_schedule(node);
                     Ok(())
                 }
-                "hot-corners" => Ok(()),
                 "search" => {
                     config.search = self.search(node);
                     Ok(())

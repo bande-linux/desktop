@@ -111,3 +111,9 @@ msgstr "Zooma ut"
 
 msgid "Turn the screen reader on or off"
 msgstr "Slå på eller av skärmläsaren"
+
+msgid "Switch to the next keyboard layout"
+msgstr "Byt till nästa tangentbordslayout"
+
+msgid "Switch to the previous keyboard layout"
+msgstr "Byt till föregående tangentbordslayout"

@@ -37,6 +37,8 @@ const REOPEN_ARGUMENT: [&str; 1] = ["--reopen-after-crash"];
 
 pub const SESSION_CLIENT_RESTART_THROTTLE: Duration = Duration::from_secs(10);
 const LOCK_SCREEN_RELAUNCH_AFTER: Duration = Duration::from_secs(10);
+const STABLE_AFTER: Duration = Duration::from_secs(60);
+const CRASH_LOOP: u32 = 3;
 
 #[derive(Clone)]
 pub(crate) struct Helper {
@@ -72,7 +74,9 @@ pub(crate) struct SessionClient {
     helper: Helper,
     role: SessionRole,
     child: Option<Child>,
+    started: Instant,
     last_restart: Option<Instant>,
+    quick_exits: u32,
 }
 
 pub const OUTPUT_VARIABLE: &str = "BANDE_OUTPUT";
@@ -145,7 +149,9 @@ impl Compositor {
             helper,
             role,
             child: Some(child),
+            started: Instant::now(),
             last_restart: None,
+            quick_exits: 0,
         });
         Ok(())
     }
@@ -293,8 +299,28 @@ impl Compositor {
             let client = &mut self.session_clients[index];
             if let Some(child) = client.child.as_mut() {
                 match child.try_wait() {
-                    Ok(None) => continue,
-                    Ok(Some(_)) => client.child = None,
+                    Ok(None) => {
+                        let ran = client.started.elapsed();
+                        if client.quick_exits > 0 {
+                            if ran >= STABLE_AFTER {
+                                client.quick_exits = 0;
+                                let executable = client.helper.path.clone();
+                                self.state.clear_alert(&executable);
+                            } else {
+                                let wait = STABLE_AFTER - ran;
+                                upkeep.retry_in =
+                                    Some(upkeep.retry_in.map_or(wait, |retry| retry.min(wait)));
+                            }
+                        }
+                        continue;
+                    }
+                    Ok(Some(_)) => {
+                        client.child = None;
+                        client.quick_exits = match client.started.elapsed() < STABLE_AFTER {
+                            true => client.quick_exits + 1,
+                            false => 0,
+                        };
+                    }
                     Err(error) => {
                         upkeep.failures.push((client.helper.path.clone(), error));
                         continue;
@@ -311,7 +337,18 @@ impl Compositor {
             client.last_restart = Some(Instant::now());
             let (helper, role) = (client.helper.clone(), client.role);
             match self.spawn_session_client(&helper, role) {
-                Ok(child) => self.session_clients[index].child = Some(child),
+                Ok(child) => {
+                    let client = &mut self.session_clients[index];
+                    client.child = Some(child);
+                    client.started = Instant::now();
+                    let quick_exits = client.quick_exits;
+                    if helper.path == Path::new(SHELL) && quick_exits >= CRASH_LOOP {
+                        self.state.report_shell_crash_loop(&helper.path);
+                        if quick_exits == CRASH_LOOP {
+                            self.state.open_force_quit();
+                        }
+                    }
+                }
                 Err(error) => {
                     upkeep.failures.push((helper.path, error));
                     let wait = SESSION_CLIENT_RESTART_THROTTLE;

@@ -323,14 +323,18 @@ fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiStat
     if !network.has_wifi()? {
         return Ok(None);
     }
-    let enabled = network.wifi_enabled()?;
     let outside = network.wifi_outside()?;
-    let (networks, link) = if enabled && outside.is_none() {
+    let enabled = outside.is_some() || network.wifi_enabled()?;
+    let (networks, link) = if enabled {
         let networks = match network.networks() {
             Err(bande_network::Error::NoWifiDevice) => return Ok(None),
             networks => networks?,
         };
-        (networks, network.wifi_link().unwrap_or_default())
+        let link = match outside {
+            None => network.wifi_link().unwrap_or_default(),
+            Some(_) => WifiLink::default(),
+        };
+        (networks, link)
     } else {
         (Vec::new(), WifiLink::default())
     };
@@ -565,6 +569,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     if let Err(error) = network.scan() {
                         tracing::debug!("scan not started: {error}");
                     }
+                    let _ = changed.send(NetworkChange::Read);
                 }
                 NetworkCommand::Join(target, password) => {
                     let outcome = joined(network.join(&target, password.as_deref()));

@@ -4,9 +4,9 @@ mod handover;
 mod hotspot;
 pub mod ifupdown;
 mod kernel;
+mod nl80211;
 mod proxy;
 mod radio;
-mod regulatory;
 mod wifi;
 
 pub use connections::{
@@ -21,8 +21,8 @@ use std::time::Duration;
 use bande_l10n::{text, tr};
 pub use enterprise::{Eap, Enterprise};
 pub use hotspot::{Hotspot, valid_hotspot_password};
+pub use nl80211::wifi_country;
 pub use radio::{airplane_mode, follow_airplane_mode, set_airplane_mode};
-pub use regulatory::wifi_country;
 pub use wifi::{ConnectionChange, KnownNetwork, PrivateAddress, WifiLink};
 
 use proxy::{
@@ -167,6 +167,7 @@ pub struct Network {
     pub security: Security,
     pub known: bool,
     pub current: bool,
+    pub system: bool,
     access_point: OwnedObjectPath,
     access_points: Vec<(OwnedObjectPath, u8)>,
 }
@@ -175,6 +176,23 @@ impl Network {
     pub fn name(&self) -> String {
         String::from_utf8_lossy(&self.ssid).into_owned()
     }
+}
+
+fn system_network(interface: &str) -> Option<Network> {
+    let association = nl80211::association(interface)
+        .inspect_err(|error| tracing::debug!("cannot read the Wi-Fi link of {interface}: {error}"))
+        .ok()??;
+    kernel::addressing(interface).address?;
+    Some(Network {
+        ssid: association.ssid,
+        strength: association.strength,
+        security: association.security,
+        known: true,
+        current: true,
+        system: true,
+        access_point: OwnedObjectPath::from(ObjectPath::from_static_str_unchecked(ROOT)),
+        access_points: Vec::new(),
+    })
 }
 
 fn sort_networks(networks: &mut [Network]) {
@@ -494,6 +512,9 @@ impl NetworkManager {
 
     pub fn scan(&self) -> Result<()> {
         let device = self.wifi_device()?;
+        if self.device(&device)?.state()? == connections::DEVICE_STATE_UNMANAGED {
+            return Ok(());
+        }
         Ok(self.wireless(&device)?.request_scan(HashMap::new())?)
     }
 
@@ -521,8 +542,13 @@ impl NetworkManager {
             .build()?)
     }
 
+    /// The networks nearby, best first. While the Wi-Fi device is set up outside NetworkManager, only the network it is connected to, read from the kernel and marked `system`.
     pub fn networks(&self) -> Result<Vec<Network>> {
         let device = self.wifi_device()?;
+        let proxy = self.device(&device)?;
+        if proxy.state()? == connections::DEVICE_STATE_UNMANAGED {
+            return Ok(system_network(&proxy.interface()?).into_iter().collect());
+        }
         let wireless = self.wireless(&device)?;
         let active = wireless.active_access_point()?;
         let saved = self.saved_wifi()?;
@@ -542,6 +568,7 @@ impl NetworkManager {
                     security: Security::of(point.flags()?, point.wpa_flags()?, point.rsn_flags()?),
                     known: saved.iter().any(|(saved, _)| *saved == ssid),
                     current: path == active,
+                    system: false,
                     ssid,
                     access_point: path.clone(),
                     access_points: vec![(path.clone(), strength)],
@@ -569,6 +596,9 @@ impl NetworkManager {
     }
 
     pub fn join(&self, network: &Network, password: Option<&str>) -> Result<JoinOutcome> {
+        if network.system {
+            return Ok(JoinOutcome::Joined);
+        }
         let device = self.wifi_device()?;
         let manager = self.manager()?;
         let saved = self

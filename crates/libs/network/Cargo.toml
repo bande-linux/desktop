@@ -15,5 +15,8 @@ rustix = { workspace = true, features = ["net"] }
 tracing.workspace = true
 zbus.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

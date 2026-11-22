@@ -4,13 +4,13 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 
-use bande_l10n::tr;
-
 use crate::{Ipv6, ManualIpv4, ManualIpv6};
 
 pub const INTERFACES: &str = "/etc/network/interfaces";
 pub const INTERFACES_FOLDER: &str = "/etc/network/interfaces.d";
 const NETWORK_FOLDER: &str = "/etc/network";
+const IFUPDOWN_STATE: &str = "/run/network/ifstate";
+const NET_CLASS: &str = "/sys/class/net";
 const SECRET_OPTIONS: [&str; 2] = ["wpa-psk", "wpa-password"];
 const HIDDEN_SECRET: &str = "••••••••";
 
@@ -24,6 +24,7 @@ pub struct Source {
 pub struct Configuration {
     pub files: Vec<Source>,
     pub elsewhere: Vec<String>,
+    pub supplicant: Vec<Source>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,89 +42,49 @@ pub enum Refusal {
     Service(String),
 }
 
-impl Refusal {
-    pub fn code(&self) -> String {
-        match self {
-            Self::NotConfigured => "not-configured".to_owned(),
-            Self::Continuation(path) => format!("continuation {}", path.display()),
-            Self::Mapping(path) => format!("mapping {}", path.display()),
-            Self::Elsewhere(source) => format!("elsewhere {source}"),
-            Self::Shared(path, line) => format!("shared {}\t{line}", path.display()),
-            Self::Repeated(family) => format!("repeated {family}"),
-            Self::Method(method) => format!("method {method}"),
-            Self::Option(option) => format!("option {option}"),
-            Self::Value(option) => format!("value {option}"),
-            Self::NoNetwork => "no-network".to_owned(),
-            Self::Service(service) => format!("service {service}"),
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        let (kind, detail) = code.split_once(' ').unwrap_or((code, ""));
-        let detail = detail.to_owned();
-        Some(match kind {
-            "not-configured" => Self::NotConfigured,
-            "continuation" => Self::Continuation(PathBuf::from(detail)),
-            "mapping" => Self::Mapping(PathBuf::from(detail)),
-            "elsewhere" => Self::Elsewhere(detail),
-            "shared" => {
-                let (path, line) = detail.split_once('\t')?;
-                Self::Shared(PathBuf::from(path), line.to_owned())
-            }
-            "repeated" => Self::Repeated(detail),
-            "method" => Self::Method(detail),
-            "option" => Self::Option(detail),
-            "value" => Self::Value(detail),
-            "no-network" => Self::NoNetwork,
-            "service" => Self::Service(detail),
-            _ => return None,
-        })
-    }
-}
-
 impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&match self {
-            Self::NotConfigured => tr!("/etc/network/interfaces has no stanza for it"),
-            Self::Continuation(path) => tr!(
-                "{file} continues lines with a backslash",
-                file = path.display().to_string()
+        match self {
+            Self::NotConfigured => write!(f, "/etc/network/interfaces has no stanza for it"),
+            Self::Continuation(path) => {
+                write!(f, "{} continues lines with a backslash", path.display())
+            }
+            Self::Mapping(path) => {
+                write!(
+                    f,
+                    "{} maps interfaces with a mapping stanza",
+                    path.display()
+                )
+            }
+            Self::Elsewhere(source) => write!(
+                f,
+                "the configuration reads “{source}” from outside /etc/network/interfaces.d"
             ),
-            Self::Mapping(path) => tr!(
-                "{file} maps interfaces with a mapping stanza",
-                file = path.display().to_string()
-            ),
-            Self::Elsewhere(source) => tr!(
-                "the configuration reads “{source}” from outside /etc/network/interfaces.d",
-                source = source.clone()
-            ),
-            Self::Shared(path, line) => tr!(
-                "another stanza in {file} uses it: “{line}”",
-                file = path.display().to_string(),
-                line = line.clone()
-            ),
-            Self::Repeated(family) => tr!(
-                "it has more than one “{family}” stanza",
-                family = family.clone()
-            ),
-            Self::Method(method) => tr!(
-                "NetworkManager has no equivalent of the “{method}” method",
-                method = method.clone()
-            ),
-            Self::Option(option) => tr!(
-                "NetworkManager has no equivalent of the “{option}” option",
-                option = option.clone()
-            ),
-            Self::Value(option) => tr!(
-                "the value of “{option}” is not one Settings understands",
-                option = option.clone()
-            ),
-            Self::NoNetwork => tr!("its stanza names no Wi-Fi network (wpa-ssid)"),
-            Self::Service(service) => tr!(
-                "{service} also sets up network interfaces on this computer",
-                service = service.clone()
-            ),
-        })
+            Self::Shared(path, line) => {
+                write!(f, "another stanza in {} uses it: “{line}”", path.display())
+            }
+            Self::Repeated(what) => write!(f, "it sets “{what}” more than once"),
+            Self::Method(method) => {
+                write!(
+                    f,
+                    "NetworkManager has no equivalent of the “{method}” method"
+                )
+            }
+            Self::Option(option) => {
+                write!(
+                    f,
+                    "NetworkManager has no equivalent of the “{option}” option"
+                )
+            }
+            Self::Value(option) => write!(f, "the value of “{option}” is not understood"),
+            Self::NoNetwork => write!(f, "its stanza names no Wi-Fi network"),
+            Self::Service(service) => {
+                write!(
+                    f,
+                    "{service} also sets up network interfaces on this computer"
+                )
+            }
+        }
     }
 }
 
@@ -266,17 +227,46 @@ fn folder_files(folder: &Path, wanted: impl Fn(&str) -> bool) -> io::Result<Vec<
         .collect()
 }
 
-fn sourced(argument: &str) -> Option<(bool, PathBuf)> {
-    let path = Path::new(NETWORK_FOLDER).join(argument);
-    let folder = Path::new(INTERFACES_FOLDER);
-    if path == folder.join("*") {
-        return Some((true, folder.to_path_buf()));
+struct Layout {
+    root: PathBuf,
+    network: PathBuf,
+    folder: PathBuf,
+}
+
+impl Layout {
+    fn under(root: &Path) -> Self {
+        Self {
+            root: root.to_path_buf(),
+            network: root.join(NETWORK_FOLDER.trim_start_matches('/')),
+            folder: root.join(INTERFACES_FOLDER.trim_start_matches('/')),
+        }
     }
-    (path.parent() == Some(folder) && !argument.contains(['*', '?', '['])).then_some((false, path))
+
+    fn resolve(&self, argument: &str) -> PathBuf {
+        match argument.strip_prefix('/') {
+            Some(absolute) => self.root.join(absolute),
+            None => self.network.join(argument),
+        }
+    }
+
+    fn sourced(&self, argument: &str) -> Option<(bool, PathBuf)> {
+        let path = self.resolve(argument);
+        if path == self.folder.join("*") {
+            return Some((true, self.folder.clone()));
+        }
+        (path.parent() == Some(self.folder.as_path()) && !argument.contains(['*', '?', '[']))
+            .then_some((false, path))
+    }
 }
 
 pub fn read() -> io::Result<Configuration> {
-    let text = match fs::read_to_string(INTERFACES) {
+    read_under(Path::new("/"))
+}
+
+fn read_under(root: &Path) -> io::Result<Configuration> {
+    let layout = Layout::under(root);
+    let main = layout.resolve(INTERFACES);
+    let text = match fs::read_to_string(&main) {
         Ok(text) => text,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Ok(Configuration::default());
@@ -285,15 +275,15 @@ pub fn read() -> io::Result<Configuration> {
     };
     let mut configuration = Configuration {
         files: vec![Source {
-            path: PathBuf::from(INTERFACES),
+            path: main,
             text: text.clone(),
         }],
-        elsewhere: Vec::new(),
+        ..Configuration::default()
     };
     for line in text.lines() {
         let words: Vec<&str> = line.split_whitespace().collect();
         match words.as_slice() {
-            ["source", argument] => match sourced(argument) {
+            ["source", argument] => match layout.sourced(argument) {
                 Some((true, folder)) => configuration
                     .files
                     .extend(folder_files(&folder, |name| !name.starts_with('.'))?),
@@ -304,11 +294,11 @@ pub fn read() -> io::Result<Configuration> {
                 None => configuration.elsewhere.push(line.trim().to_owned()),
             },
             ["source-directory" | "source-dir", folder]
-                if Path::new(NETWORK_FOLDER).join(folder) == Path::new(INTERFACES_FOLDER) =>
+                if layout.resolve(folder) == layout.folder =>
             {
                 configuration
                     .files
-                    .extend(folder_files(Path::new(INTERFACES_FOLDER), run_parts_name)?);
+                    .extend(folder_files(&layout.folder, run_parts_name)?);
             }
             ["source" | "source-directory" | "source-dir", ..] => {
                 configuration.elsewhere.push(line.trim().to_owned());
@@ -316,29 +306,55 @@ pub fn read() -> io::Result<Configuration> {
             _ => {}
         }
     }
-    for file in configuration.files.iter().skip(1) {
+    let mut supplicant = Vec::new();
+    for (index, file) in configuration.files.iter().enumerate() {
         for line in file.text.lines() {
-            if matches!(
-                line.split_whitespace().next(),
-                Some("source" | "source-directory" | "source-dir")
-            ) {
-                configuration.elsewhere.push(line.trim().to_owned());
+            match line.split_whitespace().collect::<Vec<_>>().as_slice() {
+                ["source" | "source-directory" | "source-dir", ..] if index > 0 => {
+                    configuration.elsewhere.push(line.trim().to_owned());
+                }
+                ["wpa-conf", argument] if argument.starts_with('/') => {
+                    match fs::read_to_string(layout.resolve(argument)) {
+                        Ok(text) => supplicant.push(Source {
+                            path: PathBuf::from(argument),
+                            text,
+                        }),
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+                _ => {}
             }
         }
     }
+    configuration.supplicant = supplicant;
     Ok(configuration)
 }
 
-pub fn configuring_file(configuration: &Configuration, interface: &str) -> Option<PathBuf> {
-    configuration.files.iter().find_map(|file| {
-        file.text
-            .lines()
-            .any(|line| {
-                let mut words = line.split_whitespace();
-                words.next() == Some("iface") && words.next() == Some(interface)
-            })
-            .then(|| file.path.clone())
+fn brought_up(state: &str, interface: &str) -> bool {
+    state.lines().any(|line| {
+        line.split_once('=')
+            .is_some_and(|(name, _)| name == interface)
     })
+}
+
+/// Whether Settings can hand `interface` to NetworkManager: its stanza is one the helper carries
+/// over, or, while the files are readable only by root, ifupdown brought it up.
+pub fn can_hand_over(interface: &str) -> bool {
+    let wireless = Path::new(NET_CLASS)
+        .join(interface)
+        .join("wireless")
+        .exists();
+    match read() {
+        Ok(configuration) => plan(&configuration, interface, wireless).is_ok(),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            fs::read_to_string(IFUPDOWN_STATE).is_ok_and(|state| brought_up(&state, interface))
+        }
+        Err(error) => {
+            tracing::debug!("cannot read the interfaces files: {error}");
+            false
+        }
+    }
 }
 
 fn mentions(words: &[&str], interface: &str) -> bool {
@@ -375,6 +391,7 @@ struct Collected {
     psk: Option<String>,
     open: bool,
     hidden: bool,
+    supplicant: Option<PathBuf>,
 }
 
 const STANZAS: [&str; 7] = [
@@ -467,7 +484,9 @@ impl Collected {
                 "0" => {}
                 _ => return Err(bad()),
             },
-            ("wpa-driver", ..) => {}
+            ("wpa-conf", ..) => self.supplicant = Some(PathBuf::from(value)),
+            ("wpa-driver" | "wpa-proto" | "wpa-pairwise" | "wpa-group", ..) => {}
+            ("wpa-ap-scan", ..) if value == "1" => {}
             _ => return refuse(),
         }
         Ok(())
@@ -589,6 +608,81 @@ impl Collected {
     }
 }
 
+fn supplicant_ssid(value: &str) -> Option<Vec<u8>> {
+    if let Some(quoted) = value.strip_prefix('"') {
+        return Some(quoted.strip_suffix('"')?.as_bytes().to_vec());
+    }
+    if !value.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(value.get(at..at + 2)?, 16).ok())
+        .collect()
+}
+
+impl Collected {
+    fn supplicant(&mut self, text: &str) -> Result<(), Refusal> {
+        let bad = |key: &str| Refusal::Value(key.to_owned());
+        let (mut found, mut inside) = (false, false);
+        for line in text.lines().map(str::trim) {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if !inside {
+                if line.replace(' ', "") == "network={" {
+                    if std::mem::replace(&mut found, true) {
+                        return Err(bad("wpa-conf"));
+                    }
+                    inside = true;
+                }
+                continue;
+            }
+            if line == "}" {
+                inside = false;
+                continue;
+            }
+            let (key, value) = line.split_once('=').ok_or_else(|| bad("wpa-conf"))?;
+            let (key, value) = (key.trim(), value.trim());
+            match key {
+                "ssid" => {
+                    let ssid = supplicant_ssid(value)
+                        .filter(|ssid| (1..=32).contains(&ssid.len()))
+                        .ok_or_else(|| bad("ssid"))?;
+                    if self.ssid.replace(ssid).is_some() {
+                        return Err(Refusal::Repeated("ssid".to_owned()));
+                    }
+                }
+                "psk" => {
+                    let psk = unquoted(value);
+                    if !valid_psk(psk) || (psk == value && psk.len() != 64) {
+                        return Err(bad("psk"));
+                    }
+                    self.psk = Some(psk.to_owned());
+                }
+                "key_mgmt" => match value {
+                    "NONE" => self.open = true,
+                    "WPA-PSK" | "WPA-PSK WPA-PSK-SHA256" | "WPA-PSK-SHA256 WPA-PSK" => {}
+                    _ => return Err(bad("key_mgmt")),
+                },
+                "scan_ssid" => match value {
+                    "1" => self.hidden = true,
+                    "0" => {}
+                    _ => return Err(bad("scan_ssid")),
+                },
+                "priority" | "id_str" | "proto" | "pairwise" | "group" => {}
+                "auth_alg" if value == "OPEN" => {}
+                "disabled" if value == "0" => {}
+                _ => return Err(Refusal::Option(key.to_owned())),
+            }
+        }
+        if !found || inside {
+            return Err(bad("wpa-conf"));
+        }
+        Ok(())
+    }
+}
+
 fn prefix_of(mask: &str) -> Option<u32> {
     if let Ok(prefix) = mask.parse::<u32>() {
         return Some(prefix);
@@ -699,6 +793,14 @@ pub fn plan(
     if collected.inet.is_none() && collected.inet6.is_none() {
         return Err(Refusal::NotConfigured);
     }
+    if let Some(path) = collected.supplicant.clone() {
+        let file = configuration
+            .supplicant
+            .iter()
+            .find(|file| file.path == path)
+            .ok_or_else(|| Refusal::Value("wpa-conf".to_owned()))?;
+        collected.supplicant(&file.text)?;
+    }
     Ok(Plan {
         interface: interface.to_owned(),
         edits,
@@ -719,7 +821,7 @@ mod tests {
                     text: (*text).to_owned(),
                 })
                 .collect(),
-            elsewhere: Vec::new(),
+            ..Configuration::default()
         }
     }
 
@@ -845,18 +947,96 @@ iface eth1 inet static
         );
         assert_eq!(refused("auto eth0\n", "eth0"), Some(Refusal::NotConfigured));
         assert_eq!(
-            plan(
-                &configuration(&[(
-                    INTERFACES,
-                    "iface wlan0 inet dhcp\n wpa-conf /etc/wpa.conf\n"
-                )]),
-                "wlan0",
-                true
-            )
-            .err(),
-            Some(Refusal::Option("wpa-conf".to_owned()))
+            refused("iface wlan0 inet dhcp\n wpa-roam /etc/wpa.conf\n", "wlan0"),
+            Some(Refusal::Option("wpa-roam".to_owned()))
         );
-        let code = Refusal::Shared(PathBuf::from(INTERFACES), "bridge_ports eth0".to_owned());
-        assert_eq!(Refusal::from_code(&code.code()), Some(code));
+    }
+
+    #[test]
+    fn follows_sources_and_supplicant_files() {
+        let root = tempfile::tempdir().expect("a folder");
+        let write = |path: &str, text: &str| {
+            let path = root.path().join(path);
+            fs::create_dir_all(path.parent().expect("a parent")).expect("folders");
+            fs::write(path, text).expect("a file");
+        };
+        write(
+            "etc/network/interfaces",
+            "source-directory /etc/network/interfaces.d\nauto lo\niface lo inet loopback\n",
+        );
+        write(
+            "etc/network/interfaces.d/wlan",
+            "allow-hotplug wlan0\niface wlan0 inet dhcp\n  wpa-conf /etc/wpa_supplicant/home.conf\n",
+        );
+        write(
+            "etc/network/interfaces.d/old.bak",
+            "iface wlan0 inet static\n",
+        );
+        write(
+            "etc/wpa_supplicant/home.conf",
+            "ctrl_interface=/run/wpa_supplicant\nnetwork={\n\tssid=\"Home Net\"\n\tpsk=\"correct horse\"\n\tscan_ssid=1\n\tkey_mgmt=WPA-PSK\n}\n",
+        );
+        let configuration = read_under(root.path()).expect("the files are read");
+        assert_eq!(configuration.files.len(), 2, "run-parts names only");
+        let handed = plan(&configuration, "wlan0", true).expect("the stanza is understood");
+        assert_eq!(
+            handed.setup.wifi,
+            Some(WifiSetup {
+                ssid: b"Home Net".to_vec(),
+                psk: Some("correct horse".to_owned()),
+                hidden: true,
+            })
+        );
+        assert_eq!(handed.edits.len(), 1, "the main file is left alone");
+        assert!(brought_up("lo=lo\nwlan0=wlan0\n", "wlan0"));
+        assert!(!brought_up("lo=lo\nwlan0.7=wlan0.7\n", "wlan0"));
+
+        write(
+            "etc/network/interfaces",
+            "source interfaces.d/*\nsource /etc/network/more/*\n",
+        );
+        write(
+            "etc/wpa_supplicant/home.conf",
+            "network={\n ssid=486f6d65\n key_mgmt=NONE\n}\nnetwork={\n ssid=\"Work\"\n}\n",
+        );
+        let configuration = read_under(root.path()).expect("the files are read");
+        assert_eq!(
+            configuration.files.len(),
+            3,
+            "every file not starting with a dot"
+        );
+        assert_eq!(
+            plan(&configuration, "wlan0", true).err(),
+            Some(Refusal::Elsewhere("source /etc/network/more/*".to_owned()))
+        );
+        let mut only_ours = configuration.clone();
+        only_ours.elsewhere.clear();
+        only_ours
+            .files
+            .retain(|file| !file.path.ends_with("old.bak"));
+        assert_eq!(
+            plan(&only_ours, "wlan0", true).err(),
+            Some(Refusal::Value("wpa-conf".to_owned())),
+            "two networks in one file"
+        );
+        write(
+            "etc/wpa_supplicant/home.conf",
+            "network={\n ssid=486f6d65\n key_mgmt=NONE\n}\n",
+        );
+        let mut open = read_under(root.path()).expect("the files are read");
+        open.elsewhere.clear();
+        open.files.retain(|file| !file.path.ends_with("old.bak"));
+        let wifi = plan(&open, "wlan0", true)
+            .expect("an open network")
+            .setup
+            .wifi;
+        assert_eq!(
+            wifi,
+            Some(WifiSetup {
+                ssid: b"Home".to_vec(),
+                psk: None,
+                hidden: false,
+            })
+        );
     }
 }

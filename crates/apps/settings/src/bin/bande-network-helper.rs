@@ -45,7 +45,7 @@ fn valid_interface(name: &str) -> bool {
 
 fn planned(interface: &str) -> Result<Plan, ExitCode> {
     let refuse = |refusal: Refusal| {
-        println!("refused {}", refusal.code());
+        println!("refused {refusal}");
         ExitCode::from(REFUSED)
     };
     if let Some(service) = COMPETING_SERVICES
@@ -64,11 +64,9 @@ fn planned(interface: &str) -> Result<Plan, ExitCode> {
 }
 
 fn print_plan(plan: &Plan, backups: &[PathBuf]) {
-    for (index, edit) in plan.edits.iter().enumerate() {
+    for (edit, backup) in plan.edits.iter().zip(backups) {
         println!("file {}", edit.path.display());
-        if let Some(backup) = backups.get(index) {
-            println!("backup {}", backup.display());
-        }
+        println!("backup {}", backup.display());
         for line in edit.disabled() {
             println!("line {line}");
         }
@@ -174,13 +172,6 @@ fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match words.as_slice() {
-        ["preview", interface] if valid_interface(interface) => match planned(interface) {
-            Ok(plan) => {
-                print_plan(&plan, &[]);
-                ExitCode::SUCCESS
-            }
-            Err(code) => code,
-        },
         ["manage", interface] if valid_interface(interface) => manage(interface),
         _ => fail("bad arguments"),
     }

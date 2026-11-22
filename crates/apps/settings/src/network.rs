@@ -1,17 +1,17 @@
 use bande_l10n::{text, tr};
-use bande_network::{Addressing, ConnectionChange, Ethernet, Ipv6, Outside, VpnState};
+use bande_network::{Addressing, ConnectionChange, Ethernet, Ipv6, Network, Outside, VpnState};
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_toolkit::ui::{Axis, Button, SegmentedControl, Stack, TextField, Widget};
 use bande_toolkit::{Spacing, TextRole};
 
 use crate::follow::Command;
 use crate::forget::Forget;
-use crate::handover::{HandOver, HandOverCommand};
+use crate::handover::HandOver;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::proxies::{ProxyMode, ProxySettings};
 use crate::services::NetworkCommand;
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
-use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
+use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Signal, Text, Tone};
 
 type Fields<const N: usize> = [(SettingId, bande_l10n::Text, bande_l10n::Text); N];
 
@@ -221,99 +221,70 @@ impl SettingsView {
         }
     }
 
-    pub(crate) fn outside_rows(&mut self, outside: &Outside) -> Widgets {
-        let mut status = Row::new(
-            Text::new(&status_of(false, &outside.addressing), Tone::Primary),
-            None,
-        );
-        if let Some(detail) = addressing_detail(&outside.addressing) {
-            status = status.detail(detail);
+    pub(crate) fn outside_rows(&mut self, outside: &Outside, network: Option<&Network>) -> Widgets {
+        let note = Text::new(&tr!("Set up by the system"), Tone::Muted).caption();
+        let status = status_of(false, &outside.addressing);
+        let mut rows = Vec::new();
+        match network {
+            Some(network) => {
+                rows.push(boxed(
+                    Row::new(
+                        Text::new(&network.name(), Tone::Primary),
+                        Some(boxed(Signal::new(
+                            network.strength,
+                            network.security.needs_password(),
+                        ))),
+                    )
+                    .detail(note),
+                ));
+                let mut row = Row::new(Text::new(&status, Tone::Primary), None);
+                if let Some(detail) = addressing_detail(&outside.addressing) {
+                    row = row.detail(detail);
+                }
+                rows.push(boxed(row));
+            }
+            None => {
+                rows.push(boxed(
+                    Row::new(Text::new(&status, Tone::Primary), None).detail(note),
+                ));
+                if let Some(detail) = addressing_detail(&outside.addressing) {
+                    rows.push(boxed(
+                        Row::new(Text::new(&tr!("Addresses"), Tone::Primary), None).detail(detail),
+                    ));
+                }
+            }
         }
-        let explanation = match &outside.configured_in {
-            Some(file) => tr!(
-                "{file} sets up {interface}, so Settings doesn’t change this connection.",
-                file = file.display().to_string(),
-                interface = outside.interface.clone()
-            ),
-            None => tr!(
-                "{interface} is set up outside NetworkManager, for example in /etc/network/interfaces, so Settings doesn’t change this connection.",
-                interface = outside.interface.clone()
-            ),
-        };
-        let mut rows = vec![
-            boxed(status),
-            boxed(Row::new(
-                Text::new(&explanation, Tone::Muted).caption(),
-                None,
-            )),
-        ];
         let state = self
             .handover
             .clone()
             .filter(|handover| handover.interface() == outside.interface);
         let interface = outside.interface.clone();
+        let anchor = Anchor::Item(format!("hand-over:{interface}"));
         match state {
             None if outside.hand_over => {
                 let mut ask = intent(&self.intents, move |()| {
-                    Intent::HandOver(Some(HandOverCommand::Preview(interface.clone())))
+                    Intent::HandOver(Some(HandOver::Confirm(interface.clone())))
                 });
-                let button =
-                    Button::new(&tr!("Let Settings Manage This Connection…"), move || {
-                        ask(())
-                    });
-                self.anchors.push((
-                    Anchor::Item(format!("hand-over:{}", outside.interface)),
-                    button.id(),
-                ));
+                let button = Button::new(&tr!("Manage in Settings…"), move || ask(()));
+                self.anchors.push((anchor, button.id()));
                 rows.push(boxed(Row::new(
-                    Text::new(
-                        &tr!("NetworkManager takes over with the same settings, after you authenticate"),
-                        Tone::Muted,
-                    )
-                    .caption(),
+                    Text::new(&tr!("Change this network’s settings here"), Tone::Muted).caption(),
                     Some(boxed(button)),
                 )));
             }
-            None | Some(HandOver::Done(..)) => {}
-            Some(HandOver::Asking(_)) => rows.push(muted_row(&tr!("Reading the setup…"))),
-            Some(HandOver::Applying(_)) => {
-                rows.push(muted_row(&tr!("Handing the connection to NetworkManager…")))
-            }
-            Some(HandOver::Refused(_, reason)) => rows.push(self.dismissable(tr!(
-                "Settings can’t take this connection over: {reason}.",
-                reason = reason
-            ))),
-            Some(HandOver::Failed(_, reason)) => {
-                rows.push(self.dismissable(tr!("Nothing was changed: {reason}", reason = reason)))
-            }
-            Some(HandOver::Preview(_, changes)) => {
-                rows.push(boxed(Row::new(
-                    Text::new(
-                        &tr!("Settings turns these lines into comments, keeps a copy of each file next to it and sets up the same connection in NetworkManager:"),
-                        Tone::Primary,
-                    ),
-                    None,
-                )));
-                for change in &changes {
-                    rows.push(boxed(
-                        Row::new(
-                            Text::new(&change.file.display().to_string(), Tone::Primary),
-                            None,
-                        )
-                        .detail(Text::new(&change.lines.join("\n"), Tone::Muted).caption()),
-                    ));
-                }
+            None | Some(HandOver::Done(_)) => {}
+            Some(HandOver::Confirm(_)) => {
                 let mut cancel = intent(&self.intents, |()| Intent::HandOver(None));
                 let mut apply = intent(&self.intents, move |()| {
-                    Intent::HandOver(Some(HandOverCommand::Apply(interface.clone())))
+                    Intent::HandOver(Some(HandOver::Applying(interface.clone())))
                 });
-                let manage = Button::new(&tr!("Manage Connection"), move || apply(())).primary();
-                self.anchors.push((
-                    Anchor::Item(format!("hand-over:{}", outside.interface)),
-                    manage.id(),
-                ));
+                let manage = Button::new(&tr!("Manage"), move || apply(())).primary();
+                self.anchors.push((anchor, manage.id()));
                 rows.push(boxed(Row::new(
-                    Text::new(&tr!("Other stanzas are left as they are"), Tone::Muted).caption(),
+                    Text::new(
+                        &tr!("Settings will manage this network. Your connection stays the same."),
+                        Tone::Primary,
+                    ),
                     Some(boxed(Stack::new(
                         Axis::Horizontal,
                         Spacing::S as f32,
@@ -325,6 +296,10 @@ impl SettingsView {
                     ))),
                 )));
             }
+            Some(HandOver::Applying(_)) => rows.push(muted_row(&tr!("Switching over…"))),
+            Some(HandOver::Failed(_)) => rows.push(self.dismissable(tr!(
+                "Settings can’t manage this network. Nothing was changed."
+            ))),
         }
         rows
     }
@@ -338,39 +313,12 @@ impl SettingsView {
     }
 
     pub(crate) fn handed_over_rows(&mut self) -> Widgets {
-        let Some(HandOver::Done(interface, changes, connection)) = self.handover.clone() else {
-            return Vec::new();
-        };
-        let mut rows = vec![boxed(Row::new(
-            Text::new(
-                &tr!(
-                    "NetworkManager now manages {interface} with the connection “{connection}”.",
-                    interface = interface,
-                    connection = connection
-                ),
-                Tone::Primary,
-            ),
-            None,
-        ))];
-        for change in changes {
-            let detail = match &change.backup {
-                Some(backup) => tr!(
-                    "Now comments: {lines}. The original is {backup}.",
-                    lines = change.lines.join(" · "),
-                    backup = backup.display().to_string()
-                ),
-                None => change.lines.join(" · "),
-            };
-            rows.push(boxed(
-                Row::new(
-                    Text::new(&change.file.display().to_string(), Tone::Primary),
-                    None,
-                )
-                .detail(Text::new(&detail, Tone::Muted).caption()),
-            ));
+        match self.handover {
+            Some(HandOver::Done(_)) => {
+                vec![self.dismissable(tr!("Settings now manages this network."))]
+            }
+            _ => Vec::new(),
         }
-        rows.push(self.dismissable(tr!("To undo this, put the original file back.")));
-        rows
     }
 
     pub(crate) fn opened_ethernet(&self) -> Option<Ethernet> {
@@ -471,7 +419,7 @@ impl SettingsView {
             None,
         )));
         if let Some(outside) = &ethernet.outside {
-            let rows = self.outside_rows(outside);
+            let rows = self.outside_rows(outside, None);
             page.push(boxed(Card::new(rows)));
             return Some(page);
         }

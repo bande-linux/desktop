@@ -467,21 +467,33 @@ brings up the dialog.
     TLS) and wired 802.1X need a CA certificate file or the system store with a server domain.
     Hidden networks offer every security type, WEP with a warning. Every wired device is listed,
     and IPv4 and IPv6 (automatic, manual, off) are set per connection.
-  - A device NetworkManager leaves unmanaged (ifupdown, systemd-networkd) shows its address from
-    the kernel (rtnetlink) and why Settings leaves it alone. Bande never rewrites
-    `/etc/network/interfaces` on its own: "Let Settings Manage This Connection…" runs
-    `bande-network-helper` under `pkexec` (`org.bande.network-helper`, admin, kept for a few
-    minutes). It shows
-    the stanza lines it would disable, then keeps a copy of each file next to it (hidden in
-    `interfaces.d`, which `source` globs), takes the interface down with `ifdown`, comments out
-    only that interface's lines (splitting a shared `auto` line), reloads NetworkManager and adds
-    an equivalent system connection (the Wi-Fi PSK in the root-only keyfile, as Debian's
-    NetworkManager keeps it). It refuses anything it can't carry over safely (unknown options such
-    as `post-up`, `wpa-conf`, mappings, bridges or VLANs on the interface, line continuations,
-    sources outside `interfaces.d`, a running `dhcpcd.service`). It reports the hand-over done
+  - A device NetworkManager leaves unmanaged (ifupdown, as the Debian installer sets up Wi-Fi,
+    or systemd-networkd) counts as connected while the kernel gives it an address: its address,
+    router and DNS come from rtnetlink, and a Wi-Fi device's network name, signal and security
+    from nl80211 (the scan result the card is associated with and the station's signal), so
+    nothing is sent. The Taskbar, Quick Settings and Settings show that network as connected and
+    "Set up by the system", read again whenever NetworkManager signals and when a menu, tile or
+    page showing it opens; it is never joined or scanned through NetworkManager. Its Wi-Fi switch
+    is shown on and can't be changed (the Taskbar menu disables it, Quick Settings' tile opens the
+    network menu, Settings hides it), since NetworkManager's radio switch doesn't reach it.
+  - Bande never takes such a device over on its own. Only where the helper could carry it over
+    (its stanza plans cleanly, or, while the files are readable only by root, `/run/network/ifstate`
+    shows ifupdown brought it up; never for systemd-networkd), the Wi-Fi menu in the Taskbar and
+    Quick Settings offers "Manage in Settings…" and Settings ▸ Wi-Fi (or the wired device's page)
+    offers the same, confirming in one sentence
+    before it asks for the administrator password. It runs `bande-network-helper manage` under
+    `pkexec` (`org.bande.network-helper`, admin, kept for a few minutes): the helper keeps a copy
+    of each file it changes next to it (hidden in `interfaces.d`, which `source` globs), takes
+    the interface down with `ifdown`, comments out only that interface's lines (splitting a shared
+    `auto` line) and adds an equivalent NetworkManager system connection with autoconnect (the
+    Wi-Fi PSK in the root-only keyfile, as Debian's NetworkManager keeps it; the SSID, PSK,
+    hidden flag and addressing from the stanza or the single `network` block of its `wpa-conf`
+    file). It refuses, before changing anything, what it can't carry over safely (unknown
+    options such as `post-up`, `wpa-roam`, mappings, bridges or VLANs on the interface, line
+    continuations, sources outside `interfaces.d`, a running `dhcpcd.service`). It reports done
     only once NetworkManager has connected the interface (within 90 seconds); otherwise it deletes
     the connection it added, leaves the device unmanaged again, puts every file back and brings
-    the interface up again.
+    the interface up again. The UI says only whether it worked; the details go to the journal.
   - "Online" (`follow_online`, used by Software and Calendar) is NetworkManager's
     `CONNECTED_GLOBAL`, or a default route in the kernel through a device NetworkManager doesn't
     manage; nothing is sent to find out.

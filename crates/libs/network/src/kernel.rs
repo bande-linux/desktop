@@ -138,11 +138,15 @@ fn read_addresses(messages: &[u8], index: u32, found: &mut Vec<String>) -> bool 
     false
 }
 
-fn addresses(interface: &str) -> io::Result<Vec<String>> {
-    let index: u32 = fs::read_to_string(format!("/sys/class/net/{interface}/ifindex"))?
+pub(crate) fn interface_index(interface: &str) -> io::Result<u32> {
+    fs::read_to_string(format!("/sys/class/net/{interface}/ifindex"))?
         .trim()
         .parse()
-        .map_err(io::Error::other)?;
+        .map_err(io::Error::other)
+}
+
+fn addresses(interface: &str) -> io::Result<Vec<String>> {
+    let index = interface_index(interface)?;
     let socket = route_socket(0)?;
     let mut request = Vec::with_capacity(HEADER + ADDRESS_HEADER);
     request.extend_from_slice(&((HEADER + ADDRESS_HEADER) as u32).to_ne_bytes());

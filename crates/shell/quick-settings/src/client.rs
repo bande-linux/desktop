@@ -15,7 +15,7 @@ use crate::{
 };
 use accesskit::TreeUpdate;
 use bande_audio::{Audio, Level, Meter, meter_level};
-use bande_bar::menus::bluetooth_menu;
+use bande_bar::menus::{bluetooth_menu, wifi_menu};
 use bande_bluetooth::{Bluetooth, adapter_in_kernel};
 use bande_bus::logind::own_session;
 use bande_bus::power_profiles::{BALANCED, POWER_SAVER, power_profiles};
@@ -31,8 +31,8 @@ use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
 use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
 use bande_status::devices::run_bluetooth;
 use bande_status::session::full_name;
-use bande_status::status::Bluetooth as BluetoothStatus;
 use bande_status::status::Reading;
+use bande_status::status::{Bluetooth as BluetoothStatus, Wifi as WifiStatus};
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
@@ -98,6 +98,7 @@ pub struct QuickSettings {
 #[derive(Debug, Clone, Default)]
 struct Connected {
     wifi: Reading<bool>,
+    wifi_system: bool,
     network: Option<String>,
     sign_in: bool,
     bluetooth: Reading<bool>,
@@ -172,7 +173,7 @@ enum Work {
 
 enum Answer {
     Connected(Connected),
-    Networks(Vec<(String, String, bool)>),
+    Networks(Menu),
     SignIn,
     NeedsPassword,
 }
@@ -237,9 +238,22 @@ impl Worker {
             return Some(Answer::SignIn);
         }
         report("look for Wi-Fi networks", network.scan());
-        let choices = network
-            .networks()
-            .unwrap_or_default()
+        let networks = network.networks().unwrap_or_default();
+        let outside = network
+            .wifi_outside()
+            .inspect_err(|error| tracing::debug!("cannot read the Wi-Fi device: {error}"))
+            .ok()
+            .flatten();
+        if let Some(outside) = outside {
+            return Some(Answer::Networks(wifi_menu(&WifiStatus {
+                enabled: true,
+                networks,
+                sign_in: false,
+                system: true,
+                manageable: outside.hand_over,
+            })));
+        }
+        let choices: Vec<_> = networks
             .into_iter()
             .map(|found| {
                 (
@@ -249,7 +263,7 @@ impl Worker {
                 )
             })
             .collect();
-        Some(Answer::Networks(choices))
+        Some(Answer::Networks(chooser_menu(&choices)))
     }
 
     fn join(&self, ssid: &[u8]) -> Option<Answer> {
@@ -288,13 +302,16 @@ fn read_connected(
     session: Option<&Connection>,
     system: Option<&Connection>,
 ) -> Connected {
+    let wifi_system = network.is_some_and(|network| matches!(network.wifi_outside(), Ok(Some(_))));
     let wifi = network.map_or(Reading::Absent, |network| {
-        let enabled = network
-            .has_wifi()
-            .and_then(|has| has.then(|| network.wifi_enabled()).transpose());
+        let enabled = network.has_wifi().and_then(|has| {
+            has.then(|| Ok(wifi_system || network.wifi_enabled()?))
+                .transpose()
+        });
         Reading::from_answer("NetworkManager", enabled, wifi_in_kernel)
     });
     Connected {
+        wifi_system,
         network: network
             .filter(|_| wifi == Reading::Present(true))
             .and_then(|network| network.networks().ok())
@@ -515,6 +532,7 @@ impl QuickSettings {
     fn status(&self) -> Status {
         let Connected {
             wifi,
+            wifi_system,
             network,
             sign_in,
             bluetooth,
@@ -557,6 +575,7 @@ impl QuickSettings {
             .and_then(|snapshot| snapshot.default_input());
         Status {
             wifi,
+            wifi_system,
             network,
             sign_in,
             bluetooth,
@@ -650,9 +669,9 @@ impl QuickSettings {
     fn answered(&mut self, window: &mut Window, answer: Answer) {
         match answer {
             Answer::Connected(connected) => self.connected = connected,
-            Answer::Networks(choices) => {
-                if matches!(self.mode, Mode::Panel { .. }) && !choices.is_empty() {
-                    self.show_menu(window, chooser_menu(&choices));
+            Answer::Networks(menu) => {
+                if matches!(self.mode, Mode::Panel { .. }) && !menu.items.is_empty() {
+                    self.show_menu(window, menu);
                 }
             }
             Answer::SignIn => {

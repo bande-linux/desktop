@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use bande_l10n::{Text, text, tr};
 
-use crate::format::{format_bytes, format_cpu_time, format_percent};
+use crate::format::{format_cpu_time, format_percent};
 use crate::inspect::{Details, read_details, state_name};
 use crate::list::{List, Signal, sender};
 use crate::model::StopTarget;
@@ -13,6 +13,7 @@ use crate::view::{
     ALERT_ICON, FORCE_QUIT, Icons, QUIT, Request, Screen, answer_stop, stop_alert, stop_button,
 };
 use accesskit::{ActionRequest, TreeUpdate};
+use bande_fs::format_size;
 use bande_toolkit::ui::{
     Button, Cell, Column, Cursor, Event, Key, Row, SEGMENTED_HEIGHT, SegmentedControl, Table,
     WidgetId,
@@ -288,17 +289,13 @@ impl InspectorView {
                 format_cpu_time(process.cpu_seconds),
             ),
             row("threads", text!("Threads"), process.threads.to_string()),
-            row(
-                "resident",
-                text!("Resident"),
-                format_bytes(process.resident),
-            ),
+            row("resident", text!("Resident"), format_size(process.resident)),
         ];
         if let Some(footprint) = process.footprint {
-            resources.push(row("memory", text!("Memory"), format_bytes(footprint)));
+            resources.push(row("memory", text!("Memory"), format_size(footprint)));
         }
         if let Some(size) = self.details.virtual_size {
-            resources.push(row("virtual", text!("Virtual Memory"), format_bytes(size)));
+            resources.push(row("virtual", text!("Virtual Memory"), format_size(size)));
         }
         if let Some(seconds) = self.details.running_seconds {
             resources.push(row(
@@ -311,12 +308,12 @@ impl InspectorView {
             resources.push(row(
                 "read",
                 text!("Bytes Read"),
-                format_bytes(disk.read_total),
+                format_size(disk.read_total),
             ));
             resources.push(row(
                 "written",
                 text!("Bytes Written"),
-                format_bytes(disk.written_total),
+                format_size(disk.written_total),
             ));
         }
         let mut sections = vec![section("process", text!("Process"), process_rows)];
@@ -453,7 +450,7 @@ impl InspectorView {
                             index.to_string(),
                             vec![
                                 Cell::new(format!("{:012x}–{:012x}", map.start, map.end)),
-                                Cell::new(format_bytes(map.end.saturating_sub(map.start))),
+                                Cell::new(format_size(map.end.saturating_sub(map.start))),
                                 Cell::new(map.permissions.as_str()),
                                 Cell::new(map.path.as_str()),
                             ],

@@ -20,7 +20,7 @@ mod view;
 pub use apps::{Catalog, Group, GroupKey};
 pub use asked::Asked;
 pub use cpu::{CpuShare, read_cpu_ticks};
-pub use format::{format_bytes, format_cpu_time, format_rate};
+pub use format::{format_cpu_time, format_rate};
 pub use inhibitors::{SleepBlocker, list_sleep_blockers};
 pub use inspector::{INSPECTOR_SIZE, InspectorView};
 pub use menu::{MenuCommand, Selected, app_menus, process_menu};

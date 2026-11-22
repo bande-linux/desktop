@@ -10,11 +10,12 @@ use bande_status::history::{ChargeSample, charging_spans, time_on_battery};
 use bande_status::status::Power;
 use bande_toolkit::ui::{Band, GraphKind, Series, SeriesColor};
 
-use crate::format::{format_bytes, format_cpu_time, format_hours, format_percent, format_rate};
+use crate::format::{format_cpu_time, format_hours, format_percent, format_rate};
 use crate::power::{BATTERY_HISTORY, BatteryReport};
 use crate::sampler::{Process, Snapshot};
 use crate::signal::{SignalError, Stop, stop};
 use crate::system::PressureLevel;
+use bande_fs::format_size;
 
 pub const HISTORY: usize = 60;
 pub const INTERVAL: Duration = Duration::from_secs(2);
@@ -432,7 +433,7 @@ impl Column {
             | Column::ReadTotal
             | Column::WrittenTotal
             | Column::ReceivedTotal
-            | Column::SentTotal => format_bytes(*value as u64),
+            | Column::SentTotal => format_size(*value as u64),
             Column::Read | Column::Written | Column::Received | Column::Sent => format_rate(*value),
             _ => format!("{value:.0}"),
         }
@@ -1376,15 +1377,15 @@ impl Monitor {
                 let memory = &snapshot.memory;
                 vec![
                     vec![
-                        Readout::new(text!("Physical Memory"), format_bytes(memory.total)),
-                        Readout::new(text!("Memory Used"), format_bytes(memory.used)),
-                        Readout::new(text!("Cached Files"), format_bytes(memory.cached)),
-                        Readout::new(text!("Swap Used"), format_bytes(memory.swap_used)),
+                        Readout::new(text!("Physical Memory"), format_size(memory.total)),
+                        Readout::new(text!("Memory Used"), format_size(memory.used)),
+                        Readout::new(text!("Cached Files"), format_size(memory.cached)),
+                        Readout::new(text!("Swap Used"), format_size(memory.swap_used)),
                     ],
                     vec![
-                        Readout::new(text!("App Memory"), format_bytes(memory.app)),
-                        Readout::new(text!("Wired Memory"), format_bytes(memory.kernel)),
-                        Readout::new(text!("Compressed"), format_bytes(memory.compressed)),
+                        Readout::new(text!("App Memory"), format_size(memory.app)),
+                        Readout::new(text!("Wired Memory"), format_size(memory.kernel)),
+                        Readout::new(text!("Compressed"), format_size(memory.compressed)),
                     ],
                 ]
             }
@@ -1426,10 +1427,10 @@ impl Monitor {
                     ),
                 ],
                 vec![
-                    Readout::new(text!("Data Read"), format_bytes(snapshot.disk.read_total)),
+                    Readout::new(text!("Data Read"), format_size(snapshot.disk.read_total)),
                     Readout::new(
                         text!("Data Written"),
-                        format_bytes(snapshot.disk.written_total),
+                        format_size(snapshot.disk.written_total),
                     ),
                 ],
             ],
@@ -1454,11 +1455,11 @@ impl Monitor {
                     vec![
                         Readout::new(
                             text!("Data Received"),
-                            format_bytes(total(|interface| interface.received_total as f64) as u64),
+                            format_size(total(|interface| interface.received_total as f64) as u64),
                         ),
                         Readout::new(
                             text!("Data Sent"),
-                            format_bytes(total(|interface| interface.sent_total as f64) as u64),
+                            format_size(total(|interface| interface.sent_total as f64) as u64),
                         ),
                     ],
                 ]
@@ -1478,7 +1479,7 @@ impl Monitor {
                     ),
                     Readout::new(
                         text!("GPU Memory"),
-                        format_bytes(users.iter().map(|used| used.memory).sum()),
+                        format_size(users.iter().map(|used| used.memory).sum()),
                     ),
                     Readout::new(text!("Processes Using the GPU"), users.len().to_string()),
                 ]]

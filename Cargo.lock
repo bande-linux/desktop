@@ -1296,6 +1296,7 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
+ "bande-fs",
  "bande-l10n",
  "bande-status",
  "bande-toolkit",

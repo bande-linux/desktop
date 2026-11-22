@@ -1813,6 +1813,9 @@ msgstr "Det gick inte att nå skannern."
 msgid "The scanned page couldn’t be read."
 msgstr "Den skannade sidan gick inte att läsa."
 
+msgid "These pages couldn’t be kept on disk, so they are lost if Settings closes before they are saved."
+msgstr "Sidorna kunde inte sparas undan på disken, så de försvinner om Inställningar stängs innan de sparas."
+
 msgid "Couldn’t save the scan."
 msgstr "Det gick inte att spara skanningen."
 
@@ -1822,6 +1825,18 @@ msgstr "Skanning"
 
 msgid "Save Scan"
 msgstr "Spara skanning"
+
+msgid "A scan is in progress"
+msgstr "En skanning pågår"
+
+msgid "The pages scanned so far are kept."
+msgstr "De sidor som redan har skannats behålls."
+
+msgid "Cancel Scan and Close"
+msgstr "Avbryt skanningen och stäng"
+
+msgid "Keep Scanning"
+msgstr "Fortsätt skanna"
 
 msgid "Save the scanned page?"
 msgid_plural "Save the {count} scanned pages?"

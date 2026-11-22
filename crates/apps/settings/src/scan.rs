@@ -14,6 +14,7 @@ use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Alert, Axis, Button, PopUpButton, Stack, Widget};
 use bande_xdg::state_home;
 use image::{ImageFormat, ImageReader};
+use ring::digest::{SHA256, digest};
 use zbus::blocking::Connection;
 
 use crate::follow::{Command, Update};
@@ -32,6 +33,7 @@ const POINTS_PER_INCH: f32 = 72.0;
 const STATE_FOLDER: &str = "bande";
 const KEPT_FOLDER: &str = "scans";
 const NAME_FILE: &str = "name";
+const SCANNER_FILE: &str = "scanner";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
@@ -77,9 +79,16 @@ impl fmt::Debug for Page {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Scanned {
+    pages: Vec<Page>,
+    preview: Option<Image>,
+    warning: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ScanUpdate {
     Capabilities(String, Result<ScanCapabilities, String>),
-    Scanned(String, Result<(Vec<Page>, Option<Image>), String>),
+    Scanned(String, Result<Scanned, String>),
     Saved(String, Result<Option<String>, String>),
     Kept(String, String, Vec<Page>, Option<Image>),
 }
@@ -94,6 +103,7 @@ pub enum Leaving {
 const SAVE: &str = "save";
 const DISCARD: &str = "discard";
 const CANCEL: &str = "cancel";
+const STOP: &str = "stop";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanIntent {
@@ -172,6 +182,10 @@ impl ScanState {
         })
     }
 
+    fn scanning(&self) -> bool {
+        matches!(self.busy, Some(Busy::Scanning | Busy::Cancelling))
+    }
+
     fn discard(&mut self) {
         self.pages.clear();
         self.preview = None;
@@ -225,17 +239,12 @@ fn kept_folder() -> Option<PathBuf> {
 }
 
 fn folder_of(scanner: &str) -> Option<PathBuf> {
-    let name: String = scanner.bytes().map(|byte| format!("{byte:02x}")).collect();
+    let name: String = digest(&SHA256, scanner.as_bytes())
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     kept_folder().map(|folder| folder.join(name))
-}
-
-fn scanner_of(folder: &Path) -> Option<String> {
-    let name = folder.file_name()?.to_str()?;
-    let bytes = (0..name.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(name.get(at..at + 2)?, 16).ok())
-        .collect::<Option<Vec<u8>>>()?;
-    String::from_utf8(bytes).ok()
 }
 
 fn create_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -253,14 +262,17 @@ fn keep_pages(scanner: &str, name: &str, pages: &[Page]) -> std::io::Result<()> 
         .recursive(true)
         .mode(0o700)
         .create(&folder)?;
-    let label = folder.join(NAME_FILE);
-    if !label.exists() {
-        create_private(&label, name.as_bytes())?;
+    for (file, text) in [(SCANNER_FILE, scanner), (NAME_FILE, name)] {
+        let path = folder.join(file);
+        if !path.exists() {
+            create_private(&path, text.as_bytes())?;
+        }
     }
     let first = std::fs::read_dir(&folder)?
         .flatten()
-        .filter(|entry| entry.path().extension().is_some_and(|kind| kind == "jpg"))
-        .count();
+        .filter_map(|entry| page_number(&entry.path()))
+        .max()
+        .map_or(0, |highest| highest + 1);
     for (number, page) in (first..).zip(pages) {
         create_private(
             &folder.join(format!("{number:04}-{}.jpg", page.dpi)),
@@ -268,6 +280,13 @@ fn keep_pages(scanner: &str, name: &str, pages: &[Page]) -> std::io::Result<()> 
         )?;
     }
     Ok(())
+}
+
+fn page_number(path: &Path) -> Option<usize> {
+    if path.extension()? != "jpg" {
+        return None;
+    }
+    path.file_stem()?.to_str()?.split_once('-')?.0.parse().ok()
 }
 
 fn forget_pages(scanner: &str) {
@@ -282,16 +301,20 @@ fn forget_pages(scanner: &str) {
 }
 
 fn kept_scan(folder: &Path) -> std::io::Result<Option<(String, String, Vec<Page>)>> {
-    let Some(scanner) = scanner_of(folder) else {
-        return Ok(None);
-    };
-    let name = std::fs::read_to_string(folder.join(NAME_FILE)).unwrap_or_else(|_| scanner.clone());
+    let scanner = std::fs::read_to_string(folder.join(SCANNER_FILE))?;
+    let name = std::fs::read_to_string(folder.join(NAME_FILE)).unwrap_or_else(|error| {
+        tracing::warn!(
+            "cannot read the name of the kept scan {}: {error}",
+            folder.display()
+        );
+        scanner.clone()
+    });
     let mut files: Vec<PathBuf> = std::fs::read_dir(folder)?
         .flatten()
         .map(|entry| entry.path())
         .filter(|path| path.extension().is_some_and(|kind| kind == "jpg"))
         .collect();
-    files.sort();
+    files.sort_by_key(|file| page_number(file));
     let mut pages = Vec::new();
     for file in files {
         let dpi = file
@@ -300,7 +323,9 @@ fn kept_scan(folder: &Path) -> std::io::Result<Option<(String, String, Vec<Page>
             .unwrap_or(DEFAULT_RESOLUTION);
         match read_page(File::open(&file)?.into(), dpi) {
             Ok(page) => pages.push(page),
-            Err(_) => tracing::warn!("skipping the unreadable kept page {}", file.display()),
+            Err(error) => {
+                tracing::warn!("skipping the kept page {}: {error}", file.display());
+            }
         }
     }
     Ok((!pages.is_empty()).then_some((scanner, name, pages)))
@@ -373,13 +398,18 @@ pub fn scan(session: &Connection, scanner: &str, name: &str, options: &ScanOptio
                 .into_iter()
                 .map(|(page, dpi)| read_page(page, dpi))
                 .collect::<Result<Vec<_>, _>>()?;
-            if let Err(error) = keep_pages(scanner, name, &pages) {
+            let warning = keep_pages(scanner, name, &pages).err().map(|error| {
                 tracing::warn!("cannot keep the scanned pages until they are saved: {error}");
-            }
+                tr!("These pages couldn’t be kept on disk, so they are lost if Settings closes before they are saved.")
+            });
             let preview = pages
                 .last()
                 .and_then(|page| Image::decode(&page.jpeg, PREVIEW_PIXELS));
-            Ok((pages, preview))
+            Ok(Scanned {
+                pages,
+                preview,
+                warning,
+            })
         });
     Update::Scan(ScanUpdate::Scanned(scanner.to_owned(), scanned))
 }
@@ -465,16 +495,37 @@ impl SettingsView {
 
     /// Asks what to do with the scanned pages not saved yet before leaving, and answers whether
     /// there is nothing to ask about.
+    /// Whether a scan is running or scanned pages wait to be saved.
+    pub fn has_scan_work(&self) -> bool {
+        self.unsaved_pages() > 0 || self.scans.values().any(ScanState::scanning)
+    }
+
     pub fn may_leave(&mut self, leaving: Leaving) -> bool {
+        let scanning = self.scans.values().any(ScanState::scanning);
         let unsaved = self.unsaved_pages();
-        if unsaved == 0 {
+        if !scanning && unsaved == 0 {
             return true;
         }
-        if self.leaving.is_some() || self.ui.has_sheet() {
+        if self.leaving.is_some() || self.leaving_after_scan.is_some() {
             return false;
+        }
+        if self.ui.has_sheet() {
+            self.ui.close_sheet();
         }
         self.leaving = Some(leaving);
         let mut answer = intent(&self.intents, Intent::UnsavedScans);
+        if scanning {
+            let alert = Alert::new(
+                &tr!("A scan is in progress"),
+                &tr!("The pages scanned so far are kept."),
+                move |choice| answer(choice.to_owned()),
+            )
+            .destructive(&tr!("Cancel Scan and Close"), STOP)
+            .cancel(&tr!("Keep Scanning"), CANCEL);
+            self.ui.present_sheet(alert);
+            self.invalidate();
+            return false;
+        }
         let alert = Alert::new(
             &trn!(
                 "Save the scanned page?",
@@ -513,6 +564,21 @@ impl SettingsView {
                     }
                 }
             }
+            STOP => {
+                let mut stopping = Vec::new();
+                for (id, scan) in &mut self.scans {
+                    if scan.busy == Some(Busy::Scanning) {
+                        scan.busy = Some(Busy::Cancelling);
+                        stopping.push(id.clone());
+                    }
+                }
+                for id in stopping {
+                    self.commands
+                        .push(Command::Printers(PrinterCommand::CancelScan(id)));
+                }
+                self.leaving = None;
+                self.leaving_after_scan = Some(leaving);
+            }
             DISCARD => {
                 for (id, scan) in &mut self.scans {
                     scan.discard();
@@ -522,6 +588,17 @@ impl SettingsView {
                 self.commands.push(Command::Leave(leaving));
             }
             _ => self.leaving = None,
+        }
+    }
+
+    fn scan_ended_while_leaving(&mut self) {
+        if self.scans.values().any(ScanState::scanning) {
+            return;
+        }
+        if let Some(leaving) = self.leaving_after_scan.take()
+            && self.may_leave(leaving)
+        {
+            self.commands.push(Command::Leave(leaving));
         }
     }
 
@@ -600,11 +677,10 @@ impl SettingsView {
             | ScanUpdate::Scanned(id, _)
             | ScanUpdate::Saved(id, _) => id.clone(),
             ScanUpdate::Kept(id, name, pages, preview) => {
-                let scan = self
-                    .scans
-                    .entry(id.clone())
-                    .or_insert_with(|| ScanState::new(id, name));
-                scan.busy = None;
+                let scan = self.scans.entry(id.clone()).or_insert_with(|| ScanState {
+                    busy: None,
+                    ..ScanState::new(id, name)
+                });
                 if scan.pages.is_empty() {
                     scan.pages.clone_from(pages);
                     scan.preview.clone_from(preview);
@@ -618,6 +694,7 @@ impl SettingsView {
         };
         let mut focus = None;
         let mut finished = None;
+        let mut ended = false;
         match update {
             ScanUpdate::Capabilities(_, answer) => {
                 scan.busy = None;
@@ -637,11 +714,16 @@ impl SettingsView {
             }
             ScanUpdate::Scanned(_, scanned) => {
                 scan.busy = None;
+                ended = true;
                 match scanned {
-                    Ok((pages, preview)) => {
+                    Ok(Scanned {
+                        pages,
+                        preview,
+                        warning,
+                    }) => {
                         scan.pages.extend(pages);
                         scan.preview = preview.or(scan.preview.take());
-                        scan.message = None;
+                        scan.message = warning;
                         if !scan.formats().contains(&scan.format) {
                             scan.format = Format::Pdf;
                         }
@@ -670,6 +752,9 @@ impl SettingsView {
         }
         if let Some(saved) = finished {
             self.saved_while_leaving(saved);
+        }
+        if ended {
+            self.scan_ended_while_leaving();
         }
     }
 

@@ -355,7 +355,7 @@ impl Program for Settings {
     fn should_quit(&mut self, cx: &mut Cx<Self>) -> bool {
         if cx.session_ending()
             || settings_view(cx, self.main, &mut self.parked)
-                .is_none_or(|view| view.unsaved_pages() == 0)
+                .is_none_or(|view| !view.has_scan_work())
         {
             return true;
         }

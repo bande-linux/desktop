@@ -18,6 +18,7 @@ image.workspace = true
 jiff.workspace = true
 libc.workspace = true
 libloading.workspace = true
+ring.workspace = true
 roxmltree.workspace = true
 rustix = { workspace = true, features = ["fs", "pty"] }
 tracing.workspace = true

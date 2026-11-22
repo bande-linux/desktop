@@ -53,10 +53,14 @@ graph LR
   saver already rests within its grace period. Only the idle lock `bande-power` asks for gets
   one: a lock someone else asked logind for (`Super+L` included, also on a resting lock screen, where it ends the grace period) never does. The grace period
   is `org.bande.Power`'s `PasswordRequired` property, which ends at a fixed time on the boot
-  clock however long an inhibitor holds the display awake. The lock screen believes a "no"
-  only from the owner of the name running in `bande-power.service`, answering within a second;
-  any process of the user could lengthen it through `config.kdl` anyway, so it adds no new
-  trust.
+  clock however long an inhibitor holds the display awake. The lock screen asks on the first
+  input and believes a "no" only when the name's owner (its process handle from
+  `GetConnectionCredentials`) is the `MainPID` of `bande-power.service` in the user's service
+  manager and answers within a second; any other answer, an error or a timeout requires the
+  password for the rest of that lock. `bande-power` is not dumpable, so other processes of the
+  user cannot trace it. This keeps out a process that takes the name or answers in its place;
+  code of the user that rewrites their own services or `config.kdl` can still lengthen the
+  grace period, so it adds no new trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
   when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row in
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and

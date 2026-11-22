@@ -14,6 +14,7 @@ use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
 use bande_power::password::{self, PasswordPolicy};
 use bande_power::screensaver::InhibitionService;
 use bande_power::{adapter, audio, gadgets};
+use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zbus::blocking::Connection;
 
 const LOCK_WAIT: Duration = Duration::from_secs(3);
@@ -26,6 +27,7 @@ type Services = (
 );
 
 fn serve() -> Result<Services, Box<dyn Error>> {
+    set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let system = Connection::system()?;
     let session = Connection::session()?;
     battery::watch(&system, Arc::new(BatteryNotifier::new(&session, &system)))?;

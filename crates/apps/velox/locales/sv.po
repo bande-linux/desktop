@@ -1500,7 +1500,7 @@ msgstr "Filtrera volymer"
 msgid "Copy Mountpoint"
 msgstr "Kopiera monteringspunkt"
 
-msgid "Export as tar…"
+msgid "Export as Tar…"
 msgstr "Exportera som tar…"
 
 msgid "Volume"

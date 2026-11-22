@@ -354,7 +354,7 @@ impl Pane for Volumes {
                         MenuItem::new(&tr!("Copy Name"), COPY_NAME),
                         MenuItem::new(&tr!("Copy Mountpoint"), COPY_MOUNTPOINT),
                         MenuItem::separator(),
-                        MenuItem::new(&tr!("Export as tar…"), EXPORT),
+                        MenuItem::new(&tr!("Export as Tar…"), EXPORT),
                         MenuItem::separator(),
                         MenuItem::new(&tr!("Remove…"), REMOVE),
                     ])),
@@ -434,7 +434,7 @@ impl Pane for Volumes {
             &tr!("Volume"),
             vec![
                 Entry::item(&tr!("Import Volume…"), IMPORT),
-                Entry::item(&tr!("Export as tar…"), EXPORT).enabled(one),
+                Entry::item(&tr!("Export as Tar…"), EXPORT).enabled(one),
                 Entry::item(&tr!("Copy Name"), COPY_NAME).enabled(one),
                 Entry::separator(),
                 Entry::item(&tr!("Remove…"), REMOVE).enabled(!self.selected.is_empty()),

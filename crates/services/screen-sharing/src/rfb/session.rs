@@ -2,6 +2,7 @@ use std::io::{self, Read, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, TcpStream};
 use std::os::fd::AsFd;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
@@ -32,6 +33,8 @@ const MOST_UNPARSED: usize = MOST_CUT_TEXT + 64 * 1024;
 const SERVER_CUT_TEXT: u8 = 3;
 const BUTTONS: u8 = 3;
 const MOST_HELD_KEYS: usize = 64;
+const MOST_REFUSING: usize = 8;
+const REFUSAL_TIMEOUT: Duration = Duration::from_secs(2);
 const WHEEL: [(u8, i32, i32); 4] = [
     (1 << 3, 0, -1),
     (1 << 4, 0, 1),
@@ -137,15 +140,10 @@ fn shake_hands(
     let refusal = match (&password, limits.blocked(peer)) {
         (_, true) => Some("Too many wrong passwords. Try again later."),
         (None, _) => Some("Screen sharing has no password yet."),
-        (Some(_), false) => None,
+        (Some(_), false) => limits.brake().err(),
     };
     let Some(password) = password.filter(|_| refusal.is_none()) else {
-        let reason = refusal.unwrap_or_default();
-        let code = (version == Version::V3_3).then_some(0);
-        socket.write_all(&match code {
-            Some(_) => with_reason(code, reason),
-            None => [vec![0], with_reason(None, reason)].concat(),
-        })?;
+        refuse(&mut socket, version, refusal.unwrap_or_default())?;
         return Ok(None);
     };
     let (mut transport, checked) = match version {
@@ -156,10 +154,11 @@ fn shake_hands(
             (transport, checked)
         }
         Version::V3_3 => {
-            socket.write_all(&with_reason(
-                Some(0),
+            refuse(
+                &mut socket,
+                version,
                 "This viewer is too old. Allow older viewers in Settings to use it.",
-            ))?;
+            )?;
             return Ok(None);
         }
         Version::V3_7 | Version::V3_8 => {
@@ -187,7 +186,6 @@ fn shake_hands(
         }
         transport.flush()
     };
-    limits.slow_down();
     if checked == Checked::Wrong {
         tracing::info!("a viewer at {peer} gave a wrong password");
         limits.failed(peer);
@@ -263,6 +261,7 @@ struct Viewer<'a> {
     keys: Vec<u32>,
     locked: bool,
     name: String,
+    renamed: bool,
     _seat: Seat,
 }
 
@@ -293,10 +292,7 @@ impl Viewer<'_> {
         self.locked = locked;
         let name = self.host.name();
         if name != self.name {
-            if self.encoder.desktop_name {
-                self.transport.write_all(&desktop_name(&name))?;
-                self.transport.flush()?;
-            }
+            self.renamed = self.encoder.desktop_name;
             self.name = name;
         }
         Ok(())
@@ -308,6 +304,15 @@ impl Viewer<'_> {
         };
         let mut rectangles = Vec::new();
         let mut body = Vec::new();
+        if std::mem::take(&mut self.renamed) {
+            desktop_name(&self.name, &mut body);
+            rectangles.push(Area {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+            });
+        }
         let area = frame.area();
         let resized = (area.width, area.height) != self.size;
         let mut wanted = request.area;
@@ -319,6 +324,7 @@ impl Viewer<'_> {
         }
         let incremental = request.incremental && !resized;
         if incremental
+            && rectangles.is_empty()
             && self
                 .sent
                 .as_ref()
@@ -501,7 +507,7 @@ impl Viewer<'_> {
             self.share_clipboard(latest.copy_serial, latest.copied)?;
             if let Some(frame) = &latest.frame
                 && self.request.is_some()
-                && latest.serial != self.checked
+                && (latest.serial != self.checked || self.renamed)
             {
                 self.update(frame)?;
                 self.checked = latest.serial;
@@ -584,18 +590,48 @@ fn serve_viewer(
         keys: Vec::new(),
         locked: host.locked(),
         name,
+        renamed: false,
         _seat: seat,
     };
     viewer.run()
 }
 
-fn refuse_at_once(socket: &TcpStream, reason: &str) {
-    let message = [VERSION.to_vec(), vec![0], with_reason(None, reason)].concat();
-    if let Err(error) = socket
-        .set_nonblocking(true)
-        .and_then(|()| (&*socket).write_all(&message))
-    {
-        tracing::debug!("cannot tell a viewer why it was refused: {error}");
+/// Refuses a viewer before security is chosen, in the form its RFB version reads.
+fn refuse(socket: &mut TcpStream, version: Version, reason: &str) -> io::Result<()> {
+    socket.write_all(&match version {
+        Version::V3_3 => with_reason(Some(0), reason),
+        Version::V3_7 | Version::V3_8 => [vec![0], with_reason(None, reason)].concat(),
+    })
+}
+
+/// Tells a viewer that was not given a handshake why, on a short-lived thread of its own while
+/// few such threads run; others are only closed.
+fn refuse_at_once(mut socket: TcpStream, reason: &'static str, refusing: &Arc<AtomicUsize>) {
+    if refusing.fetch_add(1, Ordering::AcqRel) >= MOST_REFUSING {
+        refusing.fetch_sub(1, Ordering::AcqRel);
+        return;
+    }
+    let refusing = Arc::clone(refusing);
+    let spawned = thread::Builder::new()
+        .name("refusal".into())
+        .spawn(move || {
+            let told = socket
+                .set_read_timeout(Some(REFUSAL_TIMEOUT))
+                .and_then(|()| socket.set_write_timeout(Some(REFUSAL_TIMEOUT)))
+                .and_then(|()| socket.write_all(VERSION))
+                .and_then(|()| read_array::<12>(&mut socket))
+                .and_then(|version| {
+                    let version = parse_version(&version)
+                        .ok_or_else(|| refused("the viewer speaks no known RFB version"))?;
+                    refuse(&mut socket, version, reason)
+                });
+            if let Err(error) = told {
+                tracing::debug!("cannot tell a viewer why it was refused: {error}");
+            }
+            refusing.fetch_sub(1, Ordering::AcqRel);
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot tell a viewer why it was refused: {error}");
     }
 }
 
@@ -608,6 +644,7 @@ pub fn serve(
     allowed: impl Fn(IpAddr) -> bool,
 ) -> io::Result<()> {
     let limits = Arc::new(Limits::default());
+    let refusing = Arc::new(AtomicUsize::new(0));
     loop {
         let (socket, address) = match listener.accept() {
             Ok(accepted) => accepted,
@@ -628,7 +665,7 @@ pub fn serve(
             Ok(handshake) => handshake,
             Err(reason) => {
                 tracing::info!("refused a viewer at {peer}: {reason}");
-                refuse_at_once(&socket, reason);
+                refuse_at_once(socket, reason, &refusing);
                 continue;
             }
         };

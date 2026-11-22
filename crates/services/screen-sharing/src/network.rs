@@ -26,6 +26,7 @@ fn address_of(socket: *const libc::sockaddr) -> Option<IpAddr> {
 
 const NET: &str = "/sys/class/net";
 const ARPHRD_ETHER: &str = "1";
+const MOST_LINK_DEPTH: u8 = 4;
 const SHORTEST_IPV4_PREFIX: u32 = 8;
 const SHORTEST_IPV6_PREFIX: u32 = 64;
 const TEREDO: (u128, u32) = (0x2001_0000 << 96, 32);
@@ -34,33 +35,54 @@ const SIX_TO_FOUR: (u128, u32) = (0x2002 << 112, 16);
 /// What an interface is, by what the kernel says of it rather than by its name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Link {
-    /// An Ethernet or Wi-Fi card.
+    /// An Ethernet or Wi-Fi card, or a bond, team or VLAN over one.
     Hardware,
-    /// A bridge with such a card among its ports.
+    /// A bridge with such a link among its ports.
     Bridge,
     /// A tunnel, VPN, container or virtual machine link, or anything else.
     Virtual,
 }
 
-fn has_hardware(name: &str) -> bool {
+fn plain_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains('/') && !name.starts_with('.')
+}
+
+/// Whether `name` is an Ethernet or Wi-Fi card, or a bond, team or VLAN over one (its `lower_`
+/// links), looking at most a few links down.
+fn has_hardware(name: &str, depth: u8) -> bool {
     let interface = Path::new(NET).join(name);
     let ethernet = std::fs::read_to_string(interface.join("type"))
         .is_ok_and(|kind| kind.trim() == ARPHRD_ETHER);
-    ethernet && !interface.join("tun_flags").exists() && interface.join("device").exists()
+    if !plain_name(name) || !ethernet || interface.join("tun_flags").exists() {
+        return false;
+    }
+    if interface.join("device").exists() {
+        return true;
+    }
+    depth < MOST_LINK_DEPTH
+        && std::fs::read_dir(&interface).is_ok_and(|entries| {
+            entries.flatten().any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .strip_prefix("lower_")
+                    .is_some_and(|lower| has_hardware(lower, depth + 1))
+            })
+        })
 }
 
 fn link_of(name: &str) -> Link {
-    if name.is_empty() || name.contains('/') || name.starts_with('.') {
+    if !plain_name(name) {
         return Link::Virtual;
     }
-    if has_hardware(name) {
+    if has_hardware(name, 0) {
         return Link::Hardware;
     }
     let ports = std::fs::read_dir(Path::new(NET).join(name).join("brif"));
     let bridges_hardware = ports.is_ok_and(|ports| {
         ports
             .flatten()
-            .any(|port| has_hardware(&port.file_name().to_string_lossy()))
+            .any(|port| has_hardware(&port.file_name().to_string_lossy(), 0))
     });
     match bridges_hardware {
         true => Link::Bridge,

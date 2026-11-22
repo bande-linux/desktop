@@ -796,9 +796,9 @@ fingerprint as soon as sharing is on. The protocol code, both sides, is `bande-r
 - **Who may connect.** Only peers on the network of a real LAN link of this computer (or the
   computer itself); others are dropped before a byte is read. A LAN link is up and running, not
   loopback or point-to-point, and by what the kernel says of it (`/sys/class/net/<link>`) an
-  Ethernet or Wi-Fi card (`type` 1, a `device`, no `tun_flags`) or a bridge with such a card
-  among its ports (`brif`), so tunnels, VPNs, container and virtual machine links, and VLANs do
-  not count whatever they are named; its prefix is at least /8 for IPv4 and /64 for IPv6, with no
+  Ethernet or Wi-Fi card (`type` 1, a `device`, no `tun_flags`), a bond, team or VLAN whose
+  `lower_` links lead to one, or a bridge with such a link among its ports (`brif`), so tunnels,
+  VPNs, container and virtual machine links do not count whatever they are named; its prefix is at least /8 for IPv4 and /64 for IPv6, with no
   Teredo or 6to4 address (`network.rs`). Viewers already connected stay when the computer moves to another network.
   Nothing changes the firewall and nothing asks the router to forward the port. A password of
   at least 8 characters, kept in the keyring and read when the service starts (Settings restarts
@@ -807,12 +807,13 @@ fingerprint as soon as sharing is on. The protocol code, both sides, is `bande-r
   made for this computer on first start (`$XDG_DATA_HOME/bande/screen-sharing`, its fingerprint
   shown in Settings). X509Vnc and plain VNC authentication (RFB 3.3 and viewers without
   VeNCrypt), which check only 8 characters, only after **Allow older viewers**. Limits are per
-  address, so one device cannot keep others out: one handshake at a time from an address (eight
-  from one IPv6 /64, sixteen in all), and five wrong passwords within ten minutes refusing that
-  address further tries, each slowed by a second. Guessing from many addresses is slowed for
-  everyone instead of refused: after ten failures in all within ten minutes, each password is
-  answered one at a time after a wait that doubles with every failure, up to half a minute. A
-  refused viewer is told why; a seat is taken before the person at the computer is asked, four
+  address, so one device cannot keep others out: one handshake at a time from an address
+  (sixteen in all), and five wrong passwords within ten minutes refusing that address further
+  tries, each slowed by a second. Guessing from many addresses is slowed for everyone: after ten
+  failures in all within ten minutes, handshakes get turns one delay apart, the delay doubling
+  with every failure up to sixteen seconds; nobody holds a lock while waiting, and a turn more
+  than twenty seconds off is refused at once ("Try again in a minute") instead of queued. A
+  refused viewer is told why, in the form of the RFB version it speaks; a seat is taken before the person at the computer is asked, four
   viewers at once; a handshake has a minute, every client message is bounded
   (`bande_rfb::protocol`) and a viewer holds at most 64 keys.
 - **Asking.** With **Ask before someone connects** (the default) a viewer that knows the password
@@ -828,8 +829,8 @@ fingerprint as soon as sharing is on. The protocol code, both sides, is `bande-r
   the connection press and let go of a key or button together. Viewers never press the power,
   sleep or wake keys. While the session is locked viewers only watch: the compositor drops their
   pointer, clicks and keys (letting go of what they held), so they can neither unlock nor use
-  the lock screen's power buttons, and viewers with the DesktopName pseudo-encoding see the
-  screen named "<computer> (locked)". While anyone views, the Taskbar shows the screen
+  the lock screen's power buttons, and viewers that asked for the DesktopName pseudo-encoding see
+  the screen named "<computer> (locked)", in their next requested update. While anyone views, the Taskbar shows the screen
   symbol ("Someone is viewing your screen"); clicking it ends the stream and disconnects every
   viewer. The stream stops when the last viewer leaves or the service goes away.
 - **RFB.** Raw and ZRLE (zlib, solid, palette and raw tiles), DesktopSize when the display

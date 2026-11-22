@@ -438,7 +438,7 @@ impl CalendarView {
                 .map_or_else(String::new, |event| event.summary.clone());
             match one.occurrence.all_day {
                 true => text.push_str(&format!("{summary}\n")),
-                false => text.push_str(&format!("{}  {summary}\n", start.strftime("%H:%M"))),
+                false => text.push_str(&format!("{}  {summary}\n", self.formats.clock_time(start))),
             }
         }
         (self.formats.month_title(first), text)
@@ -1206,6 +1206,7 @@ impl CalendarView {
                 local: &self.zone,
                 me: me.as_deref(),
                 time_zones: self.settings.time_zones,
+                formats: &self.formats,
             },
         );
         if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {

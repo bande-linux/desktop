@@ -48,6 +48,7 @@ Paths are under `crates/`.
 | `shell/shell/tests/session_end.rs` | The real confirmation dialog against a fake logind and systemd: a confirmed Shut Down really reaches `PowerOff` (the dialog once exited before the call left) and the dialog stays; a hung app does not stop Restart; an inhibitor stops the call and is shown; Log Out stops the compositor service. |
 | `libs/app/tests/app.rs` | App framework: a second launch reaches the running instance, the app keeps running without windows, launching again reopens a window, the switcher activates it without a window, Ctrl+Q quits. |
 | `toolkit/toolkit/tests/accessibility.rs` | Toolkit: a screen reader finds a button over AT-SPI in a window on the headless compositor and presses it. |
+| `libs/datetime/tests/parse.rs` | Parser: a typed date is read in the locale's own field order (a US 03/04 is 4 March, a British one 3 April), every locale reads back the dates and times it writes, and 12-hour times with the locale's day periods are read. Calendar used to read every date day-first. |
 | `libs/l10n-source/src/plural.rs` | Parser: gettext plural rules pick the forms their languages need. |
 | `libs/content/src/import.rs` | Parser: words split across Word XML runs stay whole and paragraphs stay apart in the indexed text. |
 | `services/index/src/store.rs` | Parser and tokenizer: a search matches regardless of case and accents (`ø` as `o`), the word being typed as a prefix, quoted words as a phrase and a CJK character on its own; a replaced or removed file's text is no longer found. |

@@ -1115,6 +1115,7 @@ dependencies = [
 name = "bande-keyring"
 version = "0.2.0"
 dependencies = [
+ "tracing",
  "zbus",
 ]
 

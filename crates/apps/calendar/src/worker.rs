@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use bande_keyring::Keyring;
+use bande_keyring::Passwords;
 
 use crate::store::{AccountKind, Calendar};
 use crate::sync::{Outcome, sync_calendar};
@@ -80,36 +79,6 @@ pub fn http_url(url: &str) -> String {
     }
 }
 
-struct Passwords {
-    keyring: Option<Keyring>,
-    known: HashMap<String, String>,
-}
-
-impl Passwords {
-    fn keyring(&mut self) -> Option<&Keyring> {
-        if self.keyring.is_none() {
-            self.keyring = Keyring::open(KEYRING)
-                .map_err(|error| tracing::warn!("cannot open the keyring: {error}"))
-                .ok();
-        }
-        self.keyring.as_ref()
-    }
-
-    fn get(&mut self, account: &str) -> Option<String> {
-        if let Some(password) = self.known.get(account) {
-            return Some(password.clone());
-        }
-        let password = self
-            .keyring()?
-            .password(&[("account", account)])
-            .map_err(|error| tracing::warn!("cannot read the password: {error}"))
-            .ok()
-            .flatten()?;
-        self.known.insert(account.to_owned(), password.clone());
-        Some(password)
-    }
-}
-
 fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
     match job {
         Job::Sync(calendars) => {
@@ -151,13 +120,7 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             user,
             password,
         } => {
-            let label = format!("Calendar: {user}");
-            if let Some(keyring) = passwords.keyring()
-                && let Err(error) = keyring.save(&[("account", &account)], &label, &password)
-            {
-                tracing::warn!("cannot keep the password: {error}");
-            }
-            passwords.known.insert(account, password);
+            passwords.set(&account, &format!("Calendar: {user}"), &password);
         }
         Job::Collection {
             account,
@@ -186,14 +149,7 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                 (Err(error), _) => reply(Reply::ChangeFailed(error.to_string())),
             }
         }
-        Job::Forget(account) => {
-            passwords.known.remove(&account);
-            if let Some(keyring) = passwords.keyring()
-                && let Err(error) = keyring.forget(&[("account", &account)])
-            {
-                tracing::warn!("cannot forget the password: {error}");
-            }
-        }
+        Job::Forget(account) => passwords.forget(&account),
     }
 }
 
@@ -206,10 +162,7 @@ impl Worker {
         std::thread::Builder::new()
             .name("sync".to_owned())
             .spawn(move || {
-                let mut passwords = Passwords {
-                    keyring: None,
-                    known: HashMap::new(),
-                };
+                let mut passwords = Passwords::new(KEYRING);
                 for job in inbox {
                     run(job, &mut passwords, &mut |reply| {
                         if outbox.send(reply).is_ok() {

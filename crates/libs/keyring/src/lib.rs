@@ -182,3 +182,62 @@ impl Keyring {
         Ok(())
     }
 }
+
+/// The passwords of an app's accounts, each kept under its `account` attribute and remembered
+/// once read, for a thread that signs in to servers. The keyring opens on first use.
+pub struct Passwords {
+    application: &'static str,
+    keyring: Option<Keyring>,
+    known: HashMap<String, String>,
+}
+
+impl Passwords {
+    pub fn new(application: &'static str) -> Self {
+        Self {
+            application,
+            keyring: None,
+            known: HashMap::new(),
+        }
+    }
+
+    fn keyring(&mut self) -> Option<&Keyring> {
+        if self.keyring.is_none() {
+            self.keyring = Keyring::open(self.application)
+                .map_err(|error| tracing::warn!("cannot open the keyring: {error}"))
+                .ok();
+        }
+        self.keyring.as_ref()
+    }
+
+    pub fn get(&mut self, account: &str) -> Option<String> {
+        if let Some(password) = self.known.get(account) {
+            return Some(password.clone());
+        }
+        let password = self
+            .keyring()?
+            .password(&[("account", account)])
+            .map_err(|error| tracing::warn!("cannot read the password: {error}"))
+            .ok()
+            .flatten()?;
+        self.known.insert(account.to_owned(), password.clone());
+        Some(password)
+    }
+
+    pub fn set(&mut self, account: &str, label: &str, password: &str) {
+        if let Some(keyring) = self.keyring()
+            && let Err(error) = keyring.save(&[("account", account)], label, password)
+        {
+            tracing::warn!("cannot keep the password: {error}");
+        }
+        self.known.insert(account.to_owned(), password.to_owned());
+    }
+
+    pub fn forget(&mut self, account: &str) {
+        self.known.remove(account);
+        if let Some(keyring) = self.keyring()
+            && let Err(error) = keyring.forget(&[("account", account)])
+        {
+            tracing::warn!("cannot forget the password: {error}");
+        }
+    }
+}

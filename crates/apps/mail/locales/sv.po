@@ -7,6 +7,72 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "GnuPG can’t be started: {error}"
+msgstr "GnuPG kan inte startas: {error}"
+
+msgid "The key is no longer in GnuPG."
+msgstr "Nyckeln finns inte längre i GnuPG."
+
+msgid "Enter the passphrase of your OpenPGP key “{key}” to open this message."
+msgstr "Ange lösenfrasen för din OpenPGP-nyckel ”{key}” för att öppna meddelandet."
+
+msgid "GnuPG could not use your key. The passphrase may have been wrong or not given."
+msgstr "GnuPG kunde inte använda din nyckel. Lösenfrasen kan ha varit fel eller inte angetts."
+
+msgid "The encrypted message is damaged."
+msgstr "Det krypterade meddelandet är skadat."
+
+msgid "Your OpenPGP key can’t sign: it may have expired."
+msgstr "Din OpenPGP-nyckel kan inte signera: den kan ha gått ut."
+
+msgid "Enter the passphrase of your OpenPGP key “{key}” to sign this message."
+msgstr "Ange lösenfrasen för din OpenPGP-nyckel ”{key}” för att signera meddelandet."
+
+msgid "Your OpenPGP key is no longer in GnuPG."
+msgstr "Din OpenPGP-nyckel finns inte längre i GnuPG."
+
+msgid "The OpenPGP key {key} can’t be used for encryption: it may have expired."
+msgstr "OpenPGP-nyckeln {key} kan inte användas för kryptering: den kan ha gått ut."
+
+msgid "Choose your OpenPGP key or S/MIME certificate for this account in Settings ▸ Accounts."
+msgstr "Välj din OpenPGP-nyckel eller ditt S/MIME-certifikat för kontot i Inställningar ▸ Konton."
+
+msgid "An encrypted message can’t have Bcc recipients: every recipient could see whose keys it was encrypted to. Send it separately, or turn off Encrypt."
+msgstr "Ett krypterat meddelande kan inte ha mottagare i Hemlig kopia: alla mottagare skulle kunna se vilkas nycklar det krypterades till. Skicka det separat eller stäng av Kryptera."
+
+msgid "Mail can’t encrypt this message: there is no key or certificate for {addresses}. Look up their keys, or turn off Encrypt."
+msgstr "E-post kan inte kryptera meddelandet: det finns ingen nyckel eller inget certifikat för {addresses}. Slå upp deras nycklar eller stäng av Kryptera."
+
+msgid "Enter the passphrase of your S/MIME certificate “{name}” to open this message."
+msgstr "Ange lösenfrasen för ditt S/MIME-certifikat ”{name}” för att öppna meddelandet."
+
+msgid "The system has no randomness to offer."
+msgstr "Systemet kan inte ge några slumptal."
+
+msgid "Your S/MIME certificate is no longer in GnuPG."
+msgstr "Ditt S/MIME-certifikat finns inte längre i GnuPG."
+
+msgid "Mail can sign only with an RSA S/MIME certificate."
+msgstr "E-post kan bara signera med ett S/MIME-certifikat med RSA-nyckel."
+
+msgid "Enter the passphrase of your S/MIME certificate “{name}” to sign this message."
+msgstr "Ange lösenfrasen för ditt S/MIME-certifikat ”{name}” för att signera meddelandet."
+
+msgid "GnuPG returned an unexpected signature."
+msgstr "GnuPG gav en oväntad signatur."
+
+msgid "The S/MIME certificate of {name} has no RSA key, which Mail needs to encrypt."
+msgstr "S/MIME-certifikatet för {name} har ingen RSA-nyckel, som E-post behöver för att kryptera."
+
+msgid "This address can’t be looked up."
+msgstr "Den här adressen kan inte slås upp."
+
+msgid "The key found for {email} is not for that address."
+msgstr "Nyckeln som hittades för {email} gäller inte den adressen."
+
+msgid "No key was found."
+msgstr "Ingen nyckel hittades."
+
 msgid "The connection failed: {error}"
 msgstr "Anslutningen misslyckades: {error}"
 
@@ -158,9 +224,6 @@ msgstr "Sortera efter storlek"
 msgid "Sort by Unread"
 msgstr "Sortera efter olästa"
 
-msgid "This message is encrypted. Mail can’t open encrypted messages."
-msgstr "Meddelandet är krypterat. E-post kan inte öppna krypterade meddelanden."
-
 msgid "TLS"
 msgstr "TLS"
 
@@ -253,6 +316,15 @@ msgstr "Visa citerad text"
 msgid "Load Remote Content"
 msgstr "Ladda externt innehåll"
 
+msgid "Look Up Key"
+msgstr "Slå upp nyckel"
+
+msgid "Trust Issuer…"
+msgstr "Lita på utfärdaren…"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
 msgid "To:"
 msgstr "Till:"
 
@@ -267,6 +339,12 @@ msgstr "Ämne:"
 
 msgid "From:"
 msgstr "Från:"
+
+msgid "Sign"
+msgstr "Signera"
+
+msgid "Encrypt"
+msgstr "Kryptera"
 
 msgid "Write your message"
 msgstr "Skriv ditt meddelande"
@@ -324,6 +402,51 @@ msgstr "Inget meddelande markerat"
 msgid "{count} messages selected"
 msgstr "{count} meddelanden markerade"
 
+msgid "Decrypting the message…"
+msgstr "Dekrypterar meddelandet…"
+
+msgid "This message was encrypted with {standard}."
+msgstr "Meddelandet var krypterat med {standard}."
+
+msgid "This message is encrypted with {standard}, and none of your keys can open it."
+msgstr "Meddelandet är krypterat med {standard}, och ingen av dina nycklar kan öppna det."
+
+msgid "This message is encrypted in a way Mail can’t open."
+msgstr "Meddelandet är krypterat på ett sätt som E-post inte kan öppna."
+
+msgid "This message could not be decrypted. {reason}"
+msgstr "Meddelandet kunde inte dekrypteras. {reason}"
+
+msgid "Checking the signature…"
+msgstr "Kontrollerar signaturen…"
+
+msgid "Signed by {signer}, verified."
+msgstr "Signerat av {signer}, verifierat."
+
+msgid "Signed by {signer}, but you haven’t verified that key {key} belongs to them."
+msgstr "Signerat av {signer}, men du har inte verifierat att nyckeln {key} tillhör avsändaren."
+
+msgid "Signed by {signer}, but the certificate comes from an issuer you don’t trust."
+msgstr "Signerat av {signer}, men certifikatet kommer från en utfärdare du inte litar på."
+
+msgid "Signed by {signer}, who is not the sender of this message."
+msgstr "Signerat av {signer}, som inte är avsändaren av meddelandet."
+
+msgid "Signed with key {key}, which you don’t have."
+msgstr "Signerat med nyckeln {key}, som du inte har."
+
+msgid "Signed, but the signer’s certificate is not in the message."
+msgstr "Signerat, men signerarens certifikat finns inte i meddelandet."
+
+msgid "Signed by {signer}, but the key or certificate has expired, was revoked or may not sign mail."
+msgstr "Signerat av {signer}, men nyckeln eller certifikatet har gått ut, har återkallats eller får inte signera e-post."
+
+msgid "Signed with an algorithm Mail doesn’t accept as secure, so the signature was not checked."
+msgstr "Signerat med en algoritm som E-post inte godtar som säker, så signaturen kontrollerades inte."
+
+msgid "The signature doesn’t match: the message was changed after it was signed, or the signature is forged."
+msgstr "Signaturen stämmer inte: meddelandet ändrades efter att det signerades, eller så är signaturen förfalskad."
+
 msgid "To: {names}"
 msgstr "Till: {names}"
 
@@ -366,8 +489,56 @@ msgstr "Till eller kopia"
 msgid "Subject"
 msgstr "Ämne"
 
+msgid "does not expire"
+msgstr "går inte ut"
+
+msgid "expires {date}"
+msgstr "går ut {date}"
+
 msgid "Settings"
 msgstr "Inställningar"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "Export Public Key…"
+msgstr "Exportera publik nyckel…"
+
+msgid "Signing and Encryption"
+msgstr "Signering och kryptering"
+
+msgid "OpenPGP key"
+msgstr "OpenPGP-nyckel"
+
+msgid "S/MIME certificate"
+msgstr "S/MIME-certifikat"
+
+msgid "Sign new messages"
+msgstr "Signera nya meddelanden"
+
+msgid "Generate OpenPGP Key…"
+msgstr "Skapa OpenPGP-nyckel…"
+
+msgid "Import…"
+msgstr "Importera…"
+
+msgid "Your keys and certificates stay in GnuPG, with your other GnuPG keys and smartcards; GnuPG asks for their passphrase. Import takes OpenPGP keys and S/MIME certificates with their key (PKCS #12, .p12 or .pfx)."
+msgstr "Dina nycklar och certifikat finns kvar i GnuPG, tillsammans med dina andra GnuPG-nycklar och smartkort; GnuPG frågar efter deras lösenfras. Import tar emot OpenPGP-nycklar och S/MIME-certifikat med sin nyckel (PKCS #12, .p12 eller .pfx)."
+
+msgid "This key has no user ID with the account’s address, so recipients may not trust it for this address."
+msgstr "Nyckeln har inget användar-id med kontots adress, så mottagare kanske inte litar på den för den här adressen."
+
+msgid "Generate an OpenPGP key for {user}?"
+msgstr "Skapa en OpenPGP-nyckel för {user}?"
+
+msgid "GnuPG makes the key and asks for a passphrase to protect it. The key expires in three years; you can extend it with GnuPG."
+msgstr "GnuPG skapar nyckeln och frågar efter en lösenfras som skyddar den. Nyckeln går ut om tre år; du kan förlänga den med GnuPG."
+
+msgid "Generate"
+msgstr "Skapa"
+
+msgid "Waiting for GnuPG…"
+msgstr "Väntar på GnuPG…"
 
 msgid "New Messages"
 msgstr "Nya meddelanden"
@@ -383,9 +554,6 @@ msgstr "Standardprogram för e-post"
 
 msgid "To open email links in Mail, choose it in Settings ▸ Apps."
 msgstr "Om du vill öppna e-postlänkar i E-post väljer du det i Inställningar ▸ Appar."
-
-msgid "None"
-msgstr "Ingen"
 
 msgid "1 line"
 msgid_plural "{lines} lines"
@@ -419,6 +587,12 @@ msgstr "Ladda externt innehåll i meddelanden"
 msgid "Remote pictures can tell the sender when and where you read a message. When this is off, a message shows Load Remote Content instead, and Mail remembers the senders you load it for."
 msgstr "Externa bilder kan visa för avsändaren när och var du läser ett meddelande. När det här är av visar meddelandet Ladda externt innehåll i stället, och E-post kommer ihåg de avsändare du laddar det för."
 
+msgid "Find decrypted messages in search"
+msgstr "Hitta dekrypterade meddelanden vid sökning"
+
+msgid "When this is on, the text of an encrypted message you open is kept unencrypted in Mail’s search index on this computer, and offered to desktop search."
+msgstr "När detta är på sparas texten i ett krypterat meddelande du öppnar okrypterad i E-posts sökindex på den här datorn och erbjuds till skrivbordssökningen."
+
 msgid "Remote content loads for one sender"
 msgid_plural "Remote content loads for {count} senders"
 msgstr[0] "Externt innehåll laddas för en avsändare"
@@ -426,6 +600,11 @@ msgstr[1] "Externt innehåll laddas för {count} avsändare"
 
 msgid "Forget"
 msgstr "Glöm"
+
+msgid "You trust one S/MIME issuer"
+msgid_plural "You trust {count} S/MIME issuers"
+msgstr[0] "Du litar på en S/MIME-utfärdare"
+msgstr[1] "Du litar på {count} S/MIME-utfärdare"
 
 msgid "Flag the message"
 msgstr "Flagga meddelandet"
@@ -595,6 +774,23 @@ msgstr "Ta bort {email}?"
 msgid "Mail forgets this account, its saved password and the copy of its mail on this computer. The mail on the server stays."
 msgstr "E-post glömmer det här kontot, dess sparade lösenord och kopian av dess e-post på den här datorn. E-posten på servern finns kvar."
 
+msgid "The key was generated."
+msgstr "Nyckeln skapades."
+
+msgid "Import Keys"
+msgstr "Importera nycklar"
+
+msgid "One file was imported."
+msgid_plural "{count} files were imported."
+msgstr[0] "En fil importerades."
+msgstr[1] "{count} filer importerades."
+
+msgid "Export Public Key"
+msgstr "Exportera publik nyckel"
+
+msgid "The public key was exported."
+msgstr "Den publika nyckeln exporterades."
+
 msgid "Account type:"
 msgstr "Kontotyp:"
 
@@ -704,6 +900,21 @@ msgstr "All e-post"
 msgid "Search"
 msgstr "Sök"
 
+msgid "The key could not be found"
+msgstr "Nyckeln kunde inte hittas"
+
+msgid "Trust certificates from “{name}”?"
+msgstr "Lita på certifikat från ”{name}”?"
+
+msgid "Mail will accept every certificate this issuer signs as proof of a sender’s address. Only trust it if you have checked its fingerprint with someone you know: {fingerprint}"
+msgstr "E-post godtar då varje certifikat som utfärdaren signerar som bevis för en avsändares adress. Lita bara på den om du har kontrollerat fingeravtrycket med någon du känner: {fingerprint}"
+
+msgid "Trust"
+msgstr "Lita på"
+
+msgid "The issuer could not be trusted"
+msgstr "Det gick inte att lita på utfärdaren"
+
 msgid "Red"
 msgstr "Röd"
 
@@ -756,9 +967,6 @@ msgstr "E-post når inte servern."
 
 msgid "“{account}” is offline"
 msgstr "”{account}” är offline"
-
-msgid "Try Again"
-msgstr "Försök igen"
 
 msgid "No account sends from this address any more."
 msgstr "Inget konto skickar längre från den här adressen."

@@ -51,6 +51,7 @@ pub struct MailSettings {
     pub sort: SortBy,
     pub ascending: bool,
     pub bcc_field: bool,
+    pub index_decrypted: bool,
 }
 
 impl Default for MailSettings {
@@ -68,6 +69,7 @@ impl Default for MailSettings {
             sort: SortBy::Date,
             ascending: false,
             bcc_field: false,
+            index_decrypted: false,
         }
     }
 }
@@ -106,6 +108,9 @@ impl Stored for MailSettings {
                 }
                 "ascending" => settings.ascending = flag(value).unwrap_or(settings.ascending),
                 "bcc-field" => settings.bcc_field = flag(value).unwrap_or(settings.bcc_field),
+                "index-decrypted" => {
+                    settings.index_decrypted = flag(value).unwrap_or(settings.index_decrypted);
+                }
                 _ => {}
             }
         }
@@ -114,7 +119,7 @@ impl Stored for MailSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\n",
+            "notify = {}\nsound = {}\nload-remote = {}\npreview-lines = {}\nconversations = {}\nplain-text = {}\nfixed-width = {}\nquote = {}\nsend-from = {}\nsort = {}\nascending = {}\nbcc-field = {}\nindex-decrypted = {}\n",
             self.notify,
             self.sound,
             self.load_remote,
@@ -127,6 +132,7 @@ impl Stored for MailSettings {
             self.sort.name(),
             self.ascending,
             self.bcc_field,
+            self.index_decrypted,
         )
     }
 }

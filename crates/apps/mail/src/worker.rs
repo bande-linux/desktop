@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 
 use bande_l10n::tr;
 
-use crate::compose::{Draft, Original, Outgoing, build, build_kept, forget_unsent};
+use crate::compose::{Draft, Original, Outgoing, build, build_kept, forget_unsent, keep_unsent};
+use crate::crypto::outgoing::{Book, secure};
+use crate::crypto::{GnuPg, Keys};
 use crate::error::{Error, Result};
 use crate::imap::{Flag, Role, Session};
 use crate::net::{Closer, Network};
@@ -69,6 +71,9 @@ pub enum Event {
     Found(Box<crate::setup::Found>),
     Pictures(MessageId, Vec<(String, crate::picture::Picture)>),
     MailboxRefused(String),
+    Opened(MessageId, Box<crate::message::Content>),
+    LookedUp(MessageId, std::result::Result<(), String>),
+    KeysChanged(std::result::Result<String, String>),
 }
 
 #[derive(Clone)]
@@ -469,6 +474,7 @@ impl Runner {
             Command::Body(id) => self.body(*id),
             Command::Mailbox(change) => self.change_mailbox(change),
             Command::Send(outgoing) => self.send(outgoing),
+            Command::SaveDraft(outgoing) if outgoing.draft.encrypt => Ok(keep_unsent(outgoing)?),
             Command::SaveDraft(outgoing) => {
                 self.save_draft(&outgoing.draft, outgoing.replaces.as_ref())?;
                 forget_unsent(outgoing);
@@ -655,7 +661,10 @@ impl Runner {
             ..
         } = outgoing;
         let (answering, replaces) = (answering.as_ref(), replaces.as_ref());
-        let raw = build(draft, &jiff::Zoned::now());
+        let raw = match draft.sign || draft.encrypt {
+            true => self.secured(draft)?,
+            false => build(draft, &jiff::Zoned::now()),
+        };
         let recipients = draft.recipients();
         let password = self.password()?;
         smtp::send(
@@ -682,6 +691,25 @@ impl Runner {
             }
         }
         Ok(())
+    }
+
+    fn secured(&self, draft: &Draft) -> Result<Vec<u8>> {
+        let identity = self.store.identity(self.account.id)?;
+        let keys = Keys {
+            gnupg: GnuPg::default(),
+            trusted: self.store.trusted_certificates()?,
+        };
+        let mut book = Book::default();
+        if draft.encrypt && !identity.smime.is_empty() {
+            book.intermediates = self.store.known_certificates()?;
+            for email in draft.recipients() {
+                let email = email.to_lowercase();
+                let mut certificates = self.store.certificates_of(&email)?;
+                certificates.extend(keys.gnupg.smime_certificates(&format!("<{email}>")));
+                book.certificates.insert(email, certificates);
+            }
+        }
+        secure(draft, &jiff::Zoned::now(), &identity, &keys, &book)
     }
 
     fn file_sent(

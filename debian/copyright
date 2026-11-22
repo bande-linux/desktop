@@ -133,6 +133,10 @@ Files: vendor/anstyle-1.0.14/*
 Copyright: the anstyle authors
 License: MIT or Apache-2.0
 
+Files: vendor/anyhow-1.0.104/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
 Files: vendor/appendlist-1.4.0/*
 Copyright: Daniel Dulaney <dan@dulaney.xyz>
 License: MIT
@@ -140,6 +144,10 @@ License: MIT
 Files: vendor/approx-0.4.0/*
 Copyright: Brendan Zabarauskas <bjzaba@yahoo.com.au>
 License: Apache-2.0
+
+Files: vendor/argon2-0.5.3/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
 
 Files: vendor/arrayref-0.3.9/*
 Copyright: David Roundy <roundyd@physics.oregonstate.edu>
@@ -251,6 +259,10 @@ Files: vendor/base64-0.23.1/*
 Copyright: Marshall Pierce <marshall@mpierce.org>
 License: MIT or Apache-2.0
 
+Files: vendor/base64ct-1.8.3/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
 Files: vendor/bindgen-0.72.1/*
 Copyright: Jyun-Yan You <jyyou.tw@gmail.com>
  Emilio Cobos Álvarez <emilio@crisal.io>
@@ -282,6 +294,10 @@ Files: vendor/bitflags-2.13.2/*
 Copyright: The Rust Project Developers
 License: MIT or Apache-2.0
 
+Files: vendor/blake2-0.10.6/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
 Files: vendor/block-buffer-0.10.4/*
 Copyright: RustCrypto Developers
 License: MIT or Apache-2.0
@@ -307,6 +323,12 @@ Files: vendor/brotli-decompressor-5.0.3/*
 Copyright: Daniel Reiter Horn <danielrh@dropbox.com>
  The Brotli Authors
 License: BSD-3-Clause or MIT
+
+Files: vendor/buffered-reader-1.4.1/*
+Copyright: Justus Winter <justus@sequoia-pgp.org>
+ Kai Michaelis <kai@sequoia-pgp.org>
+ Neal H. Walfield <neal@sequoia-pgp.org>
+License: LGPL-2.0-or-later
 
 Files: vendor/bumpalo-3.20.3/*
 Copyright: Nick Fitzgerald <fitzgen@gmail.com>
@@ -343,6 +365,22 @@ License: Apache-2.0
 
 Files: vendor/calloop-0.14.5/*
 Copyright: Elinor Berger <elinor@safaradeg.net>
+License: MIT
+
+Files: vendor/capnp-0.25.6/*
+Copyright: David Renshaw <dwrenshaw@gmail.com>
+License: MIT
+
+Files: vendor/capnp-futures-0.25.2/*
+Copyright: David Renshaw <drenshaw@gmail.com>
+License: MIT
+
+Files: vendor/capnp-rpc-0.25.1/*
+Copyright: David Renshaw <dwrenshaw@gmail.com>
+License: MIT
+
+Files: vendor/capnpc-0.25.3/*
+Copyright: David Renshaw <dwrenshaw@gmail.com>
 License: MIT
 
 Files: vendor/cbc-0.2.1/*
@@ -382,6 +420,10 @@ Files: vendor/charset-0.1.5/*
 Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
 License: Apache-2.0 or MIT
 
+Files: vendor/chrono-0.4.45/*
+Copyright: the chrono authors
+License: MIT or Apache-2.0
+
 Files: vendor/cipher-0.5.2/*
 Copyright: RustCrypto Developers
 License: MIT or Apache-2.0
@@ -391,6 +433,10 @@ Copyright: Kyle Mayes <kyle@mayeses.com>
 License: Apache-2.0
 
 Files: vendor/cmov-0.5.4/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/cms-0.2.3/*
 Copyright: RustCrypto Developers
 License: Apache-2.0 or MIT
 
@@ -417,6 +463,10 @@ Copyright: Stjepan Glavina <stjepang@gmail.com>
 License: Apache-2.0 or MIT
 
 Files: vendor/const-oid-0.10.2/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/const-oid-0.9.6/*
 Copyright: RustCrypto Developers
 License: Apache-2.0 or MIT
 
@@ -478,6 +528,14 @@ Files: vendor/crypto-common-0.2.2/*
 Copyright: RustCrypto Developers
 License: MIT or Apache-2.0
 
+Files: vendor/ctor-0.6.3/*
+Copyright: Matt Mastracci <matthew@mastracci.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/ctor-proc-macro-0.0.7/*
+Copyright: Matt Mastracci <matthew@mastracci.com>
+License: Apache-2.0 or MIT
+
 Files: vendor/ctutils-0.4.7/*
 Copyright: RustCrypto Developers
 License: Apache-2.0 or MIT
@@ -510,6 +568,14 @@ Files: vendor/defmt-parser-1.1.0/*
 Copyright: The Knurling-rs developers
 License: MIT or Apache-2.0
 
+Files: vendor/der-0.7.10/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/der_derive-0.7.3/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
 Files: vendor/derive_more-2.1.1/*
 Copyright: Jelte Fennema <github-tech@jeltef.nl>
 License: MIT
@@ -524,6 +590,14 @@ License: MIT or Apache-2.0
 
 Files: vendor/digest-0.11.3/*
 Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
+Files: vendor/dirs-6.0.0/*
+Copyright: Simon Ochsenreither <simon@ochsenreither.de>
+License: MIT or Apache-2.0
+
+Files: vendor/dirs-sys-0.5.0/*
+Copyright: Simon Ochsenreither <simon@ochsenreither.de>
 License: MIT or Apache-2.0
 
 Files: vendor/dispatch2-0.3.1/*
@@ -565,8 +639,24 @@ Files: vendor/drm-sys-0.8.1/*
 Copyright: Tyler Slabinski <tslabinski@slabity.net>
 License: MIT
 
+Files: vendor/dtor-0.1.1/*
+Copyright: Matt Mastracci <matthew@mastracci.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/dtor-proc-macro-0.0.6/*
+Copyright: Matt Mastracci <matthew@mastracci.com>
+License: Apache-2.0 or MIT
+
+Files: vendor/dyn-clone-1.0.20/*
+Copyright: David Tolnay <dtolnay@gmail.com>
+License: MIT or Apache-2.0
+
 Files: vendor/either-1.19.0/*
 Copyright: the either authors
+License: MIT or Apache-2.0
+
+Files: vendor/embedded-io-0.7.1/*
+Copyright: the embedded-io authors
 License: MIT or Apache-2.0
 
 Files: vendor/ena-0.14.4/*
@@ -665,6 +755,10 @@ Files: vendor/fixedbitset-0.5.7/*
 Copyright: bluss
 License: MIT or Apache-2.0
 
+Files: vendor/flagset-0.4.7/*
+Copyright: Nathaniel McCallum <nathaniel@profian.com>
+License: Apache-2.0
+
 Files: vendor/flate2-1.1.10/*
 Copyright: Alex Crichton <alex@alexcrichton.com>
  Josh Triplett <josh@joshtriplett.org>
@@ -701,6 +795,14 @@ License: MIT
 Files: vendor/fontique-0.12.0/*
 Copyright: the fontique authors
 License: Apache-2.0 or MIT
+
+Files: vendor/fs2-0.4.3/*
+Copyright: Dan Burkert <dan@danburkert.com>
+License: MIT or Apache-2.0
+
+Files: vendor/futures-0.3.34/*
+Copyright: the futures authors
+License: MIT or Apache-2.0
 
 Files: vendor/futures-channel-0.3.34/*
 Copyright: the futures-channel authors
@@ -955,6 +1057,16 @@ Files: vendor/hybrid-array-0.4.15/*
 Copyright: RustCrypto Developers
 License: MIT or Apache-2.0
 
+Files: vendor/iana-time-zone-0.1.65/*
+Copyright: Andrew Straw <strawman@astraw.com>
+ René Kijewski <rene.kijewski@fu-berlin.de>
+ Ryan Lopopolo <rjl@hyperbo.la>
+License: MIT or Apache-2.0
+
+Files: vendor/iana-time-zone-haiku-0.1.2/*
+Copyright: René Kijewski <crates.io@k6i.de>
+License: MIT or Apache-2.0
+
 Files: vendor/icu_calendar-2.4.0/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
@@ -1050,6 +1162,14 @@ License: Unicode-3.0
 Files: vendor/icu_time_data-2.4.0/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
+
+Files: vendor/idna-1.1.0/*
+Copyright: The rust-url developers
+License: MIT or Apache-2.0
+
+Files: vendor/idna_adapter-1.2.2/*
+Copyright: The rust-url developers
+License: Apache-2.0 or MIT
 
 Files: vendor/image-0.25.10/*
 Copyright: The image-rs Developers
@@ -1292,6 +1412,10 @@ Copyright: Alex Crichton <alex@alexcrichton.com>
  Trevor Gross <tg@trevorgross.com>
 License: MIT
 
+Files: vendor/libredox-0.1.25/*
+Copyright: 4lDO2 <4lDO2@protonmail.com>
+License: MIT
+
 Files: vendor/libseat-0.2.4/*
 Copyright: Poly <marynczak.bartlomiej@gmail.com>
 License: MIT
@@ -1400,6 +1524,10 @@ Files: vendor/memoffset-0.9.1/*
 Copyright: Gilad Naaman <gilad.naaman@gmail.com>
 License: MIT
 
+Files: vendor/memsec-0.7.0/*
+Copyright: quininer kel <quininer@live.com>
+License: MIT
+
 Files: vendor/miette-7.6.0/*
 Copyright: Kat Marchán <kzm@zkat.tech>
 License: Apache-2.0
@@ -1419,6 +1547,12 @@ Copyright: Frommi <daniil.liferenko@gmail.com>
  oyvindln <oyvindln@users.noreply.github.com>
  Rich Geldreich richgel99@gmail.com
 License: MIT or Zlib or Apache-2.0
+
+Files: vendor/mio-1.2.4/*
+Copyright: Carl Lerche <me@carllerche.com>
+ Thomas de Zeeuw <thomasdezeeuw@gmail.com>
+ Tokio Contributors <team@tokio.rs>
+License: MIT
 
 Files: vendor/miow-0.6.1/*
 Copyright: Alex Crichton <alex@alexcrichton.com>
@@ -1443,6 +1577,17 @@ License: MIT or Apache-2.0
 Files: vendor/naga-types-30.0.1/*
 Copyright: gfx-rs developers
 License: MIT or Apache-2.0
+
+Files: vendor/nettle-7.5.0/*
+Copyright: Kai Michaelis <kai@sequoia-pgp.org>
+ Justus Winter <justus@sequoia-pgp.org>
+ Neal H. Walfield <neal@sequoia-pgp.org>
+License: LGPL-3.0-only or GPL-2.0-only or GPL-3.0-only
+
+Files: vendor/nettle-sys-2.3.2/*
+Copyright: Justus Winter <justus@sequoia-pgp.org>
+ Kai Michaelis <kai@sequoia-pgp.org>
+License: LGPL-3.0-only or GPL-2.0-only or GPL-3.0-only
 
 Files: vendor/new_debug_unreachable-1.0.6/*
 Copyright: Matt Brubeck <mbrubeck@limpet.net>
@@ -1543,6 +1688,10 @@ Files: vendor/openssl-probe-0.2.2/*
 Copyright: Alex Crichton <alex@alexcrichton.com>
 License: MIT or Apache-2.0
 
+Files: vendor/option-ext-0.2.0/*
+Copyright: Simon Ochsenreither <simon@ochsenreither.de>
+License: MPL-2.0
+
 Files: vendor/option-operations-0.6.1/*
 Copyright: François Laignel <fengalin@free.fr>
 License: MIT or Apache-2.0
@@ -1590,6 +1739,10 @@ Files: vendor/parley_engine-0.12.0/*
 Copyright: the parley_engine authors
 License: Apache-2.0 or MIT
 
+Files: vendor/password-hash-0.5.0/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
 Files: vendor/pastey-0.2.3/*
 Copyright: Aditya Kumar <git@adityais.dev>
  David Tolnay <dtolnay@gmail.com>
@@ -1603,6 +1756,10 @@ Files: vendor/pdf-writer-0.15.0/*
 Copyright: Laurenz <laurmaedje@gmail.com>
  Martin Haug <mhaug@live.de>
 License: MIT or Apache-2.0
+
+Files: vendor/pem-rfc7468-0.7.0/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
 
 Files: vendor/peniko-0.6.1/*
 Copyright: the peniko authors
@@ -1791,6 +1948,11 @@ Copyright: The Rand Project Developers
  The CryptoCorrosion Contributors
 License: MIT or Apache-2.0
 
+Files: vendor/rand_core-0.6.4/*
+Copyright: The Rand Project Developers
+ The Rust Project Developers
+License: MIT or Apache-2.0
+
 Files: vendor/rand_core-0.9.5/*
 Copyright: The Rand Project Developers
  The Rust Project Developers
@@ -1818,6 +1980,11 @@ License: MIT or Apache-2.0
 
 Files: vendor/redox_syscall-0.5.18/*
 Copyright: Jeremy Soller <jackpot51@gmail.com>
+License: MIT
+
+Files: vendor/redox_users-0.5.3/*
+Copyright: Jose Narvaez <goyox86@gmail.com>
+ Wesley Hershberger <mggmugginsmc@gmail.com>
 License: MIT
 
 Files: vendor/regex-1.13.1/*
@@ -1973,6 +2140,26 @@ Files: vendor/semver-1.0.28/*
 Copyright: David Tolnay <dtolnay@gmail.com>
 License: MIT or Apache-2.0
 
+Files: vendor/sequoia-gpg-agent-0.6.2/*
+Copyright: Justus Winter <justus@sequoia-pgp.org>
+ Neal H. Walfield <neal@sequoia-pgp.org>
+License: LGPL-2.0-or-later
+
+Files: vendor/sequoia-ipc-0.36.1/*
+Copyright: Justus Winter <justus@sequoia-pgp.org>
+ Kai Michaelis <kai@sequoia-pgp.org>
+ Neal H. Walfield <neal@sequoia-pgp.org>
+License: LGPL-2.0-or-later
+
+Files: vendor/sequoia-openpgp-2.4.2/*
+Copyright: Igor Matuszewski <igor@sequoia-pgp.org>
+ Justus Winter <justus@sequoia-pgp.org>
+ Kai Michaelis <kai@sequoia-pgp.org>
+ Neal H. Walfield <neal@sequoia-pgp.org>
+ Nora Widdecke <nora@sequoia-pgp.org>
+ Wiktor Kwapisiewicz <wiktor@sequoia-pgp.org>
+License: LGPL-2.0-or-later
+
 Files: vendor/serde-1.0.229/*
 Copyright: Erick Tryzelaar <erick.tryzelaar@gmail.com>
  David Tolnay <dtolnay@gmail.com>
@@ -2016,6 +2203,12 @@ License: Apache-2.0
 Files: vendor/sha1-0.11.0/*
 Copyright: RustCrypto Developers
 License: MIT or Apache-2.0
+
+Files: vendor/sha1collisiondetection-0.3.4/*
+Copyright: Marc Stevens <marc@marc-stevens.nl>
+ Dan Shumow <danshu@microsoft.com>
+ Justus Winter <justus@sequoia-pgp.org>
+License: MIT
 
 Files: vendor/sha2-0.10.9/*
 Copyright: RustCrypto Developers
@@ -2110,6 +2303,11 @@ Copyright: Victor Berger <victor.berger@m4x.org>
  Drakulix (Victoria Brekenfeld)
 License: MIT
 
+Files: vendor/socket2-0.6.5/*
+Copyright: Alex Crichton <alex@alexcrichton.com>
+ Thomas de Zeeuw <thomasdezeeuw@gmail.com>
+License: MIT or Apache-2.0
+
 Files: vendor/spellbook-0.4.2/*
 Copyright: Michael Davis <mcarsondavis@gmail.com>
 License: MPL-2.0
@@ -2117,6 +2315,10 @@ License: MPL-2.0
 Files: vendor/spirv-0.4.0+sdk-1.4.341.0/*
 Copyright: Lei Zhang <antiagainst@gmail.com>
 License: Apache-2.0
+
+Files: vendor/spki-0.7.3/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
 
 Files: vendor/sqlite-wasm-rs-0.5.5/*
 Copyright: Spxg <unsafe@outlook.es>
@@ -2128,6 +2330,10 @@ License: MIT or Apache-2.0
 
 Files: vendor/static_assertions-1.1.0/*
 Copyright: Nikolai Vazquez
+License: MIT or Apache-2.0
+
+Files: vendor/stfu8-0.2.7/*
+Copyright: Garrett Berg <googberg@gmail.com>
 License: MIT or Apache-2.0
 
 Files: vendor/strict-num-0.1.1/*
@@ -2248,7 +2454,19 @@ Files: vendor/tinyvec-1.13.3/*
 Copyright: Lokathor <zefria@gmail.com>
 License: Zlib or Apache-2.0 or MIT
 
+Files: vendor/tls_codec-0.4.2/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
+Files: vendor/tls_codec_derive-0.4.2/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
 Files: vendor/tokio-1.54.1/*
+Copyright: Tokio Contributors <team@tokio.rs>
+License: MIT
+
+Files: vendor/tokio-util-0.7.20/*
 Copyright: Tokio Contributors <team@tokio.rs>
 License: MIT
 
@@ -2562,9 +2780,21 @@ Files: vendor/wgsl-types-0.4.0/*
 Copyright: the wgsl-types authors
 License: MIT or Apache-2.0
 
+Files: vendor/winapi-0.3.9/*
+Copyright: Peter Atashian <retep998@gmail.com>
+License: MIT or Apache-2.0
+
+Files: vendor/winapi-i686-pc-windows-gnu-0.4.0/*
+Copyright: Peter Atashian <retep998@gmail.com>
+License: MIT or Apache-2.0
+
 Files: vendor/winapi-util-0.1.11/*
 Copyright: Andrew Gallant <jamslam@gmail.com>
 License: Unlicense or MIT
+
+Files: vendor/winapi-x86_64-pc-windows-gnu-0.4.0/*
+Copyright: Peter Atashian <retep998@gmail.com>
+License: MIT or Apache-2.0
 
 Files: vendor/windows-0.62.2/*
 Copyright: the windows authors
@@ -2754,6 +2984,10 @@ Files: vendor/writeable-0.6.4/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
 
+Files: vendor/x509-cert-0.2.5/*
+Copyright: RustCrypto Developers
+License: Apache-2.0 or MIT
+
 Files: vendor/xattr-1.7.0/*
 Copyright: Steven Allen <steven@stebalien.com>
 License: MIT or Apache-2.0
@@ -2777,6 +3011,10 @@ License: MIT
 Files: vendor/xmp-writer-0.3.3/*
 Copyright: Martin Haug <mhaug@live.de>
 License: MIT or Apache-2.0
+
+Files: vendor/xxhash-rust-0.8.21/*
+Copyright: Douman <douman@gmx.se>
+License: BSL-1.0
 
 Files: vendor/yeslogic-fontconfig-sys-6.0.1/*
 Copyright: Austin Bonander <austin.bonander@gmail.com>
@@ -3069,6 +3307,14 @@ License: CDLA-Permissive-2.0
  of Data, including for example machine learning models and models'
  insights.
 
+License: GPL-2.0-only
+ This program is free software; you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation; version 2 of the License.
+ .
+ On Debian systems, the full text of the GNU General Public License, Version 2
+ can be found in /usr/share/common-licenses/GPL-2.
+
 License: GPL-2.0-or-later
  This program is free software; you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -3077,6 +3323,14 @@ License: GPL-2.0-or-later
  .
  On Debian systems, the full text of the GNU General Public License, Version 2
  can be found in /usr/share/common-licenses/GPL-2.
+
+License: GPL-3.0-only
+ This program is free software; you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation; version 3 of the License.
+ .
+ On Debian systems, the full text of the GNU General Public License, Version 3
+ can be found in /usr/share/common-licenses/GPL-3.
 
 License: ISC
  Permission to use, copy, modify, and/or distribute this software for any
@@ -3091,6 +3345,14 @@ License: ISC
  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+License: LGPL-2.0-or-later
+ This library is free software; you can redistribute it and/or modify it under the
+ terms of the GNU Library General Public License as published by the Free Software
+ Foundation; either version 2 of the License, or (at your option) any later version.
+ .
+ On Debian systems, the full text of the GNU Library General Public License, Version
+ 2 can be found in /usr/share/common-licenses/LGPL-2.
+
 License: LGPL-2.1-or-later
  This library is free software; you can redistribute it and/or modify it under the
  terms of the GNU Lesser General Public License as published by the Free Software
@@ -3098,6 +3360,14 @@ License: LGPL-2.1-or-later
  .
  On Debian systems, the full text of the GNU Lesser General Public License, Version
  2.1 can be found in /usr/share/common-licenses/LGPL-2.1.
+
+License: LGPL-3.0-only
+ This library is free software; you can redistribute it and/or modify it under the
+ terms of the GNU Lesser General Public License as published by the Free Software
+ Foundation; version 3 of the License.
+ .
+ On Debian systems, the full text of the GNU Lesser General Public License, Version
+ 3 can be found in /usr/share/common-licenses/LGPL-3.
 
 License: MIT
  Permission is hereby granted, free of charge, to any person obtaining a copy

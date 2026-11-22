@@ -14,6 +14,7 @@ pub enum Error {
     Login(String),
     Store(rusqlite::Error),
     Secret(String),
+    Crypto(String),
     Closed,
 }
 
@@ -48,6 +49,7 @@ impl fmt::Display for Error {
                 error = error.to_string()
             ),
             Self::Secret(error) => tr!("The keyring failed: {error}", error = error),
+            Self::Crypto(error) => error.clone(),
             Self::Closed => tr!("The server closed the connection."),
         };
         f.write_str(&text)

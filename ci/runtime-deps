@@ -94,6 +94,9 @@ dpkg-query dpkg required
 /usr/share/swcatalog appstream optional
 /usr/share/applications desktop-file-utils optional
 gpgv gpgv depends
+gpg gpg optional
+gpgsm gpgsm optional
+gpgconf gpgconf optional
 ssh openssh-client optional
 /bin/ash busybox optional
 /usr/libexec/virtiofsd virtiofsd optional

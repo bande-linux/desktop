@@ -1,0 +1,25 @@
+From: Alice <alice@bande.test>
+To: Alice <alice@bande.test>
+Subject: Signed for Alice
+Date: Sun, 22 Nov 2026 09:00:00 +0100
+Message-ID: <signed-for-alice@bande.test>
+MIME-Version: 1.0
+Content-Type: multipart/signed; boundary="sig"; micalg=pgp-sha256; protocol="application/pgp-signature"
+
+--sig
+Content-Type: text/plain; charset=utf-8
+
+Not Alice.
+
+--sig
+Content-Type: application/pgp-signature; name=signature.asc
+
+-----BEGIN PGP SIGNATURE-----
+
+iIcEABYKAC8WIQQVpP9moVN2h9POaAQLsteZA0duHQUCawKZSREcY2Fyb2xAYmFu
+ZGUudGVzdAAKCRALsteZA0duHUvjAQDgTXgFaVnoSIExuy7MNZVbqVdxt4nOaBcF
+uhkvgYjnzQD/Tned5ypqMi1Q9vwNN7DxDsyU4ERK8cfGVEaPH9xaHwc=
+=OfXc
+-----END PGP SIGNATURE-----
+
+--sig--

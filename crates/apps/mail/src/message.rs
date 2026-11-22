@@ -5,10 +5,15 @@ use mailparse::{
 
 use bande_l10n::tr;
 
+use crate::crypto::{
+    Encrypted, Keys, Layer, Opened, Sealed, Security, Standard, canonical, layer, openpgp, smime,
+};
 use crate::html::{Document, render_html, render_plain};
 
 const PREVIEW_LENGTH: usize = 240;
 const MAX_DEPTH: usize = 16;
+const MAX_LAYERS: usize = 4;
+const PROTECTED: [&str; 6] = ["Subject", "From", "To", "Cc", "Reply-To", "Date"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Address {
@@ -145,7 +150,7 @@ pub struct Content {
     pub html: Option<String>,
     pub attachments: Vec<Attachment>,
     pub inline: Vec<(String, usize)>,
-    pub encrypted: bool,
+    pub security: Security,
 }
 
 fn file_name(part: &ParsedMail<'_>) -> Option<String> {
@@ -164,8 +169,21 @@ fn file_name(part: &ParsedMail<'_>) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
+fn armored(text: &str, begin: &str, end: &str) -> bool {
+    let text = text.trim();
+    text.starts_with(begin) && text.ends_with(end)
+}
+
+fn sealed(standard: Standard, state: Sealed) -> Option<Encrypted> {
+    Some(Encrypted { standard, state })
+}
+
 impl Content {
     pub fn parse(raw: &[u8]) -> Self {
+        Self::open(raw, None)
+    }
+
+    pub fn open(raw: &[u8], keys: Option<&Keys>) -> Self {
         let headerless = |mail: &ParsedMail<'_>| {
             mail.headers
                 .iter()
@@ -181,8 +199,193 @@ impl Content {
             envelope: Envelope::from_headers(&mail.headers),
             ..Self::default()
         };
-        content.walk(&mail, 0);
+        content.unseal(&mail, keys, 0);
+        let sender = content.envelope.sender().email;
+        if let Some(signed) = &mut content.security.signed {
+            signed.resolve(&sender);
+        }
         content
+    }
+
+    fn unseal(&mut self, part: &ParsedMail<'_>, keys: Option<&Keys>, layers: usize) {
+        if layers >= MAX_LAYERS {
+            return self.walk(part, 0);
+        }
+        match layer(part) {
+            Layer::Plain => {
+                if layers > 0 {
+                    self.protect_headers(part);
+                }
+                if !self.inline(part, keys) {
+                    self.walk(part, 0);
+                }
+            }
+            Layer::Signed(standard) => {
+                let (Some(signed), Some(signature)) = (part.subparts.first(), part.subparts.get(1))
+                else {
+                    return self.walk(part, 0);
+                };
+                if self.security.signed.is_none() {
+                    match keys {
+                        Some(keys) => {
+                            let signature = signature.get_body_raw().unwrap_or_default();
+                            self.security.signed = Some(keys.verify_detached(
+                                standard,
+                                &canonical(signed.raw_bytes),
+                                &signature,
+                            ));
+                        }
+                        None => self.security.pending = true,
+                    }
+                }
+                self.unseal(signed, keys, layers + 1);
+            }
+            Layer::Encrypted => {
+                let body = part
+                    .subparts
+                    .get(1)
+                    .and_then(|data| data.get_body_raw().ok());
+                self.unwrap(Standard::OpenPgp, body, keys, layers, openpgp::decrypt);
+            }
+            Layer::Pkcs7 => {
+                let signed_only = part
+                    .ctype
+                    .params
+                    .get("smime-type")
+                    .is_some_and(|kind| kind.eq_ignore_ascii_case("signed-data"));
+                if signed_only && keys.is_none() {
+                    self.security.pending = true;
+                    return;
+                }
+                let body = part.get_body_raw().ok();
+                self.unwrap(Standard::Smime, body, keys, layers, smime::open);
+            }
+        }
+    }
+
+    fn opened(&mut self, standard: Standard, opened: Opened) -> Vec<u8> {
+        if opened.encrypted {
+            self.security.encrypted = sealed(standard, Sealed::Decrypted);
+        }
+        if self.security.signed.is_none() {
+            self.security.signed = opened.signed;
+        }
+        opened.plaintext
+    }
+
+    fn unwrap(
+        &mut self,
+        standard: Standard,
+        body: Option<Vec<u8>>,
+        keys: Option<&Keys>,
+        layers: usize,
+        open: fn(&[u8], &Keys) -> Result<Opened, Sealed>,
+    ) {
+        let Some(keys) = keys else {
+            self.security.pending = true;
+            self.security.encrypted = sealed(standard, Sealed::Pending);
+            return;
+        };
+        let opened = body
+            .ok_or_else(|| Sealed::Failed(tr!("The encrypted message is damaged.")))
+            .and_then(|body| open(&body, keys));
+        match opened {
+            Ok(opened) => {
+                let plaintext = self.opened(standard, opened);
+                match parse_mail(&plaintext) {
+                    Ok(inner) => self.unseal(&inner, Some(keys), layers + 1),
+                    Err(_) => self.plain = Some(String::from_utf8_lossy(&plaintext).into_owned()),
+                }
+            }
+            Err(state) => self.security.encrypted = sealed(standard, state),
+        }
+    }
+
+    fn protect_headers(&mut self, part: &ParsedMail<'_>) {
+        let marked = part.ctype.params.contains_key("hp")
+            || part.ctype.params.contains_key("protected-headers");
+        if !marked {
+            return;
+        }
+        let mut copied = Vec::new();
+        for header in &part.headers {
+            let key = header.get_key_ref();
+            if PROTECTED.iter().any(|name| key.eq_ignore_ascii_case(name)) {
+                copied.extend_from_slice(key.as_bytes());
+                copied.extend_from_slice(b": ");
+                copied.extend_from_slice(header.get_value_raw());
+                copied.extend_from_slice(b"\r\n");
+            }
+        }
+        copied.extend_from_slice(b"\r\n");
+        let Ok((protected, _)) = parse_headers(&copied) else {
+            return;
+        };
+        let inner = Envelope::from_headers(&protected);
+        let envelope = &mut self.envelope;
+        if protected.get_first_header("Subject").is_some() {
+            envelope.subject = inner.subject;
+        }
+        for (field, value) in [
+            (&mut envelope.from, inner.from),
+            (&mut envelope.to, inner.to),
+            (&mut envelope.cc, inner.cc),
+            (&mut envelope.reply_to, inner.reply_to),
+        ] {
+            if !value.is_empty() {
+                *field = value;
+            }
+        }
+        envelope.date = inner.date.or(envelope.date);
+    }
+
+    fn inline(&mut self, part: &ParsedMail<'_>, keys: Option<&Keys>) -> bool {
+        if !part.ctype.mimetype.eq_ignore_ascii_case("text/plain") {
+            return false;
+        }
+        let Ok(text) = part.get_body() else {
+            return false;
+        };
+        let signed = armored(
+            &text,
+            "-----BEGIN PGP SIGNED MESSAGE-----",
+            "-----END PGP SIGNATURE-----",
+        );
+        let encrypted = armored(
+            &text,
+            "-----BEGIN PGP MESSAGE-----",
+            "-----END PGP MESSAGE-----",
+        );
+        if !signed && !encrypted {
+            return false;
+        }
+        let Some(keys) = keys else {
+            self.security.pending = true;
+            match encrypted {
+                true => self.security.encrypted = sealed(Standard::OpenPgp, Sealed::Pending),
+                false => self.plain = Some(text),
+            }
+            return true;
+        };
+        if signed {
+            let verified = openpgp::verify_inline(text.trim().as_bytes(), keys);
+            match verified {
+                Some((verdict, verified)) => {
+                    self.security.signed.get_or_insert(verdict);
+                    self.plain = Some(String::from_utf8_lossy(&verified).into_owned());
+                }
+                None => self.plain = Some(text),
+            }
+            return true;
+        }
+        match openpgp::decrypt(text.trim().as_bytes(), keys) {
+            Ok(opened) => {
+                let plaintext = self.opened(Standard::OpenPgp, opened);
+                self.plain = Some(String::from_utf8_lossy(&plaintext).into_owned());
+            }
+            Err(state) => self.security.encrypted = sealed(Standard::OpenPgp, state),
+        }
+        true
     }
 
     fn walk(&mut self, part: &ParsedMail<'_>, depth: usize) {
@@ -191,17 +394,6 @@ impl Content {
         }
         let mime = part.ctype.mimetype.to_ascii_lowercase();
         let attached = part.get_content_disposition().disposition == DispositionType::Attachment;
-        let enveloped = part
-            .ctype
-            .params
-            .get("smime-type")
-            .is_some_and(|kind| kind.eq_ignore_ascii_case("enveloped-data"));
-        if mime == "multipart/encrypted"
-            || ((mime.ends_with("/pkcs7-mime") || mime.ends_with("/x-pkcs7-mime")) && enveloped)
-        {
-            self.encrypted = true;
-            return;
-        }
         if mime.starts_with("multipart/") {
             for child in &part.subparts {
                 self.walk(child, depth + 1);
@@ -244,9 +436,6 @@ impl Content {
         match (&self.plain, &self.html, prefer_plain) {
             (Some(plain), _, true) | (Some(plain), None, _) => render_plain(plain),
             (_, Some(html), _) => render_html(html),
-            (None, None, _) if self.encrypted => render_plain(&tr!(
-                "This message is encrypted. Mail can’t open encrypted messages."
-            )),
             (None, None, _) => Document::default(),
         }
     }

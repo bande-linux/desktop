@@ -3,6 +3,7 @@ use std::ops::Range;
 
 use bande_l10n::{text, tr};
 
+use crate::crypto::{Sealed, Security, Standard, Verdict};
 use crate::html::{Block, BlockKind, Document};
 use crate::message::{Address, Content};
 use crate::picture::{Picture, decode};
@@ -183,6 +184,122 @@ pub enum Target {
     Link(String, Option<String>, String),
     Attachment(MessageId, usize),
     LoadRemote(MessageId),
+    LookUpKey(MessageId),
+    TrustIssuer(MessageId),
+    Unseal(MessageId),
+}
+
+pub type Note = (String, Option<(String, Target)>);
+
+fn standard_name(standard: Standard) -> &'static str {
+    match standard {
+        Standard::OpenPgp => "OpenPGP",
+        Standard::Smime => "S/MIME",
+    }
+}
+
+pub fn security_notes(id: MessageId, security: &Security) -> Vec<Note> {
+    let mut notes = Vec::new();
+    if let Some(encrypted) = &security.encrypted {
+        let standard = standard_name(encrypted.standard);
+        let note = match &encrypted.state {
+            Sealed::Pending => (tr!("Decrypting the message…"), None),
+            Sealed::Decrypted => (
+                tr!(
+                    "This message was encrypted with {standard}.",
+                    standard = standard
+                ),
+                None,
+            ),
+            Sealed::NoKey => (
+                tr!(
+                    "This message is encrypted with {standard}, and none of your keys can open it.",
+                    standard = standard
+                ),
+                None,
+            ),
+            Sealed::Unsupported => (
+                tr!("This message is encrypted in a way Mail can’t open."),
+                None,
+            ),
+            Sealed::Failed(reason) => (
+                tr!(
+                    "This message could not be decrypted. {reason}",
+                    reason = reason.clone()
+                ),
+                Some((tr!("Try Again"), Target::Unseal(id))),
+            ),
+        };
+        notes.push(note);
+    }
+    if security.pending && security.encrypted.is_none() {
+        notes.push((tr!("Checking the signature…"), None));
+    }
+    let Some(signed) = &security.signed else {
+        return notes;
+    };
+    let signer = match signed.signer.trim() {
+        "" => signed.key.clone(),
+        signer => signer.to_owned(),
+    };
+    let key = signed.key.clone();
+    let note = match (signed.verdict, signed.standard) {
+        (Verdict::Verified, _) => (tr!("Signed by {signer}, verified.", signer = signer), None),
+        (Verdict::Unverified, Standard::OpenPgp) => (
+            tr!(
+                "Signed by {signer}, but you haven’t verified that key {key} belongs to them.",
+                signer = signer,
+                key = key
+            ),
+            None,
+        ),
+        (Verdict::Unverified, Standard::Smime) => (
+            tr!(
+                "Signed by {signer}, but the certificate comes from an issuer you don’t trust.",
+                signer = signer
+            ),
+            signed
+                .issuer
+                .as_ref()
+                .map(|_| (tr!("Trust Issuer…"), Target::TrustIssuer(id))),
+        ),
+        (Verdict::WrongSender, _) => (
+            tr!(
+                "Signed by {signer}, who is not the sender of this message.",
+                signer = signer
+            ),
+            None,
+        ),
+        (Verdict::UnknownSigner, Standard::OpenPgp) => (
+            tr!("Signed with key {key}, which you don’t have.", key = key),
+            Some((tr!("Look Up Key"), Target::LookUpKey(id))),
+        ),
+        (Verdict::UnknownSigner, Standard::Smime) => (
+            tr!("Signed, but the signer’s certificate is not in the message."),
+            None,
+        ),
+        (Verdict::InvalidKey, _) => (
+            tr!(
+                "Signed by {signer}, but the key or certificate has expired, was revoked or may not sign mail.",
+                signer = signer
+            ),
+            None,
+        ),
+        (Verdict::Unsupported, _) => (
+            tr!(
+                "Signed with an algorithm Mail doesn’t accept as secure, so the signature was not checked."
+            ),
+            None,
+        ),
+        (Verdict::Bad, _) => (
+            tr!(
+                "The signature doesn’t match: the message was changed after it was signed, or the signature is forged."
+            ),
+            None,
+        ),
+    };
+    notes.push(note);
+    notes
 }
 
 #[derive(Default)]
@@ -490,7 +607,7 @@ fn collapsed(writer: &mut Writer<'_>, summary: &Summary, clock: &Clock<'_>) {
     );
 }
 
-fn banner(writer: &mut Writer<'_>, message: &str, action: Option<(&str, Target)>) {
+fn banner(writer: &mut Writer<'_>, symbol: Symbol, message: &str, action: Option<(&str, Target)>) {
     let palette = *writer.palette;
     let frame = Rect::new(MARGIN, writer.y, writer.width - 2.0 * MARGIN, BANNER_HEIGHT);
     writer.layout.items.push(Item::Fill {
@@ -498,7 +615,7 @@ fn banner(writer: &mut Writer<'_>, message: &str, action: Option<(&str, Target)>
         paint: palette.well.into(),
     });
     writer.symbol(
-        Symbol::Remote,
+        symbol,
         frame.x + CHIP_PADDING,
         frame.y + ((BANNER_HEIGHT - SYMBOL_SIZE) / 2.0).round(),
     );
@@ -771,16 +888,37 @@ fn expanded(
 ) {
     let id = entry.summary.id;
     header(writer, entry, reading, many, clock);
+    for (note, action) in security_notes(id, &reading.content.security) {
+        banner(
+            writer,
+            Symbol::Security,
+            &note,
+            action
+                .as_ref()
+                .map(|(label, target)| (label.as_str(), target.clone())),
+        );
+    }
     if !reading.downloaded {
-        banner(writer, &tr!("Downloading the message…"), None);
+        banner(
+            writer,
+            Symbol::Remote,
+            &tr!("Downloading the message…"),
+            None,
+        );
     } else if reading.document.remote_images > 0 {
         match reading.remote {
             Remote::Blocked => banner(
                 writer,
+                Symbol::Remote,
                 &tr!("Remote content in this message was not loaded, to protect your privacy."),
                 Some((&tr!("Load Remote Content"), Target::LoadRemote(id))),
             ),
-            Remote::Loading => banner(writer, &tr!("Loading remote content…"), None),
+            Remote::Loading => banner(
+                writer,
+                Symbol::Remote,
+                &tr!("Loading remote content…"),
+                None,
+            ),
             Remote::Loaded => {}
         }
     }

@@ -24,6 +24,8 @@ pub struct Draft {
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub attachments: Vec<Attachment>,
+    pub sign: bool,
+    pub encrypt: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +63,9 @@ pub struct Outgoing {
 
 const ANSWERING: &str = "X-Bande-Answering";
 const REPLACES: &str = "X-Bande-Replaces";
+const SECURITY: &str = "X-Bande-Security";
+const SIGN: &str = "sign";
+const ENCRYPT: &str = "encrypt";
 
 impl Draft {
     pub fn recipients(&self) -> Vec<String> {
@@ -137,6 +142,7 @@ pub fn reply(original: &Content, me: &Address, all: bool, attribution: Option<&s
             .unwrap_or_default(),
         in_reply_to: envelope.message_id.clone(),
         references,
+        encrypt: original.security.encrypted.is_some(),
         ..Draft::default()
     }
 }
@@ -147,6 +153,7 @@ pub fn forward(original: &Content, me: &Address, heading: &str) -> Draft {
         subject: prefixed("Fwd:", &original.envelope.subject),
         body: format!("\n\n{heading}\n\n{}\n", original.text().trim_end()),
         attachments: original.attachments.clone(),
+        encrypt: original.security.encrypted.is_some(),
         ..Draft::default()
     }
 }
@@ -194,6 +201,14 @@ pub fn keep_unsent(outgoing: &Outgoing) -> io::Result<()> {
             .as_ref()
             .map(|original| original.header(REPLACES)),
     );
+    let draft = &outgoing.draft;
+    let security = [(draft.sign, SIGN), (draft.encrypt, ENCRYPT)]
+        .into_iter()
+        .filter_map(|(on, word)| on.then_some(word))
+        .collect::<Vec<_>>();
+    if !security.is_empty() {
+        metadata.push_str(&format!("{SECURITY}: {}\r\n", security.join(" ")));
+    }
     file.write_all(metadata.as_bytes())?;
     file.write_all(&build_kept(&outgoing.draft, &Zoned::now()))?;
     file.sync_all()?;
@@ -214,12 +229,14 @@ pub fn forget_unsent(outgoing: &Outgoing) {
 }
 
 fn recovered(raw: &[u8], unsent: PathBuf) -> Outgoing {
-    let original = |name: &str| {
+    let value = |name: &str| {
         mailparse::parse_headers(raw)
             .ok()
             .and_then(|(headers, _)| headers.get_first_value(name))
-            .and_then(|value| Original::parse(&value))
     };
+    let original = |name: &str| value(name).and_then(|value| Original::parse(&value));
+    let security = value(SECURITY).unwrap_or_default();
+    let marked = |word: &str| security.split_whitespace().any(|known| known == word);
     let content = Content::parse(raw);
     let body = content.text().replace("\r\n", "\n");
     let envelope = content.envelope;
@@ -234,6 +251,8 @@ fn recovered(raw: &[u8], unsent: PathBuf) -> Outgoing {
             in_reply_to: envelope.references.last().cloned(),
             references: envelope.references,
             attachments: content.attachments,
+            sign: marked(SIGN),
+            encrypt: marked(ENCRYPT),
         },
         answering: original(ANSWERING),
         replaces: original(REPLACES),
@@ -375,7 +394,7 @@ pub fn quoted_printable(text: &str) -> String {
     encoded
 }
 
-fn wrapped_base64(data: &[u8]) -> String {
+pub fn wrapped_base64(data: &[u8]) -> String {
     let encoded = BASE64.encode(data);
     encoded
         .as_bytes()
@@ -427,6 +446,15 @@ pub fn build_kept(draft: &Draft, now: &Zoned) -> Vec<u8> {
 }
 
 pub fn build(draft: &Draft, now: &Zoned) -> Vec<u8> {
+    let mut message = envelope_headers(draft, now);
+    message.push_str(MIME_HEADERS);
+    message.push_str(&entity(draft, "", ""));
+    message.into_bytes()
+}
+
+pub const MIME_HEADERS: &str = "MIME-Version: 1.0\r\nUser-Agent: Bande Mail\r\n";
+
+pub fn envelope_headers(draft: &Draft, now: &Zoned) -> String {
     let mut message = String::new();
     message.push_str(&format!(
         "Date: {}\r\n",
@@ -456,19 +484,32 @@ pub fn build(draft: &Draft, now: &Zoned) -> Vec<u8> {
             sanitized_header_text(&draft.references.join(" "))
         ));
     }
-    message.push_str("MIME-Version: 1.0\r\nUser-Agent: Bande Mail\r\n");
-    let text_part = format!(
-        "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n{}\r\n",
-        quoted_printable(&draft.body)
-    );
+    message
+}
+
+pub fn boundary() -> String {
+    format!("=_bande_{}", unique_token())
+}
+
+pub fn entity(draft: &Draft, hp: &str, headers: &str) -> String {
+    let marker = match hp {
+        "" => String::new(),
+        hp => format!("; hp=\"{hp}\""),
+    };
+    let marker = marker.as_str();
+    let text_part = |marker: &str, headers: &str| {
+        format!(
+            "Content-Type: text/plain; charset=utf-8{marker}\r\n{headers}Content-Transfer-Encoding: quoted-printable\r\n\r\n{}\r\n",
+            quoted_printable(&draft.body)
+        )
+    };
     if draft.attachments.is_empty() {
-        message.push_str(&text_part);
-        return message.into_bytes();
+        return text_part(marker, headers);
     }
-    let boundary = format!("=_bande_{}", unique_token());
-    message.push_str(&format!(
-        "Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n"
-    ));
+    let boundary = boundary();
+    let mut message =
+        format!("Content-Type: multipart/mixed; boundary=\"{boundary}\"{marker}\r\n{headers}\r\n");
+    let text_part = text_part("", "");
     message.push_str(&format!("--{boundary}\r\n{text_part}"));
     for attachment in &draft.attachments {
         message.push_str(&format!(
@@ -480,5 +521,5 @@ pub fn build(draft: &Draft, now: &Zoned) -> Vec<u8> {
         ));
     }
     message.push_str(&format!("--{boundary}--\r\n"));
-    message.into_bytes()
+    message
 }

@@ -330,6 +330,9 @@ impl MailView {
                 (Role::Button, attachment.name.clone())
             }
             Target::LoadRemote(_) => (Role::Button, tr!("Load Remote Content")),
+            Target::LookUpKey(_) => (Role::Button, tr!("Look Up Key")),
+            Target::TrustIssuer(_) => (Role::Button, tr!("Trust Issuer…")),
+            Target::Unseal(_) => (Role::Button, tr!("Try Again")),
         })
     }
 
@@ -358,6 +361,14 @@ impl MailView {
                     Role::Article,
                     &tr!("From {sender}, {date}", sender = sender, date = date),
                 );
+                let notes =
+                    crate::ui::reader::security_notes(entry.summary.id, &reading.content.security)
+                        .into_iter()
+                        .map(|(note, _)| note)
+                        .collect::<Vec<_>>();
+                if !notes.is_empty() {
+                    article.set_description(notes.join(" "));
+                }
                 let mut text = Node::new(Role::Label);
                 text.set_value(reading.document.text());
                 self.push(tree, Part::Text(index), text, None);

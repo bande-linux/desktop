@@ -36,6 +36,7 @@ pub enum Signal {
     TryAgain(crate::store::AccountId),
     ServerSettings,
     OpenLink(String),
+    TrustIssuer(crate::store::MessageId),
 }
 
 pub type Signals = Rc<RefCell<Vec<Signal>>>;

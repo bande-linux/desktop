@@ -6,11 +6,12 @@ use std::time::Instant;
 
 use bande_l10n::{Text, text, tr, trn};
 
+use crate::crypto::{GnuPg, OwnCertificate, OwnKey};
 use crate::discover::Settings as Servers;
 use crate::net::{Network, Security, Server};
 use crate::settings::{Change, MAX_PREVIEW_LINES, MailSettings, announce};
 use crate::setup::{Outcome, Problem, check};
-use crate::store::{Account, AccountId, Rule, RuleAction, RuleField, Store};
+use crate::store::{Account, AccountId, Identity, Rule, RuleAction, RuleField, Store};
 use crate::ui::view::TOOLBAR_HEIGHT;
 use crate::worker::{Event as MailEvent, Mailroom};
 use accesskit::TreeUpdate;
@@ -77,6 +78,14 @@ enum Signal {
     RemoveCondition,
     Matching(bool),
     ForgetSenders,
+    ForgetIssuers,
+    OpenPgpKey(usize),
+    SmimeCertificate(usize),
+    SignByDefault(bool),
+    GenerateKey,
+    Generate,
+    ImportKeys,
+    ExportKey,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -251,6 +260,21 @@ pub struct SettingsView {
     store_path: PathBuf,
     mailroom: Option<Mailroom>,
     network: Network,
+    gnupg: GnuPg,
+    own_keys: Vec<OwnKey>,
+    own_certificates: Vec<OwnCertificate>,
+    identity: Identity,
+}
+
+fn expiry(seconds: Option<i64>) -> String {
+    let Some(date) = seconds
+        .and_then(|seconds| jiff::Timestamp::from_second(seconds).ok())
+        .map(|time| time.to_zoned(jiff::tz::TimeZone::system()).date())
+    else {
+        return tr!("does not expire");
+    };
+    let date = bande_datetime::DateFormats::from_env().numeric_date(date);
+    tr!("expires {date}", date = date)
 }
 
 impl SettingsView {
@@ -299,7 +323,12 @@ impl SettingsView {
                 .inspect_err(|error| tracing::warn!("cannot check servers: {error}"))
                 .ok(),
             network: Network::default(),
+            gnupg: GnuPg::default(),
+            own_keys: Vec::new(),
+            own_certificates: Vec::new(),
+            identity: Identity::default(),
         };
+        view.refresh_keys();
         view.load_accounts();
         view.rebuild();
         view
@@ -328,9 +357,195 @@ impl SettingsView {
         true
     }
 
+    fn refresh_keys(&mut self) {
+        self.own_keys = self
+            .gnupg
+            .own_keys()
+            .inspect_err(|error| tracing::info!("cannot list OpenPGP keys: {error}"))
+            .unwrap_or_default();
+        self.own_certificates = self
+            .gnupg
+            .own_certificates()
+            .inspect_err(|error| tracing::info!("cannot list S/MIME certificates: {error}"))
+            .unwrap_or_default();
+    }
+
+    fn save_keys(&mut self) {
+        let Some(account) = self.accounts.get(self.account) else {
+            return;
+        };
+        let saved = self
+            .store
+            .as_ref()
+            .map(|store| store.set_identity(account.id, &self.identity));
+        if let Some(Err(error)) = saved {
+            self.status = Some((error.to_string(), true));
+        }
+    }
+
+    fn keys_lines(&self, account: &Account) -> Vec<FormLine> {
+        let email = account.email.to_lowercase();
+        let mut keys = vec![tr!("None")];
+        keys.extend(self.own_keys.iter().map(|key| {
+            let user = key
+                .user_ids
+                .first()
+                .cloned()
+                .unwrap_or_else(|| key.fingerprint.clone());
+            format!("{user} ({})", expiry(key.expires))
+        }));
+        let chosen_key = self
+            .own_keys
+            .iter()
+            .position(|key| key.fingerprint == self.identity.openpgp)
+            .map_or(0, |index| index + 1);
+        let mut certificates = vec![tr!("None")];
+        certificates.extend(self.own_certificates.iter().map(|certificate| {
+            let name = match certificate.emails.first() {
+                Some(email) => format!("{} <{email}>", certificate.subject),
+                None => certificate.subject.clone(),
+            };
+            format!("{name} ({})", expiry(certificate.expires))
+        }));
+        let chosen_certificate = self
+            .own_certificates
+            .iter()
+            .position(|certificate| certificate.fingerprint == self.identity.smime)
+            .map_or(0, |index| index + 1);
+        let pick = |signal: fn(usize) -> Signal| {
+            let state = Rc::clone(&self.state);
+            move |index| state.borrow_mut().signals.push(signal(index))
+        };
+        let mut export = Button::new(
+            &tr!("Export Public Key…"),
+            sender(&self.state, Signal::ExportKey),
+        );
+        export.set_enabled(!self.identity.openpgp.is_empty());
+        let mismatched = self
+            .own_keys
+            .iter()
+            .find(|key| key.fingerprint == self.identity.openpgp)
+            .is_some_and(|key| {
+                !key.user_ids
+                    .iter()
+                    .any(|user| crate::crypto::email_of(user).as_deref() == Some(email.as_str()))
+            });
+        let mut lines = vec![
+            heading(text!("Signing and Encryption")),
+            row(
+                text!("OpenPGP key"),
+                PopUpButton::new(
+                    &tr!("OpenPGP key"),
+                    &keys,
+                    chosen_key,
+                    pick(Signal::OpenPgpKey),
+                ),
+            ),
+            row(
+                text!("S/MIME certificate"),
+                PopUpButton::new(
+                    &tr!("S/MIME certificate"),
+                    &certificates,
+                    chosen_certificate,
+                    pick(Signal::SmimeCertificate),
+                ),
+            ),
+            row(text!("Sign new messages"), {
+                let state = Rc::clone(&self.state);
+                Toggle::new(&tr!("Sign new messages"), self.identity.sign, move |on| {
+                    state.borrow_mut().signals.push(Signal::SignByDefault(on));
+                })
+            }),
+            buttons(vec![
+                Button::new(
+                    &tr!("Generate OpenPGP Key…"),
+                    sender(&self.state, Signal::GenerateKey),
+                ),
+                Button::new(&tr!("Import…"), sender(&self.state, Signal::ImportKeys)),
+                export,
+            ]),
+            note(text!(
+                "Your keys and certificates stay in GnuPG, with your other GnuPG keys and smartcards; GnuPG asks for their passphrase. Import takes OpenPGP keys and S/MIME certificates with their key (PKCS #12, .p12 or .pfx)."
+            )),
+        ];
+        if mismatched {
+            lines.insert(2, note(text!("This key has no user ID with the account’s address, so recipients may not trust it for this address.")));
+        }
+        lines
+    }
+
+    fn generate_key(&mut self) {
+        let Some(account) = self.accounts.get(self.account) else {
+            return;
+        };
+        let user_id = account.address().full();
+        let state = Rc::clone(&self.state);
+        let alert = Alert::new(
+            &tr!("Generate an OpenPGP key for {user}?", user = user_id),
+            &tr!("GnuPG makes the key and asks for a passphrase to protect it. The key expires in three years; you can extend it with GnuPG."),
+            move |choice| {
+                if choice == "generate" {
+                    state.borrow_mut().signals.push(Signal::Generate);
+                }
+            },
+        )
+        .primary(&tr!("Generate"), "generate")
+        .cancel(&tr!("Cancel"), "cancel");
+        self.ui.present_sheet(alert);
+    }
+
+    fn in_background(
+        &mut self,
+        task: impl FnOnce(&GnuPg) -> crate::error::Result<String> + Send + 'static,
+    ) {
+        let Some(mailroom) = &self.mailroom else {
+            return;
+        };
+        let (gnupg, notifier) = (self.gnupg.clone(), mailroom.notifier());
+        self.status = Some((tr!("Waiting for GnuPG…"), false));
+        let spawned = std::thread::Builder::new()
+            .name("keys".to_owned())
+            .spawn(move || {
+                let outcome = task(&gnupg).map_err(|error| error.to_string());
+                notifier.send(MailEvent::KeysChanged(outcome));
+            });
+        if let Err(error) = spawned {
+            self.status = Some((error.to_string(), true));
+        }
+    }
+
+    fn keys_changed(&mut self, outcome: Result<String, String>) {
+        let before = self
+            .own_keys
+            .iter()
+            .map(|key| key.fingerprint.clone())
+            .collect::<Vec<_>>();
+        self.refresh_keys();
+        if self.identity.openpgp.is_empty()
+            && let Some(new) = self
+                .own_keys
+                .iter()
+                .find(|key| !before.contains(&key.fingerprint))
+        {
+            self.identity.openpgp = new.fingerprint.clone();
+            self.save_keys();
+        }
+        self.status = Some(match outcome {
+            Ok(message) => (message, false),
+            Err(error) => (error, true),
+        });
+    }
+
     fn choose_account(&mut self, index: usize) {
         self.account = index;
         self.status = None;
+        self.identity = self
+            .accounts
+            .get(index)
+            .and_then(|account| {
+                self.read("the account’s keys", |store| store.identity(account.id))
+            })
+            .unwrap_or_default();
         self.state.borrow_mut().editing = self
             .accounts
             .get(index)
@@ -454,6 +669,19 @@ impl SettingsView {
             ]
             .into_iter()
             .chain(self.remote_senders())
+            .chain([
+                row(
+                    text!("Find decrypted messages in search"),
+                    toggle(
+                        &self.state,
+                        &tr!("Find decrypted messages in search"),
+                        settings.index_decrypted,
+                        |settings, on| settings.index_decrypted = on,
+                    ),
+                ),
+                note(text!("When this is on, the text of an encrypted message you open is kept unencrypted in Mail’s search index on this computer, and offered to desktop search.")),
+            ])
+            .chain(self.trusted_issuers())
             .collect(),
         )
     }
@@ -471,6 +699,24 @@ impl SettingsView {
             Box::new(Button::new(
                 &tr!("Forget"),
                 sender(&self.state, Signal::ForgetSenders),
+            )),
+        ))
+    }
+
+    fn trusted_issuers(&self) -> Option<FormLine> {
+        let count = self
+            .read("the trusted issuers", Store::trusted_certificates)
+            .map(|trusted| trusted.len())
+            .filter(|count| *count > 0)?;
+        Some(FormLine::Row(
+            trn!(
+                "You trust one S/MIME issuer",
+                "You trust {count} S/MIME issuers",
+                count = count
+            ),
+            Box::new(Button::new(
+                &tr!("Forget"),
+                sender(&self.state, Signal::ForgetIssuers),
             )),
         ))
     }
@@ -808,6 +1054,9 @@ impl SettingsView {
             row(text!("Full name"), name),
             heading(text!("Signature")),
             FormLine::Wide(Box::new(signature)),
+        ];
+        lines.extend(self.keys_lines(account));
+        lines.extend([
             heading(text!("Server Settings")),
             row(
                 text!("User name"),
@@ -868,7 +1117,7 @@ impl SettingsView {
                     editing.outgoing.2 = index;
                 }),
             ),
-        ];
+        ]);
         if let Some((status, _)) = &self.status {
             lines.push(FormLine::Wide(Box::new(Label::new(status).secondary())));
         }
@@ -1021,7 +1270,15 @@ impl SettingsView {
                     self.choose_account(index);
                     rebuild = true;
                 }
-                Signal::Settings => self.save_settings(),
+                Signal::Settings => {
+                    self.save_settings();
+                    if !self.state.borrow().settings.index_decrypted
+                        && let Some(store) = &self.store
+                        && let Err(error) = store.forget_decrypted()
+                    {
+                        tracing::warn!("cannot remove decrypted text from search: {error}");
+                    }
+                }
                 Signal::Identity => self.save_identity(),
                 Signal::Enabled(on) => {
                     if let Some(account) = self.accounts.get_mut(self.account) {
@@ -1083,6 +1340,90 @@ impl SettingsView {
                     {
                         tracing::warn!("cannot forget the senders: {error}");
                     }
+                    rebuild = true;
+                }
+                Signal::ForgetIssuers => {
+                    if let Some(store) = &self.store
+                        && let Err(error) = store.forget_trusted_certificates()
+                    {
+                        tracing::warn!("cannot forget the issuers: {error}");
+                    }
+                    rebuild = true;
+                }
+                Signal::OpenPgpKey(index) => {
+                    self.identity.openpgp = index
+                        .checked_sub(1)
+                        .and_then(|index| self.own_keys.get(index))
+                        .map(|key| key.fingerprint.clone())
+                        .unwrap_or_default();
+                    self.save_keys();
+                    rebuild = true;
+                }
+                Signal::SmimeCertificate(index) => {
+                    self.identity.smime = index
+                        .checked_sub(1)
+                        .and_then(|index| self.own_certificates.get(index))
+                        .map(|certificate| certificate.fingerprint.clone())
+                        .unwrap_or_default();
+                    self.save_keys();
+                }
+                Signal::SignByDefault(on) => {
+                    self.identity.sign = on;
+                    self.save_keys();
+                }
+                Signal::GenerateKey => self.generate_key(),
+                Signal::Generate => {
+                    if let Some(account) = self.accounts.get(self.account) {
+                        let user_id = account.address().full();
+                        self.in_background(move |gnupg| {
+                            gnupg.generate(&user_id)?;
+                            Ok(tr!("The key was generated."))
+                        });
+                        rebuild = true;
+                    }
+                }
+                Signal::ImportKeys => {
+                    self.in_background(|gnupg| {
+                        let files = crate::portal::choose_files(&tr!("Import Keys"))
+                            .map_err(|error| crate::error::Error::Crypto(error.to_string()))?;
+                        for file in &files {
+                            let pkcs12 = file.extension().is_some_and(|extension| {
+                                extension.eq_ignore_ascii_case("p12")
+                                    || extension.eq_ignore_ascii_case("pfx")
+                            });
+                            match pkcs12 {
+                                true => gnupg.import_pkcs12(file)?,
+                                false => gnupg.import(&std::fs::read(file)?)?,
+                            }
+                        }
+                        Ok(trn!(
+                            "One file was imported.",
+                            "{count} files were imported.",
+                            count = files.len()
+                        ))
+                    });
+                    rebuild = true;
+                }
+                Signal::ExportKey => {
+                    let fingerprint = self.identity.openpgp.clone();
+                    let email = self
+                        .accounts
+                        .get(self.account)
+                        .map(|account| account.email.clone())
+                        .unwrap_or_default();
+                    self.in_background(move |gnupg| {
+                        let key = gnupg.export(&fingerprint)?;
+                        let Some(path) = crate::portal::choose_save_path(
+                            &tr!("Export Public Key"),
+                            &format!("{email}.asc"),
+                        )
+                        .map_err(|error| crate::error::Error::Crypto(error.to_string()))?
+                        else {
+                            return Ok(String::new());
+                        };
+                        std::fs::write(&path, key)?;
+                        Ok(tr!("The public key was exported."))
+                    });
                     rebuild = true;
                 }
                 Signal::RemoveAccount => self.confirm_removal(),
@@ -1189,8 +1530,10 @@ impl View for SettingsView {
             .map(Mailroom::take)
             .unwrap_or_default();
         for event in events {
-            if let MailEvent::Setup(outcome) = event {
-                self.checked(*outcome);
+            match event {
+                MailEvent::Setup(outcome) => self.checked(*outcome),
+                MailEvent::KeysChanged(outcome) => self.keys_changed(outcome),
+                _ => {}
             }
         }
         self.rebuild();

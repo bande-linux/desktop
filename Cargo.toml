@@ -28,6 +28,7 @@ async-process = "2.5.0"
 base64 = "0.22.1"
 blocking = "1.6.2"
 bzip2 = "0.6.1"
+cms = { version = "0.2.3", features = ["std"] }
 data-encoding = "2.11"
 encoding_rs = "0.8.35"
 fatfs = { version = "0.3.6", default-features = false, features = ["std", "alloc"] }
@@ -58,6 +59,7 @@ lzma-rust2 = { version = "0.23", default-features = false, features = ["std", "x
 mailparse = "0.16"
 md-5 = "0.10.6"
 naga = { version = "30.0.1", features = ["wgsl-in", "spv-out"] }
+nettle = "7.5.0"
 oo7 = { version = "0.7.0-beta", default-features = false, features = ["async-std", "native_crypto", "unstable"] }
 parley = { version = "0.12.0", features = ["complex-scripts"] }
 pipewire = "0.10.1"
@@ -74,8 +76,12 @@ rusqlite = "0.40"
 rustc-demangle = "0.1.28"
 rustix = { version = "1.1.5", features = ["event", "param", "process"] }
 rustls = { version = "0.23.46", default-features = false, features = ["logging", "ring", "std", "tls12"] }
+rustls-pki-types = { version = "1.15.1", features = ["std"] }
 rustls-platform-verifier = "0.6"
+rustls-webpki = { version = "0.103.16", default-features = false, features = ["ring", "std"] }
 ruzstd = "0.9.1"
+sequoia-gpg-agent = "0.6.2"
+sequoia-openpgp = { version = "2.4.2", default-features = false, features = ["crypto-nettle", "compression"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 serde_norway = "0.9.42"
@@ -103,6 +109,7 @@ wayland-scanner = "0.31.11"
 wayland-server = "0.31.14"
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "wgsl"] }
 writeable = "0.6.4"
+x509-cert = { version = "0.2.5", features = ["std"] }
 xkbcommon = "0.9"
 zbus = "5.19.0"
 zeroize = { version = "1.8.1", features = ["serde"] }

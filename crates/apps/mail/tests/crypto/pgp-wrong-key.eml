@@ -1,0 +1,28 @@
+From: Carol <carol@bande.test>
+To: Alice <alice@bande.test>
+Subject: For Bob
+Date: Sun, 22 Nov 2026 09:00:00 +0100
+Message-ID: <for-bob@bande.test>
+MIME-Version: 1.0
+Content-Type: multipart/encrypted; boundary="enc"; protocol="application/pgp-encrypted"
+
+--enc
+Content-Type: application/pgp-encrypted
+
+Version: 1
+
+--enc
+Content-Type: application/octet-stream; name=encrypted.asc
+
+-----BEGIN PGP MESSAGE-----
+
+hF4DfGctpbqVCakSAQdAAimC0oBOckP5MLOtQxkUdTqI+SZAQSzG8dIvU0mAHg8w
+AtgQRnXmgQYMJ5yn1/N7FxFDqJGhhIQgkPra5jxDepmcaWUkIhNrd776y+Whq+5z
+0qwB10LkCufY+SlVNjgPxi+/IkyULSgW50JUuS/SDUq827icmpFfM0XigUNPBJi0
+O4yW/HWoqQIl85jRtGPV6SL/12bTFV79kZ2a5s9pNRAOFBvhYQ7aa4F7in+6gmLi
+BFOScjvKTKFGZGPGh5TTNWqK383DOhpd2OBFpynbB6Wejw4pJIxBm+Gn1qW6mQOV
+kFqLZQCombydJml3gEVsogVjkJilT7cBjCT7CbnW
+=bNbA
+-----END PGP MESSAGE-----
+
+--enc--

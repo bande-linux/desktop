@@ -31,6 +31,9 @@ Build-Depends: debhelper-compat (= 14),
  librust-blocking-1+default-dev (>= 1.6.2-~~) <!pkg.bande.vendor>,
  librust-bzip2-0.6-dev (>= 0.6.1-~~) <!pkg.bande.vendor>,
  librust-bzip2-0.6+default-dev (>= 0.6.1-~~) <!pkg.bande.vendor>,
+ librust-cms-0.2-dev (>= 0.2.3-~~) <!pkg.bande.vendor>,
+ librust-cms-0.2+default-dev (>= 0.2.3-~~) <!pkg.bande.vendor>,
+ librust-cms-0.2+std-dev (>= 0.2.3-~~) <!pkg.bande.vendor>,
  librust-data-encoding-2-dev (>= 2.11.0-~~) <!pkg.bande.vendor>,
  librust-data-encoding-2+default-dev (>= 2.11.0-~~) <!pkg.bande.vendor>,
  librust-encoding-rs-0.8-dev (>= 0.8.35-~~) <!pkg.bande.vendor>,
@@ -103,6 +106,8 @@ Build-Depends: debhelper-compat (= 14),
  librust-naga-30+default-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
  librust-naga-30+spv-out-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
  librust-naga-30+wgsl-in-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
+ librust-nettle-7-dev (>= 7.5.0-~~) <!pkg.bande.vendor>,
+ librust-nettle-7+default-dev (>= 7.5.0-~~) <!pkg.bande.vendor>,
  librust-oo7-0.7-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
  librust-oo7-0.7+async-std-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
  librust-oo7-0.7+native-crypto-dev (>= 0.7.0-~~) <!pkg.bande.vendor>,
@@ -159,10 +164,21 @@ Build-Depends: debhelper-compat (= 14),
  librust-rustls-0.23+ring-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
  librust-rustls-0.23+std-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
  librust-rustls-0.23+tls12-dev (>= 0.23.46-~~) <!pkg.bande.vendor>,
+ librust-rustls-pki-types-1-dev (>= 1.15.1-~~) <!pkg.bande.vendor>,
+ librust-rustls-pki-types-1+default-dev (>= 1.15.1-~~) <!pkg.bande.vendor>,
+ librust-rustls-pki-types-1+std-dev (>= 1.15.1-~~) <!pkg.bande.vendor>,
  librust-rustls-platform-verifier-0.6-dev (>= 0.6.0-~~) <!pkg.bande.vendor>,
  librust-rustls-platform-verifier-0.6+default-dev (>= 0.6.0-~~) <!pkg.bande.vendor>,
+ librust-rustls-webpki-0.103-dev (>= 0.103.16-~~) <!pkg.bande.vendor>,
+ librust-rustls-webpki-0.103+ring-dev (>= 0.103.16-~~) <!pkg.bande.vendor>,
+ librust-rustls-webpki-0.103+std-dev (>= 0.103.16-~~) <!pkg.bande.vendor>,
  librust-ruzstd-0.9-dev (>= 0.9.1-~~) <!pkg.bande.vendor>,
  librust-ruzstd-0.9+default-dev (>= 0.9.1-~~) <!pkg.bande.vendor>,
+ librust-sequoia-gpg-agent-0.6-dev (>= 0.6.2-~~) <!pkg.bande.vendor>,
+ librust-sequoia-gpg-agent-0.6+default-dev (>= 0.6.2-~~) <!pkg.bande.vendor>,
+ librust-sequoia-openpgp-2-dev (>= 2.4.2-~~) <!pkg.bande.vendor>,
+ librust-sequoia-openpgp-2+compression-dev (>= 2.4.2-~~) <!pkg.bande.vendor>,
+ librust-sequoia-openpgp-2+crypto-nettle-dev (>= 2.4.2-~~) <!pkg.bande.vendor>,
  librust-serde-1-dev (>= 1.0.229-~~) <!pkg.bande.vendor>,
  librust-serde-1+default-dev (>= 1.0.229-~~) <!pkg.bande.vendor>,
  librust-serde-1+derive-dev (>= 1.0.229-~~) <!pkg.bande.vendor>,
@@ -243,6 +259,9 @@ Build-Depends: debhelper-compat (= 14),
  librust-wgpu-30+wgsl-dev (>= 30.0.1-~~) <!pkg.bande.vendor>,
  librust-writeable-0.6-dev (>= 0.6.4-~~) <!pkg.bande.vendor>,
  librust-writeable-0.6+default-dev (>= 0.6.4-~~) <!pkg.bande.vendor>,
+ librust-x509-cert-0.2-dev (>= 0.2.5-~~) <!pkg.bande.vendor>,
+ librust-x509-cert-0.2+default-dev (>= 0.2.5-~~) <!pkg.bande.vendor>,
+ librust-x509-cert-0.2+std-dev (>= 0.2.5-~~) <!pkg.bande.vendor>,
  librust-xkbcommon-0.9-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
  librust-xkbcommon-0.9+default-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
  librust-xkbcommon-0.9+wayland-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
@@ -269,6 +288,8 @@ Build-Depends-Arch: pkgconf,
  libpipewire-0.3-dev,
  libclang-dev,
  libsqlite3-dev,
+ nettle-dev,
+ capnproto,
  libgstreamer1.0-dev,
  libgstreamer-plugins-base1.0-dev,
  dbus-daemon <!nocheck>,
@@ -285,7 +306,10 @@ Build-Depends-Arch: pkgconf,
  libx11-data <!nocheck>,
  distro-info-data <!nocheck>,
  gstreamer1.0-plugins-base <!nocheck>,
- gstreamer1.0-plugins-good <!nocheck>
+ gstreamer1.0-plugins-good <!nocheck>,
+ gpg <!nocheck>,
+ gpg-agent <!nocheck>,
+ gpgsm <!nocheck>
 Standards-Version: 4.7.2
 Rules-Requires-Root: no
 Homepage: https://github.com/bande-linux/desktop
@@ -933,12 +957,18 @@ Depends: ${shlibs:Depends},
  fonts-manrope,
  fonts-jetbrains-mono,
  ${misc:Depends}
-Recommends: bande-secrets (= ${binary:Version}) | org.freedesktop.secrets
+Recommends: bande-secrets (= ${binary:Version}) | org.freedesktop.secrets,
+ gpg,
+ gpg-agent,
+ gpgsm
+Suggests: scdaemon
 Description: email client for the Bande desktop
  Mail for the Bande desktop, in three panes: mailboxes and a unified
  Inbox, the message list, and the reader. It speaks IMAP and SMTP over
  TLS, keeps an offline copy of every account, follows new mail with IMAP
  IDLE and keeps passwords in the Secret Service.
+ It signs, encrypts, checks and decrypts mail with OpenPGP and S/MIME,
+ using the keys and smartcards GnuPG already holds.
 
 Package: bande-calendar
 Architecture: any

@@ -1,4 +1,5 @@
 pub mod compose;
+pub mod crypto;
 pub mod discover;
 pub mod error;
 pub mod html;

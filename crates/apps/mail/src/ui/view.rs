@@ -42,6 +42,8 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use zeroize::Zeroizing;
 
+mod security;
+
 pub const SHORTCUTS: [(&str, &str); 9] = [
     ("compose", "Ctrl+N"),
     ("get-mail", "F5"),
@@ -969,20 +971,27 @@ impl MailView {
             return;
         };
         let reading = self.reading_of(&summary);
-        let remote = reading.downloaded
+        let remote = self.loads_remote(&reading);
+        let pending = reading.content.security.pending;
+        if let Some(entry) = self.thread.as_mut().and_then(|thread| thread.entry_mut(id)) {
+            entry.reading = Some(reading);
+        }
+        self.layout = None;
+        if pending {
+            self.unseal(id);
+        } else if remote {
+            self.load_remote(id);
+        }
+    }
+
+    fn loads_remote(&self, reading: &Reading) -> bool {
+        reading.downloaded
             && reading.document.remote_images > 0
             && (self.settings.load_remote
                 || self
                     .store
                     .trusts_remote(&reading.content.envelope.sender().email)
-                    .unwrap_or(false));
-        if let Some(entry) = self.thread.as_mut().and_then(|thread| thread.entry_mut(id)) {
-            entry.reading = Some(reading);
-        }
-        self.layout = None;
-        if remote {
-            self.load_remote(id);
-        }
+                    .unwrap_or(false))
     }
 
     pub(crate) fn focus_entry(&mut self, id: MessageId) {
@@ -1481,6 +1490,7 @@ impl MailView {
         if draft.from.email.is_empty() {
             draft.from = account.address();
         }
+        draft.sign = self.signs(account.id);
         draft.body = match draft.body.trim_end() {
             "" => signed("", &account.signature),
             body => format!("{body}{}", signed("", &account.signature)),
@@ -1512,6 +1522,7 @@ impl MailView {
         let quote = self.settings.quote.then_some(attribution.as_str());
         let mut draft = reply(&reading.content, &account.address(), all, quote);
         draft.body = signed(&draft.body, &account.signature);
+        draft.sign = self.signs(account.id);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: Some(Original {
@@ -1548,6 +1559,8 @@ impl MailView {
             in_reply_to: envelope.references.last().cloned(),
             references: envelope.references.clone(),
             attachments: reading.content.attachments.clone(),
+            sign: self.signs(account.id),
+            encrypt: reading.content.security.encrypted.is_some(),
         };
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
@@ -1593,6 +1606,7 @@ impl MailView {
         );
         let mut draft = forward(&reading.content, &account.address(), &heading);
         draft.body = signed(&draft.body, &account.signature);
+        draft.sign = self.signs(account.id);
         self.requests.push(Request::Compose(Box::new(Outgoing {
             draft,
             answering: None,
@@ -2000,6 +2014,9 @@ impl MailView {
                 }
                 MailEvent::Setup(outcome) => self.setup_checked(*outcome),
                 MailEvent::Found(found) => self.servers_found(*found),
+                MailEvent::Opened(id, content) => self.opened(id, *content),
+                MailEvent::LookedUp(id, result) => self.looked_up(id, result),
+                MailEvent::KeysChanged(_) => {}
                 MailEvent::Pictures(id, pictures) => {
                     if let Some(reading) = self
                         .thread
@@ -2462,6 +2479,7 @@ impl MailView {
                 }
                 Signal::ServerSettings => self.requests.push(Request::OpenSettings),
                 Signal::OpenLink(url) => self.requests.push(Request::OpenLink(url)),
+                Signal::TrustIssuer(id) => self.trust_issuer(id),
             }
         }
         if let Some(request) = self.ui.take_clipboard_request() {
@@ -3122,6 +3140,9 @@ impl MailView {
                 self.focus_entry(id);
                 self.open_attachment(index);
             }
+            Target::LookUpKey(id) => self.look_up_key(id),
+            Target::TrustIssuer(id) => self.confirm_trust_issuer(id),
+            Target::Unseal(id) => self.unseal(id),
             Target::LoadRemote(id) => {
                 let sender = self
                     .thread

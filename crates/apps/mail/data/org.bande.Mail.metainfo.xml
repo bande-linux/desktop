@@ -7,7 +7,7 @@
   <summary>Read and send mail from all your accounts</summary>
   <summary xml:lang="sv">Läs och skicka e-post från alla dina konton</summary>
   <description>
-    <p>IMAP and SMTP accounts in one window, with search, drafts, attachments and notifications for new mail.</p>
+    <p>IMAP and SMTP accounts in one window, with search, drafts, attachments and notifications for new mail, and signed and encrypted mail with OpenPGP and S/MIME.</p>
   </description>
   <developer id="org.bande">
     <name>Bande</name>

@@ -120,6 +120,21 @@ CREATE TABLE IF NOT EXISTS rule_conditions (
 CREATE TABLE IF NOT EXISTS remote_senders (
     email TEXT PRIMARY KEY
 );
+CREATE TABLE IF NOT EXISTS identities (
+    account INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    openpgp TEXT NOT NULL DEFAULT '',
+    smime TEXT NOT NULL DEFAULT '',
+    sign INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS decrypted (
+    message INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS certificates (
+    fingerprint TEXT PRIMARY KEY,
+    email TEXT,
+    trusted INTEGER NOT NULL DEFAULT 0,
+    der BLOB NOT NULL
+);
 CREATE TABLE IF NOT EXISTS pending (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -132,6 +147,13 @@ CREATE TABLE IF NOT EXISTS pending (
     target TEXT
 );
 ";
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Identity {
+    pub openpgp: String,
+    pub smime: String,
+    pub sign: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Account {
@@ -1425,5 +1447,112 @@ impl Store {
             .connection
             .query_row(&query, [scope_value], |row| row.get(0))?;
         Ok(usize::try_from(count).unwrap_or_default())
+    }
+
+    pub fn index_decrypted(&self, id: MessageId, text: &str) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(
+            "UPDATE messages SET text = ?2, preview = ?3 WHERE id = ?1",
+            params![id, text, crate::message::preview(text)],
+        )?;
+        transaction.execute(
+            "INSERT OR IGNORE INTO decrypted (message) VALUES (?1)",
+            [id],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn forget_decrypted(&self) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(
+            "UPDATE messages SET text = '', preview = '' WHERE id IN (SELECT message FROM decrypted)",
+            [],
+        )?;
+        transaction.execute("DELETE FROM decrypted", [])?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn identity(&self, account: AccountId) -> Result<Identity> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT openpgp, smime, sign FROM identities WHERE account = ?1",
+                [account],
+                |row| {
+                    Ok(Identity {
+                        openpgp: row.get(0)?,
+                        smime: row.get(1)?,
+                        sign: row.get(2)?,
+                    })
+                },
+            )
+            .optional()?
+            .unwrap_or_default())
+    }
+
+    pub fn set_identity(&self, account: AccountId, identity: &Identity) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO identities (account, openpgp, smime, sign) VALUES (?1, ?2, ?3, ?4) \
+             ON CONFLICT (account) DO UPDATE SET openpgp = ?2, smime = ?3, sign = ?4",
+            params![account, identity.openpgp, identity.smime, identity.sign],
+        )?;
+        Ok(())
+    }
+
+    pub fn remember_certificates(&self, email: &str, chain: &[Vec<u8>]) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        for (index, der) in chain.iter().enumerate() {
+            let owner = (index == 0).then(|| email.trim().to_lowercase());
+            transaction.execute(
+                "INSERT INTO certificates (fingerprint, email, der) VALUES (?1, ?2, ?3) \
+                 ON CONFLICT (fingerprint) DO UPDATE SET email = COALESCE(?2, email)",
+                params![crate::crypto::smime::fingerprint(der), owner, der],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn trust_certificate(&self, der: &[u8]) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO certificates (fingerprint, trusted, der) VALUES (?1, 1, ?2) \
+             ON CONFLICT (fingerprint) DO UPDATE SET trusted = 1",
+            params![crate::crypto::smime::fingerprint(der), der],
+        )?;
+        Ok(())
+    }
+
+    fn certificates_where(
+        &self,
+        filter: &str,
+        value: &dyn rusqlite::ToSql,
+    ) -> Result<Vec<Vec<u8>>> {
+        let mut statement = self
+            .connection
+            .prepare(&format!("SELECT der FROM certificates WHERE {filter}"))?;
+        let certificates = statement
+            .query_map([value], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(certificates)
+    }
+
+    pub fn trusted_certificates(&self) -> Result<Vec<Vec<u8>>> {
+        self.certificates_where("trusted = ?1", &true)
+    }
+
+    pub fn certificates_of(&self, email: &str) -> Result<Vec<Vec<u8>>> {
+        self.certificates_where("email = ?1", &email.trim().to_lowercase())
+    }
+
+    pub fn known_certificates(&self) -> Result<Vec<Vec<u8>>> {
+        self.certificates_where("email IS NULL OR trusted = ?1", &true)
+    }
+
+    pub fn forget_trusted_certificates(&self) -> Result<usize> {
+        Ok(self
+            .connection
+            .execute("UPDATE certificates SET trusted = 0 WHERE trusted = 1", [])?)
     }
 }

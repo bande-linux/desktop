@@ -14,9 +14,9 @@ use crate::ui::symbols::Symbol;
 use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_toolkit::ui::{
-    Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Label,
-    Menu, MenuItem, PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget,
-    WidgetId, access_rect, shortcut_pressed,
+    Alert, BUTTON_HEIGHT, Button, CheckState, Checkbox, ClipboardRequest, Context, Cursor, Event,
+    FreeLayout, Label, Menu, MenuItem, PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView,
+    Ui, Widget, WidgetId, access_rect, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Item, Palette, Point, Radius, Rect,
@@ -39,6 +39,8 @@ const REMOVE_SIZE: f32 = 22.0;
 const MORE_PADDING: f32 = 16.0;
 const REMOVE_ACTION: &str = "remove-attachment:";
 const AUTOSAVE_DELAY: Duration = Duration::from_secs(3);
+const CHECK_WIDTH: f32 = 104.0;
+const CHECK_GAP: f32 = 8.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Signal {
@@ -68,6 +70,8 @@ pub struct ComposeView {
     host: WidgetId,
     send: WidgetId,
     attach: WidgetId,
+    sign: WidgetId,
+    encrypt: WidgetId,
     to: WidgetId,
     cc: WidgetId,
     bcc: WidgetId,
@@ -189,6 +193,15 @@ impl ComposeView {
             click,
         );
         let attach = host.insert(attach_button, Rect::default());
+        let check = |label: &str, on: bool| {
+            let state = match on {
+                true => CheckState::On,
+                false => CheckState::Off,
+            };
+            Checkbox::new(label, state, |_| {})
+        };
+        let sign = host.insert(check(&tr!("Sign"), draft.sign), Rect::default());
+        let encrypt = host.insert(check(&tr!("Encrypt"), draft.encrypt), Rect::default());
         let field = |text: &str| TextField::new("", text, |_| {}).borderless(FIELD_FONT);
         let to = host.insert(field(&joined(&draft.to)), Rect::default());
         let cc = host.insert(field(&joined(&draft.cc)), Rect::default());
@@ -225,6 +238,8 @@ impl ComposeView {
             host: host_id,
             send,
             attach,
+            sign,
+            encrypt,
             to,
             cc,
             bcc,
@@ -331,7 +346,21 @@ impl ComposeView {
                 BUTTON_HEIGHT,
             )
         };
-        let mut frames = vec![(self.send, button(1.0)), (self.attach, button(2.0))];
+        let check = |slot: f32| {
+            let attach = button(2.0);
+            Rect::new(
+                attach.x - CHECK_GAP - slot * (CHECK_WIDTH + CHECK_GAP),
+                attach.y,
+                CHECK_WIDTH,
+                BUTTON_HEIGHT,
+            )
+        };
+        let mut frames = vec![
+            (self.send, button(1.0)),
+            (self.attach, button(2.0)),
+            (self.encrypt, check(1.0)),
+            (self.sign, check(2.0)),
+        ];
         let field_x = MARGIN + LABEL_WIDTH;
         let field_width = (width - field_x - MARGIN).max(40.0);
         let mut y = TOOLBAR_HEIGHT;
@@ -394,7 +423,7 @@ impl ComposeView {
             items: self
                 .frames()
                 .into_iter()
-                .take(2)
+                .take(4)
                 .map(|(_, frame)| frame)
                 .collect(),
             tabs: Vec::new(),
@@ -618,8 +647,16 @@ impl ComposeView {
             .unwrap_or_default()
     }
 
+    fn checked(&self, id: WidgetId) -> bool {
+        self.ui
+            .widget_ref::<Checkbox>(id)
+            .is_some_and(|check| check.state() == CheckState::On)
+    }
+
     fn compose_draft(&self) -> Draft {
         Draft {
+            sign: self.checked(self.sign),
+            encrypt: self.checked(self.encrypt),
             from: self
                 .senders
                 .get(self.sender)

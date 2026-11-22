@@ -567,6 +567,12 @@ msgstr "Bara en administratör kan ändra detta."
 msgid "Couldn't make this change."
 msgstr "Det gick inte att göra ändringen."
 
+msgid "This computer can't sleep, so it stays on when idle."
+msgstr "Den här datorn kan inte vila, så den förblir på när den inte används."
+
+msgid "A virtual machine doesn't sleep when idle, since a sleeping guest looks like a crash and loses its network. Sleep from the menu still works."
+msgstr "En virtuell maskin vilar inte när den inte används, eftersom en vilande gäst ser ut som en krasch och tappar sitt nätverk. Vila från menyn fungerar ändå."
+
 msgid "The desktop settings service"
 msgstr "Tjänsten för skrivbordsinställningar"
 
@@ -1178,6 +1184,9 @@ msgstr "Spegla"
 
 msgid "Mirror {display}"
 msgstr "Spegla {display}"
+
+msgid "Never"
+msgstr "Aldrig"
 
 msgid "The display turns off first, so the screen saver doesn't start."
 msgstr "Skärmen stängs av först, så skärmsläckaren startar inte."

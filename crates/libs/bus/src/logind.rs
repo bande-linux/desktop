@@ -165,3 +165,19 @@ pub fn follow_blocked(
     });
     Ok(())
 }
+
+#[zbus::proxy(
+    interface = "org.freedesktop.systemd1.Manager",
+    default_service = "org.freedesktop.systemd1",
+    default_path = "/org/freedesktop/systemd1"
+)]
+trait ServiceManager {
+    #[zbus(property)]
+    fn virtualization(&self) -> zbus::Result<String>;
+}
+
+pub fn runs_in_virtual_machine(system: &Connection) -> bool {
+    ServiceManagerProxyBlocking::new(system)
+        .and_then(|manager| manager.virtualization())
+        .is_ok_and(|virtualization| !virtualization.is_empty())
+}

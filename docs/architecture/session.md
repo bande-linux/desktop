@@ -54,9 +54,9 @@ graph LR
   `PasswordRequired` property; any process of the user could lengthen it through `config.kdl`
   anyway, so it adds no new trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
-  when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row is
-  hidden). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
-  loses its network. Sleep never comes before the display turns off; Settings says so on a row
+  when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row in
+  Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
+  loses its network, and Settings says so on the sleep row. Sleep never comes before the display turns off; Settings says so on a row
   whose choice is overridden.
 - On a computer with a battery, every sleep Bande asks for (idle, the menus, the lock screen,
   the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`

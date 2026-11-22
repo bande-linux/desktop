@@ -243,22 +243,53 @@ fn none() -> Options<'static> {
     HashMap::new()
 }
 
-fn release(system: &Connection, blocks: &[String]) -> Result<Vec<String>, Failure> {
+struct Released<'a> {
+    system: &'a Connection,
+    unmounted: Vec<String>,
+}
+
+impl Released<'_> {
+    fn keep(mut self) {
+        self.unmounted.clear();
+    }
+
+    fn remount(mut self) -> Result<(), Failure> {
+        for filesystem in std::mem::take(&mut self.unmounted) {
+            call(self.system, &filesystem, FILESYSTEM, "Mount", &(none(),))?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Released<'_> {
+    fn drop(&mut self) {
+        for filesystem in &self.unmounted {
+            if let Err(error) = call(self.system, filesystem, FILESYSTEM, "Mount", &(none(),)) {
+                tracing::warn!("cannot mount {filesystem} again: {error:?}");
+            }
+        }
+    }
+}
+
+fn release<'a>(system: &'a Connection, blocks: &[String]) -> Result<Released<'a>, Failure> {
     let objects = Objects::load(system)?;
-    let mut unmounted = Vec::new();
+    let mut released = Released {
+        system,
+        unmounted: Vec::new(),
+    };
     for block in blocks {
         let opened = objects.path(block, ENCRYPTED, "CleartextDevice");
         for filesystem in [Some(block.clone()), opened.clone()].into_iter().flatten() {
             if !objects.mount_points(&filesystem).is_empty() {
                 call(system, &filesystem, FILESYSTEM, "Unmount", &(none(),))?;
-                unmounted.push(filesystem);
+                released.unmounted.push(filesystem);
             }
         }
         if opened.is_some() {
             call(system, block, ENCRYPTED, "Lock", &(none(),))?;
         }
     }
-    Ok(unmounted)
+    Ok(released)
 }
 
 fn format_options<'a>(erase: &'a Erase, partition: bool) -> Options<'a> {
@@ -319,17 +350,10 @@ fn members(system: &Connection, block: &str) -> Result<Vec<String>, Failure> {
     Ok(members)
 }
 
-fn remount(system: &Connection, unmounted: &[String]) -> Result<(), Failure> {
-    for filesystem in unmounted {
-        call(system, filesystem, FILESYSTEM, "Mount", &(none(),))?;
-    }
-    Ok(())
-}
-
 fn resize(system: &Connection, partition: &str, size: u64, grow: bool) -> Result<(), Failure> {
     let objects = Objects::load(system)?;
     let filesystem = objects.has(partition, FILESYSTEM);
-    let unmounted = release(system, &[partition.to_owned()])?;
+    let released = release(system, &[partition.to_owned()])?;
     let partition_resize = || call(system, partition, PARTITION, "Resize", &(size, none()));
     if grow {
         partition_resize()?;
@@ -344,11 +368,11 @@ fn resize(system: &Connection, partition: &str, size: u64, grow: bool) -> Result
     if !grow {
         partition_resize()?;
     }
-    remount(system, &unmounted)
+    released.remount()
 }
 
 fn repair(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> {
-    let unmounted = release(system, &[filesystem.to_owned()])?;
+    let released = release(system, &[filesystem.to_owned()])?;
     let consistent: bool = call(system, filesystem, FILESYSTEM, "Check", &(none(),))?
         .body()
         .deserialize()?;
@@ -358,7 +382,7 @@ fn repair(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> {
             .body()
             .deserialize::<bool>()?,
     };
-    remount(system, &unmounted)?;
+    released.remount()?;
     match consistent || repaired {
         true => Ok(Outcome::Checked { repaired }),
         false => Err(Failure::Failed(tr!(
@@ -408,7 +432,7 @@ fn create_image(
     cancel: &AtomicBool,
     out: &Out,
 ) -> Result<(), Failure> {
-    let unmounted = release(system, &members(system, source)?)?;
+    let released = release(system, &members(system, source)?)?;
     let objects = Objects::load(system)?;
     let size: u64 = objects.get(source, BLOCK, "Size").unwrap_or(0);
     let device = open_device(system, source, "OpenForBackup")?;
@@ -418,7 +442,7 @@ fn create_image(
         let _ = std::fs::remove_file(file);
     }
     copied?;
-    remount(system, &unmounted)
+    released.remount()
 }
 
 fn restore(
@@ -435,8 +459,9 @@ fn restore(
     if size > capacity {
         return Err(Failure::Failed(tr!("The image is too big.")));
     }
-    release(system, &members(system, target)?)?;
+    let released = release(system, &members(system, target)?)?;
     let device = open_device(system, target, "OpenForRestore")?;
+    released.keep();
     copy(image, &device, size, cancel, out)?;
     Ok(device.sync_all()?)
 }
@@ -523,9 +548,7 @@ fn perform(
         Job::Mount(filesystem) => {
             call(system, &filesystem, FILESYSTEM, "Mount", &(none(),))?;
         }
-        Job::Unmount(block) => {
-            release(system, &[block])?;
-        }
+        Job::Unmount(block) => release(system, &[block])?.keep(),
         Job::Unlock(encrypted, passphrase) => {
             let reply = call(
                 system,
@@ -542,7 +565,7 @@ fn perform(
             bande_volumes::eject_block(system, &objects, &disk, false)?;
         }
         Job::EraseVolume(block, erase) => {
-            release(system, std::slice::from_ref(&block))?;
+            let released = release(system, std::slice::from_ref(&block))?;
             let objects = Objects::load(system)?;
             let options = format_options(&erase, objects.has(&block, PARTITION));
             call(
@@ -552,14 +575,16 @@ fn perform(
                 "Format",
                 &(erase.format.kind(), options),
             )?;
+            released.keep();
         }
         Job::EraseDisk(block, scheme, erase) => {
-            release(system, &members(system, &block)?)?;
+            let released = release(system, &members(system, &block)?)?;
             let kind = match scheme {
                 Scheme::Gpt => "gpt",
                 Scheme::Mbr => "dos",
             };
             call(system, &block, BLOCK, "Format", &(kind, none()))?;
+            released.keep();
             create_partition(system, &block, scheme, (PARTITION_START, 0), &erase)?;
         }
         Job::AddPartition {
@@ -570,8 +595,9 @@ fn perform(
             erase,
         } => create_partition(system, &table, scheme, (offset, size), &erase)?,
         Job::DeletePartition(block) => {
-            release(system, std::slice::from_ref(&block))?;
+            let released = release(system, std::slice::from_ref(&block))?;
             call(system, &block, PARTITION, "Delete", &(none(),))?;
+            released.keep();
         }
         Job::Resize {
             partition,

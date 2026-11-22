@@ -1317,7 +1317,7 @@ impl FilesView {
                 choose,
             )
             .cancel(&tr!("Cancel"), "cancel")
-            .primary(&tr!("Empty Trash"), "confirm"),
+            .destructive(&tr!("Empty Trash"), "confirm"),
             Sheet::DeleteImmediately { paths, items } => Alert::new(
                 &trn!(
                     "Delete this item immediately?",
@@ -1328,7 +1328,7 @@ impl FilesView {
                 choose,
             )
             .cancel(&tr!("Cancel"), "cancel")
-            .primary(&tr!("Delete"), "confirm"),
+            .destructive(&tr!("Delete"), "confirm"),
             Sheet::ChangeExtension { change, .. } => {
                 Alert::new(&change.title(), &ExtensionChange::detail(), choose)
                     .cancel(&change.keep(), "cancel")
@@ -1360,8 +1360,8 @@ impl FilesView {
                         &tr!("To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."),
                         choose,
                     )
-                    .other(&tr!("Force Eject"), "force")
-                    .primary(&tr!("OK"), "ok"),
+                    .destructive(&tr!("Force Eject"), "force")
+                    .safe(&tr!("OK"), "ok"),
                     false => Alert::new(
                         &tr!("The disk “{name}” couldn’t be ejected.", name = name),
                         message,

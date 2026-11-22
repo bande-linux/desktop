@@ -24,16 +24,16 @@ impl SettingsView {
         if self.confirming_clear_clipboard {
             let mut cancel = intent(&self.intents, |()| Intent::AskClearClipboard(false));
             let mut clear = intent(&self.intents, |()| Intent::ClearClipboard);
-            let erase = Button::new(&tr!("Clear"), move || clear(()));
+            let keep = Button::new(&tr!("Cancel"), move || cancel(())).cancel();
             self.anchors
-                .push((Anchor::Item(CONFIRM.to_owned()), erase.id()));
+                .push((Anchor::Item(CONFIRM.to_owned()), keep.id()));
             let buttons = Stack::new(
                 Axis::Horizontal,
                 Spacing::S as f32,
                 0.0,
                 vec![
-                    boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
-                    boxed(erase.primary()),
+                    boxed(keep),
+                    boxed(Button::new(&tr!("Clear"), move || clear(())).destructive()),
                 ],
             );
             return vec![boxed(

@@ -1043,9 +1043,9 @@ impl SettingsView {
         let mut cancel = intent(&self.intents, |()| Intent::AskDeleteAccount(false));
         let mut keep = intent(&self.intents, move |()| Intent::DeleteAccount(uid, false));
         let mut remove = intent(&self.intents, move |()| Intent::DeleteAccount(uid, true));
-        let keep = Button::new(&tr!("Keep Home Folder"), move || keep(()));
+        let back_out = Button::new(&tr!("Cancel"), move || cancel(())).cancel();
         self.anchors
-            .push((Anchor::Item(DELETE_CONFIRM.to_owned()), keep.id()));
+            .push((Anchor::Item(DELETE_CONFIRM.to_owned()), back_out.id()));
         boxed(
             Row::new(
                 Text::new(
@@ -1057,11 +1057,11 @@ impl SettingsView {
                     Spacing::S as f32,
                     0.0,
                     vec![
-                        boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
-                        boxed(keep),
+                        boxed(back_out),
+                        boxed(Button::new(&tr!("Keep Home Folder"), move || keep(()))),
                         boxed(
                             Button::new(&tr!("Delete Home Folder"), move || remove(()))
-                                .primary(),
+                                .destructive(),
                         ),
                     ],
                 ))),

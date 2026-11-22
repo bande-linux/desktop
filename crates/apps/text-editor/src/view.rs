@@ -76,6 +76,13 @@ enum Signal {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reply {
+    Default,
+    Destructive,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Asking {
     SaveChanges,
     SaveAsUnicode,
@@ -607,7 +614,7 @@ impl DocumentView {
                     name = self.name()
                 ),
                 &tr!("Saving over it would lose them. Save a copy as rich text instead?"),
-                &[("save-copy", true), ("cancel", false)],
+                &[("save-copy", Reply::Default), ("cancel", Reply::Other)],
             );
         }
         match self.path.clone() {
@@ -646,7 +653,7 @@ impl DocumentView {
                     Asking::SavePlain,
                     &tr!("Save “{name}” as plain text?", name = name),
                     &tr!("Its fonts, styles, colors and lists will be lost. To keep them, save it with a name that ends in .rtf."),
-                    &[("make-plain-confirm", true), ("cancel", false)],
+                    &[("make-plain-confirm", Reply::Default), ("cancel", Reply::Other)],
                 );
             }
             (true, None) if self.format != Format::Markdown => {
@@ -777,7 +784,7 @@ impl DocumentView {
                     Asking::SaveAsUnicode,
                     &tr!("The document can’t be saved as {encoding}.", encoding = crate::encoding_name(self.encoding)),
                     &tr!("It contains characters that this encoding can’t hold. Save it as Unicode (UTF-8) instead?"),
-                    &[("save-unicode", true), ("cancel", false)],
+                    &[("save-unicode", Reply::Default), ("cancel", Reply::Other)],
                 );
             }
             Err(WriteError::Changed) => {
@@ -785,7 +792,10 @@ impl DocumentView {
                     Asking::Changed,
                     &tr!("“{name}” was changed by another app.", name = self.name()),
                     &tr!("Saving replaces the changes made there since you opened it."),
-                    &[("save-anyway", true), ("cancel", false)],
+                    &[
+                        ("save-anyway", Reply::Destructive),
+                        ("cancel", Reply::Other),
+                    ],
                 );
             }
             Err(WriteError::Io(error)) => {
@@ -794,7 +804,7 @@ impl DocumentView {
                     Asking::Failed,
                     &tr!("“{name}” could not be saved.", name = self.name()),
                     &error,
-                    &[("save-as", true), ("cancel", false)],
+                    &[("save-as", Reply::Default), ("cancel", Reply::Other)],
                 );
             }
         }
@@ -808,11 +818,15 @@ impl DocumentView {
                 name = self.name()
             ),
             &tr!("Your changes will be lost if you don’t save them."),
-            &[("save", true), ("dont-save", false), ("cancel", false)],
+            &[
+                ("save", Reply::Default),
+                ("dont-save", Reply::Other),
+                ("cancel", Reply::Other),
+            ],
         );
     }
 
-    fn ask(&mut self, asking: Asking, title: &str, message: &str, buttons: &[(&str, bool)]) {
+    fn ask(&mut self, asking: Asking, title: &str, message: &str, buttons: &[(&str, Reply)]) {
         if self.ui.has_sheet() {
             return;
         }
@@ -821,12 +835,13 @@ impl DocumentView {
         let mut alert = Alert::new(title, message, move |action| {
             signals.borrow_mut().push(Signal::Choice(action.to_owned()));
         });
-        for (action, primary) in buttons {
+        for (action, choice) in buttons {
             let label = button_label(action);
-            alert = match (*primary, *action) {
-                (true, _) => alert.primary(&label, action),
-                (false, "cancel") => alert.cancel(&label, action),
-                (false, _) => alert.other(&label, action),
+            alert = match (choice, *action) {
+                (Reply::Default, _) => alert.primary(&label, action),
+                (Reply::Destructive, _) => alert.destructive(&label, action),
+                (Reply::Other, "cancel") => alert.cancel(&label, action),
+                (Reply::Other, _) => alert.other(&label, action),
             };
         }
         self.ui.present_sheet(alert);
@@ -1242,7 +1257,7 @@ impl DocumentView {
                 Asking::MakePlain,
                 &tr!("Convert this document to plain text?"),
                 &tr!("Its fonts, styles, colors and lists will be lost. The converted document is saved as a new plain text file."),
-                &[("make-plain-confirm", true), ("cancel", false)],
+                &[("make-plain-confirm", Reply::Default), ("cancel", Reply::Other)],
             );
         }
         self.drop_formatting();

@@ -211,6 +211,7 @@ writes a hex value, a corner radius or a font name of its own.
   |---|---|
   | `Button::new(title, action)` | secondary: `well` fill, `ink` 13/500, 8 % ink on hover, 16 % pressed |
   | `.primary()` | accent fill, `on_accent` 13/600, Return; press mixes 15 % black |
+  | `.safe()` | primary look, Return and Escape: the default when the other choices must be made deliberately |
   | `.cancel()` | secondary look, Escape |
   | `.quiet()` | `accent_text` 600, `well` fill on hover only |
   | `.destructive()` | danger fill, `on_danger` text; only for the destructive verb |
@@ -244,7 +245,12 @@ writes a hex value, a corner radius or a font name of its own.
   14: the body on `overlay` with an optional 36 pt icon (`.icon(image)`), a Manrope `Heading`
   and the message in `ink2`; a footer tray on `chassis` holds the buttons: default at the right
   (`.primary` or `.destructive`), cancel left of it, alternatives (`.other`) as quiet buttons at
-  the far left. When they do not fit side by side they stack, default on top. The parent dims
+  the far left. When they do not fit side by side they stack, default on top. The keyboard
+  focus starts on the `.safe` button, else on the first control that is not a button (a text
+  field, a list), else on the cancel button, else on the primary one, never on a destructive or
+  alternative button, so Space cannot take one by accident. An alert whose default would lose
+  data, end something or reach outside the app makes that choice `.destructive` (no Return)
+  with a cancel or `.safe` choice beside it. The parent dims
   with `scrim` (18 % light, 40 % dark); `Ui::present_sheet` drops the card from under the header (`Ui::set_sheet_top` for an app whose content covers the header),
   `Ui::present_dialog` centres it.
 - **Tables**. Rows 32 (24 with `Table::compact` for dense lists such as System Monitor), header 28 with `Label`-style

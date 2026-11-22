@@ -113,12 +113,13 @@ impl Encoder {
         self.desktop_size = encodings.contains(&ENCODING_DESKTOP_SIZE);
     }
 
-    pub fn encode(&mut self, frame: &Frame, area: Area, out: &mut Vec<u8>) -> io::Result<()> {
+    /// Encodes the part of `area` inside `frame`; false when none of it is.
+    pub fn encode(&mut self, frame: &Frame, area: Area, out: &mut Vec<u8>) -> io::Result<bool> {
         let Some(area) = frame.clip(area) else {
-            return Ok(());
+            return Ok(false);
         };
         match self.zrle {
-            true => self.zrle(frame, area, out),
+            true => self.zrle(frame, area, out)?,
             false => {
                 rectangle_header(area, ENCODING_RAW, out);
                 for y in u32::from(area.y)..u32::from(area.y) + u32::from(area.height) {
@@ -126,9 +127,9 @@ impl Encoder {
                         self.format.put(self.format.value(pixel), out);
                     }
                 }
-                Ok(())
             }
         }
+        Ok(true)
     }
 
     fn zrle(&mut self, frame: &Frame, area: Area, out: &mut Vec<u8>) -> io::Result<()> {

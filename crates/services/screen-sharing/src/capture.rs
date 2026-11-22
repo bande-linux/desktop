@@ -23,7 +23,7 @@ pub const SCREENSHOT: &str = "org.bande.Screenshot";
 pub const SCREENSHOT_PATH: &str = "/org/bande/Screenshot";
 pub const SCREENSHOT_INTERFACE: &str = "org.bande.Screenshot";
 const BYTES_PER_PIXEL: usize = 4;
-const LARGEST: u32 = 16384;
+const LARGEST: u32 = bande_rfb::protocol::LARGEST_SCREEN as u32;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The screen shown to viewers while any of them holds it: a PipeWire stream from the

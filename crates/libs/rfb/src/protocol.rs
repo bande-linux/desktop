@@ -361,7 +361,7 @@ fn parse_update(
     }
     let count = be16(buffer, 2);
     let mut at = 4;
-    let mut rectangles = Vec::with_capacity(usize::from(count).min(1024));
+    let mut found = Vec::with_capacity(usize::from(count).min(1024));
     for _ in 0..count {
         let Some(header) = buffer.get(at..at + 12) else {
             return Ok(None);
@@ -405,16 +405,20 @@ fn parse_update(
             }
             other => return Err(Refused::UnknownEncoding(other)),
         };
-        let Some(data) = buffer.get(at..at + length) else {
+        if buffer.len() < at + length {
             return Ok(None);
-        };
+        }
+        found.push((area, encoding, at..at + length));
         at += length;
-        rectangles.push(Rectangle {
+    }
+    let rectangles = found
+        .into_iter()
+        .map(|(area, encoding, data)| Rectangle {
             area,
             encoding,
-            data: data.to_vec(),
-        });
-    }
+            data: buffer[data].to_vec(),
+        })
+        .collect();
     Ok(Some((ServerMessage::Update(rectangles), at)))
 }
 

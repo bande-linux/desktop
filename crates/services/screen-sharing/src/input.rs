@@ -1,4 +1,5 @@
 use std::io;
+use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::thread;
@@ -7,19 +8,14 @@ use bande_screen_sharing::rfb::Input;
 use reis::ei;
 use reis::event::{Connection, Device, DeviceCapability, EiEvent};
 
-const SCROLL_UP: u8 = 1 << 3;
-const SCROLL_DOWN: u8 = 1 << 4;
-const SCROLL_LEFT: u8 = 1 << 5;
-const SCROLL_RIGHT: u8 = 1 << 6;
 const DETENT: i32 = 120;
-const BUTTONS: [(u8, u32); 3] = [(1, 0x110), (1 << 1, 0x112), (1 << 2, 0x111)];
+const BUTTONS: [u32; 3] = [0x110, 0x112, 0x111];
 
 struct Emulated {
     connection: Option<Connection>,
     pointer: Option<Device>,
     keys: Option<Device>,
     sequence: u32,
-    buttons: u8,
     region: Option<(f32, f32, f32, f32)>,
     display: (i32, i32),
 }
@@ -28,6 +24,7 @@ struct Emulated {
 pub struct RemoteInput {
     emulated: Arc<Mutex<Emulated>>,
     size: (u32, u32),
+    socket: UnixStream,
 }
 
 fn lock(emulated: &Mutex<Emulated>) -> MutexGuard<'_, Emulated> {
@@ -145,13 +142,13 @@ impl RemoteInput {
     /// Connects to the compositor's EIS on `socket`, for a screen of `size` pixels that shows the
     /// display at `display` (its top left corner, in logical coordinates).
     pub fn connect(socket: UnixStream, size: (u32, u32), display: (i32, i32)) -> io::Result<Self> {
+        let kept = socket.try_clone()?;
         let context = ei::Context::new(socket)?;
         let emulated = Arc::new(Mutex::new(Emulated {
             connection: None,
             pointer: None,
             keys: None,
             sequence: 0,
-            buttons: 0,
             region: None,
             display,
         }));
@@ -159,50 +156,66 @@ impl RemoteInput {
         thread::Builder::new()
             .name("eis".into())
             .spawn(move || follow(&context, &followed))?;
-        Ok(Self { emulated, size })
+        Ok(Self {
+            emulated,
+            size,
+            socket: kept,
+        })
+    }
+}
+
+impl RemoteInput {
+    fn with_pointer(&self, send: impl FnOnce(&Device)) {
+        let emulated = lock(&self.emulated);
+        if let Some(pointer) = emulated.pointer.clone() {
+            send(&pointer);
+            emulated.frame(&pointer);
+        }
+    }
+}
+
+impl Drop for RemoteInput {
+    fn drop(&mut self) {
+        let _ = self.socket.shutdown(Shutdown::Both);
     }
 }
 
 impl Input for RemoteInput {
-    fn pointer(&self, x: u32, y: u32, buttons: u8) {
-        let mut emulated = lock(&self.emulated);
-        let (Some(pointer), Some((left, top, width, height))) =
-            (emulated.pointer.clone(), emulated.region)
-        else {
+    fn pointer(&self, x: u32, y: u32) {
+        let Some((left, top, width, height)) = lock(&self.emulated).region else {
             return;
         };
         let (screen_width, screen_height) = (self.size.0.max(1) as f32, self.size.1.max(1) as f32);
         let x = left + (x.min(self.size.0.saturating_sub(1)) as f32 + 0.5) * width / screen_width;
         let y = top + (y.min(self.size.1.saturating_sub(1)) as f32 + 0.5) * height / screen_height;
-        if let Some(absolute) = pointer.interface::<ei::PointerAbsolute>() {
-            absolute.motion_absolute(x, y);
-        }
-        let pressed = buttons & !emulated.buttons;
-        let released = emulated.buttons & !buttons;
-        if let Some(button) = pointer.interface::<ei::Button>() {
-            for (bit, code) in BUTTONS {
-                if pressed & bit != 0 {
-                    button.button(code, ei::button::ButtonState::Press);
-                } else if released & bit != 0 {
-                    button.button(code, ei::button::ButtonState::Released);
-                }
+        self.with_pointer(|pointer| {
+            if let Some(absolute) = pointer.interface::<ei::PointerAbsolute>() {
+                absolute.motion_absolute(x, y);
             }
-        }
-        if let Some(scroll) = pointer.interface::<ei::Scroll>() {
-            let steps = [
-                (SCROLL_UP, 0, -DETENT),
-                (SCROLL_DOWN, 0, DETENT),
-                (SCROLL_LEFT, -DETENT, 0),
-                (SCROLL_RIGHT, DETENT, 0),
-            ];
-            for (bit, x, y) in steps {
-                if pressed & bit != 0 {
-                    scroll.scroll_discrete(x, y);
-                }
+        });
+    }
+
+    fn button(&self, button: u8, pressed: bool) {
+        let Some(code) = BUTTONS.get(usize::from(button)) else {
+            return;
+        };
+        let state = match pressed {
+            true => ei::button::ButtonState::Press,
+            false => ei::button::ButtonState::Released,
+        };
+        self.with_pointer(|pointer| {
+            if let Some(buttons) = pointer.interface::<ei::Button>() {
+                buttons.button(*code, state);
             }
-        }
-        emulated.buttons = buttons;
-        emulated.frame(&pointer);
+        });
+    }
+
+    fn scroll(&self, x: i32, y: i32) {
+        self.with_pointer(|pointer| {
+            if let Some(scroll) = pointer.interface::<ei::Scroll>() {
+                scroll.scroll_discrete(x * DETENT, y * DETENT);
+            }
+        });
     }
 
     fn key(&self, keysym: u32, down: bool) {

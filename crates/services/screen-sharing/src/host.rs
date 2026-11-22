@@ -79,10 +79,22 @@ impl Desktop {
     }
 
     /// Gives viewers the text copied here, when anyone is viewing.
+    fn locked(&self) -> bool {
+        bande_bus::system()
+            .and_then(|system| bande_bus::logind::own_session(&system)?.locked_hint())
+            .inspect_err(|error| {
+                tracing::warn!("cannot tell whether the screen is locked: {error}")
+            })
+            .unwrap_or(true)
+    }
+
     pub fn clipboard_changed(&self) {
         let Some(capture) = self.capture().upgrade() else {
             return;
         };
+        if self.locked() {
+            return;
+        }
         let text: zbus::Result<String> = self
             .session
             .call_method(
@@ -204,6 +216,10 @@ impl Host for Desktop {
     }
 
     fn copied(&self, text: String) {
+        if self.locked() {
+            tracing::info!("the screen is locked, so a viewer's copied text is not used");
+            return;
+        }
         if let Err(error) = self.session.call_method(
             Some(CLIPBOARD),
             CLIPBOARD_PATH,

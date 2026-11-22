@@ -1,5 +1,5 @@
-mod attempts;
 pub mod identity;
+mod limits;
 mod screen;
 mod session;
 
@@ -13,9 +13,12 @@ pub use session::serve;
 
 /// Where a viewer's pointer and keys go.
 pub trait Input: Send + Sync {
-    /// The pointer moved to `x`, `y` in screen pixels with these RFB buttons held (bit 0 the
-    /// primary button, bits 3 to 6 the scroll wheel).
-    fn pointer(&self, x: u32, y: u32, buttons: u8);
+    /// The pointer moved to `x`, `y` in screen pixels.
+    fn pointer(&self, x: u32, y: u32);
+    /// The primary (0), middle (1) or secondary (2) button went down or up.
+    fn button(&self, button: u8, pressed: bool);
+    /// The wheel turned one detent along `x` or `y`.
+    fn scroll(&self, x: i32, y: i32);
     /// A key with this X keysym went down or up.
     fn key(&self, keysym: u32, down: bool);
 }

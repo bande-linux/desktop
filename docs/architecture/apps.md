@@ -32,7 +32,7 @@ Velox).
 | What | Rule |
 | --- | --- |
 | Process | one process for all of an app's windows, Settings included; a second launch hands its arguments, working folder and activation token to the first and exits |
-| Start failure | when `Program::start` returns an error, `bande-app` shows it in an alert titled "{app} could not be opened" and exits once it is dismissed, so the launcher adds no notice of its own |
+| Start failure | when `Program::start` returns an error, `bande-app` gives up the single-instance name, so a new launch can start, and shows the error in an alert titled "{app} could not be opened", exiting once it is dismissed so the launcher adds no notice of its own; a `--background` start posts it as a notice instead |
 | Menus | Shown from the menu button (⋮) left of each titled window's controls: App menu (About with the app's own version, Settings… if the app has settings, Hide, Hide Other Apps, Show All Apps, Quit), the app's menus, then Window (Minimize, Maximize, Close Window, the app's window items) |
 | Keys | 1. Close Window, Quit and Settings… (`Ctrl+W`, `Ctrl+Q`, `Ctrl+,`; with `Shift` for Terminal) before the view. 2. The focused view. 3. A key the view did not take runs the enabled menu entry with that shortcut, so the menus are the one shortcut table |
 | Edit menu | `edit_submenu` items are `key:<shortcut>` actions: the focused view gets that key press, so Copy works in any text field |

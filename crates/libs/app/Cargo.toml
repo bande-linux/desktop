@@ -15,6 +15,7 @@ bande-pdf.workspace = true
 bande-inbox.workspace = true
 bande-bus.workspace = true
 bande-log.workspace = true
+bande-notify.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 libc.workspace = true

@@ -10,8 +10,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use bande_audio::{Level, VolumeKey};
+use bande_bus::power_profiles::{PERFORMANCE, POWER_SAVER};
 use bande_l10n::tr;
-use bande_power::adapter::POWER_SAVER;
 use bande_status::brightness::DisplayLevel;
 use bande_status::status::Reading;
 use bande_toolkit::ui::{
@@ -87,6 +87,7 @@ pub struct Status {
     pub dark_style: Option<bool>,
     pub power_mode: Option<String>,
     pub airplane_mode: Option<bool>,
+    pub recording: Option<bool>,
     pub volume: Option<f32>,
     pub outputs: Vec<Choice>,
     pub output: Option<String>,
@@ -119,6 +120,7 @@ pub enum Change {
     DarkStyle(bool),
     PowerSaver(bool),
     AirplaneMode(bool),
+    ScreenRecording,
     ChooseBluetoothDevice,
     Volume(f32),
     VolumeReleased,
@@ -301,7 +303,7 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             title: tr!("Power Saver"),
             detail: match mode.as_str() {
                 POWER_SAVER => on_off(true),
-                "performance" => tr!("Performance"),
+                PERFORMANCE => tr!("Performance"),
                 _ => tr!("Balanced"),
             },
             symbol: if saving {
@@ -311,6 +313,16 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             },
             on: saving,
             toggle: Change::PowerSaver,
+            details: None,
+        });
+    }
+    if let Some(on) = status.recording {
+        specs.push(TileSpec {
+            title: tr!("Screen Recording"),
+            detail: if on { tr!("Recording") } else { on_off(false) },
+            symbol: "media-record-symbolic",
+            on,
+            toggle: |_| Change::ScreenRecording,
             details: None,
         });
     }

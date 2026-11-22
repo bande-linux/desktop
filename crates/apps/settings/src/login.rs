@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 
-use bande_keyboard::{GlobalShortcut, Trigger, read_global_shortcuts, write_global_shortcuts};
+use bande_keyboard::{
+    GlobalShortcut, Trigger, assign, read_global_shortcuts, write_global_shortcuts,
+};
 use bande_l10n::text;
 use bande_xdg::{
     DesktopEntry, Locale, app_languages, applications, autostart_dir, current_desktops, data_dirs,
@@ -24,7 +26,7 @@ pub struct AppShortcut {
     pub app: App,
     pub id: String,
     pub description: String,
-    pub keys: Option<String>,
+    pub trigger: Option<Trigger>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -41,7 +43,7 @@ pub enum LoginCommand {
     Add(String),
     Remove(String),
     SetLanguage(String, Option<String>),
-    RevokeShortcut(String, String),
+    SetShortcut(String, String, Option<Trigger>),
 }
 
 fn sorted(mut apps: Vec<App>) -> Vec<App> {
@@ -151,7 +153,7 @@ fn shortcuts(apps: &[DesktopEntry]) -> Vec<AppShortcut> {
                 },
                 id: shortcut.id,
                 description: shortcut.description,
-                keys: shortcut.trigger.map(Trigger::keys),
+                trigger: shortcut.trigger,
             }
         })
         .collect();
@@ -159,14 +161,16 @@ fn shortcuts(apps: &[DesktopEntry]) -> Vec<AppShortcut> {
     listed
 }
 
-fn revoke_shortcut(app_id: &str, id: &str) -> std::io::Result<()> {
+fn set_shortcut(app_id: &str, id: &str, trigger: Option<Trigger>) -> std::io::Result<()> {
     let file = global_shortcuts_file()
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no state folder"))?;
-    let kept: Vec<GlobalShortcut> = read_shortcuts(&file)?
-        .into_iter()
-        .filter(|shortcut| shortcut.app_id != app_id || shortcut.id != id)
-        .collect();
-    bande_xdg::replace_file(&file, write_global_shortcuts(&kept))
+    let mut shortcuts = read_shortcuts(&file)?;
+    if !assign(&mut shortcuts, app_id, id, trigger) {
+        return Err(std::io::Error::other(format!(
+            "{app_id} cannot have those keys for {id}"
+        )));
+    }
+    bande_xdg::replace_file(&file, write_global_shortcuts(&shortcuts))
 }
 
 fn run(dir: &Path, apps: &[DesktopEntry], command: LoginCommand) -> std::io::Result<()> {
@@ -184,7 +188,7 @@ fn run(dir: &Path, apps: &[DesktopEntry], command: LoginCommand) -> std::io::Res
             let code = code.map(|code| code.replace(".UTF-8", ""));
             set_app_language(id.trim_end_matches(".desktop"), code.as_deref())
         }
-        LoginCommand::RevokeShortcut(app_id, id) => revoke_shortcut(&app_id, &id),
+        LoginCommand::SetShortcut(app_id, id, trigger) => set_shortcut(&app_id, &id, trigger),
     }
 }
 
@@ -212,9 +216,9 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
                     PaneId::LanguageTime,
                     text!("Couldn't change the app's language."),
                 ),
-                LoginCommand::RevokeShortcut(..) => (
+                LoginCommand::SetShortcut(..) => (
                     PaneId::KeyboardShortcuts,
-                    text!("Couldn't remove the app's shortcut."),
+                    text!("Couldn't change the app's shortcut."),
                 ),
                 _ => (
                     PaneId::Apps,

@@ -61,6 +61,12 @@ msgstr "Prestanda"
 msgid "Balanced"
 msgstr "Balanserat"
 
+msgid "Screen Recording"
+msgstr "Skärminspelning"
+
+msgid "Recording"
+msgstr "Spelar in"
+
 msgid "Microphone"
 msgstr "Mikrofon"
 

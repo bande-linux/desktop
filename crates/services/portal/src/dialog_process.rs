@@ -6,6 +6,7 @@ use std::process::{ChildStdin, Command, Stdio};
 use std::sync::mpsc::Receiver;
 use std::thread;
 
+use bande_keyboard::Trigger;
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
 
 use crate::access::{AccessUi, Answer, Question};
@@ -15,6 +16,7 @@ use crate::dynamic_launcher::{Confirmed, Launcher, LauncherUi};
 use crate::file_chooser::{
     Choice, Dialog, FileChooserUi, Filter, Mode, Outcome, Pattern, Selection,
 };
+use crate::global_shortcuts::{Consent, Consented, Proposal, ShortcutsUi};
 use crate::print::{Asked, DocumentSource, PrintAnswer, PrintRequest, PrintUi};
 use crate::request::Cancellation;
 use crate::wallpaper::WallpaperUi;
@@ -26,6 +28,7 @@ pub const ACCESS: &str = "--access";
 pub const CHOOSE_APP: &str = "--choose-app";
 pub const CREATE_LAUNCHER: &str = "--create-launcher";
 pub const SHARE_ACCOUNT: &str = "--share-account";
+pub const GLOBAL_SHORTCUTS: &str = "--global-shortcuts";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArgumentError(pub String);
@@ -724,6 +727,82 @@ impl AccountUi for DialogProcess {
             Some((Some(code), _)) if code == i32::from(CANCELLED) => Shared::No,
             Some(_) if cancellation.is_cancelled() => Shared::No,
             _ => Shared::Unavailable,
+        }
+    }
+}
+
+fn trigger_text(trigger: Option<Trigger>) -> String {
+    trigger.and_then(Trigger::text).unwrap_or_default()
+}
+
+pub fn shortcuts_arguments(consent: &Consent) -> Vec<OsString> {
+    let mut arguments = vec![os(GLOBAL_SHORTCUTS), os("--app-id"), os(&consent.app_id)];
+    if consent.configuring {
+        arguments.push(os("--configure"));
+    }
+    for proposal in &consent.shortcuts {
+        arguments.extend([
+            os("--shortcut"),
+            os(&proposal.id),
+            os(&proposal.description),
+            os(&trigger_text(proposal.trigger)),
+        ]);
+    }
+    for trigger in &consent.taken {
+        arguments.extend([os("--taken"), os(&trigger_text(Some(*trigger)))]);
+    }
+    arguments
+}
+
+pub fn parse_shortcuts(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Result<Consent, ArgumentError> {
+    let mut consent = Consent::default();
+    let mut arguments = arguments.into_iter();
+    while let Some(argument) = arguments.next() {
+        let flag = text(argument);
+        let mut value = || {
+            arguments
+                .next()
+                .map(text)
+                .ok_or_else(|| ArgumentError(format!("{flag} needs a value")))
+        };
+        match flag.as_str() {
+            GLOBAL_SHORTCUTS => {}
+            "--app-id" => consent.app_id = value()?,
+            "--configure" => consent.configuring = true,
+            "--shortcut" => consent.shortcuts.push(Proposal {
+                id: value()?,
+                description: value()?,
+                trigger: Trigger::parse(&value()?),
+            }),
+            "--taken" => consent.taken.extend(Trigger::parse(&value()?)),
+            _ => return Err(ArgumentError(format!("unknown argument {flag}"))),
+        }
+    }
+    Ok(consent)
+}
+
+pub fn encode_decisions(decisions: &[(String, Option<Trigger>)]) -> Vec<u8> {
+    let pairs: Vec<(String, String)> = decisions
+        .iter()
+        .map(|(id, trigger)| (id.clone(), trigger_text(*trigger)))
+        .collect();
+    encode_pairs(&pairs)
+}
+
+impl ShortcutsUi for DialogProcess {
+    fn ask(&self, consent: &Consent, cancellation: &Cancellation) -> Consented {
+        match self.show(shortcuts_arguments(consent), cancellation) {
+            Some((Some(code), output)) if code == i32::from(CHOSEN) => Consented::Chosen(
+                decode_pairs(&output)
+                    .into_iter()
+                    .map(|(id, trigger)| (id, Trigger::parse(&trigger)))
+                    .collect(),
+            ),
+            Some((Some(code), _)) if code == i32::from(CANCELLED) => Consented::Declined,
+            Some(_) if cancellation.is_cancelled() => Consented::Declined,
+            _ => Consented::Unavailable,
         }
     }
 }

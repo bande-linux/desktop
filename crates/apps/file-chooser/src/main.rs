@@ -1,6 +1,7 @@
 mod access;
 mod account;
 mod app_chooser;
+mod global_shortcuts;
 mod launcher;
 mod print;
 
@@ -32,8 +33,9 @@ use bande_xdg::{
     data_dirs, find_app, read_user_dirs, replace_file, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
-    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, PRINT, SET_WALLPAPER, SHARE_ACCOUNT,
-    encode, parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
+    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, GLOBAL_SHORTCUTS, PRINT, SET_WALLPAPER,
+    SHARE_ACCOUNT, encode, parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
+    parse_shortcuts,
 };
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
 
@@ -355,6 +357,15 @@ fn main() -> ExitCode {
     if mode == SHARE_ACCOUNT {
         return match parse_account(arguments) {
             Ok(details) => account::share(&details),
+            Err(error) => {
+                tracing::error!("{}", error.0);
+                ExitCode::from(UNAVAILABLE)
+            }
+        };
+    }
+    if mode == GLOBAL_SHORTCUTS {
+        return match parse_shortcuts(arguments) {
+            Ok(consent) => global_shortcuts::ask(&consent),
             Err(error) => {
                 tracing::error!("{}", error.0);
                 ExitCode::from(UNAVAILABLE)

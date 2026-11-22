@@ -644,16 +644,19 @@ impl Screenshots {
         }
     }
 
-    fn show_palette(&mut self, window: &mut Window) {
+    fn show_palette(&mut self, window: &mut Window, recording: bool) {
         if self.recorder.is_some() {
             self.stop_recording(window);
             return;
         }
-        if matches!(self.mode, Mode::Palette(_)) {
+        if matches!(self.mode, Mode::Palette(_)) && !recording {
             self.cancel(window);
             return;
         }
         self.cancel(window);
+        if recording {
+            self.palette_mode = PaletteMode::RecordScreen;
+        }
         let (width, height) = window.size();
         let mut layout = FreeLayout::new();
         let (mut palette, chosen) = Palette::new(self.palette_mode);
@@ -1230,7 +1233,9 @@ impl App for Screenshots {
                                 self.stop_recording(window);
                             }
                         }
-                        EngineEvent::ShowOptions => self.show_palette(window),
+                        EngineEvent::ShowOptions(recording) => {
+                            self.show_palette(window, recording);
+                        }
                     }
                 }
             }

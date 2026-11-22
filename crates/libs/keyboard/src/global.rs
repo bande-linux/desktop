@@ -11,7 +11,7 @@ pub struct Trigger {
 fn key_named(name: &str) -> Option<Key> {
     Some(match name {
         "Tab" => Key::Tab,
-        "space" => Key::Space,
+        "space" | "Space" => Key::Space,
         "Escape" => Key::Escape,
         "Print" => Key::Print,
         "Left" => Key::Left,
@@ -121,6 +121,32 @@ pub struct GlobalShortcut {
     pub id: String,
     pub description: String,
     pub trigger: Option<Trigger>,
+}
+
+/// Gives an app's shortcut the trigger, or takes its trigger away with `None`. Refuses a trigger
+/// an app may not have or another shortcut has.
+pub fn assign(
+    shortcuts: &mut [GlobalShortcut],
+    app_id: &str,
+    id: &str,
+    trigger: Option<Trigger>,
+) -> bool {
+    let is_it = |shortcut: &GlobalShortcut| shortcut.app_id == app_id && shortcut.id == id;
+    if let Some(trigger) = trigger
+        && (!trigger.assignable()
+            || shortcuts
+                .iter()
+                .any(|shortcut| shortcut.trigger == Some(trigger) && !is_it(shortcut)))
+    {
+        return false;
+    }
+    match shortcuts.iter_mut().find(|shortcut| is_it(shortcut)) {
+        Some(shortcut) => {
+            shortcut.trigger = trigger;
+            true
+        }
+        None => false,
+    }
 }
 
 fn clean(field: &str) -> String {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="8">
+  <interface name="bande_shell_v1" version="9">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -608,6 +608,16 @@
       </description>
       <arg name="keysym" type="uint"/>
       <arg name="modifiers" type="uint"/>
+    </request>
+
+    <request name="show_capture_options" since="9">
+      <description summary="open the screenshot and screen recording options">
+        Does what Print does: the screenshot tool shows its capture options,
+        or ends the screen recording it is making. With recording set, the
+        options open with recording the screen chosen, as Quick Settings'
+        Screen Recording asks.
+      </description>
+      <arg name="recording" type="uint" summary="1 to choose recording the screen"/>
     </request>
   </interface>
 

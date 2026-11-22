@@ -33,7 +33,7 @@ Paths are under `crates/`.
 | `apps/secrets-prompt/tests/prompt.rs` | Regression: the keyring prompt reads a request written after it started, and a window that fails to open is no answer. |
 | `shell/lock/tests/lock.rs` | Regression: the key that wakes a dark display is not typed into the password, and Select All then Backspace clears the field. |
 | `services/portal/tests/screenshot.rs` | A stored screenshot permission is trusted only from the xdg-desktop-portal frontend; any other caller makes the user be asked. |
-| `services/portal/src/global_shortcuts.rs` `an_app_gets_only_free_chords_that_hold_super_or_ctrl_alt` | Security boundary of the GlobalShortcuts portal: an app never gets a system shortcut, a plain Ctrl chord or another app's chord, and the bindings survive the file they are kept in. |
+| `services/portal/src/global_shortcuts.rs` `an_app_gets_only_free_chords_that_hold_super_or_ctrl_alt_and_only_once_asked` | Security boundary of the GlobalShortcuts portal: an app is asked about each shortcut once, and never gets a system shortcut, a plain Ctrl chord, another app's chord or a shortcut it did not ask for, even when the dialog answers with one; the bindings survive the file they are kept in. |
 | `services/notify/tests/center.rs` | A notification shows as a banner and moves to the center; the center is served only under its own bus name, not through `org.freedesktop.Notifications`. |
 | `services/automount/tests/automount.rs` | A drive plugged in while the session is locked is mounted only after unlocking. |
 | `libs/volumes/tests/eject.rs` | Regression (a VM died on eject): ejecting one volume of a removable USB ISO unmounts every volume of the drive and calls `Drive.Eject`, never `PowerOff`. |

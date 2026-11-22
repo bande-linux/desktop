@@ -19,6 +19,7 @@ bande-printers.workspace = true
 bande-search.workspace = true
 bande-files.workspace = true
 bande-fs.workspace = true
+bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-toolkit.workspace = true

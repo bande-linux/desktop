@@ -3,6 +3,7 @@ mod decode;
 mod facts;
 mod import;
 pub mod pdf;
+mod sandbox;
 mod text;
 
 use std::fs::{self, File};
@@ -15,11 +16,12 @@ use bande_fs::{Entry, can_extract, is_hidden};
 
 pub use confined::{WorkerFailure, decode_confined, run_worker, serve_worker};
 pub use decode::{
-    Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, decode_file,
-    open, read_file,
+    Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, open,
+    read_file,
 };
 pub use facts::{Facts, camera_facts};
 pub use import::Importer;
+pub use sandbox::only_compute_from_now_on;
 pub use text::{Block, Code, Tone, highlight, html, is_code, markdown, rtf};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;

@@ -148,8 +148,24 @@ fn limits() -> Limits {
 }
 
 pub fn decode(bytes: &[u8], kind: Kind) -> Result<Decoded, Failure> {
+    decode_with(bytes, kind, &svg_options(kind))
+}
+
+pub(crate) fn svg_options(kind: Kind) -> resvg::usvg::Options<'static> {
+    let mut options = resvg::usvg::Options::default();
+    if kind == Kind::Svg {
+        options.fontdb_mut().load_system_fonts();
+    }
+    options
+}
+
+pub(crate) fn decode_with(
+    bytes: &[u8],
+    kind: Kind,
+    svg: &resvg::usvg::Options<'_>,
+) -> Result<Decoded, Failure> {
     match kind {
-        Kind::Svg => decode_svg(bytes),
+        Kind::Svg => decode_svg(bytes, svg),
         Kind::Gif => decode_gif(bytes),
         Kind::Webp => decode_webp(bytes),
         Kind::Png => decode_still(bytes, ImageFormat::Png),
@@ -327,10 +343,8 @@ fn decode_webp(bytes: &[u8]) -> Result<Decoded, Failure> {
     Ok(still(image.into_rgba8(), camera_facts(exif)))
 }
 
-fn decode_svg(bytes: &[u8]) -> Result<Decoded, Failure> {
-    let mut options = resvg::usvg::Options::default();
-    options.fontdb_mut().load_system_fonts();
-    let tree = resvg::usvg::Tree::from_data(bytes, &options).map_err(|_| Failure::Damaged)?;
+fn decode_svg(bytes: &[u8], options: &resvg::usvg::Options<'_>) -> Result<Decoded, Failure> {
+    let tree = resvg::usvg::Tree::from_data(bytes, options).map_err(|_| Failure::Damaged)?;
     let size = tree.size();
     let longest = size.width().max(size.height());
     if !longest.is_finite() || longest <= 0.0 {
@@ -371,11 +385,4 @@ pub fn open(path: &Path) -> Result<(Kind, Vec<u8>), Failure> {
     let bytes = read_file(path)?;
     let kind = Kind::of(&bytes, path).ok_or(Failure::NotSupported)?;
     Ok((kind, bytes))
-}
-
-pub fn decode_file(path: &Path) -> Result<Decoded, Failure> {
-    let (kind, bytes) = open(path)?;
-    let mut decoded = decode(&bytes, kind)?;
-    decoded.facts.kind = Some(kind);
-    Ok(decoded)
 }

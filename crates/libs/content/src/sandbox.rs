@@ -67,6 +67,8 @@ fn program() -> Vec<libc::sock_filter> {
     filter
 }
 
+/// Allows this process only to compute, allocate, read and write open descriptors and exit from
+/// now on; any other system call fails. Returns whether the filter is in place.
 pub fn only_compute_from_now_on() -> bool {
     let filter = program();
     let Ok(len) = u16::try_from(filter.len()) else {

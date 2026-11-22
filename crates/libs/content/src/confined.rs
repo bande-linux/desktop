@@ -10,10 +10,10 @@ use std::time::{Duration, Instant};
 use bande_xdg::wait_for_exit;
 use serde::{Deserialize, Serialize};
 
-use crate::decode::{Decoded, Failure, Frame, Kind, Level, Pixels, decode_file};
+use crate::decode::{Decoded, Failure, Frame, Kind, Level, Pixels, decode_with, open, svg_options};
 use crate::facts::Facts;
 use crate::pdf::protocol;
-use crate::{confine, worker_program};
+use crate::{confine, only_compute_from_now_on, worker_program};
 
 const PICTURE_FLAG: &str = "--picture-worker";
 const PICTURE_TIME: Duration = Duration::from_secs(20);
@@ -124,8 +124,20 @@ pub fn serve_worker(arguments: &[String]) -> Option<ExitCode> {
     }
 }
 
+fn decode_alone(path: &Path) -> Result<Decoded, Failure> {
+    let (kind, bytes) = open(path)?;
+    let svg = svg_options(kind);
+    if !only_compute_from_now_on() {
+        tracing::warn!("cannot confine a picture reader");
+        return Err(Failure::Unreadable);
+    }
+    let mut decoded = decode_with(&bytes, kind, &svg)?;
+    decoded.facts.kind = Some(kind);
+    Ok(decoded)
+}
+
 fn serve_picture(path: &Path, longest: u32) -> ExitCode {
-    let (reply, payload) = match decode_file(path) {
+    let (reply, payload) = match decode_alone(path) {
         Ok(Decoded {
             width,
             height,

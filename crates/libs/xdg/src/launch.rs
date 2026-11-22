@@ -582,7 +582,7 @@ impl<C: Fn() -> zbus::Result<Connection>> Watcher<C> {
     fn take(&mut self, watch: Watch) {
         let (child, app) = match watch {
             Watch::NotOpened(app_id) => {
-                return tell(self.bus(), &app_id, Failure::NotOpened, None);
+                return tell(self.bus(), &app_id, Failure::NotOpened, true, None);
             }
             Watch::Child(child, app) => (child, app),
         };
@@ -620,11 +620,16 @@ impl<C: Fn() -> zbus::Result<Connection>> Watcher<C> {
                     continue;
                 }
             };
-            if let Some(app) = app
-                && let Some(failure) = failure(status, app.started.elapsed())
-            {
-                tracing::warn!("{} ended with {status}", app.app_id);
-                tell(self.bus(), &app.app_id, failure, app.program.as_deref());
+            let Some(app) = app else {
+                continue;
+            };
+            let ran = app.started.elapsed();
+            if let Some(failure) = failure(status, ran) {
+                if failure != Failure::Quit {
+                    tracing::warn!("{} ended with {status}", app.app_id);
+                }
+                let program = app.program.as_deref();
+                tell(self.bus(), &app.app_id, failure, ran < OPENING, program);
             }
         }
     }
@@ -633,6 +638,7 @@ impl<C: Fn() -> zbus::Result<Connection>> Watcher<C> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Failure {
     NotOpened,
+    Quit,
     Crashed,
     OutOfMemory,
 }
@@ -669,7 +675,10 @@ fn failure(status: ExitStatus, ran: Duration) -> Option<Failure> {
             .any(|crash| crash.as_raw() == signal)
             .then_some(Failure::Crashed);
     }
-    (!status.success() && ran < OPENING).then_some(Failure::NotOpened)
+    (ran < OPENING).then_some(match status.success() {
+        true => Failure::Quit,
+        false => Failure::NotOpened,
+    })
 }
 
 fn place_in_scope(bus: &Connection, app_id: &str, pid: u32) -> zbus::Result<()> {
@@ -745,7 +754,13 @@ fn follow_crash_notice(
     }
 }
 
-fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure, program: Option<&str>) {
+fn tell(
+    bus: zbus::Result<Connection>,
+    app_id: &str,
+    failure: Failure,
+    opening: bool,
+    program: Option<&str>,
+) {
     let entries = applications(
         &data_dirs(),
         Locale::from_env().as_ref(),
@@ -753,17 +768,15 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure, program: 
     );
     let entry = find_app(&entries, app_id);
     let app = app_name(&entries, app_id);
+    let needs_x11 = opening
+        && failure != Failure::OutOfMemory
+        && entry.is_some_and(|entry| bande_packages::x11::installed_needs_x11(&entry.path));
     let (summary, body) = match failure {
-        Failure::NotOpened
-            if entry.is_some_and(|entry| bande_packages::x11::installed_needs_x11(&entry.path)) =>
-        {
-            (
-                tr!("{app} could not be opened", app = app),
-                tr!(
-                    "It needs X11, which Bande doesn’t run. Look for a version that supports Wayland."
-                ),
-            )
-        }
+        _ if needs_x11 => (
+            tr!("{app} could not be opened", app = app),
+            tr!("It needs X11, which Bande doesn’t run. Look for a version that supports Wayland."),
+        ),
+        Failure::Quit => return,
         Failure::NotOpened => (
             tr!("{app} could not be opened", app = app),
             tr!("It quit while opening. Try again, or reinstall it if this keeps happening."),
@@ -781,7 +794,7 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure, program: 
     };
     let reopen = tr!("Reopen");
     let show_report = tr!("Show Report");
-    let program = program.filter(|_| failure == Failure::Crashed);
+    let program = program.filter(|_| failure == Failure::Crashed && !needs_x11);
     let crash_actions = [
         (REOPEN_ACTION, reopen.as_str()),
         (SHOW_REPORT_ACTION, show_report.as_str()),
@@ -888,7 +901,7 @@ fn watch_oom_kills(bus: &Connection) -> zbus::Result<()> {
             .or(ids.last().map(String::as_str));
         bande_log::fault::report_oom(&unit, app_id);
         match app_id {
-            Some(app_id) => tell(Ok(bus.clone()), app_id, Failure::OutOfMemory, None),
+            Some(app_id) => tell(Ok(bus.clone()), app_id, Failure::OutOfMemory, false, None),
             None => tell_task_stopped(bus, &unit),
         }
     }

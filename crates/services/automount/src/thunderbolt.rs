@@ -13,6 +13,9 @@ use zbus::{MatchRule, message};
 
 const BOLT: &str = "org.freedesktop.bolt";
 const UNAUTHORIZED: &str = "connected";
+const AUTHORIZED: &str = "authorized";
+const ASKING_LEVELS: [&str; 2] = ["user", "secure"];
+const AUTO: &str = "auto";
 const ALLOW: &str = "allow";
 const ALWAYS_ALLOW: &str = "always-allow";
 
@@ -23,6 +26,9 @@ const ALWAYS_ALLOW: &str = "always-allow";
 )]
 trait Manager {
     fn list_devices(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+
+    #[zbus(property)]
+    fn security_level(&self) -> zbus::Result<String>;
 
     #[zbus(allow_interactive_auth)]
     fn enroll_device(&self, uid: &str, policy: &str, flags: &str) -> zbus::Result<OwnedObjectPath>;
@@ -44,6 +50,24 @@ trait Device {
 
     #[zbus(property)]
     fn status(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
+    fn parent(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
+    fn stored(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn policy(&self) -> zbus::Result<String>;
+}
+
+struct Seen {
+    path: OwnedObjectPath,
+    uid: String,
+    name: String,
+    status: String,
+    parent: String,
+    automatic: bool,
 }
 
 #[derive(Default)]
@@ -87,7 +111,8 @@ impl Thunderbolt {
                 for signal in signals.flatten() {
                     let header = signal.header();
                     let changed = header.member().is_some_and(|member| {
-                        member.as_str() == "DeviceAdded" || member.as_str() == "PropertiesChanged"
+                        ["DeviceAdded", "DeviceRemoved", "PropertiesChanged"]
+                            .contains(&member.as_str())
                     });
                     if changed {
                         checker.check();
@@ -114,38 +139,79 @@ impl Thunderbolt {
         }
     }
 
-    fn check(&self) {
-        if !self.state().unlocked {
-            return;
+    fn devices(&self) -> zbus::Result<Vec<Seen>> {
+        if !DBusProxy::new(&self.system)?.name_has_owner(BOLT.try_into()?)? {
+            return Ok(Vec::new());
         }
-        let waiting = ManagerProxyBlocking::new(&self.system).and_then(|manager| {
-            let mut waiting = Vec::new();
-            if !DBusProxy::new(&self.system)?.name_has_owner(BOLT.try_into()?)? {
-                return Ok(waiting);
-            }
-            for path in manager.list_devices()? {
+        let manager = ManagerProxyBlocking::builder(&self.system)
+            .cache_properties(CacheProperties::No)
+            .build()?;
+        if !ASKING_LEVELS.contains(&manager.security_level()?.as_str()) {
+            return Ok(Vec::new());
+        }
+        manager
+            .list_devices()?
+            .into_iter()
+            .map(|path| {
                 let device = DeviceProxyBlocking::builder(&self.system)
                     .path(path.clone())?
                     .cache_properties(CacheProperties::No)
                     .build()?;
-                if device.status()? == UNAUTHORIZED {
-                    waiting.push((path, device.name()?));
-                }
+                Ok(Seen {
+                    uid: device.uid()?,
+                    name: device.name()?,
+                    status: device.status()?,
+                    parent: device.parent()?,
+                    automatic: device.stored()? && device.policy()? == AUTO,
+                    path,
+                })
+            })
+            .collect()
+    }
+
+    fn check(&self) {
+        if !self.state().unlocked {
+            return;
+        }
+        let devices = match self.devices() {
+            Ok(devices) => devices,
+            Err(error) => {
+                tracing::warn!("cannot read the Thunderbolt devices: {error}");
+                return;
             }
-            Ok(waiting)
-        });
-        match waiting {
-            Ok(waiting) => {
-                for (path, name) in waiting {
-                    self.ask(path, &name);
-                }
+        };
+        let parent_allowed = |device: &Seen| {
+            devices
+                .iter()
+                .find(|parent| parent.uid == device.parent)
+                .is_none_or(|parent| parent.status.starts_with(AUTHORIZED))
+        };
+        let waiting: Vec<&Seen> = devices
+            .iter()
+            .filter(|device| {
+                device.status == UNAUTHORIZED && !device.automatic && parent_allowed(device)
+            })
+            .collect();
+        let stale: Vec<u32> = self
+            .state()
+            .shown
+            .iter()
+            .filter(|(path, _)| !waiting.iter().any(|device| &device.path == *path))
+            .map(|(_, id)| *id)
+            .filter(|id| *id != 0)
+            .collect();
+        for id in stale {
+            if let Err(error) = client::close(&self.session, id) {
+                tracing::debug!("cannot withdraw the Thunderbolt question: {error}");
             }
-            Err(error) => tracing::warn!("cannot read the Thunderbolt devices: {error}"),
+        }
+        for device in waiting {
+            self.ask(device.path.clone(), &device.name);
         }
     }
 
     fn ask(&self, path: OwnedObjectPath, name: &str) {
-        if self.state().shown.contains_key(&path) {
+        if self.state().shown.insert(path.clone(), 0).is_some() {
             return;
         }
         let allow = tr!("Allow Once");
@@ -170,11 +236,13 @@ impl Thunderbolt {
             Ok(id) => id,
             Err(error) => {
                 tracing::warn!("cannot ask to allow {name}: {error}");
+                self.state().shown.remove(&path);
                 return;
             }
         };
         self.state().shown.insert(path.clone(), id);
         let answer = self.clone();
+        let name = name.to_owned();
         let spawned = thread::Builder::new()
             .name("thunderbolt-answer".to_owned())
             .spawn(move || {
@@ -194,11 +262,32 @@ impl Thunderbolt {
                     && let Err(error) = answer.allow(&path, &key)
                 {
                     tracing::warn!("cannot allow the Thunderbolt device: {error}");
+                    answer.not_allowed(&name);
                 }
                 answer.state().shown.remove(&path);
             });
         if let Err(error) = spawned {
             tracing::warn!("the Thunderbolt question cannot be answered: {error}");
+        }
+    }
+
+    fn not_allowed(&self, name: &str) {
+        let posted = client::notify(
+            &self.session,
+            &Request {
+                app_name: &tr!("Thunderbolt"),
+                replaces_id: 0,
+                app_icon: "computer-symbolic",
+                summary: &tr!("“{name}” wasn’t allowed", name = name),
+                body: &tr!("Disconnect it and connect it again to try again."),
+                actions: &[],
+                urgency: Urgency::Normal,
+                sound: None,
+                desktop_entry: None,
+            },
+        );
+        if let Err(error) = posted {
+            tracing::warn!("cannot tell that {name} wasn’t allowed: {error}");
         }
     }
 

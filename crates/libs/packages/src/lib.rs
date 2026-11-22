@@ -403,6 +403,13 @@ impl Client {
         }
     }
 
+    /// The same client, with the backend's messages left untranslated so that they can be parsed.
+    pub fn untranslated(&self) -> Self {
+        let mut client = self.clone();
+        client.hints.push("locale=C.UTF-8".to_owned());
+        client
+    }
+
     pub fn canceller(&self) -> Canceller {
         self.canceller.clone()
     }

@@ -74,6 +74,12 @@ msgid_plural "Also installs {count} packages · {size} to download"
 msgstr[0] "Installerar även 1 paket · {size} att hämta"
 msgstr[1] "Installerar även {count} paket · {size} att hämta"
 
+msgid "You skipped updating the list of available packages, so downloading the packages it needs may fail."
+msgstr "Du hoppade över att uppdatera listan över tillgängliga paket, så det kan misslyckas att hämta paketen som behövs."
+
+msgid "The list of available packages couldn’t be updated, so downloading the packages it needs may fail."
+msgstr "Listan över tillgängliga paket kunde inte uppdateras, så det kan misslyckas att hämta paketen som behövs."
+
 msgid "Removes 1 package: {names}"
 msgid_plural "Removes {count} packages: {names}"
 msgstr[0] "Tar bort 1 paket: {names}"
@@ -164,6 +170,9 @@ msgstr[1] "Det går inte att installera: det krockar med paket på den här dato
 
 msgid "Remove the conflicting software first, or look for a version of “{name}” that works with it."
 msgstr "Ta bort programvaran som krockar först, eller leta efter en version av ”{name}” som fungerar med den."
+
+msgid "Can’t install: it needs packages that can’t be installed on this computer."
+msgstr "Det går inte att installera: det behöver paket som inte kan installeras på den här datorn."
 
 msgid "Can’t install: this package was made for another release of Debian or Ubuntu."
 msgstr "Det går inte att installera: paketet är gjort för en annan version av Debian eller Ubuntu."

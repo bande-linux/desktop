@@ -411,6 +411,16 @@ impl Installer {
             };
             widgets.push(disclosure(&title, &preview.also.join("\n")));
         }
+        if let Some(unrefreshed) = preview.unrefreshed {
+            widgets.push(boxed(Label::new(&match unrefreshed {
+                Unrefreshed::Skipped => tr!(
+                    "You skipped updating the list of available packages, so downloading the packages it needs may fail."
+                ),
+                _ => tr!(
+                    "The list of available packages couldn’t be updated, so downloading the packages it needs may fail."
+                ),
+            })));
+        }
         if !preview.removes.is_empty() {
             widgets.push(boxed(Label::new(&trn!(
                 "Removes 1 package: {names}",
@@ -578,18 +588,20 @@ impl Installer {
                         "Remove the conflicting software first, or look for a version of “{name}” that works with it.",
                         name = name
                     ))));
+                } else if missing.is_empty() {
+                    widgets.push(boxed(Label::new(&tr!(
+                        "Can’t install: it needs packages that can’t be installed on this computer."
+                    ))));
                 } else {
                     widgets.push(boxed(Label::new(&tr!(
                         "Can’t install: this package was made for another release of Debian or Ubuntu."
                     ))));
-                    if !missing.is_empty() {
-                        widgets.push(boxed(Label::new(&trn!(
-                            "This computer doesn’t have the package it needs: {names}",
-                            "This computer doesn’t have the packages it needs: {names}",
-                            count = missing.len(),
-                            names = missing.join(", ")
-                        ))));
-                    }
+                    widgets.push(boxed(Label::new(&trn!(
+                        "This computer doesn’t have the package it needs: {names}",
+                        "This computer doesn’t have the packages it needs: {names}",
+                        count = missing.len(),
+                        names = missing.join(", ")
+                    ))));
                     widgets.push(boxed(Label::new(&tr!(
                         "Look for a download made for this system, or ask its developer for one."
                     ))));
@@ -611,7 +623,13 @@ impl Installer {
                 if let Some(sentence) = &unrefreshed {
                     widgets.push(boxed(Label::new(sentence)));
                 }
-                widgets.push(disclosure(&tr!("Details"), details));
+                let unexplained = missing.is_empty() && conflicts.is_empty();
+                widgets.push(boxed(Disclosure::new(
+                    &tr!("Details"),
+                    unexplained,
+                    Label::new(details),
+                    |_| {},
+                )));
                 let mut buttons = vec![close()];
                 if unrefreshed.is_some() {
                     buttons.push(boxed(

@@ -125,7 +125,7 @@ pub fn compare(version: &str, other: &str) -> Ordering {
     }
 }
 
-const REQUIRES: [&str; 2] = ["Pre-Depends:", "Depends:"];
+const REQUIRES: [&str; 2] = ["PreDepends:", "Depends:"];
 const CONFLICTS: [&str; 2] = ["Breaks:", "Conflicts:"];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -164,7 +164,7 @@ pub fn blockers(details: &str, own: &str) -> Blockers {
             continue;
         }
         let named = package_name(relation);
-        let theirs = subject != own;
+        let theirs = package_name(&subject) != own;
         let (list, entry) = match conflict {
             true if theirs && !reason.trim_end().ends_with(" is installed") => {
                 (&mut blockers.conflicts, subject.clone())

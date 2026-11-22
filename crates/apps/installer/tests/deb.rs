@@ -192,25 +192,38 @@ fn a_refused_password_says_so_instead_of_returning_silently_to_install() {
 
 #[test]
 fn apt_unmet_dependencies_name_what_is_missing_and_which_installed_package_is_in_the_way() {
-    let own = "The following packages have unmet dependencies:\n \
-        tool : Depends: libfoo (>= 2) but it is not installable\n        \
-        Depends: libbar but it is not going to be installed\n        \
-        Breaks: oldtool (< 3) but 2.1 is installed\n";
+    let own = "\
+The following packages have unmet dependencies:
+ tool : PreDepends: libnothere (>= 2) but it is not installable
+        Depends: libalso-missing but it is not installable
+        Depends: libbar but it is not going to be installed
+        Breaks: coreutils (< 99) but 9.12-0.3 is to be installed
+E: Unable to satisfy dependencies. Reached two conflicting assignments:
+   1. tool:amd64=1.0 is selected for install
+   2. tool:amd64 is not selected for install because:
+      1. coreutils:amd64 is selected for install
+      3. tool:amd64 Breaks coreutils (< 99)
+";
     assert_eq!(
         blockers(own, "tool"),
         Blockers {
-            missing: vec!["libfoo (>= 2)".to_owned()],
-            conflicts: vec!["oldtool".to_owned()],
+            missing: vec!["libnothere (>= 2)".to_owned(), "libalso-missing".to_owned()],
+            conflicts: vec!["coreutils".to_owned()],
         }
     );
     let theirs = "The following packages have unmet dependencies:\n \
         plugin : Depends: tool (= 1.0) but 2.0 is to be installed\n \
-        helper : Breaks: tool (< 3) but 2.0 is to be installed\n";
+        helper : Breaks: tool (< 3) but 2.0 is to be installed\n \
+        tool:i386 : Breaks: oldtool (< 2) but 1.5 is to be installed\n";
     assert_eq!(
         blockers(theirs, "tool"),
         Blockers {
             missing: Vec::new(),
-            conflicts: vec!["plugin".to_owned(), "helper".to_owned()],
+            conflicts: vec![
+                "plugin".to_owned(),
+                "helper".to_owned(),
+                "oldtool".to_owned()
+            ],
         }
     );
 }

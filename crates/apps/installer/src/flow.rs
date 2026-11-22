@@ -29,6 +29,7 @@ pub struct Preview {
     pub also: Vec<String>,
     pub download: u64,
     pub removes: Vec<String>,
+    pub unrefreshed: Option<Unrefreshed>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,7 +205,10 @@ fn preview(client: &Client, path: &Path, deb: &Deb, refreshing: &dyn Fn(Progress
 }
 
 fn simulate(client: &Client, path: &Path, deb: &Deb, action: &Action) -> State {
-    match client.install_files(path, Mode::Simulate, &|_| {}) {
+    match client
+        .untranslated()
+        .install_files(path, Mode::Simulate, &|_| {})
+    {
         Ok(applied) => State::Ready(Preview {
             signed: match action {
                 Action::Downgrade(_) => None,
@@ -214,6 +218,7 @@ fn simulate(client: &Client, path: &Path, deb: &Deb, action: &Action) -> State {
             also: others(&applied, &deb.name, &INSTALLING),
             download: download_size(client, &applied, &deb.name),
             removes: others(&applied, &deb.name, &[Info::Removing, Info::Obsoleting]),
+            unrefreshed: None,
         }),
         Err(Error::Failed(failure)) if failure.code == ErrorCode::Dependencies => {
             let Blockers { missing, conflicts } = deb::blockers(&failure.details, &deb.name);
@@ -229,15 +234,6 @@ fn simulate(client: &Client, path: &Path, deb: &Deb, action: &Action) -> State {
 }
 
 fn not_refreshed(simulated: State, error: &Error) -> State {
-    let State::Blocked {
-        missing,
-        conflicts,
-        details,
-        ..
-    } = simulated
-    else {
-        return simulated;
-    };
     let (code, reason) = match error {
         Error::Failed(failure) => (Some(failure.code), failure.details.clone()),
         other => (None, other.to_string()),
@@ -248,15 +244,26 @@ fn not_refreshed(simulated: State, error: &Error) -> State {
         Some(ErrorCode::NotAuthorized) => Unrefreshed::NotAllowed,
         _ => Unrefreshed::Failed,
     };
-    let details = match unrefreshed {
-        Unrefreshed::Skipped => details,
-        _ => format!("{details}\n\n{reason}"),
-    };
-    State::Blocked {
-        missing,
-        conflicts,
-        details,
-        unrefreshed: Some(unrefreshed),
+    match simulated {
+        State::Ready(preview) => State::Ready(Preview {
+            unrefreshed: Some(unrefreshed),
+            ..preview
+        }),
+        State::Blocked {
+            missing,
+            conflicts,
+            details,
+            ..
+        } => State::Blocked {
+            missing,
+            conflicts,
+            details: match unrefreshed {
+                Unrefreshed::Skipped => details,
+                _ => format!("{details}\n\n{reason}"),
+            },
+            unrefreshed: Some(unrefreshed),
+        },
+        other => other,
     }
 }
 

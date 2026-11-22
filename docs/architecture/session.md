@@ -102,6 +102,8 @@ graph LR
   saver), the display turns off once `LockedHint` is set, at most 5 s later, so the lock is
   presented and sleep need not wait for it. A wake nobody unlocks (a wake alarm, a charger, a spurious wake)
   sleeps again after 2 minutes without input when idle sleep is on. Dimming lowers each display with real brightness control to a quarter of its level.
+  On battery it switches to the `power-saver` mode when UPower warns the battery is `Low` (or
+  always, with "Use Power Saver on battery") and back to the previous mode on power.
   Battery alerts follow UPower's `WarningLevel`: a "Low Battery" notification at `Low`, replaced
   by one that stays at `Critical` or `Action`. The compositor follows `Lock` on the session's own
   logind path (from `GetSession("auto")`; logind never signals on `session/auto`).

@@ -34,6 +34,12 @@ pub fn state_home() -> Option<PathBuf> {
     base_dir("XDG_STATE_HOME", ".local/state")
 }
 
+pub fn runtime_dir() -> Option<PathBuf> {
+    env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+}
+
 pub fn config_dirs() -> Vec<PathBuf> {
     let system = env::var_os("XDG_CONFIG_DIRS")
         .filter(|value| !value.is_empty())

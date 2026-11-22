@@ -1,0 +1,116 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Can’t reach {computer}: {reason}"
+msgstr "Det går inte att nå {computer}: {reason}"
+
+msgid "Screen Sharing password for {computer}"
+msgstr "Lösenord för skärmdelning på {computer}"
+
+msgid "The password wasn’t accepted."
+msgstr "Lösenordet godtogs inte."
+
+msgid "{computer} shares its screen in a way this viewer doesn’t support."
+msgstr "{computer} delar sin skärm på ett sätt som den här visaren inte stöder."
+
+msgid "The connection to {computer} ended: {reason}"
+msgstr "Anslutningen till {computer} bröts: {reason}"
+
+msgid "Screen Sharing"
+msgstr "Skärmdelning"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "New Connection"
+msgstr "Ny anslutning"
+
+msgid "Disconnect"
+msgstr "Koppla från"
+
+msgid "View"
+msgstr "Visa"
+
+msgid "Scale to Window"
+msgstr "Anpassa till fönstret"
+
+msgid "Actual Size"
+msgstr "Verklig storlek"
+
+msgid "{computer} (not encrypted)"
+msgstr "{computer} (okrypterad)"
+
+msgid "Connect to a Screen"
+msgstr "Anslut till en skärm"
+
+msgid "Address, such as vnc://computer.local"
+msgstr "Adress, till exempel vnc://dator.local"
+
+msgid "Connect"
+msgstr "Anslut"
+
+msgid "Nearby"
+msgstr "I närheten"
+
+msgid "Finding computers nearby needs Avahi, which isn’t installed."
+msgstr "Avahi behövs för att hitta datorer i närheten, och det är inte installerat."
+
+msgid "No computer nearby shares its screen."
+msgstr "Ingen dator i närheten delar sin skärm."
+
+msgid "Cancel"
+msgstr "Avbryt"
+
+msgid "Is this {computer}?"
+msgstr "Är det här {computer}?"
+
+msgid "This is the first connection to {computer}. Check that its certificate fingerprint, shown in Settings ▸ Sharing on that computer, is the same:"
+msgstr "Det här är första anslutningen till {computer}. Kontrollera att certifikatets fingeravtryck, som visas i Inställningar ▸ Delning på den datorn, är detsamma:"
+
+msgid "Trust and Connect"
+msgstr "Lita på och anslut"
+
+msgid "{computer} has a different certificate"
+msgstr "{computer} har ett annat certifikat"
+
+msgid "The certificate isn’t the one {computer} had before. It may have been set up again, or another computer may be pretending to be it. Connect only if you know why it changed. Its fingerprint now:"
+msgstr "Certifikatet är inte det som {computer} hade tidigare. Datorn kan ha installerats om, eller så utger sig en annan dator för att vara den. Anslut bara om du vet varför det ändrades. Fingeravtrycket nu:"
+
+msgid "Trust the New Certificate"
+msgstr "Lita på det nya certifikatet"
+
+msgid "This connection isn’t encrypted"
+msgstr "Den här anslutningen är inte krypterad"
+
+msgid "{computer} offers no encryption. Others on the network could see its screen, what you type and its password. Connect only on a network you trust."
+msgstr "{computer} erbjuder ingen kryptering. Andra på nätverket kan se dess skärm, det du skriver och lösenordet. Anslut bara på ett nätverk du litar på."
+
+msgid "Connect Without Encryption"
+msgstr "Anslut utan kryptering"
+
+msgid "Sign in to {computer}"
+msgstr "Logga in på {computer}"
+
+msgid "Name"
+msgstr "Namn"
+
+msgid "Password"
+msgstr "Lösenord"
+
+msgid "Waiting for the screen…"
+msgstr "Väntar på skärmen…"
+
+msgid "Screen of {computer}"
+msgstr "Skärmen på {computer}"
+
+msgid "Connecting to {computer}…"
+msgstr "Ansluter till {computer}…"
+
+msgid "“{address}” isn’t an address of a computer."
+msgstr "”{address}” är inte adressen till en dator."

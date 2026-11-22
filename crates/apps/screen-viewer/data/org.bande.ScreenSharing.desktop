@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Screen Sharing
+Name[sv]=Skärmdelning
+Comment=See and control the screens of other computers
+Comment[sv]=Se och styr skärmen på andra datorer
+Icon=org.bande.ScreenSharing
+Exec=bande-screen-viewer %U
+StartupNotify=true
+Categories=Network;RemoteAccess;
+Keywords=VNC;RFB;remote desktop;screen;
+Keywords[sv]=VNC;RFB;fjärrskrivbord;skärm;
+MimeType=x-scheme-handler/vnc;

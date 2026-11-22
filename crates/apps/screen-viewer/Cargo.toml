@@ -1,0 +1,25 @@
+[package]
+name = "bande-screen-viewer"
+description = "Bande Screen Sharing viewer: sees and controls the screens of other computers over VNC"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+bande-discovery.workspace = true
+bande-keyring.workspace = true
+bande-rfb.workspace = true
+bande-xdg.workspace = true
+tracing.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+
+[lints]
+workspace = true

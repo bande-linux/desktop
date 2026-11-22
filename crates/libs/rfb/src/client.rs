@@ -322,7 +322,7 @@ fn send(transport: &mut Transport, message: &[u8]) -> io::Result<()> {
 }
 
 /// Shows the server's screen and sends what `commands` holds, waking when `wake` is readable,
-/// until the server or the commands' sender goes away.
+/// until the server goes away, the commands' sender does or `wake` is shut.
 pub fn view(
     session: Session,
     commands: &Receiver<Command>,
@@ -366,8 +366,10 @@ pub fn view(
             let readable = !fds[0].revents().is_empty();
             if !fds[1].revents().is_empty() {
                 let mut drained = [0; 64];
-                if let Err(error) = rustix::io::read(wake.as_fd(), &mut drained) {
-                    tracing::debug!("cannot clear the viewer's waker: {error}");
+                match rustix::io::read(wake.as_fd(), &mut drained) {
+                    Ok(0) => return Ok(()),
+                    Ok(_) => {}
+                    Err(error) => tracing::debug!("cannot clear the viewer's waker: {error}"),
                 }
                 loop {
                     let message = match commands.try_recv() {

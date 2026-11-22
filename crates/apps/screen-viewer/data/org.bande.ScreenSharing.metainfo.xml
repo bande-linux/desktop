@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.ScreenSharing</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Screen Sharing</name>
+  <name xml:lang="sv">Skärmdelning</name>
+  <summary>See and control the screens of other computers</summary>
+  <summary xml:lang="sv">Se och styr skärmen på andra datorer</summary>
+  <description>
+    <p>Connects to computers that share their screen over VNC (RFB), found nearby or typed as a vnc:// address. Connections are encrypted with TLS when the other computer offers it; its certificate is remembered the first time and a change is pointed out. Keys and the pointer go to the other computer after a click, Ctrl+Alt gives them back, and copied text crosses in both directions.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.ScreenSharing.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+  <content_rating type="oars-1.1"/>
+</component>

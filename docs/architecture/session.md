@@ -470,11 +470,12 @@ brings up the dialog.
   while locked are mounted on unlock. A drive removed while mounted posts "Disk Not Ejected
   Properly". An encrypted volume asks for its passphrase in the `bande-secrets-prompt` dialog
   (again after a wrong one) and is mounted once unlocked; the dialog closes when the volume is
-  unlocked elsewhere or removed, and cancelling it leaves a notification to unlock it later.
+  unlocked elsewhere or removed, and cancelling it leaves a notification to unlock it later,
+  withdrawn when the volume goes or is unlocked elsewhere.
   Without the prompt, a notification points to Disks. A volume that fails to mount posts why,
   offering a read-only mount for NTFS that the driver refused (blaming an unclean shutdown only
   when the error says so). A phone or camera whose FUSE tool (`go-mtpfs`, `gphotofs`) is missing
-  names the package. A Thunderbolt or USB4 device that `boltd` holds back (not one stored with
+  names the package and offers to install it through PackageKit, then opens the device. A Thunderbolt or USB4 device that `boltd` holds back (not one stored with
   the `auto` or `iommu` policy) asks, while the session is unlocked, to be allowed once
   (`Authorize`) or always (`EnrollDevice` with the `auto` policy); a dismissed password dialog
   asks again. `bande-volumes` holds the one UDisks2 client that

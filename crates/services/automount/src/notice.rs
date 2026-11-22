@@ -3,7 +3,7 @@ use std::thread;
 
 use bande_l10n::tr;
 use bande_notify::Urgency;
-use bande_notify::client::{self, Request, Signal};
+use bande_notify::client::{self, Listener, Request, Signal};
 use bande_volumes::udisks::{BLOCK, FILESYSTEM, Objects, UDISKS};
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedObjectPath, Value};
@@ -19,13 +19,16 @@ const FAILED: &str = "org.freedesktop.UDisks2.Error.Failed";
 const NOT_SHUT_DOWN: [&str; 4] = ["dirty", "hibernat", "unclean", "unsafe state"];
 const REFUSED: [&str; 2] = ["wrong fs type", "bad superblock"];
 
-fn post(
+pub fn post(
     session: &Connection,
     summary: &str,
     body: &str,
     action: (&'static str, String),
     on_action: impl FnOnce() + Send + 'static,
-) {
+) -> Option<u32> {
+    let listener = Listener::new(session)
+        .inspect_err(|error| tracing::warn!("the disk notification cannot be clicked: {error}"))
+        .ok();
     let actions = [(action.0, action.1.as_str())];
     let posted = client::notify(
         session,
@@ -35,7 +38,7 @@ fn post(
             app_icon: ICON,
             summary,
             body,
-            actions: &actions,
+            actions: listener.as_ref().map_or(&[][..], |_| &actions[..]),
             urgency: Urgency::Normal,
             sound: None,
             desktop_entry: None,
@@ -45,16 +48,16 @@ fn post(
         Ok(id) => id,
         Err(error) => {
             tracing::warn!("cannot post the notification: {error}");
-            return;
+            return None;
         }
     };
-    let session = session.clone();
+    let listener = listener?;
     let key = action.0;
     let spawned = thread::Builder::new()
         .name("disk-notice".to_owned())
         .spawn(move || {
             let mut on_action = Some(on_action);
-            let followed = client::listen(&session, |signal| match signal {
+            listener.listen(|signal| match signal {
                 Signal::ActionInvoked(shown, chosen) if shown == id && chosen == key => {
                     if let Some(act) = on_action.take() {
                         act();
@@ -64,13 +67,11 @@ fn post(
                 Signal::Closed(shown) => shown != id,
                 _ => true,
             });
-            if let Err(error) = followed {
-                tracing::warn!("the disk notification cannot be clicked: {error}");
-            }
         });
     if let Err(error) = spawned {
         tracing::warn!("the disk notification cannot be clicked: {error}");
     }
+    Some(id)
 }
 
 fn open_disks() {
@@ -93,14 +94,18 @@ pub fn not_unlocked(session: &Connection, label: &str) {
     );
 }
 
-pub fn still_locked(session: &Connection, label: &str, unlock: impl FnOnce() + Send + 'static) {
+pub fn still_locked(
+    session: &Connection,
+    label: &str,
+    unlock: impl FnOnce() + Send + 'static,
+) -> Option<u32> {
     post(
         session,
         &tr!("“{label}” is locked", label = label),
         &tr!("Unlock it to open the files on it."),
         (UNLOCK, tr!("Unlock…")),
         unlock,
-    );
+    )
 }
 
 fn mount_with(system: &Connection, path: &OwnedObjectPath, options: &str) -> zbus::Result<()> {

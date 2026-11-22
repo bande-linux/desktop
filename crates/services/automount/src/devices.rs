@@ -10,8 +10,14 @@ use bande_volumes::user_mounts_root;
 use rustix::event::{PollFd, PollFlags, poll};
 use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
-use crate::mounts::{Mounts, Started};
+use bande_l10n::tr;
+use bande_packages::{Client, ErrorCode};
+use zbus::blocking::Connection;
 
+use crate::mounts::{Mounts, Started};
+use crate::notice;
+
+const INSTALL: &str = "install";
 const GO_MTPFS: &str = "/usr/bin/go-mtpfs";
 const GPHOTOFS: &str = "/usr/bin/gphotofs";
 const STILL_IMAGE_INTERFACE: &str = ":060101:";
@@ -240,7 +246,19 @@ impl Devices {
 
     fn mount_with_retries(&self, device: Attached) {
         if let Some(package) = missing_tool(device.kind) {
-            self.mounts.notify_tool_missing(&device.name, package);
+            let devices = self.clone();
+            let body = tr!(
+                "Opening “{name}” needs the {package} package, which isn’t installed.",
+                name = device.name.as_str(),
+                package = package
+            );
+            notice::post(
+                self.mounts.session(),
+                &tr!("Device Can’t Be Opened"),
+                &body,
+                (INSTALL, tr!("Install {package}", package = package)),
+                move || devices.install_tool(package, device),
+            );
             return;
         }
         let devices = self.clone();
@@ -263,6 +281,34 @@ impl Devices {
             });
         if let Err(error) = spawned {
             tracing::warn!("cannot mount a device: {error}");
+        }
+    }
+
+    fn install_tool(&self, package: &str, device: Attached) {
+        let installed = Connection::system()
+            .map_err(bande_packages::Error::from)
+            .and_then(|system| Client::new(&system).install_missing(&[package]));
+        match installed {
+            Ok(()) => self.mount_with_retries(device),
+            Err(bande_packages::Error::Failed(failure))
+                if matches!(
+                    failure.code,
+                    ErrorCode::Cancelled | ErrorCode::NotAuthorized
+                ) => {}
+            Err(error) => {
+                tracing::warn!("cannot install {package}: {error}");
+                let reason = match &error {
+                    bande_packages::Error::Failed(failure)
+                        if failure.code == ErrorCode::NoNetwork =>
+                    {
+                        tr!(
+                            "It couldn’t be downloaded. Check your internet connection, then plug the device in again."
+                        )
+                    }
+                    _ => tr!("Install it in Software, then plug the device in again."),
+                };
+                self.mounts.notify_tool_not_installed(package, &reason);
+            }
         }
     }
 

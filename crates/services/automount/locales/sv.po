@@ -7,6 +7,21 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Opening “{name}” needs the {package} package, which isn’t installed."
+msgstr "För att öppna ”{name}” behövs paketet {package}, som inte är installerat."
+
+msgid "Device Can’t Be Opened"
+msgstr "Enheten kan inte öppnas"
+
+msgid "Install {package}"
+msgstr "Installera {package}"
+
+msgid "It couldn’t be downloaded. Check your internet connection, then plug the device in again."
+msgstr "Det gick inte att hämta. Kontrollera internetanslutningen och anslut sedan enheten igen."
+
+msgid "Install it in Software, then plug the device in again."
+msgstr "Installera det i Programvara och anslut sedan enheten igen."
+
 msgid "Disks"
 msgstr "Skivor"
 
@@ -46,11 +61,8 @@ msgstr "Serverlösenord för {server}"
 msgid "The connection to “{name}” ended."
 msgstr "Anslutningen till ”{name}” avslutades."
 
-msgid "Device Can’t Be Opened"
-msgstr "Enheten kan inte öppnas"
-
-msgid "Opening “{name}” needs the {package} package, which isn’t installed. Install it, then plug the device in again."
-msgstr "För att öppna ”{name}” behövs paketet {package}, som inte är installerat. Installera det och anslut sedan enheten igen."
+msgid "{package} Wasn’t Installed"
+msgstr "{package} installerades inte"
 
 msgid "Unlock Your Device"
 msgstr "Lås upp enheten"

@@ -906,15 +906,15 @@ impl Mounts {
         );
     }
 
-    pub fn notify_tool_missing(&self, name: &str, package: &str) {
+    pub fn session(&self) -> &Connection {
+        &self.session
+    }
+
+    pub fn notify_tool_not_installed(&self, package: &str, reason: &str) {
         self.tell(
             "phone",
-            &tr!("Device Can’t Be Opened"),
-            &tr!(
-                "Opening “{name}” needs the {package} package, which isn’t installed. Install it, then plug the device in again.",
-                name = name,
-                package = package
-            ),
+            &tr!("{package} Wasn’t Installed", package = package),
+            reason,
         );
     }
 

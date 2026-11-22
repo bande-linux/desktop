@@ -85,6 +85,9 @@ msgstr "Spara bilaga"
 msgid "The attachment couldn’t be saved: {error}"
 msgstr "Det gick inte att spara bilagan: {error}"
 
+msgid "The message couldn’t be opened: {error}"
+msgstr "Det gick inte att öppna meddelandet: {error}"
+
 msgid "Attach Files"
 msgstr "Bifoga filer"
 
@@ -232,27 +235,6 @@ msgstr "Visa konversationen"
 msgid "Collapse Conversation"
 msgstr "Dölj konversationen"
 
-msgid "Show Message from {sender}"
-msgstr "Visa meddelandet från {sender}"
-
-msgid "Hide Quoted Text"
-msgstr "Dölj citerad text"
-
-msgid "Show Quoted Text"
-msgstr "Visa citerad text"
-
-msgid "Load Remote Content"
-msgstr "Ladda externt innehåll"
-
-msgid "Look Up Key"
-msgstr "Slå upp nyckel"
-
-msgid "Trust Issuer…"
-msgstr "Lita på utfärdaren…"
-
-msgid "Try Again"
-msgstr "Försök igen"
-
 msgid "To:"
 msgstr "Till:"
 
@@ -318,6 +300,12 @@ msgstr "Avbryt"
 msgid "Yesterday"
 msgstr "Igår"
 
+msgid "The message is larger than {limit}."
+msgstr "Meddelandet är större än {limit}."
+
+msgid "Opening the message…"
+msgstr "Öppnar meddelandet…"
+
 msgid "No messages"
 msgstr "Inga meddelanden"
 
@@ -360,6 +348,9 @@ msgstr "Meddelandet är krypterat på ett sätt som E-post inte kan öppna."
 msgid "This message could not be decrypted. {reason}"
 msgstr "Meddelandet kunde inte dekrypteras. {reason}"
 
+msgid "Try Again"
+msgstr "Försök igen"
+
 msgid "Checking the signature…"
 msgstr "Kontrollerar signaturen…"
 
@@ -372,11 +363,17 @@ msgstr "Signerat av {signer}, men du har inte verifierat att nyckeln {key} tillh
 msgid "Signed by {signer}, but the certificate comes from an issuer you don’t trust."
 msgstr "Signerat av {signer}, men certifikatet kommer från en utfärdare du inte litar på."
 
+msgid "Trust Issuer…"
+msgstr "Lita på utfärdaren…"
+
 msgid "Signed by {signer}, who is not the sender of this message."
 msgstr "Signerat av {signer}, som inte är avsändaren av meddelandet."
 
 msgid "Signed with key {key}, which you don’t have."
 msgstr "Signerat med nyckeln {key}, som du inte har."
+
+msgid "Look Up Key"
+msgstr "Slå upp nyckel"
 
 msgid "Signed, but the signer’s certificate is not in the message."
 msgstr "Signerat, men signerarens certifikat finns inte i meddelandet."
@@ -393,14 +390,56 @@ msgstr "Signaturen stämmer inte: meddelandet ändrades efter att det signerades
 msgid "Cc: {names}"
 msgstr "Kopia: {names}"
 
+msgid "Hide Quoted Text"
+msgstr "Dölj citerad text"
+
+msgid "Show Quoted Text"
+msgstr "Visa citerad text"
+
 msgid "Downloading the message…"
 msgstr "Hämtar meddelandet…"
 
 msgid "Remote content in this message was not loaded, to protect your privacy."
 msgstr "Externt innehåll i det här meddelandet laddades inte, för att skydda din integritet."
 
+msgid "Load Remote Content"
+msgstr "Ladda externt innehåll"
+
 msgid "Loading remote content…"
 msgstr "Laddar externt innehåll…"
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Select All"
+msgstr "Markera allt"
+
+msgid "Show Message from {sender}"
+msgstr "Visa meddelandet från {sender}"
+
+msgid "Open Link"
+msgstr "Öppna länk"
+
+msgid "Copy Link"
+msgstr "Kopiera länk"
+
+msgid "Copy Address"
+msgstr "Kopiera adress"
+
+msgid "Open Attachment"
+msgstr "Öppna bilaga"
+
+msgid "Save Attachment…"
+msgstr "Spara bilaga…"
+
+msgid "Save to Downloads Folder"
+msgstr "Spara i mappen Hämtningar"
+
+msgid "Open this link?"
+msgstr "Öppna länken?"
+
+msgid "The link says “{claimed}”, but it goes to “{real}”."
+msgstr "Länken säger ”{claimed}” men leder till ”{real}”."
 
 msgid "General"
 msgstr "Allmänt"
@@ -856,36 +895,6 @@ msgstr "Det här kontot är redan tillagt."
 msgid "Looking up the servers…"
 msgstr "Slår upp servrarna…"
 
-msgid "Open Link"
-msgstr "Öppna länk"
-
-msgid "Copy Link"
-msgstr "Kopiera länk"
-
-msgid "Copy Address"
-msgstr "Kopiera adress"
-
-msgid "Open Attachment"
-msgstr "Öppna bilaga"
-
-msgid "Save Attachment…"
-msgstr "Spara bilaga…"
-
-msgid "Save to Downloads Folder"
-msgstr "Spara i mappen Hämtningar"
-
-msgid "Open this link?"
-msgstr "Öppna länken?"
-
-msgid "The link says “{claimed}”, but it goes to “{real}”."
-msgstr "Länken säger ”{claimed}” men leder till ”{real}”."
-
-msgid "Copy"
-msgstr "Kopiera"
-
-msgid "Select All"
-msgstr "Markera allt"
-
 msgid "Rename Mailbox…"
 msgstr "Byt namn på brevlåda…"
 
@@ -921,12 +930,3 @@ msgstr "inget lösenord är sparat för kontot"
 
 msgid "the account has no Drafts mailbox"
 msgstr "kontot har ingen brevlåda för utkast"
-
-msgid "Opening the message…"
-msgstr "Öppnar meddelandet…"
-
-msgid "The message couldn’t be opened: {error}"
-msgstr "Det gick inte att öppna meddelandet: {error}"
-
-msgid "The message is larger than {limit}."
-msgstr "Meddelandet är större än {limit}."

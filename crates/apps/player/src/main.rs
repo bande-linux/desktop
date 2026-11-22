@@ -271,7 +271,7 @@ impl Program for Player {
         let queue = pane.is_some_and(Pane::has_queue);
         let file = vec![item(text!("Open…"), OPEN, Some("Ctrl+O"), true)];
         let mut playback = vec![
-            item(toggle_key, TOGGLE, None, loaded),
+            item(toggle_key, TOGGLE, Some("Space"), loaded),
             item(text!("Next"), NEXT, Some("Ctrl+Right"), queue),
             item(text!("Previous"), PREVIOUS, Some("Ctrl+Left"), queue),
             Entry::separator(),

@@ -13,6 +13,15 @@ msgstr "Kalender"
 msgid "Calendar Settings"
 msgstr "Kalenderinställningar"
 
+msgid "“{file}” has no events."
+msgstr "”{file}” innehåller inga händelser."
+
+msgid "Can’t read “{file}”: {error}"
+msgstr "Det gick inte att läsa ”{file}”: {error}"
+
+msgid "Can’t open “{file}”: {error}"
+msgstr "Det gick inte att öppna ”{file}”: {error}"
+
 msgid "Export Calendar"
 msgstr "Exportera kalender"
 
@@ -177,6 +186,9 @@ msgstr "Avbryt"
 msgid "OK"
 msgstr "OK"
 
+msgid "This invitation is older than the event in your calendar, or is not from its organizer."
+msgstr "Inbjudan är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
+
 msgid "Invitation to “{title}”"
 msgstr "Inbjudan till ”{title}”"
 
@@ -207,11 +219,17 @@ msgstr "Jag kommer inte till ”{title}”, {when}."
 msgid "This answer is to an event that is not in your calendars."
 msgstr "Svaret gäller en händelse som inte finns i dina kalendrar."
 
+msgid "This answer is not to an event you organize, or is not from one of its invitees."
+msgstr "Svaret gäller inte en händelse som du arrangerar, eller kommer inte från någon av de inbjudna."
+
 msgid "“{title}”: answer from {names}"
 msgstr "”{title}”: svar från {names}"
 
 msgid "A cancelled event that is not in your calendars was opened."
 msgstr "En inställd händelse som inte finns i dina kalendrar öppnades."
+
+msgid "This cancellation is older than the event in your calendar, or is not from its organizer."
+msgstr "Inställningen är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
 
 msgid "“{title}” was cancelled"
 msgstr "”{title}” är inställd"
@@ -399,6 +417,18 @@ msgstr "Lägg till anteckningar"
 msgid "Delete Event"
 msgstr "Radera händelse"
 
+msgid "“{text}” is not a date"
+msgstr "”{text}” är inget datum"
+
+msgid "Enter a date such as {example}."
+msgstr "Ange ett datum som {example}."
+
+msgid "“{text}” is not a time"
+msgstr "”{text}” är ingen tid"
+
+msgid "Enter a time such as {example}."
+msgstr "Ange en tid som {example}."
+
 msgid "Local"
 msgstr "Lokalt"
 
@@ -418,15 +448,6 @@ msgid "Add {count} event to “{calendar}”?"
 msgid_plural "Add {count} events to “{calendar}”?"
 msgstr[0] "Vill du lägga till {count} händelse i ”{calendar}”?"
 msgstr[1] "Vill du lägga till {count} händelser i ”{calendar}”?"
-
-msgid "“{file}” has no events."
-msgstr "”{file}” innehåller inga händelser."
-
-msgid "Can’t read “{file}”: {error}"
-msgstr "Det gick inte att läsa ”{file}”: {error}"
-
-msgid "Can’t open “{file}”: {error}"
-msgstr "Det gick inte att öppna ”{file}”: {error}"
 
 msgid "From {file}"
 msgstr "Från {file}"
@@ -718,24 +739,3 @@ msgstr "Idag"
 
 msgid "Search"
 msgstr "Sök"
-
-msgid "This invitation is older than the event in your calendar, or is not from its organizer."
-msgstr "Inbjudan är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
-
-msgid "This answer is not to an event you organize, or is not from one of its invitees."
-msgstr "Svaret gäller inte en händelse som du arrangerar, eller kommer inte från någon av de inbjudna."
-
-msgid "This cancellation is older than the event in your calendar, or is not from its organizer."
-msgstr "Inställningen är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
-
-msgid "“{text}” is not a date"
-msgstr "”{text}” är inget datum"
-
-msgid "Enter a date such as {example}."
-msgstr "Ange ett datum som {example}."
-
-msgid "“{text}” is not a time"
-msgstr "”{text}” är ingen tid"
-
-msgid "Enter a time such as {example}."
-msgstr "Ange en tid som {example}."

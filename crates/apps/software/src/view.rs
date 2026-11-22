@@ -195,23 +195,6 @@ fn in_background(work: impl FnOnce() + Send + 'static) {
     }
 }
 
-fn open_website(url: &str) {
-    let apps = bande_xdg::Apps::load(bande_xdg::data_dirs(), &bande_xdg::config_dirs());
-    let scheme = url
-        .split(':')
-        .next()
-        .unwrap_or("https")
-        .to_ascii_lowercase();
-    match apps.default_for(&format!("x-scheme-handler/{scheme}")) {
-        Some(entry) => {
-            if let Err(error) = bande_xdg::launch_with_arguments(entry, &[url.to_owned()], None) {
-                tracing::warn!("cannot open {url}: {error}");
-            }
-        }
-        None => tracing::warn!("no app opens {scheme} links"),
-    }
-}
-
 fn deb(app: &Component) -> Option<&str> {
     app.bundles.iter().find_map(|bundle| match bundle {
         Bundle::Deb(package) => Some(package.as_str()),
@@ -352,6 +335,7 @@ pub struct Software {
     busy: HashMap<String, Busy>,
     failed: HashMap<String, (Task, Failure)>,
     removal: Option<Removal>,
+    website: Option<String>,
     updates: Vec<Package>,
     flatpak_updates: Vec<flatpak::Update>,
     shown: usize,
@@ -430,6 +414,7 @@ impl Software {
             busy: HashMap::new(),
             failed: HashMap::new(),
             removal: None,
+            website: None,
             updates: Vec::new(),
             flatpak_updates: Vec::new(),
             shown: PAGE_ROWS,
@@ -565,6 +550,10 @@ impl Software {
         }
     }
 
+    pub fn take_website(&mut self) -> Option<String> {
+        self.website.take()
+    }
+
     fn act(&mut self, intent: Intent) {
         match intent {
             Intent::Go(place) => {
@@ -602,7 +591,7 @@ impl Software {
                 self.shot = self.shot.saturating_add_signed(step);
                 self.request_shot();
             }
-            Intent::Website(url) => in_background(move || open_website(&url)),
+            Intent::Website(url) => self.website = Some(url),
             Intent::SoftwareUpdate => open_software_update(),
             Intent::Source(key, source) => {
                 self.chosen.insert(key, source);

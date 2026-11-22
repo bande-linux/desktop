@@ -317,47 +317,18 @@ impl Mail {
             self.open_argument(cx, url);
             return;
         }
-        let scheme = url
-            .split(':')
-            .next()
-            .unwrap_or("https")
-            .to_ascii_lowercase();
-        let entry = self
-            .apps()
-            .default_for(&format!("x-scheme-handler/{scheme}"))
-            .cloned();
-        match entry {
-            Some(entry) => {
-                let token = cx.window(window).and_then(|(window, _)| {
-                    window
-                        .activation_token(entry.app_id())
-                        .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
-                        .ok()
-                });
-                if let Err(error) =
-                    bande_xdg::launch_with_arguments(&entry, &[url.to_owned()], token.as_deref())
-                {
-                    tracing::warn!("cannot open {url}: {error}");
-                }
-            }
-            None => tracing::warn!("no app opens {scheme} links"),
-        }
+        self.open_target(cx, window, url);
     }
 
-    fn open_file(&mut self, cx: &mut Cx<Self>, window: WindowId, path: &Path) {
-        let entry = self.apps().default_for_path(path).cloned();
-        match entry {
-            Some(entry) => {
-                let token = cx
-                    .window(window)
-                    .and_then(|(window, _)| window.activation_token(entry.app_id()).ok());
-                if let Err(error) =
-                    bande_xdg::launch_with(&entry, &[path.to_path_buf()], token.as_deref())
-                {
-                    tracing::warn!("cannot open {}: {error}", path.display());
-                }
-            }
-            None => tracing::warn!("no app opens {}", path.display()),
+    fn open_target(&mut self, cx: &mut Cx<Self>, window: WindowId, target: &str) {
+        let token = cx.window(window).and_then(|(window, _)| {
+            window
+                .activation_token(APP_ID)
+                .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+                .ok()
+        });
+        if let Err(error) = bande_xdg::open_with(self.apps(), target, token.as_deref()) {
+            tracing::warn!("cannot open {target}: {error}");
         }
     }
 
@@ -536,7 +507,9 @@ impl Mail {
                 }
                 Request::OpenSettings => cx.open_settings(),
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
-                Request::OpenAttachment(path) => self.open_file(cx, window, &path),
+                Request::OpenAttachment(path) => {
+                    self.open_target(cx, window, &path.to_string_lossy())
+                }
                 Request::SaveAttachment(name, data) => {
                     save_attachment(name, data, self.notices.announcer().clone())
                 }

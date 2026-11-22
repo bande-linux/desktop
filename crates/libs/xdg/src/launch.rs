@@ -289,7 +289,18 @@ impl fmt::Display for OpenError {
 impl std::error::Error for OpenError {}
 
 pub fn open(target: &str, activation_token: Option<&str>) -> Result<(), OpenError> {
-    let apps = Apps::load(data_dirs(), &config_dirs());
+    open_with(
+        &Apps::load(data_dirs(), &config_dirs()),
+        target,
+        activation_token,
+    )
+}
+
+pub fn open_with(
+    apps: &Apps,
+    target: &str,
+    activation_token: Option<&str>,
+) -> Result<(), OpenError> {
     let path = path_from_file_uri(target)
         .or_else(|| target.starts_with('/').then(|| PathBuf::from(target)));
     let kind = match &path {

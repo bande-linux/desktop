@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use ash::vk;
 use smithay::backend::allocator::{Format, Fourcc, Modifier};
@@ -124,43 +124,36 @@ impl Texel {
 pub(crate) struct Capability {
     pub(crate) planes: usize,
     pub(crate) disjoint: bool,
+    pub(crate) exportable: bool,
     pub(crate) max_extent: (u32, u32),
 }
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Supported {
-    listed: HashMap<Format, Capability>,
-    proven: HashSet<Format>,
-    refused: HashSet<Format>,
-}
+pub(crate) struct Supported(HashMap<Format, Capability>);
 
 impl Supported {
     pub(crate) fn usable(&self, format: &Format) -> Option<Capability> {
-        match self.refused.contains(format) {
-            true => None,
-            false => self.listed.get(format).copied(),
-        }
+        self.0.get(format).copied()
     }
 
-    pub(crate) fn listed(&self) -> impl Iterator<Item = (Format, usize)> + '_ {
-        self.listed
+    pub(crate) fn listed(&self) -> impl Iterator<Item = (Format, Capability)> + '_ {
+        self.0
+            .iter()
+            .map(|(format, capability)| (*format, *capability))
+    }
+
+    pub(crate) fn planes(&self) -> impl Iterator<Item = (Format, usize)> + '_ {
+        self.0
             .iter()
             .map(|(format, capability)| (*format, capability.planes))
     }
 
-    pub(crate) fn advertised(&self) -> impl Iterator<Item = Format> + '_ {
-        self.listed
-            .keys()
-            .filter(|format| !self.refused.contains(format))
-            .copied()
+    pub(crate) fn formats(&self) -> impl Iterator<Item = Format> + '_ {
+        self.0.keys().copied()
     }
 
-    pub(crate) fn worked(&mut self, format: Format) {
-        self.proven.insert(format);
-    }
-
-    pub(crate) fn failed(&mut self, format: Format) -> bool {
-        !self.proven.contains(&format) && self.refused.insert(format)
+    pub(crate) fn remove(&mut self, format: &Format) {
+        self.0.remove(format);
     }
 }
 
@@ -198,6 +191,7 @@ fn listed_modifiers(
 struct Importable {
     max_extent: (u32, u32),
     dedicated_only: bool,
+    exportable: bool,
 }
 
 fn importable(
@@ -238,6 +232,7 @@ fn importable(
         .then_some(Importable {
             max_extent: (extent.width, extent.height),
             dedicated_only: features.contains(vk::ExternalMemoryFeatureFlags::DEDICATED_ONLY),
+            exportable: features.contains(vk::ExternalMemoryFeatureFlags::EXPORTABLE),
         })
 }
 
@@ -272,14 +267,20 @@ fn capability(
     Some(Capability {
         planes,
         disjoint,
+        exportable: found.exportable,
         max_extent: found.max_extent,
     })
 }
 
+const SAMPLE_FEATURES: vk::FormatFeatureFlags = vk::FormatFeatureFlags::from_raw(
+    vk::FormatFeatureFlags::SAMPLED_IMAGE.as_raw()
+        | vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR.as_raw(),
+);
+
 const RENDER_FEATURES: vk::FormatFeatureFlags = vk::FormatFeatureFlags::from_raw(
     vk::FormatFeatureFlags::COLOR_ATTACHMENT.as_raw()
         | vk::FormatFeatureFlags::COLOR_ATTACHMENT_BLEND.as_raw()
-        | vk::FormatFeatureFlags::SAMPLED_IMAGE.as_raw()
+        | SAMPLE_FEATURES.as_raw()
         | vk::FormatFeatureFlags::TRANSFER_SRC.as_raw()
         | vk::FormatFeatureFlags::TRANSFER_DST.as_raw(),
 );
@@ -293,17 +294,17 @@ pub(crate) fn query(instance: &ash::Instance, physical: vk::PhysicalDevice) -> M
                 modifier: Modifier::from(listed.drm_format_modifier),
             };
             let features = listed.drm_format_modifier_tiling_features;
-            if features.contains(vk::FormatFeatureFlags::SAMPLED_IMAGE)
+            if features.contains(SAMPLE_FEATURES)
                 && let Some(sampled) = capability(instance, physical, texel, listed, SAMPLED)
             {
-                found.sampled.listed.insert(format, sampled);
+                found.sampled.0.insert(format, sampled);
             }
             if crate::TARGET_FORMATS.contains(&texel.format)
                 && format.modifier != Modifier::Linear
                 && features.contains(RENDER_FEATURES)
                 && let Some(rendered) = capability(instance, physical, texel, listed, RENDERED)
             {
-                found.rendered.listed.insert(format, rendered);
+                found.rendered.0.insert(format, rendered);
             }
         }
     }
@@ -312,6 +313,6 @@ pub(crate) fn query(instance: &ash::Instance, physical: vk::PhysicalDevice) -> M
 
 impl Modifiers {
     pub(crate) fn any(&self) -> bool {
-        !self.sampled.listed.is_empty() || !self.rendered.listed.is_empty()
+        !self.sampled.0.is_empty() || !self.rendered.0.is_empty()
     }
 }

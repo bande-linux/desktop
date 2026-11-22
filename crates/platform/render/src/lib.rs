@@ -9,14 +9,14 @@ use std::fmt;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::marker::PhantomData;
-use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use ash::vk;
-use smithay::backend::allocator::dmabuf::{Dmabuf, WeakDmabuf};
+use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags, WeakDmabuf};
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::{Buffer, Format, Fourcc, Modifier};
 use smithay::backend::renderer::sync::SyncPoint;
@@ -40,9 +40,19 @@ const REQUIRED_EXTENSIONS: [&CStr; 3] = [
     ash::khr::external_memory_fd::NAME,
     ash::ext::external_memory_dma_buf::NAME,
 ];
+const PROMOTED_EXTENSIONS: [&CStr; 2] = [
+    ash::khr::dynamic_rendering::NAME,
+    ash::khr::synchronization2::NAME,
+];
 const MODIFIER_EXTENSIONS: [&CStr; 2] = [
     ash::ext::image_drm_format_modifier::NAME,
     ash::ext::queue_family_foreign::NAME,
+];
+const MEMORY_PLANES: [vk::ImageAspectFlags; 4] = [
+    vk::ImageAspectFlags::MEMORY_PLANE_0_EXT,
+    vk::ImageAspectFlags::MEMORY_PLANE_1_EXT,
+    vk::ImageAspectFlags::MEMORY_PLANE_2_EXT,
+    vk::ImageAspectFlags::MEMORY_PLANE_3_EXT,
 ];
 const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
 const TEXTURE_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Abgr8888];
@@ -79,7 +89,7 @@ impl fmt::Display for RenderError {
             Self::Loading(error) => write!(f, "cannot load the Vulkan library: {error}"),
             Self::Vulkan(result) => write!(f, "Vulkan call failed: {result}"),
             Self::NoDevice => {
-                f.write_str("no Vulkan 1.3 device with push descriptors and dma-buf import")
+                f.write_str("no usable Vulkan device (each one left out is logged with the reason)")
             }
             Self::NoMemoryType => f.write_str("no suitable Vulkan memory type"),
             Self::BufferOutOfBounds => f.write_str("buffer rows lie outside its pool"),
@@ -156,12 +166,6 @@ impl fmt::Display for DeviceInfo {
 pub struct Counters {
     pub uploaded_bytes: u64,
     pub shaded_pixels: u64,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Use {
-    Sampled,
-    Rendered,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -361,7 +365,7 @@ pub struct VulkanRenderer {
     foreign_family: u32,
     output_on_device: bool,
     modifiers: formats::Modifiers,
-    formats_changed: bool,
+    refused: Vec<Format>,
     output_colour: Option<OutputColour>,
     encode_table: Option<(Arc<[[u8; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
@@ -439,6 +443,7 @@ struct Chosen {
     family: u32,
     output_on_device: bool,
     modifiers: formats::Modifiers,
+    extensions: Vec<&'static CStr>,
     info: DeviceInfo,
 }
 
@@ -464,88 +469,136 @@ fn text(name: Result<&CStr, std::ffi::FromBytesUntilNulError>) -> String {
         .unwrap_or_default()
 }
 
+fn examine(
+    instance: &ash::Instance,
+    physical: vk::PhysicalDevice,
+    display: Option<u64>,
+) -> Result<(u8, Chosen), (String, String)> {
+    // SAFETY: `physical` was just enumerated from this live `instance`.
+    let properties = unsafe { instance.get_physical_device_properties(physical) };
+    let name = text(properties.device_name_as_c_str());
+    let refuse = |reason: String| (name.clone(), reason);
+    let version = properties.api_version;
+    if version < vk::API_VERSION_1_2 {
+        return Err(refuse(format!(
+            "it offers Vulkan {}.{}, and 1.2 is needed",
+            vk::api_version_major(version),
+            vk::api_version_minor(version)
+        )));
+    }
+    // SAFETY: `physical` was just enumerated from this live `instance`.
+    let extensions = unsafe { instance.enumerate_device_extension_properties(physical) }
+        .map_err(|error| refuse(format!("its extensions cannot be listed: {error}")))?;
+    let offers = |wanted: &CStr| {
+        extensions
+            .iter()
+            .any(|extension| extension.extension_name_as_c_str() == Ok(wanted))
+    };
+    let promoted: &[&CStr] = match version < vk::API_VERSION_1_3 {
+        true => &PROMOTED_EXTENSIONS,
+        false => &[],
+    };
+    let missing: Vec<_> = REQUIRED_EXTENSIONS
+        .iter()
+        .chain(promoted)
+        .filter(|&&required| !offers(required))
+        .map(|required| required.to_string_lossy())
+        .collect();
+    if !missing.is_empty() {
+        return Err(refuse(format!("it lacks {}", missing.join(", "))));
+    }
+    let mut rendering = vk::PhysicalDeviceDynamicRenderingFeatures::default();
+    let mut synchronization = vk::PhysicalDeviceSynchronization2Features::default();
+    let mut features = vk::PhysicalDeviceFeatures2::default()
+        .push_next(&mut rendering)
+        .push_next(&mut synchronization);
+    // SAFETY: `physical` belongs to this `instance`, which is Vulkan 1.3, and the chained structs
+    // outlive the call.
+    unsafe { instance.get_physical_device_features2(physical, &mut features) };
+    if rendering.dynamic_rendering != vk::TRUE || synchronization.synchronization2 != vk::TRUE {
+        return Err(refuse(
+            "it lacks dynamic rendering or synchronization2".to_owned(),
+        ));
+    }
+    // SAFETY: `physical` was just enumerated from this live `instance`.
+    let family = unsafe { instance.get_physical_device_queue_family_properties(physical) }
+        .iter()
+        .position(|family| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+        .and_then(|family| u32::try_from(family).ok())
+        .ok_or_else(|| refuse("it has no graphics queue".to_owned()))?;
+    let mut driver = vk::PhysicalDeviceDriverProperties::default();
+    let mut node = vk::PhysicalDeviceDrmPropertiesEXT::default();
+    let mut properties2 = vk::PhysicalDeviceProperties2::default().push_next(&mut driver);
+    if offers(ash::ext::physical_device_drm::NAME) {
+        properties2 = properties2.push_next(&mut node);
+    }
+    // SAFETY: `physical` belongs to this `instance`; `node` is chained only when the device
+    // lists `VK_EXT_physical_device_drm`, and both chained structs outlive the call.
+    unsafe { instance.get_physical_device_properties2(physical, &mut properties2) };
+    let on_real_gpu = matches!(
+        properties.device_type,
+        vk::PhysicalDeviceType::INTEGRATED_GPU | vk::PhysicalDeviceType::DISCRETE_GPU
+    );
+    let info = DeviceInfo {
+        name,
+        driver: text(driver.driver_name_as_c_str()),
+        driver_id: format!("{:?}", driver.driver_id),
+        driver_info: text(driver.driver_info_as_c_str()),
+        api_version: format!(
+            "{}.{}.{}",
+            vk::api_version_major(version),
+            vk::api_version_minor(version),
+            vk::api_version_patch(version)
+        ),
+        extensions: Vec::new(),
+        software: properties.device_type == vk::PhysicalDeviceType::CPU,
+        max_image_side: properties.limits.max_image_dimension2_d,
+        render_device: (node.has_render == vk::TRUE)
+            .then(|| node_of(node.render_major, node.render_minor)),
+    };
+    let primary =
+        (node.has_primary == vk::TRUE).then(|| node_of(node.primary_major, node.primary_minor));
+    let drives_display =
+        display.is_some_and(|display| [primary, info.render_device].contains(&Some(display)));
+    let modifiers = !info.software && MODIFIER_EXTENSIONS.iter().all(|&wanted| offers(wanted));
+    let extensions = REQUIRED_EXTENSIONS
+        .iter()
+        .chain(promoted)
+        .chain(
+            modifiers
+                .then_some(&MODIFIER_EXTENSIONS)
+                .into_iter()
+                .flatten(),
+        )
+        .copied()
+        .collect();
+    Ok((
+        device_rank(properties.device_type, drives_display),
+        Chosen {
+            physical,
+            family,
+            output_on_device: on_real_gpu,
+            modifiers: match modifiers {
+                true => formats::query(instance, physical),
+                false => formats::Modifiers::default(),
+            },
+            extensions,
+            info,
+        },
+    ))
+}
+
 fn choose_device(instance: &ash::Instance, display: Option<u64>) -> Result<Chosen, RenderError> {
     // SAFETY: `instance` is a live instance, not destroyed before `choose_device` returns.
     let physicals = unsafe { instance.enumerate_physical_devices() }?;
     physicals
         .into_iter()
         .filter_map(|physical| {
-            // SAFETY: `physical` was just enumerated from this live `instance`.
-            let properties = unsafe { instance.get_physical_device_properties(physical) };
-            if properties.api_version < vk::API_VERSION_1_3 {
-                return None;
-            }
-            // SAFETY: `physical` was just enumerated from this live `instance`.
-            let extensions =
-                unsafe { instance.enumerate_device_extension_properties(physical) }.ok()?;
-            REQUIRED_EXTENSIONS
-                .iter()
-                .all(|required| {
-                    extensions
-                        .iter()
-                        .any(|extension| extension.extension_name_as_c_str() == Ok(*required))
+            examine(instance, physical, display)
+                .inspect_err(|(name, reason)| {
+                    tracing::warn!("not composing on {name}: {reason}");
                 })
-                .then_some(())?;
-            // SAFETY: `physical` was just enumerated from this live `instance`.
-            let family = unsafe { instance.get_physical_device_queue_family_properties(physical) }
-                .iter()
-                .position(|family| family.queue_flags.contains(vk::QueueFlags::GRAPHICS))?;
-            let mut driver = vk::PhysicalDeviceDriverProperties::default();
-            let mut node = vk::PhysicalDeviceDrmPropertiesEXT::default();
-            let knows_node = extensions.iter().any(|extension| {
-                extension.extension_name_as_c_str() == Ok(ash::ext::physical_device_drm::NAME)
-            });
-            let mut properties2 = vk::PhysicalDeviceProperties2::default().push_next(&mut driver);
-            if knows_node {
-                properties2 = properties2.push_next(&mut node);
-            }
-            // SAFETY: `physical` belongs to this `instance`; `node` is chained only when the device
-            // lists `VK_EXT_physical_device_drm`, and both chained structs outlive the call.
-            unsafe { instance.get_physical_device_properties2(physical, &mut properties2) };
-            let on_real_gpu = matches!(
-                properties.device_type,
-                vk::PhysicalDeviceType::INTEGRATED_GPU | vk::PhysicalDeviceType::DISCRETE_GPU
-            );
-            let version = properties.api_version;
-            let info = DeviceInfo {
-                name: text(properties.device_name_as_c_str()),
-                driver: text(driver.driver_name_as_c_str()),
-                driver_id: format!("{:?}", driver.driver_id),
-                driver_info: text(driver.driver_info_as_c_str()),
-                api_version: format!(
-                    "{}.{}.{}",
-                    vk::api_version_major(version),
-                    vk::api_version_minor(version),
-                    vk::api_version_patch(version)
-                ),
-                extensions: Vec::new(),
-                software: properties.device_type == vk::PhysicalDeviceType::CPU,
-                max_image_side: properties.limits.max_image_dimension2_d,
-                render_device: (node.has_render == vk::TRUE)
-                    .then(|| node_of(node.render_major, node.render_minor)),
-            };
-            let primary = (node.has_primary == vk::TRUE)
-                .then(|| node_of(node.primary_major, node.primary_minor));
-            let drives_display = display
-                .is_some_and(|display| [primary, info.render_device].contains(&Some(display)));
-            let knows_modifiers = MODIFIER_EXTENSIONS.iter().all(|wanted| {
-                extensions
-                    .iter()
-                    .any(|extension| extension.extension_name_as_c_str() == Ok(*wanted))
-            });
-            Some((
-                device_rank(properties.device_type, drives_display),
-                Chosen {
-                    physical,
-                    family: u32::try_from(family).ok()?,
-                    output_on_device: on_real_gpu,
-                    modifiers: match info.software || !knows_modifiers {
-                        false => formats::query(instance, physical),
-                        true => formats::Modifiers::default(),
-                    },
-                    info,
-                },
-            ))
+                .ok()
         })
         .min_by_key(|(rank, _)| *rank)
         .map(|(_, chosen)| chosen)
@@ -636,42 +689,38 @@ impl VulkanRenderer {
         let queue_info = vk::DeviceQueueCreateInfo::default()
             .queue_family_index(chosen.family)
             .queue_priorities(&priorities);
-        let mut vulkan13 = vk::PhysicalDeviceVulkan13Features::default()
-            .dynamic_rendering(true)
-            .synchronization2(true);
-        let names: Vec<&CStr> = REQUIRED_EXTENSIONS
-            .iter()
-            .chain(
-                chosen
-                    .modifiers
-                    .any()
-                    .then_some(&MODIFIER_EXTENSIONS)
-                    .into_iter()
-                    .flatten(),
-            )
-            .copied()
-            .collect();
-        let extensions: Vec<_> = names.iter().map(|name| name.as_ptr()).collect();
-        // SAFETY: `chosen.physical` belongs to `instance`; `queue_info`, `priorities`, `vulkan13`
-        // and `extensions` (pointers into `'static` names) outlive the call.
-        let device = match unsafe {
+        let mut rendering =
+            vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
+        let mut synchronization =
+            vk::PhysicalDeviceSynchronization2Features::default().synchronization2(true);
+        let extensions: Vec<_> = chosen.extensions.iter().map(|name| name.as_ptr()).collect();
+        // SAFETY: `chosen.physical` belongs to `instance` and supports both features;
+        // `queue_info`, `priorities`, the feature structs and `extensions` (pointers into
+        // `'static` names) outlive the call.
+        let created = unsafe {
             instance.create_device(
                 chosen.physical,
                 &vk::DeviceCreateInfo::default()
                     .queue_create_infos(slice::from_ref(&queue_info))
                     .enabled_extension_names(&extensions)
-                    .push_next(&mut vulkan13),
+                    .push_next(&mut rendering)
+                    .push_next(&mut synchronization),
                 None,
             )
-        } {
-            Ok(device) => device,
+        };
+        let device = match created {
+            // SAFETY: `device` was just created from `instance`; a Vulkan 1.2 device resolves the
+            // core 1.3 commands Bande uses through the `KHR` extensions enabled above, which have
+            // the same signatures.
+            Ok(device) => unsafe { promoted_commands(&instance, device.handle()) },
             Err(error) => {
                 forget_instance(&instance, messenger.as_ref());
                 return Err(error.into());
             }
         };
         let mut info = chosen.info;
-        info.extensions = names
+        info.extensions = chosen
+            .extensions
             .iter()
             .map(|name| name.to_string_lossy().into_owned())
             .collect();
@@ -688,7 +737,7 @@ impl VulkanRenderer {
             },
             output_on_device: chosen.output_on_device,
             modifiers: chosen.modifiers,
-            formats_changed: false,
+            refused: Vec::new(),
             output_colour: None,
             encode_table: None,
             colour_scratch: HashMap::new(),
@@ -727,6 +776,7 @@ impl VulkanRenderer {
             _entry: entry,
         };
         renderer.create_objects(chosen.family)?;
+        renderer.prove_modifiers();
         Ok(renderer)
     }
 
@@ -966,25 +1016,18 @@ impl VulkanRenderer {
         linear(&TEXTURE_FOURCCS)
             .map(|format| (format, 1))
             .chain(linear(&[Fourcc::Nv12]).map(|format| (format, 2)))
-            .chain(self.modifiers.sampled.listed())
+            .chain(self.modifiers.sampled.planes())
             .collect()
     }
 
-    pub fn advertised_dmabuf_formats(&self) -> FormatSet {
-        linear(&TEXTURE_FOURCCS)
-            .chain(linear(&[Fourcc::Nv12]))
-            .chain(self.modifiers.sampled.advertised())
-            .collect()
+    pub fn refused_formats(&self) -> &[Format] {
+        &self.refused
     }
 
     pub fn render_formats(&self) -> FormatSet {
         linear(&TARGET_FOURCCS)
-            .chain(self.modifiers.rendered.advertised())
+            .chain(self.modifiers.rendered.formats())
             .collect()
-    }
-
-    pub fn take_formats_changed(&mut self) -> bool {
-        std::mem::take(&mut self.formats_changed)
     }
 
     pub fn device_info(&self) -> &DeviceInfo {
@@ -1189,18 +1232,156 @@ impl VulkanRenderer {
         }
     }
 
+    fn prove_modifiers(&mut self) {
+        for usage in [formats::SAMPLED, formats::RENDERED] {
+            let supported = match usage {
+                formats::SAMPLED => &self.modifiers.sampled,
+                _ => &self.modifiers.rendered,
+            };
+            let listed: Vec<_> = supported.listed().collect();
+            for (format, capability) in listed {
+                let Some(texel) = formats::texel(format.code) else {
+                    continue;
+                };
+                if !capability.exportable {
+                    continue;
+                }
+                if let Err(error) = self.round_trip(format, texel, (usage, capability)) {
+                    tracing::warn!(
+                        "{} reports {:?} with modifier {:?} for {usage:?} but cannot import it \
+                         ({error}); not offering it",
+                        self.info,
+                        format.code,
+                        format.modifier,
+                    );
+                    match usage {
+                        formats::SAMPLED => self.modifiers.sampled.remove(&format),
+                        _ => self.modifiers.rendered.remove(&format),
+                    }
+                    self.refused.push(format);
+                }
+            }
+        }
+    }
+
+    fn round_trip(
+        &self,
+        format: Format,
+        texel: formats::Texel,
+        (usage, capability): (vk::ImageUsageFlags, formats::Capability),
+    ) -> Result<(), RenderError> {
+        const SIDE: u32 = 64;
+        let modifiers = [u64::from(format.modifier)];
+        let mut list =
+            vk::ImageDrmFormatModifierListCreateInfoEXT::default().drm_format_modifiers(&modifiers);
+        let mut external = vk::ExternalMemoryImageCreateInfo::default()
+            .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        let view_formats = texel.view_formats();
+        let mut views = vk::ImageFormatListCreateInfo::default().view_formats(&view_formats);
+        let mut info = vk::ImageCreateInfo::default()
+            .flags(texel.flags())
+            .image_type(vk::ImageType::TYPE_2D)
+            .format(texel.format)
+            .extent(vk::Extent3D {
+                width: SIDE,
+                height: SIDE,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
+            .usage(usage)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .push_next(&mut list)
+            .push_next(&mut external);
+        if !view_formats.is_empty() {
+            info = info.push_next(&mut views);
+        }
+        // SAFETY: the device reported this format, modifier and usage as an exportable dma-buf
+        // image, and every struct chained into `info` outlives the call.
+        let image = unsafe { self.device.create_image(&info, None) }?;
+        let mut exported = Image {
+            image,
+            memory: Vec::new(),
+            view: vk::ImageView::null(),
+            width: SIDE as i32,
+            height: SIDE as i32,
+        };
+        let imported = self
+            .export_image(&mut exported, capability.planes, format)
+            .and_then(|dmabuf| self.import_image(&dmabuf, texel, (usage, capability)));
+        self.destroy_image(&exported);
+        self.destroy_image(&imported?);
+        Ok(())
+    }
+
+    fn export_image(
+        &self,
+        image: &mut Image,
+        planes: usize,
+        format: Format,
+    ) -> Result<Dmabuf, RenderError> {
+        // SAFETY: `image.image` is a live image of this device without memory yet.
+        let requirements = unsafe { self.device.get_image_memory_requirements(image.image) };
+        let kind = self.memory_type(
+            requirements.memory_type_bits,
+            vk::MemoryPropertyFlags::empty(),
+        )?;
+        let mut export = vk::ExportMemoryAllocateInfo::default()
+            .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
+        let mut dedicated = vk::MemoryDedicatedAllocateInfo::default().image(image.image);
+        let memory = self.allocate(
+            &vk::MemoryAllocateInfo::default()
+                .allocation_size(requirements.size)
+                .memory_type_index(kind)
+                .push_next(&mut export)
+                .push_next(&mut dedicated),
+        )?;
+        image.memory.push(memory);
+        // SAFETY: `memory` was just allocated for this image, which has none bound yet.
+        unsafe { self.device.bind_image_memory(image.image, memory, 0) }?;
+        // SAFETY: `memory` was allocated exportable as a dma-buf.
+        let fd = unsafe {
+            self.external_memory_fd.get_memory_fd(
+                &vk::MemoryGetFdInfoKHR::default()
+                    .memory(memory)
+                    .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT),
+            )
+        }?;
+        // SAFETY: `get_memory_fd` returns a new fd that nothing else owns.
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let mut builder = Dmabuf::builder(
+            (image.width, image.height),
+            format.code,
+            format.modifier,
+            DmabufFlags::empty(),
+        );
+        for (index, aspect) in MEMORY_PLANES.into_iter().take(planes).enumerate() {
+            // SAFETY: the image has a DRM format modifier with `planes` memory planes, of which
+            // `aspect` is one.
+            let layout = unsafe {
+                self.device.get_image_subresource_layout(
+                    image.image,
+                    vk::ImageSubresource::default().aspect_mask(aspect),
+                )
+            };
+            let offset =
+                u32::try_from(layout.offset).map_err(|_| RenderError::BufferOutOfBounds)?;
+            let stride =
+                u32::try_from(layout.row_pitch).map_err(|_| RenderError::BufferOutOfBounds)?;
+            builder.add_plane(fd.try_clone()?, index as u32, offset, stride);
+        }
+        builder.build().ok_or(RenderError::UnsupportedFormat)
+    }
+
     fn bind_imported_image(
         &self,
         image: &mut Image,
         objects: Vec<File>,
         disjoint: bool,
     ) -> Result<(), RenderError> {
-        const MEMORY_PLANES: [vk::ImageAspectFlags; 4] = [
-            vk::ImageAspectFlags::MEMORY_PLANE_0_EXT,
-            vk::ImageAspectFlags::MEMORY_PLANE_1_EXT,
-            vk::ImageAspectFlags::MEMORY_PLANE_2_EXT,
-            vk::ImageAspectFlags::MEMORY_PLANE_3_EXT,
-        ];
         if objects.len() > MEMORY_PLANES.len() {
             return Err(RenderError::UnsupportedFormat);
         }
@@ -1211,7 +1392,8 @@ impl VulkanRenderer {
             if disjoint {
                 info = info.push_next(&mut plane);
             }
-            let mut requirements = vk::MemoryRequirements2::default();
+            let mut dedicated = vk::MemoryDedicatedRequirements::default();
+            let mut requirements = vk::MemoryRequirements2::default().push_next(&mut dedicated);
             // SAFETY: `image.image` is a live image of this device without memory yet, and
             // `plane` names one of its memory planes only when it was created `DISJOINT`.
             unsafe {
@@ -1219,6 +1401,9 @@ impl VulkanRenderer {
                     .get_image_memory_requirements2(&info, &mut requirements)
             };
             let requirements = requirements.memory_requirements;
+            if disjoint && dedicated.requires_dedicated_allocation == vk::TRUE {
+                return Err(RenderError::UnsupportedFormat);
+            }
             if requirements.size > size {
                 return Err(RenderError::BufferOutOfBounds);
             }
@@ -1601,38 +1786,11 @@ impl VulkanRenderer {
     fn dmabuf_target(&mut self, dmabuf: &Dmabuf) -> Result<u64, RenderError> {
         let format = dmabuf.format();
         if let Some(capability) = self.modifiers.rendered.usable(&format) {
-            let direct = self.direct_target(dmabuf, capability);
-            self.note_import(format, Use::Rendered, direct.as_ref().err());
-            return direct;
+            return self.direct_target(dmabuf, capability);
         }
         let export = self.dmabuf_export(dmabuf)?;
         let size = dmabuf.size();
         self.create_target(size.w, size.h, format.code, Some(export))
-    }
-
-    pub(crate) fn note_import(&mut self, format: Format, usage: Use, error: Option<&RenderError>) {
-        let supported = match usage {
-            Use::Sampled => &mut self.modifiers.sampled,
-            Use::Rendered => &mut self.modifiers.rendered,
-        };
-        let Some(error) = error else {
-            supported.worked(format);
-            return;
-        };
-        if !matches!(error, RenderError::Vulkan(_)) || !supported.failed(format) {
-            return;
-        }
-        self.formats_changed = true;
-        let action = match usage {
-            Use::Sampled => "sample",
-            Use::Rendered => "render into",
-        };
-        tracing::warn!(
-            "{} cannot {action} {:?} with modifier {:?} ({error}); asking clients for another",
-            self.info,
-            format.code,
-            format.modifier,
-        );
     }
 
     fn create_target(
@@ -1754,10 +1912,12 @@ impl VulkanRenderer {
         self.lost.load(Ordering::Relaxed)
     }
 
+    pub fn out_of_memory(&self) -> bool {
+        self.exhausted.load(Ordering::Relaxed)
+    }
+
     pub fn needs_renewal(&self) -> bool {
-        self.is_lost()
-            || (self.exhausted.load(Ordering::Relaxed)
-                && self.created.elapsed() >= MIN_RENDERER_LIFETIME)
+        self.is_lost() || (self.out_of_memory() && self.created.elapsed() >= MIN_RENDERER_LIFETIME)
     }
 
     pub fn memory_use(&self) -> MemoryUse {
@@ -2243,15 +2403,15 @@ impl Drop for VulkanRenderer {
     }
 }
 
-static VULKAN_PROBLEMS: AtomicU64 = AtomicU64::new(0);
+static VULKAN_ERRORS: AtomicU64 = AtomicU64::new(0);
 
-pub fn vulkan_problems() -> u64 {
-    VULKAN_PROBLEMS.load(Ordering::Relaxed)
+pub fn vulkan_errors() -> u64 {
+    VULKAN_ERRORS.load(Ordering::Relaxed)
 }
 
 unsafe extern "system" fn report(
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-    types: vk::DebugUtilsMessageTypeFlagsEXT,
+    _: vk::DebugUtilsMessageTypeFlagsEXT,
     data: *const vk::DebugUtilsMessengerCallbackDataEXT<'_>,
     _: *mut std::ffi::c_void,
 ) -> vk::Bool32 {
@@ -2260,14 +2420,36 @@ unsafe extern "system" fn report(
         .map(CStr::to_string_lossy)
         .unwrap_or_default();
     let error = severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR);
-    if error || types.contains(vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION) {
-        VULKAN_PROBLEMS.fetch_add(1, Ordering::Relaxed);
+    if error {
+        VULKAN_ERRORS.fetch_add(1, Ordering::Relaxed);
     }
     match error {
         true => tracing::error!("Vulkan: {message}"),
         false => tracing::warn!("Vulkan: {message}"),
     }
     vk::FALSE
+}
+
+unsafe fn promoted_commands(instance: &ash::Instance, device: vk::Device) -> ash::Device {
+    let find = |name: &CStr| {
+        // SAFETY: `device` is a live device of `instance` and `name` is a NUL-terminated name.
+        unsafe { instance.get_device_proc_addr(device, name.as_ptr()) }
+    };
+    let load = |name: &CStr| {
+        let command = find(name).or_else(|| {
+            let mut promoted = name.to_bytes().to_vec();
+            promoted.extend_from_slice(b"KHR");
+            std::ffi::CString::new(promoted)
+                .ok()
+                .and_then(|promoted| find(&promoted))
+        });
+        command.map_or(std::ptr::null(), |command| {
+            command as *const std::ffi::c_void
+        })
+    };
+    // SAFETY: `load` returns each command of `device` by its name, or the `KHR` command it was
+    // promoted from, or null, which ash replaces by a stub that panics if called.
+    unsafe { ash::Device::load_with(load, device) }
 }
 
 fn forget_instance(

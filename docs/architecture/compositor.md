@@ -20,8 +20,10 @@ when they reach the screen is Bande's own.
 
 ## Implemented
 
-- **Renderer.** `crates/platform/render` is one Vulkan 1.3 device with push descriptors and
-  dynamic rendering, implementing Smithay's `Renderer`, `Frame`, `ImportMemWl`, `ImportDmaWl`,
+- **Renderer.** `crates/platform/render` is one Vulkan 1.2 or later device with push
+  descriptors, dynamic rendering and synchronization2 (from `VK_KHR_dynamic_rendering` and
+  `VK_KHR_synchronization2` below 1.3, so hasvk's Haswell and Broadwell GPUs qualify); every
+  device left out is logged with the reason. It implements Smithay's `Renderer`, `Frame`, `ImportMemWl`, `ImportDmaWl`,
   `Offscreen` and `Bind<Dmabuf>`. Both outputs compose the same Wayland surface elements through
   Smithay: the headless output with `OutputDamageTracker` into a persistent offscreen image (read
   back only for tests), the DRM output with `DrmCompositor`. Each surface keeps a texture for its
@@ -104,27 +106,30 @@ when they reach the screen is Bande's own.
   dma-buf for sampling: `render/src/formats.rs` asks once per device, with
   `VK_EXT_image_drm_format_modifier` (any device but a CPU one), for each format's modifiers and
   keeps those that `vkGetPhysicalDeviceImageFormatProperties2` accepts as importable dma-buf images
-  for the usage (sampled for textures; colour attachment, blending, sampling and transfers for
-  render targets), with their memory plane count, largest size and whether the planes may be bound
-  apart. The formats are ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and P010
+  for the usage (sampled with linear filtering for textures; colour attachment, blending,
+  sampling and transfers for render targets), with their memory plane count, largest size and
+  whether the planes may be bound apart. At start-up each such pair the driver can export is
+  proven: a small image is allocated with the modifier, exported as a dma-buf and imported again
+  through the same path as client buffers; a pair that fails is not offered, with one warning naming
+  the device and driver, so every version of the protocol only ever lists what imports. The formats are ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and P010
   for video (BT.709 limited range, converted in the `video` shader), each with its tiled and
   compressed modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also without the
-  extension. On a DRM device it is version 4 with feedback: the main tranche names the render
-  device and a scanout tranche lists the primary plane's formats and modifiers that the GPU can
+  extension. On a DRM device it is version 4 with feedback: the main device and tranches name
+  the card's render node and a scanout tranche lists the primary plane's formats and modifiers that the GPU can
   also sample; headless it is version 3 with LINEAR only. A buffer is accepted with exactly the
   memory planes its modifier has (a compressed modifier has more than the format: Intel CCS one
   for the pixels and one for the compression data, AMD DCC up to three) and carries the DRM node
   so that `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan image with its
-  modifier and one explicit layout per memory plane (offset and stride; size and pitches zero);
-  planes in separate dma-bufs make a `DISJOINT` image with one memory per plane, refused when the
-  modifier cannot be bound that way. Only a LINEAR plane is checked row by row against its buffer,
+  modifier and one explicit layout per memory plane (offset and stride, the stride required only
+  for the format's own planes, as a clear-colour plane has none; size and pitches zero); planes in
+  separate dma-bufs make a `DISJOINT` image with one memory per plane, refused when the modifier
+  cannot be bound that way or a plane needs dedicated memory. Only a LINEAR plane is checked row by row against its buffer,
   as a tiled layout is the driver's. The image is sampled in place every frame, without a copy: a
   frame acquires it from the foreign queue in `GENERAL` before its first draw and releases it back
-  in `GENERAL` when the frame ends. The first buffer of each format and modifier tests the import:
-  if the driver refuses it although it reported support, the pair is dropped with one warning
-  naming the device and driver, and the default and per-surface feedback are sent again without
-  it so that clients allocate another; the buffer itself stays accepted (a `create_immed` client
-  is never disconnected for it) and the surface keeps showing its last buffer that worked. A
+  in `GENERAL` when the frame ends. A buffer that still fails to import (from another GPU, with a
+  layout the driver refuses, or out of memory) fails alone: it stays accepted (a `create_immed`
+  client is never disconnected for it), the surface keeps showing its last buffer that worked,
+  and the format stays offered to everyone. A
   LINEAR buffer that cannot be sampled that way (offset or stride not a multiple of 16, or a
   driver or lavapipe without the extension) is imported as a Vulkan buffer and its damaged rows
   copied into the surface's texture, so any stride works; that buffer is acquired from the foreign
@@ -145,9 +150,9 @@ when they reach the screen is Bande's own.
   and the GPU share), imported with the same per-memory-plane layouts as client buffers and handed
   between the GPU and the display through the foreign queue (a buffer's first frame starts from
   `UNDEFINED`, as it is drawn whole); a colour profile converts into a scratch image and copies
-  back. When such a buffer fails to render, its modifier is dropped and the output (and every
-  display set up after it in the session) steps down: first to LINEAR GBM buffers, then to dumb
-  buffers. With LINEAR GBM or dumb buffers, or without a tiled modifier, the renderer binds the
+  back. When such a buffer fails to render for a reason other than a lost device or exhausted
+  memory, that output steps down for as long as it is connected: first to LINEAR GBM buffers,
+  then to dumb buffers; another display starts again from tiled buffers. With LINEAR GBM or dumb buffers, or without a tiled modifier, the renderer binds the
   buffer as a dma-buf: each frame is rendered into its own image and its
   drawn regions copied out (the buffer acquired from and released to the foreign queue around the copy), by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
   otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. Only the first card with a connected display is driven; displays on a second GPU stay dark. udev change

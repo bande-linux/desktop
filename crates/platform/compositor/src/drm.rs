@@ -12,7 +12,7 @@ use smithay::backend::drm::compositor::{
     DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement,
 };
 use smithay::backend::drm::{
-    DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode,
+    DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode, NodeType,
     VrrSupport,
 };
 use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
@@ -127,12 +127,10 @@ pub struct DrmBackend {
     renderer: VulkanRenderer,
     node: DrmNode,
     feedback: DmabufFeedback,
-    scanout_formats: FormatSet,
-    feedback_stale: bool,
+    feedback_device: u64,
     heads: Vec<Head>,
     libinput: Option<Libinput>,
     kelvin: Option<f64>,
-    fallback: Buffers,
 }
 
 pub struct DrmNotifiers {
@@ -492,8 +490,12 @@ impl DrmBackend {
         let renderer = VulkanRenderer::new(Some(node.dev_id()))?;
         let info = renderer.device_info();
         tracing::info!("composing on {info} with {}", info.extensions.join(", "));
+        let feedback_device = match node.node_with_type(NodeType::Render) {
+            Some(Ok(render)) => render.dev_id(),
+            _ => node.dev_id(),
+        };
         let feedback =
-            DmabufFeedbackBuilder::new(node.dev_id(), renderer.dmabuf_formats()).build()?;
+            DmabufFeedbackBuilder::new(feedback_device, renderer.dmabuf_formats()).build()?;
         Ok(Self {
             session,
             path,
@@ -502,12 +504,10 @@ impl DrmBackend {
             renderer,
             node,
             feedback,
-            scanout_formats: FormatSet::default(),
-            feedback_stale: false,
+            feedback_device,
             heads: Vec::new(),
             libinput: None,
             kelvin: None,
-            fallback: Buffers::Tiled,
         })
     }
 
@@ -576,7 +576,7 @@ impl DrmBackend {
             .iter()
             .any(|format| format.modifier != Modifier::Linear);
         match self.gbm.is_some() && tiled {
-            true => self.fallback,
+            true => Buffers::Tiled,
             false => Buffers::Dumb,
         }
     }
@@ -610,16 +610,10 @@ impl DrmBackend {
             .copied()
             .collect();
         Ok(
-            DmabufFeedbackBuilder::new(self.node.dev_id(), renderer_formats)
-                .add_preference_tranche(self.node.dev_id(), Some(TrancheFlags::Scanout), scanout)
+            DmabufFeedbackBuilder::new(self.feedback_device, renderer_formats)
+                .add_preference_tranche(self.feedback_device, Some(TrancheFlags::Scanout), scanout)
                 .build()?,
         )
-    }
-
-    fn refresh_feedback(&mut self, compositor: &mut Compositor) -> Result<(), DrmBackendError> {
-        self.feedback = self.feedback_for(&self.scanout_formats)?;
-        compositor.change_dmabuf_feedback(&self.scanout_device());
-        Ok(())
     }
 
     fn create_head(&mut self, info: &connector::Info) -> Result<Option<Head>, DrmBackendError> {
@@ -639,7 +633,6 @@ impl DrmBackend {
         );
         if self.heads.is_empty() {
             self.feedback = self.feedback_for(&scanout_formats)?;
-            self.scanout_formats = scanout_formats;
         }
         Ok(Some(Head {
             connector: info.handle(),
@@ -1251,7 +1244,6 @@ impl DrmBackend {
                 )
             }
         };
-        self.fallback = buffers;
         self.heads.insert(
             index,
             Head {
@@ -1272,7 +1264,6 @@ impl DrmBackend {
             self.renderer.memory_use()
         );
         self.renderer = VulkanRenderer::new(Some(self.node.dev_id()))?;
-        self.feedback_stale = true;
         for head in &mut self.heads {
             head.compositor.reset_buffers();
         }
@@ -1286,9 +1277,6 @@ impl DrmBackend {
     ) -> Result<Submission, DrmBackendError> {
         if !self.session.is_active() {
             return Ok(Submission::Paused);
-        }
-        if std::mem::take(&mut self.feedback_stale) | self.renderer.take_formats_changed() {
-            self.refresh_feedback(compositor)?;
         }
         if compositor.holds_frames() {
             return Ok(Submission::Unchanged);
@@ -1386,6 +1374,7 @@ impl DrmBackend {
                 Ok(frame) => frame,
                 Err(error)
                     if !self.renderer.is_lost()
+                        && !self.renderer.out_of_memory()
                         && let Some(next) = head.buffers.next() =>
                 {
                     tracing::warn!("{output} uses {next} from now on: {error}");

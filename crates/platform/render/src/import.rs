@@ -21,8 +21,7 @@ use smithay::wayland::shm::with_buffer_contents;
 use crate::formats::{self, Kind};
 use crate::{
     BYTES_PER_PIXEL, Image, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS,
-    TextureImage, Use, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque,
-    target_format,
+    TextureImage, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque, target_format,
 };
 
 const GPU_LINEAR_ALIGNMENT: u32 = 16;
@@ -79,26 +78,29 @@ pub(crate) struct MemoryPlane {
 pub(crate) fn memory_layouts(
     planes: &[MemoryPlane],
     expected: usize,
-    linear_rows: Option<&[(u64, u64)]>,
+    rows: &[(u64, u64)],
+    linear: bool,
 ) -> Result<Vec<vk::SubresourceLayout>, RenderError> {
-    if planes.len() != expected || linear_rows.is_some_and(|rows| rows.len() != planes.len()) {
+    if planes.len() != expected || linear && rows.len() != planes.len() {
         return Err(RenderError::UnsupportedFormat);
     }
     planes
         .iter()
         .enumerate()
         .map(|(index, plane)| {
-            let rows = linear_rows.map(|rows| rows[index]);
-            if rows.is_some()
+            let rows = rows.get(index);
+            if linear
                 && !(plane.offset.is_multiple_of(GPU_LINEAR_ALIGNMENT)
                     && plane.stride.is_multiple_of(GPU_LINEAR_ALIGNMENT))
             {
                 return Err(RenderError::UnalignedDmabuf);
             }
-            if plane.stride == 0
+            if rows.is_some() && plane.stride == 0
                 || u64::from(plane.offset) >= plane.object_size
-                || rows
-                    .is_some_and(|rows| !fits(plane.offset, plane.stride, rows, plane.object_size))
+                || linear
+                    && rows.is_some_and(|&rows| {
+                        !fits(plane.offset, plane.stride, rows, plane.object_size)
+                    })
             {
                 return Err(RenderError::BufferOutOfBounds);
             }
@@ -149,9 +151,9 @@ pub(crate) fn dmabuf_planes(
         }
     }
     let extent = dmabuf.size();
-    let rows = (dmabuf.format().modifier == Modifier::Linear)
-        .then(|| texel.plane_rows(extent.w.unsigned_abs(), extent.h.unsigned_abs()));
-    let layouts = memory_layouts(&planes, capability.planes, rows.as_deref())?;
+    let rows = texel.plane_rows(extent.w.unsigned_abs(), extent.h.unsigned_abs());
+    let linear = dmabuf.format().modifier == Modifier::Linear;
+    let layouts = memory_layouts(&planes, capability.planes, &rows, linear)?;
     Ok(Planes {
         layouts,
         objects,
@@ -483,9 +485,7 @@ impl VulkanRenderer {
         if let Some(texture) = self.sampled_dmabufs.get(&weak) {
             return Ok(texture.clone());
         }
-        let texture = self.sampled_dmabuf(dmabuf, capability);
-        self.note_import(dmabuf.format(), Use::Sampled, texture.as_ref().err());
-        let texture = texture?;
+        let texture = self.sampled_dmabuf(dmabuf, capability)?;
         self.sampled_dmabufs.insert(weak, texture.clone());
         Ok(texture)
     }
@@ -694,7 +694,7 @@ impl ImportMemWl for VulkanRenderer {
 
 impl ImportDma for VulkanRenderer {
     fn dmabuf_formats(&self) -> FormatSet {
-        self.advertised_dmabuf_formats()
+        self.dmabuf_planes().into_keys().collect()
     }
 
     fn import_dmabuf(
@@ -754,7 +754,9 @@ mod tests {
     #[test]
     fn every_memory_plane_of_a_modifier_gets_its_own_layout() {
         let layouts = |planes: &[MemoryPlane], expected, rows: Option<&[(u64, u64)]>| {
-            memory_layouts(planes, expected, rows).map(|layouts| {
+            let linear = rows.is_some();
+            let rows = rows.unwrap_or(&[(512, 64)]);
+            memory_layouts(planes, expected, rows, linear).map(|layouts| {
                 layouts
                     .iter()
                     .map(|layout| {
@@ -781,6 +783,11 @@ mod tests {
         assert_eq!(
             layouts(&pixels_and_two_aux, 3, None).ok(),
             Some(vec![(0, 1024), (262144, 256), (327680, 64)])
+        );
+        let pixels_aux_and_clear_colour = [plane(0, 512), plane(65536, 128), plane(98304, 0)];
+        assert_eq!(
+            layouts(&pixels_aux_and_clear_colour, 3, None).ok(),
+            Some(vec![(0, 512), (65536, 128), (98304, 0)])
         );
         assert!(matches!(
             layouts(&pixels_and_aux[..1], 2, None),

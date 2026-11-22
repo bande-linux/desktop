@@ -20,10 +20,7 @@ use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, with_states,
 };
-use smithay::wayland::dmabuf::{
-    DmabufFeedback, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier,
-    SurfaceDmabufFeedbackState,
-};
+use smithay::wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier};
 use smithay::wayland::fractional_scale::FractionalScaleHandler;
 use smithay::wayland::output::OutputHandler;
 use smithay::wayland::security_context::{
@@ -195,41 +192,6 @@ impl DmabufHandler for State {
         } else {
             notifier.failed();
         }
-    }
-
-    fn new_surface_feedback(
-        &mut self,
-        surface: &WlSurface,
-        _global: &DmabufGlobal,
-    ) -> Option<DmabufFeedback> {
-        let surfaces = &mut self.globals.feedback_surfaces;
-        surfaces.retain(|known| known.upgrade().is_ok());
-        let surface = surface.downgrade();
-        if !surfaces.contains(&surface) {
-            surfaces.push(surface);
-        }
-        None
-    }
-}
-
-impl super::Compositor {
-    pub fn change_dmabuf_feedback(&mut self, scanout: &super::ScanoutDevice) {
-        let globals = &mut self.state.globals;
-        globals.dmabuf_planes = scanout.planes.clone();
-        globals
-            .dmabuf_state
-            .set_default_feedback(&globals.dmabuf_global, &scanout.feedback);
-        globals.feedback_surfaces.retain(|known| {
-            let Ok(surface) = known.upgrade() else {
-                return false;
-            };
-            with_states(&surface, |states| {
-                if let Some(feedback) = SurfaceDmabufFeedbackState::from_states(states) {
-                    feedback.set_feedback(&scanout.feedback);
-                }
-            });
-            true
-        });
     }
 }
 

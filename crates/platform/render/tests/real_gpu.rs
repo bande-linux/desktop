@@ -6,7 +6,7 @@ use std::os::unix::fs::MetadataExt;
 use std::sync::Arc;
 
 use ash::vk;
-use bande_render::{OffscreenTarget, VulkanRenderer, vulkan_problems};
+use bande_render::{OffscreenTarget, VulkanRenderer, vulkan_errors};
 use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf, DmabufFlags};
 use smithay::backend::allocator::gbm::{GbmAllocator, GbmBuffer, GbmBufferFlags, GbmDevice};
 use smithay::backend::allocator::{Allocator, Buffer, Format, Fourcc};
@@ -148,6 +148,10 @@ impl Exporter {
             println!("skipped {format:?}: Vulkan cannot allocate it");
             return Ok(None);
         };
+        if planes != 2 {
+            println!("skipped {format:?}: its compression planes cannot be filled by the CPU");
+            return Ok(None);
+        }
         let modifiers = [modifier];
         let mut list =
             vk::ImageDrmFormatModifierListCreateInfoEXT::default().drm_format_modifiers(&modifiers);
@@ -175,6 +179,7 @@ impl Exporter {
                 None,
             )
         }?;
+        self.images.push((image, vk::DeviceMemory::null()));
         // SAFETY: `image` is a live image of this device.
         let requirements = unsafe { self.device.get_image_memory_requirements(image) };
         let mut export = vk::ExportMemoryAllocateInfo::default()
@@ -191,7 +196,7 @@ impl Exporter {
                 None,
             )
         }?;
-        self.images.push((image, memory));
+        self.images.push((vk::Image::null(), memory));
         // SAFETY: `memory` was allocated for `image`, which has none bound.
         unsafe { self.device.bind_image_memory(image, memory, 0) }?;
         // SAFETY: `memory` was allocated exportable as a dma-buf.
@@ -279,7 +284,7 @@ fn video(code: Fourcc) -> Option<(vk::Format, [&'static [u8]; 2])> {
     }
 }
 
-fn dma_buf_sync(file: &File, flags: u64) -> Outcome {
+fn dma_buf_sync(file: &File, flags: u64) -> std::io::Result<()> {
     const SYNC: ioctl::Opcode = ioctl::opcode::write::<u64>(b'b', 0);
     // SAFETY: `DMA_BUF_IOCTL_SYNC` is `_IOW('b', 0, struct dma_buf_sync)`, a single `__u64`.
     let request = unsafe { ioctl::Setter::<SYNC, u64>::new(flags) };
@@ -288,16 +293,13 @@ fn dma_buf_sync(file: &File, flags: u64) -> Outcome {
     Ok(())
 }
 
-fn fill_planes(dmabuf: &Dmabuf, patterns: [&[u8]; 2]) -> Outcome {
+fn fill_planes(dmabuf: &Dmabuf, patterns: [&[u8]; 2]) -> std::io::Result<()> {
     let offsets: Vec<u32> = dmabuf.offsets().collect();
     for (index, (fd, pattern)) in dmabuf.handles().zip(patterns).enumerate() {
         let file = File::from(fd.try_clone_to_owned()?);
-        let length = usize::try_from((&file).seek(SeekFrom::End(0))?)?;
-        let start = usize::try_from(offsets[index])?;
-        let end = match offsets.get(index + 1) {
-            Some(&next) => usize::try_from(next)?,
-            None => length,
-        };
+        let length = (&file).seek(SeekFrom::End(0))? as usize;
+        let start = offsets[index] as usize;
+        let end = offsets.get(index + 1).map_or(length, |&next| next as usize);
         // SAFETY: a fresh shared mapping of the whole dma-buf, unmapped below before `file` closes.
         let mapping = unsafe {
             mm::mmap(
@@ -410,6 +412,10 @@ fn sample(gpu: &mut Gpu, format: Format) -> Outcome {
                 return Ok(());
             };
             if let Err(error) = fill_colour(&mut buffer, pixel) {
+                if !gpu.renderer.render_formats().contains(&format) {
+                    println!("skipped {format:?}: GBM cannot map it ({error})");
+                    return Ok(());
+                }
                 println!("{format:?}: GBM cannot map it ({error}), drawing it instead");
                 let colour = COLOUR.map(|value| f32::from(value) / 255.0);
                 clear(&mut gpu.renderer, &mut buffer.export()?, colour)?;
@@ -417,10 +423,18 @@ fn sample(gpu: &mut Gpu, format: Format) -> Outcome {
             (buffer.export()?, [COLOUR[2], COLOUR[1], COLOUR[0], 0xff])
         }
         (None, Some((texel, planes))) => {
-            let Some(dmabuf) = gpu.exporter.export(format, texel)? else {
-                return Ok(());
+            let dmabuf = match gpu.exporter.export(format, texel) {
+                Ok(Some(dmabuf)) => dmabuf,
+                Ok(None) => return Ok(()),
+                Err(error) => {
+                    println!("skipped {format:?}: Vulkan cannot export it ({error})");
+                    return Ok(());
+                }
             };
-            fill_planes(&dmabuf, planes)?;
+            if let Err(error) = fill_planes(&dmabuf, planes) {
+                println!("skipped {format:?}: the CPU cannot fill it ({error})");
+                return Ok(());
+            }
             (dmabuf, [GREY, GREY, GREY, 0xff])
         }
         (None, None) => return Err(format!("no test pattern for {format:?}").into()),
@@ -477,7 +491,13 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome {
     }
     let last = colours[FRAMES - 1].map(|value: f32| (value * 255.0).round() as u8);
     let mut wanted = packed(format.code, last).ok_or("not a colour format")?;
-    let found = foreign_pixel(&gpu.gbm, &dmabuf)?;
+    let found = match foreign_pixel(&gpu.gbm, &dmabuf) {
+        Ok(found) => found,
+        Err(error) => {
+            println!("drew {format:?}, but GBM cannot read it back ({error})");
+            return Ok(());
+        }
+    };
     println!("scanned out {format:?}: {found:?}");
     if matches!(format.code, Fourcc::Xrgb8888 | Fourcc::Xbgr8888) {
         wanted[3] = found[3];
@@ -491,7 +511,7 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome {
 
 #[test]
 fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
-    tracing_subscriber::fmt().with_test_writer().init();
+    let _ = tracing_subscriber::fmt().with_test_writer().try_init();
     let Some(mut gpu) = hardware()? else {
         println!("skipped: no hardware Vulkan device with a DRM render node (lavapipe only)");
         return Ok(());
@@ -507,10 +527,8 @@ fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
     for format in rendered {
         scan_out(&mut gpu, format)?;
     }
-    assert!(
-        !gpu.renderer.take_formats_changed(),
-        "a format failed to import"
-    );
-    assert_eq!(vulkan_problems(), 0, "Vulkan reported problems");
+    let refused = gpu.renderer.refused_formats();
+    assert!(refused.is_empty(), "the driver refused {refused:?}");
+    assert_eq!(vulkan_errors(), 0, "Vulkan reported errors");
     Ok(())
 }

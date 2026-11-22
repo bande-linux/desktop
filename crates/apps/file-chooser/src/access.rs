@@ -1,79 +1,21 @@
+use bande_file_chooser::choice::{answers, control};
 use bande_l10n::tr;
 use bande_toolkit::Image;
-use bande_toolkit::ui::{Alert, Axis, CheckState, Checkbox, Label, PopUpButton, Stack, Widget};
+use bande_toolkit::ui::{Alert, Axis, Stack};
 use bande_xdg::{
     ICON_THEMES, Locale, applications, current_desktops, data_dirs, find_app, find_icon,
 };
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::io::Write;
 use std::process::ExitCode;
 use std::rc::Rc;
 use xdg_desktop_portal_bande::access::Question;
 use xdg_desktop_portal_bande::dialog_process::{CANCELLED, CHOSEN, encode_pairs};
-use xdg_desktop_portal_bande::file_chooser::Choice;
 
 const GRANT: &str = "grant";
 const SPACING: f32 = 8.0;
 const ICON_POINTS: f64 = 36.0;
 const UNAVAILABLE: u8 = 2;
-
-type Answers = Rc<RefCell<Vec<(String, String)>>>;
-
-fn initial(choice: &Choice) -> String {
-    match choice.options.is_empty() {
-        true if choice.initial == "true" => "true".to_owned(),
-        true => "false".to_owned(),
-        false => choice.initial.clone(),
-    }
-}
-
-fn set(answers: &Answers, id: &str, value: String) {
-    if let Some(answer) = answers
-        .borrow_mut()
-        .iter_mut()
-        .find(|answer| answer.0 == id)
-    {
-        answer.1 = value;
-    }
-}
-
-fn control(choice: &Choice, answers: &Answers) -> Box<dyn Widget> {
-    let (answers, id) = (Rc::clone(answers), choice.id.clone());
-    if choice.options.is_empty() {
-        let state = match choice.initial.as_str() {
-            "true" => CheckState::On,
-            _ => CheckState::Off,
-        };
-        return Box::new(Checkbox::new(&choice.label, state, move |on| {
-            set(&answers, &id, on.to_string());
-        }));
-    }
-    let keys: Vec<String> = choice
-        .options
-        .iter()
-        .map(|option| option.0.clone())
-        .collect();
-    let titles: Vec<&str> = choice
-        .options
-        .iter()
-        .map(|option| option.1.as_str())
-        .collect();
-    let selected = keys
-        .iter()
-        .position(|key| *key == choice.initial)
-        .unwrap_or(0);
-    let pop_up = PopUpButton::new(&choice.label, &titles, selected, move |index| {
-        if let Some(key) = keys.get(index) {
-            set(&answers, &id, key.clone());
-        }
-    });
-    Box::new(Stack::new(
-        Axis::Horizontal,
-        SPACING,
-        0.0,
-        vec![Box::new(Label::new(&choice.label)), Box::new(pop_up)],
-    ))
-}
 
 fn icon(question: &Question, pixels: u32) -> Option<Image> {
     let dirs = data_dirs();
@@ -86,13 +28,7 @@ fn icon(question: &Question, pixels: u32) -> Option<Image> {
 }
 
 pub fn ask(question: &Question) -> ExitCode {
-    let answers: Answers = Rc::new(RefCell::new(
-        question
-            .choices
-            .iter()
-            .map(|choice| (choice.id.clone(), initial(choice)))
-            .collect(),
-    ));
+    let answers = answers(&question.choices);
     let granted = Rc::new(Cell::new(false));
     let chosen = Rc::clone(&granted);
     let message = [question.subtitle.as_str(), question.body.as_str()]

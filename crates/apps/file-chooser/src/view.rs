@@ -1,3 +1,4 @@
+use crate::choice::control;
 use std::cell::{Cell as Flag, RefCell};
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
@@ -682,6 +683,9 @@ impl ChooserView {
                 self.chooser.filter().unwrap_or(0),
                 move |index| push(&intents, Intent::Filter(index)),
             )));
+        }
+        for choice in &self.chooser.dialog().choices {
+            tools.push(control(choice, self.chooser.answers()));
         }
         if !matches!(
             self.chooser.dialog().mode,

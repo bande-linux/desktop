@@ -24,6 +24,8 @@ pub enum Setting {
     UpdateCheckEvery(Option<Duration>),
     LockMessage(String),
     ShowPreviews(bool),
+    ScreenSharingAsk(bool),
+    ScreenSharingOlderViewers(bool),
     Clock(ClockFormat),
     ShowBatteryPercentage(bool),
     LowPowerOnBattery(bool),
@@ -111,6 +113,18 @@ impl Setting {
                 None,
                 "remember-recent-files",
                 (!on).then_some(KdlValue::Bool(false)),
+            ),
+            Self::ScreenSharingAsk(ask) => set(
+                &mut document,
+                None,
+                "screen-sharing-ask",
+                (!ask).then_some(KdlValue::Bool(false)),
+            ),
+            Self::ScreenSharingOlderViewers(allowed) => set(
+                &mut document,
+                None,
+                "screen-sharing-older-viewers",
+                allowed.then_some(KdlValue::Bool(true)),
             ),
             Self::ShowPreviews(shown) => set(
                 &mut document,

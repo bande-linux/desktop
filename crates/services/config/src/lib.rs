@@ -970,6 +970,8 @@ pub struct Config {
     pub update_check_every: Option<Duration>,
     pub lock_message: String,
     pub show_previews: bool,
+    pub screen_sharing_ask: bool,
+    pub screen_sharing_older_viewers: bool,
     pub clock: ClockFormat,
     pub accessibility: Accessibility,
     pub bar: Bar,
@@ -1010,6 +1012,8 @@ impl Default for Config {
             update_check_every: None,
             lock_message: String::new(),
             show_previews: true,
+            screen_sharing_ask: true,
+            screen_sharing_older_viewers: false,
             clock: ClockFormat::Automatic,
             accessibility: Accessibility::default(),
             bar: Bar::default(),
@@ -1163,6 +1167,10 @@ impl Parser<'_> {
                     .string(node)
                     .map(|message| config.lock_message = message),
                 "show-previews" => self.flag(node).map(|shown| config.show_previews = shown),
+                "screen-sharing-ask" => self.flag(node).map(|ask| config.screen_sharing_ask = ask),
+                "screen-sharing-older-viewers" => self
+                    .flag(node)
+                    .map(|allowed| config.screen_sharing_older_viewers = allowed),
                 "reopen-apps" => self.flag(node).map(|reopen| config.reopen_apps = reopen),
                 "remember-recent-files" => self
                     .flag(node)

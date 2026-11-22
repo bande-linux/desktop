@@ -189,6 +189,12 @@ fn publish_changes(
         if before.show_previews != after.show_previews {
             announce(guard.show_previews_changed(emitter).await);
         }
+        if before.screen_sharing_ask != after.screen_sharing_ask {
+            announce(guard.screen_sharing_ask_changed(emitter).await);
+        }
+        if before.screen_sharing_older_viewers != after.screen_sharing_older_viewers {
+            announce(guard.screen_sharing_older_viewers_changed(emitter).await);
+        }
         if before.lock_message != after.lock_message {
             announce(guard.lock_message_changed(emitter).await);
         }
@@ -766,6 +772,26 @@ impl ConfigInterface {
             )));
         }
         self.write(&Setting::LockMessage(message))
+    }
+
+    #[zbus(property)]
+    fn screen_sharing_ask(&self) -> bool {
+        self.store.current().screen_sharing_ask
+    }
+
+    #[zbus(property)]
+    fn set_screen_sharing_ask(&self, ask: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::ScreenSharingAsk(ask))
+    }
+
+    #[zbus(property)]
+    fn screen_sharing_older_viewers(&self) -> bool {
+        self.store.current().screen_sharing_older_viewers
+    }
+
+    #[zbus(property)]
+    fn set_screen_sharing_older_viewers(&self, allowed: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::ScreenSharingOlderViewers(allowed))
     }
 
     #[zbus(property)]

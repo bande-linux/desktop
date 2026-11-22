@@ -122,40 +122,56 @@ pub enum Signal {
     Closed(u32),
 }
 
-/// Passes every notification signal on `connection` to `deliver` until `deliver` returns false.
-/// Blocks, so it runs on a thread of its own.
-pub fn listen(
-    connection: &Connection,
-    mut deliver: impl FnMut(Signal) -> bool,
-) -> zbus::Result<()> {
-    let rule = MatchRule::builder()
-        .msg_type(message::Type::Signal)
-        .interface(INTERFACE)?
-        .path(OBJECT_PATH)?
-        .build();
-    for signal in MessageIterator::for_match_rule(rule, connection, None)?.flatten() {
-        let header = signal.header();
-        let body = signal.body();
-        let signal = match header.member().map(|member| member.as_str()) {
-            Some("ActivationToken") => body
-                .deserialize::<(u32, String)>()
-                .ok()
-                .map(|(id, token)| Signal::ActivationToken(id, token)),
-            Some("ActionInvoked") => body
-                .deserialize::<(u32, String)>()
-                .ok()
-                .map(|(id, key)| Signal::ActionInvoked(id, key)),
-            Some("NotificationClosed") => body
-                .deserialize::<(u32, u32)>()
-                .ok()
-                .map(|(id, _)| Signal::Closed(id)),
-            _ => None,
-        };
-        if let Some(signal) = signal
-            && !deliver(signal)
-        {
-            break;
+/// Notification signals on a connection, received from the moment it is made.
+pub struct Listener(MessageIterator);
+
+impl Listener {
+    /// Subscribes to notification signals on `connection`; make it before posting a notification
+    /// whose signals must not be missed.
+    pub fn new(connection: &Connection) -> zbus::Result<Self> {
+        let rule = MatchRule::builder()
+            .msg_type(message::Type::Signal)
+            .interface(INTERFACE)?
+            .path(OBJECT_PATH)?
+            .build();
+        Ok(Self(MessageIterator::for_match_rule(
+            rule, connection, None,
+        )?))
+    }
+
+    /// Passes every signal to `deliver` until `deliver` returns false.
+    /// Blocks, so it runs on a thread of its own.
+    pub fn listen(self, mut deliver: impl FnMut(Signal) -> bool) {
+        for signal in self.0.flatten() {
+            let header = signal.header();
+            let body = signal.body();
+            let signal = match header.member().map(|member| member.as_str()) {
+                Some("ActivationToken") => body
+                    .deserialize::<(u32, String)>()
+                    .ok()
+                    .map(|(id, token)| Signal::ActivationToken(id, token)),
+                Some("ActionInvoked") => body
+                    .deserialize::<(u32, String)>()
+                    .ok()
+                    .map(|(id, key)| Signal::ActionInvoked(id, key)),
+                Some("NotificationClosed") => body
+                    .deserialize::<(u32, u32)>()
+                    .ok()
+                    .map(|(id, _)| Signal::Closed(id)),
+                _ => None,
+            };
+            if let Some(signal) = signal
+                && !deliver(signal)
+            {
+                break;
+            }
         }
     }
+}
+
+/// Passes every notification signal on `connection` to `deliver` until `deliver` returns false.
+/// Blocks, so it runs on a thread of its own.
+pub fn listen(connection: &Connection, deliver: impl FnMut(Signal) -> bool) -> zbus::Result<()> {
+    Listener::new(connection)?.listen(deliver);
     Ok(())
 }

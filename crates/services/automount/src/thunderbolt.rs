@@ -4,7 +4,7 @@ use std::thread;
 
 use bande_l10n::tr;
 use bande_notify::Urgency;
-use bande_notify::client::{self, Request, Signal};
+use bande_notify::client::{self, Listener, Request, Signal};
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
@@ -15,7 +15,8 @@ const BOLT: &str = "org.freedesktop.bolt";
 const UNAUTHORIZED: &str = "connected";
 const AUTHORIZED: &str = "authorized";
 const ASKING_LEVELS: [&str; 2] = ["user", "secure"];
-const AUTO: &str = "auto";
+const AUTOMATIC: [&str; 2] = ["auto", "iommu"];
+const ACCESS_DENIED: &str = "org.freedesktop.DBus.Error.AccessDenied";
 const ALLOW: &str = "allow";
 const ALWAYS_ALLOW: &str = "always-allow";
 
@@ -162,7 +163,7 @@ impl Thunderbolt {
                     name: device.name()?,
                     status: device.status()?,
                     parent: device.parent()?,
-                    automatic: device.stored()? && device.policy()? == AUTO,
+                    automatic: device.stored()? && AUTOMATIC.contains(&device.policy()?.as_str()),
                     path,
                 })
             })
@@ -214,6 +215,14 @@ impl Thunderbolt {
         if self.state().shown.insert(path.clone(), 0).is_some() {
             return;
         }
+        let listener = match Listener::new(&self.session) {
+            Ok(listener) => listener,
+            Err(error) => {
+                tracing::warn!("the Thunderbolt question cannot be answered: {error}");
+                self.state().shown.remove(&path);
+                return;
+            }
+        };
         let allow = tr!("Allow Once");
         let always = tr!("Always Allow");
         let posted = client::notify(
@@ -247,7 +256,7 @@ impl Thunderbolt {
             .name("thunderbolt-answer".to_owned())
             .spawn(move || {
                 let mut chosen = None;
-                let followed = client::listen(&answer.session, |signal| match signal {
+                listener.listen(|signal| match signal {
                     Signal::ActionInvoked(shown, key) if shown == id => {
                         chosen = Some(key);
                         false
@@ -255,16 +264,20 @@ impl Thunderbolt {
                     Signal::Closed(shown) => shown != id,
                     _ => true,
                 });
-                if let Err(error) = followed {
-                    tracing::warn!("the Thunderbolt question cannot be answered: {error}");
-                }
-                if let Some(key) = chosen
-                    && let Err(error) = answer.allow(&path, &key)
-                {
-                    tracing::warn!("cannot allow the Thunderbolt device: {error}");
-                    answer.not_allowed(&name);
-                }
+                let allowed = chosen.map(|key| answer.allow(&path, &key));
                 answer.state().shown.remove(&path);
+                match allowed {
+                    Some(Err(zbus::Error::MethodError(error, _, _)))
+                        if error.as_str() == ACCESS_DENIED =>
+                    {
+                        answer.check();
+                    }
+                    Some(Err(error)) => {
+                        tracing::warn!("cannot allow the Thunderbolt device: {error}");
+                        answer.not_allowed(&name);
+                    }
+                    Some(Ok(())) | None => {}
+                }
             });
         if let Err(error) = spawned {
             tracing::warn!("the Thunderbolt question cannot be answered: {error}");
@@ -300,7 +313,7 @@ impl Thunderbolt {
             ALWAYS_ALLOW => {
                 ManagerProxyBlocking::new(&self.system)?.enroll_device(
                     &device.uid()?,
-                    "auto",
+                    AUTOMATIC[0],
                     "",
                 )?;
                 Ok(())

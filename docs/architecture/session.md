@@ -386,20 +386,68 @@ graph TD
 
 Bande uses `greetd` for the privileged part of login and keeps its own UI unprivileged:
 
-1. **The daemon**: `greetd` runs as root on `seat0` and owns PAM.
+1. **The daemon**: `greetd` runs as root on `seat0` and owns PAM, through Bande's own service
+   `/etc/pam.d/bande-greeter` (`[general] service` in Bande's greetd configuration). It follows
+   Debian's `gdm-password`: `pam_nologin`, no root login, `common-auth`, `common-account`,
+   `pam_loginuid`, `pam_keyinit`, `pam_limits`, `pam_env` (with `/etc/default/locale`),
+   `common-session` (`pam_systemd`, and the keyring module through `pam-auth-update`) and
+   `common-password`.
 2. **The greeter**: `bande-greeter` runs as greetd's user (`_greetd`), talks to greetd over its
    JSON IPC socket inside `bande-compositor --greeter`, and shows the lock screen's layout
-   (`bande_lock::LockScreen`) with battery, Wi-Fi, input source, and Sleep, Restart and Shut Down.
+   (`bande_lock::LockScreen`, announced as "Sign in") with battery, Wi-Fi or cable or Offline,
+   input source, and Sleep, Restart and Shut Down. Logind's answers are asked again when the
+   devices change or the screen wakes, so a dock that changes them is followed.
 3. **Handover**: after authentication the greeter asks greetd to start `bande-session` (which
    starts `bande-compositor.service` in the user's manager) with `XDG_SESSION_TYPE=wayland`,
    `XDG_CURRENT_DESKTOP=X-Bande` and `XDG_SESSION_DESKTOP=bande`, then exits, releasing the seat
    and VT before greetd opens the session through `pam_systemd`.
 
-The conversation answers PAM's first secret prompt with the typed password; further prompts
-(an expired password, a one-time code) become the field's placeholder, and PAM's messages stay
-under the field. The field shows Caps Lock and, with several layouts, the active one. The layouts
-are those in `/etc/default/keyboard`; Settings ▸ Keyboard's "Use at Login Screen" writes them
-through `bande-locale-helper`.
+**People.** The greeter lists AccountsService's `ListCachedUsers` (no `SystemAccount`, no locked
+account, no `nologin` or `false` shell), or without it `/etc/passwd` uids 1000–59999, and always
+offers "Other…", which asks for a user name, so LDAP, SSSD and systemd-homed accounts sign in too.
+The list is a row of avatars and names (an AccessKit list box) that a click, a tap, Tab and Enter
+or Up and Down choose from; with no one listed, the window asks for a name.
+
+**The conversation.** The greeter and the lock screen share one model (`bande_lock::Prompt`,
+`Refusal`, `Messages`, `Backoff`): the greeter starts greetd's `CreateSession` as soon as a person
+is shown, and the lock screen its PAM transaction (`bande-lock`, on its own thread) when it
+wakes, so a fingerprint module's "Place your finger…" comes first. Each prompt becomes the
+field's placeholder, a visible prompt (a user name, a code) shows what is typed, and a password
+typed before the first prompt answers it. PAM's info and error messages stay under the field,
+the last three of them, each at most 400 characters. Escape cancels; while checking it lets go
+of the conversation and starts a new one (greetd answers a cancel only once the module returns).
+greetd's and PAM's codes become sentences (wrong password, expired password or account, not
+allowed, too many attempts, unavailable); the raw text goes to the journal. After four wrong
+answers each further one waits 5 s, doubling to a minute, with a countdown under the field. The
+lock screen changes an expired password with `pam_chauthtok`; greetd runs no `pam_chauthtok`, so
+at login an expired password is only explained. greetd's messages are refused above 64 KiB.
+
+**Keyboard.** The field shows Caps Lock and, with several layouts, the active one as a button
+that switches to the next, as `Super+Space` does. The layouts and `XKBOPTIONS` are those in
+`/etc/default/keyboard`; Settings ▸ Keyboard's "Use at Login Screen" writes the layouts through
+`bande-locale-helper`.
+
+**Accessibility.** The login window's compositor runs the screen reader and serves
+`org.freedesktop.a11y.KeyboardMonitor` as the session does, and `_greetd`'s user manager starts
+PipeWire and WirePlumber, so Orca speaks before anyone signs in. Its defaults are
+`/etc/bande/login.kdl` (the `accessibility` block), written by Settings ▸ Accessibility's "Use at
+Login Screen" through `bande-locale-helper accessibility` and followed by the compositor; the
+greeter draws with them and with the shown person's own contrast, text size, reduced motion and
+transparency. A screen reader turned on at the login window (`Alt+Super+S`) is kept in
+`$XDG_RUNTIME_DIR/bande-login-accessibility.kdl` and passed to the session as
+`BANDE_LOGIN_ACCESSIBILITY`, which the session's compositor turns on and remembers; a person
+who has never signed in also gets the login defaults that way.
+
+**Idle.** After a minute the login window rests like the lock screen, after 10 minutes the
+compositor turns the displays off, and on battery the greeter then sleeps when logind allows it.
+
+**Several displays.** The login window is on the main display, which alone decides when the
+first frame is shown; the others show the blurred wallpaper (`greeter-backdrop` layers).
+
+**A session that fails.** When the compositor service fails, ends within 5 s, or a session is
+still running, `bande-session` writes a keyword to `/var/lib/bande-greeter/failed/<uid>` (the
+same `3733 root:_greetd` pattern as the pictures); the greeter shows that person why their
+last session ended, and the next session that starts removes the note.
 
 **No black frame.** Each stage leaves its last frame on screen until the next has something to
 show: a compositor leaving the screen closes its framebuffers with `DRM_IOCTL_MODE_CLOSEFB`,
@@ -436,13 +484,14 @@ which ends the sessions it started.
 **Wallpaper at login.** The login window shows the wallpaper of the person it offers, starting
 with whoever signed in last (`$XDG_STATE_HOME/bande-greeter/last-user` in greetd's home,
 `/var/lib/greetd`). Homes are 0700, so `bande-config` copies the dark picture (at most 64 MiB)
-to `/var/lib/bande-greeter/pictures/<uid>` when the wallpaper changes. That folder is
+to `/var/lib/bande-greeter/pictures/<uid>`, a different light one to `<uid>.light`, and the
+appearance, wallpaper fit and vision settings to `<uid>.look` whenever they change, so the
+login window shows the variant and fit the desktop fades in with. That folder is
 `root:_greetd` mode 3733: anyone may create files but no one may list them, the sticky bit stops
 people replacing each other's files, and setgid makes a 0640 copy readable by its owner and the
 login window alone. The greeter opens `<uid>` without following links, uses it only if it is a
 regular file owned by that uid within the size limit, and decodes it through `/proc/self/fd`, so
-the file it checked is the file it shows; anything else falls back to the default. Up/Down
-switches users.
+the file it checked is the file it shows; anything else falls back to the default.
 
 ## Crash handling and supervision
 

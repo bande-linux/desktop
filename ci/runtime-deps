@@ -1,5 +1,6 @@
 /bin/bash bash required
 /bin/false coreutils required
+/usr/bin/false coreutils required
 /bin/sh dash required
 /sbin/nologin login required
 /usr/sbin/nologin login required

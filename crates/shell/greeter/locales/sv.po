@@ -7,5 +7,20 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Signing in is not available right now."
-msgstr "Det går inte att logga in just nu."
+msgid "Your last sign-in stopped because a session of yours was still running. Try again in a moment."
+msgstr "Din senaste inloggning avbröts eftersom en av dina sessioner fortfarande var igång. Försök igen om en stund."
+
+msgid "Your last session ended as soon as it started. Try signing in again."
+msgstr "Din senaste session avslutades direkt när den startade. Försök logga in igen."
+
+msgid "Your last session ended unexpectedly. Anything not saved may be lost."
+msgstr "Din senaste session avslutades oväntat. Det som inte sparades kan ha gått förlorat."
+
+msgid "Other User"
+msgstr "Annan användare"
+
+msgid "Other…"
+msgstr "Annan…"
+
+msgid "User Name"
+msgstr "Användarnamn"

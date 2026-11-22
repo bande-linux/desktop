@@ -3,8 +3,8 @@ use std::path::Path;
 
 use bande_l10n::{text, tr};
 use bande_volumes::udisks::{
-    ATA, BLOCK, DRIVE, ENCRYPTED, FILESYSTEM, LOOP, NVME, Objects, PARTITION, PARTITION_TABLE,
-    SWAPSPACE,
+    ATA, BLOCK, DRIVE, ENCRYPTED, FILESYSTEM, Health, LOOP, NVME, Objects, PARTITION,
+    PARTITION_TABLE, SWAPSPACE,
 };
 
 const MIB: u64 = 1 << 20;
@@ -27,7 +27,7 @@ pub enum Scheme {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Smart {
-    pub failing: bool,
+    pub health: Health,
     pub celsius: Option<f64>,
     pub hours: Option<u64>,
 }
@@ -131,24 +131,19 @@ fn volume(objects: &Objects, block: &str) -> Volume {
 }
 
 fn smart(objects: &Objects, drive: &str) -> Option<Smart> {
+    let health = objects.health(drive)?;
     if objects.has(drive, NVME) {
-        let warnings: Vec<String> = objects
-            .get(drive, NVME, "SmartCriticalWarning")
-            .unwrap_or_default();
         let kelvin: u16 = objects.get(drive, NVME, "SmartTemperature").unwrap_or(0);
         return Some(Smart {
-            failing: !warnings.is_empty(),
+            health,
             celsius: (kelvin > 0).then(|| f64::from(kelvin) - KELVIN),
             hours: objects.get(drive, NVME, "SmartPowerOnHours"),
         });
     }
-    if !objects.flag(drive, ATA, "SmartSupported") || !objects.flag(drive, ATA, "SmartEnabled") {
-        return None;
-    }
     let kelvin: f64 = objects.get(drive, ATA, "SmartTemperature").unwrap_or(0.0);
     let seconds: Option<u64> = objects.get(drive, ATA, "SmartPowerOnSeconds");
     Some(Smart {
-        failing: objects.flag(drive, ATA, "SmartFailing"),
+        health,
         celsius: (kelvin > 0.0).then_some(kelvin - KELVIN),
         hours: seconds
             .filter(|seconds| *seconds > 0)

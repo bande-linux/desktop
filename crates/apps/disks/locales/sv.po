@@ -385,6 +385,11 @@ msgstr "Ledigt"
 msgid "Failing"
 msgstr "Felar"
 
+msgid "Warning: {count} bad sector"
+msgid_plural "Warning: {count} bad sectors"
+msgstr[0] "Varning: {count} trasig sektor"
+msgstr[1] "Varning: {count} trasiga sektorer"
+
 msgid "Verified"
 msgstr "Verifierad"
 

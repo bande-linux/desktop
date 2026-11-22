@@ -282,23 +282,11 @@ msgstr "Nej"
 msgid "All Processes"
 msgstr "Alla processer"
 
-msgid "All Processes, Hierarchically"
-msgstr "Alla processer, hierarkiskt"
-
 msgid "My Processes"
 msgstr "Mina processer"
 
-msgid "System Processes"
-msgstr "Systemprocesser"
-
-msgid "Active Processes"
-msgstr "Aktiva processer"
-
 msgid "Apps"
 msgstr "Appar"
-
-msgid "Selected Processes"
-msgstr "Markerade processer"
 
 msgid "Kernel"
 msgstr "Kärna"

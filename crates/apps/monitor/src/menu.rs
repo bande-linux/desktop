@@ -20,7 +20,7 @@ pub enum MenuCommand {
     Filter(Filter),
 }
 
-const ACTIONS: [(MenuCommand, &str); 21] = [
+const ACTIONS: [(MenuCommand, &str); 17] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -36,12 +36,8 @@ const ACTIONS: [(MenuCommand, &str); 21] = [
     (MenuCommand::Show(Tab::Gpu), "show-gpu"),
     (MenuCommand::ShowCores, "show-cores"),
     (MenuCommand::Filter(Filter::All), "filter-all"),
-    (MenuCommand::Filter(Filter::Hierarchy), "filter-hierarchy"),
     (MenuCommand::Filter(Filter::Mine), "filter-mine"),
-    (MenuCommand::Filter(Filter::System), "filter-system"),
-    (MenuCommand::Filter(Filter::Active), "filter-active"),
     (MenuCommand::Filter(Filter::Apps), "filter-apps"),
-    (MenuCommand::Filter(Filter::Selected), "filter-selected"),
 ];
 
 impl MenuCommand {

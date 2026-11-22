@@ -735,9 +735,6 @@ impl MonitorView {
     }
 
     fn set_filter(&mut self, filter: Filter) -> bool {
-        if filter == Filter::Selected && self.monitor.selection().is_empty() {
-            return false;
-        }
         self.monitor.set_filter(filter);
         let focused = self.searching();
         let field = search_field(&self.list, filter, self.monitor.search());
@@ -1069,7 +1066,7 @@ fn paint_cores(
 fn search_field(list: &List, filter: Filter, text: &str) -> SearchField {
     let send = sender(list.signals());
     let placeholder = match filter {
-        Filter::All | Filter::Hierarchy => tr!("Search"),
+        Filter::All => tr!("Search"),
         filter => tr!("Search {filter}", filter = filter.title()),
     };
     SearchField::new(&placeholder, text, move |text| {

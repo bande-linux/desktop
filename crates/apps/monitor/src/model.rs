@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -624,7 +624,6 @@ pub struct Monitor {
     cores_shown: bool,
     uid: u32,
     filter: Filter,
-    pinned: Vec<(u32, u64)>,
     impacts: HashMap<(u32, u64), VecDeque<f64>>,
     energy: VecDeque<(f64, f64)>,
     power: Option<BatteryReport>,
@@ -651,46 +650,26 @@ const DESCENDING: &str = "descending";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Filter {
     All,
-    Hierarchy,
     Mine,
-    System,
-    Active,
     Apps,
-    Selected,
 }
 
 impl Filter {
-    pub const ALL: [Filter; 7] = [
-        Filter::All,
-        Filter::Hierarchy,
-        Filter::Mine,
-        Filter::System,
-        Filter::Active,
-        Filter::Apps,
-        Filter::Selected,
-    ];
+    pub const ALL: [Filter; 3] = [Filter::All, Filter::Mine, Filter::Apps];
 
     pub fn id(self) -> &'static str {
         match self {
             Filter::All => "all",
-            Filter::Hierarchy => "hierarchy",
             Filter::Mine => "mine",
-            Filter::System => "system",
-            Filter::Active => "active",
             Filter::Apps => "apps",
-            Filter::Selected => "selected",
         }
     }
 
     pub fn title(self) -> String {
         match self {
             Filter::All => tr!("All Processes"),
-            Filter::Hierarchy => tr!("All Processes, Hierarchically"),
             Filter::Mine => tr!("My Processes"),
-            Filter::System => tr!("System Processes"),
-            Filter::Active => tr!("Active Processes"),
             Filter::Apps => tr!("Apps"),
-            Filter::Selected => tr!("Selected Processes"),
         }
     }
 }
@@ -726,7 +705,6 @@ impl Monitor {
             cores_shown: false,
             uid,
             filter: Filter::All,
-            pinned: Vec::new(),
             impacts: HashMap::new(),
             energy: VecDeque::new(),
             power: None,
@@ -865,7 +843,7 @@ impl Monitor {
             state.push_str(CORES_STATE);
             state.push('\n');
         }
-        if !matches!(self.filter, Filter::All | Filter::Selected) {
+        if self.filter != Filter::All {
             state.push_str(&format!("{FILTER_STATE} {}\n", self.filter.id()));
         }
         for (tab, sort) in Tab::ALL.iter().zip(&self.sorts) {
@@ -1115,67 +1093,58 @@ impl Monitor {
         let descending = self.descending;
         let query = self.search.trim().to_lowercase();
         let processes = &self.snapshot.processes;
-        self.rows = if self.filter == Filter::Hierarchy {
-            self.tree_rows(columns, &query)
-        } else {
-            let mut groups = Vec::new();
-            for group in &self.groups {
-                let name = self.group_name(group);
-                let members = group
-                    .members
-                    .iter()
-                    .map(|member| &processes[*member])
-                    .collect::<Vec<_>>();
-                let group_matches = query.is_empty() || name.to_lowercase().contains(&query);
-                let shown = members
-                    .iter()
-                    .copied()
-                    .filter(|process| self.passes_filter(group, process))
-                    .filter(|process| group_matches || self.matches(process, &query))
-                    .collect::<Vec<_>>();
-                if shown.is_empty() {
-                    continue;
-                }
-                let leader = &processes[group.leader];
-                let mut children = Vec::new();
-                if members.len() > 1 {
-                    children = shown
-                        .iter()
-                        .map(|process| self.process_candidate(process, columns, Vec::new()))
-                        .collect();
-                    children.sort_by(|a, b| order(a, b, descending));
-                }
-                let row = Row {
-                    key: RowKey::Group(group.key.clone()),
-                    name: name.clone(),
-                    icon: group.app.as_ref().and_then(|app| app.icon.clone()),
-                    cells: columns
-                        .iter()
-                        .map(|column| column.text(&column.measure(&shown, &name, leader)))
-                        .collect(),
-                    responding: self.unresponsive.group_responds(group, processes),
-                    revealed: !group_matches && !children.is_empty(),
-                    children: children.into_iter().map(|child| child.row).collect(),
-                };
-                groups.push(Candidate {
-                    row,
-                    measure: sort.measure(&shown, &name, leader),
-                    name,
-                    pid: leader.pid,
-                });
+        let mut groups = Vec::new();
+        for group in &self.groups {
+            let name = self.group_name(group);
+            let members = group
+                .members
+                .iter()
+                .map(|member| &processes[*member])
+                .collect::<Vec<_>>();
+            let group_matches = query.is_empty() || name.to_lowercase().contains(&query);
+            let shown = members
+                .iter()
+                .copied()
+                .filter(|process| self.passes_filter(group, process))
+                .filter(|process| group_matches || self.matches(process, &query))
+                .collect::<Vec<_>>();
+            if shown.is_empty() {
+                continue;
             }
-            groups.sort_by(|a, b| order(a, b, descending));
-            groups.into_iter().map(|group| group.row).collect()
-        };
+            let leader = &processes[group.leader];
+            let mut children = Vec::new();
+            if members.len() > 1 {
+                children = shown
+                    .iter()
+                    .map(|process| self.process_candidate(process, columns))
+                    .collect();
+                children.sort_by(|a, b| order(a, b, descending));
+            }
+            let row = Row {
+                key: RowKey::Group(group.key.clone()),
+                name: name.clone(),
+                icon: group.app.as_ref().and_then(|app| app.icon.clone()),
+                cells: columns
+                    .iter()
+                    .map(|column| column.text(&column.measure(&shown, &name, leader)))
+                    .collect(),
+                responding: self.unresponsive.group_responds(group, processes),
+                revealed: !group_matches && !children.is_empty(),
+                children: children.into_iter().map(|child| child.row).collect(),
+            };
+            groups.push(Candidate {
+                row,
+                measure: sort.measure(&shown, &name, leader),
+                name,
+                pid: leader.pid,
+            });
+        }
+        groups.sort_by(|a, b| order(a, b, descending));
+        self.rows = groups.into_iter().map(|group| group.row).collect();
         self.keep_shown_selection();
     }
 
-    fn process_candidate(
-        &self,
-        process: &Process,
-        columns: &[Column],
-        children: Vec<Row>,
-    ) -> Candidate {
+    fn process_candidate(&self, process: &Process, columns: &[Column]) -> Candidate {
         let name = &process.identity.name;
         Candidate {
             row: Row {
@@ -1190,55 +1159,13 @@ impl Monitor {
                     .map(|column| column.text(&column.measure(&[process], name, process)))
                     .collect(),
                 responding: self.unresponsive.process_responds(process.pid),
-                revealed: !children.is_empty() && !process.identity.kernel_thread,
-                children,
+                revealed: false,
+                children: Vec::new(),
             },
             measure: self.sort.measure(&[process], name, process),
             name: name.clone(),
             pid: process.pid,
         }
-    }
-
-    fn tree_rows(&self, columns: &[Column], query: &str) -> Vec<Row> {
-        let processes = &self.snapshot.processes;
-        let known = processes
-            .iter()
-            .map(|process| process.pid)
-            .collect::<HashSet<_>>();
-        let mut children: HashMap<u32, Vec<&Process>> = HashMap::new();
-        let mut roots = Vec::new();
-        for process in processes {
-            let has_parent = process.ppid != process.pid && known.contains(&process.ppid);
-            if query.is_empty() && has_parent {
-                children.entry(process.ppid).or_default().push(process);
-            } else if query.is_empty() || self.matches(process, query) {
-                roots.push(process);
-            }
-        }
-        self.level_rows(&roots, &children, columns)
-    }
-
-    fn level_rows(
-        &self,
-        level: &[&Process],
-        children: &HashMap<u32, Vec<&Process>>,
-        columns: &[Column],
-    ) -> Vec<Row> {
-        let mut candidates = level
-            .iter()
-            .map(|process| {
-                let below = children
-                    .get(&process.pid)
-                    .map(|below| self.level_rows(below, children, columns))
-                    .unwrap_or_default();
-                self.process_candidate(process, columns, below)
-            })
-            .collect::<Vec<_>>();
-        candidates.sort_by(|a, b| order(a, b, self.descending));
-        candidates
-            .into_iter()
-            .map(|candidate| candidate.row)
-            .collect()
     }
 
     pub fn graph(&self) -> Graph {
@@ -1311,42 +1238,15 @@ impl Monitor {
     }
 
     pub fn set_filter(&mut self, filter: Filter) {
-        if filter == Filter::Selected {
-            self.pinned = self
-                .selection
-                .iter()
-                .flat_map(|key| self.members(key))
-                .collect();
-        }
         self.filter = filter;
         self.rebuild();
     }
 
-    fn members(&self, key: &RowKey) -> Vec<(u32, u64)> {
-        match key {
-            RowKey::Group(key) => self
-                .group(key)
-                .map(|group| {
-                    group
-                        .members
-                        .iter()
-                        .map(|member| &self.snapshot.processes[*member])
-                        .map(|process| (process.pid, process.start_ticks))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            RowKey::Process { pid, start_ticks } => vec![(*pid, *start_ticks)],
-        }
-    }
-
     fn passes_filter(&self, group: &Group, process: &Process) -> bool {
         match self.filter {
-            Filter::All | Filter::Hierarchy => true,
+            Filter::All => true,
             Filter::Mine => process.identity.uid == self.uid,
-            Filter::System => process.identity.uid == 0,
-            Filter::Active => process.cpu_percent > 0.0,
             Filter::Apps => group.app.is_some(),
-            Filter::Selected => self.pinned.contains(&(process.pid, process.start_ticks)),
         }
     }
 

@@ -9,7 +9,7 @@ use crate::state::State;
 
 impl State {
     pub(crate) fn create_capture_shell_global(display: &DisplayHandle) {
-        display.create_global::<State, BandeCaptureV1, ()>(2, ());
+        display.create_global::<State, BandeCaptureV1, ()>(3, ());
     }
 
     pub(crate) fn show_capture_options(&mut self, recording: bool) {
@@ -75,8 +75,10 @@ impl Dispatch<BandeCaptureV1, ()> for State {
         _display: &DisplayHandle,
         _data_init: &mut DataInit<'_, Self>,
     ) {
-        if let bande_capture_v1::Request::ListWindows = request {
-            state.list_windows(resource);
+        match request {
+            bande_capture_v1::Request::ListWindows => state.list_windows(resource),
+            bande_capture_v1::Request::ConnectInput { socket } => state.serve_remote_input(socket),
+            _ => {}
         }
     }
 

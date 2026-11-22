@@ -32,7 +32,7 @@ pub(crate) const BTN_MIDDLE: u32 = 0x112;
 const EVDEV_OFFSET: u32 = 8;
 const ABOVE_TAB: u32 = 41;
 
-const SCROLL_PER_DETENT: f64 = 15.0;
+pub(crate) const SCROLL_PER_DETENT: f64 = 15.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shortcut {

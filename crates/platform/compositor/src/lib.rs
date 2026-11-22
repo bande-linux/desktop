@@ -54,6 +54,7 @@ mod pointing;
 mod popup;
 mod recall;
 mod release;
+mod remote_input;
 mod render;
 mod resume;
 mod reveal;

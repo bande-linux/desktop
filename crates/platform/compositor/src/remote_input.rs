@@ -221,15 +221,24 @@ impl Compositor {
     pub(crate) fn apply_remote_input(&mut self) {
         for (id, input) in std::mem::take(&mut self.state.remote_input) {
             let time = now_ms();
+            let locked = self.state.is_locked();
             match input {
+                RemoteInput::Pointer(_)
+                | RemoteInput::Scroll { .. }
+                | RemoteInput::Keysym(_, true)
+                    if locked => {}
+                RemoteInput::Button(_, true) if locked => {}
                 RemoteInput::Pointer(location) => self.move_pointer_to(location, time),
                 RemoteInput::Button(button, pressed) => {
                     let buttons = &mut self.state.remote_keys.buttons;
+                    let held = buttons.contains(&(id, button));
                     buttons.retain(|held| *held != (id, button));
                     if pressed {
                         buttons.push((id, button));
                     }
-                    self.press_button(button, pressed, time);
+                    if pressed || held {
+                        self.press_button(button, pressed, time);
+                    }
                 }
                 RemoteInput::Scroll { x, y, v120 } => {
                     let source = match v120 {

@@ -48,7 +48,7 @@ Paths are under `crates/`.
 | `services/portal/tests/screenshot.rs` | A stored screenshot permission is trusted only from the xdg-desktop-portal frontend; any other caller makes the user be asked. |
 | `services/portal/src/global_shortcuts.rs` `an_app_gets_only_free_chords_that_hold_super_or_ctrl_alt_and_only_once_asked` | Security boundary of the GlobalShortcuts portal: an app is asked about each shortcut once, and never gets a system shortcut, a plain Ctrl chord, another app's chord or a shortcut it did not ask for, even when the dialog answers with one; the bindings survive the file they are kept in. |
 | `services/notify/tests/center.rs` | A notification shows as a banner and moves to the center; the center is served only under its own bus name, not through `org.freedesktop.Notifications`. |
-| `services/automount/tests/automount.rs` | A drive plugged in while the session is locked is mounted only after unlocking. |
+| `services/automount/tests/automount.rs` | A drive plugged in while the session is locked is mounted only after unlocking. Files ▸ Network used to list a computer twice when it announced file and screen sharing: one host's services (any case) become one entry opening its preferred file protocol with the screen beside it, and a screen-only computer stays a screen. |
 | `libs/volumes/tests/eject.rs` | Regression (a VM died on eject): ejecting one volume of a removable USB ISO unmounts every volume of the drive and calls `Drive.Eject`, never `PowerOff`. |
 | `libs/volumes/src/server.rs` | A typed server address that could inject options or paths into the mount tools is refused. |
 | `libs/fs/tests/trash.rs` | A volume Trash whose `files` folder is a planted link is not used. |

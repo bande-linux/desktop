@@ -339,6 +339,9 @@ msgstr "Ny mapp"
 msgid "Open"
 msgstr "Öppna"
 
+msgid "Share Screen…"
+msgstr "Dela skärm…"
+
 msgid "Properties"
 msgstr "Egenskaper"
 
@@ -738,6 +741,9 @@ msgstr "Anslut till server"
 
 msgid "Connect"
 msgstr "Anslut"
+
+msgid "Select a computer that shares its screen."
+msgstr "Markera en dator som delar sin skärm."
 
 msgid "Installing what is needed…"
 msgstr "Installerar det som behövs…"

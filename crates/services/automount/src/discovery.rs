@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use bande_discovery::nearby::{Addresses, Availability, Browser};
+use bande_discovery::nearby::{Addresses, Availability, Browser, Service};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::names::BusName;
@@ -14,14 +14,17 @@ const SERVICES: [(&str, &str); 6] = [
     ("_sftp-ssh._tcp", "sftp"),
     ("_webdav._tcp", "dav"),
     ("_webdavs._tcp", "davs"),
-    ("_rfb._tcp", "vnc"),
+    (SCREEN_KIND, "vnc"),
 ];
-const SCREEN: &str = "vnc://";
+const SCREEN_KIND: &str = "_rfb._tcp";
 
+/// One computer on the network: its files (or its screen, when it shares only that) at `url`,
+/// and its shared screen, if it shares files too.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nearby {
     pub name: String,
     pub url: String,
+    pub screen: Option<String>,
 }
 
 fn preference(url: &str) -> usize {
@@ -125,36 +128,7 @@ impl Discovery {
     }
 
     pub fn list(&self) -> Vec<Nearby> {
-        let mut list: Vec<Nearby> = self
-            .browser
-            .services()
-            .into_iter()
-            .filter_map(|service| {
-                let (_, scheme) = SERVICES.iter().find(|(kind, _)| *kind == service.kind)?;
-                if !plain_host(&service.host) {
-                    tracing::debug!(
-                        "ignored {} with the host name {:?}",
-                        service.name,
-                        service.host
-                    );
-                    return None;
-                }
-                let path = service.value("path").unwrap_or_default();
-                Some(Nearby {
-                    url: url_of(scheme, &service.host, service.port, &path),
-                    name: service.name,
-                })
-            })
-            .collect();
-        list.sort_by(|a, b| {
-            a.name
-                .cmp(&b.name)
-                .then_with(|| preference(&a.url).cmp(&preference(&b.url)))
-        });
-        list.dedup_by(|a, b| {
-            a.name == b.name && a.url.starts_with(SCREEN) == b.url.starts_with(SCREEN)
-        });
-        list
+        computers(self.browser.services())
     }
 
     pub fn availability(&self) -> Availability {
@@ -164,4 +138,70 @@ impl Discovery {
     pub fn install(&self, install: impl FnOnce(&[String]) -> Result<(), String>) {
         self.browser.install(install);
     }
+}
+
+struct Found {
+    name: String,
+    url: String,
+    host: String,
+    address: String,
+    screen: bool,
+}
+
+/// One entry per computer, matched by host name or address: its preferred file service, with
+/// its screen beside it, or its screen alone.
+pub fn computers(services: Vec<Service>) -> Vec<Nearby> {
+    let mut found: Vec<Found> = services
+        .into_iter()
+        .filter_map(|service| {
+            let (kind, scheme) = SERVICES.iter().find(|(kind, _)| *kind == service.kind)?;
+            if !plain_host(&service.host) {
+                tracing::debug!(
+                    "ignored {} with the host name {:?}",
+                    service.name,
+                    service.host
+                );
+                return None;
+            }
+            let path = service.value("path").unwrap_or_default();
+            Some(Found {
+                url: url_of(scheme, &service.host, service.port, &path),
+                host: service.host.to_lowercase(),
+                address: service.address,
+                screen: *kind == SCREEN_KIND,
+                name: service.name,
+            })
+        })
+        .collect();
+    found.sort_by(|a, b| {
+        preference(&a.url)
+            .cmp(&preference(&b.url))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    let same_computer = |a: &Found, b: &Found| {
+        a.host == b.host || (!a.address.is_empty() && a.address == b.address)
+    };
+    let mut computers: Vec<(Found, Option<String>)> = Vec::new();
+    for service in found {
+        match computers
+            .iter_mut()
+            .find(|(computer, _)| same_computer(computer, &service))
+        {
+            Some((computer, screen)) if service.screen && !computer.screen => {
+                screen.get_or_insert(service.url);
+            }
+            Some(_) => {}
+            None => computers.push((service, None)),
+        }
+    }
+    let mut list: Vec<Nearby> = computers
+        .into_iter()
+        .map(|(computer, screen)| Nearby {
+            name: computer.name,
+            url: computer.url,
+            screen,
+        })
+        .collect();
+    list.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.url.cmp(&b.url)));
+    list
 }

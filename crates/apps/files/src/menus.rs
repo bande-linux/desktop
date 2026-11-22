@@ -51,6 +51,7 @@ pub enum Command {
     RestoreSidebar,
     Eject,
     ConnectToServer,
+    ShareScreen,
     ForgetServer,
 }
 
@@ -121,6 +122,7 @@ const ACTIONS: &[(&str, Command)] = &[
     ("go:downloads", Command::GoTo(Destination::Downloads)),
     ("go:recents", Command::GoTo(Destination::Recents)),
     ("connect-to-server", Command::ConnectToServer),
+    ("share-screen", Command::ShareScreen),
     ("forget-server", Command::ForgetServer),
     ("empty-trash", Command::EmptyTrash),
     ("remove-from-sidebar", Command::RemoveFromSidebar),
@@ -372,8 +374,11 @@ pub fn place_menu(place: Place) -> Menu {
     Menu::new(items)
 }
 
-pub fn server_menu(saved: bool) -> Menu {
+pub fn server_menu(saved: bool, screen: bool) -> Menu {
     let mut items = vec![item(text!("Open"), &Command::Open).shortcut("Ctrl+O")];
+    if screen {
+        items.push(item(text!("Share Screen…"), &Command::ShareScreen));
+    }
     if saved {
         items.push(MenuItem::separator());
         items.push(item(text!("Forget This Server"), &Command::ForgetServer));

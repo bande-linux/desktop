@@ -36,7 +36,8 @@ graph LR
   `application/x-nspasteboard-concealed-type` are never kept. The launcher reads it through
   `org.bande.Clipboard` (`Items`, `Content`, `Paste`, `Remove`, `Clear`); Screen Sharing reads
   the newest text (`Text`), is told of a new copy by `Changed` (no contents) and copies a
-  viewer's text with `CopyText`, which goes into the history like any copy.
+  viewer's text with `CopyText`, which goes into the history like any copy; `Text` and
+  `CopyText` answer only the main process of `bande-screen-sharing.service`.
 
 ### Screen lock and idle (`bande-lock`, `bande-power`)
 
@@ -786,24 +787,34 @@ and the port is open (it takes `org.bande.ScreenSharing.Server`), so Settings sh
 fingerprint as soon as sharing is on. The protocol code, both sides, is `bande-rfb`
 (`crates/libs/rfb`):
 
-- **Who may connect.** Only peers on a network one of this computer's interfaces is on (or the
-  computer itself); others are dropped before a byte is read. Nothing changes the firewall and
-  nothing asks the router to forward the port. A password of at least 8 characters, kept in the
-  keyring and read when the service starts (Settings restarts it after a change), is required
-  before Settings turns sharing on. Viewers are offered VeNCrypt only: X509Plain or X509Vnc over
-  TLS 1.2 or 1.3 with a self-signed certificate made for this computer on first start
-  (`$XDG_DATA_HOME/bande/screen-sharing`, its fingerprint shown in Settings). Plain VNC
-  authentication (RFB 3.3 and viewers without VeNCrypt) only after **Allow older viewers**.
-  Wrong passwords are slowed by a second each, five from one address or thirty in all within ten
-  minutes refuse further tries, a handshake has a minute, at most four viewers connect at once,
-  and every client message is bounded (`rfb/protocol.rs`).
+- **Who may connect.** Only peers on the network of a real LAN link of this computer (or the
+  computer itself); others are dropped before a byte is read. A LAN link is up and running, not
+  loopback or point-to-point, not named as a tunnel, VPN, container or virtual machine bridge
+  (`tun`, `tap`, `wg`, `ppp`, `docker`, `br-`, `virbr`, `veth`, `tailscale` and the like), with
+  a prefix of at least /8 for IPv4 and /64 for IPv6 and no Teredo or 6to4 address
+  (`network.rs`). Viewers already connected stay when the computer moves to another network.
+  Nothing changes the firewall and nothing asks the router to forward the port. A password of
+  at least 8 characters, kept in the keyring and read when the service starts (Settings restarts
+  it after a change), is required before Settings turns sharing on. Viewers are offered VeNCrypt
+  only, X509Plain over TLS 1.2 or 1.3 with the whole password, with a self-signed certificate
+  made for this computer on first start (`$XDG_DATA_HOME/bande/screen-sharing`, its fingerprint
+  shown in Settings). X509Vnc and plain VNC authentication (RFB 3.3 and viewers without
+  VeNCrypt), which check only 8 characters, only after **Allow older viewers**. Limits are per
+  source, an IPv4 address or an IPv6 /64, so one device cannot keep others out: one handshake at
+  a time (sixteen in all), wrong passwords slowed by a second each and five within ten minutes
+  refusing further tries; a handshake has a minute, four viewers are let in at once, and every
+  client message is bounded (`bande_rfb::protocol`).
 - **Asking.** With **Ask before someone connects** (the default) a viewer that knows the password
   waits on a notification with Allow and Deny for 30 seconds; no answer is Deny. Without it, a
   notification says who connected.
 - **The screen.** Once a viewer is let in, the service calls the screenshot tool's
-  `StartViewerStream`, which only `/usr/libexec/bande-screen-sharing` may call: the first
+  `StartViewerStream`, which only the main process of `bande-screen-sharing.service` may call
+  (checked through the bus's process handle of the caller against the unit's `MainPID`): the first
   display as a PipeWire stream with the pointer drawn in, and a socket on which the compositor
-  serves EIS (`bande_capture_v1.connect_input`). While anyone views, the Taskbar shows the screen
+  serves EIS (`bande_capture_v1.connect_input`, for the screenshot tool's connection only). Each
+  viewer's held keys and buttons are let go when it leaves, and the compositor lets go of what
+  the EIS connection held when it closes, which it does when the stream ends; viewers never
+  press the power, sleep or wake keys. While anyone views, the Taskbar shows the screen
   symbol ("Someone is viewing your screen"); clicking it ends the stream and disconnects every
   viewer. The stream stops when the last viewer leaves or the service goes away.
 - **RFB.** Raw and ZRLE (zlib, solid, palette and raw tiles), DesktopSize when the display
@@ -811,7 +822,12 @@ fingerprint as soon as sharing is on. The protocol code, both sides, is `bande-r
   asks. RFB keysyms are typed through `ei_text`; buttons 4 to 7 scroll.
 - **Clipboard.** While someone views, text crosses in both directions: over the extended
   clipboard pseudo-encoding (UTF-8, zlib, notify, request and provide) when the viewer has it,
-  else as Latin-1. Text a viewer sent is not sent back to it.
+  else as Latin-1. Text a viewer sent is not sent back to it. While the session is locked
+  (logind's `LockedHint`, or when it cannot be read) no text crosses either way.
+- **Signals.** The Allow answer, the end of the stream and the clipboard's `Changed` count only
+  from the current owner of `org.freedesktop.Notifications`, `org.bande.Screenshot` and
+  `org.bande.Clipboard`. Other programs of the same user that are not sandboxed are out of
+  scope: they can already read the screen and type.
 - **Found nearby.** While on, `_rfb._tcp` is announced through Avahi when it is installed
   (`bande_discovery::nearby::announce`); without it Settings offers to install it and shows the
   addresses to type.
@@ -826,11 +842,15 @@ run on its own thread:
 - **Security.** VeNCrypt (X509Plain, else X509Vnc) whenever the server offers it. The server's
   certificate is trusted on first use: its SHA-256 fingerprint is shown to compare with the one
   in Settings ▸ Sharing there and remembered in `$XDG_DATA_HOME/bande/screen-sharing/known-computers`;
-  a different one later is a warning whose safe choice is Cancel. A server that offers only plain
+  a different one later is a warning whose safe choice is Cancel, and the kept password is then
+  asked for again. A known computer that offers no encryption any more is refused before
+  anything is sent and gets the same kind of warning. Any other server that offers only plain
   VNC authentication or none is used only after "This connection isn’t encrypted", and the
   window title then says "(not encrypted)". Nothing secret is sent before the certificate is
-  trusted. Passwords are kept in the keyring (`org.bande.ScreenSharing`, by `host:port`) once
-  they worked, and asked again with the server's reason when refused.
+  trusted, and a kept password only ever over TLS. Passwords are kept in the keyring
+  (`org.bande.ScreenSharing`, by `host:port`) once they worked over TLS, and asked again with
+  the server's reason when refused. View ▸ Share Clipboard turns copied text off for a window,
+  and keys held when the window stops getting keys are let go.
 - **Viewing.** Raw, ZRLE (every tile type) and DesktopSize in 32-bit true colour, painted into
   shared memory shown as an external surface, scaled to the window or at actual size (View
   menu). A click passes keys and the pointer on (Ctrl+Alt releases them); keys go as the keysyms

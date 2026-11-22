@@ -940,6 +940,25 @@ Description: email client for the Bande desktop
  TLS, keeps an offline copy of every account, follows new mail with IMAP
  IDLE and keeps passwords in the Secret Service.
 
+Package: bande-notes
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: text
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-secrets (= ${binary:Version}) | org.freedesktop.secrets
+Description: notes for the Bande desktop
+ Notes for the Bande desktop: folders in a sidebar, the notes sorted by
+ when they changed, and an editor with headings, lists, bold, italic,
+ underline, strikethrough and links. Notes are kept on this computer or
+ in the Notes folder of an IMAP mail account, in the IMAP notes format
+ other clients use, so the same notes open there too. Edits are kept
+ offline until the server has them.
+
 Package: bande-calendar
 Architecture: any
 Built-Using: ${cargo:Built-Using}
@@ -1173,6 +1192,7 @@ Recommends: bande-greeter (>= ${source:Version}),
  bande-disks (>= ${source:Version}),
  bande-text-editor (>= ${source:Version}),
  bande-mail (>= ${source:Version}),
+ bande-notes (>= ${source:Version}),
  bande-calendar (>= ${source:Version}),
  bande-lookup (>= ${source:Version}),
  bande-browser,

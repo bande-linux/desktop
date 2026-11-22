@@ -7,42 +7,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "The connection failed: {error}"
-msgstr "Anslutningen misslyckades: {error}"
-
-msgid "The server did not answer in time."
-msgstr "Servern svarade inte i tid."
-
-msgid "The secure connection failed: {error}"
-msgstr "Den säkra anslutningen misslyckades: {error}"
-
-msgid "The server offers no secure connection."
-msgstr "Servern erbjuder ingen säker anslutning."
-
-msgid "The server sent something unexpected: {error}"
-msgstr "Servern skickade något oväntat: {error}"
-
-msgid "The server refused: {text}"
-msgstr "Servern vägrade: {text}"
-
-msgid "The server refused the login: {text}"
-msgstr "Servern vägrade inloggningen: {text}"
-
-msgid "The offline store failed: {error}"
-msgstr "Det lokala arkivet fungerar inte: {error}"
-
-msgid "The keyring failed: {error}"
-msgstr "Nyckelringen fungerar inte: {error}"
-
-msgid "The server closed the connection."
-msgstr "Servern stängde anslutningen."
-
-msgid "the mailbox name “{path}” is not allowed"
-msgstr "brevlådenamnet ”{path}” är inte tillåtet"
-
-msgid "the name or password has a line break"
-msgstr "namnet eller lösenordet innehåller en radbrytning"
-
 msgid "Mail"
 msgstr "E-post"
 
@@ -160,48 +124,6 @@ msgstr "Sortera efter olästa"
 
 msgid "This message is encrypted. Mail can’t open encrypted messages."
 msgstr "Meddelandet är krypterat. E-post kan inte öppna krypterade meddelanden."
-
-msgid "TLS"
-msgstr "TLS"
-
-msgid "STARTTLS"
-msgstr "STARTTLS"
-
-msgid "None (this computer only)"
-msgstr "Ingen (endast den här datorn)"
-
-msgid "Mail could not reach {server}. Check the server name and port, and that this computer is online."
-msgstr "E-post kunde inte nå {server}. Kontrollera servernamnet och porten, och att datorn är ansluten till internet."
-
-msgid "The certificate of {server} could not be verified. Check that the server name is exactly the one your provider gives."
-msgstr "Certifikatet för {server} kunde inte verifieras. Kontrollera att servernamnet är exakt det som din leverantör anger."
-
-msgid "Mail could not make a secure connection to {server}. Check the port and the security setting."
-msgstr "E-post kunde inte upprätta en säker anslutning till {server}. Kontrollera porten och säkerhetsinställningen."
-
-msgid "{server} offers no encrypted connection. Choose TLS or STARTTLS, with the port your provider gives for it."
-msgstr "{server} erbjuder ingen krypterad anslutning. Välj TLS eller STARTTLS, med den port som din leverantör anger för det."
-
-msgid "{server} did not accept the user name or password. Check both; some providers need a separate app password for mail apps."
-msgstr "{server} godtog inte användarnamnet eller lösenordet. Kontrollera båda. Vissa leverantörer kräver ett separat applösenord för e-postappar."
-
-msgid "{server} answered with an error: {detail}. Check the server settings, or try again later."
-msgstr "{server} svarade med ett fel: {detail}. Kontrollera serverinställningarna eller försök igen senare."
-
-msgid "Mail has no saved password for this account. Enter it again."
-msgstr "E-post har inget sparat lösenord för kontot. Ange det igen."
-
-msgid "Mail could not save the account: {error}"
-msgstr "E-post kunde inte spara kontot: {error}"
-
-msgid "“{address}” is not a mail address"
-msgstr "”{address}” är ingen e-postadress"
-
-msgid "the server offers no sign-in method Mail knows: {methods}"
-msgstr "servern erbjuder inget inloggningssätt som E-post kan: {methods}"
-
-msgid "the message has no recipients"
-msgstr "meddelandet har inga mottagare"
 
 msgid "Offline"
 msgstr "Offline"
@@ -595,90 +517,6 @@ msgstr "Ta bort {email}?"
 msgid "Mail forgets this account, its saved password and the copy of its mail on this computer. The mail on the server stays."
 msgstr "E-post glömmer det här kontot, dess sparade lösenord och kopian av dess e-post på den här datorn. E-posten på servern finns kvar."
 
-msgid "Account type:"
-msgstr "Kontotyp:"
-
-msgid "Name:"
-msgstr "Namn:"
-
-msgid "Email address:"
-msgstr "E-postadress:"
-
-msgid "User name:"
-msgstr "Användarnamn:"
-
-msgid "Password:"
-msgstr "Lösenord:"
-
-msgid "Incoming (IMAP):"
-msgstr "Inkommande (IMAP):"
-
-msgid "Outgoing (SMTP):"
-msgstr "Utgående (SMTP):"
-
-msgid "Port:"
-msgstr "Port:"
-
-msgid "Security:"
-msgstr "Säkerhet:"
-
-msgid "name@example.org"
-msgstr "namn@example.org"
-
-msgid "Required"
-msgstr "Obligatoriskt"
-
-msgid "imap.example.org"
-msgstr "imap.example.org"
-
-msgid "smtp.example.org"
-msgstr "smtp.example.org"
-
-msgid "Default"
-msgstr "Standard"
-
-msgid "Enter Server Settings Manually"
-msgstr "Ange serverinställningar manuellt"
-
-msgid "Back"
-msgstr "Tillbaka"
-
-msgid "Server Settings…"
-msgstr "Serverinställningar…"
-
-msgid "Continue"
-msgstr "Fortsätt"
-
-msgid "Sign In"
-msgstr "Logga in"
-
-msgid "Account Type"
-msgstr "Kontotyp"
-
-msgid "IMAP and SMTP"
-msgstr "IMAP och SMTP"
-
-msgid "Add a Mail Account"
-msgstr "Lägg till ett e-postkonto"
-
-msgid "Choose the type of account. Mail reads and sends mail with IMAP and SMTP, the open standards mail providers offer."
-msgstr "Välj typ av konto. E-post läser och skickar e-post med IMAP och SMTP, de öppna standarder som e-postleverantörer erbjuder."
-
-msgid "Enter your name, email address and password. Mail looks up the servers of your address’s domain and shows them to you before it signs in."
-msgstr "Ange ditt namn, din e-postadress och ditt lösenord. E-post slår upp servrarna för adressens domän och visar dem för dig innan den loggar in."
-
-msgid "Mail Server Settings"
-msgstr "Inställningar för e-postservrar"
-
-msgid "Check the settings your mail provider gives for IMAP and SMTP, then sign in."
-msgstr "Kontrollera de inställningar för IMAP och SMTP som din e-postleverantör anger och logga sedan in."
-
-msgid "Enter Your Password"
-msgstr "Ange ditt lösenord"
-
-msgid "The server did not accept the password for {email}."
-msgstr "Servern godtog inte lösenordet för {email}."
-
 msgid "Inbox"
 msgstr "Inkorg"
 
@@ -760,6 +598,9 @@ msgstr "”{account}” är offline"
 msgid "Try Again"
 msgstr "Försök igen"
 
+msgid "Server Settings…"
+msgstr "Serverinställningar…"
+
 msgid "No account sends from this address any more."
 msgstr "Inget konto skickar längre från den här adressen."
 
@@ -788,18 +629,6 @@ msgstr "Det här kontot är redan tillagt."
 
 msgid "Looking up the servers…"
 msgstr "Slår upp servrarna…"
-
-msgid "Mail found these servers in the DNS records of {domain}. Check that they belong to your mail provider, then sign in."
-msgstr "E-post hittade de här servrarna i DNS-posterna för {domain}. Kontrollera att de tillhör din e-postleverantör och logga sedan in."
-
-msgid "Mail found these servers in the settings {domain} publishes. Check that they belong to your mail provider, then sign in."
-msgstr "E-post hittade de här servrarna i inställningarna som {domain} publicerar. Kontrollera att de tillhör din e-postleverantör och logga sedan in."
-
-msgid "{domain} publishes no mail settings, so Mail guessed these servers. Check them against what your mail provider gives, then sign in."
-msgstr "{domain} publicerar inga e-postinställningar, så E-post har gissat de här servrarna. Jämför dem med vad din e-postleverantör anger och logga sedan in."
-
-msgid "Mail found no servers for {domain}. Enter the settings your mail provider gives for IMAP and SMTP."
-msgstr "E-post hittade inga servrar för {domain}. Ange de inställningar för IMAP och SMTP som din e-postleverantör anger."
 
 msgid "Open Link"
 msgstr "Öppna länk"

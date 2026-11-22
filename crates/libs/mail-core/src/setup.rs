@@ -12,6 +12,30 @@ pub struct Found {
     pub settings: Option<(Settings, Source)>,
 }
 
+impl Found {
+    pub fn message(&self) -> String {
+        let domain = self.domain.clone();
+        match self.settings.as_ref().map(|(_, source)| *source) {
+            Some(Source::Services) => tr!(
+                "Mail found these servers in the DNS records of {domain}. Check that they belong to your mail provider, then sign in.",
+                domain = domain
+            ),
+            Some(Source::Domain) => tr!(
+                "Mail found these servers in the settings {domain} publishes. Check that they belong to your mail provider, then sign in.",
+                domain = domain
+            ),
+            Some(Source::Guess) => tr!(
+                "{domain} publishes no mail settings, so Mail guessed these servers. Check them against what your mail provider gives, then sign in.",
+                domain = domain
+            ),
+            None => tr!(
+                "Mail found no servers for {domain}. Enter the settings your mail provider gives for IMAP and SMTP.",
+                domain = domain
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Problem {
     Unreachable(String),

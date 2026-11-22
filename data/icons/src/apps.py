@@ -144,6 +144,16 @@ def text_editor():
     return tile(tone(88, 0.90, 0.13), tone(78, 0.80, 0.15), body)
 
 
+def notes():
+    band = tone(78, 0.78, 0.15)
+    lines = tone(70, 0.45, 0.06)
+    body = (rect(11, 11, 26, 26, 3.5, PAPER)
+            + path('M11 14.5a3.5 3.5 0 0 1 3.5-3.5h19a3.5 3.5 0 0 1 3.5 3.5V18H11Z', band))
+    for index, width in enumerate((18, 18, 12)):
+        body += rect(15, 22 + index * 4.5, width, 1.8, 0.9, lines, 'opacity="0.6"')
+    return tile(tone(96, 0.93, 0.07), tone(86, 0.84, 0.10), body)
+
+
 def image_viewer():
     moss = accent('moss')
     body = (rect(10, 12.5, 28, 23, 3, PAPER)
@@ -269,6 +279,7 @@ ICONS = {
     'org.bande.Browser': browser,
     'org.bande.Software': software,
     'org.bande.Mail': mail,
+    'org.bande.Notes': notes,
     'org.bande.Calendar': calendar,
 }
 

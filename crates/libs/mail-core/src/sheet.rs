@@ -7,8 +7,8 @@ use crate::discover::Settings;
 use crate::net::{Security, Server};
 use accesskit::{Node, Role};
 use bande_toolkit::ui::{
-    Button, Context, PopUpButton, RadioGroup, SPINNER_SIZE, SecureField, Size, Spinner, TextField,
-    Widget, WidgetId,
+    Button, CheckState, Checkbox, Context, PopUpButton, RadioGroup, SPINNER_SIZE, SecureField,
+    Size, Spinner, TextField, Widget, WidgetId,
 };
 use bande_toolkit::{
     ControlSize, Image, Item, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
@@ -30,7 +30,6 @@ const BUTTON_SPACING: f32 = 8.0;
 const BUTTON_MIN_WIDTH: f32 = 96.0;
 const STATUS_GAP: f32 = 8.0;
 const FIELD_FONT: f32 = 13.0;
-const ICON: &[u8] = include_bytes!("../../data/org.bande.Mail.svg");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
@@ -45,6 +44,7 @@ pub enum Field {
     Outgoing,
     OutgoingPort,
     OutgoingSecurity,
+    Notes,
 }
 
 impl Field {
@@ -59,6 +59,7 @@ impl Field {
             Self::Outgoing => tr!("Outgoing (SMTP):"),
             Self::IncomingPort | Self::OutgoingPort => tr!("Port:"),
             Self::IncomingSecurity | Self::OutgoingSecurity => tr!("Security:"),
+            Self::Notes => String::new(),
         }
     }
 
@@ -71,7 +72,9 @@ impl Field {
             Self::Incoming => tr!("imap.example.org"),
             Self::Outgoing => tr!("smtp.example.org"),
             Self::IncomingPort | Self::OutgoingPort => tr!("Default"),
-            Self::Kind | Self::IncomingSecurity | Self::OutgoingSecurity => String::new(),
+            Self::Kind | Self::IncomingSecurity | Self::OutgoingSecurity | Self::Notes => {
+                String::new()
+            }
         }
     }
 
@@ -166,6 +169,10 @@ impl SheetState {
             Some((_, known)) => value.clone_into(known),
             None => self.values.push((field, value.to_owned())),
         }
+    }
+
+    pub fn notes(&self) -> bool {
+        self.value(Field::Notes) != "off"
     }
 
     fn security(&self, field: Field) -> Security {
@@ -270,14 +277,33 @@ fn security_choice(state: &Shared, field: Field) -> PopUpButton {
     })
 }
 
+fn notes_choice(state: &Shared) -> Checkbox {
+    let checked = match state.borrow().notes() {
+        true => CheckState::On,
+        false => CheckState::Off,
+    };
+    let shared = Rc::clone(state);
+    Checkbox::new(
+        &tr!("Also use this account for Notes"),
+        checked,
+        move |on| {
+            let value = if on { "on" } else { "off" };
+            shared.borrow_mut().set(Field::Notes, value);
+        },
+    )
+}
+
 fn action_button(state: &Shared, title: &str, action: Action) -> Button {
     let state = Rc::clone(state);
     Button::new(title, move || state.borrow_mut().action = Some(action))
 }
 
 impl AccountSheet {
-    pub fn new(state: Shared, mode: Mode) -> Self {
-        let fields = mode.fields();
+    pub fn new(state: Shared, mode: Mode, icon: &[u8], offer_notes: bool) -> Self {
+        let mut fields = mode.fields();
+        if offer_notes && matches!(mode, Mode::Address | Mode::Servers) {
+            fields.push(Field::Notes);
+        }
         let mut children: Vec<Box<dyn Widget>> = Vec::new();
         let mut password_field = WidgetId::next();
         for field in &fields {
@@ -304,6 +330,7 @@ impl AccountSheet {
                 Field::IncomingSecurity | Field::OutgoingSecurity => {
                     children.push(Box::new(security_choice(&state, *field)));
                 }
+                Field::Notes => children.push(Box::new(notes_choice(&state))),
                 _ => children.push(Box::new(text_field(&state, *field))),
             }
         }
@@ -324,7 +351,7 @@ impl AccountSheet {
             children,
             password_field,
             mode,
-            icon: Image::from_svg(ICON, 96, 96),
+            icon: Image::from_svg(icon, 96, 96),
             title: None,
             message: None,
             labels: Vec::new(),

@@ -1,0 +1,155 @@
+msgid ""
+msgstr ""
+"Language: sv\n"
+"Language-Team: Swedish\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Notes"
+msgstr "Anteckningar"
+
+msgid "Notes Settings"
+msgstr "Inställningar för Anteckningar"
+
+msgid "Offline"
+msgstr "Offline"
+
+msgid "Not signed in"
+msgstr "Inte inloggad"
+
+msgid "No Notes Folder"
+msgstr "Ingen mapp för anteckningar"
+
+msgid "The server of {email} has no Notes folder and does not let Notes make one, so the account is not used for notes."
+msgstr "Servern för {email} har ingen mapp för anteckningar och låter inte Anteckningar skapa en, så kontot används inte för anteckningar."
+
+msgid "Title"
+msgstr "Titel"
+
+msgid "Heading"
+msgstr "Rubrik"
+
+msgid "Subheading"
+msgstr "Underrubrik"
+
+msgid "Body"
+msgstr "Brödtext"
+
+msgid "Bulleted List"
+msgstr "Punktlista"
+
+msgid "Numbered List"
+msgstr "Numrerad lista"
+
+msgid "No List"
+msgstr "Ingen lista"
+
+msgid "Bold"
+msgstr "Fet"
+
+msgid "Italic"
+msgstr "Kursiv"
+
+msgid "Underline"
+msgstr "Understreck"
+
+msgid "Strikethrough"
+msgstr "Genomstruken"
+
+msgid "Format"
+msgstr "Format"
+
+msgid "File"
+msgstr "Arkiv"
+
+msgid "New Note"
+msgstr "Ny anteckning"
+
+msgid "Move To"
+msgstr "Flytta till"
+
+msgid "Delete Note"
+msgstr "Radera anteckning"
+
+msgid "Undo Delete"
+msgstr "Ångra radering"
+
+msgid "Add Account…"
+msgstr "Lägg till konto…"
+
+msgid "Find"
+msgstr "Sök"
+
+msgid "Accounts"
+msgstr "Konton"
+
+msgid "The accounts cannot be read: {error}"
+msgstr "Kontona kan inte läsas: {error}"
+
+msgid "Notes are kept on this computer. To keep them in a mail account as well, choose File ▸ Add Account…."
+msgstr "Anteckningar sparas på den här datorn. Välj Arkiv ▸ Lägg till konto… för att även spara dem i ett e-postkonto."
+
+msgid "Use {email} for Notes"
+msgstr "Använd {email} för Anteckningar"
+
+msgid "Folders"
+msgstr "Mappar"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Text"
+msgstr "Text"
+
+msgid "Modified"
+msgstr "Ändrad"
+
+msgid "Start writing"
+msgstr "Börja skriva"
+
+msgid "Edit Anyway"
+msgstr "Redigera ändå"
+
+msgid "On This Computer"
+msgstr "På den här datorn"
+
+msgid "Notes ({account})"
+msgstr "Anteckningar ({account})"
+
+msgid "{account} — {status}"
+msgstr "{account} – {status}"
+
+msgid "This note has pictures or attachments that Notes cannot show. Editing it here keeps only its text."
+msgstr "Anteckningen har bilder eller bilagor som Anteckningar inte kan visa. Om du redigerar den här behålls bara texten."
+
+msgid "No Notes"
+msgstr "Inga anteckningar"
+
+msgid "No notes match “{search}”"
+msgstr "Inga anteckningar matchar ”{search}”"
+
+msgid "No Note Selected"
+msgstr "Ingen anteckning är vald"
+
+msgid "Enter your name and email address."
+msgstr "Ange ditt namn och din e-postadress."
+
+msgid "Enter your password."
+msgstr "Ange ditt lösenord."
+
+msgid "Looking up the servers…"
+msgstr "Slår upp servrarna…"
+
+msgid "Enter both server names."
+msgstr "Ange båda servernamnen."
+
+msgid "Checking the account…"
+msgstr "Kontrollerar kontot…"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "no password is saved for this account"
+msgstr "inget lösenord är sparat för kontot"

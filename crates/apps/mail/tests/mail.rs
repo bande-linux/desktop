@@ -1,9 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::path::Path;
-use std::process::Command;
+use std::net::TcpListener;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -17,23 +15,13 @@ use bande_mail::offer::{DOMAIN, MESSAGE_ARGUMENT, offer_to_search};
 use bande_mail::setup::{Outcome, Problem, check, find};
 use bande_mail::store::{Account, Store};
 use bande_mail::worker::{Command as Order, Event, Mailroom, Status, Worker};
+use bande_mail_core::testing::{Dovecot, PASSWORD, USER, local};
 use bande_search::Offer;
 use zbus::blocking::Connection;
 
-const DOVECOT: &str = "/usr/sbin/dovecot";
-const USER: &str = "ann@bande.test";
-const PASSWORD: &str = "dovecot test";
 const WAIT: Duration = Duration::from_secs(20);
 
 type Sent = Arc<Mutex<Vec<(Vec<String>, String)>>>;
-
-fn local(port: u16) -> Server {
-    Server {
-        host: "127.0.0.1".to_owned(),
-        port,
-        security: Security::Plain,
-    }
-}
 
 fn account(email: &str, imap: Server, smtp: Server) -> Account {
     Account {
@@ -52,63 +40,6 @@ fn person(email: &str) -> Address {
     Address {
         name: String::new(),
         email: email.to_owned(),
-    }
-}
-
-struct Dovecot {
-    folder: tempfile::TempDir,
-    port: u16,
-}
-
-impl Dovecot {
-    fn start() -> Self {
-        let folder = tempfile::Builder::new()
-            .prefix("dc")
-            .tempdir_in("/tmp")
-            .unwrap();
-        let port = TcpListener::bind("127.0.0.1:0").and_then(|probe| probe.local_addr());
-        let port = port.unwrap().port();
-        let user = std::env::var("USER").unwrap_or_else(|_| "root".to_owned());
-        let uid = rustix::process::getuid().as_raw();
-        let gid = rustix::process::getgid().as_raw();
-        let dir = folder.path().display();
-        let config = format!(
-            "dovecot_config_version = 2.4.1\ndovecot_storage_version = 2.4.1\n\
-             base_dir = {dir}/run\nstate_dir = {dir}/state\nlog_path = {dir}/log\n\
-             default_internal_user = {user}\ndefault_internal_group = {user}\n\
-             default_login_user = {user}\nprotocols = imap\nlisten = 127.0.0.1\nssl = no\n\
-             auth_allow_cleartext = yes\nmail_driver = maildir\nmail_home = {dir}/mail\n\
-             mail_path = ~/Maildir\npassdb static {{\n password = {PASSWORD}\n}}\n\
-             userdb static {{\n fields {{\n  uid = {uid}\n  gid = {gid}\n }}\n}}\n\
-             service imap-login {{\n chroot =\n inet_listener imap {{\n  port = {port}\n }}\n\
-             inet_listener imaps {{\n  port = 0\n }}\n}}\n\
-             service anvil {{\n chroot =\n}}\nnamespace inbox {{\n inbox = yes\n\
-             mailbox Sent {{\n  special_use = \\Sent\n  auto = subscribe\n }}\n}}\n"
-        );
-        std::fs::write(folder.path().join("dovecot.conf"), config).unwrap();
-        let dovecot = Self { folder, port };
-        assert!(dovecot.command(DOVECOT, &[]).status().unwrap().success());
-        let deadline = Instant::now() + WAIT;
-        while TcpStream::connect(("127.0.0.1", port)).is_err() {
-            assert!(Instant::now() < deadline, "dovecot never listened");
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        dovecot
-    }
-
-    fn command(&self, program: &str, arguments: &[&str]) -> Command {
-        let mut command = Command::new(program);
-        command
-            .arg("-c")
-            .arg(self.folder.path().join("dovecot.conf"))
-            .args(arguments);
-        command
-    }
-}
-
-impl Drop for Dovecot {
-    fn drop(&mut self) {
-        let _ = self.command(DOVECOT, &["stop"]).status();
     }
 }
 
@@ -146,15 +77,19 @@ fn smtp_server(sent: Sent) -> u16 {
 
 #[test]
 fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_stale() {
-    if !Path::new(DOVECOT).exists() {
-        eprintln!("{DOVECOT} is not installed; skipping");
+    if !Dovecot::installed() {
+        eprintln!("dovecot is not installed; skipping");
         return;
     }
-    let dovecot = Dovecot::start();
+    let dovecot = Dovecot::start().unwrap();
     let sent = Sent::default();
-    let path = dovecot.folder.path().join("mail.sqlite3");
+    let path = dovecot.folder().join("mail.sqlite3");
     let store = Store::open(&path).unwrap();
-    let mut account = account(USER, local(dovecot.port), local(smtp_server(sent.clone())));
+    let mut account = account(
+        USER,
+        local(dovecot.port()),
+        local(smtp_server(sent.clone())),
+    );
     account.id = store.add_account(&account).unwrap();
     let id = account.id;
     let mut mailroom = Mailroom::new().unwrap();
@@ -186,7 +121,7 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
         ..Outgoing::default()
     })));
 
-    let mut session = Session::connect(&local(dovecot.port), &Network::default()).unwrap();
+    let mut session = Session::connect(&local(dovecot.port()), &Network::default()).unwrap();
     session.login(USER, PASSWORD).unwrap();
     let deadline = Instant::now() + WAIT;
     while session.select("Sent").unwrap().exists == 0 {
@@ -209,18 +144,18 @@ fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_
 
 #[test]
 fn an_account_found_in_its_domains_records_signs_in_after_a_wrong_password() {
-    if !Path::new(DOVECOT).exists() {
-        eprintln!("{DOVECOT} is not installed; skipping");
+    if !Dovecot::installed() {
+        eprintln!("dovecot is not installed; skipping");
         return;
     }
-    let dovecot = Dovecot::start();
+    let dovecot = Dovecot::start().unwrap();
     let smtp = smtp_server(Sent::default());
     let record = |service: &str, port| Record::Srv {
         name: format!("{service}._tcp.bande.test"),
         port,
         target: "localhost".to_owned(),
     };
-    let records = vec![record("_imap", dovecot.port), record("_submission", smtp)];
+    let records = vec![record("_imap", dovecot.port()), record("_submission", smtp)];
     let network = Network {
         resolver: nameserver(records).unwrap(),
         ..Network::default()
@@ -229,7 +164,7 @@ fn an_account_found_in_its_domains_records_signs_in_after_a_wrong_password() {
     assert_eq!(source, Source::Services);
     assert_eq!(
         (found.imap.host.as_str(), found.imap.port),
-        ("localhost", dovecot.port)
+        ("localhost", dovecot.port())
     );
     assert_eq!(
         (found.smtp.security, found.user.as_str()),

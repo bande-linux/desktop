@@ -2015,6 +2015,34 @@ msgstr "Starta om för att installera uppdateringar"
 msgid "Updates didn't finish installing"
 msgstr "Uppdateringarna blev inte färdiginstallerade"
 
+msgid "Shut Down Now"
+msgstr "Stäng av nu"
+
+msgid "Restart Now"
+msgstr "Starta om nu"
+
+msgid "Shut down to install 1 update"
+msgid_plural "Shut down to install {count} updates"
+msgstr[0] "Stäng av för att installera 1 uppdatering"
+msgstr[1] "Stäng av för att installera {count} uppdateringar"
+
+msgid "Restart to install 1 update"
+msgid_plural "Restart to install {count} updates"
+msgstr[0] "Starta om för att installera 1 uppdatering"
+msgstr[1] "Starta om för att installera {count} uppdateringar"
+
+msgid "Updates install while the computer restarts"
+msgstr "Uppdateringarna installeras medan datorn startar om"
+
+msgid "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
+msgstr "Uppdateringarna installeras medan datorn startar om. Håll datorn ansluten till ström tills den har startat igen."
+
+msgid "Firmware installs while the computer is shut down. Keep it plugged in, then turn it on again."
+msgstr "Den inbyggda programvaran installeras medan datorn är avstängd. Håll den ansluten till ström och starta den sedan igen."
+
+msgid "Shut down to install updates"
+msgstr "Stäng av för att installera uppdateringar"
+
 msgid "Log out to finish updating the desktop"
 msgstr "Logga ut för att slutföra uppdateringen av skrivbordet"
 
@@ -2084,12 +2112,6 @@ msgstr "Tjänsten för uppdatering av inbyggd programvara stoppades. Försök ig
 msgid "Show Updates"
 msgstr "Visa uppdateringar"
 
-msgid "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
-msgstr "Uppdateringarna installeras medan datorn startar om. Håll datorn ansluten till ström tills den har startat igen."
-
-msgid "Updates install while the computer restarts"
-msgstr "Uppdateringarna installeras medan datorn startar om"
-
 msgid "1 update was installed"
 msgid_plural "{count} updates were installed"
 msgstr[0] "1 uppdatering installerades"
@@ -2097,11 +2119,6 @@ msgstr[1] "{count} uppdateringar installerades"
 
 msgid "Could not install updates"
 msgstr "Det gick inte att installera uppdateringar"
-
-msgid "Restart to install 1 update"
-msgid_plural "Restart to install {count} updates"
-msgstr[0] "Starta om för att installera 1 uppdatering"
-msgstr[1] "Starta om för att installera {count} uppdateringar"
 
 msgid "Some updates take effect after a restart"
 msgstr "Vissa uppdateringar träder i kraft efter en omstart"
@@ -2184,11 +2201,11 @@ msgstr "Tjänsten för datum och tid"
 msgid "Later"
 msgstr "Senare"
 
+msgid "Some updates didn't install"
+msgstr "Vissa uppdateringar installerades inte"
+
 msgid "Check Now"
 msgstr "Sök nu"
-
-msgid "Restart Now"
-msgstr "Starta om nu"
 
 msgid "Log Out"
 msgstr "Logga ut"
@@ -2207,6 +2224,9 @@ msgstr "Inbyggd programvara {from} → {to}"
 
 msgid "{versions} · Installs during restart"
 msgstr "{versions} · Installeras vid omstart"
+
+msgid "{versions} · Installs while shut down"
+msgstr "{versions} · Installeras medan datorn är avstängd"
 
 msgid "{version} · Flatpak"
 msgstr "{version} · Flatpak"

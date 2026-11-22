@@ -12,6 +12,7 @@ use crate::SessionBus;
 pub const SYSTEM_POWER_TOO_LOW: u64 = 1 << 0;
 const UPDATABLE: u64 = 1 << 1;
 const NEEDS_REBOOT: u64 = 1 << 8;
+const NEEDS_SHUTDOWN: u64 = 1 << 17;
 const NOTIFIED: u64 = 1 << 10;
 const STATE_SUCCESS: u32 = 2;
 const STATE_FAILED: u32 = 3;
@@ -29,6 +30,7 @@ pub struct Device {
     pub from: &'static str,
     pub to: &'static str,
     pub at_restart: bool,
+    pub at_shutdown: bool,
     pub problems: u64,
 }
 
@@ -90,7 +92,13 @@ fn described(world: &World, device: &Device) -> Result<Record, FwupdError> {
         true => NOTIFIED,
         false => 0,
     };
-    let flags = UPDATABLE | notified | if device.at_restart { NEEDS_REBOOT } else { 0 };
+    let restart = if device.at_restart { NEEDS_REBOOT } else { 0 };
+    let shutdown = if device.at_shutdown {
+        NEEDS_SHUTDOWN
+    } else {
+        0
+    };
+    let flags = UPDATABLE | notified | restart | shutdown;
     let state = world.states.get(device.id).copied().unwrap_or(0);
     let version = match state {
         STATE_SUCCESS => device.to,
@@ -202,7 +210,7 @@ impl Fwupd {
             .find(|device| device.id == id)
             .cloned()
             .ok_or_else(|| FwupdError::NotFound(id.clone()))?;
-        let state = match device.at_restart {
+        let state = match device.at_restart || device.at_shutdown {
             true => STATE_NEEDS_REBOOT,
             false => STATE_SUCCESS,
         };

@@ -904,18 +904,21 @@ that fwupd then checks for firmware once a day by itself; a check follows the in
 a check that refreshes the package lists (Check Now, or a check the person switched on) downloads
 new metadata, for each enabled download remote in fwupd's own configuration (LVFS by default),
 skipping a remote whose `.jcat` signature is unchanged, and hands it to fwupd with
-`UpdateMetadata`. fwupd's configuration and its own `fwupd-refresh.timer` are left as Debian
+`UpdateMetadata`; a remote that fails is logged and the others still refresh. fwupd's configuration and its own `fwupd-refresh.timer` are left as Debian
 ships them. Each updatable device with a newer release is listed before the packages with its
 name, version from → to and the release notes. Update Now installs packages first, then each
 firmware: refused while fwupd reports a device problem (battery too low, mains needed, lid
 closed, update pending, busy), otherwise the cabinet is downloaded, checked against the release's
 SHA-256 and passed to `Install` with interactive authorisation, so fwupd asks through polkit
 (`update-internal`, kept for the following devices). Progress follows fwupd's `Percentage`.
-A device that installs during the restart (UEFI capsules: `needs-reboot`, then update state
-`needs-reboot`) joins the restart flow as "Restart to install", with a note to keep the computer
-plugged in; a reopened pane finds it again through fwupd's update state. After the restart the
-outcome of such an update (`GetHistory`, `GetResults`) is shown once, with the PackageKit offline
-results, then cleared with `ClearResults`. Firmware is never
+Cancelling the password dialog stops quietly and lists the updates again; a device that fails
+stops the rest, and the pane shows what did install and what waits for a restart beside the
+failure. A device that installs during the restart (UEFI capsules: `needs-reboot`, then update
+state `needs-reboot`) joins the restart flow as "Restart to install", with a note to keep the
+computer plugged in; one that installs while the computer is off (`needs-shutdown`) asks to shut
+down instead ("Shut Down Now"), which also covers any restart. A reopened pane finds them again
+through fwupd's update state. After the restart the outcome of each (`GetHistory`, `GetResults`)
+is shown once, together with the PackageKit offline results, then cleared with `ClearResults`. Firmware is never
 installed by automatic updates; the notification counts it as waiting. fwupd's errors map to
 messages that say what to do.
 

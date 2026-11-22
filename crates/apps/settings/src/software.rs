@@ -14,9 +14,10 @@ use bande_l10n::{text, tr, trn};
 use bande_packages::offline::{self, Results};
 use bande_packages::schedule::{INSTALL, check_due, check_interval, software_updates};
 use bande_packages::{
-    Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, flatpak,
+    Applies, Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, flatpak,
     running_release,
 };
+use bande_toolkit::SessionEnd;
 use bande_xdg::{replace_file, state_home};
 use zbus::MatchRule;
 use zbus::blocking::fdo::DBusProxy;
@@ -54,7 +55,9 @@ impl Package {
     pub(crate) fn needs_restart(&self) -> bool {
         matches!(
             self.class,
-            Class::Boot | Class::Offline | Class::Firmware { at_restart: true }
+            Class::Boot
+                | Class::Offline
+                | Class::Firmware(Applies::AtRestart | Applies::AtShutdown)
         )
     }
 
@@ -80,7 +83,64 @@ pub enum Refresh {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reboot {
     Finish,
-    Install { count: usize, firmware: bool },
+    Install { count: usize, ending: Ending },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Ending {
+    Restart,
+    FirmwareRestart,
+    FirmwareShutDown,
+}
+
+impl Ending {
+    fn of(applies: Applies) -> Self {
+        match applies {
+            Applies::AtShutdown => Self::FirmwareShutDown,
+            Applies::Now | Applies::AtRestart => Self::FirmwareRestart,
+        }
+    }
+
+    pub(crate) fn session_end(self) -> SessionEnd {
+        match self {
+            Self::FirmwareShutDown => SessionEnd::ShutDown,
+            Self::Restart | Self::FirmwareRestart => SessionEnd::Restart,
+        }
+    }
+
+    pub(crate) fn action(self) -> String {
+        match self {
+            Self::FirmwareShutDown => tr!("Shut Down Now"),
+            Self::Restart | Self::FirmwareRestart => tr!("Restart Now"),
+        }
+    }
+
+    pub(crate) fn title(self, count: usize) -> String {
+        match self {
+            Self::FirmwareShutDown => trn!(
+                "Shut down to install 1 update",
+                "Shut down to install {count} updates",
+                count = count
+            ),
+            Self::Restart | Self::FirmwareRestart => trn!(
+                "Restart to install 1 update",
+                "Restart to install {count} updates",
+                count = count
+            ),
+        }
+    }
+
+    pub(crate) fn hint(self) -> String {
+        match self {
+            Self::Restart => tr!("Updates install while the computer restarts"),
+            Self::FirmwareRestart => tr!(
+                "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
+            ),
+            Self::FirmwareShutDown => tr!(
+                "Firmware installs while the computer is shut down. Keep it plugged in, then turn it on again."
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,13 +165,14 @@ pub enum SoftwareState {
     },
     Prepared {
         count: usize,
-        firmware: bool,
+        ending: Ending,
     },
     Installed {
         count: usize,
         reboot: Option<Reboot>,
         logout: bool,
         apps: Vec<String>,
+        failed: Option<String>,
     },
     Interrupted,
     Failed {
@@ -123,6 +184,18 @@ pub enum SoftwareState {
 impl SoftwareState {
     pub(crate) fn pending(&self) -> Option<String> {
         match self {
+            Self::Prepared {
+                ending: Ending::FirmwareShutDown,
+                ..
+            }
+            | Self::Installed {
+                reboot:
+                    Some(Reboot::Install {
+                        ending: Ending::FirmwareShutDown,
+                        ..
+                    }),
+                ..
+            } => Some(tr!("Shut down to install updates")),
             Self::Prepared { .. }
             | Self::Installed {
                 reboot: Some(Reboot::Install { .. }),
@@ -145,6 +218,7 @@ impl SoftwareState {
             count,
             reboot,
             logout,
+            failed,
             ..
         } = self
         else {
@@ -154,7 +228,7 @@ impl SoftwareState {
             Need::Reboot => *reboot = None,
             Need::LogOut => *logout = false,
         }
-        *count == 0 && reboot.is_none() && !*logout
+        *count == 0 && reboot.is_none() && !*logout && failed.is_none()
     }
 }
 
@@ -253,9 +327,7 @@ fn firmware_updates(system: &Connection, refresh: bool) -> Vec<Package> {
             version: update.to,
             summary: update.notes,
             size: update.size,
-            class: Class::Firmware {
-                at_restart: update.at_restart,
-            },
+            class: Class::Firmware(update.applies),
         })
         .collect();
     packages.sort_by(|a, b| a.name.cmp(&b.name));
@@ -337,44 +409,46 @@ fn finished_offline(system: &Connection) -> Result<Option<SoftwareState>, Error>
     if results.is_none() && flashed.is_empty() {
         return Ok(None);
     }
-    let (installed, failed): (Vec<_>, Vec<_>) =
-        flashed.into_iter().partition(|finished| finished.installed);
-    let count = match results {
-        Some(Results::Failed(failure)) => {
-            return Ok(Some(SoftwareState::Failed {
-                during: Stage::Install,
-                reason: explain(&failure),
-            }));
-        }
-        Some(Results::Installed(ids)) => ids.len(),
-        None => 0,
-    };
-    if let Some(failed) = failed.first() {
-        let reason =
-            tr!("The firmware update didn't install. The device keeps its earlier firmware.");
-        return Ok(Some(SoftwareState::Failed {
-            during: Stage::Install,
-            reason: tr!(
-                "{device}: {reason}",
-                device = failed.name.clone(),
-                reason = reason
-            ),
-        }));
+    let mut count = 0;
+    let mut problems = Vec::new();
+    match results {
+        Some(Results::Installed(ids)) => count += ids.len(),
+        Some(Results::Failed(failure)) => problems.push(explain(&failure)),
+        None => {}
     }
-    Ok(Some(SoftwareState::Installed {
-        count: count + installed.len(),
-        reboot: None,
-        logout: false,
-        apps: Vec::new(),
+    let kept = tr!("The firmware update didn't install. The device keeps its earlier firmware.");
+    for finished in flashed {
+        match finished.installed {
+            true => count += 1,
+            false => problems.push(tr!(
+                "{device}: {reason}",
+                device = finished.name,
+                reason = kept.clone()
+            )),
+        }
+    }
+    let failed = (!problems.is_empty()).then(|| problems.join("\n"));
+    Ok(Some(match (count, failed) {
+        (0, Some(reason)) => SoftwareState::Failed {
+            during: Stage::Install,
+            reason,
+        },
+        (count, failed) => SoftwareState::Installed {
+            count,
+            reboot: None,
+            logout: false,
+            apps: Vec::new(),
+            failed,
+        },
     }))
 }
 
-fn pending_firmware(system: &Connection) -> usize {
+fn pending_firmware(system: &Connection) -> Vec<Applies> {
     firmware::pending(system).unwrap_or_else(|error| {
         if !matches!(error, firmware::Error::Missing) {
             tracing::warn!("cannot read the pending firmware updates: {error}");
         }
-        0
+        Vec::new()
     })
 }
 
@@ -384,12 +458,13 @@ fn waiting_offline(system: &Connection) -> Result<Option<SoftwareState>, Error> 
         false => 0,
     };
     let firmware = pending_firmware(system);
-    Ok(
-        (prepared + firmware > 0).then_some(SoftwareState::Prepared {
-            count: prepared + firmware,
-            firmware: firmware > 0,
-        }),
-    )
+    let ending = firmware
+        .iter()
+        .map(|applies| Ending::of(*applies))
+        .max()
+        .unwrap_or(Ending::Restart);
+    let count = prepared + firmware.len();
+    Ok((count > 0).then_some(SoftwareState::Prepared { count, ending }))
 }
 
 pub fn last_check(client: &Client) -> Option<i64> {
@@ -409,6 +484,7 @@ pub fn open_updates(session: &Connection, system: &Connection, client: &Client) 
             reboot: Some(Reboot::Finish),
             logout: false,
             apps: Vec::new(),
+            failed: None,
         },
         Ok(None) => {
             let refresh = match check_due(session, client) {
@@ -434,6 +510,7 @@ fn installed_earlier() -> SoftwareState {
         reboot: None,
         logout: stale.logout,
         apps: stale.apps,
+        failed: None,
     }
 }
 
@@ -563,6 +640,7 @@ fn firmware_reason(error: &firmware::Error) -> String {
                 tr!("The device needs your attention. Follow its instructions and try again.")
             }
             firmware::Problem::NotAuthorized => tr!("Only an administrator can change this."),
+            firmware::Problem::Cancelled => tr!("The update was canceled."),
             firmware::Problem::Invalid => {
                 tr!("The firmware file is damaged or not signed. Try again later.")
             }
@@ -580,69 +658,97 @@ fn firmware_reason(error: &firmware::Error) -> String {
     }
 }
 
+#[derive(Default)]
 struct Flashed {
     now: usize,
-    at_restart: usize,
+    waiting: usize,
+    ending: Option<Ending>,
+    failed: Option<String>,
+    cancelled: bool,
 }
 
 fn install_firmware(
     system: &Connection,
     devices: &[&Package],
     report: &dyn Fn(SoftwareState),
-) -> Result<Flashed, String> {
-    let mut flashed = Flashed {
-        now: 0,
-        at_restart: 0,
-    };
+) -> Flashed {
+    let mut flashed = Flashed::default();
     for device in devices {
-        let waits = firmware::install(system, &device.id, &|step| {
+        let installed = firmware::install(system, &device.id, &|step| {
             report(match step {
                 firmware::Step::Downloading(percent) => SoftwareState::Downloading { percent },
                 firmware::Step::Installing(percent) => SoftwareState::Installing { percent },
             })
-        })
-        .map_err(|error| {
-            tr!(
-                "{device}: {reason}",
-                device = device.name.clone(),
-                reason = firmware_reason(&error)
-            )
-        })?;
-        match waits {
-            true => flashed.at_restart += 1,
-            false => flashed.now += 1,
+        });
+        match installed {
+            Ok(None) => {}
+            Ok(Some(Applies::Now)) => flashed.now += 1,
+            Ok(Some(applies)) => {
+                flashed.waiting += 1;
+                flashed.ending = flashed.ending.max(Some(Ending::of(applies)));
+            }
+            Err(firmware::Error::Failed(firmware::Problem::Cancelled, _)) => {
+                flashed.cancelled = true;
+                return flashed;
+            }
+            Err(error) => {
+                flashed.failed = Some(tr!(
+                    "{device}: {reason}",
+                    device = device.name.clone(),
+                    reason = firmware_reason(&error)
+                ));
+                return flashed;
+            }
         }
     }
-    Ok(flashed)
+    flashed
 }
 
-fn with_firmware(state: SoftwareState, flashed: &Flashed) -> SoftwareState {
-    let firmware = flashed.at_restart > 0;
+fn with_firmware(state: SoftwareState, flashed: Flashed) -> SoftwareState {
+    let joined = |ending: Ending| {
+        flashed
+            .ending
+            .map_or(ending, |firmware| ending.max(firmware))
+    };
     match state {
-        SoftwareState::Prepared { count, .. } => SoftwareState::Prepared {
-            count: count + flashed.at_restart,
-            firmware,
+        SoftwareState::Prepared { count, ending } if flashed.failed.is_none() => {
+            SoftwareState::Prepared {
+                count: count + flashed.waiting,
+                ending: joined(ending),
+            }
+        }
+        SoftwareState::Prepared { count, ending } => SoftwareState::Installed {
+            count: flashed.now,
+            reboot: Some(Reboot::Install {
+                count: count + flashed.waiting,
+                ending: joined(ending),
+            }),
+            logout: false,
+            apps: Vec::new(),
+            failed: flashed.failed,
         },
         SoftwareState::Installed {
             count,
             reboot,
             logout,
             apps,
+            ..
         } => SoftwareState::Installed {
             count: count + flashed.now,
-            reboot: match reboot {
-                Some(Reboot::Install { count, .. }) => Some(Reboot::Install {
-                    count: count + flashed.at_restart,
-                    firmware,
+            reboot: match (reboot, flashed.ending) {
+                (Some(Reboot::Install { count, ending }), _) => Some(Reboot::Install {
+                    count: count + flashed.waiting,
+                    ending: joined(ending),
                 }),
-                _ if firmware => Some(Reboot::Install {
-                    count: flashed.at_restart,
-                    firmware,
+                (_, Some(ending)) => Some(Reboot::Install {
+                    count: flashed.waiting,
+                    ending,
                 }),
-                other => other,
+                (other, None) => other,
             },
             logout,
             apps,
+            failed: flashed.failed,
         },
         other => other,
     }
@@ -665,12 +771,19 @@ pub fn update(
     {
         return state;
     }
-    match install_firmware(system, &devices, report) {
-        Ok(flashed) => with_firmware(state, &flashed),
-        Err(reason) => SoftwareState::Failed {
-            during: Stage::Install,
-            reason,
-        },
+    let flashed = install_firmware(system, &devices, report);
+    let cancelled = flashed.cancelled;
+    let state = with_firmware(state, flashed);
+    let nothing = SoftwareState::Installed {
+        count: 0,
+        reboot: None,
+        logout: false,
+        apps: Vec::new(),
+        failed: None,
+    };
+    match cancelled && state == nothing {
+        true => check(system, client, Refresh::Never),
+        false => state,
     }
 }
 
@@ -695,6 +808,7 @@ fn update_packages(
             reboot: None,
             logout: false,
             apps: Vec::new(),
+            failed: None,
         };
     }
     let (offline, now): (Vec<&Package>, Vec<&Package>) = debian
@@ -710,7 +824,7 @@ fn update_packages(
             prepare(system, client, &ids(&debian), report)?;
             return Ok(SoftwareState::Prepared {
                 count: debian.len(),
-                firmware: false,
+                ending: Ending::Restart,
             });
         }
         let applied = client
@@ -736,7 +850,7 @@ fn update_packages(
             prepare(system, client, &ids(&offline), report)?;
             Some(Reboot::Install {
                 count: offline.len(),
-                firmware: false,
+                ending: Ending::Restart,
             })
         };
         Ok(SoftwareState::Installed {
@@ -744,13 +858,20 @@ fn update_packages(
             reboot,
             logout: false,
             apps: Vec::new(),
+            failed: None,
         })
     };
     installed().unwrap_or_else(|(stage, error)| broken(stage, &error))
 }
 
 fn settle(session: &Connection, state: SoftwareState) -> SoftwareState {
-    let SoftwareState::Installed { count, reboot, .. } = state else {
+    let SoftwareState::Installed {
+        count,
+        reboot,
+        failed,
+        ..
+    } = state
+    else {
         return state;
     };
     if reboot == Some(Reboot::Finish) {
@@ -762,6 +883,7 @@ fn settle(session: &Connection, state: SoftwareState) -> SoftwareState {
         reboot,
         logout: stale.logout,
         apps: stale.apps,
+        failed,
     }
 }
 
@@ -851,41 +973,27 @@ pub enum Reply {
     Gone,
 }
 
-pub(crate) fn restart_hint(firmware: bool) -> String {
-    match firmware {
-        true => tr!(
-            "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
-        ),
-        false => tr!("Updates install while the computer restarts"),
-    }
-}
-
 pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Result<Option<u32>> {
     let finished = finished_offline(system).unwrap_or_else(|error| {
         tracing::warn!("cannot read the offline update results: {error}");
         None
     });
     match finished {
-        Some(SoftwareState::Installed { count, .. }) => {
+        Some(SoftwareState::Installed { count, failed, .. }) => {
             let summary = trn!(
                 "1 update was installed",
                 "{count} updates were installed",
                 count = count
             );
-            return announce(session, &summary, "");
+            return announce(session, &summary, &failed.unwrap_or_default());
         }
         Some(SoftwareState::Failed { reason, .. }) => {
             return announce(session, &tr!("Could not install updates"), &reason);
         }
         _ => {}
     }
-    if let Ok(Some(SoftwareState::Prepared { count, firmware })) = waiting_offline(system) {
-        let summary = trn!(
-            "Restart to install 1 update",
-            "Restart to install {count} updates",
-            count = count
-        );
-        return announce(session, &summary, &restart_hint(firmware));
+    if let Ok(Some(SoftwareState::Prepared { count, ending })) = waiting_offline(system) {
+        return announce(session, &ending.title(count), &ending.hint());
     }
     if restart_pending() {
         return announce(
@@ -977,11 +1085,11 @@ struct Sorted {
 fn sort_updates(client: &Client, packages: Vec<Package>, live: bool) -> Sorted {
     let firmware = packages
         .iter()
-        .filter(|package| package.class == Class::Firmware { at_restart: false })
+        .filter(|package| package.class == Class::Firmware(Applies::Now))
         .count();
     let (mut now, later): (Vec<Package>, Vec<Package>) = packages
         .into_iter()
-        .filter(|package| package.class != Class::Firmware { at_restart: false })
+        .filter(|package| package.class != Class::Firmware(Applies::Now))
         .partition(|package| matches!(package.class, Class::Flatpak | Class::Live));
     let debian: Vec<&Package> = now
         .iter()
@@ -1036,15 +1144,9 @@ fn update_automatically(
         Some(SoftwareState::Failed { reason, .. }) => {
             announce(session, &tr!("Could not install updates"), &reason)
         }
-        Some(SoftwareState::Prepared { count, firmware }) => announce(
-            session,
-            &trn!(
-                "Restart to install 1 update",
-                "Restart to install {count} updates",
-                count = count
-            ),
-            &restart_hint(firmware),
-        ),
+        Some(SoftwareState::Prepared { count, ending }) => {
+            announce(session, &ending.title(count), &ending.hint())
+        }
         _ if approve + restart > 0 => announce_waiting(session, approve, restart),
         Some(SoftwareState::Installed {
             reboot: Some(_), ..

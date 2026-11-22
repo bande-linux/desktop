@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use bande_https::ureq;
+use bande_packages::Applies;
 use roxmltree::{Document, Node};
 use rustix::fs::{MemfdFlags, memfd_create};
 use sha2::{Digest, Sha256};
@@ -58,7 +59,7 @@ pub(crate) struct Update {
     pub(crate) to: String,
     pub(crate) notes: String,
     pub(crate) size: u64,
-    pub(crate) at_restart: bool,
+    pub(crate) applies: Applies,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +79,7 @@ pub(crate) enum Problem {
     NotReachable,
     NeedsUserAction,
     NotAuthorized,
+    Cancelled,
     Invalid,
     UpToDate,
     Other,
@@ -88,7 +90,8 @@ impl Problem {
         match name.strip_prefix(ERROR_PREFIX).unwrap_or(name) {
             "BatteryLevelTooLow" => Self::BatteryLow,
             "AcPowerRequired" => Self::AcPowerRequired,
-            "AuthFailed" | "AuthExpired" | "PermissionDenied" => Self::NotAuthorized,
+            "AuthFailed" => Self::Cancelled,
+            "AuthExpired" | "PermissionDenied" => Self::NotAuthorized,
             "AlreadyPending" => Self::AlreadyPending,
             "Busy" | "TimedOut" => Self::Busy,
             "NotReachable" => Self::NotReachable,
@@ -242,8 +245,15 @@ fn plain(markup: &str) -> String {
     lines.join("\n")
 }
 
-fn restarts(device: &Record) -> bool {
-    flags(device) & (NEEDS_REBOOT | NEEDS_SHUTDOWN) != 0
+fn applies(device: &Record) -> Applies {
+    let flags = flags(device);
+    if flags & NEEDS_SHUTDOWN != 0 {
+        Applies::AtShutdown
+    } else if flags & NEEDS_REBOOT != 0 {
+        Applies::AtRestart
+    } else {
+        Applies::Now
+    }
 }
 
 fn waiting(device: &Record) -> bool {
@@ -269,18 +279,19 @@ pub(crate) fn updates(system: &Connection) -> Result<Vec<Update>, Error> {
             to: text(&release, "Version"),
             notes: plain(&text(&release, "Description")),
             size: number(&release, "Size").unwrap_or(0),
-            at_restart: restarts(&device),
+            applies: applies(&device),
             device: id,
         });
     }
     Ok(found)
 }
 
-pub(crate) fn pending(system: &Connection) -> Result<usize, Error> {
+pub(crate) fn pending(system: &Connection) -> Result<Vec<Applies>, Error> {
     Ok(devices(system)?
         .iter()
         .filter(|device| waiting(device))
-        .count())
+        .map(|device| applies(device).max(Applies::AtRestart))
+        .collect())
 }
 
 pub(crate) fn installed(system: &Connection) -> zbus::Result<bool> {
@@ -310,7 +321,7 @@ fn result(system: &Connection, device: &str) -> Result<Option<Record>, Error> {
 pub(crate) fn finished(system: &Connection) -> Result<Vec<Finished>, Error> {
     let mut found = Vec::new();
     for device in history(system)? {
-        if !restarts(&device) || flags(&device) & NOTIFIED != 0 || waiting(&device) {
+        if applies(&device) == Applies::Now || flags(&device) & NOTIFIED != 0 || waiting(&device) {
             continue;
         }
         let id = text(&device, "DeviceId");
@@ -415,21 +426,32 @@ pub(crate) fn refresh(system: &Connection) -> Result<(), Error> {
             tracing::info!("not refreshing the firmware remote {id}: it needs a login");
             continue;
         }
-        let signature = download(&agent, &format!("{uri}.jcat"), 0, &|_| {})?;
-        if sha256(&signature) == text(&remote, "Checksum") {
-            continue;
+        match refresh_remote(system, &agent, &id, &uri, &text(&remote, "Checksum")) {
+            Err(Error::Missing) => return Err(Error::Missing),
+            Err(error) => tracing::warn!("cannot refresh the firmware remote {id}: {error}"),
+            Ok(()) => {}
         }
-        let metadata = download(&agent, &uri, 0, &|_| {})?;
-        let (metadata, signature) = (memory_file(&metadata)?, memory_file(&signature)?);
-        let () = daemon(system)?.call(
-            "UpdateMetadata",
-            &(
-                id.as_str(),
-                Fd::from(metadata.as_fd()),
-                Fd::from(signature.as_fd()),
-            ),
-        )?;
     }
+    Ok(())
+}
+
+fn refresh_remote(
+    system: &Connection,
+    agent: &ureq::Agent,
+    id: &str,
+    uri: &str,
+    known: &str,
+) -> Result<(), Error> {
+    let signature = download(agent, &format!("{uri}.jcat"), 0, &|_| {})?;
+    if sha256(&signature) == known {
+        return Ok(());
+    }
+    let metadata = download(agent, uri, 0, &|_| {})?;
+    let (metadata, signature) = (memory_file(&metadata)?, memory_file(&signature)?);
+    let () = daemon(system)?.call(
+        "UpdateMetadata",
+        &(id, Fd::from(metadata.as_fd()), Fd::from(signature.as_fd())),
+    )?;
     Ok(())
 }
 
@@ -638,7 +660,7 @@ pub(crate) fn install(
     system: &Connection,
     device: &str,
     report: &dyn Fn(Step),
-) -> Result<bool, Error> {
+) -> Result<Option<Applies>, Error> {
     let found = devices(system)?
         .into_iter()
         .find(|record| text(record, "DeviceId") == device)
@@ -647,7 +669,7 @@ pub(crate) fn install(
         return Err(Error::Failed(problem, "fwupd reports a problem".into()));
     }
     let Some(release) = upgrades(system, device)?.into_iter().next() else {
-        return Ok(false);
+        return Ok(None);
     };
     report(Step::Downloading(None));
     let bytes = fetch(system, &release, report)?;
@@ -656,11 +678,15 @@ pub(crate) fn install(
     let filename = location.as_deref().map(basename).unwrap_or("firmware.cab");
     report(Step::Installing(None));
     match send_install(system, device, &file, filename, report) {
-        Err(Error::Failed(Problem::UpToDate, _)) => return Ok(false),
+        Err(Error::Failed(Problem::UpToDate, _)) => return Ok(None),
         result => result?,
     }
     let after = devices(system)?
         .into_iter()
         .find(|record| text(record, "DeviceId") == device);
-    Ok(after.is_some_and(|record| waiting(&record)) || restarts(&found))
+    let waits = after.is_some_and(|record| waiting(&record));
+    Ok(Some(match (applies(&found), waits) {
+        (Applies::Now, true) => Applies::AtRestart,
+        (applies, _) => applies,
+    }))
 }

@@ -1,11 +1,11 @@
 use bande_l10n::{tr, trn};
 
 use crate::pages::{Widgets, boxed};
-use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage, restart_hint};
+use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 use bande_fs::format_size;
-use bande_packages::Class;
+use bande_packages::{Applies, Class};
 use bande_settings_panes::SettingId;
 use bande_toolkit::ui::{Axis, Button, Label, ProgressBar, Spinner, Stack, Widget};
 use bande_toolkit::{SessionEnd, Spacing};
@@ -61,9 +61,22 @@ impl SettingsView {
         reboot: Option<Reboot>,
         logout: bool,
         apps: &[String],
+        failed: Option<&str>,
         system: &str,
     ) -> Widgets {
         let mut rows = Vec::new();
+        if let Some(failed) = failed {
+            let retry = self.software_button(
+                &tr!("Try Again"),
+                Intent::Software(SoftwareCommand::Check),
+                false,
+            );
+            rows.push(self.status_row(
+                &tr!("Some updates didn't install"),
+                Some(failed),
+                Some(retry),
+            ));
+        }
         if count > 0 {
             let check = self.software_button(
                 &tr!("Check Now"),
@@ -81,22 +94,21 @@ impl SettingsView {
             ));
         }
         if let Some(reboot) = reboot {
-            let (title, detail) = match reboot {
+            let (title, detail, action, ending) = match reboot {
                 Reboot::Finish => (
                     tr!("Restart to finish updating"),
                     tr!("Some updates take effect after a restart"),
+                    tr!("Restart Now"),
+                    SessionEnd::Restart,
                 ),
-                Reboot::Install { count, firmware } => (
-                    trn!(
-                        "Restart to install 1 update",
-                        "Restart to install {count} updates",
-                        count = count
-                    ),
-                    restart_hint(firmware),
+                Reboot::Install { count, ending } => (
+                    ending.title(count),
+                    ending.hint(),
+                    ending.action(),
+                    ending.session_end(),
                 ),
             };
-            let buttons =
-                self.later_buttons(&tr!("Restart Now"), SessionEnd::Restart, Need::Reboot);
+            let buttons = self.later_buttons(&action, ending, Need::Reboot);
             rows.push(self.status_row(&title, Some(&detail), Some(buttons)));
         }
         if logout {
@@ -131,7 +143,7 @@ impl SettingsView {
         rows
     }
 
-    fn firmware_detail(package: &Package, at_restart: bool) -> String {
+    fn firmware_detail(package: &Package, applies: Applies) -> String {
         let versions = match package.from.is_empty() {
             true => tr!("Firmware {to}", to = package.version.clone()),
             false => tr!(
@@ -140,9 +152,12 @@ impl SettingsView {
                 to = package.version.clone()
             ),
         };
-        let versions = match at_restart {
-            true => tr!("{versions} · Installs during restart", versions = versions),
-            false => versions,
+        let versions = match applies {
+            Applies::AtRestart => tr!("{versions} · Installs during restart", versions = versions),
+            Applies::AtShutdown => {
+                tr!("{versions} · Installs while shut down", versions = versions)
+            }
+            Applies::Now => versions,
         };
         match package.summary.is_empty() {
             true => versions,
@@ -159,7 +174,7 @@ impl SettingsView {
                     (package.size > 0).then(|| boxed(Label::new(&format_size(package.size))));
                 let version = match package.class {
                     Class::Flatpak => tr!("{version} · Flatpak", version = package.version.clone()),
-                    Class::Firmware { at_restart } => Self::firmware_detail(package, at_restart),
+                    Class::Firmware(applies) => Self::firmware_detail(package, applies),
                     _ => package.version.clone(),
                 };
                 boxed(
@@ -287,28 +302,21 @@ impl SettingsView {
                 &tr!("You can keep working while updates install"),
                 percent,
             )],
-            SoftwareState::Prepared { count, firmware } => {
+            SoftwareState::Prepared { count, ending } => {
                 let restart = self.software_button(
-                    &tr!("Restart Now"),
-                    Intent::EndSession(SessionEnd::Restart),
+                    &ending.action(),
+                    Intent::EndSession(ending.session_end()),
                     true,
                 );
-                vec![self.status_row(
-                    &trn!(
-                        "Restart to install 1 update",
-                        "Restart to install {count} updates",
-                        count = count
-                    ),
-                    Some(&restart_hint(firmware)),
-                    Some(restart),
-                )]
+                vec![self.status_row(&ending.title(count), Some(&ending.hint()), Some(restart))]
             }
             SoftwareState::Installed {
                 count,
                 reboot,
                 logout,
                 apps,
-            } => self.installed_rows(count, reboot, logout, &apps, &system),
+                failed,
+            } => self.installed_rows(count, reboot, logout, &apps, failed.as_deref(), &system),
             SoftwareState::Interrupted => {
                 let finish = self.software_button(
                     &tr!("Finish Installing"),

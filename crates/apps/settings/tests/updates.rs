@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use bande_packages::{Class, Client};
-use bande_settings::{Reboot, Refresh, SoftwareState, check, open_updates, update};
+use bande_packages::{Applies, Class, Client};
+use bande_settings::{Ending, Reboot, Refresh, SoftwareState, check, open_updates, update};
 use bande_test_bus::SessionBus;
 use bande_test_bus::fwupd::{self, Device, FakeFwupd, METADATA, SIGNATURE, SYSTEM_POWER_TOO_LOW};
 use bande_test_bus::packagekit::{Call, FakePackageKit, ONLY_DOWNLOAD, ONLY_TRUSTED, SIMULATE};
@@ -15,6 +15,16 @@ const DOCK: Device = Device {
     from: "1.0",
     to: "1.1",
     at_restart: false,
+    at_shutdown: false,
+    problems: 0,
+};
+const DRIVE: Device = Device {
+    id: "drive",
+    name: "Drive",
+    from: "3",
+    to: "4",
+    at_restart: false,
+    at_shutdown: true,
     problems: 0,
 };
 const UEFI: Device = Device {
@@ -23,6 +33,7 @@ const UEFI: Device = Device {
     from: "0.9",
     to: "1.2",
     at_restart: true,
+    at_shutdown: false,
     problems: 0,
 };
 
@@ -43,10 +54,11 @@ fn updates_install_now_unless_they_need_the_system_restarted() {
             count: 1,
             reboot: Some(Reboot::Install {
                 count: 1,
-                firmware: false,
+                ending: Ending::Restart,
             }),
             logout: false,
             apps: Vec::new(),
+            failed: None,
         }
     );
     assert_eq!(
@@ -65,7 +77,7 @@ fn updates_install_now_unless_they_need_the_system_restarted() {
         state,
         SoftwareState::Prepared {
             count: 2,
-            firmware: false
+            ending: Ending::Restart
         }
     );
     assert_eq!(
@@ -79,10 +91,10 @@ fn updates_install_now_unless_they_need_the_system_restarted() {
 }
 
 #[test]
-fn firmware_lists_beside_packages_and_capsules_wait_for_the_restart() {
+fn firmware_lists_beside_packages_and_waits_for_the_restart_or_shutdown_it_needs() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let _packagekit = FakePackageKit::start(&bus, &[LIBC]).expect("fake PackageKit");
-    let fwupd = FakeFwupd::start(&bus, &[UEFI, DOCK]).expect("fake fwupd");
+    let fwupd = FakeFwupd::start(&bus, &[UEFI, DRIVE, DOCK]).expect("fake fwupd");
     let system = bus.connect().expect("client connection");
     let client = Client::new(&system);
 
@@ -91,16 +103,16 @@ fn firmware_lists_beside_packages_and_capsules_wait_for_the_restart() {
     };
     assert!(fwupd.take_calls().is_empty(), "fetched without a check");
     let names: Vec<&str> = listed.iter().map(|update| update.name.as_str()).collect();
-    assert_eq!(names, ["Desk Dock", "System Firmware", "libc6"]);
+    assert_eq!(names, ["Desk Dock", "Drive", "System Firmware", "libc6"]);
     assert_eq!(
-        (&listed[1].from, &listed[1].version, &listed[1].summary),
+        (&listed[2].from, &listed[2].version, &listed[2].summary),
         (
             &"0.9".to_owned(),
             &"1.2".to_owned(),
             &"Fixes waking from sleep.\n• Quieter fan".to_owned()
         )
     );
-    assert_eq!(listed[1].class, Class::Firmware { at_restart: true });
+    assert_eq!(listed[2].class, Class::Firmware(Applies::AtRestart));
 
     check(&system, &client, Refresh::Always);
     assert_eq!(
@@ -122,41 +134,49 @@ fn firmware_lists_beside_packages_and_capsules_wait_for_the_restart() {
         SoftwareState::Installed {
             count: 1,
             reboot: Some(Reboot::Install {
-                count: 1,
-                firmware: true
+                count: 2,
+                ending: Ending::FirmwareShutDown
             }),
             logout: false,
             apps: Vec::new(),
+            failed: None,
         }
     );
     assert_eq!(
         fwupd.take_calls(),
         [
             fwupd::Call::Install("dock".to_owned(), DOCK.cab()),
+            fwupd::Call::Install("drive".to_owned(), DRIVE.cab()),
             fwupd::Call::Install("uefi".to_owned(), UEFI.cab()),
         ]
     );
 
     fwupd.restart(false);
     let SoftwareState::Failed { reason, .. } = open_updates(&system, &system, &client) else {
-        panic!("the failed capsule was not reported");
+        panic!("the failed firmware was not reported");
     };
-    assert!(reason.starts_with("System Firmware:"), "{reason}");
+    assert!(
+        reason.contains("System Firmware:") && reason.contains("Drive:"),
+        "{reason}"
+    );
     assert_eq!(
         fwupd.take_calls(),
-        [fwupd::Call::ClearResults("uefi".to_owned())]
+        [
+            fwupd::Call::ClearResults("uefi".to_owned()),
+            fwupd::Call::ClearResults("drive".to_owned()),
+        ]
     );
 }
 
 #[test]
-fn firmware_is_refused_while_fwupd_reports_the_battery_too_low() {
+fn firmware_is_refused_while_fwupd_reports_the_battery_too_low_and_others_still_install() {
     let bus = SessionBus::start().expect("dbus-daemon");
     let _packagekit = FakePackageKit::start(&bus, &[]).expect("fake PackageKit");
     let low = Device {
         problems: SYSTEM_POWER_TOO_LOW,
         ..UEFI
     };
-    let fwupd = FakeFwupd::start(&bus, &[low]).expect("fake fwupd");
+    let fwupd = FakeFwupd::start(&bus, &[DOCK, low]).expect("fake fwupd");
     let system = bus.connect().expect("client connection");
     let client = Client::new(&system);
     let SoftwareState::Available(listed) = check(&system, &client, Refresh::Never) else {
@@ -164,9 +184,18 @@ fn firmware_is_refused_while_fwupd_reports_the_battery_too_low() {
     };
 
     let state = update(&system, &client, &listed, &|_| {});
-    let SoftwareState::Failed { reason, .. } = state else {
+    let SoftwareState::Installed {
+        count: 1,
+        reboot: None,
+        failed: Some(reason),
+        ..
+    } = state
+    else {
         panic!("installed on a low battery: {state:?}");
     };
     assert!(reason.contains("battery"), "{reason}");
-    assert!(fwupd.take_calls().is_empty());
+    assert_eq!(
+        fwupd.take_calls(),
+        [fwupd::Call::Install("dock".to_owned(), DOCK.cab())]
+    );
 }

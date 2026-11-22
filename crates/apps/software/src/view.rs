@@ -34,12 +34,10 @@ const ROW_ICON: f32 = 40.0;
 const PAGE_ICON: f32 = 96.0;
 const SHOT_WIDTH: f32 = 640.0;
 const SHOT_HEIGHT: f32 = 400.0;
-const LISTED_UPDATES: usize = 30;
 pub const COMMAND_FIND: &str = "find";
 pub const COMMAND_BACK: &str = "back";
 pub const COMMAND_DISCOVER: &str = "discover";
 pub const COMMAND_INSTALLED: &str = "installed";
-pub const COMMAND_UPDATES: &str = "updates";
 const SETTINGS: &str = "bande-settings";
 pub const SETTINGS_ID: &str = "org.bande.Settings";
 const SOFTWARE_UPDATE_PANE: &str = "software-update";
@@ -48,11 +46,10 @@ const SOFTWARE_UPDATE_PANE: &str = "software-update";
 pub enum Place {
     Discover,
     Installed,
-    Updates,
 }
 
 impl Place {
-    const ALL: [Self; 3] = [Self::Discover, Self::Installed, Self::Updates];
+    const ALL: [Self; 2] = [Self::Discover, Self::Installed];
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,7 +133,6 @@ fn place_name(place: Place) -> String {
     match place {
         Place::Discover => tr!("Discover"),
         Place::Installed => tr!(context = "section", "Installed"),
-        Place::Updates => tr!("Updates"),
     }
 }
 
@@ -173,21 +169,10 @@ fn origin_name(origin: &str) -> String {
     }
 }
 
-fn place_control(
-    intents: &Rc<RefCell<Vec<Intent>>>,
-    place: Place,
-    updates: usize,
-) -> SegmentedControl {
+fn place_control(intents: &Rc<RefCell<Vec<Intent>>>) -> SegmentedControl {
     let chosen = Rc::clone(intents);
-    let names: Vec<String> = Place::ALL
-        .into_iter()
-        .map(|shown| match (shown, updates) {
-            (Place::Updates, 1..) => tr!("Updates ({count})", count = updates),
-            _ => place_name(shown),
-        })
-        .collect();
-    let selected = Place::ALL.iter().position(|shown| *shown == place);
-    SegmentedControl::new(&tr!("Show"), &names, selected, move |index| {
+    let names: Vec<String> = Place::ALL.into_iter().map(place_name).collect();
+    SegmentedControl::new(&tr!("Show"), &names, Some(0), move |index| {
         if let Some(place) = Place::ALL.get(index) {
             chosen.borrow_mut().push(Intent::Go(*place));
         }
@@ -385,8 +370,6 @@ pub struct Software {
     content: WidgetId,
     search: WidgetId,
     places: WidgetId,
-    header: WidgetId,
-    counted: usize,
     finished: Vec<Finished>,
     settings_app: bool,
 }
@@ -415,13 +398,12 @@ impl Software {
         let search = SearchField::new(&tr!("Search apps"), "", move |query: &str| {
             typed.borrow_mut().push(Intent::Search(query.to_owned()));
         });
-        let places = place_control(&intents, Place::Discover, 0);
+        let places = place_control(&intents);
         let content = Stack::new(Axis::Vertical, 0.0, 0.0, vec![boxed(Label::new(""))]);
         let id = content.id();
         let search_id = search.id();
         let places_id = places.id();
         let header = Stack::new(Axis::Horizontal, SPACING, 0.0, vec![boxed(places)]);
-        let header_id = header.id();
         let page = Stack::new(
             Axis::Vertical,
             SPACING,
@@ -466,8 +448,6 @@ impl Software {
             content: id,
             search: search_id,
             places: places_id,
-            header: header_id,
-            counted: 0,
             finished: Vec::new(),
             settings_app: false,
         };
@@ -567,7 +547,6 @@ impl Software {
             }
             COMMAND_DISCOVER => Place::Discover,
             COMMAND_INSTALLED => Place::Installed,
-            COMMAND_UPDATES => Place::Updates,
             _ => return false,
         };
         if let Some(index) = Place::ALL.iter().position(|shown| *shown == place) {
@@ -594,9 +573,6 @@ impl Software {
                 self.removal = None;
                 self.pages = vec![(Page::Home, ScrollState::default())];
                 *self.scroll.borrow_mut() = ScrollState::default();
-                if place == Place::Updates {
-                    self.ask(Query::Updates);
-                }
             }
             Intent::Show(page) => self.push(page),
             Intent::Search(query) => {
@@ -1064,10 +1040,6 @@ impl Software {
         }
     }
 
-    fn update_count(&self) -> usize {
-        self.updates.len() + self.flatpak_updates.len()
-    }
-
     fn row_action(&self, index: usize, app: &Component) -> Option<Box<dyn Widget>> {
         let key = app.key();
         if let Some(busy) = self.busy.get(key) {
@@ -1087,7 +1059,7 @@ impl Software {
 
     fn source_caption(&self, app: &Component) -> Option<String> {
         let source = self.source_of(app)?;
-        let listed = matches!(self.place, Place::Installed | Place::Updates);
+        let listed = self.place == Place::Installed;
         match source {
             Source::Debian if !(listed && self.flatpak_offered) => None,
             source => Some(source_name(&source)),
@@ -1225,78 +1197,6 @@ impl Software {
         }
         let shown = self.shown;
         widgets.extend(self.rows(&found, shown));
-        widgets
-    }
-
-    fn updates_list(&mut self) -> Widgets {
-        let mut widgets = vec![boxed(Label::heading(&tr!("Updates")))];
-        let count = self.update_count();
-        if count == 0 {
-            widgets.push(boxed(Label::new(&tr!(
-                "Your apps and system are up to date."
-            ))));
-            if self.settings_app {
-                widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings ▸ Software Update, which also restarts what needs it.")).secondary()));
-                widgets.push(row(vec![boxed(
-                    self.button(&tr!("Check for Updates…"), Intent::SoftwareUpdate),
-                )]));
-            }
-            return widgets;
-        }
-        let apps = self.sorted(self.matching(|app| self.has_update(app)));
-        widgets.push(boxed(Label::new(&trn!(
-            "1 update is available.",
-            "{count} updates are available.",
-            count = count
-        ))));
-        if self.settings_app {
-            widgets.push(boxed(Label::new(&tr!("Updates are installed in Settings ▸ Software Update, which also restarts what needs it.")).secondary()));
-            widgets.push(row(vec![boxed(
-                self.button(&tr!("Update All…"), Intent::SoftwareUpdate)
-                    .primary(),
-            )]));
-        }
-        if !apps.is_empty() {
-            widgets.push(boxed(Label::heading(&tr!("Apps"))));
-            widgets.extend(self.rows(&apps, apps.len()));
-        }
-        let debian = self.flatpak_offered.then(|| source_name(&Source::Debian));
-        let mut packages: Vec<String> = self
-            .updates
-            .iter()
-            .map(|package| (&package.name, &package.version, debian.clone()))
-            .chain(self.flatpak_updates.iter().map(|update| {
-                let remote = self
-                    .flatpaks
-                    .get(&update.id)
-                    .map(|found| found.origin.clone())
-                    .unwrap_or_default();
-                (
-                    &update.name,
-                    &update.version,
-                    Some(source_name(&Source::Flatpak(remote))),
-                )
-            }))
-            .take(LISTED_UPDATES)
-            .map(|(name, version, source)| match source {
-                Some(source) => tr!(
-                    "{name} {version} · {source}",
-                    name = name.clone(),
-                    version = version.clone(),
-                    source = source
-                ),
-                None => format!("{name} {version}"),
-            })
-            .collect();
-        if count > LISTED_UPDATES {
-            packages.push(tr!("and {count} more", count = (count - LISTED_UPDATES)));
-        }
-        widgets.push(boxed(Disclosure::new(
-            &trn!("1 package", "All {count} packages", count = count),
-            false,
-            Label::new(&packages.join("\n")),
-            |_| {},
-        )));
         widgets
     }
 
@@ -1763,23 +1663,7 @@ impl Software {
         widgets
     }
 
-    fn recount(&mut self) {
-        if self.counted == self.update_count() {
-            return;
-        }
-        self.counted = self.update_count();
-        let places = place_control(&self.intents, self.place, self.counted);
-        let id = places.id();
-        if let Some(holder) = self.ui.widget(self.header)
-            && let Some(slot) = holder.children_mut().first_mut()
-        {
-            *slot = boxed(places);
-            self.places = id;
-        }
-    }
-
     fn rebuild(&mut self) {
-        self.recount();
         let mut widgets = if self.loading {
             vec![boxed(Spinner::new(&tr!("Loading apps…")))]
         } else if self.apps.is_empty() {
@@ -1794,7 +1678,6 @@ impl Software {
                 Page::Home => match self.place {
                     Place::Discover => self.discover(),
                     Place::Installed => self.installed_list(),
-                    Place::Updates => self.updates_list(),
                 },
             }
         };

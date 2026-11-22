@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use bande_app::{
     Cx, Dropping, FileDrop, Info, Keys, Kind, Menus, Program, Settings, View, WindowId,
+    choose_file, choose_save_file,
 };
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
@@ -14,7 +15,6 @@ use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
 use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION, Subject};
 use bande_calendar::online::System;
-use bande_calendar::portal::{Choose, choose_file};
 use bande_calendar::settings::{CalendarSettings, Change, listen};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, Library, data_dir, new_uid};
 use bande_calendar::sync::{apply, subscription_outcome};
@@ -34,6 +34,7 @@ use bande_toolkit::{
 };
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp, Zoned};
+use zbus::blocking::Connection;
 
 const APP_ID: &str = "org.bande.Calendar";
 const NEW_EVENT: &str = "new-event";
@@ -43,6 +44,7 @@ const REFRESH: &str = "refresh";
 const IMPORT: &str = "import";
 const EXPORT: &str = "export";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
+const VIEW_FILE: &str = "calendar-view";
 const FEED_COLOR_PROPERTIES: [&str; 2] = ["COLOR", "X-APPLE-CALENDAR-COLOR"];
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
@@ -73,15 +75,29 @@ enum Chosen {
     Failed(String),
 }
 
-fn choose(outbox: bande_inbox::Outbox<Chosen>, export: Option<(String, String)>) {
+fn choose(
+    outbox: bande_inbox::Outbox<Chosen>,
+    session: Option<Connection>,
+    export: Option<(String, String)>,
+) {
+    let Some(session) = session else {
+        tracing::warn!("cannot choose a file without the session bus");
+        return;
+    };
     let spawned = std::thread::Builder::new()
         .name("choose".to_owned())
         .spawn(move || {
-            let (title, save) = match &export {
-                Some((name, _)) => (tr!("Export Calendar"), Choose::Save(name)),
-                None => (tr!("Import Events"), Choose::Open),
+            let chosen = match &export {
+                Some((name, _)) => choose_save_file(&session, &tr!("Export Calendar"), name),
+                None => {
+                    let filter = (
+                        tr!("iCalendar"),
+                        vec![(0, "*.ics".to_owned()), (1, "text/calendar".to_owned())],
+                    );
+                    choose_file(&session, &tr!("Import Events"), Some(filter))
+                }
             };
-            let chosen = match choose_file(&title, save) {
+            let chosen = match chosen {
                 Ok(Some(path)) => path,
                 Ok(None) => return,
                 Err(error) => {
@@ -120,6 +136,7 @@ struct CalendarApp {
     alarm: WallAlarm,
     changes: Inbox<Change>,
     chosen: Inbox<Chosen>,
+    session: Option<Connection>,
     online: Inbox<System>,
     setups: Inbox<SetupReply>,
     settings: CalendarSettings,
@@ -142,6 +159,7 @@ struct CalendarApp {
     sync_again: bool,
     title: String,
     errors: Vec<String>,
+    mode: Mode,
 }
 
 fn next_minute() -> Timestamp {
@@ -226,6 +244,19 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
         edit_submenu(Vec::new()),
         Entry::submenu(&tr!("View"), view_menu),
     ]
+}
+
+fn saved_mode(file: Option<PathBuf>) -> Option<Mode> {
+    let text = match std::fs::read_to_string(file?) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            tracing::warn!("cannot read the shown view: {error}");
+            return None;
+        }
+    };
+    let index = text.trim().parse::<usize>().ok()?;
+    Mode::ALL.get(index).copied()
 }
 
 fn clock(formats: &DateFormats, at: &Zoned) -> String {
@@ -658,7 +689,20 @@ impl CalendarApp {
                     self.check_alerts(view);
                     view.refresh_search();
                 }
-                Request::Export { name, data } => choose(self.chosen.outbox(), Some((name, data))),
+                Request::Mail(uri) => {
+                    let token = window
+                        .as_deref_mut()
+                        .and_then(|window| window.activation_token(APP_ID).ok());
+                    if let Err(error) = bande_xdg::open(&uri, token.as_deref()) {
+                        tracing::warn!("cannot hand the answer to Mail: {error}");
+                        view.set_status(Some(tr!("Can’t open Mail to send the answer.")));
+                    }
+                }
+                Request::Export { name, data } => choose(
+                    self.chosen.outbox(),
+                    self.session.clone(),
+                    Some((name, data)),
+                ),
                 Request::Collection {
                     account,
                     url,
@@ -827,7 +871,20 @@ impl CalendarApp {
             self.serve(None, &mut pane.0);
             self.parked = Some(pane);
         }
-        self.with_view(cx, |app, view| app.rearm(view));
+        let mut mode = self.mode;
+        self.with_view(cx, |app, view| {
+            app.rearm(view);
+            mode = view.mode();
+        });
+        if mode != self.mode {
+            self.mode = mode;
+            let index = Mode::ALL.iter().position(|shown| *shown == mode);
+            if let (Some(file), Some(index)) = (cx.state_file(VIEW_FILE), index)
+                && let Err(error) = bande_xdg::replace_file(&file, index.to_string())
+            {
+                tracing::warn!("cannot remember the shown view: {error}");
+            }
+        }
         cx.refresh_menus();
     }
 
@@ -956,6 +1013,8 @@ impl Program for CalendarApp {
             now,
             setups.outbox(),
         );
+        let mode = saved_mode(cx.state_file(VIEW_FILE)).unwrap_or(view.mode());
+        view.set_mode(mode);
         let title = view.title();
         let directory = std::env::current_dir().unwrap_or_default();
         open_arguments(&mut view, &arguments, &directory);
@@ -982,6 +1041,7 @@ impl Program for CalendarApp {
             alarm: WallAlarm::new()?,
             changes,
             chosen: Inbox::new()?,
+            session: cx.session().cloned(),
             online,
             setups,
             settings,
@@ -1004,6 +1064,7 @@ impl Program for CalendarApp {
             sync_again: false,
             title,
             errors: Vec::new(),
+            mode,
         };
         if new_event {
             app.command(cx, main, NEW_EVENT);
@@ -1029,12 +1090,11 @@ impl Program for CalendarApp {
             bande_app_menu::PRINT => {
                 let mut printable = None;
                 self.with_view(cx, |_, view| printable = Some(view.printable()));
-                if let Some((title, text)) = printable {
-                    let document = bande_app::text_document(format!("{title}\n{text}"), false);
+                if let Some((title, document)) = printable {
                     cx.print(&title, document);
                 }
             }
-            IMPORT => choose(self.chosen.outbox(), None),
+            IMPORT => choose(self.chosen.outbox(), self.session.clone(), None),
             _ => {
                 if self.main.is_none() && command != EXPORT {
                     self.reopen(cx);
@@ -1221,7 +1281,7 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Pat
                 if let Some(first) = objects.first().and_then(|object| object.events.first()) {
                     view.go_to(first.start.date());
                 }
-                offered |= view.offer_import(objects, &name);
+                offered |= view.offer(objects, &name);
             }
             Ok(Ok(_)) => tracing::warn!("{} has no events", path.display()),
             Ok(Err(error)) => tracing::warn!("cannot read {}: {error}", path.display()),

@@ -3,6 +3,8 @@ use mailparse::{
     dateparse, parse_headers, parse_mail,
 };
 
+use bande_l10n::tr;
+
 use crate::html::{Document, render_html, render_plain};
 
 const PREVIEW_LENGTH: usize = 240;
@@ -143,6 +145,7 @@ pub struct Content {
     pub html: Option<String>,
     pub attachments: Vec<Attachment>,
     pub inline: Vec<(String, usize)>,
+    pub encrypted: bool,
 }
 
 fn file_name(part: &ParsedMail<'_>) -> Option<String> {
@@ -188,6 +191,17 @@ impl Content {
         }
         let mime = part.ctype.mimetype.to_ascii_lowercase();
         let attached = part.get_content_disposition().disposition == DispositionType::Attachment;
+        let enveloped = part
+            .ctype
+            .params
+            .get("smime-type")
+            .is_some_and(|kind| kind.eq_ignore_ascii_case("enveloped-data"));
+        if mime == "multipart/encrypted"
+            || ((mime.ends_with("/pkcs7-mime") || mime.ends_with("/x-pkcs7-mime")) && enveloped)
+        {
+            self.encrypted = true;
+            return;
+        }
         if mime.starts_with("multipart/") {
             for child in &part.subparts {
                 self.walk(child, depth + 1);
@@ -230,6 +244,9 @@ impl Content {
         match (&self.plain, &self.html, prefer_plain) {
             (Some(plain), _, true) | (Some(plain), None, _) => render_plain(plain),
             (_, Some(html), _) => render_html(html),
+            (None, None, _) if self.encrypted => render_plain(&tr!(
+                "This message is encrypted. Mail can’t open encrypted messages."
+            )),
             (None, None, _) => Document::default(),
         }
     }

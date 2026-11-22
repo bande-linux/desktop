@@ -2,7 +2,7 @@ use bande_l10n::tr;
 
 use crate::store::Summary;
 use crate::ui::format::list_date;
-use crate::ui::reader::{Clock, focus_bar, lay_out};
+use crate::ui::reader::{Clock, Target, focus_bar, lay_out};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
@@ -16,9 +16,10 @@ use jiff::Timestamp;
 const FLAG_COLORS: [u32; 7] = [
     0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759, 0x007AFF, 0xAF52DE, 0x8E8E93,
 ];
-use crate::worker::Status;
 
 const CHILD_INDENT: f32 = 14.0;
+const LINK_TARGET_INSET: f32 = 8.0;
+const LINK_TARGET_PADDING: f32 = 8.0;
 const DRAG_LABEL_WIDTH: f32 = 240.0;
 const SIDEBAR_INSET: f32 = 8.0;
 const SIDEBAR_ROW: f32 = 28.0;
@@ -229,24 +230,27 @@ impl MailView {
                         .accounts
                         .iter()
                         .find(|(account, _)| account.email == *title)
-                        .is_some_and(|(account, _)| {
-                            self.statuses.iter().any(|(known, status)| {
-                                *known == account.id && *status == Status::Offline
-                            })
-                        });
-                    if offline {
+                        .map(|(account, _)| account.id)
+                        .filter(|account| self.offline(*account));
+                    if let Some(account) = offline {
+                        let ink = match self.hover == Some(Hit::Offline(account)) {
+                            true => palette.ink,
+                            false => palette.ink3,
+                        };
                         let paragraph = self.text_line(
                             &tr!("Offline"),
-                            TextStyle::role(TextRole::Callout, palette.ink3),
+                            TextStyle::role(TextRole::Callout, ink),
                             80.0,
                         );
-                        drawn.push(Item::Text {
-                            origin: Point::new(
-                                SIDEBAR_WIDTH - SIDEBAR_INSET - 8.0 - paragraph.width(),
-                                y + heading_height - paragraph.height() - 4.0,
-                            ),
-                            paragraph,
-                        });
+                        let origin = Point::new(
+                            SIDEBAR_WIDTH - SIDEBAR_INSET - 8.0 - paragraph.width(),
+                            y + heading_height - paragraph.height() - 4.0,
+                        );
+                        self.hits.push((
+                            Rect::new(origin.x, origin.y, paragraph.width(), paragraph.height()),
+                            Hit::Offline(account),
+                        ));
+                        drawn.push(Item::Text { origin, paragraph });
                     }
                     y += heading_height;
                 }
@@ -360,8 +364,8 @@ impl MailView {
         let mut drawn = Vec::new();
         if self.messages.is_empty() {
             let message = match self.search.is_empty() {
-                true => tr!("No Messages"),
-                false => tr!("No Results"),
+                true => tr!("No messages"),
+                false => tr!("No results"),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,
@@ -596,8 +600,8 @@ impl MailView {
             let chosen = self.also.len() + usize::from(self.selected.is_some());
             let message = match (self.messages.len(), chosen) {
                 (0, _) => String::new(),
-                (_, 0 | 1) => tr!("No Message Selected"),
-                (_, count) => tr!("{count} Messages Selected", count = count),
+                (_, 0 | 1) => tr!("No message selected"),
+                (_, count) => tr!("{count} messages selected", count = count),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,
@@ -635,6 +639,7 @@ impl MailView {
                 },
             );
             self.layout = Some((frame.width, layout));
+            self.selection = None;
         }
         let Some((_, layout)) = &self.layout else {
             return;
@@ -685,14 +690,45 @@ impl MailView {
             .map(|(rect, target)| (moved(rect), Hit::Reader(target.clone())))
             .filter(|(rect, _)| rect.y + rect.height > frame.y && rect.y < frame.y + frame.height)
             .collect::<Vec<_>>();
+        let selected = match self.focus == Pane::Reader {
+            true => palette.accent_soft,
+            false => palette.well,
+        };
+        let highlight =
+            self.selected_range()
+                .map(|(start, end)| {
+                    (start.0..=end.0)
+                        .filter_map(|index| {
+                            let (_, top, paragraph) = layout.texts.get(index)?;
+                            let from = if index == start.0 { start.1 } else { 0 };
+                            let to = if index == end.0 {
+                                end.1
+                            } else {
+                                paragraph.text().len()
+                            };
+                            Some(paragraph.span_rects(from..to).into_iter().map(|rect| {
+                                Item::Fill {
+                                    shape: Shape::rect(Rect::new(
+                                        rect.x + top.x,
+                                        rect.y + top.y,
+                                        rect.width,
+                                        rect.height,
+                                    )),
+                                    paint: selected.into(),
+                                }
+                            }))
+                        })
+                        .flatten()
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
         items.push(Item::Clip {
             shape: Shape::rect(frame),
             items: vec![Item::Translate {
                 offset: origin,
-                items: layout
-                    .items
-                    .iter()
-                    .cloned()
+                items: highlight
+                    .into_iter()
+                    .chain(layout.items.iter().cloned())
                     .chain(
                         self.thread
                             .as_ref()
@@ -705,6 +741,42 @@ impl MailView {
         let scroll = &self.scrolls[2];
         let cx = self.ui.context();
         scroll.paint_scrollbar(cx, frame, items);
+        if let Some(Hit::Reader(Target::Link(url, _))) = &self.hover {
+            let url = url.clone();
+            self.paint_link_target(items, frame, &url);
+        }
+    }
+
+    fn paint_link_target(&mut self, items: &mut Vec<Item>, frame: Rect, url: &str) {
+        let palette = self.palette;
+        let paragraph = self.ui.context().text.fitted(
+            url,
+            TextStyle::role(TextRole::Callout, palette.ink2),
+            (frame.width - 2.0 * LINK_TARGET_INSET - 2.0 * LINK_TARGET_PADDING).max(40.0),
+        );
+        let height = paragraph.height() + LINK_TARGET_PADDING;
+        let shown = Rect::new(
+            frame.x + LINK_TARGET_INSET,
+            frame.y + frame.height - LINK_TARGET_INSET - height,
+            paragraph.width() + 2.0 * LINK_TARGET_PADDING,
+            height,
+        );
+        items.push(Item::Fill {
+            shape: Shape::rounded(shown, Radius::S),
+            paint: palette.raised.into(),
+        });
+        items.push(Item::Stroke {
+            shape: Shape::rounded(shown, Radius::S),
+            width: 1.0,
+            paint: palette.hairline.into(),
+        });
+        items.push(Item::Text {
+            origin: Point::new(
+                shown.x + LINK_TARGET_PADDING,
+                shown.y + LINK_TARGET_PADDING / 2.0,
+            ),
+            paragraph,
+        });
     }
 
     pub(crate) fn scroll(&mut self, scroll: &Scroll) -> bool {

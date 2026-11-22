@@ -8,10 +8,11 @@ use bande_inbox::Inbox;
 use bande_l10n::{Text, text, tr};
 use bande_text_editor::{
     CHOICES, COLORS, DocumentView, FAMILIES, Format, LineEnding, Loaded, MAX_FILE_BYTES, Message,
-    Opening, Record, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,
-    encoding_name, new_id, now, open, read, read_bounded, spawn, stamp,
+    Opening, Record, Request, Session, Settings, TextEncoding, encoding_name, new_id, now, open,
+    read, read_bounded, spawn, stamp,
 };
 use bande_toolkit::ui::{Alignment, ListMarker};
+use bande_watch::{Changes, FolderWatch};
 
 const APP_ID: &str = "org.bande.TextEditor";
 const WINDOW_SIZE: (u32, u32) = (760, 640);
@@ -33,6 +34,7 @@ struct TextEditor {
     recent: Vec<PathBuf>,
     untitled: u32,
     next_token: u64,
+    watch: Option<FolderWatch>,
 }
 
 fn item(label: Text, action: &str) -> Entry {
@@ -284,10 +286,13 @@ impl TextEditor {
             return;
         };
         let (token, name) = (view.token, view.name());
+        let Some(bus) = cx.session().cloned() else {
+            return tracing::warn!("cannot choose where to save: no session bus");
+        };
         let outbox = self.inbox.outbox();
         let title = tr!("Save As");
         spawn("save as", move || {
-            let path = choose_save_path(&title, &name)
+            let path = bande_app::choose_save_file(&bus, &title, &name)
                 .inspect_err(|error| tracing::warn!("cannot choose where to save: {error}"))
                 .ok()
                 .flatten();
@@ -295,11 +300,14 @@ impl TextEditor {
         });
     }
 
-    fn ask_open(&self) {
+    fn ask_open(&self, cx: &Cx<Self>) {
+        let Some(bus) = cx.session().cloned() else {
+            return tracing::warn!("cannot choose files: no session bus");
+        };
         let outbox = self.inbox.outbox();
         let title = tr!("Open");
         spawn("choose", move || {
-            let paths = choose_files(&title)
+            let paths = bande_app::choose_files(&bus, &title, None)
                 .inspect_err(|error| tracing::warn!("cannot choose files: {error}"))
                 .unwrap_or_default();
             outbox.send(Message::Chosen(paths));
@@ -506,15 +514,15 @@ impl TextEditor {
                 vec![
                     item(text!("Bold"), "style:bold")
                         .shortcut("Ctrl+B")
-                        .radio(attributes.bold),
+                        .check(attributes.bold),
                     item(text!("Italic"), "style:italic")
                         .shortcut("Ctrl+I")
-                        .radio(attributes.italic),
+                        .check(attributes.italic),
                     item(text!("Underline"), "style:underline")
                         .shortcut("Ctrl+U")
-                        .radio(attributes.underline),
+                        .check(attributes.underline),
                     item(text!("Strikethrough"), "style:strikethrough")
-                        .radio(attributes.strikethrough),
+                        .check(attributes.strikethrough),
                     Entry::separator(),
                     item(text!("Bigger"), "style:bigger").shortcut("Ctrl+="),
                     item(text!("Smaller"), "style:smaller").shortcut("Ctrl+-"),
@@ -611,6 +619,7 @@ impl TextEditor {
                 }
                 return;
             }
+            Message::Changed(paths) => return self.reload_changed(cx, paths),
             Message::Loaded { token, .. }
             | Message::Written { token, .. }
             | Message::Counted { token, .. }
@@ -653,9 +662,32 @@ impl TextEditor {
             } => view.save_to(path),
             Message::Versions { versions, .. } => view.set_versions(versions),
             Message::SaveTo { path: None, .. } => view.cancel_save(),
-            Message::Chosen(_) => {}
+            Message::Chosen(_) | Message::Changed(_) => {}
+        }
+        if let Some(view) = Self::view(cx, window)
+            && let Some(folder) = view.path.as_deref().and_then(Path::parent)
+            && let Some(watch) = &self.watch
+            && let Err(error) = watch.watch(folder)
+        {
+            tracing::warn!("cannot watch {} for changes: {error}", folder.display());
         }
         self.serve(cx, window);
+    }
+
+    fn reload_changed(&mut self, cx: &mut Cx<Self>, paths: &[PathBuf]) {
+        let windows: Vec<WindowId> = cx.windows().collect();
+        for window in windows {
+            let Some(view) = Self::view(cx, window) else {
+                continue;
+            };
+            let Some(path) = paths.iter().find(|path| view.reloads_from(path)).cloned() else {
+                continue;
+            };
+            let (token, encoding) = (view.token, view.encoding.encoding);
+            view.start_loading(Some(path.clone()));
+            self.load_into(token, path, Some(encoding));
+            self.serve(cx, window);
+        }
     }
 }
 
@@ -671,7 +703,14 @@ impl Program for TextEditor {
             recent,
             untitled: 0,
             next_token: 0,
+            watch: None,
         };
+        let outbox = program.inbox.outbox();
+        program.watch = FolderWatch::spawn(Changes::Saved, move |paths| {
+            outbox.send(Message::Changed(paths));
+        })
+        .inspect_err(|error| tracing::warn!("cannot watch documents for changes: {error}"))
+        .ok();
         let directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
         for argument in arguments {
             if let Some(path) = path_of(&argument, &directory) {
@@ -721,7 +760,7 @@ impl Program for TextEditor {
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
         match command {
             "new" => return self.new_document(cx),
-            "open" => return self.ask_open(),
+            "open" => return self.ask_open(cx),
             "clear-recent" => {
                 self.recent.clear();
                 if let Some(session) = &self.session {
@@ -791,8 +830,18 @@ impl Program for TextEditor {
         self.serve(cx, window);
     }
 
-    fn window_closed(&mut self, _cx: &mut Cx<Self>, _window: WindowId, view: DocumentView) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, _window: WindowId, view: DocumentView) {
         view.forget();
+        let Some(folder) = view.path.as_deref().and_then(Path::parent) else {
+            return;
+        };
+        let shared = cx.windows().any(|window| {
+            cx.view(window)
+                .is_some_and(|other| other.path.as_deref().and_then(Path::parent) == Some(folder))
+        });
+        if !shared && let Some(watch) = &self.watch {
+            watch.unwatch(folder);
+        }
     }
 
     fn should_close(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {

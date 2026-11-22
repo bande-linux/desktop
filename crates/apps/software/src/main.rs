@@ -9,8 +9,8 @@ use bande_notify::Urgency;
 use bande_notify::client::{Request as Notification, notify};
 use bande_packages::{Client, debian_arch};
 use bande_software::{
-    COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, COMMAND_UPDATES, Finished,
-    SETTINGS_ID, Software, WINDOW_SIZE,
+    COMMAND_BACK, COMMAND_DISCOVER, COMMAND_FIND, COMMAND_INSTALLED, Finished, SETTINGS_ID,
+    Software, WINDOW_SIZE,
 };
 use bande_toolkit::{Appearance, Rect, Scene, TextSystem, Window, WindowEvent};
 
@@ -189,7 +189,6 @@ impl Program for Store {
                             COMMAND_INSTALLED,
                             "Ctrl+2",
                         ),
-                        item(text!("Updates"), COMMAND_UPDATES, "Ctrl+3"),
                     ],
                 ),
             ],

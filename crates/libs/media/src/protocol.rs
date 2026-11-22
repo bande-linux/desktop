@@ -2,12 +2,19 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Opening {
+    pub path: PathBuf,
+    pub subtitles: Option<PathBuf>,
+    pub start_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Command {
     Configure {
         nv12_dmabuf: bool,
     },
-    Open(PathBuf),
+    Open(Opening),
     Play,
     Pause,
     Seek {

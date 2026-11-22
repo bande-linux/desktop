@@ -10,25 +10,27 @@ use bande_inbox::Inbox;
 use bande_l10n::{text, tr};
 use bande_thumbnails::{Request as ThumbRequest, ThumbnailSize, Thumbnails};
 use bande_toolkit::ui::{
-    Button, Context, Event, FreeLayout, Key, SearchField, SecureField, TEXT_FIELD_HEIGHT, Ui,
-    WidgetId,
+    Alert, Button, Context, Event, FreeLayout, Key, SearchField, SecureField, TEXT_FIELD_HEIGHT,
+    Ui, WidgetId,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, HEADER_LEADING, HEADER_TRAILING, Header, Image, Radius, Rect,
     SHEET_INSET, Scene, TextSystem, Transfer, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 
-use crate::canvas::{Canvas, Zoom};
+use crate::canvas::{Canvas, Orientation, Zoom};
 use crate::copy::encode_png;
 use crate::files::{mime_of_name, neighbour};
 use crate::loader::{Loader, Opened};
 use crate::pdf::contents::Contents;
 use crate::pdf::document::{Fit, PdfView};
+use crate::save::{Refusal, save_jpeg_orientation, save_png_copy};
 use crate::sidebar::{SIDEBAR_WIDTH, Sidebar, Thumb};
 use crate::tr_with;
 use bande_content::pdf::protocol::{Opened as PdfOpened, Render, Use};
 use bande_content::pdf::session::{Change, Phase, Session};
-use bande_content::{Decoded, Failure};
+use bande_content::{Decoded, Failure, Kind};
+use bande_fs::{Trash, TrashItem};
 
 const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
@@ -66,6 +68,14 @@ pub enum Request {
     Changed,
     Open(Vec<PathBuf>),
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Saving {
+    InPlace,
+    Copy,
+}
+
+type Saved = (PathBuf, Result<(), Refusal>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarMode {
@@ -116,6 +126,8 @@ pub struct FileView {
     loading: bool,
     thumbnails: Option<Thumbnails>,
     copies: Option<Inbox<Option<Vec<u8>>>>,
+    saves: Option<Inbox<Saved>>,
+    trashed: Option<(TrashItem, usize)>,
     session: Option<Session>,
     sidebar_shown: bool,
     sidebar_mode: SidebarMode,
@@ -204,6 +216,8 @@ impl FileView {
             loading: false,
             thumbnails: None,
             copies: None,
+            saves: None,
+            trashed: None,
             session: None,
             sidebar_shown: several,
             sidebar_mode: SidebarMode::Thumbnails,
@@ -217,16 +231,99 @@ impl FileView {
         view.fill_sidebar();
         view.load_current();
         if view.paths.is_empty() {
-            let (title, detail) = (
-                tr!("No file is open"),
-                tr!(
-                    "Open an image or a PDF document with File ▸ Open…, from Files or by dropping it here."
-                ),
-            );
-            view.with_canvas(|canvas| canvas.show_message(&title, &detail));
+            view.show_empty();
         }
         view.ui.set_focus(canvas);
         view
+    }
+
+    fn show_empty(&mut self) {
+        let (title, detail) = (
+            tr!("No file is open"),
+            tr!(
+                "Open an image or a PDF document with File ▸ Open…, from Files or by dropping it here."
+            ),
+        );
+        self.with_canvas(|canvas| canvas.show_message(&title, &detail));
+    }
+
+    pub fn can_trash(&self) -> bool {
+        self.path()
+            .is_some_and(|path| !bande_volumes::on_connected_volume(path))
+    }
+
+    pub fn move_to_trash(&mut self) {
+        let Some(path) = self.path().map(Path::to_path_buf) else {
+            return;
+        };
+        let next = match self.paths.len() {
+            1 => neighbour(&path, true),
+            _ => None,
+        };
+        let put = Trash::for_user()
+            .ok_or_else(|| std::io::Error::other("there is no home folder"))
+            .and_then(|trash| trash.put(&path));
+        let item = match put {
+            Ok(item) => item,
+            Err(error) => {
+                tracing::warn!("cannot move {} to the Trash: {error}", path.display());
+                let title = tr_with(
+                    text!("“{name}” could not be moved to the Trash."),
+                    &[("name", file_name(&path))],
+                );
+                let detail = tr!("You may not have permission to move it.");
+                let alert = Alert::new(&title, &detail, |_| {}).primary(&tr!("OK"), "ok");
+                return self.ui.present_dialog(alert);
+            }
+        };
+        self.trashed = Some((item, self.current));
+        match next {
+            Some(next) => self.paths[self.current] = next,
+            None => {
+                self.paths.remove(self.current);
+                self.current = self.current.min(self.paths.len().saturating_sub(1));
+            }
+        }
+        self.show_current();
+    }
+
+    pub fn can_undo_trash(&self) -> bool {
+        self.trashed.is_some()
+    }
+
+    pub fn undo_trash(&mut self) {
+        let Some((item, at)) = self.trashed.take() else {
+            return;
+        };
+        if let Err(error) = bande_fs::restore_to(&item, &item.original) {
+            tracing::warn!("cannot put back {}: {error}", item.original.display());
+            let title = tr_with(
+                text!("“{name}” could not be put back."),
+                &[("name", item.name())],
+            );
+            let detail = tr!("A file with the same name may be in its place.");
+            let alert = Alert::new(&title, &detail, |_| {}).primary(&tr!("OK"), "ok");
+            return self.ui.present_dialog(alert);
+        }
+        match self.paths.len() {
+            0 | 1 => self.paths = vec![item.original],
+            count => self.paths.insert(at.min(count), item.original),
+        }
+        self.current = at.min(self.paths.len() - 1);
+        self.show_current();
+    }
+
+    fn show_current(&mut self) {
+        self.fill_sidebar();
+        if self.paths.is_empty() {
+            if self.session.take().is_some() {
+                self.reset_document();
+            }
+            self.show_empty();
+            self.requests.push(Request::Changed);
+            return;
+        }
+        self.load_current();
     }
 
     pub fn ui_ref(&self) -> &Ui {
@@ -636,7 +733,113 @@ impl FileView {
     }
 
     pub fn rotate(&mut self, clockwise: bool) {
+        if self.is_document() {
+            self.with_pdf(|pdf| pdf.rotate(clockwise));
+            return;
+        }
         self.with_canvas(|canvas| canvas.orient(canvas.orientation().rotated(clockwise)));
+    }
+
+    pub fn rotation_saving(&self) -> Option<Saving> {
+        let canvas = self.canvas()?;
+        let picture = canvas.picture()?;
+        if canvas.is_animated() || canvas.orientation() == Orientation::default() {
+            return None;
+        }
+        Some(match picture.facts.kind {
+            Some(Kind::Jpeg) => Saving::InPlace,
+            _ => Saving::Copy,
+        })
+    }
+
+    pub fn copy_name(&self) -> String {
+        let stem = self
+            .path()
+            .and_then(Path::file_stem)
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        format!(
+            "{}.png",
+            tr_with(text!("{name} rotated"), &[("name", stem)])
+        )
+    }
+
+    pub fn save_rotation(&mut self) {
+        let Some(path) = self.path().map(Path::to_path_buf) else {
+            return;
+        };
+        let orientation = self.canvas().map(Canvas::orientation).unwrap_or_default();
+        self.save_in_background(path.clone(), move || {
+            save_jpeg_orientation(&path, orientation)
+        });
+    }
+
+    pub fn save_copy(&mut self, target: PathBuf) {
+        let Some(source) = self
+            .picture()
+            .and_then(|picture| encode_source(picture, None))
+        else {
+            return;
+        };
+        let orientation = self.canvas().map(Canvas::orientation).unwrap_or_default();
+        self.save_in_background(target.clone(), move || {
+            save_png_copy(&target, source, orientation)
+        });
+    }
+
+    fn save_in_background(
+        &mut self,
+        path: PathBuf,
+        save: impl FnOnce() -> Result<(), Refusal> + Send + 'static,
+    ) {
+        if self.saves.is_none() {
+            self.saves = Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot save: {error}"))
+                .ok();
+        }
+        let Some(outbox) = self.saves.as_ref().map(Inbox::outbox) else {
+            return self.refused(&path, Refusal::Unwritable);
+        };
+        let spawned = std::thread::Builder::new()
+            .name("save".to_owned())
+            .spawn(move || {
+                let saved = save();
+                outbox.send((path, saved));
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot save: {error}");
+        }
+    }
+
+    fn take_saves(&mut self) -> bool {
+        let saved = self.saves.as_mut().map(Inbox::drain).unwrap_or_default();
+        let changed = !saved.is_empty();
+        for (path, result) in saved {
+            match result {
+                Ok(()) if Some(path.as_path()) == self.path() => self.load_current(),
+                Ok(()) => {}
+                Err(refusal) => self.refused(&path, refusal),
+            }
+        }
+        changed
+    }
+
+    fn refused(&mut self, path: &Path, refusal: Refusal) {
+        let title = tr_with(
+            text!("“{name}” could not be saved."),
+            &[("name", file_name(path))],
+        );
+        let detail = match refusal {
+            Refusal::Unreadable => tr!("The file cannot be read."),
+            Refusal::Unwritable => {
+                tr!("You may not have permission to change it, or the disk is full.")
+            }
+            Refusal::Unusual => tr!(
+                "Viewer cannot change this file’s orientation without rewriting the picture, so the file is left as it is."
+            ),
+        };
+        let alert = Alert::new(&title, &detail, |_| {}).primary(&tr!("OK"), "ok");
+        self.ui.present_dialog(alert);
     }
 
     pub fn flip(&mut self, vertical: bool) {
@@ -805,15 +1008,10 @@ impl FileView {
         if let Some(page) = chosen {
             self.with_pdf(|pdf| pdf.go_to_page(page));
         }
-        let picture = self.has_picture();
-        let zoomable = picture || self.is_document();
-        for (index, id) in self.toolbar.tools.iter().enumerate().skip(1) {
-            let enabled = match index {
-                3 => picture,
-                _ => zoomable,
-            };
+        let zoomable = self.has_picture() || self.is_document();
+        for id in self.toolbar.tools.iter().skip(1) {
             if let Some(button) = self.ui.widget_as::<Button>(*id) {
-                button.set_enabled(enabled);
+                button.set_enabled(zoomable);
             }
         }
         let has_sidebar = self.has_sidebar();
@@ -1058,8 +1256,9 @@ impl FileView {
         let loaded = self.take_loaded();
         let document = self.take_session();
         let thumbs = self.take_thumbnails();
+        let saved = self.take_saves();
         self.settle();
-        loaded || document || thumbs
+        loaded || document || thumbs || saved
     }
 
     pub fn deadline(&self) -> Option<Instant> {
@@ -1175,6 +1374,9 @@ impl View for FileView {
         }
         if let Some(copies) = &self.copies {
             fds.push(copies.fd());
+        }
+        if let Some(saves) = &self.saves {
+            fds.push(saves.fd());
         }
         if let Some(session) = &self.session {
             fds.push(session.fd());

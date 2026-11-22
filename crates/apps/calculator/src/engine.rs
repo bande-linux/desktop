@@ -8,6 +8,7 @@ pub const SHOWN_DIGITS: u32 = 16;
 const SCIENTIFIC_DIGITS: u32 = 16;
 const SMALLEST_PLAIN: i64 = -8;
 const EXPONENT_DIGITS: usize = 4;
+const TAPE_LINES: usize = 2000;
 const LARGEST_FACTORIAL: i128 = 3300;
 const NEGLIGIBLE: f64 = 1e-15;
 const RANDOM_BITS: u32 = 53;
@@ -388,6 +389,16 @@ impl Engine {
 
     pub fn clear_tape(&mut self) {
         self.tape.clear();
+    }
+
+    pub fn restore_tape(&mut self, text: &str) {
+        self.tape = text.lines().map(str::to_owned).collect();
+        self.trim_tape();
+    }
+
+    fn trim_tape(&mut self) {
+        let excess = self.tape.len().saturating_sub(TAPE_LINES);
+        self.tape.drain(..excess);
     }
 
     pub fn has_memory(&self) -> bool {
@@ -968,6 +979,7 @@ impl Engine {
         let result = self.format(result);
         self.tape.push(format!("{expression} ="));
         self.tape.push(result);
+        self.trim_tape();
     }
 
     fn percent(&mut self) -> Result<(), Failure> {

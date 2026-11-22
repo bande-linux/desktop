@@ -6,12 +6,14 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use bande_https::ureq;
+use serde::Deserialize;
 use sha2::{Digest, Sha256, Sha512};
 
 use crate::{Error, Result};
 
 const CHUNK: usize = 1024 * 1024;
 const CHECKSUMS_LIMIT: u64 = 1024 * 1024;
+const RELEASES_LIMIT: u64 = 16 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,13 +35,40 @@ enum Signed {
 }
 
 #[derive(Clone, Copy, Debug)]
+enum Location {
+    Fixed {
+        url: &'static str,
+        checksums: &'static str,
+    },
+    NewestFedora,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct CloudImage {
     pub os: &'static str,
-    pub url: &'static str,
-    pub checksums: &'static str,
+    location: Location,
     pub algorithm: Algorithm,
     signed: Signed,
 }
+
+#[derive(Debug, PartialEq, Eq)]
+struct Located {
+    url: String,
+    checksums: String,
+}
+
+#[derive(Deserialize)]
+struct FedoraRelease {
+    version: String,
+    arch: String,
+    variant: String,
+    link: String,
+}
+
+const FEDORA_RELEASES: &str = "https://fedoraproject.org/releases.json";
+const FEDORA_DOWNLOADS: &str = "https://download.fedoraproject.org/pub/fedora/linux/releases/";
+const FEDORA_IMAGE: &str = "Fedora-Cloud-Base-Generic-";
+const NEWEST_SIGNED_FEDORA: u32 = 46;
 
 const GPGV: &str = "gpgv";
 
@@ -66,23 +95,27 @@ macro_rules! arch {
 const CATALOG: &[CloudImage] = &[
     CloudImage {
         os: "Debian 13 (trixie)",
-        url: concat!(
-            "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-",
-            arch!(debian),
-            ".qcow2"
-        ),
-        checksums: "https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS",
+        location: Location::Fixed {
+            url: concat!(
+                "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-",
+                arch!(debian),
+                ".qcow2"
+            ),
+            checksums: "https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS",
+        },
         algorithm: Algorithm::Sha512,
         signed: Signed::Https,
     },
     CloudImage {
         os: "Ubuntu 26.04 LTS",
-        url: concat!(
-            "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-",
-            arch!(debian),
-            ".img"
-        ),
-        checksums: "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS",
+        location: Location::Fixed {
+            url: concat!(
+                "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-",
+                arch!(debian),
+                ".img"
+            ),
+            checksums: "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS",
+        },
         algorithm: Algorithm::Sha256,
         signed: Signed::Detached {
             url: "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS.gpg",
@@ -90,21 +123,8 @@ const CATALOG: &[CloudImage] = &[
         },
     },
     CloudImage {
-        os: "Fedora Cloud 43",
-        url: concat!(
-            "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/",
-            arch!(kernel),
-            "/images/Fedora-Cloud-Base-Generic-43-1.6.",
-            arch!(kernel),
-            ".qcow2"
-        ),
-        checksums: concat!(
-            "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/",
-            arch!(kernel),
-            "/images/Fedora-Cloud-43-1.6-",
-            arch!(kernel),
-            "-CHECKSUM"
-        ),
+        os: "Fedora Cloud",
+        location: Location::NewestFedora,
         algorithm: Algorithm::Sha256,
         signed: Signed::Inline {
             keys: include_bytes!("../data/fedora.gpg"),
@@ -159,13 +179,33 @@ impl Hasher {
     }
 }
 
-impl CloudImage {
-    pub fn file_name(&self) -> &'static str {
-        self.url.rsplit('/').next().unwrap_or(self.url)
-    }
+fn file_name(url: &str) -> &str {
+    url.rsplit('/').next().unwrap_or(url)
+}
 
-    fn listed_checksum(&self, checksums: &str) -> Option<String> {
-        let file = self.file_name();
+fn newest_fedora(releases: &[FedoraRelease]) -> Option<Located> {
+    let suffix = concat!(".", arch!(kernel), ".qcow2");
+    releases
+        .iter()
+        .filter(|release| release.variant == "Cloud" && release.arch == arch!(kernel))
+        .filter_map(|release| {
+            let version: u32 = release.version.parse().ok()?;
+            let name = file_name(&release.link);
+            let compose = name.strip_prefix(FEDORA_IMAGE)?.strip_suffix(suffix)?;
+            let folder = release.link.strip_suffix(name)?;
+            (version <= NEWEST_SIGNED_FEDORA && folder.starts_with(FEDORA_DOWNLOADS)).then(|| {
+                let checksums =
+                    format!("{folder}Fedora-Cloud-{compose}-{}-CHECKSUM", arch!(kernel));
+                let url = release.link.clone();
+                (version, Located { url, checksums })
+            })
+        })
+        .max_by_key(|(version, _)| *version)
+        .map(|(_, located)| located)
+}
+
+impl CloudImage {
+    fn listed_checksum(&self, checksums: &str, file: &str) -> Option<String> {
         let hex = checksums.lines().find_map(|line| {
             let line = line.trim();
             match line.split_once(") = ") {
@@ -197,14 +237,39 @@ impl ImageStore {
         Self { dir, agent }
     }
 
+    fn locate(&self, image: &CloudImage) -> Result<Located> {
+        let (url, checksums) = match image.location {
+            Location::Fixed { url, checksums } => (url, checksums),
+            Location::NewestFedora => {
+                let releases: Vec<FedoraRelease> = serde_json::from_str(
+                    &self
+                        .agent
+                        .get(FEDORA_RELEASES)
+                        .call()?
+                        .body_mut()
+                        .with_config()
+                        .limit(RELEASES_LIMIT)
+                        .read_to_string()?,
+                )?;
+                return newest_fedora(&releases).ok_or_else(|| Error::NoRelease(image.os.into()));
+            }
+        };
+        Ok(Located {
+            url: url.into(),
+            checksums: checksums.into(),
+        })
+    }
+
     pub fn fetch(
         &self,
         image: &CloudImage,
         progress: &mut dyn FnMut(u64, Option<u64>) -> ControlFlow<()>,
     ) -> Result<PathBuf> {
+        let located = self.locate(image)?;
+        let file = file_name(&located.url);
         let checksums = self
             .agent
-            .get(image.checksums)
+            .get(&located.checksums)
             .call()?
             .body_mut()
             .with_config()
@@ -212,17 +277,15 @@ impl ImageStore {
             .read_to_string()?;
         let checksums = self.verified(image, checksums)?;
         let expected = image
-            .listed_checksum(&checksums)
-            .ok_or_else(|| Error::NotListed(image.file_name().into()))?;
-        let path = self
-            .dir
-            .join(format!("{}-{}", &expected[..16], image.file_name()));
+            .listed_checksum(&checksums, file)
+            .ok_or_else(|| Error::NotListed(file.into()))?;
+        let path = self.dir.join(format!("{}-{file}", &expected[..16]));
         if path.is_file() {
             return Ok(path);
         }
         fs::create_dir_all(&self.dir)?;
         let staging = path.with_extension("partial");
-        let downloaded = self.download(image, &expected, &staging, progress);
+        let downloaded = self.download(image, &located.url, &expected, &staging, progress);
         match downloaded {
             Ok(file) => persist(&file, &staging, &path).map(|()| path),
             Err(error) => {
@@ -289,11 +352,12 @@ impl ImageStore {
     fn download(
         &self,
         image: &CloudImage,
+        url: &str,
         expected: &str,
         staging: &Path,
         progress: &mut dyn FnMut(u64, Option<u64>) -> ControlFlow<()>,
     ) -> Result<File> {
-        let response = self.agent.get(image.url).call()?;
+        let response = self.agent.get(url).call()?;
         let total = response.body().content_length();
         let mut body = response.into_body().into_reader();
         let mut file = File::create(staging)?;
@@ -330,4 +394,54 @@ fn persist(file: &File, staging: &Path, path: &Path) -> Result<()> {
         bande_xdg::sync_folder(folder)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fedora_is_the_newest_release_its_keys_sign_from_fedoras_mirrors() {
+        let arch = arch!(kernel);
+        let release = |version: &str, link: String| FedoraRelease {
+            version: version.into(),
+            arch: arch.into(),
+            variant: "Cloud".into(),
+            link,
+        };
+        let images = |version: u32| format!("{FEDORA_DOWNLOADS}{version}/Cloud/{arch}/images/");
+        let generic = |version: u32, compose: &str| {
+            format!(
+                "{}Fedora-Cloud-Base-Generic-{version}-{compose}.{arch}.qcow2",
+                images(version)
+            )
+        };
+        let releases = [
+            release("44", generic(44, "1.7")),
+            release("45", generic(45, "1.4")),
+            release(
+                "45",
+                format!(
+                    "{}Fedora-Cloud-Base-UEFI-UKI-45-1.4.{arch}.qcow2",
+                    images(45)
+                ),
+            ),
+            release("46 Beta", generic(46, "0.9")),
+            release(
+                "46",
+                format!("https://example.org/Fedora-Cloud-Base-Generic-46-1.2.{arch}.qcow2"),
+            ),
+            release(
+                &(NEWEST_SIGNED_FEDORA + 1).to_string(),
+                generic(NEWEST_SIGNED_FEDORA + 1, "1.1"),
+            ),
+        ];
+        assert_eq!(
+            newest_fedora(&releases),
+            Some(Located {
+                url: generic(45, "1.4"),
+                checksums: format!("{}Fedora-Cloud-45-1.4-{arch}-CHECKSUM", images(45)),
+            })
+        );
+    }
 }

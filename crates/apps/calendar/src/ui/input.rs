@@ -493,6 +493,7 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
     match key {
         Key::Character(character) if command => match character.to_ascii_lowercase() {
             't' => menu_command(view, ACTION_TODAY),
+            'z' if !modifiers.shift && !modifiers.alt => view.undo(),
             'n' if modifiers.alt => menu_command(view, ACTION_NEW_CALENDAR),
             'n' => menu_command(view, ACTION_NEW_EVENT),
             'f' => menu_command(view, ACTION_FIND),
@@ -999,8 +1000,20 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
 }
 
 fn choose(view: &mut CalendarView, action: &str) {
-    let Some(confirm) = view.confirm.take() else {
-        return;
+    let confirm = match view.confirm.take() {
+        Some(Confirm::Invitation(object)) => return view.answer_invitation(*object, action),
+        Some(Confirm::Cancelled {
+            calendar,
+            uid,
+            occurrence,
+        }) => {
+            if action == "accept" {
+                view.remove_cancelled(&calendar, &uid, occurrence);
+            }
+            return;
+        }
+        Some(confirm) => confirm,
+        None => return,
     };
     let scope = match action {
         "occurrence" => Scope::Occurrence,
@@ -1023,10 +1036,12 @@ fn choose(view: &mut CalendarView, action: &str) {
         Confirm::RemoveAccount(id) => view.requests.push(Request::RemoveAccount(id)),
         Confirm::Import(objects, calendar) => {
             for object in objects {
-                view.library.put_object(calendar, object);
+                view.library
+                    .put_object(calendar, crate::invite::without_method(object));
             }
             view.requests.push(Request::Changed);
         }
         Confirm::DeleteCalendar(index) => view.delete_calendar(index),
+        Confirm::Invitation(_) | Confirm::Cancelled { .. } => {}
     }
 }

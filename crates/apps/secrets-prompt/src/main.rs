@@ -249,7 +249,7 @@ impl Prompt {
         let secret = self.secret();
         match action.as_str() {
             "allow" | "always" if secret.is_empty() => {
-                self.present(None);
+                self.present(Some(tr!("Type the password to continue.")));
             }
             "allow" if self.request.mode == Mode::Create && self.first.is_none() => {
                 self.first = Some(secret);

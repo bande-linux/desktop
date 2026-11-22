@@ -126,6 +126,7 @@ pub struct Chooser {
     mime: MimeDatabase,
     folder: PathBuf,
     entries: Vec<Entry>,
+    found: bool,
     listings: Option<Inbox<(PathBuf, io::Result<Vec<Entry>>)>>,
     loading: bool,
     filter: Option<usize>,
@@ -155,6 +156,7 @@ impl Chooser {
             mime,
             folder: PathBuf::new(),
             entries: Vec::new(),
+            found: false,
             listings: Inbox::new().ok(),
             loading: false,
             filter,
@@ -197,7 +199,24 @@ impl Chooser {
             false => list(folder, self.show_hidden, self.sort)?,
         };
         self.folder = folder.to_path_buf();
+        self.found = false;
         Ok(())
+    }
+
+    pub fn show_found(&mut self, paths: &[PathBuf]) {
+        self.entries = paths
+            .iter()
+            .filter(|path| !on_server(path) && path.symlink_metadata().is_ok())
+            .filter_map(|path| {
+                let name = path.file_name()?.to_string_lossy().into_owned();
+                Some(Entry::read(path.clone(), name))
+            })
+            .collect();
+        self.found = true;
+    }
+
+    pub fn shows_found(&self) -> bool {
+        self.found
     }
 
     pub fn listing_fd(&self) -> Option<BorrowedFd<'_>> {
@@ -225,7 +244,7 @@ impl Chooser {
         let finished = self.listings.as_mut().map(Inbox::drain).unwrap_or_default();
         let mut changed = false;
         for (folder, listed) in finished {
-            if folder != self.folder {
+            if folder != self.folder || self.found {
                 continue;
             }
             self.loading = false;
@@ -255,6 +274,7 @@ impl Chooser {
 
     pub fn set_show_hidden(&mut self, show: bool) -> io::Result<()> {
         match on_server(&self.folder) {
+            _ if self.found => {}
             true => self.start_listing(self.folder.clone(), show),
             false => self.entries = list(&self.folder, show, self.sort)?,
         }

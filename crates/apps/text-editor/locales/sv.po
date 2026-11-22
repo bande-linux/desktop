@@ -373,6 +373,9 @@ msgid_plural "{count} characters"
 msgstr[0] "1 tecken"
 msgstr[1] "{count} tecken"
 
+msgid "Line {line}, Column {column}"
+msgstr "Rad {line}, kolumn {column}"
+
 msgid "Rich Text Document"
 msgstr "Dokument med formaterad text"
 

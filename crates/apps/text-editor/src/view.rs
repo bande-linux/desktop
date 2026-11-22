@@ -173,6 +173,7 @@ pub struct DocumentView {
     shown_message: String,
     note: Option<String>,
     snapshot: Option<(u64, Arc<String>)>,
+    position: Option<(u64, usize, (usize, usize))>,
     saving: bool,
     stamp: Option<Stamp>,
     overwrite: bool,
@@ -249,6 +250,7 @@ impl DocumentView {
             shown_message: String::new(),
             note: None,
             snapshot: None,
+            position: None,
             saving: false,
             stamp: None,
             overwrite: false,
@@ -322,6 +324,14 @@ impl DocumentView {
 
     pub fn is_edited(&self) -> bool {
         self.saved != Some(self.revision()) || self.format_changed
+    }
+
+    pub fn reloads_from(&self, changed: &Path) -> bool {
+        self.path.as_deref() == Some(changed)
+            && !self.loading
+            && !self.saving
+            && !self.is_edited()
+            && stamp(changed).is_some_and(|found| Some(found) != self.stamp)
     }
 
     pub fn is_empty_untitled(&self) -> bool {
@@ -459,11 +469,15 @@ impl DocumentView {
         self.rich = rich.is_some();
         let text = match (rich, self.editor()) {
             (Some(rich), Some(editor)) => {
+                let caret = editor.selection();
                 editor.set_rich_text(&rich);
+                keep_caret(editor, &rich.text, caret);
                 rich.text
             }
             (None, Some(editor)) => {
+                let caret = editor.selection();
                 editor.set_text(&text);
+                keep_caret(editor, &text, caret);
                 text
             }
             (_, None) => text,
@@ -1285,7 +1299,27 @@ impl DocumentView {
         }
     }
 
-    fn status_line(&self) -> String {
+    fn caret_position(&mut self) -> Option<(usize, usize)> {
+        let caret = self.ui.widget_ref::<TextView>(self.editor)?.selection().end;
+        let revision = self.revision();
+        if let Some((seen, at, position)) = self.position
+            && (seen, at) == (revision, caret)
+        {
+            return Some(position);
+        }
+        let text = self.text();
+        let before = text.get(..caret)?;
+        let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
+        let column = before
+            .rsplit('\n')
+            .next()
+            .map_or(0, |line| line.chars().count())
+            + 1;
+        self.position = Some((revision, caret, (line, column)));
+        Some((line, column))
+    }
+
+    fn status_line(&mut self) -> String {
         let counts = match (self.loading, self.counts) {
             (true, _) => tr!("Opening…"),
             (false, Some((words, characters))) => format!(
@@ -1295,7 +1329,13 @@ impl DocumentView {
             ),
             (false, None) => String::new(),
         };
+        let position = match self.loading {
+            true => None,
+            false => self.caret_position(),
+        }
+        .map(|(line, column)| tr!("Line {line}, Column {column}", line = line, column = column));
         let mut parts = vec![counts];
+        parts.extend(position);
         if self.format != Format::Plain {
             parts.push(format_title(self.format.name()));
         }
@@ -1641,5 +1681,14 @@ fn button_label(action: &str) -> String {
         "save-copy" => tr!("Save a Copy…"),
         "save-unicode" => tr!("Save as UTF-8"),
         other => other.to_owned(),
+    }
+}
+
+fn keep_caret(editor: &mut TextView, text: &str, caret: std::ops::Range<usize>) {
+    if caret.end <= text.len()
+        && text.is_char_boundary(caret.start)
+        && text.is_char_boundary(caret.end)
+    {
+        editor.select(caret);
     }
 }

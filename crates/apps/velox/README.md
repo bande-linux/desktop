@@ -15,7 +15,14 @@ ready or not on their own. Packaged as `bande-velox`.
   architecture: amd64 on `q35` with OVMF (`ovmf`), arm64 on `virt` with AAVMF
   (`qemu-efi-aarch64`), KVM when `/dev/kvm` is usable and TCG emulation when asked. Cloud images
   of the same architecture are verified against the vendor's checksums, signed where the vendor
-  signs them.
-- **Nothing is installed or configured by Velox.** When an engine or the QEMU stack is missing it
-  shows copyable steps. Passing a USB device to a machine and bridging it onto the local network
+  signs them. Fedora's is the newest release in Fedora's `releases.json`, read when a machine is
+  made from it, that the keys in `libs/vm/data/fedora.gpg` sign: when Fedora publishes the next
+  release key, add it there and raise `NEWEST_SIGNED_FEDORA` in `libs/vm/src/image.rs`.
+- **In the background**: "Launch Velox at login" writes an autostart entry that starts
+  `bande-velox --background`, which opens no window and follows the engine, so a container that
+  stops unexpectedly still raises a notice. Velox stays there after Quit while that or the
+  status item is on; with both off `--background` exits at once.
+- **Installing only when asked.** When no engine is installed, Install Podman installs Debian's
+  `podman` through PackageKit and starts its user socket; otherwise, when an engine or the QEMU
+  stack is missing, Velox shows copyable steps. Passing a USB device to a machine and bridging it onto the local network
   ask for an administrator's password through polkit and run only `velox-helper` as root.

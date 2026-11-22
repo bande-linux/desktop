@@ -11,7 +11,7 @@ use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{Ui, WidgetId};
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use bande_viewer::{
-    FileView, InfoPanel, Request, Row, SidebarMode, WORKER_FLAG, Zoom, argument_path,
+    FileView, InfoPanel, Request, Row, Saving, SidebarMode, WORKER_FLAG, Zoom, argument_path,
     document_rows, file_rows, info_ui, picture_rows,
 };
 
@@ -44,6 +44,9 @@ const ROTATE_LEFT: &str = "rotate-left";
 const ROTATE_RIGHT: &str = "rotate-right";
 const FLIP_HORIZONTAL: &str = "flip-horizontal";
 const FLIP_VERTICAL: &str = "flip-vertical";
+const SAVE_ROTATION: &str = "save-rotation";
+const TRASH: &str = "trash";
+const UNDO_TRASH: &str = "undo-trash";
 const FIND: &str = "find";
 const FIND_NEXT: &str = "find-next";
 const FIND_PREVIOUS: &str = "find-previous";
@@ -59,6 +62,7 @@ enum Pane {
 
 struct Viewer {
     chosen: Option<Inbox<PathBuf>>,
+    copies: Option<Inbox<(WindowId, PathBuf)>>,
     info: Option<WindowId>,
 }
 
@@ -114,6 +118,9 @@ impl Viewer {
                 "image/jpeg",
                 "image/gif",
                 "image/webp",
+                "image/tiff",
+                "image/bmp",
+                "image/vnd.microsoft.icon",
                 "image/svg+xml",
                 "application/pdf",
             ]
@@ -130,6 +137,51 @@ impl Viewer {
                     }
                     Ok(None) => {}
                     Err(error) => tracing::warn!("cannot choose a file: {error}"),
+                },
+            );
+        if let Err(error) = spawned {
+            tracing::warn!("cannot open the chooser: {error}");
+        }
+    }
+
+    fn save_rotation(&mut self, cx: &mut Cx<Self>, window: WindowId) {
+        let (saving, name) = match cx.view(window) {
+            Some(Pane::Main(view)) => (view.rotation_saving(), view.copy_name()),
+            _ => return,
+        };
+        match saving {
+            Some(Saving::InPlace) => {
+                if let Some((_, Pane::Main(view))) = cx.window(window) {
+                    view.save_rotation();
+                }
+            }
+            Some(Saving::Copy) => self.choose_copy(cx, window, name),
+            None => {}
+        }
+    }
+
+    fn choose_copy(&mut self, cx: &mut Cx<Self>, window: WindowId, name: String) {
+        let Some(session) = cx.session().cloned() else {
+            return;
+        };
+        if self.copies.is_none() {
+            self.copies = Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot open the chooser: {error}"))
+                .ok();
+        }
+        let Some(outbox) = self.copies.as_ref().map(Inbox::outbox) else {
+            return;
+        };
+        let title = tr!("Save Rotated Copy");
+        let spawned = std::thread::Builder::new()
+            .name("save".to_owned())
+            .spawn(
+                move || match bande_app::choose_save_file(&session, &title, &name) {
+                    Ok(Some(path)) => {
+                        outbox.send((window, path));
+                    }
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!("cannot choose where to save: {error}"),
                 },
             );
         if let Err(error) = spawned {
@@ -266,6 +318,7 @@ impl Program for Viewer {
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut viewer = Self {
             chosen: None,
+            copies: None,
             info: None,
         };
         if !arguments.is_empty() {
@@ -284,6 +337,7 @@ impl Program for Viewer {
         let copyable = view.is_some_and(FileView::can_copy);
         let contents = view.is_some_and(FileView::has_contents);
         let several = view.is_some_and(FileView::has_sidebar);
+        let saving = view.and_then(FileView::rotation_saving);
         let item = |key: Text, action: &str, shortcut: Option<&str>, enabled: bool| {
             let entry = Entry::item(&key.tr(), action).enabled(enabled);
             match shortcut {
@@ -298,9 +352,23 @@ impl Program for Viewer {
         file_menu.extend([
             item(text!("Properties"), PROPERTIES, Some("Ctrl+I"), file),
             Entry::separator(),
+            item(
+                text!("Move to Trash"),
+                TRASH,
+                Some("Delete"),
+                view.is_some_and(FileView::can_trash),
+            ),
+            Entry::separator(),
             bande_app_menu::print_item(file),
         ]);
         let edit = vec![
+            item(
+                text!("Undo Move to Trash"),
+                UNDO_TRASH,
+                Some("Ctrl+Z"),
+                view.is_some_and(FileView::can_undo_trash),
+            ),
+            Entry::separator(),
             item(text!("Copy"), COPY, Some("Ctrl+C"), copyable),
             Entry::separator(),
             item(text!("Find…"), FIND, Some("Ctrl+F"), document),
@@ -347,12 +415,32 @@ impl Program for Viewer {
                 text!("Rotate Left"),
                 ROTATE_LEFT,
                 Some("Shift+Ctrl+R"),
-                picture,
+                zoomable,
             ),
-            item(text!("Rotate Right"), ROTATE_RIGHT, Some("Ctrl+R"), picture),
+            item(
+                text!("Rotate Right"),
+                ROTATE_RIGHT,
+                Some("Ctrl+R"),
+                zoomable,
+            ),
             Entry::separator(),
             item(text!("Flip Horizontal"), FLIP_HORIZONTAL, None, picture),
             item(text!("Flip Vertical"), FLIP_VERTICAL, None, picture),
+            Entry::separator(),
+            match saving {
+                Some(Saving::Copy) => item(
+                    text!("Save Rotated Copy…"),
+                    SAVE_ROTATION,
+                    Some("Ctrl+S"),
+                    true,
+                ),
+                _ => item(
+                    text!("Save Rotation"),
+                    SAVE_ROTATION,
+                    Some("Ctrl+S"),
+                    saving.is_some(),
+                ),
+            },
         ];
         Menus {
             menus: vec![
@@ -384,6 +472,10 @@ impl Program for Viewer {
         if command == bande_app_menu::PRINT {
             return Self::print(cx, window);
         }
+        if command == SAVE_ROTATION {
+            self.save_rotation(cx, window);
+            return self.serve(cx, window);
+        }
         if let Some((shown, Pane::Main(view))) = cx.window(window) {
             match command {
                 COPY => view.copy(Some(shown)),
@@ -403,6 +495,8 @@ impl Program for Viewer {
                 ROTATE_RIGHT => view.rotate(true),
                 FLIP_HORIZONTAL => view.flip(false),
                 FLIP_VERTICAL => view.flip(true),
+                TRASH => view.move_to_trash(),
+                UNDO_TRASH => view.undo_trash(),
                 NEXT => view.go(true),
                 PREVIOUS => view.go(false),
                 _ => return,
@@ -464,12 +558,20 @@ impl Program for Viewer {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.chosen.iter().map(Inbox::fd).collect()
+        let chosen = self.chosen.iter().map(Inbox::fd);
+        chosen.chain(self.copies.iter().map(Inbox::fd)).collect()
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
         let chosen = self.chosen.as_mut().map(Inbox::drain).unwrap_or_default();
         self.open_paths(cx, chosen);
+        let copies = self.copies.as_mut().map(Inbox::drain).unwrap_or_default();
+        for (window, path) in copies {
+            if let Some((shown, Pane::Main(view))) = cx.window(window) {
+                view.save_copy(path);
+                shown.request_redraw();
+            }
+        }
     }
 }
 

@@ -18,6 +18,7 @@ use bande_xdg::replace_file;
 
 const APP_ID: &str = "org.bande.Calculator";
 const STATE_FILE: &str = "calculator";
+const TAPE_FILE: &str = "calculator-tape";
 const TAPE_SIZE: (u32, u32) = (300, 420);
 const MODE_ACTION: &str = "mode-";
 const BASE_ACTION: &str = "base-";
@@ -145,6 +146,7 @@ struct Calculator {
     main: Option<WindowId>,
     tape: Option<WindowId>,
     saved: String,
+    kept_tape: String,
     had_tape: bool,
     reopen_tape: bool,
     quitting: bool,
@@ -260,7 +262,7 @@ impl Calculator {
                 view.set_text(&text);
                 view.select(text.len()..text.len());
             });
-            *shown = text;
+            *shown = text.clone();
             window.request_redraw();
         }
         if let Some((window, _)) = self.main.and_then(|main| cx.window(main)) {
@@ -275,6 +277,14 @@ impl Calculator {
             }
             self.saved = state;
             cx.refresh_menus();
+        }
+        if text != self.kept_tape {
+            if let Some(file) = cx.state_file(TAPE_FILE)
+                && let Err(error) = replace_file(&file, &text)
+            {
+                tracing::warn!("cannot keep the paper tape: {error}");
+            }
+            self.kept_tape = text;
         }
         if has_tape != self.had_tape {
             self.had_tape = has_tape;
@@ -296,8 +306,8 @@ impl Calculator {
             mode(Mode::Scientific, text!("Scientific"), "Ctrl+2"),
             mode(Mode::Programmer, text!("Programmer"), "Ctrl+3"),
             Entry::separator(),
-            Entry::item(&tr!("RPN Mode"), RPN).radio(engine.rpn),
-            Entry::item(&tr!("Show Thousands Separators"), GROUPING).radio(engine.grouping),
+            Entry::item(&tr!("RPN Mode"), RPN).check(engine.rpn),
+            Entry::item(&tr!("Show Thousands Separators"), GROUPING).check(engine.grouping),
             Entry::separator(),
             Entry::item(&tr!("Degrees"), DEGREES)
                 .radio(engine.angle == Angle::Degrees)
@@ -350,12 +360,19 @@ impl Program for Calculator {
             .state_file(STATE_FILE)
             .and_then(|file| std::fs::read_to_string(file).ok())
             .is_some_and(|text| restore(&mut engine, &text));
+        let kept_tape = cx
+            .state_file(TAPE_FILE)
+            .and_then(|file| std::fs::read_to_string(file).ok())
+            .unwrap_or_default();
+        engine.restore_tape(&kept_tape);
+        let kept_tape = tape_text(&engine);
         let saved = save(&engine, tape);
         Ok(Self {
             engine: Rc::new(RefCell::new(engine)),
             main: None,
             tape: None,
             saved,
+            kept_tape,
             had_tape: false,
             reopen_tape: tape,
             quitting: false,
@@ -373,7 +390,7 @@ impl Program for Calculator {
             ],
             window: vec![
                 Entry::item(&tr!("Calculator"), SHOW_CALCULATOR),
-                Entry::item(&tr!("Paper Tape"), PAPER_TAPE).radio(self.tape.is_some()),
+                Entry::item(&tr!("Paper Tape"), PAPER_TAPE).check(self.tape.is_some()),
             ],
         }
     }

@@ -3,7 +3,7 @@ use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use bande_l10n::{Text, text, tr};
+use bande_l10n::{Text, text, tr, trn};
 
 use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report};
 use crate::model::{Disk, Group, Model, Scheme, Selected, Volume};
@@ -19,6 +19,7 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use bande_toolkit::{Appearance, Color, Header, Image, Palette, SHEET_INSET, TextSystem};
+use bande_volumes::udisks::Health;
 use zeroize::Zeroizing;
 
 const DISK_SYMBOL: &str = include_str!("../data/symbols/disk.svg");
@@ -1314,9 +1315,14 @@ impl DisksView {
                 color: self.palette.hairline,
             });
         }
-        let smart = match &disk.smart {
-            Some(smart) if smart.failing => tr!("Failing"),
-            Some(_) => tr!("Verified"),
+        let smart = match disk.smart.as_ref().map(|smart| smart.health) {
+            Some(Health::Failing) => tr!("Failing"),
+            Some(Health::BadSectors(count)) => trn!(
+                "Warning: {count} bad sector",
+                "Warning: {count} bad sectors",
+                count = count
+            ),
+            Some(Health::Good) => tr!("Verified"),
             None => tr!("Not Supported"),
         };
         let mut pairs = vec![

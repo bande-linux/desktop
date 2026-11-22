@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Read, Seek};
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bande_content::{Kind, Pixels, decode};
 use bande_media::{
-    BufferKind, Command, Event, FailureKind, FrameBuffer, MediaInfo, Playback, Player,
+    BufferKind, Command, Event, FailureKind, FrameBuffer, MediaInfo, Opening, Playback, Player,
 };
 use bande_toolkit::ui::SurfaceId;
 use bande_toolkit::{
@@ -39,7 +39,7 @@ pub struct Session {
     next_refresh: Option<Instant>,
     play_when_ready: bool,
     configured: bool,
-    waiting: Option<PathBuf>,
+    waiting: Option<Opening>,
 }
 
 fn plain_text(markup: &str) -> String {
@@ -109,13 +109,13 @@ impl Session {
         }
     }
 
-    pub fn load(&mut self, path: &Path, play: bool) -> io::Result<()> {
+    pub fn load(&mut self, opening: Opening, play: bool) -> io::Result<()> {
         if self.player.is_none() {
             self.player = Some(Player::spawn()?);
         }
         self.info = MediaInfo::default();
         self.playback = Playback::Opening;
-        self.position_ms = 0;
+        self.position_ms = opening.start_ms;
         self.position_at = Instant::now();
         self.subtitle = None;
         self.subtitle_until = None;
@@ -125,8 +125,8 @@ impl Session {
         self.showing_frame = false;
         self.play_when_ready = play;
         match self.configured {
-            true => self.send(Command::Open(path.to_owned())),
-            false => self.waiting = Some(path.to_owned()),
+            true => self.send(Command::Open(opening)),
+            false => self.waiting = Some(opening),
         }
         if self.rate != 1.0 {
             self.send(Command::SetRate(self.rate));
@@ -325,8 +325,8 @@ impl Session {
                     nv12_dmabuf: window.supports_dmabuf(NV12, LINEAR),
                 });
                 self.configured = true;
-                if let Some(path) = self.waiting.take() {
-                    self.send(Command::Open(path));
+                if let Some(opening) = self.waiting.take() {
+                    self.send(Command::Open(opening));
                 }
                 false
             }

@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_l10n::tr;
@@ -20,11 +20,9 @@ use crate::model::{
     Column, CoreGroup, CoreKind, Filter, Graph, HISTORY, Monitor, Row, RowKey, StopTarget, Tab,
 };
 use crate::sampler::Snapshot;
-use crate::signal::Stop;
 use crate::view::{
-    ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, SEND, Screen,
-    answer_stop, is_secondary, opens_menu, send_signal, signal_alert, stop_alert, stop_button,
-    symbol_button,
+    ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, Screen, answer_stop,
+    is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
 };
 use bande_app_menu::Entry;
 
@@ -156,7 +154,6 @@ pub struct MonitorView {
     full_screen: bool,
     focused: bool,
     stopping: Option<StopTarget>,
-    signalling: Option<(StopTarget, Stop)>,
     requests: Vec<Request>,
     footer: WidgetId,
     readout_widths: Vec<f32>,
@@ -223,7 +220,6 @@ impl MonitorView {
             full_screen: false,
             focused: true,
             stopping: None,
-            signalling: None,
             requests: Vec::new(),
             footer: WidgetId::next(),
             readout_widths: Vec::new(),
@@ -355,13 +351,6 @@ impl MonitorView {
     }
 
     fn chosen(&mut self, choice: &str) {
-        if let Some((target, how)) = self.signalling.take() {
-            if choice == SEND {
-                self.signal_now(&target, how);
-            }
-            self.list.focus();
-            return;
-        }
         let Some(target) = self.stopping.take() else {
             return;
         };
@@ -689,47 +678,9 @@ impl MonitorView {
         let alert = stop_alert(&target, force, icon, move |choice| {
             send(Signal::Choice(choice.to_owned()))
         });
-        self.signalling = None;
         self.stopping = Some(target);
         self.list.present_dialog(alert);
         true
-    }
-
-    fn send_signal(&mut self, how: Stop) -> bool {
-        let Some(mut target) = self.monitor.stop_target() else {
-            return false;
-        };
-        if how == Stop::Pause {
-            let own = std::process::id();
-            target.processes.retain(|(pid, _)| *pid != own);
-            if target.processes.is_empty() {
-                return false;
-            }
-        }
-        if how == Stop::Resume {
-            self.signal_now(&target, how);
-            return true;
-        }
-        let send = sender(self.list.signals());
-        let alert = signal_alert(&target, how, self.icons.get(ALERT_ICON), move |choice| {
-            send(Signal::Choice(choice.to_owned()))
-        });
-        self.stopping = None;
-        self.signalling = Some((target, how));
-        self.list.present_dialog(alert);
-        true
-    }
-
-    fn signal_now(&mut self, target: &StopTarget, how: Stop) {
-        let icon = self.icons.get(ALERT_ICON);
-        let send = sender(self.list.signals());
-        let denied = send_signal(target, how, icon, move |choice| {
-            send(Signal::Choice(choice.to_owned()))
-        });
-        self.requests.push(Request::Resample);
-        if let Some(alert) = denied {
-            self.list.present_dialog(alert);
-        }
     }
 
     fn show_in_files(&mut self) -> bool {
@@ -784,9 +735,6 @@ impl MonitorView {
     }
 
     fn set_filter(&mut self, filter: Filter) -> bool {
-        if filter == Filter::Selected && self.monitor.selection().is_empty() {
-            return false;
-        }
         self.monitor.set_filter(filter);
         let focused = self.searching();
         let field = search_field(&self.list, filter, self.monitor.search());
@@ -1118,7 +1066,7 @@ fn paint_cores(
 fn search_field(list: &List, filter: Filter, text: &str) -> SearchField {
     let send = sender(list.signals());
     let placeholder = match filter {
-        Filter::All | Filter::Hierarchy => tr!("Search"),
+        Filter::All => tr!("Search"),
         filter => tr!("Search {filter}", filter = filter.title()),
     };
     SearchField::new(&placeholder, text, move |text| {
@@ -1131,7 +1079,6 @@ impl Screen for MonitorView {
         Some(app_menus(
             &self.monitor.tabs(),
             self.monitor.filter(),
-            self.monitor.frequency(),
             windowed,
             files,
         ))
@@ -1196,13 +1143,6 @@ impl Screen for MonitorView {
             }
             Some(MenuCommand::ShowCores) => self.toggle_cores(),
             Some(MenuCommand::Filter(filter)) => self.set_filter(filter),
-            Some(MenuCommand::Signal(how)) => self.send_signal(how),
-            Some(MenuCommand::Frequency(frequency)) => {
-                self.monitor.set_frequency(frequency);
-                self.requests.push(Request::SaveState(self.monitor.state()));
-                self.requests.push(Request::Resample);
-                true
-            }
             None => false,
         }
     }
@@ -1299,10 +1239,6 @@ impl Screen for MonitorView {
 
     fn measures_gpu(&self) -> bool {
         self.monitor.measures_gpu()
-    }
-
-    fn interval(&self) -> Option<Duration> {
-        Some(self.monitor.frequency().interval())
     }
 
     fn measures_disk(&self) -> bool {

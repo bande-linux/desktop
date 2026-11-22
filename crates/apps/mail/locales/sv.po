@@ -7,11 +7,47 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "The connection failed: {error}"
+msgstr "Anslutningen misslyckades: {error}"
+
+msgid "The server did not answer in time."
+msgstr "Servern svarade inte i tid."
+
+msgid "The secure connection failed: {error}"
+msgstr "Den säkra anslutningen misslyckades: {error}"
+
+msgid "The server offers no secure connection."
+msgstr "Servern erbjuder ingen säker anslutning."
+
+msgid "The server sent something unexpected: {error}"
+msgstr "Servern skickade något oväntat: {error}"
+
+msgid "The server refused: {text}"
+msgstr "Servern vägrade: {text}"
+
+msgid "The server refused the login: {text}"
+msgstr "Servern vägrade inloggningen: {text}"
+
+msgid "The offline store failed: {error}"
+msgstr "Det lokala arkivet fungerar inte: {error}"
+
+msgid "The keyring failed: {error}"
+msgstr "Nyckelringen fungerar inte: {error}"
+
+msgid "The server closed the connection."
+msgstr "Servern stängde anslutningen."
+
+msgid "the mailbox name “{path}” is not allowed"
+msgstr "brevlådenamnet ”{path}” är inte tillåtet"
+
+msgid "the name or password has a line break"
+msgstr "namnet eller lösenordet innehåller en radbrytning"
+
 msgid "Mail"
 msgstr "E-post"
 
-msgid "Settings"
-msgstr "Inställningar"
+msgid "Mail Settings"
+msgstr "E-postinställningar"
 
 msgid "Save Attachment"
 msgstr "Spara bilaga"
@@ -70,6 +106,9 @@ msgstr "Meddelande"
 msgid "Send"
 msgstr "Skicka"
 
+msgid "Discard Draft"
+msgstr "Släng utkast"
+
 msgid "Reply"
 msgstr "Svara"
 
@@ -119,6 +158,9 @@ msgstr "Sortera efter storlek"
 msgid "Sort by Unread"
 msgstr "Sortera efter olästa"
 
+msgid "This message is encrypted. Mail can’t open encrypted messages."
+msgstr "Meddelandet är krypterat. E-post kan inte öppna krypterade meddelanden."
+
 msgid "TLS"
 msgstr "TLS"
 
@@ -151,6 +193,15 @@ msgstr "E-post har inget sparat lösenord för kontot. Ange det igen."
 
 msgid "Mail could not save the account: {error}"
 msgstr "E-post kunde inte spara kontot: {error}"
+
+msgid "“{address}” is not a mail address"
+msgstr "”{address}” är ingen e-postadress"
+
+msgid "the server offers no sign-in method Mail knows: {methods}"
+msgstr "servern erbjuder inget inloggningssätt som E-post kan: {methods}"
+
+msgid "the message has no recipients"
+msgstr "meddelandet har inga mottagare"
 
 msgid "Offline"
 msgstr "Offline"
@@ -220,6 +271,14 @@ msgstr "Från:"
 msgid "Write your message"
 msgstr "Skriv ditt meddelande"
 
+msgid "{count} more"
+msgid_plural "{count} more"
+msgstr[0] "{count} till"
+msgstr[1] "{count} till"
+
+msgid "Remove “{name}”"
+msgstr "Ta bort ”{name}”"
+
 msgid "Add at least one recipient."
 msgstr "Lägg till minst en mottagare."
 
@@ -235,22 +294,34 @@ msgstr "OK"
 msgid "The message was not sent"
 msgstr "Meddelandet skickades inte"
 
-msgid "Remove “{name}”"
-msgstr "Ta bort ”{name}”"
+msgid "The draft is moved to the Trash."
+msgstr "Utkastet flyttas till papperskorgen."
+
+msgid "The message is not kept."
+msgstr "Meddelandet sparas inte."
+
+msgid "Discard this message?"
+msgstr "Släng meddelandet?"
+
+msgid "Discard"
+msgstr "Släng"
+
+msgid "Cancel"
+msgstr "Avbryt"
 
 msgid "Yesterday"
 msgstr "Igår"
 
-msgid "No Messages"
+msgid "No messages"
 msgstr "Inga meddelanden"
 
-msgid "No Results"
+msgid "No results"
 msgstr "Inga resultat"
 
-msgid "No Message Selected"
+msgid "No message selected"
 msgstr "Inget meddelande markerat"
 
-msgid "{count} Messages Selected"
+msgid "{count} messages selected"
 msgstr "{count} meddelanden markerade"
 
 msgid "To: {names}"
@@ -294,6 +365,9 @@ msgstr "Till eller kopia"
 
 msgid "Subject"
 msgstr "Ämne"
+
+msgid "Settings"
+msgstr "Inställningar"
 
 msgid "New Messages"
 msgstr "Nya meddelanden"
@@ -421,9 +495,6 @@ msgstr "Ta bort villkor"
 
 msgid "Then"
 msgstr "Då"
-
-msgid "Cancel"
-msgstr "Avbryt"
 
 msgid "Save Rule"
 msgstr "Spara regel"
@@ -680,6 +751,15 @@ msgstr ""
 "Datum: {date}\n"
 "Till: {to}"
 
+msgid "Mail can’t reach the server."
+msgstr "E-post når inte servern."
+
+msgid "“{account}” is offline"
+msgstr "”{account}” är offline"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
 msgid "No account sends from this address any more."
 msgstr "Inget konto skickar längre från den här adressen."
 
@@ -721,6 +801,15 @@ msgstr "{domain} publicerar inga e-postinställningar, så E-post har gissat de 
 msgid "Mail found no servers for {domain}. Enter the settings your mail provider gives for IMAP and SMTP."
 msgstr "E-post hittade inga servrar för {domain}. Ange de inställningar för IMAP och SMTP som din e-postleverantör anger."
 
+msgid "Open Link"
+msgstr "Öppna länk"
+
+msgid "Copy Link"
+msgstr "Kopiera länk"
+
+msgid "Copy Address"
+msgstr "Kopiera adress"
+
 msgid "Open Attachment"
 msgstr "Öppna bilaga"
 
@@ -729,6 +818,18 @@ msgstr "Spara bilaga…"
 
 msgid "Save to Downloads Folder"
 msgstr "Spara i mappen Hämtningar"
+
+msgid "Open this link?"
+msgstr "Öppna länken?"
+
+msgid "The link says “{claimed}”, but it goes to “{real}”."
+msgstr "Länken säger ”{claimed}” men leder till ”{real}”."
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Select All"
+msgstr "Markera allt"
 
 msgid "Rename Mailbox…"
 msgstr "Byt namn på brevlåda…"
@@ -759,3 +860,9 @@ msgstr "Markera som läst"
 
 msgid "Unflag"
 msgstr "Ta bort flagga"
+
+msgid "no password is saved for this account"
+msgstr "inget lösenord är sparat för kontot"
+
+msgid "the account has no Drafts mailbox"
+msgstr "kontot har ingen brevlåda för utkast"

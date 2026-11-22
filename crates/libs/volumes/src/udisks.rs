@@ -37,6 +37,13 @@ pub enum Change {
     Changed(OwnedObjectPath, String, Vec<String>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Health {
+    Good,
+    BadSectors(u64),
+    Failing,
+}
+
 #[derive(Debug, Default)]
 pub struct Objects(HashMap<OwnedObjectPath, Interfaces>);
 
@@ -108,6 +115,28 @@ impl Objects {
                 String::from_utf8_lossy(point).into_owned()
             })
             .collect()
+    }
+
+    /// The SMART verdict of a drive, or `None` when it reports none.
+    pub fn health(&self, drive: &str) -> Option<Health> {
+        if self.has(drive, NVME) {
+            let warnings: Vec<String> = self
+                .get(drive, NVME, "SmartCriticalWarning")
+                .unwrap_or_default();
+            return Some(match warnings.is_empty() {
+                true => Health::Good,
+                false => Health::Failing,
+            });
+        }
+        if !self.flag(drive, ATA, "SmartSupported") || !self.flag(drive, ATA, "SmartEnabled") {
+            return None;
+        }
+        let bad_sectors: i64 = self.get(drive, ATA, "SmartNumBadSectors").unwrap_or(0);
+        Some(match self.flag(drive, ATA, "SmartFailing") {
+            true => Health::Failing,
+            false if bad_sectors > 0 => Health::BadSectors(bad_sectors.unsigned_abs()),
+            false => Health::Good,
+        })
     }
 
     pub fn device(&self, path: &str) -> String {

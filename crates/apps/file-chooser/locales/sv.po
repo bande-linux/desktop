@@ -220,6 +220,9 @@ msgstr "Gå"
 msgid "Choose"
 msgstr "Välj"
 
+msgid "Recent"
+msgstr "Senaste"
+
 msgid "Date Modified"
 msgstr "Ändringsdatum"
 

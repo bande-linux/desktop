@@ -7,13 +7,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app::{
+    Cx, Dropping, FileDrop, Info, Keys, Kind, Menus, Program, Settings, View, WindowId,
+};
 use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::{
-    Appearance, DragAction, DragEvent, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window,
-    WindowEvent,
+    Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
     Act, ContainerRequest, DisplayWindow, Effect, Endpoint, Failure, Hub, Informer, LogsTarget,
@@ -21,8 +22,8 @@ use bande_velox::{
     Request, SETTINGS_SIZE, SIDEBAR_WIDTH, Section, ShellLink, ShellTarget, ShellWindow,
     TERMINAL_APP_ID, Target, Tray, TrayAction, Tunnel, Update, VeloxSettings, VeloxView, Work,
     context_endpoint, contexts, create_context, current_context, engine_connected, engine_missing,
-    load_hosts, notify_crash, remove_context, rename_context, save_hosts, settings_form,
-    tunnel_socket, use_context,
+    launches_at_login, load_hosts, notify_crash, remove_context, rename_context, save_hosts,
+    settings_form, tunnel_socket, use_context,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -88,7 +89,7 @@ struct Pane {
     logs: Vec<LogsTarget>,
     shells: Vec<ShellTarget>,
     apps: Option<Apps>,
-    dragged: bool,
+    drop: FileDrop,
     places: Vec<Request>,
 }
 
@@ -230,23 +231,17 @@ impl View for Pane {
             self.view.set_hidden(state.suspended);
             self.view.sync_streams();
         }
-        if let WindowEvent::Drag(drag) = &event {
-            match drag {
-                DragEvent::Entered { uris, .. } => {
-                    self.dragged = self.view.accepts_drop(uris);
-                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
-                }
-                DragEvent::Moved(_) => {
-                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
-                }
-                DragEvent::Dropped { transfer, .. } if self.dragged => {
-                    self.dragged = false;
-                    self.view.dropped(&transfer.uris);
-                    self.serve(window);
-                }
-                DragEvent::Left | DragEvent::Finished(_) => self.dragged = false,
-                DragEvent::Dropped { .. } => {}
+        match self
+            .drop
+            .event(window, &event, |path| self.view.accepts_drop(path))
+        {
+            Dropping::Over => return true,
+            Dropping::Dropped(archives) => {
+                self.view.dropped(archives);
+                self.serve(window);
+                return true;
             }
+            Dropping::Other => {}
         }
         let handled = View::event(self.view.ui(), window, event);
         let pumped = self.view.pump();
@@ -466,24 +461,32 @@ impl Velox {
                     .session()
                     .cloned()
                     .and_then(|session| Tray::start(session, APP_ID));
-                if self.informer.is_none() {
-                    self.hosts = load_hosts();
-                    match self.open_engine() {
-                        Ok(informer) => self.informer = Some(informer),
-                        Err(error) => tracing::warn!("cannot follow the engine: {error}"),
-                    }
+            }
+            (false, true) => self.tray = None,
+            _ => {}
+        }
+        self.follow_engine_windowless(cx);
+        cx.refresh_menus();
+    }
+
+    fn follow_engine_windowless(&mut self, cx: &Cx<Self>) {
+        if cx.windows().next().is_some() {
+            return;
+        }
+        match (Self::runs_in_background(), self.informer.is_some()) {
+            (true, false) => {
+                self.hosts = load_hosts();
+                match self.open_engine() {
+                    Ok(informer) => self.informer = Some(informer),
+                    Err(error) => tracing::warn!("cannot follow the engine: {error}"),
                 }
             }
             (false, true) => {
-                self.tray = None;
-                if cx.windows().next().is_none() {
-                    self.informer = None;
-                    self.tunnel = None;
-                }
+                self.informer = None;
+                self.tunnel = None;
             }
             _ => {}
         }
-        cx.refresh_menus();
     }
 
     fn serve_tray(&mut self, cx: &mut Cx<Self>) {
@@ -976,7 +979,7 @@ impl Velox {
                 logs: Vec::new(),
                 shells: Vec::new(),
                 apps: None,
-                dragged: false,
+                drop: FileDrop::default(),
                 places: Vec::new(),
             }))
         });
@@ -1058,13 +1061,11 @@ impl Program for Velox {
             .collect();
         sections.push(Entry::separator());
         sections.push(Entry::item(&tr!("Find"), FIND).shortcut("Ctrl+F"));
-        if self.settings.command_palette {
-            sections.push(
-                Entry::item(&tr!("Command Palette…"), PALETTE)
-                    .shortcut("Ctrl+K")
-                    .enabled(ready),
-            );
-        }
+        sections.push(
+            Entry::item(&tr!("Command Palette…"), PALETTE)
+                .shortcut("Ctrl+K")
+                .enabled(ready),
+        );
         sections.extend(view.map(VeloxView::view_entries).unwrap_or_default());
         let pane = view.and_then(VeloxView::resource_menu).unwrap_or_else(|| {
             Entry::submenu(
@@ -1218,9 +1219,7 @@ impl Program for Velox {
         }
         if cx.windows().next().is_none() {
             self.hub = None;
-            if self.tray.is_none() {
-                self.informer = None;
-            }
+            self.follow_engine_windowless(cx);
         } else {
             self.update_sampling(cx);
         }
@@ -1284,10 +1283,10 @@ impl Program for Velox {
             .drain()
             .into_iter()
             .partition(|update| matches!(update, Update::Crashed { .. }));
-        if !crashes.is_empty() && VeloxSettings::current().notify_crashes {
+        if let Some(session) = cx.session() {
             for crash in crashes {
                 if let Update::Crashed { name, code } = crash {
-                    notify_crash(RUNNING_ID, &name, code);
+                    notify_crash(session, RUNNING_ID, &name, code);
                 }
             }
         }
@@ -1349,7 +1348,8 @@ impl Program for Velox {
     }
 
     fn runs_in_background() -> bool {
-        !LEAVING.load(Ordering::Relaxed) && VeloxSettings::current().status_item
+        !LEAVING.load(Ordering::Relaxed)
+            && (VeloxSettings::current().status_item || launches_at_login())
     }
 
     fn tick(&mut self, cx: &mut Cx<Self>, now: Instant) {

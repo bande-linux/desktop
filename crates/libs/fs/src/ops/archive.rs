@@ -90,6 +90,20 @@ impl Format {
     fn single(self) -> bool {
         matches!(self, Self::Gzip | Self::Bzip2 | Self::Xz | Self::Zstd)
     }
+
+    /// Reads `reader` decompressed; zip, tar and 7z pass through as they are.
+    pub fn decoder<'a>(self, reader: impl Read + 'a) -> io::Result<Box<dyn Read + 'a>> {
+        Ok(match self {
+            Self::TarGzip | Self::Gzip => Box::new(MultiGzDecoder::new(reader)),
+            Self::TarBzip2 | Self::Bzip2 => Box::new(MultiBzDecoder::new(reader)),
+            Self::TarXz | Self::Xz => Box::new(XzReader::new(reader, true)),
+            Self::TarZstd | Self::Zstd => Box::new(
+                StreamingDecoder::new(reader)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            ),
+            Self::Zip | Self::Tar | Self::SevenZip => Box::new(reader),
+        })
+    }
 }
 
 fn split(path: &Path) -> Option<(Format, String)> {
@@ -132,7 +146,7 @@ pub fn archive_contents(path: &Path, most: u64) -> Option<Contents> {
         }
         format if format.single() => contents.items = 1,
         format => {
-            let mut tar = tar::Archive::new(decoder(format, file).ok()?);
+            let mut tar = tar::Archive::new(format.decoder(file).ok()?);
             for entry in tar.entries().ok()?.take(most as usize) {
                 let entry = entry.ok()?;
                 contents.items += 1;
@@ -303,19 +317,6 @@ impl<R: Read> Read for Watched<'_, R> {
         self.worker.report_progress(false);
         Ok(read)
     }
-}
-
-fn decoder<'a>(format: Format, reader: impl Read + 'a) -> io::Result<Box<dyn Read + 'a>> {
-    Ok(match format {
-        Format::TarGzip | Format::Gzip => Box::new(MultiGzDecoder::new(reader)),
-        Format::TarBzip2 | Format::Bzip2 => Box::new(MultiBzDecoder::new(reader)),
-        Format::TarXz | Format::Xz => Box::new(XzReader::new(reader, true)),
-        Format::TarZstd | Format::Zstd => Box::new(
-            StreamingDecoder::new(reader)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
-        ),
-        Format::Zip | Format::Tar | Format::SevenZip => Box::new(reader),
-    })
 }
 
 fn zip_time(time: SystemTime) -> DateTime {
@@ -657,7 +658,7 @@ impl Worker {
     ) -> Result<(), Stop> {
         let counted = self.counted(file)?;
         let read = counted.read.clone();
-        let mut reader = decoder(format, counted)?;
+        let mut reader = format.decoder(counted)?;
         let path = entry_path(Path::new(stem))?.ok_or(Refusal::Outside)?;
         let mut out = sink.file(&path)?;
         self.pump_counted(&mut reader, &mut sink.metered(&mut out), &read)?;
@@ -669,7 +670,7 @@ impl Worker {
     fn untar(&mut self, file: File, format: Format, sink: &mut Sink) -> Result<(), Stop> {
         let counted = self.counted(file)?;
         let read = counted.read.clone();
-        let mut tar = tar::Archive::new(decoder(format, counted)?);
+        let mut tar = tar::Archive::new(format.decoder(counted)?);
         for entry in tar.entries()? {
             self.check()?;
             let mut entry = entry?;

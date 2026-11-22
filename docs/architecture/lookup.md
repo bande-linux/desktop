@@ -24,6 +24,12 @@ file (an online source: the same metadata, no data). The first with an `id` wins
 are in `/usr/share`, the user's own in `~/.local/share`; they are treated the same, and the user's
 can be removed in Settings.
 
+Installed dictd dictionaries (`/usr/share/dictd`) and StarDict ones (`/usr/share/stardict/dic`,
+`~/.stardict/dic`, a dictionary per file or per folder) are sources too: when Dictionary starts, a
+worker thread converts each one that is new or changed, as an import does, into a pack in
+`$XDG_CACHE_HOME/bande/dict-installed/` (a `.refused` marker for one that cannot be converted, so
+it is not tried again until it changes), and removes the packs of dictionaries no longer installed.
+
 No language and no source is named in the code. A source is on by default when it serves one of
 the user's languages (their language list and their region's language), unless it says
 `default=on|off`. The default order puts sources whose text is in the user's languages first, then
@@ -42,8 +48,8 @@ optional `.syn`) or a dictd one (`.index` with `.dict` or `.dict.dz`), or a tarb
 (unpacked with `tar`). It is converted on a worker thread into a pack in
 `~/.local/share/bande/dict/`, serving any language (`*`); markup is reduced to text. A DICT server
 (`dict://host[:port]/database`, RFC 2229, unencrypted) is checked and added as a `.source` with
-`protocol=dict`. An unsupported or broken file gets a message naming it. Formats without a public
-specification are not imported.
+`protocol=dict`. An unsupported or broken file gets a message naming it, and so does one over
+1 GiB once unpacked. Formats without a public specification are not imported.
 
 ## Pack format
 

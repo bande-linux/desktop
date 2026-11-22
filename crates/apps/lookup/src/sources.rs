@@ -4,14 +4,14 @@ use std::os::fd::BorrowedFd;
 use std::path::Path;
 use std::rc::Rc;
 
-use bande_app::View;
+use bande_app::{Dropping, FileDrop, View};
 use bande_dict::{Choices, Pack};
 use bande_inbox::Inbox;
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{
-    Axis, Button, CheckState, Checkbox, DragAction, Label, ScrollView, Stack, TextField, Ui, Widget,
+    Axis, Button, CheckState, Checkbox, Label, ScrollView, Stack, TextField, Ui, Widget,
 };
-use bande_toolkit::{Appearance, DragEvent, Scene, Spacing, TextSystem, Window, WindowEvent};
+use bande_toolkit::{Appearance, Scene, Spacing, TextSystem, Window, WindowEvent};
 
 use crate::import;
 use crate::panel::ui_with;
@@ -49,6 +49,7 @@ pub struct SourcesWindow {
     choices: Choices,
     change: Rc<RefCell<Option<Change>>>,
     changed: Rc<Cell<bool>>,
+    drop: FileDrop,
 }
 
 pub fn sources_window(appearance: Appearance) -> Box<dyn View> {
@@ -66,6 +67,7 @@ pub fn sources_window(appearance: Appearance) -> Box<dyn View> {
         choices: Choices::load(),
         change: Rc::new(RefCell::new(None)),
         changed: Rc::new(Cell::new(false)),
+        drop: FileDrop::default(),
     };
     window.rebuild();
     Box::new(window)
@@ -114,15 +116,6 @@ impl SourcesWindow {
         self.importing += 1;
         self.status = None;
         std::thread::spawn(move || outbox.send(work()));
-    }
-
-    fn dropped(&mut self, uris: &[String]) {
-        for path in uris
-            .iter()
-            .filter_map(|uri| bande_xdg::path_from_file_uri(uri))
-        {
-            self.start(move || imported(&path));
-        }
     }
 
     fn button(&self, label: Text, change: Change) -> Box<dyn Widget> {
@@ -295,23 +288,17 @@ impl View for SourcesWindow {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
-        if let WindowEvent::Drag(drag) = &event {
-            match drag {
-                DragEvent::Entered { uris, .. } => {
-                    let files = uris
-                        .iter()
-                        .any(|uri| bande_xdg::path_from_file_uri(uri).is_some());
-                    window.accept_drag(files.then_some(DragAction::Copy));
+        match self.drop.event(window, &event, Path::is_file) {
+            Dropping::Over => return true,
+            Dropping::Dropped(paths) => {
+                for path in paths {
+                    self.start(move || imported(&path));
                 }
-                DragEvent::Moved(_) => window.accept_drag(Some(DragAction::Copy)),
-                DragEvent::Dropped { transfer, .. } => {
-                    self.dropped(&transfer.uris);
-                    self.rebuild();
-                    window.request_redraw();
-                }
-                DragEvent::Left | DragEvent::Finished(_) => {}
+                self.rebuild();
+                window.request_redraw();
+                return true;
             }
-            return true;
+            Dropping::Other => {}
         }
         let handled = window
             .drive(&mut self.ui, event)

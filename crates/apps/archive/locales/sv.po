@@ -49,8 +49,8 @@ msgstr "Stoppa"
 msgid "OK"
 msgstr "OK"
 
-msgid "Choose Folder…"
-msgstr "Välj mapp…"
+msgid "Choose Folder"
+msgstr "Välj mapp"
 
 msgid "ZIP archive"
 msgstr "ZIP-arkiv"

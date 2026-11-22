@@ -28,6 +28,7 @@ enum Part {
     Target(usize),
     Body(usize),
     Text(usize),
+    Offline(usize),
 }
 
 impl Part {
@@ -42,6 +43,7 @@ impl Part {
             Self::Target(index) => (6, index),
             Self::Body(index) => (7, index),
             Self::Text(index) => (8, index),
+            Self::Offline(index) => (9, index),
         };
         (index < INDEX_LIMIT).then_some((kind << KIND_SHIFT) | index as u64)
     }
@@ -58,6 +60,7 @@ impl Part {
             6 => Self::Target(row),
             7 => Self::Body(row),
             8 => Self::Text(row),
+            9 => Self::Offline(row),
             _ => return None,
         })
     }
@@ -156,14 +159,22 @@ impl MailView {
                     let mut node = Node::new(Role::Heading);
                     node.set_label(title.as_str());
                     node.set_level(2);
-                    let offline = self.accounts.iter().any(|(account, _)| {
-                        account.email == *title
-                            && self.statuses.iter().any(|(known, status)| {
-                                *known == account.id && *status == crate::worker::Status::Offline
-                            })
-                    });
-                    if offline {
-                        node.set_description(tr!("Offline"));
+                    let offline = self
+                        .accounts
+                        .iter()
+                        .find(|(account, _)| account.email == *title)
+                        .map(|(account, _)| account.id)
+                        .filter(|account| self.offline(*account));
+                    if let Some(account) = offline {
+                        let mut button = clickable(Role::Button, &tr!("Offline"));
+                        button.set_description(self.failure(account));
+                        let bounds = self.bounds_of(|hit| *hit == Hit::Offline(account));
+                        self.push(tree, Part::Offline(index), button, bounds);
+                        node.set_children(
+                            self.node_of(Part::Offline(index))
+                                .into_iter()
+                                .collect::<Vec<_>>(),
+                        );
                     }
                     (node, None)
                 }
@@ -299,7 +310,8 @@ impl MailView {
             Target::Respond(_, Respond::Reply) => (Role::Button, tr!("Reply")),
             Target::Respond(_, Respond::ReplyAll) => (Role::Button, tr!("Reply All")),
             Target::Respond(_, Respond::Forward) => (Role::Button, tr!("Forward")),
-            Target::Link(url) => (Role::Link, url.clone()),
+            Target::Link(url, _) => (Role::Link, url.clone()),
+            Target::Address(address) => (Role::Button, address.full()),
             Target::Attachment(id, index) => {
                 let attachment = thread
                     .entry(*id)?
@@ -361,7 +373,7 @@ impl MailView {
                 continue;
             };
             let mut node = clickable(role, &label);
-            if let Target::Link(url) = target {
+            if let Target::Link(url, _) = target {
                 node.set_url(url.as_str());
             }
             self.push(tree, Part::Target(index), node, Some(*rect));
@@ -393,6 +405,21 @@ impl MailView {
                 self.focus = Pane::Sidebar;
                 if place != self.place {
                     self.choose_place(place);
+                }
+            }
+            Part::Offline(index) => {
+                let Some(Row::Heading(title)) = self.sidebar.get(index) else {
+                    return Some(false);
+                };
+                let account = self
+                    .accounts
+                    .iter()
+                    .find(|(account, _)| account.email == *title)?
+                    .0
+                    .id;
+                self.focus = Pane::Sidebar;
+                if request.action == Action::Click {
+                    self.show_failure(account);
                 }
             }
             Part::Message(index) => {

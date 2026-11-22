@@ -1,9 +1,12 @@
 mod mpris;
 mod pane;
+mod positions;
 
+use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::rc::Rc;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
@@ -13,6 +16,7 @@ use bande_media::Track;
 
 use mpris::{Mpris, Remote};
 use pane::Pane;
+use positions::Positions;
 
 static INFO: Info = Info {
     id: "org.bande.Player",
@@ -24,12 +28,18 @@ static INFO: Info = Info {
 };
 
 const WINDOW_SIZE: (u32, u32) = (720, 480);
+const POSITIONS_FILE: &str = "player-positions";
 const OPEN: &str = "open";
+const ADD_SUBTITLES: &str = "add-subtitles";
 const TOGGLE: &str = "toggle";
 const NEXT: &str = "next";
 const PREVIOUS: &str = "previous";
 const LOOP: &str = "loop";
 const FULL_SCREEN: &str = "full-screen";
+const QUEUE: &str = "queue";
+const REMOVE_FROM_QUEUE: &str = "remove-from-queue";
+const MOVE_UP: &str = "move-up";
+const MOVE_DOWN: &str = "move-down";
 const RATE_PREFIX: &str = "rate:";
 const AUDIO_PREFIX: &str = "audio:";
 const SUBTITLES_PREFIX: &str = "subtitles:";
@@ -42,12 +52,15 @@ const RATES: [(f64, &str); 5] = [
     (2.0, "2×"),
 ];
 const MEDIA_MIMES: [&str; 2] = ["audio/*", "video/*"];
+const SUBTITLE_MIMES: [&str; 3] = ["application/x-subrip", "text/vtt", "text/x-ssa"];
 
 struct Player {
-    chosen: Option<Inbox<PathBuf>>,
+    chosen: Option<Inbox<Vec<PathBuf>>>,
+    subtitles: Option<Inbox<(WindowId, PathBuf)>>,
     remote: Option<Inbox<Remote>>,
     mpris: Option<Mpris>,
     current: Option<WindowId>,
+    positions: Rc<RefCell<Positions>>,
 }
 
 impl Player {
@@ -56,8 +69,9 @@ impl Player {
             .first()
             .map(|path| pane::file_title(path))
             .unwrap_or_else(|| tr!("Player"));
+        let positions = Rc::clone(&self.positions);
         match cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
-            Pane::new(appearance, paths)
+            Pane::new(appearance, paths, positions)
         }) {
             Ok(window) => self.current = Some(window),
             Err(error) => tracing::warn!("cannot open a window: {error}"),
@@ -106,12 +120,47 @@ impl Player {
         let spawned = std::thread::Builder::new()
             .name("open".to_owned())
             .spawn(
+                move || match bande_app::choose_files(&session, &title, Some(filter)) {
+                    Ok(paths) => {
+                        outbox.send(paths);
+                    }
+                    Err(error) => tracing::warn!("cannot choose files: {error}"),
+                },
+            );
+        if let Err(error) = spawned {
+            tracing::warn!("cannot open the chooser: {error}");
+        }
+    }
+
+    fn choose_subtitles(&mut self, cx: &mut Cx<Self>, window: WindowId) {
+        let Some(session) = cx.session().cloned() else {
+            return;
+        };
+        if self.subtitles.is_none() {
+            self.subtitles = Inbox::new()
+                .inspect_err(|error| tracing::warn!("cannot open the chooser: {error}"))
+                .ok();
+        }
+        let Some(outbox) = self.subtitles.as_ref().map(Inbox::outbox) else {
+            return;
+        };
+        let title = tr!("Add Subtitle File");
+        let filter = (
+            tr!("Subtitles"),
+            SUBTITLE_MIMES
+                .into_iter()
+                .map(|mime| (1, mime.to_owned()))
+                .collect(),
+        );
+        let spawned = std::thread::Builder::new()
+            .name("subtitles".to_owned())
+            .spawn(
                 move || match bande_app::choose_file(&session, &title, Some(filter)) {
                     Ok(Some(path)) => {
-                        outbox.send(path);
+                        outbox.send((window, path));
                     }
                     Ok(None) => {}
-                    Err(error) => tracing::warn!("cannot choose a file: {error}"),
+                    Err(error) => tracing::warn!("cannot choose a subtitle file: {error}"),
                 },
             );
         if let Err(error) = spawned {
@@ -203,9 +252,11 @@ impl Program for Player {
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut player = Self {
             chosen: None,
+            subtitles: None,
             remote: None,
             mpris: None,
             current: None,
+            positions: Rc::new(RefCell::new(Positions::load(cx.state_file(POSITIONS_FILE)))),
         };
         player.start_mpris(cx);
         let directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
@@ -270,9 +321,17 @@ impl Program for Player {
             false => text!("Play"),
         };
         let queue = pane.is_some_and(Pane::has_queue);
-        let file = vec![item(text!("Open…"), OPEN, Some("Ctrl+O"), true)];
+        let file = vec![
+            item(text!("Open…"), OPEN, Some("Ctrl+O"), true),
+            item(
+                text!("Add Subtitle File…"),
+                ADD_SUBTITLES,
+                None,
+                pane.is_some_and(Pane::has_video),
+            ),
+        ];
         let mut playback = vec![
-            item(toggle_key, TOGGLE, None, loaded),
+            item(toggle_key, TOGGLE, Some("Space"), loaded),
             item(text!("Next"), NEXT, Some("Ctrl+Right"), queue),
             item(text!("Previous"), PREVIOUS, Some("Ctrl+Left"), queue),
             Entry::separator(),
@@ -286,9 +345,33 @@ impl Program for Player {
         }
         playback.extend([
             Entry::separator(),
-            item(text!("Loop"), LOOP, Some("Ctrl+L"), loaded).radio(pane.is_some_and(Pane::loops)),
+            item(text!("Loop"), LOOP, Some("Ctrl+L"), loaded).check(pane.is_some_and(Pane::loops)),
         ]);
-        let view = vec![item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true)];
+        let queue_key = match pane.is_some_and(Pane::queue_shown) {
+            true => text!("Hide Queue"),
+            false => text!("Show Queue"),
+        };
+        let editable = pane.is_some_and(Pane::can_edit_queue);
+        let view = vec![
+            item(queue_key, QUEUE, Some("F9"), pane.is_some()),
+            item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true),
+        ];
+        playback.extend([
+            Entry::separator(),
+            item(text!("Move Up in Queue"), MOVE_UP, Some("Alt+Up"), editable),
+            item(
+                text!("Move Down in Queue"),
+                MOVE_DOWN,
+                Some("Alt+Down"),
+                editable,
+            ),
+            item(
+                text!("Remove from Queue"),
+                REMOVE_FROM_QUEUE,
+                Some("Delete"),
+                pane.is_some_and(Pane::can_remove_from_queue),
+            ),
+        ]);
         Menus {
             menus: vec![
                 Entry::submenu(&tr!("File"), file),
@@ -306,6 +389,9 @@ impl Program for Player {
         let Some(window) = window.or_else(|| cx.focused()) else {
             return;
         };
+        if command == ADD_SUBTITLES {
+            return self.choose_subtitles(cx, window);
+        }
         let Some((shown, pane)) = cx.window(window) else {
             return;
         };
@@ -324,6 +410,10 @@ impl Program for Player {
                 NEXT => pane.go(true),
                 PREVIOUS => pane.go(false),
                 LOOP => pane.toggle_loop(),
+                QUEUE => pane.toggle_queue(),
+                MOVE_UP => pane.move_selected(false),
+                MOVE_DOWN => pane.move_selected(true),
+                REMOVE_FROM_QUEUE => pane.remove_selected(),
                 SUBTITLES_OFF => pane.select_subtitles(None),
                 FULL_SCREEN => {
                     if let Err(error) = shown.toggle_full_screen() {
@@ -336,6 +426,7 @@ impl Program for Player {
         shown.request_redraw();
         cx.refresh_menus();
         self.sync_mpris(cx);
+        self.positions.borrow_mut().save();
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
@@ -346,7 +437,9 @@ impl Program for Player {
         self.open_window(cx, Vec::new());
     }
 
-    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Pane) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+        view.remember();
+        self.positions.borrow_mut().save();
         if self.current == Some(window) {
             self.current = None;
         }
@@ -361,16 +454,32 @@ impl Program for Player {
             cx.refresh_menus();
         }
         self.sync_mpris(cx);
+        self.positions.borrow_mut().save();
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         let chosen = self.chosen.iter().map(Inbox::fd);
-        chosen.chain(self.remote.iter().map(Inbox::fd)).collect()
+        let subtitles = self.subtitles.iter().map(Inbox::fd);
+        chosen
+            .chain(subtitles)
+            .chain(self.remote.iter().map(Inbox::fd))
+            .collect()
     }
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
         let chosen = self.chosen.as_mut().map(Inbox::drain).unwrap_or_default();
-        self.open_paths(cx, chosen);
+        self.open_paths(cx, chosen.into_iter().flatten().collect());
+        let subtitles = self
+            .subtitles
+            .as_mut()
+            .map(Inbox::drain)
+            .unwrap_or_default();
+        for (window, path) in subtitles {
+            if let Some((shown, pane)) = cx.window(window) {
+                pane.add_subtitles(path);
+                shown.request_redraw();
+            }
+        }
         let remote = self.remote.as_mut().map(Inbox::drain).unwrap_or_default();
         for command in remote {
             self.remote(cx, command);

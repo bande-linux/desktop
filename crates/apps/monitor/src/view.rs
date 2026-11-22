@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_l10n::{tr, trn};
@@ -19,7 +19,6 @@ use bande_app_menu::Entry;
 
 pub(crate) const QUIT: &str = "quit";
 pub(crate) const FORCE_QUIT: &str = "force-quit";
-pub(crate) const SEND: &str = "send";
 const CANCEL: &str = "cancel";
 pub(crate) const ALERT_ICON: &str = "org.bande.SystemMonitor";
 pub(crate) const INSPECT_SYMBOL: &str = "dialog-information-symbolic";
@@ -161,34 +160,6 @@ pub(crate) fn stop_alert(
     with_icon(alert.cancel(&tr!("Cancel"), CANCEL), icon)
 }
 
-pub(crate) fn signal_alert(
-    target: &StopTarget,
-    how: Stop,
-    icon: Option<Image>,
-    choose: impl FnMut(&str) + 'static,
-) -> Alert {
-    let signal = crate::menu::signal_title(how);
-    let title = trn!(
-        "Do you want to send {signal} to “{name}”?",
-        "Do you want to send {signal} to the {count} selected items?",
-        count = target.count,
-        signal = signal,
-        name = target.name.clone()
-    );
-    let message = match how {
-        Stop::Pause => tr!(
-            "A paused process does nothing until it gets Continue. Pausing a part of the desktop can freeze the screen."
-        ),
-        _ => tr!(
-            "A process that doesn’t handle this signal ends at once, and any unsaved changes are lost."
-        ),
-    };
-    let alert = Alert::new(&title, &message, choose)
-        .primary(&tr!("Send"), SEND)
-        .cancel(&tr!("Cancel"), CANCEL);
-    with_icon(alert, icon)
-}
-
 pub(crate) fn answer_stop(
     target: &StopTarget,
     choice: &str,
@@ -200,15 +171,6 @@ pub(crate) fn answer_stop(
         FORCE_QUIT => Stop::ForceQuit,
         _ => return None,
     };
-    send_signal(target, how, icon, choose)
-}
-
-pub(crate) fn send_signal(
-    target: &StopTarget,
-    how: Stop,
-    icon: Option<Image>,
-    choose: impl FnMut(&str) + 'static,
-) -> Option<Alert> {
     match stop_target(target, how) {
         Ok(()) => None,
         Err(SignalError::PermissionDenied) => Some(with_icon(
@@ -285,9 +247,5 @@ pub trait Screen {
 
     fn inspects(&self, _pid: u32) -> bool {
         false
-    }
-
-    fn interval(&self) -> Option<Duration> {
-        None
     }
 }

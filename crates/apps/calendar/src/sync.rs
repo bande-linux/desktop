@@ -297,9 +297,9 @@ pub fn apply(library: &mut Library, outcome: Outcome, replace_all: bool) -> Vec<
     if replace_all {
         calendar.objects.clear();
     }
-    calendar
-        .objects
-        .retain(|stored| !outcome.removed.contains(&stored.href));
+    calendar.objects.retain(|stored| {
+        stored.pending == Some(Pending::Create) || !outcome.removed.contains(&stored.href)
+    });
     for upsert in outcome.upserts {
         match calendar
             .objects

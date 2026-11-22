@@ -7,8 +7,8 @@
   <summary>View images and PDF documents</summary>
   <summary xml:lang="sv">Visa bilder och PDF-dokument</summary>
   <description>
-    <p>Opens PNG, JPEG, GIF, WebP and SVG pictures from Files, zooms, pans, rotates and flips them, steps through a folder, plays animations and slideshows, copies them and shows their size, dimensions and camera details.</p>
-    <p>PDF documents scroll continuously with page thumbnails and their table of contents; their text can be selected, copied and searched, and locked documents open with their password.</p>
+    <p>Opens PNG, JPEG, GIF, WebP, TIFF, BMP, icon and SVG pictures from Files, zooms, pans, rotates and flips them, saves a photo’s rotation without re-encoding it, steps through a folder, moves pictures to the Trash, plays animations and slideshows, copies them and shows their size, dimensions and camera details.</p>
+    <p>PDF documents scroll continuously with page thumbnails and their table of contents and can be rotated; their text can be selected, copied and searched, and locked documents open with their password.</p>
   </description>
   <developer id="org.bande">
     <name>Bande</name>
@@ -20,6 +20,9 @@
     <mediatype>image/jpeg</mediatype>
     <mediatype>image/gif</mediatype>
     <mediatype>image/webp</mediatype>
+    <mediatype>image/tiff</mediatype>
+    <mediatype>image/bmp</mediatype>
+    <mediatype>image/vnd.microsoft.icon</mediatype>
     <mediatype>image/svg+xml</mediatype>
     <mediatype>application/pdf</mediatype>
   </provides>

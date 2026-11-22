@@ -156,3 +156,73 @@ pub fn invite(event: &mut Event, me: &[String], addresses: &[String]) {
         );
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Method {
+    Publish,
+    Request,
+    Reply,
+    Cancel,
+}
+
+pub fn method(object: &CalendarObject) -> Method {
+    match object
+        .calendar
+        .value("METHOD")
+        .map(|method| method.trim().to_ascii_uppercase())
+        .as_deref()
+    {
+        Some("REQUEST") => Method::Request,
+        Some("REPLY") => Method::Reply,
+        Some("CANCEL") => Method::Cancel,
+        _ => Method::Publish,
+    }
+}
+
+pub fn without_method(mut object: CalendarObject) -> CalendarObject {
+    object
+        .calendar
+        .properties
+        .retain(|property| !property.name.eq_ignore_ascii_case("METHOD"));
+    object
+}
+
+pub fn organizer(event: &Event) -> Option<Invitee> {
+    event
+        .component
+        .property("ORGANIZER")
+        .map(|property| invitee(property, true))
+}
+
+pub fn is_invited(event: &Event, me: &[String]) -> bool {
+    event
+        .component
+        .all("ATTENDEE")
+        .any(|attendee| same(attendee, me))
+}
+
+pub fn take_reply(
+    object: &CalendarObject,
+    reply: &CalendarObject,
+) -> Option<(CalendarObject, Vec<Invitee>)> {
+    let answers: Vec<Invitee> = reply
+        .events
+        .iter()
+        .flat_map(|event| event.component.all("ATTENDEE"))
+        .map(|attendee| invitee(attendee, false))
+        .filter(|attendee| {
+            object
+                .events
+                .iter()
+                .any(|event| is_invited(event, std::slice::from_ref(&attendee.address)))
+        })
+        .collect();
+    let updated = answers.iter().fold(object.clone(), |updated, attendee| {
+        answer(
+            &updated,
+            std::slice::from_ref(&attendee.address),
+            attendee.answer,
+        )
+    });
+    (!answers.is_empty()).then_some((updated, answers))
+}

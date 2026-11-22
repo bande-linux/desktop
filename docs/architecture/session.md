@@ -115,7 +115,10 @@ dialog that cannot start fails the request with response 2.
   folders, cancellation). `bande-file-chooser` answers on standard output and exits 0 when
   chosen, 1 when cancelled. It has the Files sidebar, a path bar, a sortable list with
   type-to-jump, Save As with the name selected up to its extension, "Replace?", New Folder, Show
-  Hidden Files (`Ctrl+H`), and remembers the last folder per app in
+  Hidden Files (`Ctrl+H`), Recent (the files Files lists there, from `recently-used.xbel` and
+  launcher usage, without Search's excluded folders), a search field (`Ctrl+F`) that finds names
+  below the shown folder through the search index, or by walking it outside the home folder (in
+  Save, activating a result opens its folder), and remembers the last folder per app in
   `$XDG_STATE_HOME/bande/file-chooser-folders`. It is attached to the asking window
   (`parent_window` through `zxdg_importer_v2`, which every `bande-app` window exports) and modal
   through `xdg_dialog_v1`.
@@ -401,7 +404,9 @@ brings up the dialog.
   Properly"; encrypted volumes wait for the UI. `bande-volumes` holds the one UDisks2 client that
   automount, Files, the desktop and Disks share. Eject unmounts every filesystem of the drive,
   locks its encrypted volumes, then calls `Drive.Eject` or else `PowerOff`; a failure is reported
-  to the caller, not only logged.
+  to the caller, not only logged. A drive whose SMART status turns failing posts one critical
+  "A Disk Is Failing" notification; the drive ids already reported are kept in
+  `$XDG_STATE_HOME/bande/failing-disks` until the drive reports healthy again.
 - **Theme propagation**: GTK, Qt (above) and the pointer (`XCURSOR_THEME=Bande-Cursors`,
   `XCURSOR_SIZE`) follow the desktop's appearance.
 

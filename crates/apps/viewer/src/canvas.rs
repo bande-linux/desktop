@@ -61,7 +61,7 @@ impl Orientation {
         self.turns % 2 == 1
     }
 
-    fn transform(self, width: f32, height: f32) -> Transform {
+    pub(crate) fn transform(self, width: f32, height: f32) -> Transform {
         let matrix = match self.turns {
             1 => [0.0, 1.0, -1.0, 0.0, height, 0.0],
             2 => [-1.0, 0.0, 0.0, -1.0, width, height],
@@ -81,7 +81,7 @@ impl Orientation {
     }
 }
 
-fn inverse(transform: Transform) -> Option<Transform> {
+pub(crate) fn inverse(transform: Transform) -> Option<Transform> {
     let [a, b, c, d, e, f] = transform.matrix;
     let determinant = a * d - b * c;
     if determinant.abs() < f32::EPSILON {

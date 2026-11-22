@@ -179,7 +179,8 @@ pub enum Target {
     Expand(MessageId),
     Quotes(MessageId),
     Respond(MessageId, Respond),
-    Link(String),
+    Address(Address),
+    Link(String, Option<String>),
     Attachment(MessageId, usize),
     LoadRemote(MessageId),
 }
@@ -190,6 +191,43 @@ pub struct Layout {
     pub height: f32,
     pub targets: Vec<(Rect, Target)>,
     pub tops: Vec<(MessageId, f32)>,
+    pub texts: Vec<(MessageId, Point, Paragraph)>,
+}
+
+fn host(text: &str) -> Option<String> {
+    let text = text.trim();
+    let rest = text
+        .split_once("://")
+        .map_or(text, |(_, rest)| rest)
+        .split(['/', '?', '#'])
+        .next()?;
+    let host = rest
+        .rsplit('@')
+        .next()?
+        .split(':')
+        .next()?
+        .to_ascii_lowercase();
+    let host = host.strip_prefix("www.").unwrap_or(&host).to_owned();
+    let top_level = host.rsplit('.').next().unwrap_or_default();
+    let named = host.contains('.')
+        && top_level.len() >= 2
+        && top_level
+            .chars()
+            .all(|character| character.is_ascii_alphabetic());
+    (named && !host.contains(char::is_whitespace)).then_some(host)
+}
+
+pub(crate) fn link_host(url: &str) -> Option<String> {
+    let scheme = url.split(':').next()?.to_ascii_lowercase();
+    matches!(scheme.as_str(), "http" | "https")
+        .then(|| host(url))
+        .flatten()
+}
+
+fn claimed_host(shown: &str, url: &str) -> Option<String> {
+    let claimed = host(shown)?;
+    let real = link_host(url)?;
+    (real != claimed && !real.ends_with(&format!(".{claimed}"))).then_some(claimed)
 }
 
 fn names(addresses: &[Address]) -> String {
@@ -201,6 +239,7 @@ fn names(addresses: &[Address]) -> String {
 }
 
 struct Writer<'a> {
+    entry: MessageId,
     text: &'a mut TextSystem,
     palette: &'a Palette,
     symbols: &'a mut Symbols,
@@ -217,6 +256,9 @@ impl Writer<'_> {
 
     fn put(&mut self, paragraph: Paragraph, x: f32) -> f32 {
         let height = paragraph.height();
+        self.layout
+            .texts
+            .push((self.entry, Point::new(x, self.y), paragraph.clone()));
         self.layout.items.push(Item::Text {
             origin: Point::new(x, self.y),
             paragraph,
@@ -332,6 +374,10 @@ fn header(
         TextStyle::role(TextRole::BodyStrong, palette.ink),
         name_width,
     );
+    let name_rect = Rect::new(text_x, writer.y, name.width(), name.height());
+    if !envelope.sender().email.is_empty() {
+        writer.target(name_rect, Target::Address(envelope.sender()));
+    }
     writer.y += writer.put(name, text_x) + LINE_GAP;
     for (label, addresses) in [
         (text!("To: {names}"), &envelope.to),
@@ -340,12 +386,25 @@ fn header(
         if addresses.is_empty() {
             continue;
         }
-        let line = label.tr_args(&[("names", &names(addresses) as &dyn std::fmt::Display)]);
+        let joined = names(addresses);
+        let line = label.tr_args(&[("names", &joined as &dyn std::fmt::Display)]);
         let paragraph = writer.paragraph(
             &line,
             TextStyle::role(TextRole::Callout, palette.ink2),
             details_right - text_x,
         );
+        if let Some(mut at) = line.find(&joined) {
+            for address in addresses {
+                let end = at + address.shown().len();
+                for rect in paragraph.span_rects(at..end) {
+                    writer.target(
+                        Rect::new(rect.x + text_x, rect.y + writer.y, rect.width, rect.height),
+                        Target::Address(address.clone()),
+                    );
+                }
+                at = end + ", ".len();
+            }
+        }
         writer.y += writer.put(paragraph, text_x) + LINE_GAP;
     }
     writer.y = writer.y.max(top + AVATAR) + SECTION_GAP / 2.0;
@@ -573,6 +632,10 @@ fn block(writer: &mut Writer<'_>, block: &Block, pictures: &HashMap<String, Imag
         TextAlign::Start,
     );
     for (range, url) in &block.links {
+        let claimed = block
+            .text
+            .get(range.clone())
+            .and_then(|shown| claimed_host(shown, url));
         for rect in paragraph.span_rects(range.clone()) {
             let rect = Rect::new(rect.x + x, rect.y + writer.y, rect.width, rect.height);
             writer.layout.items.push(Item::Fill {
@@ -584,7 +647,7 @@ fn block(writer: &mut Writer<'_>, block: &Block, pictures: &HashMap<String, Imag
                 )),
                 paint: palette.accent_text.into(),
             });
-            writer.target(rect, Target::Link(url.clone()));
+            writer.target(rect, Target::Link(url.clone(), claimed.clone()));
         }
     }
     let top = writer.y;
@@ -721,6 +784,7 @@ pub fn lay_out(
     clock: Clock<'_>,
 ) -> Layout {
     let mut writer = Writer {
+        entry: thread.focus,
         text,
         palette,
         symbols,
@@ -731,6 +795,7 @@ pub fn lay_out(
     let many = thread.entries.len() > 1;
     for (index, entry) in thread.entries.iter().enumerate() {
         let id = entry.summary.id;
+        writer.entry = id;
         if index > 0 {
             writer.rule();
         }

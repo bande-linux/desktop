@@ -629,6 +629,10 @@ Files: vendor/fatfs-0.3.6/*
 Copyright: Rafał Harabień <rafalh92@outlook.com>
 License: MIT
 
+Files: vendor/fax-0.2.7/*
+Copyright: Sebastian K <s3bk@protonmail.com>
+License: MIT
+
 Files: vendor/fdeflate-0.3.7/*
 Copyright: The image-rs Developers
 License: MIT or Apache-2.0
@@ -817,6 +821,15 @@ Copyright: Sebastian Dröge <sebastian@centricular.com>
 License: MIT
 
 Files: vendor/gstreamer-sys-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT
+
+Files: vendor/gstreamer-tag-0.25.2/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+ Marc Wiblishauser <marcbull@mwcloud.eu>
+License: MIT or Apache-2.0
+
+Files: vendor/gstreamer-tag-sys-0.25.4/*
 Copyright: Sebastian Dröge <sebastian@centricular.com>
 License: MIT
 
@@ -1351,10 +1364,6 @@ Files: vendor/logos-derive-0.16.1/*
 Copyright: Maciej Hirsz <hello@maciej.codes>
  Jérome Eertmans (maintainer) <jeertmans@icloud.com>
 License: MIT or Apache-2.0
-
-Files: vendor/lzma-rust2-0.19.0/*
-Copyright: the lzma-rust2 authors
-License: Apache-2.0
 
 Files: vendor/lzma-rust2-0.23.0/*
 Copyright: the lzma-rust2 authors
@@ -2000,7 +2009,7 @@ Files: vendor/serde_spanned-1.1.2/*
 Copyright: the serde_spanned authors
 License: MIT or Apache-2.0
 
-Files: vendor/sevenz-rust2-0.21.6/*
+Files: vendor/sevenz-rust2-0.24.2/*
 Copyright: the sevenz-rust2 authors
 License: Apache-2.0
 
@@ -2218,6 +2227,10 @@ License: MIT or Apache-2.0
 Files: vendor/thread_local-1.1.10/*
 Copyright: Amanieu d'Antras <amanieu@gmail.com>
 License: MIT or Apache-2.0
+
+Files: vendor/tiff-0.11.3/*
+Copyright: The image-rs Developers
+License: MIT
 
 Files: vendor/tiny-skia-0.12.0/*
 Copyright: Yevhenii Reizner <razrfalcon@gmail.com>

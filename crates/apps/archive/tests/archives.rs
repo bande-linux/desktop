@@ -24,7 +24,8 @@ fn done(ended: Ended) -> PathBuf {
 }
 
 fn expand(archive: &Path, password: Option<&str>) -> Ended {
-    let (password, settings) = (password.map(str::to_owned), ArchiveSettings::default());
+    let password = password.map(|password| zeroize::Zeroizing::new(password.to_owned()));
+    let settings = ArchiveSettings::default();
     made(Work::expand(archive.into(), password, &settings))
 }
 

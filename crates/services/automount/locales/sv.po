@@ -7,14 +7,20 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Disks"
+msgstr "Skivor"
+
+msgid "A Disk Is Failing"
+msgstr "En skiva håller på att gå sönder"
+
+msgid "“{name}” reports that it is about to fail. Back up its files now and replace the disk."
+msgstr "”{name}” rapporterar att den snart slutar fungera. Säkerhetskopiera filerna på den nu och byt ut skivan."
+
 msgid "Untitled"
 msgstr "Namnlös"
 
 msgid "Eject “{label}” before disconnecting it, or files on it may be damaged."
 msgstr "Mata ut ”{label}” innan du kopplar från den, annars kan filer på den skadas."
-
-msgid "Disks"
-msgstr "Skivor"
 
 msgid "Disk Not Ejected Properly"
 msgstr "Skivan matades inte ut på rätt sätt"

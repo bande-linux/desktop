@@ -26,6 +26,9 @@ fn kind_name(kind: Kind) -> String {
         Kind::Jpeg => tr!("JPEG image"),
         Kind::Gif => tr!("GIF image"),
         Kind::Webp => tr!("WebP image"),
+        Kind::Tiff => tr!("TIFF image"),
+        Kind::Bmp => tr!("BMP image"),
+        Kind::Ico => tr!("Icon"),
         Kind::Svg => tr!("SVG image"),
         Kind::Pdf => tr!("PDF document"),
     }

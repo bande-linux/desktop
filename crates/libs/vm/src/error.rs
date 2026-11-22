@@ -32,6 +32,7 @@ pub enum Error {
         actual: String,
     },
     NotListed(String),
+    NoRelease(String),
     NoSnapshot,
     NoShare,
     Tool {
@@ -69,6 +70,10 @@ impl fmt::Display for Error {
             Self::NotListed(file) => f.write_str(&tr!(
                 "{file} is not in the vendor’s checksums.",
                 file = file.clone()
+            )),
+            Self::NoRelease(os) => f.write_str(&tr!(
+                "No {os} release is signed with a key Velox knows.",
+                os = os.clone()
             )),
             Self::NoSnapshot => f.write_str(&tr!("This snapshot no longer exists.")),
             Self::NoShare => f.write_str(&tr!("This shared folder no longer exists.")),
@@ -115,6 +120,7 @@ impl Error {
             self,
             Self::Checksum { .. }
                 | Self::NotListed(_)
+                | Self::NoRelease(_)
                 | Self::NoSnapshot
                 | Self::NoShare
                 | Self::Missing(_)

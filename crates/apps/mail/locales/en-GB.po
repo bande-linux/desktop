@@ -7,6 +7,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "The draft is moved to the Trash."
+msgstr "The draft is moved to the Bin."
+
 msgid "Organize by conversation"
 msgstr "Organise by conversation"
 

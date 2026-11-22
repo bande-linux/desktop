@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use bande_l10n::tr;
 use data_encoding::BASE64;
 
 use super::wire::{Response, Status, Value, literal_length, parse_response, quote};
@@ -25,6 +26,7 @@ pub struct Selected {
     pub uid_validity: u32,
     pub uid_next: Option<u32>,
     pub exists: u32,
+    pub highest_modseq: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -86,7 +88,7 @@ fn mailbox_argument(path: &str) -> Result<String> {
     Some(path)
         .filter(|path| !path.chars().any(char::is_control))
         .and_then(|path| quote(&utf7::encode(path)))
-        .ok_or_else(|| Error::Refused(format!("the mailbox name {path:?} is not allowed")))
+        .ok_or_else(|| Error::Refused(tr!("the mailbox name “{path}” is not allowed", path = path)))
 }
 
 fn atoms(value: &Value) -> Vec<String> {
@@ -357,7 +359,7 @@ impl Session {
             return Err(Error::Insecure);
         } else {
             let (Some(user), Some(password)) = (quote(user), quote(password)) else {
-                return Err(Error::Login("the name or password has a line break".into()));
+                return Err(Error::Login(tr!("the name or password has a line break")));
             };
             self.run(&format!("LOGIN {user} {password}"))
         };
@@ -419,7 +421,11 @@ impl Session {
     }
 
     pub fn select(&mut self, path: &str) -> Result<Selected> {
-        let reply = self.run(&format!("SELECT {}", mailbox_argument(path)?))?;
+        let condstore = match self.has("CONDSTORE") {
+            true => " (CONDSTORE)",
+            false => "",
+        };
+        let reply = self.run(&format!("SELECT {}{condstore}", mailbox_argument(path)?))?;
         let exists = reply
             .data
             .iter()
@@ -434,6 +440,7 @@ impl Session {
             uid_next: code_number(&reply.codes, "UIDNEXT")
                 .and_then(|value| u32::try_from(value).ok()),
             exists: u32::try_from(exists).unwrap_or(u32::MAX),
+            highest_modseq: code_number(&reply.codes, "HIGHESTMODSEQ"),
         })
     }
 
@@ -462,9 +469,18 @@ impl Session {
     }
 
     fn fetch(&mut self, uids: &[u32], items: &str) -> Result<Vec<Fetched>> {
+        self.fetch_modified(uids, items, "")
+    }
+
+    fn fetch_modified(
+        &mut self,
+        uids: &[u32],
+        items: &str,
+        modifiers: &str,
+    ) -> Result<Vec<Fetched>> {
         let mut found = Vec::new();
         for set in uid_sets(uids) {
-            let reply = self.run(&format!("UID FETCH {set} ({items})"))?;
+            let reply = self.run(&format!("UID FETCH {set} ({items}){modifiers}"))?;
             found.extend(reply.data.iter().filter_map(|values| fetched(values)));
         }
         Ok(found)
@@ -474,8 +490,15 @@ impl Session {
         self.fetch(uids, "UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER]")
     }
 
-    pub fn fetch_flags(&mut self, uids: &[u32]) -> Result<Vec<Fetched>> {
-        self.fetch(uids, "UID FLAGS")
+    pub fn fetch_flags(
+        &mut self,
+        uids: &[u32],
+        changed_since: Option<u64>,
+    ) -> Result<Vec<Fetched>> {
+        let modifiers = changed_since
+            .map(|modseq| format!(" (CHANGEDSINCE {modseq})"))
+            .unwrap_or_default();
+        self.fetch_modified(uids, "UID FLAGS", &modifiers)
     }
 
     pub fn fetch_bodies(&mut self, uids: &[u32]) -> Result<Vec<Fetched>> {

@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use bande_fs::{Entry, Sort};
 
-const IMAGE_EXTENSIONS: [&str; 8] = ["png", "jpg", "jpeg", "jpe", "jfif", "gif", "webp", "svg"];
+const IMAGE_EXTENSIONS: [&str; 12] = [
+    "png", "jpg", "jpeg", "jpe", "jfif", "gif", "webp", "tif", "tiff", "bmp", "ico", "svg",
+];
 
 pub fn is_image_name(path: &Path) -> bool {
     path.extension()
@@ -24,6 +26,9 @@ pub fn mime_of_name(path: &Path) -> &'static str {
         "png" => "image/png",
         "gif" => "image/gif",
         "webp" => "image/webp",
+        "tif" | "tiff" => "image/tiff",
+        "bmp" => "image/bmp",
+        "ico" => "image/vnd.microsoft.icon",
         "svg" => "image/svg+xml",
         "pdf" => "application/pdf",
         _ => "image/jpeg",

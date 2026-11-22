@@ -8,7 +8,7 @@ use bande_app_menu::edit_submenu;
 use bande_installer::{Installer, Machine, WINDOW_SIZE};
 use bande_l10n::tr;
 use bande_packages::Client;
-use bande_toolkit::{Appearance, Scene, TextSystem, Window, WindowEvent};
+use bande_toolkit::{Appearance, Scene, SessionEnd, TextSystem, Window, WindowEvent};
 use zbus::blocking::Connection;
 
 static INFO: Info = Info {
@@ -29,7 +29,13 @@ impl View for Pane {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
         let handled = View::event(self.0.ui(), window, event);
-        self.0.pump() || handled
+        let changed = self.0.pump();
+        if self.0.take_restart()
+            && let Err(error) = window.ask_to_end_session(SessionEnd::Restart)
+        {
+            tracing::warn!("cannot ask to restart: {error}");
+        }
+        changed || handled
     }
 
     fn set_appearance(&mut self, appearance: Appearance) {

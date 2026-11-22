@@ -32,9 +32,6 @@ msgctxt "section"
 msgid "Installed"
 msgstr "Installerade"
 
-msgid "Updates"
-msgstr "Uppdateringar"
-
 msgid "Internet"
 msgstr "Internet"
 
@@ -106,9 +103,6 @@ msgstr "Kan läsa och ändra andra appars inställningar"
 
 msgid "Debian {suite} ({component})"
 msgstr "Debian {suite} ({component})"
-
-msgid "Updates ({count})"
-msgstr "Uppdateringar ({count})"
 
 msgid "Show"
 msgstr "Visa"
@@ -203,37 +197,6 @@ msgstr "Nytt och uppdaterat"
 msgid "No apps from the catalog are installed."
 msgstr "Inga appar från katalogen är installerade."
 
-msgid "Your apps and system are up to date."
-msgstr "Dina appar och ditt system är uppdaterade."
-
-msgid "Updates are installed in Settings ▸ Software Update, which also restarts what needs it."
-msgstr "Uppdateringar installeras i Inställningar ▸ Programuppdatering, som också startar om det som behöver det."
-
-msgid "Check for Updates…"
-msgstr "Sök efter uppdateringar…"
-
-msgid "1 update is available."
-msgid_plural "{count} updates are available."
-msgstr[0] "1 uppdatering finns tillgänglig."
-msgstr[1] "{count} uppdateringar finns tillgängliga."
-
-msgid "Update All…"
-msgstr "Uppdatera alla…"
-
-msgid "Apps"
-msgstr "Appar"
-
-msgid "{name} {version} · {source}"
-msgstr "{name} {version} · {source}"
-
-msgid "and {count} more"
-msgstr "och {count} till"
-
-msgid "1 package"
-msgid_plural "All {count} packages"
-msgstr[0] "1 paket"
-msgstr[1] "Alla {count} paket"
-
 msgid "Cancel"
 msgstr "Avbryt"
 
@@ -263,6 +226,9 @@ msgstr "Ta bort"
 
 msgid "An update is available."
 msgstr "En uppdatering finns tillgänglig."
+
+msgid "Update All…"
+msgstr "Uppdatera alla…"
 
 msgid "You’ll be asked for an administrator’s password."
 msgstr "Du får frågan om en administratörs lösenord."

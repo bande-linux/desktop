@@ -14,13 +14,13 @@ use crate::discover::Settings;
 use crate::discover::Source;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
-use crate::message::{Content, Envelope};
+use crate::message::{Content, Envelope, parse_addresses};
 use crate::net::Network;
 use crate::settings::{MailSettings, SortBy};
 use crate::setup::{Found, Outcome, check, find};
 use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
 use crate::ui::format::full_date;
-use crate::ui::reader::{Entry, Layout, Reading, Remote, Respond, Target, Thread};
+use crate::ui::reader::{Entry, Layout, Reading, Remote, Respond, Target, Thread, link_host};
 use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
 use crate::ui::sidebar::{Place, Row, rows};
 use crate::ui::symbols::Symbols;
@@ -71,6 +71,9 @@ const FLAG_COLORS: [Text; 7] = [
     text!("Gray"),
 ];
 const MAX_PICTURE_BYTES: usize = 10 << 20;
+const CORRESPONDENTS_READ: usize = 5000;
+const LIST_PAGE: usize = 500;
+const LIST_AHEAD: f32 = 2000.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -82,6 +85,7 @@ pub enum Request {
         summary: String,
         body: String,
         sound: bool,
+        message: Option<MessageId>,
     },
     NotSent {
         error: String,
@@ -98,7 +102,10 @@ pub enum Hit {
     Message(MessageId),
     Conversation(MessageId),
     Reader(Target),
+    Offline(AccountId),
 }
+
+pub(crate) type Spot = (usize, usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pane {
@@ -190,40 +197,27 @@ pub(crate) struct SetupSheet {
     pub(crate) password_field: WidgetId,
 }
 
-fn open_files() -> HashSet<PathBuf> {
-    let Ok(processes) = std::fs::read_dir("/proc") else {
-        return HashSet::new();
-    };
-    processes
-        .filter_map(|entry| entry.ok())
-        .filter(|process| {
-            process
-                .file_name()
-                .to_str()
-                .is_some_and(|name| name.parse::<u32>().is_ok())
-        })
-        .filter_map(|process| std::fs::read_dir(process.path().join("fd")).ok())
-        .flatten()
-        .filter_map(|entry| entry.ok())
-        .filter_map(|fd| std::fs::read_link(fd.path()).ok())
-        .collect()
-}
-
 pub struct MailView {
     pub(crate) store: Store,
     store_path: PathBuf,
     pub(crate) accounts: Vec<(Account, Vec<Mailbox>)>,
     workers: Vec<Worker>,
     pub(crate) statuses: Vec<(AccountId, Status)>,
+    pub(crate) failures: Vec<(AccountId, String)>,
+    retrying: Vec<AccountId>,
     mailroom: Mailroom,
     network: Network,
     pub(crate) sidebar: Vec<Row>,
     pub(crate) place: Place,
     pub(crate) messages: Vec<Summary>,
+    listed: usize,
+    listed_all: bool,
     pub(crate) selected: Option<MessageId>,
     pub(crate) also: Vec<MessageId>,
     pub(crate) thread: Option<Thread>,
     pub(crate) layout: Option<(f32, Layout)>,
+    pub(crate) selection: Option<(Spot, Spot)>,
+    selecting: bool,
     pub(crate) search: String,
     pub(crate) ui: Ui,
     pub(crate) host: WidgetId,
@@ -276,15 +270,21 @@ impl MailView {
             accounts: Vec::new(),
             workers: Vec::new(),
             statuses: Vec::new(),
+            failures: Vec::new(),
+            retrying: Vec::new(),
             mailroom: Mailroom::new()?,
             network: Network::default(),
             sidebar: Vec::new(),
             place: Place::All(Role::Inbox),
             messages: Vec::new(),
+            listed: LIST_PAGE,
+            listed_all: true,
             selected: None,
             also: Vec::new(),
             thread: None,
             layout: None,
+            selection: None,
+            selecting: false,
             search: String::new(),
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
             host: host_id,
@@ -445,6 +445,21 @@ impl MailView {
             .collect()
     }
 
+    pub fn correspondents(&self) -> Vec<crate::message::Address> {
+        let mut found = self
+            .store
+            .correspondents(CORRESPONDENTS_READ)
+            .inspect_err(|error| tracing::warn!("cannot read known addresses: {error}"))
+            .unwrap_or_default();
+        found.retain(|address| {
+            !self
+                .accounts
+                .iter()
+                .any(|(account, _)| account.email.eq_ignore_ascii_case(&address.email))
+        });
+        found
+    }
+
     pub fn fds(&self) -> Vec<BorrowedFd<'_>> {
         vec![self.mailroom.fd()]
     }
@@ -466,18 +481,36 @@ impl MailView {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let text = format!(
-            "{}\n{}\n{}\n\n{}",
-            envelope.subject,
-            names(&envelope.from),
-            tr!("To: {names}", names = names(&envelope.to)),
-            reading.content.text(),
+        let mut lines = vec![envelope.subject.clone(), names(&envelope.from)];
+        lines.extend(
+            envelope
+                .date
+                .map(|date| full_date(date, &self.zone, &self.formats)),
         );
+        lines.push(tr!("To: {names}", names = names(&envelope.to)));
+        if !envelope.cc.is_empty() {
+            lines.push(tr!("Cc: {names}", names = names(&envelope.cc)));
+        }
+        let text = format!("{}\n\n{}", lines.join("\n"), reading.content.text());
         let title = match summary.subject.is_empty() {
             true => tr!("No Subject"),
             false => summary.subject.clone(),
         };
         Some((title, text))
+    }
+
+    pub fn unread_inbox(&self) -> usize {
+        self.sidebar
+            .iter()
+            .find_map(|row| match row {
+                Row::Place {
+                    place: Place::All(Role::Inbox),
+                    unread,
+                    ..
+                } => Some(*unread),
+                _ => None,
+            })
+            .unwrap_or(0)
     }
 
     pub fn selected(&self) -> Option<MessageId> {
@@ -531,8 +564,9 @@ impl MailView {
 
     pub fn cursor(&self) -> Cursor {
         match &self.hover {
-            Some(Hit::Conversation(_)) => Cursor::Pointer,
-            Some(Hit::Reader(target)) if !matches!(target, Target::Card(_)) => Cursor::Pointer,
+            Some(Hit::Conversation(_) | Hit::Offline(_)) => Cursor::Pointer,
+            Some(Hit::Reader(Target::Card(_))) => Cursor::Text,
+            Some(Hit::Reader(_)) => Cursor::Pointer,
             _ => self.ui.cursor(),
         }
     }
@@ -632,21 +666,18 @@ impl MailView {
         if !exists {
             self.place = Place::All(Role::Inbox);
         }
-        let mut all = self
+        let all = self
             .store
-            .summaries(&self.place.scope(), &self.search)
+            .listing(
+                &self.place.scope(),
+                &self.search,
+                self.settings.sort,
+                self.settings.ascending,
+                self.listed,
+            )
             .inspect_err(|error| tracing::warn!("cannot list the messages: {error}"))
             .unwrap_or_default();
-        match self.settings.sort {
-            SortBy::Date => {}
-            SortBy::From => all.sort_by_cached_key(|summary| summary.sender.shown().to_lowercase()),
-            SortBy::Subject => all.sort_by_cached_key(|summary| summary.subject.to_lowercase()),
-            SortBy::Size => all.sort_by_key(|summary| std::cmp::Reverse(summary.size)),
-            SortBy::Unread => all.sort_by_key(|summary| summary.flags.seen),
-        }
-        if self.settings.ascending {
-            all.reverse();
-        }
+        self.listed_all = all.len() < self.listed;
         self.messages = match self.settings.conversations {
             true => self.conversations.group(all),
             false => {
@@ -738,6 +769,7 @@ impl MailView {
             return;
         }
         self.place = place;
+        self.listed = LIST_PAGE;
         self.selected = None;
         self.also.clear();
         self.thread = None;
@@ -748,6 +780,7 @@ impl MailView {
 
     pub fn search_for(&mut self, text: &str) {
         self.search = text.to_owned();
+        self.listed = LIST_PAGE;
         self.scrolls[1] = ScrollState::default();
         self.reload();
     }
@@ -1067,6 +1100,7 @@ impl MailView {
         let unread = self
             .store
             .summaries(&self.place.scope(), "")
+            .inspect_err(|error| tracing::warn!("cannot list the messages: {error}"))
             .unwrap_or_default()
             .into_iter()
             .filter(|summary| !summary.flags.seen)
@@ -1366,9 +1400,30 @@ impl MailView {
     }
 
     pub fn delete_selected(&mut self) {
+        let targets = self.targets();
+        let gone = self.delete(targets);
+        self.leave_targets(&gone);
+    }
+
+    pub fn discard_draft(&mut self, draft: &Original) {
+        let summary = match (
+            self.store.summary(draft.id),
+            self.store.message_id(draft.id),
+        ) {
+            (Ok(Some(summary)), Ok(Some(message_id))) if message_id == draft.message_id => summary,
+            (Err(error), _) | (_, Err(error)) => {
+                return tracing::warn!("cannot discard the draft: {error}");
+            }
+            _ => return,
+        };
+        self.delete(vec![summary]);
+        self.reload();
+    }
+
+    fn delete(&mut self, summaries: Vec<Summary>) -> Vec<MessageId> {
         let mut moves = Vec::new();
         let mut expunged = Vec::new();
-        for summary in self.targets() {
+        for summary in summaries {
             let in_trash = self
                 .mailbox_of(&summary)
                 .is_some_and(|mailbox| mailbox.role == Some(Role::Trash));
@@ -1387,7 +1442,7 @@ impl MailView {
                 Err(error) => tracing::warn!("cannot delete the messages: {error}"),
             }
         }
-        self.leave_targets(&gone);
+        gone
     }
 
     fn default_account(&self) -> Option<Account> {
@@ -1545,9 +1600,52 @@ impl MailView {
     }
 
     pub fn get_mail(&mut self) {
+        self.retrying = self
+            .statuses
+            .iter()
+            .filter(|(_, status)| *status == Status::Offline)
+            .map(|(account, _)| *account)
+            .collect();
         for worker in &self.workers {
             worker.send(Command::Sync);
         }
+    }
+
+    pub(crate) fn offline(&self, account: AccountId) -> bool {
+        self.statuses
+            .iter()
+            .any(|(known, status)| *known == account && *status == Status::Offline)
+    }
+
+    pub(crate) fn failure(&self, account: AccountId) -> String {
+        self.failures
+            .iter()
+            .find(|(known, _)| *known == account)
+            .map(|(_, reason)| reason.clone())
+            .unwrap_or_else(|| tr!("Mail can’t reach the server."))
+    }
+
+    pub(crate) fn show_failure(&mut self, account: AccountId) {
+        let Some(email) = self.account(account).map(|account| account.email.clone()) else {
+            return;
+        };
+        if self.ui.has_sheet() {
+            return;
+        }
+        let signals = Rc::clone(&self.signals);
+        let alert = Alert::new(
+            &tr!("“{account}” is offline", account = email),
+            &self.failure(account),
+            move |choice| match choice {
+                "retry" => signals.borrow_mut().push(Signal::TryAgain(account)),
+                "settings" => signals.borrow_mut().push(Signal::ServerSettings),
+                _ => {}
+            },
+        )
+        .primary(&tr!("Try Again"), "retry")
+        .other(&tr!("Server Settings…"), "settings")
+        .cancel(&tr!("Cancel"), "cancel");
+        self.ui.present_sheet(alert);
     }
 
     fn account_for(&self, draft: &Draft) -> Option<AccountId> {
@@ -1798,6 +1896,7 @@ impl MailView {
                 ),
                 body: name,
                 sound: false,
+                message: None,
             });
         }
     }
@@ -1813,14 +1912,8 @@ impl MailView {
             })
             .map(|(_, path, _)| path)
             .collect::<Vec<_>>();
-        if unedited.is_empty() {
-            return;
-        }
-        let in_use = open_files();
         for path in unedited {
-            let real = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-            if !in_use.contains(&real)
-                && std::fs::remove_file(&path).is_ok()
+            if std::fs::remove_file(&path).is_ok()
                 && let Some(folder) = path.parent()
             {
                 let _ = std::fs::remove_dir(folder);
@@ -1837,6 +1930,10 @@ impl MailView {
             changed |= !matches!(event, MailEvent::Synced(..));
             match event {
                 MailEvent::Status(account, status) => {
+                    if status == Status::Syncing {
+                        self.failures.retain(|(known, _)| *known != account);
+                        self.retrying.retain(|known| *known != account);
+                    }
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
@@ -1878,6 +1975,12 @@ impl MailView {
                 }
                 MailEvent::Failed(account, error) => {
                     tracing::warn!("account {account}: {error}");
+                    self.failures.retain(|(known, _)| *known != account);
+                    self.failures.push((account, error));
+                    if let Some(at) = self.retrying.iter().position(|known| *known == account) {
+                        self.retrying.remove(at);
+                        self.show_failure(account);
+                    }
                 }
                 MailEvent::Sent(_) => {}
                 MailEvent::MailboxRefused(reason) => {
@@ -2006,6 +2109,7 @@ impl MailView {
                     .collect::<Vec<_>>()
                     .join(", "),
                 sound,
+                message: None,
             });
             return;
         }
@@ -2017,6 +2121,7 @@ impl MailView {
                     subject => subject.to_owned(),
                 },
                 sound,
+                message: Some(summary.id),
             });
         }
     }
@@ -2349,6 +2454,12 @@ impl MailView {
                 signal @ (Signal::NewMailbox(..)
                 | Signal::RenameMailbox(..)
                 | Signal::DeleteMailbox(_)) => self.change_mailboxes(signal),
+                Signal::TryAgain(account) => {
+                    self.retrying.push(account);
+                    self.send_command(account, Command::Sync);
+                }
+                Signal::ServerSettings => self.requests.push(Request::OpenSettings),
+                Signal::OpenLink(url) => self.requests.push(Request::OpenLink(url)),
             }
         }
         if let Some(request) = self.ui.take_clipboard_request() {
@@ -2363,7 +2474,20 @@ impl MailView {
     pub fn handle(&mut self, event: &Event) -> bool {
         let handled = self.route(event);
         self.after_ui();
+        self.list_more();
         handled
+    }
+
+    fn list_more(&mut self) {
+        let scroll = &self.scrolls[1];
+        if self.listed_all
+            || scroll.limit() <= 0.0
+            || scroll.offset(self.ui.context()) < scroll.limit() - LIST_AHEAD
+        {
+            return;
+        }
+        self.listed += LIST_PAGE;
+        self.reload();
     }
 
     fn route(&mut self, event: &Event) -> bool {
@@ -2379,6 +2503,10 @@ impl MailView {
                 self.ui.clear_focus();
                 self.click(pointer)
             }
+            Event::PointerMove(pointer) if self.selecting => {
+                self.extend_selection(pointer.position)
+            }
+            Event::PointerUp(_) if self.selecting => self.finish_selection(),
             Event::PointerUp(_) if self.drag.is_some() => {
                 self.drop_messages();
                 true
@@ -2501,6 +2629,16 @@ impl MailView {
         }
         if key == Key::Tab && bare {
             return self.cycle_pane(!modifiers.shift);
+        }
+        if self.focus == Pane::Reader && modifiers.control && !modifiers.shift && !modifiers.alt {
+            match key {
+                Key::Character('c' | 'C') => return self.copy_selection(),
+                Key::Character('a' | 'A') => {
+                    self.select_entry_text();
+                    return true;
+                }
+                _ => {}
+            }
         }
         let event = Event::Key { key, modifiers };
         if let Some((action, _)) = SHORTCUTS
@@ -2664,7 +2802,15 @@ impl MailView {
             Pane::List => self
                 .selected
                 .map(|id| (Hit::Message(id), self.message_menu())),
-            Pane::Reader => None,
+            Pane::Reader => {
+                let frame = self.reader_frame();
+                let menu = self.text_menu();
+                self.requests.push(Request::ShowMenu(
+                    menu,
+                    Point::new(frame.x + frame.width / 2.0, frame.y + frame.height / 3.0),
+                ));
+                return true;
+            }
         };
         let Some((rect, menu)) = shown.and_then(|(wanted, menu)| {
             self.hits
@@ -2799,8 +2945,12 @@ impl MailView {
             }
             Hit::Reader(target) => {
                 self.focus = Pane::Reader;
+                if matches!(target, Target::Card(_)) && !secondary {
+                    self.start_selection(pointer);
+                }
                 self.click_reader(target, pointer);
             }
+            Hit::Offline(account) => self.show_failure(account),
         }
         true
     }
@@ -2808,7 +2958,14 @@ impl MailView {
     pub(crate) fn click_reader(&mut self, target: Target, pointer: &Pointer) {
         let secondary = pointer.button == PointerButton::Secondary;
         match target {
-            Target::Card(id) => self.focus_entry(id),
+            Target::Card(id) => {
+                self.focus_entry(id);
+                if secondary {
+                    let menu = self.text_menu();
+                    self.requests
+                        .push(Request::ShowMenu(menu, pointer.position));
+                }
+            }
             Target::Expand(id) => self.toggle_entry(id),
             Target::Quotes(id) => {
                 self.focus_entry(id);
@@ -2825,7 +2982,26 @@ impl MailView {
                     Respond::Forward => self.forward_selected(),
                 }
             }
-            Target::Link(url) => self.requests.push(Request::OpenLink(url)),
+            Target::Link(url, _) if secondary => {
+                let menu = Menu::new(vec![
+                    MenuItem::new(&tr!("Open Link"), &format!("open-link:{url}")),
+                    MenuItem::new(&tr!("Copy Link"), &format!("copy:{url}")),
+                ]);
+                self.requests
+                    .push(Request::ShowMenu(menu, pointer.position));
+            }
+            Target::Link(url, claimed) => self.open_link(url, claimed),
+            Target::Address(address) => {
+                let menu = Menu::new(vec![
+                    MenuItem::new(
+                        &tr!("New Message"),
+                        &format!("compose-to:{}", address.full()),
+                    ),
+                    MenuItem::new(&tr!("Copy Address"), &format!("copy:{}", address.email)),
+                ]);
+                self.requests
+                    .push(Request::ShowMenu(menu, pointer.position));
+            }
             Target::Attachment(id, index) if secondary => {
                 self.focus_entry(id);
                 let menu = Menu::new(vec![
@@ -2862,6 +3038,180 @@ impl MailView {
                 self.load_remote(id);
             }
         }
+    }
+
+    fn open_link(&mut self, url: String, claimed: Option<String>) {
+        let Some(claimed) = claimed else {
+            return self.requests.push(Request::OpenLink(url));
+        };
+        let real = link_host(&url).unwrap_or_else(|| url.clone());
+        let signals = Rc::clone(&self.signals);
+        let alert = Alert::new(
+            &tr!("Open this link?"),
+            &tr!(
+                "The link says “{claimed}”, but it goes to “{real}”.",
+                claimed = claimed,
+                real = real
+            ),
+            move |choice| {
+                if choice == "open" {
+                    signals.borrow_mut().push(Signal::OpenLink(url.clone()));
+                }
+            },
+        )
+        .primary(&tr!("Open Link"), "open")
+        .cancel(&tr!("Cancel"), "cancel");
+        self.ui.present_sheet(alert);
+    }
+
+    fn claimed_host(&self, url: &str) -> Option<String> {
+        let (_, layout) = self.layout.as_ref()?;
+        layout.targets.iter().find_map(|(_, target)| match target {
+            Target::Link(known, claimed) if known == url => claimed.clone(),
+            _ => None,
+        })
+    }
+
+    fn text_menu(&self) -> Menu {
+        Menu::new(vec![
+            MenuItem::new(&tr!("Copy"), "copy-selection").enabled(self.selected_range().is_some()),
+            MenuItem::new(&tr!("Select All"), "select-text"),
+        ])
+    }
+
+    fn reader_origin(&mut self) -> Point {
+        let frame = self.reader_frame();
+        let offset = self.scrolls[2].offset(self.ui.context());
+        Point::new(frame.x, frame.y - offset)
+    }
+
+    fn spot_at(&mut self, at: Point) -> Option<Spot> {
+        let origin = self.reader_origin();
+        let (x, y) = (at.x - origin.x, at.y - origin.y);
+        let (_, layout) = self.layout.as_ref()?;
+        let outside = |point: f32, start: f32, length: f32| {
+            (start - point).max(point - start - length).max(0.0)
+        };
+        let distance = |(_, top, paragraph): &(MessageId, Point, bande_toolkit::Paragraph)| {
+            (
+                outside(y, top.y, paragraph.height()),
+                outside(x, top.x, paragraph.width()),
+            )
+        };
+        let (index, (_, top, paragraph)) = layout.texts.iter().enumerate().min_by(|a, b| {
+            let (a, b) = (distance(a.1), distance(b.1));
+            a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1))
+        })?;
+        Some((index, paragraph.byte_at(x - top.x, y - top.y)))
+    }
+
+    fn word_at(&self, (index, byte): Spot) -> (Spot, Spot) {
+        let Some(text) = self
+            .layout
+            .as_ref()
+            .and_then(|(_, layout)| layout.texts.get(index))
+            .map(|(_, _, paragraph)| paragraph.text())
+        else {
+            return ((index, byte), (index, byte));
+        };
+        let word = |character: char| character.is_alphanumeric() || character == '_';
+        let before = text.get(..byte).unwrap_or_default();
+        let after = text.get(byte..).unwrap_or_default();
+        let start = before
+            .char_indices()
+            .rev()
+            .take_while(|(_, character)| word(*character))
+            .last()
+            .map_or(byte, |(at, _)| at);
+        let end = after
+            .char_indices()
+            .find(|(_, character)| !word(*character))
+            .map_or(text.len(), |(at, _)| byte + at);
+        ((index, start), (index, end))
+    }
+
+    fn start_selection(&mut self, pointer: &Pointer) {
+        self.selection = self
+            .spot_at(pointer.position)
+            .map(|spot| match pointer.count {
+                2 => self.word_at(spot),
+                _ => (spot, spot),
+            });
+        self.selecting = self.selection.is_some();
+    }
+
+    fn extend_selection(&mut self, at: Point) -> bool {
+        let Some(spot) = self.spot_at(at) else {
+            return false;
+        };
+        match &mut self.selection {
+            Some((_, focus)) if *focus != spot => {
+                *focus = spot;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn finish_selection(&mut self) -> bool {
+        self.selecting = false;
+        if let Some(text) = self.selected_text() {
+            self.requests
+                .push(Request::Clipboard(ClipboardRequest::SelectPrimary(text)));
+        }
+        true
+    }
+
+    pub(crate) fn selected_range(&self) -> Option<(Spot, Spot)> {
+        let (anchor, focus) = self.selection?;
+        let (start, end) = match anchor <= focus {
+            true => (anchor, focus),
+            false => (focus, anchor),
+        };
+        (start != end).then_some((start, end))
+    }
+
+    fn selected_text(&self) -> Option<String> {
+        let (start, end) = self.selected_range()?;
+        let (_, layout) = self.layout.as_ref()?;
+        let pieces = (start.0..=end.0)
+            .filter_map(|index| {
+                let text = layout.texts.get(index)?.2.text();
+                let from = if index == start.0 { start.1 } else { 0 };
+                let to = if index == end.0 { end.1 } else { text.len() };
+                text.get(from..to)
+            })
+            .collect::<Vec<_>>();
+        Some(pieces.join("\n"))
+    }
+
+    fn copy_selection(&mut self) -> bool {
+        let Some(text) = self.selected_text() else {
+            return false;
+        };
+        self.requests
+            .push(Request::Clipboard(ClipboardRequest::Copy(text)));
+        true
+    }
+
+    fn select_entry_text(&mut self) {
+        let Some(focus) = self.thread.as_ref().map(|thread| thread.focus) else {
+            return;
+        };
+        let Some((_, layout)) = &self.layout else {
+            return;
+        };
+        let mut texts = layout
+            .texts
+            .iter()
+            .enumerate()
+            .filter(|(_, (id, _, _))| *id == focus);
+        let Some(first) = texts.next() else {
+            return;
+        };
+        let (last, (_, _, paragraph)) = texts.next_back().unwrap_or(first);
+        let first = first.0;
+        self.selection = Some(((first, 0), (last, paragraph.text().len())));
     }
 
     fn mailbox(&self, id: MailboxId) -> Option<Mailbox> {
@@ -3120,6 +3470,24 @@ impl MailView {
                 }
             }
             "find" => self.ui.set_focus(self.toolbar.search),
+            "copy-selection" => {
+                self.copy_selection();
+            }
+            "select-text" => self.select_entry_text(),
+            action if action.starts_with("copy:") => {
+                let text = action["copy:".len()..].to_owned();
+                self.requests
+                    .push(Request::Clipboard(ClipboardRequest::Copy(text)));
+            }
+            action if action.starts_with("open-link:") => {
+                let url = action["open-link:".len()..].to_owned();
+                let claimed = self.claimed_host(&url);
+                self.open_link(url, claimed);
+            }
+            action if action.starts_with("compose-to:") => self.compose(Draft {
+                to: parse_addresses(&action["compose-to:".len()..]),
+                ..Draft::default()
+            }),
             action if action.starts_with("move-to:") => {
                 let target = action
                     .strip_prefix("move-to:")

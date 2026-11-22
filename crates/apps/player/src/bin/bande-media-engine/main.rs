@@ -3,11 +3,11 @@ mod info;
 
 use std::io::Write;
 use std::os::fd::{AsFd, OwnedFd};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
-use bande_media::{Channel, Command, Event, FailureKind, MediaInfo, Playback};
+use bande_media::{Channel, Command, Event, FailureKind, MediaInfo, Opening, Playback};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
@@ -20,12 +20,79 @@ const ONE_MILLISECOND: gst::ClockTime = gst::ClockTime::from_mseconds(1);
 const COMPOSITOR_DELAY: gst::ClockTime = gst::ClockTime::from_mseconds(16);
 const STEP_BACK_FALLBACK_MS: u64 = 40;
 const SIDECAR_EXTENSIONS: [&str; 3] = ["srt", "vtt", "ass"];
+const SUBTITLE_BYTES: u64 = 16 << 20;
+const RESUME_TRIES: u32 = 40;
+const RESUME_PAUSE: std::time::Duration = std::time::Duration::from_millis(50);
+const RESUME_WAIT: gst::ClockTime = gst::ClockTime::from_seconds(2);
+const RESUME_CLOSE: gst::ClockTime = gst::ClockTime::from_mseconds(250);
 
 struct Status {
     info: MediaInfo,
     rate: f64,
     ended: bool,
     collection: Option<gst::StreamCollection>,
+    held: bool,
+    opened: u64,
+    kept_audio: Option<String>,
+    show_added: bool,
+}
+
+fn readable_subtitles(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() && metadata.len() <= SUBTITLE_BYTES => true,
+        Ok(_) => {
+            eprintln!(
+                "bande-media-engine: {} is not a subtitle file",
+                path.display()
+            );
+            false
+        }
+        Err(_) => false,
+    }
+}
+
+fn subtitle_extension(extension: &str) -> bool {
+    SIDECAR_EXTENSIONS
+        .iter()
+        .any(|known| known.eq_ignore_ascii_case(extension))
+}
+
+fn sidecar(video: &Path) -> Option<PathBuf> {
+    let exact = SIDECAR_EXTENSIONS
+        .iter()
+        .map(|extension| video.with_extension(extension))
+        .find(|candidate| readable_subtitles(candidate));
+    if exact.is_some() {
+        return exact;
+    }
+    let stem = video.file_stem()?.to_str()?;
+    let languages = bande_l10n::preferred_languages();
+    let rank = |language: &str| {
+        let short = gstreamer_tag::language_codes::language_code_iso_639_1(language)
+            .map_or_else(|| language.to_ascii_lowercase(), |code| code.to_string());
+        languages
+            .iter()
+            .position(|wanted| *wanted == short)
+            .unwrap_or(languages.len())
+    };
+    let mut found: Vec<(usize, PathBuf)> = std::fs::read_dir(video.parent()?)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_str()?;
+            let (language, extension) = name
+                .strip_prefix(stem)?
+                .strip_prefix('.')?
+                .rsplit_once('.')?;
+            let wanted =
+                !language.is_empty() && !language.contains('.') && subtitle_extension(extension);
+            let rank = rank(language);
+            (wanted && readable_subtitles(&path)).then_some((rank, path))
+        })
+        .collect();
+    found.sort();
+    found.into_iter().next().map(|(_, path)| path)
 }
 
 #[derive(Clone)]
@@ -67,6 +134,10 @@ impl Engine {
                 rate: 1.0,
                 ended: false,
                 collection: None,
+                held: false,
+                opened: 0,
+                kept_audio: None,
+                show_added: false,
             })),
             frames,
         })
@@ -109,28 +180,36 @@ impl Engine {
         self.status.lock().map_or(1.0, |status| status.rate)
     }
 
-    fn open(&self, path: &Path) {
-        let Ok(uri) = gst::glib::filename_to_uri(path, None) else {
-            return self.failed(FailureKind::Unreadable, path.display().to_string());
+    fn open(&self, opening: Opening) {
+        let Ok(uri) = gst::glib::filename_to_uri(&opening.path, None) else {
+            return self.failed(FailureKind::Unreadable, opening.path.display().to_string());
         };
+        let added = opening
+            .subtitles
+            .filter(|subtitles| readable_subtitles(subtitles));
         self.set_state(gst::State::Ready);
         if let Ok(mut status) = self.status.lock() {
+            status.show_added = added.is_some();
+            status.kept_audio = added.as_ref().and(status.info.selected_audio.clone());
             status.info = MediaInfo::default();
             status.ended = false;
             status.collection = None;
+            status.held = opening.start_ms > 0;
+            status.opened += 1;
         }
         self.frames.new_media();
         self.playbin.set_property("uri", uri.as_str());
-        let sidecar = SIDECAR_EXTENSIONS
-            .iter()
-            .map(|extension| path.with_extension(extension))
-            .find(|candidate| candidate.is_file())
-            .and_then(|candidate| gst::glib::filename_to_uri(candidate, None).ok());
+        let subtitles = added
+            .or_else(|| sidecar(&opening.path))
+            .and_then(|subtitles| gst::glib::filename_to_uri(subtitles, None).ok());
         self.playbin
-            .set_property("suburi", sidecar.as_ref().map(|uri| uri.as_str()));
+            .set_property("suburi", subtitles.as_ref().map(|uri| uri.as_str()));
         emit(&self.channel, &Event::State(Playback::Opening));
         if self.playbin.set_state(gst::State::Paused).is_err() {
             eprintln!("bande-media-engine: the pipeline refused to start");
+        }
+        if opening.start_ms > 0 {
+            self.resume_in_background(ONE_MILLISECOND * opening.start_ms);
         }
     }
 
@@ -188,7 +267,7 @@ impl Engine {
     fn command(&self, command: Command) {
         match command {
             Command::Configure { nv12_dmabuf } => self.frames.configure(&self.video, nv12_dmabuf),
-            Command::Open(path) => self.open(&path),
+            Command::Open(opening) => self.open(opening),
             Command::Play => self.play(),
             Command::Pause => {
                 self.set_state(gst::State::Paused);
@@ -258,14 +337,79 @@ impl Engine {
     }
 
     fn state_changed(&self, new: gst::State) {
-        let ended = self.status.lock().is_ok_and(|status| status.ended);
+        let waiting = self
+            .status
+            .lock()
+            .map_or(true, |status| status.ended || status.held);
         match new {
             gst::State::Playing => emit(&self.channel, &Event::State(Playback::Playing)),
-            gst::State::Paused if !ended => {
-                self.refresh_extent();
-                emit(&self.channel, &Event::State(Playback::Paused));
-            }
+            gst::State::Paused if !waiting => self.paused(),
             _ => {}
+        }
+    }
+
+    fn paused(&self) {
+        self.refresh_extent();
+        emit(&self.channel, &Event::State(Playback::Paused));
+    }
+
+    fn resume_in_background(&self, start: gst::ClockTime) {
+        let opened = self.status.lock().map_or(0, |status| status.opened);
+        let engine = self.clone();
+        let spawned = std::thread::Builder::new()
+            .name("resume".to_owned())
+            .spawn(move || engine.resume_at(start, opened));
+        if let Err(error) = spawned {
+            eprintln!("bande-media-engine: cannot resume where playback stopped: {error}");
+            if let Ok(mut status) = self.status.lock() {
+                status.held = false;
+            }
+        }
+    }
+
+    fn resume_at(&self, start: gst::ClockTime, opened: u64) {
+        let current = || {
+            self.status
+                .lock()
+                .is_ok_and(|status| status.opened == opened)
+        };
+        for _ in 0..RESUME_TRIES {
+            std::thread::sleep(RESUME_PAUSE);
+            if !current() {
+                return;
+            }
+            let (_, state, pending) = self.playbin.state(RESUME_WAIT);
+            if state != gst::State::Paused || pending != gst::State::VoidPending {
+                continue;
+            }
+            let sought = self.playbin.seek(
+                self.rate(),
+                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
+                gst::SeekType::Set,
+                start,
+                gst::SeekType::None,
+                gst::ClockTime::NONE,
+            );
+            if sought.is_err() {
+                continue;
+            }
+            if let (Err(error), ..) = self.playbin.state(RESUME_WAIT) {
+                eprintln!("bande-media-engine: cannot resume where playback stopped: {error}");
+                continue;
+            }
+            let near = self
+                .position()
+                .is_some_and(|position| position.max(start) - position.min(start) < RESUME_CLOSE);
+            if near {
+                break;
+            }
+        }
+        let held = self
+            .status
+            .lock()
+            .is_ok_and(|mut status| status.opened == opened && std::mem::take(&mut status.held));
+        if held {
+            self.paused();
         }
     }
 
@@ -302,11 +446,28 @@ impl Engine {
             }
             MessageView::StreamCollection(message) => {
                 let collection = message.stream_collection();
-                if let Ok(mut status) = self.status.lock() {
-                    status.collection = Some(collection.clone());
-                }
+                let (audio, subtitles) = match self.status.lock() {
+                    Ok(mut status) => {
+                        status.collection = Some(collection.clone());
+                        let added = status
+                            .show_added
+                            .then(|| {
+                                collection
+                                    .iter()
+                                    .filter(|stream| {
+                                        stream.stream_type().contains(gst::StreamType::TEXT)
+                                    })
+                                    .filter_map(|stream| stream.stream_id())
+                                    .next_back()
+                                    .map(|id| id.to_string())
+                            })
+                            .flatten();
+                        (status.kept_audio.clone(), added)
+                    }
+                    Err(_) => (None, None),
+                };
                 self.with_info(|media| info::apply_collection(media, &collection));
-                self.select_tracks(None, None);
+                self.select_tracks(audio, subtitles);
             }
             MessageView::StreamsSelected(message) => {
                 let selected: Vec<gst::Stream> = message.streams().collect();
@@ -337,6 +498,8 @@ impl Engine {
 }
 
 fn run(channel: Arc<Channel>) -> Result<(), Box<dyn std::error::Error>> {
+    // SAFETY: called before GStreamer starts any thread, so no other thread reads the locale.
+    unsafe { libc::setlocale(libc::LC_MESSAGES, c"".as_ptr()) };
     gst::init()?;
     let engine = Engine::new(Arc::clone(&channel))?;
     let reporter = engine.clone();

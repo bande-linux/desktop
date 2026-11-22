@@ -9,4 +9,4 @@ Exec=bande-installer %f
 StartupNotify=true
 NoDisplay=true
 MimeType=application/vnd.debian.binary-package;application/x-deb;
-Categories=System;PackageManager;
+Categories=Settings;PackageManager;

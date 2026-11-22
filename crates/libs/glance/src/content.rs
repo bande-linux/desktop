@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use bande_media_view::{Session, Stage};
+use bande_media_view::{Opening, Session, Stage};
 
 use bande_content::{Block, Code, Content, Contents, Frame, Level, Pixels};
 use bande_toolkit::Color;
@@ -96,7 +96,11 @@ pub enum Shown {
 
 fn media_stage(path: &Path) -> Option<Box<Stage>> {
     let mut session = Session::new();
-    match session.load(path, true) {
+    let opening = Opening {
+        path: path.to_owned(),
+        ..Opening::default()
+    };
+    match session.load(opening, true) {
         Ok(()) => Some(Box::new(Stage::new(session))),
         Err(error) => {
             tracing::info!("no media playback in Glance: {error}");

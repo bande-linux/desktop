@@ -6,9 +6,11 @@ use accesskit::{Node, Role};
 use bande_toolkit::ui::{
     Context, Cursor, Event, Key, PointerButton, Scroll, ScrollState, Size, Widget, WidgetId,
 };
-use bande_toolkit::{Color, Image, Item, Point, Rect, Shape};
+use bande_toolkit::{Color, Image, Item, Point, Rect, Shape, Transform};
 
 use bande_content::pdf::protocol::{Glyph, MAX_RENDER_PIXELS, Render, Use};
+
+use crate::canvas::{Orientation, inverse};
 
 const MARGIN: f32 = 16.0;
 const GAP: f32 = 14.0;
@@ -126,6 +128,7 @@ pub struct PdfView {
     radius: f32,
     label: String,
     pages: Vec<(f32, f32)>,
+    turns: u8,
     tops: Vec<f32>,
     fit: Fit,
     scale: f32,
@@ -156,6 +159,7 @@ impl PdfView {
             radius: 0.0,
             label: label.to_owned(),
             pages,
+            turns: 0,
             tops: Vec::new(),
             fit: Fit::Width,
             scale: 1.0,
@@ -186,10 +190,33 @@ impl PdfView {
         self.radius = radius;
     }
 
+    pub fn rotate(&mut self, clockwise: bool) {
+        let page = self.current_page();
+        self.turns = (self.turns + if clockwise { 1 } else { 3 }) % 4;
+        self.jump = Some((page, 0.0));
+    }
+
+    fn shown_size(&self, page: usize) -> Option<(f32, f32)> {
+        let (width, height) = *self.pages.get(page)?;
+        Some(match self.turns % 2 {
+            1 => (height, width),
+            _ => (width, height),
+        })
+    }
+
+    fn turned(&self, page: usize) -> Option<Transform> {
+        let (width, height) = *self.pages.get(page)?;
+        let orientation = Orientation {
+            turns: self.turns,
+            flipped: false,
+        };
+        Some(orientation.transform(width * self.scale, height * self.scale))
+    }
+
     fn widest(&self) -> f32 {
-        self.pages
-            .iter()
-            .map(|(width, _)| *width)
+        (0..self.pages.len())
+            .filter_map(|page| self.shown_size(page))
+            .map(|(width, _)| width)
             .fold(1.0, f32::max)
     }
 
@@ -231,7 +258,11 @@ impl PdfView {
     }
 
     fn content_height(&self) -> f32 {
-        match (self.tops.last(), self.pages.last()) {
+        let last = self.pages.len().checked_sub(1);
+        match (
+            self.tops.last(),
+            last.and_then(|page| self.shown_size(page)),
+        ) {
             (Some(top), Some((_, height))) => top + height * self.scale + MARGIN,
             _ => 0.0,
         }
@@ -244,11 +275,10 @@ impl PdfView {
     fn lay_out(&mut self) {
         self.scale = self.fitted_scale();
         let mut y = MARGIN;
-        self.tops = self
-            .pages
-            .iter()
-            .map(|(_, height)| {
+        self.tops = (0..self.pages.len())
+            .map(|page| {
                 let top = y;
+                let height = self.shown_size(page).map_or(0.0, |(_, height)| height);
                 y += height * self.scale + GAP;
                 top
             })
@@ -256,7 +286,7 @@ impl PdfView {
     }
 
     fn page_rect(&self, page: usize, offset: f32) -> Option<Rect> {
-        let (width, height) = *self.pages.get(page)?;
+        let (width, height) = self.shown_size(page)?;
         let top = *self.tops.get(page)?;
         let shown = width * self.scale;
         let x = match self.content_width() <= self.frame.width {
@@ -377,12 +407,21 @@ impl PdfView {
             let Some(rect) = self.page_rect(page, offset) else {
                 continue;
             };
-            let left = (self.frame.x.max(rect.x) - rect.x) * display;
-            let top = (self.frame.y.max(rect.y) - rect.y) * display;
-            let right =
-                ((self.frame.x + self.frame.width).min(rect.x + rect.width) - rect.x) * display;
-            let bottom =
-                ((self.frame.y + self.frame.height).min(rect.y + rect.height) - rect.y) * display;
+            let Some(back) = self.turned(page).and_then(inverse) else {
+                continue;
+            };
+            let corners = [
+                Point::new(self.frame.x.max(rect.x), self.frame.y.max(rect.y)),
+                Point::new(
+                    (self.frame.x + self.frame.width).min(rect.x + rect.width),
+                    (self.frame.y + self.frame.height).min(rect.y + rect.height),
+                ),
+            ]
+            .map(|corner| back.apply(Point::new(corner.x - rect.x, corner.y - rect.y)));
+            let left = corners[0].x.min(corners[1].x).max(0.0) * display;
+            let top = corners[0].y.min(corners[1].y).max(0.0) * display;
+            let right = corners[0].x.max(corners[1].x) * display;
+            let bottom = corners[0].y.max(corners[1].y) * display;
             if right <= left || bottom <= top {
                 continue;
             }
@@ -467,12 +506,19 @@ impl PdfView {
         let Some((page, range)) = self.current.and_then(|index| self.matches.get(index)) else {
             return;
         };
-        let top = self
+        let glyph = self
             .texts
             .get(*page)
             .and_then(Option::as_ref)
-            .and_then(|text| text.rects.get(range.start))
-            .map_or(0.0, |rect| rect[1]);
+            .and_then(|text| text.rects.get(range.start));
+        let top = match (glyph, self.turned(*page)) {
+            (Some([left, top, right, bottom]), Some(turned)) => {
+                let a = turned.apply(Point::new(left * self.scale, top * self.scale));
+                let b = turned.apply(Point::new(right * self.scale, bottom * self.scale));
+                a.y.min(b.y) / self.scale
+            }
+            _ => 0.0,
+        };
         self.jump = Some((*page, top));
     }
 
@@ -512,10 +558,9 @@ impl PdfView {
             distance(*a).total_cmp(&distance(*b))
         })?;
         let rect = self.page_rect(page, offset)?;
-        let inside = Point::new(
-            (point.x - rect.x) / self.scale,
-            (point.y - rect.y) / self.scale,
-        );
+        let back = inverse(self.turned(page)?)?;
+        let local = back.apply(Point::new(point.x - rect.x, point.y - rect.y));
+        let inside = Point::new(local.x / self.scale, local.y / self.scale);
         let glyph = self.texts.get(page)?.as_ref()?.hit(inside)?;
         Some((page, glyph))
     }
@@ -557,8 +602,15 @@ impl PdfView {
             cx.palette.scheme,
             true,
         ));
+        let Some((width, height)) = self.pages.get(page).copied() else {
+            return;
+        };
+        let Some(turned) = self.turned(page) else {
+            return;
+        };
+        let local = Rect::new(0.0, 0.0, width * self.scale, height * self.scale);
         let mut inner = vec![Item::Fill {
-            shape: Shape::rect(rect),
+            shape: Shape::rect(local),
             paint: Color::WHITE.into(),
         }];
         for shown in [self.bases.get(&page), self.details.get(&page)]
@@ -568,8 +620,8 @@ impl PdfView {
             let unit = self.scale / shown.render.scale;
             inner.push(Item::Image {
                 rect: Rect::new(
-                    rect.x + shown.render.x as f32 * unit,
-                    rect.y + shown.render.y as f32 * unit,
+                    shown.render.x as f32 * unit,
+                    shown.render.y as f32 * unit,
                     shown.render.width as f32 * unit,
                     shown.render.height as f32 * unit,
                 ),
@@ -585,18 +637,21 @@ impl PdfView {
                 true => CURRENT_MATCH,
                 false => MATCH,
             };
-            self.highlight(&mut inner, page, rect, range.clone(), color);
+            self.highlight(&mut inner, page, local, range.clone(), color);
         }
         if let Some((start, end)) = self.ordered_selection()
             && (start.0..=end.0).contains(&page)
         {
             let first = if page == start.0 { start.1 } else { 0 };
             let last = if page == end.0 { end.1 + 1 } else { usize::MAX };
-            self.highlight(&mut inner, page, rect, first..last, SELECTION);
+            self.highlight(&mut inner, page, local, first..last, SELECTION);
         }
         items.push(Item::Clip {
             shape: Shape::rect(rect),
-            items: inner,
+            items: vec![Item::Transform {
+                transform: turned.then(Transform::translate(rect.x, rect.y)),
+                items: inner,
+            }],
         });
     }
 

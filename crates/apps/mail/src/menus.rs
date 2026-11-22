@@ -17,7 +17,7 @@ pub fn window_menu() -> Vec<Entry> {
     vec![Entry::item(&tr!("Message Viewer"), VIEWER)]
 }
 
-pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
+pub fn app_menus(view: &MailView, viewer: bool, windowed: bool, composing: bool) -> Vec<Entry> {
     let targets = view
         .move_targets()
         .into_iter()
@@ -55,7 +55,7 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
                 .push(Entry::item(&tr!("Ascending"), "sort-ascending").radio(settings.ascending));
             entries.push(Entry::separator());
             entries.push(
-                Entry::item(&tr!("Bcc Address Field"), "bcc-field").radio(settings.bcc_field),
+                Entry::item(&tr!("Bcc Address Field"), "bcc-field").check(settings.bcc_field),
             );
             entries
         }),
@@ -73,6 +73,7 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
             &tr!("Message"),
             vec![
                 item(text!("Send"), "send").enabled(windowed),
+                item(text!("Discard Draft"), "discard-draft").enabled(composing),
                 Entry::separator(),
                 selection(text!("Reply"), "reply"),
                 selection(text!("Reply All"), "reply-all"),

@@ -8,13 +8,15 @@ use std::rc::Rc;
 use bande_l10n::tr;
 
 use crate::model::{Accept, Chooser};
+use crate::search::{Search, recent_paths};
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
-use bande_files::{Place, Row as SidebarRow};
+use bande_files::{Location, Place, Row as SidebarRow};
 use bande_fs::{Entry, SortBy, format_date, format_size, is_hidden};
+use bande_inbox::Inbox;
 use bande_toolkit::ui::{
     Alert, Axis, Button, Cell, CheckState, Checkbox, Column, Context, Cursor, Event, Heading, Key,
-    Label, Modifiers, PopUpButton, Row, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table, TextField, Ui,
-    Widget, WidgetId,
+    Label, Modifiers, PopUpButton, Row, SearchField, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table,
+    TextField, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Item, Rect, Scene, Shape, TextSystem};
 use bande_xdg::{OCTET_STREAM, UserDir, find_icon, user_folder};
@@ -29,11 +31,15 @@ const MARGIN: f32 = 16.0;
 const GAP: f32 = 8.0;
 const ICON_PIXELS: u32 = 16;
 const PROMPT_WIDTH: f32 = 320.0;
+const SEARCH_WIDTH: f32 = 200.0;
 const PLACE_PREFIX: &str = "place:";
+const RECENT_KEY: &str = "recent";
 
 #[derive(Debug, Clone, PartialEq)]
 enum Intent {
     Go(PathBuf),
+    Recent,
+    Search(String),
     Select(Vec<String>),
     Activate(Vec<String>),
     Name(String),
@@ -69,6 +75,7 @@ fn label(text: &str) -> String {
 struct Slots {
     sidebar: usize,
     path: usize,
+    search: usize,
     files: usize,
     tools: usize,
     buttons: usize,
@@ -153,19 +160,27 @@ impl Widget for Layout {
                 ),
             );
         }
-        let path = self.measure_child(
-            cx,
-            self.slots.path,
-            Size::new(width - 2.0 * MARGIN, BAR_HEIGHT),
-        );
+        let search_width = SEARCH_WIDTH.min((width - 2.0 * MARGIN).max(0.0));
+        let path_width = (width - 2.0 * MARGIN - search_width - GAP).max(0.0);
+        let path = self.measure_child(cx, self.slots.path, Size::new(path_width, BAR_HEIGHT));
         self.place_child(
             cx,
             self.slots.path,
             Rect::new(
                 content + MARGIN,
                 centred(top - BAR_HEIGHT, path.height),
-                (width - 2.0 * MARGIN).max(0.0),
+                path_width,
                 path.height,
+            ),
+        );
+        self.place_child(
+            cx,
+            self.slots.search,
+            Rect::new(
+                content + width - MARGIN - search_width,
+                centred(top - BAR_HEIGHT, TEXT_FIELD_HEIGHT),
+                search_width,
+                TEXT_FIELD_HEIGHT,
             ),
         );
         self.place_child(
@@ -445,6 +460,12 @@ pub struct ChooserView {
     icons: Icons,
     intents: Intents,
     files: WidgetId,
+    search_field: WidgetId,
+    search_text: String,
+    search: Option<Search>,
+    recent: bool,
+    excluded: Vec<PathBuf>,
+    policy: Option<Inbox<Vec<PathBuf>>>,
     hidden_toggle: WidgetId,
     focus: WidgetId,
     selected: Vec<PathBuf>,
@@ -455,9 +476,30 @@ pub struct ChooserView {
 
 fn place_key(place: &Place) -> Option<String> {
     match &place.location {
-        bande_files::Location::Folder(path) => Some(format!("{PLACE_PREFIX}{}", path.display())),
+        Location::Folder(path) => Some(format!("{PLACE_PREFIX}{}", path.display())),
+        Location::Recents => Some(RECENT_KEY.to_owned()),
         _ => None,
     }
+}
+
+fn table_sort(order: bande_fs::Sort) -> Sort {
+    Sort {
+        column: match order.by {
+            SortBy::Name | SortBy::Kind | SortBy::Created => 0,
+            SortBy::Modified => 1,
+            SortBy::Size => 2,
+        },
+        ascending: !order.descending,
+    }
+}
+
+fn follow_search_policy(home: PathBuf) -> Option<Inbox<Vec<PathBuf>>> {
+    let inbox = Inbox::new()
+        .inspect_err(|error| tracing::warn!("cannot follow the Search settings: {error}"))
+        .ok()?;
+    let outbox = inbox.outbox();
+    bande_search::follow_policy(home, move |policy| outbox.send(policy.excluded));
+    Some(inbox)
 }
 
 fn folder_places(rows: Vec<SidebarRow>) -> Vec<SidebarRow> {
@@ -498,6 +540,7 @@ impl ChooserView {
                 files: 2,
                 tools: 3,
                 buttons: 4,
+                search: 5,
                 name: None,
             },
             frame: Rect::default(),
@@ -507,10 +550,16 @@ impl ChooserView {
             ui: Ui::new(Box::new(layout), Context::new(text, appearance.palette())),
             chooser,
             places: folder_places(places),
+            policy: follow_search_policy(home.clone()),
             home,
             icons,
             intents: Rc::new(RefCell::new(Vec::new())),
             files: WidgetId::next(),
+            search_field: WidgetId::next(),
+            search_text: String::new(),
+            search: None,
+            recent: false,
+            excluded: Vec::new(),
             hidden_toggle: WidgetId::next(),
             focus: WidgetId::next(),
             selected: Vec::new(),
@@ -540,7 +589,11 @@ impl ChooserView {
 
     fn sidebar(&mut self) -> Table {
         let intents = Rc::clone(&self.intents);
-        let current = format!("{PLACE_PREFIX}{}", self.chooser.folder().display());
+        let current = match self.recent {
+            true => RECENT_KEY.to_owned(),
+            false => format!("{PLACE_PREFIX}{}", self.chooser.folder().display()),
+        };
+        let offers_recent = !self.chooses_folders();
         let mut rows = Vec::new();
         let mut headings = Vec::new();
         for row in self.places.clone().iter() {
@@ -549,7 +602,9 @@ impl ChooserView {
                     headings.push(Heading::new(rows.len(), title.as_str()))
                 }
                 SidebarRow::Place(place) => {
-                    if let Some(key) = place_key(place) {
+                    if let Some(key) = place_key(place)
+                        && (offers_recent || key != RECENT_KEY)
+                    {
                         let icon = self.icons.first(&[place.icon.to_owned()]);
                         rows.push(Row::new(
                             key,
@@ -562,10 +617,14 @@ impl ChooserView {
         let mut table = Table::new(vec![Column::new("", SIDEBAR_WIDTH).flexible()])
             .without_header()
             .sidebar()
-            .on_selection(move |keys| {
-                if let Some(path) = keys.first().and_then(|key| key.strip_prefix(PLACE_PREFIX)) {
-                    push(&intents, Intent::Go(PathBuf::from(path)));
+            .on_selection(move |keys| match keys.first().map(String::as_str) {
+                Some(RECENT_KEY) => push(&intents, Intent::Recent),
+                Some(key) => {
+                    if let Some(path) = key.strip_prefix(PLACE_PREFIX) {
+                        push(&intents, Intent::Go(PathBuf::from(path)));
+                    }
                 }
+                None => {}
             });
         table.set_rows(rows);
         table.set_headings(headings);
@@ -573,8 +632,22 @@ impl ChooserView {
         table
     }
 
+    fn chooses_folders(&self) -> bool {
+        matches!(
+            self.chooser.dialog().mode,
+            Mode::Open {
+                directory: true,
+                ..
+            } | Mode::SaveMany { .. }
+        )
+    }
+
     fn path_bar(&self) -> Stack {
         let mut children: Vec<Box<dyn Widget>> = Vec::new();
+        if self.recent {
+            children.push(Box::new(Label::new(&tr!("Recent"))));
+            return Stack::new(Axis::Horizontal, 2.0, 0.0, children);
+        }
         let folder = self.chooser.folder().to_path_buf();
         let ancestors: Vec<&Path> = match folder.starts_with(&self.home) {
             true => folder
@@ -653,15 +726,7 @@ impl ChooserView {
         .on_selection(move |keys| push(&select, Intent::Select(keys.to_vec())))
         .on_activate(move |keys| push(&activate, Intent::Activate(keys.to_vec())))
         .on_sort(move |order| push(&sort, Intent::Sort(order)));
-        let order = self.chooser.sort();
-        table.set_sort(Some(Sort {
-            column: match order.by {
-                SortBy::Name | SortBy::Kind | SortBy::Created => 0,
-                SortBy::Modified => 1,
-                SortBy::Size => 2,
-            },
-            ascending: !order.descending,
-        }));
+        table.set_sort((!self.chooser.shows_found()).then(|| table_sort(self.chooser.sort())));
         let rows = self.file_rows();
         table.set_rows(rows);
         table
@@ -728,14 +793,84 @@ impl ChooserView {
         )
     }
 
-    pub fn listing_fd(&self) -> Option<BorrowedFd<'_>> {
-        self.chooser.listing_fd()
+    pub fn sources(&self) -> Vec<BorrowedFd<'_>> {
+        [
+            self.chooser.listing_fd(),
+            self.search.as_ref().map(Search::fd),
+            self.policy.as_ref().map(Inbox::fd),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
-    pub fn listing_ready(&mut self) {
+    pub fn source_ready(&mut self) {
         if self.chooser.take_listings() {
             self.rebuild();
         }
+        if let Some(found) = self.search.as_mut().and_then(Search::take)
+            && !self.search_text.trim().is_empty()
+        {
+            self.chooser.show_found(&found);
+            self.refresh_rows();
+        }
+        if let Some(excluded) = self.policy.as_mut().and_then(|policy| policy.drain().pop()) {
+            self.excluded = excluded;
+            if let Some(search) = &self.search {
+                search.exclude(&self.excluded);
+            }
+            self.searched();
+        }
+    }
+
+    fn search_field(&self) -> SearchField {
+        let intents = Rc::clone(&self.intents);
+        SearchField::new(&tr!("Search"), &self.search_text, move |text: &str| {
+            push(&intents, Intent::Search(text.to_owned()))
+        })
+    }
+
+    fn refresh_rows(&mut self) {
+        self.selected.clear();
+        let rows = self.file_rows();
+        let order = (!self.chooser.shows_found()).then(|| table_sort(self.chooser.sort()));
+        if let Some(table) = self.ui.widget_as::<Table>(self.files) {
+            table.set_sort(order);
+            table.set_rows(rows);
+        }
+    }
+
+    fn searched(&mut self) {
+        let text = self.search_text.trim().to_owned();
+        if !text.is_empty() {
+            let scope = match self.recent {
+                true => self.home.clone(),
+                false => self.chooser.folder().to_path_buf(),
+            };
+            Search::query(&mut self.search, &self.home, &scope, &text, &self.excluded);
+            return;
+        }
+        if self.recent {
+            self.chooser.show_found(&recent_paths(&self.excluded));
+        } else if self.chooser.shows_found() {
+            let folder = self.chooser.folder().to_path_buf();
+            if let Err(error) = self.chooser.open(&folder) {
+                tracing::warn!("cannot list {}: {error}", folder.display());
+            }
+        } else {
+            return;
+        }
+        self.refresh_rows();
+    }
+
+    fn show_recent(&mut self) {
+        if self.recent && self.search_text.is_empty() {
+            return;
+        }
+        self.recent = true;
+        self.search_text.clear();
+        self.chooser.show_found(&recent_paths(&self.excluded));
+        self.rebuild();
     }
 
     fn rebuild(&mut self) {
@@ -743,12 +878,15 @@ impl ChooserView {
         let files = self.files_table();
         self.files = files.id();
         self.focus = self.files;
+        let search = self.search_field();
+        self.search_field = search.id();
         let mut children: Vec<Box<dyn Widget>> = vec![
             Box::new(sidebar),
             Box::new(self.path_bar()),
             Box::new(files),
             Box::new(self.tools()),
             Box::new(self.buttons()),
+            Box::new(search),
         ];
         let name = match self.chooser.dialog().mode {
             Mode::Save { .. } => {
@@ -756,7 +894,7 @@ impl ChooserView {
                 self.focus = field.id();
                 children.push(Box::new(Label::new(&tr!("Save as:"))));
                 children.push(Box::new(field));
-                Some((5, 6))
+                Some((6, 7))
             }
             _ => None,
         };
@@ -766,6 +904,7 @@ impl ChooserView {
             files: 2,
             tools: 3,
             buttons: 4,
+            search: 5,
             name,
         };
         if let Some(layout) = self.ui.widget_as::<Layout>(self.layout) {
@@ -841,11 +980,13 @@ impl ChooserView {
     }
 
     fn open(&mut self, folder: PathBuf) -> bool {
-        if folder == self.chooser.folder() {
+        if folder == self.chooser.folder() && !self.chooser.shows_found() {
             return false;
         }
         match self.chooser.open(&folder) {
             Ok(()) => {
+                self.recent = false;
+                self.search_text.clear();
                 self.rebuild();
                 true
             }
@@ -972,10 +1113,16 @@ impl ChooserView {
             for intent in intents {
                 match intent {
                     Intent::Go(folder) => self.go(folder),
+                    Intent::Recent => self.show_recent(),
+                    Intent::Search(text) => {
+                        self.search_text = text;
+                        self.searched();
+                    }
                     Intent::Select(keys) => {
                         self.selected = self.paths(&keys);
                         if let (Mode::Save { .. }, [only]) =
                             (&self.chooser.dialog().mode, self.selected.as_slice())
+                            && !self.chooser.shows_found()
                             && !self.chooser.is_folder(only)
                             && let Some(name) = only.file_name()
                         {
@@ -987,6 +1134,16 @@ impl ChooserView {
                         self.selected = self.paths(&keys);
                         match self.selected.as_slice() {
                             [only] if self.chooser.is_folder(only) => self.go(only.clone()),
+                            [only]
+                                if self.chooser.shows_found()
+                                    && matches!(self.chooser.dialog().mode, Mode::Save { .. }) =>
+                            {
+                                let found = only.clone();
+                                if let Some(parent) = found.parent() {
+                                    self.go(parent.to_path_buf());
+                                    self.select(&[found]);
+                                }
+                            }
                             _ => self.accept(),
                         }
                     }
@@ -1119,6 +1276,7 @@ impl ChooserView {
             Key::Character(letter) if control && !alt => {
                 match (letter.to_ascii_lowercase(), shift) {
                     ('l', false) => push(&self.intents, Intent::AskGoTo(self.shown_folder())),
+                    ('f', false) => self.ui.set_focus(self.search_field),
                     ('h', false) => push(
                         &self.intents,
                         Intent::ShowHidden(!self.chooser.shows_hidden()),

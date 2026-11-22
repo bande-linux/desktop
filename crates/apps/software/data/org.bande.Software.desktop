@@ -7,6 +7,6 @@ Comment[sv]=Hitta och installera appar
 Icon=org.bande.Software
 Exec=bande-software
 StartupNotify=true
-Categories=System;PackageManager;
+Categories=Settings;PackageManager;
 Keywords=apps;store;install;
 Keywords[sv]=appar;butik;installera;programvara;

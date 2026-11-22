@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 gstreamer.workspace = true
 gstreamer-app.workspace = true
+gstreamer-tag.workspace = true
 gstreamer-video.workspace = true
 rustix = { workspace = true, features = ["fs", "net"] }
 accesskit.workspace = true

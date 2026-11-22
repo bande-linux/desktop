@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_l10n::tr;
+
 use crate::compose::{Draft, Original, Outgoing, build, build_kept, forget_unsent};
 use crate::error::{Error, Result};
 use crate::imap::{Flag, Role, Session};
@@ -275,7 +277,7 @@ impl Runner {
         }
         self.password
             .clone()
-            .ok_or_else(|| Error::Login("no password is saved for this account".to_owned()))
+            .ok_or_else(|| Error::Login(tr!("no password is saved for this account")))
     }
 
     fn session(&mut self) -> Result<&mut Session> {
@@ -637,9 +639,7 @@ impl Runner {
             .store
             .mailbox_with_role(self.account.id, Role::Drafts)?
         else {
-            return Err(Error::Refused(
-                "the account has no Drafts mailbox".to_owned(),
-            ));
+            return Err(Error::Refused(tr!("the account has no Drafts mailbox")));
         };
         let raw = build_kept(draft, &jiff::Zoned::now());
         let session = self.session()?;

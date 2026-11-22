@@ -84,6 +84,9 @@ msgstr "Inte nu"
 msgid "Update Password"
 msgstr "Uppdatera lösenord"
 
+msgid "Type the password to continue."
+msgstr "Skriv lösenordet för att fortsätta."
+
 msgid "The passwords don’t match. Try again."
 msgstr "Lösenorden stämmer inte överens. Försök igen."
 

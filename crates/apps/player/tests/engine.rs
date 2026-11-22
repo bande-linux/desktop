@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::{Child, Command as Process, Stdio};
 use std::time::{Duration, Instant};
 
-use bande_media::{Channel, Command, Event, FailureKind, Playback};
+use bande_media::{Channel, Command, Event, FailureKind, Opening, Playback};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::net::{RecvFlags, SendFlags};
 
@@ -37,20 +37,34 @@ impl Engine {
             .unwrap();
     }
 
+    fn next(&self, within: Duration) -> Option<Event> {
+        let timeout = Timespec::try_from(within).unwrap();
+        let mut fds = [PollFd::new(&self.channel, PollFlags::IN)];
+        poll(&mut fds, Some(&timeout)).unwrap();
+        match self.channel.receive::<Event>(RecvFlags::DONTWAIT) {
+            Ok(received) => received.map(|(event, _)| event),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
+            Err(error) => panic!("the engine stopped: {error}"),
+        }
+    }
+
     fn until(&self, mut wanted: impl FnMut(&Event) -> bool) {
         let deadline = Instant::now() + PATIENCE;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             assert!(!left.is_zero(), "the engine did not answer in time");
-            let timeout = Timespec::try_from(left).unwrap();
-            let mut fds = [PollFd::new(&self.channel, PollFlags::IN)];
-            poll(&mut fds, Some(&timeout)).unwrap();
-            if let Some((event, _)) = self.channel.receive::<Event>(RecvFlags::DONTWAIT).unwrap()
-                && wanted(&event)
-            {
+            if self.next(left).is_some_and(|event| wanted(&event)) {
                 return;
             }
         }
+    }
+
+    fn position_is(&self, wanted_ms: u64) -> bool {
+        (0..50).any(|_| {
+            self.send(Command::QueryPosition);
+            std::iter::from_fn(|| self.next(Duration::from_millis(100)))
+                .any(|event| matches!(event, Event::Position(ms) if ms.abs_diff(wanted_ms) < 100))
+        })
     }
 }
 
@@ -86,7 +100,10 @@ fn a_song_opens_with_its_length_and_plays_to_the_end() {
     let path = folder.path().join("song.wav");
     write_wav(&path, 1);
     let engine = Engine::start();
-    engine.send(Command::Open(path));
+    engine.send(Command::Open(Opening {
+        path,
+        ..Opening::default()
+    }));
     engine.until(|event| {
         matches!(event, Event::Info(info) if info.duration_ms.is_some_and(|ms| ms.abs_diff(1000) < 100))
     });
@@ -100,12 +117,54 @@ fn a_file_that_is_not_media_fails_without_killing_the_engine() {
     let junk = folder.path().join("junk.mp4");
     std::fs::write(&junk, vec![0x5a; 4096]).unwrap();
     let engine = Engine::start();
-    engine.send(Command::Open(junk));
+    engine.send(Command::Open(Opening {
+        path: junk,
+        ..Opening::default()
+    }));
     engine.until(
         |event| matches!(event, Event::Failed { kind, .. } if *kind == FailureKind::Unsupported),
     );
     let song = folder.path().join("song.wav");
     write_wav(&song, 1);
-    engine.send(Command::Open(song));
+    engine.send(Command::Open(Opening {
+        path: song,
+        ..Opening::default()
+    }));
     engine.until(|event| *event == Event::State(Playback::Paused));
+}
+
+#[test]
+fn subtitles_named_after_a_recording_open_with_it() {
+    let folder = tempfile::tempdir().unwrap();
+    let song = folder.path().join("song.wav");
+    write_wav(&song, 1);
+    std::fs::write(
+        folder.path().join("song.en.srt"),
+        "1\n00:00:00,000 --> 00:00:00,900\nHello\n",
+    )
+    .unwrap();
+    let engine = Engine::start();
+    engine.send(Command::Open(Opening {
+        path: song.clone(),
+        ..Opening::default()
+    }));
+    engine.until(|event| matches!(event, Event::Info(info) if !info.subtitle_tracks.is_empty()));
+    let added = folder.path().join("added.vtt");
+    std::fs::write(&added, "WEBVTT\n\n00:00.000 --> 00:00.900\nHej\n").unwrap();
+    engine.send(Command::Open(Opening {
+        path: song,
+        subtitles: Some(added),
+        start_ms: 500,
+    }));
+    let (mut shown, mut paused) = (false, false);
+    engine.until(|event| {
+        shown |= matches!(event, Event::Info(info)
+            if info.selected_subtitles.is_some() && info.selected_audio.is_some());
+        paused |= *event == Event::State(Playback::Paused);
+        shown && paused
+    });
+    assert!(
+        engine.position_is(500),
+        "playback did not carry on where it was"
+    );
 }

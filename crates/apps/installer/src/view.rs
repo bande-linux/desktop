@@ -34,6 +34,8 @@ enum Intent {
     Back,
     Retry,
     Open(usize),
+    Website,
+    Restart,
     Close,
 }
 
@@ -45,10 +47,10 @@ fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
 
 fn arch_name(arch: &str) -> String {
     match arch {
-        "amd64" => tr!("Intel and AMD computers (amd64)"),
-        "arm64" => tr!("64-bit ARM (arm64)"),
-        "armhf" => tr!("32-bit ARM (armhf)"),
-        "i386" => tr!("older 32-bit Intel and AMD computers (i386)"),
+        "amd64" => tr!("Intel and AMD computers"),
+        "arm64" => tr!("64-bit ARM computers"),
+        "armhf" => tr!("32-bit ARM computers"),
+        "i386" => tr!("older 32-bit Intel and AMD computers"),
         other => other.to_owned(),
     }
 }
@@ -97,6 +99,7 @@ pub struct Installer {
     ui: Ui,
     content: WidgetId,
     closed: bool,
+    restart: bool,
 }
 
 impl Installer {
@@ -128,6 +131,7 @@ impl Installer {
             ui,
             content: id,
             closed: false,
+            restart: false,
         };
         installer.ask(Job::Inspect);
         installer.rebuild();
@@ -242,8 +246,20 @@ impl Installer {
                     self.closed = true;
                 }
             }
+            Intent::Website => {
+                if let Some(deb) = &self.deb
+                    && let Err(error) = bande_xdg::open(&deb.homepage, None)
+                {
+                    tracing::warn!("cannot open {}: {error}", deb.homepage);
+                }
+            }
+            Intent::Restart => self.restart = true,
             Intent::Close => self.closed = true,
         }
+    }
+
+    pub fn take_restart(&mut self) -> bool {
+        std::mem::take(&mut self.restart)
     }
 
     pub fn pump(&mut self) -> bool {
@@ -363,7 +379,7 @@ impl Installer {
         }
         match &preview.signed {
             Some(signed) => widgets.push(boxed(Label::new(&tr!("The same version is in your software sources ({source}), where it is signed. Installing it from there is safer than installing this file.", source = origin_name(&signed.origin))))),
-            None => widgets.push(boxed(Label::new(&tr!("This package doesn't come from your software sources. Its install scripts get full control of this computer, and it may add its own software source. Install it only if you trust where you got it.")))),
+            None => widgets.push(boxed(Label::new(&tr!("This package doesn’t come from your software sources. Its install scripts get full control of this computer, and it may add its own software source. Install it only if you trust where you got it.")))),
         }
         if !deb.maintainer.is_empty() {
             widgets.push(boxed(Label::new(&tr!(
@@ -371,8 +387,8 @@ impl Installer {
                 maintainer = deb.maintainer.clone()
             ))));
         }
-        if !deb.homepage.is_empty() {
-            widgets.push(boxed(Label::new(&deb.homepage)));
+        if deb.homepage.starts_with("https://") || deb.homepage.starts_with("http://") {
+            widgets.push(boxed(self.button(&deb.homepage, Intent::Website).link()));
         }
         if !deb.description.is_empty() {
             widgets.push(disclosure(&tr!("Details"), &deb.description));
@@ -427,7 +443,7 @@ impl Installer {
         match &self.state {
             State::Reading => vec![boxed(Spinner::new(&tr!("Reading the package…")))],
             State::Invalid => vec![
-                boxed(Label::new(&tr!("This file isn't a valid Debian package."))),
+                boxed(Label::new(&tr!("This file isn’t a valid Debian package."))),
                 boxed(Label::new(&tr!(
                     "The download may be incomplete. Try downloading it again."
                 ))),
@@ -441,8 +457,8 @@ impl Installer {
                     native = arch_name(native)
                 ))),
                 boxed(Label::new(&tr!(
-                    "Look for a download for {native} on the developer's website.",
-                    native = native.clone()
+                    "Look for a download for {native} on the developer’s website.",
+                    native = arch_name(native)
                 ))),
                 row(vec![close()]),
             ],
@@ -466,7 +482,7 @@ impl Installer {
             State::Ready(preview) => self.preview(preview),
             State::Blocked { missing, details } => {
                 let mut widgets = vec![boxed(Label::new(&tr!(
-                    "Can't install: it needs packages that aren't available"
+                    "Can’t install: it needs packages that aren’t available"
                 )))];
                 if !missing.is_empty() {
                     widgets.push(boxed(Label::new(&tr!(
@@ -499,6 +515,9 @@ impl Installer {
                         ))
                     })
                     .collect();
+                if *restart {
+                    buttons.push(boxed(self.button(&tr!("Restart…"), Intent::Restart)));
+                }
                 buttons.push(done());
                 widgets.push(row(buttons));
                 widgets
@@ -529,25 +548,25 @@ impl Installer {
                         tr!("Another installation is running. Try again when it finishes.")
                     }
                     Problem::SystemPackage => {
-                        tr!("This package is part of the system and can't be removed.")
+                        tr!("This package is part of the system and can’t be removed.")
                     }
                     Problem::Unavailable => {
-                        tr!("Installing packages needs PackageKit, which isn't installed.")
+                        tr!("Installing packages needs PackageKit, which isn’t installed.")
                     }
                     Problem::NoNetwork => tr!(
-                        "The packages it needs couldn't be downloaded. Check your internet connection and try again."
+                        "The packages it needs couldn’t be downloaded. Check your internet connection and try again."
                     ),
                     Problem::NoSpace => {
-                        tr!("There isn't enough disk space. Free up some space and try again.")
+                        tr!("There isn’t enough disk space. Free up some space and try again.")
                     }
                     Problem::Dependencies => tr!(
-                        "It needs packages that can't be installed right now. Install pending updates in Settings ▸ Software Update, then try again."
+                        "It needs packages that can’t be installed right now. Install pending updates in Settings ▸ Software Update, then try again."
                     ),
                     Problem::Install => tr!(
-                        "The package couldn't be installed. Try again, or open Details to see what went wrong."
+                        "The package couldn’t be installed. Try again, or open Details to see what went wrong."
                     ),
                     Problem::Remove => tr!(
-                        "The package couldn't be removed. Try again, or open Details to see what went wrong."
+                        "The package couldn’t be removed. Try again, or open Details to see what went wrong."
                     ),
                 };
                 let mut widgets = vec![boxed(Label::new(&sentence))];
@@ -566,7 +585,7 @@ impl Installer {
     fn rebuild(&mut self) {
         let mut widgets = self.header();
         if self.refused {
-            widgets.push(boxed(Label::new(&tr!("Nothing was changed, because no administrator's password was given. If no password window appeared, log out and back in, then try again."))));
+            widgets.push(boxed(Label::new(&tr!("Nothing was changed, because no administrator’s password was given. If no password window appeared, log out and back in, then try again."))));
         }
         widgets.extend(self.body());
         let page = boxed(Stack::new(Axis::Vertical, SPACING, PADDING, widgets));

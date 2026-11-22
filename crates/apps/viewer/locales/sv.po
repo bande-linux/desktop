@@ -19,6 +19,15 @@ msgstr "GIF-bild"
 msgid "WebP image"
 msgstr "WebP-bild"
 
+msgid "TIFF image"
+msgstr "TIFF-bild"
+
+msgid "BMP image"
+msgstr "BMP-bild"
+
+msgid "Icon"
+msgstr "Ikon"
+
 msgid "SVG image"
 msgstr "SVG-bild"
 
@@ -115,6 +124,9 @@ msgstr "Öppna"
 msgid "Images and PDF documents"
 msgstr "Bilder och PDF-dokument"
 
+msgid "Save Rotated Copy"
+msgstr "Spara roterad kopia"
+
 msgid "Info"
 msgstr "Info"
 
@@ -126,6 +138,12 @@ msgstr "Visa i Filer"
 
 msgid "Properties"
 msgstr "Egenskaper"
+
+msgid "Move to Trash"
+msgstr "Flytta till papperskorgen"
+
+msgid "Undo Move to Trash"
+msgstr "Ångra flytt till papperskorgen"
 
 msgid "Copy"
 msgstr "Kopiera"
@@ -190,6 +208,12 @@ msgstr "Vänd horisontellt"
 msgid "Flip Vertical"
 msgstr "Vänd vertikalt"
 
+msgid "Save Rotated Copy…"
+msgstr "Spara roterad kopia…"
+
+msgid "Save Rotation"
+msgstr "Spara rotering"
+
 msgid "File"
 msgstr "Arkiv"
 
@@ -235,6 +259,21 @@ msgstr "Ingen fil är öppen"
 msgid "Open an image or a PDF document with File ▸ Open…, from Files or by dropping it here."
 msgstr "Öppna en bild eller ett PDF-dokument med Arkiv ▸ Öppna…, från Filer eller genom att släppa det här."
 
+msgid "“{name}” could not be moved to the Trash."
+msgstr "Det gick inte att flytta ”{name}” till papperskorgen."
+
+msgid "You may not have permission to move it."
+msgstr "Du kanske inte har behörighet att flytta den."
+
+msgid "OK"
+msgstr "OK"
+
+msgid "“{name}” could not be put back."
+msgstr "Det gick inte att lägga tillbaka ”{name}”."
+
+msgid "A file with the same name may be in its place."
+msgstr "Det kanske redan finns en fil med samma namn på dess plats."
+
 msgid "{name} (page {page} of {count})"
 msgstr "{name} (sida {page} av {count})"
 
@@ -252,3 +291,15 @@ msgstr "Lösenordet är fel. Försök igen."
 
 msgid "Enter the document’s password to open it."
 msgstr "Ange dokumentets lösenord för att öppna det."
+
+msgid "{name} rotated"
+msgstr "{name} roterad"
+
+msgid "“{name}” could not be saved."
+msgstr "Det gick inte att spara ”{name}”."
+
+msgid "You may not have permission to change it, or the disk is full."
+msgstr "Du kanske inte har behörighet att ändra den, eller så är disken full."
+
+msgid "Viewer cannot change this file’s orientation without rewriting the picture, so the file is left as it is."
+msgstr "Visare kan inte ändra filens orientering utan att skriva om bilden, så filen lämnas som den är."

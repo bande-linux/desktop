@@ -86,7 +86,7 @@ pub(crate) fn alert_title(alert: Alert) -> String {
     }
 }
 
-fn answer_title(answer: Answer) -> String {
+pub(super) fn answer_title(answer: Answer) -> String {
     match answer {
         Answer::Accepted => tr!("Accept"),
         Answer::Tentative => tr!("Maybe"),

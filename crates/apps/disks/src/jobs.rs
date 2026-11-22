@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -24,6 +24,11 @@ use zeroize::Zeroizing;
 
 const DISMISSED: &str = "org.freedesktop.UDisks2.Error.NotAuthorizedDismissed";
 const CHUNK: usize = 4 << 20;
+const COMPRESSED: [bande_fs::Format; 3] = [
+    bande_fs::Format::Xz,
+    bande_fs::Format::Zstd,
+    bande_fs::Format::Gzip,
+];
 const PARTITION_START: u64 = 1 << 20;
 const FILESYSTEMS: [&str; 10] = [
     "ext2", "ext3", "ext4", "vfat", "exfat", "ntfs", "xfs", "btrfs", "f2fs", "udf",
@@ -243,22 +248,53 @@ fn none() -> Options<'static> {
     HashMap::new()
 }
 
-fn release(system: &Connection, blocks: &[String]) -> Result<Vec<String>, Failure> {
+struct Released<'a> {
+    system: &'a Connection,
+    unmounted: Vec<String>,
+}
+
+impl Released<'_> {
+    fn keep(mut self) {
+        self.unmounted.clear();
+    }
+
+    fn remount(mut self) -> Result<(), Failure> {
+        for filesystem in std::mem::take(&mut self.unmounted) {
+            call(self.system, &filesystem, FILESYSTEM, "Mount", &(none(),))?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Released<'_> {
+    fn drop(&mut self) {
+        for filesystem in &self.unmounted {
+            if let Err(error) = call(self.system, filesystem, FILESYSTEM, "Mount", &(none(),)) {
+                tracing::warn!("cannot mount {filesystem} again: {error:?}");
+            }
+        }
+    }
+}
+
+fn release<'a>(system: &'a Connection, blocks: &[String]) -> Result<Released<'a>, Failure> {
     let objects = Objects::load(system)?;
-    let mut unmounted = Vec::new();
+    let mut released = Released {
+        system,
+        unmounted: Vec::new(),
+    };
     for block in blocks {
         let opened = objects.path(block, ENCRYPTED, "CleartextDevice");
         for filesystem in [Some(block.clone()), opened.clone()].into_iter().flatten() {
             if !objects.mount_points(&filesystem).is_empty() {
                 call(system, &filesystem, FILESYSTEM, "Unmount", &(none(),))?;
-                unmounted.push(filesystem);
+                released.unmounted.push(filesystem);
             }
         }
         if opened.is_some() {
             call(system, block, ENCRYPTED, "Lock", &(none(),))?;
         }
     }
-    Ok(unmounted)
+    Ok(released)
 }
 
 fn format_options<'a>(erase: &'a Erase, partition: bool) -> Options<'a> {
@@ -319,17 +355,10 @@ fn members(system: &Connection, block: &str) -> Result<Vec<String>, Failure> {
     Ok(members)
 }
 
-fn remount(system: &Connection, unmounted: &[String]) -> Result<(), Failure> {
-    for filesystem in unmounted {
-        call(system, filesystem, FILESYSTEM, "Mount", &(none(),))?;
-    }
-    Ok(())
-}
-
 fn resize(system: &Connection, partition: &str, size: u64, grow: bool) -> Result<(), Failure> {
     let objects = Objects::load(system)?;
     let filesystem = objects.has(partition, FILESYSTEM);
-    let unmounted = release(system, &[partition.to_owned()])?;
+    let released = release(system, &[partition.to_owned()])?;
     let partition_resize = || call(system, partition, PARTITION, "Resize", &(size, none()));
     if grow {
         partition_resize()?;
@@ -344,11 +373,11 @@ fn resize(system: &Connection, partition: &str, size: u64, grow: bool) -> Result
     if !grow {
         partition_resize()?;
     }
-    remount(system, &unmounted)
+    released.remount()
 }
 
 fn repair(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> {
-    let unmounted = release(system, &[filesystem.to_owned()])?;
+    let released = release(system, &[filesystem.to_owned()])?;
     let consistent: bool = call(system, filesystem, FILESYSTEM, "Check", &(none(),))?
         .body()
         .deserialize()?;
@@ -358,7 +387,7 @@ fn repair(system: &Connection, filesystem: &str) -> Result<Outcome, Failure> {
             .body()
             .deserialize::<bool>()?,
     };
-    remount(system, &unmounted)?;
+    released.remount()?;
     match consistent || repaired {
         true => Ok(Outcome::Checked { repaired }),
         false => Err(Failure::Failed(tr!(
@@ -373,31 +402,58 @@ fn open_device(system: &Connection, block: &str, method: &str) -> Result<File, F
     Ok(File::from(OwnedFd::from(fd)))
 }
 
-fn copy(
-    mut from: impl Read,
-    mut to: impl Write,
+struct Measured<'a, R> {
+    inner: R,
     total: u64,
-    cancel: &AtomicBool,
-    out: &Out,
-) -> Result<(), Failure> {
-    let mut buffer = vec![0; CHUNK];
-    let mut done = 0u64;
-    let mut shown = 0u64;
-    loop {
-        if cancel.swap(false, Ordering::Relaxed) {
-            return Err(Failure::Failed(tr!("The operation was stopped.")));
+    done: u64,
+    shown: u64,
+    cancel: &'a AtomicBool,
+    out: &'a Out,
+}
+
+impl<'a, R> Measured<'a, R> {
+    fn new(inner: R, total: u64, cancel: &'a AtomicBool, out: &'a Out) -> Self {
+        Self {
+            inner,
+            total,
+            done: 0,
+            shown: 0,
+            cancel,
+            out,
         }
+    }
+}
+
+impl<R: Read> Read for Measured<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.cancel.swap(false, Ordering::Relaxed) {
+            return Err(io::Error::other(tr!("The operation was stopped.")));
+        }
+        let read = self.inner.read(buffer)?;
+        self.done += read as u64;
+        let percent = self.done.saturating_mul(100) / self.total.max(1);
+        if percent != self.shown {
+            self.shown = percent;
+            self.out.send(Report::Progress(percent as f32 / 100.0));
+        }
+        Ok(read)
+    }
+}
+
+fn copy(mut from: impl Read, mut to: impl Write) -> Result<(), Failure> {
+    let mut buffer = vec![0; CHUNK];
+    loop {
         let read = from.read(&mut buffer)?;
         if read == 0 {
             return Ok(());
         }
-        to.write_all(buffer.get(..read).unwrap_or_default())?;
-        done += read as u64;
-        let percent = done.saturating_mul(100) / total.max(1);
-        if percent != shown {
-            shown = percent;
-            out.send(Report::Progress(percent as f32 / 100.0));
-        }
+        to.write_all(buffer.get(..read).unwrap_or_default())
+            .map_err(|error| match error.kind() {
+                io::ErrorKind::StorageFull | io::ErrorKind::WriteZero => {
+                    Failure::Failed(tr!("The image is too big."))
+                }
+                _ => Failure::from(error),
+            })?;
     }
 }
 
@@ -408,17 +464,18 @@ fn create_image(
     cancel: &AtomicBool,
     out: &Out,
 ) -> Result<(), Failure> {
-    let unmounted = release(system, &members(system, source)?)?;
+    let released = release(system, &members(system, source)?)?;
     let objects = Objects::load(system)?;
     let size: u64 = objects.get(source, BLOCK, "Size").unwrap_or(0);
     let device = open_device(system, source, "OpenForBackup")?;
     let image = File::create(file)?;
-    let copied = copy(device, &image, size, cancel, out).and_then(|()| Ok(image.sync_all()?));
+    let copied =
+        copy(Measured::new(device, size, cancel, out), &image).and_then(|()| Ok(image.sync_all()?));
     if copied.is_err() {
         let _ = std::fs::remove_file(file);
     }
     copied?;
-    remount(system, &unmounted)
+    released.remount()
 }
 
 fn restore(
@@ -430,14 +487,21 @@ fn restore(
 ) -> Result<(), Failure> {
     let image = File::open(file)?;
     let size = image.metadata()?.len();
+    let compression = bande_fs::Format::of(file).filter(|format| COMPRESSED.contains(format));
     let objects = Objects::load(system)?;
     let capacity: u64 = objects.get(target, BLOCK, "Size").unwrap_or(0);
-    if size > capacity {
+    if compression.is_none() && size > capacity {
         return Err(Failure::Failed(tr!("The image is too big.")));
     }
-    release(system, &members(system, target)?)?;
+    let released = release(system, &members(system, target)?)?;
     let device = open_device(system, target, "OpenForRestore")?;
-    copy(image, &device, size, cancel, out)?;
+    released.keep();
+    let measured = Measured::new(image, size, cancel, out);
+    let decoded: Box<dyn Read> = match compression {
+        Some(format) => format.decoder(BufReader::with_capacity(CHUNK, measured))?,
+        None => Box::new(measured),
+    };
+    copy(decoded, &device)?;
     Ok(device.sync_all()?)
 }
 
@@ -460,13 +524,18 @@ fn mount_image(system: &Connection, file: &PathBuf) -> Result<Outcome, Failure> 
     Ok(Outcome::Loop(device.to_string()))
 }
 
-fn image_filter() -> bande_app::Filter {
-    let patterns = ["*.img", "*.iso", "*.IMG", "*.ISO", "*.raw"];
+fn image_filter(compressed: bool) -> bande_app::Filter {
+    let raw = ["*.img", "*.iso", "*.IMG", "*.ISO", "*.raw"];
+    let packed = ["*.img.xz", "*.img.zst", "*.img.gz"];
+    let patterns = match compressed {
+        true => [raw.as_slice(), packed.as_slice()].concat(),
+        false => raw.to_vec(),
+    };
     (
         tr!("Disk Images"),
         patterns
-            .iter()
-            .map(|pattern| (0, (*pattern).to_owned()))
+            .into_iter()
+            .map(|pattern| (0, pattern.to_owned()))
             .collect(),
     )
 }
@@ -523,9 +592,7 @@ fn perform(
         Job::Mount(filesystem) => {
             call(system, &filesystem, FILESYSTEM, "Mount", &(none(),))?;
         }
-        Job::Unmount(block) => {
-            release(system, &[block])?;
-        }
+        Job::Unmount(block) => release(system, &[block])?.keep(),
         Job::Unlock(encrypted, passphrase) => {
             let reply = call(
                 system,
@@ -542,7 +609,7 @@ fn perform(
             bande_volumes::eject_block(system, &objects, &disk, false)?;
         }
         Job::EraseVolume(block, erase) => {
-            release(system, std::slice::from_ref(&block))?;
+            let released = release(system, std::slice::from_ref(&block))?;
             let objects = Objects::load(system)?;
             let options = format_options(&erase, objects.has(&block, PARTITION));
             call(
@@ -552,14 +619,16 @@ fn perform(
                 "Format",
                 &(erase.format.kind(), options),
             )?;
+            released.keep();
         }
         Job::EraseDisk(block, scheme, erase) => {
-            release(system, &members(system, &block)?)?;
+            let released = release(system, &members(system, &block)?)?;
             let kind = match scheme {
                 Scheme::Gpt => "gpt",
                 Scheme::Mbr => "dos",
             };
             call(system, &block, BLOCK, "Format", &(kind, none()))?;
+            released.keep();
             create_partition(system, &block, scheme, (PARTITION_START, 0), &erase)?;
         }
         Job::AddPartition {
@@ -570,8 +639,9 @@ fn perform(
             erase,
         } => create_partition(system, &table, scheme, (offset, size), &erase)?,
         Job::DeletePartition(block) => {
-            release(system, std::slice::from_ref(&block))?;
+            let released = release(system, std::slice::from_ref(&block))?;
             call(system, &block, PARTITION, "Delete", &(none(),))?;
+            released.keep();
         }
         Job::Resize {
             partition,
@@ -654,12 +724,12 @@ impl Worker {
                     Choose::Restore(_) => bande_app::choose_file(
                         &session,
                         &tr!("Choose an Image"),
-                        Some(image_filter()),
+                        Some(image_filter(true)),
                     ),
                     Choose::MountImage => bande_app::choose_file(
                         &session,
                         &tr!("Open Disk Image"),
-                        Some(image_filter()),
+                        Some(image_filter(false)),
                     ),
                 };
                 let file = chosen.unwrap_or_else(|error| {

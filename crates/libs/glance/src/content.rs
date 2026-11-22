@@ -3,10 +3,10 @@ use std::time::Instant;
 
 use bande_media_view::{Opening, Session, Stage};
 
-use bande_content::{Block, Code, Content, Contents, Frame, Level, Pixels};
+use bande_content::{Block, Code, Content, Contents, Failure, Frame, Level, Pixels};
 use bande_toolkit::Color;
 
-use crate::loader::Loaded;
+use crate::loader::{Loaded, installed_font};
 use crate::worker::Sample;
 use bande_toolkit::{Image, Paragraph};
 
@@ -63,9 +63,18 @@ pub struct DocumentView {
     pub laid: Laid<(f32, Block, Paragraph)>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Installation {
+    Available,
+    Installing,
+    Installed,
+    Failed,
+}
+
 pub struct FontView {
     pub sample: Image,
     pub tinted: Option<(Color, Image)>,
+    pub installation: Installation,
 }
 
 impl FontView {
@@ -91,6 +100,7 @@ pub enum Shown {
     Folder { items: u64, bytes: Option<u64> },
     Archive(Contents),
     Media(Option<Box<Stage>>),
+    Failed(Failure),
     Other,
 }
 
@@ -110,8 +120,17 @@ fn media_stage(path: &Path) -> Option<Box<Stage>> {
 }
 
 impl Shown {
-    pub fn from_loaded(loaded: Loaded, path: Option<&Path>) -> Self {
-        match loaded {
+    pub fn receive(&mut self, loaded: Loaded, path: Option<&Path>) {
+        *self = match loaded {
+            Loaded::FontInstalled(installed) => {
+                if let Self::Font(font) = self {
+                    font.installation = match installed {
+                        true => Installation::Installed,
+                        false => Installation::Failed,
+                    };
+                }
+                return;
+            }
             Loaded::Content(content) => Self::from_content(content, path),
             Loaded::FontSample(sample) => sample
                 .and_then(
@@ -122,14 +141,21 @@ impl Shown {
                      }| { Image::from_premultiplied(width, height, rgba) },
                 )
                 .map_or(Self::Other, |sample| {
+                    let installed = path
+                        .and_then(installed_font)
+                        .is_some_and(|installed| installed.is_file());
                     Self::Font(Box::new(FontView {
                         sample,
                         tinted: None,
+                        installation: match installed {
+                            true => Installation::Installed,
+                            false => Installation::Available,
+                        },
                     }))
                 }),
             Loaded::Archive(Some(contents)) => Self::Archive(contents),
             Loaded::Archive(None) => Self::Other,
-        }
+        };
     }
 
     fn from_content(content: Content, path: Option<&Path>) -> Self {
@@ -174,6 +200,7 @@ impl Shown {
             Content::Document(blocks) => Self::Document(DocumentView { blocks, laid: None }),
             Content::Folder { items, bytes } => Self::Folder { items, bytes },
             Content::Media => Self::Media(path.and_then(media_stage)),
+            Content::Failed(failure) => Self::Failed(failure),
             Content::Font | Content::Archive | Content::Other => Self::Other,
         }
     }

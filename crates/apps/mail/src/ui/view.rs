@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::os::fd::BorrowedFd;
 use std::os::unix::fs::DirBuilderExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -26,6 +26,7 @@ use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 use accesskit::{ActionRequest, TreeUpdate};
+use bande_app::{Dropping, FileDrop};
 use bande_app_settings::{Stored, settings_folder};
 use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
@@ -36,6 +37,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
+    Window, WindowEvent,
 };
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -95,6 +97,7 @@ pub enum Request {
     ShowMenu(Menu, Point),
     Clipboard(ClipboardRequest),
     OpenSettings,
+    Attach(Vec<PathBuf>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -199,6 +202,7 @@ pub(crate) struct SetupSheet {
 }
 
 pub struct MailView {
+    drop: FileDrop,
     pub(crate) store: Store,
     store_path: PathBuf,
     pub(crate) accounts: Vec<(Account, Vec<Mailbox>)>,
@@ -267,6 +271,7 @@ impl MailView {
         let host = FreeLayout::new();
         let host_id = Widget::id(&host);
         let mut view = Self {
+            drop: FileDrop::default(),
             store,
             store_path,
             accounts: Vec::new(),
@@ -604,6 +609,17 @@ impl MailView {
         let handled = self.ui.pasted(text);
         self.after_ui();
         handled
+    }
+
+    pub fn dragged(&mut self, window: &mut Window, event: &WindowEvent) -> bool {
+        match self.drop.event(window, event, Path::is_file) {
+            Dropping::Over => true,
+            Dropping::Dropped(paths) => {
+                self.requests.push(Request::Attach(paths));
+                true
+            }
+            Dropping::Other => false,
+        }
     }
 
     pub fn menu_closed(&mut self) -> bool {

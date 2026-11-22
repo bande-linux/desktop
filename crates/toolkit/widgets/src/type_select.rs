@@ -22,6 +22,13 @@ impl TypeSelect {
         &self.typed
     }
 
+    pub fn is_typing(&self, now: Instant) -> bool {
+        !self.typed.is_empty()
+            && self
+                .last
+                .is_some_and(|last| now.saturating_duration_since(last) <= PAUSE)
+    }
+
     pub fn clear(&mut self) {
         self.typed.clear();
     }

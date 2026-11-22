@@ -1,13 +1,14 @@
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::fs;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_content::pdf::worker::first_page;
-use bande_content::{confine, worker_program};
+use bande_content::{confine, run_worker};
 use bande_xdg::{find_executable, wait_for_exit};
 use image::DynamicImage;
 
@@ -335,41 +336,16 @@ fn picture_from(out: &[u8]) -> Option<Picture> {
 }
 
 fn in_worker(cache: &Cache, path: &Path, mime: &str, size: ThumbnailSize) -> Option<Picture> {
-    let mut child = Command::new(worker_program())
-        .arg(WORKER_FLAG)
-        .arg(size.pixels().to_string())
-        .arg(mime)
-        .arg(path)
-        .arg(cache.root())
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .inspect_err(|error| tracing::warn!("cannot start a thumbnail worker: {error}"))
-        .ok()?;
-    let stdout = child.stdout.take()?;
-    let reader = thread::Builder::new()
-        .name("thumbnail reader".to_owned())
-        .spawn(move || {
-            let mut out = Vec::new();
-            stdout
-                .take(LARGEST_OUTPUT)
-                .read_to_end(&mut out)
-                .map(|_| out)
-        })
-        .inspect_err(|error| tracing::warn!("cannot read a thumbnail worker: {error}"))
-        .ok()?;
-    let exited = wait_for_exit(&mut child, Some(Instant::now() + WORKER_TIME), None);
-    let made = matches!(exited, Ok(Some(status)) if status.success());
-    if !made {
-        if let Ok(None) = exited {
-            tracing::warn!("making the thumbnail of {} took too long", path.display());
-        }
-        let _ = child.kill();
-        let _ = child.wait();
-    }
-    let out = reader.join().ok()?.ok()?;
-    made.then(|| picture_from(&out)).flatten()
+    let pixels = size.pixels().to_string();
+    let arguments = [
+        OsStr::new(WORKER_FLAG),
+        OsStr::new(&pixels),
+        OsStr::new(mime),
+        path.as_os_str(),
+        cache.root().as_os_str(),
+    ];
+    let out = run_worker(&arguments, LARGEST_OUTPUT, WORKER_TIME)?;
+    picture_from(&out)
 }
 
 pub fn thumbnail(

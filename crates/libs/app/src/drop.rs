@@ -13,6 +13,14 @@ pub enum Dropping {
     Dropped(Vec<PathBuf>),
 }
 
+/// The local files among `uris` that `accepts` takes.
+pub fn local_files(uris: &[String], accepts: impl Fn(&Path) -> bool) -> Vec<PathBuf> {
+    uris.iter()
+        .filter_map(|uri| bande_xdg::path_from_file_uri(uri))
+        .filter(|path| accepts(path))
+        .collect()
+}
+
 /// Takes files dragged onto a window, such as from Files, for the app to open, attach or
 /// import.
 #[derive(Debug, Default)]
@@ -34,11 +42,7 @@ impl FileDrop {
         };
         match drag {
             DragEvent::Entered { uris, .. } => {
-                self.offered = uris
-                    .iter()
-                    .filter_map(|uri| bande_xdg::path_from_file_uri(uri))
-                    .filter(|path| accepts(path))
-                    .collect();
+                self.offered = local_files(uris, accepts);
             }
             DragEvent::Dropped { .. } if !self.offered.is_empty() => {
                 return Dropping::Dropped(std::mem::take(&mut self.offered));

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use bande_fs::{Action, Purpose, Task, same_volume};
-use bande_toolkit::ui::{Pointer, past_drag_slop};
+use bande_toolkit::ui::{Event, Pointer, Scroll, past_drag_slop};
 use bande_toolkit::{
     Color, DragAction, DragIcon, Item, Point, Radius, Rect, Scene, Shape, TextAlign, TextStyle,
 };
@@ -16,6 +16,9 @@ use crate::view::{FilesView, Hit, Request, SIDEBAR_WIDTH, home};
 use crate::views::ViewMode;
 
 const GAP_REACH: f32 = 6.0;
+const SCROLL_EDGE: f32 = 24.0;
+const SCROLL_SPEED: f32 = 1200.0;
+const SCROLL_STEP: Duration = Duration::from_millis(16);
 const EMPTY_FAVOURITES_Y: f32 = 40.0;
 const ICON: f32 = 40.0;
 const ICON_PIXELS: u32 = 64;
@@ -158,6 +161,43 @@ impl FilesView {
         self.press = None;
         self.drag_sources.clear();
         self.drop = None;
+        self.auto_scroll = None;
+    }
+
+    fn edge_pull(&self, at: Point) -> f32 {
+        let frame = self.content_frame();
+        if self.drag_sources.is_empty() || !frame.contains(at) {
+            return 0.0;
+        }
+        let from_top = at.y - frame.y;
+        let from_bottom = frame.y + frame.height - at.y;
+        match (from_top < SCROLL_EDGE, from_bottom < SCROLL_EDGE) {
+            (true, false) => -(1.0 - from_top / SCROLL_EDGE),
+            (false, true) => 1.0 - from_bottom / SCROLL_EDGE,
+            _ => 0.0,
+        }
+    }
+
+    pub(crate) fn auto_scroll_due(&self) -> Option<Instant> {
+        self.auto_scroll.map(|(_, last)| last + SCROLL_STEP)
+    }
+
+    pub(crate) fn auto_scroll(&mut self, now: Instant) {
+        let Some((at, last)) = self.auto_scroll else {
+            return;
+        };
+        if now < last + SCROLL_STEP {
+            return;
+        }
+        let elapsed = now.saturating_duration_since(last).min(SCROLL_STEP * 4);
+        self.auto_scroll = Some((at, now));
+        let delta = self.edge_pull(at) * SCROLL_SPEED * elapsed.as_secs_f32();
+        self.handle(&Event::Scroll(Scroll {
+            position: at,
+            delta: Point::new(0.0, delta),
+            ..Scroll::default()
+        }));
+        self.drag_moved(at);
     }
 
     pub fn drag_icon(&mut self, grab: Point) -> DragIcon {
@@ -376,6 +416,10 @@ impl FilesView {
     }
 
     pub fn drag_moved(&mut self, at: Point) -> Option<DragAction> {
+        self.auto_scroll = (self.edge_pull(at) != 0.0).then(|| {
+            let last = self.auto_scroll.map_or_else(Instant::now, |(_, last)| last);
+            (at, last)
+        });
         let Some((target, highlight, spring)) = self.drop_target(at) else {
             self.drop = None;
             return None;
@@ -410,6 +454,7 @@ impl FilesView {
 
     pub fn drag_left(&mut self) {
         self.drop = None;
+        self.auto_scroll = None;
         self.drag_sources.clear();
     }
 
@@ -436,6 +481,7 @@ impl FilesView {
 
     pub fn dropped(&mut self, at: Point, uris: &[String], action: Option<DragAction>) -> bool {
         self.drop = None;
+        self.auto_scroll = None;
         let sources = uris
             .iter()
             .filter_map(|uri| path_from_file_uri(uri))

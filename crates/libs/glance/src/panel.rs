@@ -30,6 +30,7 @@ pub struct Link {
     shown: bool,
     multiple: bool,
     typing: bool,
+    playing: bool,
     path: Option<PathBuf>,
     origin: Option<Rect>,
     copied: Option<PathBuf>,
@@ -107,6 +108,8 @@ impl Link {
         match key {
             Key::Escape => true,
             Key::PageUp | Key::PageDown | Key::Home | Key::End => plain,
+            Key::Character('k' | 'K' | 'm' | 'M') => plain && self.playing,
+            Key::Left | Key::Right if command => self.playing,
             Key::Left | Key::Right => plain && self.multiple,
             Key::Enter => command,
             Key::Character('=' | '+' | '-' | '0' | 'l' | 'L') => command,
@@ -175,6 +178,7 @@ impl Panel {
     fn sync(&mut self) {
         let mut link = self.link.borrow_mut();
         link.typing = self.shown.as_ref().is_some_and(Glance::wants_typing);
+        link.playing = self.shown.as_ref().is_some_and(Glance::plays_media);
         if self.shown.as_ref().is_some_and(Glance::is_closing) {
             link.shown = false;
         }

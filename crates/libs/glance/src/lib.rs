@@ -15,7 +15,7 @@ use bande_toolkit::ui::{Animated, Cursor, Event, Key, Modifiers, Spring};
 use bande_toolkit::{Image, Point, Rect, ResizeEdge, Window};
 use bande_xdg::{DesktopEntry, state_home};
 
-use crate::content::Shown;
+use crate::content::{Installation, Shown};
 use crate::loader::Loader;
 
 pub use panel::{GlanceLink, Link, Panel};
@@ -72,6 +72,7 @@ enum Hit {
     Rotate,
     Copy,
     Open,
+    Install,
     Tile(usize),
     Thumbnail(usize),
     Resize(ResizeEdge),
@@ -279,6 +280,32 @@ impl Glance {
         !self.closing && matches!(&self.shown, Shown::Pdf(pdf) if pdf.is_locked())
     }
 
+    pub fn plays_media(&self) -> bool {
+        !self.closing && matches!(&self.shown, Shown::Media(Some(_)))
+    }
+
+    fn media_key(&mut self, key: Key, now: Instant) -> bool {
+        match &mut self.shown {
+            Shown::Media(Some(stage)) => stage.key(&key, &Modifiers::default(), now),
+            _ => false,
+        }
+    }
+
+    fn install_font(&mut self) {
+        let Some(path) = self.path().cloned() else {
+            return;
+        };
+        if let Shown::Font(font) = &mut self.shown
+            && matches!(
+                font.installation,
+                Installation::Available | Installation::Failed
+            )
+        {
+            font.installation = Installation::Installing;
+            self.loader.install_font(path);
+        }
+    }
+
     fn unlock(&mut self) {
         if let Shown::Pdf(pdf) = &mut self.shown
             && !self.password.is_empty()
@@ -334,7 +361,7 @@ impl Glance {
                         .subjects
                         .get(self.at)
                         .map(|subject| subject.entry.path.clone());
-                    self.shown = Shown::from_loaded(content, path.as_deref());
+                    self.shown.receive(content, path.as_deref());
                     changed = true;
                 }
                 changed
@@ -458,6 +485,11 @@ impl Glance {
         }
         match key {
             Key::Escape => self.close(now),
+            Key::Character('k' | 'K') if plain => return self.media_key(Key::Space, now),
+            Key::Character('m' | 'M') if plain => return self.media_key(key, now),
+            Key::Left | Key::Right if command && !modifiers.shift => {
+                return self.media_key(key, now);
+            }
             Key::Left | Key::Right if plain && self.subjects.len() > 1 => {
                 return self.step(key == Key::Right);
             }
@@ -514,6 +546,7 @@ impl Glance {
                     });
                 }
             }
+            Hit::Install => self.install_font(),
             Hit::Tile(index) => self.go_to(index),
             Hit::Thumbnail(page) => {
                 if let Shown::Pdf(pdf) = &self.shown {

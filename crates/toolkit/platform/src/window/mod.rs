@@ -1184,6 +1184,17 @@ impl Window {
         passed
     }
 
+    pub fn start_text_drag(&mut self, ui: &mut Ui) -> Result<(), WindowError> {
+        if let Some((scene, hotspot, text)) = ui.take_text_drag() {
+            self.start_drag(
+                Transfer::text(&text),
+                &[DragAction::Copy, DragAction::Move],
+                Some(DragIcon { scene, hotspot }),
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn drive(
         &mut self,
         ui: &mut Ui,
@@ -1207,13 +1218,7 @@ impl Window {
                 if ui.take_input_method_reset() {
                     self.reset_text_input();
                 }
-                if let Some((scene, hotspot, text)) = ui.take_text_drag() {
-                    self.start_drag(
-                        Transfer::text(&text),
-                        &[DragAction::Copy, DragAction::Move],
-                        Some(DragIcon { scene, hotspot }),
-                    )?;
-                }
+                self.start_text_drag(ui)?;
                 self.set_cursor(ui.cursor());
                 if let Some(text) = ui.take_look_up_request() {
                     self.look_up(text);

@@ -24,7 +24,7 @@ use bande_xdg::file_uri;
 
 pub use bande_pdf::{Block, Orientation, Page, PageItem, PageSetup, Paper, flow};
 pub use cx::{Cx, WindowId};
-pub use drop::{Dropping, FileDrop};
+pub use drop::{Dropping, FileDrop, local_files};
 pub use files::show_in_files;
 pub use portal::{
     Filter, choose_file, choose_files, choose_folder, choose_save_file, parent_window,

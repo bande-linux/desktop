@@ -1,3 +1,4 @@
+mod confined;
 mod decode;
 mod facts;
 mod import;
@@ -7,10 +8,12 @@ mod text;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub use bande_fs::Contents;
 use bande_fs::{Entry, can_extract, is_hidden};
 
+pub use confined::{decode_confined, run_worker, serve_worker};
 pub use decode::{
     Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, decode_file,
     open, read_file,
@@ -21,7 +24,7 @@ pub use text::{Block, Code, Tone, highlight, html, is_code, markdown, rtf};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;
 pub const IMAGE_PREVIEW_PIXELS: u32 = 2048;
-const DECODE_BYTES_LIMIT: u64 = 256 << 20;
+const PICTURE_SIDE: u32 = 4096;
 
 #[derive(Debug, Clone)]
 pub enum Preview<I> {
@@ -48,6 +51,7 @@ pub enum Content {
     Folder { items: u64, bytes: Option<u64> },
     Archive,
     Media,
+    Failed(Failure),
     Other,
 }
 
@@ -74,22 +78,17 @@ fn text_up_to(path: &Path, limit: u64) -> Option<String> {
 }
 
 fn image<I>(path: &Path, picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>) -> Option<I> {
-    let mut limits = image::Limits::default();
-    limits.max_alloc = Some(DECODE_BYTES_LIMIT);
-    let mut reader = image::ImageReader::open(path)
-        .ok()?
-        .with_guessed_format()
-        .ok()?;
-    reader.limits(limits);
-    let decoded = reader.decode().ok()?;
-    let decoded = if decoded.width().max(decoded.height()) > IMAGE_PREVIEW_PIXELS {
-        decoded.thumbnail(IMAGE_PREVIEW_PIXELS, IMAGE_PREVIEW_PIXELS)
-    } else {
-        decoded
+    let decoded = decode_confined(path, IMAGE_PREVIEW_PIXELS).ok()?;
+    let level = match decoded.pixels {
+        Pixels::Still(levels) => levels.into_iter().next()?,
+        Pixels::Animation(frames) => Level {
+            width: decoded.width,
+            height: decoded.height,
+            rgba: frames.into_iter().next()?.rgba,
+        },
     };
-    let rgba = decoded.into_rgba8();
-    let (width, height) = rgba.dimensions();
-    picture(width, height, rgba.into_raw())
+    let rgba = Arc::try_unwrap(level.rgba).unwrap_or_else(|shared| (*shared).clone());
+    picture(level.width, level.height, rgba)
 }
 
 pub fn image_size(path: &Path) -> Option<(u32, u32)> {
@@ -214,10 +213,12 @@ pub fn content(path: &Path, mime: &str, current: &dyn Fn() -> bool) -> Content {
     if mime == "application/pdf" {
         return Content::Pdf(path.to_path_buf());
     }
-    if mime.starts_with("image/")
-        && let Ok(decoded) = decode_file(path)
-    {
-        return Content::Picture(decoded);
+    let mut unshown = Content::Other;
+    if mime.starts_with("image/") {
+        match decode_confined(path, PICTURE_SIDE) {
+            Ok(decoded) => return Content::Picture(decoded),
+            Err(failure) => unshown = Content::Failed(failure),
+        }
     }
     if is_font(mime) {
         return Content::Font;
@@ -230,7 +231,7 @@ pub fn content(path: &Path, mime: &str, current: &dyn Fn() -> bool) -> Content {
     }
     let textual = is_text(mime) || is_code(&extension) || mime == "application/octet-stream";
     let Some(text) = textual.then(|| text_up_to(path, TEXT_BYTES)).flatten() else {
-        return Content::Other;
+        return unshown;
     };
     let document = &text[..text.floor_char_boundary(DOCUMENT_BYTES)];
     match mime {
@@ -276,6 +277,9 @@ pub fn confine() {
     };
     if let Err(error) = rustix::process::setrlimit(rustix::process::Resource::As, limit) {
         tracing::warn!("cannot limit a file reader's memory: {error}");
+    }
+    if let Err(error) = rustix::thread::set_no_new_privs(true) {
+        tracing::warn!("cannot keep a file reader from gaining privileges: {error}");
     }
     if let Err(error) =
         rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::KILL))

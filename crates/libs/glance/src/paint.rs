@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use bande_content::pdf::protocol::Use;
 use bande_content::pdf::session::Phase;
-use bande_content::{Block, Tone};
+use bande_content::{Block, Failure, Tone};
 use bande_fs::{format_date, format_size};
 use bande_l10n::{tr, trn};
 use bande_toolkit::{
@@ -14,7 +14,7 @@ use bande_toolkit::{
 use bande_xdg::{ICON_THEMES, data_dirs, find_icon};
 use parley::{Alignment, AlignmentOptions, FontFamily, FontFamilyName, StyleProperty};
 
-use crate::content::{CodeView, DocumentView, FontView, Picture, Shown};
+use crate::content::{CodeView, DocumentView, FontView, Installation, Picture, Shown};
 use crate::pdf::{GAP, PdfView, render};
 use crate::worker::SAMPLE_WIDTH;
 use crate::{Glance, Hit, MIN_SIZE, Resizing, Subject};
@@ -332,7 +332,23 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
         _ if entry.is_folder() => String::new(),
         _ => format_size(entry.size),
     };
-    vec![subject.kind.clone(), size, modified]
+    let reason = match shown {
+        Shown::Failed(Failure::TooLarge { width, height }) => Some(tr!(
+            "Too large to preview ({width} × {height})",
+            width = width,
+            height = height
+        )),
+        Shown::Failed(Failure::FileTooLarge) => Some(tr!("Too large to preview")),
+        Shown::Failed(Failure::Damaged) => Some(tr!("This image is damaged")),
+        Shown::Failed(Failure::NotSupported) => Some(tr!("This kind of image can’t be previewed")),
+        Shown::Failed(Failure::Unreadable) => Some(tr!("This file can’t be read")),
+        Shown::Media(None) => Some(tr!("This can’t be played here")),
+        _ => None,
+    };
+    [subject.kind.clone(), size, modified]
+        .into_iter()
+        .chain(reason)
+        .collect()
 }
 
 impl Glance {
@@ -552,31 +568,64 @@ impl Glance {
             left += width + 10.0;
         }
         let mut right = panel.x + panel.width - 10.0;
-        if let Some(app) = self.subject().and_then(|subject| subject.app.clone()) {
-            let label = painter.paragraph(
-                &tr!("Open with {app}", app = app.name),
-                TextStyle::role(TextRole::Body, palette.ink).weight(TextStyle::MEDIUM),
-                None,
-            );
-            let width = (label.width() + 24.0).ceil();
-            let rect = Rect::new(right - width, top, width, BUTTON);
-            let fill = match self.hover == Some(Hit::Open) {
-                true => palette.well.mix(palette.ink, 0.08),
-                false => palette.well,
+        let text_button =
+            |painter: &mut Painter<'_>, right: f32, text: &str, hit, this: &mut Self| {
+                let label = painter.paragraph(
+                    text,
+                    TextStyle::role(TextRole::Body, palette.ink).weight(TextStyle::MEDIUM),
+                    None,
+                );
+                let width = (label.width() + 24.0).ceil();
+                let rect = Rect::new(right - width, top, width, BUTTON);
+                let fill = match this.hover == Some(hit) {
+                    true => palette.well.mix(palette.ink, 0.08),
+                    false => palette.well,
+                };
+                painter.items.push(Item::Fill {
+                    shape: Shape::rounded(rect, Radius::S),
+                    paint: fill.into(),
+                });
+                painter.items.push(Item::Text {
+                    origin: Point::new(
+                        rect.x + 12.0,
+                        top + ((BUTTON - label.height()) / 2.0).round(),
+                    ),
+                    paragraph: label,
+                });
+                this.hits.push((rect, hit));
+                rect.x - 6.0
             };
-            painter.items.push(Item::Fill {
-                shape: Shape::rounded(rect, Radius::S),
-                paint: fill.into(),
-            });
+        let note = |painter: &mut Painter<'_>, right: f32, text: &str| {
+            let label =
+                painter.paragraph(text, TextStyle::role(TextRole::Callout, palette.ink2), None);
+            let x = right - label.width().ceil();
             painter.items.push(Item::Text {
-                origin: Point::new(
-                    rect.x + 12.0,
-                    top + ((BUTTON - label.height()) / 2.0).round(),
-                ),
+                origin: Point::new(x, panel.y + ((HEADER - label.height()) / 2.0).round()),
                 paragraph: label,
             });
-            self.hits.push((rect, Hit::Open));
-            right = rect.x - 6.0;
+            x - 10.0
+        };
+        if let Some(app) = self.subject().and_then(|subject| subject.app.clone()) {
+            right = text_button(
+                painter,
+                right,
+                &tr!("Open with {app}", app = app.name),
+                Hit::Open,
+                self,
+            );
+        }
+        if let Shown::Font(font) = &self.shown {
+            right = match font.installation {
+                Installation::Available => {
+                    text_button(painter, right, &tr!("Install"), Hit::Install, self)
+                }
+                Installation::Installing => note(painter, right, &tr!("Installing…")),
+                Installation::Installed => note(painter, right, &tr!("Installed")),
+                Installation::Failed => {
+                    let right = text_button(painter, right, &tr!("Install"), Hit::Install, self);
+                    note(painter, right, &tr!("The font couldn’t be installed."))
+                }
+            };
         }
         right -= BUTTON;
         button(painter, right, "edit-copy-symbolic", Hit::Copy, self);
@@ -710,7 +759,7 @@ fn paint_picture(
     } else {
         (width, height)
     };
-    let fit = fitted(area, shown_width / scale, shown_height / scale, false);
+    let fit = fitted(area, shown_width, shown_height, false);
     let (zoomed_width, zoomed_height) = (fit.width * zoom, fit.height * zoom);
     let room = (
         ((zoomed_width - area.width) / 2.0).max(0.0),

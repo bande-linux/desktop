@@ -3,13 +3,16 @@ use std::time::Instant;
 use accesskit::{
     Action as AccessAction, ActionRequest, Live, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate,
 };
+use bande_content::Block;
 use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
 
+use crate::content::Shown;
 use crate::{Glance, Hit};
 
 const ROOT: NodeId = NodeId(1);
 const FIRST: u64 = 2;
+const SPOKEN_BYTES: usize = 64 << 10;
 
 fn bounds(rect: Rect) -> accesskit::Rect {
     accesskit::Rect {
@@ -21,6 +24,30 @@ fn bounds(rect: Rect) -> accesskit::Rect {
 }
 
 impl Glance {
+    fn readable_text(&self) -> Option<String> {
+        let shortened = |text: &str| text[..text.floor_char_boundary(SPOKEN_BYTES)].to_owned();
+        match &self.shown {
+            Shown::Code(code) => Some(shortened(&code.code.text)),
+            Shown::Document(document) => Some(shortened(
+                &document
+                    .blocks
+                    .iter()
+                    .filter_map(|block| match block {
+                        Block::Heading(_, text)
+                        | Block::Paragraph(text)
+                        | Block::Bullet(text)
+                        | Block::Quote(text)
+                        | Block::Code(text)
+                        | Block::Plain(text) => Some(text.as_str()),
+                        Block::Rule => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )),
+            _ => None,
+        }
+    }
+
     fn label(&self, hit: Hit) -> Option<String> {
         let id = match hit {
             Hit::Close => text!("Close"),
@@ -32,6 +59,7 @@ impl Glance {
             Hit::Rotate => text!("Rotate Left"),
             Hit::Copy => text!("Copy"),
             Hit::Unlock => text!("Unlock"),
+            Hit::Install => text!("Install"),
             Hit::Open => {
                 let app = self.subject()?.app.as_ref()?.name.clone();
                 return Some(tr!("Open with {app}", app = app));
@@ -58,6 +86,14 @@ impl Glance {
         root.set_live(Live::Polite);
         if let Some(subject) = self.subject() {
             let mut description = format!("{}, {}", subject.entry.name, subject.kind);
+            if let Shown::Picture(picture) = &self.shown {
+                description.push_str(", ");
+                description.push_str(&tr!(
+                    "{width} × {height}",
+                    width = picture.width,
+                    height = picture.height
+                ));
+            }
             if let Some((at, count)) = self.position() {
                 description.push_str(", ");
                 description.push_str(&tr!("{at} of {count}", at = at, count = count));
@@ -77,6 +113,18 @@ impl Glance {
             node.add_action(AccessAction::Click);
             nodes.push((NodeId(FIRST + index as u64), node));
         }
+        if let Some(text) = self.readable_text() {
+            let mut document = Node::new(Role::Document);
+            document.set_value(text);
+            document.set_bounds(bounds(self.frame));
+            nodes.push((NodeId(FIRST + nodes.len() as u64), document));
+        }
+        if let Shown::Media(Some(stage)) = &self.shown {
+            let first = FIRST + nodes.len() as u64;
+            for (part, node) in stage.access_parts().into_iter().enumerate() {
+                nodes.push((NodeId(first + part as u64), node));
+            }
+        }
         root.set_children(nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>());
         nodes.insert(0, (ROOT, root));
         TreeUpdate {
@@ -91,13 +139,19 @@ impl Glance {
     }
 
     pub fn perform(&mut self, request: &ActionRequest, now: Instant) -> bool {
-        if request.action != AccessAction::Click {
-            return false;
-        }
         let Some(index) = request.target_node.0.checked_sub(FIRST) else {
             return false;
         };
-        let Some((_, hit, _)) = self.controls().get(index as usize).cloned() else {
+        let controls = self.controls();
+        if let Some(part) = index.checked_sub(controls.len() as u64)
+            && let Shown::Media(Some(stage)) = &mut self.shown
+        {
+            return stage.perform_part(part, request);
+        }
+        if request.action != AccessAction::Click {
+            return false;
+        }
+        let Some((_, hit, _)) = controls.get(index as usize).cloned() else {
             return false;
         };
         self.activate(hit, now);

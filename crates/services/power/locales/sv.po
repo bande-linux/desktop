@@ -31,6 +31,9 @@ msgstr "{percentage} % av batteriet återstår. Anslut till ström nu, annars f�
 msgid "{percentage}% of the battery remains. Connect to power now, or the computer will sleep."
 msgstr "{percentage} % av batteriet återstår. Anslut till ström nu, annars försätts datorn i vila."
 
+msgid "{percentage}% of the battery remains. Connect to power now."
+msgstr "{percentage} % av batteriet återstår. Anslut till ström nu."
+
 msgid "{name} Battery Low"
 msgstr "Låg batterinivå i {name}"
 
@@ -45,9 +48,6 @@ msgstr "{level} % återstår. Ladda den nu."
 
 msgid "Bluetooth"
 msgstr "Bluetooth"
-
-msgid "{percentage}% of the battery remains. Connect to power now."
-msgstr "{percentage} % av batteriet återstår. Anslut till ström nu."
 
 msgid "Lock the screen before the computer sleeps"
 msgstr "Lås skärmen innan datorn försätts i vila"

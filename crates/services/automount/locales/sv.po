@@ -103,6 +103,12 @@ msgstr "Tillåta ”{name}”?"
 msgid "A Thunderbolt device gets direct access to this computer. Allow it only if you know where it came from."
 msgstr "En Thunderbolt-enhet får direkt åtkomst till datorn. Tillåt den bara om du vet var den kommer ifrån."
 
+msgid "“{name}” wasn’t allowed"
+msgstr "”{name}” tilläts inte"
+
+msgid "Disconnect it and connect it again to try again."
+msgstr "Koppla från den och anslut den igen för att försöka igen."
+
 msgid "“{label}” is encrypted"
 msgstr "”{label}” är krypterad"
 
@@ -111,9 +117,3 @@ msgstr "Ange lösenfrasen för att öppna den."
 
 msgid "Unlock"
 msgstr "Lås upp"
-
-msgid "“{name}” wasn’t allowed"
-msgstr "”{name}” tilläts inte"
-
-msgid "Disconnect it and connect it again to try again."
-msgstr "Koppla från den och anslut den igen för att försöka igen."

@@ -85,11 +85,11 @@ msgstr "Spara bilaga"
 msgid "The attachment couldn’t be saved: {error}"
 msgstr "Det gick inte att spara bilagan: {error}"
 
-msgid "{name} is larger than {limit} and was not attached."
-msgstr "{name} är större än {limit} och bifogades inte."
-
 msgid "Attach Files"
 msgstr "Bifoga filer"
+
+msgid "{name} is larger than {limit} and was not attached."
+msgstr "{name} är större än {limit} och bifogades inte."
 
 msgid "Message Viewer"
 msgstr "Meddelandevisare"

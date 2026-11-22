@@ -10,6 +10,9 @@ msgstr ""
 msgid "Clock"
 msgstr "Klocka"
 
+msgid "An alarm or timer is ringing"
+msgstr "Ett alarm eller en timer ringer"
+
 msgid "Timer Done"
 msgstr "Timern är klar"
 
@@ -189,6 +192,3 @@ msgstr "natt"
 
 msgid "Remove"
 msgstr "Ta bort"
-
-msgid "An alarm or timer is ringing"
-msgstr "Ett alarm eller en timer ringer"

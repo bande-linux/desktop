@@ -52,6 +52,18 @@ msgstr "{width} × {height}"
 msgid "{at} of {count}"
 msgstr "{at} av {count}"
 
+msgid "Ctrl+Shift+I"
+msgstr "Ctrl+Skift+I"
+
+msgid "Installing…"
+msgstr "Installerar…"
+
+msgid "Installed"
+msgstr "Installerat"
+
+msgid "The font couldn’t be installed."
+msgstr "Typsnittet kunde inte installeras."
+
 msgid "Password"
 msgstr "Lösenord"
 
@@ -74,12 +86,6 @@ msgid_plural "{count} items, {size} unpacked"
 msgstr[0] "1 objekt, {size} uppackat"
 msgstr[1] "{count} objekt, {size} uppackade"
 
-msgid "This document cannot be shown"
-msgstr "Det här dokumentet kan inte visas"
-
-msgid "This document is locked"
-msgstr "Det här dokumentet är låst"
-
 msgid "Too large to preview ({width} × {height})"
 msgstr "För stor för att förhandsvisas ({width} × {height})"
 
@@ -101,17 +107,11 @@ msgstr "Filen kan inte läsas"
 msgid "This can’t be played here"
 msgstr "Det här kan inte spelas upp här"
 
-msgid "Installing…"
-msgstr "Installerar…"
+msgid "This document cannot be shown"
+msgstr "Det här dokumentet kan inte visas"
 
-msgid "Installed"
-msgstr "Installerat"
-
-msgid "The font couldn’t be installed."
-msgstr "Typsnittet kunde inte installeras."
-
-msgid "Ctrl+Shift+I"
-msgstr "Ctrl+Skift+I"
+msgid "This document is locked"
+msgstr "Det här dokumentet är låst"
 
 msgid "The quick brown fox jumps over the lazy dog."
 msgstr "Flygande bäckasiner söka hwila på mjuka tuvor."

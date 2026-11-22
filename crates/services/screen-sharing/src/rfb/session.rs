@@ -1,8 +1,9 @@
 use std::io::{self, Read, Write};
-use std::net::{IpAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, Shutdown, TcpListener, TcpStream};
 use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
@@ -20,6 +21,7 @@ use super::protocol::{
 use super::{Frame, Host, Viewing};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
+const HANDSHAKE_DEADLINE: Duration = Duration::from_secs(60);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const FAILURE_DELAY: Duration = Duration::from_secs(1);
 const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(5);
@@ -455,7 +457,18 @@ fn serve_viewer(
     socket.set_read_timeout(Some(HANDSHAKE_TIMEOUT))?;
     socket.set_write_timeout(Some(WRITE_TIMEOUT))?;
     socket.set_nodelay(true)?;
-    let Some(mut transport) = handshake(socket, peer, host, tls, attempts)? else {
+    let watched = socket.try_clone()?;
+    let (finished, unfinished) = mpsc::channel::<()>();
+    thread::Builder::new()
+        .name("handshake".into())
+        .spawn(move || {
+            if unfinished.recv_timeout(HANDSHAKE_DEADLINE) == Err(RecvTimeoutError::Timeout) {
+                let _ = watched.shutdown(Shutdown::Both);
+            }
+        })?;
+    let shaken = handshake(socket, peer, host, tls, attempts);
+    drop(finished);
+    let Some(mut transport) = shaken? else {
         return Ok(());
     };
     let Some(viewing) = host.view(peer) else {

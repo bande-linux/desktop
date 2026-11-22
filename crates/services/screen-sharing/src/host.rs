@@ -22,6 +22,7 @@ const SETTINGS: &str = "org.bande.Settings";
 
 pub struct Desktop {
     session: Connection,
+    password: Option<String>,
     capture: Mutex<Weak<Capture>>,
     name: String,
 }
@@ -48,8 +49,15 @@ fn config() -> Config {
 
 impl Desktop {
     pub fn new(session: Connection, name: String) -> Self {
+        let password = Keyring::open(KEYRING_APPLICATION)
+            .and_then(|keyring| keyring.password(&PASSWORD_KEY))
+            .inspect_err(|error| tracing::warn!("cannot read the Screen Sharing password: {error}"))
+            .ok()
+            .flatten()
+            .filter(|password| !password.is_empty());
         Self {
             session,
+            password,
             capture: Mutex::new(Weak::new()),
             name,
         }
@@ -74,7 +82,7 @@ impl Desktop {
             &Request {
                 app_name: &tr!("Screen Sharing"),
                 replaces_id: 0,
-                app_icon: "preferences-desktop-remote-desktop",
+                app_icon: SETTINGS,
                 summary,
                 body,
                 actions,
@@ -122,12 +130,7 @@ impl Desktop {
 
 impl Host for Desktop {
     fn password(&self) -> Option<String> {
-        Keyring::open(KEYRING_APPLICATION)
-            .and_then(|keyring| keyring.password(&PASSWORD_KEY))
-            .inspect_err(|error| tracing::warn!("cannot read the Screen Sharing password: {error}"))
-            .ok()
-            .flatten()
-            .filter(|password| !password.is_empty())
+        self.password.clone()
     }
 
     fn older_viewers(&self) -> bool {

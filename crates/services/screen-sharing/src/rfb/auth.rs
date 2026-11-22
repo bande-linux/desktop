@@ -9,6 +9,7 @@ use des::cipher::{Block, BlockCipherEncrypt, KeyInit};
 pub const CHALLENGE: usize = 16;
 pub const PASSWORD_BYTES: usize = 8;
 const MOST_FAILURES: usize = 5;
+const MOST_FAILURES_OVERALL: usize = 30;
 const FAILURE_MEMORY: Duration = Duration::from_secs(600);
 
 fn reversed_key(password: &str) -> [u8; PASSWORD_BYTES] {
@@ -45,7 +46,7 @@ pub struct Attempts {
 }
 
 impl Attempts {
-    fn recent(&self, peer: IpAddr) -> usize {
+    fn recent(&self, peer: IpAddr) -> (usize, usize) {
         let mut failures = self
             .failures
             .lock()
@@ -55,11 +56,13 @@ impl Attempts {
             times.retain(|time| now.duration_since(*time) < FAILURE_MEMORY);
             !times.is_empty()
         });
-        failures.get(&peer).map_or(0, Vec::len)
+        let overall = failures.values().map(Vec::len).sum();
+        (failures.get(&peer).map_or(0, Vec::len), overall)
     }
 
     pub fn blocked(&self, peer: IpAddr) -> bool {
-        self.recent(peer) >= MOST_FAILURES
+        let (from_peer, overall) = self.recent(peer);
+        from_peer >= MOST_FAILURES || overall >= MOST_FAILURES_OVERALL
     }
 
     pub fn failed(&self, peer: IpAddr) {

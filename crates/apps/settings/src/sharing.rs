@@ -299,7 +299,8 @@ fn save_screen_password(password: &str) -> Result<(), Problem> {
         .map_err(|error| {
             tracing::warn!("cannot keep the Screen Sharing password: {error}");
             Problem::Failed
-        })
+        })?;
+    worked(systemctl(&["--user", "try-restart", screen_sharing::UNIT]))
 }
 
 fn configure(

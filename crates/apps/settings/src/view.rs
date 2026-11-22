@@ -971,6 +971,7 @@ impl SettingsView {
                 }
                 self.failures.insert(pane, error);
             }
+            Update::TrialFailed => self.keep_displays(false),
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,

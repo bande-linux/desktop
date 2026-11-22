@@ -203,7 +203,7 @@ when they reach the screen is Bande's own.
   keys pressed in front of a blank screen never keep its mode; unless Keep is chosen within
   15 s `bande-config` itself restores every display changed since the trial began, so closing
   or losing Settings, logging out or switching off during the countdown cannot keep a mode the
-  display can't show.
+  display can't show. When a trial can't start, Settings closes the dialog, reverts and says why.
 
 - **Colour.** Each display has a colour profile (`colour-profile` in its settings, Settings ▸
   Displays ▸ Colour profile): "This display" (the default) builds a profile from

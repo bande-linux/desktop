@@ -46,6 +46,9 @@ msgstr "Sida {number}"
 msgid "Glance"
 msgstr "Glimt"
 
+msgid "{width} × {height}"
+msgstr "{width} × {height}"
+
 msgid "{at} of {count}"
 msgstr "{at} av {count}"
 

@@ -82,6 +82,7 @@ pub enum Request {
         summary: String,
         body: String,
         sound: bool,
+        message: Option<MessageId>,
     },
     NotSent {
         error: String,
@@ -463,6 +464,20 @@ impl MailView {
             false => summary.subject.clone(),
         };
         Some((title, text))
+    }
+
+    pub fn unread_inbox(&self) -> usize {
+        self.sidebar
+            .iter()
+            .find_map(|row| match row {
+                Row::Place {
+                    place: Place::All(Role::Inbox),
+                    unread,
+                    ..
+                } => Some(*unread),
+                _ => None,
+            })
+            .unwrap_or(0)
     }
 
     pub fn selected(&self) -> Option<MessageId> {
@@ -1804,6 +1819,7 @@ impl MailView {
                 ),
                 body: name,
                 sound: false,
+                message: None,
             });
         }
     }
@@ -2006,6 +2022,7 @@ impl MailView {
                     .collect::<Vec<_>>()
                     .join(", "),
                 sound,
+                message: None,
             });
             return;
         }
@@ -2017,6 +2034,7 @@ impl MailView {
                     subject => subject.to_owned(),
                 },
                 sound,
+                message: Some(summary.id),
             });
         }
     }

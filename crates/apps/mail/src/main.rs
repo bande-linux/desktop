@@ -1,4 +1,5 @@
 mod menus;
+mod notices;
 mod picker;
 
 use std::os::fd::BorrowedFd;
@@ -19,21 +20,19 @@ use bande_mail::ui::{
     COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Mode, Request, SETTINGS_SIZE,
     SIDEBAR_WIDTH, SettingsView,
 };
-use bande_notify::Urgency;
-use bande_notify::client::{Request as Notification, notify};
 use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowError,
     WindowEvent,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, data_home, replace_file};
 
+use crate::notices::{Announcer, Clicked, Notices};
 use crate::picker::{MAX_ATTACHMENT, Picked, Picker};
 
 const ATTACH_FLAG: &str = "--attach";
 const SHARED_FILES: u64 = u64::MAX;
 const APP_ID: &str = "org.bande.Mail";
 const WINDOW_SIZE: (u32, u32) = (1180, 720);
-const NEW_MAIL_SOUND: &str = "message-new-email";
 
 static INFO: Info = Info {
     id: APP_ID,
@@ -181,6 +180,7 @@ struct Mail {
     apps: Option<Apps>,
     picker: Picker,
     changes: Inbox<Change>,
+    notices: Notices,
 }
 
 fn store_path() -> PathBuf {
@@ -189,36 +189,7 @@ fn store_path() -> PathBuf {
         .join("bande-mail/mail.sqlite3")
 }
 
-fn announce(summary: String, body: String, sound: bool) {
-    let spawned = std::thread::Builder::new()
-        .name("notify".to_owned())
-        .spawn(move || {
-            let shown = zbus::blocking::Connection::session().and_then(|session| {
-                notify(
-                    &session,
-                    &Notification {
-                        app_name: &tr!("Mail"),
-                        replaces_id: 0,
-                        app_icon: APP_ID,
-                        summary: &summary,
-                        body: &body,
-                        actions: &[],
-                        urgency: Urgency::Normal,
-                        sound: sound.then_some(NEW_MAIL_SOUND),
-                        desktop_entry: Some(APP_ID),
-                    },
-                )
-            });
-            if let Err(error) = shown {
-                tracing::debug!("cannot show a notification: {error}");
-            }
-        });
-    if let Err(error) = spawned {
-        tracing::warn!("cannot notify: {error}");
-    }
-}
-
-fn save_attachment(name: String, data: Vec<u8>) {
+fn save_attachment(name: String, data: Vec<u8>, announcer: Announcer) {
     let spawned = std::thread::Builder::new()
         .name("save-attachment".to_owned())
         .spawn(
@@ -227,13 +198,14 @@ fn save_attachment(name: String, data: Vec<u8>) {
                     if let Err(error) = replace_file(&path, &data) {
                         tracing::warn!("cannot save {}: {error}", path.display());
 
-                        announce(
+                        announcer.announce(
                             tr!(
                                 "The attachment couldn’t be saved: {error}",
                                 error = error.to_string()
                             ),
                             name,
                             false,
+                            None,
                         );
                     }
                 }
@@ -504,7 +476,11 @@ impl Mail {
                     summary,
                     body,
                     sound,
-                } => announce(summary, body, sound),
+                    message,
+                } => self
+                    .notices
+                    .announcer()
+                    .announce(summary, body, sound, message),
                 Request::NotSent { error, outgoing } => {
                     if let Some(opened) = self.open_compose(cx, *outgoing)
                         && let Some((_, Pane::Compose(view))) = cx.window(opened)
@@ -514,6 +490,29 @@ impl Mail {
                 }
                 _ => {}
             }
+        }
+        self.show_unread(cx);
+    }
+
+    fn show_unread(&mut self, cx: &mut Cx<Self>) {
+        let unread =
+            main_view(cx, self.main, &mut self.parked).map_or(0, |view| view.unread_inbox());
+        self.notices
+            .set_badge(u32::try_from(unread).unwrap_or(u32::MAX));
+    }
+
+    fn open_clicked(&mut self, cx: &mut Cx<Self>, clicked: Clicked) {
+        if let Some(message) = clicked.message
+            && let Some(view) = main_view(cx, self.main, &mut self.parked)
+        {
+            view.show_message(message);
+        }
+        match self.main {
+            Some(main) => {
+                cx.raise(main, clicked.token);
+                self.serve(cx, main);
+            }
+            None => self.reopen(cx),
         }
     }
 
@@ -531,12 +530,18 @@ impl Mail {
                 Request::OpenSettings => cx.open_settings(),
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
                 Request::OpenAttachment(path) => self.open_file(cx, window, &path),
-                Request::SaveAttachment(name, data) => save_attachment(name, data),
+                Request::SaveAttachment(name, data) => {
+                    save_attachment(name, data, self.notices.announcer().clone())
+                }
                 Request::Notify {
                     summary,
                     body,
                     sound,
-                } => announce(summary, body, sound),
+                    message,
+                } => self
+                    .notices
+                    .announcer()
+                    .announce(summary, body, sound, message),
                 Request::NotSent { error, outgoing } => {
                     if let Some(opened) = self.open_compose(cx, *outgoing)
                         && let Some((_, Pane::Compose(view))) = cx.window(opened)
@@ -561,6 +566,7 @@ impl Mail {
             }
         }
         refresh(cx, window);
+        self.show_unread(cx);
     }
 
     fn keep_draft(&mut self, cx: &mut Cx<Self>, window: WindowId) {
@@ -662,6 +668,7 @@ impl Program for Mail {
             apps: None,
             picker: Picker::new()?,
             changes,
+            notices: Notices::start(APP_ID, cx.session())?,
         };
         mail.open_arguments(cx, arguments);
         if let Some(main) = main {
@@ -674,6 +681,7 @@ impl Program for Mail {
             };
             mail.open_compose(cx, outgoing);
         }
+        mail.show_unread(cx);
         Ok(mail)
     }
 
@@ -776,7 +784,7 @@ impl Program for Mail {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.changes.fd(), self.picker.fd()];
+        let mut sources = vec![self.changes.fd(), self.picker.fd(), self.notices.fd()];
         if let Some(view) = &self.parked {
             sources.extend(view.fds());
         }
@@ -790,7 +798,13 @@ impl Program for Mail {
             }
             return;
         }
-        if index > 1 {
+        if index == 2 {
+            for clicked in self.notices.clicked() {
+                self.open_clicked(cx, clicked);
+            }
+            return;
+        }
+        if index > 2 {
             if let Some(view) = &mut self.parked {
                 view.engine_ready();
             }

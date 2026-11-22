@@ -106,7 +106,7 @@ apt install bande-mail
   when opened). Flag changes, moves and deletions apply at once and are queued until the
   server has them, so they survive going offline or quitting.
 - **New mail.** A second connection IDLEs on the Inbox; servers without IDLE are polled every
-  five minutes. New unread mail shows a notification through `org.freedesktop.Notifications`.
+  five minutes. New unread mail shows a notification through `org.freedesktop.Notifications`; clicking it opens the message. The Taskbar icon shows how many messages in the Inbox are unread (`com.canonical.Unity.LauncherEntry`).
 - **Integration.** `org.bande.Mail.desktop` registers Mail for `mailto:` links (choose it in
   Settings ▸ Apps). A second `bande-mail mailto:…` hands the link to the running Mail.
 

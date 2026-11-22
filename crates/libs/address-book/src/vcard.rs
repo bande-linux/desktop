@@ -10,9 +10,6 @@ const MAX_PHOTO: usize = 4 << 20;
 const MAX_VALUES: usize = 256;
 const PRODID: &str = "-//Bande//Contacts//EN";
 
-/// The largest `.vcf` file that is read.
-pub const MAX_FILE: u64 = 64 << 20;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Version {
     V3,

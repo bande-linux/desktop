@@ -1670,6 +1670,9 @@ msgstr "Inga skrivare i det här nätverket än. De visas här så fort de hitta
 msgid "Scanner"
 msgstr "Skanner"
 
+msgid "Not on this network"
+msgstr "Inte på det här nätverket"
+
 msgid "Default printer"
 msgstr "Standardskrivare"
 
@@ -1705,6 +1708,11 @@ msgstr "Webbläsare, LibreOffice och andra appar skriver ut via CUPS, som även 
 
 msgid "Printing from other apps and USB printers"
 msgstr "Utskrift från andra appar och USB-skrivare"
+
+msgid "1 scanned page not saved"
+msgid_plural "{count} scanned pages not saved"
+msgstr[0] "1 skannad sida inte sparad"
+msgstr[1] "{count} skannade sidor inte sparade"
 
 msgid "Kind"
 msgstr "Typ"
@@ -1837,6 +1845,9 @@ msgstr "Skanna"
 
 msgid "Asking the scanner what it can do…"
 msgstr "Frågar skannern vad den kan…"
+
+msgid "The scanner isn’t on this network now. Its scanned pages can still be saved."
+msgstr "Skannern är inte på det här nätverket nu. Dess skannade sidor kan fortfarande sparas."
 
 msgid "Try Again"
 msgstr "Försök igen"

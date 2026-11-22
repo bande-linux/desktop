@@ -1012,6 +1012,7 @@ impl SettingsView {
                 if let Some(id) = &opened
                     && !printers.printers.iter().any(|printer| printer.id == *id)
                     && !printers.scanners.iter().any(|scanner| scanner.id == *id)
+                    && self.unsaved_pages_of(id) == 0
                 {
                     self.detail = None;
                 }

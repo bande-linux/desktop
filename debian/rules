@@ -19,8 +19,6 @@ PROFILE ?= dist
 OUT := $(CARGO_TARGET_DIR)/$(DEB_HOST_RUST_TYPE)/$(if $(filter dev,$(PROFILE)),debug,$(PROFILE))
 BUILD := debian/build
 PROGRAMS := $(sort $(shell sed -n 's|^debian/build/bin/\([^ ]*\) .*|\1|p' debian/*.install))
-RELEASE := $(firstword $(subst ~, ,$(subst +, ,$(DEB_VERSION_UPSTREAM))))
-RELEASED := $(shell date -u -d @$(SOURCE_DATE_EPOCH) +%Y-%m-%d)
 
 ifneq (,$(filter pkg.bande.vendor,$(DEB_BUILD_PROFILES)))
 REGISTRY := vendor
@@ -59,10 +57,7 @@ override_dh_auto_build-arch:
 	ln -sfn $(OUT) $(BUILD)/bin
 	cp $(OUT)/libpam_bande_secrets.so $(BUILD)/security/pam_bande_secrets.so
 	$(OUT)/bande-cursor-theme $(BUILD)/cursors/Bande-Cursors
-	for metainfo in crates/*/*/data/*.metainfo.xml; do \
-		sed 's|^</component>$$|  <releases>\n    <release version="$(RELEASE)" date="$(RELEASED)"/>\n  </releases>\n</component>|' \
-			"$$metainfo" > $(BUILD)/metainfo/$$(basename "$$metainfo"); \
-	done
+	debian/metainfo.py $(BUILD)/metainfo crates/*/*/data/*.metainfo.xml
 
 catalogs:
 	$(OUT)/bande-l10n-tool check ci/l10n-complete

@@ -34,7 +34,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   (the cargo output), files from the crates' `data/` and `data/` at the root under their
   installed names, and what `debian/rules` generates in `debian/build`: the pointers
   (`bande-cursor-theme`), the catalogs (`bande-l10n-tool pack`) and each metainfo with its
-  release (the upstream version and the date of the changelog entry). After `dh_install`,
+  releases (`debian/metainfo.py`: one per upstream version in `debian/changelog`, dated by its
+  newest entry and described by its entries' items). After `dh_install`,
   `debian/manpages.py` writes a manual page for each program in `/usr/bin`: the crate's
   `data/<program>.1` when it has one (a package's second program must), or else the Cargo
   description of the crate that builds it and the package's description.

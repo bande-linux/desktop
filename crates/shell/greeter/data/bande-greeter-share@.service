@@ -1,0 +1,11 @@
+[Unit]
+Description=Folder the login window reads for user %i
+ConditionPathIsDirectory=/var/lib/bande-greeter/users
+
+[Service]
+Type=oneshot
+User=%i
+Group=_greetd
+StateDirectory=bande-greeter/users/%i
+StateDirectoryMode=2750
+ExecStart=/usr/bin/true

@@ -8,7 +8,7 @@ use std::thread;
 
 use crate::{Accessibility, Config, Setting, Wallpaper, WallpaperVariant};
 
-pub const LOGIN_PICTURES: &str = "/var/lib/bande-greeter/pictures";
+pub const LOGIN_SHARE: &str = "/var/lib/bande-greeter/users";
 pub const LOGIN_PICTURE_LIMIT: u64 = 64 << 20;
 pub const LOGIN_LOOK_LIMIT: u64 = 16 << 10;
 const SHARED_MODE: u32 = 0o640;
@@ -66,16 +66,20 @@ pub fn login_look(config: &Config, home: Option<&Path>) -> LoginLook {
     }
 }
 
-pub fn login_picture_file(folder: &Path, uid: u32) -> PathBuf {
+pub fn login_share(folder: &Path, uid: u32) -> PathBuf {
     folder.join(uid.to_string())
 }
 
+pub fn login_picture_file(folder: &Path, uid: u32) -> PathBuf {
+    login_share(folder, uid).join("picture")
+}
+
 pub fn login_light_picture_file(folder: &Path, uid: u32) -> PathBuf {
-    folder.join(format!("{uid}.light"))
+    login_share(folder, uid).join("picture.light")
 }
 
 pub fn login_look_file(folder: &Path, uid: u32) -> PathBuf {
-    folder.join(format!("{uid}.look"))
+    login_share(folder, uid).join("look")
 }
 
 fn share(shared: &Path, source: Option<(&mut dyn Read, u64)>, limit: u64) -> io::Result<()> {
@@ -143,9 +147,8 @@ pub fn share_login_look(look: LoginLook) {
             if LATEST_SHARE.load(Ordering::SeqCst) != share {
                 return;
             }
-            let copied = std::fs::metadata("/proc/self").and_then(|process| {
-                copy_login_look(Path::new(LOGIN_PICTURES), process.uid(), &look)
-            });
+            let copied = std::fs::metadata("/proc/self")
+                .and_then(|process| copy_login_look(Path::new(LOGIN_SHARE), process.uid(), &look));
             if let Err(error) = copied {
                 tracing::info!("the login window keeps its own look: {error}");
             }

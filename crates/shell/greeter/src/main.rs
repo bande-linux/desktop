@@ -10,15 +10,15 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_config::{
-    Accessibility, Appearance as Look, CARRIED_ACCESSIBILITY, Config, LOGIN_PICTURES, WallpaperFit,
+    Accessibility, Appearance as Look, CARRIED_ACCESSIBILITY, Config, LOGIN_SHARE, WallpaperFit,
     carry, login_defaults,
 };
 use bande_datetime::daylight::{Sky, place_of, sky};
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_greeter::{
-    FAILED_SESSIONS, Login, Request, Step, account_users, failed_session, last_user_file,
-    login_accessibility, login_look, login_picture, login_users, read_message, remember_user,
-    remembered_user, write_message,
+    Login, Request, Step, account_users, failed_session, last_user_file, login_accessibility,
+    login_look, login_picture, login_users, read_message, remember_user, remembered_user,
+    write_message,
 };
 use bande_keyboard::Layouts;
 use bande_l10n::tr;
@@ -196,7 +196,7 @@ impl Greeter {
 
     fn choose_look(&mut self) {
         let user = self.users.get(self.shown);
-        self.look = user.and_then(|user| login_look(Path::new(LOGIN_PICTURES), user.uid));
+        self.look = user.and_then(|user| login_look(Path::new(LOGIN_SHARE), user.uid));
         let variant = self
             .look
             .as_ref()
@@ -207,11 +207,7 @@ impl Greeter {
         };
         let picture = user
             .and_then(|user| {
-                login_picture(
-                    Path::new(LOGIN_PICTURES),
-                    user.uid,
-                    variant == Variant::Light,
-                )
+                login_picture(Path::new(LOGIN_SHARE), user.uid, variant == Variant::Light)
             })
             .map(Arc::new);
         self.wallpaper = Wallpaper {
@@ -297,7 +293,7 @@ impl Greeter {
             screen.set_picture(picture);
         }
         if let Some(user) = self.users.get(self.shown) {
-            screen.set_message(failed_session(Path::new(FAILED_SESSIONS), user.uid));
+            screen.set_message(failed_session(Path::new(LOGIN_SHARE), user.uid));
         }
         if let Some(blurred) = &self.blurred {
             screen.set_backdrop(blurred.clone(), Instant::now() - Duration::from_secs(1));

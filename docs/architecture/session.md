@@ -515,8 +515,8 @@ compositor turns the displays off, and on battery the greeter then sleeps when l
 first frame is shown; the others show the blurred wallpaper (`greeter-backdrop` layers).
 
 **A session that fails.** When the compositor service fails, ends within 5 s, or a session is
-still running, `bande-session` writes a keyword to `/var/lib/bande-greeter/failed/<uid>` (the
-same `3733 root:_greetd` pattern as the pictures); the greeter shows that person why their
+still running, `bande-session` writes a keyword to `failed` in that person's login-window
+folder (below); the greeter shows that person why their
 last session ended, and the next session that starts removes the note.
 
 **No black frame.** Each stage leaves its last frame on screen until the next has something to
@@ -563,15 +563,17 @@ display-manager.service`, which ends the sessions it started.
 
 **Wallpaper at login.** The login window shows the wallpaper of the person it offers, starting
 with whoever signed in last (`$XDG_STATE_HOME/bande-greeter/last-user` in greetd's home,
-`/var/lib/greetd`). Homes are 0700, so `bande-config` copies the dark picture (at most 64 MiB)
-to `/var/lib/bande-greeter/pictures/<uid>`, a different light one to `<uid>.light`, and the
-appearance, wallpaper fit and vision settings to `<uid>.look` whenever they change, so the
-login window shows the variant and fit the desktop fades in with. That folder is
-`root:_greetd` mode 3733: anyone may create files but no one may list them, the sticky bit stops
-people replacing each other's files, and setgid makes a 0640 copy readable by its owner and the
-login window alone. The greeter opens `<uid>` without following links, uses it only if it is a
-regular file owned by that uid within the size limit, and decodes it through `/proc/self/fd`, so
-the file it checked is the file it shows; anything else falls back to the default.
+`/var/lib/greetd`). Homes are 0700, so each person has a folder the login window reads,
+`/var/lib/bande-greeter/users/<uid>`, owned by them, group `_greetd`, mode 2750: systemd makes it
+(`bande-greeter-share@<uid>.service`, a `StateDirectory=` that `user@.service` wants through a
+drop-in) whenever their user manager starts, and the folder above it is root's, so no one can
+create or replace another person's files or list theirs. `bande-config` copies the dark picture
+(at most 64 MiB) to `picture` there, a different light one to `picture.light`, and the
+appearance, wallpaper fit and vision settings to `look` whenever they change, so the login
+window shows the variant and fit the desktop fades in with; setgid makes each 0640 copy readable
+by its owner and the login window alone. The greeter opens each file without following links,
+uses it only if it is a regular file owned by that uid within the size limit, and decodes it
+through `/proc/self/fd`, so the file it checked is the file it shows; anything else falls back to the default.
 
 ## Crash handling and supervision
 

@@ -26,6 +26,7 @@ use crate::ui::symbols::Symbols;
 use crate::ui::toolbar::{Signal, Signals, Toolbar};
 use crate::worker::{Command, Event as MailEvent, MailboxChange, Mailroom, Status, Worker};
 use accesskit::{ActionRequest, TreeUpdate};
+use bande_address_book::Directory;
 use bande_app_settings::{Stored, settings_folder};
 use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
@@ -73,6 +74,7 @@ const FLAG_COLORS: [Text; 7] = [
 ];
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 const CORRESPONDENTS_READ: usize = 5000;
+const CONTACTS_APP: &str = "org.bande.Contacts";
 const LIST_PAGE: usize = 500;
 const LIST_AHEAD: f32 = 2000.0;
 
@@ -95,6 +97,7 @@ pub enum Request {
     ShowMenu(Menu, Point),
     Clipboard(ClipboardRequest),
     OpenSettings,
+    AddContact(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -200,6 +203,7 @@ pub(crate) struct SetupSheet {
 
 pub struct MailView {
     pub(crate) store: Store,
+    contacts: Directory,
     store_path: PathBuf,
     pub(crate) accounts: Vec<(Account, Vec<Mailbox>)>,
     workers: Vec<Worker>,
@@ -268,6 +272,7 @@ impl MailView {
         let host_id = Widget::id(&host);
         let mut view = Self {
             store,
+            contacts: Directory::open(),
             store_path,
             accounts: Vec::new(),
             workers: Vec::new(),
@@ -448,12 +453,26 @@ impl MailView {
             .collect()
     }
 
-    pub fn correspondents(&self) -> Vec<crate::message::Address> {
-        let mut found = self
+    pub fn correspondents(&mut self) -> Vec<crate::message::Address> {
+        self.contacts.refresh();
+        let mut found: Vec<crate::message::Address> = self
+            .contacts
+            .addresses()
+            .map(|(name, email)| crate::message::Address {
+                name: name.to_owned(),
+                email: email.to_owned(),
+            })
+            .collect();
+        let senders = self
             .store
             .correspondents(CORRESPONDENTS_READ)
             .inspect_err(|error| tracing::warn!("cannot read known addresses: {error}"))
             .unwrap_or_default();
+        found.extend(
+            senders
+                .into_iter()
+                .filter(|sender| !self.contacts.knows(&sender.email)),
+        );
         found.retain(|address| {
             !self
                 .accounts
@@ -680,6 +699,8 @@ impl MailView {
             )
             .inspect_err(|error| tracing::warn!("cannot list the messages: {error}"))
             .unwrap_or_default();
+        self.contacts.refresh();
+        let all = self.with_contact_names(all);
         self.listed_all = all.len() < self.listed;
         self.messages = match self.settings.conversations {
             true => self.conversations.group(all),
@@ -707,14 +728,24 @@ impl MailView {
     }
 
     fn conversation_of(&self, summary: &Summary) -> Vec<Summary> {
-        match self.settings.conversations {
+        let conversation = match self.settings.conversations {
             true => self
                 .store
                 .conversation(summary)
                 .inspect_err(|error| tracing::warn!("cannot read a conversation: {error}"))
                 .unwrap_or_else(|_| vec![summary.clone()]),
             false => vec![summary.clone()],
+        };
+        self.with_contact_names(conversation)
+    }
+
+    fn with_contact_names(&self, mut summaries: Vec<Summary>) -> Vec<Summary> {
+        for summary in &mut summaries {
+            if let Some(name) = self.contacts.name_for(&summary.sender.email) {
+                name.clone_into(&mut summary.sender.name);
+            }
         }
+        summaries
     }
 
     fn refresh_thread(&mut self) {
@@ -3102,13 +3133,20 @@ impl MailView {
             }
             Target::Link(url, claimed, _) => self.open_link(url, claimed),
             Target::Address(address) => {
-                let menu = Menu::new(vec![
+                let mut items = vec![
                     MenuItem::new(
                         &tr!("New Message"),
                         &format!("compose-to:{}", address.full()),
                     ),
                     MenuItem::new(&tr!("Copy Address"), &format!("copy:{}", address.email)),
-                ]);
+                ];
+                if !self.contacts.knows(&address.email) && bande_xdg::is_installed(CONTACTS_APP) {
+                    items.push(MenuItem::new(
+                        &tr!("Add to Contacts"),
+                        &format!("add-contact:{}", address.full()),
+                    ));
+                }
+                let menu = Menu::new(items);
                 self.requests
                     .push(Request::ShowMenu(menu, pointer.position));
             }
@@ -3597,6 +3635,9 @@ impl MailView {
                 let claimed = self.claimed_host(&url);
                 self.open_link(url, claimed);
             }
+            action if action.starts_with("add-contact:") => self.requests.push(
+                Request::AddContact(action["add-contact:".len()..].to_owned()),
+            ),
             action if action.starts_with("compose-to:") => self.compose(Draft {
                 to: parse_addresses(&action["compose-to:".len()..]),
                 ..Draft::default()

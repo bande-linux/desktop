@@ -1,7 +1,45 @@
+//! Content lines of iCalendar (RFC 5545) and vCard (RFC 6350, RFC 2426): folding, parameters,
+//! groups, escaping and nested `BEGIN`/`END` components.
+
 use std::fmt::Write;
+use std::fs::OpenOptions;
+use std::io::{self, Read};
+use std::os::unix::fs::OpenOptionsExt;
+use std::path::Path;
+
+use rustix::fs::OFlags;
+
+/// The largest file [`read_file`] reads.
+pub const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// The text of an `.ics` or `.vcf` file someone handed over: only a regular file (a FIFO
+/// would hang) and at most [`MAX_FILE_BYTES`].
+pub fn read_file(path: &Path) -> io::Result<String> {
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(OFlags::NONBLOCK.bits() as i32)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "not a regular file",
+        ));
+    }
+    if metadata.len() > MAX_FILE_BYTES {
+        return Err(io::ErrorKind::FileTooLarge.into());
+    }
+    let mut text = String::new();
+    file.take(MAX_FILE_BYTES + 1).read_to_string(&mut text)?;
+    if text.len() as u64 > MAX_FILE_BYTES {
+        return Err(io::ErrorKind::FileTooLarge.into());
+    }
+    Ok(text)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
+    pub group: Option<String>,
     pub name: String,
     pub params: Vec<(String, String)>,
     pub value: String,
@@ -10,6 +48,7 @@ pub struct Property {
 impl Property {
     pub fn new(name: &str, value: impl Into<String>) -> Self {
         Self {
+            group: None,
             name: name.to_owned(),
             params: Vec::new(),
             value: value.into(),
@@ -48,7 +87,7 @@ impl std::fmt::Display for ParseError {
         match self {
             Self::Line(line) => write!(f, "malformed content line {line}"),
             Self::Unbalanced(name) => write!(f, "{name} is not closed"),
-            Self::Empty => write!(f, "no calendar data"),
+            Self::Empty => write!(f, "nothing in it"),
         }
     }
 }
@@ -89,7 +128,8 @@ impl Component {
         self.properties.push(property);
     }
 
-    pub fn to_ics(&self) -> String {
+    /// The component as folded content lines.
+    pub fn to_text(&self) -> String {
         let mut out = String::new();
         self.write(&mut out);
         out
@@ -98,7 +138,10 @@ impl Component {
     fn write(&self, out: &mut String) {
         fold_into(out, &format!("BEGIN:{}", self.name));
         for property in &self.properties {
-            let mut line = property.name.clone();
+            let mut line = match &property.group {
+                Some(group) => format!("{group}.{}", property.name),
+                None => property.name.clone(),
+            };
             for (name, value) in &property.params {
                 let quoted = value.contains([':', ';', ',']);
                 match quoted {
@@ -167,14 +210,25 @@ fn parse_line(line: &str) -> Option<Property> {
     }
     let value_start = value_start?;
     let name_end = name_end.unwrap_or(value_start);
-    let name = line[..name_end].trim().to_ascii_uppercase();
+    let full = line[..name_end].trim();
+    let word = |text: &str| {
+        !text.is_empty()
+            && text
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    };
+    let (group, name) = match full.split_once('.') {
+        Some((group, name)) if word(group) && word(name) => (Some(group.to_owned()), name),
+        _ => (None, full),
+    };
+    let name = name.to_ascii_uppercase();
     if name.is_empty() {
         return None;
     }
     let mut params = Vec::new();
     if name_end < value_start {
         for param in split_unquoted(&line[name_end + 1..value_start], ';') {
-            let (key, value) = param.split_once('=')?;
+            let (key, value) = param.split_once('=').unwrap_or(("TYPE", param));
             params.push((
                 key.trim().to_ascii_uppercase(),
                 value.trim_matches('"').to_owned(),
@@ -182,6 +236,7 @@ fn parse_line(line: &str) -> Option<Property> {
         }
     }
     Some(Property {
+        group,
         name,
         params,
         value: line[value_start + 1..].to_owned(),
@@ -267,14 +322,24 @@ pub fn escape(value: &str) -> String {
     out
 }
 
+/// The items of a comma-separated list value, still escaped.
 pub fn split_list(value: &str) -> Vec<&str> {
+    split_unescaped(value, ',')
+}
+
+/// The components of a structured value such as vCard's `N` or `ADR`, still escaped.
+pub fn split_components(value: &str) -> Vec<&str> {
+    split_unescaped(value, ';')
+}
+
+fn split_unescaped(value: &str, separator: char) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut start = 0;
     let mut escaped = false;
     for (index, character) in value.char_indices() {
         match character {
             '\\' if !escaped => escaped = true,
-            ',' if !escaped => {
+            found if found == separator && !escaped => {
                 parts.push(&value[start..index]);
                 start = index + 1;
             }

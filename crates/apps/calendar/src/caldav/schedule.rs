@@ -1,10 +1,9 @@
 use jiff::Timestamp;
 
-use super::client::Client;
-use super::http::{Error, join};
-use super::xml::{CALDAV, DAV, Element, escape, parse_element};
 use crate::ical::freebusy::{self, Period};
 use crate::invite::UserType;
+use bande_dav::xml::{CALDAV, DAV, Element, escape, parse_element};
+use bande_dav::{Client, Error, join, mail_address};
 
 const SEARCH_LIMIT: usize = 20;
 const NAMESPACES: &str = "xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"";
@@ -28,14 +27,6 @@ pub struct Scheduling {
 pub enum Availability {
     Busy(Vec<Period>),
     Unknown,
-}
-
-pub fn mail_address(href: &str) -> Option<String> {
-    let href = href.trim();
-    href.get(..7)
-        .filter(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
-        .and_then(|_| href.get(7..))
-        .map(str::to_owned)
 }
 
 fn utc(at: Timestamp) -> String {
@@ -90,207 +81,208 @@ fn tolerated(error: Error) -> Result<(), Error> {
     }
 }
 
-impl Client {
-    /// The signed-in user's principal for the calendar home `home`, with its RFC 6638
-    /// scheduling outbox when the server has one.
-    pub fn scheduling(&self, home: &str) -> Result<Scheduling, Error> {
-        let principal = self
-            .first_href(
-                home,
-                DAV,
-                "current-user-principal",
-                "d:current-user-principal",
-            )?
-            .map(|(_, principal)| principal)
-            .ok_or_else(|| Error::NotFound(home.to_owned()))?;
-        let outbox = match self.first_href(
-            &principal,
-            CALDAV,
-            "schedule-outbox-URL",
-            "c:schedule-outbox-URL",
-        ) {
-            Ok(outbox) => outbox.map(|(_, outbox)| outbox),
-            Err(error) => {
-                tolerated(error)?;
-                None
-            }
-        };
-        Ok(Scheduling { principal, outbox })
-    }
+/// The signed-in user's principal for the calendar home `home`, with its RFC 6638
+/// scheduling outbox when the server has one.
+pub fn scheduling(client: &Client, home: &str) -> Result<Scheduling, Error> {
+    let principal = client
+        .first_href(
+            home,
+            DAV,
+            "current-user-principal",
+            "d:current-user-principal",
+        )?
+        .map(|(_, principal)| principal)
+        .ok_or_else(|| Error::NotFound(home.to_owned()))?;
+    let outbox = match client.first_href(
+        &principal,
+        CALDAV,
+        "schedule-outbox-URL",
+        "c:schedule-outbox-URL",
+    ) {
+        Ok(outbox) => outbox.map(|(_, outbox)| outbox),
+        Err(error) => {
+            tolerated(error)?;
+            None
+        }
+    };
+    Ok(Scheduling { principal, outbox })
+}
 
-    /// Principals whose name or calendar user address contains `text` (RFC 3744
-    /// principal-property-search over the server's principal collections).
-    pub fn search_principals(&self, principal: &str, text: &str) -> Result<Vec<Principal>, Error> {
-        let mut found: Vec<Principal> = Vec::new();
-        for prop in ["d:displayname", "c:calendar-user-address-set"] {
-            let (url, status) =
-                match self.multistatus("REPORT", principal, "0", &principal_search(prop, text)) {
-                    Ok(answer) => answer,
-                    Err(error) => {
-                        tolerated(error)?;
-                        continue;
-                    }
-                };
-            for entry in status.entries {
-                let url = join(&url, &entry.href);
-                if found.iter().any(|known| known.url == url) {
+/// Principals whose name or calendar user address contains `text` (RFC 3744
+/// principal-property-search over the server's principal collections).
+pub fn search_principals(
+    client: &Client,
+    principal: &str,
+    text: &str,
+) -> Result<Vec<Principal>, Error> {
+    let mut found: Vec<Principal> = Vec::new();
+    for prop in ["d:displayname", "c:calendar-user-address-set"] {
+        let (url, status) =
+            match client.multistatus("REPORT", principal, "0", &principal_search(prop, text)) {
+                Ok(answer) => answer,
+                Err(error) => {
+                    tolerated(error)?;
                     continue;
                 }
-                let addresses: Vec<String> = entry
-                    .prop(CALDAV, "calendar-user-address-set")
-                    .map(Element::hrefs)
-                    .unwrap_or_default()
-                    .iter()
-                    .filter_map(|href| mail_address(href))
-                    .collect();
-                if addresses.is_empty() {
-                    continue;
-                }
-                found.push(Principal {
-                    name: entry
-                        .text(DAV, "displayname")
-                        .map_or_else(|| addresses[0].clone(), str::to_owned),
-                    kind: UserType::of(entry.text(CALDAV, "calendar-user-type")),
-                    home: entry
-                        .prop(CALDAV, "calendar-home-set")
-                        .and_then(|home| home.hrefs().into_iter().next())
-                        .map(|home| join(&url, &home)),
-                    addresses,
-                    url,
-                });
+            };
+        for entry in status.entries {
+            let url = join(&url, &entry.href);
+            if found.iter().any(|known| known.url == url) {
+                continue;
             }
-        }
-        found.truncate(SEARCH_LIMIT);
-        Ok(found)
-    }
-
-    /// When each of `attendees` is busy during `window`: asked of the scheduling outbox
-    /// (RFC 6638 §6), and for anyone it does not answer for, with a free-busy-query
-    /// (RFC 4791 §7.10) on the calendars of their principal on this server.
-    pub fn availability(
-        &self,
-        scheduling: &Scheduling,
-        organizer: &str,
-        attendees: &[String],
-        window: Period,
-    ) -> Result<Vec<(String, Availability)>, Error> {
-        let mut found: Vec<(String, Availability)> = attendees
-            .iter()
-            .map(|attendee| (attendee.clone(), Availability::Unknown))
-            .collect();
-        if let Some(outbox) = &scheduling.outbox {
-            match self.ask_outbox(outbox, organizer, attendees, window) {
-                Ok(answers) => {
-                    for (recipient, availability) in answers {
-                        if let Some((_, slot)) = found
-                            .iter_mut()
-                            .find(|(attendee, _)| attendee.eq_ignore_ascii_case(&recipient))
-                        {
-                            *slot = availability;
-                        }
-                    }
-                }
-                Err(error) => tolerated(error)?,
+            let addresses: Vec<String> = entry
+                .prop(CALDAV, "calendar-user-address-set")
+                .map(Element::hrefs)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|href| mail_address(href))
+                .collect();
+            if addresses.is_empty() {
+                continue;
             }
-        }
-        for (attendee, availability) in &mut found {
-            if *availability == Availability::Unknown {
-                *availability = self.query_principal(&scheduling.principal, attendee, window)?;
-            }
-        }
-        Ok(found)
-    }
-
-    fn ask_outbox(
-        &self,
-        outbox: &str,
-        organizer: &str,
-        attendees: &[String],
-        window: Period,
-    ) -> Result<Vec<(String, Availability)>, Error> {
-        let body = freebusy::request(
-            &crate::store::new_uid(),
-            organizer,
-            attendees,
-            window,
-            Timestamp::now(),
-        );
-        let response = self.http.send(
-            "POST",
-            outbox,
-            &[("Content-Type", "text/calendar; charset=utf-8")],
-            Some(&body),
-        )?;
-        if !response.success() {
-            return Err(Error::Status {
-                status: response.status,
-                url: outbox.to_owned(),
+            found.push(Principal {
+                name: entry
+                    .text(DAV, "displayname")
+                    .map_or_else(|| addresses[0].clone(), str::to_owned),
+                kind: UserType::of(entry.text(CALDAV, "calendar-user-type")),
+                home: entry
+                    .prop(CALDAV, "calendar-home-set")
+                    .and_then(|home| home.hrefs().into_iter().next())
+                    .map(|home| join(&url, &home)),
+                addresses,
+                url,
             });
         }
-        let root = parse_element(&response.body)?;
-        Ok(root
-            .children
-            .iter()
-            .filter(|child| child.is(CALDAV, "response"))
-            .filter_map(answered)
-            .collect())
     }
+    found.truncate(SEARCH_LIMIT);
+    Ok(found)
+}
 
-    fn query_principal(
-        &self,
-        principal: &str,
-        address: &str,
-        window: Period,
-    ) -> Result<Availability, Error> {
-        let home = self
-            .search_principals(principal, address)?
-            .into_iter()
-            .find(|found| {
-                found
-                    .addresses
-                    .iter()
-                    .any(|known| known.eq_ignore_ascii_case(address))
-            })
-            .and_then(|found| found.home);
-        let Some(home) = home else {
-            return Ok(Availability::Unknown);
-        };
-        let calendars = match self.calendars(&home) {
-            Ok(calendars) => calendars,
-            Err(error) => {
-                tolerated(error)?;
-                return Ok(Availability::Unknown);
-            }
-        };
-        let mut busy = Vec::new();
-        let mut answered = false;
-        for calendar in calendars {
-            let response = self.http.send(
-                "REPORT",
-                &calendar.url,
-                &[("Depth", "1")],
-                Some(&free_busy_query(window)),
-            )?;
-            match response
-                .success()
-                .then(|| freebusy::busy(&response.body))
-                .flatten()
-            {
-                Some(found) => {
-                    answered = true;
-                    busy.extend(found);
+/// When each of `attendees` is busy during `window`: asked of the scheduling outbox
+/// (RFC 6638 §6), and for anyone it does not answer for, with a free-busy-query
+/// (RFC 4791 §7.10) on the calendars of their principal on this server.
+pub fn availability(
+    client: &Client,
+    scheduling: &Scheduling,
+    organizer: &str,
+    attendees: &[String],
+    window: Period,
+) -> Result<Vec<(String, Availability)>, Error> {
+    let mut found: Vec<(String, Availability)> = attendees
+        .iter()
+        .map(|attendee| (attendee.clone(), Availability::Unknown))
+        .collect();
+    if let Some(outbox) = &scheduling.outbox {
+        match ask_outbox(client, outbox, organizer, attendees, window) {
+            Ok(answers) => {
+                for (recipient, availability) in answers {
+                    if let Some((_, slot)) = found
+                        .iter_mut()
+                        .find(|(attendee, _)| attendee.eq_ignore_ascii_case(&recipient))
+                    {
+                        *slot = availability;
+                    }
                 }
-                None => tracing::debug!(
-                    "{} answered {} to a free-busy-query",
-                    calendar.url,
-                    response.status
-                ),
             }
+            Err(error) => tolerated(error)?,
         }
-        busy.sort();
-        Ok(match answered {
-            true => Availability::Busy(busy),
-            false => Availability::Unknown,
-        })
     }
+    for (attendee, availability) in &mut found {
+        if *availability == Availability::Unknown {
+            *availability = query_principal(client, &scheduling.principal, attendee, window)?;
+        }
+    }
+    Ok(found)
+}
+
+fn ask_outbox(
+    client: &Client,
+    outbox: &str,
+    organizer: &str,
+    attendees: &[String],
+    window: Period,
+) -> Result<Vec<(String, Availability)>, Error> {
+    let body = freebusy::request(
+        &crate::store::new_uid(),
+        organizer,
+        attendees,
+        window,
+        Timestamp::now(),
+    );
+    let response = client.send(
+        "POST",
+        outbox,
+        &[("Content-Type", "text/calendar; charset=utf-8")],
+        Some(&body),
+    )?;
+    if !response.success() {
+        return Err(Error::Status {
+            status: response.status,
+            url: outbox.to_owned(),
+        });
+    }
+    let root = parse_element(&response.body)?;
+    Ok(root
+        .children
+        .iter()
+        .filter(|child| child.is(CALDAV, "response"))
+        .filter_map(answered)
+        .collect())
+}
+
+fn query_principal(
+    client: &Client,
+    principal: &str,
+    address: &str,
+    window: Period,
+) -> Result<Availability, Error> {
+    let home = search_principals(client, principal, address)?
+        .into_iter()
+        .find(|found| {
+            found
+                .addresses
+                .iter()
+                .any(|known| known.eq_ignore_ascii_case(address))
+        })
+        .and_then(|found| found.home);
+    let Some(home) = home else {
+        return Ok(Availability::Unknown);
+    };
+    let calendars = match client.calendars(&home) {
+        Ok(calendars) => calendars,
+        Err(error) => {
+            tolerated(error)?;
+            return Ok(Availability::Unknown);
+        }
+    };
+    let mut busy = Vec::new();
+    let mut answered = false;
+    for calendar in calendars {
+        let response = client.send(
+            "REPORT",
+            &calendar.url,
+            &[("Depth", "1")],
+            Some(&free_busy_query(window)),
+        )?;
+        match response
+            .success()
+            .then(|| freebusy::busy(&response.body))
+            .flatten()
+        {
+            Some(found) => {
+                answered = true;
+                busy.extend(found);
+            }
+            None => tracing::debug!(
+                "{} answered {} to a free-busy-query",
+                calendar.url,
+                response.status
+            ),
+        }
+    }
+    busy.sort();
+    Ok(match answered {
+        true => Availability::Busy(busy),
+        false => Availability::Unknown,
+    })
 }

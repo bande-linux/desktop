@@ -1,8 +1,11 @@
 use bande_discovery::{Resolver, domain_of};
 
-use super::http::{Credentials, Error, Http, Response, join, origin, same_resource};
-use super::schedule::mail_address;
-use super::xml::{self, CALDAV, CALENDAR_COLOR_NS, CALSERVER, DAV, Multistatus, parse_multistatus};
+use crate::http::{
+    Credentials, Error, Http, Response, join, origin, percent_decode, same_resource,
+};
+use crate::xml::{
+    self, CALDAV, CALENDAR_COLOR_NS, CALSERVER, CARDDAV, DAV, Multistatus, parse_multistatus,
+};
 
 const MAX_REDIRECTS: usize = 5;
 const MULTIGET_BATCH: usize = 50;
@@ -38,9 +41,40 @@ pub enum Precondition {
     None,
 }
 
+/// The protocol a [`Client`] speaks on top of WebDAV.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Service {
+    CalDav,
+    CardDav,
+}
+
+impl Service {
+    fn name(self) -> &'static str {
+        match self {
+            Self::CalDav => "caldav",
+            Self::CardDav => "carddav",
+        }
+    }
+
+    fn app(self) -> &'static str {
+        match self {
+            Self::CalDav => "calendar",
+            Self::CardDav => "contacts",
+        }
+    }
+
+    pub fn media_type(self) -> &'static str {
+        match self {
+            Self::CalDav => "text/calendar",
+            Self::CardDav => "text/vcard",
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Client {
-    pub(super) http: Http,
+    http: Http,
+    service: Service,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,11 +89,12 @@ fn has_scheme(text: &str) -> bool {
     text.starts_with("http://") || text.starts_with("https://")
 }
 
-fn well_known(url: &str) -> String {
-    format!("{}/.well-known/caldav", origin(url))
+fn well_known(service: Service, url: &str) -> String {
+    format!("{}/.well-known/{}", origin(url), service.name())
 }
 
-pub fn candidates(server: &str) -> Vec<String> {
+/// The URLs to try for a server the user typed: as typed, its `/.well-known/` URL and its root.
+pub fn candidates(service: Service, server: &str) -> Vec<String> {
     let server = server.trim();
     let mut found = match (server.is_empty(), has_scheme(server)) {
         (true, _) => return Vec::new(),
@@ -71,7 +106,7 @@ pub fn candidates(server: &str) -> Vec<String> {
         true => server.to_owned(),
         false => format!("https://{}", server.split('/').next().unwrap_or(server)),
     };
-    for url in [well_known(&base), format!("{}/", origin(&base))] {
+    for url in [well_known(service, &base), format!("{}/", origin(&base))] {
         if !found.contains(&url) {
             found.push(url);
         }
@@ -79,13 +114,10 @@ pub fn candidates(server: &str) -> Vec<String> {
     found
 }
 
-fn contexts(domain: &str, resolver: &Resolver) -> Vec<String> {
+fn contexts(service: Service, domain: &str, resolver: &Resolver) -> Vec<String> {
     let mut found = Vec::new();
-    for (service, scheme, default_port) in [
-        ("_caldavs._tcp", "https", 443),
-        ("_caldav._tcp", "http", 80),
-    ] {
-        let name = format!("{service}.{domain}");
+    for (secure, scheme, default_port) in [("s", "https", 443), ("", "http", 80)] {
+        let name = format!("_{}{secure}._tcp.{domain}", service.name());
         let path = resolver
             .texts(&name)
             .iter()
@@ -97,11 +129,13 @@ fn contexts(domain: &str, resolver: &Resolver) -> Vec<String> {
                 true => String::new(),
                 false => format!(":{}", target.port),
             };
-            let path = path.as_deref().unwrap_or("/.well-known/caldav");
+            let path = path
+                .clone()
+                .unwrap_or_else(|| format!("/.well-known/{}", service.name()));
             found.push(format!("{scheme}://{}{port}{path}", target.host));
         }
     }
-    found.push(format!("https://{domain}/.well-known/caldav"));
+    found.push(format!("https://{domain}/.well-known/{}", service.name()));
     found
 }
 
@@ -116,13 +150,14 @@ fn rank(error: &Error) -> u8 {
 }
 
 impl Client {
-    pub fn new(credentials: Option<&Credentials>) -> Self {
+    pub fn new(service: Service, credentials: Option<&Credentials>) -> Self {
         Self {
-            http: Http::new(credentials),
+            http: Http::new(service.app(), credentials),
+            service,
         }
     }
 
-    pub(super) fn follow(
+    pub(crate) fn follow(
         &self,
         method: &str,
         url: &str,
@@ -140,7 +175,18 @@ impl Client {
         Err(Error::Network(format!("too many redirects from {url}")))
     }
 
-    pub(super) fn multistatus(
+    /// Sends one request, signing in when the server asks.
+    pub fn send(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Option<&str>,
+    ) -> Result<Response, Error> {
+        self.http.send(method, url, headers, body)
+    }
+
+    pub fn multistatus(
         &self,
         method: &str,
         url: &str,
@@ -157,7 +203,7 @@ impl Client {
         Ok((url.clone(), parse_multistatus(&response.body)?))
     }
 
-    pub(super) fn first_href(
+    pub fn first_href(
         &self,
         url: &str,
         namespace: &str,
@@ -172,11 +218,11 @@ impl Client {
             .map(|href| (url.clone(), join(&url, &href))))
     }
 
-    /// The CalDAV context URL that the domain of `address` points to (RFC 6764), found
-    /// without sending credentials.
-    pub fn find(address: &str, resolver: &Resolver) -> Option<String> {
-        let probe = Self::new(None);
-        contexts(&domain_of(address)?, resolver)
+    /// The context URL that the domain of `address` points to for `service` (RFC 6764),
+    /// found without sending credentials.
+    pub fn find(service: Service, address: &str, resolver: &Resolver) -> Option<String> {
+        let probe = Self::new(service, None);
+        contexts(service, &domain_of(address)?, resolver)
             .into_iter()
             .find_map(|url| probe.probe(&url))
     }
@@ -191,7 +237,7 @@ impl Client {
             {
                 Err(Error::Unauthorized) => return Some(url),
                 Err(error) => {
-                    tracing::debug!("no calendar server at {url}: {error}");
+                    tracing::debug!("no {} server at {url}: {error}", self.service.name());
                     return None;
                 }
                 Ok(response) => response,
@@ -200,7 +246,7 @@ impl Client {
                 (Some(location), 301 | 302 | 303 | 307 | 308) => url = join(&url, location),
                 (_, 207) => return Some(url),
                 (_, status) => {
-                    tracing::debug!("no calendar server at {url}: {status}");
+                    tracing::debug!("no {} server at {url}: {status}", self.service.name());
                     return None;
                 }
             }
@@ -208,13 +254,17 @@ impl Client {
         None
     }
 
-    pub fn discover(&self, server: &str) -> Result<Discovered, Error> {
+    pub(crate) fn discover_with<T>(
+        &self,
+        server: &str,
+        at: impl Fn(&str) -> Result<T, Error>,
+    ) -> Result<T, Error> {
         let mut best = Error::NotFound(server.to_owned());
-        for candidate in candidates(server) {
-            match self.discover_at(&candidate) {
+        for candidate in candidates(self.service, server) {
+            match at(&candidate) {
                 Ok(found) => return Ok(found),
                 Err(error) => {
-                    tracing::debug!("no calendars at {candidate}: {error}");
+                    tracing::debug!("nothing at {candidate}: {error}");
                     if rank(&error) <= rank(&best) {
                         best = error;
                     }
@@ -224,7 +274,11 @@ impl Client {
         Err(best)
     }
 
-    fn discover_at(&self, url: &str) -> Result<Discovered, Error> {
+    pub(crate) fn principal_and_home(
+        &self,
+        url: &str,
+        (namespace, name, prop): (&str, &str, &str),
+    ) -> Result<(String, String), Error> {
         let principal = self.first_href(
             url,
             DAV,
@@ -236,17 +290,20 @@ impl Client {
             None => (url.to_owned(), url.to_owned()),
         };
         let home = self
-            .first_href(
-                &principal,
-                CALDAV,
-                "calendar-home-set",
-                "c:calendar-home-set",
-            )?
+            .first_href(&principal, namespace, name, prop)?
             .map(|(_, home)| home);
-        let home = match home {
-            Some(home) => home,
-            None => url,
-        };
+        Ok((principal, home.unwrap_or(url)))
+    }
+
+    /// Signs in at `server` and follows `current-user-principal` → `calendar-home-set` → the
+    /// calendars there.
+    pub fn discover_calendars(&self, server: &str) -> Result<Discovered, Error> {
+        self.discover_with(server, |url| self.calendars_at(url))
+    }
+
+    fn calendars_at(&self, url: &str) -> Result<Discovered, Error> {
+        let (principal, home) =
+            self.principal_and_home(url, (CALDAV, "calendar-home-set", "c:calendar-home-set"))?;
         let calendars = self.calendars(&home)?;
         if calendars.is_empty() {
             return Err(Error::NotFound(home));
@@ -311,13 +368,7 @@ impl Client {
             })
             .map(|entry| {
                 let calendar_url = join(&url, &entry.href);
-                let read_only = entry
-                    .prop(DAV, "current-user-privilege-set")
-                    .is_some_and(|set| {
-                        set.find(DAV, "write").is_none()
-                            && set.find(DAV, "write-content").is_none()
-                            && set.find(DAV, "all").is_none()
-                    });
+                let read_only = entry.read_only();
                 RemoteCalendar {
                     name: entry
                         .text(DAV, "displayname")
@@ -378,12 +429,20 @@ impl Client {
         Ok(delta)
     }
 
-    pub fn etags(&self, calendar: &str) -> Result<Vec<(String, Option<String>)>, Error> {
-        let (url, status) =
-            self.multistatus("REPORT", calendar, "1", &xml::calendar_query_events())?;
+    pub fn etags(&self, collection: &str) -> Result<Vec<(String, Option<String>)>, Error> {
+        let (method, body) = match self.service {
+            Service::CalDav => ("REPORT", xml::calendar_query_events()),
+            Service::CardDav => ("PROPFIND", xml::propfind(&["d:resourcetype", "d:getetag"])),
+        };
+        let (url, status) = self.multistatus(method, collection, "1", &body)?;
         Ok(status
             .entries
             .iter()
+            .filter(|entry| {
+                entry
+                    .prop(DAV, "resourcetype")
+                    .is_none_or(|kind| kind.child(DAV, "collection").is_none())
+            })
             .map(|entry| {
                 (
                     join(&url, &entry.href),
@@ -394,14 +453,18 @@ impl Client {
             .collect())
     }
 
-    pub fn multiget(&self, calendar: &str, urls: &[String]) -> Result<Vec<Resource>, Error> {
+    pub fn multiget(&self, collection: &str, urls: &[String]) -> Result<Vec<Resource>, Error> {
+        let (namespace, name) = match self.service {
+            Service::CalDav => (CALDAV, "calendar-data"),
+            Service::CardDav => (CARDDAV, "address-data"),
+        };
         let mut found = Vec::new();
         for batch in urls.chunks(MULTIGET_BATCH) {
             let hrefs: Vec<String> = batch.iter().map(|url| path_of(url).to_owned()).collect();
-            let (url, status) =
-                self.multistatus("REPORT", calendar, "1", &xml::multiget(&hrefs))?;
+            let body = xml::multiget(self.service, &hrefs);
+            let (url, status) = self.multistatus("REPORT", collection, "1", &body)?;
             for entry in status.entries {
-                if let Some(data) = entry.text(CALDAV, "calendar-data") {
+                if let Some(data) = entry.text(namespace, name) {
                     found.push(Resource {
                         url: join(&url, &entry.href),
                         etag: entry.text(DAV, "getetag").map(str::to_owned),
@@ -414,7 +477,8 @@ impl Client {
     }
 
     pub fn get(&self, url: &str) -> Result<Resource, Error> {
-        let (url, response) = self.follow("GET", url, &[("Accept", "text/calendar")], None)?;
+        let (url, response) =
+            self.follow("GET", url, &[("Accept", self.service.media_type())], None)?;
         match response.success() {
             true => Ok(Resource {
                 url,
@@ -434,7 +498,8 @@ impl Client {
         data: &str,
         precondition: &Precondition,
     ) -> Result<Option<String>, Error> {
-        let mut headers = vec![("Content-Type", "text/calendar; charset=utf-8")];
+        let content_type = format!("{}; charset=utf-8", self.service.media_type());
+        let mut headers = vec![("Content-Type", content_type.as_str())];
         match precondition {
             Precondition::Create => headers.push(("If-None-Match", "*")),
             Precondition::Match(etag) => headers.push(("If-Match", etag.as_str())),
@@ -517,6 +582,15 @@ fn path_of(url: &str) -> &str {
     &url[origin(url).len()..]
 }
 
-fn last_segment(url: &str) -> String {
-    super::http::percent_decode(url.trim_end_matches('/').rsplit('/').next().unwrap_or(url))
+/// The mail address of a `mailto:` calendar user address.
+pub fn mail_address(href: &str) -> Option<String> {
+    let href = href.trim();
+    href.get(..7)
+        .filter(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
+        .and_then(|_| href.get(7..))
+        .map(str::to_owned)
+}
+
+pub(crate) fn last_segment(url: &str) -> String {
+    percent_decode(url.trim_end_matches('/').rsplit('/').next().unwrap_or(url))
 }

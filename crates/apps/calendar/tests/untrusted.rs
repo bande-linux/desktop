@@ -2,7 +2,8 @@
 
 use std::io::ErrorKind;
 
-use bande_calendar::ical::{CalendarObject, read_file};
+use bande_calendar::ical::CalendarObject;
+use bande_content_lines::read_file;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 

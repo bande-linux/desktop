@@ -4,9 +4,10 @@ use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use bande_calendar::caldav::{Availability, Client, Precondition};
+use bande_calendar::caldav::{Availability, availability, scheduling, search_principals};
 use bande_calendar::invite::UserType;
 use bande_calendar::schedule::{Hours, free_slots};
+use bande_dav::{Client, Precondition, Service};
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp};
 
@@ -69,9 +70,9 @@ fn find_a_time_skips_what_the_server_says_is_busy() {
     let Some((_server, _folder, port)) = xandikos() else {
         return;
     };
-    let client = Client::new(None);
+    let client = Client::new(Service::CalDav, None);
     let found = client
-        .discover(&format!("http://127.0.0.1:{port}/"))
+        .discover_calendars(&format!("http://127.0.0.1:{port}/"))
         .unwrap();
     assert_eq!(found.addresses, ["jane@bande.test"]);
     let calendar = &found.calendars[0];
@@ -82,18 +83,21 @@ SUMMARY:Review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
     let url = format!("{}busy.ics", calendar.url);
     client.put(&url, event, &Precondition::Create).unwrap();
 
-    let scheduling = client.scheduling(&found.home).unwrap();
-    let people = client
-        .search_principals(&scheduling.principal, "bande.test")
-        .unwrap();
+    let scheduling = scheduling(&client, &found.home).unwrap();
+    let people = search_principals(&client, &scheduling.principal, "bande.test").unwrap();
     assert_eq!(people.len(), 1);
     assert_eq!(people[0].addresses, ["jane@bande.test"]);
     assert_eq!(people[0].kind, UserType::Individual);
 
     let day = (at("2026-11-24T00:00:00Z"), at("2026-11-25T00:00:00Z"));
-    let answers = client
-        .availability(&scheduling, "jane@bande.test", &found.addresses, day)
-        .unwrap();
+    let answers = availability(
+        &client,
+        &scheduling,
+        "jane@bande.test",
+        &found.addresses,
+        day,
+    )
+    .unwrap();
     let busy = vec![(at("2026-11-24T10:00:00Z"), at("2026-11-24T11:00:00Z"))];
     assert_eq!(
         answers,

@@ -314,6 +314,24 @@ impl Mail {
         self.open_target(cx, window, url);
     }
 
+    fn add_contact(&mut self, cx: &mut Cx<Self>, window: WindowId, address: &str) {
+        let token = cx.window(window).and_then(|(window, _)| {
+            window
+                .activation_token(APP_ID)
+                .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+                .ok()
+        });
+        let Some(contacts) = self.apps().find("org.bande.Contacts.desktop").cloned() else {
+            return tracing::warn!("Contacts is not installed");
+        };
+        let arguments = ["--add".to_owned(), address.to_owned()];
+        if let Err(error) =
+            bande_xdg::launch_with_arguments(&contacts, &arguments, token.as_deref())
+        {
+            tracing::warn!("cannot open Contacts: {error}");
+        }
+    }
+
     fn open_target(&mut self, cx: &mut Cx<Self>, window: WindowId, target: &str) {
         let token = cx.window(window).and_then(|(window, _)| {
             window
@@ -501,6 +519,7 @@ impl Mail {
                 }
                 Request::OpenSettings => cx.open_settings(),
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
+                Request::AddContact(address) => self.add_contact(cx, window, &address),
                 Request::OpenAttachment(path) => {
                     self.open_target(cx, window, &path.to_string_lossy())
                 }

@@ -111,6 +111,12 @@ msgstr[1] "La till {count} kalendrar från {owner}."
 msgid "Can’t open the calendars of {owner}: {error}"
 msgstr "Kan inte öppna kalendrarna för {owner}: {error}"
 
+msgid "{address} could not be used for Calendar: {error}"
+msgstr "{address} kunde inte användas för Kalender: {error}"
+
+msgid "The account could not be offered to Contacts: {error}"
+msgstr "Kontot kunde inte erbjudas till Kontakter: {error}"
+
 msgid "Updated {time}"
 msgstr "Uppdaterad {time}"
 
@@ -125,6 +131,12 @@ msgstr "Det gick inte att logga in på ”{name}”"
 
 msgid "The server refused the password. Click to enter it again."
 msgstr "Servern avvisade lösenordet. Klicka för att ange det igen."
+
+msgid "Birthdays"
+msgstr "Födelsedagar"
+
+msgid "{name}’s birthday"
+msgstr "{name} fyller år"
 
 msgid "{date}, {count} event"
 msgid_plural "{date}, {count} events"
@@ -664,6 +676,9 @@ msgstr "Regionens standard"
 msgid "Show week numbers"
 msgstr "Visa veckonummer"
 
+msgid "Show birthdays from Contacts"
+msgstr "Visa födelsedagar från Kontakter"
+
 msgid "General"
 msgstr "Allmänt"
 
@@ -765,6 +780,9 @@ msgstr "Det finns ingen CalDAV-kalender på den här adressen. Kontrollera serve
 
 msgid "Password:"
 msgstr "Lösenord:"
+
+msgid "Also use this account for Contacts"
+msgstr "Använd också det här kontot för Kontakter"
 
 msgid "Add a Calendar Account"
 msgstr "Lägg till ett kalenderkonto"

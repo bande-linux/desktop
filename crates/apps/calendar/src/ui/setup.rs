@@ -7,17 +7,18 @@ use bande_discovery::{Resolver, domain_of};
 use bande_inbox::Outbox;
 use bande_l10n::tr;
 use bande_toolkit::ui::{
-    Button, Event, Key, Label, Modifiers, RadioGroup, SecureField, TEXT_FIELD_HEIGHT, TextField,
-    Ui, Widget, WidgetId,
+    Button, CheckState, Checkbox, Event, Key, Label, Modifiers, RadioGroup, SecureField,
+    TEXT_FIELD_HEIGHT, TextField, Ui, Widget, WidgetId,
 };
 
 use super::panel::{Line, Panel, Width};
-use crate::caldav::{Client, Credentials, Discovered, Error};
 use crate::ical::CalendarObject;
 use crate::store::{Account, AccountKind};
 use crate::worker::http_url;
+use bande_dav::{Client, Credentials, Discovered, Error, Service};
 
 const WIDTH: f32 = 500.0;
+const CONTACTS_APP: &str = "org.bande.Contacts";
 const LABEL_WIDTH: f32 = 104.0;
 const ROW: f32 = TEXT_FIELD_HEIGHT;
 const NOTE: f32 = 54.0;
@@ -43,6 +44,7 @@ enum Signal {
     User(String),
     Server(String),
     Password(String),
+    Contacts(bool),
     Entered,
     Primary,
     Other,
@@ -83,10 +85,12 @@ enum Answer {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Done {
     Added {
+        address: String,
         server: String,
         user: String,
         password: String,
         found: Discovered,
+        also_contacts: bool,
     },
     Updated {
         account: String,
@@ -159,6 +163,8 @@ pub struct AccountSetup {
     panel: WidgetId,
     cancel: WidgetId,
     dismissed: Rc<Cell<bool>>,
+    contacts: bool,
+    also_contacts: bool,
     closed: bool,
 }
 
@@ -222,6 +228,8 @@ impl AccountSetup {
             panel: WidgetId::next(),
             cancel: WidgetId::next(),
             dismissed: Rc::default(),
+            contacts: bande_xdg::is_installed(CONTACTS_APP),
+            also_contacts: true,
             closed: false,
         };
         match start {
@@ -291,6 +299,23 @@ impl AccountSetup {
             ROW,
         ));
         self.password_field = panel.id_of(field);
+    }
+
+    fn contacts_line(&mut self, panel: &mut Panel) {
+        if !self.contacts || !self.adding() {
+            return;
+        }
+        let state = match self.also_contacts {
+            true => CheckState::On,
+            false => CheckState::Off,
+        };
+        let send = sender(&self.signals);
+        let also = panel.add(Checkbox::new(
+            &tr!("Also use this account for Contacts"),
+            state,
+            move |on| send(Signal::Contacts(on)),
+        ));
+        panel.line(Line::new(None, vec![(also, Width::Fill)], ROW));
     }
 
     fn note_line(&mut self, panel: &mut Panel, text: &str) {
@@ -365,6 +390,7 @@ impl AccountSetup {
                     Signal::Address,
                 );
                 self.password_line(&mut panel);
+                self.contacts_line(&mut panel);
                 self.note_line(
                     &mut panel,
                     &tr!("Calendar looks up the CalDAV server of your address’s domain and shows it to you before it signs in."),
@@ -391,6 +417,7 @@ impl AccountSetup {
                     Signal::User,
                 );
                 self.password_line(&mut panel);
+                self.contacts_line(&mut panel);
                 self.note_line(
                     &mut panel,
                     &tr!("Enter the server address your provider gives, with its port and path if it has them. Calendar sends the password only when the server asks for it."),
@@ -485,6 +512,7 @@ impl AccountSetup {
             }
             Signal::Server(text) => self.server = text.trim().to_owned(),
             Signal::Password(secret) => self.password = Some(secret),
+            Signal::Contacts(on) => self.also_contacts = on,
             Signal::Entered | Signal::Primary | Signal::Other | Signal::Cancel => {}
         }
     }
@@ -573,7 +601,7 @@ impl AccountSetup {
                 } else {
                     let address = self.address.clone();
                     self.spawn(ui, &tr!("Looking up the server…"), move || {
-                        Answer::Found(Client::find(&address, &Resolver::system()))
+                        Answer::Found(Client::find(Service::CalDav, &address, &Resolver::system()))
                     });
                 }
             }
@@ -593,7 +621,10 @@ impl AccountSetup {
                 };
                 let server = self.server.clone();
                 self.spawn(ui, &tr!("Signing in…"), move || {
-                    Answer::Signed(Client::new(Some(&credentials)).discover(&server))
+                    Answer::Signed(
+                        Client::new(Service::CalDav, Some(&credentials))
+                            .discover_calendars(&server),
+                    )
                 });
             }
             Step::Subscription if self.url.is_empty() => {
@@ -602,12 +633,12 @@ impl AccountSetup {
             Step::Subscription => {
                 let url = http_url(&self.url);
                 self.spawn(ui, &tr!("Updating…"), move || {
-                    Answer::Fetched(Client::new(None).get(&url).and_then(|resource| {
-                        match CalendarObject::parse(&resource.data) {
+                    Answer::Fetched(Client::new(Service::CalDav, None).get(&url).and_then(
+                        |resource| match CalendarObject::parse(&resource.data) {
                             Ok(_) => Ok(resource.data),
                             Err(_) => Err(Error::NotFound(url)),
-                        }
-                    }))
+                        },
+                    ))
                 });
             }
             Step::Password if password.is_empty() => {
@@ -672,10 +703,15 @@ impl AccountSetup {
                         found,
                     },
                     None => Done::Added {
+                        address: match self.address.is_empty() {
+                            true => user.clone(),
+                            false => self.address.clone(),
+                        },
                         server,
                         user,
                         password,
                         found,
+                        also_contacts: self.contacts && self.also_contacts,
                     },
                 })
             }

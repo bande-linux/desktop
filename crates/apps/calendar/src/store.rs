@@ -1,7 +1,9 @@
 use std::cell::RefCell;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use bande_address_book::vcard::Birthday;
+use bande_dav::{Cached, read_or_set_aside};
+pub use bande_dav::{Pending, new_uid};
 use bande_l10n::tr;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -12,6 +14,7 @@ use crate::ical::{CalendarObject, Event, Occurrence};
 pub const ACCOUNTS_FILE: &str = "accounts.json";
 const CALENDARS_DIR: &str = "calendars";
 pub const LOCAL_ACCOUNT: &str = "local";
+pub const BIRTHDAYS_CALENDAR: &str = "birthdays";
 const PROGRAM: &str = "bande-calendar";
 
 pub fn data_dir() -> PathBuf {
@@ -63,13 +66,6 @@ pub struct CalendarInfo {
     pub opened: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Pending {
-    Create,
-    Update,
-    Delete,
-}
-
 type Expansion = (Timestamp, Timestamp, TimeZone, Vec<Occurrence>);
 
 #[derive(Debug, Default)]
@@ -97,6 +93,32 @@ pub struct Stored {
     pub parsed: Option<CalendarObject>,
     #[serde(skip)]
     expanded: Expanded,
+}
+
+impl Cached for Stored {
+    fn fresh(href: String, etag: Option<String>, data: String, pending: Option<Pending>) -> Self {
+        Self::new(href, etag, data, pending)
+    }
+
+    fn href(&self) -> &str {
+        &self.href
+    }
+
+    fn data(&self) -> &str {
+        &self.data
+    }
+
+    fn pending(&self) -> Option<Pending> {
+        self.pending
+    }
+
+    fn set_etag(&mut self, etag: Option<String>) {
+        self.etag = etag;
+    }
+
+    fn set_pending(&mut self, pending: Option<Pending>) {
+        self.pending = pending;
+    }
 }
 
 impl Stored {
@@ -269,61 +291,8 @@ pub struct Library {
     pub calendars: Vec<Calendar>,
 }
 
-pub fn new_uid() -> String {
-    let mut bytes = [0u8; 16];
-    let read =
-        std::fs::File::open("/dev/urandom").and_then(|mut random| random.read_exact(&mut bytes));
-    if read.is_err() {
-        let now = Timestamp::now().as_nanosecond().to_le_bytes();
-        bytes.copy_from_slice(&now);
-        bytes[0] ^= std::process::id() as u8;
-    }
-    bytes[6] = (bytes[6] & 0x0F) | 0x40;
-    bytes[8] = (bytes[8] & 0x3F) | 0x80;
-    let hex: String = bytes.iter().map(|byte| format!("{byte:02X}")).collect();
-    format!(
-        "{}-{}-{}-{}-{}",
-        &hex[0..8],
-        &hex[8..12],
-        &hex[12..16],
-        &hex[16..20],
-        &hex[20..32]
-    )
-}
-
-fn read_or_set_aside<T: serde::de::DeserializeOwned>(file: &Path) -> Option<T> {
-    let text = std::fs::read_to_string(file).ok()?;
-    match serde_json::from_str(&text) {
-        Ok(value) => Some(value),
-        Err(error) => {
-            let aside = file.with_extension("broken");
-            tracing::warn!(
-                "cannot read {}: {error}; keeping it as {}",
-                file.display(),
-                aside.display()
-            );
-            if let Err(error) = std::fs::rename(file, &aside) {
-                tracing::warn!("cannot keep {}: {error}", aside.display());
-            }
-            None
-        }
-    }
-}
-
 pub fn href_for(calendar: &CalendarInfo, uid: &str) -> String {
-    let safe: String = uid
-        .chars()
-        .map(
-            |character| match character.is_ascii_alphanumeric() || "-_.".contains(character) {
-                true => character,
-                false => '_',
-            },
-        )
-        .collect();
-    match &calendar.url {
-        Some(url) => format!("{}/{safe}.ics", url.trim_end_matches('/')),
-        None => format!("{safe}.ics"),
-    }
+    bande_dav::href_for(calendar.url.as_deref(), uid, "ics")
 }
 
 fn calendar_file(dir: &Path, id: &str) -> PathBuf {
@@ -440,11 +409,55 @@ impl Library {
         }
     }
 
+    /// Shows `people`'s birthdays as a read-only calendar that is made from Contacts each
+    /// time and never saved; none removes it.
+    pub fn set_birthdays(&mut self, people: &[(String, String, Birthday)]) {
+        self.calendars
+            .retain(|calendar| calendar.info.id != BIRTHDAYS_CALENDAR);
+        if people.is_empty() {
+            return;
+        }
+        let mut calendar = Calendar::new(CalendarInfo {
+            id: BIRTHDAYS_CALENDAR.to_owned(),
+            account: LOCAL_ACCOUNT.to_owned(),
+            url: None,
+            name: tr!("Birthdays"),
+            color: "#2B8A3E".to_owned(),
+            read_only: true,
+            visible: true,
+            ctag: None,
+            sync_token: None,
+            refreshed: None,
+            opened: false,
+        });
+        for (uid, name, birthday) in people {
+            let (rule, year) = match (birthday.month, birthday.day) {
+                (2, 29) => ("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1", 2000),
+                _ => ("FREQ=YEARLY", birthday.year.unwrap_or(2000)),
+            };
+            let start = format!("{year:04}{:02}{:02}", birthday.month, birthday.day);
+            let summary =
+                bande_content_lines::escape(&tr!("{name}’s birthday", name = name.clone()));
+            let data = format!(
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Bande//Calendar//EN\r\nBEGIN:VEVENT\r\n\
+                 UID:birthday-{uid}\r\nDTSTAMP:20000101T000000Z\r\nDTSTART;VALUE=DATE:{start}\r\n\
+                 RRULE:{rule}\r\nSUMMARY:{summary}\r\nTRANSP:TRANSPARENT\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+            );
+            calendar
+                .objects
+                .push(Stored::new(format!("birthday-{uid}.ics"), None, data, None));
+        }
+        self.calendars.push(calendar);
+    }
+
     pub fn save(&self, index: usize) {
         crate::offer::offer_to_search(&self.calendars);
         let (Some(dir), Some(calendar)) = (&self.dir, self.calendars.get(index)) else {
             return;
         };
+        if calendar.info.id == BIRTHDAYS_CALENDAR {
+            return;
+        }
         let file = calendar_file(dir, &calendar.info.id);
         let written = serde_json::to_string(calendar)
             .map_err(std::io::Error::other)

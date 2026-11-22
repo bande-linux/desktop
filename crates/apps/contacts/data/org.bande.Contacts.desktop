@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=Contacts
+Name[sv]=Kontakter
+GenericName=Address Book
+GenericName[sv]=Adressbok
+Comment=Keep the people you know, on this computer and on CardDAV servers
+Comment[sv]=Håll ordning på dem du känner, på datorn och på CardDAV-servrar
+Icon=org.bande.Contacts
+Exec=bande-contacts %U
+Categories=Office;ContactManagement;
+Keywords=contacts;address book;people;vcard;vcf;carddav;
+Keywords[sv]=kontakter;adressbok;personer;vcard;vcf;carddav;
+MimeType=text/vcard;text/x-vcard;
+StartupNotify=true
+Actions=new-contact;
+
+[Desktop Action new-contact]
+Name=New Contact
+Name[sv]=Ny kontakt
+Exec=bande-contacts --add ""

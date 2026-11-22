@@ -2,9 +2,9 @@ use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp};
 
 use super::event::PRODUCT;
-use super::lines::{self, Component, Property};
 use super::tz::Zones;
 use super::value::{Duration, Moment};
+use bande_content_lines::{self as lines, Component, Property};
 
 pub type Period = (Timestamp, Timestamp);
 
@@ -33,7 +33,7 @@ pub fn request(
         query.push(Property::new("ATTENDEE", format!("mailto:{attendee}")));
     }
     calendar.components.push(query);
-    calendar.to_ics()
+    calendar.to_text()
 }
 
 fn period(text: &str, zones: &Zones) -> Option<Period> {

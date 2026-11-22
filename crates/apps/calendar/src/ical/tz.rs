@@ -4,7 +4,7 @@ use jiff::civil::{Date, DateTime, Weekday};
 use jiff::tz::{Offset, TimeZone};
 use jiff::{Timestamp, ToSpan};
 
-use super::lines::{Component, Property};
+use bande_content_lines::{Component, Property};
 
 const NON_IANA_ZONES: [(&str, &str); 24] = [
     ("UTC", "UTC"),

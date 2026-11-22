@@ -9,14 +9,14 @@ use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report, least
 use crate::model::{Disk, Group, Model, Scheme, Selected, Volume};
 use crate::size::parse_size;
 use crate::widgets::{
-    CapacityBar, Closable, Heading, InfoGrid, Root, SIDEBAR_WIDTH, Segment, TOOLBAR_HEIGHT, symbol,
+    CapacityBar, Heading, InfoGrid, Root, SIDEBAR_WIDTH, Segment, TOOLBAR_HEIGHT, symbol,
 };
 use bande_design::Accent;
 use bande_fs::format_size;
 use bande_toolkit::ui::{
-    Alert, Axis, Button, Cell, Column, Context, Form, FormLine, Heading as SidebarHeading, Label,
-    PopUpButton, ProgressBar, Row, ScrollView, SecureField, Stack, Table, TextField, Ui, Widget,
-    WidgetId,
+    Alert, Axis, Button, Cell, Closable, Column, Context, Form, FormLine,
+    Heading as SidebarHeading, Label, PopUpButton, ProgressBar, Row, ScrollView, SecureField,
+    Stack, Table, TextField, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Color, Header, Image, Palette, SHEET_INSET, TextSystem};
 use bande_volumes::udisks::Health;

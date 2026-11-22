@@ -1,3 +1,4 @@
+use bande_address_book::Directory;
 use bande_datetime::DateFormats;
 use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
@@ -37,6 +38,7 @@ pub struct Inspector {
     invite_field: Option<WidgetId>,
     invited: Vec<(String, String)>,
     user_types: Vec<(String, UserType)>,
+    invite_completion: Option<(String, String)>,
     zone_text: Option<String>,
     calendars: Vec<usize>,
     calendar_choice: usize,
@@ -502,6 +504,7 @@ impl Inspector {
                 .map(|invitee| (invitee.address.clone(), shown_name(invitee)))
                 .collect(),
             user_types: Vec::new(),
+            invite_completion: None,
             zone_text,
             calendars: calendars.into_iter().map(|(index, _)| index).collect(),
             calendar_choice: selected,
@@ -545,6 +548,64 @@ impl Inspector {
             Some(anchor) => Arrow::Right(anchor.y + anchor.height.min(80.0) / 2.0),
             None => Arrow::None,
         }
+    }
+
+    /// Completes the invitee being typed from Contacts, the rest shown selected; a comma
+    /// takes it.
+    pub fn complete_invitee(&mut self, ui: &mut Ui, before: &str, contacts: &Directory) {
+        let Some(field) = self.invite_field else {
+            return;
+        };
+        let text = self.invite_text.clone();
+        let set = |ui: &mut Ui, shown: &str, selected: std::ops::Range<usize>| {
+            if let Some(widget) = ui.widget_as::<TextField>(field) {
+                widget.replace_text(shown);
+                widget.select(selected);
+            }
+        };
+        if let Some((typed, shown)) = self.invite_completion.take() {
+            if text == shown {
+                self.invite_completion = Some((typed, shown));
+                return;
+            }
+            if let Some(separator) = text.strip_prefix(typed.as_str())
+                && [",", ";"].contains(&separator)
+            {
+                let accepted = format!("{shown}, ");
+                set(ui, &accepted, accepted.len()..accepted.len());
+                self.invite_text = accepted;
+                return;
+            }
+        }
+        let selection = ui
+            .widget_ref::<TextField>(field)
+            .map(TextField::selection)
+            .unwrap_or_default();
+        if text.len() <= before.len()
+            || !text.starts_with(before)
+            || selection != (text.len()..text.len())
+        {
+            return;
+        }
+        let token = text
+            .rsplit([',', ';'])
+            .next()
+            .unwrap_or_default()
+            .trim_start();
+        if token.chars().count() < 2 {
+            return;
+        }
+        let Some(rest) = contacts.complete(token) else {
+            return;
+        };
+        let shown = format!("{text}{rest}");
+        set(ui, &shown, text.len()..shown.len());
+        self.invite_text = shown.clone();
+        self.invite_completion = Some((text, shown));
+    }
+
+    pub fn invite_text(&self) -> &str {
+        &self.invite_text
     }
 
     pub fn apply(&mut self, signal: &Signal) {

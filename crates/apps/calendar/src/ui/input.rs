@@ -955,7 +955,12 @@ fn new_event_now(view: &mut CalendarView) {
 
 pub fn signal(view: &mut CalendarView, signal: Signal) {
     if let Some(inspector) = &mut view.inspector {
+        let before = inspector.invite_text().to_owned();
         inspector.apply(&signal);
+        if matches!(signal, Signal::Invitees(_)) {
+            view.contacts.refresh();
+            inspector.complete_invitee(&mut view.ui, &before, &view.contacts);
+        }
     }
     if let Some(custom) = &mut view.custom {
         custom.apply(&signal, &mut view.ui);

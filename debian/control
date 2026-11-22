@@ -1005,6 +1005,23 @@ Description: calendar for the Bande desktop
  local calendar and read-only subscriptions, with day, week, month and
  year views and event alerts.
 
+Package: bande-contacts
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: utils
+Depends: ${shlibs:Depends},
+ fonts-inter,
+ fonts-manrope,
+ fonts-jetbrains-mono,
+ ${misc:Depends}
+Recommends: bande-secrets (= ${binary:Version}) | org.freedesktop.secrets
+Description: contacts for the Bande desktop
+ The address book of the Bande desktop: contacts on this computer and on
+ CardDAV servers, kept offline and in sync, with groups, search, .vcf
+ import and export and merging of duplicates. Mail and Calendar complete
+ addresses from it.
+
 Package: bande-velox
 Architecture: any
 Built-Using: ${cargo:Built-Using}
@@ -1224,6 +1241,7 @@ Recommends: bande-greeter (>= ${source:Version}),
  bande-mail (>= ${source:Version}),
  bande-notes (>= ${source:Version}),
  bande-calendar (>= ${source:Version}),
+ bande-contacts (>= ${source:Version}),
  bande-lookup (>= ${source:Version}),
  bande-browser,
  systemd-oomd,

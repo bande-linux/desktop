@@ -40,6 +40,7 @@ Each app is `crates/apps/<name>`, packaged as `bande-<name>`:
 | Mail | `bande-mail` (IMAP and SMTP) |
 | Notes | `bande-notes` (on this computer or in an IMAP account's Notes folder) |
 | Calendar | `bande-calendar` (CalDAV and iCalendar files) |
+| Contacts | `bande-contacts` (CardDAV and vCard files) |
 | Velox | `bande-velox` (containers of Docker Engine or Podman, and QEMU virtual machines) |
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |
 | Player | `bande-player` (audio and video; decoding runs in the `bande-media-engine` child process, the only part linking GStreamer) |

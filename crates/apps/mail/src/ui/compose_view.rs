@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
+use bande_address_book::completes;
 use bande_app::{Dropping, FileDrop};
 use bande_l10n::{Text, text, tr, trn};
 
@@ -124,18 +125,6 @@ fn joined(addresses: &[Address]) -> String {
         .map(Address::full)
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn completes(candidate: &str, token: &str) -> Option<String> {
-    let mut rest = candidate.char_indices();
-    for typed in token.chars() {
-        let (_, known) = rest.next()?;
-        if !known.to_lowercase().eq(typed.to_lowercase()) {
-            return None;
-        }
-    }
-    let rest = rest.as_str();
-    (!rest.is_empty()).then(|| rest.to_owned())
 }
 
 fn rows(from: bool, bcc: bool) -> Vec<Text> {

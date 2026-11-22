@@ -1,6 +1,7 @@
 use bande_discovery::{Resolver, domain_of};
 
 use super::http::{Credentials, Error, Http, Response, join, origin, same_resource};
+use super::schedule::mail_address;
 use super::xml::{self, CALDAV, CALENDAR_COLOR_NS, CALSERVER, DAV, Multistatus, parse_multistatus};
 
 const MAX_REDIRECTS: usize = 5;
@@ -39,7 +40,7 @@ pub enum Precondition {
 
 #[derive(Clone)]
 pub struct Client {
-    http: Http,
+    pub(super) http: Http,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,7 +122,7 @@ impl Client {
         }
     }
 
-    fn follow(
+    pub(super) fn follow(
         &self,
         method: &str,
         url: &str,
@@ -139,7 +140,7 @@ impl Client {
         Err(Error::Network(format!("too many redirects from {url}")))
     }
 
-    fn multistatus(
+    pub(super) fn multistatus(
         &self,
         method: &str,
         url: &str,
@@ -156,7 +157,7 @@ impl Client {
         Ok((url.clone(), parse_multistatus(&response.body)?))
     }
 
-    fn first_href(
+    pub(super) fn first_href(
         &self,
         url: &str,
         namespace: &str,
@@ -267,12 +268,7 @@ impl Client {
             })
             .unwrap_or_default()
             .iter()
-            .filter_map(|href| {
-                href.get(..7)
-                    .filter(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
-                    .and_then(|_| href.get(7..))
-                    .map(str::to_owned)
-            })
+            .filter_map(|href| mail_address(href))
             .collect();
         Ok(Discovered {
             principal,

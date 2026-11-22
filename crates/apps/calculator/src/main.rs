@@ -350,6 +350,17 @@ impl Calculator {
     }
 }
 
+fn read_kept(file: &std::path::Path) -> Option<String> {
+    match std::fs::read_to_string(file) {
+        Ok(text) => Some(text),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            tracing::warn!("cannot read {}: {error}", file.display());
+            None
+        }
+    }
+}
+
 impl Program for Calculator {
     type View = Pane;
 
@@ -358,11 +369,11 @@ impl Program for Calculator {
         engine.numbers = Numbers::from_env();
         let tape = cx
             .state_file(STATE_FILE)
-            .and_then(|file| std::fs::read_to_string(file).ok())
+            .and_then(|file| read_kept(&file))
             .is_some_and(|text| restore(&mut engine, &text));
         let kept_tape = cx
             .state_file(TAPE_FILE)
-            .and_then(|file| std::fs::read_to_string(file).ok())
+            .and_then(|file| read_kept(&file))
             .unwrap_or_default();
         engine.restore_tape(&kept_tape);
         let kept_tape = tape_text(&engine);

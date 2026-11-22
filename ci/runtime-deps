@@ -107,3 +107,5 @@ ssh openssh-client optional
 /usr/share/AAVMF/AAVMF_VARS.ms.fd qemu-efi-aarch64 optional
 /usr/bin/bande-clock bande-clock depends
 /usr/libexec/bande-velox/velox-helper bande-velox depends
+/usr/share/dictd dictd optional
+/usr/share/stardict/dic stardict-common optional

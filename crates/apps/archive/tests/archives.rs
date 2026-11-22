@@ -116,7 +116,7 @@ fn asks_for_the_password(archive: &Path, name: &str) {
 
 #[test]
 fn hostile_archives_are_refused_and_leave_nothing_behind() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir_in("/tmp").unwrap();
     let outside = dir.path().join("evil");
     let case = |name: &str| {
         let folder = dir.path().join(name.replace('.', "-"));

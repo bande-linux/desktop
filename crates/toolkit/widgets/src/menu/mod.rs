@@ -12,6 +12,7 @@ pub use self::tracker::{MenuOutcome, MenuTracker};
 const ROW_HEIGHT: f32 = 28.0;
 pub(crate) const VERTICAL_PADDING: f32 = 4.0;
 pub(crate) const TEXT_START: f32 = 28.0;
+pub(crate) const SEPARATOR_HEIGHT: f32 = 9.0;
 pub const MENU_RADIUS: f32 = Radius::L;
 pub const MENU_SHADOW_MARGIN: f32 = 24.0;
 

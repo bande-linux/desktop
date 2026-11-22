@@ -6,14 +6,13 @@ use bande_graphics::{
 
 use super::model::{Menu, MenuItem, MenuToggle};
 use super::{
-    MENU_RADIUS, MENU_SHADOW_MARGIN, SEARCH_NODE, TEXT_START, VERTICAL_PADDING, menu_node,
-    row_height,
+    MENU_RADIUS, MENU_SHADOW_MARGIN, SEARCH_NODE, SEPARATOR_HEIGHT, TEXT_START, VERTICAL_PADDING,
+    menu_node, row_height,
 };
 use crate::Size;
 use crate::control::square_capped;
 use crate::shortcut::ShortcutText;
 
-const SEPARATOR_HEIGHT: f32 = 9.0;
 const HIGHLIGHT_INSET: f32 = 4.0;
 const SEPARATOR_INSET: f32 = 12.0;
 const TRAILING_PADDING: f32 = 12.0;

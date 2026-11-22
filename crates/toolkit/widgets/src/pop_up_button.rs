@@ -4,7 +4,7 @@ use bande_graphics::{
 };
 
 use super::control::{chevron_down, focus_ring};
-use super::menu::{TEXT_START, VERTICAL_PADDING, row_height};
+use super::menu::{SEPARATOR_HEIGHT, TEXT_START, VERTICAL_PADDING, row_height};
 use super::{Context, Event, Key, Menu, MenuItem, Size, Widget, WidgetId};
 
 const PADDING: f32 = 10.0;
@@ -16,6 +16,7 @@ pub struct PopUpButton {
     label: String,
     choices: Vec<String>,
     selected: usize,
+    separator: Option<usize>,
     on_select: Box<dyn FnMut(usize)>,
     paragraphs: Vec<Paragraph>,
     tooltip: Option<String>,
@@ -38,6 +39,7 @@ impl PopUpButton {
                 .map(|choice| choice.as_ref().to_owned())
                 .collect(),
             selected,
+            separator: None,
             on_select: Box::new(on_select),
             paragraphs: Vec::new(),
             tooltip: None,
@@ -49,6 +51,14 @@ impl PopUpButton {
     pub fn tooltip(self, tooltip: &str) -> Self {
         Self {
             tooltip: Some(tooltip.to_owned()),
+            ..self
+        }
+    }
+
+    /// Separates the choices before `index` from the rest in the opened menu.
+    pub fn separated_at(self, index: usize) -> Self {
+        Self {
+            separator: (index > 0 && index < self.choices.len()).then_some(index),
             ..self
         }
     }
@@ -67,17 +77,24 @@ impl PopUpButton {
     }
 
     fn open(&self, cx: &mut Context) {
-        let menu = Menu::new(
-            self.choices
-                .iter()
-                .enumerate()
-                .map(|(index, choice)| {
-                    MenuItem::new(choice, &index.to_string()).radio(index == self.selected)
-                })
-                .collect(),
-        );
+        let mut items: Vec<MenuItem> = self
+            .choices
+            .iter()
+            .enumerate()
+            .map(|(index, choice)| {
+                MenuItem::new(choice, &index.to_string()).radio(index == self.selected)
+            })
+            .collect();
+        let mut row = VERTICAL_PADDING;
+        if let Some(separator) = self.separator.filter(|at| *at < items.len()) {
+            items.insert(separator, MenuItem::separator());
+            if self.selected >= separator {
+                row += SEPARATOR_HEIGHT;
+            }
+        }
+        let menu = Menu::new(items);
         let row_height = row_height(cx.text.size());
-        let row = VERTICAL_PADDING + self.selected as f32 * row_height;
+        let row = row + self.selected as f32 * row_height;
         let at = Point::new(
             self.frame.x + PADDING - TEXT_START,
             self.frame.y + ((self.frame.height - row_height) / 2.0).round() - row,

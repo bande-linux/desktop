@@ -40,6 +40,12 @@ fn root_of(surface: &WlSurface) -> WlSurface {
 }
 
 impl Compositor {
+    pub fn refresh_follows_frames(&mut self, output: &str, varies: bool) {
+        if let Some(screen) = self.state.screen_named(output) {
+            self.state.screens[screen].refresh_varies = varies;
+        }
+    }
+
     pub fn wants_variable_refresh(&self, output: &str) -> bool {
         let state = &self.state;
         let Some(screen) = state.screen_named(output) else {

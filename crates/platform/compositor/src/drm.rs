@@ -1081,6 +1081,7 @@ impl DrmBackend {
                 }
             }
         }
+        compositor.refresh_follows_frames(output, head.compositor.vrr_enabled());
         let chosen = compositor.colour_profile(output).map(str::to_owned);
         if head
             .output_colour

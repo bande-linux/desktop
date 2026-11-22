@@ -541,11 +541,15 @@ impl Compositor {
         } else {
             Kind::Vsync
         };
+        let refresh = match presented.refresh_varies {
+            true => Refresh::variable(refresh),
+            false => Refresh::fixed(refresh),
+        };
         for feedback in presented.latched_feedback.drain(..) {
             feedback.presented(
                 &presented.output,
                 vblank.time,
-                Refresh::fixed(refresh),
+                refresh,
                 vblank.sequence,
                 kind,
             );

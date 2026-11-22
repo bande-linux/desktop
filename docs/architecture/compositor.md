@@ -138,7 +138,8 @@ when they reach the screen is Bande's own.
   primary plane without composition. A display whose connector can change its refresh without
   a mode-set gets variable refresh while a full-screen window on its active workspace says its
   content is a game or video (`wp_content_type_v1`), unless `variable-refresh #false` is in its
-  settings (Settings ▸ Displays ▸ Variable refresh rate in full screen). Tearing page flips are
+  settings (Settings ▸ Displays ▸ Variable refresh rate in full screen); presentation feedback
+  then reports the refresh as variable, with the mode's as the fastest. Tearing page flips are
   not offered: Smithay 0.7's `DrmCompositor` cannot ask for `DRM_MODE_PAGE_FLIP_ASYNC`.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
   (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`

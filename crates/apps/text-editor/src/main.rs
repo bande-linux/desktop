@@ -8,8 +8,8 @@ use bande_inbox::Inbox;
 use bande_l10n::{Text, text, tr};
 use bande_text_editor::{
     CHOICES, COLORS, DocumentView, FAMILIES, Format, LineEnding, Loaded, MAX_FILE_BYTES, Message,
-    Opening, Record, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,
-    encoding_name, new_id, now, open, read, read_bounded, spawn, stamp,
+    Opening, Record, Request, Session, Settings, TextEncoding, encoding_name, new_id, now, open,
+    read, read_bounded, spawn, stamp,
 };
 use bande_toolkit::ui::{Alignment, ListMarker};
 
@@ -286,8 +286,11 @@ impl TextEditor {
         let (token, name) = (view.token, view.name());
         let outbox = self.inbox.outbox();
         let title = tr!("Save As");
+        let Some(bus) = cx.session().cloned() else {
+            return tracing::warn!("cannot choose where to save: no session bus");
+        };
         spawn("save as", move || {
-            let path = choose_save_path(&title, &name)
+            let path = bande_app::choose_save_file(&bus, &title, &name)
                 .inspect_err(|error| tracing::warn!("cannot choose where to save: {error}"))
                 .ok()
                 .flatten();
@@ -295,11 +298,14 @@ impl TextEditor {
         });
     }
 
-    fn ask_open(&self) {
+    fn ask_open(&self, cx: &Cx<Self>) {
+        let Some(bus) = cx.session().cloned() else {
+            return tracing::warn!("cannot choose files: no session bus");
+        };
         let outbox = self.inbox.outbox();
         let title = tr!("Open");
         spawn("choose", move || {
-            let paths = choose_files(&title)
+            let paths = bande_app::choose_files(&bus, &title, None)
                 .inspect_err(|error| tracing::warn!("cannot choose files: {error}"))
                 .unwrap_or_default();
             outbox.send(Message::Chosen(paths));
@@ -721,7 +727,7 @@ impl Program for TextEditor {
     fn command(&mut self, cx: &mut Cx<Self>, window: Option<WindowId>, command: &str) {
         match command {
             "new" => return self.new_document(cx),
-            "open" => return self.ask_open(),
+            "open" => return self.ask_open(cx),
             "clear-recent" => {
                 self.recent.clear();
                 if let Some(session) = &self.session {

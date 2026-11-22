@@ -1828,7 +1828,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
- "zbus",
  "zip",
 ]
 

@@ -42,7 +42,7 @@ fn ask(
     method: &str,
     title: &str,
     mut options: HashMap<&str, Value<'_>>,
-) -> zbus::Result<Option<PathBuf>> {
+) -> zbus::Result<Vec<PathBuf>> {
     static REQUESTS: AtomicU32 = AtomicU32::new(0);
     let token = format!(
         "bande_app_{}_{}",
@@ -57,21 +57,27 @@ fn ask(
     options.insert("modal", Value::from(true));
     let _: OwnedObjectPath = chooser.call(method, &(parent_window(), title, options))?;
     let Some(response) = responses.next() else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     let (code, results) = response
         .body()
         .deserialize::<(u32, HashMap<String, OwnedValue>)>()?;
     if code != 0 {
-        return Ok(None);
+        return Ok(Vec::new());
     }
     let uris = results
         .get("uris")
         .and_then(|uris| Vec::<String>::try_from(uris.try_clone().ok()?).ok())
         .unwrap_or_default();
     Ok(uris
-        .first()
-        .and_then(|uri| bande_xdg::path_from_file_uri(uri)))
+        .iter()
+        .filter_map(|uri| bande_xdg::path_from_file_uri(uri))
+        .collect())
+}
+
+fn filters(options: &mut HashMap<&str, Value<'_>>, filter: Filter) {
+    options.insert("filters", Value::from(vec![filter.clone()]));
+    options.insert("current_filter", Value::from(filter));
 }
 
 pub fn choose_file(
@@ -81,13 +87,22 @@ pub fn choose_file(
 ) -> zbus::Result<Option<PathBuf>> {
     let mut options = HashMap::new();
     match filter {
-        Some(filter) => {
-            options.insert("filters", Value::from(vec![filter.clone()]));
-            options.insert("current_filter", Value::from(filter));
-        }
+        Some(filter) => filters(&mut options, filter),
         None => {
             options.insert("directory", Value::from(true));
         }
+    }
+    Ok(ask(session, "OpenFile", title, options)?.into_iter().next())
+}
+
+pub fn choose_files(
+    session: &Connection,
+    title: &str,
+    filter: Option<Filter>,
+) -> zbus::Result<Vec<PathBuf>> {
+    let mut options = HashMap::from([("multiple", Value::from(true))]);
+    if let Some(filter) = filter {
+        filters(&mut options, filter);
     }
     ask(session, "OpenFile", title, options)
 }
@@ -98,5 +113,5 @@ pub fn choose_save_file(
     name: &str,
 ) -> zbus::Result<Option<PathBuf>> {
     let options = HashMap::from([("current_name", Value::from(name))]);
-    ask(session, "SaveFile", title, options)
+    Ok(ask(session, "SaveFile", title, options)?.into_iter().next())
 }

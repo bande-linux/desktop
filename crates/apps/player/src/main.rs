@@ -44,7 +44,7 @@ const RATES: [(f64, &str); 5] = [
 const MEDIA_MIMES: [&str; 2] = ["audio/*", "video/*"];
 
 struct Player {
-    chosen: Option<Inbox<PathBuf>>,
+    chosen: Option<Inbox<Vec<PathBuf>>>,
     remote: Option<Inbox<Remote>>,
     mpris: Option<Mpris>,
     current: Option<WindowId>,
@@ -106,12 +106,11 @@ impl Player {
         let spawned = std::thread::Builder::new()
             .name("open".to_owned())
             .spawn(
-                move || match bande_app::choose_file(&session, &title, Some(filter)) {
-                    Ok(Some(path)) => {
-                        outbox.send(path);
+                move || match bande_app::choose_files(&session, &title, Some(filter)) {
+                    Ok(paths) => {
+                        outbox.send(paths);
                     }
-                    Ok(None) => {}
-                    Err(error) => tracing::warn!("cannot choose a file: {error}"),
+                    Err(error) => tracing::warn!("cannot choose files: {error}"),
                 },
             );
         if let Err(error) = spawned {
@@ -370,7 +369,7 @@ impl Program for Player {
 
     fn source_ready(&mut self, cx: &mut Cx<Self>, _index: usize) {
         let chosen = self.chosen.as_mut().map(Inbox::drain).unwrap_or_default();
-        self.open_paths(cx, chosen);
+        self.open_paths(cx, chosen.into_iter().flatten().collect());
         let remote = self.remote.as_mut().map(Inbox::drain).unwrap_or_default();
         for command in remote {
             self.remote(cx, command);

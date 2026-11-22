@@ -43,6 +43,7 @@ const REFRESH: &str = "refresh";
 const IMPORT: &str = "import";
 const EXPORT: &str = "export";
 const WINDOW_SIZE: (u32, u32) = (1120, 740);
+const VIEW_FILE: &str = "calendar-view";
 const FEED_COLOR_PROPERTIES: [&str; 2] = ["COLOR", "X-APPLE-CALENDAR-COLOR"];
 const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
@@ -142,6 +143,7 @@ struct CalendarApp {
     sync_again: bool,
     title: String,
     errors: Vec<String>,
+    mode: Mode,
 }
 
 fn next_minute() -> Timestamp {
@@ -226,6 +228,19 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
         edit_submenu(Vec::new()),
         Entry::submenu(&tr!("View"), view_menu),
     ]
+}
+
+fn saved_mode(file: Option<PathBuf>) -> Option<Mode> {
+    let text = match std::fs::read_to_string(file?) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            tracing::warn!("cannot read the shown view: {error}");
+            return None;
+        }
+    };
+    let index = text.trim().parse::<usize>().ok()?;
+    Mode::ALL.get(index).copied()
 }
 
 fn clock(formats: &DateFormats, at: &Zoned) -> String {
@@ -827,7 +842,20 @@ impl CalendarApp {
             self.serve(None, &mut pane.0);
             self.parked = Some(pane);
         }
-        self.with_view(cx, |app, view| app.rearm(view));
+        let mut mode = self.mode;
+        self.with_view(cx, |app, view| {
+            app.rearm(view);
+            mode = view.mode();
+        });
+        if mode != self.mode {
+            self.mode = mode;
+            let index = Mode::ALL.iter().position(|shown| *shown == mode);
+            if let (Some(file), Some(index)) = (cx.state_file(VIEW_FILE), index)
+                && let Err(error) = bande_xdg::replace_file(&file, index.to_string())
+            {
+                tracing::warn!("cannot remember the shown view: {error}");
+            }
+        }
         cx.refresh_menus();
     }
 
@@ -956,6 +984,8 @@ impl Program for CalendarApp {
             now,
             setups.outbox(),
         );
+        let mode = saved_mode(cx.state_file(VIEW_FILE)).unwrap_or(view.mode());
+        view.set_mode(mode);
         let title = view.title();
         let directory = std::env::current_dir().unwrap_or_default();
         open_arguments(&mut view, &arguments, &directory);
@@ -1004,6 +1034,7 @@ impl Program for CalendarApp {
             sync_again: false,
             title,
             errors: Vec::new(),
+            mode,
         };
         if new_event {
             app.command(cx, main, NEW_EVENT);

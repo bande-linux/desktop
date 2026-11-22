@@ -45,8 +45,9 @@ views. Packaged as `bande-calendar`.
   non-IANA zone names and prefixed names), unknown ones through their `VTIMEZONE` (converted to
   a POSIX rule). Written events carry a `VTIMEZONE` generated from the tz database.
 - **Views.** Day, week, month and year, a mini month and the calendar list in the sidebar,
-  per-calendar colours and visibility, Today and previous/next. File ▸ Print… prints the view that is
-  shown, with the hours shown in the day and week views.
+  per-calendar colours and visibility, Today and previous/next. The view comes back at the next
+  start. File ▸ Print… prints the view that is shown, with the hours shown in the day and week
+  views.
 - **Calendars.** New, rename and delete, on this computer or on a CalDAV server (MKCALENDAR,
   PROPPATCH of the name and colour, DELETE): File ▸ New Calendar…, or right-click a calendar or
   an account heading.

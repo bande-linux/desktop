@@ -43,6 +43,9 @@ msgstr "Tar bort…"
 msgid "Working…"
 msgstr "Arbetar…"
 
+msgid "Enter an administrator’s password in the dialog to continue, or cancel it to stop."
+msgstr "Ange en administratörs lösenord i dialogrutan för att fortsätta, eller avbryt den för att stoppa."
+
 msgid "It would install, but it won’t open: its windows can’t appear in Bande."
 msgstr "Den skulle installeras, men den går inte att öppna: dess fönster kan inte visas i Bande."
 
@@ -106,8 +109,8 @@ msgstr "Installera den här filen"
 msgid "Install from Software Sources"
 msgstr "Installera från programvarukällor"
 
-msgid "Enter an administrator’s password in the dialog to continue, or cancel it to stop."
-msgstr "Ange en administratörs lösenord i dialogrutan för att fortsätta, eller avbryt den för att stoppa."
+msgid "Skipping…"
+msgstr "Hoppar över…"
 
 msgid "Updating the list of available packages…"
 msgstr "Uppdaterar listan över tillgängliga paket…"
@@ -173,8 +176,17 @@ msgstr[1] "Den här datorn har inte paketen som behövs: {names}"
 msgid "Look for a download made for this system, or ask its developer for one."
 msgstr "Leta efter en nedladdning gjord för det här systemet, eller be utvecklaren om en."
 
-msgid "The list of available packages wasn’t updated, so it may be out of date. Check your internet connection, then try again to update it."
-msgstr "Listan över tillgängliga paket uppdaterades inte, så den kan vara inaktuell. Kontrollera internetanslutningen och försök sedan igen för att uppdatera den."
+msgid "You skipped updating the list of available packages, so it may be out of date. Try again to update it."
+msgstr "Du hoppade över att uppdatera listan över tillgängliga paket, så den kan vara inaktuell. Försök igen för att uppdatera den."
+
+msgid "The list of available packages couldn’t be updated, so it may be out of date. Check your internet connection, then try again."
+msgstr "Listan över tillgängliga paket kunde inte uppdateras, så den kan vara inaktuell. Kontrollera internetanslutningen och försök sedan igen."
+
+msgid "The list of available packages wasn’t updated, because updating it wasn’t allowed. Try again to update it."
+msgstr "Listan över tillgängliga paket uppdaterades inte, eftersom det inte tilläts. Försök igen för att uppdatera den."
+
+msgid "The list of available packages couldn’t be updated, so it may be out of date. Open Details to see why, then try again."
+msgstr "Listan över tillgängliga paket kunde inte uppdateras, så den kan vara inaktuell. Öppna Detaljer för att se varför och försök sedan igen."
 
 msgid "Try Again"
 msgstr "Försök igen"

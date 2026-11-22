@@ -8,7 +8,7 @@ use std::sync::mpsc::Sender;
 use bande_l10n::{text, tr, trn};
 
 use crate::deb::{Deb, Identity, Machine};
-use crate::flow::{Action, Preview, Problem, State};
+use crate::flow::{Action, Preview, Problem, State, Unrefreshed};
 use crate::icon::Icon;
 use crate::worker::{self, Feed, Job, Message};
 use bande_fs::format_size;
@@ -30,6 +30,7 @@ enum Intent {
     InstallAnyway,
     InstallSigned,
     Cancel,
+    Skip,
     AskRemove,
     Remove,
     Back,
@@ -79,6 +80,10 @@ fn status_line(status: Status) -> String {
     }
 }
 
+fn password_hint() -> String {
+    tr!("Enter an administrator’s password in the dialog to continue, or cancel it to stop.")
+}
+
 fn x11_warning() -> String {
     tr!("It would install, but it won’t open: its windows can’t appear in Bande.")
 }
@@ -97,6 +102,7 @@ pub struct Installer {
     state: State,
     ready: Option<State>,
     refused: bool,
+    skipping: bool,
     x11_accepted: bool,
     jobs: Sender<Job>,
     feed: Feed,
@@ -130,6 +136,7 @@ impl Installer {
             state: State::Reading,
             ready: None,
             refused: false,
+            skipping: false,
             x11_accepted: false,
             jobs,
             feed,
@@ -185,7 +192,14 @@ impl Installer {
         match message {
             Message::Read(deb) => self.deb = deb,
             Message::Identity(identity) => self.identity = identity,
+            Message::State(State::Refreshing(progress)) => {
+                if self.skipping && progress.allow_cancel {
+                    self.skip();
+                }
+                self.state = State::Refreshing(progress);
+            }
             Message::State(state) => {
+                self.skipping = false;
                 if matches!(state, State::Ready(_) | State::Present) {
                     self.ready = Some(state.clone());
                 }
@@ -201,6 +215,18 @@ impl Installer {
                 self.refused = true;
                 self.back();
             }
+        }
+    }
+
+    fn cancel(&self) {
+        if let Err(error) = self.canceller.cancel() {
+            tracing::warn!("cannot cancel: {error}");
+        }
+    }
+
+    fn skip(&self) {
+        if let Err(error) = self.canceller.cancel() {
+            tracing::debug!("cannot skip updating the package lists yet: {error}");
         }
     }
 
@@ -227,10 +253,10 @@ impl Installer {
                 self.state = State::Installing(Progress::default());
                 self.ask(Job::Install(Some(id)));
             }
-            Intent::Cancel => {
-                if let Err(error) = self.canceller.cancel() {
-                    tracing::warn!("cannot cancel: {error}");
-                }
+            Intent::Cancel => self.cancel(),
+            Intent::Skip => {
+                self.skipping = true;
+                self.skip();
             }
             Intent::AskRemove => {
                 self.state = State::Reading;
@@ -435,7 +461,7 @@ impl Installer {
 
     fn working(&self, progress: &Progress) -> Widgets {
         let status = status_line(progress.status);
-        let mut cancel = self.button(&tr!("Cancel"), Intent::Cancel);
+        let mut cancel = self.button(&tr!("Cancel"), Intent::Cancel).cancel();
         cancel.set_enabled(progress.allow_cancel);
         let fraction = match progress.status {
             Status::Authorizing | Status::Waiting => None,
@@ -446,32 +472,32 @@ impl Installer {
             boxed(ProgressBar::new(&status, fraction)),
         ];
         if progress.status == Status::Authorizing {
-            widgets.push(boxed(Label::new(&tr!("Enter an administrator’s password in the dialog to continue, or cancel it to stop.")).secondary()));
+            widgets.push(boxed(Label::new(&password_hint()).secondary()));
         }
         widgets.push(row(vec![boxed(cancel)]));
         widgets
     }
 
     fn refreshing(&self, progress: &Progress) -> Widgets {
-        let status = match progress.status {
-            Status::Waiting => status_line(Status::Waiting),
-            _ => tr!("Updating the list of available packages…"),
+        let status = match (self.skipping, progress.status) {
+            (true, _) => tr!("Skipping…"),
+            (false, Status::Waiting | Status::Authorizing) => status_line(progress.status),
+            (false, _) => tr!("Updating the list of available packages…"),
         };
         let fraction = match progress.status {
             Status::Authorizing | Status::Waiting => None,
             _ => progress.percent.map(|percent| percent as f32 / 100.0),
         };
-        let mut skip = self.button(&tr!("Skip"), Intent::Cancel);
-        skip.set_enabled(progress.allow_cancel);
+        let mut skip = self.button(&tr!("Skip"), Intent::Skip).cancel();
+        skip.set_enabled(!self.skipping);
+        let hint = match progress.status {
+            Status::Authorizing => password_hint(),
+            _ => tr!("This makes sure that the packages it needs can be found and downloaded."),
+        };
         vec![
             boxed(Label::new(&status)),
             boxed(ProgressBar::new(&status, fraction)),
-            boxed(
-                Label::new(&tr!(
-                    "This makes sure that the packages it needs can be found and downloaded."
-                ))
-                .secondary(),
-            ),
+            boxed(Label::new(&hint).secondary()),
             row(vec![boxed(skip)]),
         ]
     }
@@ -538,7 +564,7 @@ impl Installer {
                 missing,
                 conflicts,
                 details,
-                stale,
+                unrefreshed,
             } => {
                 let mut widgets = Vec::new();
                 if missing.is_empty() && !conflicts.is_empty() {
@@ -568,14 +594,26 @@ impl Installer {
                         "Look for a download made for this system, or ask its developer for one."
                     ))));
                 }
-                if *stale {
-                    widgets.push(boxed(Label::new(&tr!(
-                        "The list of available packages wasn’t updated, so it may be out of date. Check your internet connection, then try again to update it."
-                    ))));
+                let unrefreshed = unrefreshed.map(|unrefreshed| match unrefreshed {
+                    Unrefreshed::Skipped => tr!(
+                        "You skipped updating the list of available packages, so it may be out of date. Try again to update it."
+                    ),
+                    Unrefreshed::NoNetwork => tr!(
+                        "The list of available packages couldn’t be updated, so it may be out of date. Check your internet connection, then try again."
+                    ),
+                    Unrefreshed::NotAllowed => tr!(
+                        "The list of available packages wasn’t updated, because updating it wasn’t allowed. Try again to update it."
+                    ),
+                    Unrefreshed::Failed => tr!(
+                        "The list of available packages couldn’t be updated, so it may be out of date. Open Details to see why, then try again."
+                    ),
+                });
+                if let Some(sentence) = &unrefreshed {
+                    widgets.push(boxed(Label::new(sentence)));
                 }
                 widgets.push(disclosure(&tr!("Details"), details));
                 let mut buttons = vec![close()];
-                if *stale {
+                if unrefreshed.is_some() {
                     buttons.push(boxed(
                         self.button(&tr!("Try Again"), Intent::Retry).primary(),
                     ));

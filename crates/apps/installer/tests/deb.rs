@@ -5,7 +5,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use bande_installer::{Installer, Machine, State, identity, read};
+use bande_installer::{Blockers, Installer, Machine, State, blockers, identity, read};
 use bande_packages::{Client, PATH, SERVICE};
 use bande_toolkit::{Appearance, TextSystem};
 use zbus::blocking::Connection;
@@ -188,4 +188,29 @@ fn a_refused_password_says_so_instead_of_returning_silently_to_install() {
             .any(|text| text.starts_with("Nothing was changed"))
     }));
     drop(daemon);
+}
+
+#[test]
+fn apt_unmet_dependencies_name_what_is_missing_and_which_installed_package_is_in_the_way() {
+    let own = "The following packages have unmet dependencies:\n \
+        tool : Depends: libfoo (>= 2) but it is not installable\n        \
+        Depends: libbar but it is not going to be installed\n        \
+        Breaks: oldtool (< 3) but 2.1 is installed\n";
+    assert_eq!(
+        blockers(own, "tool"),
+        Blockers {
+            missing: vec!["libfoo (>= 2)".to_owned()],
+            conflicts: vec!["oldtool".to_owned()],
+        }
+    );
+    let theirs = "The following packages have unmet dependencies:\n \
+        plugin : Depends: tool (= 1.0) but 2.0 is to be installed\n \
+        helper : Breaks: tool (< 3) but 2.0 is to be installed\n";
+    assert_eq!(
+        blockers(theirs, "tool"),
+        Blockers {
+            missing: Vec::new(),
+            conflicts: vec!["plugin".to_owned(), "helper".to_owned()],
+        }
+    );
 }

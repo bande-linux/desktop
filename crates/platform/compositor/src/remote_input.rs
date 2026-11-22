@@ -16,6 +16,7 @@ use crate::state::{Compositor, State};
 
 const EVDEV_OFFSET: u32 = 8;
 const DISCRETE_PER_DETENT: f64 = 120.0;
+const SYSTEM_KEYS: [u32; 6] = [116, 142, 143, 205, 245, 356];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum RemoteInput {
@@ -277,6 +278,10 @@ impl Compositor {
             tracing::debug!("no key on this keyboard layout types keysym {keysym:#x}");
             return;
         };
+        if SYSTEM_KEYS.contains(&code) {
+            tracing::info!("a remote viewer may not press the power, sleep or wake key");
+            return;
+        }
         self.state.remote_keys.held.push((id, keysym, code));
         self.key(code, true, time);
     }

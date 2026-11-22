@@ -45,8 +45,17 @@ pub(crate) fn is_shell(client: &Client) -> bool {
         .is_some_and(|state| plays_shell(state.role))
 }
 
+pub(crate) fn is_screenshot(client: &Client) -> bool {
+    client
+        .get_data::<ClientState>()
+        .is_some_and(|state| state.role == Some(SessionRole::Screenshot))
+}
+
 fn plays_shell(role: Option<SessionRole>) -> bool {
-    matches!(role, Some(SessionRole::Shell | SessionRole::LockScreen))
+    matches!(
+        role,
+        Some(SessionRole::Shell | SessionRole::LockScreen | SessionRole::Screenshot)
+    )
 }
 
 pub(crate) fn is_shell_client(display: &DisplayHandle, id: &ClientId) -> bool {

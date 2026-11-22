@@ -859,7 +859,7 @@ fn start_user_session<O: FrameOutput + 'static>(
     for (executable, role) in [
         (SHELL, SessionRole::Shell),
         (CLIPBOARD_DAEMON, SessionRole::ClipboardDaemon),
-        (SCREENSHOT, SessionRole::Shell),
+        (SCREENSHOT, SessionRole::Screenshot),
     ] {
         if let Err(error) = app
             .compositor

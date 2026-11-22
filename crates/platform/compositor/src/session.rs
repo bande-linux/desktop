@@ -25,6 +25,7 @@ pub enum SessionRole {
     ClipboardDaemon,
     LockScreen,
     Shell,
+    Screenshot,
 }
 
 pub const CLIPBOARD_DAEMON: &str = "/usr/bin/bande-clipboard";
@@ -382,9 +383,10 @@ impl Compositor {
         command.envs(desktop_environment());
         command.envs(cursor_environment(self.cursor_theme()));
         match (&self.socket_name, role) {
-            (Some(name), SessionRole::Shell | SessionRole::LockScreen) => {
-                command.env("WAYLAND_DISPLAY", name)
-            }
+            (
+                Some(name),
+                SessionRole::Shell | SessionRole::LockScreen | SessionRole::Screenshot,
+            ) => command.env("WAYLAND_DISPLAY", name),
             _ => command.env_remove("WAYLAND_DISPLAY"),
         };
         // SAFETY: the closure runs between fork and exec and only calls fcntl, which is async-

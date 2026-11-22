@@ -4,7 +4,7 @@ use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
 
-use crate::shell::is_shell;
+use crate::shell::{is_screenshot, is_shell};
 use crate::state::State;
 
 impl State {
@@ -68,7 +68,7 @@ impl GlobalDispatch<BandeCaptureV1, ()> for State {
 impl Dispatch<BandeCaptureV1, ()> for State {
     fn request(
         state: &mut Self,
-        _client: &Client,
+        client: &Client,
         resource: &BandeCaptureV1,
         request: bande_capture_v1::Request,
         _data: &(),
@@ -77,7 +77,12 @@ impl Dispatch<BandeCaptureV1, ()> for State {
     ) {
         match request {
             bande_capture_v1::Request::ListWindows => state.list_windows(resource),
-            bande_capture_v1::Request::ConnectInput { socket } => state.serve_remote_input(socket),
+            bande_capture_v1::Request::ConnectInput { socket } if is_screenshot(client) => {
+                state.serve_remote_input(socket);
+            }
+            bande_capture_v1::Request::ConnectInput { .. } => {
+                tracing::warn!("only the screenshot tool may serve remote input");
+            }
             _ => {}
         }
     }

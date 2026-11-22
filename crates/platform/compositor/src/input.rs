@@ -379,6 +379,15 @@ impl Compositor {
                 },
                 event.time_msec(),
             ),
+            event @ (InputEvent::TouchDown { .. }
+            | InputEvent::TouchMotion { .. }
+            | InputEvent::TouchUp { .. }
+            | InputEvent::TouchFrame { .. }
+            | InputEvent::TouchCancel { .. }
+            | InputEvent::TabletToolProximity { .. }
+            | InputEvent::TabletToolAxis { .. }
+            | InputEvent::TabletToolTip { .. }
+            | InputEvent::TabletToolButton { .. }) => self.handle_touch(event),
             _ => return Ok(()),
         }
         self.flush_clients()

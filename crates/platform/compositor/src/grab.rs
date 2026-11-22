@@ -214,6 +214,9 @@ impl State {
 
     pub(crate) fn request_move(&mut self, surface: &WlSurface, seat: &WlSeat, serial: Serial) {
         let Some(mut start) = self.grab_start(seat, serial, surface) else {
+            if self.take_over_touch(serial, surface) {
+                self.move_from_title_bar(surface, BTN_LEFT);
+            }
             return;
         };
         if let Some(pointer) = self.seat.get_pointer() {
@@ -273,6 +276,9 @@ impl State {
         edges: ResizeEdge,
     ) {
         let Some(start) = self.grab_start(seat, serial, surface) else {
+            if self.take_over_touch(serial, surface) {
+                self.resize_from_frame(surface, edges, BTN_LEFT);
+            }
             return;
         };
         if self.begin_resize(surface, edges) {

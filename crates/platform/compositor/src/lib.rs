@@ -66,6 +66,7 @@ mod switcher;
 mod sync;
 mod tile;
 mod toplevel_drag;
+mod touch;
 mod trust;
 mod typing;
 mod watchdog;

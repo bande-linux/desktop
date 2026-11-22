@@ -161,6 +161,7 @@ pub struct State {
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
     pub(crate) global_shortcuts: crate::global_shortcuts::GlobalShortcuts,
+    pub(crate) touch: crate::touch::Touch,
     pub(crate) app_states: crate::app_states::AppStates,
     pub(crate) needs_redraw: bool,
     pub(crate) reveal: crate::reveal::Reveal,
@@ -223,6 +224,7 @@ impl Compositor {
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
         seat.add_pointer();
+        seat.add_touch();
         crate::idle::create_global(&handle);
         crate::output_power::create_global(&handle);
         crate::menu_button::create_globals(&handle);
@@ -319,6 +321,7 @@ impl Compositor {
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
             global_shortcuts: crate::global_shortcuts::GlobalShortcuts::default(),
+            touch: crate::touch::Touch::default(),
             app_states: crate::app_states::AppStates::default(),
             needs_redraw: false,
             reveal: crate::reveal::Reveal::default(),

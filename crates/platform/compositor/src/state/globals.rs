@@ -77,6 +77,7 @@ pub(crate) struct Globals {
     _relative_pointer_state: RelativePointerManagerState,
     pub(crate) session_lock_state: SessionLockManagerState,
     _security_context_state: SecurityContextState,
+    _tablet_state: smithay::wayland::tablet_manager::TabletManagerState,
 }
 
 impl Globals {
@@ -153,6 +154,7 @@ impl Globals {
             _security_context_state: SecurityContextState::new::<State, _>(handle, |client| {
                 !trust::is_sandboxed(client)
             }),
+            _tablet_state: crate::touch::create_global(handle),
         }
     }
 }

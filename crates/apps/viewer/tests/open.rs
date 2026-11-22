@@ -105,3 +105,31 @@ fn a_pdf_renders_in_its_own_process_finds_text_and_lists_its_outline() {
     let mut damaged = FileView::new(Appearance::default(), vec![folder.path().join("bad.pdf")]);
     until(&mut damaged, "“bad.pdf” could not be opened.");
 }
+
+#[test]
+fn saving_a_rotation_changes_only_the_jpeg_orientation() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("a.jpg");
+    image::RgbImage::from_pixel(64, 48, image::Rgb([200, 120, 40]))
+        .save(&path)
+        .unwrap();
+    let scan = |bytes: &[u8]| {
+        let start = bytes
+            .windows(2)
+            .position(|pair| pair == [0xFF, 0xDA])
+            .unwrap();
+        bytes[start..].to_vec()
+    };
+    let picture = scan(&std::fs::read(&path).unwrap());
+
+    let mut view = FileView::new(Appearance::default(), vec![path.clone()]);
+    until(&mut view, "a.jpg, 64 × 48");
+    view.rotate(true);
+    view.save_rotation();
+    until(&mut view, "a.jpg, 48 × 64");
+    view.rotate(true);
+    view.save_rotation();
+    until(&mut view, "a.jpg, 64 × 48");
+    assert_eq!(scan(&std::fs::read(&path).unwrap()), picture);
+    assert_eq!(view.rotation_saving(), None);
+}

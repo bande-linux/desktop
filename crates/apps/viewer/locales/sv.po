@@ -124,6 +124,9 @@ msgstr "Öppna"
 msgid "Images and PDF documents"
 msgstr "Bilder och PDF-dokument"
 
+msgid "Save Rotated Copy"
+msgstr "Spara roterad kopia"
+
 msgid "Info"
 msgstr "Info"
 
@@ -199,6 +202,12 @@ msgstr "Vänd horisontellt"
 msgid "Flip Vertical"
 msgstr "Vänd vertikalt"
 
+msgid "Save Rotated Copy…"
+msgstr "Spara roterad kopia…"
+
+msgid "Save Rotation"
+msgstr "Spara rotering"
+
 msgid "File"
 msgstr "Arkiv"
 
@@ -261,3 +270,18 @@ msgstr "Lösenordet är fel. Försök igen."
 
 msgid "Enter the document’s password to open it."
 msgstr "Ange dokumentets lösenord för att öppna det."
+
+msgid "{name} rotated"
+msgstr "{name} roterad"
+
+msgid "“{name}” could not be saved."
+msgstr "Det gick inte att spara ”{name}”."
+
+msgid "You may not have permission to change it, or the disk is full."
+msgstr "Du kanske inte har behörighet att ändra den, eller så är disken full."
+
+msgid "Viewer cannot change this file’s orientation without rewriting the picture, so the file is left as it is."
+msgstr "Visare kan inte ändra filens orientering utan att skriva om bilden, så filen lämnas som den är."
+
+msgid "OK"
+msgstr "OK"

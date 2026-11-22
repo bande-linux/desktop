@@ -238,7 +238,7 @@ pub struct MailView {
     pub(crate) now: Option<Timestamp>,
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
-    waiting: Option<Draft>,
+    waiting: Vec<Draft>,
     pub(crate) settings: MailSettings,
     held: Vec<(AccountId, Command)>,
     undo: Vec<Vec<Moved>>,
@@ -303,7 +303,7 @@ impl MailView {
             now: None,
             requests: Vec::new(),
             setup: None,
-            waiting: None,
+            waiting: Vec::new(),
             settings,
             held: Vec::new(),
             undo: Vec::new(),
@@ -1482,7 +1482,7 @@ impl MailView {
 
     pub fn compose(&mut self, mut draft: Draft) {
         let Some(account) = self.sending_account() else {
-            self.waiting = Some(draft);
+            self.waiting.push(draft);
             self.present_setup(Mode::Kind);
             return;
         };
@@ -2052,11 +2052,8 @@ impl MailView {
     }
 
     fn drop_waiting(&mut self) {
-        if self
-            .waiting
-            .take()
-            .is_some_and(|draft| draft != Draft::default())
-        {
+        let waiting = std::mem::take(&mut self.waiting);
+        if waiting.iter().any(|draft| *draft != Draft::default()) {
             self.requests.push(Request::Notify {
                 summary: tr!("The new message was not started"),
                 body: tr!("Mail needs an account to send it from. Add one, then try again."),
@@ -2308,7 +2305,7 @@ impl MailView {
         ));
         self.close_setup();
         self.reload();
-        if let Some(draft) = self.waiting.take() {
+        for draft in std::mem::take(&mut self.waiting) {
             self.compose(draft);
         }
     }
@@ -2530,13 +2527,17 @@ impl MailView {
         if key == Key::Function(6) && bare {
             return self.cycle_pane(!modifiers.shift);
         }
-        if self.ui.focus().is_some() {
+        if let Some(before) = self.ui.focus() {
             if key == Key::Escape {
                 self.ui.clear_focus();
                 return true;
             }
-            if self.search_focused() || key == Key::Tab {
-                return self.ui.handle(&Event::Key { key, modifiers });
+            let handled = self.ui.handle(&Event::Key { key, modifiers });
+            if key == Key::Tab && bare && self.left_toolbar(before, !modifiers.shift) {
+                return self.cycle_pane(!modifiers.shift);
+            }
+            if handled || self.search_focused() || key == Key::Tab {
+                return handled;
             }
         }
         if key == Key::Tab && bare {
@@ -2626,6 +2627,23 @@ impl MailView {
                 true
             }
             _ => self.ui.handle(&event),
+        }
+    }
+
+    fn left_toolbar(&self, before: WidgetId, forward: bool) -> bool {
+        let frames = self.toolbar_frames();
+        let x = |id: Option<WidgetId>| {
+            frames
+                .iter()
+                .find(|(known, _)| Some(*known) == id)
+                .map(|(_, frame)| frame.x)
+        };
+        match (x(Some(before)), x(self.ui.focus())) {
+            (Some(from), Some(to)) => match forward {
+                true => to <= from,
+                false => to >= from,
+            },
+            _ => false,
         }
     }
 

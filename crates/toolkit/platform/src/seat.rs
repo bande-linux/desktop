@@ -8,6 +8,7 @@ use wayland_client::protocol::wl_keyboard::{self, KeymapFormat, WlKeyboard};
 use wayland_client::protocol::wl_pointer::{self, WlPointer};
 use wayland_client::protocol::wl_seat::{self, Capability, WlSeat};
 use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_client::protocol::wl_touch::{self, WlTouch};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum, delegate_noop};
 use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::{
     Shape, WpCursorShapeDeviceV1,
@@ -101,6 +102,8 @@ pub(crate) struct Input {
     cursor: Cursor,
     shown_cursor: Option<Cursor>,
     keyboard: Option<WlKeyboard>,
+    touch: Option<WlTouch>,
+    touch_point: Option<i32>,
     keymap: Option<Keymap>,
     pub(crate) compose: Compose,
     modifiers: Modifiers,
@@ -143,6 +146,11 @@ impl Input {
             && keyboard.version() >= 3
         {
             keyboard.release();
+        }
+        if let Some(touch) = self.touch.take()
+            && touch.version() >= 3
+        {
+            touch.release();
         }
     }
 }
@@ -638,6 +646,65 @@ impl Dispatch<WlSeat, ()> for State {
         }
         if capabilities.contains(Capability::Keyboard) && input.keyboard.is_none() {
             input.keyboard = Some(seat.get_keyboard(handle, ()));
+        }
+        if capabilities.contains(Capability::Touch) && input.touch.is_none() {
+            input.touch = Some(seat.get_touch(handle, ()));
+        }
+    }
+}
+
+impl State {
+    fn lift_touch(&mut self, serial: u32) {
+        if self.input.touch_point.take().is_some() {
+            self.press(serial, BTN_LEFT, false, Instant::now());
+            self.pointer_event(Event::PointerLeave);
+            self.input.pointer_popup = None;
+        }
+    }
+}
+
+impl Dispatch<WlTouch, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &WlTouch,
+        event: wl_touch::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            wl_touch::Event::Down {
+                serial,
+                surface,
+                id,
+                x,
+                y,
+                ..
+            } if state.input.touch_point.is_none() && !state.is_foreign(&surface) => {
+                let popup = state.popup_level(&surface);
+                let input = &mut state.input;
+                input.touch_point = Some(id);
+                input.pointer_popup = popup;
+                let at = Point::new(x as f32, y as f32);
+                input.pointer_at = at;
+                let pointer = input.pointer(at);
+                state.pointer_event(Event::PointerEnter(pointer));
+                state.press(serial, BTN_LEFT, true, Instant::now());
+            }
+            wl_touch::Event::Motion { id, x, y, .. } if state.input.touch_point == Some(id) => {
+                let at = Point::new(x as f32, y as f32);
+                state.input.pointer_at = at;
+                let pointer = state.input.pointer(at);
+                state.pointer_event(Event::PointerMove(pointer));
+            }
+            wl_touch::Event::Up { serial, id, .. } if state.input.touch_point == Some(id) => {
+                state.lift_touch(serial);
+            }
+            wl_touch::Event::Cancel => {
+                let serial = state.input.serial.unwrap_or_default();
+                state.lift_touch(serial);
+            }
+            _ => {}
         }
     }
 }

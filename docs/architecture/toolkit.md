@@ -356,7 +356,9 @@ writes a hex value, a corner radius or a font name of its own.
   held, which toggles an item in a selection. Scrolling
   arrives as `Event::Scroll` with its source (wheel, finger, continuous) and phase (a finger
   scroll begins, changes and ends at `axis_stop`, so momentum can start from its end).
-  Modifier-only changes arrive as `Event::ModifiersChanged`. `Ui` sends `PointerEnter` and
+  `wl_touch` arrives as the primary button: the first finger enters, presses, moves and lifts
+  like the pointer, so a tap clicks and a drag on the title bar moves the window; further
+  fingers are ignored. Modifier-only changes arrive as `Event::ModifiersChanged`. `Ui` sends `PointerEnter` and
   `PointerLeave` to every widget on the hit path, bubbles scrolling from the innermost widget
   outwards, and reports the hovered widget's cursor, which `Window::set_cursor` shows through
   `wp_cursor_shape_v1`. A close request (close button, Ctrl+W in the app, Alt+F4) asks `App::should_close`, so an

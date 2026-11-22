@@ -2,6 +2,7 @@ use std::time::Duration;
 
 pub const LOCKED_DISPLAY_OFF_AFTER: Duration = Duration::from_secs(60);
 pub const DIM_AHEAD: Duration = Duration::from_secs(10);
+pub const LOCK_SETTLES_IN: Duration = Duration::from_secs(5);
 pub const SLEEP_AGAIN_AFTER_WAKE: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +83,8 @@ pub struct IdleMachine {
     locked: bool,
     locked_when_idle: bool,
     lock_pending: bool,
+    awaiting_lock: bool,
+    display_off_when_locked: bool,
     woke_locked: bool,
     password_required: bool,
     inhibitors: Vec<Inhibitor>,
@@ -100,6 +103,8 @@ impl IdleMachine {
             locked: false,
             locked_when_idle: false,
             lock_pending: false,
+            awaiting_lock: false,
+            display_off_when_locked: false,
             woke_locked: false,
             password_required: true,
             inhibitors: Vec::new(),
@@ -119,6 +124,9 @@ impl IdleMachine {
             self.policy.rest_after(),
             self.policy.password_after(),
             self.policy.display_off_after,
+            self.policy
+                .display_off_after
+                .map(|off| off + LOCK_SETTLES_IN),
             self.policy.computer_sleeps_after(),
         ]
         .into_iter()
@@ -148,6 +156,7 @@ impl IdleMachine {
                 self.locked = true;
                 self.locked_when_idle = true;
                 self.lock_pending = true;
+                self.awaiting_lock = true;
                 if !self.policy.require_password_after.is_zero() {
                     self.password_required = false;
                     commands.push(Command::RequirePassword(false));
@@ -163,8 +172,17 @@ impl IdleMachine {
             && (reached(self.policy.display_off_after)
                 || (self.locked && !self.locked_when_idle && idle >= LOCKED_DISPLAY_OFF_AFTER))
         {
-            self.display_off = true;
-            commands.push(Command::DisplayOff);
+            let lock_overdue = reached(
+                self.policy
+                    .display_off_after
+                    .map(|off| off + LOCK_SETTLES_IN),
+            );
+            if self.awaiting_lock && !lock_overdue {
+                self.display_off_when_locked = true;
+            } else {
+                self.display_off = true;
+                commands.push(Command::DisplayOff);
+            }
         }
         if self.stage < Stage::Suspended && reached(self.sleep_after()) {
             if self.assertions.is_empty() {
@@ -251,7 +269,13 @@ impl IdleMachine {
 
     pub fn set_locked(&mut self, locked: bool) -> Vec<Command> {
         self.locked = locked;
+        self.awaiting_lock = false;
+        let display_off = std::mem::take(&mut self.display_off_when_locked);
         if locked {
+            if display_off && !self.display_off {
+                self.display_off = true;
+                return vec![Command::DisplayOff];
+            }
             return Vec::new();
         }
         self.locked_when_idle = false;
@@ -270,6 +294,7 @@ impl IdleMachine {
     }
 
     fn undim(&mut self) -> Vec<Command> {
+        self.display_off_when_locked = false;
         let mut commands = Vec::new();
         if std::mem::take(&mut self.dimmed) {
             commands.push(Command::Undim);

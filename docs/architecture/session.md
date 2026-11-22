@@ -91,7 +91,9 @@ graph LR
   `InhibitDelayMaxSec` of 5). Its idle state machine maps the compositor's
   `ext-idle-notify-v1` thresholds to dim, saver, password required, display off and suspend; it
   skips locking a locked session and turns the display off after 60 s on a lock it did not
-  start or after waking. A wake nobody unlocks (a wake alarm, a charger, a spurious wake)
+  start or after waking. When the lock and the display turning off come together (no screen
+  saver), the display turns off once `LockedHint` is set, at most 5 s later, so the lock is
+  presented and sleep need not wait for it. A wake nobody unlocks (a wake alarm, a charger, a spurious wake)
   sleeps again after 2 minutes without input when idle sleep is on. Dimming lowers each display with real brightness control to a quarter of its level.
   Battery alerts follow UPower's `WarningLevel`: a "Low Battery" notification at `Low`, replaced
   by one that stays at `Critical` or `Action`. The compositor follows `Lock` on the session's own

@@ -1759,7 +1759,7 @@ fn keyboard_pane() -> Pane {
                         (tr!("None"), "none"),
                         (tr!("Right Alt"), "right-alt"),
                         (tr!("Right Control"), "right-control"),
-                        (tr!("Menu"), "menu"),
+                        (tr!("Menu key"), "menu"),
                     ])),
                 ),
                 ],

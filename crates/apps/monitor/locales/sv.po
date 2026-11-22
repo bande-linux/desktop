@@ -7,23 +7,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "{count} byte"
-msgid_plural "{count} bytes"
-msgstr[0] "{count} byte"
-msgstr[1] "{count} byte"
-
-msgid "{value} KB"
-msgstr "{value} KB"
-
-msgid "{value} MB"
-msgstr "{value} MB"
-
-msgid "{value} GB"
-msgstr "{value} GB"
-
-msgid "{value} TB"
-msgstr "{value} TB"
-
 msgid "{size}/s"
 msgstr "{size}/s"
 

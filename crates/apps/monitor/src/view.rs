@@ -5,7 +5,7 @@ use std::time::Instant;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{
-    Alert, Button, ClipboardRequest, Cursor, Event, Key, Menu, Modifiers, Pointer, PointerButton,
+    Alert, Button, ClipboardRequest, Cursor, Event, Menu, Pointer, PointerButton,
 };
 use bande_toolkit::{
     Appearance, Color, Header, Image, Item, Point, Rect, Scene, Shape, TextAlign, TextStyle,
@@ -70,10 +70,6 @@ pub fn is_secondary(pointer: &Pointer) -> bool {
     pointer.button == PointerButton::Secondary
 }
 
-pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
-    key == Key::Menu || (key == Key::Function(10) && modifiers.shift && !modifiers.logo)
-}
-
 pub struct Painter<'a> {
     pub text: &'a mut TextSystem,
     pub items: Vec<Item>,
@@ -100,19 +96,8 @@ impl Painter<'_> {
     }
 }
 
-pub(crate) fn symbol_button(
-    symbol: Option<Image>,
-    label: &str,
-    on_click: impl FnMut() + 'static,
-) -> Button {
-    match symbol {
-        Some(symbol) => Button::symbol(symbol, label, on_click),
-        None => Button::new(label, on_click),
-    }
-}
-
 pub(crate) fn stop_button(on_click: impl FnMut() + 'static) -> Button {
-    symbol_button(
+    Button::symbol(
         Image::from_svg(STOP_SYMBOL, SYMBOL_PIXELS, SYMBOL_PIXELS),
         &tr!("Quit Process"),
         on_click,

@@ -51,6 +51,12 @@ enum Signal {
     Dismissed,
 }
 
+struct Completion {
+    field: WidgetId,
+    typed: String,
+    shown: String,
+}
+
 struct Chip {
     key: u64,
     remove: WidgetId,
@@ -89,7 +95,7 @@ pub struct ComposeView {
     removed: Vec<(usize, Attachment)>,
     known: Vec<Address>,
     typed: Vec<(WidgetId, String)>,
-    completion: Option<(WidgetId, String)>,
+    completion: Option<Completion>,
     access: WidgetId,
     token: u64,
     closed: bool,
@@ -169,18 +175,19 @@ impl ComposeView {
         let host_id = Widget::id(&host);
         let send_signal = Rc::clone(&signals);
         let click = move || send_signal.borrow_mut().push(Signal::Send);
-        let send_button = match Image::from_svg(Symbol::Sent.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-            Some(image) => Button::symbol(image, &tr!("Send"), click),
-            None => Button::new(&tr!("Send"), click),
-        };
+        let send_button = Button::symbol(
+            Image::from_svg(Symbol::Sent.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS),
+            &tr!("Send"),
+            click,
+        );
         let send = host.insert(send_button, Rect::default());
         let attach_signal = Rc::clone(&signals);
         let click = move || attach_signal.borrow_mut().push(Signal::Attach);
-        let attach_button =
-            match Image::from_svg(Symbol::Attachment.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-                Some(image) => Button::symbol(image, &tr!("Attach Files"), click),
-                None => Button::new(&tr!("Attach Files"), click),
-            };
+        let attach_button = Button::symbol(
+            Image::from_svg(Symbol::Attachment.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS),
+            &tr!("Attach Files"),
+            click,
+        );
         let attach = host.insert(attach_button, Rect::default());
         let field = |text: &str| TextField::new("", text, |_| {}).borderless(FIELD_FONT);
         let to = host.insert(field(&joined(&draft.to)), Rect::default());
@@ -569,10 +576,11 @@ impl ComposeView {
         let signals = Rc::clone(&self.signals);
         let click = move || signals.borrow_mut().push(Signal::Remove(key));
         let label = tr!("Remove “{name}”", name = name);
-        let button = match Image::from_svg(Symbol::Remove.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-            Some(image) => Button::symbol(image, &label, click),
-            None => Button::new(&label, click),
-        };
+        let button = Button::symbol(
+            Image::from_svg(Symbol::Remove.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS),
+            &label,
+            click,
+        );
         let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) else {
             return;
         };
@@ -743,8 +751,14 @@ impl ComposeView {
             return;
         };
         let text = self.field_text(field);
-        let completion = self.completion.take().filter(|(id, _)| *id == field);
-        if completion.as_ref().is_some_and(|(_, shown)| *shown == text) {
+        let completion = self
+            .completion
+            .take()
+            .filter(|completion| completion.field == field);
+        if completion
+            .as_ref()
+            .is_some_and(|completion| completion.shown == text)
+        {
             self.completion = completion;
             return;
         }
@@ -753,11 +767,11 @@ impl ComposeView {
             return;
         };
         let before = std::mem::replace(&mut self.typed[at].1, text.clone());
-        if let Some((_, shown)) = completion
-            && let Some(separator) = text.strip_prefix(before.as_str())
+        if let Some(completion) = completion
+            && let Some(separator) = text.strip_prefix(completion.typed.as_str())
             && [",", ";"].contains(&separator)
         {
-            self.set_field(field, &format!("{shown}, "), None);
+            self.set_field(field, &format!("{}, ", completion.shown), None);
             return;
         }
         let selection = self
@@ -788,7 +802,11 @@ impl ComposeView {
         };
         let shown = format!("{text}{rest}");
         self.set_field(field, &shown, Some(text.len()..shown.len()));
-        self.completion = Some((field, shown));
+        self.completion = Some(Completion {
+            field,
+            typed: text,
+            shown,
+        });
     }
 
     fn set_field(&mut self, field: WidgetId, text: &str, selected: Option<std::ops::Range<usize>>) {

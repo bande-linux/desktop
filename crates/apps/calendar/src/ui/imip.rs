@@ -27,6 +27,10 @@ fn title_of(event: &Event) -> String {
 
 impl CalendarView {
     pub fn offer(&mut self, objects: Vec<CalendarObject>, file: &str) -> bool {
+        if self.confirm.is_some() {
+            self.offers.push_back((objects, file.to_owned()));
+            return true;
+        }
         let Some(first) = objects.first().filter(|_| objects.len() == 1) else {
             return self.offer_import(objects, file);
         };
@@ -35,6 +39,14 @@ impl CalendarView {
             Method::Reply => self.take_reply(first),
             Method::Cancel => self.offer_cancel(first),
             _ => self.offer_import(objects, file),
+        }
+    }
+
+    pub(crate) fn offer_next(&mut self) {
+        while self.confirm.is_none()
+            && let Some((objects, file)) = self.offers.pop_front()
+        {
+            self.offer(objects, &file);
         }
     }
 
@@ -53,8 +65,14 @@ impl CalendarView {
     fn invited(&self, object: &CalendarObject) -> bool {
         let me = self.my_addresses();
         object
-            .master()
-            .is_some_and(|event| invite::is_invited(event, &me))
+            .events
+            .iter()
+            .any(|event| invite::is_invited(event, &me))
+    }
+
+    fn stored_object(&self, uid: &str) -> Option<(usize, usize, &CalendarObject)> {
+        let (calendar, index) = self.stored(uid)?;
+        Some((calendar, index, self.library.object(calendar, index)?))
     }
 
     fn stored(&self, uid: &str) -> Option<(usize, usize)> {
@@ -72,9 +90,17 @@ impl CalendarView {
     }
 
     fn offer_invitation(&mut self, object: CalendarObject) -> bool {
-        let Some(event) = object.master() else {
+        let Some(event) = object.master().or_else(|| object.events.first()) else {
             return false;
         };
+        if let Some((_, _, stored)) = self.stored_object(object.uid())
+            && !invite::may_update(stored, &object)
+        {
+            self.status = Some(tr!(
+                "This invitation is older than the event in your calendar, or is not from its organizer."
+            ));
+            return true;
+        }
         let organizer = invite::organizer(event).map_or_else(String::new, |organizer| {
             match organizer.name.is_empty() {
                 true => organizer.address,
@@ -107,18 +133,31 @@ impl CalendarView {
         };
         let me = self.my_addresses();
         let answered = invite::without_method(invite::answer(&object, &me, answer));
-        let Some(event) = answered.master().cloned() else {
+        let Some(event) = answered
+            .master()
+            .or_else(|| answered.events.first())
+            .cloned()
+        else {
             return;
         };
-        let stored = self.stored(answered.uid());
+        let whole = answered.master().is_some();
+        let stored = match self.stored_object(answered.uid()) {
+            Some((_, _, stored)) if !invite::may_update(stored, &answered) => return,
+            Some((calendar, index, stored)) => Some((
+                calendar,
+                index,
+                invite::merge_update(stored, answered.clone()),
+            )),
+            None => None,
+        };
         match (answer, stored) {
-            (Answer::Declined, Some((calendar, index))) => {
+            (Answer::Declined, Some((calendar, index, _))) if whole => {
                 self.remember(calendar, index);
                 self.library.remove_object(calendar, index);
             }
             (Answer::Declined, None) => {}
-            (_, Some((calendar, _))) => {
-                self.library.put_object(calendar, answered);
+            (_, Some((calendar, _, merged))) => {
+                self.library.put_object(calendar, merged);
             }
             (_, None) => {
                 if let Some(calendar) = self.default_calendar() {
@@ -166,42 +205,47 @@ impl CalendarView {
     }
 
     fn take_reply(&mut self, reply: &CalendarObject) -> bool {
-        let found = self.stored(reply.uid()).and_then(|(calendar, index)| {
-            let object = self.library.object(calendar, index)?;
-            let (updated, answers) = invite::take_reply(object, reply)?;
-            Some((calendar, updated, answers))
-        });
-        let Some((calendar, updated, answers)) = found else {
+        let me = self.my_addresses();
+        let Some((calendar, _, object)) = self.stored_object(reply.uid()) else {
             self.status = Some(tr!(
                 "This answer is to an event that is not in your calendars."
+            ));
+            return true;
+        };
+        let Some((updated, replier)) = invite::take_reply(object, reply, &me) else {
+            self.status = Some(tr!(
+                "This answer is not to an event you organize, or is not from one of its invitees."
             ));
             return true;
         };
         let title = updated.master().map(title_of).unwrap_or_default();
         self.library.put_object(calendar, updated);
         self.requests.push(Request::Changed);
-        let names: Vec<String> = answers
-            .into_iter()
-            .map(|answer| match answer.name.is_empty() {
-                true => answer.address,
-                false => answer.name,
-            })
-            .collect();
+        let name = match replier.name.is_empty() {
+            true => replier.address,
+            false => replier.name,
+        };
         self.status = Some(tr!(
             "“{title}”: answer from {names}",
             title = title,
-            names = names.join(", ")
+            names = name
         ));
         true
     }
 
     fn offer_cancel(&mut self, cancel: &CalendarObject) -> bool {
-        let Some((calendar, _)) = self.stored(cancel.uid()) else {
+        let Some((calendar, _, stored)) = self.stored_object(cancel.uid()) else {
             self.status = Some(tr!(
                 "A cancelled event that is not in your calendars was opened."
             ));
             return true;
         };
+        if !invite::may_update(stored, cancel) {
+            self.status = Some(tr!(
+                "This cancellation is older than the event in your calendar, or is not from its organizer."
+            ));
+            return true;
+        }
         let title = cancel.events.first().map(title_of).unwrap_or_default();
         let occurrence = cancel
             .events

@@ -15,7 +15,6 @@ pub type MailboxId = i64;
 pub type MessageId = i64;
 
 const SCHEMA: &str = "
-PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -579,21 +578,8 @@ impl Store {
         let connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(10))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
-        let indexed = connection
-            .query_row(
-                "SELECT 1 FROM sqlite_master WHERE name = 'message_words'",
-                [],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some();
+        connection.pragma_update(None, "foreign_keys", true)?;
         connection.execute_batch(SCHEMA)?;
-        if !indexed {
-            connection.execute(
-                "INSERT INTO message_words (message_words) VALUES ('rebuild')",
-                [],
-            )?;
-        }
         Ok(Self { connection })
     }
 

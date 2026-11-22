@@ -30,10 +30,11 @@ pub struct Toolbar {
 }
 
 fn symbol(svg: &str, label: &str, on_click: impl FnMut() + 'static) -> Button {
-    match Image::from_svg(svg.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-        Some(image) => Button::symbol(image, label, on_click),
-        None => Button::new(label, on_click),
-    }
+    Button::symbol(
+        Image::from_svg(svg.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS),
+        label,
+        on_click,
+    )
 }
 
 impl Toolbar {

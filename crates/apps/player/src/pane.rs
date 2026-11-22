@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -100,6 +101,7 @@ pub struct Pane {
     choices: Choices,
     queue_shown: bool,
     queue: Vec<PathBuf>,
+    added_subtitles: HashMap<PathBuf, PathBuf>,
     at: usize,
     looping: bool,
     remembered: Option<Playback>,
@@ -120,7 +122,6 @@ impl Pane {
         let choices: Choices = Rc::default();
         let mut host = FreeLayout::new();
         let stage = host.insert(StageWidget::new(), Rect::default());
-        let table = host.insert(queue_table(&choices), Rect::default());
         let host_id = Widget::id(&host);
         let mut ui = Ui::new(
             Box::new(host),
@@ -132,10 +133,11 @@ impl Pane {
             ui,
             host: host_id,
             stage,
-            table,
+            table: WidgetId::next(),
             choices,
             queue_shown: false,
             queue,
+            added_subtitles: HashMap::new(),
             at: 0,
             looping: false,
             remembered: None,
@@ -147,7 +149,6 @@ impl Pane {
             positions,
         };
         pane.load();
-        pane.fill_queue();
         pane
     }
 
@@ -176,10 +177,20 @@ impl Pane {
 
     pub fn toggle_queue(&mut self) {
         self.queue_shown = !self.queue_shown;
-        let focus = match self.queue_shown {
-            true => self.table,
-            false => self.stage,
+        let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) else {
+            return;
         };
+        let focus = match self.queue_shown {
+            true => {
+                self.table = host.insert(queue_table(&self.choices), Rect::default());
+                self.table
+            }
+            false => {
+                host.remove(self.table);
+                self.stage
+            }
+        };
+        self.fill_queue();
         self.ui.set_focus(focus);
     }
 
@@ -291,10 +302,11 @@ impl Pane {
             return;
         };
         let start_ms = self.positions.borrow().start(&path);
+        let subtitles = self.added_subtitles.get(&path).cloned();
         self.open(
             Opening {
                 path,
-                subtitles: None,
+                subtitles,
                 start_ms,
             },
             true,
@@ -320,6 +332,7 @@ impl Pane {
         let start_ms = self.session().map_or(0, |session| {
             session.position(Instant::now()).as_millis() as u64
         });
+        self.added_subtitles.insert(path.clone(), subtitles.clone());
         self.open(
             Opening {
                 path,

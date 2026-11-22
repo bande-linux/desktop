@@ -145,7 +145,8 @@ fn with_recently_used(xbel: &str, files: &[(PathBuf, String)], name: &str, exec:
     xbel
 }
 
-fn remembers_recent_files() -> bool {
+/// Whether the user lets the desktop remember recently used files.
+pub fn remembers_recent_files() -> bool {
     bande_config::config_path()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|source| bande_config::Config::parse(&source).ok())

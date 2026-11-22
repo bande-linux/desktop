@@ -916,9 +916,7 @@ impl VeloxView {
         let intents = Rc::clone(&self.intents);
         let click = move || push(&intents, Intent::Engine(lifecycle));
         match symbol(svg, self.palette.ink) {
-            Some(image) => {
-                pill.with_button(boxed(Button::symbol(image, &label, click).tooltip(&label)))
-            }
+            Some(image) => pill.with_button(boxed(Button::symbol(Some(image), &label, click))),
             None => pill,
         }
     }

@@ -82,6 +82,7 @@ enum Asking {
     GoToLine,
     Failed,
     MakePlain,
+    SavePlain,
     Lossy,
     Changed,
 }
@@ -176,6 +177,8 @@ pub struct DocumentView {
     position: Option<(u64, usize, (usize, usize))>,
     saving: bool,
     stamp: Option<Stamp>,
+    reloading_from: Option<u64>,
+    plain_target: Option<PathBuf>,
     overwrite: bool,
     close_after_save: bool,
     requests: Vec<Request>,
@@ -253,6 +256,8 @@ impl DocumentView {
             position: None,
             saving: false,
             stamp: None,
+            reloading_from: None,
+            plain_target: None,
             overwrite: false,
             close_after_save: false,
             requests: Vec::new(),
@@ -423,11 +428,17 @@ impl DocumentView {
             opened: self.opened,
             format: self.format.name().to_owned(),
             rich: self.rich,
+            stamp: self.stamp,
         }
     }
 
     pub fn start_loading(&mut self, path: Option<PathBuf>) {
         self.path = path;
+        self.loading = true;
+    }
+
+    pub fn start_reloading(&mut self) {
+        self.reloading_from = Some(self.revision());
         self.loading = true;
     }
 
@@ -445,8 +456,15 @@ impl DocumentView {
             words,
             characters,
         } = loaded;
-        self.lossy = lossy && from_disk;
         self.loading = false;
+        if self
+            .reloading_from
+            .take()
+            .is_some_and(|revision| revision != self.revision())
+        {
+            return self.persist();
+        }
+        self.lossy = lossy && from_disk;
         if from_disk {
             self.stamp = stamp;
             self.encoding = encoding;
@@ -459,6 +477,8 @@ impl DocumentView {
                 self.apply_settings();
             }
             self.format = format;
+        } else if stamp.is_some() {
+            self.stamp = stamp;
         }
         self.note = damaged.then(|| {
             tr!(
@@ -498,6 +518,7 @@ impl DocumentView {
 
     pub fn failed(&mut self, error: &str) {
         self.loading = false;
+        self.reloading_from = None;
         self.unloaded = self.saved.is_some() && self.revision() == self.counted;
         self.asking = Some(Asking::Failed);
         let signals = Rc::clone(&self.signals);
@@ -600,15 +621,33 @@ impl DocumentView {
     }
 
     pub fn save_to(&mut self, path: PathBuf) {
+        self.save_to_as(path, false);
+    }
+
+    fn save_to_as(&mut self, path: PathBuf, plain: bool) {
         if self.saving {
             return;
         }
-        self.saving = true;
+        let rich_on_disk = self.path.as_ref() == Some(&path) && self.format.is_rich();
         match (self.rich, Format::by_extension(&path)) {
             (true, Some(chosen))
                 if chosen != Format::Markdown || self.format == Format::Markdown =>
             {
                 self.format = chosen;
+            }
+            (true, None) if rich_on_disk => {}
+            (true, None) if self.format != Format::Markdown && !plain => {
+                let name = path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.plain_target = Some(path);
+                return self.ask(
+                    Asking::SavePlain,
+                    &tr!("Save “{name}” as plain text?", name = name),
+                    &tr!("Its fonts, styles, colors and lists will be lost. To keep them, save it with a name that ends in .rtf."),
+                    &[("make-plain-confirm", true), ("cancel", false)],
+                );
             }
             (true, None) if self.format != Format::Markdown => {
                 self.drop_formatting();
@@ -619,6 +658,7 @@ impl DocumentView {
             (false, _) if self.format != Format::Markdown => self.format = Format::Plain,
             _ => {}
         }
+        self.saving = true;
         let expected = match std::mem::take(&mut self.overwrite) {
             false if self.path.as_ref() == Some(&path) => self.stamp,
             _ => None,
@@ -846,6 +886,11 @@ impl DocumentView {
             }
             (Some(Asking::Failed), _) if self.unloaded => self.requests.push(Request::Close),
             (Some(Asking::MakePlain), "make-plain-confirm") => self.make_plain(true),
+            (Some(Asking::SavePlain), "make-plain-confirm") => {
+                if let Some(path) = self.plain_target.take() {
+                    self.save_to_as(path, true);
+                }
+            }
             (Some(Asking::Lossy), "save-copy") => {
                 self.lossy = false;
                 self.retarget(Format::Rtf);
@@ -1641,10 +1686,7 @@ pub fn line_ending_title(name: &str) -> String {
 fn symbol_button(icon: &str, label: &str, on_click: impl FnMut() + 'static) -> Button {
     let image = find_icon(icon, SYMBOL_PIXELS, &ICON_THEMES, &data_dirs())
         .and_then(|path| Image::load(&path, SYMBOL_PIXELS));
-    match image {
-        Some(image) => Button::symbol(image, label, on_click),
-        None => Button::new(label, on_click),
-    }
+    Button::symbol(image, label, on_click)
 }
 
 fn write_failure(error: &io::Error) -> String {

@@ -7,7 +7,7 @@ use jiff::{Timestamp, Zoned};
 use crate::rail::in_use;
 use bande_status::Command;
 use bande_status::clock_app::ClockApp;
-use bande_status::dbusmenu::{Node, command};
+use bande_status::dbusmenu::{Node, Toggle, command};
 use bande_status::status::{
     Battery, Bluetooth, Capture, InputSources, Power, Sound, Wifi, hours_and_minutes,
 };
@@ -96,7 +96,7 @@ fn clock_items(clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Vec<Me
 pub fn clock_menu(quiet: bool, clock: &ClockApp, dates: &DateFormats, has_clock: bool) -> Menu {
     let mut items = clock_items(clock, dates, has_clock);
     items.extend([
-        item(&tr!("Do Not Disturb"), &Command::SetDoNotDisturb(!quiet)).checked(quiet),
+        item(&tr!("Do Not Disturb"), &Command::SetDoNotDisturb(!quiet)).check(quiet),
         MenuItem::separator(),
         settings(tr!("Notifications Settings…"), "notifications"),
         settings(tr!("Date & Time Settings…"), "language-time"),
@@ -176,14 +176,13 @@ pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
             &tr!("Show Percentage"),
             &Command::ShowBatteryPercentage(!percentage_shown),
         )
-        .checked(percentage_shown),
+        .check(percentage_shown),
     );
     Menu::new(items)
 }
 
 pub fn wifi_menu(wifi: &Wifi) -> Menu {
-    let mut items =
-        vec![item(&tr!("Wi-Fi"), &Command::SetWifi(!wifi.enabled)).checked(wifi.enabled)];
+    let mut items = vec![item(&tr!("Wi-Fi"), &Command::SetWifi(!wifi.enabled)).check(wifi.enabled)];
     if wifi.sign_in {
         items.push(MenuItem::separator());
         items.push(note(&tr!("Sign in required")));
@@ -211,7 +210,7 @@ pub fn wifi_menu(wifi: &Wifi) -> Menu {
                     title = tr!("{name} (secured)", name = title);
                 }
                 items.push(
-                    item(&title, &Command::Join(network.ssid.clone())).checked(network.current),
+                    item(&title, &Command::Join(network.ssid.clone())).radio(network.current),
                 );
             }
         }
@@ -233,7 +232,7 @@ pub fn sound_menu(sound: &Sound, capturing: &[Capture]) -> Menu {
             "Volume {percent}%",
             percent = (f64::from(sound.volume) * 100.0).round()
         )),
-        item(&tr!("Mute"), &Command::SetMuted(!sound.muted)).checked(sound.muted),
+        item(&tr!("Mute"), &Command::SetMuted(!sound.muted)).check(sound.muted),
     ]);
     if !sound.outputs.is_empty() {
         items.push(MenuItem::separator());
@@ -244,7 +243,7 @@ pub fn sound_menu(sound: &Sound, capturing: &[Capture]) -> Menu {
                     &output.description,
                     &Command::UseOutput(output.name.clone()),
                 )
-                .checked(sound.default_output.as_deref() == Some(output.name.as_str())),
+                .radio(sound.default_output.as_deref() == Some(output.name.as_str())),
             );
         }
     }
@@ -259,7 +258,7 @@ pub fn bluetooth_menu(bluetooth: &Bluetooth) -> Menu {
             &tr!("Bluetooth"),
             &Command::SetBluetooth(!bluetooth.powered),
         )
-        .checked(bluetooth.powered),
+        .check(bluetooth.powered),
     ];
     if bluetooth.powered && !bluetooth.devices.is_empty() {
         items.push(MenuItem::separator());
@@ -275,7 +274,7 @@ pub fn bluetooth_menu(bluetooth: &Bluetooth) -> Menu {
             };
             items.push(
                 item(&title, &Command::ToggleGadget(gadget.address.clone()))
-                    .checked(gadget.connected),
+                    .check(gadget.connected),
             );
         }
         let forgettable = bluetooth
@@ -299,7 +298,7 @@ pub fn input_source_menu(input: &InputSources) -> Menu {
         .iter()
         .enumerate()
         .map(|(index, source)| {
-            item(&source.name, &Command::SelectInputSource(index)).checked(index == input.active)
+            item(&source.name, &Command::SelectInputSource(index)).radio(index == input.active)
         })
         .collect();
     items.push(MenuItem::separator());
@@ -318,8 +317,12 @@ pub fn app_menu(node: &Node, item: &str) -> Menu {
                 }
                 if child.children.is_empty() {
                     let entry = MenuItem::new(&child.label, &command(child, item).action())
-                        .enabled(child.enabled)
-                        .checked(child.checked);
+                        .enabled(child.enabled);
+                    let entry = match child.toggle {
+                        Some(Toggle::Check(on)) => entry.check(on),
+                        Some(Toggle::Radio(on)) => entry.radio(on),
+                        None => entry,
+                    };
                     match &child.shortcut {
                         Some(shortcut) => entry.shortcut(shortcut),
                         None => entry,

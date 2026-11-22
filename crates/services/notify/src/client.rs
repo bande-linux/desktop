@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use zbus::blocking::Connection;
+use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::Value;
+use zbus::{MatchRule, message};
 
 use crate::{BUS_NAME, OBJECT_PATH, Urgency, WireApp, WirePresentation};
 
@@ -110,5 +111,51 @@ pub fn close(connection: &Connection, id: u32) -> zbus::Result<()> {
         "CloseNotification",
         &id,
     )?;
+    Ok(())
+}
+
+/// What the notification server says about a notification it shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Signal {
+    ActivationToken(u32, String),
+    ActionInvoked(u32, String),
+    Closed(u32),
+}
+
+/// Passes every notification signal on `connection` to `deliver` until `deliver` returns false.
+/// Blocks, so it runs on a thread of its own.
+pub fn listen(
+    connection: &Connection,
+    mut deliver: impl FnMut(Signal) -> bool,
+) -> zbus::Result<()> {
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .interface(INTERFACE)?
+        .path(OBJECT_PATH)?
+        .build();
+    for signal in MessageIterator::for_match_rule(rule, connection, None)?.flatten() {
+        let header = signal.header();
+        let body = signal.body();
+        let signal = match header.member().map(|member| member.as_str()) {
+            Some("ActivationToken") => body
+                .deserialize::<(u32, String)>()
+                .ok()
+                .map(|(id, token)| Signal::ActivationToken(id, token)),
+            Some("ActionInvoked") => body
+                .deserialize::<(u32, String)>()
+                .ok()
+                .map(|(id, key)| Signal::ActionInvoked(id, key)),
+            Some("NotificationClosed") => body
+                .deserialize::<(u32, u32)>()
+                .ok()
+                .map(|(id, _)| Signal::Closed(id)),
+            _ => None,
+        };
+        if let Some(signal) = signal
+            && !deliver(signal)
+        {
+            break;
+        }
+    }
     Ok(())
 }

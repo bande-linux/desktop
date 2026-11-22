@@ -21,6 +21,8 @@ impl Engine {
         let (ours, theirs) = Channel::pair().unwrap();
         let process = Process::new(env!("CARGO_BIN_EXE_bande-media-engine"))
             .env("PULSE_SERVER", "unix:/nonexistent")
+            .env("LC_ALL", "pt_PT.UTF-8")
+            .env_remove("LANGUAGE")
             .stdin(Stdio::from(theirs.into_fd()))
             .stdout(Stdio::null())
             .spawn()
@@ -139,7 +141,7 @@ fn subtitles_named_after_a_recording_open_with_it() {
     let song = folder.path().join("song.wav");
     write_wav(&song, 1);
     std::fs::write(
-        folder.path().join("song.en.srt"),
+        folder.path().join("song.pt-BR.srt"),
         "1\n00:00:00,000 --> 00:00:00,900\nHello\n",
     )
     .unwrap();

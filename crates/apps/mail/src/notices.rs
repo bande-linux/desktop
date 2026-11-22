@@ -5,23 +5,16 @@ use bande_inbox::{Inbox, Outbox};
 use bande_l10n::tr;
 use bande_mail::store::MessageId;
 use bande_notify::Urgency;
-use bande_notify::client::{Request, notify};
-use zbus::blocking::{Connection, MessageIterator};
-use zbus::zvariant::Value;
-use zbus::{MatchRule, message};
+use bande_notify::client::{Request, Signal, listen, notify};
+use bande_taskbar_model::bus::show_badge;
+use zbus::blocking::Connection;
 
-const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
-const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
-const LAUNCHER_INTERFACE: &str = "com.canonical.Unity.LauncherEntry";
-const LAUNCHER_PATH: &str = "/org/bande/Mail";
 const OPEN: &str = "default";
 const NEW_MAIL_SOUND: &str = "message-new-email";
 
 enum Notice {
     Shown(u32, Option<MessageId>),
-    Token(u32, String),
-    Invoked(u32, String),
-    Closed(u32),
+    Signal(Signal),
 }
 
 pub struct Clicked {
@@ -42,39 +35,6 @@ pub struct Notices {
     shown: HashMap<u32, Option<MessageId>>,
     tokens: HashMap<u32, String>,
     badge: u32,
-}
-
-fn listen(session: &Connection, outbox: &Outbox<Notice>) -> zbus::Result<()> {
-    let rule = MatchRule::builder()
-        .msg_type(message::Type::Signal)
-        .interface(NOTIFICATIONS)?
-        .path(NOTIFICATIONS_PATH)?
-        .build();
-    for signal in MessageIterator::for_match_rule(rule, session, None)?.flatten() {
-        let header = signal.header();
-        let body = signal.body();
-        let notice = match header.member().map(|member| member.as_str()) {
-            Some("ActivationToken") => body
-                .deserialize::<(u32, String)>()
-                .ok()
-                .map(|(id, token)| Notice::Token(id, token)),
-            Some("ActionInvoked") => body
-                .deserialize::<(u32, String)>()
-                .ok()
-                .map(|(id, key)| Notice::Invoked(id, key)),
-            Some("NotificationClosed") => body
-                .deserialize::<(u32, u32)>()
-                .ok()
-                .map(|(id, _)| Notice::Closed(id)),
-            _ => None,
-        };
-        if let Some(notice) = notice
-            && !outbox.send(notice)
-        {
-            break;
-        }
-    }
-    Ok(())
 }
 
 fn in_background(name: &str, work: impl FnOnce() + Send + 'static) {
@@ -124,7 +84,7 @@ impl Notices {
         if let Some(session) = session.cloned() {
             let outbox = inbox.outbox();
             in_background("notices", move || {
-                if let Err(error) = listen(&session, &outbox) {
+                if let Err(error) = listen(&session, |signal| outbox.send(Notice::Signal(signal))) {
                     tracing::warn!("cannot follow new mail notifications: {error}");
                 }
             });
@@ -154,18 +114,7 @@ impl Notices {
         let Some(session) = &self.announcer.session else {
             return;
         };
-        let properties = HashMap::from([
-            ("count", Value::from(i64::from(count))),
-            ("count-visible", Value::from(count > 0)),
-        ]);
-        let uri = format!("application://{}.desktop", self.announcer.app_id);
-        if let Err(error) = session.emit_signal(
-            None::<&str>,
-            LAUNCHER_PATH,
-            LAUNCHER_INTERFACE,
-            "Update",
-            &(uri.as_str(), properties),
-        ) {
+        if let Err(error) = show_badge(session, self.announcer.app_id, count, false) {
             tracing::warn!("cannot show the unread count in the Taskbar: {error}");
         }
     }
@@ -181,12 +130,12 @@ impl Notices {
                 Notice::Shown(id, message) => {
                     self.shown.insert(id, message);
                 }
-                Notice::Token(id, token) => {
+                Notice::Signal(Signal::ActivationToken(id, token)) => {
                     if self.shown.contains_key(&id) {
                         self.tokens.insert(id, token);
                     }
                 }
-                Notice::Invoked(id, key) => {
+                Notice::Signal(Signal::ActionInvoked(id, key)) => {
                     if key == OPEN
                         && let Some(message) = self.shown.remove(&id)
                     {
@@ -196,7 +145,7 @@ impl Notices {
                         });
                     }
                 }
-                Notice::Closed(id) => {
+                Notice::Signal(Signal::Closed(id)) => {
                     self.shown.remove(&id);
                     self.tokens.remove(&id);
                 }

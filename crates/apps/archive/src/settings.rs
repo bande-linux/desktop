@@ -130,7 +130,7 @@ fn choose_folder(field: Field) {
                 return;
             };
             let chosen = zbus::blocking::Connection::session()
-                .and_then(|session| bande_app::choose_file(&session, &tr!("Choose Folder"), None));
+                .and_then(|session| bande_app::choose_folder(&session, &tr!("Choose Folder")));
             match chosen {
                 Ok(Some(path)) => {
                     let mut settings = ArchiveSettings::load(&folder);

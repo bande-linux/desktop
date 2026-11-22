@@ -86,9 +86,12 @@ apt install bande-mail
   act on all of them, and dragging them onto a mailbox in the sidebar moves them.
   Tab and F6 (Shift for backwards) move between the sidebar, the list, the reader and the
   toolbar; Up, Down, Home, End, Page Up and Page Down choose a mailbox in the sidebar, move the
-  selection in the list and scroll the reader, and the Menu key opens the mailbox's or the
-  message's menu. Screen readers see every mailbox, message row, message text, link, attachment
-  and button, and can focus and press them. Dates and times follow the locale. Undo (Ctrl+Z)
+  selection in the list and scroll the reader, and the Menu key (or Shift+F10) opens the
+  mailbox's or the message's menu. In the reader, Tab also steps through its links, addresses,
+  attachments and buttons such as Load Remote Content; Enter or Space presses the one with the
+  focus ring, the Menu key opens its menu and Escape leaves it. Screen readers see every mailbox,
+  message row, message text, link (named by its text), attachment and button, and can focus and
+  press them. Dates and times follow the locale. Undo (Ctrl+Z)
   puts moved or deleted messages back, up to 20 steps, and a mailbox that messages were moved
   to is synced right after the move. Mailbox ▸ New Mailbox… and a mailbox's menu in the sidebar
   create, rename and delete mailboxes on the server; the special mailboxes keep their names.

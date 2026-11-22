@@ -6,7 +6,7 @@ use bande_config::{BUS_NAME, OBJECT_PATH};
 use bande_inbox::Outbox;
 use zbus::blocking::fdo::PropertiesProxy;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
-use zbus::zvariant::OwnedValue;
+use zbus::zvariant::{OwnedValue, Value};
 use zbus::{MatchRule, message};
 
 use crate::LauncherUpdate;
@@ -49,6 +49,38 @@ pub fn launcher_update(properties: &HashMap<String, OwnedValue>) -> LauncherUpda
         progress_visible: flag("progress-visible"),
         urgent: flag("urgent"),
     }
+}
+
+/// Shows `count` on `app_id`'s Taskbar button, or no badge for 0, and with `urgent` also asks
+/// for attention while the count is above 0.
+pub fn show_badge(
+    connection: &Connection,
+    app_id: &str,
+    count: u32,
+    urgent: bool,
+) -> zbus::Result<()> {
+    let path: String = app_id
+        .split('.')
+        .flat_map(|part| {
+            std::iter::once('/').chain(
+                part.chars()
+                    .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }),
+            )
+        })
+        .collect();
+    let properties = HashMap::from([
+        ("count", Value::from(i64::from(count))),
+        ("count-visible", Value::from(count > 0)),
+        ("urgent", Value::from(urgent && count > 0)),
+    ]);
+    let uri = format!("application://{app_id}.desktop");
+    connection.emit_signal(
+        None::<&str>,
+        path.as_str(),
+        LAUNCHER_INTERFACE,
+        "Update",
+        &(uri.as_str(), properties),
+    )
 }
 
 fn spawn(name: &str, work: impl FnOnce() + Send + 'static) {

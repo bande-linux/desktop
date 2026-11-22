@@ -193,6 +193,9 @@ msgstr "Återställa {name}?"
 msgid "Restoring {target} from {image} ({image_size}) replaces all data stored on it. You can’t undo this action."
 msgstr "Om du återställer {target} från {image} ({image_size}) ersätts alla data på den. Du kan inte ångra det här."
 
+msgid "Restoring {target} from {image} replaces all data stored on it. You can’t undo this action. Its expanded size can’t be checked first. If it doesn’t fit, the restore stops when the disk is full."
+msgstr "Om du återställer {target} från {image} ersätts alla data på den. Du kan inte ångra det här. Avbildningens uppackade storlek kan inte kontrolleras i förväg. Om den inte får plats avbryts återställningen när disken är full."
+
 msgid "Cancel"
 msgstr "Avbryt"
 

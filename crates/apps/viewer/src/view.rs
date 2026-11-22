@@ -76,6 +76,13 @@ pub enum Saving {
 }
 
 type Saved = (PathBuf, Result<(), Refusal>);
+type Trashed = (PathBuf, Option<PathBuf>, std::io::Result<TrashItem>);
+
+struct TrashedSlot {
+    item: TrashItem,
+    at: usize,
+    replaced: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarMode {
@@ -88,10 +95,11 @@ type Signals = Rc<RefCell<Vec<Signal>>>;
 fn symbol(svg: &str, label: &str, signals: &Signals, signal: Signal) -> Button {
     let signals = Rc::clone(signals);
     let click = move || signals.borrow_mut().push(signal.clone());
-    match Image::from_svg(svg.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-        Some(image) => Button::symbol(image, label, click),
-        None => Button::new(label, click),
-    }
+    Button::symbol(
+        Image::from_svg(svg.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS),
+        label,
+        click,
+    )
     .tooltip(label)
 }
 
@@ -127,7 +135,9 @@ pub struct FileView {
     thumbnails: Option<Thumbnails>,
     copies: Option<Inbox<Option<Vec<u8>>>>,
     saves: Option<Inbox<Saved>>,
-    trashed: Option<(TrashItem, usize)>,
+    saving: Vec<PathBuf>,
+    trashing: Option<Inbox<Trashed>>,
+    trashed: Option<TrashedSlot>,
     session: Option<Session>,
     sidebar_shown: bool,
     sidebar_mode: SidebarMode,
@@ -217,6 +227,8 @@ impl FileView {
             thumbnails: None,
             copies: None,
             saves: None,
+            saving: Vec::new(),
+            trashing: None,
             trashed: None,
             session: None,
             sidebar_shown: several,
@@ -248,21 +260,48 @@ impl FileView {
     }
 
     pub fn can_trash(&self) -> bool {
-        self.path()
-            .is_some_and(|path| !bande_volumes::on_connected_volume(path))
+        self.trashing.is_none()
+            && self
+                .path()
+                .is_some_and(|path| !bande_volumes::on_connected_volume(path))
     }
 
     pub fn move_to_trash(&mut self) {
         let Some(path) = self.path().map(Path::to_path_buf) else {
             return;
         };
-        let next = match self.paths.len() {
-            1 => neighbour(&path, true),
-            _ => None,
+        if self.trashing.is_some() {
+            return;
+        }
+        let browsing = self.paths.len() == 1;
+        let inbox = match Inbox::new() {
+            Ok(inbox) => inbox,
+            Err(error) => return tracing::warn!("cannot move to the Trash: {error}"),
         };
-        let put = Trash::for_user()
-            .ok_or_else(|| std::io::Error::other("there is no home folder"))
-            .and_then(|trash| trash.put(&path));
+        let outbox = inbox.outbox();
+        let spawned = std::thread::Builder::new()
+            .name("trash".to_owned())
+            .spawn(move || {
+                let next = browsing.then(|| neighbour(&path, true)).flatten();
+                let put = Trash::for_user()
+                    .ok_or_else(|| std::io::Error::other("there is no home folder"))
+                    .and_then(|trash| trash.put(&path));
+                outbox.send((path, next, put));
+            });
+        match spawned {
+            Ok(_) => self.trashing = Some(inbox),
+            Err(error) => tracing::warn!("cannot move to the Trash: {error}"),
+        }
+    }
+
+    fn take_trashed(&mut self) -> bool {
+        let Some(trashed) = self.trashing.as_mut().map(Inbox::drain) else {
+            return false;
+        };
+        let Some((path, next, put)) = trashed.into_iter().next() else {
+            return false;
+        };
+        self.trashing = None;
         let item = match put {
             Ok(item) => item,
             Err(error) => {
@@ -273,18 +312,33 @@ impl FileView {
                 );
                 let detail = tr!("You may not have permission to move it.");
                 let alert = Alert::new(&title, &detail, |_| {}).primary(&tr!("OK"), "ok");
-                return self.ui.present_dialog(alert);
+                self.ui.present_dialog(alert);
+                return true;
             }
         };
-        self.trashed = Some((item, self.current));
-        match next {
-            Some(next) => self.paths[self.current] = next,
+        let Some(at) = self.paths.iter().position(|shown| *shown == path) else {
+            let at = self.paths.len();
+            self.trashed = Some(TrashedSlot {
+                item,
+                at,
+                replaced: false,
+            });
+            return true;
+        };
+        let replaced = next.is_some() && self.paths.len() == 1;
+        match next.filter(|_| replaced) {
+            Some(next) => self.paths[at] = next,
             None => {
-                self.paths.remove(self.current);
+                self.paths.remove(at);
+                if self.current > at {
+                    self.current -= 1;
+                }
                 self.current = self.current.min(self.paths.len().saturating_sub(1));
             }
         }
+        self.trashed = Some(TrashedSlot { item, at, replaced });
         self.show_current();
+        true
     }
 
     pub fn can_undo_trash(&self) -> bool {
@@ -292,7 +346,7 @@ impl FileView {
     }
 
     pub fn undo_trash(&mut self) {
-        let Some((item, at)) = self.trashed.take() else {
+        let Some(TrashedSlot { item, at, replaced }) = self.trashed.take() else {
             return;
         };
         if let Err(error) = bande_fs::restore_to(&item, &item.original) {
@@ -305,11 +359,12 @@ impl FileView {
             let alert = Alert::new(&title, &detail, |_| {}).primary(&tr!("OK"), "ok");
             return self.ui.present_dialog(alert);
         }
-        match self.paths.len() {
-            0 | 1 => self.paths = vec![item.original],
-            count => self.paths.insert(at.min(count), item.original),
+        let at = at.min(self.paths.len());
+        match self.paths.get_mut(at) {
+            Some(slot) if replaced => *slot = item.original,
+            _ => self.paths.insert(at, item.original),
         }
-        self.current = at.min(self.paths.len() - 1);
+        self.current = at;
         self.show_current();
     }
 
@@ -737,10 +792,20 @@ impl FileView {
             self.with_pdf(|pdf| pdf.rotate(clockwise));
             return;
         }
-        self.with_canvas(|canvas| canvas.orient(canvas.orientation().rotated(clockwise)));
+        if self.can_turn() {
+            self.with_canvas(|canvas| canvas.orient(canvas.orientation().rotated(clockwise)));
+        }
+    }
+
+    pub fn can_turn(&self) -> bool {
+        self.path()
+            .is_none_or(|path| !self.saving.iter().any(|saving| saving == path))
     }
 
     pub fn rotation_saving(&self) -> Option<Saving> {
+        if !self.can_turn() {
+            return None;
+        }
         let canvas = self.canvas()?;
         let picture = canvas.picture()?;
         if canvas.is_animated() || canvas.orientation() == Orientation::default() {
@@ -800,14 +865,16 @@ impl FileView {
         let Some(outbox) = self.saves.as_ref().map(Inbox::outbox) else {
             return self.refused(&path, Refusal::Unwritable);
         };
+        let saving = path.clone();
         let spawned = std::thread::Builder::new()
             .name("save".to_owned())
             .spawn(move || {
                 let saved = save();
                 outbox.send((path, saved));
             });
-        if let Err(error) = spawned {
-            tracing::warn!("cannot save: {error}");
+        match spawned {
+            Ok(_) => self.saving.push(saving),
+            Err(error) => tracing::warn!("cannot save: {error}"),
         }
     }
 
@@ -815,6 +882,9 @@ impl FileView {
         let saved = self.saves.as_mut().map(Inbox::drain).unwrap_or_default();
         let changed = !saved.is_empty();
         for (path, result) in saved {
+            if let Some(at) = self.saving.iter().position(|saving| *saving == path) {
+                self.saving.remove(at);
+            }
             match result {
                 Ok(()) if Some(path.as_path()) == self.path() => self.load_current(),
                 Ok(()) => {}
@@ -843,7 +913,9 @@ impl FileView {
     }
 
     pub fn flip(&mut self, vertical: bool) {
-        self.with_canvas(|canvas| canvas.orient(canvas.orientation().flipped(vertical)));
+        if self.can_turn() {
+            self.with_canvas(|canvas| canvas.orient(canvas.orientation().flipped(vertical)));
+        }
     }
 
     pub fn has_picture(&self) -> bool {
@@ -1257,8 +1329,9 @@ impl FileView {
         let document = self.take_session();
         let thumbs = self.take_thumbnails();
         let saved = self.take_saves();
+        let trashed = self.take_trashed();
         self.settle();
-        loaded || document || thumbs || saved
+        loaded || document || thumbs || saved || trashed
     }
 
     pub fn deadline(&self) -> Option<Instant> {
@@ -1377,6 +1450,9 @@ impl View for FileView {
         }
         if let Some(saves) = &self.saves {
             fds.push(saves.fd());
+        }
+        if let Some(trashing) = &self.trashing {
+            fds.push(trashing.fd());
         }
         if let Some(session) = &self.session {
             fds.push(session.fd());

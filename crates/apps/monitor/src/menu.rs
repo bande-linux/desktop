@@ -99,7 +99,7 @@ pub fn columns_menu(shown: &[Column]) -> Menu {
             .chain(Column::CHOOSABLE)
             .map(|column| {
                 MenuItem::new(&column.title(), &format!("{COLUMN_ACTION}{}", column.id()))
-                    .checked(shown.contains(&column))
+                    .check(shown.contains(&column))
                     .enabled(column != Column::Name)
             })
             .collect(),

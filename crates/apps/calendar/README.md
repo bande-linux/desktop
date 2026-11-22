@@ -35,7 +35,8 @@ views. Packaged as `bande-calendar`.
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.
-  Undo (Ctrl+Z) takes back a delete, a move or a change of length: a deleted event comes back
+  Undo (Ctrl+Z) takes back a delete, a move or a change of length, and Redo (Shift+Ctrl+Z) does
+  it again: a deleted event comes back
   with its own UID at its own address (`If-None-Match: *`), so other clients see the same event
   return, and a moved one is written back with its earlier times.
 - **iCalendar.** Its own parser and writer: line folding, escaping, unknown properties and
@@ -46,8 +47,9 @@ views. Packaged as `bande-calendar`.
   a POSIX rule). Written events carry a `VTIMEZONE` generated from the tz database.
 - **Views.** Day, week, month and year, a mini month and the calendar list in the sidebar,
   per-calendar colours and visibility, Today and previous/next. The view comes back at the next
-  start. File ▸ Print… prints the view that is shown, with the hours shown in the day and week
-  views.
+  start. File ▸ Print… prints the view that is shown, with every hour that has an event (and the
+  working day) in the day and week views, followed, except for the year, by a list of every
+  event in it with its times and location.
 - **Calendars.** New, rename and delete, on this computer or on a CalDAV server (MKCALENDAR,
   PROPPATCH of the name and colour, DELETE): File ▸ New Calendar…, or right-click a calendar or
   an account heading.
@@ -67,10 +69,13 @@ views. Packaged as `bande-calendar`.
   `calendar-user-address-set`.
 - **Invitations by mail** (iMIP, RFC 6047), opened from Mail or as a file: a `REQUEST` that
   invites one of your addresses asks Accept, Maybe or Decline, keeps the event with your
-  answer (Decline removes it) and opens a message to the organizer in Mail through a `mailto:`
+  answer and your own alerts (Decline removes it; for one occurrence, only that occurrence is
+  updated) and opens a message to the organizer in Mail through a `mailto:`
   link with the answer in words; the message carries no `REPLY` part, since `mailto:` cannot
-  attach one. A `REPLY` updates that invitee's answer in your event, and a `CANCEL` asks to
-  remove the event or the one cancelled occurrence (undoable). `METHOD` is never stored.
+  attach one. A `REPLY` with one invitee updates that invitee's answer in an event you organise,
+  and a `CANCEL` asks to remove the event or the one cancelled occurrence (undoable). An update or
+  `CANCEL` from someone other than the stored event's organizer, or with an older `SEQUENCE`, is
+  refused. `METHOD` is never stored.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
   Snooze (5 minutes) and a click that opens Calendar on the event's day. Calendar also shows them when it was never opened or was quit: the autostart
@@ -88,7 +93,9 @@ views. Packaged as `bande-calendar`.
   support. With it, the inspector shows each timed event's zone, its times are shown and typed
   in that zone, a new zone keeps the wall times of the whole series (exceptions and end date
   move with it), and View ▸ Time Zone shows the calendar in a zone its events use.
-- **Files and links.** `bande-calendar file.ics` or File ▸ Import… offers to add its events;
+- **Files and links.** `bande-calendar file.ics`, File ▸ Import… or a dropped file offers to add
+  its events (files are read in the background, several are offered one after another, and one
+  that can't be read is named in the sidebar);
   File ▸ Export… (or Export… on a calendar's menu) saves a calendar as one `.ics` file, through
   the desktop's file chooser portal; `bande-calendar webcal://…` offers to subscribe. The
   desktop file registers `text/calendar` and the `webcal` schemes. With the window closed,
@@ -96,7 +103,7 @@ views. Packaged as `bande-calendar`.
   the window opens when there is something to confirm.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Page Up/Page Down previous/next, Ctrl+N new
-event, Ctrl+F search, Ctrl+R refresh, Delete to delete, Ctrl+Z to undo, Enter to open the selected event (or the
+event, Ctrl+F search, Ctrl+R refresh, Delete to delete, Ctrl+Z to undo, Shift+Ctrl+Z to redo, Enter to open the selected event (or the
 focused day, in the month and year views), Ctrl+W close and Ctrl+Q quit. The arrow keys move the
 focused day (Up and Down by a week in the month and year views, and scroll the hours in the day
 and week views), Home and End go to the first and last day shown, and Tab and Shift+Tab select
@@ -105,7 +112,8 @@ to choose, Space to show or hide, Menu for its menu) and the toolbar. Every day,
 calendar is in the accessibility tree.
 
 Dates and times are typed and shown the way the locale writes them; a date that starts with a
-four-digit year is read as year-month-day.
+four-digit year is read as year-month-day. A date or time that can't be read keeps the inspector
+open on that field and says what to type.
 
 ## Layout
 

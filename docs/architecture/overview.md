@@ -173,7 +173,8 @@ own apps and third-party apps use the same keys, so the compositor translates no
   delete a word; `Shift` extends the selection. `Ctrl+Y` also redoes. Alt and Super are not used
   in text fields.
 - **Terminal**: every plain `Ctrl+letter` goes to the shell (`Ctrl+C` interrupts, `Ctrl+D` ends
-  input), so the Terminal's own commands are on `Shift+Ctrl`.
+  input), so the Terminal's own commands are on `Shift+Ctrl`. Find Next is therefore
+  `Shift+Ctrl+G`, so Find Previous, `Shift+Ctrl+G` in other apps, is `Shift+Ctrl+H` there.
 - **Menus** write shortcuts as words in the order Shift, Ctrl, Alt, Super: "Shift+Ctrl+N",
   "Alt+Super+8".
 

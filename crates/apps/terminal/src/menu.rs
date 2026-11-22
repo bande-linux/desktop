@@ -76,7 +76,7 @@ const COMMANDS: [(Command, &str, Text, Option<&str>); 22] = [
         text!("Show Previous Tab"),
         Some("Ctrl+PgUp"),
     ),
-    (Command::Find, "find", text!("Find…"), Some("Shift+Ctrl+F")),
+    (Command::Find, "find", text!("Find"), Some("Shift+Ctrl+F")),
     (
         Command::FindNext,
         "find-next",

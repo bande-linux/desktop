@@ -17,7 +17,7 @@ use bande_fs::{
 use bande_glance::GlanceLink;
 use bande_inbox::Inbox;
 use bande_l10n::{tr, trn};
-use bande_search::{Usage, recent_files, recently_used};
+use bande_search::{ScopedSearch, load_recent_files};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{
     ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer,
@@ -35,7 +35,7 @@ use crate::controls::{Formats, Press, Signals};
 use crate::grid::Band;
 use crate::icons::Icons;
 use crate::loader::{Loaded, Loader};
-use crate::search::{Index, SEARCH_HEIGHT, Searching};
+use crate::search::{SEARCH_HEIGHT, Searching};
 use crate::servers::{Discovery, DiscoveryBar, ServerDone, ServerRequest, ServersSeen};
 use crate::settings::{DEFAULT_SPRING_DELAY, FilesSettings};
 use crate::sidebar::{Row, SidebarEdit, with_volumes};
@@ -292,7 +292,7 @@ pub struct FilesView {
     pub(crate) trash_full: bool,
     pub(crate) hover: Option<Hit>,
     pub(crate) searching: Option<Searching>,
-    pub(crate) index: Option<Index>,
+    pub(crate) index: Option<ScopedSearch>,
     pub(crate) search_home_button: Option<WidgetId>,
     pub(crate) discovery_bar: Option<DiscoveryBar>,
     pub(crate) discovery: Discovery,
@@ -762,7 +762,7 @@ impl FilesView {
         }
         self.search_excluded = excluded;
         if let Some(index) = &self.index {
-            index.index.exclude(self.search_excluded.clone());
+            index.exclude(&self.search_excluded);
         }
         self.load_recents();
         self.query();
@@ -772,11 +772,9 @@ impl FilesView {
         let Some((xbel, usage)) = &self.recents else {
             return;
         };
-        let shared = std::fs::read_to_string(xbel).unwrap_or_default();
-        let usage = Usage::load(usage.clone());
-        self.browser.set_recents(recent_files(
-            &recently_used(&shared),
-            &usage,
+        self.browser.set_recents(load_recent_files(
+            xbel,
+            usage.clone(),
             &self.search_excluded,
             MAX_RECENTS,
         ));

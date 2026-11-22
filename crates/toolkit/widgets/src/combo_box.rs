@@ -54,7 +54,7 @@ impl ComboBox {
                 .iter()
                 .enumerate()
                 .map(|(index, choice)| {
-                    MenuItem::new(choice, &index.to_string()).checked(*choice == text)
+                    MenuItem::new(choice, &index.to_string()).radio(*choice == text)
                 })
                 .collect(),
         );

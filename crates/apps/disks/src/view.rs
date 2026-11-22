@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use bande_l10n::{Text, text, tr, trn};
 
-use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report};
+use crate::jobs::{Abilities, Erase, Failure, Format, Job, Outcome, Report, least_restored_size};
 use crate::model::{Disk, Group, Model, Scheme, Selected, Volume};
 use crate::size::parse_size;
 use crate::widgets::{
@@ -485,16 +485,17 @@ impl DisksView {
             return;
         };
         let image_size = match bande_volumes::on_connected_volume(&file) {
-            true => 0,
-            false => std::fs::metadata(&file)
-                .map(|metadata| metadata.len())
-                .unwrap_or(0),
+            true => None,
+            false => least_restored_size(&file).unwrap_or_else(|error| {
+                tracing::warn!("cannot read the size of {}: {error}", file.display());
+                None
+            }),
         };
         let image_name = file
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        if image_size > size {
+        if image_size.is_some_and(|image_size| image_size > size) {
             let message = tr!(
                 "{image} doesn’t fit on {target}.",
                 image = quoted(&image_name),
@@ -503,12 +504,19 @@ impl DisksView {
             return self.notice(&tr!("The image is too big."), &message);
         }
         let title = tr!("Restore {name}?", name = quoted(&name));
-        let message = tr!(
-            "Restoring {target} from {image} ({image_size}) replaces all data stored on it. You can’t undo this action.",
-            target = described(&name, &device, size),
-            image = quoted(&image_name),
-            image_size = format_size(image_size)
-        ) + &self.system_disk_warning(target);
+        let message = match image_size {
+            Some(image_size) => tr!(
+                "Restoring {target} from {image} ({image_size}) replaces all data stored on it. You can’t undo this action.",
+                target = described(&name, &device, size),
+                image = quoted(&image_name),
+                image_size = format_size(image_size)
+            ),
+            None => tr!(
+                "Restoring {target} from {image} replaces all data stored on it. You can’t undo this action. Its expanded size can’t be checked first. If it doesn’t fit, the restore stops when the disk is full.",
+                target = described(&name, &device, size),
+                image = quoted(&image_name)
+            ),
+        } + &self.system_disk_warning(target);
         self.ui.present_sheet(
             Alert::new(
                 &title,

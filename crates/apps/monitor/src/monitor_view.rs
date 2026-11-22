@@ -7,7 +7,7 @@ use bande_toolkit::ui::{
     self, Animated, BUTTON_HEIGHT, Button, Cell, Column as TableColumn, Context, Cursor, Event,
     GraphKind, Key, Modifiers, Pointer, Row as TableRow, SEGMENTED_HEIGHT, SearchField,
     SegmentedControl, Series, SeriesColor, Sort, Spring, TEXT_FIELD_HEIGHT, Table, Widget,
-    WidgetId,
+    WidgetId, opens_menu,
 };
 use bande_toolkit::{
     Appearance, Color, HEADER_LEADING, HEADER_TRAILING, Header, Item, Palette, Point, Radius, Rect,
@@ -22,7 +22,7 @@ use crate::model::{
 use crate::sampler::Snapshot;
 use crate::view::{
     ALERT_ICON, FORCE_QUIT, INSPECT_SYMBOL, Icons, Painter, QUIT, Request, Screen, answer_stop,
-    is_secondary, opens_menu, stop_alert, stop_button, symbol_button,
+    is_secondary, stop_alert, stop_button,
 };
 use bande_app_menu::Entry;
 
@@ -188,7 +188,7 @@ impl MonitorView {
         let send = sender(list.signals());
         let stop = list.insert_in_header(stop_button(move || send(Signal::Stop)));
         let send = sender(list.signals());
-        let inspect = list.insert_in_header(symbol_button(
+        let inspect = list.insert_in_header(Button::symbol(
             icons.get(INSPECT_SYMBOL),
             &tr!("Inspect Process"),
             move || send(Signal::Inspect),

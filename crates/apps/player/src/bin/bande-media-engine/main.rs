@@ -68,12 +68,10 @@ fn sidecar(video: &Path) -> Option<PathBuf> {
     let stem = video.file_stem()?.to_str()?;
     let languages = bande_l10n::preferred_languages();
     let rank = |language: &str| {
-        let short = gstreamer_tag::language_codes::language_code_iso_639_1(language)
-            .map_or_else(|| language.to_ascii_lowercase(), |code| code.to_string());
-        languages
-            .iter()
-            .position(|wanted| *wanted == short)
-            .unwrap_or(languages.len())
+        let base = language.split(['-', '_']).next().unwrap_or(language);
+        let short = gstreamer_tag::language_codes::language_code_iso_639_1(base)
+            .map_or_else(|| base.to_ascii_lowercase(), |code| code.to_string());
+        languages.iter().position(|wanted| *wanted == short)
     };
     let mut found: Vec<(usize, PathBuf)> = std::fs::read_dir(video.parent()?)
         .ok()?
@@ -87,7 +85,7 @@ fn sidecar(video: &Path) -> Option<PathBuf> {
                 .rsplit_once('.')?;
             let wanted =
                 !language.is_empty() && !language.contains('.') && subtitle_extension(extension);
-            let rank = rank(language);
+            let rank = rank(language)?;
             (wanted && readable_subtitles(&path)).then_some((rank, path))
         })
         .collect();

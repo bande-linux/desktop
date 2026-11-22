@@ -96,13 +96,20 @@ pub(super) fn collect_found(
     }
 }
 
+/// A menu item that is on or off: one of its own, or one choice of several.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuToggle {
+    Check(bool),
+    Radio(bool),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MenuItem {
     pub title: String,
     pub action: String,
     pub shortcut: Option<String>,
     pub enabled: bool,
-    pub checked: bool,
+    pub toggle: Option<MenuToggle>,
     pub strong: bool,
     pub submenu: Option<Menu>,
     pub separator: bool,
@@ -132,7 +139,7 @@ impl MenuItem {
             action: action.to_owned(),
             shortcut: None,
             enabled: true,
-            checked: false,
+            toggle: None,
             strong: false,
             submenu: None,
             separator: false,
@@ -172,8 +179,18 @@ impl MenuItem {
         Self { enabled, ..self }
     }
 
-    pub fn checked(self, checked: bool) -> Self {
-        Self { checked, ..self }
+    pub fn check(self, on: bool) -> Self {
+        Self {
+            toggle: Some(MenuToggle::Check(on)),
+            ..self
+        }
+    }
+
+    pub fn radio(self, chosen: bool) -> Self {
+        Self {
+            toggle: Some(MenuToggle::Radio(chosen)),
+            ..self
+        }
     }
 
     pub fn strong(self) -> Self {

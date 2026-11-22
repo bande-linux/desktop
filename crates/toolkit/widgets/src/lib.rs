@@ -59,8 +59,8 @@ pub use free_layout::FreeLayout;
 pub use graph::{Band, Graph, GraphKind, Series, SeriesColor};
 pub use label::Label;
 pub use menu::{
-    MENU_RADIUS, MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuTracker, Search,
-    placement_layout,
+    MENU_RADIUS, MENU_SHADOW_MARGIN, Menu, MenuItem, MenuOutcome, MenuPanel, MenuToggle,
+    MenuTracker, Search, placement_layout,
 };
 pub use pop_up_button::PopUpButton;
 pub use progress::{
@@ -505,7 +505,8 @@ fn path_to(widget: &dyn Widget, id: WidgetId, path: &mut Vec<WidgetId>) -> bool 
     false
 }
 
-fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
+/// Whether `key` asks for the focused item's context menu: the Menu key or Shift+F10.
+pub fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
     match key {
         Key::Menu => true,
         Key::Function(10) => {

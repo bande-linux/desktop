@@ -247,10 +247,8 @@ impl Installer {
                 }
             }
             Intent::Website => {
-                if let Some(deb) = &self.deb
-                    && let Err(error) = bande_xdg::open(&deb.homepage, None)
-                {
-                    tracing::warn!("cannot open {}: {error}", deb.homepage);
+                if let Some(deb) = &self.deb {
+                    open_website(deb.homepage.clone());
                 }
             }
             Intent::Restart => self.restart = true,
@@ -594,5 +592,18 @@ impl Installer {
         {
             *slot = page;
         }
+    }
+}
+
+fn open_website(homepage: String) {
+    let spawned = std::thread::Builder::new()
+        .name("installer-website".to_owned())
+        .spawn(move || {
+            if let Err(error) = bande_xdg::open(&homepage, None) {
+                tracing::warn!("cannot open {homepage}: {error}");
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot open the website: {error}");
     }
 }

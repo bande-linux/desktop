@@ -21,6 +21,7 @@ bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-notify.workspace = true
 bande-search.workspace = true
+bande-taskbar-model.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 data-encoding.workspace = true

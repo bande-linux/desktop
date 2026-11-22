@@ -32,8 +32,8 @@ use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
 use bande_toolkit::ui::{
     Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, past_drag_slop,
-    shortcut_pressed,
+    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, opens_menu,
+    past_drag_slop, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -218,6 +218,7 @@ pub struct MailView {
     pub(crate) layout: Option<(f32, Layout)>,
     pub(crate) selection: Option<(Spot, Spot)>,
     selecting: bool,
+    pub(crate) reader_target: Option<(usize, Target)>,
     pub(crate) search: String,
     pub(crate) ui: Ui,
     pub(crate) host: WidgetId,
@@ -285,6 +286,7 @@ impl MailView {
             layout: None,
             selection: None,
             selecting: false,
+            reader_target: None,
             search: String::new(),
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
             host: host_id,
@@ -2628,7 +2630,8 @@ impl MailView {
             }
         }
         if key == Key::Tab && bare {
-            return self.cycle_pane(!modifiers.shift);
+            return (self.focus == Pane::Reader && self.step_reader_target(!modifiers.shift))
+                || self.cycle_pane(!modifiers.shift);
         }
         if self.focus == Pane::Reader && modifiers.control && !modifiers.shift && !modifiers.alt {
             match key {
@@ -2674,7 +2677,16 @@ impl MailView {
                 self.focus = Pane::List;
                 true
             }
-            Key::Menu => self.keyboard_menu(),
+            _ if opens_menu(key, modifiers) => self.keyboard_menu(),
+            Key::Escape if self.focus == Pane::Reader && self.reader_target.is_some() => {
+                self.reader_target = None;
+                true
+            }
+            Key::Enter | Key::Space
+                if plain && self.focus == Pane::Reader && self.reader_target.is_some() =>
+            {
+                self.press_reader_target(false)
+            }
             Key::Backspace | Key::Delete if self.focus == Pane::Sidebar => false,
             Key::Right | Key::Left if plain && !modifiers.shift => {
                 let expanded = self.selected.is_some_and(|id| {
@@ -2715,6 +2727,9 @@ impl MailView {
                 true => Pane::Sidebar,
                 false => Pane::Reader,
             };
+            if !forward && let Some(&last) = self.reader_stops().last() {
+                self.set_reader_target(last);
+            }
             return true;
         }
         let index = PANES
@@ -2757,6 +2772,87 @@ impl MailView {
             Pane::Reader => self.scroll_reader(key),
             Pane::List => false,
         }
+    }
+
+    pub(crate) fn reader_stops(&self) -> Vec<usize> {
+        let Some((_, layout)) = &self.layout else {
+            return Vec::new();
+        };
+        let targets = &layout.targets;
+        (0..targets.len())
+            .filter(|index| {
+                let target = &targets[*index].1;
+                !matches!(target, Target::Card(_))
+                    && index
+                        .checked_sub(1)
+                        .is_none_or(|before| targets[before].1 != *target)
+            })
+            .collect()
+    }
+
+    fn set_reader_target(&mut self, index: usize) {
+        let Some((rect, target)) = self
+            .layout
+            .as_ref()
+            .and_then(|(_, layout)| layout.targets.get(index).cloned())
+        else {
+            return;
+        };
+        self.reader_target = Some((index, target));
+        let cx = self.ui.context();
+        self.scrolls[2].reveal(cx, rect.y, rect.y + rect.height);
+    }
+
+    fn step_reader_target(&mut self, forward: bool) -> bool {
+        let stops = self.reader_stops();
+        let at = self
+            .reader_target
+            .as_ref()
+            .and_then(|(index, _)| stops.iter().position(|stop| stop == index));
+        let next = match (at, forward) {
+            (None, true) => stops.first().copied(),
+            (None, false) => None,
+            (Some(at), true) => stops.get(at + 1).copied(),
+            (Some(at), false) => at.checked_sub(1).map(|before| stops[before]),
+        };
+        self.reader_target = None;
+        match next {
+            Some(index) => {
+                self.set_reader_target(index);
+                true
+            }
+            None => at.is_some() && !forward,
+        }
+    }
+
+    fn press_reader_target(&mut self, secondary: bool) -> bool {
+        let Some((index, target)) = self.reader_target.clone() else {
+            return false;
+        };
+        let has_menu = matches!(
+            target,
+            Target::Link(..) | Target::Address(_) | Target::Attachment(..)
+        );
+        let Some(rect) = self
+            .layout
+            .as_ref()
+            .and_then(|(_, layout)| layout.targets.get(index))
+            .map(|(rect, _)| *rect)
+            .filter(|_| has_menu || !secondary)
+        else {
+            return false;
+        };
+        let origin = self.reader_origin();
+        let at = Point::new(
+            origin.x + rect.x + rect.width / 2.0,
+            origin.y + rect.y + rect.height,
+        );
+        let button = match secondary {
+            true => PointerButton::Secondary,
+            false => PointerButton::Primary,
+        };
+        self.click_reader(target, &Pointer::at(at).with_button(button));
+        true
     }
 
     fn step_place(&mut self, by: isize) -> bool {
@@ -2803,6 +2899,9 @@ impl MailView {
                 .selected
                 .map(|id| (Hit::Message(id), self.message_menu())),
             Pane::Reader => {
+                if self.press_reader_target(true) {
+                    return true;
+                }
                 let frame = self.reader_frame();
                 let menu = self.text_menu();
                 self.requests.push(Request::ShowMenu(
@@ -2945,6 +3044,7 @@ impl MailView {
             }
             Hit::Reader(target) => {
                 self.focus = Pane::Reader;
+                self.reader_target = None;
                 if matches!(target, Target::Card(_)) && !secondary {
                     self.start_selection(pointer);
                 }
@@ -2982,7 +3082,7 @@ impl MailView {
                     Respond::Forward => self.forward_selected(),
                 }
             }
-            Target::Link(url, _) if secondary => {
+            Target::Link(url, ..) if secondary => {
                 let menu = Menu::new(vec![
                     MenuItem::new(&tr!("Open Link"), &format!("open-link:{url}")),
                     MenuItem::new(&tr!("Copy Link"), &format!("copy:{url}")),
@@ -2990,7 +3090,7 @@ impl MailView {
                 self.requests
                     .push(Request::ShowMenu(menu, pointer.position));
             }
-            Target::Link(url, claimed) => self.open_link(url, claimed),
+            Target::Link(url, claimed, _) => self.open_link(url, claimed),
             Target::Address(address) => {
                 let menu = Menu::new(vec![
                     MenuItem::new(
@@ -3067,7 +3167,7 @@ impl MailView {
     fn claimed_host(&self, url: &str) -> Option<String> {
         let (_, layout) = self.layout.as_ref()?;
         layout.targets.iter().find_map(|(_, target)| match target {
-            Target::Link(known, claimed) if known == url => claimed.clone(),
+            Target::Link(known, claimed, _) if known == url => claimed.clone(),
             _ => None,
         })
     }

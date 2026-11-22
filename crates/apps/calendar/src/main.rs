@@ -71,8 +71,42 @@ fn settings_window(appearance: Appearance) -> Box<dyn View> {
 }
 
 enum Chosen {
-    Open(PathBuf),
+    Read(String, Vec<CalendarObject>),
     Failed(String),
+}
+
+fn read_calendar(path: &Path) -> Chosen {
+    let file = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    match read_file(path).map(|text| CalendarObject::parse(&text)) {
+        Ok(Ok(objects)) if !objects.is_empty() => Chosen::Read(file, objects),
+        Ok(Ok(_)) => Chosen::Failed(tr!("“{file}” has no events.", file = file)),
+        Ok(Err(error)) => Chosen::Failed(tr!(
+            "Can’t read “{file}”: {error}",
+            file = file,
+            error = error.to_string()
+        )),
+        Err(error) => Chosen::Failed(tr!(
+            "Can’t open “{file}”: {error}",
+            file = file,
+            error = error.to_string()
+        )),
+    }
+}
+
+fn read_calendars(outbox: bande_inbox::Outbox<Chosen>, paths: Vec<PathBuf>) {
+    let spawned = std::thread::Builder::new()
+        .name("read".to_owned())
+        .spawn(move || {
+            for path in paths {
+                outbox.send(read_calendar(&path));
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot read calendar files: {error}");
+    }
 }
 
 fn choose(
@@ -106,7 +140,7 @@ fn choose(
                 }
             };
             let done = match export {
-                None => Chosen::Open(chosen),
+                None => read_calendar(&chosen),
                 Some((_, data)) => match bande_xdg::replace_file(&chosen, data) {
                     Ok(()) => return,
                     Err(error) => Chosen::Failed(tr!(
@@ -698,6 +732,7 @@ impl CalendarApp {
                         view.set_status(Some(tr!("Can’t open Mail to send the answer.")));
                     }
                 }
+                Request::Read(paths) => read_calendars(self.chosen.outbox(), paths),
                 Request::Export { name, data } => choose(
                     self.chosen.outbox(),
                     self.session.clone(),
@@ -796,9 +831,7 @@ impl View for Pane {
         match self.1.event(window, &event, Path::is_file) {
             Dropping::Over => return true,
             Dropping::Dropped(paths) => {
-                let files: Vec<String> =
-                    paths.iter().map(|path| bande_xdg::file_uri(path)).collect();
-                open_arguments(&mut self.0, &files, Path::new("/"));
+                self.0.read_files(paths);
                 return true;
             }
             Dropping::Other => {}
@@ -1186,12 +1219,13 @@ impl Program for CalendarApp {
                 for chosen in self.chosen.drain() {
                     let mut shown = false;
                     self.with_view(cx, |_, view| match chosen {
-                        Chosen::Open(path) => {
-                            shown = open_arguments(
-                                view,
-                                &[path.to_string_lossy().into_owned()],
-                                Path::new("/"),
-                            );
+                        Chosen::Read(file, objects) => {
+                            if let Some(first) =
+                                objects.first().and_then(|object| object.events.first())
+                            {
+                                view.go_to(first.start.date());
+                            }
+                            shown = view.offer(objects, &file);
                         }
                         Chosen::Failed(error) => {
                             view.set_status(Some(error));
@@ -1257,8 +1291,8 @@ fn new_event_asked(arguments: Vec<String>) -> (bool, Vec<String>) {
     (!flags.is_empty(), arguments)
 }
 
-fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Path) -> bool {
-    let mut offered = false;
+fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Path) {
+    let mut files = Vec::new();
     for argument in arguments {
         if let Some(uid) = argument.strip_prefix(bande_calendar::offer::EVENT_ARGUMENT) {
             view.show_event(uid);
@@ -1267,28 +1301,15 @@ fn open_arguments(view: &mut CalendarView, arguments: &[String], directory: &Pat
         let lower = argument.to_ascii_lowercase();
         if lower.starts_with("webcal://") || lower.starts_with("webcals://") {
             view.offer_subscription(argument);
-            offered = true;
             continue;
         }
-        let path =
-            bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| directory.join(argument));
-        match read_file(&path).map(|text| CalendarObject::parse(&text)) {
-            Ok(Ok(objects)) if !objects.is_empty() => {
-                let name = path
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                if let Some(first) = objects.first().and_then(|object| object.events.first()) {
-                    view.go_to(first.start.date());
-                }
-                offered |= view.offer(objects, &name);
-            }
-            Ok(Ok(_)) => tracing::warn!("{} has no events", path.display()),
-            Ok(Err(error)) => tracing::warn!("cannot read {}: {error}", path.display()),
-            Err(error) => tracing::warn!("cannot open {}: {error}", path.display()),
-        }
+        files.push(
+            bande_xdg::path_from_file_uri(argument).unwrap_or_else(|| directory.join(argument)),
+        );
     }
-    offered
+    if !files.is_empty() {
+        view.read_files(files);
+    }
 }
 
 fn main() -> ExitCode {

@@ -24,7 +24,7 @@ use bande_search::{FileResults, Usage};
 use bande_toolkit::Appearance;
 use bande_toolkit::ui::{
     Animated, Context, Event, Key, Menu, Modifiers, ScrollState, Size, Spring, TextField, Ui,
-    Widget, WidgetId,
+    Widget, WidgetId, opens_menu,
 };
 use bande_toolkit::{
     Color, Elevation, Image, Item, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole,
@@ -670,16 +670,6 @@ impl Widget for Margin {
     fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
         &mut self.children
     }
-}
-
-fn opens_menu(key: Key, modifiers: Modifiers) -> bool {
-    key == Key::Menu
-        || (key == Key::Function(10)
-            && modifiers
-                == Modifiers {
-                    shift: true,
-                    ..Modifiers::default()
-                })
 }
 
 pub struct Launcher {

@@ -25,6 +25,23 @@ const INFO: Info = Info {
 
 struct Pane(Software);
 
+fn open_website(window: &mut Window, url: String) {
+    let token = window
+        .activation_token(INFO.id)
+        .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
+        .ok();
+    let spawned = std::thread::Builder::new()
+        .name("software-website".to_owned())
+        .spawn(move || {
+            if let Err(error) = bande_xdg::open(&url, token.as_deref()) {
+                tracing::warn!("cannot open {url}: {error}");
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot open a website: {error}");
+    }
+}
+
 impl View for Pane {
     fn scene(&mut self, window: &mut Window) -> Scene {
         View::scene(self.0.ui(), window)
@@ -32,7 +49,11 @@ impl View for Pane {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
         let handled = View::event(self.0.ui(), window, event);
-        self.0.pump() || handled
+        let pumped = self.0.pump();
+        if let Some(url) = self.0.take_website() {
+            open_website(window, url);
+        }
+        pumped || handled
     }
 
     fn set_appearance(&mut self, appearance: Appearance) {

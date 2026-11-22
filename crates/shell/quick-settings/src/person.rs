@@ -50,10 +50,8 @@ impl PersonRow {
                 let change = change.clone();
                 let push = move || changes.borrow_mut().push(change.clone());
                 let label = label.tr();
-                let button: Box<dyn Widget> = match symbol(glyph, icon_dirs) {
-                    Some(image) => Box::new(Button::symbol(image, &label, push)),
-                    None => Box::new(Button::new(&label, push)),
-                };
+                let button: Box<dyn Widget> =
+                    Box::new(Button::symbol(symbol(glyph, icon_dirs), &label, push));
                 button
             })
             .collect();

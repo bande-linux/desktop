@@ -29,6 +29,7 @@ pub struct Inspector {
     pub original: Details,
     details: Details,
     texts: [String; 4],
+    time_fields: [Option<WidgetId>; 4],
     end_kind: usize,
     end_text: String,
     invite_text: String,
@@ -244,6 +245,7 @@ impl Inspector {
         };
         let mut panel = Panel::new(None, WIDTH, LABEL_WIDTH);
         let mut title_field = None;
+        let mut time_fields = [None; 4];
         if read_only {
             header(&mut panel, &details, &texts);
             if !details.notes.is_empty() {
@@ -306,6 +308,8 @@ impl Inspector {
                 ));
                 let end_date = panel.add(field(&texts[2], Signal::EndDate));
                 let end_time = panel.add(field(&texts[3], Signal::EndTime));
+                time_fields =
+                    [start_date, start_time, end_date, end_time].map(|field| panel.id_of(field));
                 panel.line(Line::new(
                     Some(&tr!("Ends:")),
                     vec![(end_date, Width::Fill), (end_time, Width::Fixed(80.0))],
@@ -451,6 +455,7 @@ impl Inspector {
             original_calendar: selected,
             details,
             texts,
+            time_fields,
             end_kind,
             end_text,
             invite_text: String::new(),
@@ -553,6 +558,34 @@ impl Inspector {
                 Some((start, end))
             }
         }
+    }
+
+    pub fn unreadable(&self) -> Option<(WidgetId, String, String)> {
+        (0..4)
+            .filter(|index| !self.details.all_day || index % 2 == 0)
+            .find_map(|index| {
+                let field = self.time_fields[index]?;
+                let text = self.texts[index].trim();
+                match index % 2 {
+                    0 if self.formats.parse_date(text).is_none() => Some((
+                        field,
+                        tr!("“{text}” is not a date", text = text.to_owned()),
+                        tr!(
+                            "Enter a date such as {example}.",
+                            example = self.formats.numeric_date(self.original.start.date())
+                        ),
+                    )),
+                    1 if self.formats.parse_time(text).is_none() => Some((
+                        field,
+                        tr!("“{text}” is not a time", text = text.to_owned()),
+                        tr!(
+                            "Enter a time such as {example}.",
+                            example = time_text(&self.formats, self.original.start)
+                        ),
+                    )),
+                    _ => None,
+                }
+            })
     }
 
     pub fn edited_details(&self) -> Option<Details> {

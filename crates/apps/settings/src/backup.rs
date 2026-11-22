@@ -8,7 +8,7 @@ use crate::pages::{Widgets, boxed, muted_row};
 use crate::passwords::Concealed;
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
-use bande_app::choose_file;
+use bande_app::choose_folder;
 use bande_backup::client::{
     BackupProxy, DiskChoice, Status, follow_status, phase, problem, setup_error,
 };
@@ -137,7 +137,7 @@ fn run_one(
         BackupCommand::SetExcluded(folders) => proxy.set_excluded(folders),
         BackupCommand::AddExcluded(current) => {
             let Some(folder) =
-                choose_file(session, &tr!("Choose a Folder to Keep Out of Search"), None)?
+                choose_folder(session, &tr!("Choose a Folder to Keep Out of Search"))?
             else {
                 return Ok(());
             };

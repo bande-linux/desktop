@@ -54,7 +54,7 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
         .enumerate()
         .map(|(position, (accent, label))| {
             MenuItem::new(&label.tr(), &format!("{ACTION_COLOR}{index}:{position}"))
-                .checked(current == Some(*accent))
+                .radio(current == Some(*accent))
         })
         .collect();
     let subscription = calendar.info.read_only && calendar.info.url.is_none();
@@ -494,6 +494,8 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
         Key::Character(character) if command => match character.to_ascii_lowercase() {
             't' => menu_command(view, ACTION_TODAY),
             'z' if !modifiers.shift && !modifiers.alt => view.undo(),
+            'z' if !modifiers.alt => view.redo(),
+            'y' if !modifiers.shift && !modifiers.alt => view.redo(),
             'n' if modifiers.alt => menu_command(view, ACTION_NEW_CALENDAR),
             'n' => menu_command(view, ACTION_NEW_EVENT),
             'f' => menu_command(view, ACTION_FIND),
@@ -1000,6 +1002,11 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
 }
 
 fn choose(view: &mut CalendarView, action: &str) {
+    resolve(view, action);
+    view.offer_next();
+}
+
+fn resolve(view: &mut CalendarView, action: &str) {
     let confirm = match view.confirm.take() {
         Some(Confirm::Invitation(object)) => return view.answer_invitation(*object, action),
         Some(Confirm::Cancelled {

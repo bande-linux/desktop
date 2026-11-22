@@ -2,6 +2,7 @@ mod calc;
 mod index;
 mod matcher;
 mod recents;
+mod scoped;
 mod service;
 mod tree;
 mod usage;
@@ -11,8 +12,9 @@ pub use index::{CACHE_TAG, FileHit, FileIndex, FileResults, MAX_ENTRIES, MAX_HIT
 pub use matcher::{EXACT, FUZZY, INITIALS, PREFIX, Query, SUBSTRING, WORD, WORDS, fold};
 pub use recents::{
     FILE_KEY, RecentlyUsed, Recents, add_recently_used, is_excluded, recent_files, recently_used,
-    recently_used_path,
+    recently_used_path, remembers_recent_files,
 };
+pub use scoped::{ScopedSearch, load_recent_files};
 pub use service::{
     BUS_NAME, Found, IndexProxyBlocking, OBJECT_PATH, Offer, Policy, SearchService, follow_policy,
 };

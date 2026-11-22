@@ -313,7 +313,7 @@ impl State {
             .map(|position| {
                 let title = tr!("Workspace {number}", number = (position + 1));
                 item(title, &format!("desktop-{position}"))
-                    .checked(Some(position) == current)
+                    .radio(Some(position) == current)
                     .enabled(Some(position) != current)
             })
             .collect();
@@ -347,7 +347,7 @@ impl State {
                 Menu::new(self.desktop_items(index)),
             ),
             item(tr!("Keep on Top"), "keep-on-top")
-                .checked(self.windows[index].keep_on_top)
+                .check(self.windows[index].keep_on_top)
                 .enabled(!self.windows[index].has_state(xdg_toplevel::State::Fullscreen)),
             MenuItem::separator(),
             item(tr!("Close"), "close").shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),

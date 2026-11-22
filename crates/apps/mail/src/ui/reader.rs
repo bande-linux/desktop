@@ -180,7 +180,7 @@ pub enum Target {
     Quotes(MessageId),
     Respond(MessageId, Respond),
     Address(Address),
-    Link(String, Option<String>),
+    Link(String, Option<String>, String),
     Attachment(MessageId, usize),
     LoadRemote(MessageId),
 }
@@ -194,40 +194,54 @@ pub struct Layout {
     pub texts: Vec<(MessageId, Point, Paragraph)>,
 }
 
-fn host(text: &str) -> Option<String> {
+fn authority(text: &str) -> Option<String> {
     let text = text.trim();
     let rest = text
         .split_once("://")
         .map_or(text, |(_, rest)| rest)
         .split(['/', '?', '#'])
-        .next()?;
-    let host = rest
+        .next()?
         .rsplit('@')
-        .next()?
-        .split(':')
-        .next()?
-        .to_ascii_lowercase();
+        .next()?;
+    let host = match rest.strip_prefix('[') {
+        Some(literal) => format!("[{}]", literal.split(']').next()?),
+        None => rest.split(':').next()?.to_owned(),
+    }
+    .to_ascii_lowercase();
     let host = host.strip_prefix("www.").unwrap_or(&host).to_owned();
+    (!host.is_empty() && !host.contains(char::is_whitespace)).then_some(host)
+}
+
+fn named(host: &str) -> bool {
     let top_level = host.rsplit('.').next().unwrap_or_default();
-    let named = host.contains('.')
+    host.contains('.')
         && top_level.len() >= 2
         && top_level
             .chars()
-            .all(|character| character.is_ascii_alphabetic());
-    (named && !host.contains(char::is_whitespace)).then_some(host)
+            .all(|character| character.is_ascii_alphabetic())
+}
+
+fn web(url: &str) -> bool {
+    url.split(':')
+        .next()
+        .is_some_and(|scheme| matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https"))
 }
 
 pub(crate) fn link_host(url: &str) -> Option<String> {
-    let scheme = url.split(':').next()?.to_ascii_lowercase();
-    matches!(scheme.as_str(), "http" | "https")
-        .then(|| host(url))
-        .flatten()
+    web(url).then(|| authority(url)).flatten()
 }
 
 fn claimed_host(shown: &str, url: &str) -> Option<String> {
-    let claimed = host(shown)?;
-    let real = link_host(url)?;
-    (real != claimed && !real.ends_with(&format!(".{claimed}"))).then_some(claimed)
+    let claimed = authority(shown).filter(|host| named(host))?;
+    if !web(url) {
+        return None;
+    }
+    match link_host(url) {
+        Some(real) if named(&real) => {
+            (real != claimed && !real.ends_with(&format!(".{claimed}"))).then_some(claimed)
+        }
+        _ => Some(claimed),
+    }
 }
 
 fn names(addresses: &[Address]) -> String {
@@ -632,10 +646,12 @@ fn block(writer: &mut Writer<'_>, block: &Block, pictures: &HashMap<String, Imag
         TextAlign::Start,
     );
     for (range, url) in &block.links {
-        let claimed = block
-            .text
-            .get(range.clone())
-            .and_then(|shown| claimed_host(shown, url));
+        let shown = block.text.get(range.clone()).unwrap_or_default().trim();
+        let claimed = claimed_host(shown, url);
+        let named = match shown {
+            "" => url.clone(),
+            shown => shown.to_owned(),
+        };
         for rect in paragraph.span_rects(range.clone()) {
             let rect = Rect::new(rect.x + x, rect.y + writer.y, rect.width, rect.height);
             writer.layout.items.push(Item::Fill {
@@ -647,7 +663,10 @@ fn block(writer: &mut Writer<'_>, block: &Block, pictures: &HashMap<String, Imag
                 )),
                 paint: palette.accent_text.into(),
             });
-            writer.target(rect, Target::Link(url.clone(), claimed.clone()));
+            writer.target(
+                rect,
+                Target::Link(url.clone(), claimed.clone(), named.clone()),
+            );
         }
     }
     let top = writer.y;
@@ -842,4 +861,28 @@ pub fn focus_bar(thread: &Thread, layout: &Layout, color: Color) -> Option<Item>
         ),
         paint: color.into(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::claimed_host;
+
+    #[test]
+    fn a_link_that_shows_one_host_and_goes_to_another_asks_first() {
+        let bank = Some("bank.example".to_owned());
+        assert_eq!(claimed_host("bank.example", "http://203.0.113.5/"), bank);
+        assert_eq!(
+            claimed_host("www.bank.example", "https://[2001:db8::1]:8443/"),
+            bank
+        );
+        assert_eq!(claimed_host("bank.example", "https://evil.example/"), bank);
+        assert_eq!(
+            claimed_host("bank.example", "https://login.bank.example/"),
+            None
+        );
+        assert_eq!(
+            claimed_host("support@bank.example", "mailto:support@bank.example"),
+            None
+        );
+    }
 }

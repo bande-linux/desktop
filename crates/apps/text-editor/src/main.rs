@@ -232,6 +232,7 @@ impl TextEditor {
         }
         match (record.edited, record.path) {
             (true, _) => {
+                let kept_stamp = record.stamp;
                 let (outbox, session, id) = (self.inbox.outbox(), session.clone(), id.clone());
                 let kept = match record.rich {
                     true => Format::Rtf,
@@ -244,6 +245,7 @@ impl TextEditor {
                         .and_then(|bytes| read(bytes, kept, Some(encoding_rs::UTF_8)))
                         .map(|loaded| Loaded {
                             from_disk: false,
+                            stamp: kept_stamp,
                             ..loaded
                         });
                     outbox.send(Message::Loaded { token, loaded });
@@ -684,7 +686,7 @@ impl TextEditor {
                 continue;
             };
             let (token, encoding) = (view.token, view.encoding.encoding);
-            view.start_loading(Some(path.clone()));
+            view.start_reloading();
             self.load_into(token, path, Some(encoding));
             self.serve(cx, window);
         }
@@ -724,7 +726,7 @@ impl Program for TextEditor {
         let view = cx.focused().and_then(|window| cx.view(window));
         let windowed = view.is_some();
         let find = vec![
-            item(text!("Find…"), "find")
+            item(text!("Find"), "find")
                 .shortcut("Ctrl+F")
                 .enabled(windowed),
             item(text!("Find and Replace…"), "find-replace")

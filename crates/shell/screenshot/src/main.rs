@@ -683,7 +683,7 @@ impl Screenshots {
     fn options_menu(&self) -> Menu {
         let options = self.options;
         let destination = |title: Text, action: &str, chosen: Destination| {
-            MenuItem::new(&title.tr(), action).checked(options.destination == chosen)
+            MenuItem::new(&title.tr(), action).radio(options.destination == chosen)
         };
         let mut items = vec![
             MenuItem::new(&tr!("Save to"), "").enabled(false),
@@ -699,13 +699,12 @@ impl Screenshots {
                 _ => tr!("{seconds} Seconds", seconds = seconds),
             };
             items.push(
-                MenuItem::new(&title, &format!("timer-{seconds}"))
-                    .checked(options.timer == seconds),
+                MenuItem::new(&title, &format!("timer-{seconds}")).radio(options.timer == seconds),
             );
         }
         items.push(MenuItem::separator());
         items.push(
-            MenuItem::new(&tr!("Show Mouse Pointer"), "show-pointer").checked(options.show_pointer),
+            MenuItem::new(&tr!("Show Mouse Pointer"), "show-pointer").check(options.show_pointer),
         );
         Menu::new(items)
     }

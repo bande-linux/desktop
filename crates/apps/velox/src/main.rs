@@ -132,10 +132,16 @@ impl Pane {
             .activation_token(RUNNING_ID)
             .map_err(|error| tracing::warn!("cannot get an activation token: {error}"))
             .ok();
+        self.open_web_link(link, token.as_deref());
+    }
+
+    fn open_web_link(&mut self, link: &str, token: Option<&str>) {
         let apps = self
             .apps
             .get_or_insert_with(|| Apps::load(data_dirs(), &config_dirs()));
-        open_web_link(apps, link, token.as_deref());
+        if let Err(error) = bande_xdg::open_with(apps, link, token) {
+            tracing::warn!("cannot open {link}: {error}");
+        }
     }
 
     fn command(&mut self, window: &mut Window, command: &str) -> bool {
@@ -406,17 +412,6 @@ impl View for Screen {
     }
 }
 
-fn open_web_link(apps: &Apps, link: &str, token: Option<&str>) {
-    match apps.default_for("x-scheme-handler/https") {
-        Some(entry) => {
-            if let Err(error) = bande_xdg::launch_with_arguments(entry, &[link.to_owned()], token) {
-                tracing::warn!("cannot open {link}: {error}");
-            }
-        }
-        None => tracing::warn!("no app opens web links"),
-    }
-}
-
 static LEAVING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -504,7 +499,9 @@ impl Velox {
                     cx.quit();
                 }
                 TrayAction::Open(link) => {
-                    open_web_link(&Apps::load(data_dirs(), &config_dirs()), &link, None);
+                    if let Err(error) = bande_xdg::open(&link, None) {
+                        tracing::warn!("cannot open {link}: {error}");
+                    }
                 }
             }
         }

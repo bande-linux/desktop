@@ -130,9 +130,6 @@ msgstr "Visa nästa flik"
 msgid "Show Previous Tab"
 msgstr "Visa föregående flik"
 
-msgid "Find…"
-msgstr "Sök…"
-
 msgid "Find Next"
 msgstr "Sök nästa"
 

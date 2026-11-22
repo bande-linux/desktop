@@ -7,7 +7,7 @@ use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
-use bande_toolkit::ui::{Key, Scroll, Size};
+use bande_toolkit::ui::{Key, Scroll, Size, focus_ring_for};
 use bande_toolkit::{
     Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
@@ -638,6 +638,18 @@ impl MailView {
                     now,
                 },
             );
+            self.reader_target = self.reader_target.take().and_then(|(index, target)| {
+                let found = |at: &usize| {
+                    layout
+                        .targets
+                        .get(*at)
+                        .is_some_and(|(_, kept)| *kept == target)
+                };
+                Some(index)
+                    .filter(found)
+                    .or_else(|| layout.targets.iter().position(|(_, kept)| *kept == target))
+                    .map(|index| (index, target))
+            });
             self.layout = Some((frame.width, layout));
             self.selection = None;
         }
@@ -690,6 +702,19 @@ impl MailView {
             .map(|(rect, target)| (moved(rect), Hit::Reader(target.clone())))
             .filter(|(rect, _)| rect.y + rect.height > frame.y && rect.y < frame.y + frame.height)
             .collect::<Vec<_>>();
+        let mut ring = Vec::new();
+        if let Some((index, target)) = &self.reader_target
+            && self.focus == Pane::Reader
+            && !self.ui.has_sheet()
+            && self.ui.context().window_active
+        {
+            for (rect, _) in layout.targets[*index..]
+                .iter()
+                .take_while(|(_, shown)| shown == target)
+            {
+                focus_ring_for(&palette, Shape::rounded(*rect, Radius::XS), &mut ring);
+            }
+        }
         let selected = match self.focus == Pane::Reader {
             true => palette.accent_soft,
             false => palette.well,
@@ -734,6 +759,7 @@ impl MailView {
                             .as_ref()
                             .and_then(|thread| focus_bar(thread, layout, bar)),
                     )
+                    .chain(ring)
                     .collect(),
             }],
         });
@@ -741,7 +767,7 @@ impl MailView {
         let scroll = &self.scrolls[2];
         let cx = self.ui.context();
         scroll.paint_scrollbar(cx, frame, items);
-        if let Some(Hit::Reader(Target::Link(url, _))) = &self.hover {
+        if let Some(Hit::Reader(Target::Link(url, ..))) = &self.hover {
             let url = url.clone();
             self.paint_link_target(items, frame, &url);
         }

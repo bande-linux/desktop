@@ -7,5 +7,14 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "This invitation is older than the event in your calendar, or is not from its organizer."
+msgstr "This invitation is older than the event in your calendar, or is not from its organiser."
+
+msgid "This answer is not to an event you organize, or is not from one of its invitees."
+msgstr "This answer is not to an event you organise, or is not from one of its invitees."
+
+msgid "This cancellation is older than the event in your calendar, or is not from its organizer."
+msgstr "This cancellation is older than the event in your calendar, or is not from its organiser."
+
 msgid "organizer"
 msgstr "organiser"

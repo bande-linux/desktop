@@ -130,16 +130,23 @@ impl MailView {
                     .selected
                     .and_then(|id| self.messages.iter().position(|summary| summary.id == id))
                     .map_or(Part::List, Part::Message),
-                Pane::Reader => self
-                    .thread
-                    .as_ref()
-                    .and_then(|thread| {
-                        thread
-                            .entries
-                            .iter()
-                            .position(|entry| entry.summary.id == thread.focus)
-                    })
-                    .map_or(Part::Reader, Part::Body),
+                Pane::Reader => match &self.reader_target {
+                    Some((_, target)) => self
+                        .hits
+                        .iter()
+                        .position(|(_, hit)| *hit == Hit::Reader(target.clone()))
+                        .map_or(Part::Reader, Part::Target),
+                    None => self
+                        .thread
+                        .as_ref()
+                        .and_then(|thread| {
+                            thread
+                                .entries
+                                .iter()
+                                .position(|entry| entry.summary.id == thread.focus)
+                        })
+                        .map_or(Part::Reader, Part::Body),
+                },
             };
             if let Some(focus) = [focused, Part::List]
                 .into_iter()
@@ -310,7 +317,7 @@ impl MailView {
             Target::Respond(_, Respond::Reply) => (Role::Button, tr!("Reply")),
             Target::Respond(_, Respond::ReplyAll) => (Role::Button, tr!("Reply All")),
             Target::Respond(_, Respond::Forward) => (Role::Button, tr!("Forward")),
-            Target::Link(url, _) => (Role::Link, url.clone()),
+            Target::Link(_, _, shown) => (Role::Link, shown.clone()),
             Target::Address(address) => (Role::Button, address.full()),
             Target::Attachment(id, index) => {
                 let attachment = thread
@@ -373,7 +380,7 @@ impl MailView {
                 continue;
             };
             let mut node = clickable(role, &label);
-            if let Target::Link(url, _) = target {
+            if let Target::Link(url, ..) = target {
                 node.set_url(url.as_str());
             }
             self.push(tree, Part::Target(index), node, Some(*rect));

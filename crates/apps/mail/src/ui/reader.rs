@@ -180,7 +180,7 @@ pub enum Target {
     Quotes(MessageId),
     Respond(MessageId, Respond),
     Address(Address),
-    Link(String, Option<String>),
+    Link(String, Option<String>, String),
     Attachment(MessageId, usize),
     LoadRemote(MessageId),
 }
@@ -646,10 +646,12 @@ fn block(writer: &mut Writer<'_>, block: &Block, pictures: &HashMap<String, Imag
         TextAlign::Start,
     );
     for (range, url) in &block.links {
-        let claimed = block
-            .text
-            .get(range.clone())
-            .and_then(|shown| claimed_host(shown, url));
+        let shown = block.text.get(range.clone()).unwrap_or_default().trim();
+        let claimed = claimed_host(shown, url);
+        let named = match shown {
+            "" => url.clone(),
+            shown => shown.to_owned(),
+        };
         for rect in paragraph.span_rects(range.clone()) {
             let rect = Rect::new(rect.x + x, rect.y + writer.y, rect.width, rect.height);
             writer.layout.items.push(Item::Fill {
@@ -661,7 +663,10 @@ fn block(writer: &mut Writer<'_>, block: &Block, pictures: &HashMap<String, Imag
                 )),
                 paint: palette.accent_text.into(),
             });
-            writer.target(rect, Target::Link(url.clone(), claimed.clone()));
+            writer.target(
+                rect,
+                Target::Link(url.clone(), claimed.clone(), named.clone()),
+            );
         }
     }
     let top = writer.y;

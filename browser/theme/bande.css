@@ -1,26 +1,37 @@
 :root {
-  --bande-chassis: #ECEAE7;
-  --bande-sheet: #FCFBF9;
+  --bande-chassis: #F1F0ED;
+  --bande-sheet: #FEFDFD;
   --bande-overlay: #FFFFFF;
   --bande-well: #E2DFDB;
   --bande-hairline: #D4D0CB;
   --bande-edge: #BAB7B2;
+  --bande-field-edge: transparent;
   --bande-ink: #201E1A;
   --bande-ink2: #5B5752;
   --bande-ink3: #83807A;
   --bande-accent: AccentColor;
   --bande-danger: #D42F34;
   @media (prefers-color-scheme: dark) {
-    --bande-chassis: #1F2329;
-    --bande-sheet: #272A30;
-    --bande-overlay: #34373C;
-    --bande-well: #31343A;
-    --bande-hairline: #3B3F45;
+    --bande-chassis: #282A2E;
+    --bande-sheet: #1E2124;
+    --bande-overlay: #33353A;
+    --bande-well: #3D4044;
+    --bande-hairline: #45484C;
     --bande-edge: #575B62;
     --bande-ink: #E4E6EA;
     --bande-ink2: #B9BEC6;
     --bande-ink3: #8D9198;
     --bande-danger: #CF4040;
+  }
+  @media (prefers-contrast: more) {
+    --bande-edge: #898681;
+    --bande-field-edge: var(--bande-edge);
+  }
+  @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+    --bande-edge: #767A82;
+    --bande-ink: #F1F3F8;
+    --bande-ink2: #CDD1D9;
+    --bande-ink3: #A7ABB3;
   }
   --toolbox-bgcolor: var(--bande-chassis) !important;
   --toolbox-bgcolor-inactive: var(--bande-chassis) !important;
@@ -41,7 +52,8 @@
   --toolbar-field-focus-background-color: var(--bande-sheet) !important;
   --toolbar-field-color: var(--bande-ink) !important;
   --toolbar-field-focus-color: var(--bande-ink) !important;
-  --toolbar-field-border-color: transparent !important;
+  --toolbar-field-border-color: var(--bande-field-edge) !important;
+  --toolbar-field-focus-border-color: var(--bande-accent) !important;
   --focus-outline-color: var(--bande-accent) !important;
   --tab-selected-bgcolor: var(--bande-sheet) !important;
   --tab-selected-textcolor: var(--bande-ink) !important;

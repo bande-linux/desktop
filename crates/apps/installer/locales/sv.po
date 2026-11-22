@@ -10,17 +10,17 @@ msgstr ""
 msgid "Package Installer"
 msgstr "Paketinstallation"
 
-msgid "Intel and AMD computers (amd64)"
-msgstr "Intel- och AMD-datorer (amd64)"
+msgid "Intel and AMD computers"
+msgstr "Intel- och AMD-datorer"
 
-msgid "64-bit ARM (arm64)"
-msgstr "64-bitars ARM (arm64)"
+msgid "64-bit ARM computers"
+msgstr "64-bitars ARM-datorer"
 
-msgid "32-bit ARM (armhf)"
-msgstr "32-bitars ARM (armhf)"
+msgid "32-bit ARM computers"
+msgstr "32-bitars ARM-datorer"
 
-msgid "older 32-bit Intel and AMD computers (i386)"
-msgstr "äldre 32-bitars Intel- och AMD-datorer (i386)"
+msgid "older 32-bit Intel and AMD computers"
+msgstr "äldre 32-bitars Intel- och AMD-datorer"
 
 msgid "Debian {suite}, {component}"
 msgstr "Debian {suite}, {component}"
@@ -76,7 +76,7 @@ msgstr[1] "Tar bort {count} paket: {names}"
 msgid "The same version is in your software sources ({source}), where it is signed. Installing it from there is safer than installing this file."
 msgstr "Samma version finns i dina programvarukällor ({source}), där den är signerad. Det är säkrare att installera den därifrån än från den här filen."
 
-msgid "This package doesn't come from your software sources. Its install scripts get full control of this computer, and it may add its own software source. Install it only if you trust where you got it."
+msgid "This package doesn’t come from your software sources. Its install scripts get full control of this computer, and it may add its own software source. Install it only if you trust where you got it."
 msgstr "Det här paketet kommer inte från dina programvarukällor. Dess installationsskript får full kontroll över datorn, och paketet kan lägga till en egen programvarukälla. Installera det bara om du litar på var du fick det ifrån."
 
 msgid "From {maintainer}"
@@ -115,7 +115,7 @@ msgstr "Klar"
 msgid "Reading the package…"
 msgstr "Läser paketet…"
 
-msgid "This file isn't a valid Debian package."
+msgid "This file isn’t a valid Debian package."
 msgstr "Filen är inte ett giltigt Debian-paket."
 
 msgid "The download may be incomplete. Try downloading it again."
@@ -124,7 +124,7 @@ msgstr "Hämtningen kan vara ofullständig. Försök hämta den igen."
 msgid "“{name}” is built for {arch}. This computer needs a package for {native}."
 msgstr "”{name}” är byggt för {arch}. Den här datorn behöver ett paket för {native}."
 
-msgid "Look for a download for {native} on the developer's website."
+msgid "Look for a download for {native} on the developer’s website."
 msgstr "Leta efter en hämtning för {native} på utvecklarens webbplats."
 
 msgid "Version {version} is installed."
@@ -133,7 +133,7 @@ msgstr "Version {version} är installerad."
 msgid "Remove…"
 msgstr "Ta bort…"
 
-msgid "Can't install: it needs packages that aren't available"
+msgid "Can’t install: it needs packages that aren’t available"
 msgstr "Det går inte att installera: paketet behöver andra paket som inte är tillgängliga"
 
 msgid "Needs {names}"
@@ -147,6 +147,9 @@ msgstr "Starta om datorn för att slutföra installationen."
 
 msgid "Open {app}"
 msgstr "Öppna {app}"
+
+msgid "Restart…"
+msgstr "Starta om…"
 
 msgid "Remove “{name}”?"
 msgstr "Vill du ta bort ”{name}”?"
@@ -165,29 +168,29 @@ msgstr "”{name}” har tagits bort."
 msgid "Another installation is running. Try again when it finishes."
 msgstr "En annan installation pågår. Försök igen när den är klar."
 
-msgid "This package is part of the system and can't be removed."
+msgid "This package is part of the system and can’t be removed."
 msgstr "Det här paketet är en del av systemet och kan inte tas bort."
 
-msgid "Installing packages needs PackageKit, which isn't installed."
+msgid "Installing packages needs PackageKit, which isn’t installed."
 msgstr "Installation av paket kräver PackageKit, som inte är installerat."
 
-msgid "The packages it needs couldn't be downloaded. Check your internet connection and try again."
+msgid "The packages it needs couldn’t be downloaded. Check your internet connection and try again."
 msgstr "Det gick inte att hämta de paket som behövs. Kontrollera din internetanslutning och försök igen."
 
-msgid "There isn't enough disk space. Free up some space and try again."
+msgid "There isn’t enough disk space. Free up some space and try again."
 msgstr "Det finns inte tillräckligt med diskutrymme. Frigör lite utrymme och försök igen."
 
-msgid "It needs packages that can't be installed right now. Install pending updates in Settings ▸ Software Update, then try again."
+msgid "It needs packages that can’t be installed right now. Install pending updates in Settings ▸ Software Update, then try again."
 msgstr "Paketet behöver andra paket som inte kan installeras just nu. Installera väntande uppdateringar i Inställningar ▸ Programuppdatering och försök sedan igen."
 
-msgid "The package couldn't be installed. Try again, or open Details to see what went wrong."
+msgid "The package couldn’t be installed. Try again, or open Details to see what went wrong."
 msgstr "Det gick inte att installera paketet. Försök igen, eller öppna Detaljer för att se vad som gick fel."
 
-msgid "The package couldn't be removed. Try again, or open Details to see what went wrong."
+msgid "The package couldn’t be removed. Try again, or open Details to see what went wrong."
 msgstr "Det gick inte att ta bort paketet. Försök igen, eller öppna Detaljer för att se vad som gick fel."
 
 msgid "Try Again"
 msgstr "Försök igen"
 
-msgid "Nothing was changed, because no administrator's password was given. If no password window appeared, log out and back in, then try again."
+msgid "Nothing was changed, because no administrator’s password was given. If no password window appeared, log out and back in, then try again."
 msgstr "Ingenting har ändrats eftersom inget administratörslösenord angavs. Om inget lösenordsfönster visades, logga ut och in igen och försök sedan på nytt."

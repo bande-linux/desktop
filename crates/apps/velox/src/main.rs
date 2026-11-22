@@ -21,8 +21,8 @@ use bande_velox::{
     Request, SETTINGS_SIZE, SIDEBAR_WIDTH, Section, ShellLink, ShellTarget, ShellWindow,
     TERMINAL_APP_ID, Target, Tray, TrayAction, Tunnel, Update, VeloxSettings, VeloxView, Work,
     context_endpoint, contexts, create_context, current_context, engine_connected, engine_missing,
-    load_hosts, notify_crash, remove_context, rename_context, save_hosts, settings_form,
-    tunnel_socket, use_context,
+    launches_at_login, load_hosts, notify_crash, remove_context, rename_context, save_hosts,
+    settings_form, tunnel_socket, use_context,
 };
 use bande_xdg::{Apps, config_dirs, data_dirs, spawn_detached};
 
@@ -466,24 +466,32 @@ impl Velox {
                     .session()
                     .cloned()
                     .and_then(|session| Tray::start(session, APP_ID));
-                if self.informer.is_none() {
-                    self.hosts = load_hosts();
-                    match self.open_engine() {
-                        Ok(informer) => self.informer = Some(informer),
-                        Err(error) => tracing::warn!("cannot follow the engine: {error}"),
-                    }
+            }
+            (false, true) => self.tray = None,
+            _ => {}
+        }
+        self.follow_engine_windowless(cx);
+        cx.refresh_menus();
+    }
+
+    fn follow_engine_windowless(&mut self, cx: &Cx<Self>) {
+        if cx.windows().next().is_some() {
+            return;
+        }
+        match (Self::runs_in_background(), self.informer.is_some()) {
+            (true, false) => {
+                self.hosts = load_hosts();
+                match self.open_engine() {
+                    Ok(informer) => self.informer = Some(informer),
+                    Err(error) => tracing::warn!("cannot follow the engine: {error}"),
                 }
             }
             (false, true) => {
-                self.tray = None;
-                if cx.windows().next().is_none() {
-                    self.informer = None;
-                    self.tunnel = None;
-                }
+                self.informer = None;
+                self.tunnel = None;
             }
             _ => {}
         }
-        cx.refresh_menus();
     }
 
     fn serve_tray(&mut self, cx: &mut Cx<Self>) {
@@ -1216,9 +1224,7 @@ impl Program for Velox {
         }
         if cx.windows().next().is_none() {
             self.hub = None;
-            if self.tray.is_none() {
-                self.informer = None;
-            }
+            self.follow_engine_windowless(cx);
         } else {
             self.update_sampling(cx);
         }
@@ -1347,7 +1353,8 @@ impl Program for Velox {
     }
 
     fn runs_in_background() -> bool {
-        !LEAVING.load(Ordering::Relaxed) && VeloxSettings::current().status_item
+        !LEAVING.load(Ordering::Relaxed)
+            && (VeloxSettings::current().status_item || launches_at_login())
     }
 
     fn tick(&mut self, cx: &mut Cx<Self>, now: Instant) {

@@ -16,6 +16,10 @@ ready or not on their own. Packaged as `bande-velox`.
   (`qemu-efi-aarch64`), KVM when `/dev/kvm` is usable and TCG emulation when asked. Cloud images
   of the same architecture are verified against the vendor's checksums, signed where the vendor
   signs them.
+- **In the background**: "Launch Velox at login" writes an autostart entry that starts
+  `bande-velox --background`, which opens no window and follows the engine, so a container that
+  stops unexpectedly still raises a notice. Velox stays there after Quit while that or the
+  status item is on; with both off `--background` exits at once.
 - **Nothing is installed or configured by Velox.** When an engine or the QEMU stack is missing it
   shows copyable steps. Passing a USB device to a machine and bridging it onto the local network
   ask for an administrator's password through polkit and run only `velox-helper` as root.

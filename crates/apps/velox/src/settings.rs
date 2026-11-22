@@ -1,5 +1,6 @@
 use std::cell::Cell;
-use std::path::PathBuf;
+use std::io;
+use std::path::Path;
 use std::rc::Rc;
 
 use accesskit::{ActionRequest, Node};
@@ -14,6 +15,14 @@ use crate::diagnostics::diagnostics;
 
 pub const SETTINGS_SIZE: (u32, u32) = (560, 440);
 const DESKTOP_ENTRY: &str = "org.bande.Velox.desktop";
+const LOGIN_ENTRY: &str = "[Desktop Entry]
+Type=Application
+Name=Velox
+Exec=bande-velox --background
+TryExec=bande-velox
+Icon=org.bande.Velox
+OnlyShowIn=X-Bande;
+";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VeloxSettings {
@@ -35,10 +44,8 @@ impl Stored for VeloxSettings {
     fn parse(text: &str) -> Self {
         let mut settings = Self::default();
         for (key, value) in pairs(text) {
-            let on = flag(value).unwrap_or_default();
-            match key {
-                "status-item" => settings.status_item = on,
-                _ => {}
+            if key == "status-item" {
+                settings.status_item = flag(value).unwrap_or_default();
             }
         }
         settings
@@ -49,24 +56,30 @@ impl Stored for VeloxSettings {
     }
 }
 
-fn installed_entry() -> Option<PathBuf> {
-    bande_xdg::data_dirs()
-        .into_iter()
-        .map(|dir| dir.join("applications").join(DESKTOP_ENTRY))
-        .find(|path| path.is_file())
+pub fn launches_at_login() -> bool {
+    bande_xdg::autostart_dir().is_some_and(|dir| bande_xdg::opens_at_login(&dir, DESKTOP_ENTRY))
+}
+
+fn set_launch_at_login(on: bool) -> io::Result<()> {
+    let dir = bande_xdg::autostart_dir()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no home folder"))?;
+    if !on {
+        return bande_xdg::set_open_at_login(&dir, DESKTOP_ENTRY, Path::new(""), false);
+    }
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join(DESKTOP_ENTRY), LOGIN_ENTRY)
 }
 
 fn login_toggle() -> Box<dyn Widget> {
-    let on = bande_xdg::autostart_dir()
-        .is_some_and(|dir| bande_xdg::opens_at_login(&dir, DESKTOP_ENTRY));
-    Box::new(Toggle::new(&tr!("Launch Velox at login"), on, |on| {
-        let (Some(dir), Some(entry)) = (bande_xdg::autostart_dir(), installed_entry()) else {
-            return tracing::warn!("cannot find Velox's desktop entry");
-        };
-        if let Err(error) = bande_xdg::set_open_at_login(&dir, DESKTOP_ENTRY, &entry, on) {
-            tracing::warn!("cannot change launch at login: {error}");
-        }
-    }))
+    Box::new(Toggle::new(
+        &tr!("Launch Velox at login"),
+        launches_at_login(),
+        |on| {
+            if let Err(error) = set_launch_at_login(on) {
+                tracing::warn!("cannot change launch at login: {error}");
+            }
+        },
+    ))
 }
 
 struct CopyDiagnostics {

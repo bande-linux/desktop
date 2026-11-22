@@ -28,7 +28,7 @@ pub use machines::{
 pub use notify::notify_crash;
 pub use readiness::Readiness;
 pub use resources::file_menu;
-pub use settings::{SETTINGS_SIZE, VeloxSettings, settings_form};
+pub use settings::{SETTINGS_SIZE, VeloxSettings, launches_at_login, settings_form};
 pub use shell::{ShellLink, ShellTarget, ShellWindow};
 pub use tray::{Tray, TrayAction};
 pub use ui::{Place, Places, Request, SIDEBAR_WIDTH, Section, VeloxView};

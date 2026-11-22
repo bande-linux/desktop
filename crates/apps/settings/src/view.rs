@@ -2478,8 +2478,8 @@ impl SettingsView {
             &countdown(until),
             move |action| send(action == KEEP),
         )
-        .cancel(&tr!("Revert"), REVERT)
-        .primary(&tr!("Keep"), KEEP);
+        .other(&tr!("Keep"), KEEP)
+        .safe(&tr!("Revert"), REVERT);
         self.keep = Some(Trial {
             until,
             alert: alert.id(),

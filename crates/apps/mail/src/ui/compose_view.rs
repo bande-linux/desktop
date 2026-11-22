@@ -66,7 +66,7 @@ struct Chip {
 }
 
 pub fn attachable(path: &Path) -> bool {
-    bande_volumes::on_connected_volume(path) || path.is_file()
+    bande_volumes::on_connected_volume(path) || path.is_file() || path.is_dir()
 }
 
 pub struct ComposeView {

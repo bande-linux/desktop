@@ -55,7 +55,7 @@ apt install bande-mail
   replies from Sent and the account's other mailboxes (not Trash or Junk): the chosen message and
   unread ones open, the others as a line that opens on a click. Each open message shows its
   headers, the plain text or sanitised HTML, quoted text folded behind Show Quoted Text, and the
-  attachments; a message forwarded as an attachment (`message/rfc822`) is shown below with its
+  attachments, pictures shown in the text included; a message forwarded as an attachment (`message/rfc822`) is shown below with its
   own headers, and its attachments join the others; Reply, Reply All and Forward (in the message or the toolbar) act on the message
   last clicked, marked with a bar in the accent colour while the reader has focus. Delete, Flag,
   Mark as Read or Unread, Move, Junk, Archive and Apply Rules act on that message too when the
@@ -67,13 +67,17 @@ apt install bande-mail
   the reader focused, Select All (Ctrl+A) for the chosen message, and copied with Copy (Ctrl+C)
   or its context menu; a name or address offers New Message and Copy Address, a link Open Link
   and Copy Link. Pointing at a link shows where it goes, and a link whose text names another
-  host than the one it leads to asks before it opens.
+  host than the one it leads to asks before it opens, with Cancel as the default.
+  Files dropped or shared while no account is set up wait through account setup and then start
+  the message; cancelling setup says the message was not started. A folder, an unreadable file or
+  one over 25 MB is refused with a message naming it.
 - **Message files.** A saved message (`.eml`, `message/rfc822`), opened from Files or from a
   message's attachments, opens read-only in a window of its own with the same reader: text,
   pictures, attachments, signatures and encryption, and remote content only on Load Remote
   Content. The file is read off the UI thread, up to 64 MB; one that cannot be read says why in
   the window. Its attachments open from a private copy in `~/.cache/bande-mail/opened/`, removed
-  like the others.
+  like the others. Shortcuts and menus in that window act only on the file: the main window's
+  message commands are disabled there, and Print prints the file.
 - **Signed and encrypted mail**, with OpenPGP (PGP/MIME, RFC 3156, and inline PGP, read only)
   and S/MIME (RFC 8551). The keys are GnuPG's: secret keys stay in `gpg-agent`, which asks for
   their passphrase (pinentry) and uses smartcards; OpenPGP keys come from the GnuPG keyring,

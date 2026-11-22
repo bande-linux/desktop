@@ -863,6 +863,7 @@ impl Store {
     pub fn store_body(&self, mailbox: MailboxId, uid: u32, raw: &[u8]) -> Result<()> {
         let content = Content::parse(raw);
         let text = content.text();
+        let searchable = content.all_text();
         self.connection.execute(
             "UPDATE messages SET body = ?3, preview = ?4, text = ?5, attachments = ?6 \
              WHERE mailbox = ?1 AND uid = ?2",
@@ -871,7 +872,7 @@ impl Store {
                 uid,
                 raw,
                 crate::message::preview(&text),
-                text,
+                searchable,
                 !content.attachments.is_empty()
             ],
         )?;

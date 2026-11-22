@@ -216,12 +216,20 @@ impl View for Pane {
 
 const MESSAGE_MIME: &str = "message/rfc822";
 
+fn app_wide(command: &str) -> bool {
+    matches!(
+        command,
+        "compose" | "add-account" | "get-mail" | "new-mailbox" | "bcc-field"
+    ) || command.starts_with("sort-")
+        || command.starts_with("compose-to:")
+}
+
 fn message_file(apps: &Apps, argument: &str, directory: &Path) -> Option<PathBuf> {
     let path = match argument.starts_with("file:") {
         true => path_from_file_uri(argument)?,
         false => directory.join(argument),
     };
-    (apps.mime_for(&path) == MESSAGE_MIME).then_some(path)
+    (apps.mime_for(&path) == MESSAGE_MIME).then(|| std::fs::canonicalize(&path).unwrap_or(path))
 }
 
 struct Mail {
@@ -451,7 +459,13 @@ impl Mail {
                 Picked::Refused(path, reason) => refused.push((path, reason)),
             }
         }
-        let refusal = refused.first().map(|(path, reason)| refusal(path, *reason));
+        let refusal = (!refused.is_empty()).then(|| {
+            refused
+                .iter()
+                .map(|(path, reason)| refusal(path, *reason))
+                .collect::<Vec<_>>()
+                .join("\n")
+        });
         if token == SHARED_FILES {
             let before: Vec<WindowId> = cx.windows().collect();
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
@@ -475,7 +489,12 @@ impl Mail {
                     }
                     refresh(cx, window);
                 }
-                None => tracing::warn!("{refusal}"),
+                None => {
+                    tracing::warn!("{refusal}");
+                    self.notices
+                        .announcer()
+                        .announce(refusal, String::new(), false, None);
+                }
             }
             return;
         }
@@ -798,13 +817,20 @@ impl Program for Mail {
             Some(Pane::Main(view)) => Some(view.as_ref()),
             _ => self.parked.as_deref(),
         };
-        let windowed = cx.windows().next().is_some();
-        let composing = cx
-            .focused()
-            .is_some_and(|window| matches!(cx.view(window), Some(Pane::Compose(_))));
+        let focused = cx.focused().and_then(|window| cx.view(window));
+        let message = matches!(focused, Some(Pane::Message(_)));
+        let shown = menus::Shown {
+            viewer: self.main.is_some() && !message,
+            printable: match focused {
+                Some(Pane::Message(message)) => message.printable().is_some(),
+                _ => self.main.is_some(),
+            },
+            windowed: cx.windows().next().is_some(),
+            composing: matches!(focused, Some(Pane::Compose(_))),
+        };
         Menus {
             menus: view
-                .map(|view| menus::app_menus(view, self.main.is_some(), windowed, composing))
+                .map(|view| menus::app_menus(view, shown))
                 .unwrap_or_default(),
             window: menus::window_menu(),
         }
@@ -815,20 +841,23 @@ impl Program for Mail {
             return self.show_viewer(cx);
         }
         if command == bande_app_menu::PRINT {
-            let printable =
-                main_view(cx, self.main, &mut self.parked).and_then(|view| view.printable());
+            let printable = match window.and_then(|window| cx.view(window)) {
+                Some(Pane::Message(message)) => message.printable(),
+                _ => main_view(cx, self.main, &mut self.parked).and_then(|view| view.printable()),
+            };
             if let Some((title, text)) = printable {
                 cx.print(&title, bande_app::text_document(text, false));
             }
             return;
         }
-        let handled = match window.and_then(|window| cx.window(window)) {
-            Some((_, Pane::Main(view))) => view.menu_action(command),
-            Some((_, Pane::Compose(view))) => view.menu_action(command),
-            Some((_, Pane::Message(view))) => view.menu_action(command),
-            None => false,
+        let (handled, message) = match window.and_then(|window| cx.window(window)) {
+            Some((_, Pane::Main(view))) => (view.menu_action(command), false),
+            Some((_, Pane::Compose(view))) => (view.menu_action(command), false),
+            Some((_, Pane::Message(view))) => (view.menu_action(command), true),
+            None => (false, false),
         };
-        if !handled && (window.is_none() || window != self.main) {
+        let reaches_main = !message || app_wide(command);
+        if !handled && reaches_main && (window.is_none() || window != self.main) {
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
                 view.menu_action(command);
             }

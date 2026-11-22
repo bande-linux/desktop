@@ -27,7 +27,7 @@ use crate::net::Network;
 use crate::picture::Picture;
 use crate::settings::MailSettings;
 use crate::store::{MessageId, Store, Summary};
-use crate::ui::reader::{Clock, Entry, Reading, Target, Thread};
+use crate::ui::reader::{Clock, Entry, Reading, Remote, Target, Thread};
 use crate::ui::reader_pane::{
     Look, ReaderPane, address_menu, attachment_menu, fetch_remote, link_alert, link_menu,
     paint_link_target,
@@ -205,6 +205,10 @@ impl MessageView {
         self.arrived.fd()
     }
 
+    pub fn printable(&self) -> Option<(String, String)> {
+        self.reader.printable(&self.zone, &self.formats)
+    }
+
     pub fn take_requests(&mut self) -> Vec<Request> {
         std::mem::take(&mut self.requests)
     }
@@ -256,12 +260,10 @@ impl MessageView {
         remember_certificates(&self.store, &content);
         let summary = summary_of(&content, raw.len());
         let reading = Reading::new(content, true, &self.settings);
-        let remote = reading.document.remote_images > 0
-            && (self.settings.load_remote
-                || self
-                    .store
-                    .trusts_remote(&reading.content.envelope.sender().email)
-                    .unwrap_or(false));
+        let asked = self
+            .reader
+            .focused()
+            .is_some_and(|(_, shown)| shown.remote != Remote::Blocked);
         self.reader.thread = Some(Thread {
             entries: vec![Entry {
                 summary,
@@ -273,7 +275,7 @@ impl MessageView {
         });
         self.reader.layout = None;
         self.shown = Shown::Open(raw);
-        if remote {
+        if asked {
             self.load_remote();
         }
     }

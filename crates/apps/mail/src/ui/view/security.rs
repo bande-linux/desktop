@@ -81,8 +81,8 @@ pub(crate) fn trust_issuer_alert(issuer: &Issuer, mut trust: impl FnMut() + 'sta
             }
         },
     )
-    .primary(&tr!("Trust"), "trust")
-    .cancel(&tr!("Cancel"), "cancel")
+    .destructive(&tr!("Trust"), "trust")
+    .safe(&tr!("Cancel"), "cancel")
 }
 
 pub(crate) fn issuer_not_trusted(error: &str) -> Alert {
@@ -137,7 +137,7 @@ impl MailView {
             .is_some_and(|encrypted| encrypted.state == Sealed::Decrypted);
         if decrypted
             && self.settings.index_decrypted
-            && let Err(error) = self.store.index_decrypted(id, &content.text())
+            && let Err(error) = self.store.index_decrypted(id, &content.all_text())
         {
             tracing::warn!("cannot add a decrypted message to search: {error}");
         }

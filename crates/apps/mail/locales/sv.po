@@ -930,3 +930,12 @@ msgstr "Det gick inte att öppna meddelandet: {error}"
 
 msgid "The message is larger than {limit}."
 msgstr "Meddelandet är större än {limit}."
+
+msgid "The new message was not started"
+msgstr "Det nya meddelandet påbörjades inte"
+
+msgid "Mail needs an account to send it from. Add one, then try again."
+msgstr "E-post behöver ett konto att skicka från. Lägg till ett och försök igen."
+
+msgid "There is no Downloads folder, because HOME is not set."
+msgstr "Det finns ingen mapp för hämtade filer, eftersom HOME inte är angiven."

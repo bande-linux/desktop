@@ -23,7 +23,7 @@ use crate::ui::reader::{
 };
 use crate::ui::symbols::Symbols;
 
-pub(crate) type Spot = (usize, usize);
+type Spot = (usize, usize);
 
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 const LINK_TARGET_INSET: f32 = 8.0;
@@ -55,7 +55,34 @@ impl ReaderPane {
         self.thread.as_ref().and_then(Thread::focused)
     }
 
-    pub(crate) fn reading_mut(&mut self, id: MessageId) -> Option<&mut Reading> {
+    pub(crate) fn printable(
+        &self,
+        zone: &TimeZone,
+        formats: &DateFormats,
+    ) -> Option<(String, String)> {
+        let (summary, reading) = self.focused()?;
+        let envelope = &reading.content.envelope;
+        let names = |list: &[crate::message::Address]| {
+            list.iter()
+                .map(crate::message::Address::full)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let mut lines = vec![envelope.subject.clone(), names(&envelope.from)];
+        lines.extend(envelope.date.map(|date| full_date(date, zone, formats)));
+        lines.push(tr!("To: {names}", names = names(&envelope.to)));
+        if !envelope.cc.is_empty() {
+            lines.push(tr!("Cc: {names}", names = names(&envelope.cc)));
+        }
+        let text = format!("{}\n\n{}", lines.join("\n"), reading.content.text());
+        let title = match summary.subject.is_empty() {
+            true => tr!("No Subject"),
+            false => summary.subject.clone(),
+        };
+        Some((title, text))
+    }
+
+    fn reading_mut(&mut self, id: MessageId) -> Option<&mut Reading> {
         self.thread
             .as_mut()
             .and_then(|thread| thread.entry_mut(id))
@@ -239,7 +266,7 @@ impl ReaderPane {
         self.scroll.scroll_to(cx, target)
     }
 
-    pub(crate) fn origin(&self, cx: &Context, frame: Rect) -> Point {
+    fn origin(&self, cx: &Context, frame: Rect) -> Point {
         Point::new(frame.x, frame.y - self.scroll.offset(cx))
     }
 
@@ -316,7 +343,7 @@ impl ReaderPane {
         self.selected_text()
     }
 
-    pub(crate) fn selected_range(&self) -> Option<(Spot, Spot)> {
+    fn selected_range(&self) -> Option<(Spot, Spot)> {
         let (anchor, focus) = self.selection?;
         let (start, end) = match anchor <= focus {
             true => (anchor, focus),
@@ -510,7 +537,13 @@ impl ReaderPane {
             return Ok(());
         };
         let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
-            return Ok(());
+            return Err((
+                name,
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    tr!("There is no Downloads folder, because HOME is not set."),
+                ),
+            ));
         };
         let user_dirs = bande_xdg::config_home()
             .and_then(|config| std::fs::read_to_string(config.join("user-dirs.dirs")).ok());
@@ -566,7 +599,7 @@ impl ReaderPane {
         }
     }
 
-    pub(crate) fn target_label(&self, target: &Target) -> Option<(Role, String)> {
+    fn target_label(&self, target: &Target) -> Option<(Role, String)> {
         let thread = self.thread.as_ref()?;
         Some(match target {
             Target::Card(_) => return None,
@@ -712,8 +745,8 @@ pub(crate) fn link_alert(
             }
         },
     )
-    .primary(&tr!("Open Link"), "open")
-    .cancel(&tr!("Cancel"), "cancel")
+    .other(&tr!("Open Link"), "open")
+    .safe(&tr!("Cancel"), "cancel")
 }
 
 pub(crate) fn fetch_remote(

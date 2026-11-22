@@ -616,6 +616,7 @@ impl Compositor {
     }
 
     pub fn add_output(&mut self, config: OutputConfig) {
+        self.state.note_activity();
         if self.state.withholds(&config.name) && self.state.any_screen_shown() {
             self.state.withheld.push(config);
             return;

@@ -171,7 +171,8 @@ when they reach the screen is Bande's own.
   the others and its CRTC is turned off; opening the lid brings it and its windows back. With no
   other display the closed panel stays the only one and is turned off. The lid follows
   libinput's lid switch and logind's `LidClosed`, read at start and after waking, since libinput
-  does not report a lid opened during sleep. `wlr-output-management-v1` lists the
+  does not report a lid opened during sleep. Connecting a display counts as activity, so it
+  never lights alone while the others stay off. `wlr-output-management-v1` lists the
   displays (the head description is the display's name) and applies configurations from tools
   such as `wlr-randr`; Settings reads it. A display can mirror another (`mirror=` in the
   arrangement): it keeps no windows or workspaces of its own, the pointer does not enter it, and

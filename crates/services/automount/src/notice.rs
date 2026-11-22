@@ -14,6 +14,15 @@ const DISKS: &str = "org.bande.Disks";
 const OPEN_DISKS: &str = "open-disks";
 const READ_ONLY: &str = "read-only";
 const ICON: &str = "drive-removable-media";
+const FAILED: &str = "org.freedesktop.UDisks2.Error.Failed";
+const NOT_SHUT_DOWN: [&str; 6] = [
+    "dirty",
+    "hibernat",
+    "unclean",
+    "unsafe state",
+    "wrong fs type",
+    "bad superblock",
+];
 
 fn post(
     session: &Connection,
@@ -120,12 +129,14 @@ pub fn mount(system: &Connection, session: &Connection, path: &OwnedObjectPath, 
     };
     tracing::warn!("cannot mount {path}: {error}");
     let summary = tr!("“{label}” couldn’t be opened", label = label);
-    let reason = match &error {
-        zbus::Error::MethodError(_, Some(reason), _) => reason.as_str(),
-        _ => "",
+    let (failed, reason) = match &error {
+        zbus::Error::MethodError(name, Some(reason), _) => {
+            (name.as_str() == FAILED, reason.to_lowercase())
+        }
+        _ => (false, String::new()),
     };
     let format = format_of(system, path);
-    if format == "ntfs" {
+    if format == "ntfs" && failed && NOT_SHUT_DOWN.iter().any(|sign| reason.contains(sign)) {
         let (retry_system, retry_session, retry_path, retry_label) = (
             system.clone(),
             session.clone(),

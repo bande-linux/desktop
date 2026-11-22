@@ -93,6 +93,14 @@ fn escape_regex(text: &str) -> String {
     out
 }
 
+fn missing_tool(kind: Kind) -> Option<&'static str> {
+    let (tool, package) = match kind {
+        Kind::Phone => (GO_MTPFS, "go-mtpfs"),
+        Kind::Camera => (GPHOTOFS, "gphotofs"),
+    };
+    (!Path::new(tool).exists()).then_some(package)
+}
+
 fn command_for(device: &Attached, point: &Path) -> Option<Command> {
     match device.kind {
         Kind::Phone => {
@@ -231,6 +239,10 @@ impl Devices {
     }
 
     fn mount_with_retries(&self, device: Attached) {
+        if let Some(package) = missing_tool(device.kind) {
+            self.mounts.notify_tool_missing(&device.name, package);
+            return;
+        }
         let devices = self.clone();
         let spawned = thread::Builder::new()
             .name("mount device".to_owned())

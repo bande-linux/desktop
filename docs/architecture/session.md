@@ -461,11 +461,15 @@ brings up the dialog.
   mounted when it appears, but only while the session is active and unlocked; drives that appear
   while locked are mounted on unlock. A drive removed while mounted posts "Disk Not Ejected
   Properly". An encrypted volume asks for its passphrase in the `bande-secrets-prompt` dialog
-  (again after a wrong one) and is mounted once unlocked; without the prompt, a notification
-  points to Disks. A volume that fails to mount posts why, offering a read-only mount for NTFS
-  that was not shut down fully. A Thunderbolt or USB4 device that `boltd` holds back asks, while
-  the session is unlocked, to be allowed once (`Authorize`) or always (`EnrollDevice` with the
-  `auto` policy). `bande-volumes` holds the one UDisks2 client that
+  (again after a wrong one) and is mounted once unlocked; the dialog closes when the volume is
+  unlocked elsewhere or removed, and cancelling it leaves a notification to unlock it later.
+  Without the prompt, a notification points to Disks. A volume that fails to mount posts why,
+  offering a read-only mount for NTFS that the driver refused (blaming an unclean shutdown only
+  when the error says so). A phone or camera whose FUSE tool (`go-mtpfs`, `gphotofs`) is missing
+  names the package. A Thunderbolt or USB4 device that `boltd` holds back (not one stored with
+  the `auto` or `iommu` policy) asks, while the session is unlocked, to be allowed once
+  (`Authorize`) or always (`EnrollDevice` with the `auto` policy); a dismissed password dialog
+  asks again. `bande-volumes` holds the one UDisks2 client that
   automount, Files, the desktop and Disks share. Eject unmounts every filesystem of the drive,
   locks its encrypted volumes, then calls `Drive.Eject` or else `PowerOff`; a failure is reported
   to the caller, not only logged. A drive whose SMART status turns failing posts one critical

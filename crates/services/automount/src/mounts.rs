@@ -878,16 +878,15 @@ impl Mounts {
         }
     }
 
-    fn notify_lost(&self, name: &str) {
-        let body = tr!("The connection to “{name}” ended.", name = name);
+    fn tell(&self, icon: &str, summary: &str, body: &str) {
         let posted = client::notify(
             &self.session,
             &Request {
                 app_name: &tr!("Disks"),
                 replaces_id: 0,
-                app_icon: "folder-remote",
-                summary: &tr!("Server Disconnected"),
-                body: &body,
+                app_icon: icon,
+                summary,
+                body,
                 actions: &[],
                 urgency: Urgency::Normal,
                 sound: None,
@@ -899,28 +898,35 @@ impl Mounts {
         }
     }
 
+    fn notify_lost(&self, name: &str) {
+        self.tell(
+            "folder-remote",
+            &tr!("Server Disconnected"),
+            &tr!("The connection to “{name}” ended.", name = name),
+        );
+    }
+
+    pub fn notify_tool_missing(&self, name: &str, package: &str) {
+        self.tell(
+            "phone",
+            &tr!("Device Can’t Be Opened"),
+            &tr!(
+                "Opening “{name}” needs the {package} package, which isn’t installed. Install it, then plug the device in again.",
+                name = name,
+                package = package
+            ),
+        );
+    }
+
     pub fn notify_device_locked(&self, name: &str) {
-        let body = tr!(
-            "Unlock “{name}”, choose File transfer on it if it asks, then plug it in again.",
-            name = name
+        self.tell(
+            "phone",
+            &tr!("Unlock Your Device"),
+            &tr!(
+                "Unlock “{name}”, choose File transfer on it if it asks, then plug it in again.",
+                name = name
+            ),
         );
-        let posted = client::notify(
-            &self.session,
-            &Request {
-                app_name: &tr!("Disks"),
-                replaces_id: 0,
-                app_icon: "phone",
-                summary: &tr!("Unlock Your Device"),
-                body: &body,
-                actions: &[],
-                urgency: Urgency::Normal,
-                sound: None,
-                desktop_entry: None,
-            },
-        );
-        if let Err(error) = posted {
-            tracing::warn!("cannot post the notification: {error}");
-        }
     }
 
     pub fn disconnect(&self, point: &Path) -> Result<(), String> {

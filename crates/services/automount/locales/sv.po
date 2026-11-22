@@ -46,11 +46,17 @@ msgstr "Serverlösenord för {server}"
 msgid "The connection to “{name}” ended."
 msgstr "Anslutningen till ”{name}” avslutades."
 
-msgid "Unlock “{name}”, choose File transfer on it if it asks, then plug it in again."
-msgstr "Lås upp ”{name}”, välj Filöverföring på den om den frågar och anslut den sedan igen."
+msgid "Device Can’t Be Opened"
+msgstr "Enheten kan inte öppnas"
+
+msgid "Opening “{name}” needs the {package} package, which isn’t installed. Install it, then plug the device in again."
+msgstr "För att öppna ”{name}” behövs paketet {package}, som inte är installerat. Installera det och anslut sedan enheten igen."
 
 msgid "Unlock Your Device"
 msgstr "Lås upp enheten"
+
+msgid "Unlock “{name}”, choose File transfer on it if it asks, then plug it in again."
+msgstr "Lås upp ”{name}”, välj Filöverföring på den om den frågar och anslut den sedan igen."
 
 msgid "Open Disks"
 msgstr "Öppna Skivor"
@@ -61,14 +67,26 @@ msgstr "”{label}” låstes inte upp"
 msgid "Open Disks to unlock it."
 msgstr "Öppna Skivor för att låsa upp den."
 
+msgid "“{label}” is locked"
+msgstr "”{label}” är låst"
+
+msgid "Unlock it to open the files on it."
+msgstr "Lås upp den för att öppna filerna på den."
+
+msgid "Unlock…"
+msgstr "Lås upp…"
+
 msgid "“{label}” couldn’t be opened"
 msgstr "Det gick inte att öppna ”{label}”"
 
-msgid "Open Disks to check it."
-msgstr "Öppna Skivor för att kontrollera den."
-
 msgid "It may not have been shut down fully in Windows. Open it read-only, or start Windows, shut it down fully and connect the disk again."
 msgstr "Den kanske inte stängdes av helt i Windows. Öppna den skrivskyddad, eller starta Windows, stäng av helt och anslut skivan igen."
+
+msgid "Open it read-only to get to the files on it, or open Disks to check it."
+msgstr "Öppna den skrivskyddad för att komma åt filerna på den, eller öppna Skivor för att kontrollera den."
+
+msgid "Open Disks to check it."
+msgstr "Öppna Skivor för att kontrollera den."
 
 msgid "Open Read-Only"
 msgstr "Öppna skrivskyddad"

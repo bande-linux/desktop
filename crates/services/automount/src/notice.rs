@@ -13,16 +13,11 @@ const DISMISSED: &str = "org.freedesktop.UDisks2.Error.NotAuthorizedDismissed";
 const DISKS: &str = "org.bande.Disks";
 const OPEN_DISKS: &str = "open-disks";
 const READ_ONLY: &str = "read-only";
+const UNLOCK: &str = "unlock";
 const ICON: &str = "drive-removable-media";
 const FAILED: &str = "org.freedesktop.UDisks2.Error.Failed";
-const NOT_SHUT_DOWN: [&str; 6] = [
-    "dirty",
-    "hibernat",
-    "unclean",
-    "unsafe state",
-    "wrong fs type",
-    "bad superblock",
-];
+const NOT_SHUT_DOWN: [&str; 4] = ["dirty", "hibernat", "unclean", "unsafe state"];
+const REFUSED: [&str; 2] = ["wrong fs type", "bad superblock"];
 
 fn post(
     session: &Connection,
@@ -98,6 +93,16 @@ pub fn not_unlocked(session: &Connection, label: &str) {
     );
 }
 
+pub fn still_locked(session: &Connection, label: &str, unlock: impl FnOnce() + Send + 'static) {
+    post(
+        session,
+        &tr!("“{label}” is locked", label = label),
+        &tr!("Unlock it to open the files on it."),
+        (UNLOCK, tr!("Unlock…")),
+        unlock,
+    );
+}
+
 fn mount_with(system: &Connection, path: &OwnedObjectPath, options: &str) -> zbus::Result<()> {
     let mut given: HashMap<&str, Value<'_>> = HashMap::new();
     if !options.is_empty() {
@@ -136,7 +141,21 @@ pub fn mount(system: &Connection, session: &Connection, path: &OwnedObjectPath, 
         _ => (false, String::new()),
     };
     let format = format_of(system, path);
-    if format == "ntfs" && failed && NOT_SHUT_DOWN.iter().any(|sign| reason.contains(sign)) {
+    let refused = |signs: &[&str]| {
+        format == "ntfs" && failed && signs.iter().any(|sign| reason.contains(sign))
+    };
+    let advice = if refused(&NOT_SHUT_DOWN) {
+        Some(tr!(
+            "It may not have been shut down fully in Windows. Open it read-only, or start Windows, shut it down fully and connect the disk again."
+        ))
+    } else if refused(&REFUSED) {
+        Some(tr!(
+            "Open it read-only to get to the files on it, or open Disks to check it."
+        ))
+    } else {
+        None
+    };
+    if let Some(advice) = advice {
         let (retry_system, retry_session, retry_path, retry_label) = (
             system.clone(),
             session.clone(),
@@ -158,9 +177,7 @@ pub fn mount(system: &Connection, session: &Connection, path: &OwnedObjectPath, 
         post(
             session,
             &summary,
-            &tr!(
-                "It may not have been shut down fully in Windows. Open it read-only, or start Windows, shut it down fully and connect the disk again."
-            ),
+            &advice,
             (READ_ONLY, tr!("Open Read-Only")),
             retry,
         );

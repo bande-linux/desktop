@@ -141,6 +141,76 @@ fn lock(state: &Shared) -> MutexGuard<'_, State> {
     state.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+fn ask_to_unlock(
+    system: Connection,
+    session: Connection,
+    state: Shared,
+    path: OwnedObjectPath,
+    label: String,
+) {
+    let spawned = thread::Builder::new()
+        .name("unlock".to_owned())
+        .spawn(move || {
+            let unlocked = unlock::ask_and_unlock(&system, &path, &label, |prompt| {
+                let mut state = lock(&state);
+                if state.locked.contains_key(&path) {
+                    state.prompts.insert(path.clone(), prompt);
+                } else {
+                    prompt.close();
+                }
+            });
+            let dismissed = {
+                let mut state = lock(&state);
+                state.prompts.remove(&path).is_some() && state.locked.contains_key(&path)
+            };
+            match unlocked {
+                Unlocked::Opened(cleartext) => {
+                    let mount = {
+                        let mut state = lock(&state);
+                        match state.volumes.get(&cleartext) {
+                            Some(volume) => !volume.automount && !volume.mounted,
+                            None => {
+                                state.volumes.insert(
+                                    cleartext.clone(),
+                                    Volume {
+                                        label: label.clone(),
+                                        automount: false,
+                                        mounted: false,
+                                    },
+                                );
+                                true
+                            }
+                        }
+                    };
+                    if mount {
+                        notice::mount(&system, &session, &cleartext, &label);
+                    }
+                }
+                Unlocked::Cancelled if dismissed => {
+                    let again = (session.clone(), label.clone());
+                    notice::still_locked(&session, &label, move || {
+                        let still_locked = {
+                            let state = lock(&state);
+                            state.locked.contains_key(&path) && !state.prompts.contains_key(&path)
+                        };
+                        if still_locked {
+                            ask_to_unlock(system, again.0, state, path, again.1);
+                        }
+                    });
+                }
+                Unlocked::Cancelled => {}
+                Unlocked::NoPrompt => notice::not_unlocked(&session, &label),
+                Unlocked::Failed(error) => {
+                    tracing::warn!("cannot unlock {path}: {error}");
+                    notice::not_unlocked(&session, &label);
+                }
+            }
+        });
+    if let Err(error) = spawned {
+        tracing::warn!("cannot ask for the passphrase: {error}");
+    }
+}
+
 pub struct Automounter {
     system: Connection,
     session: Connection,
@@ -208,6 +278,18 @@ impl Automounter {
                     volume.mounted = !objects.mount_points(path).is_empty();
                 }
             }
+            Change::Changed(path, interface, keys)
+                if interface == ENCRYPTED && keys.iter().any(|key| key == "CleartextDevice") =>
+            {
+                if objects.path(path, ENCRYPTED, "CleartextDevice").is_some() {
+                    let mut state = lock(&self.state);
+                    state.locked.remove(path);
+                    state.waiting.remove(path);
+                    if let Some(prompt) = state.prompts.remove(path) {
+                        prompt.close();
+                    }
+                }
+            }
             Change::Changed(..) => {}
         }
     }
@@ -251,30 +333,13 @@ impl Automounter {
     }
 
     fn unlock(&self, path: &OwnedObjectPath, label: String) {
-        let (system, session, path) = (self.system.clone(), self.session.clone(), path.clone());
-        let state = Arc::clone(&self.state);
-        let spawned = thread::Builder::new()
-            .name("unlock".to_owned())
-            .spawn(move || {
-                let unlocked = unlock::ask_and_unlock(&system, &path, &label, |prompt| {
-                    lock(&state).prompts.insert(path.clone(), prompt);
-                });
-                lock(&state).prompts.remove(&path);
-                match unlocked {
-                    Unlocked::Opened(cleartext) => {
-                        notice::mount(&system, &session, &cleartext, &label)
-                    }
-                    Unlocked::Cancelled => {}
-                    Unlocked::NoPrompt => notice::not_unlocked(&session, &label),
-                    Unlocked::Failed(error) => {
-                        tracing::warn!("cannot unlock {path}: {error}");
-                        notice::not_unlocked(&session, &label);
-                    }
-                }
-            });
-        if let Err(error) = spawned {
-            tracing::warn!("cannot ask for the passphrase: {error}");
-        }
+        ask_to_unlock(
+            self.system.clone(),
+            self.session.clone(),
+            Arc::clone(&self.state),
+            path.clone(),
+            label,
+        );
     }
 
     fn mount(&self, path: &OwnedObjectPath) {

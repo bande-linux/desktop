@@ -1183,8 +1183,8 @@ Recommends: bande-greeter (>= ${source:Version}),
  fonts-noto-core,
  fonts-noto-cjk,
  pipewire-pulse,
- libspa-0.2-bluetooth
-Suggests: bande-plymouth-theme (>= ${source:Version})
+ libspa-0.2-bluetooth,
+ bande-plymouth-theme (>= ${source:Version})
 Description: Bande desktop environment
  Bande is a Wayland desktop with its own compositor, shell, session
  services, login window and applications.
@@ -1193,8 +1193,8 @@ Description: Bande desktop environment
  shell and lock screen, the keyring, the portal backend, PipeWire for
  sound and a way to log in (the Bande login window under greetd, or the
  display manager the system already has). It recommends the Bande apps,
- fault reporting and systemd-oomd, which closes an app when memory stays
- under pressure.
+ the boot screen, fault reporting and systemd-oomd, which closes an app
+ when memory stays under pressure.
 
 Package: bande-icon-theme
 Build-Profiles: <!pkg.bande.l10n-only>

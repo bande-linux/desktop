@@ -543,7 +543,7 @@ over the desktop, so input reaches the desktop at once. `Ctrl+Alt+F2` reaches a 
 any time, and when greetd gives up `bande-console-fallback.service` quits Plymouth, starts
 `getty@tty1` and brings the console forward.
 
-The boot screen (`bande-plymouth-theme`) shows when GRUB starts
+The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts
 the kernel with `splash`, which the package's `/etc/default/grub.d/bande-splash.cfg` adds
 ([packaging.md](packaging.md)) and Settings ▸ About ▸ Show a boot screen turns off and on. It
 hands over the same way. `bande-greeter.service` starts after `plymouth-start.service`,

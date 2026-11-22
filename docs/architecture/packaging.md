@@ -133,8 +133,8 @@ are in [performance.md](performance.md).
 - **`bande-plymouth-theme`** (architecture `all`): the boot screen, a Plymouth `two-step` theme
   that `bande-plymouth-theme` (a program of `crates/libs/splash`, never installed) draws at build
   time from the Datum tokens and the mark in `data/branding/mark.svg`, the same mark the bar
-  shows. Debian's desktop tasks install no Plymouth, so `bande-desktop` only suggests it.
-  Plymouth only draws with `splash` on the
+  shows. The boot screen is part of the desktop, so `bande-desktop` recommends it (a system
+  installed without recommends starts with no Plymouth). Plymouth only draws with `splash` on the
   kernel command line, which Debian's GRUB leaves out, so the package ships the conffile
   `/etc/default/grub.d/bande-splash.cfg` (`crates/libs/splash/data`), which `grub-mkconfig`
   sources after `/etc/default/grub` and which adds `splash` unless it is already there. It stays
@@ -152,7 +152,7 @@ are in [performance.md](performance.md).
   a way to log in: the Bande login window, or the display manager the system already has. It
   recommends `bande-greeter` anyway (debconf then asks which display manager to start; see
   [session.md](session.md#display-manager-and-greeter)), Bande's Browser (`bande-browser`, built
-  from `browser/` on its own rhythm, so unversioned), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
+  from `browser/` on its own rhythm, so unversioned), the boot screen (`bande-plymouth-theme`), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
   clipboard daemon, the screenshot tool, Files, Settings, the tray, file indexing
   (`bande-indexer`), automount, backups (`bande-backup`), the file chooser, the polkit agent, the keyring's PAM module and the default apps (every app but Velox),
   all built here at the same version, and the few Debian packages in

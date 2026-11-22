@@ -204,13 +204,19 @@ fn set_locale(assignments: &[String]) -> io::Result<()> {
     if !wanted.is_empty() {
         run(tool("/usr/sbin/locale-gen").arg("--keep-existing"))?;
     }
-    let merged = merged_assignments(&read_if_present(LOCALE_FILE)?, assignments);
-    let target = real_path(LOCALE_FILE);
-    write_atomically(&target, &merged)?;
-    if real_path(DEFAULT_LOCALE_FILE) != target {
-        write_atomically(&real_path(DEFAULT_LOCALE_FILE), &merged)?;
+    let default = real_path(DEFAULT_LOCALE_FILE);
+    let own = real_path(LOCALE_FILE);
+    let own = (own != default && own.exists()).then_some(own);
+    let current = match &own {
+        Some(_) => read_if_present(LOCALE_FILE)?,
+        None => read_if_present(DEFAULT_LOCALE_FILE)?,
+    };
+    let merged = merged_assignments(&current, assignments);
+    write_atomically(&default, &merged)?;
+    match own {
+        Some(own) => write_atomically(&own, &merged),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 fn set_keyboard(codes: &[String]) -> io::Result<()> {

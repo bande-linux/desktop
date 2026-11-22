@@ -317,7 +317,8 @@ PipeWire's socket.
   `XDG_SESSION_TYPE` and `XDG_CURRENT_DESKTOP` to the user manager and D-Bus activation.
 - `bande-session` sets `ELECTRON_OZONE_PLATFORM_HINT=auto`, `GTK_USE_PORTAL=1` and
   `QT_QPA_PLATFORMTHEME` (each unless already set), and takes the language and formats from
-  `/etc/locale.conf`, then `~/.config/locale.conf`, into the user manager and D-Bus activation:
+  `/etc/locale.conf` (or Debian's `/etc/default/locale` where there is none), then
+  `~/.config/locale.conf`, into the user manager and D-Bus activation:
   greetd and a lingering user manager keep what they had, so a choice in Settings would
   otherwise need a restart. The login window reads the same file through
   `bande-greeter-session`.
@@ -325,7 +326,8 @@ PipeWire's socket.
   default through `bande-locale-helper` under `pkexec` (`org.bande.locale-helper`), since Debian
   forbids localed's `SetLocale` even to root; localed is only read. The helper accepts only UTF-8
   names from `/usr/share/i18n/SUPPORTED`, runs `locale-gen --keep-existing` before replacing
-  `/etc/locale.conf` atomically, and writes the login keyboard (codes checked against xkb's
+  `/etc/default/locale` atomically, and `/etc/locale.conf` too where it is a file of its own
+  (it never creates one). It writes the login keyboard (codes checked against xkb's
   `evdev.lst`) to `/etc/default/keyboard`, then applies it to udev and the console.
 - Per-app languages are `<app id>=<code>` lines in `$XDG_CONFIG_HOME/bande/app-languages`;
   `spawn_detached` sets `LANGUAGE` for that app and restores the session's value

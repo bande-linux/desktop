@@ -27,11 +27,14 @@ export GTK_USE_PORTAL="${GTK_USE_PORTAL:-1}"
 
 locale_variables="LANG LANGUAGE LC_ALL LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT LC_IDENTIFICATION"
 unset $locale_variables
-if [ -r /etc/locale.conf ]; then
-    set -a
-    . /etc/locale.conf
-    set +a
-fi
+for system_locale in /etc/locale.conf /etc/default/locale; do
+    if [ -r "$system_locale" ]; then
+        set -a
+        . "$system_locale"
+        set +a
+        break
+    fi
+done
 user_locale="${XDG_CONFIG_HOME:-$HOME/.config}/locale.conf"
 if [ -r "$user_locale" ]; then
     set -a

@@ -54,7 +54,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   failed-session folders are `3733 root:_greetd`, so each person writes only their own files and
   only the login window reads them). `bande-greeter` ships its PAM service as the conffile
   `/etc/pam.d/bande-greeter` (`debian/bande-greeter.pam`, after Debian's `gdm-password`), which
-  its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched. The other scripts purge state, restart nothing else and run
+  its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched.
+  `/etc/bande` is created by `bande-reporter`'s tmpfiles entry, or by Settings' locale helper
+  when it first writes the login window's `/etc/bande/login.kdl`; purging `bande-reporter` or
+  `bande-settings` removes the file it wrote there, and the folder once it is empty. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
   `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative and the
   boot screen a `default.plymouth` alternative (`dh_installalternatives`). The boot screen's

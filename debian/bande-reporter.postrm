@@ -2,5 +2,7 @@
 set -e
 if [ "$1" = purge ]; then
 	rm -rf /var/lib/bande/reports
+	rm -f /etc/bande/reports.conf
+	rmdir --ignore-fail-on-non-empty /etc/bande 2>/dev/null || true
 fi
 #DEBHELPER#

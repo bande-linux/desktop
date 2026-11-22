@@ -404,3 +404,54 @@ impl Widget for Alert {
         &mut self.buttons
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::{Context, Event, Key, Modifiers, Palette, TextSystem, Ui};
+
+    fn press(alert: impl FnOnce(Box<dyn FnMut(&str)>) -> Alert, key: Key) -> Option<String> {
+        let chosen = Rc::new(RefCell::new(None));
+        let answer = chosen.clone();
+        let mut cx = Context::new(
+            TextSystem::new(),
+            Palette::for_scheme(bande_graphics::Scheme::Light),
+        );
+        cx.keyboard_navigation = true;
+        let mut ui = Ui::new(Box::new(Button::new("Behind", || {})), cx);
+        ui.present_dialog(alert(Box::new(move |action| {
+            *answer.borrow_mut() = Some(action.to_owned())
+        })));
+        ui.handle(&Event::Key {
+            key,
+            modifiers: Modifiers::default(),
+        });
+        chosen.take()
+    }
+
+    #[test]
+    fn neither_space_nor_return_takes_a_destructive_or_alternative_choice() {
+        let force_eject = |choose| {
+            Alert::new("Busy", "", choose)
+                .other("Force Eject", "force")
+                .primary("OK", "ok")
+        };
+        assert_eq!(press(force_eject, Key::Space).as_deref(), Some("ok"));
+        let erase = |choose| {
+            Alert::new("Erase?", "", choose)
+                .cancel("Cancel", "cancel")
+                .destructive("Erase", "erase")
+        };
+        assert_eq!(press(erase, Key::Space).as_deref(), Some("cancel"));
+        assert_eq!(press(erase, Key::Enter), None);
+        let revert = |choose| {
+            Alert::new("Keep?", "", choose)
+                .other("Keep", "keep")
+                .safe("Revert", "revert")
+        };
+        assert_eq!(press(revert, Key::Space).as_deref(), Some("revert"));
+    }
+}

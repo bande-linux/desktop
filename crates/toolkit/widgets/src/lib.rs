@@ -687,14 +687,16 @@ impl Ui {
         let mut order = Vec::new();
         focus_order(self.active(), &self.cx, &mut order);
         let primary = equivalent(self.active(), Key::Enter).filter(|id| self.accepts_focus(*id));
-        let safe = primary.filter(|id| equivalent(self.active(), Key::Escape) == Some(*id));
+        let cancel = equivalent(self.active(), Key::Escape).filter(|id| self.accepts_focus(*id));
+        let safe = primary.filter(|id| cancel == Some(*id));
         self.cx.focus = safe
             .or_else(|| {
                 order.into_iter().find(|id| {
                     self.lookup(*id)
-                        .is_some_and(|widget| widget.shortcuts().is_empty())
+                        .is_some_and(|widget| !(widget as &dyn Any).is::<Button>())
                 })
             })
+            .or(cancel)
             .or(primary);
     }
 

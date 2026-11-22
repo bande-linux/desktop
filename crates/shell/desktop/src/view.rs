@@ -1052,6 +1052,9 @@ impl DesktopView {
         }
         let selected = self.desktop.selected();
         let command = modifiers.control;
+        if !matches!(key, Key::Space | Key::Character(_)) {
+            self.typed.clear();
+        }
         match key {
             Key::Space if !command && !modifiers.alt && self.typed.is_typing(now) => {
                 self.desktop.select_prefix(self.typed.push([' '], now));

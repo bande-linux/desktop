@@ -71,6 +71,7 @@ flatpak flatpak optional
 /usr/bin/bande-screenshot bande-screenshot depends
 /usr/bin/bande-shell bande-shell depends
 /usr/libexec/bande-backupd bande-backup optional
+/usr/libexec/bande-boot-screen-helper bande-settings depends
 /usr/libexec/bande-consent bande-settings depends
 /usr/libexec/bande-file-chooser bande-file-chooser depends
 /usr/libexec/bande-locale-helper bande-settings depends
@@ -81,6 +82,8 @@ flatpak flatpak optional
 /usr/share/bande/bande-davfs2.conf bande-automount depends
 /usr/share/bande/l10n bande-compositor optional
 /usr/share/plymouth/themes plymouth optional
+/usr/share/plymouth/themes/bande/bande.plymouth bande-plymouth-theme optional
+/usr/sbin/update-grub grub2-common optional
 /usr/share/vulkan/icd.d mesa-vulkan-drivers optional
 /usr/share/zoneinfo/iso3166.tab tzdata depends
 dpkg dpkg required

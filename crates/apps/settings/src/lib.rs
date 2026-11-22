@@ -2,6 +2,7 @@ mod about;
 mod arrangement;
 mod backup;
 mod battery;
+mod boot_screen;
 mod brightness;
 mod client;
 mod clock;

@@ -252,6 +252,21 @@ msgstr "Tjänsten för strömläge"
 msgid "The battery service"
 msgstr "Batteritjänsten"
 
+msgid "This computer doesn’t start with GRUB, so Settings can’t turn on the boot screen. Install bande-plymouth-theme and add “splash” to the kernel command line of its boot manager."
+msgstr "Den här datorn startar inte med GRUB, så Inställningar kan inte slå på startskärmen. Installera bande-plymouth-theme och lägg till ”splash” på kärnans kommandorad i dess starthanterare."
+
+msgid "That change didn’t go through."
+msgstr "Ändringen gick inte igenom."
+
+msgid "Show a boot screen"
+msgstr "Visa en startskärm"
+
+msgid "Changing…"
+msgstr "Ändrar…"
+
+msgid "The Bande mark instead of the computer’s messages while it starts and shuts down. It takes effect at the next start."
+msgstr "Bandes märke i stället för datorns meddelanden medan den startar och stängs av. Det gäller från nästa start."
+
 msgid "The brightness service"
 msgstr "Ljusstyrketjänsten"
 
@@ -1792,9 +1807,6 @@ msgstr "Det gick inte att para ihop med enheten."
 
 msgid "Choose a folder to share"
 msgstr "Välj en mapp att dela"
-
-msgid "That change didn’t go through."
-msgstr "Ändringen gick inte igenom."
 
 msgid "Others with an account on this computer can sign in with SSH"
 msgstr "Andra med ett konto på den här datorn kan logga in med SSH"

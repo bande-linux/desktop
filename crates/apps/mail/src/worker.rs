@@ -705,7 +705,10 @@ impl Runner {
             };
             let kept = match filed {
                 true => Ok(()),
-                false => self.session()?.append(&sent.path, &[Flag::Seen], raw),
+                false => self
+                    .session()?
+                    .append(&sent.path, &[Flag::Seen], raw)
+                    .map(drop),
             };
             match kept {
                 Err(error) if error.is_connection() => return Err(error),

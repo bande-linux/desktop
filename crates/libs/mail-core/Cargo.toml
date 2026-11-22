@@ -8,6 +8,9 @@ repository.workspace = true
 description = "Mail accounts, their setup and the IMAP and SMTP clients shared by Bande's Mail and Notes"
 publish = false
 
+[features]
+testing = ["dep:rustix", "dep:tempfile"]
+
 [dependencies]
 accesskit.workspace = true
 bande-discovery.workspace = true
@@ -18,9 +21,11 @@ bande-xdg.workspace = true
 data-encoding.workspace = true
 jiff.workspace = true
 roxmltree.workspace = true
+rustix = { workspace = true, features = ["process"], optional = true }
 rusqlite.workspace = true
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
+tempfile = { workspace = true, optional = true }
 tracing.workspace = true
 zbus.workspace = true
 zeroize.workspace = true

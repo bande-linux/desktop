@@ -136,7 +136,8 @@ their usual English names.
 
 ## Tests
 
-`tests/mail.rs` starts Debian's `dovecot` as the current user on a free loopback port, with a
+`tests/mail.rs` starts Debian's `dovecot` as the current user on a free loopback port
+(`bande_mail_core::testing`, shared with Notes), with a
 small SMTP listener beside it, and checks that a message sent after the IMAP session went stale
 goes out once, without injected headers or its Bcc, and is kept in Sent. It skips itself when
 `/usr/sbin/dovecot` is not installed. It also checks that a `mailto:` link cannot add Bcc

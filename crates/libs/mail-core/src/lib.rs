@@ -3,10 +3,13 @@ pub mod discover;
 pub mod error;
 pub mod http;
 pub mod imap;
+pub mod mime;
 pub mod net;
 pub mod setup;
 pub mod sheet;
 pub mod smtp;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub const KEYRING: &str = "org.bande.Mail";
 

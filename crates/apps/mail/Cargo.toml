@@ -37,7 +37,7 @@ zeroize.workspace = true
 
 [dev-dependencies]
 bande-discovery = { workspace = true, features = ["testing"] }
-rustix = { workspace = true, features = ["process"] }
+bande-mail-core = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 
 [lints]

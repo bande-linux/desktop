@@ -4,7 +4,6 @@ use bande_config::{
     ArrangedDisplay, DisplaySettings, FocusScheduleValue, NightLightValue, Placement, Rotation,
     SearchCategory,
 };
-use bande_datetime::DateFormats;
 use bande_notify::client::NotificationsProxy;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
@@ -209,6 +208,14 @@ pub trait Config {
     #[zbus(property)]
     fn set_caps_lock(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
+    fn compose_key(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_compose_key(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn system_layout_switch(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_system_layout_switch(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn trackpad_tap_to_click(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_trackpad_tap_to_click(&self, on: bool) -> zbus::Result<()>;
@@ -365,10 +372,10 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 83] = [
+pub const CONFIG_SETTINGS: [SettingId; 85] = [
     SettingId::Appearance,
     SettingId::Style,
-    SettingId::Clock24Hour,
+    SettingId::ClockFormat,
     SettingId::LowPowerOnBattery,
     SettingId::LidOnPower,
     SettingId::ScreenReader,
@@ -416,6 +423,8 @@ pub const CONFIG_SETTINGS: [SettingId; 83] = [
     SettingId::KeyRepeatDelay,
     SettingId::InputSources,
     SettingId::CapsLock,
+    SettingId::ComposeKey,
+    SettingId::SystemLayoutSwitch,
     SettingId::TrackpadTapToClick,
     SettingId::TrackpadNaturalScrolling,
     SettingId::TrackpadSpeed,
@@ -619,11 +628,7 @@ impl SettingsClient {
             SettingId::UpdateCheckEvery => Value::Seconds(self.config.update_check_every()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
-            SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
-                "24-hour" => true,
-                "12-hour" => false,
-                _ => DateFormats::from_env().uses_24_hour_clock(),
-            }),
+            SettingId::ClockFormat => Value::Keyword(self.config.clock_format()?),
             SettingId::Wallpaper => Value::Pictures {
                 light: self.config.wallpaper_light()?,
                 dark: self.config.wallpaper_dark()?,
@@ -656,6 +661,8 @@ impl SettingsClient {
             SettingId::KeyRepeatDelay => Value::Number(self.config.key_repeat_delay()?),
             SettingId::InputSources => Value::Codes(self.config.input_sources()?),
             SettingId::CapsLock => Value::Keyword(self.config.caps_lock()?),
+            SettingId::ComposeKey => Value::Keyword(self.config.compose_key()?),
+            SettingId::SystemLayoutSwitch => Value::Flag(self.config.system_layout_switch()?),
             SettingId::TrackpadTapToClick => Value::Flag(self.config.trackpad_tap_to_click()?),
             SettingId::TrackpadNaturalScrolling => {
                 Value::Flag(self.config.trackpad_natural_scrolling()?)
@@ -730,12 +737,8 @@ impl SettingsClient {
                 self.config.set_automatic_updates(*on)
             }
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
-            (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
-                self.config.set_clock_format(if *twenty_four_hour {
-                    "24-hour"
-                } else {
-                    "12-hour"
-                })
+            (SettingId::ClockFormat, Value::Keyword(keyword)) => {
+                self.config.set_clock_format(keyword)
             }
             (SettingId::LowPowerOnBattery, Value::Flag(on)) => {
                 self.config.set_low_power_on_battery(*on)
@@ -840,6 +843,12 @@ impl SettingsClient {
                 self.config.set_input_sources(codes.clone())
             }
             (SettingId::CapsLock, Value::Keyword(keyword)) => self.config.set_caps_lock(keyword),
+            (SettingId::ComposeKey, Value::Keyword(keyword)) => {
+                self.config.set_compose_key(keyword)
+            }
+            (SettingId::SystemLayoutSwitch, Value::Flag(on)) => {
+                self.config.set_system_layout_switch(*on)
+            }
             (SettingId::AlertSound, Value::Keyword(keyword)) => {
                 self.config.set_alert_sound(keyword)?;
                 bande_sound::play(

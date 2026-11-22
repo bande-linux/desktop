@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use bande_config::{CapsLock, InputSource, Keyboard};
+use bande_config::{CapsLock, ComposeKey, InputSource, Keyboard, switches_layouts};
 use bande_graphics::TextRole;
 use bande_render::VulkanRenderer;
 use bande_spring::{Animated, Spring};
@@ -18,12 +18,10 @@ const HUD_STYLE: LabelStyle = LabelStyle {
     look: Look::Card,
 };
 const HUD_HOLD: Duration = Duration::from_millis(800);
-const CAPS_LOCK_OPTIONS: [&str; 3] = ["ctrl:nocaps", "ctrl:swapcaps", "compose:caps"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyboardSettings {
     pub input_sources: Vec<InputSource>,
-    pub caps_lock: CapsLock,
     pub options: Vec<String>,
     pub repeat_rate: u32,
     pub repeat_delay: Duration,
@@ -40,14 +38,22 @@ impl KeyboardSettings {
         } else {
             keyboard.input_sources.clone()
         };
-        if keyboard.caps_lock != CapsLock::CapsLock {
-            options.retain(|option| {
-                !option.starts_with("caps:") && !CAPS_LOCK_OPTIONS.contains(&option.as_str())
-            });
-        }
+        options.retain(|option| {
+            !(keyboard.caps_lock.is_some() && CapsLock::remaps(option)
+                || keyboard.compose.is_some() && ComposeKey::remaps(option)
+                || !keyboard.system_switch && switches_layouts(option))
+        });
+        options.splice(
+            0..0,
+            keyboard
+                .caps_lock
+                .and_then(CapsLock::xkb_option)
+                .into_iter()
+                .chain(keyboard.compose.and_then(ComposeKey::xkb_option))
+                .map(str::to_owned),
+        );
         Self {
             input_sources,
-            caps_lock: keyboard.caps_lock,
             options,
             repeat_rate: keyboard.repeat_rate,
             repeat_delay: keyboard.repeat_delay,
@@ -65,12 +71,7 @@ impl KeyboardSettings {
         (
             join(|source| &source.layout),
             join(|source| source.variant.as_deref().unwrap_or("")),
-            self.caps_lock
-                .xkb_option()
-                .into_iter()
-                .chain(self.options.iter().map(String::as_str))
-                .map(str::to_owned)
-                .reduce(|options, option| options + "," + &option),
+            (!self.options.is_empty()).then(|| self.options.join(",")),
         )
     }
 }

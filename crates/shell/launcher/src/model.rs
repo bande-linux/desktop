@@ -858,10 +858,13 @@ impl Model {
         }
     }
 
-    pub fn cannot_sleep(&mut self, panes: Vec<PaneInfo>) {
-        self.panes = panes.into_iter().map(IndexedPane::new).collect();
+    pub fn cannot_sleep(&mut self) {
         self.commands
             .retain(|indexed| indexed.command != SystemCommand::Sleep);
+    }
+
+    pub fn set_panes(&mut self, panes: Vec<PaneInfo>) {
+        self.panes = panes.into_iter().map(IndexedPane::new).collect();
         if self.mode == Mode::Search {
             let keep = self.selection().map(|hit| hit.target.clone());
             self.rebuild(keep);

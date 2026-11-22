@@ -52,6 +52,7 @@ mod wifi;
 pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, system_version};
 pub use backup::{BackupCommand, BackupUpdate};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
+pub use bande_status::pointing::{PointingDevices, UDEV_DATA};
 pub use battery::{BatteryCommand, Charge, PowerState, charge_of, follow_battery};
 pub use boot_screen::{SPLASH_DROP_IN, switch_splash};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
@@ -65,7 +66,7 @@ pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifi
 pub use passwords::{Concealed, PasswordCommand, Saved, follow_passwords};
 pub use permissions::{Grant, Grants, PermissionCommand, follow_permissions};
 pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
-pub use pointing::{PointingDevices, UDEV_DATA, follow_pointing};
+pub use pointing::follow_pointing;
 pub use power::charge_text;
 pub use privilege::{Privilege, refused};
 pub use services::{

@@ -432,6 +432,9 @@ msgstr "Proxy"
 msgid "http proxy, https proxy, bypass"
 msgstr "http-proxy, https-proxy, förbigå"
 
+msgid "file sharing, samba, smb, remote login, ssh, shared folders"
+msgstr "fildelning, samba, smb, fjärrinloggning, ssh, delade mappar"
+
 msgid "dark mode, light mode, night, theme"
 msgstr "mörkt läge, ljust läge, natt, tema"
 
@@ -798,9 +801,6 @@ msgstr "Kortkommandon"
 msgid "hotkeys, keys, super, command, combinations"
 msgstr "snabbtangenter, tangenter, super, kommando, kombinationer"
 
-msgid "file sharing, samba, smb, remote login, ssh, shared folders"
-msgstr "fildelning, samba, smb, fjärrinloggning, ssh, delade mappar"
-
 msgid "default printer, queue, jobs, pause, resume, remove, cancel"
 msgstr "standardskrivare, kö, jobb, pausa, återuppta, ta bort, avbryt"
 
@@ -1005,6 +1005,12 @@ msgstr "Inmatningskällor"
 msgid "keyboard layout, language, input method, switch, dvorak, qwerty, azerty"
 msgstr "tangentbordslayout, språk, inmatningsmetod, växla, dvorak, qwerty, azerty"
 
+msgid "Also switch with the keys set when installing"
+msgstr "Byt även med tangenterna som valdes vid installationen"
+
+msgid "alt shift, ctrl shift, layout switch, toggle, xkb, installer"
+msgstr "alt shift, ctrl shift, byta layout, växla, xkb, installation"
+
 msgid "Key repeat"
 msgstr "Tangentupprepning"
 
@@ -1067,6 +1073,24 @@ msgstr "Compose"
 
 msgid "No action"
 msgstr "Ingen åtgärd"
+
+msgid "Compose key"
+msgstr "Compose-tangent"
+
+msgid "compose, dead keys, accents, special characters, right alt, menu"
+msgstr "compose, döda tangenter, accenter, specialtecken, höger alt, meny"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "Right Alt"
+msgstr "Höger Alt"
+
+msgid "Right Control"
+msgstr "Höger Control"
+
+msgid "Menu key"
+msgstr "Menytangent"
 
 msgid "Tracking speed"
 msgstr "Pekarhastighet"
@@ -1449,11 +1473,20 @@ msgstr "Region"
 msgid "date format, number format, currency, measurement units, metric, imperial, paper size, first day of week, calendar, country"
 msgstr "datumformat, talformat, valuta, måttenheter, metriska, brittiska, pappersstorlek, första veckodagen, kalender, land"
 
-msgid "24-hour time"
-msgstr "24-timmarsklocka"
+msgid "Time format"
+msgstr "Tidsformat"
 
-msgid "12-hour, am, pm, hour format, taskbar clock, lock screen clock"
-msgstr "12-timmars, fm, em, timformat, aktivitetsfältsklocka, låsskärmsklocka"
+msgid "24-hour, 12-hour, am, pm, hour format, taskbar clock, lock screen clock"
+msgstr "24-timmars, 12-timmars, fm, em, timformat, aktivitetsfältsklocka, låsskärmsklocka"
+
+msgid "Automatic"
+msgstr "Automatiskt"
+
+msgid "24-hour"
+msgstr "24 timmar"
+
+msgid "12-hour"
+msgstr "12 timmar"
 
 msgid "Time"
 msgstr "Tid"

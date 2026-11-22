@@ -234,7 +234,7 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
             match run(&dir, apps, command) {
                 Ok(()) => {
                     if let Some(code) = language {
-                        crate::locale::fetch_language_packs(code, |_| {});
+                        crate::locale::fetch_language_packs(code, false, |_| {});
                     }
                 }
                 Err(error) => {

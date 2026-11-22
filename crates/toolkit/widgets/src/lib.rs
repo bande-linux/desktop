@@ -709,10 +709,20 @@ impl Ui {
     }
 
     fn dismiss_finished_sheet(&mut self) {
+        if self
+            .sheet
+            .as_ref()
+            .is_some_and(|sheet| sheet.widget.dismissed())
+        {
+            self.close_sheet();
+        }
+    }
+
+    pub fn close_sheet(&mut self) {
         let Some(sheet) = &mut self.sheet else {
             return;
         };
-        if sheet.closing || !sheet.widget.dismissed() {
+        if sheet.closing {
             return;
         }
         sheet.closing = true;

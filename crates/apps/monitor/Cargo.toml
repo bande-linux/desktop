@@ -15,6 +15,7 @@ tracing.workspace = true
 zbus.workspace = true
 bande-app.workspace = true
 bande-app-menu.workspace = true
+bande-fs.workspace = true
 bande-l10n.workspace = true
 bande-status.workspace = true
 bande-toolkit.workspace = true

@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::sync::LazyLock;
 use std::time::Instant;
 
 use bande_l10n::{text, tr};
@@ -37,11 +38,15 @@ const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
 const ROW_INSET: f32 = Spacing::M as f32;
 const VOLUME_STEP: f64 = 1.0 / 16.0;
+
+static SYSTEM_SWITCHES_LAYOUTS: LazyLock<bool> = LazyLock::new(|| {
+    bande_config::read_system_xkb_options()
+        .iter()
+        .any(|option| bande_config::switches_layouts(option))
+});
 pub(crate) const FIELD_SIZE: f32 = 13.0;
 
 pub(crate) type Widgets = Vec<Box<dyn Widget>>;
-
-const KEEP_ANCHOR: &str = "keep-display-settings";
 
 pub(crate) fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {
     Box::new(widget)
@@ -1333,6 +1338,7 @@ impl SettingsView {
             SettingId::BatteryDisplayOffAfter | SettingId::BatterySleepAfter => battery,
             SettingId::LidOnPower => power.is_some_and(|power| power.lid),
             SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
+            SettingId::SystemLayoutSwitch => *SYSTEM_SWITCHES_LAYOUTS,
             _ => true,
         }
     }
@@ -1412,43 +1418,6 @@ impl SettingsView {
         ])
     }
 
-    fn keep_card(&mut self) -> Option<Widgets> {
-        self.keep.as_ref()?;
-        let button = |intents: &Intents, title: &str, keep: bool| {
-            let mut send = intent(intents, Intent::KeepDisplays);
-            boxed(Button::new(title, move || send(keep)))
-        };
-        let buttons = boxed(Stack::new(
-            Axis::Horizontal,
-            Spacing::S as f32,
-            0.0,
-            vec![
-                button(&self.intents, &tr!("Revert"), false),
-                button(&self.intents, &tr!("Keep"), true),
-            ],
-        ));
-        let focus = buttons
-            .children()
-            .last()
-            .map_or(buttons.id(), |button| button.id());
-        self.anchors
-            .push((Anchor::Item(KEEP_ANCHOR.to_owned()), focus));
-        let countdown = tr!(
-            "The previous settings come back in {seconds} s.",
-            seconds = self.seconds_left()
-        );
-        Some(vec![boxed(Card::new(vec![
-            boxed(
-                Row::new(
-                    Text::new(&tr!("Keep these display settings?"), Tone::Primary).semibold(),
-                    Some(buttons),
-                )
-                .highlighted(true),
-            ),
-            boxed(Caption::new(Text::new(&countdown, Tone::Muted))),
-        ]))])
-    }
-
     fn arrangement_card(&mut self) -> Option<Widgets> {
         if self.displays.len() < 2 {
             return None;
@@ -1507,7 +1476,6 @@ impl SettingsView {
         matched: &dyn Fn(SettingId) -> Option<SettingHit>,
     ) -> Widgets {
         let mut page = Vec::new();
-        page.extend(self.keep_card().into_iter().flatten());
         page.extend(self.arrangement_card().into_iter().flatten());
         for display in self.displays.clone() {
             let title = display.name();

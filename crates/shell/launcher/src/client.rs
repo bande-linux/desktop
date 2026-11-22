@@ -16,7 +16,8 @@ use bande_content::{Preview, preview};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
 use bande_search::{RecentlyUsed, SearchService, Usage, recently_used_path, usage_path};
-use bande_settings_panes::Pane;
+use bande_settings_panes::PaneId;
+use bande_status::devices::Hardware;
 use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use bande_toolkit::{
     App, Color, Edges, Image, KeyboardFocus, LauncherMode, LayerKind, LayerOptions, MenuPlacement,
@@ -211,6 +212,8 @@ pub struct LauncherShell {
     previewer: Option<Previewer>,
     clips: Option<Clips>,
     cannot_sleep: Option<Inbox<()>>,
+    sleeps: bool,
+    hardware: Hardware,
     apps: Rc<RefCell<Apps>>,
     recently_used: Option<RecentlyUsed>,
     config: Option<PathBuf>,
@@ -314,6 +317,12 @@ impl LauncherShell {
     }
 
     fn show(&mut self, window: &mut Window) -> Result<(), WindowError> {
+        let hardware = Hardware::scan();
+        if hardware != self.hardware {
+            self.hardware = hardware;
+            self.launcher
+                .set_panes(settings_panes(self.sleeps, hardware));
+        }
         window.set_layer_anchor(Edges::ALL);
         window.set_layer_margin(0);
         window.set_layer_size((0, 0))?;
@@ -547,9 +556,10 @@ impl App for LauncherShell {
             .is_some_and(|answer| !answer.drain().is_empty())
         {
             self.cannot_sleep = None;
-            let mut panes = bande_settings_panes::panes();
-            bande_settings_panes::without_sleep(&mut panes);
-            self.launcher.cannot_sleep(settings_panes(panes));
+            self.sleeps = false;
+            self.launcher.cannot_sleep();
+            self.launcher
+                .set_panes(settings_panes(self.sleeps, self.hardware));
         }
         self.sync(window);
     }
@@ -594,7 +604,18 @@ fn folder_stamps(data_dirs: &[PathBuf]) -> Vec<Option<SystemTime>> {
         .collect()
 }
 
-fn settings_panes(panes: Vec<Pane>) -> Vec<PaneInfo> {
+fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
+    let mut panes = bande_settings_panes::panes();
+    if !sleeps {
+        bande_settings_panes::without_sleep(&mut panes);
+    }
+    panes.retain(|pane| match pane.id {
+        PaneId::Wifi => hardware.wifi,
+        PaneId::Bluetooth => hardware.bluetooth,
+        PaneId::Mouse => hardware.pointing.mouse,
+        PaneId::Trackpad => hardware.pointing.trackpad,
+        _ => true,
+    });
     panes
         .into_iter()
         .map(|pane| PaneInfo {
@@ -663,9 +684,10 @@ impl LauncherShell {
         if let Err(error) = window.dismiss_on_press_outside() {
             tracing::warn!("a click beside the launcher does not close it: {error}");
         }
+        let hardware = Hardware::scan();
         let mut launcher = Launcher::new(
             apps,
-            settings_panes(bande_settings_panes::panes()),
+            settings_panes(true, hardware),
             Box::new(library),
             home.clone(),
             usage,
@@ -689,6 +711,8 @@ impl LauncherShell {
             cannot_sleep: bande_status::devices::hear_if_cannot_sleep()
                 .inspect_err(|error| tracing::warn!("cannot ask whether sleep works: {error}"))
                 .ok(),
+            sleeps: true,
+            hardware,
             apps: apps_by_type,
             recently_used,
             config: config_path(),

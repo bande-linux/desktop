@@ -803,11 +803,13 @@ dependencies = [
 name = "bande-datetime"
 version = "0.2.0"
 dependencies = [
+ "bande-bus",
  "icu_calendar",
  "icu_datetime",
  "icu_locale_core",
  "jiff",
  "rustix 1.1.6",
+ "tracing",
  "writeable",
  "zbus",
 ]
@@ -1298,6 +1300,7 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
+ "bande-fs",
  "bande-l10n",
  "bande-status",
  "bande-toolkit",

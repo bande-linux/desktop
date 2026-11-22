@@ -26,6 +26,12 @@ catalog is read into memory and searched in place; fallbacks are opened only on 
 key is the English, a translation is only ever used for the English it was made for. A language
 change applies at the next start of each program.
 
+**Dates and times** (`bande-datetime`). `DateFormats::from_env` formats for the first locale in
+`LC_ALL`, `LC_TIME`, `LANG`, with the Time format chosen in Settings ▸ Language & Time
+(`clock-format`: `automatic`, `24-hour` or `12-hour`), read once per program from
+`org.bande.Config` without starting it. The taskbar clock and the lock screen follow a change at
+once; other programs at their next start.
+
 **Checks.** `bande-l10n-tool check ci/l10n-complete` (in `ci/release/lint.sh`) fails on a broken
 `.po`, an entry the code no longer has, a placeholder the English lacks, a wrong number of plural
 forms, two crates of one program translating the same English differently, a language in

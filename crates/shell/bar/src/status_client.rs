@@ -694,7 +694,7 @@ impl App for StatusClient {
                     self.bar.set_battery_percentage(shown);
                 }
                 Update::ClockFormat(format) => {
-                    self.dates = DateFormats::from_env().with_clock_format(&format);
+                    self.dates = DateFormats::for_language().with_clock_format(&format);
                     self.bar.set_time(&bande_datetime::now(), &self.dates);
                 }
                 Update::Minute => {

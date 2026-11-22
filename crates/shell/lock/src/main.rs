@@ -459,7 +459,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut locker = Locker {
         screen: LockScreen::new(
             &user,
-            DateFormats::from_env().with_clock_format(&config_text("ClockFormat")),
+            DateFormats::for_language().with_clock_format(&config_text("ClockFormat")),
             &bande_datetime::now(),
             window.appearance(),
             TextSystem::new(),

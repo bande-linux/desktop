@@ -1,35 +1,9 @@
-use bande_l10n::{tr, trn};
-
-pub fn format_bytes(bytes: u64) -> String {
-    if bytes < 1_000 {
-        return trn!("{count} byte", "{count} bytes", count = bytes);
-    }
-    let kilobytes = (bytes as f64 / 1e3).round();
-    if kilobytes < 1e3 {
-        return tr!("{value} KB", value = kilobytes.to_string());
-    }
-    let units = [(1e6, 1), (1e9, 2), (1e12, 2)];
-    let (unit, (scale, decimals)) = units
-        .into_iter()
-        .enumerate()
-        .find(|(_, (scale, decimals))| {
-            (bytes as f64 / scale * 10f64.powi(*decimals)).round() < 1e3 * 10f64.powi(*decimals)
-        })
-        .unwrap_or((2, units[2]));
-    let value = format!("{:.*}", decimals as usize, bytes as f64 / scale);
-    let value = value.trim_end_matches('0').trim_end_matches('.').to_owned();
-
-    match unit {
-        0 => tr!("{value} MB", value = value),
-        1 => tr!("{value} GB", value = value),
-        _ => tr!("{value} TB", value = value),
-    }
-}
+use bande_l10n::tr;
 
 pub fn format_rate(bytes_per_second: f64) -> String {
     tr!(
         "{size}/s",
-        size = format_bytes(bytes_per_second.round() as u64)
+        size = bande_fs::format_size(bytes_per_second.round() as u64)
     )
 }
 

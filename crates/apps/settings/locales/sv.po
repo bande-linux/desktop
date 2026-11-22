@@ -1329,18 +1329,6 @@ msgstr "Ange PIN-koden för {device} och tryck på Retur."
 msgid "Pairing request"
 msgstr "Begäran om ihopparning"
 
-msgid "Revert"
-msgstr "Återställ"
-
-msgid "Keep"
-msgstr "Behåll"
-
-msgid "The previous settings come back in {seconds} s."
-msgstr "De tidigare inställningarna återställs om {seconds} s."
-
-msgid "Keep these display settings?"
-msgstr "Vill du behålla de här skärminställningarna?"
-
 msgid "Arrangement"
 msgstr "Placering"
 
@@ -2202,6 +2190,9 @@ msgstr "Lösenordet är för svagt. Välj ett längre."
 msgid "Couldn't change the password."
 msgstr "Det gick inte att ändra lösenordet."
 
+msgid "The previous settings come back in {seconds} s."
+msgstr "De tidigare inställningarna återställs om {seconds} s."
+
 msgid "Search"
 msgstr "Sök"
 
@@ -2222,6 +2213,15 @@ msgstr "Ange en tid som 22:00."
 
 msgid "Type the date and time as year-month-day hours:minutes, such as 2026-10-30 14:05."
 msgstr "Skriv datum och tid som år-månad-dag timmar:minuter, till exempel 2026-10-30 14:05."
+
+msgid "Keep these display settings?"
+msgstr "Vill du behålla de här skärminställningarna?"
+
+msgid "Revert"
+msgstr "Återställ"
+
+msgid "Keep"
+msgstr "Behåll"
 
 msgid "Fixed"
 msgstr "Fast"

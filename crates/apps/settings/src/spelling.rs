@@ -64,6 +64,11 @@ pub enum SpellingCommand {
     },
 }
 
+fn offered(locale: &str) -> Result<Option<String>, bande_packages::Error> {
+    let system = bande_bus::system()?;
+    offered_dictionary(&bande_packages::Client::new(&system), locale)
+}
+
 fn read(proxy: &Proxy<'_>) -> zbus::Result<SpellingState> {
     let (chosen, active, available) = proxy.call("Languages", &())?;
     let (_, replacements): (BTreeMap<String, String>, BTreeMap<String, String>) =
@@ -77,7 +82,7 @@ fn read(proxy: &Proxy<'_>) -> zbus::Result<SpellingState> {
         missing: proxy
             .call::<_, _, Vec<String>>("MissingDictionaries", &())?
             .into_iter()
-            .filter(|name| match offered_dictionary(name) {
+            .filter(|name| match offered(name) {
                 Ok(package) => package.is_some(),
                 Err(error) => {
                     tracing::warn!("cannot look for a dictionary for {name}: {error}");
@@ -100,39 +105,33 @@ fn package_names(locale: &str) -> Vec<String> {
     names
 }
 
-fn offered_dictionary(locale: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
+pub(crate) fn offered_dictionary(
+    client: &bande_packages::Client,
+    locale: &str,
+) -> Result<Option<String>, bande_packages::Error> {
     let names = package_names(locale);
-    let system = bande_bus::system()?;
-    let found = bande_packages::Client::new(&system).resolve(&names)?;
+    let found = client.resolve(&names)?;
     let Some(name) = names
-        .iter()
-        .find(|name| found.iter().any(|package| package.name == **name))
+        .into_iter()
+        .find(|name| found.iter().any(|package| package.name == *name))
     else {
         return Ok(None);
     };
-    let mut named = found.iter().filter(|package| package.name == *name);
-    if named
+    let mut named = found.iter().filter(|package| package.name == name);
+    let installed = named
         .clone()
-        .any(|package| package.info == bande_packages::Info::Installed)
-    {
-        return Ok(None);
-    }
-    Ok(named
-        .find(|package| package.info == bande_packages::Info::Available)
-        .map(|package| package.id.clone()))
+        .any(|package| package.info == bande_packages::Info::Installed);
+    let available = named.any(|package| package.info == bande_packages::Info::Available);
+    Ok((!installed && available).then_some(name))
 }
 
-fn get_dictionary(locale: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let Some(id) = offered_dictionary(locale)? else {
-        return Ok(());
-    };
+fn get_dictionary(locale: &str) -> Result<(), bande_packages::Error> {
     let system = bande_bus::system()?;
-    bande_packages::Client::new(&system).install(
-        std::slice::from_ref(&id),
-        bande_packages::Mode::Apply,
-        &|_| {},
-    )?;
-    Ok(())
+    let client = bande_packages::Client::new(&system);
+    match offered_dictionary(&client, locale)? {
+        Some(name) => client.install_missing(&[&name]),
+        None => Ok(()),
+    }
 }
 
 fn apply(proxy: &Proxy<'_>, command: SpellingCommand, state: &SpellingState) -> zbus::Result<()> {

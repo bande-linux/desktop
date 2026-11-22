@@ -923,7 +923,7 @@ dependencies = [
  "icu_decimal",
  "icu_locale_core",
  "jiff",
- "lzma-rust2 0.19.0",
+ "lzma-rust2",
  "rustix 1.1.6",
  "ruzstd",
  "sevenz-rust2",
@@ -4737,15 +4737,6 @@ dependencies = [
 
 [[package]]
 name = "lzma-rust2"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c1bf3331fb5cf60f2ef15b63361f6cc39492a5d94c096053c395515e17d147f"
-dependencies = [
- "sha2 0.11.1",
-]
-
-[[package]]
-name = "lzma-rust2"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1c46f3fcd2e888afdb01a07efc071cb21300e07c68d32c3e8b01b5c8cb1fcaa"
@@ -6232,9 +6223,9 @@ dependencies = [
 
 [[package]]
 name = "sevenz-rust2"
-version = "0.21.6"
+version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7e6633e9d494e3b8e69b6e806cd76fb19e5d60b7aedcf35ac051e78c4f0c27c"
+checksum = "30146010a60b5773ef63f7b0033576c7a0487ecc87a30d97b787ca8e27c85140"
 dependencies = [
  "aes",
  "bzip2",
@@ -6243,7 +6234,7 @@ dependencies = [
  "flate2",
  "getrandom 0.4.3",
  "js-sys",
- "lzma-rust2 0.19.0",
+ "lzma-rust2",
  "ppmd-rust",
  "sha2 0.11.1",
  "wasm-bindgen",
@@ -8351,7 +8342,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hmac",
  "indexmap",
- "lzma-rust2 0.23.0",
+ "lzma-rust2",
  "memchr",
  "nix",
  "pbkdf2",

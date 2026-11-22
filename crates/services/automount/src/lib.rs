@@ -9,6 +9,7 @@ mod notice;
 mod unlock;
 pub use bande_volumes::server;
 pub mod space;
+mod thunderbolt;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -20,6 +21,7 @@ use bande_notify::client::{self, Request};
 use bande_volumes::udisks::{BLOCK, Change, ENCRYPTED, FILESYSTEM, Objects, Udisks};
 use devices::Devices;
 use failing::FailingDisks;
+use thunderbolt::Thunderbolt;
 use unlock::Unlocked;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
@@ -144,6 +146,7 @@ pub struct Automounter {
     state: Shared,
     devices: Mutex<Option<Devices>>,
     failing: FailingDisks,
+    thunderbolt: Thunderbolt,
 }
 
 impl Automounter {
@@ -159,6 +162,7 @@ impl Automounter {
             state: Shared::default(),
             devices: Mutex::new(None),
             failing: FailingDisks::new(session),
+            thunderbolt: Thunderbolt::new(system, session),
         });
         match follow_session(system) {
             Ok((login, changes)) => {
@@ -177,6 +181,12 @@ impl Automounter {
                 });
             }
             Err(error) => tracing::warn!("cannot follow the login session: {error}"),
+        }
+        automounter
+            .thunderbolt
+            .session_changed(lock(&automounter.state).unlocked);
+        if let Err(error) = automounter.thunderbolt.follow() {
+            tracing::warn!("Thunderbolt devices are not followed: {error}");
         }
         let watcher = Arc::clone(&automounter);
         Udisks::follow(system, move |objects, change| {
@@ -279,6 +289,7 @@ impl Automounter {
         {
             devices.session_changed(unlocked);
         }
+        self.thunderbolt.session_changed(unlocked);
         let mut unlocks = Vec::new();
         let ready: Vec<OwnedObjectPath> = {
             let mut state = lock(&self.state);

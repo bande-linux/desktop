@@ -589,6 +589,7 @@ Depends: ${shlibs:Depends},
  systemd,
  ${misc:Depends}
 Recommends: bande-secrets (= ${source:Version}),
+ bolt,
  cifs-utils,
  smbclient,
  sshfs,

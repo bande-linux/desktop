@@ -88,6 +88,21 @@ msgstr "Skivan är nästan full"
 msgid "Only {free} is left. Make room by removing files you no longer need."
 msgstr "Bara {free} är kvar. Frigör utrymme genom att ta bort filer du inte längre behöver."
 
+msgid "Allow Once"
+msgstr "Tillåt en gång"
+
+msgid "Always Allow"
+msgstr "Tillåt alltid"
+
+msgid "Thunderbolt"
+msgstr "Thunderbolt"
+
+msgid "Allow “{name}”?"
+msgstr "Tillåta ”{name}”?"
+
+msgid "A Thunderbolt device gets direct access to this computer. Allow it only if you know where it came from."
+msgstr "En Thunderbolt-enhet får direkt åtkomst till datorn. Tillåt den bara om du vet var den kommer ifrån."
+
 msgid "“{label}” is encrypted"
 msgstr "”{label}” är krypterad"
 

@@ -28,6 +28,57 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cause {
+    NoNetwork,
+    NoSpace,
+    Other,
+}
+
+const CURL_NETWORK_CODES: [u32; 6] = [5, 6, 7, 28, 52, 56];
+const NETWORK_ERRORS: [&str; 6] = [
+    "Network is unreachable",
+    "Temporary failure in name resolution",
+    "Name or service not known",
+    "Could not resolve host",
+    "Connection refused",
+    "Connection timed out",
+];
+const SPACE_ERRORS: [&str; 5] = [
+    "No space left on device",
+    "Disk quota exceeded",
+    "Not enough disk space",
+    "min-free-space-percent",
+    "min-free-space-size",
+];
+
+fn curl_code(line: &str) -> Option<u32> {
+    let (_, after) = line.split_once(": [")?;
+    let (code, _) = after.split_once("] ")?;
+    code.parse().ok()
+}
+
+impl Error {
+    pub fn cause(&self) -> Cause {
+        let Self::Failed(details) = self else {
+            return Cause::Other;
+        };
+        let any = |phrases: &[&str]| phrases.iter().any(|phrase| details.contains(phrase));
+        if any(&SPACE_ERRORS) {
+            Cause::NoSpace
+        } else if any(&NETWORK_ERRORS)
+            || details
+                .lines()
+                .filter_map(curl_code)
+                .any(|code| CURL_NETWORK_CODES.contains(&code))
+        {
+            Cause::NoNetwork
+        } else {
+            Cause::Other
+        }
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         match error.kind() {
@@ -461,4 +512,28 @@ pub fn permissions(metadata: &str) -> Vec<Permission> {
         found.retain(|permission| !matches!(permission, Permission::Folders));
     }
     found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cause, Error};
+
+    #[test]
+    fn causes_come_from_the_c_locale_errors_and_curl_codes_not_from_words_within_them() {
+        let cause = |details: &str| Error::Failed(details.to_owned()).cause();
+        assert_eq!(
+            cause("bwrap: No permissions to create new namespace"),
+            Cause::Other
+        );
+        assert_eq!(
+            cause(
+                "While pulling app/org.example.App/x86_64/stable from remote flathub: While fetching https://dl.flathub.org/repo/summary: [6] Couldn't resolve host name"
+            ),
+            Cause::NoNetwork
+        );
+        assert_eq!(
+            cause("Failed to install org.example.App: No space left on device"),
+            Cause::NoSpace
+        );
+    }
 }

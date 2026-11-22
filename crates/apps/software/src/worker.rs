@@ -103,21 +103,15 @@ pub enum Message {
 
 fn flatpak_failure(error: flatpak::Error) -> Option<Failure> {
     tracing::warn!("flatpak: {error}");
+    let problem = match error.cause() {
+        flatpak::Cause::NoNetwork => Problem::NoNetwork,
+        flatpak::Cause::NoSpace => Problem::NoSpace,
+        flatpak::Cause::Other => Problem::Other,
+    };
     let details = match error {
         flatpak::Error::Cancelled => return None,
         flatpak::Error::Missing => error.to_string(),
         flatpak::Error::Failed(details) => details,
-    };
-    let lower = details.to_lowercase();
-    let problem = if ["resolve", "connect", "network", "timeout"]
-        .iter()
-        .any(|word| lower.contains(word))
-    {
-        Problem::NoNetwork
-    } else if lower.contains("space") {
-        Problem::NoSpace
-    } else {
-        Problem::Other
     };
     Some(Failure { problem, details })
 }

@@ -42,6 +42,7 @@ Paths are under `crates/`.
 | `libs/fs/tests/operations.rs` | Regressions in file operations: Replace keeps the old item until the new one is complete; names that are not UTF-8 survive listing, copy and Keep Both. |
 | `libs/search/src/recents.rs` `opening_files_again_keeps_one_bookmark_each_and_counts_the_app` | Parser and writer of `recently-used.xbel`: opening a file again updates its one bookmark and counts the app, a new file gets its own, and names that need XML escaping read back. |
 | `apps/files/tests/files.rs` | Files: a file goes to the Trash and is put back; Quit during a copy asks, then goes through when the copy ends. |
+| `libs/packages/src/flatpak.rs` `causes_come_from_the_c_locale_errors_and_curl_codes_not_from_words_within_them` | Regression: Flatpak failures were classed by English words, so a bubblewrap “namespace” error was shown as a full disk; offline and full-disk failures come from the C-locale system messages and curl’s error codes. |
 | `libs/xdg/tests/xdg.rs` | `.desktop` Exec parsing (quoting, escapes, field codes, reserved characters); a `.desktop` file opened in Files runs only when installed or marked executable by its owner. |
 | `apps/settings/tests/settings.rs` | Settings: a setting found by search and changed from the keyboard is written to `config.kdl` through `org.bande.Config`. |
 | `apps/settings/tests/updates.rs` | Settings: updates install at once through PackageKit (trusted only, simulated first) unless one needs a restart, which is prepared for the next boot. |

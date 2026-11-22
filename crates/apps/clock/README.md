@@ -18,7 +18,9 @@ Packaged as `bande-clock`.
 - **Ringing.** An alarm or a finished timer posts a critical notification through
   `org.freedesktop.Notifications` (bande-notify) with the chosen sound, and repeats the sound
   through bande-sound every 3 seconds for up to 5 minutes, until it is snoozed, stopped, opened
-  or dismissed. A timer's notification offers Repeat.
+  or dismissed. A timer's notification offers Repeat. While anything rings, Clock holds an
+  `org.freedesktop.ScreenSaver` inhibitor, so the screen stays on and the computer does not go
+  back to sleep after an alarm woke it.
 - **With the window closed.** As Calendar's agent, `/etc/xdg/autostart/org.bande.ClockAgent.desktop`
   starts `bande-clock --background` at login: a process with no window that rings alarms and
   timers, and that Quit (Ctrl+Q) returns to. It runs only while an alarm is on, snoozed or a
@@ -56,7 +58,7 @@ After a resume the alarms and timers whose time passed ring at once.
 | `src/model.rs` | alarms (repeat days, next ring in a time zone), timers, the stopwatch, the saved state in `~/.local/share/bande-clock/clock.json` |
 | `src/deadline.rs` | the wall-clock and boot-clock timerfds |
 | `src/notice.rs` | ringing notifications and their actions |
-| `src/bus.rs` | `org.bande.Clock` for the shell and the systemd wake-up timer |
+| `src/bus.rs` | `org.bande.Clock` for the shell, the screen inhibitor while ringing and the systemd wake-up timer |
 | `src/cities.rs` | cities from the tz database |
 | `src/ui/` | the window: the four pages and the alarm, timer and city sheets |
 | `src/main.rs` | the app: window, menus, the agent, ringing |

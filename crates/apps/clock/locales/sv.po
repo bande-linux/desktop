@@ -189,3 +189,6 @@ msgstr "natt"
 
 msgid "Remove"
 msgstr "Ta bort"
+
+msgid "An alarm or timer is ringing"
+msgstr "Ett alarm eller en timer ringer"

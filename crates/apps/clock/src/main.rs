@@ -259,6 +259,7 @@ impl ClockApp {
         let summary = self.summary();
         if let Some(bus) = &mut self.bus {
             bus.publish(summary);
+            bus.keep_awake(!self.ringing.is_empty());
         }
         let clock = self.clock.clone();
         if let Some((window, view)) = self.main.and_then(|main| cx.window(main)) {
@@ -545,6 +546,9 @@ impl Program for ClockApp {
                 self.next_ring = Some(now + RING_EVERY);
             }
             _ => self.next_ring = None,
+        }
+        if let Some(bus) = &mut self.bus {
+            bus.keep_awake(!self.ringing.is_empty());
         }
     }
 

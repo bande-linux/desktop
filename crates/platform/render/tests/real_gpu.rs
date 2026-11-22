@@ -548,6 +548,10 @@ fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
          {rendered_total} scanned-out formats; the others are skipped above"
     );
     assert!(sampled_verified > 0, "no sampled format could be checked");
+    assert!(
+        rendered_total == 0 || rendered_verified > 0,
+        "no scanned-out format could be checked"
+    );
     let refused = gpu.renderer.refused_formats();
     assert!(refused.is_empty(), "the driver refused {refused:?}");
     assert_eq!(vulkan_errors(), 0, "Vulkan reported errors");

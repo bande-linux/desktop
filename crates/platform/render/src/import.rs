@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::os::fd::BorrowedFd;
@@ -204,6 +204,9 @@ struct SurfaceTextures(RefCell<Vec<VulkanTexture>>);
 #[derive(Default)]
 struct LastShown(RefCell<Option<VulkanTexture>>);
 
+#[derive(Default)]
+struct LinearOnly(Cell<u64>);
+
 struct MemorySource<'a> {
     pool: &'a [u8],
     offset: usize,
@@ -249,6 +252,12 @@ impl VulkanRenderer {
                 .ok();
         }
         self.linear_feedback.clone()
+    }
+
+    pub fn restore_feedback(&self, feedback: &DmabufFeedback) {
+        for surface in &self.linear_surfaces {
+            surface.set_feedback(feedback);
+        }
     }
 
     fn create_texture(
@@ -740,12 +749,8 @@ impl ImportDmaWl for VulkanRenderer {
             false => self.import_dmabuf_into(dmabuf, surface, Some(damage)),
         };
         if let Err(error) = &imported
-            && !matches!(
-                error,
-                RenderError::Vulkan(
-                    vk::Result::ERROR_OUT_OF_DEVICE_MEMORY | vk::Result::ERROR_OUT_OF_HOST_MEMORY
-                )
-            )
+            && !error.is_transient()
+            && !self.is_lost()
             && self.failed_dmabufs.insert(weak)
         {
             let format = dmabuf.format();
@@ -760,6 +765,12 @@ impl ImportDmaWl for VulkanRenderer {
                 && let Some(linear) = self.linear_feedback()
             {
                 feedback.set_feedback(&linear);
+                states.data_map.insert_if_missing(LinearOnly::default);
+                if let Some(marked) = states.data_map.get::<LinearOnly>()
+                    && marked.0.replace(self.id) != self.id
+                {
+                    self.linear_surfaces.push(feedback.clone());
+                }
             }
         }
         let Some(states) = surface else {

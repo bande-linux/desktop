@@ -109,23 +109,25 @@ when they reach the screen is Bande's own.
   and transfers for render targets), with their memory plane count, largest size and whether the
   planes may be bound apart. At start-up each pair is proven once: a small image is allocated with
   the modifier (by Vulkan when the driver can export it, otherwise by GBM on the card), imported
-  again through the same path as client buffers, given its views and handed between the foreign
-  queue and Bande's once; the time it took is logged. A pair the driver refuses is not offered, with
-  one warning naming the device, the driver and the step that failed; a tiled pair that neither
-  Vulkan nor GBM can allocate is left out too, and one that ran out of memory is kept. Every version
-  of the protocol only ever lists what imports, and a renderer started again after a lost device or
-  exhausted memory keeps the proven set. The formats are ARGB, XRGB, ABGR and XBGR in 8 and 10 bits
-  per channel, NV12 and P010 for video (BT.709 limited range, converted in the `video` shader), each
-  with its tiled and compressed modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also
-  without the extension. On a DRM device it is version 4 with feedback: the main device and tranches
-  name the card's render node and a scanout tranche lists the primary plane's formats and modifiers
-  that the GPU can also sample; headless it is version 3 with LINEAR only. A buffer is accepted with
-  exactly the memory planes its modifier has (a compressed modifier has more than the format: Intel
-  CCS one for the pixels and one for the compression data, AMD DCC up to three) and carries the DRM
-  node so that `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan image
-  with its modifier and one explicit layout per memory plane (offset and stride, the stride required
-  only for the format's own planes, as a clear-colour plane has none; size and pitches zero); planes
-  in separate dma-bufs make a `DISJOINT` image with one memory per plane, refused when the modifier
+  again through the same path as client buffers and given its views; all of them are then handed
+  between the foreign queue and Bande's in one submission, and the time it took is logged. A pair
+  the driver refuses is not offered, with one warning naming the device, the driver and the step
+  that failed; a tiled pair that neither Vulkan nor GBM can allocate is left out too, and one that
+  failed for a passing reason (memory, file descriptors, a lost device) is kept. Every version of
+  the protocol only ever lists what imports, and a renderer started again on the same device keeps
+  the proven set unless the proof itself lost the device; on another device it proves again. The
+  formats are ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and P010 for video
+  (BT.709 limited range, converted in the `video` shader), each with its tiled and compressed
+  modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also without the extension. On a
+  DRM device it is version 4 with feedback: the main device and tranches name the card's render node
+  and a scanout tranche lists the primary plane's formats and modifiers that the GPU can also
+  sample; headless it is version 3 with LINEAR only. A buffer is accepted with exactly the memory
+  planes its modifier has (a compressed modifier has more than the format: Intel CCS one for the
+  pixels and one for the compression data, AMD DCC up to three) and carries the DRM node so that
+  `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan image with its
+  modifier and one explicit layout per memory plane (offset and stride, the stride required only for
+  the format's own planes, as a clear-colour plane has none; size and pitches zero); planes in
+  separate dma-bufs make a `DISJOINT` image with one memory per plane, refused when the modifier
   cannot be bound that way or a plane needs dedicated memory. Only a LINEAR plane is checked row by
   row against its buffer, as a tiled layout is the driver's. The image is sampled in place every
   frame, without a copy: a frame acquires it from the foreign queue in `GENERAL` before its first
@@ -134,7 +136,8 @@ when they reach the screen is Bande's own.
   `create_immed` client is never disconnected for it), it is logged once and not tried again, the
   surface keeps showing its last buffer that worked, and when the buffer was tiled the surface's own
   feedback is changed to LINEAR only, so its client allocates buffers that import; other clients
-  keep every format. A buffer that failed for lack of memory is tried again. A LINEAR buffer that
+  keep every format. A buffer that failed for a passing reason is tried again, and a restarted
+  renderer gives the surfaces it switched to LINEAR the full feedback back. A LINEAR buffer that
   cannot be sampled that way (offset or stride not a multiple of 16, or a driver or lavapipe without
   the extension) is imported as a Vulkan buffer and its damaged rows copied into the surface's
   texture, so any stride works; that buffer is acquired from the foreign queue for the copy and

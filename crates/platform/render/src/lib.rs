@@ -115,6 +115,20 @@ impl fmt::Display for RenderError {
 impl std::error::Error for RenderError {}
 
 impl RenderError {
+    pub(crate) fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::Io(_)
+                | Self::Vulkan(
+                    vk::Result::ERROR_OUT_OF_DEVICE_MEMORY
+                        | vk::Result::ERROR_OUT_OF_HOST_MEMORY
+                        | vk::Result::ERROR_TOO_MANY_OBJECTS
+                        | vk::Result::ERROR_DEVICE_LOST
+                        | vk::Result::TIMEOUT
+                )
+        )
+    }
+
     pub fn is_device_lost(&self) -> bool {
         matches!(
             self,
@@ -369,6 +383,7 @@ pub struct VulkanRenderer {
     modifiers: formats::Modifiers,
     refused: Vec<Format>,
     unproven: Vec<(vk::ImageUsageFlags, Format)>,
+    proven: bool,
     output_colour: Option<OutputColour>,
     encode_table: Option<(Arc<[[u8; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
@@ -394,6 +409,7 @@ pub struct VulkanRenderer {
     sampled_dmabufs: HashMap<WeakDmabuf, VulkanTexture>,
     failed_dmabufs: HashSet<WeakDmabuf>,
     linear_feedback: Option<smithay::wayland::dmabuf::DmabufFeedback>,
+    linear_surfaces: Vec<smithay::wayland::dmabuf::SurfaceDmabufFeedbackState>,
     imports: HashMap<WeakDmabuf, Imported>,
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
@@ -442,6 +458,12 @@ impl Program {
             Self::BlurTone => c"blur_tone",
         }
     }
+}
+
+struct Proven {
+    info: DeviceInfo,
+    modifiers: formats::Modifiers,
+    refused: Vec<Format>,
 }
 
 struct Chosen {
@@ -634,22 +656,23 @@ fn linear(codes: &[Fourcc]) -> impl Iterator<Item = Format> + '_ {
     })
 }
 
+type Proof = Result<(Image, Option<vk::ImageView>), (&'static str, RenderError)>;
+
 impl VulkanRenderer {
     pub fn new(display: Option<u64>) -> Result<Self, RenderError> {
         Self::create(display, None)
     }
 
     pub fn renew(&self) -> Result<Self, RenderError> {
-        Self::create(
-            self.display,
-            Some((self.info.render_device, self.modifiers.clone())),
-        )
+        let proven = self.proven.then(|| Proven {
+            info: self.info.clone(),
+            modifiers: self.modifiers.clone(),
+            refused: self.refused.clone(),
+        });
+        Self::create(self.display, proven)
     }
 
-    fn create(
-        display: Option<u64>,
-        proven: Option<(Option<u64>, formats::Modifiers)>,
-    ) -> Result<Self, RenderError> {
+    fn create(display: Option<u64>, proven: Option<Proven>) -> Result<Self, RenderError> {
         // SAFETY: loading runs the system Vulkan loader's initialisers once; the returned `Entry`
         // keeps the library loaded for as long as the renderer holds it in `_entry`.
         let entry = unsafe { ash::Entry::load() }?;
@@ -759,6 +782,7 @@ impl VulkanRenderer {
             modifiers: chosen.modifiers,
             refused: Vec::new(),
             unproven: Vec::new(),
+            proven: false,
             output_colour: None,
             encode_table: None,
             colour_scratch: HashMap::new(),
@@ -785,6 +809,7 @@ impl VulkanRenderer {
             sampled_dmabufs: HashMap::new(),
             failed_dmabufs: HashSet::new(),
             linear_feedback: None,
+            linear_surfaces: Vec::new(),
             imports: HashMap::new(),
             staging: Vec::new(),
             copies: Vec::new(),
@@ -801,8 +826,10 @@ impl VulkanRenderer {
         };
         renderer.create_objects(chosen.family)?;
         match proven {
-            Some((device, modifiers)) if device == renderer.info.render_device => {
-                renderer.modifiers = modifiers;
+            Some(proven) if proven.info == renderer.info => {
+                renderer.modifiers = proven.modifiers;
+                renderer.refused = proven.refused;
+                renderer.proven = true;
             }
             _ => renderer.prove_modifiers(),
         }
@@ -1263,7 +1290,6 @@ impl VulkanRenderer {
 
     fn prove_modifiers(&mut self) {
         let started = Instant::now();
-        let mut proved = 0;
         let pairs: Vec<_> = [formats::SAMPLED, formats::RENDERED]
             .into_iter()
             .flat_map(|usage| {
@@ -1273,6 +1299,7 @@ impl VulkanRenderer {
                     .collect::<Vec<_>>()
             })
             .collect();
+        let mut proofs = Vec::new();
         for (usage, format, capability) in pairs {
             let Some(texel) = formats::texel(format.code) else {
                 continue;
@@ -1281,16 +1308,17 @@ impl VulkanRenderer {
                 .exportable
                 .then(|| self.exported(format, texel, (usage, capability)).ok())
                 .flatten();
-            let Some((image, dmabuf)) = exported else {
+            let Some((source, dmabuf)) = exported else {
                 self.unproven.push((usage, format));
                 continue;
             };
             let proof = self.prove(&dmabuf, texel, (usage, capability));
-            self.destroy_image(&image);
-            self.judge(format, usage, proof);
-            proved += 1;
+            self.destroy_image(&source);
+            proofs.push((format, usage, proof));
         }
-        self.exhausted.store(false, Ordering::Relaxed);
+        let proved = proofs.len();
+        self.hand_over_proofs(proofs);
+        self.proven = !self.is_lost();
         tracing::info!(
             "proved {proved} dma-buf formats on {} in {:.1?}, {} left to prove by allocation",
             self.info.name,
@@ -1300,6 +1328,7 @@ impl VulkanRenderer {
     }
 
     pub fn prove_unexported(&mut self, mut allocate: impl FnMut(Format) -> Option<Dmabuf>) {
+        let mut proofs = Vec::new();
         for (usage, format) in std::mem::take(&mut self.unproven) {
             let (Some(texel), Some(capability)) = (
                 formats::texel(format.code),
@@ -1309,10 +1338,61 @@ impl VulkanRenderer {
             };
             let proof = match allocate(format) {
                 Some(dmabuf) => self.prove(&dmabuf, texel, (usage, capability)),
-                None if format.modifier == Modifier::Linear => Ok(()),
-                None => Err(("allocate", RenderError::UnsupportedFormat)),
+                None if format.modifier == Modifier::Linear => continue,
+                None => Err(("allocate (GBM)", RenderError::UnsupportedFormat)),
             };
-            self.judge(format, usage, proof);
+            proofs.push((format, usage, proof));
+        }
+        self.hand_over_proofs(proofs);
+        self.proven &= !self.is_lost();
+    }
+
+    fn hand_over_proofs(&mut self, proofs: Vec<(Format, vk::ImageUsageFlags, Proof)>) {
+        let mut images = Vec::new();
+        for (format, usage, proof) in proofs {
+            match proof {
+                Ok(proved) => images.push((usage, proved)),
+                Err(failure) => self.judge(format, usage, failure),
+            }
+        }
+        let handed = self.begin_commands().and_then(|()| {
+            for (usage, (image, _)) in &images {
+                let using = match *usage {
+                    formats::SAMPLED => SAMPLED,
+                    _ => DRAWING,
+                };
+                for acquire in [true, false] {
+                    hand_over(
+                        &self.device,
+                        self.command_buffer,
+                        image.image,
+                        self.queue_family,
+                        (acquire, using),
+                    );
+                }
+            }
+            // SAFETY: `begin_commands` started the buffer on this thread and only the hand-over
+            // barriers were recorded into it.
+            unsafe { self.device.end_command_buffer(self.command_buffer) }?;
+            self.submit_and_wait()
+        });
+        if let Err(error) = handed {
+            tracing::warn!(
+                "{} could not hand {} proven images to the foreign queue ({error}); keeping them",
+                self.info,
+                images.len()
+            );
+        }
+        if self.is_lost() {
+            return;
+        }
+        for (_, (image, chroma)) in images {
+            if let Some(chroma) = chroma {
+                // SAFETY: the device is not lost, so the submission that used the image finished
+                // before `submit_and_wait` returned, and nothing else holds `chroma`.
+                unsafe { self.device.destroy_image_view(chroma, None) };
+            }
+            self.destroy_image(&image);
         }
         self.exhausted.store(false, Ordering::Relaxed);
     }
@@ -1328,19 +1408,11 @@ impl VulkanRenderer {
         &mut self,
         format: Format,
         usage: vk::ImageUsageFlags,
-        proof: Result<(), (&'static str, RenderError)>,
+        (stage, error): (&'static str, RenderError),
     ) {
-        let Err((stage, error)) = proof else {
-            return;
-        };
-        if matches!(
-            error,
-            RenderError::Vulkan(
-                vk::Result::ERROR_OUT_OF_DEVICE_MEMORY | vk::Result::ERROR_OUT_OF_HOST_MEMORY
-            )
-        ) {
+        if error.is_transient() || self.is_lost() {
             tracing::warn!(
-                "keeping {:?} with modifier {:?} unproven: {stage} ran out of memory",
+                "keeping {:?} with modifier {:?} unproven: {stage} failed for now ({error})",
                 format.code,
                 format.modifier
             );
@@ -1371,7 +1443,7 @@ impl VulkanRenderer {
         dmabuf: &Dmabuf,
         texel: formats::Texel,
         (usage, capability): (vk::ImageUsageFlags, formats::Capability),
-    ) -> Result<(), (&'static str, RenderError)> {
+    ) -> Proof {
         let mut image = self
             .import_image(dmabuf, texel, (usage, capability))
             .map_err(|error| ("import", error))?;
@@ -1381,50 +1453,16 @@ impl VulkanRenderer {
                 .create_view(image.image, texel.format, vk::ComponentSwizzle::IDENTITY)
                 .map(|view| (view, None)),
         };
-        let proof = views
-            .map_err(|error| ("view", error))
-            .and_then(|(view, chroma)| {
+        match views {
+            Ok((view, chroma)) => {
                 image.view = view;
-                let handed = self.hand_over_once(image.image, usage);
-                if let Some(chroma) = chroma {
-                    // SAFETY: the submission that used the image has been waited for, and nothing
-                    // else holds `chroma`.
-                    unsafe { self.device.destroy_image_view(chroma, None) };
-                }
-                handed.map_err(|error| ("hand over", error))
-            });
-        self.destroy_image(&image);
-        proof
-    }
-
-    fn hand_over_once(
-        &self,
-        image: vk::Image,
-        usage: vk::ImageUsageFlags,
-    ) -> Result<(), RenderError> {
-        let using = match usage {
-            formats::SAMPLED => SAMPLED,
-            _ => DRAWING,
-        };
-        self.begin_commands()?;
-        hand_over(
-            &self.device,
-            self.command_buffer,
-            image,
-            self.queue_family,
-            (true, using),
-        );
-        hand_over(
-            &self.device,
-            self.command_buffer,
-            image,
-            self.queue_family,
-            (false, using),
-        );
-        // SAFETY: `begin_commands` started the buffer on this thread and only the two barriers
-        // were recorded into it.
-        unsafe { self.device.end_command_buffer(self.command_buffer) }?;
-        self.submit_and_wait()
+                Ok((image, chroma))
+            }
+            Err(error) => {
+                self.destroy_image(&image);
+                Err(("view", error))
+            }
+        }
     }
 
     fn exported(

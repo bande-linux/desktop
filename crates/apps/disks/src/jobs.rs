@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -24,6 +24,11 @@ use zeroize::Zeroizing;
 
 const DISMISSED: &str = "org.freedesktop.UDisks2.Error.NotAuthorizedDismissed";
 const CHUNK: usize = 4 << 20;
+const COMPRESSED: [bande_fs::Format; 3] = [
+    bande_fs::Format::Xz,
+    bande_fs::Format::Zstd,
+    bande_fs::Format::Gzip,
+];
 const PARTITION_START: u64 = 1 << 20;
 const FILESYSTEMS: [&str; 10] = [
     "ext2", "ext3", "ext4", "vfat", "exfat", "ntfs", "xfs", "btrfs", "f2fs", "udf",
@@ -397,31 +402,58 @@ fn open_device(system: &Connection, block: &str, method: &str) -> Result<File, F
     Ok(File::from(OwnedFd::from(fd)))
 }
 
-fn copy(
-    mut from: impl Read,
-    mut to: impl Write,
+struct Measured<'a, R> {
+    inner: R,
     total: u64,
-    cancel: &AtomicBool,
-    out: &Out,
-) -> Result<(), Failure> {
-    let mut buffer = vec![0; CHUNK];
-    let mut done = 0u64;
-    let mut shown = 0u64;
-    loop {
-        if cancel.swap(false, Ordering::Relaxed) {
-            return Err(Failure::Failed(tr!("The operation was stopped.")));
+    done: u64,
+    shown: u64,
+    cancel: &'a AtomicBool,
+    out: &'a Out,
+}
+
+impl<'a, R> Measured<'a, R> {
+    fn new(inner: R, total: u64, cancel: &'a AtomicBool, out: &'a Out) -> Self {
+        Self {
+            inner,
+            total,
+            done: 0,
+            shown: 0,
+            cancel,
+            out,
         }
+    }
+}
+
+impl<R: Read> Read for Measured<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.cancel.swap(false, Ordering::Relaxed) {
+            return Err(io::Error::other(tr!("The operation was stopped.")));
+        }
+        let read = self.inner.read(buffer)?;
+        self.done += read as u64;
+        let percent = self.done.saturating_mul(100) / self.total.max(1);
+        if percent != self.shown {
+            self.shown = percent;
+            self.out.send(Report::Progress(percent as f32 / 100.0));
+        }
+        Ok(read)
+    }
+}
+
+fn copy(mut from: impl Read, mut to: impl Write) -> Result<(), Failure> {
+    let mut buffer = vec![0; CHUNK];
+    loop {
         let read = from.read(&mut buffer)?;
         if read == 0 {
             return Ok(());
         }
-        to.write_all(buffer.get(..read).unwrap_or_default())?;
-        done += read as u64;
-        let percent = done.saturating_mul(100) / total.max(1);
-        if percent != shown {
-            shown = percent;
-            out.send(Report::Progress(percent as f32 / 100.0));
-        }
+        to.write_all(buffer.get(..read).unwrap_or_default())
+            .map_err(|error| match error.kind() {
+                io::ErrorKind::StorageFull | io::ErrorKind::WriteZero => {
+                    Failure::Failed(tr!("The image is too big."))
+                }
+                _ => Failure::from(error),
+            })?;
     }
 }
 
@@ -437,7 +469,8 @@ fn create_image(
     let size: u64 = objects.get(source, BLOCK, "Size").unwrap_or(0);
     let device = open_device(system, source, "OpenForBackup")?;
     let image = File::create(file)?;
-    let copied = copy(device, &image, size, cancel, out).and_then(|()| Ok(image.sync_all()?));
+    let copied =
+        copy(Measured::new(device, size, cancel, out), &image).and_then(|()| Ok(image.sync_all()?));
     if copied.is_err() {
         let _ = std::fs::remove_file(file);
     }
@@ -454,15 +487,21 @@ fn restore(
 ) -> Result<(), Failure> {
     let image = File::open(file)?;
     let size = image.metadata()?.len();
+    let compression = bande_fs::Format::of(file).filter(|format| COMPRESSED.contains(format));
     let objects = Objects::load(system)?;
     let capacity: u64 = objects.get(target, BLOCK, "Size").unwrap_or(0);
-    if size > capacity {
+    if compression.is_none() && size > capacity {
         return Err(Failure::Failed(tr!("The image is too big.")));
     }
     let released = release(system, &members(system, target)?)?;
     let device = open_device(system, target, "OpenForRestore")?;
     released.keep();
-    copy(image, &device, size, cancel, out)?;
+    let measured = Measured::new(image, size, cancel, out);
+    let decoded: Box<dyn Read> = match compression {
+        Some(format) => format.decoder(BufReader::with_capacity(CHUNK, measured))?,
+        None => Box::new(measured),
+    };
+    copy(decoded, &device)?;
     Ok(device.sync_all()?)
 }
 
@@ -485,13 +524,18 @@ fn mount_image(system: &Connection, file: &PathBuf) -> Result<Outcome, Failure> 
     Ok(Outcome::Loop(device.to_string()))
 }
 
-fn image_filter() -> bande_app::Filter {
-    let patterns = ["*.img", "*.iso", "*.IMG", "*.ISO", "*.raw"];
+fn image_filter(compressed: bool) -> bande_app::Filter {
+    let raw = ["*.img", "*.iso", "*.IMG", "*.ISO", "*.raw"];
+    let packed = ["*.img.xz", "*.img.zst", "*.img.gz"];
+    let patterns = match compressed {
+        true => [raw.as_slice(), packed.as_slice()].concat(),
+        false => raw.to_vec(),
+    };
     (
         tr!("Disk Images"),
         patterns
-            .iter()
-            .map(|pattern| (0, (*pattern).to_owned()))
+            .into_iter()
+            .map(|pattern| (0, pattern.to_owned()))
             .collect(),
     )
 }
@@ -680,12 +724,12 @@ impl Worker {
                     Choose::Restore(_) => bande_app::choose_file(
                         &session,
                         &tr!("Choose an Image"),
-                        Some(image_filter()),
+                        Some(image_filter(true)),
                     ),
                     Choose::MountImage => bande_app::choose_file(
                         &session,
                         &tr!("Open Disk Image"),
-                        Some(image_filter()),
+                        Some(image_filter(false)),
                     ),
                 };
                 let file = chosen.unwrap_or_else(|error| {

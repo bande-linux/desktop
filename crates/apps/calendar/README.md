@@ -174,5 +174,7 @@ over 64 MiB. `tests/accounts.rs` finds a CalDAV server from a domain's records a
 Digest after a wrong password, and never sends a password over plain HTTP to anything but this
 computer. `tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
 exceptions and end follow. `tests/undo.rs` undoes a delete while a sync pushes it and checks
-the event comes back at its own address. The whole test list and the reason for each is in
+the event comes back at its own address. `tests/scheduling.rs` runs Debian's `xandikos` (and
+skips itself without it), searches its directory, asks for free/busy times and finds a free
+time around an event. The whole test list and the reason for each is in
 `docs/quality/tests.md`.

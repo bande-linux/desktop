@@ -2098,20 +2098,12 @@ impl FilesView {
     }
 
     pub fn present_eject_failure(&mut self, failure: EjectFailure) {
-        let openers = self.apps.openers();
         let mut programs: Vec<String> = failure
             .programs
             .iter()
-            .map(|program| {
-                openers
-                    .iter()
-                    .find(|app| {
-                        app.exec
-                            .split_whitespace()
-                            .next()
-                            .and_then(|command| Path::new(command).file_name())
-                            .is_some_and(|command| command == program.as_str())
-                    })
+            .map(|(pid, program)| {
+                self.apps
+                    .app_for_process(*pid)
                     .map_or_else(|| program.clone(), |app| app.name.clone())
             })
             .collect();

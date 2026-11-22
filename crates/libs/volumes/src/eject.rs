@@ -23,7 +23,7 @@ pub struct EjectFailure {
     pub mount_point: PathBuf,
     pub busy: bool,
     pub message: String,
-    pub programs: Vec<String>,
+    pub programs: Vec<(u32, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,22 +184,20 @@ fn failure(mount_point: PathBuf, error: &zbus::Error) -> EjectFailure {
     }
 }
 
-/// The programs of this user with a file, folder or executable open on `mount_point`.
-pub fn programs_using(mount_point: &Path) -> Vec<String> {
+/// The processes of this user, by id and program name, with a file, folder or executable open on
+/// `mount_point`.
+pub fn programs_using(mount_point: &Path) -> Vec<(u32, String)> {
     let Ok(processes) = std::fs::read_dir("/proc") else {
         return Vec::new();
     };
-    let own = std::process::id().to_string();
-    let mut programs: Vec<String> = processes
+    let own = std::process::id();
+    processes
         .flatten()
-        .map(|process| process.path())
-        .filter(|process| {
-            process
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name != own && name.bytes().all(|byte| byte.is_ascii_digit()))
+        .filter_map(|process| {
+            let pid = process.file_name().to_str()?.parse::<u32>().ok()?;
+            (pid != own).then(|| (pid, process.path()))
         })
-        .filter(|process| {
+        .filter(|(_, process)| {
             let open = std::fs::read_dir(process.join("fd"))
                 .into_iter()
                 .flatten()
@@ -212,14 +210,11 @@ pub fn programs_using(mount_point: &Path) -> Vec<String> {
                 .filter_map(|link| std::fs::read_link(link).ok())
                 .any(|target| target.starts_with(mount_point))
         })
-        .filter_map(|process| {
+        .filter_map(|(pid, process)| {
             let program = std::fs::read_link(process.join("exe")).ok()?;
-            Some(program.file_name()?.to_string_lossy().into_owned())
+            Some((pid, program.file_name()?.to_string_lossy().into_owned()))
         })
-        .collect();
-    programs.sort();
-    programs.dedup();
-    programs
+        .collect()
 }
 
 fn eject_all(

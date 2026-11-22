@@ -127,6 +127,10 @@ impl Apps {
         self.handlers.iter().find(|entry| entry.id == id)
     }
 
+    pub fn app_for_process(&self, pid: u32) -> Option<&DesktopEntry> {
+        crate::find_app_for_process(&self.handlers, Path::new("/proc"), pid)
+    }
+
     pub fn openers(&self) -> Vec<&DesktopEntry> {
         self.handlers
             .iter()

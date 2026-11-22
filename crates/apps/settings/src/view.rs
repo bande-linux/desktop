@@ -17,8 +17,8 @@ use bande_settings_panes::{
 use bande_settings_panes::{PaneHit, search};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_toolkit::ui::{
-    Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui, Widget,
-    WidgetId,
+    Alert, Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui,
+    Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, Image, Palette, Rect, SHEET_INSET, Scene, SessionEnd, TextSystem};
 use jiff::Zoned;
@@ -59,6 +59,8 @@ use bande_network::Security;
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
+const KEEP: &str = "keep";
+const REVERT: &str = "revert";
 pub(crate) const USE_MAIN: &str = "main";
 pub(crate) const ADD_COLOUR_PROFILE: &str = "add";
 pub(crate) const USE_EXTENDED: &str = "extended";
@@ -214,6 +216,17 @@ pub(crate) enum Anchor {
     Back,
 }
 
+fn countdown(until: Instant) -> String {
+    let seconds = until
+        .saturating_duration_since(Instant::now())
+        .as_secs_f64()
+        .ceil() as u64;
+    tr!(
+        "The previous settings come back in {seconds} s.",
+        seconds = seconds
+    )
+}
+
 pub(crate) fn intent<T>(
     intents: &Intents,
     make: impl Fn(T) -> Intent + 'static,
@@ -252,6 +265,12 @@ pub(crate) enum Detail {
     Report(String),
 }
 
+pub(crate) struct Trial {
+    until: Instant,
+    alert: WidgetId,
+    back: Option<Anchor>,
+}
+
 pub struct SettingsView {
     pub(crate) panes: Vec<Pane>,
     pub(crate) values: HashMap<SettingId, Value>,
@@ -259,7 +278,7 @@ pub struct SettingsView {
     pub(crate) display_levels: Vec<DisplayLevel>,
     pub(crate) arrangements: Vec<Vec<Placement>>,
     pub(crate) displays: Vec<Display>,
-    pub(crate) keep: Option<Instant>,
+    pub(crate) keep: Option<Trial>,
     pub(crate) audio: Option<Snapshot>,
     pub(crate) input_level: Rc<Cell<f32>>,
     pub(crate) wifi: Reading<WifiState>,
@@ -1224,6 +1243,10 @@ impl SettingsView {
     }
 
     pub fn handle(&mut self, event: &Event) -> bool {
+        if self.ui.has_sheet() {
+            let handled = self.ui.handle(event);
+            return self.settle() | handled;
+        }
         let editing = self
             .focused_setting()
             .filter(|setting| self.drafts.contains_key(setting));
@@ -2409,36 +2432,63 @@ impl SettingsView {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        let until = self.keep?;
-        let left = until.saturating_duration_since(Instant::now());
+        let left = self
+            .keep
+            .as_ref()?
+            .until
+            .saturating_duration_since(Instant::now());
         let tick = Duration::from_nanos(left.subsec_nanos().into());
         Some(Instant::now() + if tick.is_zero() { SECOND } else { tick })
     }
 
     pub fn tick(&mut self, now: Instant) {
-        let Some(until) = self.keep else {
+        let Some(trial) = &self.keep else {
             return;
         };
-        if now >= until {
+        if now >= trial.until {
             self.keep_displays(false);
-        } else {
-            self.invalidate();
+            return;
+        }
+        let (alert, message) = (trial.alert, countdown(trial.until));
+        if let Some(alert) = self.ui.widget_as::<Alert>(alert) {
+            alert.set_message(&message);
         }
     }
 
-    pub(crate) fn seconds_left(&self) -> u64 {
-        self.keep.map_or(0, |until| {
-            until
-                .saturating_duration_since(Instant::now())
-                .as_secs_f64()
-                .ceil() as u64
-        })
+    fn start_trial(&mut self) {
+        let until = Instant::now() + bande_config::DISPLAY_TRIAL;
+        if let Some(trial) = &mut self.keep {
+            trial.until = until;
+            return;
+        }
+        let back = self.ui.focus().and_then(|focus| {
+            self.anchors
+                .iter()
+                .find(|(_, id)| *id == focus)
+                .map(|(anchor, _)| anchor.clone())
+        });
+        let mut send = intent(&self.intents, Intent::KeepDisplays);
+        let alert = Alert::new(
+            &tr!("Keep these display settings?"),
+            &countdown(until),
+            move |action| send(action == KEEP),
+        )
+        .cancel(&tr!("Revert"), REVERT)
+        .primary(&tr!("Keep"), KEEP);
+        self.keep = Some(Trial {
+            until,
+            alert: alert.id(),
+            back,
+        });
+        self.ui.present_dialog(alert);
     }
 
     fn keep_displays(&mut self, keep: bool) {
-        if self.keep.take().is_none() {
+        let Some(trial) = self.keep.take() else {
             return;
-        }
+        };
+        self.ui.close_sheet();
+        self.focus_next = trial.back;
         self.commands.push(Command::KeepDisplays(keep));
         self.invalidate();
     }
@@ -2573,9 +2623,11 @@ impl SettingsView {
             }
             (SettingId::DisplayScale, Value::Number(percent)) => {
                 display.scale = Some(f64::from(percent) / 100.0);
+                trial = self.keep.is_some();
             }
             (SettingId::DisplayScale, Value::Keyword(keyword)) if keyword == AUTOMATIC => {
                 display.scale = None;
+                trial = self.keep.is_some();
             }
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
@@ -2599,7 +2651,7 @@ impl SettingsView {
         self.display_settings
             .insert(identity.clone(), display.clone());
         if trial {
-            self.keep = Some(Instant::now() + bande_config::DISPLAY_TRIAL);
+            self.start_trial();
             self.commands.push(Command::TryDisplay(identity, display));
         } else {
             self.commands.push(Command::Display(identity, display));
@@ -2608,7 +2660,11 @@ impl SettingsView {
 
     fn rebuild(&mut self) {
         self.reveal_pending = self.focus_next.is_some();
-        let focused = self.focus_next.take().or_else(|| {
+        let focused = match self.ui.has_sheet() {
+            true => None,
+            false => self.focus_next.take(),
+        }
+        .or_else(|| {
             let focus = self.ui.focus()?;
             self.anchors
                 .iter()

@@ -8,7 +8,10 @@ use bande_l10n::{text, tr};
 
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
-use bande_packages::Client;
+use crate::software::{Notice, Reply};
+use bande_notify::Urgency;
+use bande_notify::client::{Request, notify};
+use bande_packages::{Client, Info};
 use bande_settings_panes::{PaneId, SettingId};
 use zbus::blocking::Connection;
 
@@ -19,6 +22,8 @@ const PACKS: &str = "bande-desktop-l10n-";
 const BROWSER_PACKS: &str = "bande-browser-l10n-";
 const BROWSER: &str = "org.bande.Browser";
 const OWN_CATALOGS: &str = "bande-settings";
+const DECLINED_FILE: &str = "bande/translations-declined";
+const TRANSLATIONS_NOTICE: &str = "org.bande.Settings.TranslationsNotice";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
 const PKEXEC_DISMISSED: i32 = 126;
@@ -545,6 +550,94 @@ pub(crate) fn fetch_language_packs(
                 .is_ok(),
         );
     });
+}
+
+fn declined_file() -> Option<PathBuf> {
+    Some(bande_xdg::state_home()?.join(DECLINED_FILE))
+}
+
+fn declined() -> Vec<String> {
+    declined_file()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .map(|text| text.lines().map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
+fn decline(packs: &[String]) {
+    let Some(path) = declined_file() else {
+        return;
+    };
+    let changed = bande_xdg::change_file(&path, |before| {
+        let mut names: Vec<&str> = before.lines().collect();
+        names.extend(packs.iter().map(String::as_str));
+        names.sort_unstable();
+        names.dedup();
+        Ok(names.iter().map(|name| format!("{name}\n")).collect())
+    });
+    if let Err(error) = changed {
+        tracing::warn!("cannot remember the translations declined: {error}");
+    }
+}
+
+fn offered_packs(system: &Connection) -> Result<Vec<String>, bande_packages::Error> {
+    let (language, _) = parse_assignments(&with_user_choices(locale_proxy(system)?.locale()?));
+    let declined = declined();
+    let names: Vec<String> = pack_names(&language)
+        .into_iter()
+        .filter(|name| !declined.contains(name))
+        .collect();
+    if names.is_empty() {
+        return Ok(names);
+    }
+    let found = Client::background(system).resolve(&names)?;
+    let has = |name: &str, info: Info| {
+        found
+            .iter()
+            .any(|package| package.name == name && package.info == info)
+    };
+    Ok(names
+        .into_iter()
+        .filter(|name| has(name, Info::Available) && !has(name, Info::Installed))
+        .collect())
+}
+
+pub fn announce_translations(
+    session: &Connection,
+    system: &Connection,
+) -> Result<(), bande_packages::Error> {
+    let packs = offered_packs(system)?;
+    if packs.is_empty() {
+        return Ok(());
+    }
+    let notice = Notice::listen(session, TRANSLATIONS_NOTICE)?;
+    let install = tr!("Install");
+    let id = notify(
+        session,
+        &Request {
+            app_name: &tr!("Settings"),
+            replaces_id: 0,
+            app_icon: "org.bande.Settings",
+            summary: &tr!("Translations are available for your language"),
+            body: &tr!(
+                "Some installed software can show its text in your language once its translation is installed."
+            ),
+            actions: &[("default", &install)],
+            urgency: Urgency::Normal,
+            sound: None,
+            desktop_entry: Some("org.bande.Settings"),
+        },
+    )?;
+    match notice.answer(id)? {
+        Reply::Clicked => {
+            let names: Vec<&str> = packs.iter().map(String::as_str).collect();
+            Client::new(system).install_missing(&names)
+        }
+        Reply::Dismissed => {
+            decline(&packs);
+            Ok(())
+        }
+        Reply::Gone => Ok(()),
+    }
 }
 
 fn tongue(code: &str) -> String {

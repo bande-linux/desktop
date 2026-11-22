@@ -188,7 +188,17 @@ are in [performance.md](performance.md).
   (`bande-desktop-l10n-<lang>-<region>` and `bande-desktop-l10n-<lang>`, the same two names of
   `bande-browser-l10n-` when the Browser is installed, and for the system its Hunspell dictionary)
   through PackageKit on its own thread, says while Bande's text is being fetched, and says when it
-  could not be.
+  could not be. A name with no package in the APT index is skipped. Packs can also be missing
+  when the language was chosen before Bande or the Browser was installed. For that case, Settings'
+  update timer (`bande-update-check.timer`: 3 minutes after login, then daily) resolves the same
+  names for the person's language in the local APT index, without fetching anything. When some
+  are available and not installed, it offers them in a notification. Install installs them
+  through PackageKit, asking for the administrator's password through the polkit agent.
+  Dismissing the notification keeps those packs from being offered again; they are listed in
+  `$XDG_STATE_HOME/bande/translations-declined`. A maintainer script can't install the packs,
+  since dpkg holds the lock while it runs.
+  The Browser's packs (`bande-browser-l10n-<lang>`, built from `browser/l10n/languages`) are
+  separate from the Browser, which is English only.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.

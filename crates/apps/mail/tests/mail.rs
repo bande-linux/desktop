@@ -292,3 +292,73 @@ fn search_is_told_of_new_mail_its_text_and_its_removal_and_catches_up_after_losi
     store.remove_uids(mailbox, &[7]).unwrap();
     assert_eq!(offer(&store, &taken).forgotten.len(), 1);
 }
+
+fn opened(view: &mut bande_mail::ui::MessageView) -> accesskit::TreeUpdate {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        view.arrived();
+        view.scene(800, 700);
+        let tree = view.accessibility();
+        let opening = tree
+            .nodes
+            .iter()
+            .any(|(_, node)| node.label() == Some("Opening the message…"));
+        if !opening || Instant::now() > deadline {
+            return tree;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn an_eml_file_opens_read_only_with_its_text_and_attachment() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("report.eml");
+    std::fs::write(
+        &path,
+        "From: Ada <ada@example.org>\r\nTo: bob@example.org\r\nSubject: Quarterly report\r\n\
+         MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n\
+         --b\r\nContent-Type: text/plain\r\n\r\nSee the attached figures.\r\n\
+         --b\r\nContent-Type: text/csv\r\nContent-Disposition: attachment; filename=figures.csv\r\n\r\n\
+         a,b\r\n--b--\r\n",
+    )
+    .unwrap();
+    let store = folder.path().join("mail.sqlite3");
+    let open = |path: &std::path::Path| {
+        bande_mail::ui::MessageView::new(
+            path.to_path_buf(),
+            &store,
+            bande_mail::settings::MailSettings::default(),
+            bande_toolkit::Appearance::default().palette(),
+            bande_toolkit::TextSystem::new(),
+        )
+        .unwrap()
+    };
+    let mut view = open(&path);
+    let tree = opened(&mut view);
+    assert_eq!(view.title(), "Quarterly report");
+    assert!(tree.nodes.iter().any(|(_, node)| {
+        node.value()
+            .is_some_and(|text| text.contains("See the attached figures."))
+    }));
+    assert!(
+        tree.nodes
+            .iter()
+            .any(|(_, node)| node.label() == Some("figures.csv"))
+    );
+    view.menu_action("attachment-save-as:0");
+    assert!(
+        view.take_requests()
+            .contains(&bande_mail::ui::Request::SaveAttachment(
+                "figures.csv".to_owned(),
+                b"a,b".to_vec(),
+            ))
+    );
+
+    let mut missing = open(&folder.path().join("missing.eml"));
+    let tree = opened(&mut missing);
+    assert!(tree.nodes.iter().any(|(_, node)| {
+        node.label()
+            .is_some_and(|label| label.starts_with("The message couldn’t be opened"))
+    }));
+}

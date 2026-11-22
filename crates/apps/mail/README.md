@@ -68,6 +68,12 @@ apt install bande-mail
   or its context menu; a name or address offers New Message and Copy Address, a link Open Link
   and Copy Link. Pointing at a link shows where it goes, and a link whose text names another
   host than the one it leads to asks before it opens.
+- **Message files.** A saved message (`.eml`, `message/rfc822`), opened from Files or from a
+  message's attachments, opens read-only in a window of its own with the same reader: text,
+  pictures, attachments, signatures and encryption, and remote content only on Load Remote
+  Content. The file is read off the UI thread, up to 64 MB; one that cannot be read says why in
+  the window. Its attachments open from a private copy in `~/.cache/bande-mail/opened/`, removed
+  like the others.
 - **Signed and encrypted mail**, with OpenPGP (PGP/MIME, RFC 3156, and inline PGP, read only)
   and S/MIME (RFC 8551). The keys are GnuPG's: secret keys stay in `gpg-agent`, which asks for
   their passphrase (pinentry) and uses smartcards; OpenPGP keys come from the GnuPG keyring,

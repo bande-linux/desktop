@@ -7,8 +7,8 @@ use bande_toolkit::ui::access_rect;
 use bande_toolkit::{Point, Rect};
 
 use crate::store::Summary;
-use crate::ui::format::{full_date, list_date};
-use crate::ui::reader::{Respond, Target};
+use crate::ui::format::list_date;
+use crate::ui::reader::Target;
 use crate::ui::sidebar::Row;
 use crate::ui::view::{Hit, MailView, Pane};
 use jiff::Timestamp;
@@ -70,7 +70,7 @@ fn centre(rect: Rect) -> Point {
     Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0)
 }
 
-fn clickable(role: Role, label: &str) -> Node {
+pub(crate) fn clickable(role: Role, label: &str) -> Node {
     let mut node = Node::new(role);
     node.set_label(label);
     node.add_action(Action::Click);
@@ -130,13 +130,14 @@ impl MailView {
                     .selected
                     .and_then(|id| self.messages.iter().position(|summary| summary.id == id))
                     .map_or(Part::List, Part::Message),
-                Pane::Reader => match &self.reader_target {
+                Pane::Reader => match &self.reader.target {
                     Some((_, target)) => self
                         .hits
                         .iter()
                         .position(|(_, hit)| *hit == Hit::Reader(target.clone()))
                         .map_or(Part::Reader, Part::Target),
                     None => self
+                        .reader
                         .thread
                         .as_ref()
                         .and_then(|thread| {
@@ -292,108 +293,30 @@ impl MailView {
         self.node_of(Part::List)
     }
 
-    fn target_label(&self, target: &Target) -> Option<(Role, String)> {
-        let thread = self.thread.as_ref()?;
-        Some(match target {
-            Target::Card(_) => return None,
-            Target::Expand(id) => {
-                let entry = thread.entry(*id)?;
-                let sender = match entry.summary.sender.shown() {
-                    "" => tr!("No Sender"),
-                    shown => shown.to_owned(),
-                };
-                (
-                    Role::Button,
-                    tr!("Show Message from {sender}", sender = sender),
-                )
-            }
-            Target::Quotes(id) => (
-                Role::Button,
-                match thread.entry(*id)?.quotes {
-                    true => tr!("Hide Quoted Text"),
-                    false => tr!("Show Quoted Text"),
-                },
-            ),
-            Target::Respond(_, Respond::Reply) => (Role::Button, tr!("Reply")),
-            Target::Respond(_, Respond::ReplyAll) => (Role::Button, tr!("Reply All")),
-            Target::Respond(_, Respond::Forward) => (Role::Button, tr!("Forward")),
-            Target::Link(_, _, shown) => (Role::Link, shown.clone()),
-            Target::Address(address) => (Role::Button, address.full()),
-            Target::Attachment(id, index) => {
-                let attachment = thread
-                    .entry(*id)?
-                    .reading
-                    .as_ref()?
-                    .content
-                    .every_attachment()
-                    .nth(*index)?;
-                (Role::Button, attachment.name.clone())
-            }
-            Target::LoadRemote(_) => (Role::Button, tr!("Load Remote Content")),
-            Target::LookUpKey(_) => (Role::Button, tr!("Look Up Key")),
-            Target::TrustIssuer(_) => (Role::Button, tr!("Trust Issuer…")),
-            Target::Unseal(_) => (Role::Button, tr!("Try Again")),
-        })
-    }
-
     fn describe_reader(&self, tree: &mut TreeUpdate) -> Option<NodeId> {
         let frame = self.reader_frame();
         if frame.width <= 0.0 {
             return None;
         }
         let mut children = Vec::new();
-        if let Some(thread) = &self.thread {
-            for (index, entry) in thread.entries.iter().enumerate() {
-                let Some(reading) = &entry.reading else {
-                    continue;
-                };
-                let sender = match reading.content.envelope.sender().shown() {
-                    "" => tr!("No Sender"),
-                    shown => shown.to_owned(),
-                };
-                let date = reading
-                    .content
-                    .envelope
-                    .date
-                    .map(|date| full_date(date, &self.zone, &self.formats))
-                    .unwrap_or_default();
-                let mut article = clickable(
-                    Role::Article,
-                    &tr!("From {sender}, {date}", sender = sender, date = date),
-                );
-                let notes =
-                    crate::ui::reader::security_notes(entry.summary.id, &reading.content.security)
-                        .into_iter()
-                        .map(|(note, _)| note)
-                        .collect::<Vec<_>>();
-                if !notes.is_empty() {
-                    article.set_description(notes.join(" "));
-                }
-                let mut text = Node::new(Role::Label);
-                text.set_value(reading.document.text());
-                self.push(tree, Part::Text(index), text, None);
-                article.set_children(
-                    self.node_of(Part::Text(index))
-                        .into_iter()
-                        .collect::<Vec<_>>(),
-                );
-                let bounds =
-                    self.bounds_of(|hit| *hit == Hit::Reader(Target::Card(entry.summary.id)));
-                self.push(tree, Part::Body(index), article, bounds);
-                children.extend(self.node_of(Part::Body(index)));
-            }
+        for (index, id, mut article, text) in self.reader.articles(&self.zone, &self.formats) {
+            self.push(tree, Part::Text(index), text, None);
+            article.set_children(
+                self.node_of(Part::Text(index))
+                    .into_iter()
+                    .collect::<Vec<_>>(),
+            );
+            let bounds = self.bounds_of(|hit| *hit == Hit::Reader(Target::Card(id)));
+            self.push(tree, Part::Body(index), article, bounds);
+            children.extend(self.node_of(Part::Body(index)));
         }
         for (index, (rect, hit)) in self.hits.iter().enumerate() {
             let Hit::Reader(target) = hit else {
                 continue;
             };
-            let Some((role, label)) = self.target_label(target) else {
+            let Some(node) = self.reader.target_node(target) else {
                 continue;
             };
-            let mut node = clickable(role, &label);
-            if let Target::Link(url, ..) = target {
-                node.set_url(url.as_str());
-            }
             self.push(tree, Part::Target(index), node, Some(*rect));
             children.extend(self.node_of(Part::Target(index)));
         }
@@ -455,9 +378,9 @@ impl MailView {
                 }
             }
             Part::Body(index) | Part::Text(index) => {
-                let id = self.thread.as_ref()?.entries.get(index)?.summary.id;
+                let id = self.reader.thread.as_ref()?.entries.get(index)?.summary.id;
                 self.focus = Pane::Reader;
-                self.focus_entry(id);
+                self.reader.focus_entry(id);
             }
             Part::Target(index) => {
                 let (rect, Hit::Reader(target)) = self.hits.get(index).cloned()? else {

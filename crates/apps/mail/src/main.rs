@@ -17,15 +17,15 @@ use bande_mail::message::Attachment;
 use bande_mail::portal::choose_save_path;
 use bande_mail::settings::{Change, MailSettings, listen};
 use bande_mail::ui::{
-    COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Mode, Place, Request, SETTINGS_SIZE,
-    SIDEBAR_WIDTH, SettingsView,
+    COMPOSE_SIZE, ComposeRequest, ComposeView, MESSAGE_SIZE, MailView, MessageView, Mode, Place,
+    Request, SETTINGS_SIZE, SIDEBAR_WIDTH, SettingsView,
 };
 use bande_toolkit::ui::ClipboardRequest;
 use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowError,
     WindowEvent,
 };
-use bande_xdg::{Apps, config_dirs, data_dirs, replace_file};
+use bande_xdg::{Apps, config_dirs, data_dirs, path_from_file_uri, replace_file};
 
 use crate::notices::{Announcer, Clicked, Notices};
 use crate::picker::{MAX_ATTACHMENT, Picked, Picker, Refusal};
@@ -66,6 +66,7 @@ fn load_settings() -> MailSettings {
 enum Pane {
     Main(Box<MailView>),
     Compose(Box<ComposeView>),
+    Message(Box<MessageView>),
 }
 
 impl View for Pane {
@@ -84,6 +85,15 @@ impl View for Pane {
                 scene
             }
             Self::Compose(view) => {
+                window.set_frame_regions(FrameRegions {
+                    sidebar: 0.0,
+                    toolbar: 0.0,
+                });
+                let scene = view.scene(width, height);
+                window.set_header(view.header());
+                scene
+            }
+            Self::Message(view) => {
                 window.set_frame_regions(FrameRegions {
                     sidebar: 0.0,
                     toolbar: 0.0,
@@ -120,6 +130,10 @@ impl View for Pane {
             (Self::Compose(view), WindowEvent::MenuAction(action)) => view.menu_action(&action),
             (Self::Main(view), WindowEvent::MenuClosed) => view.menu_closed(),
             (Self::Compose(view), WindowEvent::MenuClosed) => view.menu_closed(),
+            (Self::Message(view), WindowEvent::Input(input)) => view.handle(&input),
+            (Self::Message(view), WindowEvent::Accessibility(request)) => view.perform(&request),
+            (Self::Message(view), WindowEvent::MenuAction(action)) => view.menu_action(&action),
+            (Self::Message(view), WindowEvent::MenuClosed) => view.menu_closed(),
             _ => false,
         }
     }
@@ -128,12 +142,19 @@ impl View for Pane {
         match self {
             Self::Main(view) => view.set_appearance(appearance),
             Self::Compose(view) => view.set_appearance(appearance),
+            Self::Message(view) => view.set_appearance(appearance),
         }
     }
 
     fn set_active(&mut self, active: bool) {
-        if let Self::Main(view) = self {
-            view.set_window_active(active);
+        match self {
+            Self::Main(view) => {
+                view.set_window_active(active);
+            }
+            Self::Message(view) => {
+                view.set_window_active(active);
+            }
+            Self::Compose(_) => {}
         }
     }
 
@@ -141,6 +162,7 @@ impl View for Pane {
         match self {
             Self::Main(view) => view.fds(),
             Self::Compose(_) => Vec::new(),
+            Self::Message(view) => vec![view.fd()],
         }
     }
 
@@ -148,6 +170,7 @@ impl View for Pane {
         match self {
             Self::Main(view) => view.engine_ready(),
             Self::Compose(_) => false,
+            Self::Message(view) => view.arrived(),
         }
     }
 
@@ -155,6 +178,7 @@ impl View for Pane {
         match self {
             Self::Main(view) => view.deadline(),
             Self::Compose(view) => view.deadline(),
+            Self::Message(view) => view.deadline(),
         }
     }
 
@@ -169,6 +193,7 @@ impl View for Pane {
         match self {
             Self::Main(view) => view.animating(),
             Self::Compose(view) => view.animating(),
+            Self::Message(view) => view.animating(),
         }
     }
 
@@ -176,6 +201,7 @@ impl View for Pane {
         match self {
             Self::Main(view) => Some(view.accessibility()),
             Self::Compose(view) => Some(view.accessibility()),
+            Self::Message(view) => Some(view.accessibility()),
         }
     }
 
@@ -183,11 +209,23 @@ impl View for Pane {
         match self {
             Self::Main(view) => view.text_input_area(),
             Self::Compose(view) => view.text_input_area(),
+            Self::Message(view) => view.text_input_area(),
         }
     }
 }
 
+const MESSAGE_MIME: &str = "message/rfc822";
+
+fn message_file(apps: &Apps, argument: &str, directory: &Path) -> Option<PathBuf> {
+    let path = match argument.starts_with("file:") {
+        true => path_from_file_uri(argument)?,
+        false => directory.join(argument),
+    };
+    (apps.mime_for(&path) == MESSAGE_MIME).then_some(path)
+}
+
 struct Mail {
+    store_path: PathBuf,
     main: Option<WindowId>,
     parked: Option<Box<MailView>>,
     apps: Option<Apps>,
@@ -289,14 +327,72 @@ impl Mail {
             .ok()
     }
 
-    fn open_arguments(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>) {
+    fn open_arguments(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
         if arguments.first().is_some_and(|flag| flag == ATTACH_FLAG) {
             let paths = arguments.into_iter().skip(1).map(PathBuf::from).collect();
             self.picker.read(SHARED_FILES, paths);
             return;
         }
         for argument in arguments {
-            self.open_argument(cx, &argument);
+            match message_file(self.apps(), &argument, directory) {
+                Some(path) => self.open_message(cx, path),
+                None => self.open_argument(cx, &argument),
+            }
+        }
+    }
+
+    fn open_message(&mut self, cx: &mut Cx<Self>, path: PathBuf) {
+        let windows: Vec<WindowId> = cx.windows().collect();
+        let shown = windows.into_iter().find(
+            |window| matches!(cx.view(*window), Some(Pane::Message(view)) if view.path() == path),
+        );
+        if let Some((window, _)) = shown.and_then(|shown| cx.window(shown)) {
+            if let Err(error) = window
+                .activation_token(APP_ID)
+                .and_then(|token| window.activate(&token))
+            {
+                tracing::warn!("cannot raise the message: {error}");
+            }
+            return;
+        }
+        let settings = main_view(cx, self.main, &mut self.parked)
+            .map(|view| view.settings().clone())
+            .unwrap_or_else(load_settings);
+        let created = MessageView::new(
+            path,
+            &self.store_path,
+            settings,
+            Appearance::default().palette(),
+            TextSystem::new(),
+        );
+        let mut view = match created {
+            Ok(view) => view,
+            Err(error) => {
+                tracing::warn!("cannot open a message: {error}");
+                self.notices.announcer().announce(
+                    tr!(
+                        "The message couldn’t be opened: {error}",
+                        error = error.to_string()
+                    ),
+                    String::new(),
+                    false,
+                    None,
+                );
+                return;
+            }
+        };
+        let title = view.title();
+        let opened = cx.open(
+            Kind::Secondary("message"),
+            &title,
+            MESSAGE_SIZE,
+            |appearance| {
+                view.set_appearance(appearance);
+                Pane::Message(Box::new(view))
+            },
+        );
+        if let Err(error) = opened {
+            tracing::warn!("cannot open a message window: {error}");
         }
     }
 
@@ -516,6 +612,7 @@ impl Mail {
     fn serve(&mut self, cx: &mut Cx<Self>, window: WindowId) {
         let requests = match cx.window(window) {
             Some((_, Pane::Main(view))) => view.take_requests(),
+            Some((_, Pane::Message(view))) => view.take_requests(),
             Some((_, Pane::Compose(_))) => return self.serve_compose(cx, window),
             None => return,
         };
@@ -625,6 +722,9 @@ impl Mail {
         let windows: Vec<WindowId> = cx.windows().collect();
         for window in windows {
             self.keep_draft(cx, window);
+            if let Some((_, Pane::Message(view))) = cx.window(window) {
+                view.finish();
+            }
         }
         if let Some(view) = main_view(cx, self.main, &mut self.parked) {
             view.finish();
@@ -637,6 +737,7 @@ fn refresh(cx: &mut Cx<Mail>, window: WindowId) {
         let (cursor, title) = match pane {
             Pane::Main(view) => (view.cursor(), view.title()),
             Pane::Compose(view) => (view.cursor(), view.title()),
+            Pane::Message(view) => (view.cursor(), view.title()),
         };
         shown.set_cursor(cursor);
         shown.set_title(&title);
@@ -649,8 +750,9 @@ impl Program for Mail {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let store_path = bande_mail_core::accounts::store_path()?;
         let mut view = MailView::new(
-            bande_mail_core::accounts::store_path()?,
+            store_path.clone(),
             load_settings(),
             Appearance::default().palette(),
             TextSystem::new(),
@@ -658,19 +760,25 @@ impl Program for Mail {
         let changes = Inbox::new()?;
         listen(changes.outbox());
         view.start();
-        let (main, parked) = match arguments.is_empty() {
+        let apps = Apps::load(data_dirs(), &config_dirs());
+        let directory = std::env::current_dir().unwrap_or_default();
+        let only_messages = arguments
+            .iter()
+            .all(|argument| message_file(&apps, argument, &directory).is_some());
+        let (main, parked) = match only_messages {
             true => (None, Some(Box::new(view))),
             false => (Some(show_main(cx, Box::new(view))?), None),
         };
         let mut mail = Self {
+            store_path,
             main,
             parked,
-            apps: None,
+            apps: Some(apps),
             picker: Picker::new()?,
             changes,
             notices: Notices::start(APP_ID, cx.session())?,
         };
-        mail.open_arguments(cx, arguments);
+        mail.open_arguments(cx, arguments, &directory);
         if let Some(main) = main {
             mail.serve(cx, main);
         }
@@ -717,6 +825,7 @@ impl Program for Mail {
         let handled = match window.and_then(|window| cx.window(window)) {
             Some((_, Pane::Main(view))) => view.menu_action(command),
             Some((_, Pane::Compose(view))) => view.menu_action(command),
+            Some((_, Pane::Message(view))) => view.menu_action(command),
             None => false,
         };
         if !handled && (window.is_none() || window != self.main) {
@@ -741,8 +850,8 @@ impl Program for Mail {
         }
     }
 
-    fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, _directory: &Path) {
-        self.open_arguments(cx, arguments);
+    fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
+        self.open_arguments(cx, arguments, directory);
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, window: WindowId) {
@@ -772,7 +881,7 @@ impl Program for Mail {
     fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
         match cx.view(window)? {
             Pane::Main(view) => Saved::of(&view.place().key()),
-            Pane::Compose(_) => None,
+            Pane::Compose(_) | Pane::Message(_) => None,
         }
     }
 
@@ -786,11 +895,13 @@ impl Program for Mail {
     }
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {
-        if let Pane::Main(view) = view
-            && self.main == Some(window)
-        {
-            self.main = None;
-            self.parked = Some(view);
+        match view {
+            Pane::Main(view) if self.main == Some(window) => {
+                self.main = None;
+                self.parked = Some(view);
+            }
+            Pane::Message(mut view) => view.finish(),
+            _ => {}
         }
     }
 

@@ -921,3 +921,12 @@ msgstr "inget lösenord är sparat för kontot"
 
 msgid "the account has no Drafts mailbox"
 msgstr "kontot har ingen brevlåda för utkast"
+
+msgid "Opening the message…"
+msgstr "Öppnar meddelandet…"
+
+msgid "The message couldn’t be opened: {error}"
+msgstr "Det gick inte att öppna meddelandet: {error}"
+
+msgid "The message is larger than {limit}."
+msgstr "Meddelandet är större än {limit}."

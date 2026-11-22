@@ -11,7 +11,7 @@ Exec=bande-mail %u
 Categories=Network;Email;
 Keywords=email;mail;imap;smtp;inbox;
 Keywords[sv]=e-post;mejl;imap;smtp;inkorg;email;mail;
-MimeType=x-scheme-handler/mailto;
+MimeType=x-scheme-handler/mailto;message/rfc822;
 StartupNotify=true
 Actions=compose;
 

@@ -97,13 +97,13 @@ fn is_built_in(device: &LibinputDevice) -> bool {
     }
 }
 
-fn pressed_on(event: &InputEvent<LibinputInputBackend>) -> Option<LibinputDevice> {
+fn pressed_on(event: &InputEvent<LibinputInputBackend>) -> Option<(LibinputDevice, u32)> {
     match event {
         InputEvent::Keyboard { event } if event.state() == KeyState::Pressed => {
-            Some(event.device())
+            Some((event.device(), event.key_code().raw()))
         }
         InputEvent::PointerButton { event } if event.state() == ButtonState::Pressed => {
-            Some(event.device())
+            Some((event.device(), event.button_code()))
         }
         _ => None,
     }
@@ -123,8 +123,10 @@ fn follow_lid_input(app: &mut App<DrmBackend>, event: &InputEvent<LibinputInputB
         }
         _ => {
             if app.compositor.lid_closed()
-                && pressed_on(event).is_some_and(|device| app.lid.built_in.contains(&device))
+                && let Some((device, code)) = pressed_on(event)
+                && app.lid.built_in.contains(&device)
             {
+                tracing::info!("code {code} on {} counts as opening the lid", device.name());
                 app.lid.switched_since_wake = true;
                 lid_changed(app, false);
             }

@@ -173,6 +173,7 @@ pub struct DocumentView {
     shown_message: String,
     note: Option<String>,
     snapshot: Option<(u64, Arc<String>)>,
+    position: Option<(u64, usize, (usize, usize))>,
     saving: bool,
     stamp: Option<Stamp>,
     overwrite: bool,
@@ -249,6 +250,7 @@ impl DocumentView {
             shown_message: String::new(),
             note: None,
             snapshot: None,
+            position: None,
             saving: false,
             stamp: None,
             overwrite: false,
@@ -1285,7 +1287,27 @@ impl DocumentView {
         }
     }
 
-    fn status_line(&self) -> String {
+    fn caret_position(&mut self) -> Option<(usize, usize)> {
+        let caret = self.ui.widget_ref::<TextView>(self.editor)?.selection().end;
+        let revision = self.revision();
+        if let Some((seen, at, position)) = self.position
+            && (seen, at) == (revision, caret)
+        {
+            return Some(position);
+        }
+        let text = self.text();
+        let before = text.get(..caret)?;
+        let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
+        let column = before
+            .rsplit('\n')
+            .next()
+            .map_or(0, |line| line.chars().count())
+            + 1;
+        self.position = Some((revision, caret, (line, column)));
+        Some((line, column))
+    }
+
+    fn status_line(&mut self) -> String {
         let counts = match (self.loading, self.counts) {
             (true, _) => tr!("Opening…"),
             (false, Some((words, characters))) => format!(
@@ -1307,7 +1329,13 @@ impl DocumentView {
         parts.retain(|part| !part.is_empty());
         parts.join("   ·   ")
     }
+        let position = match self.loading {
+            true => None,
+            false => self.caret_position(),
+        }
+        .map(|(line, column)| tr!("Line {line}, Column {column}", line = line, column = column));
 
+        parts.extend(position);
     fn fit(&mut self, label: &str) -> f32 {
         let style = TextStyle::new(13.0, self.ui.context().palette.ink);
         let width = self

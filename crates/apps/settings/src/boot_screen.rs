@@ -1,3 +1,5 @@
+use std::fs;
+use std::io;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
@@ -16,7 +18,10 @@ const HELPER: &str = "/usr/libexec/bande-boot-screen-helper";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const THEME_PACKAGE: &str = "bande-plymouth-theme";
 const THEME: &str = "/usr/share/plymouth/themes/bande/bande.plymouth";
-const SPLASH_DROP_IN: &str = "/etc/default/grub.d/bande-splash.cfg";
+/// GRUB's configuration file, shipped by `bande-plymouth-theme`, that adds `splash` to the
+/// kernel command line.
+pub const SPLASH_DROP_IN: &str = "/etc/default/grub.d/bande-splash.cfg";
+const SPLASH: &str = r#"case " $GRUB_CMDLINE_LINUX_DEFAULT " in *" splash "*) ;; *) GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT splash" ;; esac"#;
 const GRUB_CONFIG: &str = "/boot/grub/grub.cfg";
 const UPDATE_GRUB: &str = "/usr/sbin/update-grub";
 
@@ -33,10 +38,43 @@ pub enum BootScreenCommand {
     Show(bool),
 }
 
+fn adds_splash(line: &str) -> bool {
+    let line = line.trim_start();
+    !line.starts_with('#') && line.contains("splash")
+}
+
+/// Returns the text of [`SPLASH_DROP_IN`] with its `splash` line active or commented out,
+/// adding the line when it is to be active and none is.
+pub fn switch_splash(text: &str, on: bool) -> String {
+    let mut lines: Vec<String> = text
+        .lines()
+        .map(|line| match on {
+            true if line.trim_start_matches(['#', ' ', '\t']) == SPLASH => SPLASH.to_owned(),
+            false if adds_splash(line) => format!("#{line}"),
+            _ => line.to_owned(),
+        })
+        .collect();
+    if on && !lines.iter().any(|line| adds_splash(line)) {
+        lines.push(SPLASH.to_owned());
+    }
+    lines.iter().map(|line| format!("{line}\n")).collect()
+}
+
+fn splash_added() -> bool {
+    match fs::read_to_string(SPLASH_DROP_IN) {
+        Ok(text) => text.lines().any(adds_splash),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => {
+            tracing::warn!("cannot read {SPLASH_DROP_IN}: {error}");
+            false
+        }
+    }
+}
+
 fn read_state() -> BootScreenState {
     BootScreenState {
         grub: Path::new(UPDATE_GRUB).exists() && Path::new(GRUB_CONFIG).exists(),
-        shown: Path::new(THEME).exists() && Path::new(SPLASH_DROP_IN).exists(),
+        shown: Path::new(THEME).exists() && splash_added(),
         failed: false,
     }
 }

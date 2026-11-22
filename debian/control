@@ -1223,9 +1223,10 @@ Description: boot screen of the Bande desktop
  it.
  .
  It is the boot screen only when no other theme is chosen in
- /etc/plymouth/plymouthd.conf or by an installed default theme, and only
- when the kernel command line contains "splash"; Settings ▸ About ▸ Show a
- boot screen adds that for GRUB.
+ /etc/plymouth/plymouthd.conf or by an installed default theme. For GRUB it
+ adds "splash" to the kernel command line through the configuration file
+ /etc/default/grub.d/bande-splash.cfg, which Settings ▸ About ▸ Show a boot
+ screen turns off and on; other boot managers need "splash" added by hand.
 
 Package: bande-desktop-l10n-sv
 Architecture: all

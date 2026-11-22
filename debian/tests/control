@@ -48,5 +48,5 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
 Restrictions: allow-stderr
 
 Tests: boot-screen
-Depends: bande-plymouth-theme, initramfs-tools, kmod
+Depends: bande-plymouth-theme, bande-settings, grub2-common, initramfs-tools, kmod
 Restrictions: needs-root, breaks-testbed, allow-stderr

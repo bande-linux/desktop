@@ -63,8 +63,11 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative and the
   boot screen a `default.plymouth` alternative (`dh_installalternatives`). The boot screen's
   initramfs hook (`dh_installinitramfs`) rebuilds the initramfs through initramfs-tools'
-  trigger; no maintainer script runs `update-initramfs`, `update-grub` or
-  `plymouth-set-default-theme`, and none touches plymouth's or GRUB's configuration.
+  trigger. GRUB has no trigger to regenerate `grub.cfg`, so the boot screen's `postinst` and
+  its `postrm` on purge run `update-grub` when it is on the `PATH` and `/boot/grub/grub.cfg`
+  exists, reporting a failure without failing the package; no maintainer script runs
+  `update-initramfs` or `plymouth-set-default-theme`, and none touches another package's
+  configuration.
 - **Version**: `debian/changelog` names the release, `X.Y.Z-1`, with `X.Y.Z` the
   `[workspace.package] version`; a packaging-only fix is `X.Y.Z-2` (tag `vX.Y.Z-2`). A build
   for a Debian release adds an entry with that release's suffix, `X.Y.Z-1~deb14` for forky
@@ -78,8 +81,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   one version, every program and file in
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
   `boot-screen` (the boot screen is a `default.plymouth` alternative that only applies when no
-  other theme is chosen, the initramfs carries it, its link and Inter, and purging it leaves
-  neither the alternative nor the theme there), `system-setup` (every package with its recommends brings none of the short list of packages
+  other theme is chosen, the initramfs carries it, its link and Inter, it installs without GRUB,
+  with GRUB the generated `linux` lines carry `splash` once, also when `/etc/default/grub` has
+  it, Settings' helper turns it off and back to the unmodified conffile, and purging it leaves
+  neither the alternative, the theme nor `splash` behind), `system-setup` (every package with its recommends brings none of the short list of packages
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
   display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and
   `/etc/nsswitch.conf` of a system booted with systemd as they were),
@@ -128,10 +133,16 @@ are in [performance.md](performance.md).
 - **`bande-plymouth-theme`** (architecture `all`): the boot screen, a Plymouth `two-step` theme
   that `bande-plymouth-theme` (a program of `crates/libs/splash`, never installed) draws at build
   time from the Datum tokens and the mark in `data/branding/mark.svg`, the same mark the bar
-  shows. Debian's desktop tasks install no Plymouth, so `bande-desktop` only suggests it;
-  Settings ▸ About ▸ Show a boot screen installs it and adds `splash` to the kernel command line
-  through `/etc/default/grub.d/bande-splash.cfg`, the one file it writes, and on a boot manager
-  other than GRUB says what to do instead. Plymouth draws images at their own size and doubles
+  shows. Debian's desktop tasks install no Plymouth, so `bande-desktop` only suggests it.
+  Plymouth only draws with `splash` on the
+  kernel command line, which Debian's GRUB leaves out, so the package ships the conffile
+  `/etc/default/grub.d/bande-splash.cfg` (`crates/libs/splash/data`), which `grub-mkconfig`
+  sources after `/etc/default/grub` and which adds `splash` unless it is already there. It stays
+  until purge like any conffile; a removed package's `splash` only shows Plymouth's own theme.
+  Settings ▸ About ▸ Show a boot screen shows whether that line is active and comments it out or
+  back in through `bande-boot-screen-helper`, an administrator's change to the conffile that
+  dpkg keeps on upgrade, installing the package first when it is missing; on a boot manager
+  other than GRUB it says what to do instead. Plymouth draws images at their own size and doubles
   them on a HiDPI display, with no larger variant to choose, so the assets are drawn on whole
   pixels at scale 1.
 - **`bande-desktop`** (architecture `all`, section `metapackages`): the one package that installs a complete Bande desktop.

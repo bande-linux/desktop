@@ -1,1 +1,2 @@
 debian/build/plymouth/bande usr/share/plymouth/themes/
+crates/libs/splash/data/bande-splash.cfg etc/default/grub.d/

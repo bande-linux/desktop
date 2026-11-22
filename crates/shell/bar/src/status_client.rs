@@ -654,7 +654,7 @@ impl App for StatusClient {
         }
         for update in self.inbox.drain() {
             match update {
-                Update::Devices((battery, wifi, bluetooth)) => {
+                Update::Devices((battery, wifi, bluetooth, _)) => {
                     let status = self.bar.status_mut();
                     status.battery = battery;
                     status.wifi = wifi;

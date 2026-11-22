@@ -7,12 +7,12 @@ use std::rc::Rc;
 
 use bande_l10n::tr;
 
-use crate::model::{Accept, Chooser};
-use crate::search::{Search, recent_paths};
+use crate::model::{Accept, Arrived, Chooser};
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_files::{Location, Place, Row as SidebarRow};
 use bande_fs::{Entry, SortBy, format_date, format_size, is_hidden};
 use bande_inbox::Inbox;
+use bande_search::{ScopedSearch, load_recent_files, recently_used_path, usage_path};
 use bande_toolkit::ui::{
     Alert, Axis, Button, Cell, CheckState, Checkbox, Column, Context, Cursor, Event, Heading, Key,
     Label, Modifiers, PopUpButton, Row, SearchField, Size, Sort, Stack, TEXT_FIELD_HEIGHT, Table,
@@ -23,6 +23,8 @@ use bande_xdg::{OCTET_STREAM, UserDir, find_icon, user_folder};
 use xdg_desktop_portal_bande::file_chooser::{Mode, Selection};
 use xdg_desktop_portal_bande::settings::icon_theme;
 
+const MAX_RECENTS: usize = 200;
+const MAX_FOUND: usize = 500;
 const SIDEBAR_WIDTH: f32 = 184.0;
 const BAR_HEIGHT: f32 = 44.0;
 const FOOTER_HEIGHT: f32 = 56.0;
@@ -462,7 +464,7 @@ pub struct ChooserView {
     files: WidgetId,
     search_field: WidgetId,
     search_text: String,
-    search: Option<Search>,
+    search: Option<ScopedSearch>,
     recent: bool,
     excluded: Vec<PathBuf>,
     policy: Option<Inbox<Vec<PathBuf>>>,
@@ -796,7 +798,7 @@ impl ChooserView {
     pub fn sources(&self) -> Vec<BorrowedFd<'_>> {
         [
             self.chooser.listing_fd(),
-            self.search.as_ref().map(Search::fd),
+            self.search.as_ref().map(ScopedSearch::fd),
             self.policy.as_ref().map(Inbox::fd),
         ]
         .into_iter()
@@ -805,14 +807,15 @@ impl ChooserView {
     }
 
     pub fn source_ready(&mut self) {
-        if self.chooser.take_listings() {
-            self.rebuild();
+        match self.chooser.take_listings() {
+            Arrived::Folder => self.rebuild(),
+            Arrived::Found => self.refresh_rows(),
+            Arrived::Nothing => {}
         }
-        if let Some(found) = self.search.as_mut().and_then(Search::take)
+        if let Some(found) = self.search.as_mut().and_then(ScopedSearch::take)
             && !self.search_text.trim().is_empty()
         {
-            self.chooser.show_found(&found);
-            self.refresh_rows();
+            self.chooser.show_found(move || found);
         }
         if let Some(excluded) = self.policy.as_mut().and_then(|policy| policy.drain().pop()) {
             self.excluded = excluded;
@@ -847,11 +850,21 @@ impl ChooserView {
                 true => self.home.clone(),
                 false => self.chooser.folder().to_path_buf(),
             };
-            Search::query(&mut self.search, &self.home, &scope, &text, &self.excluded);
+            let excluded = &self.excluded;
+            if let Err(error) = ScopedSearch::query(
+                &mut self.search,
+                &self.home,
+                &scope,
+                &text,
+                excluded,
+                MAX_FOUND,
+            ) {
+                tracing::warn!("cannot search {}: {error}", scope.display());
+            }
             return;
         }
         if self.recent {
-            self.chooser.show_found(&recent_paths(&self.excluded));
+            self.show_recent_files();
         } else if self.chooser.shows_found() {
             let folder = self.chooser.folder().to_path_buf();
             if let Err(error) = self.chooser.open(&folder) {
@@ -863,13 +876,23 @@ impl ChooserView {
         self.refresh_rows();
     }
 
+    fn show_recent_files(&mut self) {
+        let excluded = self.excluded.clone();
+        self.chooser.show_found(move || {
+            let (Some(xbel), Some(usage)) = (recently_used_path(), usage_path()) else {
+                return Vec::new();
+            };
+            load_recent_files(&xbel, usage, &excluded, MAX_RECENTS)
+        });
+    }
+
     fn show_recent(&mut self) {
         if self.recent && self.search_text.is_empty() {
             return;
         }
         self.recent = true;
         self.search_text.clear();
-        self.chooser.show_found(&recent_paths(&self.excluded));
+        self.show_recent_files();
         self.rebuild();
     }
 

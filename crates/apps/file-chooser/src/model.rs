@@ -121,14 +121,26 @@ pub fn initial_name(dialog: &Dialog) -> String {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Arrived {
+    Nothing,
+    Folder,
+    Found,
+}
+
+enum Listed {
+    Folder(PathBuf, io::Result<Vec<Entry>>),
+    Found(u64, Vec<Entry>),
+}
+
 pub struct Chooser {
     dialog: Dialog,
     mime: MimeDatabase,
     folder: PathBuf,
     entries: Vec<Entry>,
     found: bool,
-    listings: Option<Inbox<(PathBuf, io::Result<Vec<Entry>>)>>,
-    loading: bool,
+    finding: u64,
+    listings: Option<Inbox<Listed>>,
     filter: Option<usize>,
     sort: Sort,
     pub name: String,
@@ -157,8 +169,8 @@ impl Chooser {
             folder: PathBuf::new(),
             entries: Vec::new(),
             found: false,
+            finding: 0,
             listings: Inbox::new().ok(),
-            loading: false,
             filter,
             sort: Sort::default(),
             show_extensions: settings.show_extensions,
@@ -203,16 +215,30 @@ impl Chooser {
         Ok(())
     }
 
-    pub fn show_found(&mut self, paths: &[PathBuf]) {
-        self.entries = paths
-            .iter()
-            .filter(|path| !on_server(path) && path.symlink_metadata().is_ok())
-            .filter_map(|path| {
-                let name = path.file_name()?.to_string_lossy().into_owned();
-                Some(Entry::read(path.clone(), name))
-            })
-            .collect();
+    pub fn show_found(&mut self, paths: impl FnOnce() -> Vec<PathBuf> + Send + 'static) {
+        self.entries.clear();
         self.found = true;
+        self.finding += 1;
+        let finding = self.finding;
+        let Some(outbox) = self.listings.as_ref().map(Inbox::outbox) else {
+            return;
+        };
+        let spawned = std::thread::Builder::new()
+            .name("found files".to_owned())
+            .spawn(move || {
+                let entries = paths()
+                    .into_iter()
+                    .filter(|path| !on_server(path) && path.symlink_metadata().is_ok())
+                    .filter_map(|path| {
+                        let name = path.file_name()?.to_string_lossy().into_owned();
+                        Some(Entry::read(path, name))
+                    })
+                    .collect();
+                outbox.send(Listed::Found(finding, entries));
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot look up the found files: {error}");
+        }
     }
 
     pub fn shows_found(&self) -> bool {
@@ -224,7 +250,6 @@ impl Chooser {
     }
 
     fn start_listing(&mut self, folder: PathBuf, show_hidden: bool) {
-        self.loading = true;
         let order = self.sort;
         let Some(outbox) = self.listings.as_ref().map(Inbox::outbox) else {
             return;
@@ -233,28 +258,33 @@ impl Chooser {
             .name("connected folder".to_owned())
             .spawn(move || {
                 let listed = list(&folder, show_hidden, order);
-                outbox.send((folder, listed));
+                outbox.send(Listed::Folder(folder, listed));
             });
         if let Err(error) = spawned {
             tracing::warn!("cannot list a folder on a server: {error}");
         }
     }
 
-    pub fn take_listings(&mut self) -> bool {
+    pub fn take_listings(&mut self) -> Arrived {
         let finished = self.listings.as_mut().map(Inbox::drain).unwrap_or_default();
-        let mut changed = false;
-        for (folder, listed) in finished {
-            if folder != self.folder || self.found {
-                continue;
-            }
-            self.loading = false;
-            changed = true;
+        let mut arrived = Arrived::Nothing;
+        for listed in finished {
             match listed {
-                Ok(entries) => self.entries = entries,
-                Err(error) => tracing::warn!("cannot list {}: {error}", folder.display()),
+                Listed::Folder(folder, listed) if folder == self.folder && !self.found => {
+                    arrived = Arrived::Folder;
+                    match listed {
+                        Ok(entries) => self.entries = entries,
+                        Err(error) => tracing::warn!("cannot list {}: {error}", folder.display()),
+                    }
+                }
+                Listed::Found(finding, entries) if finding == self.finding && self.found => {
+                    arrived = Arrived::Found;
+                    self.entries = entries;
+                }
+                Listed::Folder(..) | Listed::Found(..) => {}
             }
         }
-        changed
+        arrived
     }
 
     pub fn is_folder(&self, path: &Path) -> bool {

@@ -1,6 +1,5 @@
 pub mod choice;
 mod model;
-mod search;
 mod view;
 
 pub use model::{

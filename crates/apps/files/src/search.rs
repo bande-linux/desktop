@@ -8,7 +8,7 @@ use crate::tabs::location_title;
 use crate::view::{FilesView, home};
 use crate::views::ViewMode;
 use bande_fs::{ARCHIVES, DOCUMENTS, Recency};
-use bande_search::{FUZZY, FileIndex, FileResults, SearchService};
+use bande_search::ScopedSearch;
 use bande_toolkit::ui::{BUTTON_HEIGHT, PopUpButton, SEGMENTED_HEIGHT, SegmentedControl, WidgetId};
 use bande_toolkit::{Item, Point, Rect, TextAlign, TextStyle};
 
@@ -91,54 +91,6 @@ pub(crate) struct Searching {
     pub(crate) date_control: WidgetId,
 }
 
-pub(crate) enum Searcher {
-    Home(SearchService),
-    Elsewhere(FileIndex),
-}
-
-impl Searcher {
-    fn query_within(&self, generation: u64, text: &str, within: &Path, limit: usize) {
-        match self {
-            Self::Home(service) => service.query_within(generation, text, within, limit),
-            Self::Elsewhere(index) => index.query_within(generation, text, within, limit),
-        }
-    }
-
-    pub(crate) fn exclude(&self, excluded: Vec<PathBuf>) {
-        if let Self::Elsewhere(index) = self {
-            index.exclude(excluded);
-        }
-    }
-
-    pub(crate) fn fd(&self) -> std::os::fd::BorrowedFd<'_> {
-        match self {
-            Self::Home(service) => service.fd(),
-            Self::Elsewhere(index) => index.fd(),
-        }
-    }
-
-    fn take(&mut self) -> Option<FileResults> {
-        match self {
-            Self::Home(service) => service.take(),
-            Self::Elsewhere(index) => index.take(),
-        }
-    }
-}
-
-pub(crate) struct Index {
-    root: PathBuf,
-    pub(crate) index: Searcher,
-    generation: u64,
-}
-
-fn covered(root: &Path, folder: &Path) -> bool {
-    folder.strip_prefix(root).is_ok_and(|inside| {
-        inside
-            .components()
-            .all(|part| !bande_fs::is_hidden(&part.as_os_str().to_string_lossy()))
-    })
-}
-
 impl FilesView {
     pub fn searching(&self) -> Option<&str> {
         self.searching
@@ -147,7 +99,7 @@ impl FilesView {
     }
 
     pub(crate) fn search_index_fd(&self) -> Option<std::os::fd::BorrowedFd<'_>> {
-        self.index.as_ref().map(|index| index.index.fd())
+        self.index.as_ref().map(ScopedSearch::fd)
     }
 
     fn scope_widget(&self, folder: &Path, everywhere: bool) -> SegmentedControl {
@@ -247,63 +199,25 @@ impl FilesView {
         ) else {
             return;
         };
-        let home = home();
-        let in_home = covered(&home, &scope);
-        let root = match in_home {
-            true => home,
-            false => scope.clone(),
-        };
-        if !self
-            .index
-            .as_ref()
-            .is_some_and(|index| covered(&index.root, &scope))
+        let excluded = &self.search_excluded;
+        if let Err(error) =
+            ScopedSearch::query(&mut self.index, &home(), &scope, &text, excluded, MAX_FOUND)
         {
-            let searcher = match in_home {
-                true => SearchService::connect().map(Searcher::Home),
-                false => FileIndex::spawn(root.clone(), self.search_excluded.clone())
-                    .map(Searcher::Elsewhere),
-            };
-            match searcher {
-                Ok(index) => {
-                    self.index = Some(Index {
-                        root,
-                        index,
-                        generation: 0,
-                    });
-                }
-                Err(error) => {
-                    tracing::warn!("cannot search {}: {error}", root.display());
-                    return;
-                }
-            }
+            tracing::warn!("cannot search {}: {error}", scope.display());
+            return;
         }
         if let Some(searching) = &mut self.searching {
             searching.answered = false;
         }
-        if let Some(index) = &mut self.index {
-            index.generation += 1;
-            index
-                .index
-                .query_within(index.generation, &text, &scope, MAX_FOUND);
-        }
     }
 
     pub(crate) fn search_results(&mut self) -> bool {
-        let Some(index) = &mut self.index else {
+        let Some(found) = self.index.as_mut().and_then(ScopedSearch::take) else {
             return false;
         };
-        let Some(results) = index.index.take() else {
-            return false;
-        };
-        if results.generation != index.generation || self.searching.is_none() {
+        if self.searching.is_none() {
             return false;
         }
-        let found = results
-            .hits
-            .into_iter()
-            .filter(|hit| hit.score > FUZZY)
-            .map(|hit| hit.path)
-            .collect();
         if let Some(searching) = &mut self.searching {
             searching.hits = found;
             searching.answered = true;

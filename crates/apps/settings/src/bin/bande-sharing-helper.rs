@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::process::{Command, ExitCode, Stdio};
 
 const SHARE_GROUP: &str = "sambashare";
+const SAMBA_UNITS: [&str; 2] = ["smbd.service", "nmbd.service"];
 
 struct Account {
     name: String,
@@ -35,8 +36,18 @@ fn systemctl(arguments: &[&str]) -> ExitCode {
         .stdout(Stdio::null()))
 }
 
+fn samba_units(verb: &str, now: bool) -> ExitCode {
+    let mut arguments = vec![verb];
+    if now {
+        arguments.push("--now");
+    }
+    arguments.extend(SAMBA_UNITS);
+    systemctl(&arguments)
+}
+
 fn file_sharing(on: bool) -> ExitCode {
     match on {
+        true if samba_units("unmask", false) != ExitCode::SUCCESS => ExitCode::FAILURE,
         true => systemctl(&["enable", "--now", "smbd.service"]),
         false => systemctl(&["disable", "--now", "smbd.service"]),
     }
@@ -159,7 +170,9 @@ fn main() -> ExitCode {
     match words.as_slice() {
         ["file-sharing", "on"] => file_sharing(true),
         ["file-sharing", "off"] => file_sharing(false),
-        ["samba-installed"] => systemctl(&["disable", "--now", "smbd.service", "nmbd.service"]),
+        ["samba-installing"] => samba_units("mask", false),
+        ["samba-not-installed"] => samba_units("unmask", false),
+        ["samba-installed"] => samba_units("disable", true),
         ["remote-login", "on"] => remote_login(true),
         ["remote-login", "off"] => remote_login(false),
         ["password"] => set_password(&user),

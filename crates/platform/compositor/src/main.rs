@@ -825,7 +825,10 @@ where
     if let (Session::User, Some(system)) = (&session, &app.buses.system) {
         let (presses, received) = std::sync::mpsc::channel();
         match handle_power_key(system, received) {
-            Ok(()) => app.compositor.send_power_key_presses(presses),
+            Ok(true) => app.compositor.send_power_key_presses(presses),
+            Ok(false) => {
+                tracing::info!("logind's HandlePowerKey= decides what the power button does")
+            }
             Err(error) => tracing::warn!("logind keeps handling the power button: {error}"),
         }
     }

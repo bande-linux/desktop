@@ -6,11 +6,10 @@ use std::path::PathBuf;
 use bande_l10n::tr;
 use zbus::blocking::Connection;
 
-const FILE: &str = "environment.d/60-bande-proxy.conf";
+const FILE: &str = "bande/proxy";
 const HTTP: [&str; 2] = ["http_proxy", "HTTP_PROXY"];
 const HTTPS: [&str; 2] = ["https_proxy", "HTTPS_PROXY"];
 const BYPASS: [&str; 2] = ["no_proxy", "NO_PROXY"];
-const AUTOMATIC: &str = "pac+";
 const SCHEME: &str = "http://";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -18,11 +17,10 @@ pub enum ProxyMode {
     #[default]
     None,
     Manual,
-    Automatic,
 }
 
 impl ProxyMode {
-    pub const ALL: [Self; 3] = [Self::None, Self::Manual, Self::Automatic];
+    pub const ALL: [Self; 2] = [Self::None, Self::Manual];
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -31,7 +29,6 @@ pub struct ProxySettings {
     pub http: String,
     pub https: String,
     pub bypass: String,
-    pub pac: String,
 }
 
 #[zbus::proxy(
@@ -86,23 +83,17 @@ pub fn read_proxy() -> ProxySettings {
         .split(',')
         .collect::<Vec<_>>()
         .join(", ");
-    match http.strip_prefix(AUTOMATIC) {
-        Some(pac) => ProxySettings {
-            mode: ProxyMode::Automatic,
-            pac: pac.to_owned(),
-            ..ProxySettings::default()
-        },
-        None if !http.is_empty() => ProxySettings {
-            mode: ProxyMode::Manual,
-            http: host(http),
-            https: values
-                .get(HTTPS[0])
-                .map(|url| host(url))
-                .unwrap_or_default(),
-            bypass,
-            pac: String::new(),
-        },
-        None => ProxySettings::default(),
+    if http.is_empty() {
+        return ProxySettings::default();
+    }
+    ProxySettings {
+        mode: ProxyMode::Manual,
+        http: host(http),
+        https: values
+            .get(HTTPS[0])
+            .map(|url| host(url))
+            .unwrap_or_default(),
+        bypass,
     }
 }
 
@@ -124,18 +115,6 @@ fn assignments(settings: &ProxySettings) -> Result<Vec<(&'static str, String)>, 
     let mut assigned = Vec::new();
     match settings.mode {
         ProxyMode::None => {}
-        ProxyMode::Automatic => {
-            let pac = settings.pac.trim();
-            if !plain(pac) || !(pac.starts_with("http://") || pac.starts_with("https://")) {
-                return Err(tr!(
-                    "Type the address of the configuration file, such as http://wpad.example.org/wpad.dat."
-                ));
-            }
-            let url = format!("{AUTOMATIC}{pac}");
-            for name in HTTP.into_iter().chain(HTTPS) {
-                assigned.push((name, url.clone()));
-            }
-        }
         ProxyMode::Manual => {
             let invalid =
                 || tr!("Type the proxy as a name and port, such as proxy.example.org:3128.");

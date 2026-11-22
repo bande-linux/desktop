@@ -13,6 +13,18 @@ msgstr "NetworkManager har ingen enhet som heter {interface}"
 msgid "NetworkManager still leaves {interface} alone"
 msgstr "NetworkManager låter fortfarande {interface} vara"
 
+msgid "NetworkManager could not connect {interface}"
+msgstr "NetworkManager kunde inte ansluta {interface}"
+
+msgid "NetworkManager did not connect {interface} in time"
+msgstr "NetworkManager anslöt inte {interface} i tid"
+
+msgid "the new connection is still saved ({error})"
+msgstr "den nya anslutningen är fortfarande sparad ({error})"
+
+msgid "NetworkManager still manages the interface ({error})"
+msgstr "NetworkManager hanterar fortfarande gränssnittet ({error})"
+
 msgid "/etc/network/interfaces has no stanza for it"
 msgstr "/etc/network/interfaces har inget avsnitt för den"
 

@@ -15,7 +15,7 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
 Restrictions: needs-root, allow-stderr
 
 Tests: system-setup
-Depends: apt
+Depends: apt, systemd-sysv, libnss-systemd
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: display-manager
@@ -24,7 +24,7 @@ Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: coexistence
 Depends: gnome-core, gnome-keyring, libpam-gnome-keyring, libsecret-tools, dbus-daemon, dbus-bin,
- apt
+ python3-dbusmock, apt
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: services

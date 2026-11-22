@@ -429,8 +429,8 @@ msgstr "wireguard, openvpn, tunnel, privat nätverk, importera, arbetsnätverk"
 msgid "Proxy"
 msgstr "Proxy"
 
-msgid "http proxy, https proxy, pac, automatic configuration, bypass"
-msgstr "http-proxy, https-proxy, pac, automatisk konfiguration, förbigå"
+msgid "http proxy, https proxy, bypass"
+msgstr "http-proxy, https-proxy, förbigå"
 
 msgid "dark mode, light mode, night, theme"
 msgstr "mörkt läge, ljust läge, natt, tema"

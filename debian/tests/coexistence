@@ -1,7 +1,9 @@
 #!/bin/bash
 # Next to GNOME, installing bande-desktop with its recommends removes nothing, both keyrings keep
-# their PAM profiles, GNOME Keyring alone is D-Bus activatable as org.freedesktop.secrets, and a
-# session that is not Bande's gets its secrets from GNOME Keyring.
+# their PAM profiles, GNOME Keyring alone is D-Bus activatable as org.freedesktop.secrets, a
+# session that is not Bande's gets its secrets from GNOME Keyring, and Bande's keyring, started
+# while logind lists only a GNOME session, exits without taking the name, which it takes once
+# logind lists a Bande session.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 installed() {
@@ -30,5 +32,45 @@ dbus-run-session -- bash -euo pipefail -c '
         org.freedesktop.DBus.GetConnectionUnixProcessID string:org.freedesktop.secrets | awk "{print \$2}")
     [ "$(readlink "/proc/$owner/exe")" = /usr/bin/gnome-keyring-daemon ]
 '
-[ ! -e "$runtime/bande-secrets" ]
-echo "bande-desktop installs next to GNOME, whose keyring keeps working outside Bande"
+
+scratch=$(mktemp -d)
+mkdir -m 0700 "$scratch/runtime" "$scratch/home"
+dbus-daemon --session --address="unix:path=$scratch/system" --fork --print-pid=3 3> "$scratch/system.pid"
+export DBUS_SYSTEM_BUS_ADDRESS="unix:path=$scratch/system"
+python3 -m dbusmock --system --template logind &
+logind=$!
+trap 'kill "$logind" "$(cat "$scratch/system.pid")" 2> /dev/null || true' EXIT
+until dbus-send --system --print-reply --dest=org.freedesktop.login1 /org/freedesktop/login1 \
+    org.freedesktop.DBus.Peer.Ping > /dev/null 2>&1; do
+    sleep 0.1
+done
+login() {
+    local session
+    session=$(dbus-send --system --print-reply=literal --dest=org.freedesktop.login1 /org/freedesktop/login1 \
+        org.freedesktop.DBus.Mock.AddSession string:"$1" string:seat0 uint32:0 string:root boolean:true)
+    dbus-send --system --print-reply --dest=org.freedesktop.login1 $session org.freedesktop.DBus.Mock.AddProperty \
+        string:org.freedesktop.login1.Session string:Desktop variant:string:"$2" > /dev/null
+}
+export HOME="$scratch/home" XDG_DATA_HOME="$scratch/home/.local/share" XDG_RUNTIME_DIR="$scratch/runtime"
+login c1 gnome
+dbus-run-session -- bash -euo pipefail -c '
+    timeout 20 /usr/libexec/bande-secrets
+    ! dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus.GetNameOwner string:org.freedesktop.secrets 2> /dev/null
+'
+login c2 bande
+dbus-run-session -- bash -euo pipefail -c '
+    /usr/libexec/bande-secrets &
+    keyring=$!
+    owner() {
+        dbus-send --session --print-reply=literal --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+            org.freedesktop.DBus.GetConnectionUnixProcessID string:org.freedesktop.secrets 2> /dev/null
+    }
+    for _ in $(seq 100); do
+        owner > /dev/null && break
+        sleep 0.1
+    done
+    owner | grep -qw "$keyring"
+    kill "$keyring"
+'
+echo "bande-desktop installs next to GNOME, whose keyring keeps working outside Bande, where Bande's stays off"

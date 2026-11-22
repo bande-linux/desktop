@@ -1073,15 +1073,6 @@ msgstr "Manuell"
 msgid "Proxy"
 msgstr "Proxy"
 
-msgid "Configuration URL"
-msgstr "Konfigurationsadress"
-
-msgid "http://wpad.example.org/wpad.dat"
-msgstr "http://wpad.example.org/wpad.dat"
-
-msgid "Command-line tools don’t read configuration files: give them a manual proxy"
-msgstr "Kommandoradsverktyg läser inte konfigurationsfiler: ge dem en manuell proxy"
-
 msgid "Apps you open after logging out and back in use the proxy"
 msgstr "Appar som du öppnar efter att ha loggat ut och in igen använder proxyn"
 
@@ -1717,9 +1708,6 @@ msgstr "Sök i den här mappen igen"
 
 msgid "Files in these folders never appear in search"
 msgstr "Filer i de här mapparna visas aldrig i sökresultat"
-
-msgid "Type the address of the configuration file, such as http://wpad.example.org/wpad.dat."
-msgstr "Skriv konfigurationsfilens adress, till exempel http://wpad.example.org/wpad.dat."
 
 msgid "Type the proxy as a name and port, such as proxy.example.org:3128."
 msgstr "Skriv proxyn som namn och port, till exempel proxy.example.org:3128."

@@ -399,7 +399,7 @@ Section: misc
 Depends: ${shlibs:Depends},
  default-dbus-session-bus | dbus-session-bus,
  ${misc:Depends}
-Recommends: avahi-daemon
+Suggests: avahi-daemon
 Description: Bande print service: prints to network printers without CUPS
  Serves org.bande.Print on the session bus: finds IPP Everywhere
  (driverless) printers on the network through Avahi, keeps a
@@ -571,8 +571,8 @@ Recommends: cifs-utils,
  go-mtpfs,
  gphotofs,
  libmtp-common,
- fuse3,
- avahi-daemon,
+ fuse3
+Suggests: avahi-daemon,
  libnss-mdns
 Description: Bande removable media mounting
  Mounts removable drives through UDisks2 as they appear, connects to SMB,
@@ -811,9 +811,10 @@ Description: Bande Settings: panes for the desktop and its devices with ranked s
  update), with a search field that ranks the matching settings and marks
  them. Every pane follows changes made elsewhere while it is open.
  Desktop settings go through org.bande.Config, which writes config.kdl. A
- polkit rule lets administrators (members of sudo) change the time,
- language, login screen keyboard layouts and computer name without a
- password prompt. Any supported language can be chosen; it is generated
+ polkit rule lets administrators (members of sudo) change the time zone,
+ automatic time, language and login screen keyboard layouts without a
+ password prompt; setting the clock by hand or renaming the computer asks
+ for the password. Any supported language can be chosen; it is generated
  with locale-gen. Updates install through PackageKit while the computer
  runs; only those that need a restart install at the next restart,
  through PackageKit's offline updates. Settings asks to log out or reopen

@@ -34,6 +34,7 @@ eu-stack elfutils optional
 restic restic depends
 gst-inspect-1.0 gstreamer1.0-tools optional
 gst-launch-1.0 gstreamer1.0-tools optional
+/usr/lib/systemd systemd optional
 nmcli network-manager optional
 /usr/sbin/NetworkManager network-manager optional
 /usr/sbin/ifup ifupdown optional

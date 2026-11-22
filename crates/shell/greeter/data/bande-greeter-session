@@ -1,8 +1,11 @@
 #!/bin/sh
 unset LANG LANGUAGE LC_ALL LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT LC_IDENTIFICATION
-if [ -r /etc/locale.conf ]; then
-    set -a
-    . /etc/locale.conf
-    set +a
-fi
+for system_locale in /etc/locale.conf /etc/default/locale; do
+    if [ -r "$system_locale" ]; then
+        set -a
+        . "$system_locale"
+        set +a
+        break
+    fi
+done
 exec /usr/bin/bande-compositor --greeter

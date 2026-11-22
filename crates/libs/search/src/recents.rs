@@ -117,13 +117,19 @@ fn new_bookmark(href: &str, mime: &str, name: &str, exec: &str, now: &str) -> St
     )
 }
 
-fn with_recently_used(xbel: &str, files: &[(PathBuf, String)], name: &str, exec: &str) -> String {
+fn with_recently_used(
+    xbel: &str,
+    files: &[(PathBuf, String)],
+    name: &str,
+    exec: &str,
+) -> Option<String> {
     let now = jiff::Timestamp::now()
         .strftime("%Y-%m-%dT%H:%M:%S%.6fZ")
         .to_string();
-    let mut xbel = match xbel.contains(XBEL_END) {
-        true => xbel.to_owned(),
-        false => format!("{XBEL_START}{XBEL_END}\n"),
+    let mut xbel = match (xbel.contains(XBEL_END), xbel.trim().is_empty()) {
+        (true, _) => xbel.to_owned(),
+        (false, true) => format!("{XBEL_START}{XBEL_END}\n"),
+        (false, false) => return None,
     };
     for (path, mime) in files {
         let href = bande_xdg::escape_xml(&bande_xdg::file_uri(path));
@@ -142,7 +148,7 @@ fn with_recently_used(xbel: &str, files: &[(PathBuf, String)], name: &str, exec:
             }
         }
     }
-    xbel
+    Some(xbel)
 }
 
 /// Whether the user lets the desktop remember recently used files.
@@ -175,9 +181,14 @@ pub fn add_recently_used(
                 return;
             }
         };
-        let written =
-            bande_xdg::replace_file(&path, with_recently_used(&xbel, &files, &name, &exec));
-        if let Err(error) = written {
+        let Some(updated) = with_recently_used(&xbel, &files, &name, &exec) else {
+            tracing::warn!(
+                "{} ends early, so it is left as it is and these files are not added",
+                path.display()
+            );
+            return;
+        };
+        if let Err(error) = bande_xdg::replace_file(&path, updated) {
             tracing::warn!("cannot remember the recently opened files: {error}");
         }
     };
@@ -290,13 +301,15 @@ mod tests {
             std::slice::from_ref(&report),
             "Text Editor",
             "bande-text-editor %U",
-        );
+        )
+        .expect("an empty file starts a new list");
         let twice = with_recently_used(
             &once,
             &[report.clone(), notes.clone()],
             "Text Editor",
             "bande-text-editor %U",
-        );
+        )
+        .expect("a whole file takes more files");
         let paths: Vec<PathBuf> = recently_used(&twice)
             .into_iter()
             .map(|(path, _)| path)

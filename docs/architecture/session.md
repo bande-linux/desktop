@@ -76,9 +76,10 @@ graph LR
   (`org.bande.Power.KeepAwake`) and someone else's logind `sleep` inhibitor keep it awake;
   after the last one the computer sleeps after a full `suspend-after`. Audio alone keeps the
   computer but not the display awake; CPU load, builds and MPRIS keep nothing awake.
-- The power button: the compositor holds logind's `handle-power-key` inhibitor in a user session,
-  and on a press shorter than five seconds locks the session through logind and asks for
-  `Suspend` when `CanSuspend` is `yes`.
+- The power button: the compositor holds logind's `handle-power-key` inhibitor while its user
+  session is active and logind's configuration leaves `HandlePowerKey=` unset, and on a press
+  shorter than five seconds locks the session through logind and asks for `Suspend` when
+  `CanSuspend` is `yes`.
 - **Lock screen** (`crates/shell/lock`): date, time, the user's picture (AccountsService
   `IconFile`, or the initial on the accent colour) and name, and a secure field. PAM
   (`/etc/pam.d/bande-lock`) runs off the UI thread with a progress row after 200 ms; a rejected
@@ -267,7 +268,10 @@ UI.
   session: started by the login socket or by `bande-session.target`, with no D-Bus activation
   file, so in another desktop that desktop's keyring (GNOME Keyring, KWallet) owns the name and
   is activated as before. The login socket is in `sockets.target` because PAM opens the session
-  before `bande-session.target` starts; nothing writes to it outside Bande.
+  before `bande-session.target` starts. When the socket starts it and logind lists no session of
+  the user whose `Desktop` is `bande` (`pam_systemd` registers the session first, as its
+  pam-auth-update profile sorts before `bande-secrets`), it stays off the bus: it answers the
+  waiting login messages, following a password change but unlocking nothing, and exits.
 - Keyrings are oo7's v1 files in `~/.local/share/bande/keyrings/v1/<name>.keyring` (written 0600
   through a temporary file): `login` (alias `default`), the in-memory `session`, and any an app
   creates. GNOME Keyring's files are not read.
@@ -277,9 +281,12 @@ UI.
   `XDG_CURRENT_DESKTOP` names `X-Bande`, as every display manager sets them for `pam_systemd` (the
   module checks the socket is the user's, the daemon takes messages only from root; a failed
   send is logged through `pam_syslog`, never the password; a missing socket is no failure), and
-  `password` re-encrypts the login keyring when the old password opens it and the change comes
-  from a Bande session; after a change made elsewhere, the next unlock offers to update it. The lock screen runs `auth` and `account` only, so it
-  unlocks nothing; the login keyring stays unlocked while the screen is locked. When the login password
+  `password` re-encrypts the login keyring, wherever the password is changed (`passwd` at a
+  console, over SSH, in another desktop), when the old password opens it and the user's systemd
+  instance runs, which holds the socket. A change made without it (by root for another user, or
+  with no user instance) leaves the keyring on the old password, and the next unlock offers to
+  update it. The lock screen runs `auth` and `account` only, so it unlocks
+  nothing; the login keyring stays unlocked while the screen is locked. When the login password
   does not open the keyring, the next unlock offers to update its password or start a new one
   (the old file is kept).
 - It is NetworkManager's secret agent (`org.bande.Secrets`, answering only NetworkManager's bus
@@ -313,7 +320,8 @@ PipeWire's socket.
   `XDG_SESSION_TYPE` and `XDG_CURRENT_DESKTOP` to the user manager and D-Bus activation.
 - `bande-session` sets `ELECTRON_OZONE_PLATFORM_HINT=auto`, `GTK_USE_PORTAL=1` and
   `QT_QPA_PLATFORMTHEME` (each unless already set), and takes the language and formats from
-  `/etc/locale.conf`, then `~/.config/locale.conf`, into the user manager and D-Bus activation:
+  `/etc/locale.conf` (or Debian's `/etc/default/locale` where there is none), then
+  `~/.config/locale.conf`, into the user manager and D-Bus activation:
   greetd and a lingering user manager keep what they had, so a choice in Settings would
   otherwise need a restart. The login window reads the same file through
   `bande-greeter-session`.
@@ -321,7 +329,8 @@ PipeWire's socket.
   default through `bande-locale-helper` under `pkexec` (`org.bande.locale-helper`), since Debian
   forbids localed's `SetLocale` even to root; localed is only read. The helper accepts only UTF-8
   names from `/usr/share/i18n/SUPPORTED`, runs `locale-gen --keep-existing` before replacing
-  `/etc/locale.conf` atomically, and writes the login keyboard (codes checked against xkb's
+  `/etc/default/locale` atomically, and `/etc/locale.conf` too where it is a file of its own
+  (it never creates one). It writes the login keyboard (codes checked against xkb's
   `evdev.lst`) to `/etc/default/keyboard`, then applies it to udev and the console.
 - Per-app languages are `<app id>=<code>` lines in `$XDG_CONFIG_HOME/bande/app-languages`;
   `spawn_detached` sets `LANGUAGE` for that app and restores the session's value
@@ -373,15 +382,18 @@ brings up the dialog.
   - A device NetworkManager leaves unmanaged (ifupdown, systemd-networkd) shows its address from
     the kernel (rtnetlink) and why Settings leaves it alone. Bande never rewrites
     `/etc/network/interfaces` on its own: "Let Settings Manage This Connection…" runs
-    `bande-network-helper` under `pkexec` (`org.bande.network-helper`, admin each time). It shows
+    `bande-network-helper` under `pkexec` (`org.bande.network-helper`, admin, kept for a few
+    minutes). It shows
     the stanza lines it would disable, then keeps a copy of each file next to it (hidden in
     `interfaces.d`, which `source` globs), takes the interface down with `ifdown`, comments out
     only that interface's lines (splitting a shared `auto` line), reloads NetworkManager and adds
     an equivalent system connection (the Wi-Fi PSK in the root-only keyfile, as Debian's
     NetworkManager keeps it). It refuses anything it can't carry over safely (unknown options such
     as `post-up`, `wpa-conf`, mappings, bridges or VLANs on the interface, line continuations,
-    sources outside `interfaces.d`, a running `dhcpcd.service`), and puts every file back and the
-    interface up again if NetworkManager doesn't take over.
+    sources outside `interfaces.d`, a running `dhcpcd.service`). It reports the hand-over done
+    only once NetworkManager has connected the interface (within 90 seconds); otherwise it deletes
+    the connection it added, leaves the device unmanaged again, puts every file back and brings
+    the interface up again.
   - "Online" (`follow_online`, used by Software and Calendar) is NetworkManager's
     `CONNECTED_GLOBAL`, or a default route in the kernel through a device NetworkManager doesn't
     manage; nothing is sent to find out.
@@ -389,11 +401,14 @@ brings up the dialog.
     (`bande_network::{airplane_mode, set_airplane_mode, follow_airplane_mode}`) blocks every
     rfkill radio through `/dev/rfkill` and remembers in `$XDG_STATE_HOME/bande/airplane-radios`
     which were on, to turn just those back on.
-  - Proxy (none, manual, PAC) is written to `~/.config/environment.d/60-bande-proxy.conf`
-    (`http_proxy`, `https_proxy`, `no_proxy` and their upper-case forms; PAC as libproxy's
-    `pac+URL`) and set in the user manager's and the D-Bus activation environment. libproxy reads
-    these outside GNOME, so GLib apps and the portal's ProxyResolver follow them, as do Qt and
-    command-line tools for a manual proxy; running apps pick them up at the next login.
+  - Proxy (none or manual) is written to `~/.config/bande/proxy` (`http_proxy`, `https_proxy`,
+    `no_proxy` and their upper-case forms) and set in the user manager's and the D-Bus activation
+    environment. `bande-session` sets them from that file when a Bande session starts and unsets
+    them when it ends, so the person's other desktops keep their own proxy. libproxy, so GLib
+    apps and the portal's ProxyResolver, Qt and command-line tools all follow them; running apps
+    pick them up at the next login. There is no PAC mode: libproxy takes a PAC address only from
+    `http_proxy` as `pac+URL`, which every other program rejects, or from GSettings' and
+    `kioslaverc`'s proxy keys, which it reads only when `XDG_CURRENT_DESKTOP` names their desktop.
   - Quick Settings' Airplane mode tile uses the same functions (the active seat reaches
     `/dev/rfkill` through `uaccess`), and its Power Saver tile switches power-profiles-daemon
     between `power-saver` and `balanced`.
@@ -648,8 +663,9 @@ Settings ▸ Sharing works with Debian's own Samba and SSH setup and never rewri
 
 - **File sharing** is `smbd` enabled and running with Debian's `/etc/samba/smb.conf`; turning it
   off disables `smbd`. `nmbd` is left as the administrator set it. Installing Samba from Sharing
-  disables `smbd` and `nmbd`, which the package's own scripts start, so nothing listens until
-  the person turns sharing on.
+  masks `smbd` and `nmbd` first, so the package's own scripts cannot start them, then disables
+  them; nothing listens until the person turns sharing on, which unmasks both. If the install
+  fails, the masks are lifted again.
 - **Folders** are Samba usershares (`net usershare`, which Debian's build enables in
   `/var/lib/samba/usershares`, mode 1770 for `sambashare`): the helper runs `net` as the person,
   with their own primary group and `sambashare` added, so their account is not changed. Listing

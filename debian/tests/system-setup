@@ -1,8 +1,7 @@
 #!/bin/bash
 # Installing every Bande package with its recommends brings no package that takes over system-wide
-# setup, and leaves /etc/resolv.conf, the hosts line of /etc/nsswitch.conf and
-# /etc/network/interfaces as they were. The one allowed change is libnss-mdns adding
-# mdns4_minimal to the hosts line, Debian's way to resolve the .local names Files finds.
+# setup, and leaves /etc/resolv.conf, /etc/nsswitch.conf and /etc/network/interfaces as they were
+# on a Debian system booted with systemd (systemd-sysv and its libnss-systemd).
 # bande-greeter (with greetd) is Bande's login window, which the display-manager test shows is
 # offered, not imposed.
 set -euo pipefail
@@ -20,8 +19,7 @@ setup() {
         echo "resolv.conf links to $(readlink /etc/resolv.conf)"
     fi
     cat /etc/resolv.conf 2> /dev/null || echo "no resolv.conf"
-    sed -n 's/^hosts:[[:space:]]*//p' /etc/nsswitch.conf |
-        sed -E 's/mdns4_minimal \[NOTFOUND=return\]//; s/[[:space:]]+/ /g; s/ $//'
+    cat /etc/nsswitch.conf
     cat /etc/network/interfaces 2> /dev/null || echo "no interfaces"
 }
 version=$(candidate bande-desktop)

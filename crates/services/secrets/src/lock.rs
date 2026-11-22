@@ -10,14 +10,18 @@ use zbus::{Connection, MatchRule, MessageStream};
 use crate::service::Daemon;
 
 const LOGIN: &str = "org.freedesktop.login1";
+const LOGIN_PATH: &str = "/org/freedesktop/login1";
+const MANAGER: &str = "org.freedesktop.login1.Manager";
 const SESSION: &str = "org.freedesktop.login1.Session";
+const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
+const BANDE_DESKTOP: &str = "bande";
 
 async fn ours(system: &Connection, session: &str) -> zbus::Result<bool> {
     let reply = system
         .call_method(
             Some(LOGIN),
             session,
-            Some("org.freedesktop.DBus.Properties"),
+            Some(PROPERTIES),
             "Get",
             &(SESSION, "User"),
         )
@@ -25,6 +29,41 @@ async fn ours(system: &Connection, session: &str) -> zbus::Result<bool> {
     let user: OwnedValue = reply.body().deserialize()?;
     let (uid, _): (u32, OwnedObjectPath) = user.try_into()?;
     Ok(uid == getuid().as_raw())
+}
+
+async fn desktop(system: &Connection, session: &str) -> zbus::Result<String> {
+    let reply = system
+        .call_method(
+            Some(LOGIN),
+            session,
+            Some(PROPERTIES),
+            "Get",
+            &(SESSION, "Desktop"),
+        )
+        .await?;
+    let desktop: OwnedValue = reply.body().deserialize()?;
+    Ok(desktop.try_into()?)
+}
+
+/// Whether logind has a Bande session of this user, whose desktop the login window names `bande`.
+pub async fn has_bande_session(system: &Connection) -> zbus::Result<bool> {
+    let reply = system
+        .call_method(Some(LOGIN), LOGIN_PATH, Some(MANAGER), "ListSessions", &())
+        .await?;
+    let sessions: Vec<(String, u32, String, String, OwnedObjectPath)> =
+        reply.body().deserialize()?;
+    let uid = getuid().as_raw();
+    for (_, owner, _, _, path) in sessions {
+        if owner != uid {
+            continue;
+        }
+        match desktop(system, path.as_str()).await {
+            Ok(desktop) if desktop == BANDE_DESKTOP => return Ok(true),
+            Ok(_) => {}
+            Err(error) => tracing::debug!("cannot read the desktop of session {path}: {error}"),
+        }
+    }
+    Ok(false)
 }
 
 pub async fn revoke_grants_on_lock(daemon: Arc<Daemon>, system: Connection) -> zbus::Result<()> {

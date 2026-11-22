@@ -1,4 +1,7 @@
+use std::fs;
+use std::io;
 use std::os::fd::OwnedFd;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::thread;
 
@@ -12,6 +15,9 @@ use zbus::zvariant::OwnedObjectPath;
     default_service = "org.freedesktop.login1"
 )]
 trait Session {
+    #[zbus(property)]
+    fn active(&self) -> zbus::Result<bool>;
+
     fn set_locked_hint(&self, locked: bool) -> zbus::Result<()>;
 
     #[zbus(name = "Lock")]
@@ -48,6 +54,13 @@ trait Manager {
     fn prepare_for_shutdown(&self, start: bool) -> zbus::Result<()>;
 }
 
+const LOGIND_CONFIG_FOLDERS: [&str; 4] = [
+    "/etc/systemd",
+    "/run/systemd",
+    "/usr/local/lib/systemd",
+    "/usr/lib/systemd",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRequest {
     Lock,
@@ -79,19 +92,76 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
     Ok(())
 }
 
-pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus::Result<()> {
+fn logind_files(folder: &Path) -> Vec<PathBuf> {
+    let mut files = vec![folder.join("logind.conf")];
+    match fs::read_dir(folder.join("logind.conf.d")) {
+        Ok(entries) => files.extend(
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|extension| extension == "conf")
+                }),
+        ),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!("cannot read {}/logind.conf.d: {error}", folder.display()),
+    }
+    files
+}
+
+fn power_key_configured() -> bool {
+    LOGIND_CONFIG_FOLDERS
+        .iter()
+        .flat_map(|folder| logind_files(Path::new(folder)))
+        .any(|file| match fs::read_to_string(&file) {
+            Ok(text) => text
+                .lines()
+                .any(|line| line.trim_start().starts_with("HandlePowerKey=")),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+            Err(error) => {
+                tracing::warn!("cannot read {}: {error}", file.display());
+                false
+            }
+        })
+}
+
+pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus::Result<bool> {
+    if power_key_configured() {
+        return Ok(false);
+    }
     let manager = ManagerProxyBlocking::new(connection)?;
-    let held = manager.inhibit(
-        "handle-power-key",
-        "Bande",
-        &tr!("The power button locks the screen and puts the computer to sleep"),
-        "block",
-    )?;
     let session = SessionProxyBlocking::builder(connection)
         .path(manager.get_session("auto")?)?
         .build()?;
+    let inhibitor = manager.clone();
+    let inhibit = move || {
+        inhibitor
+            .inhibit(
+                "handle-power-key",
+                "Bande",
+                &tr!("The power button locks the screen and puts the computer to sleep"),
+                "block",
+            )
+            .inspect_err(|error| tracing::warn!("cannot handle the power button: {error}"))
+            .ok()
+    };
+    let changes = session.receive_active_changed();
+    let mut held = match session.active()? {
+        true => inhibit(),
+        false => None,
+    };
     thread::spawn(move || {
-        let _held = held;
+        for change in changes {
+            match change.get() {
+                Ok(true) if held.is_none() => held = inhibit(),
+                Ok(true) => {}
+                Ok(false) => held = None,
+                Err(error) => tracing::warn!("cannot tell whether the session is active: {error}"),
+            }
+        }
+    });
+    thread::spawn(move || {
         for () in presses {
             if let Err(error) = session.request_lock() {
                 tracing::warn!("cannot lock on the power button: {error}");
@@ -107,7 +177,7 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
             }
         }
     });
-    Ok(())
+    Ok(true)
 }
 
 pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus::Result<()> {

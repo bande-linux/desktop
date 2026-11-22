@@ -55,7 +55,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `bande-greeter-share@.service`, which a `user@.service` drop-in wants, so only its owner writes
   it and only the login window reads it. `bande-greeter` ships its PAM service as the conffile
   `/etc/pam.d/bande-greeter` (`debian/bande-greeter.pam`, after Debian's `gdm-password`), which
-  its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched. The other scripts purge state, restart nothing else and run
+  its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched.
+  `/etc/bande` is created by `bande-reporter`'s tmpfiles entry, or by Settings' locale helper
+  when it first writes the login window's `/etc/bande/login.kdl`; purging `bande-reporter` or
+  `bande-settings` removes the file it wrote there, and the folder once it is empty. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
   `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative and the
   boot screen a `default.plymouth` alternative (`dh_installalternatives`). The boot screen's
@@ -78,13 +81,14 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   other theme is chosen, the initramfs carries it, its link and Inter, and purging it leaves
   neither the alternative nor the theme there), `system-setup` (every package with its recommends brings none of the short list of packages
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
-  display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and the `hosts`
-  line of `/etc/nsswitch.conf` as they were, but for `libnss-mdns`'s own entry),
+  display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and
+  `/etc/nsswitch.conf` of a system booted with systemd as they were),
   `display-manager` (next to LightDM, the login window is offered and not imposed,
   `dpkg-reconfigure` switches both ways, and removing it gives the display back to LightDM),
   `coexistence` (`bande-desktop` installs next to `gnome-core` without removing anything, and
-  GNOME's keyring keeps its PAM profile, socket and activation while Bande's stays out of a
-  non-Bande login), `services` (the
+  GNOME's keyring keeps its PAM profile, socket and activation, and Bande's keyring, started
+  while logind (python-dbusmock's template) lists only a GNOME session of the user, exits
+  without taking `org.freedesktop.secrets`, which it takes once a Bande session is listed), `services` (the
   settings service on a private bus, the compositor headless), `portal` (the colour scheme
   through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).
 
@@ -227,12 +231,13 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `bande-spell` recommends the English dictionary, `bande-files` and `bande-lookup` DejaVu Sans
   Mono, and `bande-clock` the notification and sound services, which ring its alarms;
 - `bande-backup` depends on `restic` and `fuse3`: Debian's restic is the backup engine ([session.md](session.md#backups)).
-- `bande-automount` recommends `avahi-daemon`, which Files browses for nearby computers over its
+- `bande-automount` suggests `avahi-daemon`, which Files browses for nearby computers over its
   D-Bus interface (Samba announces shares through it too), and `libnss-mdns`, so the `.local`
-  names it finds resolve when mounting; neither touches `/etc/resolv.conf` or the network setup;
-  without them the Network folder offers to install them;
-- `bande-printd` recommends `avahi-daemon` too, which it browses for driverless printers; without
-  it Settings ▸ Printers offers to install it and printers added by address still print;
+  names it finds resolve when mounting; they stay out of an install because Avahi announces the
+  computer on the network and `libnss-mdns` changes `/etc/nsswitch.conf`, so the Network folder
+  offers to install them;
+- `bande-printd` suggests `avahi-daemon` too, which it browses for driverless printers; Settings ▸
+  Printers offers to install it and printers added by address print without it;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`, which it runs from its own `bande-greeter.service`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
@@ -246,7 +251,7 @@ No package depends on an X server, XWayland or an X session; the `desktop` autop
 comes along.
 
 Bande ships no firewall rules and changes no system-wide kernel or resolver policy: none of its
-components listens on the network until the person turns a service on (`avahi-daemon`, when
-installed, answers for the computer's name on the local network as Debian configures it), and a default-deny ruleset
+components listens on the network until the person turns a service on (`avahi-daemon`, once the
+person installs it, answers for the computer's name on the local network as Debian configures it), and a default-deny ruleset
 would only break what a person turns on (file sharing, a development server). Flatpak is the sandbox and the portal asks for access; other programs run with the user's
 full access, and Settings ▸ Privacy & Security says so.

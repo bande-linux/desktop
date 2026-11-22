@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -41,18 +41,22 @@ fn write_staged(
     target: &Path,
     mode: Option<u32>,
 ) -> io::Result<()> {
+    let existing = match mode {
+        Some(_) => None,
+        None => fs::metadata(target)
+            .ok()
+            .map(|existing| existing.permissions()),
+    };
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    if let Some(mode) = mode {
+    if let Some(mode) = mode.or(existing.as_ref().map(|existing| existing.mode() & 0o777)) {
         options.mode(mode);
     }
     let mut staged = options.open(staging)?;
-    staged.write_all(contents)?;
-    if mode.is_none()
-        && let Ok(existing) = fs::metadata(target)
-    {
-        staged.set_permissions(existing.permissions())?;
+    if let Some(existing) = existing {
+        staged.set_permissions(existing)?;
     }
+    staged.write_all(contents)?;
     staged.sync_all()
 }
 

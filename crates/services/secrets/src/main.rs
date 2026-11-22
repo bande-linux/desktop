@@ -25,10 +25,18 @@ async fn serve() -> Result<(), Box<dyn Error>> {
         .map(PathBuf::from)
         .ok_or("no XDG_RUNTIME_DIR")?;
     let listener = pam::listener(&runtime_dir)?;
+    let system = zbus::connection::Builder::system()?.build().await;
+    if let Ok(system) = &system
+        && !lock::has_bande_session(system).await?
+    {
+        tracing::info!("this user has no Bande session, so the keyring stays off the bus");
+        pam::follow_changes(data_home, listener).await?;
+        return Ok(());
+    }
     let daemon = Daemon::new(Store::load(data_home).await, PathBuf::from(PROGRAM));
     let connection = zbus::connection::Builder::session()?.build().await?;
     daemon.serve(&connection).await?;
-    match zbus::connection::Builder::system()?.build().await {
+    match system {
         Ok(system) => {
             let executor = connection.executor();
             let (agent, locks) = (daemon.clone(), daemon.clone());

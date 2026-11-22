@@ -45,6 +45,8 @@ const ROTATE_RIGHT: &str = "rotate-right";
 const FLIP_HORIZONTAL: &str = "flip-horizontal";
 const FLIP_VERTICAL: &str = "flip-vertical";
 const SAVE_ROTATION: &str = "save-rotation";
+const TRASH: &str = "trash";
+const UNDO_TRASH: &str = "undo-trash";
 const FIND: &str = "find";
 const FIND_NEXT: &str = "find-next";
 const FIND_PREVIOUS: &str = "find-previous";
@@ -350,9 +352,23 @@ impl Program for Viewer {
         file_menu.extend([
             item(text!("Properties"), PROPERTIES, Some("Ctrl+I"), file),
             Entry::separator(),
+            item(
+                text!("Move to Trash"),
+                TRASH,
+                Some("Delete"),
+                view.is_some_and(FileView::can_trash),
+            ),
+            Entry::separator(),
             bande_app_menu::print_item(file),
         ]);
         let edit = vec![
+            item(
+                text!("Undo Move to Trash"),
+                UNDO_TRASH,
+                Some("Ctrl+Z"),
+                view.is_some_and(FileView::can_undo_trash),
+            ),
+            Entry::separator(),
             item(text!("Copy"), COPY, Some("Ctrl+C"), copyable),
             Entry::separator(),
             item(text!("Find…"), FIND, Some("Ctrl+F"), document),
@@ -479,6 +495,8 @@ impl Program for Viewer {
                 ROTATE_RIGHT => view.rotate(true),
                 FLIP_HORIZONTAL => view.flip(false),
                 FLIP_VERTICAL => view.flip(true),
+                TRASH => view.move_to_trash(),
+                UNDO_TRASH => view.undo_trash(),
                 NEXT => view.go(true),
                 PREVIOUS => view.go(false),
                 _ => return,

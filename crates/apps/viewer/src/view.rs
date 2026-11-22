@@ -30,6 +30,7 @@ use crate::tr_with;
 use bande_content::pdf::protocol::{Opened as PdfOpened, Render, Use};
 use bande_content::pdf::session::{Change, Phase, Session};
 use bande_content::{Decoded, Failure, Kind};
+use bande_fs::{Trash, TrashItem};
 
 const TOOLBAR_HEIGHT: f32 = WINDOW_HEADER_HEIGHT as f32;
 const SIDE: f32 = 12.0;
@@ -126,6 +127,7 @@ pub struct FileView {
     thumbnails: Option<Thumbnails>,
     copies: Option<Inbox<Option<Vec<u8>>>>,
     saves: Option<Inbox<Saved>>,
+    trashed: Option<(TrashItem, usize)>,
     session: Option<Session>,
     sidebar_shown: bool,
     sidebar_mode: SidebarMode,
@@ -215,6 +217,7 @@ impl FileView {
             thumbnails: None,
             copies: None,
             saves: None,
+            trashed: None,
             session: None,
             sidebar_shown: several,
             sidebar_mode: SidebarMode::Thumbnails,
@@ -228,16 +231,99 @@ impl FileView {
         view.fill_sidebar();
         view.load_current();
         if view.paths.is_empty() {
-            let (title, detail) = (
-                tr!("No file is open"),
-                tr!(
-                    "Open an image or a PDF document with File ▸ Open…, from Files or by dropping it here."
-                ),
-            );
-            view.with_canvas(|canvas| canvas.show_message(&title, &detail));
+            view.show_empty();
         }
         view.ui.set_focus(canvas);
         view
+    }
+
+    fn show_empty(&mut self) {
+        let (title, detail) = (
+            tr!("No file is open"),
+            tr!(
+                "Open an image or a PDF document with File ▸ Open…, from Files or by dropping it here."
+            ),
+        );
+        self.with_canvas(|canvas| canvas.show_message(&title, &detail));
+    }
+
+    pub fn can_trash(&self) -> bool {
+        self.path()
+            .is_some_and(|path| !bande_volumes::on_connected_volume(path))
+    }
+
+    pub fn move_to_trash(&mut self) {
+        let Some(path) = self.path().map(Path::to_path_buf) else {
+            return;
+        };
+        let next = match self.paths.len() {
+            1 => neighbour(&path, true),
+            _ => None,
+        };
+        let put = Trash::for_user()
+            .ok_or_else(|| std::io::Error::other("there is no home folder"))
+            .and_then(|trash| trash.put(&path));
+        let item = match put {
+            Ok(item) => item,
+            Err(error) => {
+                tracing::warn!("cannot move {} to the Trash: {error}", path.display());
+                let title = tr_with(
+                    text!("“{name}” could not be moved to the Trash."),
+                    &[("name", file_name(&path))],
+                );
+                let detail = tr!("You may not have permission to move it.");
+                let alert = Alert::new(&title, &detail, |_| {}).primary(&tr!("OK"), "ok");
+                return self.ui.present_dialog(alert);
+            }
+        };
+        self.trashed = Some((item, self.current));
+        match next {
+            Some(next) => self.paths[self.current] = next,
+            None => {
+                self.paths.remove(self.current);
+                self.current = self.current.min(self.paths.len().saturating_sub(1));
+            }
+        }
+        self.show_current();
+    }
+
+    pub fn can_undo_trash(&self) -> bool {
+        self.trashed.is_some()
+    }
+
+    pub fn undo_trash(&mut self) {
+        let Some((item, at)) = self.trashed.take() else {
+            return;
+        };
+        if let Err(error) = bande_fs::restore_to(&item, &item.original) {
+            tracing::warn!("cannot put back {}: {error}", item.original.display());
+            let title = tr_with(
+                text!("“{name}” could not be put back."),
+                &[("name", item.name())],
+            );
+            let detail = tr!("A file with the same name may be in its place.");
+            let alert = Alert::new(&title, &detail, |_| {}).primary(&tr!("OK"), "ok");
+            return self.ui.present_dialog(alert);
+        }
+        match self.paths.len() {
+            0 | 1 => self.paths = vec![item.original],
+            count => self.paths.insert(at.min(count), item.original),
+        }
+        self.current = at.min(self.paths.len() - 1);
+        self.show_current();
+    }
+
+    fn show_current(&mut self) {
+        self.fill_sidebar();
+        if self.paths.is_empty() {
+            if self.session.take().is_some() {
+                self.reset_document();
+            }
+            self.show_empty();
+            self.requests.push(Request::Changed);
+            return;
+        }
+        self.load_current();
     }
 
     pub fn ui_ref(&self) -> &Ui {

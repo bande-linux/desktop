@@ -139,6 +139,12 @@ msgstr "Visa i Filer"
 msgid "Properties"
 msgstr "Egenskaper"
 
+msgid "Move to Trash"
+msgstr "Flytta till papperskorgen"
+
+msgid "Undo Move to Trash"
+msgstr "Ångra flytt till papperskorgen"
+
 msgid "Copy"
 msgstr "Kopiera"
 
@@ -253,6 +259,21 @@ msgstr "Ingen fil är öppen"
 msgid "Open an image or a PDF document with File ▸ Open…, from Files or by dropping it here."
 msgstr "Öppna en bild eller ett PDF-dokument med Arkiv ▸ Öppna…, från Filer eller genom att släppa det här."
 
+msgid "“{name}” could not be moved to the Trash."
+msgstr "Det gick inte att flytta ”{name}” till papperskorgen."
+
+msgid "You may not have permission to move it."
+msgstr "Du kanske inte har behörighet att flytta den."
+
+msgid "OK"
+msgstr "OK"
+
+msgid "“{name}” could not be put back."
+msgstr "Det gick inte att lägga tillbaka ”{name}”."
+
+msgid "A file with the same name may be in its place."
+msgstr "Det kanske redan finns en fil med samma namn på dess plats."
+
 msgid "{name} (page {page} of {count})"
 msgstr "{name} (sida {page} av {count})"
 
@@ -282,6 +303,3 @@ msgstr "Du kanske inte har behörighet att ändra den, eller så är disken full
 
 msgid "Viewer cannot change this file’s orientation without rewriting the picture, so the file is left as it is."
 msgstr "Visare kan inte ändra filens orientering utan att skriva om bilden, så filen lämnas som den är."
-
-msgid "OK"
-msgstr "OK"

@@ -39,7 +39,7 @@ pub use permissions::{
     Access, Class, access, apply_to_enclosed, own_groups, runnable, set_group, set_mode,
     with_access, with_runnable,
 };
-pub use trash::{Trash, TrashDir, TrashItem};
+pub use trash::{Trash, TrashDir, TrashItem, restore_to};
 pub use undo::{Action, History, Step};
 pub use watch::{FolderChanges, FolderWatch};
 

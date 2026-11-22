@@ -759,7 +759,7 @@ fn paint_picture(
     } else {
         (width, height)
     };
-    let fit = fitted(area, shown_width / scale, shown_height / scale, false);
+    let fit = fitted(area, shown_width, shown_height, false);
     let (zoomed_width, zoomed_height) = (fit.width * zoom, fit.height * zoom);
     let room = (
         ((zoomed_width - area.width) / 2.0).max(0.0),

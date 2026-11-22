@@ -286,6 +286,15 @@ impl XdgShellHandler for State {
     fn fullscreen_request(&mut self, surface: ToplevelSurface, output: Option<WlOutput>) {
         if !self.decline_for_fixed_size(&surface) {
             if let Some(screen) = output.and_then(|output| self.screen_of_output(&output)) {
+                let elsewhere = self
+                    .window_index(surface.wl_surface())
+                    .is_some_and(|index| {
+                        let window = &self.windows[index];
+                        self.on_full_screen_space(window) && self.screen_of(window) != screen
+                    });
+                if elsewhere {
+                    self.unfullscreen(surface.wl_surface());
+                }
                 self.move_to_screen(surface.wl_surface(), screen);
             }
             self.fullscreen(surface.wl_surface());

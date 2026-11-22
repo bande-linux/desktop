@@ -7,13 +7,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app::{
+    Cx, Dropping, FileDrop, Info, Keys, Kind, Menus, Program, Settings, View, WindowId,
+};
 use bande_app_menu::Entry;
 use bande_app_settings::{SettingsWatch, SettingsWindow, Stored, settings_folder};
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::{
-    Appearance, DragAction, DragEvent, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window,
-    WindowEvent,
+    Appearance, FrameRegions, Rect, Scene, WINDOW_HEADER_HEIGHT, Window, WindowEvent,
 };
 use bande_velox::{
     Act, ContainerRequest, DisplayWindow, Effect, Endpoint, Failure, Hub, Informer, LogsTarget,
@@ -88,7 +89,7 @@ struct Pane {
     logs: Vec<LogsTarget>,
     shells: Vec<ShellTarget>,
     apps: Option<Apps>,
-    dragged: bool,
+    drop: FileDrop,
     places: Vec<Request>,
 }
 
@@ -230,23 +231,17 @@ impl View for Pane {
             self.view.set_hidden(state.suspended);
             self.view.sync_streams();
         }
-        if let WindowEvent::Drag(drag) = &event {
-            match drag {
-                DragEvent::Entered { uris, .. } => {
-                    self.dragged = self.view.accepts_drop(uris);
-                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
-                }
-                DragEvent::Moved(_) => {
-                    window.accept_drag(self.dragged.then_some(DragAction::Copy));
-                }
-                DragEvent::Dropped { transfer, .. } if self.dragged => {
-                    self.dragged = false;
-                    self.view.dropped(&transfer.uris);
-                    self.serve(window);
-                }
-                DragEvent::Left | DragEvent::Finished(_) => self.dragged = false,
-                DragEvent::Dropped { .. } => {}
+        match self
+            .drop
+            .event(window, &event, |path| self.view.accepts_drop(path))
+        {
+            Dropping::Over => return true,
+            Dropping::Dropped(archives) => {
+                self.view.dropped(archives);
+                self.serve(window);
+                return true;
             }
+            Dropping::Other => {}
         }
         let handled = View::event(self.view.ui(), window, event);
         let pumped = self.view.pump();
@@ -984,7 +979,7 @@ impl Velox {
                 logs: Vec::new(),
                 shells: Vec::new(),
                 apps: None,
-                dragged: false,
+                drop: FileDrop::default(),
                 places: Vec::new(),
             }))
         });

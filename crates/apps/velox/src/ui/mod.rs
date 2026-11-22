@@ -4,6 +4,7 @@ mod places;
 mod widgets;
 
 use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use bande_app_menu::Entry;
@@ -428,28 +429,15 @@ impl VeloxView {
         }
     }
 
-    fn image_archives(&self, uris: &[String]) -> Vec<std::path::PathBuf> {
-        if self.section != Section::Images || !self.ready() {
-            return Vec::new();
-        }
-        uris.iter()
-            .filter_map(|uri| bande_xdg::path_from_file_uri(uri))
-            .filter(|path| {
-                let name = path.to_string_lossy().to_lowercase();
-                IMAGE_ARCHIVES.iter().any(|suffix| name.ends_with(suffix))
-            })
-            .collect()
+    pub fn accepts_drop(&self, path: &Path) -> bool {
+        let name = path.to_string_lossy().to_lowercase();
+        self.section == Section::Images
+            && self.ready()
+            && IMAGE_ARCHIVES.iter().any(|suffix| name.ends_with(suffix))
     }
 
-    pub fn accepts_drop(&self, uris: &[String]) -> bool {
-        !self.image_archives(uris).is_empty()
-    }
-
-    pub fn dropped(&mut self, uris: &[String]) {
-        let archives = self.image_archives(uris);
-        if !archives.is_empty() {
-            self.resources.add_task(Task::LoadImages(archives));
-        }
+    pub fn dropped(&mut self, archives: Vec<PathBuf>) {
+        self.resources.add_task(Task::LoadImages(archives));
     }
 
     pub fn take_requests(&mut self) -> Vec<Request> {

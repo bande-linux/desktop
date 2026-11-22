@@ -84,9 +84,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
   `boot-screen` (the boot screen is a `default.plymouth` alternative that only applies when no
   other theme is chosen, the initramfs carries it, its link and Inter, it installs without GRUB,
-  with GRUB the generated `linux` lines carry `splash` once, also when `/etc/default/grub` has
-  it, Settings' helper turns it off and back to the unmodified conffile, and purging it leaves
-  neither the alternative, the theme nor `splash` behind), `system-setup` (every package with its recommends brings none of the short list of packages
+  with GRUB the generated `linux` lines carry `splash` and `loglevel=3` once, also when
+  `/etc/default/grub` has `splash`, Settings' helper turns them off and back to the unmodified
+  conffile, and purging it leaves neither the alternative, the theme, `splash` nor `loglevel=3`
+  behind), `system-setup` (every package with its recommends brings none of the short list of packages
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
   display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and
   `/etc/nsswitch.conf` of a system booted with systemd as they were),
@@ -140,7 +141,9 @@ are in [performance.md](performance.md).
   installed without recommends starts with no Plymouth). Plymouth only draws with `splash` on the
   kernel command line, which Debian's GRUB leaves out, so the package ships the conffile
   `/etc/default/grub.d/bande-splash.cfg` (`crates/libs/splash/data`), which `grub-mkconfig`
-  sources after `/etc/default/grub` and which adds `splash` unless it is already there. It stays
+  sources after `/etc/default/grub` and which adds `splash` unless it is already there, and
+  `loglevel=3` unless a `loglevel=` is: Debian's kernel prints errors to the console with
+  `quiet`, and firmware errors would otherwise show as text before Plymouth starts. It stays
   until purge like any conffile; a removed package's `splash` only shows Plymouth's own theme.
   Settings ▸ About ▸ Show a boot screen shows whether that line is active and comments it out or
   back in through `bande-boot-screen-helper`, an administrator's change to the conffile that

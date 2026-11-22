@@ -18,10 +18,10 @@ const HELPER: &str = "/usr/libexec/bande-boot-screen-helper";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const THEME_PACKAGE: &str = "bande-plymouth-theme";
 const THEME: &str = "/usr/share/plymouth/themes/bande/bande.plymouth";
-/// GRUB's configuration file, shipped by `bande-plymouth-theme`, that adds `splash` to the
-/// kernel command line.
+/// GRUB's configuration file, shipped by `bande-plymouth-theme`, that adds `splash` and
+/// `loglevel=3` to the kernel command line.
 pub const SPLASH_DROP_IN: &str = "/etc/default/grub.d/bande-splash.cfg";
-const SPLASH: &str = r#"case " $GRUB_CMDLINE_LINUX_DEFAULT " in *" splash "*) ;; *) GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT splash" ;; esac"#;
+const SPLASH: &str = r#"case " $GRUB_CMDLINE_LINUX_DEFAULT " in *" splash "*) ;; *) GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT splash" ;; esac; case " $GRUB_CMDLINE_LINUX_DEFAULT " in *" loglevel="*) ;; *) GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT loglevel=3" ;; esac"#;
 const GRUB_CONFIG: &str = "/boot/grub/grub.cfg";
 const UPDATE_GRUB: &str = "/usr/sbin/update-grub";
 

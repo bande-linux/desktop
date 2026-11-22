@@ -2,8 +2,9 @@
 # The boot screen is a default.plymouth alternative that applies only when no other theme is
 # chosen, the initramfs carries it with its link, plugins and font, and purging it leaves neither
 # the alternative nor the theme in the next initramfs. It installs cleanly without GRUB; with GRUB
-# its configuration file adds "splash" once to the kernel command line outside recovery mode,
-# Settings' helper turns that off and on, and purging regenerates grub.cfg without it.
+# its configuration file adds "splash" and "loglevel=3" once to the kernel command line outside
+# recovery mode, Settings' helper turns them off and on, and purging regenerates grub.cfg without
+# them.
 set -euo pipefail
 themes=/usr/share/plymouth/themes
 theme=$themes/bande/bande.plymouth
@@ -23,11 +24,13 @@ never() {
     fi
 }
 splash_times() {
-    local lines
+    local lines option
     lines=$(grep -E '^[[:space:]]*linux[[:space:]]' /boot/grub/grub.cfg | grep -vw single)
     [ -n "$lines" ] || { echo "grub.cfg has no linux line outside recovery mode"; exit 1; }
     while read -r line; do
-        [ "$(grep -ow splash <<< "$line" | wc -l)" = "$1" ] || { echo "splash not $1 time(s): $line"; exit 1; }
+        for option in splash loglevel=3; do
+            [ "$(grep -ow "$option" <<< "$line" | wc -l)" = "$1" ] || { echo "$option not $1 time(s): $line"; exit 1; }
+        done
     done <<< "$lines"
 }
 helper() {
@@ -95,4 +98,4 @@ splash_times 0
 contents=$(initramfs)
 never grep -q "^${themes#/}/bande" <<< "$contents"
 never grep -q Inter-Regular <<< "$contents"
-echo "the boot screen applies only when chosen by nothing else, adds splash to GRUB once and leaves with its package"
+echo "the boot screen applies only when chosen by nothing else, adds splash and loglevel=3 to GRUB once and leaves with its package"

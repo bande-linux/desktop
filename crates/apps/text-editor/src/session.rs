@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bande_xdg::replace_file;
 use serde::{Deserialize, Serialize};
 
-use crate::file::{MAX_FILE_BYTES, read_bounded};
+use crate::file::{MAX_FILE_BYTES, Stamp, read_bounded};
 
 const RECORD: &str = "json";
 const TEXT: &str = "text";
@@ -32,6 +32,7 @@ pub struct Record {
     pub opened: u128,
     pub format: String,
     pub rich: bool,
+    pub stamp: Option<Stamp>,
 }
 
 #[derive(Debug, Clone)]

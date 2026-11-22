@@ -232,6 +232,7 @@ impl TextEditor {
         }
         match (record.edited, record.path) {
             (true, _) => {
+                let kept_stamp = record.stamp;
                 let (outbox, session, id) = (self.inbox.outbox(), session.clone(), id.clone());
                 let kept = match record.rich {
                     true => Format::Rtf,
@@ -244,6 +245,7 @@ impl TextEditor {
                         .and_then(|bytes| read(bytes, kept, Some(encoding_rs::UTF_8)))
                         .map(|loaded| Loaded {
                             from_disk: false,
+                            stamp: kept_stamp,
                             ..loaded
                         });
                     outbox.send(Message::Loaded { token, loaded });

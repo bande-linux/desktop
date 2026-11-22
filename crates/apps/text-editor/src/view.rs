@@ -423,6 +423,7 @@ impl DocumentView {
             opened: self.opened,
             format: self.format.name().to_owned(),
             rich: self.rich,
+            stamp: self.stamp,
         }
     }
 
@@ -459,6 +460,8 @@ impl DocumentView {
                 self.apply_settings();
             }
             self.format = format;
+        } else if stamp.is_some() {
+            self.stamp = stamp;
         }
         self.note = damaged.then(|| {
             tr!(

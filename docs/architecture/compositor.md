@@ -401,7 +401,9 @@ a session switch or wake once the first frame has flipped.
 
 1. *Before sleep.* `bande-power` holds a logind `delay` inhibitor for sleep. On
    `PrepareForSleep(true)` it locks the session unless locked; the compositor starts `bande-lock`
-   and sets `LockedHint` only once a frame of the lock screen is presented on every display.
+   and sets `LockedHint` only once a frame of the lock screen is presented on every display that
+   is on; with every display off (a closed lid, the display turned off) once the lock screen has
+   drawn on each, so its frame is the first one shown on wake.
    `bande-power` waits for that change, at most 3 s, then releases the inhibitor, so a lock screen
    that never draws leaves the displays blank rather than holding sleep back. Input devices are
    suspended, so keys held into sleep are released.

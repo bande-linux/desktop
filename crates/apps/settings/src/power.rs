@@ -1,7 +1,7 @@
 use bande_l10n::tr;
 use bande_toolkit::ui::Toggle;
 
-use crate::battery::{BatteryCommand, Charge, ChargeLimit, Profiles};
+use crate::battery::{BatteryCommand, Charge, ChargeLimit, NO_RESUME, Profiles};
 use crate::general::info_row;
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::view::{Intent, SettingsView, intent};
@@ -124,6 +124,7 @@ impl SettingsView {
                 &tr!("Hibernation"),
                 &tr!("Before the battery runs out during sleep"),
             )),
+            Some(NO_RESUME) => rows.push(muted_row(&tr!("Hibernation isn't set up, so sleep lasts until the battery runs out."))),
             Some("na") => rows.push(muted_row(&tr!("This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."))),
             Some(_) => rows.push(muted_row(&tr!("The administrator doesn't allow hibernation, so sleep lasts until the battery runs out."))),
             None => {}

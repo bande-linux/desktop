@@ -7,6 +7,7 @@ pub mod controller;
 pub mod ddc;
 pub mod gadgets;
 pub mod idle;
+pub mod lid;
 pub mod logind;
 pub mod password;
 pub mod screensaver;

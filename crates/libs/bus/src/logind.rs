@@ -1,4 +1,7 @@
+use std::fs;
+use std::io;
 use std::os::fd::OwnedFd;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use zbus::blocking::Connection;
@@ -32,6 +35,12 @@ pub trait Manager {
     #[zbus(property)]
     fn block_inhibited(&self) -> zbus::Result<String>;
 
+    #[zbus(property)]
+    fn lid_closed(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn docked(&self) -> zbus::Result<bool>;
+
     #[zbus(signal)]
     fn prepare_for_sleep(&self, start: bool) -> zbus::Result<()>;
 }
@@ -55,34 +64,57 @@ pub trait Session {
 }
 
 #[zbus::proxy(
-    interface = "org.freedesktop.UPower.Device",
+    interface = "org.freedesktop.UPower",
     default_service = "org.freedesktop.UPower",
-    default_path = "/org/freedesktop/UPower/devices/DisplayDevice"
+    default_path = "/org/freedesktop/UPower"
 )]
-trait PowerSource {
-    #[zbus(property, name = "Type")]
-    fn kind(&self) -> zbus::Result<u32>;
-
+trait UPower {
     #[zbus(property)]
-    fn is_present(&self) -> zbus::Result<bool>;
+    fn on_battery(&self) -> zbus::Result<bool>;
 }
 
-const UPOWER_BATTERY: u32 = 2;
+fn runs_on_battery(system: &Connection) -> bool {
+    UPowerProxyBlocking::builder(system)
+        .cache_properties(CacheProperties::No)
+        .build()
+        .and_then(|upower| upower.on_battery())
+        .unwrap_or(false)
+}
 
-fn runs_on_a_battery(system: &Connection) -> bool {
-    PowerSourceProxyBlocking::new(system).is_ok_and(|source| {
-        source.is_present().unwrap_or(false)
-            && source.kind().is_ok_and(|kind| kind == UPOWER_BATTERY)
-    })
+/// Answers whether a hibernated system would resume: the kernel knows its resume device (from
+/// `resume=` or the initramfs) and the command line does not say `noresume`.
+pub fn resume_configured() -> bool {
+    let read = |path: &str| {
+        fs::read_to_string(path).unwrap_or_else(|error| {
+            if error.kind() != io::ErrorKind::NotFound {
+                tracing::warn!("cannot read {path}: {error}");
+            }
+            String::new()
+        })
+    };
+    resumes(&read("/proc/cmdline"), &read("/sys/power/resume"))
+}
+
+fn resumes(cmdline: &str, device: &str) -> bool {
+    let mut words = cmdline.split_whitespace();
+    if words.clone().any(|word| word == "noresume") {
+        return false;
+    }
+    let named = words.any(|word| {
+        word.strip_prefix("resume=")
+            .is_some_and(|device| !device.is_empty() && device != "none")
+    });
+    named || !matches!(device.trim(), "" | "0:0")
 }
 
 pub fn hibernates_after_sleep(manager: &ManagerProxyBlocking<'_>) -> zbus::Result<bool> {
-    Ok(runs_on_a_battery(manager.inner().connection())
-        && manager.can_suspend_then_hibernate()? == "yes")
+    Ok(runs_on_battery(manager.inner().connection())
+        && manager.can_suspend_then_hibernate()? == "yes"
+        && resume_configured())
 }
 
-/// Puts the computer to sleep, hibernating before a battery runs out where logind can, and
-/// answers whether logind allowed it.
+/// Puts the computer to sleep, hibernating later on battery where it would resume, and answers
+/// whether logind allowed it.
 pub fn sleep(manager: &ManagerProxyBlocking<'_>, interactive: bool) -> zbus::Result<bool> {
     if hibernates_after_sleep(manager)? {
         manager.suspend_then_hibernate(interactive)?;
@@ -170,4 +202,60 @@ pub fn runs_in_virtual_machine(system: &Connection) -> bool {
     crate::systemd::ServiceManagerProxyBlocking::new(system)
         .and_then(|manager| manager.virtualization())
         .is_ok_and(|virtualization| !virtualization.is_empty())
+}
+
+const LOGIND_CONFIG_FOLDERS: [&str; 4] = [
+    "/etc/systemd",
+    "/run/systemd",
+    "/usr/local/lib/systemd",
+    "/usr/lib/systemd",
+];
+
+fn logind_files(folder: &Path) -> Vec<PathBuf> {
+    let mut files = vec![folder.join("logind.conf")];
+    match fs::read_dir(folder.join("logind.conf.d")) {
+        Ok(entries) => files.extend(
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|extension| extension == "conf")
+                }),
+        ),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!("cannot read {}/logind.conf.d: {error}", folder.display()),
+    }
+    files
+}
+
+/// Answers whether the administrator's logind configuration sets a key starting with `prefix`.
+pub fn logind_sets(prefix: &str) -> bool {
+    LOGIND_CONFIG_FOLDERS
+        .iter()
+        .flat_map(|folder| logind_files(Path::new(folder)))
+        .any(|file| match fs::read_to_string(&file) {
+            Ok(text) => text
+                .lines()
+                .any(|line| line.trim_start().starts_with(prefix)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+            Err(error) => {
+                tracing::warn!("cannot read {}: {error}", file.display());
+                false
+            }
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resumes;
+
+    #[test]
+    fn hibernation_resumes_only_from_a_named_or_known_resume_device() {
+        assert!(resumes("root=/dev/sda2 resume=UUID=1234 quiet", "0:0\n"));
+        assert!(resumes("root=/dev/sda2 quiet", "259:3\n"));
+        assert!(!resumes("root=/dev/sda2 quiet", "0:0\n"));
+        assert!(!resumes("root=/dev/sda2 resume=none", "0:0\n"));
+        assert!(!resumes("resume=/dev/sda3 noresume", "8:3\n"));
+    }
 }

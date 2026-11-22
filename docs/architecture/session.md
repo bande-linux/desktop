@@ -66,16 +66,30 @@ graph LR
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
   loses its network, and Settings says so on the sleep row. Sleep never comes before the display turns off; Settings says so on a row
   whose choice is overridden.
-- On a computer with a battery, every sleep Bande asks for (idle, the menus, the lock screen,
-  the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`
-  (logind checks swap, resume and Secure Boot), so a sleeping laptop hibernates before its
-  battery runs out (`HibernateDelaySec=` in `sleep.conf` decides when). Settings ▸ Power says
-  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`. When logind leaves
-  the lid alone, because someone holds its `handle-lid-switch` inhibitor (Settings ▸ Power
-  keeping the computer running with the lid closed on power) or `HandleLidSwitch=` or
-  `HandleLidSwitchExternalPower=` is `ignore`, closing the lid locks the session through logind
-  unless logind counts the computer as `Docked`. Where only one of the two is `ignore`, the
-  other source sleeps as well, which locks anyway.
+- On battery, every sleep Bande asks for (idle, the menus, the lock screen, the power button, the
+  lid) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes` and the system
+  would resume: the kernel knows a resume device (`/sys/power/resume`, set from `resume=` or the
+  initramfs) and the command line has no `noresume`. Otherwise, and always on power, it is plain
+  `Suspend`. systemd-sleep decides when a sleeping laptop hibernates (`HibernateDelaySec=`, by
+  default from the battery's discharge rate); Bande changes no system configuration. Settings ▸
+  Power says whether sleep can hibernate, or why not ("isn't set up" without a resume device). Nothing in the session wakes a sleeping computer except an alarm
+  or timer the user set in Clock; `mem_sleep` is the kernel's.
+- **The lid**: closing it locks the session and the computer sleeps at once, unless Settings ▸
+  Power keeps it running on power or a display is connected (logind's `Docked`), where it keeps
+  running with the built-in panel off. `bande-power` holds logind's `handle-lid-switch` inhibitor
+  while it keeps the computer running, and while sleep on the lid would hibernate later, which it
+  then asks for itself on UPower's `LidIsClosed`. Otherwise logind's own lid handling sleeps
+  (plain `Suspend`): `bande-power` lets go when the lid closes with a display connected or
+  someone's `sleep` block inhibitor held, since logind's lid ignores those
+  (`LidSwitchIgnoreInhibited=`), so playing audio or an app never keeps a closed laptop awake.
+  When the administrator sets any `HandleLidSwitch…=` in `logind.conf`, the lid is logind's
+  alone, except Keep running. A wake with the lid still closed (a charger, a USB device) sleeps
+  again 30 s later, as logind's `HoldoffTimeoutSec=` does. When logind leaves the lid alone (an
+  inhibitor, or `HandleLidSwitch=` or `HandleLidSwitchExternalPower=` set to `ignore`), the
+  compositor locks the session on closing it unless the computer is `Docked`.
+- **A sleep that fails** (the boot clock did not move past the monotonic one between
+  `PrepareForSleep` true and false) posts a "The Computer Didn't Sleep" notification, and
+  `bande-power` does not ask again for a closed lid until it opens.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 
@@ -109,7 +123,8 @@ graph LR
   password clears and shakes the field. The compositor sets logind's `LockedHint`.
 - **`bande-power`** (`crates/services/power`) locks the session through logind before sleep,
   holding a `delay` inhibitor until `LockedHint` is set or 3 s pass (below logind's
-  `InhibitDelayMaxSec` of 5). Its idle state machine maps the compositor's
+  `InhibitDelayMaxSec` of 5); with every display off `LockedHint` comes once the lock screen has
+  drawn, so the first frame on wake is the lock screen. Its idle state machine maps the compositor's
   `ext-idle-notify-v1` thresholds to dim, saver, password required, display off and suspend; it
   skips locking a locked session and turns the display off after 60 s on a lock it did not
   start or after waking. When the lock and the display turning off come together (no screen

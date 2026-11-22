@@ -1571,6 +1571,9 @@ msgstr "Viloläge på disk"
 msgid "Before the battery runs out during sleep"
 msgstr "Innan batteriet tar slut under vila"
 
+msgid "Hibernation isn't set up, so sleep lasts until the battery runs out."
+msgstr "Viloläge på disk är inte inställt, så vilan varar tills batteriet tar slut."
+
 msgid "This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."
 msgstr "Den här datorn kan inte gå i viloläge på disk, så vilan varar tills batteriet tar slut. Viloläge på disk kräver växlingsutrymme minst lika stort som minnet och går inte medan Secure Boot låser kärnan."
 

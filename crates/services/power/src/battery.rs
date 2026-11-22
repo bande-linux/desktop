@@ -134,6 +134,12 @@ pub trait UPower {
     #[zbus(property)]
     fn on_battery(&self) -> zbus::Result<bool>;
 
+    #[zbus(property)]
+    fn lid_is_closed(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn lid_is_present(&self) -> zbus::Result<bool>;
+
     fn get_critical_action(&self) -> zbus::Result<String>;
 }
 

@@ -638,6 +638,10 @@ impl Compositor {
         self.state.arrange_screens();
     }
 
+    pub fn lid_closed(&self) -> bool {
+        self.state.lid_closed
+    }
+
     pub fn set_lid_closed(&mut self, closed: bool) {
         if self.state.lid_closed == closed {
             return;

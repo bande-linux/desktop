@@ -19,7 +19,11 @@ use bande_datetime::timedate::zone_changes;
 use bande_inbox::Inbox;
 use bande_log::fault::StallWatch;
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
-use smithay::backend::input::{InputEvent, Switch, SwitchState, SwitchToggleEvent};
+use smithay::backend::input::{
+    ButtonState, Event as _, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent, Switch,
+    SwitchState, SwitchToggleEvent,
+};
+use smithay::backend::libinput::LibinputInputBackend;
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
@@ -29,6 +33,7 @@ use smithay::reexports::calloop::{
 };
 use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction};
 use smithay::reexports::drm::control::crtc;
+use smithay::reexports::input::{Device as LibinputDevice, DeviceCapability};
 use smithay::utils::{Clock, Monotonic, Size};
 use smithay::wayland::socket::ListeningSocketSource;
 use zbus::blocking::Connection;
@@ -59,6 +64,72 @@ struct App<O> {
     buses: Buses,
     displays: Option<DisplaysHandle>,
     loop_handle: LoopHandle<'static, App<O>>,
+    lid: Lid,
+}
+
+#[derive(Default)]
+struct Lid {
+    switched_since_wake: bool,
+    built_in: Vec<LibinputDevice>,
+}
+
+const BUS_I8042: u16 = 0x11;
+const BUS_I2C: u16 = 0x18;
+const BUS_SPI: u16 = 0x1c;
+const BUS_RMI: u16 = 0x1d;
+
+fn is_built_in(device: &LibinputDevice) -> bool {
+    if !device.has_capability(DeviceCapability::Keyboard)
+        && !device.has_capability(DeviceCapability::Pointer)
+    {
+        return false;
+    }
+    let bus = Path::new("/sys/class/input")
+        .join(device.sysname())
+        .join("device/id/bustype");
+    match std::fs::read_to_string(&bus) {
+        Ok(bus) => u16::from_str_radix(bus.trim(), 16)
+            .is_ok_and(|bus| [BUS_I8042, BUS_I2C, BUS_SPI, BUS_RMI].contains(&bus)),
+        Err(error) => {
+            tracing::debug!("cannot tell how {} is connected: {error}", device.name());
+            false
+        }
+    }
+}
+
+fn pressed_on(event: &InputEvent<LibinputInputBackend>) -> Option<LibinputDevice> {
+    match event {
+        InputEvent::Keyboard { event } if event.state() == KeyState::Pressed => {
+            Some(event.device())
+        }
+        InputEvent::PointerButton { event } if event.state() == ButtonState::Pressed => {
+            Some(event.device())
+        }
+        _ => None,
+    }
+}
+
+fn follow_lid_input(app: &mut App<DrmBackend>, event: &InputEvent<LibinputInputBackend>) {
+    match event {
+        InputEvent::DeviceAdded { device } if is_built_in(device) => {
+            app.lid.built_in.push(device.clone());
+        }
+        InputEvent::DeviceRemoved { device } => app.lid.built_in.retain(|known| known != device),
+        InputEvent::SwitchToggle { event: switch }
+            if SwitchToggleEvent::switch(switch) == Some(Switch::Lid) =>
+        {
+            app.lid.switched_since_wake = true;
+            lid_changed(app, SwitchToggleEvent::state(switch) == SwitchState::On);
+        }
+        _ => {
+            if app.compositor.lid_closed()
+                && pressed_on(event).is_some_and(|device| app.lid.built_in.contains(&device))
+            {
+                app.lid.switched_since_wake = true;
+                lid_changed(app, false);
+            }
+        }
+    }
 }
 
 struct StallSource(StallWatch, Duration);
@@ -207,6 +278,7 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
         buses,
         displays: None,
         loop_handle: event_loop.handle(),
+        lid: Lid::default(),
     };
     serve(&mut event_loop, app, session).map(drop)
 }
@@ -443,6 +515,7 @@ fn run_drm(
             |app, sleep| match sleep {
                 Sleep::Starting => app.output.suspend_input(),
                 Sleep::Ended => {
+                    app.lid.switched_since_wake = false;
                     if let Err(error) = app.output.wake() {
                         tracing::warn!("cannot wake the displays and input: {error}");
                         bande_log::fault::report("wake-failure", "displays-and-input");
@@ -458,7 +531,11 @@ fn run_drm(
             &handle,
             "the lid",
             |sender| follow_lid(system, sender),
-            lid_changed,
+            |app, closed| {
+                if !app.lid.switched_since_wake {
+                    lid_changed(app, closed);
+                }
+            },
         )?;
     }
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
@@ -498,15 +575,12 @@ fn run_drm(
         buses,
         displays: None,
         loop_handle: event_loop.handle(),
+        lid: Lid::default(),
     };
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
         app.compositor.track_libinput_device(&event);
-        if let InputEvent::SwitchToggle { event: switch } = &event
-            && SwitchToggleEvent::switch(switch) == Some(Switch::Lid)
-        {
-            lid_changed(app, SwitchToggleEvent::state(switch) == SwitchState::On);
-        }
+        follow_lid_input(app, &event);
         if let Err(error) = app.compositor.handle_input(event) {
             tracing::warn!("cannot deliver input: {error}");
         }

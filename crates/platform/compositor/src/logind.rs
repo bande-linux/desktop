@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::mpsc::Receiver;
 use std::thread;
+use std::time::Duration;
 
 use bande_l10n::tr;
 use smithay::reexports::calloop::channel::Sender;
@@ -137,6 +138,8 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
     Ok(())
 }
 
+const LID_SETTLES_AFTER_WAKE: Duration = Duration::from_secs(2);
+
 pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result<()> {
     let manager = ManagerProxyBlocking::builder(connection)
         .cache_properties(zbus::proxy::CacheProperties::No)
@@ -151,13 +154,16 @@ pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result
             if wake.args().is_ok_and(|arguments| *arguments.start()) {
                 continue;
             }
-            match manager.lid_closed() {
-                Ok(closed) => {
-                    if sender.send(closed).is_err() {
-                        return;
+            for wait in [Duration::ZERO, LID_SETTLES_AFTER_WAKE] {
+                thread::sleep(wait);
+                match manager.lid_closed() {
+                    Ok(closed) => {
+                        if sender.send(closed).is_err() {
+                            return;
+                        }
                     }
+                    Err(error) => tracing::warn!("cannot tell whether the lid is closed: {error}"),
                 }
-                Err(error) => tracing::warn!("cannot tell whether the lid is closed: {error}"),
             }
         }
     });

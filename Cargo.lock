@@ -1323,6 +1323,7 @@ dependencies = [
  "bande-l10n",
  "bande-media",
  "bande-media-view",
+ "bande-search",
  "bande-toolkit",
  "bande-xdg",
  "gstreamer",

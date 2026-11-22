@@ -14,6 +14,7 @@ pub struct Positions {
 
 impl Positions {
     pub fn load(file: Option<PathBuf>) -> Self {
+        let file = file.filter(|file| remembered(file));
         let text = match file.as_deref().map(std::fs::read) {
             Some(Ok(text)) => text,
             Some(Err(error)) if error.kind() != std::io::ErrorKind::NotFound => {
@@ -63,7 +64,7 @@ impl Positions {
         if !std::mem::take(&mut self.changed) {
             return;
         }
-        let Some(file) = &self.file else {
+        let Some(file) = self.file.as_deref().filter(|file| remembered(file)) else {
             return;
         };
         let mut text = Vec::new();
@@ -77,4 +78,17 @@ impl Positions {
             tracing::warn!("cannot keep where playback stopped: {error}");
         }
     }
+}
+
+fn remembered(file: &Path) -> bool {
+    if bande_search::remembers_recent_files() {
+        return true;
+    }
+    match std::fs::remove_file(file) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            tracing::warn!("cannot forget where playback stopped: {error}");
+        }
+        _ => {}
+    }
+    false
 }

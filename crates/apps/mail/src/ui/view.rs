@@ -45,7 +45,7 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use zeroize::Zeroizing;
 
-mod security;
+pub(crate) mod security;
 
 pub const SHORTCUTS: [(&str, &str); 9] = [
     ("compose", "Ctrl+N"),

@@ -8,6 +8,8 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+blocking.workspace = true
+bande-bus.workspace = true
 rustix.workspace = true
 tracing.workspace = true
 bande-log.workspace = true

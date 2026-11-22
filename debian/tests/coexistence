@@ -24,7 +24,7 @@ runtime=$(mktemp -d)
 chmod 0700 "$runtime"
 export XDG_RUNTIME_DIR="$runtime" XDG_CURRENT_DESKTOP=GNOME
 dbus-run-session -- bash -euo pipefail -c '
-    printf hunter2 | secret-tool store --collection=session --label=coexistence test coexistence
+    printf hunter2 | secret-tool store --collection=/org/freedesktop/secrets/aliases/session --label=coexistence test coexistence
     [ "$(secret-tool lookup test coexistence)" = hunter2 ]
     owner=$(dbus-send --session --print-reply=literal --dest=org.freedesktop.DBus /org/freedesktop/DBus \
         org.freedesktop.DBus.GetConnectionUnixProcessID string:org.freedesktop.secrets | awk "{print \$2}")

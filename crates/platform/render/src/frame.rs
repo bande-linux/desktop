@@ -9,8 +9,8 @@ use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Transform};
 use smithay::reexports::rustix::ioctl;
 
 use crate::{
-    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DeviceExport, MappedExport, Program, Rect,
-    RenderError, TRANSFER_DESTINATION, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
+    ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, MappedExport, Program, Rect,
+    RenderError, SAMPLED, TRANSFER_DESTINATION, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
     VulkanTexture, barrier, disjoint, hand_over,
 };
 
@@ -158,6 +158,7 @@ pub struct VulkanFrame<'frame, 'buffer> {
     area: (i32, i32),
     drawn: Vec<Rect>,
     direct: bool,
+    acquired: Vec<vk::Image>,
     finished: bool,
     _framebuffer: PhantomData<&'frame mut VulkanFramebuffer<'buffer>>,
 }
@@ -218,7 +219,13 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             vk::AccessFlags2::NONE,
         );
         match (direct, rendered) {
-            (true, true) => hand_over(device, commands, image, renderer.queue_family, true),
+            (true, true) => hand_over(
+                device,
+                commands,
+                image,
+                renderer.queue_family,
+                (true, DRAWING),
+            ),
             (_, false) => barrier(device, commands, image, unwritten, drawing),
             (false, true) => barrier(device, commands, image, ATTACHMENT, drawing),
         }
@@ -236,6 +243,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             area: (area.w, area.h),
             drawn: Vec::new(),
             direct,
+            acquired: Vec::new(),
             finished: false,
             _framebuffer: PhantomData,
         };
@@ -499,6 +507,15 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 .device
                 .cmd_end_rendering(self.renderer.command_buffer)
         };
+        for image in std::mem::take(&mut self.acquired) {
+            hand_over(
+                &self.renderer.device,
+                self.renderer.command_buffer,
+                image,
+                self.renderer.queue_family,
+                (false, SAMPLED),
+            );
+        }
         let drawn = disjoint(std::mem::take(&mut self.drawn), self.bounds);
         if self.direct {
             return self.finish_direct(&drawn);
@@ -569,7 +586,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             renderer.command_buffer,
             self.image,
             renderer.queue_family,
-            false,
+            (false, DRAWING),
         );
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it,
@@ -607,13 +624,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     })
             })
             .collect();
-        barrier(
-            device,
-            commands,
-            self.image,
-            blur::SAMPLED,
-            TRANSFER_DESTINATION,
-        );
+        barrier(device, commands, self.image, SAMPLED, TRANSFER_DESTINATION);
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it;
         // `convert_output` left `scratch` in `TRANSFER_SRC_OPTIMAL`, the barrier above moved the
@@ -659,7 +670,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     &self.renderer.device,
                     self.renderer.command_buffer,
                     self.image,
-                    blur::SAMPLED,
+                    SAMPLED,
                     ATTACHMENT,
                 );
                 Some(scratch)
@@ -706,7 +717,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         self.bind(Program::DisplayColour)?;
         let device = &self.renderer.device;
         let commands = self.renderer.command_buffer;
-        barrier(device, commands, self.image, ATTACHMENT, blur::SAMPLED);
+        barrier(device, commands, self.image, ATTACHMENT, SAMPLED);
         barrier(device, commands, scratch.0, blur::DISCARDED, blur::DRAWN);
         self.begin_rendering(scratch.1, self.bounds, vk::AttachmentLoadOp::DONT_CARE);
         self.push_texture(self.target_view);
@@ -1090,18 +1101,35 @@ impl Frame for VulkanFrame<'_, '_> {
         if texture.renderer != self.renderer.id {
             return Err(RenderError::ForeignResource);
         }
-        let Some(view) = self
+        let Some((view, foreign)) = self
             .renderer
             .textures
             .get(&texture.id)
             .filter(|image| image.readable)
-            .map(|image| image.image.view)
+            .map(|image| {
+                (
+                    image.image.view,
+                    image.imported.then_some(image.image.image),
+                )
+            })
         else {
             return Ok(());
         };
         let (destination, rects) = self.placed(physical(&dst), damage);
         if rects.is_empty() {
             return Ok(());
+        }
+        if let Some(image) = foreign.filter(|image| !self.acquired.contains(image)) {
+            self.pause();
+            hand_over(
+                &self.renderer.device,
+                self.renderer.command_buffer,
+                image,
+                self.renderer.queue_family,
+                (true, SAMPLED),
+            );
+            self.resume();
+            self.acquired.push(image);
         }
         let chroma = texture.chroma.as_ref().and_then(|chroma| {
             self.renderer

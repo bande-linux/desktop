@@ -99,3 +99,34 @@ pub fn replace_private_file(path: &Path, contents: impl AsRef<[u8]>) -> io::Resu
         Some(PRIVATE_FOLDER),
     )
 }
+
+/// Reads `path` (empty when missing), hands its text to `change` and writes back what it returns,
+/// all while holding an exclusive lock on `<path>.lock`, so processes that change the file this
+/// way never lose each other's changes.
+pub fn change_file(path: &Path, change: impl FnOnce(&str) -> io::Result<String>) -> io::Result<()> {
+    if let Some(folder) = path
+        .parent()
+        .filter(|folder| !folder.as_os_str().is_empty())
+    {
+        fs::create_dir_all(folder)?;
+    }
+    let mut lock_name = path.as_os_str().to_owned();
+    lock_name.push(".lock");
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(PRIVATE_FILE)
+        .open(PathBuf::from(lock_name))?;
+    rustix::fs::flock(&lock, rustix::fs::FlockOperation::LockExclusive)?;
+    let before = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error),
+    };
+    let after = change(&before)?;
+    match after == before {
+        true => Ok(()),
+        false => replace_file(path, after),
+    }
+}

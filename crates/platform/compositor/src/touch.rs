@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use smithay::backend::input::{
-    AbsolutePositionEvent, ButtonState, Event, InputBackend, TabletToolButtonEvent,
+    AbsolutePositionEvent, ButtonState, Device, Event, InputBackend, TabletToolButtonEvent,
     TabletToolEvent, TabletToolProximityEvent, TabletToolTipEvent, TabletToolTipState, TouchEvent,
     TouchSlot,
 };
@@ -36,12 +36,30 @@ enum Contact {
     Ignored,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PenPress {
+    Client,
+    Pointer,
+}
+
 #[derive(Default)]
 pub(crate) struct Touch {
     contacts: HashMap<TouchSlot, Contact>,
     location: Point<f64, Logical>,
-    pen_on_client: bool,
+    pen_focus: Option<(WlSurface, Point<f64, Logical>)>,
+    pen_press: Option<PenPress>,
     tablet_clients: Vec<ClientId>,
+    outputs: HashMap<String, Option<String>>,
+}
+
+fn wanted_output(device: &impl Device) -> Option<String> {
+    let path = device.syspath()?;
+    let udev = smithay::reexports::udev::Device::from_syspath(&path)
+        .inspect_err(|error| tracing::debug!("cannot read {}: {error}", path.display()))
+        .ok()?;
+    udev.property_value("WL_OUTPUT")
+        .and_then(|output| output.to_str())
+        .map(str::to_owned)
 }
 
 impl Touch {
@@ -49,6 +67,10 @@ impl Touch {
         self.contacts
             .values()
             .any(|contact| matches!(contact, Contact::Pointer))
+    }
+
+    pub(crate) fn forget_device(&mut self, device: &impl Device) {
+        self.outputs.remove(&device.id());
     }
 }
 
@@ -84,6 +106,8 @@ impl State {
             let rect = self.screen_rect(screen).to_f64();
             location.y >= rect.loc.y + rect.size.h - EDGE_ZONE
         }) && !self.compositor_takes_touch()
+            && !self.is_locked()
+            && !self.login_window
     }
 
     fn touch_serial_of(&self, serial: Serial, surface: &WlSurface) -> Option<TouchSlot> {
@@ -100,6 +124,24 @@ impl State {
             })
     }
 
+    fn input_screen(&mut self, device: &impl Device) -> usize {
+        let wanted = self
+            .touch
+            .outputs
+            .entry(device.id())
+            .or_insert_with(|| wanted_output(device))
+            .clone();
+        wanted
+            .as_deref()
+            .and_then(|name| self.screen_named(name))
+            .or_else(|| {
+                self.screens
+                    .iter()
+                    .position(|screen| bande_edid::is_internal_connector(&screen.name()))
+            })
+            .unwrap_or(0)
+    }
+
     fn pen_reaches(&self, surface: &WlSurface) -> bool {
         surface
             .client()
@@ -108,11 +150,15 @@ impl State {
 }
 
 fn mapped<B: InputBackend>(
-    state: &State,
+    state: &mut State,
     event: &impl AbsolutePositionEvent<B>,
 ) -> Point<f64, Logical> {
-    let rect = state.screen_rect(0);
-    event.position_transformed(rect.size) + rect.loc.to_f64()
+    let screen = state.input_screen(&event.device());
+    let rect = state.screen_rect(screen);
+    let transform = state.screens[screen].output.current_transform();
+    let native = transform.invert().transform_size(rect.size);
+    transform.transform_point_in(event.position_transformed(native), &native.to_f64())
+        + rect.loc.to_f64()
 }
 
 impl Compositor {
@@ -217,11 +263,11 @@ impl Compositor {
         use smithay::backend::input::InputEvent;
         match event {
             InputEvent::TouchDown { event } => {
-                let location = mapped(&self.state, &event);
+                let location = mapped(&mut self.state, &event);
                 self.touch_down(&event, location);
             }
             InputEvent::TouchMotion { event } => {
-                let location = mapped(&self.state, &event);
+                let location = mapped(&mut self.state, &event);
                 self.touch_motion(&event, location);
             }
             InputEvent::TouchUp { event } => self.lift(event.slot(), event.time_msec()),
@@ -261,16 +307,8 @@ impl Compositor {
             .filter(|(surface, _)| self.state.pen_reaches(surface))
     }
 
-    fn pen_location<B: InputBackend>(
-        &self,
-        event: &impl TabletToolEvent<B>,
-    ) -> Point<f64, Logical> {
-        let rect = self.state.bounding_rect();
-        event.position_transformed(rect.size) + rect.loc.to_f64()
-    }
-
     fn pen_proximity<B: InputBackend>(&mut self, event: &B::TabletToolProximityEvent) {
-        let location = self.pen_location(event);
+        let location = mapped(&mut self.state, event);
         let time = event.time_msec();
         let state = &mut self.state;
         let tablet_seat = state.seat.tablet_seat();
@@ -280,34 +318,52 @@ impl Compositor {
         let tool = tablet_seat.add_tool::<State>(state, &display, &event.tool());
         if event.state() == smithay::backend::input::ProximityState::Out {
             tool.proximity_out(time);
-            state.touch.pen_on_client = false;
+            state.touch.pen_focus = None;
             return;
         }
         match self.pen_target(location) {
             Some(focus) => {
-                tool.proximity_in(location, focus, &tablet, SERIAL_COUNTER.next_serial(), time);
-                self.state.touch.pen_on_client = true;
+                tool.proximity_in(
+                    location,
+                    focus.clone(),
+                    &tablet,
+                    SERIAL_COUNTER.next_serial(),
+                    time,
+                );
+                self.state.touch.pen_focus = Some(focus);
             }
             None => self.move_pointer_to(location, time),
         }
     }
 
     fn pen_moved<B: InputBackend>(&mut self, event: &B::TabletToolAxisEvent) {
-        let location = self.pen_location(event);
+        let location = mapped(&mut self.state, event);
         let time = event.time_msec();
         let tablet_seat = self.state.seat.tablet_seat();
         let tool = tablet_seat.get_tool(&event.tool());
         let tablet = tablet_seat.get_tablet(&TabletDescriptor::from(&event.device()));
-        let focus = self.pen_target(location);
+        let focus = match self.state.touch.pen_press {
+            Some(PenPress::Client) => self
+                .state
+                .touch
+                .pen_focus
+                .clone()
+                .filter(|(surface, _)| surface.is_alive()),
+            Some(PenPress::Pointer) => None,
+            None => self.pen_target(location),
+        };
         match (tool, tablet) {
-            (Some(tool), Some(tablet)) if focus.is_some() || self.state.touch.pen_on_client => {
+            (Some(tool), Some(tablet))
+                if self.state.touch.pen_press != Some(PenPress::Pointer)
+                    && (focus.is_some() || self.state.touch.pen_focus.is_some()) =>
+            {
                 if event.pressure_has_changed() {
                     tool.pressure(event.pressure());
                 }
                 if event.tilt_has_changed() {
                     tool.tilt(event.tilt());
                 }
-                self.state.touch.pen_on_client = focus.is_some();
+                self.state.touch.pen_focus.clone_from(&focus);
                 tool.motion(location, focus, &tablet, SERIAL_COUNTER.next_serial(), time);
             }
             _ => self.move_pointer_to(location, time),
@@ -316,13 +372,27 @@ impl Compositor {
 
     fn pen_tip<B: InputBackend>(&mut self, event: &B::TabletToolTipEvent) {
         let time = event.time_msec();
-        let down = event.tip_state() == TabletToolTipState::Down;
-        match self.state.seat.tablet_seat().get_tool(&event.tool()) {
-            Some(tool) if self.state.touch.pen_on_client => match down {
-                true => tool.tip_down(SERIAL_COUNTER.next_serial(), time),
-                false => tool.tip_up(time),
-            },
-            _ => self.press_button(BTN_LEFT, down, time),
+        let tool = self.state.seat.tablet_seat().get_tool(&event.tool());
+        let touch = &mut self.state.touch;
+        let press = match event.tip_state() {
+            TabletToolTipState::Down if touch.pen_press.is_none() => {
+                let press = match (&tool, &touch.pen_focus) {
+                    (Some(_), Some(_)) => PenPress::Client,
+                    _ => PenPress::Pointer,
+                };
+                touch.pen_press = Some(press);
+                Some((press, true))
+            }
+            TabletToolTipState::Down => None,
+            TabletToolTipState::Up => touch.pen_press.take().map(|press| (press, false)),
+        };
+        match (press, tool) {
+            (Some((PenPress::Client, true)), Some(tool)) => {
+                tool.tip_down(SERIAL_COUNTER.next_serial(), time);
+            }
+            (Some((PenPress::Client, false)), Some(tool)) => tool.tip_up(time),
+            (Some((PenPress::Pointer, down)), _) => self.press_button(BTN_LEFT, down, time),
+            _ => {}
         }
     }
 
@@ -330,7 +400,7 @@ impl Compositor {
         let time = event.time_msec();
         let pressed = event.button_state() == ButtonState::Pressed;
         match self.state.seat.tablet_seat().get_tool(&event.tool()) {
-            Some(tool) if self.state.touch.pen_on_client => {
+            Some(tool) if self.state.touch.pen_focus.is_some() => {
                 tool.button(
                     event.button(),
                     event.button_state(),

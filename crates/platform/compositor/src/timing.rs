@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::utils::{Monotonic, Time};
@@ -17,6 +18,8 @@ use crate::state::{Compositor, State};
 
 delegate_fifo!(State);
 delegate_commit_timing!(State);
+
+const TIMED_COMMIT_HORIZON: Duration = Duration::from_secs(5);
 
 pub(crate) struct LatchedBarrier {
     barrier: Barrier,
@@ -37,7 +40,10 @@ pub(crate) fn wait_for_timed_commits(surface: &WlSurface) {
                     .is_some_and(|timer| timer.borrow().timestamp.is_some())
         });
         if waits {
-            state.needs_redraw = true;
+            let screen = state.screen_of_surface(surface);
+            if let Some(screen) = state.screens.get_mut(screen) {
+                screen.redraw = true;
+            }
         }
     });
 }
@@ -118,7 +124,7 @@ impl State {
                 .map(|window| window.surface().clone()),
         );
         let mut clients: Vec<Client> = Vec::new();
-        let mut waiting = false;
+        let mut next: Option<Duration> = None;
         each_surface(&roots, |surface, states| {
             let Some(timer) = states.data_map.get::<CommitTimerBarrierStateUserData>() else {
                 return;
@@ -132,11 +138,44 @@ impl State {
             {
                 clients.push(client);
             }
-            waiting |= timer.next_deadline().is_some();
+            if let Some(deadline) = timer.next_deadline() {
+                let deadline = Duration::from(Time::<Monotonic>::from(deadline));
+                next = Some(next.map_or(deadline, |next| next.min(deadline)));
+            }
         });
         self.clear_blockers_of(clients);
-        if waiting {
+        if let Some(next) = next {
+            let wake = next
+                .saturating_sub(self.screens[screen].refresh())
+                .min(shown_at + TIMED_COMMIT_HORIZON);
+            self.wake_screen_after(screen, wake.saturating_sub(shown_at));
+        }
+    }
+
+    fn wake_screen_after(&mut self, screen: usize, after: Duration) {
+        if let Some(previous) = self.screens[screen].timed_wake.take() {
+            self.blockers.remove(previous);
+        }
+        if after.is_zero() {
             self.screens[screen].redraw = true;
+            return;
+        }
+        let name = self.screens[screen].name();
+        let inserted =
+            self.blockers
+                .insert_source(Timer::from_duration(after), move |_, (), state| {
+                    if let Some(screen) = state.screen_named(&name) {
+                        state.screens[screen].timed_wake = None;
+                        state.screens[screen].redraw = true;
+                    }
+                    TimeoutAction::Drop
+                });
+        match inserted {
+            Ok(token) => self.screens[screen].timed_wake = Some(token),
+            Err(error) => {
+                tracing::warn!("cannot wait for a timed commit: {error}");
+                self.screens[screen].redraw = true;
+            }
         }
     }
 }

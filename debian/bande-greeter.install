@@ -6,3 +6,5 @@ crates/shell/greeter/data/bande-greeter.service usr/lib/systemd/system/
 crates/shell/greeter/data/bande-greeter-splash.path usr/lib/systemd/system/
 crates/shell/greeter/data/bande-greeter-splash.service usr/lib/systemd/system/
 debian/build/l10n/development/bande-greeter/* usr/share/bande/l10n/bande-greeter/
+crates/shell/greeter/data/bande-greeter-share@.service usr/lib/systemd/system/
+crates/shell/greeter/data/user@.service.d/bande-greeter.conf usr/lib/systemd/system/user@.service.d/

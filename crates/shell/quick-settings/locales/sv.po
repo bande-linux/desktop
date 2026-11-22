@@ -52,6 +52,9 @@ msgstr "Nattljus"
 msgid "Dark Style"
 msgstr "Mörk stil"
 
+msgid "Automatic"
+msgstr "Automatiskt"
+
 msgid "Power Saver"
 msgstr "Strömsparläge"
 

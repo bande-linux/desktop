@@ -1142,7 +1142,14 @@ impl DrmBackend {
         let head = self.heads.remove(index);
         let (crtc, mode) = (head.compositor.crtc(), head.compositor.pending_mode());
         drop(head.compositor);
-        let compositor = self.output_compositor(crtc, mode, head.connector, false)?;
+        let compositor = match self.output_compositor(crtc, mode, head.connector, false) {
+            Ok(compositor) => compositor,
+            Err(error) => {
+                tracing::warn!("{} cannot copy its frames: {error}", head.config.name);
+                self.copies_frames = false;
+                self.output_compositor(crtc, mode, head.connector, true)?
+            }
+        };
         self.heads.insert(
             index,
             Head {
@@ -1244,6 +1251,7 @@ impl DrmBackend {
                 }
             }
         }
+        compositor.refresh_follows_frames(output, head.compositor.vrr_enabled());
         let chosen = compositor.colour_profile(output).map(str::to_owned);
         if head
             .output_colour

@@ -4,8 +4,8 @@ use std::time::Duration;
 use bande_protocols::server::bande_app_control_v1::BandeAppControlV1;
 use bande_protocols::server::bande_shell_v1::BandeShellV1;
 use smithay::input::pointer::CursorIcon;
-use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::backend::ClientId;
+use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::shell::xdg::ShellClient;
 
@@ -236,6 +236,7 @@ impl State {
 
     fn relaunch_hung_shell(&mut self, now: Duration) -> Option<Duration> {
         let mut due = None;
+        let desktop_shell = self.desktop_shell.as_ref().map(Client::id);
         for ping in self
             .watchdog
             .pings
@@ -245,6 +246,9 @@ impl State {
             let Pinged::Shell(shell) = &ping.pinged else {
                 continue;
             };
+            if desktop_shell.as_ref() != Some(&ping.owner) {
+                continue;
+            }
             let relaunch_at = ping.sent + SHELL_RELAUNCH_AFTER;
             if now < relaunch_at {
                 due = due.into_iter().chain([relaunch_at]).min();

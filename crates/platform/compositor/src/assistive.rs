@@ -22,8 +22,6 @@ use crate::motion::SETTLED_ALPHA;
 use crate::scene::{Behind, FillElement, rounded, scrim};
 use crate::state::{Compositor, OutputElement, State};
 
-const SOUND_BUS_NAME: &str = "org.bande.Sound";
-const SOUND_PATH: &str = "/org/bande/Sound";
 const FLASH_OPACITY: f64 = 0.45;
 
 type Remembered = (&'static str, OwnedValue);
@@ -80,7 +78,12 @@ pub fn follow_alerts(
     connection: &Connection,
     mut alerted: impl FnMut() -> bool + Send + 'static,
 ) -> zbus::Result<()> {
-    let sound = Proxy::new(connection, SOUND_BUS_NAME, SOUND_PATH, SOUND_BUS_NAME)?;
+    let sound = Proxy::new(
+        connection,
+        bande_sound::BUS_NAME,
+        bande_sound::OBJECT_PATH,
+        bande_sound::BUS_NAME,
+    )?;
     let alerts = sound.receive_signal("AlertPlayed")?;
     thread::spawn(move || {
         for _ in alerts {

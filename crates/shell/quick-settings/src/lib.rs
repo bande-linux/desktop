@@ -84,7 +84,7 @@ pub struct Status {
     pub bluetooth: Reading<bool>,
     pub do_not_disturb: bool,
     pub night_light: Option<bool>,
-    pub dark_style: Option<bool>,
+    pub dark_style: Option<DarkStyle>,
     pub power_mode: Option<String>,
     pub airplane_mode: Option<bool>,
     pub recording: Option<bool>,
@@ -103,6 +103,12 @@ pub struct Status {
     pub person: Option<String>,
     pub settings: bool,
     pub icon_dirs: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DarkStyle {
+    pub on: bool,
+    pub automatic: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -287,10 +293,13 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             details: None,
         });
     }
-    if let Some(on) = status.dark_style {
+    if let Some(DarkStyle { on, automatic }) = status.dark_style {
         specs.push(TileSpec {
             title: tr!("Dark Style"),
-            detail: on_off(on),
+            detail: match automatic {
+                true => tr!("Automatic"),
+                false => on_off(on),
+            },
             symbol: "weather-clear-night-symbolic",
             on,
             toggle: Change::DarkStyle,

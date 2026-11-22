@@ -5,13 +5,12 @@ use std::path::{Path, PathBuf};
 
 use bande_config::{
     Accessibility, Config, LOGIN_LOOK_LIMIT, LOGIN_PICTURE_LIMIT, login_accessibility_file,
-    login_defaults, login_light_picture_file, login_look_file, login_picture_file,
+    login_defaults, login_light_picture_file, login_look_file, login_picture_file, login_share,
     read_accessibility,
 };
 use bande_l10n::tr;
 
 const LAST_USER: &str = "bande-greeter/last-user";
-pub const FAILED_SESSIONS: &str = "/var/lib/bande-greeter/failed";
 const FAILURE_LIMIT: u64 = 64;
 
 fn shared_file(path: &Path, uid: u32, limit: u64) -> Option<File> {
@@ -64,7 +63,7 @@ pub fn login_look(folder: &Path, uid: u32) -> Option<Config> {
 }
 
 pub fn failed_session(folder: &Path, uid: u32) -> Option<String> {
-    let text = shared_text(&folder.join(uid.to_string()), uid, FAILURE_LIMIT)?;
+    let text = shared_text(&login_share(folder, uid).join("failed"), uid, FAILURE_LIMIT)?;
     match text.trim() {
         "already-running" => Some(tr!(
             "Your last sign-in stopped because a session of yours was still running. Try again in a moment."

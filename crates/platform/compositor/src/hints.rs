@@ -16,6 +16,8 @@ delegate_content_type!(State);
 delegate_single_pixel_buffer!(State);
 delegate_xdg_system_bell!(State);
 
+const WINDOW_BELL: &str = "bell-window-system";
+
 pub(crate) fn wants_exact_timing(surface: &WlSurface) -> bool {
     with_states(surface, |states| {
         matches!(
@@ -38,6 +40,12 @@ fn root_of(surface: &WlSurface) -> WlSurface {
 }
 
 impl Compositor {
+    pub fn refresh_follows_frames(&mut self, output: &str, varies: bool) {
+        if let Some(screen) = self.state.screen_named(output) {
+            self.state.screens[screen].refresh_varies = varies;
+        }
+    }
+
     pub fn wants_variable_refresh(&self, output: &str) -> bool {
         let state = &self.state;
         let Some(screen) = state.screen_named(output) else {
@@ -57,6 +65,9 @@ impl Compositor {
 
 impl XdgSystemBellHandler for State {
     fn ring(&mut self, surface: Option<WlSurface>) {
+        if let Some(session) = &self.assistive.session_bus {
+            bande_sound::play(session, WINDOW_BELL);
+        }
         let Some(root) = surface.as_ref().map(root_of) else {
             return;
         };

@@ -4,7 +4,7 @@ if [ "${JOURNAL_STREAM:-}" != "$(stat -L -c %d:%i /proc/self/fd/2)" ]; then
     exec systemd-cat --identifier=bande-session "$0" "$@"
 fi
 
-failure_note="/var/lib/bande-greeter/failed/$(id -u)"
+failure_note="/var/lib/bande-greeter/users/$(id -u)/failed"
 note_failure() {
     [ -d "${failure_note%/*}" ] || return 0
     if ! (umask 027 && printf '%s\n' "$1" > "$failure_note"); then

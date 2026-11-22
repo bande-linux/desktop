@@ -21,6 +21,26 @@ pub(crate) struct Texel {
     pub(crate) kind: Kind,
 }
 
+impl Texel {
+    pub(crate) fn plane_rows(&self, width: u32, height: u32) -> Vec<(u64, u64)> {
+        let (width, height) = (u64::from(width), u64::from(height));
+        let (half_width, half_height) = (width.div_ceil(2), height.div_ceil(2));
+        match self.kind {
+            Kind::Colour { .. } => vec![(width * 4, height)],
+            Kind::Video { luma, .. } => {
+                let sample = match luma {
+                    vk::Format::R16_UNORM => 2,
+                    _ => 1,
+                };
+                vec![
+                    (width * sample, height),
+                    (half_width * 2 * sample, half_height),
+                ]
+            }
+        }
+    }
+}
+
 const fn colour(code: Fourcc, format: vk::Format, opaque: bool) -> Texel {
     Texel {
         code,

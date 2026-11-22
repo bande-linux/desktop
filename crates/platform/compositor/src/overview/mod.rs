@@ -248,6 +248,9 @@ impl State {
     }
 
     pub(crate) fn open_overview(&mut self, app: Option<String>) {
+        if self.is_locked() || self.login_window {
+            return;
+        }
         if !self.overview.is_open() {
             self.prepare_overview(app);
         }

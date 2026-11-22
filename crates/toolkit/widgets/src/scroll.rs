@@ -558,6 +558,7 @@ pub struct ScrollView {
     state: Rc<RefCell<ScrollState>>,
     content: Size,
     frame: Rect,
+    tallest: f32,
 }
 
 impl ScrollView {
@@ -572,7 +573,14 @@ impl ScrollView {
             state,
             content: Size::default(),
             frame: Rect::default(),
+            tallest: f32::INFINITY,
         }
+    }
+
+    /// Grows with its content up to `height`, then scrolls.
+    pub fn at_most(mut self, height: f32) -> Self {
+        self.tallest = height;
+        self
     }
 }
 
@@ -583,7 +591,10 @@ impl Widget for ScrollView {
 
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         self.content = self.child[0].measure(cx, available);
-        Size::new(available.width, self.content.height.min(available.height))
+        Size::new(
+            available.width,
+            self.content.height.min(available.height).min(self.tallest),
+        )
     }
 
     fn place(&mut self, cx: &mut Context, frame: Rect) {

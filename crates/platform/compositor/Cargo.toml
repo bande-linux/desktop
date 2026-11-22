@@ -23,6 +23,7 @@ bande-config.workspace = true
 bande-datetime.workspace = true
 bande-colour.workspace = true
 bande-edid.workspace = true
+bande-sound.workspace = true
 bande-graphics.workspace = true
 resvg.workspace = true
 bande-inbox.workspace = true

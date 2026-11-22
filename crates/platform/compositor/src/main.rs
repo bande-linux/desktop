@@ -841,7 +841,7 @@ where
         }
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
-            app.compositor.apply_input_settings(InputSettings::login());
+            app.compositor.serve_login_window();
             if let Some(runtime) = bande_xdg::runtime_dir() {
                 app.compositor
                     .record_accessibility_in(login_accessibility_file(&runtime));

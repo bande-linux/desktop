@@ -20,7 +20,6 @@ const PAM_PROMPT_ECHO_ON: c_int = 2;
 const PAM_ERROR_MSG: c_int = 3;
 const PAM_TEXT_INFO: c_int = 4;
 const PAM_REFRESH_CRED: c_int = 0x0010;
-const PAM_CHANGE_EXPIRED_AUTHTOK: c_int = 0x0020;
 const LIBRARY: &str = "libpam.so.0";
 
 #[repr(C)]
@@ -57,11 +56,17 @@ type Start = unsafe extern "C" fn(
 type Step = unsafe extern "C" fn(handle: *mut c_void, flags: c_int) -> c_int;
 type End = unsafe extern "C" fn(handle: *mut c_void, status: c_int) -> c_int;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Accepted {
+    Current,
+    PasswordExpired,
+}
+
 #[derive(Debug)]
 pub enum Said {
     Ask(Prompt),
     Show(String),
-    Done(Result<(), Refusal>),
+    Done(Result<Accepted, Refusal>),
 }
 
 struct Talk {
@@ -197,7 +202,7 @@ unsafe extern "C" fn converse(
     PAM_SUCCESS
 }
 
-fn authenticate(service: &CStr, user: &CStr, talk: &Talk) -> Result<(), Refusal> {
+fn authenticate(service: &CStr, user: &CStr, talk: &Talk) -> Result<Accepted, Refusal> {
     // SAFETY: libpam's initialisers have no preconditions on the loading process.
     let library = unsafe { Library::new(LIBRARY) }.map_err(|error| {
         tracing::warn!("cannot load {LIBRARY}: {error}");
@@ -209,8 +214,8 @@ fn authenticate(service: &CStr, user: &CStr, talk: &Talk) -> Result<(), Refusal>
         Refusal::Unavailable
     })?;
     match status {
-        PAM_SUCCESS => Ok(()),
-        code => {
+        Ok(accepted) => Ok(accepted),
+        Err(code) => {
             tracing::info!("PAM refused authentication ({code})");
             Err(Refusal::from_pam(code))
         }
@@ -222,7 +227,7 @@ unsafe fn run(
     service: &CStr,
     user: &CStr,
     talk: &Talk,
-) -> Result<c_int, libloading::Error> {
+) -> Result<Result<Accepted, c_int>, libloading::Error> {
     // SAFETY: every name looked up with this closure is a libpam function with the Step signature
     // int (pam_handle_t *, int).
     let symbol = |name: &[u8]| unsafe { library.get::<Step>(name) };
@@ -232,7 +237,6 @@ unsafe fn run(
     let end: Symbol<End> = unsafe { library.get(b"pam_end\0") }?;
     let authenticate = symbol(b"pam_authenticate\0")?;
     let account = symbol(b"pam_acct_mgmt\0")?;
-    let change = symbol(b"pam_chauthtok\0")?;
     let refresh = symbol(b"pam_setcred\0")?;
     let conversation = Conversation {
         converse,
@@ -243,22 +247,21 @@ unsafe fn run(
     // outlive the transaction, which pam_end closes before this function returns.
     let started = unsafe { start(service.as_ptr(), user.as_ptr(), &conversation, &mut handle) };
     if started != PAM_SUCCESS {
-        return Ok(started);
+        return Ok(Err(started));
     }
     // SAFETY: handle is the open transaction pam_start returned, for every call below.
-    let mut status = unsafe { authenticate(handle, 0) };
-    if status == PAM_SUCCESS {
+    let authenticated = unsafe { authenticate(handle, 0) };
+    let accepted = match authenticated {
         // SAFETY: as above.
-        status = unsafe { account(handle, 0) };
-    }
-    if status == PAM_NEW_AUTHTOK_REQD {
-        talk.said.send(Said::Show(
-            crate::conversation::Refusal::PasswordExpired.message(),
-        ));
-        // SAFETY: as above.
-        status = unsafe { change(handle, PAM_CHANGE_EXPIRED_AUTHTOK) };
-    }
-    if status == PAM_SUCCESS {
+        PAM_SUCCESS => match unsafe { account(handle, 0) } {
+            PAM_SUCCESS => Ok(Accepted::Current),
+            PAM_NEW_AUTHTOK_REQD => Ok(Accepted::PasswordExpired),
+            refused => Err(refused),
+        },
+        refused => Err(refused),
+    };
+    let status = accepted.err().unwrap_or(PAM_SUCCESS);
+    if accepted.is_ok() {
         // SAFETY: as above.
         let refreshed = unsafe { refresh(handle, PAM_REFRESH_CRED) };
         if refreshed != PAM_SUCCESS {
@@ -267,5 +270,5 @@ unsafe fn run(
     }
     // SAFETY: handle is the open transaction pam_start returned, ended exactly once here.
     unsafe { end(handle, status) };
-    Ok(status)
+    Ok(accepted)
 }

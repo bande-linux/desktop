@@ -20,8 +20,9 @@ pub use login::{
     login_accessibility_file, login_defaults, read_accessibility,
 };
 pub use login_picture::{
-    LOGIN_LOOK_LIMIT, LOGIN_PICTURE_LIMIT, LOGIN_PICTURES, LoginLook, copy_login_look,
-    login_light_picture_file, login_look, login_look_file, login_picture_file, share_login_look,
+    LOGIN_LOOK_LIMIT, LOGIN_PICTURE_LIMIT, LOGIN_SHARE, LoginLook, copy_login_look,
+    login_light_picture_file, login_look, login_look_file, login_picture_file, login_share,
+    share_login_look,
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{

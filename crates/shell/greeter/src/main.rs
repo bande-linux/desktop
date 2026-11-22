@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::net::UnixStream;
@@ -9,21 +10,22 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_config::{
-    Accessibility, Appearance as Look, CARRIED_ACCESSIBILITY, Config, LOGIN_PICTURES, WallpaperFit,
+    Accessibility, Appearance as Look, CARRIED_ACCESSIBILITY, Config, LOGIN_SHARE, WallpaperFit,
     carry, login_defaults,
 };
 use bande_datetime::daylight::{Sky, place_of, sky};
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_greeter::{
-    FAILED_SESSIONS, Login, Request, Step, account_users, failed_session, last_user_file,
-    login_accessibility, login_look, login_picture, login_users, read_message, remember_user,
-    remembered_user, write_message,
+    Login, Request, Step, account_users, failed_session, last_user_file, login_accessibility,
+    login_look, login_picture, login_users, read_message, remember_user, remembered_user,
+    write_message,
 };
 use bande_keyboard::Layouts;
 use bande_l10n::tr;
 use bande_lock::{
-    BackdropSource, Corner, Devices, Fit, Inbox, LockScreen, Look as Drawn, PICTURE_PIXELS, Peer,
-    PowerAction, Prompt, Purpose, Refusal, User, Variant, load_backdrop, load_pictures, night,
+    BackdropSource, Backoff, Corner, Devices, Fit, Inbox, LockScreen, Look as Drawn,
+    PICTURE_PIXELS, Peer, PowerAction, Prompt, Purpose, Refusal, User, Variant, load_backdrop,
+    load_pictures, night,
 };
 use bande_status::devices::{powers, use_power};
 use bande_status::session::Ending;
@@ -79,6 +81,8 @@ struct Greeter {
     login: Option<Login>,
     awaiting: bool,
     asked: bool,
+    answered: bool,
+    backoffs: HashMap<String, Backoff>,
     cancel_queued: bool,
     next: Option<String>,
     refusal: Option<Refusal>,
@@ -192,7 +196,7 @@ impl Greeter {
 
     fn choose_look(&mut self) {
         let user = self.users.get(self.shown);
-        self.look = user.and_then(|user| login_look(Path::new(LOGIN_PICTURES), user.uid));
+        self.look = user.and_then(|user| login_look(Path::new(LOGIN_SHARE), user.uid));
         let variant = self
             .look
             .as_ref()
@@ -203,11 +207,7 @@ impl Greeter {
         };
         let picture = user
             .and_then(|user| {
-                login_picture(
-                    Path::new(LOGIN_PICTURES),
-                    user.uid,
-                    variant == Variant::Light,
-                )
+                login_picture(Path::new(LOGIN_SHARE), user.uid, variant == Variant::Light)
             })
             .map(Arc::new);
         self.wallpaper = Wallpaper {
@@ -293,10 +293,16 @@ impl Greeter {
             screen.set_picture(picture);
         }
         if let Some(user) = self.users.get(self.shown) {
-            screen.set_message(failed_session(Path::new(FAILED_SESSIONS), user.uid));
+            screen.set_message(failed_session(Path::new(LOGIN_SHARE), user.uid));
         }
         if let Some(blurred) = &self.blurred {
             screen.set_backdrop(blurred.clone(), Instant::now() - Duration::from_secs(1));
+        }
+        if let Some(backoff) = self
+            .current_login()
+            .and_then(|login| self.backoffs.get(&login))
+        {
+            screen.set_backoff(backoff.clone());
         }
         screen.wake(Instant::now());
         self.screen = screen;
@@ -309,8 +315,12 @@ impl Greeter {
         }
     }
 
+    fn is_starting(&self) -> bool {
+        self.started || self.login.as_ref().is_some_and(Login::is_starting)
+    }
+
     fn switch_to(&mut self, index: usize) {
-        if self.started || index > self.users.len() {
+        if self.is_starting() || index > self.users.len() {
             return;
         }
         self.shown = index;
@@ -413,11 +423,16 @@ impl Greeter {
             }
             _ => {
                 self.next = None;
-                let (login, request) = Login::begin(&login);
-                self.login = Some(login);
-                self.send(&request);
+                self.begin(&login);
             }
         }
+    }
+
+    fn begin(&mut self, login: &str) {
+        let (login, request) = Login::begin(login);
+        self.login = Some(login);
+        self.answered = false;
+        self.send(&request);
     }
 
     fn carried_environment(&self) -> Vec<String> {
@@ -448,7 +463,7 @@ impl Greeter {
             }
             return;
         }
-        if self.login.is_none() {
+        if self.login.as_ref().is_none_or(Login::is_idle) {
             self.pending = Some(answer);
             self.converse();
             return;
@@ -459,6 +474,7 @@ impl Greeter {
         }
         self.asked = false;
         if let Some(request) = self.login.as_ref().map(|login| login.answer(answer)) {
+            self.answered = true;
             self.send(&request);
         }
     }
@@ -515,18 +531,29 @@ impl Greeter {
             return;
         }
         if let Some(next) = self.next.take() {
-            let (login, request) = Login::begin(&next);
-            self.login = Some(login);
-            self.send(&request);
+            self.begin(&next);
             return;
         }
         if let Some(refusal) = self.refusal.take() {
-            self.pending = None;
-            if self.shown >= self.users.len() {
-                self.other = None;
-                self.rebuild_screen();
-            }
-            self.screen.refuse(refusal, frame_time().on_screen());
+            self.refused(refusal);
+        }
+    }
+
+    fn refused(&mut self, refusal: Refusal) {
+        self.pending = None;
+        let at = frame_time().on_screen();
+        let login = self.current_login();
+        self.screen.refuse(refusal, at);
+        if let Some(login) = login {
+            self.backoffs.insert(login, self.screen.backoff());
+        }
+        if self.shown >= self.users.len() {
+            self.other = None;
+            self.rebuild_screen();
+            self.screen.reject(at);
+            self.screen.set_message(Some(refusal.message()));
+        }
+        if self.answered || self.current_login().is_none() {
             self.converse();
         }
     }
@@ -686,7 +713,7 @@ impl Greeter {
             WindowEvent::Input(Event::Key {
                 key: key @ (Key::Up | Key::Down),
                 ..
-            }) if !self.started => {
+            }) if !self.is_starting() && self.screen.can_switch_person() => {
                 self.step_user(key == Key::Down);
                 true
             }
@@ -995,6 +1022,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         login: None,
         awaiting: false,
         asked: false,
+        answered: false,
+        backoffs: HashMap::new(),
         cancel_queued: false,
         next: None,
         refusal: None,

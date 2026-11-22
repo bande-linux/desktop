@@ -4,6 +4,7 @@ const MONITOR_NAME: u8 = 0xfc;
 const SERIAL_TEXT: u8 = 0xff;
 
 const PNP_IDS: &str = "/usr/share/hwdata/pnp.ids";
+const INTERNAL_CONNECTORS: [&str; 3] = ["eDP", "LVDS", "DSI"];
 
 const SRGB_DEFAULT: u8 = 1 << 2;
 const UNDEFINED_GAMMA: u8 = 0xff;
@@ -64,6 +65,13 @@ fn vendor_name(code: &str) -> Option<String> {
         let name = String::from_utf8_lossy(name).trim().to_owned();
         (!name.is_empty()).then_some(name)
     })
+}
+
+/// Whether a DRM connector name such as `eDP-1` is a built-in panel.
+pub fn is_internal_connector(connector: &str) -> bool {
+    INTERNAL_CONNECTORS
+        .iter()
+        .any(|prefix| connector.starts_with(prefix))
 }
 
 pub fn parse(block: &[u8]) -> Option<Edid> {

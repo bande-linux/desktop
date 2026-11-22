@@ -125,6 +125,11 @@ pub fn follow_login_settings(
 }
 
 impl Compositor {
+    pub fn serve_login_window(&mut self) {
+        self.state.login_window = true;
+        self.apply_input_settings(InputSettings::login());
+    }
+
     pub fn apply_input_settings(&mut self, settings: InputSettings) {
         self.apply_pointer_settings(settings.pointer);
         self.apply_keyboard_settings(settings.keyboard);

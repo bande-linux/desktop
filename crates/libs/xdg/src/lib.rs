@@ -23,7 +23,7 @@ pub use entry::{
     CURRENT_DESKTOP, DesktopAction, DesktopEntry, Locale, applications, current_desktops,
     data_dirs, find_executable, handlers, own_code_replaced, own_executable, runs_replaced_code,
 };
-pub use file::{replace_file, replace_private_file, sync_folder};
+pub use file::{change_file, replace_file, replace_private_file, sync_folder};
 pub use file_manager::{FILE_MANAGER, FILE_MANAGER_PATH, show_items};
 pub use icon::{FALLBACK_THEME, ICON_THEMES, find_icon};
 pub use identity::{

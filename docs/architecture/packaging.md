@@ -50,9 +50,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   login window's console fallback, its boot screen path unit and the fault reporter's
   socket-activated services are not started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
   enabled by its own `postinst`. `bande-reporter` and `bande-greeter` create their state
-  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`; the login window's pictures and
-  failed-session folders are `3733 root:_greetd`, so each person writes only their own files and
-  only the login window reads them). `bande-greeter` ships its PAM service as the conffile
+  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`); each person's login-window
+  folder below `/var/lib/bande-greeter/users` comes from the static template
+  `bande-greeter-share@.service`, which a `user@.service` drop-in wants, so only its owner writes
+  it and only the login window reads it. `bande-greeter` ships its PAM service as the conffile
   `/etc/pam.d/bande-greeter` (`debian/bande-greeter.pam`, after Debian's `gdm-password`), which
   its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in

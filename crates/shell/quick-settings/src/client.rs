@@ -10,7 +10,7 @@ use bande_l10n::tr;
 
 use crate::media::{self, Command, Playback, Player, Players};
 use crate::{
-    Anchor, Change, Changes, Choice, HUD_DURATION, HUD_SIZE, Hud, PANEL_WIDTH, Status,
+    Anchor, Change, Changes, Choice, DarkStyle, HUD_DURATION, HUD_SIZE, Hud, PANEL_WIDTH, Status,
     chooser_menu, display_title, hud, panel, panel_items, place_beside, scene, slide_from, stepped,
 };
 use accesskit::TreeUpdate;
@@ -19,7 +19,9 @@ use bande_bar::menus::bluetooth_menu;
 use bande_bluetooth::{Bluetooth, adapter_in_kernel};
 use bande_bus::logind::own_session;
 use bande_bus::power_profiles::{BALANCED, POWER_SAVER, power_profiles};
-use bande_config::{BUS_NAME as CONFIG_BUS, NightLightValue, OBJECT_PATH as CONFIG_PATH};
+use bande_config::{
+    Appearance as Style, BUS_NAME as CONFIG_BUS, NightLightValue, OBJECT_PATH as CONFIG_PATH,
+};
 use bande_inbox::{Inbox, Outbox};
 use bande_network::{NetworkManager, wifi_in_kernel};
 use bande_network::{airplane_mode, set_airplane_mode};
@@ -35,8 +37,8 @@ use bande_status::status::Reading;
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use bande_toolkit::{
     App, BrightnessKey, Edges, Image, Item, KeyboardFocus, LayerKind, LayerOptions, MediaKey,
-    MenuPlacement, Palette, Panel, Point, Radius, Rect, Role, Scene, SessionEnd, TextSystem,
-    VolumeKey, Window, WindowEvent, report,
+    MenuPlacement, Palette, Panel, Point, Radius, Rect, Role, Scene, Scheme, SessionEnd,
+    TextSystem, VolumeKey, Window, WindowEvent, report,
 };
 use bande_xdg::{
     DesktopEntry, ICON_THEMES, applications, current_desktops, data_dirs, find_icon,
@@ -53,8 +55,6 @@ const ARTWORK_PIXELS: u32 = 128;
 const ARTWORKS_KEPT: usize = 16;
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const SLIDE: f32 = 8.0;
-const DARK: &str = "dark";
-const LIGHT: &str = "light";
 
 enum Mode {
     Hidden,
@@ -73,8 +73,6 @@ pub struct QuickSettings {
     pointer: Point,
     anchor: Option<Anchor>,
     audio: Option<Arc<Audio>>,
-    network: Option<NetworkManager>,
-    bluetooth: Option<Bluetooth>,
     system: Option<Connection>,
     session: Option<Connection>,
     lights: Vec<DisplayLevel>,
@@ -90,8 +88,10 @@ pub struct QuickSettings {
     meter: Option<Meter>,
     input_level: Rc<Cell<f32>>,
     connected: Connected,
-    connected_updates: Inbox<Connected>,
-    refresh: Option<Sender<()>>,
+    answers: Inbox<Answer>,
+    work: Option<Sender<Work>>,
+    automatic_was: Option<bool>,
+    by_keyboard: bool,
     can_sleep: bool,
     cannot_sleep: Inbox<()>,
 }
@@ -105,7 +105,7 @@ struct Connected {
     devices: Option<BluetoothStatus>,
     do_not_disturb: bool,
     night_light: Option<bool>,
-    dark_style: Option<bool>,
+    style: Option<Style>,
     power_mode: Option<String>,
     airplane_mode: Option<bool>,
     recording: Option<bool>,
@@ -140,13 +140,140 @@ fn read_recording(session: &Connection) -> zbus::Result<bool> {
         .get_property("Recording")
 }
 
-fn read_dark_style(session: &Connection) -> zbus::Result<bool> {
-    Ok(config(session)?.get_property::<String>("Appearance")? == DARK)
+fn read_style(session: &Connection) -> zbus::Result<Option<Style>> {
+    let keyword: String = config(session)?.get_property("Appearance")?;
+    Ok([Style::Dark, Style::Light, Style::Automatic]
+        .into_iter()
+        .find(|style| style.keyword() == keyword))
 }
 
-fn set_dark_style(session: &Connection, on: bool) -> zbus::Result<()> {
-    config(session)?.set_property("Appearance", if on { DARK } else { LIGHT })?;
+fn set_style(session: &Connection, style: Style) -> zbus::Result<()> {
+    config(session)?.set_property("Appearance", style.keyword())?;
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Switch {
+    Wifi(bool),
+    Bluetooth(bool),
+    DoNotDisturb(bool),
+    NightLight(bool),
+    Style(Style),
+    PowerSaver(bool),
+    AirplaneMode(bool),
+}
+
+enum Work {
+    Refresh,
+    Switch(Switch),
+    Bluetooth(StatusCommand),
+    ChooseNetwork,
+    Join(Vec<u8>),
+}
+
+enum Answer {
+    Connected(Connected),
+    Networks(Vec<(String, String, bool)>),
+    SignIn(String),
+    NeedsPassword,
+}
+
+struct Worker {
+    network: Option<NetworkManager>,
+    bluetooth: Option<Bluetooth>,
+    session: Option<Connection>,
+    system: Option<Connection>,
+}
+
+impl Worker {
+    fn switch(&self, switch: Switch) {
+        match switch {
+            Switch::Wifi(on) => {
+                if let Some(network) = &self.network {
+                    report("switch Wi-Fi", network.set_wifi_enabled(on));
+                }
+            }
+            Switch::Bluetooth(on) => {
+                if let Some(bluetooth) = &self.bluetooth {
+                    report("switch Bluetooth", bluetooth.set_powered(on));
+                }
+            }
+            Switch::DoNotDisturb(on) => {
+                if let Some(session) = &self.session {
+                    report(
+                        "switch Do Not Disturb",
+                        NotificationsProxy::new(session)
+                            .and_then(|center| center.set_do_not_disturb(on)),
+                    );
+                }
+            }
+            Switch::NightLight(on) => {
+                if let Some(session) = &self.session {
+                    report("switch Night Light", set_night_light(session, on));
+                }
+            }
+            Switch::Style(style) => {
+                if let Some(session) = &self.session {
+                    report("switch the dark style", set_style(session, style));
+                }
+            }
+            Switch::PowerSaver(on) => {
+                if let Some(system) = &self.system {
+                    let profile = if on { POWER_SAVER } else { BALANCED };
+                    report(
+                        "switch the power mode",
+                        power_profiles(system)
+                            .and_then(|profiles| profiles.set_active_profile(profile)),
+                    );
+                }
+            }
+            Switch::AirplaneMode(on) => report("switch airplane mode", set_airplane_mode(on)),
+        }
+    }
+
+    fn networks(&self) -> Option<Answer> {
+        let network = self.network.as_ref()?;
+        if let Ok(Some(page)) = network.sign_in_page() {
+            return Some(Answer::SignIn(page));
+        }
+        report("look for Wi-Fi networks", network.scan());
+        let choices = network
+            .networks()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|found| {
+                (
+                    found.name(),
+                    StatusCommand::Join(found.ssid.clone()).action(),
+                    found.current,
+                )
+            })
+            .collect();
+        Some(Answer::Networks(choices))
+    }
+
+    fn join(&self, ssid: &[u8]) -> Option<Answer> {
+        let network = self.network.as_ref()?;
+        let found = network
+            .networks()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|candidate| candidate.ssid == ssid)?;
+        if found.security.needs_password() && !found.known {
+            return Some(Answer::NeedsPassword);
+        }
+        bande_status::captive::join_network(network, &found);
+        None
+    }
+
+    fn connected(&self) -> Connected {
+        read_connected(
+            self.network.as_ref(),
+            self.bluetooth.as_ref(),
+            self.session.as_ref(),
+            self.system.as_ref(),
+        )
+    }
 }
 
 fn quietly<T>(what: &str, result: zbus::Result<T>) -> Option<T> {
@@ -194,7 +321,9 @@ fn read_connected(
         night_light: session
             .and_then(|session| quietly("Night Light", read_night_light(session)))
             .map(|(on, ..)| on),
-        dark_style: session.and_then(|session| quietly("the style", read_dark_style(session))),
+        style: session
+            .and_then(|session| quietly("the style", read_style(session)))
+            .flatten(),
         recording: session
             .and_then(|session| quietly("whether the screen is recorded", read_recording(session))),
         power_mode: system.and_then(|system| {
@@ -213,30 +342,49 @@ fn read_connected(
 fn follow_connected(
     session: Option<&Connection>,
     system: Option<&Connection>,
-    outbox: Outbox<Connected>,
-) -> Option<Sender<()>> {
-    let (refresh, wanted) = mpsc::channel::<()>();
+    outbox: Outbox<Answer>,
+) -> Option<Sender<Work>> {
+    let (work, wanted) = mpsc::channel::<Work>();
     let (session, system) = (session.cloned(), system.cloned());
     let started = std::thread::Builder::new()
         .name("control-status".to_owned())
         .spawn(move || {
-            let network = system.as_ref().map(NetworkManager::new);
-            let bluetooth = system.as_ref().map(Bluetooth::new);
-            while wanted.recv().is_ok() {
-                wanted.try_iter().count();
-                let read = read_connected(
-                    network.as_ref(),
-                    bluetooth.as_ref(),
-                    session.as_ref(),
-                    system.as_ref(),
-                );
-                if !outbox.send(read) {
+            let worker = Worker {
+                network: system.as_ref().map(NetworkManager::new),
+                bluetooth: system.as_ref().map(Bluetooth::new),
+                session,
+                system,
+            };
+            while let Ok(first) = wanted.recv() {
+                let mut refresh = false;
+                let mut answers = Vec::new();
+                for asked in std::iter::once(first).chain(wanted.try_iter()) {
+                    match asked {
+                        Work::Refresh => refresh = true,
+                        Work::Switch(switch) => {
+                            worker.switch(switch);
+                            refresh = true;
+                        }
+                        Work::Bluetooth(command) => {
+                            if let Some(bluetooth) = &worker.bluetooth {
+                                run_bluetooth(bluetooth, &command);
+                            }
+                            refresh = true;
+                        }
+                        Work::ChooseNetwork => answers.extend(worker.networks()),
+                        Work::Join(ssid) => answers.extend(worker.join(&ssid)),
+                    }
+                }
+                if refresh {
+                    answers.push(Answer::Connected(worker.connected()));
+                }
+                if !answers.into_iter().all(|answer| outbox.send(answer)) {
                     break;
                 }
             }
         });
     match started {
-        Ok(_) => Some(refresh),
+        Ok(_) => Some(work),
         Err(error) => {
             tracing::warn!("Quick Settings does not follow Wi-Fi and Bluetooth: {error}");
             None
@@ -347,12 +495,6 @@ fn moved(event: &Event, offset: Point) -> Event {
 }
 
 impl QuickSettings {
-    fn notifications(&self) -> Option<NotificationsProxy<'_>> {
-        NotificationsProxy::new(self.session.as_ref()?)
-            .inspect_err(|error| tracing::warn!("cannot reach the notification centre: {error}"))
-            .ok()
-    }
-
     fn set_light(&mut self, connector: String, level: f32) {
         if let Some(light) = self
             .lights
@@ -378,12 +520,20 @@ impl QuickSettings {
             bluetooth,
             do_not_disturb,
             night_light,
-            dark_style,
+            style,
             power_mode,
             airplane_mode,
             recording,
             ..
         } = self.connected.clone();
+        let dark_style = style.map(|style| DarkStyle {
+            on: match style {
+                Style::Dark => true,
+                Style::Light => false,
+                Style::Automatic => self.palette.scheme == Scheme::Dark,
+            },
+            automatic: style == Style::Automatic,
+        });
         let snapshot = self.audio.as_deref().map(Audio::snapshot);
         let output = snapshot
             .as_ref()
@@ -470,108 +620,80 @@ impl QuickSettings {
         )
     }
 
-    fn show_menu(&self, window: &mut Window, choices: &[(String, String, bool)]) {
-        if choices.is_empty() {
-            return;
+    fn menu_point(&self, window: &Window) -> Point {
+        let Mode::Panel { ui, height } = &self.mode else {
+            return self.pointer;
+        };
+        match ui.focused_frame().filter(|_| self.by_keyboard) {
+            Some(frame) => {
+                let origin = self.panel_rect(window, *height);
+                Point::new(origin.x + frame.x, origin.y + frame.y + frame.height)
+            }
+            None => self.pointer,
         }
+    }
+
+    fn show_menu(&self, window: &mut Window, menu: Menu) {
+        let at = self.menu_point(window);
         report(
             "open the menu",
-            window.show_menu(chooser_menu(choices), MenuPlacement::AtPoint(self.pointer)),
+            window.show_menu(menu, MenuPlacement::AtPoint(at)),
         );
     }
 
-    fn choose_network(&mut self, window: &mut Window) {
-        let Some(network) = &self.network else {
-            return;
-        };
-        if let Ok(Some(page)) = network.sign_in_page() {
-            open_page(&page);
-            self.dismiss(window);
-            return;
+    fn ask(&self, work: Work) {
+        if let Some(sender) = &self.work {
+            let _ = sender.send(work);
         }
-        report("look for Wi-Fi networks", network.scan());
-        let choices: Vec<_> = network
-            .networks()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|found| {
-                (
-                    found.name(),
-                    StatusCommand::Join(found.ssid.clone()).action(),
-                    found.current,
-                )
-            })
-            .collect();
-        self.show_menu(window, &choices);
     }
 
-    fn join(&mut self, window: &mut Window, ssid: &[u8]) {
-        let Some(network) = &self.network else {
-            return;
-        };
-        let Some(found) = network
-            .networks()
-            .unwrap_or_default()
-            .into_iter()
-            .find(|candidate| candidate.ssid == ssid)
-        else {
-            return;
-        };
-        if found.security.needs_password() && !found.known {
-            self.launch(window, SETTINGS_APP, &["bande-settings", "wifi"]);
-            self.dismiss(window);
-            return;
+    fn answered(&mut self, window: &mut Window, answer: Answer) {
+        match answer {
+            Answer::Connected(connected) => self.connected = connected,
+            Answer::Networks(choices) => {
+                if matches!(self.mode, Mode::Panel { .. }) && !choices.is_empty() {
+                    self.show_menu(window, chooser_menu(&choices));
+                }
+            }
+            Answer::SignIn(page) => {
+                open_page(&page);
+                self.dismiss(window);
+            }
+            Answer::NeedsPassword => {
+                self.launch(window, SETTINGS_APP, &["bande-settings", "wifi"]);
+                self.dismiss(window);
+            }
         }
-        bande_status::captive::join_network(network, &found);
+    }
+
+    fn toggle_style(&mut self, on: bool) {
+        let explicit = match on {
+            true => Style::Dark,
+            false => Style::Light,
+        };
+        let style = match self.connected.style {
+            Some(Style::Automatic) => {
+                self.automatic_was = Some(self.palette.scheme == Scheme::Dark);
+                explicit
+            }
+            _ if self.automatic_was == Some(on) => {
+                self.automatic_was = None;
+                Style::Automatic
+            }
+            _ => explicit,
+        };
+        self.ask(Work::Switch(Switch::Style(style)));
     }
 
     fn apply(&mut self, window: &mut Window, change: Change) {
         match change {
-            Change::Wifi(on) => {
-                if let Some(network) = &self.network {
-                    report("switch Wi-Fi", network.set_wifi_enabled(on));
-                }
-                self.refresh();
-            }
-            Change::Bluetooth(on) => {
-                if let Some(bluetooth) = &self.bluetooth {
-                    report("switch Bluetooth", bluetooth.set_powered(on));
-                }
-                self.refresh();
-            }
-            Change::DoNotDisturb(on) => {
-                if let Some(center) = self.notifications() {
-                    report("switch Do Not Disturb", center.set_do_not_disturb(on));
-                }
-                self.refresh();
-            }
-            Change::NightLight(on) => {
-                if let Some(session) = &self.session {
-                    report("switch Night Light", set_night_light(session, on));
-                }
-                self.refresh();
-            }
-            Change::DarkStyle(on) => {
-                if let Some(session) = &self.session {
-                    report("switch the dark style", set_dark_style(session, on));
-                }
-                self.refresh();
-            }
-            Change::PowerSaver(on) => {
-                if let Some(system) = &self.system {
-                    let profile = if on { POWER_SAVER } else { BALANCED };
-                    report(
-                        "switch the power mode",
-                        power_profiles(system)
-                            .and_then(|profiles| profiles.set_active_profile(profile)),
-                    );
-                }
-                self.refresh();
-            }
-            Change::AirplaneMode(on) => {
-                report("switch airplane mode", set_airplane_mode(on));
-                self.refresh();
-            }
+            Change::Wifi(on) => self.ask(Work::Switch(Switch::Wifi(on))),
+            Change::Bluetooth(on) => self.ask(Work::Switch(Switch::Bluetooth(on))),
+            Change::DoNotDisturb(on) => self.ask(Work::Switch(Switch::DoNotDisturb(on))),
+            Change::NightLight(on) => self.ask(Work::Switch(Switch::NightLight(on))),
+            Change::DarkStyle(on) => self.toggle_style(on),
+            Change::PowerSaver(on) => self.ask(Work::Switch(Switch::PowerSaver(on))),
+            Change::AirplaneMode(on) => self.ask(Work::Switch(Switch::AirplaneMode(on))),
             Change::ScreenRecording => {
                 report(
                     "open the screen recording options",
@@ -581,13 +703,7 @@ impl QuickSettings {
             }
             Change::ChooseBluetoothDevice => {
                 if let Some(devices) = &self.connected.devices {
-                    report(
-                        "open the Bluetooth devices",
-                        window.show_menu(
-                            bluetooth_menu(devices),
-                            MenuPlacement::AtPoint(self.pointer),
-                        ),
-                    );
+                    self.show_menu(window, bluetooth_menu(devices));
                 }
             }
             Change::Volume(volume) => {
@@ -620,7 +736,7 @@ impl QuickSettings {
                 }
                 self.listen();
             }
-            Change::ChooseNetwork => self.choose_network(window),
+            Change::ChooseNetwork => self.ask(Work::ChooseNetwork),
             Change::Output(name) => {
                 if let Some(audio) = &self.audio
                     && let Some(device) = audio.snapshot().device(&name).cloned()
@@ -654,10 +770,7 @@ impl QuickSettings {
                         &format!("{SESSION}log-out"),
                     ),
                 ]);
-                report(
-                    "open the power menu",
-                    window.show_menu(Menu::new(items), MenuPlacement::AtPoint(self.pointer)),
-                );
+                self.show_menu(window, Menu::new(items));
             }
             Change::Settings => {
                 self.launch(window, SETTINGS_APP, &["bande-settings"]);
@@ -681,12 +794,7 @@ impl QuickSettings {
                 self.launch(window, SETTINGS_APP, &command);
                 self.dismiss(window);
             }
-            command => {
-                if let Some(bluetooth) = &self.bluetooth {
-                    run_bluetooth(bluetooth, command);
-                }
-                self.refresh();
-            }
+            command => self.ask(Work::Bluetooth(command.clone())),
         }
     }
 
@@ -790,12 +898,6 @@ impl QuickSettings {
         (ui, height)
     }
 
-    fn refresh(&self) {
-        if let Some(refresh) = &self.refresh {
-            let _ = refresh.send(());
-        }
-    }
-
     fn rebuild(&mut self) {
         if !matches!(self.mode, Mode::Panel { .. }) {
             return;
@@ -844,6 +946,7 @@ impl QuickSettings {
 
     fn dismiss(&mut self, window: &mut Window) {
         self.meter = None;
+        self.automatic_was = None;
         self.mode = Mode::Hidden;
         self.shown
             .animate_at(Instant::now(), self.reduce_motion, 0.0, Spring::QUICK);
@@ -866,7 +969,7 @@ impl QuickSettings {
             height,
         };
         self.listen();
-        self.refresh();
+        self.ask(Work::Refresh);
         self.request_light(LevelRequest::Refresh);
         self.shown.jump_to(0.0);
         self.reveal(window, true);
@@ -957,8 +1060,13 @@ impl QuickSettings {
     }
 
     fn input(&mut self, window: &mut Window, input: &Event) {
-        if let Event::PointerMove(pointer) | Event::PointerDown(pointer) = input {
-            self.pointer = pointer.position;
+        match input {
+            Event::PointerMove(pointer) | Event::PointerDown(pointer) => {
+                self.pointer = pointer.position;
+                self.by_keyboard = false;
+            }
+            Event::Key { .. } => self.by_keyboard = true,
+            _ => {}
         }
         let Mode::Panel { height, .. } = &self.mode else {
             return;
@@ -1092,6 +1200,7 @@ impl App for QuickSettings {
             }
             WindowEvent::Input(input) => self.input(window, &input),
             WindowEvent::Accessibility(request) => {
+                self.by_keyboard = true;
                 if let Mode::Panel { ui, .. } = &mut self.mode
                     && ui.perform(&request)
                 {
@@ -1102,7 +1211,7 @@ impl App for QuickSettings {
             WindowEvent::MenuAction(action) => {
                 let command = StatusCommand::parse(&action);
                 if let Some(StatusCommand::Join(ssid)) = &command {
-                    self.join(window, ssid);
+                    self.ask(Work::Join(ssid.clone()));
                 } else if let Some(keyword) = action.strip_prefix(SESSION) {
                     self.end_session(window, keyword);
                 } else if let Some(command) = command.filter(|command| {
@@ -1166,7 +1275,7 @@ impl App for QuickSettings {
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
         vec![
             self.player_updates.fd(),
-            self.connected_updates.fd(),
+            self.answers.fd(),
             self.artworks.fd(),
             self.light_updates.fd(),
             self.cannot_sleep.fd(),
@@ -1191,10 +1300,13 @@ impl App for QuickSettings {
                 return;
             }
         } else if index == 1 {
-            let Some(connected) = self.connected_updates.drain().pop() else {
+            let answers = self.answers.drain();
+            if answers.is_empty() {
                 return;
-            };
-            self.connected = connected;
+            }
+            for answer in answers {
+                self.answered(window, answer);
+            }
         } else {
             let Some(latest) = self.player_updates.drain().pop() else {
                 return;
@@ -1253,7 +1365,7 @@ impl QuickSettings {
         audio: Option<Arc<Audio>>,
     ) -> std::io::Result<Self> {
         let player_updates = Inbox::new()?;
-        let connected_updates = Inbox::new()?;
+        let answers = Inbox::new()?;
         let light_updates = Inbox::new()?;
         let light_requests = session.and_then(|connection| {
             let outbox = light_updates.outbox();
@@ -1268,7 +1380,7 @@ impl QuickSettings {
         });
         let artworks = Inbox::new()?;
         let artwork_requests = load_artworks(artworks.outbox());
-        let refresh = follow_connected(session, system, connected_updates.outbox());
+        let work = follow_connected(session, system, answers.outbox());
         let player_commands = session.map(|connection| {
             let (commands, received) = mpsc::channel();
             let (watching, outbox) = (connection.clone(), player_updates.outbox());
@@ -1295,8 +1407,6 @@ impl QuickSettings {
             pointer: Point::new(0.0, 0.0),
             anchor: None,
             audio,
-            network: system.map(NetworkManager::new),
-            bluetooth: system.map(Bluetooth::new),
             lights: Vec::new(),
             light_updates,
             can_sleep: true,
@@ -1314,10 +1424,12 @@ impl QuickSettings {
             meter: None,
             input_level: Rc::default(),
             connected: Connected::default(),
-            connected_updates,
-            refresh,
+            answers,
+            work,
+            automatic_was: None,
+            by_keyboard: false,
         };
-        center.refresh();
+        center.ask(Work::Refresh);
         Ok(center)
     }
 }

@@ -164,13 +164,15 @@ fn shortcuts(apps: &[DesktopEntry]) -> Vec<AppShortcut> {
 fn set_shortcut(app_id: &str, id: &str, trigger: Option<Trigger>) -> std::io::Result<()> {
     let file = global_shortcuts_file()
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no state folder"))?;
-    let mut shortcuts = read_shortcuts(&file)?;
-    if !assign(&mut shortcuts, app_id, id, trigger) {
-        return Err(std::io::Error::other(format!(
-            "{app_id} cannot have those keys for {id}"
-        )));
-    }
-    bande_xdg::replace_file(&file, write_global_shortcuts(&shortcuts))
+    bande_xdg::change_file(&file, |text| {
+        let mut shortcuts = read_global_shortcuts(text);
+        match assign(&mut shortcuts, app_id, id, trigger) {
+            true => Ok(write_global_shortcuts(&shortcuts)),
+            false => Err(std::io::Error::other(format!(
+                "{app_id} cannot have those keys for {id}"
+            ))),
+        }
+    })
 }
 
 fn run(dir: &Path, apps: &[DesktopEntry], command: LoginCommand) -> std::io::Result<()> {

@@ -710,6 +710,7 @@ dependencies = [
  "bande-log",
  "bande-protocols",
  "bande-render",
+ "bande-sound",
  "bande-splash",
  "bande-spring",
  "bande-test-bus",
@@ -1138,6 +1139,7 @@ dependencies = [
  "bande-keyboard",
  "bande-l10n",
  "bande-log",
+ "bande-notify",
  "bande-spring",
  "bande-status",
  "bande-test-wayland",
@@ -1364,6 +1366,7 @@ version = "0.2.0"
 dependencies = [
  "bande-audio",
  "bande-bus",
+ "bande-edid",
  "bande-l10n",
  "bande-log",
  "bande-notify",

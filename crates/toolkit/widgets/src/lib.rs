@@ -598,6 +598,10 @@ impl Ui {
         self.cx.focus
     }
 
+    pub fn focused_frame(&self) -> Option<Rect> {
+        self.lookup(self.cx.focus?).map(Widget::frame)
+    }
+
     pub fn set_focus(&mut self, id: WidgetId) {
         if self.accepts_focus(id) {
             self.cx.focus = Some(id);

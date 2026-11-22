@@ -150,14 +150,17 @@ dialog that cannot start fails the request with response 2.
 - **DynamicLauncher**: "Add this web app to Applications?" with the icon, an editable name and the
   address. `RequestInstallToken` trusts only the app stores the other backends trust (GNOME
   Software, AppCenter, Discover).
-- **GlobalShortcuts** (version 2): only for calls from `xdg-desktop-portal`. `BindShortcuts` binds
+- **GlobalShortcuts** (version 2): only for calls from `xdg-desktop-portal`, and never for an app
+  with no app id (one started outside an app scope). `BindShortcuts` takes at most 32 shortcuts
+  with ids of up to 64 bytes and descriptions cut at 256 characters, and binds
   nothing until the user answers "Allow <app> to use keyboard shortcuts?", which lists each new
-  shortcut with its description and proposed keys: the `preferred_trigger` when it holds Super or
+  shortcut with its description and proposed keys in a list that scrolls: the `preferred_trigger` when it holds Super or
   both Ctrl and Alt, is no system shortcut and nobody has it. Per shortcut the user keeps it,
   records other keys or unticks it; Don't Allow declines them all. Every answer is remembered, a
   declined shortcut as one without keys, so the app is asked only about shortcuts it has not
   asked for before. `ConfigureShortcuts` shows the same list for the app's shortcuts. Bindings
-  are kept per app id in `$XDG_STATE_HOME/bande/global-shortcuts`, which the compositor follows:
+  are kept per app id in `$XDG_STATE_HOME/bande/global-shortcuts` (the portal and Settings change
+  it holding `global-shortcuts.lock`), which the compositor follows:
   it takes a bound chord before the focused app (not while locked or while shortcuts are
   inhibited) and signals `org.bande.GlobalShortcuts.Activated` and `Deactivated` to the portal
   only, which emits them for the app's sessions. The portal follows the file too and emits
@@ -275,8 +278,8 @@ UI.
   module checks the socket is the user's, the daemon takes messages only from root; a failed
   send is logged through `pam_syslog`, never the password; a missing socket is no failure), and
   `password` re-encrypts the login keyring when the old password opens it and the change comes
-  from a Bande session; after a change made elsewhere, the next unlock offers to update it. The lock screen runs `auth` only, so it unlocks
-  nothing; the login keyring stays unlocked while the screen is locked. When the login password
+  from a Bande session; after a change made elsewhere, the next unlock offers to update it. The lock screen runs `auth` and `account` only, so it
+  unlocks nothing; the login keyring stays unlocked while the screen is locked. When the login password
   does not open the keyring, the next unlock offers to update its password or start a new one
   (the old file is kept).
 - It is NetworkManager's secret agent (`org.bande.Secrets`, answering only NetworkManager's bus
@@ -478,10 +481,17 @@ typed before the first prompt answers it. PAM's info and error messages stay und
 the last three of them, each at most 400 characters. Escape cancels; while checking it lets go
 of the conversation and starts a new one (greetd answers a cancel only once the module returns).
 greetd's and PAM's codes become sentences (wrong password, expired password or account, not
-allowed, too many attempts, unavailable); the raw text goes to the journal. After four wrong
-answers each further one waits 5 s, doubling to a minute, with a countdown under the field. The
-lock screen changes an expired password with `pam_chauthtok`; greetd runs no `pam_chauthtok`, so
-at login an expired password is only explained. greetd's messages are refused above 64 KiB.
+allowed, too many attempts, unavailable); the raw text goes to the journal. A refusal after an
+answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
+load) waits for the next answer, Escape or another person. After four wrong answers for the same
+login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
+the login window keeps the count per name across switching people. While a session is starting,
+the field holds text or a power confirmation is open, Up and Down do not switch people. At login
+greetd changes an expired password with `pam_chauthtok` through the same conversation (the
+`password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
+with no `password` stack: when `account` answers that the password has expired it unlocks the
+session it already holds and a notification asks the person to choose a new one in Settings ▸
+Users & Groups, which runs `passwd`. greetd's messages are refused above 64 KiB.
 
 **Keyboard.** The field shows Caps Lock and, with several layouts, the active one as a button
 that switches to the next, as `Super+Space` does. The layouts and `XKBOPTIONS` are those in
@@ -506,8 +516,8 @@ compositor turns the displays off, and on battery the greeter then sleeps when l
 first frame is shown; the others show the blurred wallpaper (`greeter-backdrop` layers).
 
 **A session that fails.** When the compositor service fails, ends within 5 s, or a session is
-still running, `bande-session` writes a keyword to `/var/lib/bande-greeter/failed/<uid>` (the
-same `3733 root:_greetd` pattern as the pictures); the greeter shows that person why their
+still running, `bande-session` writes a keyword to `failed` in that person's login-window
+folder (below); the greeter shows that person why their
 last session ended, and the next session that starts removes the note.
 
 **No black frame.** Each stage leaves its last frame on screen until the next has something to
@@ -572,15 +582,17 @@ display-manager.service`, which ends the sessions it started.
 
 **Wallpaper at login.** The login window shows the wallpaper of the person it offers, starting
 with whoever signed in last (`$XDG_STATE_HOME/bande-greeter/last-user` in greetd's home,
-`/var/lib/greetd`). Homes are 0700, so `bande-config` copies the dark picture (at most 64 MiB)
-to `/var/lib/bande-greeter/pictures/<uid>`, a different light one to `<uid>.light`, and the
-appearance, wallpaper fit and vision settings to `<uid>.look` whenever they change, so the
-login window shows the variant and fit the desktop fades in with. That folder is
-`root:_greetd` mode 3733: anyone may create files but no one may list them, the sticky bit stops
-people replacing each other's files, and setgid makes a 0640 copy readable by its owner and the
-login window alone. The greeter opens `<uid>` without following links, uses it only if it is a
-regular file owned by that uid within the size limit, and decodes it through `/proc/self/fd`, so
-the file it checked is the file it shows; anything else falls back to the default.
+`/var/lib/greetd`). Homes are 0700, so each person has a folder the login window reads,
+`/var/lib/bande-greeter/users/<uid>`, owned by them, group `_greetd`, mode 2750: systemd makes it
+(`bande-greeter-share@<uid>.service`, a `StateDirectory=` that `user@.service` wants through a
+drop-in) whenever their user manager starts, and the folder above it is root's, so no one can
+create or replace another person's files or list theirs. `bande-config` copies the dark picture
+(at most 64 MiB) to `picture` there, a different light one to `picture.light`, and the
+appearance, wallpaper fit and vision settings to `look` whenever they change, so the login
+window shows the variant and fit the desktop fades in with; setgid makes each 0640 copy readable
+by its owner and the login window alone. The greeter opens each file without following links,
+uses it only if it is a regular file owned by that uid within the size limit, and decodes it
+through `/proc/self/fd`, so the file it checked is the file it shows; anything else falls back to the default.
 
 ## Crash handling and supervision
 
@@ -593,7 +605,7 @@ what the one before could not save:
   daemon, at most once every 10 s; the session and its apps stay, and notifications live in
   `bande-notify`. A hung shell shows in Force Quit as "Taskbar & Desktop (Not Responding)" with
   Relaunch; at 2 s without an answer its keyboard-exclusive surfaces lose the keyboard, and at
-  5 s the compositor kills it through its pidfd (after `SIGQUIT`) for the supervisor to restart. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
+  5 s the compositor kills `bande-shell` (never the lock screen, screenshots or a session dialog) through its pidfd (after `SIGQUIT`) for the supervisor to restart. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
   while locked is killed and restarted.
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without

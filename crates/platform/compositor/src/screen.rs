@@ -3,6 +3,7 @@ use std::time::Duration;
 use smithay::backend::renderer::utils::Buffer;
 use smithay::desktop::layer_map_for_output;
 use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Subpixel};
+use smithay::reexports::calloop::RegistrationToken;
 use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::reexports::wayland_server::backend::GlobalId;
 use smithay::utils::{Clock, Logical, Monotonic, Physical, Point, Raw, Rectangle, Size, Transform};
@@ -122,6 +123,7 @@ pub(crate) struct Screen {
     pub(crate) mirror: Option<String>,
     pub(crate) colour_profile: Option<String>,
     pub(crate) variable_refresh: bool,
+    pub(crate) refresh_varies: bool,
     pub(crate) parked: bool,
     pub(crate) fitted_to: Rectangle<i32, Logical>,
     pub(crate) latched_feedback: Vec<PresentationFeedbackCallback>,
@@ -129,6 +131,7 @@ pub(crate) struct Screen {
     pub(crate) due_callbacks: Vec<DueCallback>,
     pub(crate) latched_releases: Vec<Buffer>,
     pub(crate) latched_barriers: Vec<LatchedBarrier>,
+    pub(crate) timed_wake: Option<RegistrationToken>,
 }
 
 impl Screen {
@@ -163,6 +166,7 @@ impl Screen {
             mirror: None,
             colour_profile: None,
             variable_refresh: true,
+            refresh_varies: false,
             parked: false,
             fitted_to: Rectangle::default(),
             latched_feedback: Vec::new(),
@@ -170,6 +174,7 @@ impl Screen {
             due_callbacks: Vec::new(),
             latched_releases: Vec::new(),
             latched_barriers: Vec::new(),
+            timed_wake: None,
         };
         screen.apply(settings);
         screen

@@ -8,6 +8,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+bande-edid.workspace = true
 rustix.workspace = true
 tracing.workspace = true
 bande-audio.workspace = true

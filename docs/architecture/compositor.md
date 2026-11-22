@@ -103,11 +103,12 @@ when they reach the screen is Bande's own.
   also sample; headless it is version 3 with LINEAR only. A buffer is accepted only with exactly
   the planes its modifier has, all in one dma-buf, and carries the DRM node so that
   `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan
-  image with its modifier and explicit plane layout and sampled in place every frame (acquired
-  from the foreign queue), without a copy. A LINEAR buffer that cannot be sampled that way
+  image with its modifier and explicit plane layout and sampled in place every frame, without a copy: a frame acquires it from the foreign queue
+  before its first draw and releases it back in `GENERAL` when the frame ends. A LINEAR buffer that cannot be sampled that way
   (offset or stride not a multiple of 16, or a driver or lavapipe without the extension) is
   imported as a Vulkan buffer and its damaged rows copied into the surface's texture, so any
-  stride works. Uploads are submitted with the frame, or on their own when no frame is rendered
+  stride works. A LINEAR plane whose stride is shorter than a row, or whose last row ends past
+  the dma-buf, is refused. Uploads are submitted with the frame, or on their own when no frame is rendered
   (a covered window that keeps drawing, direct scanout), so pending staging memory cannot pile
   up. Explicit sync is `linux-drm-syncobj-v1`, offered when the DRM device supports syncobj
   eventfds.
@@ -137,7 +138,8 @@ when they reach the screen is Bande's own.
   primary plane without composition. A display whose connector can change its refresh without
   a mode-set gets variable refresh while a full-screen window on its active workspace says its
   content is a game or video (`wp_content_type_v1`), unless `variable-refresh #false` is in its
-  settings (Settings ▸ Displays ▸ Variable refresh rate in full screen). Tearing page flips are
+  settings (Settings ▸ Displays ▸ Variable refresh rate in full screen); presentation feedback
+  then reports the refresh as variable, with the mode's as the fastest. Tearing page flips are
   not offered: Smithay 0.7's `DrmCompositor` cannot ask for `DRM_MODE_PAGE_FLIP_ASYNC`.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
   (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`
@@ -324,8 +326,9 @@ when they reach the screen is Bande's own.
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
   pidfd taken at connection, and through `cgroup.kill` when they run in their own scope. The
   shell is listed as "Taskbar & Desktop" with Relaunch, which kills it for the supervisor to
-  start again; a shell that leaves a ping unanswered loses any keyboard-exclusive layer focus
-  at 2 s and is relaunched the same way at 5 s.
+  start again; a shell client that leaves a ping unanswered loses any keyboard-exclusive layer
+  focus at 2 s, and `bande-shell` itself is relaunched the same way at 5 s (the lock screen,
+  screenshots and session dialogs only lose the keyboard).
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
   and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`. The loop
@@ -444,20 +447,20 @@ Status is what `crates/platform/compositor` serves on `main`.
 | :--- | :--- | :--- |
 | `wl_compositor` / `wl_subcompositor` | Core surfaces and hierarchy | implemented |
 | `wl_shm` | Shared-memory buffers | implemented |
-| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | implemented; a touchscreen maps to the first display; a finger on a client surface goes to it as `wl_touch` (a move or resize asked with that touch's serial becomes ours), and a finger on our title bars and frame zones, menus, overview, switcher or free-half panel, or while a popup holds the grab, works as the left button; a swipe up from the display's bottom edge opens the overview |
-| `zwp_tablet_manager_v2` | Pen tablets and styluses | implemented: a client that bound it gets the pen on its surfaces (pressure, tilt, buttons); elsewhere, and for every other client, the pen moves the pointer, its tip is the left button and a barrel button the right |
+| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | implemented; a touchscreen or pen maps to its own display, turned with it: the one udev names in `WL_OUTPUT`, else the built-in panel (eDP, LVDS, DSI), else the main display; a finger on a client surface goes to it as `wl_touch` (a move or resize asked with that touch's serial becomes ours), and a finger on our title bars and frame zones, menus, overview, switcher or free-half panel, or while a popup holds the grab, works as the left button; a swipe up from the display's bottom edge opens the overview, except while locked or at the login window, where the overview never opens |
+| `zwp_tablet_manager_v2` | Pen tablets and styluses | implemented: a client that bound it gets the pen on its surfaces (pressure, tilt, buttons); elsewhere, and for every other client, the pen moves the pointer, its tip is the left button and a barrel button the right; while the tip is down the pen stays with the surface or button it touched |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | implemented where the device supports syncobj eventfds |
 | `xdg_wm_base` | Application windows and popups | implemented; `wm_capabilities` lists maximize, fullscreen, minimize and the window menu; `set_fullscreen` moves the window to the output it names; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | implemented |
 | `wp_presentation` | Presentation timing, VSync | implemented |
-| `wp_fifo_v1` | FIFO presentation without frame callbacks (Mesa WSI, SDL, Proton) | implemented: a barrier is lifted when the frame that latched it is presented, a hidden window's at the next presentation of its display |
-| `wp_commit_timing_v1` | Commits that wait for a presentation time | implemented: released at the start of the first frame shown at or after the time; a waiting commit keeps its display's frames coming |
+| `wp_fifo_v1` | FIFO presentation without frame callbacks (Mesa WSI, SDL, Proton) | implemented: a barrier is lifted when the frame that latched it is presented, a hidden window's at the next presentation of its display; a commit waiting on a barrier asks only for a frame of its own display |
+| `wp_commit_timing_v1` | Commits that wait for a presentation time | implemented: released at the start of the first frame shown at or after the time; a waiting commit wakes its display one refresh before the time (at most 5 s ahead, then it waits again) |
 | `wp_content_type_v1` | Game, video or photo content | implemented; game and video in full screen turn on variable refresh |
 | `wp_single_pixel_buffer_v1` | One-colour buffers (backgrounds, letterboxing) | implemented, drawn as a solid fill |
 | `wp_alpha_modifier_v1` | Surface opacity set by the client | implemented |
-| `xdg_system_bell_v1` | The terminal bell | implemented: the window's app asks for attention in the taskbar unless it is focused |
+| `xdg_system_bell_v1` | The terminal bell | implemented: it plays the alert sound through `bande-sound`, so the screen flashes when Settings ▸ Accessibility asks for that, and an unfocused window's app asks for attention in the taskbar |
 | `wp_tearing_control_v1` | Tearing page flips for games | not served: needs async page flips in Smithay's `DrmCompositor` |
 | `xdg_toplevel_icon_v1` | A window's own icon | not served: the taskbar shows the app's desktop entry icon, and `bande_shell_v1` has no way to pass a client icon |
 | `wp_drm_lease_v1` | Lease a VR headset's connector | not served |

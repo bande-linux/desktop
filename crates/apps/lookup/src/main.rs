@@ -156,6 +156,12 @@ impl Program for Lookup {
     type View = Pane;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        if let Err(error) = std::thread::Builder::new()
+            .name("installed dictionaries".to_owned())
+            .spawn(import::convert_installed)
+        {
+            tracing::warn!("cannot read the installed dictionaries: {error}");
+        }
         let mut lookup = Self {
             shown: None,
             dismissed: Rc::new(Cell::new(false)),

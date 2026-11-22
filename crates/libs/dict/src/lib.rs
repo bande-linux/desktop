@@ -396,7 +396,7 @@ pub fn discover(folders: &[PathBuf]) -> Vec<Pack> {
             .filter_map(|file| Some(file.ok()?.path()))
             .filter(|path| {
                 path.extension()
-                    .is_some_and(|extension| extension == PACK || extension == SOURCE)
+                    .is_some_and(|extension| extension == PACK_EXTENSION || extension == SOURCE)
             })
             .collect();
         paths.sort();
@@ -545,16 +545,18 @@ pub fn look_up(sources: &[Pack], text: &str, word_languages: &[String]) -> io::R
     Ok(unique)
 }
 
-const PACK: &str = "bdict";
+pub const PACK_EXTENSION: &str = "bdict";
 const SOURCE: &str = "source";
 const ANY_LANGUAGE: &str = "*";
 pub const PACK_FOLDER: &str = "bande/dict";
+pub const INSTALLED_PACK_FOLDER: &str = "bande/dict-installed";
 
 pub fn installed() -> Vec<Pack> {
-    let folders: Vec<PathBuf> = bande_xdg::data_dirs()
+    let mut folders: Vec<PathBuf> = bande_xdg::data_dirs()
         .into_iter()
         .map(|folder| folder.join(PACK_FOLDER))
         .collect();
+    folders.extend(bande_xdg::cache_home().map(|cache| cache.join(INSTALLED_PACK_FOLDER)));
     discover(&folders)
 }
 

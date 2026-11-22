@@ -24,6 +24,12 @@ file (an online source: the same metadata, no data). The first with an `id` wins
 are in `/usr/share`, the user's own in `~/.local/share`; they are treated the same, and the user's
 can be removed in Settings.
 
+Installed dictd dictionaries (`/usr/share/dictd`) and StarDict ones (`/usr/share/stardict/dic`,
+`~/.stardict/dic`, a dictionary per file or per folder) are sources too: when Dictionary starts, a
+worker thread converts each one that is new or changed, as an import does, into a pack in
+`$XDG_CACHE_HOME/bande/dict-installed/` (a `.refused` marker for one that cannot be converted, so
+it is not tried again until it changes), and removes the packs of dictionaries no longer installed.
+
 No language and no source is named in the code. A source is on by default when it serves one of
 the user's languages (their language list and their region's language), unless it says
 `default=on|off`. The default order puts sources whose text is in the user's languages first, then

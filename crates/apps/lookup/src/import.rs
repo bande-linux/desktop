@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use bande_dict::{Line, NewEntry, PACK_FOLDER};
+use bande_dict::{INSTALLED_PACK_FOLDER, Line, NewEntry, PACK_EXTENSION, PACK_FOLDER};
 use bande_l10n::tr;
 use flate2::read::GzDecoder;
 
@@ -13,6 +13,7 @@ const DICT_PORT: u16 = 2628;
 const DICT_TIMEOUT: Duration = Duration::from_secs(10);
 const ANY_LANGUAGE: &str = "*";
 const LARGEST: u64 = 1 << 30;
+const INSTALLED_FOLDERS: [&str; 2] = ["/usr/share/dictd", "/usr/share/stardict/dic"];
 const TARBALLS: [&str; 5] = [".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar"];
 
 #[derive(Debug)]
@@ -53,7 +54,7 @@ fn users_folder() -> Result<PathBuf, Failure> {
         .ok_or_else(|| broken("no data folder"))
 }
 
-fn identifier(name: &str) -> String {
+fn identifier(kind: &str, name: &str) -> String {
     let readable: String = name
         .chars()
         .map(|character| match character.is_ascii_alphanumeric() {
@@ -64,7 +65,7 @@ fn identifier(name: &str) -> String {
     let hash = name.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
         (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3)
     });
-    format!("user-{}-{:08x}", readable.trim_matches('-'), hash as u32)
+    format!("{kind}-{}-{:08x}", readable.trim_matches('-'), hash as u32)
 }
 
 fn meta(id: &str, name: &str, attribution: &str, extra: &str) -> String {
@@ -86,8 +87,12 @@ fn read_maybe_gzipped(path: &Path) -> Result<Vec<u8>, Failure> {
         .extension()
         .is_some_and(|extension| extension == "dz" || extension == "gz")
     {
-        true => GzDecoder::new(file).take(LARGEST + 1).read_to_end(&mut bytes)?,
-        false => BufReader::new(file).take(LARGEST + 1).read_to_end(&mut bytes)?,
+        true => GzDecoder::new(file)
+            .take(LARGEST + 1)
+            .read_to_end(&mut bytes)?,
+        false => BufReader::new(file)
+            .take(LARGEST + 1)
+            .read_to_end(&mut bytes)?,
     };
     match bytes.len() as u64 > LARGEST {
         true => Err(Failure::Broken(tr!("it is too big once unpacked"))),
@@ -316,7 +321,8 @@ fn import_dictd(index_path: &Path) -> Result<(String, String, Vec<NewEntry>), Fa
     let data_path =
         first_existing(&base, &[".dict.dz", ".dict"]).ok_or_else(|| broken("no .dict file"))?;
     let data = read_maybe_gzipped(&data_path)?;
-    let index = fs::read_to_string(index_path).map_err(|_| broken("the index is not text"))?;
+    let index = String::from_utf8(read_maybe_gzipped(index_path)?)
+        .map_err(|_| broken("the index is not text"))?;
     let mut name = None;
     let mut attribution = None;
     let mut entries = Vec::new();
@@ -427,13 +433,105 @@ fn convert(path: &Path) -> Result<(String, String, Vec<NewEntry>), Failure> {
     Err(Failure::Unsupported)
 }
 
+fn installed_dictionaries() -> Vec<PathBuf> {
+    let mut folders: Vec<PathBuf> = INSTALLED_FOLDERS.iter().map(PathBuf::from).collect();
+    folders.extend(std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".stardict/dic")));
+    let mut found = Vec::new();
+    for folder in folders {
+        let Ok(entries) = fs::read_dir(&folder) else {
+            continue;
+        };
+        for path in entries.flatten().map(|entry| entry.path()) {
+            let inside = match path.is_dir() {
+                true => fs::read_dir(&path)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .map(|entry| entry.path())
+                    .collect(),
+                false => vec![path],
+            };
+            found.extend(
+                inside
+                    .into_iter()
+                    .filter(|path| ends_with(path, ".ifo") || ends_with(path, ".index")),
+            );
+        }
+    }
+    found.sort();
+    found
+}
+
+fn modified(path: &Path) -> Option<std::time::SystemTime> {
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+}
+
+fn write_installed(source: &Path, pack: &Path, id: &str) -> Result<(), Failure> {
+    let (name, attribution, entries) = convert(source)?;
+    if entries.is_empty() {
+        return Err(broken("it has no entries"));
+    }
+    bande_dict::write_pack(pack, &meta(id, &name, &attribution, ""), &entries)?;
+    Ok(())
+}
+
+pub fn convert_installed() {
+    let Some(folder) = bande_xdg::cache_home().map(|cache| cache.join(INSTALLED_PACK_FOLDER))
+    else {
+        return;
+    };
+    let mut kept = Vec::new();
+    for source in installed_dictionaries() {
+        let id = identifier("installed", &source.to_string_lossy());
+        let pack = folder.join(format!("{id}.{PACK_EXTENSION}"));
+        let refused = folder.join(format!("{id}.refused"));
+        let changed = modified(&source);
+        let current = [&pack, &refused]
+            .into_iter()
+            .any(|done| modified(done).is_some_and(|done| Some(done) >= changed));
+        if !current {
+            match write_installed(&source, &pack, &id) {
+                Ok(()) => {
+                    if let Err(error) = fs::remove_file(&refused)
+                        && error.kind() != io::ErrorKind::NotFound
+                    {
+                        tracing::warn!("cannot remove {}: {error}", refused.display());
+                    }
+                }
+                Err(failure) => {
+                    let name = source.to_string_lossy();
+                    tracing::warn!("{}", failure.message(&name));
+                    if let Err(error) = bande_xdg::replace_file(&refused, "") {
+                        tracing::warn!("cannot write {}: {error}", refused.display());
+                    }
+                }
+            }
+        }
+        kept.extend([pack, refused]);
+    }
+    let Ok(entries) = fs::read_dir(&folder) else {
+        return;
+    };
+    for stale in entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| !kept.contains(path))
+    {
+        if let Err(error) = fs::remove_file(&stale) {
+            tracing::warn!("cannot remove {}: {error}", stale.display());
+        }
+    }
+}
+
 pub fn import_file(path: &Path) -> Result<String, Failure> {
     let (name, attribution, entries) = convert(path)?;
     if entries.is_empty() {
         return Err(broken("it has no entries"));
     }
-    let id = identifier(&name);
-    let target = users_folder()?.join(format!("{id}.bdict"));
+    let id = identifier("user", &name);
+    let target = users_folder()?.join(format!("{id}.{PACK_EXTENSION}"));
     bande_dict::write_pack(&target, &meta(&id, &name, &attribution, ""), &entries)?;
     Ok(name)
 }
@@ -495,7 +593,7 @@ pub fn add_server(url: &str) -> Result<String, Failure> {
         "*" | "!" => host.clone(),
         database => format!("{host} ({database})"),
     };
-    let id = identifier(&format!("dict-{host}-{port}-{database}"));
+    let id = identifier("user", &format!("dict-{host}-{port}-{database}"));
     let address = format!("dict://{host}:{port}/{database}");
     let text = meta(
         &id,

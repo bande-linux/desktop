@@ -647,12 +647,7 @@ fn install_packs(session: &Connection, system: &Connection, packs: &[String]) ->
             )?;
             return Ok(());
         }
-        Err(bande_packages::Error::Failed(failure))
-            if matches!(
-                failure.code,
-                ErrorCode::Cancelled | ErrorCode::NotAuthorized
-            ) =>
-        {
+        Err(bande_packages::Error::Failed(failure)) if failure.code == ErrorCode::Cancelled => {
             return Ok(());
         }
         Err(bande_packages::Error::Failed(failure)) => explain(&failure),

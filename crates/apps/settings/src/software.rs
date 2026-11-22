@@ -20,7 +20,6 @@ use bande_packages::{
 use bande_toolkit::SessionEnd;
 use bande_xdg::{replace_file, state_home};
 use zbus::MatchRule;
-use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::fdo::RequestNameFlags;
 use zbus::message;
@@ -29,7 +28,7 @@ use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
 use bande_notify::Urgency;
-use bande_notify::client::{Request, close, notify};
+use bande_notify::client::{Listener, Request, Signal, close, notify};
 
 const FRESH_SECONDS: u32 = 60 * 60;
 const REBOOT_REQUIRED: &str = "/run/reboot-required";
@@ -37,6 +36,7 @@ const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
 const RESTART_FILE: &str = "bande/restart-pending";
 const INTERRUPTED: &str = "dpkg --configure -a";
 const NEVER_REFRESHED: u32 = u32::MAX;
+const BUS: &str = "org.freedesktop.DBus";
 const FWUPD: &str = "fwupd";
 const IDLE_FOR: Duration = Duration::from_secs(5 * 60);
 
@@ -91,9 +91,24 @@ pub enum Ending {
     Restart,
     FirmwareRestart,
     FirmwareShutDown,
+    FirmwareShutDownAndPackages,
 }
 
 impl Ending {
+    fn join(self, other: Self) -> Self {
+        match (self.min(other), self.max(other)) {
+            (Self::Restart, Self::FirmwareShutDown) => Self::FirmwareShutDownAndPackages,
+            (_, most) => most,
+        }
+    }
+
+    pub(crate) fn shuts_down(self) -> bool {
+        matches!(
+            self,
+            Self::FirmwareShutDown | Self::FirmwareShutDownAndPackages
+        )
+    }
+
     fn of(applies: Applies) -> Self {
         match applies {
             Applies::AtShutdown => Self::FirmwareShutDown,
@@ -102,27 +117,27 @@ impl Ending {
     }
 
     pub(crate) fn session_end(self) -> SessionEnd {
-        match self {
-            Self::FirmwareShutDown => SessionEnd::ShutDown,
-            Self::Restart | Self::FirmwareRestart => SessionEnd::Restart,
+        match self.shuts_down() {
+            true => SessionEnd::ShutDown,
+            false => SessionEnd::Restart,
         }
     }
 
     pub(crate) fn action(self) -> String {
-        match self {
-            Self::FirmwareShutDown => tr!("Shut Down Now"),
-            Self::Restart | Self::FirmwareRestart => tr!("Restart Now"),
+        match self.shuts_down() {
+            true => tr!("Shut Down Now"),
+            false => tr!("Restart Now"),
         }
     }
 
     pub(crate) fn title(self, count: usize) -> String {
-        match self {
-            Self::FirmwareShutDown => trn!(
+        match self.shuts_down() {
+            true => trn!(
                 "Shut down to install 1 update",
                 "Shut down to install {count} updates",
                 count = count
             ),
-            Self::Restart | Self::FirmwareRestart => trn!(
+            false => trn!(
                 "Restart to install 1 update",
                 "Restart to install {count} updates",
                 count = count
@@ -138,6 +153,9 @@ impl Ending {
             ),
             Self::FirmwareShutDown => tr!(
                 "Firmware installs while the computer is shut down. Keep it plugged in, then turn it on again."
+            ),
+            Self::FirmwareShutDownAndPackages => tr!(
+                "Firmware installs while the computer is shut down, and the other updates when you turn it on again. Keep it plugged in."
             ),
         }
     }
@@ -184,18 +202,11 @@ pub enum SoftwareState {
 impl SoftwareState {
     pub(crate) fn pending(&self) -> Option<String> {
         match self {
-            Self::Prepared {
-                ending: Ending::FirmwareShutDown,
-                ..
-            }
+            Self::Prepared { ending, .. }
             | Self::Installed {
-                reboot:
-                    Some(Reboot::Install {
-                        ending: Ending::FirmwareShutDown,
-                        ..
-                    }),
+                reboot: Some(Reboot::Install { ending, .. }),
                 ..
-            } => Some(tr!("Shut down to install updates")),
+            } if ending.shuts_down() => Some(tr!("Shut down to install updates")),
             Self::Prepared { .. }
             | Self::Installed {
                 reboot: Some(Reboot::Install { .. }),
@@ -458,11 +469,11 @@ fn waiting_offline(system: &Connection) -> Result<Option<SoftwareState>, Error> 
         false => 0,
     };
     let firmware = pending_firmware(system);
-    let ending = firmware
-        .iter()
-        .map(|applies| Ending::of(*applies))
-        .max()
-        .unwrap_or(Ending::Restart);
+    let firmware_ending = firmware.iter().map(|applies| Ending::of(*applies)).max();
+    let ending = match (prepared > 0, firmware_ending) {
+        (true, Some(ending)) => Ending::Restart.join(ending),
+        (_, ending) => ending.unwrap_or(Ending::Restart),
+    };
     let count = prepared + firmware.len();
     Ok((count > 0).then_some(SoftwareState::Prepared { count, ending }))
 }
@@ -708,7 +719,7 @@ fn with_firmware(state: SoftwareState, flashed: Flashed) -> SoftwareState {
     let joined = |ending: Ending| {
         flashed
             .ending
-            .map_or(ending, |firmware| ending.max(firmware))
+            .map_or(ending, |firmware| ending.join(firmware))
     };
     match state {
         SoftwareState::Prepared { count, ending } if flashed.failed.is_none() => {
@@ -911,26 +922,29 @@ pub const UPDATE_NOTICE: &str = "org.bande.Settings.UpdateNotice";
 
 pub struct Notice {
     session: Connection,
-    messages: MessageIterator,
-    name: &'static str,
+    listener: Listener,
+    lost: MessageIterator,
 }
 
 impl Notice {
     pub fn listen(session: &Connection, name: &'static str) -> zbus::Result<Self> {
-        let messages = MessageIterator::from(session);
+        let listener = Listener::new(session)?;
         let rule = MatchRule::builder()
             .msg_type(message::Type::Signal)
-            .interface("org.freedesktop.Notifications")?
+            .sender(BUS)?
+            .interface(BUS)?
+            .member("NameLost")?
+            .arg(0, name)?
             .build();
-        DBusProxy::new(session)?.add_match_rule(rule)?;
+        let lost = MessageIterator::for_match_rule(rule, session, None)?;
         session.request_name_with_flags(
             name,
             RequestNameFlags::ReplaceExisting | RequestNameFlags::AllowReplacement,
         )?;
         Ok(Self {
             session: session.clone(),
-            messages,
-            name,
+            listener,
+            lost,
         })
     }
 
@@ -939,28 +953,25 @@ impl Notice {
     }
 
     pub fn answer(self, id: u32) -> zbus::Result<Option<String>> {
-        for message in self.messages.flatten() {
-            let header = message.header();
-            match header.member().map(|member| member.as_str()) {
-                Some("ActionInvoked") => {
-                    let (invoked, action) = message.body().deserialize::<(u32, String)>()?;
-                    if invoked == id {
-                        return Ok(Some(action));
-                    }
-                }
-                Some("NotificationClosed")
-                    if message.body().deserialize::<(u32, u32)>()?.0 == id =>
-                {
-                    return Ok(None);
-                }
-                Some("NameLost") if message.body().deserialize::<&str>()? == self.name => {
-                    close(&self.session, id)?;
-                    return Ok(None);
-                }
-                _ => {}
+        let session = self.session;
+        let lost = self.lost;
+        spawn("notice", move || {
+            if lost.flatten().next().is_some()
+                && let Err(error) = close(&session, id)
+            {
+                tracing::warn!("cannot close the replaced notification: {error}");
             }
-        }
-        Ok(None)
+        });
+        let mut answer = None;
+        self.listener.listen(|signal| match signal {
+            Signal::ActionInvoked(invoked, action) if invoked == id => {
+                answer = Some(action);
+                false
+            }
+            Signal::Closed(closed) => closed != id,
+            _ => true,
+        });
+        Ok(answer)
     }
 }
 
@@ -1219,7 +1230,11 @@ pub fn follow_software(
                 }
                 SoftwareCommand::Check => {
                     updates.send(Update::Software(SoftwareState::Checking));
-                    check(&system, &client, Refresh::Always)
+                    match waiting_offline(&system) {
+                        Ok(Some(waiting)) => waiting,
+                        Ok(None) => check(&system, &client, Refresh::Always),
+                        Err(error) => broken(Stage::Check, &error),
+                    }
                 }
                 SoftwareCommand::Update(packages) => {
                     updates.send(Update::Software(SoftwareState::Downloading {

@@ -155,7 +155,7 @@ impl Device {
 }
 
 const SHOWN: [(&str, &[&str]); 3] = [
-    (ADAPTER, &["Powered", "Alias"]),
+    (ADAPTER, &["Powered", "Discoverable", "Alias"]),
     (
         DEVICE,
         &["Address", "Alias", "Name", "Icon", "Paired", "Connected"],
@@ -222,6 +222,7 @@ fn bluez_running(bus: &Connection) -> zbus::Result<bool> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Radio {
     pub powered: bool,
+    pub discoverable: bool,
     pub name: String,
     pub paired: Vec<Device>,
     pub nearby: Vec<Device>,
@@ -296,6 +297,7 @@ impl Bluetooth {
         nearby.retain(|device| device.named);
         Ok(Some(Radio {
             powered: property(adapter, "Powered").unwrap_or(false),
+            discoverable: property(adapter, "Discoverable").unwrap_or(false),
             name: property(adapter, "Alias").unwrap_or_default(),
             paired,
             nearby,
@@ -323,6 +325,14 @@ impl Bluetooth {
             adapter.stop_discovery()?;
         }
         visible
+    }
+
+    /// Lets nearby devices find this computer again after the adapter's timeout ended it.
+    pub fn stay_discoverable(&self) -> zbus::Result<()> {
+        match self.adapter()? {
+            Some(adapter) => adapter.set_discoverable(true),
+            None => Ok(()),
+        }
     }
 
     fn device(&self, device: &Device) -> zbus::Result<DeviceProxyBlocking<'static>> {

@@ -678,12 +678,13 @@ impl SettingsView {
         let Some(bluetooth) = self.bluetooth.present().cloned() else {
             return Vec::new();
         };
-        let visible = (!paired && bluetooth.powered && !bluetooth.name.is_empty()).then(|| {
-            muted_row(&tr!(
-                "While this page is open, nearby devices can find this computer as “{name}”.",
-                name = bluetooth.name
-            ))
-        });
+        let visible =
+            (!paired && bluetooth.discoverable && !bluetooth.name.is_empty()).then(|| {
+                muted_row(&tr!(
+                    "While this page is open, nearby devices can find this computer as “{name}”.",
+                    name = bluetooth.name
+                ))
+            });
         let devices = if paired {
             bluetooth.paired
         } else {

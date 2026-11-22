@@ -800,6 +800,14 @@ impl SettingsView {
                             .map(|device| device.connected)
                     };
                     let before = self.bluetooth.present();
+                    let hidden = before
+                        .is_some_and(|before| before.discoverable || !before.powered)
+                        && bluetooth.powered
+                        && !bluetooth.discoverable;
+                    if hidden && self.on_screen && self.pane == PaneId::Bluetooth {
+                        self.commands
+                            .push(Command::Bluetooth(BluetoothCommand::StayDiscoverable));
+                    }
                     self.busy.retain(|address| {
                         connection(before, address) == connection(Some(bluetooth), address)
                     });

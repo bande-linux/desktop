@@ -409,9 +409,11 @@ brings up the dialog.
   (About, Hide, Hide Other Apps, Show All Apps) are performed by the shell through
   `bande_shell_v1`, since an app cannot hide itself.
 - **Network and Bluetooth**: NetworkManager and BlueZ for Wi-Fi in Quick Settings and Settings,
-  and pairing in Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar and Quick
-  Settings show Wi-Fi alone. The shell and Settings register the pairing agent again whenever
-  `org.bluez` gets an owner, the computer is discoverable while Settings ▸ Bluetooth is open, a
+  and pairing in Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar's
+  Bluetooth menu and Quick Settings turn Bluetooth on or off and connect, disconnect or forget
+  paired devices. The shell and Settings register the pairing agent again whenever `org.bluez`
+  gets an owner. While Settings ▸ Bluetooth is open the computer is discoverable, made so again
+  when the adapter's `DiscoverableTimeout` ends it, and the page says so only while it is; a
   paired device that fails to connect from the Taskbar or Quick Settings posts why, and
   `bande-power` warns once at 15% and again at 5% when a connected device's `Battery1` runs low.
   - Saved connections activate whatever their security; new WPA Enterprise networks (PEAP, TTLS,

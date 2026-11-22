@@ -67,6 +67,7 @@ pub enum NetworkCommand {
 pub enum BluetoothCommand {
     Power(bool),
     Discover(bool),
+    StayDiscoverable,
     Connect(bande_bluetooth::Device),
     Disconnect(bande_bluetooth::Device),
     Pair(bande_bluetooth::Device),
@@ -704,7 +705,13 @@ pub fn follow_bluetooth(
                         let _ = changed.send(());
                     }
                     if let Err(error) = bluetooth.set_discovering(on) {
-                        tracing::debug!("discovery not changed: {error}");
+                        tracing::warn!("discovery not changed: {error}");
+                    }
+                    continue;
+                }
+                BluetoothCommand::StayDiscoverable => {
+                    if let Err(error) = bluetooth.stay_discoverable() {
+                        tracing::warn!("this computer cannot be found by nearby devices: {error}");
                     }
                     continue;
                 }

@@ -4,7 +4,7 @@ use bande_graphics::{
     TextStyle, TextSystem,
 };
 
-use super::model::{Menu, MenuItem};
+use super::model::{Menu, MenuItem, MenuToggle};
 use super::{
     MENU_RADIUS, MENU_SHADOW_MARGIN, SEARCH_NODE, TEXT_START, VERTICAL_PADDING, menu_node,
     row_height,
@@ -22,6 +22,7 @@ const CHEVRON_SPACE: f32 = 18.0;
 const MINIMUM_WIDTH: f32 = 140.0;
 const FONT_SIZE: f32 = 13.0;
 const MARK_STROKE: f32 = 1.6;
+const RADIO_DOT: f32 = 6.0;
 const SEARCH_WIDTH: f32 = 220.0;
 const MAGNIFIER_RADIUS: f32 = 4.0;
 const MAGNIFIER_CENTRE: f32 = 14.0;
@@ -460,14 +461,27 @@ impl MenuPanel {
                 );
             }
             let at = |x: f32, y: f32| Point::new(x, centre + y);
-            if item.checked {
-                items.push(Item::FillPath {
+            match item.toggle {
+                Some(MenuToggle::Check(true)) => items.push(Item::FillPath {
                     path: square_capped(
                         &[at(10.0, 0.5), at(13.0, 3.5), at(18.0, -3.5)],
                         MARK_STROKE,
                     ),
                     paint: mark.into(),
-                });
+                }),
+                Some(MenuToggle::Radio(true)) => items.push(Item::Fill {
+                    shape: Shape::rounded(
+                        Rect::new(
+                            14.0 - RADIO_DOT / 2.0,
+                            centre - RADIO_DOT / 2.0,
+                            RADIO_DOT,
+                            RADIO_DOT,
+                        ),
+                        RADIO_DOT / 2.0,
+                    ),
+                    paint: mark.into(),
+                }),
+                Some(MenuToggle::Check(false) | MenuToggle::Radio(false)) | None => {}
             }
             if let Some(layout) = item.layout {
                 paint_layout(layout, centre, mark, &mut items);
@@ -557,15 +571,18 @@ impl MenuPanel {
             if item.separator {
                 continue;
             }
-            let role = if item.checked {
-                Role::MenuItemCheckBox
-            } else {
-                Role::MenuItem
+            let (role, on) = match item.toggle {
+                Some(MenuToggle::Check(on)) => (Role::MenuItemCheckBox, Some(on)),
+                Some(MenuToggle::Radio(on)) => (Role::MenuItemRadio, Some(on)),
+                None => (Role::MenuItem, None),
             };
             let mut node = Node::new(role);
             node.set_label(item.title.clone());
-            if item.checked {
-                node.set_toggled(Toggled::True);
+            if let Some(on) = on {
+                node.set_toggled(match on {
+                    true => Toggled::True,
+                    false => Toggled::False,
+                });
             }
             if let Some(shortcut) = &item.shortcut {
                 node.set_keyboard_shortcut(shortcut.clone());

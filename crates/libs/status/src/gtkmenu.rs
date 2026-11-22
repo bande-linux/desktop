@@ -4,7 +4,7 @@ use zbus::blocking::Connection;
 use zbus::message::{Flags, Message};
 use zbus::zvariant::{OwnedValue, Signature, Value};
 
-use crate::dbusmenu::{Node, with_app_row, without_mnemonics};
+use crate::dbusmenu::{Node, Toggle, with_app_row, without_mnemonics};
 
 pub const MENUS_INTERFACE: &str = "org.gtk.Menus";
 pub const ACTIONS_INTERFACE: &str = "org.gtk.Actions";
@@ -214,10 +214,10 @@ impl Builder<'_> {
             actions.get(name)
         });
         let enabled = described.is_some_and(|(enabled, _, _)| *enabled);
-        let checked = match (described.and_then(|(_, _, state)| state.first()), &target) {
-            (Some(state), Some(target)) => state == target,
-            (Some(state), None) => bool::try_from(&**state).unwrap_or(false),
-            _ => false,
+        let toggle = match (described.and_then(|(_, _, state)| state.first()), &target) {
+            (Some(state), Some(target)) => Some(Toggle::Radio(state == target)),
+            (Some(state), None) => bool::try_from(&**state).ok().map(Toggle::Check),
+            _ => None,
         };
         let visible = match text(item, "hidden-when") {
             Some("action-disabled") => enabled,
@@ -242,7 +242,7 @@ impl Builder<'_> {
             label,
             enabled,
             visible,
-            checked,
+            toggle,
             shortcut: text(item, "accel").and_then(shortcut),
             ..Node::default()
         }

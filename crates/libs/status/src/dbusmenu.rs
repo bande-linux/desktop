@@ -6,6 +6,7 @@ use zbus::zvariant::{OwnedValue, Value};
 use crate::Command;
 
 pub use bande_app_menu::MENU_PATH as APP_MENU_PATH;
+pub use bande_app_menu::Toggle;
 
 pub type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
 
@@ -34,7 +35,7 @@ pub struct Node {
     pub enabled: bool,
     pub visible: bool,
     pub separator: bool,
-    pub checked: bool,
+    pub toggle: Option<Toggle>,
     pub shortcut: Option<String>,
     pub shell_action: Option<ShellAction>,
     pub version: Option<String>,
@@ -107,14 +108,18 @@ fn shortcut(properties: &HashMap<String, OwnedValue>) -> Option<String> {
 }
 
 fn node(id: i32, properties: &HashMap<String, OwnedValue>, children: Vec<Node>) -> Node {
-    let toggled = property::<&str>(properties, "toggle-type").is_some_and(|kind| !kind.is_empty());
     Node {
         id,
         label: without_mnemonics(property::<&str>(properties, "label").unwrap_or_default()),
         enabled: property(properties, "enabled").unwrap_or(true),
         visible: property(properties, "visible").unwrap_or(true),
         separator: property::<&str>(properties, "type") == Some("separator"),
-        checked: toggled && property::<i32>(properties, "toggle-state") == Some(1),
+        toggle: property::<&str>(properties, "toggle-type").and_then(|kind| {
+            Toggle::parse(
+                kind,
+                property::<i32>(properties, "toggle-state").unwrap_or(0),
+            )
+        }),
         shortcut: shortcut(properties),
         shell_action: property::<&str>(properties, SHELL_ACTION_PROPERTY)
             .and_then(ShellAction::parse),

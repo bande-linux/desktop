@@ -227,7 +227,7 @@ pub(crate) fn columns_menu(shown: &[ListColumn], clicked: Option<ListColumn>) ->
         .iter()
         .map(|column| {
             MenuItem::new(&list_column_title(*column), &list_column_action(*column))
-                .checked(shown.contains(column))
+                .check(shown.contains(column))
         })
         .collect::<Vec<_>>();
     if let Some((column, at)) =

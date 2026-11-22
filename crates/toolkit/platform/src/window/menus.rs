@@ -88,7 +88,7 @@ impl Window {
         if self.can_keep_on_top() {
             items.push(
                 MenuItem::new(&tr!("Keep on Top"), "keep-on-top")
-                    .checked(self.keep_on_top)
+                    .check(self.keep_on_top)
                     .enabled(!toplevel.fullscreen),
             );
         }

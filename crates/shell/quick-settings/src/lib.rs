@@ -455,7 +455,7 @@ pub fn chooser_menu(choices: &[(String, String, bool)]) -> Menu {
     Menu::new(
         choices
             .iter()
-            .map(|(title, action, chosen)| MenuItem::new(title, action).checked(*chosen))
+            .map(|(title, action, chosen)| MenuItem::new(title, action).radio(*chosen))
             .collect(),
     )
 }

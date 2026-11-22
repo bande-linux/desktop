@@ -54,7 +54,7 @@ fn calendar_menu(view: &CalendarView, index: usize) -> Option<Menu> {
         .enumerate()
         .map(|(position, (accent, label))| {
             MenuItem::new(&label.tr(), &format!("{ACTION_COLOR}{index}:{position}"))
-                .checked(current == Some(*accent))
+                .radio(current == Some(*accent))
         })
         .collect();
     let subscription = calendar.info.read_only && calendar.info.url.is_none();

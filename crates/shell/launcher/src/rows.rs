@@ -213,7 +213,7 @@ pub fn hit_menu(hit: &Hit, model: &Model) -> Menu {
                     );
                     items.push(
                         MenuItem::new(&title, &format!("{TONE_PREFIX}{index}"))
-                            .checked(model.skin_tone == *tone),
+                            .radio(model.skin_tone == *tone),
                     );
                 }
             }

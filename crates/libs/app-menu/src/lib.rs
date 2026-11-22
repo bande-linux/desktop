@@ -193,6 +193,36 @@ pub fn shortcut_action(menus: &[Entry], pressed: &dyn Fn(&str) -> bool) -> Optio
         })
 }
 
+/// The dbusmenu `toggle-type` and `toggle-state` of an item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Toggle {
+    Check(bool),
+    Radio(bool),
+}
+
+impl Toggle {
+    pub fn parse(kind: &str, state: i32) -> Option<Self> {
+        match kind {
+            "checkmark" => Some(Self::Check(state == 1)),
+            "radio" => Some(Self::Radio(state == 1)),
+            _ => None,
+        }
+    }
+
+    fn kind(self) -> &'static str {
+        match self {
+            Self::Check(_) => "checkmark",
+            Self::Radio(_) => "radio",
+        }
+    }
+
+    fn on(self) -> bool {
+        match self {
+            Self::Check(on) | Self::Radio(on) => on,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     label: String,
@@ -202,7 +232,7 @@ pub struct Entry {
     version: Option<String>,
     enabled: bool,
     separator: bool,
-    toggle: Option<(&'static str, bool)>,
+    toggle: Option<Toggle>,
     children: Vec<Entry>,
 }
 
@@ -269,14 +299,14 @@ impl Entry {
 
     pub fn radio(self, selected: bool) -> Self {
         Self {
-            toggle: Some(("radio", selected)),
+            toggle: Some(Toggle::Radio(selected)),
             ..self
         }
     }
 
     pub fn check(self, checked: bool) -> Self {
         Self {
-            toggle: Some(("checkmark", checked)),
+            toggle: Some(Toggle::Check(checked)),
             ..self
         }
     }
@@ -301,9 +331,12 @@ impl Entry {
         if !self.children.is_empty() {
             properties.insert("children-display".to_owned(), Value::from("submenu"));
         }
-        if let Some((kind, on)) = self.toggle {
-            properties.insert("toggle-type".to_owned(), Value::from(kind));
-            properties.insert("toggle-state".to_owned(), Value::from(i32::from(on)));
+        if let Some(toggle) = self.toggle {
+            properties.insert("toggle-type".to_owned(), Value::from(toggle.kind()));
+            properties.insert(
+                "toggle-state".to_owned(),
+                Value::from(i32::from(toggle.on())),
+            );
         }
         if let Some(shortcut) = &self.shortcut {
             let keys = shortcut

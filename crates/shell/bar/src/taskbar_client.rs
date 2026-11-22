@@ -611,10 +611,10 @@ impl Taskbar {
                 }
                 let options = Menu::new(vec![
                     MenuItem::new(&tr!("Keep in Taskbar"), MENU_KEEP)
-                        .checked(self.kept.contains(app_id))
+                        .check(self.kept.contains(app_id))
                         .enabled(self.can_keep(window, app_id)),
                     MenuItem::new(&tr!("Open at Login"), MENU_LOGIN)
-                        .checked(self.opens_at_login(app_id))
+                        .check(self.opens_at_login(app_id))
                         .enabled(installed && self.autostart.is_some()),
                     MenuItem::separator(),
                     MenuItem::new(&tr!("Show in Files"), MENU_SHOW).enabled(installed),

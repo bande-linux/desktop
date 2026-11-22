@@ -72,7 +72,7 @@ impl PopUpButton {
                 .iter()
                 .enumerate()
                 .map(|(index, choice)| {
-                    MenuItem::new(choice, &index.to_string()).checked(index == self.selected)
+                    MenuItem::new(choice, &index.to_string()).radio(index == self.selected)
                 })
                 .collect(),
         );

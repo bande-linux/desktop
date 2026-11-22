@@ -48,9 +48,7 @@ fn item(message: Text, action: &str) -> MenuItem {
 pub fn desktop_menu(sort: SortBy, paste: bool, settings: bool) -> Menu {
     let sorts = SORTS
         .iter()
-        .map(|(by, message, keyword)| {
-            item(*message, &format!("sort:{keyword}")).checked(*by == sort)
-        })
+        .map(|(by, message, keyword)| item(*message, &format!("sort:{keyword}")).radio(*by == sort))
         .collect();
     let mut items = vec![
         item(text!("New Folder"), "new-folder").shortcut("Shift+Ctrl+N"),

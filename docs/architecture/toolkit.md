@@ -237,7 +237,8 @@ writes a hex value, a corner radius or a font name of its own.
   (`MENU_RADIUS`) with the Datum overlay shadow pair and no blur; 4 pt inset, 28 pt rows, 9 pt
   separators in `hairline`, the highlight accent radius 6 with `on_accent` text, disabled items
   `ink3`, the shortcut column right-aligned in `ink3` as words, square-capped
-  checkmarks, submenu chevrons. Searchable menus (`Menu::searchable`) have a `well` search
+  checkmarks for `MenuItem::check` and a dot for the chosen `MenuItem::radio` (announced as
+  check box and radio items, on or off, as app menus carry them over dbusmenu), submenu chevrons. Searchable menus (`Menu::searchable`) have a `well` search
   field; Alt swaps items for their `alternate`.
 - **Alerts and sheets**. `Alert` is a card of radius
   14: the body on `overlay` with an optional 36 pt icon (`.icon(image)`), a Manrope `Heading`

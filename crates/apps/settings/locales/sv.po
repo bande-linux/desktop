@@ -1637,11 +1637,11 @@ msgstr "Avahi är inte installerat. Skrivare som lagts till med adress fungerar 
 msgid "Finding printers nearby needs Avahi"
 msgstr "Avahi behövs för att hitta skrivare i närheten"
 
-msgid "Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
-msgstr "Nätverksskrivare behöver inget mer. USB-skrivare och skrivare som behöver en drivrutin använder utskriftssystemet CUPS, från Debian-arkivet"
+msgid "Bande’s apps print to network printers by themselves. Other apps, such as the browser or LibreOffice, USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
+msgstr "Bandes appar skriver ut till nätverksskrivare på egen hand. Andra appar, som webbläsaren eller LibreOffice, USB-skrivare och skrivare som behöver en drivrutin använder utskriftssystemet CUPS, från Debian-arkivet"
 
-msgid "Support for USB and older printers"
-msgstr "Stöd för USB-skrivare och äldre skrivare"
+msgid "Printing from other apps and USB printers"
+msgstr "Utskrift från andra appar och USB-skrivare"
 
 msgid "Kind"
 msgstr "Typ"

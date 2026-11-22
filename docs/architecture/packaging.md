@@ -214,7 +214,7 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
 
 It does not pull in `gnome-keyring` (it installs beside Bande's keyring, which runs only in a Bande
 session, so another desktop's keyring owns `org.freedesktop.secrets` there), `pipewire-alsa` or `cups` (`bande-printd` prints to network printers
-without it; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for USB and older printers), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
+without it; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for other apps' printing and for USB and older printers), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
 nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and
 `xdg-user-dirs`, which the Bande packages that use them declare:

@@ -486,14 +486,17 @@ impl SettingsView {
             tr!("Installing…")
         } else {
             tr!(
-                "Network printers need nothing more. USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
+                "Bande’s apps print to network printers by themselves. Other apps, such as the browser or LibreOffice, USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
             )
         };
         self.anchors
             .push((Anchor::Item("install-printing".to_owned()), button.id()));
         boxed(
             Row::new(
-                Text::new(&tr!("Support for USB and older printers"), Tone::Primary),
+                Text::new(
+                    &tr!("Printing from other apps and USB printers"),
+                    Tone::Primary,
+                ),
                 Some(boxed(button)),
             )
             .detail(Text::new(&detail, Tone::Muted).caption()),

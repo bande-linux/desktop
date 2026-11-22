@@ -12,6 +12,7 @@ accesskit.workspace = true
 accesskit_unix.workspace = true
 jiff.workspace = true
 libc.workspace = true
+reis = { workspace = true, features = ["calloop"] }
 rustix = { workspace = true, features = ["fs", "net", "rand", "thread", "time"] }
 serde.workspace = true
 serde_json.workspace = true

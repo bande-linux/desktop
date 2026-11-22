@@ -1017,6 +1017,7 @@ impl SettingsView {
             List::LoginItems => self.login_rows(),
             List::BatteryHistory => self.battery_rows(),
             List::PowerStatus => self.power_status_rows(),
+            List::SleepStatus => self.sleep_status_rows(),
             List::NotificationApps => self.notification_app_rows(),
             List::SoftwareUpdates => self.software_rows(),
             List::Ethernet => self.ethernet_rows(),

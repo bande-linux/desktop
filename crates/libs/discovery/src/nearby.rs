@@ -71,6 +71,71 @@ trait Avahi {
         address_protocol: i32,
         flags: u32,
     ) -> zbus::Result<(i32, i32, String, i32, String, u32)>;
+
+    fn entry_group_new(&self) -> zbus::Result<OwnedObjectPath>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.Avahi.EntryGroup",
+    default_service = "org.freedesktop.Avahi"
+)]
+trait EntryGroup {
+    #[allow(clippy::too_many_arguments)]
+    fn add_service(
+        &self,
+        interface: i32,
+        protocol: i32,
+        flags: u32,
+        name: &str,
+        kind: &str,
+        domain: &str,
+        host: &str,
+        port: u16,
+        text: Vec<Vec<u8>>,
+    ) -> zbus::Result<()>;
+
+    fn commit(&self) -> zbus::Result<()>;
+
+    fn free(&self) -> zbus::Result<()>;
+}
+
+/// A service this computer announces on the local network until it is dropped.
+pub struct Announcement {
+    group: EntryGroupProxyBlocking<'static>,
+}
+
+impl Drop for Announcement {
+    fn drop(&mut self) {
+        if let Err(error) = self.group.free() {
+            tracing::debug!("cannot withdraw an announced service: {error}");
+        }
+    }
+}
+
+/// Announces the service `kind` (such as `_rfb._tcp`) named `name` on `port`, when Avahi is
+/// installed: `None` without it.
+pub fn announce(name: &str, kind: &str, port: u16) -> zbus::Result<Option<Announcement>> {
+    let system = bande_bus::system()?;
+    if !avahi_installed(&DBusProxy::new(&system)?)? {
+        return Ok(None);
+    }
+    let path = AvahiProxyBlocking::new(&system)?.entry_group_new()?;
+    let group = EntryGroupProxyBlocking::builder(&system)
+        .path(path)?
+        .build()?;
+    group.add_service(
+        ANY_INTERFACE,
+        ANY_PROTOCOL,
+        0,
+        name,
+        kind,
+        "",
+        "",
+        port,
+        Vec::new(),
+    )?;
+    group.commit()?;
+    Ok(Some(Announcement { group }))
 }
 
 /// The address a `.local` host name resolves to now, asked of Avahi.

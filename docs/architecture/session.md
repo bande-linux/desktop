@@ -67,14 +67,22 @@ graph LR
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
   loses its network, and Settings says so on the sleep row. Sleep never comes before the display turns off; Settings says so on a row
   whose choice is overridden.
-- On battery, every sleep Bande asks for (idle, the menus, the lock screen, the power button, the
-  lid) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes` and the system
-  would resume: the kernel knows a resume device (`/sys/power/resume`, set from `resume=` or the
-  initramfs) and the command line has no `noresume`. Otherwise, and always on power, it is plain
-  `Suspend`. systemd-sleep decides when a sleeping laptop hibernates (`HibernateDelaySec=`, by
-  default from the battery's discharge rate); Bande changes no system configuration. Settings ▸
-  Power says whether sleep can hibernate, or why not ("isn't set up" without a resume device). Nothing in the session wakes a sleeping computer except an alarm
-  or timer the user set in Clock; `mem_sleep` is the kernel's.
+- On a computer with a battery, every sleep Bande asks for (idle, the menus, the lock screen, the
+  power button, the lid), plugged in or not, is logind's `SuspendThenHibernate` when
+  `CanSuspendThenHibernate` is `yes` and the system would resume: the kernel knows a resume device
+  (`/sys/power/resume`, set from `resume=` or the initramfs) and the command line has no
+  `noresume`. Otherwise it is plain `Suspend`. `bande-power` ships
+  `/usr/lib/systemd/sleep.conf.d/50-bande.conf` (`HibernateDelaySec=3h`,
+  `HibernateOnACPower=no`), which only `SuspendThenHibernate` reads and any `/etc` setting
+  overrides: on battery the computer hibernates after 3 hours asleep, or sooner when the battery,
+  discharging, reaches 5 % (ACPI `_BTP` alarm or systemd-sleep's discharge estimate), so a laptop
+  left in a bag for days keeps its charge. On the charger it stays suspended and wakes at once:
+  systemd-sleep restarts the 3 hours at each check while on AC, so a laptop unplugged while asleep
+  hibernates about 3 hours later. Where the firmware has no battery alarm,
+  systemd-sleep wakes briefly to read the battery (about hourly, or from the discharge rate it
+  learned). Settings ▸ Power ▸ When inactive says whether sleep can hibernate, or why not ("isn't set up"
+  without a resume device). Nothing in the session wakes a
+  sleeping computer except an alarm or timer the user set in Clock; `mem_sleep` is the kernel's.
 - **The lid**: closing it locks the session and the computer sleeps at once, unless Settings ▸
   Power keeps it running on power or a display is connected (logind's `Docked`), where it keeps
   running with the built-in panel off. `bande-power` holds logind's `handle-lid-switch` inhibitor
@@ -768,6 +776,39 @@ Settings ▸ Sharing works with Debian's own Samba and SSH setup and never rewri
   folders. The sharing password is the person's Samba password (`smbpasswd -a`).
 - **Remote login** enables or disables `ssh.service`.
 
+**Screen Sharing** (`crates/services/screen-sharing`, package `bande-screen-sharing`) lets VNC
+viewers on other computers see and control the screen over RFB (RFC 6143). It is on while the
+user unit `bande-screen-sharing.service` is enabled (Settings ▸ Sharing; the package never
+enables it), and listens on port 5900 only then:
+
+- **Who may connect.** Only peers on a network one of this computer's interfaces is on (or the
+  computer itself); others are dropped before a byte is read. Nothing changes the firewall and
+  nothing asks the router to forward the port. A password of at least 8 characters, kept in the
+  keyring and read when the service starts (Settings restarts it after a change), is required
+  before Settings turns sharing on. Viewers are offered VeNCrypt only: X509Plain or X509Vnc over
+  TLS 1.2 or 1.3 with a self-signed certificate made for this computer on first start
+  (`$XDG_DATA_HOME/bande/screen-sharing`, its fingerprint shown in Settings). Plain VNC
+  authentication (RFB 3.3 and viewers without VeNCrypt) only after **Allow older viewers**.
+  Wrong passwords are slowed by a second each, five from one address or thirty in all within ten
+  minutes refuse further tries, a handshake has a minute, at most four viewers connect at once,
+  and every client message is bounded (`rfb/protocol.rs`).
+- **Asking.** With **Ask before someone connects** (the default) a viewer that knows the password
+  waits on a notification with Allow and Deny for 30 seconds; no answer is Deny. Without it, a
+  notification says who connected.
+- **The screen.** Once a viewer is let in, the service calls the screenshot tool's
+  `StartViewerStream`, which only `/usr/libexec/bande-screen-sharing` may call: the first
+  display as a PipeWire stream with the pointer drawn in, and a socket on which the compositor
+  serves EIS (`bande_capture_v1.connect_input`). While anyone views, the Taskbar shows the screen
+  symbol ("Someone is viewing your screen"); clicking it ends the stream and disconnects every
+  viewer. The stream stops when the last viewer leaves or the service goes away.
+- **RFB.** Raw and ZRLE (zlib, solid, palette and raw tiles), DesktopSize when the display
+  changes size, any true-colour pixel format; only changed 64×64 tiles are sent, when the viewer
+  asks. RFB keysyms are typed through `ei_text`; buttons 4 to 7 scroll. Clipboard text from a
+  viewer is not used.
+- **Found nearby.** While on, `_rfb._tcp` is announced through Avahi when it is installed
+  (`bande_discovery::nearby::announce`); without it Settings offers to install it and shows the
+  addresses to type.
+
 ## Backups
 
 Scheduled, versioned backups with `restic` (`crates/services/backup`). `bande-backupd` is a
@@ -828,8 +869,10 @@ Taskbar and Search watch the `applications` folders on `XDG_DATA_DIRS`, so a fir
 appears without logging out.
 
 **Firmware** (BIOS/UEFI, drives, docks and other devices) comes through fwupd
-(`org.freedesktop.fwupd`), which `bande-settings` recommends; without it Software Update shows
-no firmware. Settings is the fwupd client (`crates/apps/settings/src/software/firmware.rs`): only
+(`org.freedesktop.fwupd`), which `bande-settings` only suggests, because Debian's fwupd enables
+its own daily `fwupd-refresh.timer`. Without it Software Update shows one line, "Firmware updates
+for this computer and its devices", whose Install… installs `fwupd` through PackageKit and says
+that fwupd then checks for firmware once a day by itself; a check follows the install. Settings is the fwupd client (`crates/apps/settings/src/software/firmware.rs`): only
 a check that refreshes the package lists (Check Now, or a check the person switched on) downloads
 new metadata, for each enabled download remote in fwupd's own configuration (LVFS by default),
 skipping a remote whose `.jcat` signature is unchanged, and hands it to fwupd with
@@ -842,7 +885,9 @@ SHA-256 and passed to `Install` with interactive authorisation, so fwupd asks th
 (`update-internal`, kept for the following devices). Progress follows fwupd's `Percentage`.
 A device that installs during the restart (UEFI capsules: `needs-reboot`, then update state
 `needs-reboot`) joins the restart flow as "Restart to install", with a note to keep the computer
-plugged in; a reopened pane finds it again through fwupd's update state. Firmware is never
+plugged in; a reopened pane finds it again through fwupd's update state. After the restart the
+outcome of such an update (`GetHistory`, `GetResults`) is shown once, with the PackageKit offline
+results, then cleared with `ClearResults`. Firmware is never
 installed by automatic updates; the notification counts it as waiting. fwupd's errors map to
 messages that say what to do.
 

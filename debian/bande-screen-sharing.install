@@ -1,0 +1,3 @@
+debian/build/bin/bande-screen-sharing usr/libexec/
+crates/services/screen-sharing/data/bande-screen-sharing.service usr/lib/systemd/user/
+debian/build/l10n/development/bande-screen-sharing/* usr/share/bande/l10n/bande-screen-sharing/

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use bande_packages::{Class, Client};
-use bande_settings::{Reboot, Refresh, SoftwareState, check, update};
+use bande_settings::{Reboot, Refresh, SoftwareState, check, open_updates, update};
 use bande_test_bus::SessionBus;
 use bande_test_bus::fwupd::{self, Device, FakeFwupd, METADATA, SIGNATURE, SYSTEM_POWER_TOO_LOW};
 use bande_test_bus::packagekit::{Call, FakePackageKit, ONLY_DOWNLOAD, ONLY_TRUSTED, SIMULATE};
@@ -135,6 +135,16 @@ fn firmware_lists_beside_packages_and_capsules_wait_for_the_restart() {
             fwupd::Call::Install("dock".to_owned(), DOCK.cab()),
             fwupd::Call::Install("uefi".to_owned(), UEFI.cab()),
         ]
+    );
+
+    fwupd.restart(false);
+    let SoftwareState::Failed { reason, .. } = open_updates(&system, &system, &client) else {
+        panic!("the failed capsule was not reported");
+    };
+    assert!(reason.starts_with("System Firmware:"), "{reason}");
+    assert_eq!(
+        fwupd.take_calls(),
+        [fwupd::Call::ClearResults("uefi".to_owned())]
     );
 }
 

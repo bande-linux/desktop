@@ -30,6 +30,7 @@ blocking = "1.6.2"
 bzip2 = "0.6.1"
 cms = { version = "0.2.3", features = ["std"] }
 data-encoding = "2.11"
+des = "0.9.0"
 encoding_rs = "0.8.35"
 fatfs = { version = "0.3.6", default-features = false, features = ["std", "alloc"] }
 flate2 = "1.1.10"
@@ -66,9 +67,11 @@ pipewire = "0.10.1"
 png = "0.18.1"
 proc-macro2 = "1.0.107"
 quick-xml = "0.38"
+rcgen = { version = "0.14.7", default-features = false, features = ["ring"] }
 quote = "1.0.47"
 raw-window-handle = "0.6.2"
 regex = "1.13.1"
+reis = { version = "0.7.1", default-features = false }
 resvg = { version = "0.48", default-features = false }
 ring = "0.17.14"
 roxmltree = "0.21.2"
@@ -178,6 +181,7 @@ bande-secrets = { path = "crates/services/secrets" }
 bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }
+bande-screen-sharing = { path = "crates/services/screen-sharing", default-features = false }
 bande-sound = { path = "crates/services/sound", default-features = false }
 bande-splash = { path = "crates/libs/splash" }
 bande-spring = { path = "crates/libs/spring" }

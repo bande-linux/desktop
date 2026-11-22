@@ -96,6 +96,7 @@ pub enum Update {
     Software(SoftwareState),
     SoftwareChecked(Option<i64>),
     SoftwareHint(Option<String>),
+    FirmwareMissing(bool),
     Locale(Option<LocaleState>),
     Layouts(Layouts),
     Pointing(PointingDevices),

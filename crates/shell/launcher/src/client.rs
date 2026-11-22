@@ -11,7 +11,7 @@ use crate::{
     Request, SettingInfo, SystemCommand, Target,
 };
 use accesskit::TreeUpdate;
-use bande_config::{Config, Search, SearchCategory, config_path};
+use bande_config::{Bar, Config, SearchCategory, config_path};
 use bande_content::{Preview, preview};
 use bande_fs::Entry;
 use bande_inbox::Inbox;
@@ -214,6 +214,7 @@ pub struct LauncherShell {
     cannot_sleep: Option<Inbox<()>>,
     sleeps: bool,
     hardware: Hardware,
+    floating: bool,
     apps: Rc<RefCell<Apps>>,
     recently_used: Option<RecentlyUsed>,
     config: Option<PathBuf>,
@@ -249,14 +250,19 @@ impl LauncherShell {
         self.launcher.clear();
     }
 
-    fn follow_search(&mut self) -> bool {
-        let search: Search = self
+    fn follow_config(&mut self) -> bool {
+        let config: Config = self
             .config
             .as_deref()
             .and_then(|path| std::fs::read_to_string(path).ok())
             .and_then(|source| Config::load(&source).ok())
-            .map(|(config, _)| config.search)
+            .map(|(config, _)| config)
             .unwrap_or_default();
+        if config.bar.floating != self.floating {
+            self.floating = config.bar.floating;
+            self.refresh_panes();
+        }
+        let search = config.search;
         let excluded = search.excluded(Some(&self.home));
         let recents = search.shows(SearchCategory::RecentDocuments);
         if !search.shows(SearchCategory::Documents) && !search.shows(SearchCategory::Folders) {
@@ -268,6 +274,11 @@ impl LauncherShell {
         }
         self.launcher.set_search(search, excluded);
         recents
+    }
+
+    fn refresh_panes(&mut self) {
+        self.launcher
+            .set_panes(settings_panes(self.sleeps, self.hardware, self.floating));
     }
 
     fn ask(&self, request: Request) {
@@ -285,7 +296,7 @@ impl LauncherShell {
         if mode == Mode::Search {
             self.follow_apps();
 
-            let recents = match (self.follow_search(), &self.recently_used) {
+            let recents = match (self.follow_config(), &self.recently_used) {
                 (true, Some(recently_used)) => recently_used.recents(),
                 _ => &[],
             };
@@ -320,8 +331,7 @@ impl LauncherShell {
         let hardware = Hardware::scan();
         if hardware != self.hardware {
             self.hardware = hardware;
-            self.launcher
-                .set_panes(settings_panes(self.sleeps, hardware));
+            self.refresh_panes();
         }
         window.set_layer_anchor(Edges::ALL);
         window.set_layer_margin(0);
@@ -558,8 +568,7 @@ impl App for LauncherShell {
             self.cannot_sleep = None;
             self.sleeps = false;
             self.launcher.cannot_sleep();
-            self.launcher
-                .set_panes(settings_panes(self.sleeps, self.hardware));
+            self.refresh_panes();
         }
         self.sync(window);
     }
@@ -604,7 +613,7 @@ fn folder_stamps(data_dirs: &[PathBuf]) -> Vec<Option<SystemTime>> {
         .collect()
 }
 
-fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
+fn settings_panes(sleeps: bool, hardware: Hardware, floating: bool) -> Vec<PaneInfo> {
     let mut panes = bande_settings_panes::panes();
     if !sleeps {
         bande_settings_panes::without_sleep(&mut panes);
@@ -617,6 +626,7 @@ fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
     panes.retain(|pane| match pane.id {
         PaneId::Wifi => hardware.wifi,
         PaneId::Bluetooth => hardware.bluetooth,
+        PaneId::BarMore => floating,
         _ => true,
     });
     panes
@@ -690,7 +700,7 @@ impl LauncherShell {
         let hardware = Hardware::scan();
         let mut launcher = Launcher::new(
             apps,
-            settings_panes(true, hardware),
+            settings_panes(true, hardware, Bar::default().floating),
             Box::new(library),
             home.clone(),
             usage,
@@ -716,6 +726,7 @@ impl LauncherShell {
                 .ok(),
             sleeps: true,
             hardware,
+            floating: Bar::default().floating,
             apps: apps_by_type,
             recently_used,
             config: config_path(),
@@ -723,7 +734,7 @@ impl LauncherShell {
             skin_tone,
             input_region: None,
         };
-        shell.follow_search();
+        shell.follow_config();
         Ok(shell)
     }
 }

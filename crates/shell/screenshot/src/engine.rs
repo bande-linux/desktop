@@ -25,7 +25,7 @@ use wayland_client::protocol::wl_output::{self, WlOutput};
 use wayland_client::protocol::wl_registry::{self, WlRegistry};
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
-use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, WEnum, delegate_noop, event_created_child};
+use wayland_client::{Proxy, Connection, Dispatch, EventQueue, QueueHandle, WEnum, delegate_noop, event_created_child};
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::{
     self, ExtForeignToplevelHandleV1,
 };
@@ -130,6 +130,7 @@ enum Command {
     },
     PoolChanged,
     Stop(u64),
+    ConnectInput(OwnedFd),
 }
 
 #[derive(Clone)]
@@ -151,7 +152,7 @@ impl Engine {
             output_sources: globals.bind(&handle, 1..=1, ()).ok(),
             toplevel_sources: globals.bind(&handle, 1..=1, ()).ok(),
             copy: globals.bind(&handle, 1..=1, ()).ok(),
-            shell: globals.bind(&handle, 1..=2, ()).ok(),
+            shell: globals.bind(&handle, 1..=3, ()).ok(),
             toplevels: Vec::new(),
             listed: Vec::new(),
             listings: VecDeque::new(),
@@ -255,6 +256,10 @@ impl Engine {
 
     pub fn stop(&self, id: u64) {
         self.commands.send(Command::Stop(id));
+    }
+
+    pub fn connect_input(&self, socket: OwnedFd) {
+        self.commands.send(Command::ConnectInput(socket));
     }
 }
 
@@ -424,6 +429,12 @@ impl Capture {
                 }
             }
             Command::PoolChanged => {}
+            Command::ConnectInput(socket) => match &self.shell {
+                Some(shell) if shell.version() >= bande_capture_v1::REQ_CONNECT_INPUT_SINCE => {
+                    shell.connect_input(socket.as_fd());
+                }
+                _ => tracing::warn!("the compositor does not take remote input"),
+            },
             Command::Stop(id) => {
                 if let Some(session) = self
                     .sessions

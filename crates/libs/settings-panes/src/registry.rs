@@ -233,7 +233,9 @@ impl PaneId {
                 tr!("Buttons, tapping, scrolling, tracking speed and trackpad gestures")
             }
             Self::Printers => tr!("Add printers, pick the default, see what is printing and scan"),
-            Self::Sharing => tr!("Share folders with other computers and allow remote login"),
+            Self::Sharing => {
+                tr!("Share folders and the screen with other computers and allow remote login")
+            }
             Self::Power => tr!("Battery, power mode, display off, sleep and the lid"),
             Self::Users => tr!("Your account and the others on this computer"),
             Self::Passwords => tr!("The passwords apps and networks keep in your keyring"),
@@ -291,7 +293,9 @@ impl PaneId {
                 tr!("print, printer, cups, queue, ipp, airprint, scan, scanner, escl")
             }
             Self::Sharing => {
-                tr!("share, file sharing, samba, smb, remote login, ssh, network folder")
+                tr!(
+                    "share, file sharing, samba, smb, remote login, ssh, network folder, screen sharing, vnc, remote desktop"
+                )
             }
             Self::Power => tr!(
                 "energy, battery, low power mode, power saver, lid, sleep, suspend, display off, screen timeout, inactive, idle"
@@ -480,6 +484,7 @@ pub enum SettingId {
     PowerMode,
     LowPowerOnBattery,
     PowerStatus,
+    SleepStatus,
     LidOnPower,
     AppNotifications,
     SoftwareUpdates,
@@ -592,6 +597,7 @@ pub enum List {
     LoginItems,
     BatteryHistory,
     PowerStatus,
+    SleepStatus,
     NotificationApps,
     SoftwareUpdates,
     Ethernet,
@@ -1044,7 +1050,9 @@ fn connection_panes() -> Vec<Pane> {
                 vec![list(
                     SettingId::Sharing,
                     tr!("Sharing"),
-                    tr!("file sharing, samba, smb, remote login, ssh, shared folders"),
+                    tr!(
+                        "file sharing, samba, smb, remote login, ssh, shared folders, screen sharing, vnc, remote desktop"
+                    ),
                     List::Sharing,
                 )],
             )],
@@ -2328,6 +2336,14 @@ fn power_pane() -> Pane {
                         tr!("Sleep on battery after"),
                         tr!("idle, inactive, suspend, energy, battery, laptop, computer sleep"),
                         choice(sleep_choices()),
+                    ),
+                    list(
+                        SettingId::SleepStatus,
+                        tr!("Hibernation"),
+                        tr!(
+                            "hibernate, hibernation, deep sleep, swap, battery runs out, can't sleep"
+                        ),
+                        List::SleepStatus,
                     ),
                 ],
             ),

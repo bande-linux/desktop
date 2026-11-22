@@ -109,6 +109,9 @@ pub struct State {
     pub(crate) acting_surfaces: Vec<(WlSurface, String)>,
     pub(crate) shell_resources: Vec<BandeShellV1>,
     pub(crate) capture_resources: Vec<bande_protocols::server::bande_capture_v1::BandeCaptureV1>,
+    pub(crate) remote_input: Vec<(u64, crate::remote_input::RemoteInput)>,
+    pub(crate) remote_keys: crate::remote_input::RemoteKeys,
+    pub(crate) next_remote_input: u64,
     pub(crate) pending_insert: Option<crate::shell::PendingInsert>,
     pub(crate) app_resources: Vec<BandeAppV1>,
     pub(crate) kept_apps: Vec<(BandeAppV1, String)>,
@@ -274,6 +277,9 @@ impl Compositor {
             acting_surfaces: Vec::new(),
             shell_resources: Vec::new(),
             capture_resources: Vec::new(),
+            remote_input: Vec::new(),
+            remote_keys: Default::default(),
+            next_remote_input: 0,
             pending_insert: None,
             app_resources: Vec::new(),
             kept_apps: Vec::new(),
@@ -416,6 +422,7 @@ impl Compositor {
 
     pub fn dispatch(&mut self) -> io::Result<()> {
         self.clear_signalled_fences()?;
+        self.apply_remote_input();
         self.display.dispatch_clients(&mut self.state)?;
         self.state.deliver_pending_insert();
         self.state.activate_next_app_if_the_windowless_one_quit();

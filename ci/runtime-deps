@@ -79,6 +79,7 @@ flatpak flatpak optional
 /usr/libexec/bande-network-helper bande-settings depends
 /usr/libexec/bande-mount-helper bande-automount depends
 /usr/libexec/bande-secrets-prompt bande-secrets depends
+/usr/libexec/bande-screen-sharing bande-screen-sharing optional
 /usr/bin/pinentry-gnome3 pinentry-gnome3 optional
 /usr/bin/pinentry-qt pinentry-qt optional
 /usr/bin/pinentry-gtk-2 pinentry-gtk2 optional

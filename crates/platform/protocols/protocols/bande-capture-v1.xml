@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_capture_v1">
-  <interface name="bande_capture_v1" version="2">
+  <interface name="bande_capture_v1" version="3">
     <description summary="what the screenshot tool needs beyond image capture">
       Offered only on the connections of the shell clients the compositor starts
       itself. Tells the screenshot tool where the windows on the screen are, so
@@ -48,5 +48,17 @@
         it ends a screen recording that is running.
       </description>
     </event>
+
+    <request name="connect_input" since="3">
+      <description summary="serve emulated input on a socket">
+        The compositor speaks the EIS side of the libei protocol on the
+        socket, to one sender context: a seat with an absolute pointer over
+        the displays (a region per display, in logical coordinates), buttons,
+        scrolling and keysyms (ei_text). Its input reaches the session as if
+        it came from a local keyboard and pointer. The connection ends when
+        either side closes the socket.
+      </description>
+      <arg name="socket" type="fd"/>
+    </request>
   </interface>
 </protocol>

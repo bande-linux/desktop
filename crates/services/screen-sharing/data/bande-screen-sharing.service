@@ -1,0 +1,13 @@
+[Unit]
+Description=Bande Screen Sharing
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Slice=session.slice
+ExecStart=/usr/libexec/bande-screen-sharing
+Restart=on-failure
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=bande-session.target

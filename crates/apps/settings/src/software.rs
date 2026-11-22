@@ -36,6 +36,7 @@ const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
 const RESTART_FILE: &str = "bande/restart-pending";
 const INTERRUPTED: &str = "dpkg --configure -a";
 const NEVER_REFRESHED: u32 = u32::MAX;
+const FWUPD: &str = "fwupd";
 const IDLE_FOR: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,6 +165,7 @@ pub enum SoftwareCommand {
     Check,
     Update(Vec<Package>),
     Repair,
+    InstallFirmwareSupport,
 }
 
 fn explain(failure: &Failure) -> String {
@@ -315,24 +317,55 @@ pub fn check(system: &Connection, client: &Client, refresh: Refresh) -> Software
     checked().unwrap_or_else(|error| broken(Stage::Check, &error))
 }
 
+fn finished_firmware(system: &Connection) -> Vec<firmware::Finished> {
+    firmware::finished(system).unwrap_or_else(|error| {
+        if !matches!(error, firmware::Error::Missing) {
+            tracing::warn!("cannot read the firmware update results: {error}");
+        }
+        Vec::new()
+    })
+}
+
 fn finished_offline(system: &Connection) -> Result<Option<SoftwareState>, Error> {
-    let Some(results) = offline::results(system)? else {
-        return Ok(None);
-    };
-    if let Err(error) = offline::clear_results(system) {
+    let results = offline::results(system)?;
+    if results.is_some()
+        && let Err(error) = offline::clear_results(system)
+    {
         tracing::warn!("cannot clear the offline update results: {error}");
     }
-    Ok(Some(match results {
-        Results::Installed(ids) => SoftwareState::Installed {
-            count: ids.len(),
-            reboot: None,
-            logout: false,
-            apps: Vec::new(),
-        },
-        Results::Failed(failure) => SoftwareState::Failed {
+    let flashed = finished_firmware(system);
+    if results.is_none() && flashed.is_empty() {
+        return Ok(None);
+    }
+    let (installed, failed): (Vec<_>, Vec<_>) =
+        flashed.into_iter().partition(|finished| finished.installed);
+    let count = match results {
+        Some(Results::Failed(failure)) => {
+            return Ok(Some(SoftwareState::Failed {
+                during: Stage::Install,
+                reason: explain(&failure),
+            }));
+        }
+        Some(Results::Installed(ids)) => ids.len(),
+        None => 0,
+    };
+    if let Some(failed) = failed.first() {
+        let reason =
+            tr!("The firmware update didn't install. The device keeps its earlier firmware.");
+        return Ok(Some(SoftwareState::Failed {
             during: Stage::Install,
-            reason: explain(&failure),
-        },
+            reason: tr!(
+                "{device}: {reason}",
+                device = failed.name.clone(),
+                reason = reason
+            ),
+        }));
+    }
+    Ok(Some(SoftwareState::Installed {
+        count: count + installed.len(),
+        reboot: None,
+        logout: false,
+        apps: Vec::new(),
     }))
 }
 
@@ -1038,6 +1071,29 @@ fn update_automatically(
     }
 }
 
+fn firmware_missing(system: &Connection) -> bool {
+    firmware::installed(system).map_or_else(
+        |error| {
+            tracing::warn!("cannot tell whether fwupd is installed: {error}");
+            false
+        },
+        |installed| !installed,
+    )
+}
+
+fn install_firmware_support(system: &Connection, client: &Client) -> SoftwareState {
+    if let Err(error) = client.install_missing(&[FWUPD]) {
+        return broken(Stage::Install, &error);
+    }
+    match firmware_missing(system) {
+        true => SoftwareState::Failed {
+            during: Stage::Install,
+            reason: tr!("Firmware updates aren't available from this computer's software sources."),
+        },
+        false => check(system, client, Refresh::Always),
+    }
+}
+
 pub fn follow_software(
     session: &Connection,
     system: &Connection,
@@ -1095,9 +1151,16 @@ pub fn follow_software(
                         Err(error) => broken(Stage::Install, &error),
                     }
                 }
+                SoftwareCommand::InstallFirmwareSupport => {
+                    updates.send(Update::Software(SoftwareState::Installing {
+                        percent: None,
+                    }));
+                    install_firmware_support(&system, &client)
+                }
             };
             badge::remember(&state);
             updates.send(Update::SoftwareChecked(last_check(&client)));
+            updates.send(Update::FirmwareMissing(firmware_missing(&system)));
             if !updates.send(Update::Software(state)) {
                 break;
             }

@@ -13,11 +13,14 @@ msgstr "Logga in på {network}"
 msgid "Sign in to the network"
 msgstr "Logga in på nätverket"
 
+msgid "Network"
+msgstr "Nätverk"
+
 msgid "Could not join {network}"
 msgstr "Det gick inte att ansluta till {network}"
 
-msgid "Network"
-msgstr "Nätverk"
+msgid "The sign-in page could not be opened"
+msgstr "Det gick inte att öppna inloggningssidan"
 
 msgid "{network} may need you to sign in"
 msgstr "Du kan behöva logga in på {network}"
@@ -150,6 +153,3 @@ msgstr "Datum och tid"
 
 msgid "The Wi-Fi networks nearby are in a country where the time differs from this computer’s clock."
 msgstr "Wi-Fi-näten i närheten finns i ett land där tiden skiljer sig från datorns klocka."
-
-msgid "The sign-in page could not be opened"
-msgstr "Det gick inte att öppna inloggningssidan"

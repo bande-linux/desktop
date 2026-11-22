@@ -588,17 +588,30 @@ impl MailView {
     }
 
     fn refresh_sidebar(&mut self) {
-        let accounts = self.store.accounts().unwrap_or_default();
+        let accounts = self
+            .store
+            .accounts()
+            .inspect_err(|error| tracing::warn!("cannot read the accounts: {error}"))
+            .unwrap_or_default();
         self.accounts = accounts
             .into_iter()
             .filter(|account| account.enabled)
             .map(|account| {
-                let mailboxes = self.store.mailboxes(account.id).unwrap_or_default();
+                let mailboxes = self
+                    .store
+                    .mailboxes(account.id)
+                    .inspect_err(|error| tracing::warn!("cannot read the mailboxes: {error}"))
+                    .unwrap_or_default();
                 (account, mailboxes)
             })
             .collect();
         let store = &self.store;
-        self.sidebar = rows(&self.accounts, |scope| store.unread(scope).unwrap_or(0));
+        self.sidebar = rows(&self.accounts, |scope| {
+            store
+                .unread(scope)
+                .inspect_err(|error| tracing::warn!("cannot count unread mail: {error}"))
+                .unwrap_or(0)
+        });
     }
 
     pub fn reload(&mut self) {
@@ -613,6 +626,7 @@ impl MailView {
         let mut all = self
             .store
             .summaries(&self.place.scope(), &self.search)
+            .inspect_err(|error| tracing::warn!("cannot list the messages: {error}"))
             .unwrap_or_default();
         match self.settings.sort {
             SortBy::Date => {}
@@ -654,6 +668,7 @@ impl MailView {
             true => self
                 .store
                 .conversation(summary)
+                .inspect_err(|error| tracing::warn!("cannot read a conversation: {error}"))
                 .unwrap_or_else(|_| vec![summary.clone()]),
             false => vec![summary.clone()],
         }
@@ -1590,7 +1605,10 @@ impl MailView {
     }
 
     fn release_held(&mut self) {
-        let stored = self.store.accounts().unwrap_or_default();
+        let stored = match self.store.accounts() {
+            Ok(stored) => stored,
+            Err(error) => return tracing::warn!("cannot read the accounts: {error}"),
+        };
         for (account, command) in std::mem::take(&mut self.held) {
             if self.worker(account).is_some() {
                 self.send_command(account, command);
@@ -1606,7 +1624,11 @@ impl MailView {
     }
 
     fn tell_held(&mut self, accounts: &[AccountId]) {
-        let stored = self.store.accounts().unwrap_or_default();
+        let stored = self
+            .store
+            .accounts()
+            .inspect_err(|error| tracing::warn!("cannot read the accounts: {error}"))
+            .unwrap_or_default();
         for account in stored.iter().filter(|known| accounts.contains(&known.id)) {
             let count = self
                 .held
@@ -1909,11 +1931,20 @@ impl MailView {
     }
 
     fn apply_rules(&mut self, account: AccountId, mut ids: Vec<MessageId>) -> Vec<MessageId> {
-        for rule in self.store.rules().unwrap_or_default() {
+        let rules = self
+            .store
+            .rules()
+            .inspect_err(|error| tracing::warn!("cannot read the rules: {error}"))
+            .unwrap_or_default();
+        for rule in rules {
             if ids.is_empty() {
                 break;
             }
-            let matched = self.store.matching(&ids, &rule).unwrap_or_default();
+            let matched = self
+                .store
+                .matching(&ids, &rule)
+                .inspect_err(|error| tracing::warn!("cannot match a rule: {error}"))
+                .unwrap_or_default();
             if matched.is_empty() {
                 continue;
             }

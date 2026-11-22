@@ -21,9 +21,9 @@ pub use group::{
     ARCHIVES, AppGroup, DOCUMENTS, DateGroup, Group, GroupBy, KindGroup, SizeGroup, group_of,
 };
 pub use listing::{
-    Entry, Kind, Listing, Recency, Sort, SortBy, compare, format_civil_date, format_date,
-    format_list_date, format_size, is_hidden, list, list_date, list_trash, merge, natural_order,
-    same_volume, sort,
+    Entry, HIDDEN_LIST, Kind, Listing, Recency, Sort, SortBy, compare, format_civil_date,
+    format_date, format_list_date, format_size, hidden_names, is_hidden, list, list_date,
+    list_trash, merge, natural_order, same_volume, sort,
 };
 pub use naming::{
     ExtensionChange, duplicate_name, keep_both_name, typed_location, untitled_folder,

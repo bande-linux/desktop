@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::os::unix::fs::MetadataExt;
@@ -159,6 +160,33 @@ pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
+pub const HIDDEN_LIST: &str = ".hidden";
+const LARGEST_HIDDEN_LIST: u64 = 64 << 10;
+
+/// The names a folder's `.hidden` file lists, one per line, to leave out like dot files.
+pub fn hidden_names(folder: &Path) -> HashSet<String> {
+    let mut text = String::new();
+    let read = fs::File::open(folder.join(HIDDEN_LIST)).and_then(|file| {
+        io::Read::read_to_string(&mut io::Read::take(file, LARGEST_HIDDEN_LIST), &mut text)
+    });
+    match read {
+        Ok(_) => text
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect(),
+        Err(error) => {
+            if error.kind() != io::ErrorKind::NotFound {
+                tracing::debug!(
+                    "cannot read {}: {error}",
+                    folder.join(HIDDEN_LIST).display()
+                );
+            }
+            HashSet::new()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SortBy {
     #[default]
@@ -255,6 +283,7 @@ pub fn merge(entries: &mut Vec<Entry>, chunk: Vec<Entry>, order: Sort) -> Vec<us
 pub struct Listing {
     names: fs::ReadDir,
     show_hidden: bool,
+    listed_hidden: HashSet<String>,
     done: bool,
     failure: Option<io::ErrorKind>,
 }
@@ -264,6 +293,10 @@ impl Listing {
         Ok(Self {
             names: fs::read_dir(folder)?,
             show_hidden,
+            listed_hidden: match show_hidden {
+                true => HashSet::new(),
+                false => hidden_names(folder),
+            },
             done: false,
             failure: None,
         })
@@ -295,7 +328,8 @@ impl Listing {
             let name = found.file_name().to_string_lossy().into_owned();
             if is_partial(&name) {
                 sweep(found.path());
-            } else if self.show_hidden || !is_hidden(&name) {
+            } else if self.show_hidden || !(is_hidden(&name) || self.listed_hidden.contains(&name))
+            {
                 entries.push(Entry::read(found.path(), name));
             }
         }

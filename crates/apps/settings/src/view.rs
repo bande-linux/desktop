@@ -46,6 +46,7 @@ use crate::printers::{PrinterCommand, PrintersState, Support};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::proxies::ProxySettings;
+use crate::scan::{ScanIntent, ScanState};
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::sharing::{SharingCommand, SharingState};
 use crate::software::{Need, SoftwareCommand, SoftwareState};
@@ -151,6 +152,7 @@ pub(crate) enum Intent {
     CancelJob(u32),
     CancelQueuedJob(i32),
     PausePrinter((String, bool)),
+    Scan(ScanIntent),
     AskPassword(bool),
     PasswordEntry(usize, String),
     OpenAccount(String),
@@ -334,6 +336,7 @@ pub struct SettingsView {
     pub(crate) adding_printer: bool,
     pub(crate) installing_printing: Option<Support>,
     pub(crate) printer_address: String,
+    pub(crate) scan: Option<ScanState>,
     pub(crate) accounts: Option<Vec<Account>>,
     pub(crate) accounts_managed: bool,
     pub(crate) picture_edit: Option<PictureEdit>,
@@ -454,6 +457,7 @@ impl SettingsView {
             adding_printer: false,
             installing_printing: None,
             printer_address: String::new(),
+            scan: None,
             accounts: None,
             accounts_managed: false,
             picture_edit: None,
@@ -739,7 +743,10 @@ impl SettingsView {
             }
             Update::Sharing(_) => (Some(PaneId::Sharing), &[SettingId::Sharing]),
             Update::BootScreen(_) => (Some(PaneId::About), &[SettingId::BootScreen]),
-            Update::Printers(_) | Update::PrinterAdded(..) | Update::PrintingInstalled => (
+            Update::Printers(_)
+            | Update::PrinterAdded(..)
+            | Update::PrintingInstalled
+            | Update::Scan(_) => (
                 Some(PaneId::Printers),
                 &[SettingId::Printers, SettingId::NearbyPrinters],
             ),
@@ -990,12 +997,20 @@ impl SettingsView {
             Update::Spelling(state) => self.spelling = state,
             Update::Security(status) => self.security = status,
             Update::Printers(printers) => {
-                if let Some(Detail::Printer(id)) = &self.detail
+                let opened = match &self.detail {
+                    Some(Detail::Printer(id)) => Some(id.clone()),
+                    _ => None,
+                };
+                if let Some(id) = &opened
                     && !printers.printers.iter().any(|printer| printer.id == *id)
+                    && !printers.scanners.iter().any(|scanner| scanner.id == *id)
                 {
                     self.detail = None;
                 }
                 self.printers = Some(printers);
+                if let Some(id) = opened {
+                    self.open_scanner(&id);
+                }
             }
             Update::PrintingInstalled => self.installing_printing = None,
             Update::Accounts(accounts, managed) => self.take_accounts(accounts, managed),
@@ -1007,6 +1022,7 @@ impl SettingsView {
             }
             Update::CopiedPassword(secret) => self.commands.push(Command::CopySecret(secret)),
             Update::Password(outcome) => self.password_changed(outcome),
+            Update::Scan(update) => self.scan_update(update),
             Update::PrinterAdded(added) => {
                 self.adding_printer = false;
                 if added {
@@ -1732,6 +1748,7 @@ impl SettingsView {
                     .commands
                     .push(Command::Diagnostics(DiagnosticsCommand::Save(id, text))),
                 Intent::OpenPrinter(name) => {
+                    self.open_scanner(&name);
                     self.detail = Some(Detail::Printer(name));
                     self.forgetting = None;
                     self.clear_failure();
@@ -1788,6 +1805,7 @@ impl SettingsView {
                 Intent::NewAccountName(_)
                 | Intent::NewAccountLogin(_)
                 | Intent::NewAccountAdmin(_) => {}
+                Intent::Scan(change) => self.scan_intent(change),
                 Intent::PausePrinter((name, paused)) => {
                     self.focus_next = Some(Anchor::Item("printer-pause".to_owned()));
                     self.commands

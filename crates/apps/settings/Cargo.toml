@@ -35,6 +35,7 @@ bande-network.workspace = true
 bande-printers.workspace = true
 bande-notify.workspace = true
 bande-packages.workspace = true
+bande-pdf.workspace = true
 bande-settings-panes.workspace = true
 bande-sound.workspace = true
 bande-edid.workspace = true

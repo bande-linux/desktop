@@ -1686,6 +1686,7 @@ dependencies = [
  "bande-network",
  "bande-notify",
  "bande-packages",
+ "bande-pdf",
  "bande-printers",
  "bande-settings-panes",
  "bande-sound",

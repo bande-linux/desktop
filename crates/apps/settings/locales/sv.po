@@ -1634,6 +1634,9 @@ msgstr "Söker efter skrivare i det här nätverket…"
 msgid "No printers on this network yet. They appear here as soon as they are found."
 msgstr "Inga skrivare i det här nätverket än. De visas här så fort de hittas."
 
+msgid "Scanner"
+msgstr "Skanner"
+
 msgid "Default printer"
 msgstr "Standardskrivare"
 
@@ -1661,8 +1664,8 @@ msgstr "Installerar…"
 msgid "Avahi isn’t installed. Printers added by address work without it"
 msgstr "Avahi är inte installerat. Skrivare som lagts till med adress fungerar utan det"
 
-msgid "Finding printers nearby needs Avahi"
-msgstr "Avahi behövs för att hitta skrivare i närheten"
+msgid "Finding printers and scanners nearby needs Avahi"
+msgstr "Avahi behövs för att hitta skrivare och skannrar i närheten"
 
 msgid "The Browser, LibreOffice and other apps print through CUPS, which USB printers and printers that need a driver also use. Installs CUPS and Avahi, which finds printers on the network, from the Debian archive"
 msgstr "Webbläsare, LibreOffice och andra appar skriver ut via CUPS, som även USB-skrivare och skrivare som behöver en drivrutin använder. Installerar CUPS och Avahi, som hittar skrivare i nätverket, från Debian-arkivet"
@@ -1747,6 +1750,99 @@ msgstr "Skilj namnen som ska nås direkt åt med kommatecken, till exempel local
 
 msgid "This account has no configuration folder."
 msgstr "Kontot har ingen konfigurationsmapp."
+
+msgid "PNG picture"
+msgstr "PNG-bild"
+
+msgid "JPEG picture"
+msgstr "JPEG-bild"
+
+msgid "Flatbed"
+msgstr "Flatbädd"
+
+msgid "Document feeder"
+msgstr "Dokumentmatare"
+
+msgid "Couldn’t reach the scanner."
+msgstr "Det gick inte att nå skannern."
+
+msgid "The scanned page couldn’t be read."
+msgstr "Den skannade sidan gick inte att läsa."
+
+msgid "Couldn’t save the scan."
+msgstr "Det gick inte att spara skanningen."
+
+msgctxt "document"
+msgid "Scan"
+msgstr "Skanning"
+
+msgid "Save Scan"
+msgstr "Spara skanning"
+
+msgid "Saved “{name}”"
+msgstr "Sparade ”{name}”"
+
+msgid "Scan"
+msgstr "Skanna"
+
+msgid "Asking the scanner what it can do…"
+msgstr "Frågar skannern vad den kan…"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
+msgid "Source"
+msgstr "Källa"
+
+msgid "Color"
+msgstr "Färg"
+
+msgid "Grayscale"
+msgstr "Gråskala"
+
+msgid "{dpi} dpi"
+msgstr "{dpi} dpi"
+
+msgid "Resolution"
+msgstr "Upplösning"
+
+msgid "Scanning…"
+msgstr "Skannar…"
+
+msgid "Saving…"
+msgstr "Sparar…"
+
+msgid "Place the page on the scanner or the pages in its feeder"
+msgstr "Lägg sidan på skannern eller sidorna i dess matare"
+
+msgid "1 page scanned"
+msgid_plural "{count} pages scanned"
+msgstr[0] "1 sida skannad"
+msgstr[1] "{count} sidor skannade"
+
+msgid "Scan More"
+msgstr "Skanna fler"
+
+msgid "Scan with these settings"
+msgstr "Skanna med de här inställningarna"
+
+msgid "Scanned page {number}"
+msgstr "Skannad sida {number}"
+
+msgid "Save as"
+msgstr "Spara som"
+
+msgid "Save…"
+msgstr "Spara…"
+
+msgid "Save the scanned pages"
+msgstr "Spara de skannade sidorna"
+
+msgid "Discard"
+msgstr "Släng"
+
+msgid "Start over"
+msgstr "Börja om"
 
 msgid "Couldn't change sign-in page detection."
 msgstr "Det gick inte att ändra upptäckten av inloggningssidor."
@@ -2054,9 +2150,6 @@ msgstr "Det gick inte att söka efter uppdateringar"
 
 msgid "Could not download updates"
 msgstr "Det gick inte att hämta uppdateringar"
-
-msgid "Try Again"
-msgstr "Försök igen"
 
 msgid "The login service"
 msgstr "Inloggningstjänsten"

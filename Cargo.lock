@@ -611,9 +611,11 @@ dependencies = [
  "accesskit",
  "bande-app",
  "bande-app-menu",
+ "bande-datetime",
  "bande-l10n",
  "bande-toolkit",
  "bande-xdg",
+ "icu_decimal",
  "tracing",
 ]
 

@@ -4,7 +4,7 @@ use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use bande_content::{Content, Contents, Decoded, Facts, Level, Pixels, content};
@@ -86,6 +86,18 @@ fn install_font(path: &Path) -> io::Result<()> {
         })
 }
 
+fn serve(
+    requests: &Receiver<(u64, PathBuf, String)>,
+    latest: &AtomicU64,
+    outbox: &Outbox<(u64, Loaded)>,
+) {
+    for (asked, path, mime) in requests {
+        if latest.load(Ordering::Relaxed) == asked {
+            load_one(asked, &path, &mime, latest, outbox);
+        }
+    }
+}
+
 impl Loader {
     pub fn new() -> io::Result<Self> {
         let loaded = Inbox::new()?;
@@ -93,6 +105,11 @@ impl Loader {
         let generation = Arc::new(AtomicU64::new(0));
         let latest = Arc::clone(&generation);
         let (requests, receiver) = mpsc::channel::<(u64, PathBuf, String)>();
+        let (on_server, server_requests) = mpsc::channel::<(u64, PathBuf, String)>();
+        let (server_latest, server_outbox) = (Arc::clone(&latest), outbox.clone());
+        thread::Builder::new()
+            .name("glance on a server".to_owned())
+            .spawn(move || serve(&server_requests, &server_latest, &server_outbox))?;
         thread::Builder::new()
             .name("glance".to_owned())
             .spawn(move || {
@@ -102,14 +119,8 @@ impl Loader {
                     }
                     if !bande_volumes::on_connected_volume(&path) {
                         load_one(asked, &path, &mime, &latest, &outbox);
-                        continue;
-                    }
-                    let (latest, outbox) = (Arc::clone(&latest), outbox.clone());
-                    let spawned = thread::Builder::new()
-                        .name("glance on a server".to_owned())
-                        .spawn(move || load_one(asked, &path, &mime, &latest, &outbox));
-                    if let Err(error) = spawned {
-                        tracing::warn!("cannot preview a file on a server: {error}");
+                    } else if on_server.send((asked, path, mime)).is_err() {
+                        tracing::warn!("cannot preview a file on a server");
                     }
                 }
             })?;

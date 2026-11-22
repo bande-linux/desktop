@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app::{
+    Cx, Dropping, FileDrop, Info, Keys, Kind, Menus, Program, Settings, View, WindowId,
+};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between, last_checked, save_checked};
@@ -727,7 +729,7 @@ impl CalendarApp {
     }
 }
 
-struct Pane(CalendarView);
+struct Pane(CalendarView, FileDrop);
 
 impl View for Pane {
     fn scene(&mut self, window: &mut Window) -> Scene {
@@ -747,6 +749,16 @@ impl View for Pane {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        match self.1.event(window, &event, Path::is_file) {
+            Dropping::Over => return true,
+            Dropping::Dropped(paths) => {
+                let files: Vec<String> =
+                    paths.iter().map(|path| bande_xdg::file_uri(path)).collect();
+                open_arguments(&mut self.0, &files, Path::new("/"));
+                return true;
+            }
+            Dropping::Other => {}
+        }
         match event {
             WindowEvent::Input(input) => {
                 let changed = self.0.handle(&input);
@@ -808,7 +820,7 @@ impl CalendarApp {
     }
 
     fn settle(&mut self, cx: &mut Cx<Self>) {
-        if let Some((window, Pane(view))) = self.main.and_then(|main| cx.window(main)) {
+        if let Some((window, Pane(view, _))) = self.main.and_then(|main| cx.window(main)) {
             self.serve(Some(&mut *window), view);
             window.request_redraw();
         } else if let Some(mut pane) = self.parked.take() {
@@ -903,7 +915,7 @@ impl CalendarApp {
     }
 
     fn with_view(&mut self, cx: &mut Cx<Self>, work: impl FnOnce(&mut Self, &mut CalendarView)) {
-        if let Some((_, Pane(view))) = self.main.and_then(|main| cx.window(main)) {
+        if let Some((_, Pane(view, _))) = self.main.and_then(|main| cx.window(main)) {
             return work(self, view);
         }
         if let Some(mut pane) = self.parked.take() {
@@ -957,8 +969,11 @@ impl Program for CalendarApp {
             .and_then(|folder| SettingsWatch::start(folder, CalendarSettings::FILE));
         let (main, parked) =
             match cx.launched_in_background() || (arguments.is_empty() && !new_event) {
-                true => (None, Some(Pane(view))),
-                false => (Some(show(cx, &title, Pane(view))?), None),
+                true => (None, Some(Pane(view, FileDrop::default()))),
+                false => (
+                    Some(show(cx, &title, Pane(view, FileDrop::default()))?),
+                    None,
+                ),
             };
         let mut app = Self {
             main,
@@ -1002,7 +1017,7 @@ impl Program for CalendarApp {
                 .main
                 .and_then(|main| cx.view(main))
                 .or(self.parked.as_ref())
-                .map(|Pane(view)| app_menus(view, self.settings.time_zones))
+                .map(|Pane(view, _)| app_menus(view, self.settings.time_zones))
                 .unwrap_or_default(),
             window: vec![entry(text!("Calendar"), SHOW_CALENDAR)],
         }

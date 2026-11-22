@@ -13,7 +13,7 @@ image = { workspace = true, features = ["bmp", "gif", "ico", "jpeg", "tiff", "we
 kamadak-exif.workspace = true
 quick-xml.workspace = true
 resvg = { workspace = true, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
-rustix = { workspace = true, features = ["fs", "process"] }
+rustix = { workspace = true, features = ["fs", "process", "thread"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

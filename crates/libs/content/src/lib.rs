@@ -278,6 +278,9 @@ pub fn confine() {
     if let Err(error) = rustix::process::setrlimit(rustix::process::Resource::As, limit) {
         tracing::warn!("cannot limit a file reader's memory: {error}");
     }
+    if let Err(error) = rustix::thread::set_no_new_privs(true) {
+        tracing::warn!("cannot keep a file reader from gaining privileges: {error}");
+    }
     if let Err(error) =
         rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::KILL))
     {

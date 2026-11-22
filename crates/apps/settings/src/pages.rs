@@ -22,7 +22,10 @@ use crate::widgets::{
 use bande_audio::{Direction, SoundCard};
 use bande_bluetooth::{Device, Kind as DeviceKind};
 use bande_config::Placement;
-use bande_config::{ACCENTS, Accessibility, ComposeKey, InputSource, MAX_INPUT_SOURCES, carry};
+use bande_config::{
+    ACCENTS, Accessibility, ComposeKey, InputSource, MAX_INPUT_SOURCES, carry,
+    read_system_xkb_options,
+};
 use bande_keyboard::{Action, Trigger, shortcuts_in};
 use bande_settings_panes::SettingHit;
 use bande_settings_panes::{
@@ -170,7 +173,29 @@ fn choice_control(
     }
 }
 
-fn right_alt_is_altgr(codes: &[String]) -> bool {
+pub(crate) struct SystemKeys {
+    codes: Vec<String>,
+    altgr: bool,
+    compose: bool,
+}
+
+impl SystemKeys {
+    fn read(codes: Vec<String>) -> Self {
+        let options = read_system_xkb_options();
+        let compose = ComposeKey::unchosen(&options) == ComposeKey::System;
+        let layout_options: Vec<String> = options
+            .into_iter()
+            .filter(|option| !option.starts_with("compose:"))
+            .collect();
+        Self {
+            altgr: right_alt_is_altgr(&codes, &layout_options),
+            codes,
+            compose,
+        }
+    }
+}
+
+fn right_alt_is_altgr(codes: &[String], options: &[String]) -> bool {
     let sources: Vec<InputSource> = codes
         .iter()
         .filter_map(|code| InputSource::parse(code))
@@ -184,7 +209,7 @@ fn right_alt_is_altgr(codes: &[String]) -> bool {
         "",
         &join(|source| &source.layout),
         &join(|source| source.variant.as_deref().unwrap_or("")),
-        None,
+        (!options.is_empty()).then(|| options.join(",")),
         xkb::KEYMAP_COMPILE_NO_FLAGS,
     ) else {
         tracing::warn!("cannot compile the keyboard layouts {codes:?}");
@@ -219,17 +244,13 @@ impl SettingsView {
         }
     }
 
-    fn right_alt_is_altgr(&self) -> bool {
+    fn system_keys<T>(&self, read: impl FnOnce(&SystemKeys) -> T) -> T {
         let codes = self.input_sources();
-        let mut known = self.altgr.borrow_mut();
-        match &*known {
-            Some((checked, altgr)) if *checked == codes => *altgr,
-            _ => {
-                let altgr = right_alt_is_altgr(&codes);
-                *known = Some((codes, altgr));
-                altgr
-            }
+        let mut known = self.system_keys.borrow_mut();
+        if known.as_ref().is_some_and(|keys| keys.codes != codes) {
+            *known = None;
         }
+        read(known.get_or_insert_with(|| SystemKeys::read(codes)))
     }
 
     fn compose_keys(&self) -> Vec<String> {
@@ -237,20 +258,30 @@ impl SettingsView {
             Some(Value::Keyword(keyword)) => keyword.as_str(),
             _ => "",
         };
-        let altgr = self.right_alt_is_altgr();
+        let (altgr, system) = self.system_keys(|keys| (keys.altgr, keys.compose));
         ComposeKey::ALL
             .into_iter()
-            .chain([ComposeKey::System])
             .filter(|key| {
                 key.keyword() == current
                     || match key {
                         ComposeKey::RightAlt => !altgr,
-                        ComposeKey::System => false,
+                        ComposeKey::System => system,
                         _ => true,
                     }
             })
             .map(|key| key.keyword().to_owned())
             .collect()
+    }
+
+    fn choice_label(&self, id: SettingId, choice: &Choice) -> String {
+        let right_alt = Value::Keyword(ComposeKey::RightAlt.keyword().to_owned());
+        match id == SettingId::ComposeKey
+            && choice.value == right_alt
+            && self.system_keys(|keys| keys.altgr)
+        {
+            true => tr!("Right Alt (replaces AltGr)"),
+            false => choice.label.clone(),
+        }
     }
 
     fn setting_intent(
@@ -341,8 +372,10 @@ impl SettingsView {
             }
             Kind::Menu(choices) => {
                 let choices = offered_choices(choices, offered.as_deref());
-                let labels: Vec<String> =
-                    choices.iter().map(|choice| choice.label.clone()).collect();
+                let labels: Vec<String> = choices
+                    .iter()
+                    .map(|choice| self.choice_label(id, choice))
+                    .collect();
                 let values: Vec<Value> =
                     choices.iter().map(|choice| choice.value.clone()).collect();
                 let selected = value

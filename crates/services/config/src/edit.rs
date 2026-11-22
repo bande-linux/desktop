@@ -274,7 +274,7 @@ impl Setting {
                 &mut document,
                 Some("keyboard"),
                 "compose",
-                Some(compose.keyword().into()),
+                (*compose != ComposeKey::System).then(|| compose.keyword().into()),
             ),
             Self::SystemSwitch(on) => set(
                 &mut document,

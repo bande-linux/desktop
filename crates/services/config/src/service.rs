@@ -1270,7 +1270,7 @@ impl ConfigInterface {
             .current()
             .keyboard
             .compose
-            .unwrap_or_else(|| ComposeKey::of_options(&read_system_xkb_options()))
+            .unwrap_or_else(|| ComposeKey::unchosen(&read_system_xkb_options()))
             .keyword()
             .to_owned()
     }

@@ -38,6 +38,7 @@ use crate::locale::{DEFAULT_LOCALE, LocaleCommand, LocaleState, same_locale};
 use crate::login::{App, LoginCommand, LoginItems, app_matches, login_matches};
 use crate::night::clock_text;
 use crate::notifications::{AppNotifications, NotificationCommand};
+use crate::pages::SystemKeys;
 use crate::passwords::{PasswordCommand, SavedPasswords};
 use crate::permissions::Grants;
 use crate::pictures::{Pair, PictureCommand};
@@ -294,7 +295,7 @@ pub struct SettingsView {
     pub(crate) hits: Vec<PaneHit>,
     pub(crate) pane: PaneId,
     pub(crate) layouts: Option<Layouts>,
-    pub(crate) altgr: RefCell<Option<(Vec<String>, bool)>>,
+    pub(crate) system_keys: RefCell<Option<SystemKeys>>,
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
@@ -415,7 +416,7 @@ impl SettingsView {
             hits: Vec::new(),
             pane: PaneId::Appearance,
             layouts: None,
-            altgr: RefCell::default(),
+            system_keys: RefCell::default(),
             pointing: PointingDevices::default(),
             about: None,
             diagnostics: Diagnostics::default(),

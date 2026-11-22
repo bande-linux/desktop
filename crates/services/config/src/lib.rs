@@ -420,7 +420,13 @@ pub enum ComposeKey {
 }
 
 impl ComposeKey {
-    pub const ALL: [Self; 4] = [Self::None, Self::RightAlt, Self::RightControl, Self::Menu];
+    pub const ALL: [Self; 5] = [
+        Self::None,
+        Self::RightAlt,
+        Self::RightControl,
+        Self::Menu,
+        Self::System,
+    ];
 
     pub fn keyword(self) -> &'static str {
         match self {
@@ -446,20 +452,12 @@ impl ComposeKey {
         option.starts_with("compose:") && option != "compose:caps"
     }
 
-    /// The compose key under the xkb `options`: `System` for a compose option no other choice
-    /// sets.
-    pub fn of_options(options: &[String]) -> Self {
-        options
-            .iter()
-            .filter(|option| Self::remaps(option))
-            .map(|option| {
-                Self::ALL
-                    .into_iter()
-                    .find(|key| key.xkb_option() == Some(option.as_str()))
-                    .unwrap_or(Self::System)
-            })
-            .next()
-            .unwrap_or(Self::None)
+    /// The compose key while none is chosen: `System` when the xkb `options` make a key compose.
+    pub fn unchosen(options: &[String]) -> Self {
+        match options.iter().any(|option| Self::remaps(option)) {
+            true => Self::System,
+            false => Self::None,
+        }
     }
 }
 
@@ -1570,6 +1568,7 @@ impl Parser<'_> {
                         child,
                         &ComposeKey::ALL.map(|choice| (choice.keyword(), choice)),
                     )?)
+                    .filter(|choice| *choice != ComposeKey::System)
                 }
                 "system-switch" => keyboard.system_switch = self.flag(child)?,
                 _ => return Err(self.unknown_child("keyboard", child)),

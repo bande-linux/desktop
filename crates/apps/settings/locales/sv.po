@@ -1152,6 +1152,9 @@ msgstr "Hög kvalitet (A2DP)"
 msgid "Headset (HFP)"
 msgstr "Headset (HFP)"
 
+msgid "Right Alt (replaces AltGr)"
+msgstr "Höger Alt (ersätter AltGr)"
+
 msgid "{value} Hz"
 msgstr "{value} Hz"
 

@@ -1819,9 +1819,9 @@ dependencies = [
  "bande-l10n",
  "bande-toolkit",
  "bande-volumes",
+ "bande-watch",
  "bande-xdg",
  "encoding_rs",
- "bande-watch",
  "html5ever",
  "jiff",
  "regex",
@@ -1906,6 +1906,7 @@ dependencies = [
  "bande-app-settings",
  "bande-fs",
  "bande-l10n",
+ "bande-notify",
  "bande-packages",
  "bande-terminal-view",
  "bande-toolkit",
@@ -2819,12 +2820,12 @@ dependencies = [
 ]
 
 [[package]]
-[[package]]
 name = "fax"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caf1079563223d5d59d83c85886a56e586cfd5c1a26292e971a0fa266531ac5a"
 
+[[package]]
 name = "fdeflate"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3945,8 +3946,8 @@ dependencies = [
  "moxcms",
  "num-traits",
  "png",
- "zune-core",
  "tiff",
+ "zune-core",
  "zune-jpeg",
 ]
 
@@ -6732,7 +6733,6 @@ dependencies = [
 ]
 
 [[package]]
-[[package]]
 name = "tiff"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6746,6 +6746,7 @@ dependencies = [
  "zune-jpeg",
 ]
 
+[[package]]
 name = "tiny-skia"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

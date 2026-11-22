@@ -65,6 +65,10 @@ struct Chip {
     frame: Rect,
 }
 
+pub fn attachable(path: &Path) -> bool {
+    bande_volumes::on_connected_volume(path) || path.is_file()
+}
+
 pub struct ComposeView {
     ui: Ui,
     host: WidgetId,
@@ -958,7 +962,7 @@ impl ComposeView {
     }
 
     pub fn dragged(&mut self, window: &mut Window, event: &WindowEvent) -> bool {
-        match self.drop.event(window, event, Path::is_file) {
+        match self.drop.event(window, event, attachable) {
             Dropping::Over => true,
             Dropping::Dropped(paths) => {
                 self.requests.push(ComposeRequest::Attach(paths));

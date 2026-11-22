@@ -22,6 +22,7 @@ bande-notify.workspace = true
 bande-search.workspace = true
 bande-taskbar-model.workspace = true
 bande-toolkit.workspace = true
+bande-volumes.workspace = true
 bande-xdg.workspace = true
 cms.workspace = true
 html5ever.workspace = true

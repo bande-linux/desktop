@@ -1226,6 +1226,7 @@ dependencies = [
  "bande-search",
  "bande-taskbar-model",
  "bande-toolkit",
+ "bande-volumes",
  "bande-xdg",
  "cms",
  "html5ever",

@@ -33,7 +33,8 @@ impl MailView {
     }
 
     fn opened_content(&self, id: MessageId) -> Option<&Content> {
-        self.thread
+        self.reader
+            .thread
             .as_ref()?
             .entry(id)?
             .reading
@@ -86,10 +87,15 @@ impl MailView {
         }
         let reading = Reading::new(content, true, &self.settings);
         let remote = self.loads_remote(&reading);
-        if let Some(entry) = self.thread.as_mut().and_then(|thread| thread.entry_mut(id)) {
+        if let Some(entry) = self
+            .reader
+            .thread
+            .as_mut()
+            .and_then(|thread| thread.entry_mut(id))
+        {
             entry.reading = Some(reading);
         }
-        self.layout = None;
+        self.reader.layout = None;
         if remote {
             self.load_remote(id);
         }

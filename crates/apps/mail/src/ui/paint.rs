@@ -2,12 +2,13 @@ use bande_l10n::tr;
 
 use crate::store::Summary;
 use crate::ui::format::list_date;
-use crate::ui::reader::{Clock, Target, focus_bar, lay_out};
+use crate::ui::reader::{Clock, Target};
+use crate::ui::reader_pane::{Look, paint_link_target};
 use crate::ui::sidebar::Row;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{Hit, LIST_WIDTH, MailView, Pane, SIDEBAR_WIDTH, TOOLBAR_HEIGHT};
 use bande_toolkit::Color;
-use bande_toolkit::ui::{Key, Scroll, Size, focus_ring_for};
+use bande_toolkit::ui::{Key, Scroll, Size};
 use bande_toolkit::{
     Item, Paragraph, Point, Radius, Rect, Scene, Shape, TextAlign, TextRole, TextStyle,
 };
@@ -18,8 +19,6 @@ const FLAG_COLORS: [u32; 7] = [
 ];
 
 const CHILD_INDENT: f32 = 14.0;
-const LINK_TARGET_INSET: f32 = 8.0;
-const LINK_TARGET_PADDING: f32 = 8.0;
 const DRAG_LABEL_WIDTH: f32 = 240.0;
 const SIDEBAR_INSET: f32 = 8.0;
 const SIDEBAR_ROW: f32 = 28.0;
@@ -36,8 +35,6 @@ const DOT: f32 = 8.0;
 const ROW_INSET: f32 = 6.0;
 const BADGE_GAP: f32 = 10.0;
 const SMALL_SYMBOL: f32 = 13.0;
-const PAGE_OVERLAP: f32 = 40.0;
-const READER_LINE: f32 = 40.0;
 
 impl MailView {
     fn scale(&mut self) -> f32 {
@@ -596,7 +593,7 @@ impl MailView {
         if frame.width <= 0.0 {
             return;
         }
-        let Some(thread) = &self.thread else {
+        if self.reader.thread.is_none() {
             let chosen = self.also.len() + usize::from(self.selected.is_some());
             let message = match (self.messages.len(), chosen) {
                 (0, _) => String::new(),
@@ -617,192 +614,31 @@ impl MailView {
                 paragraph,
             });
             return;
-        };
-        if self
-            .layout
-            .as_ref()
-            .is_none_or(|(width, _)| *width != frame.width)
-        {
-            let zone = self.zone.clone();
-            let formats = self.formats.clone();
-            let now = self.now.unwrap_or_else(Timestamp::now);
-            let layout = lay_out(
-                thread,
-                frame.width,
-                &mut self.ui.context().text,
-                &palette,
-                &mut self.symbols,
-                Clock {
-                    zone: &zone,
-                    formats: &formats,
-                    now,
-                },
-            );
-            self.reader_target = self.reader_target.take().and_then(|(index, target)| {
-                let found = |at: &usize| {
-                    layout
-                        .targets
-                        .get(*at)
-                        .is_some_and(|(_, kept)| *kept == target)
-                };
-                Some(index)
-                    .filter(found)
-                    .or_else(|| layout.targets.iter().position(|(_, kept)| *kept == target))
-                    .map(|index| (index, target))
-            });
-            self.layout = Some((frame.width, layout));
-            self.selection = None;
         }
-        let Some((_, layout)) = &self.layout else {
-            return;
+        let zone = self.zone.clone();
+        let formats = self.formats.clone();
+        let look = Look {
+            palette: &palette,
+            symbols: &mut self.symbols,
+            clock: Clock {
+                zone: &zone,
+                formats: &formats,
+                now: self.now.unwrap_or_else(Timestamp::now),
+            },
+            focused: self.focus == Pane::Reader,
+            sheet: self.ui.has_sheet(),
         };
-        let height = layout.height;
-        let reveal = self
-            .thread
-            .as_mut()
-            .filter(|thread| thread.reveal)
-            .and_then(|thread| {
-                thread.reveal = false;
-                layout
-                    .tops
-                    .iter()
-                    .find(|(id, _)| *id == thread.focus)
-                    .map(|(_, top)| *top)
-            });
-        let offset = {
-            let scroll = &mut self.scrolls[2];
-            scroll.set_extent(height, frame.height);
-            if let Some(top) = reveal {
-                scroll.follow(self.ui.context(), top, top + frame.height);
-            }
-            scroll.offset(self.ui.context())
-        };
-        let origin = Point::new(frame.x, frame.y - offset);
-        let bar = match self.focus == Pane::Reader
-            && !self.ui.has_sheet()
-            && self.ui.context().window_active
-        {
-            true => palette.accent,
-            false => palette.ink3,
-        };
-        let Some((_, layout)) = &self.layout else {
-            return;
-        };
-        let moved = |rect: &Rect| {
-            Rect::new(
-                rect.x + origin.x,
-                rect.y + origin.y,
-                rect.width,
-                rect.height,
-            )
-        };
-        let targets = layout
-            .targets
-            .iter()
-            .map(|(rect, target)| (moved(rect), Hit::Reader(target.clone())))
-            .filter(|(rect, _)| rect.y + rect.height > frame.y && rect.y < frame.y + frame.height)
-            .collect::<Vec<_>>();
-        let mut ring = Vec::new();
-        if let Some((index, target)) = &self.reader_target
-            && self.focus == Pane::Reader
-            && !self.ui.has_sheet()
-            && self.ui.context().window_active
-        {
-            for (rect, _) in layout.targets[*index..]
-                .iter()
-                .take_while(|(_, shown)| shown == target)
-            {
-                focus_ring_for(&palette, Shape::rounded(*rect, Radius::XS), &mut ring);
-            }
-        }
-        let selected = match self.focus == Pane::Reader {
-            true => palette.accent_soft,
-            false => palette.well,
-        };
-        let highlight =
-            self.selected_range()
-                .map(|(start, end)| {
-                    (start.0..=end.0)
-                        .filter_map(|index| {
-                            let (_, top, paragraph) = layout.texts.get(index)?;
-                            let from = if index == start.0 { start.1 } else { 0 };
-                            let to = if index == end.0 {
-                                end.1
-                            } else {
-                                paragraph.text().len()
-                            };
-                            Some(paragraph.span_rects(from..to).into_iter().map(|rect| {
-                                Item::Fill {
-                                    shape: Shape::rect(Rect::new(
-                                        rect.x + top.x,
-                                        rect.y + top.y,
-                                        rect.width,
-                                        rect.height,
-                                    )),
-                                    paint: selected.into(),
-                                }
-                            }))
-                        })
-                        .flatten()
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-        items.push(Item::Clip {
-            shape: Shape::rect(frame),
-            items: vec![Item::Translate {
-                offset: origin,
-                items: highlight
-                    .into_iter()
-                    .chain(layout.items.iter().cloned())
-                    .chain(
-                        self.thread
-                            .as_ref()
-                            .and_then(|thread| focus_bar(thread, layout, bar)),
-                    )
-                    .chain(ring)
-                    .collect(),
-            }],
-        });
-        self.hits.extend(targets);
-        let scroll = &self.scrolls[2];
-        let cx = self.ui.context();
-        scroll.paint_scrollbar(cx, frame, items);
+        items.extend(self.reader.paint(self.ui.context(), look, frame));
+        let targets = self.reader.visible_targets(self.ui.context(), frame);
+        self.hits.extend(
+            targets
+                .into_iter()
+                .map(|(rect, target)| (rect, Hit::Reader(target))),
+        );
         if let Some(Hit::Reader(Target::Link(url, ..))) = &self.hover {
             let url = url.clone();
-            self.paint_link_target(items, frame, &url);
+            paint_link_target(self.ui.context(), &palette, items, frame, &url);
         }
-    }
-
-    fn paint_link_target(&mut self, items: &mut Vec<Item>, frame: Rect, url: &str) {
-        let palette = self.palette;
-        let paragraph = self.ui.context().text.fitted(
-            url,
-            TextStyle::role(TextRole::Callout, palette.ink2),
-            (frame.width - 2.0 * LINK_TARGET_INSET - 2.0 * LINK_TARGET_PADDING).max(40.0),
-        );
-        let height = paragraph.height() + LINK_TARGET_PADDING;
-        let shown = Rect::new(
-            frame.x + LINK_TARGET_INSET,
-            frame.y + frame.height - LINK_TARGET_INSET - height,
-            paragraph.width() + 2.0 * LINK_TARGET_PADDING,
-            height,
-        );
-        items.push(Item::Fill {
-            shape: Shape::rounded(shown, Radius::S),
-            paint: palette.raised.into(),
-        });
-        items.push(Item::Stroke {
-            shape: Shape::rounded(shown, Radius::S),
-            width: 1.0,
-            paint: palette.hairline.into(),
-        });
-        items.push(Item::Text {
-            origin: Point::new(
-                shown.x + LINK_TARGET_PADDING,
-                shown.y + LINK_TARGET_PADDING / 2.0,
-            ),
-            paragraph,
-        });
     }
 
     pub(crate) fn scroll(&mut self, scroll: &Scroll) -> bool {
@@ -812,7 +648,8 @@ impl MailView {
         } else if self.list_frame().contains(at) {
             1
         } else if self.reader_frame().contains(at) {
-            2
+            let cx = self.ui.context();
+            return self.reader.scroll.scroll(cx, scroll);
         } else {
             return false;
         };
@@ -826,20 +663,8 @@ impl MailView {
     }
 
     pub(crate) fn scroll_reader(&mut self, key: Key) -> bool {
-        let page = self.reader_frame().height - PAGE_OVERLAP;
-        let line = (READER_LINE * self.scale()).round();
-        let state = &mut self.scrolls[2];
-        let cx = self.ui.context();
-        let offset = state.offset(cx);
-        let target = match key {
-            Key::Up => offset - line,
-            Key::Down => offset + line,
-            Key::PageUp => offset - page,
-            Key::PageDown => offset + page,
-            Key::Home => 0.0,
-            _ => f32::MAX,
-        };
-        state.scroll_to(cx, target)
+        let frame = self.reader_frame();
+        self.reader.scroll_key(self.ui.context(), frame, key)
     }
 
     pub(crate) fn rows_per_page(&mut self) -> isize {

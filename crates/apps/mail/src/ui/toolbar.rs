@@ -233,6 +233,7 @@ impl MailView {
         let selected = self.selected.is_some();
         let has_account = self.has_accounts();
         let reading = self
+            .reader
             .thread
             .as_ref()
             .and_then(crate::ui::reader::Thread::focused)

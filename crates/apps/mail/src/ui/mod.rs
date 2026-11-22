@@ -3,6 +3,7 @@ mod compose_view;
 mod format;
 mod paint;
 mod reader;
+mod reader_pane;
 mod settings_view;
 mod sidebar;
 mod symbols;

@@ -298,6 +298,12 @@ msgstr "Dokumentet kan inte sparas som {encoding}."
 msgid "It contains characters that this encoding can’t hold. Save it as Unicode (UTF-8) instead?"
 msgstr "Det innehåller tecken som den här teckenkodningen inte kan lagra. Vill du spara det som Unicode (UTF-8) i stället?"
 
+msgid "“{name}” was changed by another app."
+msgstr "”{name}” har ändrats av en annan app."
+
+msgid "Saving replaces the changes made there since you opened it."
+msgstr "Om du sparar ersätts ändringarna som gjorts där sedan du öppnade den."
+
 msgid "“{name}” could not be saved."
 msgstr "Det gick inte att spara ”{name}”."
 
@@ -391,15 +397,6 @@ msgstr "CRLF (vagnretur och radmatning)"
 msgid "CR (Carriage Return)"
 msgstr "CR (vagnretur)"
 
-msgid "Don’t Save"
-msgstr "Spara inte"
-
-msgid "Save a Copy…"
-msgstr "Spara en kopia…"
-
-msgid "Save as UTF-8"
-msgstr "Spara som UTF-8"
-
 msgid "You don’t have permission to change it. Save a copy somewhere else instead."
 msgstr "Du har inte behörighet att ändra den. Spara en kopia någon annanstans i stället."
 
@@ -417,3 +414,15 @@ msgstr "Den är för stor för disken den ligger på."
 
 msgid "Something went wrong while writing it: {error}"
 msgstr "Något gick fel när den skrevs: {error}"
+
+msgid "Don’t Save"
+msgstr "Spara inte"
+
+msgid "Save Anyway"
+msgstr "Spara ändå"
+
+msgid "Save a Copy…"
+msgstr "Spara en kopia…"
+
+msgid "Save as UTF-8"
+msgstr "Spara som UTF-8"

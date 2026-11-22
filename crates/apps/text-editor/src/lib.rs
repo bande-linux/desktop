@@ -11,7 +11,7 @@ mod worker;
 
 pub use document::{Format, Loaded, open, read};
 pub use encoding::{CHOICES, LineEnding, TextEncoding};
-pub use file::{MAX_FILE_BYTES, read_bounded};
+pub use file::{MAX_FILE_BYTES, Stamp, read_bounded, stamp};
 pub use portal::{choose_files, choose_save_path};
 pub use session::{Record, Session, new_id, now};
 pub use view::{COLORS, DocumentView, FAMILIES, Opening, Request, Settings, line_ending_title};

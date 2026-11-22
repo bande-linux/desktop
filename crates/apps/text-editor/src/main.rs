@@ -9,7 +9,7 @@ use bande_l10n::{Text, text, tr};
 use bande_text_editor::{
     CHOICES, COLORS, DocumentView, FAMILIES, Format, LineEnding, Loaded, MAX_FILE_BYTES, Message,
     Opening, Record, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,
-    encoding_name, new_id, now, open, read, read_bounded, spawn,
+    encoding_name, new_id, now, open, read, read_bounded, spawn, stamp,
 };
 use bande_toolkit::ui::{Alignment, ListMarker};
 
@@ -57,6 +57,10 @@ fn load(path: &Path, chosen: Option<&'static encoding_rs::Encoding>) -> Result<L
             _ => error.to_string(),
         })
         .and_then(|bytes| open(path, bytes, chosen))
+        .map(|loaded| Loaded {
+            stamp: stamp(path),
+            ..loaded
+        })
 }
 
 const VERSION_COMMAND: &str = "version:";

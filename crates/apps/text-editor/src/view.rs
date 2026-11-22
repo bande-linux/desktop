@@ -9,7 +9,7 @@ use bande_l10n::{tr, trn};
 
 use crate::document::{Content, Format, Loaded, encode, read};
 use crate::encoding::{LineEnding, TextEncoding};
-use crate::file::{MAX_FILE_BYTES, read_bounded};
+use crate::file::{MAX_FILE_BYTES, Stamp, read_bounded, stamp};
 use crate::find::{self, Query};
 use crate::formats::{heading, markdown, rtf};
 use crate::session::seconds_now;
@@ -81,6 +81,7 @@ enum Asking {
     Failed,
     MakePlain,
     Lossy,
+    Changed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -171,6 +172,8 @@ pub struct DocumentView {
     note: Option<String>,
     snapshot: Option<(u64, Arc<String>)>,
     saving: bool,
+    stamp: Option<Stamp>,
+    overwrite: bool,
     close_after_save: bool,
     requests: Vec<Request>,
     drop: FileDrop,
@@ -245,6 +248,8 @@ impl DocumentView {
             note: None,
             snapshot: None,
             saving: false,
+            stamp: None,
+            overwrite: false,
             close_after_save: false,
             requests: Vec::new(),
             drop: FileDrop::default(),
@@ -424,12 +429,14 @@ impl DocumentView {
             damaged,
             lossy,
             from_disk,
+            stamp,
             words,
             characters,
         } = loaded;
         self.lossy = lossy && from_disk;
         self.loading = false;
         if from_disk {
+            self.stamp = stamp;
             self.encoding = encoding;
             self.line_ending = line_ending;
             if self.rich != rich.is_some() {
@@ -596,6 +603,10 @@ impl DocumentView {
             (false, _) if self.format != Format::Markdown => self.format = Format::Plain,
             _ => {}
         }
+        let expected = match std::mem::take(&mut self.overwrite) {
+            false if self.path.as_ref() == Some(&path) => self.stamp,
+            _ => None,
+        };
         let content = self.content();
         let revision = self.revision();
         let (encoding, line_ending, format) = (self.encoding, self.line_ending, self.format);
@@ -603,18 +614,24 @@ impl DocumentView {
         let (outbox, token) = (self.outbox.clone(), self.token);
         let session = self.session.clone();
         spawn("save", move || {
-            let outcome =
-                encode(&content, format, encoding, line_ending, &title).and_then(|bytes| {
-                    if let Some(session) = &session
-                        && let Ok(before) = read_bounded(&path, MAX_FILE_BYTES)
-                        && before != bytes
-                        && let Err(error) = session.keep_version(&path, &before, seconds_now())
-                    {
-                        tracing::warn!("cannot keep the old version: {error}");
-                    }
-                    bande_xdg::replace_file(&path, &bytes)
-                        .map_err(|error| WriteError::Io(write_failure(&error)))
-                });
+            let changed = expected
+                .is_some_and(|expected| stamp(&path).is_some_and(|found| found != expected));
+            let outcome = match changed {
+                true => Err(WriteError::Changed),
+                false => encode(&content, format, encoding, line_ending, &title),
+            }
+            .and_then(|bytes| {
+                if let Some(session) = &session
+                    && let Ok(before) = read_bounded(&path, MAX_FILE_BYTES)
+                    && before != bytes
+                    && let Err(error) = session.keep_version(&path, &before, seconds_now())
+                {
+                    tracing::warn!("cannot keep the old version: {error}");
+                }
+                bande_xdg::replace_file(&path, &bytes)
+                    .map(|()| stamp(&path))
+                    .map_err(|error| WriteError::Io(write_failure(&error)))
+            });
             outbox.send(Message::Written {
                 token,
                 revision,
@@ -678,10 +695,16 @@ impl DocumentView {
         });
     }
 
-    pub fn written(&mut self, revision: u64, path: PathBuf, outcome: Result<(), WriteError>) {
+    pub fn written(
+        &mut self,
+        revision: u64,
+        path: PathBuf,
+        outcome: Result<Option<Stamp>, WriteError>,
+    ) {
         self.saving = false;
         match outcome {
-            Ok(()) => {
+            Ok(stamp) => {
+                self.stamp = stamp;
                 self.lossy &= self.path.as_ref() == Some(&path);
                 self.path = Some(path.clone());
                 self.saved = Some(revision);
@@ -699,6 +722,14 @@ impl DocumentView {
                     &tr!("The document can’t be saved as {encoding}.", encoding = crate::encoding_name(self.encoding)),
                     &tr!("It contains characters that this encoding can’t hold. Save it as Unicode (UTF-8) instead?"),
                     &[("save-unicode", true), ("cancel", false)],
+                );
+            }
+            Err(WriteError::Changed) => {
+                self.ask(
+                    Asking::Changed,
+                    &tr!("“{name}” was changed by another app.", name = self.name()),
+                    &tr!("Saving replaces the changes made there since you opened it."),
+                    &[("save-anyway", true), ("cancel", false)],
                 );
             }
             Err(WriteError::Io(error)) => {
@@ -792,6 +823,11 @@ impl DocumentView {
                 self.ui.set_focus(self.editor);
             }
             (Some(Asking::Failed), "save-as") => self.requests.push(Request::SaveAs),
+            (Some(Asking::Changed), "save-anyway") => {
+                self.overwrite = true;
+                let close = self.close_after_save;
+                self.save(close);
+            }
             (Some(Asking::Failed), _) if self.unloaded => self.requests.push(Request::Close),
             (Some(Asking::MakePlain), "make-plain-confirm") => self.make_plain(true),
             (Some(Asking::Lossy), "save-copy") => {
@@ -1585,6 +1621,7 @@ fn button_label(action: &str) -> String {
         "make-plain-confirm" => tr!("Make Plain Text"),
         "ok" => tr!("OK"),
         "save" => tr!("Save"),
+        "save-anyway" => tr!("Save Anyway"),
         "save-as" => tr!("Save As…"),
         "save-copy" => tr!("Save a Copy…"),
         "save-unicode" => tr!("Save as UTF-8"),

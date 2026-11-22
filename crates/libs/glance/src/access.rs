@@ -6,6 +6,7 @@ use accesskit::{
 use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
 
+use crate::content::Shown;
 use crate::{Glance, Hit};
 
 const ROOT: NodeId = NodeId(1);
@@ -77,6 +78,12 @@ impl Glance {
             node.add_action(AccessAction::Click);
             nodes.push((NodeId(FIRST + index as u64), node));
         }
+        if let Shown::Media(Some(stage)) = &self.shown {
+            let first = FIRST + nodes.len() as u64;
+            for (part, node) in stage.access_parts().into_iter().enumerate() {
+                nodes.push((NodeId(first + part as u64), node));
+            }
+        }
         root.set_children(nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>());
         nodes.insert(0, (ROOT, root));
         TreeUpdate {
@@ -91,13 +98,19 @@ impl Glance {
     }
 
     pub fn perform(&mut self, request: &ActionRequest, now: Instant) -> bool {
-        if request.action != AccessAction::Click {
-            return false;
-        }
         let Some(index) = request.target_node.0.checked_sub(FIRST) else {
             return false;
         };
-        let Some((_, hit, _)) = self.controls().get(index as usize).cloned() else {
+        let controls = self.controls();
+        if let Some(part) = index.checked_sub(controls.len() as u64)
+            && let Shown::Media(Some(stage)) = &mut self.shown
+        {
+            return stage.perform_part(part, request);
+        }
+        if request.action != AccessAction::Click {
+            return false;
+        }
+        let Some((_, hit, _)) = controls.get(index as usize).cloned() else {
             return false;
         };
         self.activate(hit, now);

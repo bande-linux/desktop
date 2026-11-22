@@ -771,6 +771,7 @@ version = "0.2.0"
 dependencies = [
  "bande-fs",
  "bande-inbox",
+ "bande-xdg",
  "hayro",
  "image",
  "kamadak-exif",

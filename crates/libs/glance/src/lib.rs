@@ -279,6 +279,17 @@ impl Glance {
         !self.closing && matches!(&self.shown, Shown::Pdf(pdf) if pdf.is_locked())
     }
 
+    pub fn plays_media(&self) -> bool {
+        !self.closing && matches!(&self.shown, Shown::Media(Some(_)))
+    }
+
+    fn media_key(&mut self, key: Key, now: Instant) -> bool {
+        match &mut self.shown {
+            Shown::Media(Some(stage)) => stage.key(&key, &Modifiers::default(), now),
+            _ => false,
+        }
+    }
+
     fn unlock(&mut self) {
         if let Shown::Pdf(pdf) = &mut self.shown
             && !self.password.is_empty()
@@ -458,6 +469,11 @@ impl Glance {
         }
         match key {
             Key::Escape => self.close(now),
+            Key::Character('k' | 'K') if plain => return self.media_key(Key::Space, now),
+            Key::Character('m' | 'M') if plain => return self.media_key(key, now),
+            Key::Left | Key::Right if command && !modifiers.shift => {
+                return self.media_key(key, now);
+            }
             Key::Left | Key::Right if plain && self.subjects.len() > 1 => {
                 return self.step(key == Key::Right);
             }

@@ -1,19 +1,17 @@
+use std::ffi::OsStr;
 use std::io::{self, Read, Write};
 use std::path::Path;
-use std::process::{Command, ExitCode, Stdio};
+use std::process::ExitCode;
 use std::sync::Arc;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bande_l10n::tr;
 
 use crate::paint::colored;
-use bande_content::pdf::protocol::WORKER_FLAG;
-use bande_content::{Contents, confine, worker_program};
+use bande_content::{Contents, confine, run_worker};
 use bande_fs::archive_contents;
 use bande_thumbnails::Picture;
 use bande_toolkit::{Color, CpuRenderer, Item, Point, Scene, TextStyle, TextSystem};
-use bande_xdg::wait_for_exit;
 
 const FONT_FLAG: &str = "--glance-font";
 const ARCHIVE_FLAG: &str = "--glance-archive";
@@ -37,12 +35,14 @@ pub fn serve_worker(arguments: &[String]) -> Option<ExitCode> {
     if let Some(code) = bande_thumbnails::serve_worker(arguments, &font_thumbnail) {
         return Some(code);
     }
+    if let Some(code) = bande_content::serve_worker(arguments) {
+        return Some(code);
+    }
     let [flag, path] = arguments else {
         return None;
     };
     let path = Path::new(path);
     match flag.as_str() {
-        WORKER_FLAG => Some(bande_content::pdf::worker::run(path)),
         FONT_FLAG => {
             confine();
             Some(exit(font_sample(path).and_then(|sample| {
@@ -168,34 +168,11 @@ fn font_sample(path: &Path) -> io::Result<Sample> {
 }
 
 fn run(flag: &str, path: &Path) -> Option<Vec<u8>> {
-    let mut child = Command::new(worker_program())
-        .arg(flag)
-        .arg(path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .inspect_err(|error| tracing::warn!("cannot start a file reader: {error}"))
-        .ok()?;
-    let stdout = child.stdout.take()?;
-    let reader = thread::Builder::new()
-        .name("glance reader".to_owned())
-        .spawn(move || {
-            let mut out = Vec::new();
-            stdout
-                .take(MOST_PIXELS * 4 + 64)
-                .read_to_end(&mut out)
-                .map(|_| out)
-        })
-        .ok()?;
-    let exited = wait_for_exit(&mut child, Some(Instant::now() + WORKER_TIME), None);
-    if !matches!(exited, Ok(Some(status)) if status.success()) {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = reader.join();
-        return None;
-    }
-    reader.join().ok()?.ok()
+    run_worker(
+        &[OsStr::new(flag), path.as_os_str()],
+        MOST_PIXELS * 4 + 64,
+        WORKER_TIME,
+    )
 }
 
 fn header(out: &[u8]) -> Option<(u64, u64, &[u8])> {

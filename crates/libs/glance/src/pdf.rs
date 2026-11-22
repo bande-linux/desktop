@@ -136,6 +136,11 @@ impl PdfView {
     }
 
     pub fn want(&mut self, renders: Vec<Render>) {
+        self.rendered.retain(|page, _| {
+            renders
+                .iter()
+                .any(|render| render.purpose != Use::Thumbnail && render.page == *page)
+        });
         let missing: Vec<Render> = renders
             .into_iter()
             .filter(|render| match render.purpose {

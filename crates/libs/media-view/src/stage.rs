@@ -57,6 +57,15 @@ struct Layout {
     wide: bool,
 }
 
+fn part_bounds(rect: Rect) -> accesskit::Rect {
+    accesskit::Rect {
+        x0: f64::from(rect.x),
+        y0: f64::from(rect.y),
+        x1: f64::from(rect.x + rect.width),
+        y1: f64::from(rect.y + rect.height),
+    }
+}
+
 pub struct Stage {
     session: Session,
     layout: Layout,
@@ -667,6 +676,55 @@ impl Stage {
         self.reveal_controls(now);
         true
     }
+
+    pub fn access_parts(&self) -> [Node; 3] {
+        let layout = &self.layout;
+        let session = &self.session;
+        let mut play = Node::new(Role::Button);
+        play.set_label(match session.is_playing() {
+            true => tr!("Pause"),
+            false => tr!("Play"),
+        });
+        play.add_action(Action::Click);
+        play.set_bounds(part_bounds(layout.play));
+        let mut timeline = Node::new(Role::Slider);
+        timeline.set_label(tr!("Timeline"));
+        timeline.set_min_numeric_value(0.0);
+        timeline.set_max_numeric_value(
+            session
+                .info()
+                .duration_ms
+                .map_or(0.0, |ms| ms as f64 / 1000.0),
+        );
+        timeline.set_numeric_value(session.position(Instant::now()).as_secs_f64());
+        timeline.add_action(Action::SetValue);
+        timeline.set_bounds(part_bounds(layout.track));
+        let mut volume = Node::new(Role::Slider);
+        volume.set_label(tr!("Volume"));
+        volume.set_min_numeric_value(0.0);
+        volume.set_max_numeric_value(1.0);
+        volume.set_numeric_value(session.volume());
+        volume.add_action(Action::SetValue);
+        volume.set_bounds(part_bounds(layout.volume));
+        [play, timeline, volume]
+    }
+
+    pub fn perform_part(&mut self, part: u64, request: &ActionRequest) -> bool {
+        let value = match &request.data {
+            Some(ActionData::NumericValue(value)) => Some(*value),
+            _ => None,
+        };
+        let session = &mut self.session;
+        match (part, request.action, value) {
+            (0, Action::Click, _) => session.toggle(),
+            (1, Action::SetValue, Some(seconds)) => {
+                session.seek(Duration::from_secs_f64(seconds.max(0.0)), true);
+            }
+            (2, Action::SetValue, Some(volume)) => session.set_volume(volume),
+            _ => return false,
+        }
+        true
+    }
 }
 
 pub struct StageWidget {
@@ -696,15 +754,6 @@ impl StageWidget {
 
     pub fn stage_mut(&mut self) -> &mut Stage {
         &mut self.stage
-    }
-
-    fn part_bounds(rect: Rect) -> accesskit::Rect {
-        accesskit::Rect {
-            x0: f64::from(rect.x),
-            y0: f64::from(rect.y),
-            x1: f64::from(rect.x + rect.width),
-            y1: f64::from(rect.y + rect.height),
-        }
     }
 }
 
@@ -757,39 +806,13 @@ impl Widget for StageWidget {
     }
 
     fn parts(&self, _cx: &Context) -> Parts {
-        let layout = &self.stage.layout;
-        let session = self.stage.session();
-        let mut play = Node::new(Role::Button);
-        play.set_label(match session.is_playing() {
-            true => tr!("Pause"),
-            false => tr!("Play"),
-        });
-        play.add_action(Action::Click);
-        play.set_bounds(Self::part_bounds(layout.play));
-        let mut timeline = Node::new(Role::Slider);
-        timeline.set_label(tr!("Timeline"));
-        timeline.set_min_numeric_value(0.0);
-        timeline.set_max_numeric_value(
-            session
-                .info()
-                .duration_ms
-                .map_or(0.0, |ms| ms as f64 / 1000.0),
-        );
-        timeline.set_numeric_value(session.position(Instant::now()).as_secs_f64());
-        timeline.add_action(Action::SetValue);
-        timeline.set_bounds(Self::part_bounds(layout.track));
-        let mut volume = Node::new(Role::Slider);
-        volume.set_label(tr!("Volume"));
-        volume.set_min_numeric_value(0.0);
-        volume.set_max_numeric_value(1.0);
-        volume.set_numeric_value(session.volume());
-        volume.add_action(Action::SetValue);
-        volume.set_bounds(Self::part_bounds(layout.volume));
-        let nodes = vec![
-            (self.id.part(0), play),
-            (self.id.part(1), timeline),
-            (self.id.part(2), volume),
-        ];
+        let nodes: Vec<_> = self
+            .stage
+            .access_parts()
+            .into_iter()
+            .enumerate()
+            .map(|(part, node)| (self.id.part(part as u64), node))
+            .collect();
         Parts {
             children: nodes.iter().map(|(id, _)| *id).collect(),
             nodes,
@@ -798,19 +821,6 @@ impl Widget for StageWidget {
     }
 
     fn perform_part(&mut self, _cx: &mut Context, part: u64, request: &ActionRequest) -> bool {
-        let value = match &request.data {
-            Some(ActionData::NumericValue(value)) => Some(*value),
-            _ => None,
-        };
-        let session = self.stage.session_mut();
-        match (part, request.action, value) {
-            (0, Action::Click, _) => session.toggle(),
-            (1, Action::SetValue, Some(seconds)) => {
-                session.seek(Duration::from_secs_f64(seconds.max(0.0)), true);
-            }
-            (2, Action::SetValue, Some(volume)) => session.set_volume(volume),
-            _ => return false,
-        }
-        true
+        self.stage.perform_part(part, request)
     }
 }

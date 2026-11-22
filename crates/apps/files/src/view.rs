@@ -1727,6 +1727,9 @@ impl FilesView {
         let alt = modifiers.alt;
         let plain = !command && !alt;
         match key {
+            Key::Space if plain && self.typed.is_typing(Instant::now()) => {
+                return self.type_select(' ');
+            }
             Key::Space if plain => self.toggle_glance(),
             Key::Escape if self.searching.is_some() => self.end_search(),
             Key::Character('f' | 'F') if command && !shift => self.focus_search(),

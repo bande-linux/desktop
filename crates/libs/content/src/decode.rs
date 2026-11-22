@@ -9,6 +9,7 @@ use image::codecs::gif::GifDecoder;
 use image::codecs::webp::WebPDecoder;
 use image::metadata::Orientation;
 use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits};
+use serde::{Deserialize, Serialize};
 
 use crate::facts::{Facts, camera_facts};
 
@@ -46,7 +47,7 @@ pub struct Decoded {
     pub facts: Facts,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Failure {
     Unreadable,
     NotSupported,

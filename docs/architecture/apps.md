@@ -9,7 +9,8 @@ are not. `crates/apps/template` is the starting point of a new app (`ci/new-app.
 several apps share is a library in `crates/libs` (`bande-discovery`: DNS SRV and TXT service
 discovery for account setup; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
 machines in systemd user units; `bande-keyring`: passwords in the Secret Service; `bande-dav`:
-CalDAV and CardDAV with offline sync; `bande-content-lines`: iCalendar and vCard content lines).
+CalDAV and CardDAV with offline sync; `bande-content-lines`: iCalendar and vCard content lines;
+`bande-address-book`: vCard, the offline address books and their CardDAV sync).
 `ci/check-apps.sh` checks that every app is built and packaged this way. A crate's own
 `README.md` describes an app where it needs more than its metainfo (Mail, Calendar, Clock,
 Velox).

@@ -25,7 +25,7 @@ done
 packages() {
     case $1 in
         lint) echo curl ca-certificates shellcheck python3 jq rustfmt rust-clippy distro-info-data dpkg-dev ;;
-        test) echo dpkg-dev ;;
+        test) echo dpkg-dev python3-radicale ;;
         debs) echo build-essential dpkg-dev devscripts git jq lintian xz-utils distro-info-data ;;
     esac
 }

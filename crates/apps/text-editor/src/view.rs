@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -612,7 +613,7 @@ impl DocumentView {
                         tracing::warn!("cannot keep the old version: {error}");
                     }
                     bande_xdg::replace_file(&path, &bytes)
-                        .map_err(|error| WriteError::Io(error.to_string()))
+                        .map_err(|error| WriteError::Io(write_failure(&error)))
                 });
             outbox.send(Message::Written {
                 token,
@@ -706,7 +707,7 @@ impl DocumentView {
                     Asking::Failed,
                     &tr!("“{name}” could not be saved.", name = self.name()),
                     &error,
-                    &[("ok", true)],
+                    &[("save-as", true), ("cancel", false)],
                 );
             }
         }
@@ -790,6 +791,7 @@ impl DocumentView {
                 }
                 self.ui.set_focus(self.editor);
             }
+            (Some(Asking::Failed), "save-as") => self.requests.push(Request::SaveAs),
             (Some(Asking::Failed), _) if self.unloaded => self.requests.push(Request::Close),
             (Some(Asking::MakePlain), "make-plain-confirm") => self.make_plain(true),
             (Some(Asking::Lossy), "save-copy") => {
@@ -1554,6 +1556,28 @@ pub fn line_ending_title(name: &str) -> String {
     }
 }
 
+fn write_failure(error: &io::Error) -> String {
+    match error.kind() {
+        io::ErrorKind::PermissionDenied => {
+            tr!("You don’t have permission to change it. Save a copy somewhere else instead.")
+        }
+        io::ErrorKind::ReadOnlyFilesystem => {
+            tr!("The disk it is on can only be read. Save a copy somewhere else instead.")
+        }
+        io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded => {
+            tr!("There isn’t enough space on the disk. Free some space or save it somewhere else.")
+        }
+        io::ErrorKind::NotFound => {
+            tr!("Its folder no longer exists. Save it somewhere else instead.")
+        }
+        io::ErrorKind::FileTooLarge => tr!("It is too large for the disk it is on."),
+        _ => tr!(
+            "Something went wrong while writing it: {error}",
+            error = error.to_string()
+        ),
+    }
+}
+
 fn button_label(action: &str) -> String {
     match action {
         "cancel" => tr!("Cancel"),
@@ -1561,6 +1585,7 @@ fn button_label(action: &str) -> String {
         "make-plain-confirm" => tr!("Make Plain Text"),
         "ok" => tr!("OK"),
         "save" => tr!("Save"),
+        "save-as" => tr!("Save As…"),
         "save-copy" => tr!("Save a Copy…"),
         "save-unicode" => tr!("Save as UTF-8"),
         other => other.to_owned(),

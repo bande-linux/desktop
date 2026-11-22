@@ -1883,7 +1883,7 @@ fn system_panes() -> Vec<Pane> {
             vec![
                 section(
                     Some(tr!("This computer")),
-                    vec![list(SettingId::SecurityStatus, tr!("This computer"), tr!("remote login, ssh, security"),
+                    vec![list(SettingId::SecurityStatus, tr!("This computer"), tr!("remote login, ssh, security, sign-in page, captive portal, connectivity check"),
                         List::SecurityStatus,
                     )],
                 ),

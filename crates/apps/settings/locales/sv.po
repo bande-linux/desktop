@@ -1487,6 +1487,18 @@ msgstr "Appar du installerar"
 msgid "Apps from Flatpak are sandboxed. Other programs run with your full access to your files, and nothing here can contain them, so only run programs you trust."
 msgstr "Appar från Flatpak körs i en sandlåda. Andra program körs med full åtkomst till dina filer, och inget här kan begränsa dem, så kör bara program du litar på."
 
+msgid "Detect sign-in pages on networks"
+msgstr "Upptäck inloggningssidor i nätverk"
+
+msgid "Contacts {server} whenever a network connects, to find out whether it asks you to sign in"
+msgstr "Kontaktar {server} varje gång ett nätverk ansluts, för att ta reda på om det vill att du loggar in"
+
+msgid "Contacts Debian’s server whenever a network connects, to find out whether it asks you to sign in"
+msgstr "Kontaktar Debians server varje gång ett nätverk ansluts, för att ta reda på om det vill att du loggar in"
+
+msgid "Couldn't change sign-in page detection."
+msgstr "Det gick inte att ändra upptäckten av inloggningssidor."
+
 msgid "Couldn't change the sound settings."
 msgstr "Det gick inte att ändra ljudinställningarna."
 

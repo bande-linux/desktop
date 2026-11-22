@@ -122,6 +122,7 @@ pub(crate) enum Intent {
     SaveReport((String, String)),
     DefaultPrinter(String),
     Sharing(SharingCommand),
+    SignInPages(bool),
     PrinterAddress(String),
     AddPrinterAddress,
     InstallPrinting(Support),
@@ -1558,6 +1559,7 @@ impl SettingsView {
                         Anchor::Item("other-network".to_owned())
                     });
                 }
+                Intent::SignInPages(on) => self.commands.push(Command::SignInPages(on)),
                 Intent::OtherSecurity(index) => {
                     if let (Some(other), Some(security)) =
                         (&mut self.other, HIDDEN_SECURITY.get(index))

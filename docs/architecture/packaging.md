@@ -180,7 +180,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 
 - `bande-shell` depends on NetworkManager (network menu) and UPower (battery), since without
   them the bar would read as a computer without a network or battery, and recommends BlueZ
-  (Bluetooth), the colour emoji font, Debian's connectivity check (captive portals), PipeWire and WirePlumber (volume),
+  (Bluetooth), the colour emoji font, PipeWire and WirePlumber (volume),
   `xdg-user-dirs` (the Desktop and the folders Files shows); Bande's own icon theme falls back
   only to `hicolor`, so no GNOME icon theme comes along; `bande-compositor` ships Bande's own
   pointers, so no cursor theme package comes along (see compositor.md); `bande-settings` adds
@@ -188,7 +188,8 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   NetworkManager (Network, VPN import) to its recommends and depends on `xkb-data` and `locales`,
   so its helper can generate any language picked in Settings;
   the OpenVPN plugin is installed through PackageKit when an `.ovpn` file is imported, as Samba
-  and `avahi-daemon` are from Sharing;
+  and `avahi-daemon` are from Sharing and Debian's connectivity check
+  (`network-manager-config-connectivity-debian`) is from Privacy & Security;
 - every package that draws text depends on the fonts the toolkit asks for by name (Inter, Manrope
   for titles, JetBrains Mono where it shows code), so none silently falls back to another face;
 - `bande-player` is the one package linking GStreamer: its engine process plays for Player and

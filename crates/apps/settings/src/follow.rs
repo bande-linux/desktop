@@ -139,6 +139,7 @@ pub enum Command {
     Spelling(SpellingCommand),
     Printers(PrinterCommand),
     Sharing(SharingCommand),
+    SignInPages(bool),
     Users(UsersCommand),
     Brightness(LevelRequest),
     Reveal(PathBuf),
@@ -423,6 +424,7 @@ pub struct Services {
     brightness: Option<Sender<LevelRequest>>,
     printers: Option<Sender<PrinterCommand>>,
     sharing: Sender<SharingCommand>,
+    sign_in_pages: Sender<bool>,
     users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
 }
@@ -439,7 +441,7 @@ impl Services {
             follow_privileges(system, updates.clone());
             hide_sleep_if_unavailable(system, updates.clone());
         }
-        follow_security_status(system, updates);
+        let sign_in_pages = follow_security_status(system, updates);
         let listed = updates.clone();
         spawn("colour-profiles", move || {
             listed.send(Update::ColourProfiles(crate::colour::installed()));
@@ -470,6 +472,7 @@ impl Services {
             brightness: follow_brightness(session, updates.clone()),
             printers: system.map(|system| follow_printers(system, session, updates.clone())),
             sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
+            sign_in_pages,
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
                 .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
@@ -519,6 +522,7 @@ impl Services {
             Command::Passwords(command) => self.passwords.send(command).is_ok(),
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Sharing(command) => self.sharing.send(command).is_ok(),
+            Command::SignInPages(on) => self.sign_in_pages.send(on).is_ok(),
             Command::Printers(command) => self
                 .printers
                 .as_ref()

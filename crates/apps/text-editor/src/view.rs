@@ -15,7 +15,7 @@ use crate::session::seconds_now;
 use crate::session::{Record, Session};
 use crate::worker::{Message, WriteError, spawn};
 use accesskit::TreeUpdate;
-use bande_app::View;
+use bande_app::{Dropping, FileDrop, View};
 use bande_inbox::Outbox;
 use bande_toolkit::ui::{
     Alert, Alignment, BUTTON_HEIGHT, Button, CheckState, Checkbox, Context, Event, FreeLayout, Key,
@@ -86,6 +86,7 @@ enum Asking {
 pub enum Request {
     Close,
     SaveAs,
+    Open(PathBuf),
     Remember(PathBuf),
 }
 
@@ -171,6 +172,7 @@ pub struct DocumentView {
     saving: bool,
     close_after_save: bool,
     requests: Vec<Request>,
+    drop: FileDrop,
     outbox: Outbox<Message>,
     session: Option<Session>,
     versions: Vec<u64>,
@@ -244,6 +246,7 @@ impl DocumentView {
             saving: false,
             close_after_save: false,
             requests: Vec::new(),
+            drop: FileDrop::default(),
             outbox,
             session,
             versions: Vec::new(),
@@ -1464,6 +1467,14 @@ impl View for DocumentView {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        match self.drop.event(window, &event, Path::is_file) {
+            Dropping::Over => return true,
+            Dropping::Dropped(paths) => {
+                self.requests.extend(paths.into_iter().map(Request::Open));
+                return true;
+            }
+            Dropping::Other => {}
+        }
         if let WindowEvent::Input(input) = &event
             && let Some(handled) = self.key(input)
         {

@@ -858,6 +858,7 @@ name = "bande-file-chooser"
 version = "0.2.0"
 dependencies = [
  "accesskit",
+ "bande-app",
  "bande-app-settings",
  "bande-content",
  "bande-files",

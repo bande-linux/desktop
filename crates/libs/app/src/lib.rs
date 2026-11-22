@@ -1,4 +1,5 @@
 mod cx;
+mod drop;
 mod files;
 mod instance;
 mod menus;
@@ -23,6 +24,7 @@ use bande_xdg::file_uri;
 
 pub use bande_pdf::{Block, Orientation, Page, PageItem, PageSetup, Paper, flow};
 pub use cx::{Cx, WindowId};
+pub use drop::{Dropping, FileDrop};
 pub use files::show_in_files;
 pub use portal::{Filter, choose_file, choose_save_file, parent_window};
 pub use print::{

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use bande_app::View;
+use bande_app::{Dropping, FileDrop, View};
 use bande_media::{FailureKind, MediaInfo, Playback, VideoInfo};
 use bande_media_view::{Session, StageWidget};
 use bande_toolkit::ui::{Context, Event, Key, Ui, Widget, WidgetId};
@@ -41,6 +41,7 @@ pub struct Pane {
     shown_title: Option<String>,
     menus_changed: bool,
     pending_load: bool,
+    drop: FileDrop,
 }
 
 impl Pane {
@@ -63,6 +64,7 @@ impl Pane {
             fitted: false,
             shown_title: None,
             menus_changed: false,
+            drop: FileDrop::default(),
             pending_load: false,
         };
         pane.load();
@@ -289,6 +291,15 @@ impl View for Pane {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        match self.drop.event(window, &event, Path::is_file) {
+            Dropping::Over => return true,
+            Dropping::Dropped(paths) => {
+                self.add(paths);
+                window.request_redraw();
+                return true;
+            }
+            Dropping::Other => {}
+        }
         let double_click = matches!(
             &event,
             WindowEvent::Input(Event::PointerDown(pointer))

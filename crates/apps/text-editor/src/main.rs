@@ -262,6 +262,7 @@ impl TextEditor {
             match request {
                 Request::Close => cx.close(window),
                 Request::SaveAs => self.ask_save_path(cx, window),
+                Request::Open(path) => self.open_path(cx, path),
                 Request::Remember(path) => self.remember(&path),
             }
         }

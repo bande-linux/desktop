@@ -1043,6 +1043,27 @@ impl ChooserView {
             .collect()
     }
 
+    pub fn dropped(&mut self, paths: &[PathBuf]) {
+        let Some(first) = paths.first() else {
+            return;
+        };
+        if let [folder] = paths
+            && bande_volumes::quick_is_dir(folder)
+        {
+            return self.go(folder.clone());
+        }
+        let Some(parent) = first.parent() else {
+            return;
+        };
+        self.go(parent.to_path_buf());
+        let beside: Vec<PathBuf> = paths
+            .iter()
+            .filter(|path| path.parent() == Some(parent))
+            .cloned()
+            .collect();
+        self.select(&beside);
+    }
+
     fn select(&mut self, paths: &[PathBuf]) {
         let keys: Vec<String> = paths
             .iter()

@@ -2,7 +2,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use bande_discovery::testing::{Record, nameserver};
@@ -20,6 +20,7 @@ use bande_search::Offer;
 use zbus::blocking::Connection;
 
 const WAIT: Duration = Duration::from_secs(20);
+static SEARCH_ON_THE_SESSION_BUS: Mutex<()> = Mutex::new(());
 
 type Sent = Arc<Mutex<Vec<(Vec<String>, String)>>>;
 
@@ -77,6 +78,9 @@ fn smtp_server(sent: Sent) -> u16 {
 
 #[test]
 fn a_message_goes_out_once_without_injected_headers_after_the_imap_session_went_stale() {
+    let _search = SEARCH_ON_THE_SESSION_BUS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     if !Dovecot::installed() {
         eprintln!("dovecot is not installed; skipping");
         return;
@@ -230,6 +234,9 @@ fn item<'a>(taken: &'a Taken, kind: &str) -> &'a Offer {
 
 #[test]
 fn search_is_told_of_new_mail_its_text_and_its_removal_and_catches_up_after_losing_its_index() {
+    let _search = SEARCH_ON_THE_SESSION_BUS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let taken = Arc::new(Mutex::new(Taken::default()));
     let service = Connection::session().unwrap();
     let index = Index(Arc::clone(&taken));

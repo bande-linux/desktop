@@ -7,6 +7,7 @@ mod zone;
 use icu_calendar::Gregorian;
 use icu_calendar::week::WeekInformation;
 use std::fmt;
+use std::sync::OnceLock;
 
 use icu_datetime::fieldsets::{DE, E, M, MD, MDE, T, YM, YMD};
 use icu_datetime::input::{Date, DateTime, Time};
@@ -17,6 +18,8 @@ use icu_locale_core::preferences::extensions::unicode::keywords::HourCycle;
 use icu_locale_core::{Locale, locale};
 use jiff::Zoned;
 use writeable::{Part, PartsWrite, Writeable};
+use zbus::proxy::MethodFlags;
+use zbus::zvariant::OwnedValue;
 
 pub use minute::{ClockChanges, MinuteTimer};
 pub use month::{Month, Week};
@@ -24,6 +27,7 @@ pub use zone::{ZoneSuggestion, local_zone, now, suggested_zone};
 
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_TIME", "LANG"];
 const FALLBACK: Locale = locale!("en-US");
+const CONFIG: &str = "org.bande.Config";
 
 pub fn posix_locale(value: &str) -> Locale {
     let language = value
@@ -45,6 +49,34 @@ pub fn env_locale(variables: &[&str]) -> Locale {
         .find(|value| !value.is_empty())
         .unwrap_or_default();
     posix_locale(&value)
+}
+
+fn chosen_clock_format() -> &'static str {
+    static CHOSEN: OnceLock<String> = OnceLock::new();
+    CHOSEN.get_or_init(|| {
+        let asked = bande_bus::session().and_then(|session| {
+            zbus::blocking::Proxy::new(
+                &session,
+                CONFIG,
+                "/org/bande/Config",
+                "org.freedesktop.DBus.Properties",
+            )?
+            .call_with_flags::<_, _, OwnedValue>(
+                "Get",
+                MethodFlags::NoAutoStart.into(),
+                &(CONFIG, "ClockFormat"),
+            )
+        });
+        match asked {
+            Ok(Some(value)) => String::try_from(value).unwrap_or_default(),
+            Ok(None) => String::new(),
+            Err(error) if bande_bus::is_unowned(&error) => String::new(),
+            Err(error) => {
+                tracing::warn!("cannot read the clock format: {error}");
+                String::new()
+            }
+        }
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -229,7 +261,13 @@ impl DateFormats {
         afternoon.is_ok_and(|afternoon| self.clock(&afternoon).contains("13"))
     }
 
+    /// The formats of the session's locale, with the clock format chosen in Settings.
     pub fn from_env() -> Self {
+        Self::for_language().with_clock_format(chosen_clock_format())
+    }
+
+    /// The formats of the session's locale, with its own clock format.
+    pub fn for_language() -> Self {
         Self::for_locale(&env_locale(&LOCALE_VARIABLES))
     }
 

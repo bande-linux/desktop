@@ -461,7 +461,7 @@ pub enum SettingId {
     AutomaticTime,
     DateAndTime,
     TimeZone,
-    Clock24Hour,
+    ClockFormat,
     LoginItems,
     ReopenApps,
     RememberRecentFiles,
@@ -2267,10 +2267,17 @@ fn language_time_pane() -> Pane {
                         ),
                         List::Regions,
                     ),
-                    switch(
-                        SettingId::Clock24Hour,
-                        tr!("24-hour time"),
-                        tr!("12-hour, am, pm, hour format, taskbar clock, lock screen clock"),
+                    setting(
+                        SettingId::ClockFormat,
+                        tr!("Time format"),
+                        tr!(
+                            "24-hour, 12-hour, am, pm, hour format, taskbar clock, lock screen clock"
+                        ),
+                        Kind::Choices(keyword_choices(vec![
+                            (tr!("Automatic"), AUTOMATIC),
+                            (tr!("24-hour"), "24-hour"),
+                            (tr!("12-hour"), "12-hour"),
+                        ])),
                     ),
                 ],
             ),

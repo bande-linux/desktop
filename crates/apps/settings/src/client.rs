@@ -4,7 +4,6 @@ use bande_config::{
     ArrangedDisplay, DisplaySettings, FocusScheduleValue, NightLightValue, Placement, Rotation,
     SearchCategory,
 };
-use bande_datetime::DateFormats;
 use bande_notify::client::NotificationsProxy;
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
@@ -368,7 +367,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
 pub const CONFIG_SETTINGS: [SettingId; 83] = [
     SettingId::Appearance,
     SettingId::Style,
-    SettingId::Clock24Hour,
+    SettingId::ClockFormat,
     SettingId::LowPowerOnBattery,
     SettingId::LidOnPower,
     SettingId::ScreenReader,
@@ -619,11 +618,7 @@ impl SettingsClient {
             SettingId::UpdateCheckEvery => Value::Seconds(self.config.update_check_every()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
-            SettingId::Clock24Hour => Value::Flag(match self.config.clock_format()?.as_str() {
-                "24-hour" => true,
-                "12-hour" => false,
-                _ => DateFormats::from_env().uses_24_hour_clock(),
-            }),
+            SettingId::ClockFormat => Value::Keyword(self.config.clock_format()?),
             SettingId::Wallpaper => Value::Pictures {
                 light: self.config.wallpaper_light()?,
                 dark: self.config.wallpaper_dark()?,
@@ -730,12 +725,8 @@ impl SettingsClient {
                 self.config.set_automatic_updates(*on)
             }
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
-            (SettingId::Clock24Hour, Value::Flag(twenty_four_hour)) => {
-                self.config.set_clock_format(if *twenty_four_hour {
-                    "24-hour"
-                } else {
-                    "12-hour"
-                })
+            (SettingId::ClockFormat, Value::Keyword(keyword)) => {
+                self.config.set_clock_format(keyword)
             }
             (SettingId::LowPowerOnBattery, Value::Flag(on)) => {
                 self.config.set_low_power_on_battery(*on)

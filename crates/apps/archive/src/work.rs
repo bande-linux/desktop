@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use bande_l10n::{text, tr};
+use zeroize::Zeroizing;
 
 use crate::settings::ArchiveSettings;
 use bande_fs::{
@@ -14,7 +15,7 @@ use bande_fs::{
 pub enum Kind {
     Expand {
         archive: PathBuf,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     },
     Compress {
         sources: Vec<PathBuf>,
@@ -59,7 +60,7 @@ impl Work {
 
     pub fn expand(
         archive: PathBuf,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
         settings: &ArchiveSettings,
     ) -> io::Result<Self> {
         let task = Task::Extract {

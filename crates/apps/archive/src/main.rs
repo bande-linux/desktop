@@ -17,6 +17,7 @@ use bande_inbox::Inbox;
 use bande_l10n::tr;
 use bande_toolkit::{Appearance, Rect, Scene, Window, WindowEvent};
 use zbus::blocking::Connection;
+use zeroize::Zeroizing;
 
 static INFO: Info = Info {
     id: "org.bande.Archives",
@@ -149,7 +150,7 @@ impl Utility {
         }
     }
 
-    fn expand(&mut self, cx: &mut Cx<Self>, archive: PathBuf, password: Option<String>) {
+    fn expand(&mut self, cx: &mut Cx<Self>, archive: PathBuf, password: Option<Zeroizing<String>>) {
         let started = Work::expand(archive, password, &ArchiveSettings::current());
         self.begin(cx, started);
     }
@@ -292,7 +293,7 @@ impl Utility {
         }
     }
 
-    fn answer(&mut self, cx: &mut Cx<Self>, password: Option<String>) {
+    fn answer(&mut self, cx: &mut Cx<Self>, password: Option<Zeroizing<String>>) {
         let Some(prompt) = self.prompt.take() else {
             return;
         };

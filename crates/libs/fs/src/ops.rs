@@ -24,6 +24,7 @@ use crate::naming::{alias_name, duplicate_name, keep_both_name, untitled_folder}
 use crate::partial::{Anchor, partial_path};
 use crate::trash::{Trash, TrashItem, erase, forget, remove_all, restore_to};
 pub use archive::{Contents, Format, Refusal, archive_contents, archive_path, can_extract};
+use zeroize::Zeroizing;
 
 const CHUNK: u64 = 8 * 1024 * 1024;
 const FLUSH_EVERY: u64 = 64 * 1024 * 1024;
@@ -75,7 +76,7 @@ pub enum Task {
     Extract {
         archives: Vec<PathBuf>,
         into: Option<PathBuf>,
-        password: Option<String>,
+        password: Option<Zeroizing<String>>,
     },
 }
 
@@ -675,7 +676,11 @@ impl Worker {
                     let folder = into
                         .as_deref()
                         .unwrap_or_else(|| archive.parent().unwrap_or(Path::new("/")));
-                    self.extract(archive, folder, password.as_deref())?;
+                    self.extract(
+                        archive,
+                        folder,
+                        password.as_ref().map(|password| password.as_str()),
+                    )?;
                 }
             }
             Task::Revert { changes } => {

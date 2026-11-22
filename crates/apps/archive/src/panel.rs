@@ -7,6 +7,7 @@ use bande_toolkit::ui::{
     SecureField, Stack, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{Appearance, TextSystem};
+use zeroize::Zeroizing;
 
 pub const PANEL_SIZE: (u32, u32) = (460, 240);
 pub const PROMPT_SIZE: (u32, u32) = (420, 200);
@@ -18,7 +19,7 @@ const FIELD_FONT: f32 = 13.0;
 pub enum Intent {
     Cancel(u64),
     Dismiss,
-    Password(Option<String>),
+    Password(Option<Zeroizing<String>>),
     Submit,
 }
 
@@ -83,7 +84,7 @@ impl Panel {
         let field = SecureField::new(&tr!("Password"), FIELD_FONT, move |secret| {
             intents
                 .borrow_mut()
-                .push(Intent::Password(Some(secret.to_owned())));
+                .push(Intent::Password(Some(Zeroizing::new(secret.to_owned()))));
         });
         panel.field = Some(field.id());
         let mut widgets = vec![boxed(Label::heading(&tr!(

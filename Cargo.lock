@@ -488,6 +488,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "zbus",
+ "zeroize",
  "zip",
 ]
 
@@ -929,6 +930,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tracing",
+ "zeroize",
  "zip",
 ]
 

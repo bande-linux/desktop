@@ -22,14 +22,14 @@ use bande_audio::Direction;
 use bande_bluetooth::Kind as DeviceKind;
 use bande_config::Placement;
 use bande_config::{ACCENTS, MAX_INPUT_SOURCES};
-use bande_keyboard::{Action, shortcuts_in};
+use bande_keyboard::{Action, Trigger, shortcuts_in};
 use bande_settings_panes::SettingHit;
 use bande_settings_panes::{
     AUTOMATIC, Choice, Kind, List, MAX_SEGMENTS, PaneId, SCALES, Section, Setting, SettingId, Value,
 };
 use bande_toolkit::ui::{
     Axis, Button, Label, LevelIndicator, PopUpButton, ScrollView, SearchField, SecureField,
-    SegmentedControl, Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
+    SegmentedControl, Shortcut, ShortcutField, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
 use bande_toolkit::{Scheme, Spacing, TextRole};
 
@@ -1030,27 +1030,46 @@ impl SettingsView {
         if !shortcuts.is_empty() {
             page.push(boxed(Caption::new(Text::label(&tr!("App Shortcuts")))));
             let rows = shortcuts
-                .into_iter()
+                .iter()
                 .map(|shortcut| {
-                    let mut revoke = intent(&self.intents, |(app_id, id)| {
-                        Intent::RevokeShortcut(app_id, id)
-                    });
-                    let (app_id, id) = (shortcut.app.id.clone(), shortcut.id.clone());
-                    let remove = Button::new(&tr!("Remove"), move || {
-                        revoke((app_id.clone(), id.clone()));
-                    })
-                    .tooltip(&tr!("Stop this shortcut from working in the app"));
-                    let mut controls: Widgets = shortcut
-                        .keys
-                        .as_deref()
-                        .map(|keys| boxed(Shortcut::new(keys)))
-                        .into_iter()
-                        .collect();
-                    controls.push(boxed(remove));
                     let title = match shortcut.description.is_empty() {
                         true => shortcut.id.clone(),
                         false => shortcut.description.clone(),
                     };
+                    let taken: Vec<Trigger> = shortcuts
+                        .iter()
+                        .filter(|other| other.app.id != shortcut.app.id || other.id != shortcut.id)
+                        .filter_map(|other| other.trigger)
+                        .collect();
+                    let mut record = intent(&self.intents, |(app_id, id, trigger)| {
+                        Intent::SetShortcut(app_id, id, Some(trigger))
+                    });
+                    let (app_id, id) = (shortcut.app.id.clone(), shortcut.id.clone());
+                    let keys = shortcut.trigger.map(Trigger::keys);
+                    let field = ShortcutField::new(&title, keys.as_deref(), move |chord| {
+                        match Trigger::parse(chord)
+                            .filter(|trigger| trigger.assignable() && !taken.contains(trigger))
+                        {
+                            Some(trigger) => {
+                                record((app_id.clone(), id.clone(), trigger));
+                                true
+                            }
+                            None => false,
+                        }
+                    });
+                    let mut controls: Widgets = vec![boxed(field)];
+                    if shortcut.trigger.is_some() {
+                        let mut turn_off = intent(&self.intents, |(app_id, id)| {
+                            Intent::SetShortcut(app_id, id, None)
+                        });
+                        let (app_id, id) = (shortcut.app.id.clone(), shortcut.id.clone());
+                        controls.push(boxed(
+                            Button::new(&tr!("Turn Off"), move || {
+                                turn_off((app_id.clone(), id.clone()));
+                            })
+                            .tooltip(&tr!("Stop this shortcut from working in the app")),
+                        ));
+                    }
                     boxed(
                         Row::new(
                             Text::new(&title, Tone::Primary),

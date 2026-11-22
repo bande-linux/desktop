@@ -854,8 +854,8 @@ msgstr "Det gick inte att läsa det aktuella språket och den aktuella regionen.
 msgid "Couldn't change the app's language."
 msgstr "Det gick inte att ändra appens språk."
 
-msgid "Couldn't remove the app's shortcut."
-msgstr "Det gick inte att ta bort appens kortkommando."
+msgid "Couldn't change the app's shortcut."
+msgstr "Det gick inte att ändra appens kortkommando."
 
 msgid "Couldn't change the apps that open at login."
 msgstr "Det gick inte att ändra vilka appar som öppnas vid inloggning."

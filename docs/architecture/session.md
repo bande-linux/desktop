@@ -146,14 +146,19 @@ dialog that cannot start fails the request with response 2.
 - **DynamicLauncher**: "Add this web app to Applications?" with the icon, an editable name and the
   address. `RequestInstallToken` trusts only the app stores the other backends trust (GNOME
   Software, AppCenter, Discover).
-- **GlobalShortcuts**: only for calls from `xdg-desktop-portal`. `BindShortcuts` gives each new
-  shortcut its `preferred_trigger` when the trigger holds Super or both Ctrl and Alt, is no system
-  shortcut and no other app has it; a shortcut already bound keeps its keys. Bindings are kept per
-  app id in `$XDG_STATE_HOME/bande/global-shortcuts`, which the compositor follows: it takes a
-  bound chord before the focused app (not while locked or while shortcuts are inhibited) and
-  signals `org.bande.GlobalShortcuts.Activated` and `Deactivated` to the portal only, which emits
-  them for the app's sessions. Settings ▸ Keyboard Shortcuts lists them under App Shortcuts with
-  Remove. There is no `ConfigureShortcuts`, and an unassigned shortcut stays without keys.
+- **GlobalShortcuts** (version 2): only for calls from `xdg-desktop-portal`. `BindShortcuts` binds
+  nothing until the user answers "Allow <app> to use keyboard shortcuts?", which lists each new
+  shortcut with its description and proposed keys: the `preferred_trigger` when it holds Super or
+  both Ctrl and Alt, is no system shortcut and nobody has it. Per shortcut the user keeps it,
+  records other keys or unticks it; Don't Allow declines them all. Every answer is remembered, a
+  declined shortcut as one without keys, so the app is asked only about shortcuts it has not
+  asked for before. `ConfigureShortcuts` shows the same list for the app's shortcuts. Bindings
+  are kept per app id in `$XDG_STATE_HOME/bande/global-shortcuts`, which the compositor follows:
+  it takes a bound chord before the focused app (not while locked or while shortcuts are
+  inhibited) and signals `org.bande.GlobalShortcuts.Activated` and `Deactivated` to the portal
+  only, which emits them for the app's sessions. The portal follows the file too and emits
+  `ShortcutsChanged` when an app's shortcuts change outside `BindShortcuts`. Settings ▸ Keyboard
+  Shortcuts lists them under App Shortcuts, where the keys can be recorded again or turned off.
 - **Account**: "Share your name and picture with <app>?"; Share returns the login, the
   AccountsService `RealName` (else the passwd name) and the picture as a `file://` URI.
 - **Secret**: only for calls from `xdg-desktop-portal` itself, hands a sandboxed app the 64-byte
@@ -169,7 +174,7 @@ dialog that cannot start fails the request with response 2.
   theme, fonts, cursor and animations, `org.gnome.desktop.sound` `event-sounds`, and
   `org.gnome.desktop.wm.preferences` `button-layout` `:minimize,maximize,close`, so GTK,
   libadwaita, Firefox and Qt put their window controls on the right in Bande's order.
-- Not implemented: GlobalShortcuts, InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is
+- Not implemented: InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is
   the frontend's default (nothing locked down).
 
 **Capture lives in the screenshot tool.** The portal has no Wayland connection: Screenshot and

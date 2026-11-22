@@ -19,6 +19,7 @@ bande-config.workspace = true
 bande-datetime.workspace = true
 bande-design.workspace = true
 bande-keyboard.workspace = true
+bande-watch.workspace = true
 bande-log.workspace = true
 bande-wallpaper.workspace = true
 bande-xdg.workspace = true

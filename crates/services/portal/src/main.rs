@@ -104,7 +104,7 @@ fn serve() -> zbus::Result<Connection> {
             server.at(
                 OBJECT_PATH,
                 Wallpaper {
-                    ui: dialogs,
+                    ui: dialogs.clone(),
                     folder: data_home.join(BACKGROUNDS),
                     session: connection.clone(),
                 },
@@ -112,7 +112,7 @@ fn serve() -> zbus::Result<Connection> {
         }
     }
     Inhibit::serve(&connection, system.as_ref())?;
-    GlobalShortcuts::serve(&connection)?;
+    GlobalShortcuts::serve(&connection, dialogs)?;
     Notification::serve(&connection)?;
     Background::serve(&connection)?;
     close_sessions_when_sharing_ends(&connection, &tool_connection)?;

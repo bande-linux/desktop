@@ -1560,11 +1560,12 @@ impl CollectionObject {
             .get(ITEM_LABEL)
             .and_then(|value| String::try_from(value.try_clone().ok()?).ok())
             .unwrap_or_default();
-        let mut attributes = properties
+        let wanted = properties
             .get(ITEM_ATTRIBUTES)
             .and_then(|value| HashMap::<String, String>::try_from(value.try_clone().ok()?).ok())
-            .map(client_attributes)
             .unwrap_or_default();
+        let shared_with = wanted.get(ALLOWED).cloned();
+        let mut attributes = client_attributes(wanted);
         let replaced = {
             let mut store = self.daemon.store.lock().await;
             let collection = store
@@ -1598,7 +1599,19 @@ impl CollectionObject {
                     ));
                 }
                 Some((id, stored, true)) => {
-                    let attributes = keep_internal(&stored, attributes.clone());
+                    let mut attributes = keep_internal(&stored, attributes.clone());
+                    if let Some(shared_with) = &shared_with {
+                        let mut list = stored
+                            .get(ALLOWED)
+                            .map(|list| list.lines().map(str::to_owned).collect::<Vec<_>>())
+                            .unwrap_or_default();
+                        for identity in shared_with.lines() {
+                            if !list.iter().any(|known| known == identity) {
+                                list.push(identity.to_owned());
+                            }
+                        }
+                        attributes.insert(ALLOWED.to_owned(), list.join("\n"));
+                    }
                     store
                         .update_item(&self.name, id, |item| {
                             item.set_label(&label);
@@ -1617,6 +1630,9 @@ impl CollectionObject {
         }
         if let Some(identity) = &caller.identity {
             attributes.insert(CREATOR.to_owned(), identity.clone());
+        }
+        if let Some(shared_with) = shared_with {
+            attributes.insert(ALLOWED.to_owned(), shared_with);
         }
         let id = self
             .daemon

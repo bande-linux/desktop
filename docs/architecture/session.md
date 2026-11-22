@@ -295,7 +295,9 @@ UI.
   password system-wide; Enterprise (802.1X) passwords and private-key passwords set in Settings
   are agent-owned, so they stay in the keyring.
 - Items record the app that saved them (`bande:creator`); another app sees them locked until the
-  user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). Prompts
+  user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). The saving
+  app may name in `bande:allowed` the programs that open its item as their own; nobody else
+  can change who owns it. Prompts
   are `bande-secrets-prompt` processes, so the daemon never links the toolkit; the daemon is not
   dumpable.
 - Calendar and Contacts keep their account passwords under their app ids (`bande_keyring::Passwords`,

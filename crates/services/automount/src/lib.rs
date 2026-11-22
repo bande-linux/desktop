@@ -133,6 +133,22 @@ struct State {
     unlocked: bool,
     waiting: HashSet<OwnedObjectPath>,
     prompts: HashMap<OwnedObjectPath, Prompt>,
+    notices: HashMap<OwnedObjectPath, u32>,
+}
+
+impl State {
+    fn forget_locked(&mut self, session: &Connection, path: &OwnedObjectPath) {
+        self.locked.remove(path);
+        self.waiting.remove(path);
+        if let Some(prompt) = self.prompts.remove(path) {
+            prompt.close();
+        }
+        if let Some(id) = self.notices.remove(path)
+            && let Err(error) = client::close(session, id)
+        {
+            tracing::debug!("cannot withdraw the locked notice: {error}");
+        }
+    }
 }
 
 type Shared = Arc<Mutex<State>>;
@@ -187,16 +203,28 @@ fn ask_to_unlock(
                     }
                 }
                 Unlocked::Cancelled if dismissed => {
-                    let again = (session.clone(), label.clone());
-                    notice::still_locked(&session, &label, move || {
+                    let (again, shared, locked) = (
+                        (session.clone(), label.clone()),
+                        Arc::clone(&state),
+                        path.clone(),
+                    );
+                    let posted = notice::still_locked(&session, &label, move || {
                         let still_locked = {
-                            let state = lock(&state);
+                            let mut state = lock(&state);
+                            state.notices.remove(&path);
                             state.locked.contains_key(&path) && !state.prompts.contains_key(&path)
                         };
                         if still_locked {
                             ask_to_unlock(system, again.0, state, path, again.1);
                         }
                     });
+                    if let Some(id) = posted {
+                        let mut state = lock(&shared);
+                        state.notices.insert(locked.clone(), id);
+                        if !state.locked.contains_key(&locked) {
+                            state.forget_locked(&session, &locked);
+                        }
+                    }
                 }
                 Unlocked::Cancelled => {}
                 Unlocked::NoPrompt => notice::not_unlocked(&session, &label),
@@ -282,12 +310,7 @@ impl Automounter {
                 if interface == ENCRYPTED && keys.iter().any(|key| key == "CleartextDevice") =>
             {
                 if objects.path(path, ENCRYPTED, "CleartextDevice").is_some() {
-                    let mut state = lock(&self.state);
-                    state.locked.remove(path);
-                    state.waiting.remove(path);
-                    if let Some(prompt) = state.prompts.remove(path) {
-                        prompt.close();
-                    }
+                    lock(&self.state).forget_locked(&self.session, path);
                 }
             }
             Change::Changed(..) => {}
@@ -399,10 +422,7 @@ impl Automounter {
                 .iter()
                 .any(|name| name == ENCRYPTED || name == BLOCK)
             {
-                state.locked.remove(path);
-                if let Some(prompt) = state.prompts.remove(path) {
-                    prompt.close();
-                }
+                state.forget_locked(&self.session, path);
             }
             if !interfaces
                 .iter()

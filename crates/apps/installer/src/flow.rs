@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use bande_packages::{Applied, Client, Error, ErrorCode, Info, Mode, Package, Progress};
 use bande_xdg::DesktopEntry;
 
-use crate::deb::{self, Deb, Machine};
+use crate::deb::{self, Blockers, Deb, Machine};
 
 const INSTALLING: [Info; 3] = [Info::Installing, Info::Updating, Info::Downgrading];
 const FRESH_LISTS: u32 = 24 * 60 * 60;
@@ -44,6 +44,14 @@ pub enum Problem {
     Remove,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unrefreshed {
+    Skipped,
+    NoNetwork,
+    NotAllowed,
+    Failed,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     Reading,
@@ -60,7 +68,7 @@ pub enum State {
         missing: Vec<String>,
         conflicts: Vec<String>,
         details: String,
-        stale: bool,
+        unrefreshed: Option<Unrefreshed>,
     },
     Installing(Progress),
     Installed {
@@ -160,11 +168,10 @@ pub fn inspect(
     if deb.needs_x11 && !x11_accepted {
         return State::NeedsX11;
     }
-    let fresh = refresh_old_lists(client, refreshing);
-    preview(client, path, deb, fresh)
+    preview(client, path, deb, refreshing)
 }
 
-fn preview(client: &Client, path: &Path, deb: &Deb, fresh: bool) -> State {
+fn preview(client: &Client, path: &Path, deb: &Deb, refreshing: &dyn Fn(Progress)) -> State {
     let present = match installed(client, deb) {
         Ok(present) => present,
         Err(error) => return failed(&error, Problem::Install),
@@ -177,24 +184,89 @@ fn preview(client: &Client, path: &Path, deb: &Deb, fresh: bool) -> State {
             Ordering::Less => Action::Downgrade(package.version),
         },
     };
+    let simulated = simulate(client, path, deb, &action);
+    let needs_lists = match &simulated {
+        State::Blocked { .. } => true,
+        State::Ready(preview) => !preview.also.is_empty(),
+        _ => false,
+    };
+    if !needs_lists || lists_fresh(client) {
+        return simulated;
+    }
+    refreshing(Progress::default());
+    match client.refresh(false, refreshing) {
+        Ok(()) => simulate(client, path, deb, &action),
+        Err(error) => {
+            tracing::warn!("cannot refresh the package lists: {error}");
+            not_refreshed(simulated, &error)
+        }
+    }
+}
+
+fn simulate(client: &Client, path: &Path, deb: &Deb, action: &Action) -> State {
     match client.install_files(path, Mode::Simulate, &|_| {}) {
         Ok(applied) => State::Ready(Preview {
             signed: match action {
                 Action::Downgrade(_) => None,
                 Action::Install | Action::Upgrade(_) => signed(client, deb),
             },
-            action,
+            action: action.clone(),
             also: others(&applied, &deb.name, &INSTALLING),
             download: download_size(client, &applied, &deb.name),
             removes: others(&applied, &deb.name, &[Info::Removing, Info::Obsoleting]),
         }),
-        Err(Error::Failed(failure)) if failure.code == ErrorCode::Dependencies => State::Blocked {
-            missing: deb::relations(&failure.details, &deb::REQUIRES),
-            conflicts: deb::relations(&failure.details, &deb::CONFLICTS),
-            details: failure.details,
-            stale: !fresh,
-        },
+        Err(Error::Failed(failure)) if failure.code == ErrorCode::Dependencies => {
+            let Blockers { missing, conflicts } = deb::blockers(&failure.details, &deb.name);
+            State::Blocked {
+                missing,
+                conflicts,
+                details: failure.details,
+                unrefreshed: None,
+            }
+        }
         Err(error) => failed(&error, Problem::Install),
+    }
+}
+
+fn not_refreshed(simulated: State, error: &Error) -> State {
+    let State::Blocked {
+        missing,
+        conflicts,
+        details,
+        ..
+    } = simulated
+    else {
+        return simulated;
+    };
+    let (code, reason) = match error {
+        Error::Failed(failure) => (Some(failure.code), failure.details.clone()),
+        other => (None, other.to_string()),
+    };
+    let unrefreshed = match code {
+        Some(ErrorCode::Cancelled) => Unrefreshed::Skipped,
+        Some(ErrorCode::NoNetwork) => Unrefreshed::NoNetwork,
+        Some(ErrorCode::NotAuthorized) => Unrefreshed::NotAllowed,
+        _ => Unrefreshed::Failed,
+    };
+    let details = match unrefreshed {
+        Unrefreshed::Skipped => details,
+        _ => format!("{details}\n\n{reason}"),
+    };
+    State::Blocked {
+        missing,
+        conflicts,
+        details,
+        unrefreshed: Some(unrefreshed),
+    }
+}
+
+fn lists_fresh(client: &Client) -> bool {
+    match client.seconds_since_refresh() {
+        Ok(age) => age < FRESH_LISTS,
+        Err(error) => {
+            tracing::warn!("cannot read when the package lists were refreshed: {error}");
+            false
+        }
     }
 }
 
@@ -253,22 +325,6 @@ fn signed(client: &Client, deb: &Deb) -> Option<Signed> {
                 .to_owned(),
             id: package.id,
         })
-}
-
-fn refresh_old_lists(client: &Client, refreshing: &dyn Fn(Progress)) -> bool {
-    match client.seconds_since_refresh() {
-        Ok(age) if age < FRESH_LISTS => return true,
-        Ok(_) => {}
-        Err(error) => tracing::warn!("cannot read when the package lists were refreshed: {error}"),
-    }
-    refreshing(Progress::default());
-    match client.refresh(false, refreshing) {
-        Ok(()) => true,
-        Err(error) => {
-            tracing::warn!("cannot refresh the package lists: {error}");
-            false
-        }
-    }
 }
 
 pub fn install(

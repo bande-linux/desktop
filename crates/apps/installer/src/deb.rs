@@ -125,22 +125,59 @@ pub fn compare(version: &str, other: &str) -> Ordering {
     }
 }
 
-pub const REQUIRES: [&str; 2] = ["Pre-Depends:", "Depends:"];
-pub const CONFLICTS: [&str; 2] = ["Breaks:", "Conflicts:"];
+const REQUIRES: [&str; 2] = ["Pre-Depends:", "Depends:"];
+const CONFLICTS: [&str; 2] = ["Breaks:", "Conflicts:"];
 
-pub fn relations(details: &str, fields: &[&str]) -> Vec<String> {
-    let mut named: Vec<String> = details
-        .lines()
-        .filter_map(|line| {
-            let (_, after) = fields.iter().find_map(|field| line.split_once(field))?;
-            let (requirement, reason) = after.split_once(" but ").unwrap_or((after, ""));
-            let requirement = requirement.trim();
-            (!requirement.is_empty() && !reason.starts_with("it is not going to be installed"))
-                .then(|| requirement.to_owned())
-        })
-        .collect();
-    named.dedup();
-    named
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Blockers {
+    pub missing: Vec<String>,
+    pub conflicts: Vec<String>,
+}
+
+fn package_name(relation: &str) -> &str {
+    relation.split([' ', '(', ':']).next().unwrap_or(relation)
+}
+
+pub fn blockers(details: &str, own: &str) -> Blockers {
+    let mut blockers = Blockers::default();
+    let mut subject = String::new();
+    for line in details.lines() {
+        let line = match line.split_once(" : ") {
+            Some((name, rest)) if !name.trim().is_empty() && !name.trim().contains(' ') => {
+                subject = name.trim().to_owned();
+                rest
+            }
+            _ => line,
+        };
+        let line = line.trim_start();
+        let Some((conflict, after)) = REQUIRES
+            .iter()
+            .map(|field| (false, field))
+            .chain(CONFLICTS.iter().map(|field| (true, field)))
+            .find_map(|(conflict, field)| Some((conflict, line.strip_prefix(field)?)))
+        else {
+            continue;
+        };
+        let (relation, reason) = after.split_once(" but ").unwrap_or((after, ""));
+        let relation = relation.trim();
+        if relation.is_empty() || reason.starts_with("it is not going to be installed") {
+            continue;
+        }
+        let named = package_name(relation);
+        let theirs = subject != own;
+        let (list, entry) = match conflict {
+            true if theirs && !reason.trim_end().ends_with(" is installed") => {
+                (&mut blockers.conflicts, subject.clone())
+            }
+            true => (&mut blockers.conflicts, named.to_owned()),
+            false if theirs && named == own => (&mut blockers.conflicts, subject.clone()),
+            false => (&mut blockers.missing, relation.to_owned()),
+        };
+        if !list.contains(&entry) {
+            list.push(entry);
+        }
+    }
+    blockers
 }
 
 #[derive(Debug, Clone, PartialEq)]

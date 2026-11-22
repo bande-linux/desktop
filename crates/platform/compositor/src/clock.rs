@@ -680,6 +680,31 @@ mod tests {
     }
 
     #[test]
+    fn an_idle_desktop_draws_nothing_and_asks_to_be_woken_never() -> io::Result<()> {
+        let refresh = Duration::from_secs_f64(1.0 / 60.0);
+        let mut compositor = Compositor::new(smithay::utils::Size::from((640, 480)))?;
+        let mut scheduler = FrameScheduler::new(FrameClock::measured(Duration::ZERO, refresh));
+        let mut output = Counted(0);
+        let mut now = Duration::from_secs(1);
+        while output.0 == 0 {
+            let poll = scheduler.poll(|| now, &mut compositor, &mut output)?;
+            now = poll.wake_at.unwrap_or(now + refresh).max(now);
+        }
+        let vblank = Vblank {
+            sequence: 1,
+            time: now,
+        };
+        scheduler.flipped(vblank, &mut compositor)?;
+        for _ in 0..600 {
+            now += refresh;
+            let poll = scheduler.poll(|| now, &mut compositor, &mut output)?;
+            assert_eq!(poll.wake_at, None, "woken at {now:?}");
+        }
+        assert_eq!(output.0, 1);
+        Ok(())
+    }
+
+    #[test]
     fn the_first_frame_is_drawn_although_timers_wake_late() -> io::Result<()> {
         let refresh = Duration::from_secs_f64(1.0 / 74.99);
         for late in [Duration::from_micros(30), Duration::from_micros(900)] {

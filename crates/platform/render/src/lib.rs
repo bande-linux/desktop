@@ -1233,6 +1233,8 @@ impl VulkanRenderer {
     }
 
     fn prove_modifiers(&mut self) {
+        let started = Instant::now();
+        let mut proved = 0;
         for usage in [formats::SAMPLED, formats::RENDERED] {
             let supported = match usage {
                 formats::SAMPLED => &self.modifiers.sampled,
@@ -1246,6 +1248,7 @@ impl VulkanRenderer {
                 if !capability.exportable {
                     continue;
                 }
+                proved += 1;
                 if let Err(error) = self.round_trip(format, texel, (usage, capability)) {
                     tracing::warn!(
                         "{} reports {:?} with modifier {:?} for {usage:?} but cannot import it \
@@ -1262,6 +1265,11 @@ impl VulkanRenderer {
                 }
             }
         }
+        tracing::info!(
+            "proved {proved} dma-buf formats on {} in {:.1?}",
+            self.info.name,
+            started.elapsed()
+        );
     }
 
     fn round_trip(

@@ -30,6 +30,8 @@ pub const BUS_NAME: &str = "org.freedesktop.Notifications";
 pub const BANDE_BUS_NAME: &str = "org.bande.Notifications";
 pub const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 pub const SPEC_VERSION: &str = "1.2";
+/// The action the server invokes when the body of a notification is clicked.
+pub const DEFAULT_ACTION: &str = "default";
 const APPS_FILE: &str = "notification-apps";
 
 struct State {

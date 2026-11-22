@@ -12,6 +12,10 @@ pub enum ZoneSuggestion {
 const LOCALTIME: &str = "/etc/localtime";
 const ZONEINFO: &str = "zoneinfo/";
 
+pub fn city_name(zone: &str) -> String {
+    zone.rsplit('/').next().unwrap_or(zone).replace('_', " ")
+}
+
 pub fn local_zone() -> TimeZone {
     if std::env::var_os("TZ").is_some() {
         return TimeZone::system();

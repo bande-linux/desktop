@@ -4,8 +4,8 @@ use std::thread;
 
 use bande_l10n::tr;
 use bande_network::{JoinOutcome, Network, NetworkManager, Security};
-use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
+use bande_notify::{DEFAULT_ACTION, Urgency};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
 use zbus::{MatchRule, message};
@@ -14,7 +14,6 @@ const NETWORK_MANAGER: &str = "org.freedesktop.NetworkManager";
 const NETWORK_MANAGER_PATH: &str = "/org/freedesktop/NetworkManager";
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const CONNECTIVITY: &str = "Connectivity";
-const SIGN_IN_ACTION: &str = "default";
 const OFFER_ACTION: &str = "sign-in";
 const NETWORK_ICON: &str = "network-wireless-symbolic";
 
@@ -81,7 +80,7 @@ fn offer_sign_in(network: &NetworkManager, found: &Network) {
                 app_icon: NETWORK_ICON,
                 summary: &summary,
                 body: &tr!("Open networks in hotels, cafés and airports often show a sign-in page before websites open."),
-                actions: &[(OFFER_ACTION, &open)],
+                actions: &[(DEFAULT_ACTION, ""), (OFFER_ACTION, &open)],
                 urgency: Urgency::Normal,
                 sound: None,
                 desktop_entry: None,
@@ -136,7 +135,7 @@ impl Portal {
                 app_icon: NETWORK_ICON,
                 summary: &summary,
                 body: &tr!("This network asks you to sign in before you can use the internet."),
-                actions: &[(SIGN_IN_ACTION, &sign_in)],
+                actions: &[(DEFAULT_ACTION, &sign_in)],
                 urgency: Urgency::Normal,
                 sound: None,
                 desktop_entry: None,
@@ -193,12 +192,14 @@ fn watch_notices(portal: &Portal, signals: MessageIterator, open: &dyn Fn(&str))
                 let Ok((id, key)) = body.deserialize::<(u32, String)>() else {
                     continue;
                 };
-                if key == SIGN_IN_ACTION
+                if key == DEFAULT_ACTION
                     && *lock(&portal.shown) == Some(id)
                     && let Ok(Some(page)) = portal.network.sign_in_page()
                 {
                     open(&page);
-                } else if key == OFFER_ACTION && *lock(&OFFERED) == Some(id) {
+                } else if (key == DEFAULT_ACTION || key == OFFER_ACTION)
+                    && *lock(&OFFERED) == Some(id)
+                {
                     match portal.network.sign_in_probe() {
                         Ok(page) => open(&page),
                         Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),

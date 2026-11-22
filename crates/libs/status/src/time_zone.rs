@@ -1,13 +1,14 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
 use bande_datetime::daylight::ZONE_TAB;
 use bande_datetime::timedate::TimedateProxyBlocking;
-use bande_datetime::{ZoneSuggestion, suggested_zone};
+use bande_datetime::{ZoneSuggestion, city_name, suggested_zone};
 use bande_l10n::tr;
-use bande_notify::Urgency;
 use bande_notify::client::{self, Request, Signal};
+use bande_notify::{DEFAULT_ACTION, Urgency};
 use zbus::blocking::Connection;
 
 const KEPT_FILE: &str = "bande/time-zone-kept";
@@ -24,9 +25,15 @@ struct Offer {
     suggestion: ZoneSuggestion,
 }
 
-type Offered = Arc<Mutex<Option<Offer>>>;
+#[derive(Default)]
+struct Offers {
+    shown: Option<Offer>,
+    dismissed: HashSet<String>,
+}
 
-fn lock(offered: &Offered) -> MutexGuard<'_, Option<Offer>> {
+type Offered = Arc<Mutex<Offers>>;
+
+fn lock(offered: &Offered) -> MutexGuard<'_, Offers> {
     offered.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -56,10 +63,6 @@ fn keep(country: &str) {
     }
 }
 
-fn city(zone: &str) -> String {
-    zone.rsplit('/').next().unwrap_or(zone).replace('_', " ")
-}
-
 fn offer(session: &Connection, offered: &Offered) {
     let country = match bande_network::wifi_country() {
         Ok(Some(country)) => country,
@@ -69,8 +72,14 @@ fn offer(session: &Connection, offered: &Offered) {
             return;
         }
     };
-    let mut shown = lock(offered);
-    if kept(&country) || shown.as_ref().is_some_and(|shown| shown.country == country) {
+    let mut offers = lock(offered);
+    if kept(&country)
+        || offers.dismissed.contains(&country)
+        || offers
+            .shown
+            .as_ref()
+            .is_some_and(|shown| shown.country == country)
+    {
         return;
     }
     let zone_tab = match std::fs::read_to_string(ZONE_TAB) {
@@ -87,7 +96,7 @@ fn offer(session: &Connection, offered: &Offered) {
     };
     let (summary, action) = match &suggestion {
         ZoneSuggestion::Zone(zone) => (
-            tr!("Change the time zone to {city}?", city = city(zone)),
+            tr!("Change the time zone to {city}?", city = city_name(zone)),
             (CHANGE_ACTION, tr!("Change")),
         ),
         ZoneSuggestion::Choose => (
@@ -100,13 +109,17 @@ fn offer(session: &Connection, offered: &Offered) {
         session,
         &Request {
             app_name: &tr!("Date & Time"),
-            replaces_id: shown.as_ref().map_or(0, |shown| shown.id),
+            replaces_id: offers.shown.as_ref().map_or(0, |shown| shown.id),
             app_icon: SETTINGS_APP,
             summary: &summary,
             body: &tr!(
                 "The Wi-Fi networks nearby are in a country where the time differs from this computer’s clock."
             ),
-            actions: &[(action.0, &action.1), (KEEP_ACTION, &keep)],
+            actions: &[
+                (DEFAULT_ACTION, ""),
+                (action.0, &action.1),
+                (KEEP_ACTION, &keep),
+            ],
             urgency: Urgency::Normal,
             sound: None,
             desktop_entry: Some(SETTINGS_APP),
@@ -114,7 +127,7 @@ fn offer(session: &Connection, offered: &Offered) {
     );
     match posted {
         Ok(id) => {
-            *shown = Some(Offer {
+            offers.shown = Some(Offer {
                 id,
                 country,
                 suggestion,
@@ -141,16 +154,19 @@ fn answer(system: &Connection, offered: &Offered, signal: Signal) {
         Signal::Closed(id) => (id, None),
         Signal::ActivationToken(..) => return,
     };
-    let mut shown = lock(offered);
-    if shown.as_ref().is_none_or(|shown| shown.id != id) {
+    let mut offers = lock(offered);
+    if offers.shown.as_ref().is_none_or(|shown| shown.id != id) {
         return;
     }
-    let Some(offer) = shown.take() else {
+    let Some(offer) = offers.shown.take() else {
         return;
     };
     match (action.as_deref(), offer.suggestion) {
+        (None, _) => {
+            offers.dismissed.insert(offer.country);
+        }
         (Some(CHANGE_ACTION), ZoneSuggestion::Zone(zone)) => change_zone(system, zone),
-        (Some(CHOOSE_ACTION), _) => {
+        (Some(CHOOSE_ACTION | DEFAULT_ACTION), _) => {
             let command = [SETTINGS_PROGRAM, TIME_PANE];
             if let Err(error) = bande_xdg::spawn_detached(SETTINGS_APP, &command, None, None) {
                 tracing::warn!("cannot open the time zone settings: {error}");

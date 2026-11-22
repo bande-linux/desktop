@@ -60,10 +60,10 @@ pub enum Support {
 }
 
 impl Support {
-    fn packages(self) -> &'static [&'static str] {
+    fn packages(self) -> Vec<&'static str> {
         match self {
-            Self::Cups => &PRINTING_PACKAGES,
-            Self::Avahi => &AVAHI_PACKAGES,
+            Self::Cups => [PRINTING_PACKAGES.as_slice(), &AVAHI_PACKAGES].concat(),
+            Self::Avahi => AVAHI_PACKAGES.to_vec(),
         }
     }
 }
@@ -97,7 +97,7 @@ fn read(session: &Connection, cups: &Cups, system: &Connection) -> Option<Printe
 }
 
 fn install_printing(system: &Connection, support: Support) -> Result<(), bande_packages::Error> {
-    Client::new(system).install_missing(support.packages())
+    Client::new(system).install_missing(&support.packages())
 }
 
 fn administers_printers() -> bool {
@@ -482,11 +482,19 @@ impl SettingsView {
         let mut install = intent(&self.intents, |()| Intent::InstallPrinting(Support::Cups));
         let mut button = Button::new(&tr!("Install"), move || install(()));
         button.set_enabled(self.installing_printing.is_none());
+        let needs_avahi = self
+            .printers
+            .as_ref()
+            .is_some_and(|state| state.needs_avahi);
         let detail = if self.installing_printing == Some(Support::Cups) {
             tr!("Installing…")
+        } else if needs_avahi {
+            tr!(
+                "The Browser, LibreOffice and other apps print through CUPS, which USB printers and printers that need a driver also use. Installs CUPS and Avahi, which finds printers on the network, from the Debian archive"
+            )
         } else {
             tr!(
-                "Bande’s apps print to network printers by themselves. Other apps, such as the browser or LibreOffice, USB printers and printers that need a driver use the CUPS print system, from the Debian archive"
+                "The Browser, LibreOffice and other apps print through CUPS, which USB printers and printers that need a driver also use. Installs CUPS from the Debian archive"
             )
         };
         self.anchors

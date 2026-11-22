@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use bande_datetime::{DateFormats, Month};
 use bande_l10n::{text, tr};
-use bande_notify::{Notification, Presentation, Stack};
+use bande_notify::{DEFAULT_ACTION, Notification, Presentation, Stack};
 use bande_spring::rubber_band;
 use bande_toolkit::ui::{Animated, Event, Key, Spring, focus_ring_for, past_drag_slop};
 use bande_toolkit::{
@@ -18,7 +18,7 @@ use jiff::civil::Date;
 
 use calendar::{Calendar, Turn};
 use card::CLOSE_REACH;
-pub use card::{Card, DEFAULT_ACTION, Part, Sender, age_label};
+pub use card::{Card, Part, Sender, age_label};
 pub use client::{Notifications, role};
 
 fn until_midnight() -> Option<Duration> {

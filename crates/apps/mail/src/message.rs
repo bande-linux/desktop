@@ -159,6 +159,7 @@ pub struct Content {
     pub html: Option<String>,
     pub attachments: Vec<Attachment>,
     pub inline: Vec<(String, usize)>,
+    pub forwarded: Vec<Content>,
     pub security: Security,
 }
 
@@ -436,9 +437,35 @@ impl Content {
                 {
                     self.inline.push((id, self.attachments.len()));
                 }
+                let nested = (mime == "message/rfc822").then(|| data.clone());
                 self.attachments.push(Attachment { name, mime, data });
+                if let Some(raw) = nested {
+                    self.forward(&raw, depth);
+                }
             }
         }
+    }
+
+    fn forward(&mut self, raw: &[u8], depth: usize) {
+        let Ok(mail) = parse_mail(raw) else {
+            return;
+        };
+        let mut nested = Self {
+            envelope: Envelope::from_headers(&mail.headers),
+            ..Self::default()
+        };
+        nested.walk(&mail, depth + 1);
+        let offset = self.attachments.len();
+        self.inline.extend(
+            nested
+                .inline
+                .drain(..)
+                .map(|(id, index)| (id, index + offset)),
+        );
+        self.attachments.append(&mut nested.attachments);
+        let deeper = std::mem::take(&mut nested.forwarded);
+        self.forwarded.push(nested);
+        self.forwarded.extend(deeper);
     }
 
     pub fn document(&self, prefer_plain: bool) -> Document {

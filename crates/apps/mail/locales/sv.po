@@ -324,6 +324,21 @@ msgstr "Inget meddelande markerat"
 msgid "{count} messages selected"
 msgstr "{count} meddelanden markerade"
 
+msgid "Forwarded Message"
+msgstr "Vidarebefordrat meddelande"
+
+msgid "From: {names}"
+msgstr "Från: {names}"
+
+msgid "To: {names}"
+msgstr "Till: {names}"
+
+msgid "Subject: {subject}"
+msgstr "Ämne: {subject}"
+
+msgid "Date: {date}"
+msgstr "Datum: {date}"
+
 msgid "Decrypting the message…"
 msgstr "Dekrypterar meddelandet…"
 
@@ -368,9 +383,6 @@ msgstr "Signerat med en algoritm som E-post inte godtar som säker, så signatur
 
 msgid "The signature doesn’t match: the message was changed after it was signed, or the signature is forged."
 msgstr "Signaturen stämmer inte: meddelandet ändrades efter att det signerades, eller så är signaturen förfalskad."
-
-msgid "To: {names}"
-msgstr "Till: {names}"
 
 msgid "Cc: {names}"
 msgstr "Kopia: {names}"

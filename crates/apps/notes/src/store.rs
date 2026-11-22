@@ -104,10 +104,15 @@ pub struct Store {
     connection: Connection,
 }
 
-pub fn store_path() -> PathBuf {
+pub fn store_path() -> std::io::Result<PathBuf> {
     bande_xdg::data_home()
-        .unwrap_or_else(|| PathBuf::from(".local/share"))
-        .join("bande-notes/notes.sqlite3")
+        .map(|home| home.join("bande-notes/notes.sqlite3"))
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "there is no folder for the notes: neither XDG_DATA_HOME nor HOME is set",
+            )
+        })
 }
 
 fn stored_from(row: &Row<'_>) -> rusqlite::Result<Stored> {

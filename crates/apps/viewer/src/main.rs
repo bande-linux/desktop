@@ -121,6 +121,9 @@ impl Viewer {
                 "image/tiff",
                 "image/bmp",
                 "image/vnd.microsoft.icon",
+                "image/heif",
+                "image/avif",
+                "image/jxl",
                 "image/svg+xml",
                 "application/pdf",
             ]
@@ -677,6 +680,9 @@ fn main() -> ExitCode {
         .map(|argument| argument.to_string_lossy().into_owned())
         .collect();
     if let Some(code) = bande_thumbnails::serve_worker(&words, &|_, _| None) {
+        return code;
+    }
+    if let Some(code) = bande_content::serve_worker(&words) {
         return code;
     }
     bande_app::run::<Viewer>(&INFO)

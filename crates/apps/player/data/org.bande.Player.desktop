@@ -8,4 +8,4 @@ Icon=org.bande.Player
 Exec=bande-player %U
 StartupNotify=true
 Categories=AudioVideo;Audio;Video;Player;
-MimeType=audio/aac;audio/flac;audio/mp4;audio/mpeg;audio/ogg;audio/opus;audio/vorbis;audio/wav;audio/webm;audio/x-flac;audio/x-m4a;audio/x-matroska;audio/x-mp3;audio/x-opus+ogg;audio/x-vorbis+ogg;audio/x-wav;video/mp4;video/mpeg;video/ogg;video/quicktime;video/webm;video/x-m4v;video/x-matroska;video/x-msvideo;video/mp2t;
+MimeType=audio/aac;audio/flac;audio/mp4;audio/mpeg;audio/ogg;audio/opus;audio/vorbis;audio/wav;audio/webm;audio/x-aiff;audio/x-flac;audio/x-m4a;audio/x-m4b;audio/x-matroska;audio/x-mp3;audio/x-ms-wma;audio/x-opus+ogg;audio/x-vorbis+ogg;audio/x-wav;video/3gpp;video/3gpp2;video/mp4;video/mpeg;video/ogg;video/quicktime;video/webm;video/x-flv;video/x-m4v;video/x-matroska;video/x-ms-wmv;video/x-msvideo;video/mp2t;

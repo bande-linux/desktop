@@ -60,6 +60,11 @@ fn location(exif: &Exif) -> Option<String> {
     ))
 }
 
+pub fn container_facts(bytes: &[u8]) -> Facts {
+    let exif = exif::Reader::new().read_from_container(&mut std::io::Cursor::new(bytes));
+    camera_facts(exif.ok().map(|exif| exif.buf().to_vec()))
+}
+
 pub fn camera_facts(chunk: Option<Vec<u8>>) -> Facts {
     let Some(exif) = chunk.and_then(|chunk| exif::Reader::new().read_raw(chunk).ok()) else {
         return Facts::default();

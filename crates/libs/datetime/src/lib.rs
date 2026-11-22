@@ -23,7 +23,7 @@ use zbus::zvariant::OwnedValue;
 
 pub use minute::{ClockChanges, MinuteTimer};
 pub use month::{Month, Week};
-pub use zone::{ZoneSuggestion, local_zone, now, suggested_zone};
+pub use zone::{ZoneSuggestion, city_name, local_zone, now, suggested_zone};
 
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_TIME", "LANG"];
 const FALLBACK: Locale = locale!("en-US");

@@ -18,6 +18,7 @@ const NL80211: &[u8] = b"nl80211\0";
 const NL80211_CMD_GET_REG: u8 = 31;
 const NL80211_ATTR_WIPHY: u16 = 1;
 const NL80211_ATTR_REG_ALPHA2: u16 = 33;
+const NL80211_ATTR_WIPHY_SELF_MANAGED_REG: u16 = 216;
 
 fn exchange(
     socket: &OwnedFd,
@@ -86,7 +87,8 @@ fn country(code: &[u8]) -> Option<String> {
 }
 
 /// The country the Wi-Fi hardware is set to transmit for, as its two letters, which the kernel or
-/// the firmware takes from the networks nearby. Nothing is sent to the network to find out.
+/// location-aware firmware takes from the networks nearby. A country a driver keeps from the
+/// card's factory settings is ignored. Nothing is sent to the network to find out.
 pub fn wifi_country() -> io::Result<Option<String>> {
     let socket = netlink_socket(Some(netlink::GENERIC), 0)?;
     let families = match exchange(
@@ -114,17 +116,19 @@ pub fn wifi_country() -> io::Result<Option<String>> {
     let mut global = None;
     for body in &domains {
         let mut wiphy = false;
+        let mut self_managed = false;
         let mut code = None;
         for (kind, data) in attributes(body) {
             match kind {
                 NL80211_ATTR_WIPHY => wiphy = true,
+                NL80211_ATTR_WIPHY_SELF_MANAGED_REG => self_managed = true,
                 NL80211_ATTR_REG_ALPHA2 => code = country(data),
                 _ => {}
             }
         }
-        match (wiphy, code) {
-            (true, Some(code)) => return Ok(Some(code)),
-            (false, Some(code)) => global = Some(code),
+        match (wiphy, self_managed, code) {
+            (true, true, Some(code)) => return Ok(Some(code)),
+            (false, _, Some(code)) => global = Some(code),
             _ => {}
         }
     }

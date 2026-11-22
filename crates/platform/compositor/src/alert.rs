@@ -55,6 +55,7 @@ impl Alerts {
     fn announce(&mut self) {
         self.announcer.withdraw();
         if self.alerts.is_empty() {
+            self.announcer = Announcer::default();
             return;
         }
         let (ids, nodes): (Vec<NodeId>, Vec<(NodeId, Node)>) = self

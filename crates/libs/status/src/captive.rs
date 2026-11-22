@@ -30,6 +30,23 @@ fn sign_in_summary(network: Option<&str>) -> String {
     }
 }
 
+fn tell(session: &Connection, summary: &str, body: &str) -> zbus::Result<u32> {
+    client::notify(
+        session,
+        &Request {
+            app_name: &tr!("Network"),
+            replaces_id: 0,
+            app_icon: NETWORK_ICON,
+            summary,
+            body,
+            actions: &[],
+            urgency: Urgency::Normal,
+            sound: None,
+            desktop_entry: None,
+        },
+    )
+}
+
 pub fn join_network(network: &NetworkManager, found: &Network) {
     let reason = match network.join(found, None) {
         Ok(JoinOutcome::Joined) => return offer_sign_in(network, found),
@@ -38,24 +55,39 @@ pub fn join_network(network: &NetworkManager, found: &Network) {
     };
     tracing::warn!("cannot join {}: {reason}", found.name());
     let summary = tr!("Could not join {network}", network = found.name());
-    let posted = Connection::session().and_then(|session| {
-        client::notify(
+    if let Err(error) = Connection::session().and_then(|session| tell(&session, &summary, &reason))
+    {
+        tracing::warn!("cannot tell why joining failed: {error}");
+    }
+}
+
+/// Opens the network's sign-in page, or an address the network redirects to it, and tells the person why when it cannot.
+pub fn sign_in(network: &NetworkManager, activation_token: Option<&str>) {
+    let page = match network.sign_in_page() {
+        Ok(Some(page)) => Ok(page),
+        Ok(None) => network.sign_in_probe(),
+        Err(error) => {
+            tracing::warn!("cannot ask for the sign-in page: {error}");
+            network.sign_in_probe()
+        }
+    };
+    let reason = match page {
+        Ok(page) => match bande_xdg::open(&page, activation_token) {
+            Ok(()) => return,
+            Err(error) => error.to_string(),
+        },
+        Err(error) => error.to_string(),
+    };
+    tracing::warn!("cannot open the sign-in page: {reason}");
+    let told = Connection::session().and_then(|session| {
+        tell(
             &session,
-            &Request {
-                app_name: &tr!("Network"),
-                replaces_id: 0,
-                app_icon: NETWORK_ICON,
-                summary: &summary,
-                body: &reason,
-                actions: &[],
-                urgency: Urgency::Normal,
-                sound: None,
-                desktop_entry: None,
-            },
+            &tr!("The sign-in page could not be opened"),
+            &reason,
         )
     });
-    if let Err(error) = posted {
-        tracing::warn!("cannot tell why joining failed: {error}");
+    if let Err(error) = told {
+        tracing::warn!("cannot tell why the sign-in page did not open: {error}");
     }
 }
 
@@ -183,27 +215,26 @@ fn notice_signals(session: &Connection) -> zbus::Result<MessageIterator> {
     MessageIterator::for_match_rule(rule, session, None)
 }
 
-fn watch_notices(portal: &Portal, signals: MessageIterator, open: &dyn Fn(&str)) {
+fn watch_notices(portal: &Portal, signals: MessageIterator) {
+    let mut token: Option<(u32, String)> = None;
     for signal in signals.flatten() {
         let header = signal.header();
         let body = signal.body();
         match header.member().map(|member| member.as_str()) {
+            Some("ActivationToken") => token = body.deserialize::<(u32, String)>().ok(),
             Some("ActionInvoked") => {
                 let Ok((id, key)) = body.deserialize::<(u32, String)>() else {
                     continue;
                 };
-                if key == DEFAULT_ACTION
-                    && *lock(&portal.shown) == Some(id)
-                    && let Ok(Some(page)) = portal.network.sign_in_page()
-                {
-                    open(&page);
-                } else if (key == DEFAULT_ACTION || key == OFFER_ACTION)
-                    && *lock(&OFFERED) == Some(id)
-                {
-                    match portal.network.sign_in_probe() {
-                        Ok(page) => open(&page),
-                        Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
-                    }
+                let ours = (key == DEFAULT_ACTION && *lock(&portal.shown) == Some(id))
+                    || ((key == DEFAULT_ACTION || key == OFFER_ACTION)
+                        && *lock(&OFFERED) == Some(id));
+                let token = token
+                    .take()
+                    .filter(|(given, _)| *given == id)
+                    .map(|(_, token)| token);
+                if ours {
+                    sign_in(&portal.network, token.as_deref());
                 }
             }
             Some("NotificationClosed") => {
@@ -221,11 +252,7 @@ fn watch_notices(portal: &Portal, signals: MessageIterator, open: &dyn Fn(&str))
     }
 }
 
-pub fn follow_captive_portal(
-    system: &Connection,
-    session: &Connection,
-    open: impl Fn(&str) + Send + 'static,
-) {
+pub fn follow_captive_portal(system: &Connection, session: &Connection) {
     let portal = Arc::new(Portal {
         system: system.clone(),
         network: NetworkManager::new(system),
@@ -235,7 +262,7 @@ pub fn follow_captive_portal(
     match notice_signals(session) {
         Ok(signals) => {
             let notices = Arc::clone(&portal);
-            thread::spawn(move || watch_notices(&notices, signals, &open));
+            thread::spawn(move || watch_notices(&notices, signals));
         }
         Err(error) => tracing::warn!("sign-in notices cannot be clicked: {error}"),
     }
@@ -244,10 +271,4 @@ pub fn follow_captive_portal(
             tracing::warn!("captive portals are not followed: {error}");
         }
     });
-}
-
-pub fn open_page(page: &str) {
-    if let Err(error) = bande_xdg::open(page, None) {
-        tracing::warn!("cannot open the sign-in page: {error}");
-    }
 }

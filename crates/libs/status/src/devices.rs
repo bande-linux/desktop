@@ -364,11 +364,7 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
                 crate::captive::join_network(network, &found);
             }
         }
-        Command::SignIn => match network.sign_in_page() {
-            Ok(Some(page)) => crate::captive::open_page(&page),
-            Ok(None) => {}
-            Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
-        },
+        Command::SignIn => crate::captive::sign_in(network, None),
         Command::Sleep => report("sleep", sleep(system)),
         Command::LockScreen => report("lock the screen", lock_screen(system)),
         command => run_bluetooth(bluez, &command),

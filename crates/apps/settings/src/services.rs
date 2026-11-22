@@ -552,10 +552,7 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     text!("Couldn't forget this network."),
                     network.forget(&ssid),
                 ),
-                NetworkCommand::SignIn => match network.sign_in_probe() {
-                    Ok(page) => bande_status::captive::open_page(&page),
-                    Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
-                },
+                NetworkCommand::SignIn => bande_status::captive::sign_in(&network, None),
                 NetworkCommand::ChangeConnection(pane, path, change) => {
                     report(
                         &updates,

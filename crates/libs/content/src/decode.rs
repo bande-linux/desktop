@@ -54,6 +54,7 @@ pub enum Failure {
     Damaged,
     TooLarge { width: u32, height: u32 },
     FileTooLarge,
+    TimedOut,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

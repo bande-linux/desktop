@@ -173,6 +173,7 @@ fn run(flag: &str, path: &Path) -> Option<Vec<u8>> {
         MOST_PIXELS * 4 + 64,
         WORKER_TIME,
     )
+    .ok()
 }
 
 fn header(out: &[u8]) -> Option<(u64, u64, &[u8])> {

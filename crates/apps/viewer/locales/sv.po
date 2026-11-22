@@ -241,6 +241,9 @@ msgstr "Den här typen av fil kan inte öppnas i Visare."
 msgid "The file is damaged or is not in a format Viewer understands."
 msgstr "Filen är skadad eller har ett format som Visare inte förstår."
 
+msgid "The file took too long to open."
+msgstr "Det tog för lång tid att öppna filen."
+
 msgid "The file is too large to open."
 msgstr "Filen är för stor för att öppnas."
 

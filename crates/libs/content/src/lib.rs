@@ -13,7 +13,7 @@ use std::sync::Arc;
 pub use bande_fs::Contents;
 use bande_fs::{Entry, can_extract, is_hidden};
 
-pub use confined::{decode_confined, run_worker, serve_worker};
+pub use confined::{WorkerFailure, decode_confined, run_worker, serve_worker};
 pub use decode::{
     Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, decode_file,
     open, read_file,

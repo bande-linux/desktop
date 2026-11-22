@@ -64,21 +64,28 @@ pub trait Session {
 }
 
 #[zbus::proxy(
-    interface = "org.freedesktop.UPower",
+    interface = "org.freedesktop.UPower.Device",
     default_service = "org.freedesktop.UPower",
-    default_path = "/org/freedesktop/UPower"
+    default_path = "/org/freedesktop/UPower/devices/DisplayDevice"
 )]
-trait UPower {
+trait PowerSource {
+    #[zbus(property, name = "Type")]
+    fn kind(&self) -> zbus::Result<u32>;
+
     #[zbus(property)]
-    fn on_battery(&self) -> zbus::Result<bool>;
+    fn is_present(&self) -> zbus::Result<bool>;
 }
 
-fn runs_on_battery(system: &Connection) -> bool {
-    UPowerProxyBlocking::builder(system)
+const UPOWER_BATTERY: u32 = 2;
+
+fn has_a_battery(system: &Connection) -> bool {
+    PowerSourceProxyBlocking::builder(system)
         .cache_properties(CacheProperties::No)
         .build()
-        .and_then(|upower| upower.on_battery())
-        .unwrap_or(false)
+        .is_ok_and(|source| {
+            source.is_present().unwrap_or(false)
+                && source.kind().is_ok_and(|kind| kind == UPOWER_BATTERY)
+        })
 }
 
 /// Answers whether a hibernated system would resume: the kernel knows its resume device (from
@@ -108,13 +115,13 @@ fn resumes(cmdline: &str, device: &str) -> bool {
 }
 
 pub fn hibernates_after_sleep(manager: &ManagerProxyBlocking<'_>) -> zbus::Result<bool> {
-    Ok(runs_on_battery(manager.inner().connection())
+    Ok(has_a_battery(manager.inner().connection())
         && manager.can_suspend_then_hibernate()? == "yes"
         && resume_configured())
 }
 
-/// Puts the computer to sleep, hibernating later on battery where it would resume, and answers
-/// whether logind allowed it.
+/// Puts the computer to sleep, hibernating later on a computer with a battery where it would
+/// resume, and answers whether logind allowed it.
 pub fn sleep(manager: &ManagerProxyBlocking<'_>, interactive: bool) -> zbus::Result<bool> {
     if hibernates_after_sleep(manager)? {
         manager.suspend_then_hibernate(interactive)?;

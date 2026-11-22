@@ -66,14 +66,18 @@ graph LR
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
   loses its network, and Settings says so on the sleep row. Sleep never comes before the display turns off; Settings says so on a row
   whose choice is overridden.
-- On battery, every sleep Bande asks for (idle, the menus, the lock screen, the power button, the
-  lid) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes` and the system
-  would resume: the kernel knows a resume device (`/sys/power/resume`, set from `resume=` or the
-  initramfs) and the command line has no `noresume`. Otherwise, and always on power, it is plain
-  `Suspend`. systemd-sleep decides when a sleeping laptop hibernates (`HibernateDelaySec=`, by
-  default from the battery's discharge rate); Bande changes no system configuration. Settings ▸
-  Power says whether sleep can hibernate, or why not ("isn't set up" without a resume device). Nothing in the session wakes a sleeping computer except an alarm
-  or timer the user set in Clock; `mem_sleep` is the kernel's.
+- On a computer with a battery, every sleep Bande asks for (idle, the menus, the lock screen, the
+  power button, the lid), plugged in or not, is logind's `SuspendThenHibernate` when
+  `CanSuspendThenHibernate` is `yes` and the system would resume: the kernel knows a resume device
+  (`/sys/power/resume`, set from `resume=` or the initramfs) and the command line has no
+  `noresume`. Otherwise it is plain `Suspend`. With systemd-sleep's defaults (`HibernateDelaySec=`
+  unset, `HibernateOnACPower=yes`) the computer stays suspended, and wakes at once, for as long as
+  the battery lasts, on the charger overnight included, and hibernates only when the battery,
+  discharging, reaches 5 %, so a laptop unplugged while asleep never runs flat. Where the firmware
+  has no battery alarm (ACPI `_BTP`), systemd-sleep wakes briefly about hourly to read the
+  battery. Bande changes no system configuration. Settings ▸ Power says whether sleep can
+  hibernate, or why not ("isn't set up" without a resume device). Nothing in the session wakes a
+  sleeping computer except an alarm or timer the user set in Clock; `mem_sleep` is the kernel's.
 - **The lid**: closing it locks the session and the computer sleeps at once, unless Settings ▸
   Power keeps it running on power or a display is connected (logind's `Docked`), where it keeps
   running with the built-in panel off. `bande-power` holds logind's `handle-lid-switch` inhibitor

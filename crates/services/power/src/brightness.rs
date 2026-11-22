@@ -7,6 +7,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bande_edid::is_internal_connector;
 use rustix::event::{PollFd, PollFlags, poll};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::{PropertiesChangedIterator, PropertiesProxy};
@@ -20,7 +21,6 @@ use crate::logind::SessionProxyBlocking;
 pub const BUS_NAME: &str = "org.bande.Brightness";
 pub const OBJECT_PATH: &str = "/org/bande/Brightness";
 const I2C_DEVICES: &str = "/dev";
-const INTERNAL_CONNECTORS: [&str; 3] = ["eDP", "LVDS", "DSI"];
 const MONITOR_WRITE_GAP: Duration = Duration::from_millis(250);
 const PROBE_WAITS: [Duration; 4] = [
     Duration::ZERO,
@@ -54,12 +54,6 @@ pub trait Brightness {
     fn displays(&self) -> zbus::Result<Vec<(String, String, f64)>>;
     fn set_level(&self, connector: &str, level: f64) -> zbus::Result<()>;
     fn refresh(&self) -> zbus::Result<()>;
-}
-
-fn is_internal(connector: &str) -> bool {
-    INTERNAL_CONNECTORS
-        .iter()
-        .any(|prefix| connector.starts_with(prefix))
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -239,7 +233,7 @@ impl Shared {
                 mailbox,
             });
         }
-        lights.sort_by_key(|light| !is_internal(&light.connector));
+        lights.sort_by_key(|light| !is_internal_connector(&light.connector));
         let _ = self.changed.send(());
     }
 
@@ -252,7 +246,7 @@ impl Shared {
         let mut lights = lock(&self.lights);
         if let Some(light) = lights
             .iter_mut()
-            .find(|light| is_internal(&light.connector) && light.level.is_some())
+            .find(|light| is_internal_connector(&light.connector) && light.level.is_some())
             && light.level != Some(level)
         {
             light.level = Some(level);
@@ -292,7 +286,7 @@ impl Lamp {
         let internal_backlight = shared
             .backlight
             .clone()
-            .filter(|_| is_internal(&connector) && shared.logind.is_some())
+            .filter(|_| is_internal_connector(&connector) && shared.logind.is_some())
             .and_then(|backlight| backlight_level(&backlight).map(|level| (backlight, level)));
         let (drive, level) = match internal_backlight {
             Some((backlight, level)) => (Drive::Backlight(backlight), level),

@@ -292,8 +292,9 @@ impl Compositor {
         self.state.note_activity();
         match event {
             InputEvent::DeviceAdded { .. } => self.state.input_devices += 1,
-            InputEvent::DeviceRemoved { .. } => {
+            InputEvent::DeviceRemoved { device } => {
                 self.state.input_devices = self.state.input_devices.saturating_sub(1);
+                self.state.touch.forget_device(&device);
             }
             InputEvent::Keyboard { event } => {
                 let pressed = event.state() == KeyState::Pressed;

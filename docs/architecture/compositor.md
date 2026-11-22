@@ -454,8 +454,8 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | implemented |
 | `wp_presentation` | Presentation timing, VSync | implemented |
-| `wp_fifo_v1` | FIFO presentation without frame callbacks (Mesa WSI, SDL, Proton) | implemented: a barrier is lifted when the frame that latched it is presented, a hidden window's at the next presentation of its display |
-| `wp_commit_timing_v1` | Commits that wait for a presentation time | implemented: released at the start of the first frame shown at or after the time; a waiting commit keeps its display's frames coming |
+| `wp_fifo_v1` | FIFO presentation without frame callbacks (Mesa WSI, SDL, Proton) | implemented: a barrier is lifted when the frame that latched it is presented, a hidden window's at the next presentation of its display; a commit waiting on a barrier asks only for a frame of its own display |
+| `wp_commit_timing_v1` | Commits that wait for a presentation time | implemented: released at the start of the first frame shown at or after the time; a waiting commit wakes its display one refresh before the time (at most 5 s ahead, then it waits again) |
 | `wp_content_type_v1` | Game, video or photo content | implemented; game and video in full screen turn on variable refresh |
 | `wp_single_pixel_buffer_v1` | One-colour buffers (backgrounds, letterboxing) | implemented, drawn as a solid fill |
 | `wp_alpha_modifier_v1` | Surface opacity set by the client | implemented |

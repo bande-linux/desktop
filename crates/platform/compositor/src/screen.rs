@@ -3,6 +3,7 @@ use std::time::Duration;
 use smithay::backend::renderer::utils::Buffer;
 use smithay::desktop::layer_map_for_output;
 use smithay::output::{Mode, Output, PhysicalProperties, Scale as OutputScale, Subpixel};
+use smithay::reexports::calloop::RegistrationToken;
 use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::reexports::wayland_server::backend::GlobalId;
 use smithay::utils::{Clock, Logical, Monotonic, Physical, Point, Raw, Rectangle, Size, Transform};
@@ -129,6 +130,7 @@ pub(crate) struct Screen {
     pub(crate) due_callbacks: Vec<DueCallback>,
     pub(crate) latched_releases: Vec<Buffer>,
     pub(crate) latched_barriers: Vec<LatchedBarrier>,
+    pub(crate) timed_wake: Option<RegistrationToken>,
 }
 
 impl Screen {
@@ -170,6 +172,7 @@ impl Screen {
             due_callbacks: Vec::new(),
             latched_releases: Vec::new(),
             latched_barriers: Vec::new(),
+            timed_wake: None,
         };
         screen.apply(settings);
         screen

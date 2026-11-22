@@ -43,6 +43,36 @@ pub const SIDEBAR_WIDTH: f32 = 220.0;
 const MAX_ZONES: usize = 12;
 const UNDO_DEPTH: usize = 50;
 const PRINT_TITLE: f32 = 16.0;
+const PRINT_DAY: f32 = 12.0;
+const PRINT_BODY: f32 = 11.0;
+const PRINT_INDENT: f32 = 12.0;
+
+fn agenda(library: &Library, formats: &DateFormats, found: &[Found]) -> Vec<(String, bool)> {
+    let mut lines = Vec::new();
+    let mut day = None;
+    for one in found {
+        let (start, end) = (&one.occurrence.start, &one.occurrence.end);
+        if day != Some(start.date()) {
+            day = Some(start.date());
+            lines.push((formats.long_date(start), true));
+        }
+        let title = paint::summary(library, one);
+        let title = match library.event(one).map(|event| event.location.trim()) {
+            Some(location) if !location.is_empty() => format!("{title}, {location}"),
+            _ => title,
+        };
+        let line = match one.occurrence.all_day {
+            true => title,
+            false => format!(
+                "{}–{}  {title}",
+                formats.clock_time(start),
+                formats.clock_time(end)
+            ),
+        };
+        lines.push((line, false));
+    }
+    lines
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -490,7 +520,40 @@ impl CalendarView {
         let zone = self.zone.clone();
         let now = self.now.clone();
         let (mode, focus) = (self.mode, self.focus);
-        let hours_scrolled = self.scroll / self.hour_height;
+        let (first, last) = paint::period(mode, focus, first_weekday);
+        let moment = |day: Date| {
+            day.to_zoned(zone.clone())
+                .map_or_else(|_| now.timestamp(), |zoned| zoned.timestamp())
+        };
+        let mut found = library.occurrences(moment(first), moment(last), &zone);
+        found.sort_by(|a, b| a.occurrence.start.cmp(&b.occurrence.start));
+        let (first_hour, last_hour) = found
+            .iter()
+            .filter(|found| !found.occurrence.all_day)
+            .map(|found| {
+                let (start, end) = (&found.occurrence.start, &found.occurrence.end);
+                let to_midnight = end.time() == jiff::civil::Time::midnight()
+                    && start.date().tomorrow().ok() == Some(end.date());
+                match (start.date() == end.date(), to_midnight) {
+                    (true, _) => (
+                        start.hour(),
+                        end.hour() + i8::from(end.minute() > 0 || end.second() > 0),
+                    ),
+                    (false, true) => (start.hour(), 24),
+                    (false, false) => (0, 24),
+                }
+            })
+            .fold(
+                (work_hours.0 as i8, work_hours.1 as i8),
+                |(low, high), (start, end)| (low.min(start), high.max(end)),
+            );
+        let hours_shown =
+            u8::try_from(last_hour - first_hour).map_or(hours_shown, |hours| hours.max(1));
+        let first_hour = f32::from(first_hour);
+        let agenda = match mode {
+            Mode::Year => Vec::new(),
+            _ => agenda(&library, &formats, &found),
+        };
         let layout = move |setup: &bande_app::PageSetup, text: &mut TextSystem| {
             let palette = Palette::for_scheme(bande_toolkit::Scheme::Light);
             let area = setup.content();
@@ -508,7 +571,7 @@ impl CalendarView {
                 (area.height - PRINT_TITLE * 2.0).max(0.0),
             );
             let scroll = paint::time_grid(mode, focus, first_weekday, sheet, 0.0, hours_shown)
-                .map_or(0.0, |grid| hours_scrolled * grid.hour_height);
+                .map_or(0.0, |grid| first_hour * grid.hour_height);
             let model = ViewModel {
                 library: &library,
                 palette,
@@ -541,7 +604,33 @@ impl CalendarView {
             for item in title_items {
                 page.draw(item);
             }
-            vec![page]
+            let width = setup.content().width;
+            let blocks: Vec<bande_app::Block> = agenda
+                .iter()
+                .map(|(line, heading)| {
+                    let style = match heading {
+                        true => TextStyle::new(PRINT_DAY, palette.ink).weight(TextStyle::SEMIBOLD),
+                        false => TextStyle::new(PRINT_BODY, palette.ink),
+                    };
+                    bande_app::Block {
+                        paragraph: text.paragraph(line, style, Some(width), TextAlign::Start),
+                        marker: None,
+                        indent: match heading {
+                            true => 0.0,
+                            false => PRINT_INDENT,
+                        },
+                        space_after: match heading {
+                            true => 2.0,
+                            false => 0.0,
+                        },
+                    }
+                })
+                .collect();
+            let mut pages = vec![page];
+            if !blocks.is_empty() {
+                pages.extend(bande_app::flow(&blocks, setup));
+            }
+            pages
         };
         (title, bande_app::Document::Pages(Box::new(layout)))
     }
@@ -1199,9 +1288,7 @@ impl CalendarView {
             .get(calendar)?
             .objects
             .iter()
-            .position(|stored| {
-                stored.href == href && stored.pending != Some(crate::store::Pending::Delete)
-            })
+            .position(|stored| stored.href == href && stored.pending != Some(Pending::Delete))
     }
 
     pub(crate) fn undo(&mut self) -> bool {

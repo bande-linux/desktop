@@ -1,0 +1,29 @@
+[package]
+name = "bande-mail-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Mail accounts, their setup and the IMAP and SMTP clients shared by Bande's Mail and Notes"
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+bande-discovery.workspace = true
+bande-https.workspace = true
+bande-l10n.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+data-encoding.workspace = true
+jiff.workspace = true
+roxmltree.workspace = true
+rusqlite.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true

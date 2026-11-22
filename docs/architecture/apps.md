@@ -7,7 +7,7 @@ Disks and Archives. The file chooser portal and the keyring prompt are the two p
 are not. `crates/apps/template` is the starting point of a new app (`ci/new-app.sh <dir> <Id>
 "<Name>"`), a real app that is checked and tested with the others and never released. Code that
 several apps share is a library in `crates/libs` (`bande-discovery`: DNS SRV and TXT service
-discovery for account setup; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
+discovery for account setup; `bande-mail-core`: mail accounts, their setup sheet, IMAP and SMTP, shared by Mail and Notes; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
 machines in systemd user units; `bande-keyring`: passwords in the Secret Service).
 `ci/check-apps.sh` checks that every app is built and packaged this way. A crate's own
 `README.md` describes an app where it needs more than its metainfo (Mail, Calendar, Clock,

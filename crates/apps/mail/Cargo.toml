@@ -16,7 +16,6 @@ bande-app-settings.workspace = true
 bande-datetime.workspace = true
 bande-discovery.workspace = true
 bande-fs.workspace = true
-bande-https.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-notify.workspace = true
@@ -29,13 +28,11 @@ html5ever.workspace = true
 image.workspace = true
 jiff.workspace = true
 mailparse.workspace = true
-roxmltree.workspace = true
 rusqlite.workspace = true
-rustls.workspace = true
-rustls-platform-verifier.workspace = true
 tracing.workspace = true
 zbus.workspace = true
 bande-keyring.workspace = true
+bande-mail-core.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]

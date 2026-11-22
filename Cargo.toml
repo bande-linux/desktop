@@ -146,6 +146,7 @@ bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
 bande-lookup = { path = "crates/apps/lookup" }
+bande-mail-core = { path = "crates/libs/mail-core" }
 bande-media = { path = "crates/libs/media" }
 bande-media-view = { path = "crates/libs/media-view" }
 bande-network = { path = "crates/libs/network" }

@@ -4,10 +4,12 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::history::{Contents, History, summary};
+use crate::history::{Contents, History, summary, text_of};
 
 pub const BUS_NAME: &str = "org.bande.Clipboard";
 pub const OBJECT_PATH: &str = "/org/bande/Clipboard";
+pub const INTERFACE: &str = "org.bande.Clipboard";
+const TEXT_MIMES: [&str; 3] = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"];
 
 pub type Shared = Arc<Mutex<History>>;
 pub type Item = (u64, u64, String, Vec<String>);
@@ -70,6 +72,32 @@ impl ClipboardHistory {
         let contents = lock(&self.history)
             .promote(id, now())
             .ok_or_else(|| zbus::fdo::Error::InvalidArgs(format!("no item {id}")))?;
+        self.paste
+            .send(contents)
+            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+        self.wake
+            .write_all(&[1])
+            .map_err(|error| zbus::fdo::Error::IOError(error.to_string()))
+    }
+
+    fn text(&self) -> String {
+        lock(&self.history)
+            .entries()
+            .first()
+            .and_then(|entry| text_of(&entry.contents))
+            .unwrap_or_default()
+    }
+
+    fn copy_text(&mut self, text: String) -> zbus::fdo::Result<()> {
+        let contents: Contents = TEXT_MIMES
+            .iter()
+            .map(|mime| ((*mime).to_owned(), text.as_bytes().to_vec()))
+            .collect();
+        if !lock(&self.history).record(contents.clone(), now()) {
+            return Err(zbus::fdo::Error::InvalidArgs(
+                "the text cannot be copied".into(),
+            ));
+        }
         self.paste
             .send(contents)
             .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;

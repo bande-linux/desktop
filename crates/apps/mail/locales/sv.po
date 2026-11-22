@@ -810,6 +810,9 @@ msgstr "Kopiera länk"
 msgid "Copy Address"
 msgstr "Kopiera adress"
 
+msgid "Add to Contacts"
+msgstr "Lägg till i Kontakter"
+
 msgid "Open Attachment"
 msgstr "Öppna bilaga"
 

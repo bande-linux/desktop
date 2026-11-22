@@ -72,7 +72,9 @@ apt install bande-mail
   on the server), Mark as Read or Unread, Send
   (Ctrl+Enter), Close Window (Ctrl+W), Quit (Ctrl+Q) and Search (Ctrl+F), which finds messages
   with every word in their sender, recipients, subject or text; `from:`, `to:` and `subject:`
-  keep a word to that field, and quotes keep words together. View sorts the list by date, sender, subject, size or unread first,
+  keep a word to that field, and quotes keep words together. Words of three or more characters are
+  looked up in an SQLite FTS5 trigram index, so a search stays fast in a large mailbox; the list
+  shows the first 500 messages and loads more as you scroll. View sorts the list by date, sender, subject, size or unread first,
   either way. Mailbox ▸ Mark All as Read marks the shown mailbox read, and Message ▸ Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
   (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then

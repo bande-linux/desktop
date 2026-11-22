@@ -8,6 +8,7 @@ use crate::error::Result;
 use crate::imap::{Fetched, Flag, Flags, Folder, Role};
 use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::{Security, Server};
+use crate::settings::SortBy;
 
 pub type AccountId = i64;
 pub type MailboxId = i64;
@@ -68,6 +69,26 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS messages_by_date ON messages (mailbox, date DESC);
 CREATE INDEX IF NOT EXISTS messages_by_thread ON messages (thread);
+CREATE VIRTUAL TABLE IF NOT EXISTS message_words USING fts5 (
+    subject, sender_name, sender_email, recipients, text,
+    content = 'messages', content_rowid = 'id', tokenize = 'trigram', detail = 'none',
+    columnsize = 0
+);
+CREATE TRIGGER IF NOT EXISTS words_added AFTER INSERT ON messages BEGIN
+    INSERT INTO message_words (rowid, subject, sender_name, sender_email, recipients, text)
+    VALUES (new.id, new.subject, new.sender_name, new.sender_email, new.recipients, new.text);
+END;
+CREATE TRIGGER IF NOT EXISTS words_removed AFTER DELETE ON messages BEGIN
+    INSERT INTO message_words (message_words, rowid, subject, sender_name, sender_email, recipients, text)
+    VALUES ('delete', old.id, old.subject, old.sender_name, old.sender_email, old.recipients, old.text);
+END;
+CREATE TRIGGER IF NOT EXISTS words_changed
+AFTER UPDATE OF subject, sender_name, sender_email, recipients, text ON messages BEGIN
+    INSERT INTO message_words (message_words, rowid, subject, sender_name, sender_email, recipients, text)
+    VALUES ('delete', old.id, old.subject, old.sender_name, old.sender_email, old.recipients, old.text);
+    INSERT INTO message_words (rowid, subject, sender_name, sender_email, recipients, text)
+    VALUES (new.id, new.subject, new.sender_name, new.sender_email, new.recipients, new.text);
+END;
 CREATE TABLE IF NOT EXISTS search_outbox (
     change_id INTEGER PRIMARY KEY AUTOINCREMENT,
     message INTEGER NOT NULL
@@ -211,6 +232,14 @@ impl RuleField {
             Self::From => "from",
             Self::To => "to",
             Self::Subject => "subject",
+        }
+    }
+
+    fn words(self) -> &'static [&'static str] {
+        match self {
+            Self::From => &["sender_name", "sender_email"],
+            Self::To => &["recipients"],
+            Self::Subject => &["subject"],
         }
     }
 
@@ -403,6 +432,66 @@ fn search_terms(search: &str) -> Vec<(Option<RuleField>, String)> {
     terms
 }
 
+const WORDS: [&str; 5] = [
+    "subject",
+    "sender_name",
+    "sender_email",
+    "recipients",
+    "text",
+];
+const INDEXED_LENGTH: usize = 3;
+
+fn indexed(term: &str) -> bool {
+    term.trim().chars().count() >= INDEXED_LENGTH && !term.contains(['%', '_'])
+}
+
+fn term_filter(field: Option<RuleField>, term: &str, slot: usize) -> String {
+    if indexed(term) {
+        let columns = field.map_or(&WORDS[..], RuleField::words);
+        let any = columns
+            .iter()
+            .map(|column| format!("{column} LIKE ?{slot}"))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        return format!(" AND m.id IN (SELECT rowid FROM message_words WHERE {any})");
+    }
+    match field {
+        Some(field) => format!(" AND {}", field.columns(slot)),
+        None => format!(
+            " AND (m.subject LIKE ?{slot} ESCAPE '\\' \
+             OR m.sender_name LIKE ?{slot} ESCAPE '\\' \
+             OR m.sender_email LIKE ?{slot} ESCAPE '\\' \
+             OR m.recipients LIKE ?{slot} ESCAPE '\\' \
+             OR m.text LIKE ?{slot} ESCAPE '\\')"
+        ),
+    }
+}
+
+fn term_pattern(term: &str) -> String {
+    match indexed(term) {
+        true => format!("%{}%", term.trim()),
+        false => like_pattern(term),
+    }
+}
+
+fn order_by(sort: SortBy, ascending: bool) -> String {
+    let (first, second) = match ascending {
+        true => ("ASC", "DESC"),
+        false => ("DESC", "ASC"),
+    };
+    let key = match sort {
+        SortBy::Date => String::new(),
+        SortBy::From => format!(
+            "lower(CASE WHEN trim(m.sender_name) = '' THEN m.sender_email \
+             ELSE m.sender_name END) {second}, "
+        ),
+        SortBy::Subject => format!("lower(m.subject) {second}, "),
+        SortBy::Size => format!("m.size {first}, "),
+        SortBy::Unread => format!("m.seen {second}, "),
+    };
+    format!("{key}m.date {first}, m.id {first}")
+}
+
 fn like_pattern(search: &str) -> String {
     let escaped = search
         .trim()
@@ -486,7 +575,21 @@ impl Store {
         let connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(10))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
+        let indexed = connection
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE name = 'message_words'",
+                [],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
         connection.execute_batch(SCHEMA)?;
+        if !indexed {
+            connection.execute(
+                "INSERT INTO message_words (message_words) VALUES ('rebuild')",
+                [],
+            )?;
+        }
         Ok(Self { connection })
     }
 
@@ -834,35 +937,38 @@ impl Store {
     }
 
     pub fn summaries(&self, scope: &Scope, search: &str) -> Result<Vec<Summary>> {
+        self.listing(scope, search, SortBy::Date, false, usize::MAX)
+    }
+
+    pub fn listing(
+        &self,
+        scope: &Scope,
+        search: &str,
+        sort: SortBy,
+        ascending: bool,
+        limit: usize,
+    ) -> Result<Vec<Summary>> {
         let (filter, scope_value) = scope_filter(scope);
         let terms = search_terms(search);
         let search_filter = terms
             .iter()
             .enumerate()
-            .map(|(index, (field, _))| {
-                let slot = index + 2;
-                match field {
-                    Some(field) => format!(" AND {}", field.columns(slot)),
-                    None => format!(
-                        " AND (m.subject LIKE ?{slot} ESCAPE '\\' \
-                         OR m.sender_name LIKE ?{slot} ESCAPE '\\' \
-                         OR m.sender_email LIKE ?{slot} ESCAPE '\\' \
-                         OR m.recipients LIKE ?{slot} ESCAPE '\\' \
-                         OR m.text LIKE ?{slot} ESCAPE '\\')"
-                    ),
-                }
-            })
+            .map(|(index, (field, term))| term_filter(*field, term, index + 3))
             .collect::<String>();
+        let order = order_by(sort, ascending);
         let query = format!(
             "SELECT {SUMMARY_COLUMNS} FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
-             WHERE {filter} AND m.deleted = 0{search_filter}{ENABLED} ORDER BY m.date DESC, m.id DESC"
+             WHERE {filter} AND m.deleted = 0{search_filter}{ENABLED} ORDER BY {order} LIMIT ?2"
         );
         let mut statement = self.connection.prepare(&query)?;
-        let mut values: Vec<Box<dyn rusqlite::ToSql>> = vec![scope_value];
+        let mut values: Vec<Box<dyn rusqlite::ToSql>> = vec![
+            scope_value,
+            Box::new(i64::try_from(limit).unwrap_or(i64::MAX)),
+        ];
         values.extend(
             terms
                 .iter()
-                .map(|(_, term)| Box::new(like_pattern(term)) as Box<dyn rusqlite::ToSql>),
+                .map(|(_, term)| Box::new(term_pattern(term)) as Box<dyn rusqlite::ToSql>),
         );
         let summaries = statement
             .query_map(params_from_iter(values.iter()), summary_from)?

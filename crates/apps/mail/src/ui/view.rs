@@ -72,6 +72,8 @@ const FLAG_COLORS: [Text; 7] = [
 ];
 const MAX_PICTURE_BYTES: usize = 10 << 20;
 const CORRESPONDENTS_READ: usize = 5000;
+const LIST_PAGE: usize = 500;
+const LIST_AHEAD: f32 = 2000.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -206,6 +208,8 @@ pub struct MailView {
     pub(crate) sidebar: Vec<Row>,
     pub(crate) place: Place,
     pub(crate) messages: Vec<Summary>,
+    listed: usize,
+    listed_all: bool,
     pub(crate) selected: Option<MessageId>,
     pub(crate) also: Vec<MessageId>,
     pub(crate) thread: Option<Thread>,
@@ -269,6 +273,8 @@ impl MailView {
             sidebar: Vec::new(),
             place: Place::All(Role::Inbox),
             messages: Vec::new(),
+            listed: LIST_PAGE,
+            listed_all: true,
             selected: None,
             also: Vec::new(),
             thread: None,
@@ -653,21 +659,18 @@ impl MailView {
         if !exists {
             self.place = Place::All(Role::Inbox);
         }
-        let mut all = self
+        let all = self
             .store
-            .summaries(&self.place.scope(), &self.search)
+            .listing(
+                &self.place.scope(),
+                &self.search,
+                self.settings.sort,
+                self.settings.ascending,
+                self.listed,
+            )
             .inspect_err(|error| tracing::warn!("cannot list the messages: {error}"))
             .unwrap_or_default();
-        match self.settings.sort {
-            SortBy::Date => {}
-            SortBy::From => all.sort_by_cached_key(|summary| summary.sender.shown().to_lowercase()),
-            SortBy::Subject => all.sort_by_cached_key(|summary| summary.subject.to_lowercase()),
-            SortBy::Size => all.sort_by_key(|summary| std::cmp::Reverse(summary.size)),
-            SortBy::Unread => all.sort_by_key(|summary| summary.flags.seen),
-        }
-        if self.settings.ascending {
-            all.reverse();
-        }
+        self.listed_all = all.len() < self.listed;
         self.messages = match self.settings.conversations {
             true => self.conversations.group(all),
             false => {
@@ -759,6 +762,7 @@ impl MailView {
             return;
         }
         self.place = place;
+        self.listed = LIST_PAGE;
         self.selected = None;
         self.also.clear();
         self.thread = None;
@@ -769,6 +773,7 @@ impl MailView {
 
     pub fn search_for(&mut self, text: &str) {
         self.search = text.to_owned();
+        self.listed = LIST_PAGE;
         self.scrolls[1] = ScrollState::default();
         self.reload();
     }
@@ -1088,6 +1093,7 @@ impl MailView {
         let unread = self
             .store
             .summaries(&self.place.scope(), "")
+            .inspect_err(|error| tracing::warn!("cannot list the messages: {error}"))
             .unwrap_or_default()
             .into_iter()
             .filter(|summary| !summary.flags.seen)
@@ -2460,7 +2466,20 @@ impl MailView {
     pub fn handle(&mut self, event: &Event) -> bool {
         let handled = self.route(event);
         self.after_ui();
+        self.list_more();
         handled
+    }
+
+    fn list_more(&mut self) {
+        let scroll = &self.scrolls[1];
+        if self.listed_all
+            || scroll.limit() <= 0.0
+            || scroll.offset(self.ui.context()) < scroll.limit() - LIST_AHEAD
+        {
+            return;
+        }
+        self.listed += LIST_PAGE;
+        self.reload();
     }
 
     fn route(&mut self, event: &Event) -> bool {

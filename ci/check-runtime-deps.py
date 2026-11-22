@@ -20,7 +20,7 @@ def referenced(crate_root):
     found = {}
     for source in sorted((crate_root / "src").rglob("*.rs")):
         relative = source.relative_to(ROOT)
-        if SKIPPED & set(relative.parts):
+        if SKIPPED & {*relative.parts, relative.stem}:
             continue
         text = TEST_MODULE.split(source.read_text(encoding="utf-8"))[0]
         constants = dict(CONSTANT.findall(text))

@@ -1,0 +1,34 @@
+[package]
+name = "bande-notes"
+description = "notes for the Bande desktop, kept in an IMAP account or on this computer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+accesskit.workspace = true
+bande-app.workspace = true
+bande-app-menu.workspace = true
+bande-discovery.workspace = true
+bande-fs.workspace = true
+bande-inbox.workspace = true
+bande-keyring.workspace = true
+bande-l10n.workspace = true
+bande-mail-core.workspace = true
+bande-rich-text.workspace = true
+bande-toolkit.workspace = true
+bande-xdg.workspace = true
+jiff.workspace = true
+mailparse.workspace = true
+rusqlite.workspace = true
+tracing.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+bande-mail-core = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

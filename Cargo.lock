@@ -1289,6 +1289,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-notes"
+version = "0.2.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-discovery",
+ "bande-fs",
+ "bande-inbox",
+ "bande-keyring",
+ "bande-l10n",
+ "bande-mail-core",
+ "bande-rich-text",
+ "bande-toolkit",
+ "bande-xdg",
+ "jiff",
+ "mailparse",
+ "rusqlite",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
 name = "bande-notifications"
 version = "0.2.0"
 dependencies = [

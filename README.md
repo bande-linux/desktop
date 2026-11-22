@@ -17,7 +17,7 @@ One Cargo workspace with the desktop and its apps, grouped by role in `crates/`
 | `shell/` | `bande-shell` (desktop, Taskbar, notifications, Quick Settings, launcher in one process), screenshots, lock screen, greeter |
 | `apps/` | the apps (below), the template a new app starts from, the portal's file chooser and the keyring prompt |
 | `services/` | config (`config.kdl` over D-Bus), notifications, power, sound, clipboard, tray, automount, backups, search index, printing, spell checking, fault reports and crash collection, portal backend, polkit agent, keyring (Secret Service and its PAM module) |
-| `libs/` | shared logic, including `bande-app`, the framework every app is built on, and what apps share (`bande-keyring`, `bande-discovery`, `bande-mail-core`, `bande-terminal-view`, `bande-vm`) |
+| `libs/` | shared logic, including `bande-app`, the framework every app is built on, and what apps share (`bande-keyring`, `bande-discovery`, `bande-mail-core`, `bande-rich-text`, `bande-terminal-view`, `bande-vm`) |
 | `testing/` | the test bus, a Wayland test client, benchmarks, a sample app and the review recorder |
 
 `debian/` builds every package, the apps' included, as the one Debian source package
@@ -38,6 +38,7 @@ Each app is `crates/apps/<name>`, packaged as `bande-<name>`:
 | Package Installer | `bande-installer` (opens `.deb` files) |
 | System Monitor | `bande-monitor` |
 | Mail | `bande-mail` (IMAP and SMTP) |
+| Notes | `bande-notes` (on this computer or in an IMAP account's Notes folder) |
 | Calendar | `bande-calendar` (CalDAV and iCalendar files) |
 | Velox | `bande-velox` (containers of Docker Engine or Podman, and QEMU virtual machines) |
 | Calculator | `bande-calculator` (Basic, Scientific and Programmer, paper tape, RPN) |

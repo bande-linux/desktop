@@ -1,5 +1,6 @@
 use bande_media::{FailureKind, MediaInfo, Track};
 use gstreamer as gst;
+use gstreamer_tag::language_codes::language_name;
 
 const MISSING_PLUGIN: &str = "missing-plugin";
 
@@ -17,6 +18,7 @@ fn track(stream: &gst::Stream) -> Option<Track> {
                 tags.get::<gst::tags::LanguageCode>()
                     .map(|t| t.get().to_owned()),
             )
+            .map(|code| language_name(&code).map_or(code, |name| name.to_string()))
         }),
     })
 }

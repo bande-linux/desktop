@@ -36,6 +36,7 @@ fontique = { version = "0.12.0", features = ["fontconfig-dlopen"] }
 futures-lite = "2.6.1"
 gstreamer = "0.25.4"
 gstreamer-app = "0.25.2"
+gstreamer-tag = "0.25.2"
 gstreamer-video = "0.25.4"
 hayro = "0.8.0"
 html5ever = "0.40"

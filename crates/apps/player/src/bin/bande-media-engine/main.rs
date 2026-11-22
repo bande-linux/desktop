@@ -337,6 +337,8 @@ impl Engine {
 }
 
 fn run(channel: Arc<Channel>) -> Result<(), Box<dyn std::error::Error>> {
+    // SAFETY: called before GStreamer starts any thread, so no other thread reads the locale.
+    unsafe { libc::setlocale(libc::LC_MESSAGES, c"".as_ptr()) };
     gst::init()?;
     let engine = Engine::new(Arc::clone(&channel))?;
     let reporter = engine.clone();

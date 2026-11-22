@@ -824,6 +824,15 @@ Files: vendor/gstreamer-sys-0.25.4/*
 Copyright: Sebastian Dröge <sebastian@centricular.com>
 License: MIT
 
+Files: vendor/gstreamer-tag-0.25.2/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+ Marc Wiblishauser <marcbull@mwcloud.eu>
+License: MIT or Apache-2.0
+
+Files: vendor/gstreamer-tag-sys-0.25.4/*
+Copyright: Sebastian Dröge <sebastian@centricular.com>
+License: MIT
+
 Files: vendor/gstreamer-video-0.25.4/*
 Copyright: Sebastian Dröge <sebastian@centricular.com>
 License: MIT or Apache-2.0

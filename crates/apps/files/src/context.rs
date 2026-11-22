@@ -119,6 +119,7 @@ impl FilesView {
                 load_saved_servers(bande_xdg::state_home().as_deref())
                     .iter()
                     .any(|server| server.url == url),
+                self.chosen_screen().is_some(),
             );
         }
         let selection = self.browser.selection();
@@ -314,6 +315,7 @@ impl FilesView {
                 Destination::Recents => Location::Recents,
             }),
             Command::ConnectToServer => self.ask_connect(),
+            Command::ShareScreen => self.share_screen(),
             Command::ForgetServer => {
                 if let Some(url) = self.browser.chosen_server().and_then(Entry::server_address) {
                     self.requests.push(Request::ForgetServer(url.to_owned()));

@@ -314,6 +314,7 @@ pub struct FilesView {
     pub(crate) next_refresh: Option<Instant>,
     pub(crate) window_active: bool,
     pub(crate) network: Vec<Entry>,
+    pub(crate) screens: Vec<(String, String)>,
     pub(crate) unresponsive: Vec<PathBuf>,
     pub(crate) sheet_primary: Option<WidgetId>,
     pub(crate) favourites: Vec<Row>,
@@ -483,6 +484,7 @@ impl FilesView {
             next_refresh: None,
             window_active: true,
             network: Vec::new(),
+            screens: Vec::new(),
             unresponsive: Vec::new(),
             sheet_primary: None,
             favourites: Vec::new(),
@@ -563,10 +565,16 @@ impl FilesView {
     }
 
     pub fn set_nearby(&mut self, seen: ServersSeen) {
+        self.screens = seen
+            .nearby
+            .iter()
+            .filter(|(_, _, screen)| !screen.is_empty())
+            .map(|(_, url, screen)| (url.clone(), screen.clone()))
+            .collect();
         self.network = seen
             .nearby
             .into_iter()
-            .map(|(name, url)| Entry::server(name, url))
+            .map(|(name, url, _)| Entry::server(name, url))
             .collect();
         self.browser.set_network(self.network.clone());
         self.unresponsive = seen.unresponsive;

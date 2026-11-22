@@ -74,7 +74,7 @@ pub(crate) struct DiscoveryBar {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServersSeen {
-    pub nearby: Vec<(String, String)>,
+    pub nearby: Vec<(String, String, String)>,
     pub unresponsive: Vec<PathBuf>,
     pub discovery: Discovery,
 }
@@ -390,6 +390,22 @@ impl FilesView {
             .button(&tr!("Connect"), "connect", Kind::Primary);
         let cancel = prompt.cancel_button();
         self.show_sheet(prompt, Sheet::ConnectServer { request, saved }, cancel);
+    }
+
+    pub(crate) fn chosen_screen(&self) -> Option<(String, String)> {
+        let server = self.browser.chosen_server()?;
+        let url = server.server_address()?;
+        self.screens
+            .iter()
+            .find(|(files, _)| files == url)
+            .map(|(_, screen)| (screen.clone(), server.name.clone()))
+    }
+
+    pub(crate) fn share_screen(&mut self) {
+        match self.chosen_screen() {
+            Some((screen, name)) => self.connect_to(screen, name),
+            None => self.show_notice(tr!("Select a computer that shares its screen.")),
+        }
     }
 
     pub(crate) fn connect_to(&mut self, url: String, name: String) {

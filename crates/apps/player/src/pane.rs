@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -100,6 +101,7 @@ pub struct Pane {
     choices: Choices,
     queue_shown: bool,
     queue: Vec<PathBuf>,
+    added_subtitles: HashMap<PathBuf, PathBuf>,
     at: usize,
     looping: bool,
     remembered: Option<Playback>,
@@ -135,6 +137,7 @@ impl Pane {
             choices,
             queue_shown: false,
             queue,
+            added_subtitles: HashMap::new(),
             at: 0,
             looping: false,
             remembered: None,
@@ -299,10 +302,11 @@ impl Pane {
             return;
         };
         let start_ms = self.positions.borrow().start(&path);
+        let subtitles = self.added_subtitles.get(&path).cloned();
         self.open(
             Opening {
                 path,
-                subtitles: None,
+                subtitles,
                 start_ms,
             },
             true,
@@ -328,6 +332,7 @@ impl Pane {
         let start_ms = self.session().map_or(0, |session| {
             session.position(Instant::now()).as_millis() as u64
         });
+        self.added_subtitles.insert(path.clone(), subtitles.clone());
         self.open(
             Opening {
                 path,

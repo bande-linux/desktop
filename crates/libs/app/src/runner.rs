@@ -1,15 +1,18 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io;
 use std::os::fd::BorrowedFd;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
 use bande_app_menu::{AppMenu, KEY_ACTION, Standard, shortcut_action};
-use bande_toolkit::ui::{Event, parse_shortcut, shortcut_pressed};
+use bande_l10n::tr;
+use bande_toolkit::ui::{Alert, Context, Event, Key, Size, Ui, parse_shortcut, shortcut_pressed};
 use bande_toolkit::{
-    AppConnection, AppRequest, Rect, Scene, Surfaces, Window, WindowError, WindowEvent,
+    App, AppConnection, AppRequest, Appearance, Rect, Role, Scene, Surfaces, TextSystem, Window,
+    WindowError, WindowEvent,
 };
 use bande_xdg::InstallWatch;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
@@ -86,7 +89,10 @@ pub(crate) fn run<P: Program>(
         link.keep_running();
     }
     let mut cx = Cx::new(info, link, session, background, resume);
-    let mut program = P::start(&mut cx, arguments)?;
+    let mut program = match P::start(&mut cx, arguments) {
+        Ok(program) => program,
+        Err(error) => return tell_start_failure(info, &cx.link, error),
+    };
     let prompted = !background && !windowless && reopen_saved_windows(&mut program, &mut cx);
     if plain_launch && !prompted && !cx.resume.has_main_window() {
         program.reopen(&mut cx);
@@ -116,6 +122,81 @@ pub(crate) fn run<P: Program>(
         sources: RefCell::new(Vec::new()),
     };
     runner.run()
+}
+
+struct StartFailure {
+    ui: Ui,
+    dismissed: Rc<Cell<bool>>,
+}
+
+impl App for StartFailure {
+    fn scene(&mut self, window: &mut Window) -> Scene {
+        let (width, height) = window.size();
+        self.ui.scene(width, height)
+    }
+
+    fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        if let WindowEvent::Input(Event::Key {
+            key: Key::Escape, ..
+        }) = event
+        {
+            self.dismissed.set(true);
+        }
+        match window.drive(&mut self.ui, event) {
+            Ok(_) => window.request_redraw(),
+            Err(error) => tracing::warn!("{error}"),
+        }
+        if self.dismissed.get() {
+            window.close();
+        }
+    }
+
+    fn deadline(&self) -> Option<Instant> {
+        self.ui.deadline()
+    }
+
+    fn tick(&mut self, window: &mut Window, _now: Instant) {
+        window.request_redraw();
+    }
+
+    fn animating(&self) -> bool {
+        self.ui.is_animating()
+    }
+
+    fn accessibility(&self) -> Option<TreeUpdate> {
+        Some(self.ui.accessibility())
+    }
+}
+
+fn tell_start_failure(info: &Info, link: &AppConnection, error: Error) -> Result<(), Error> {
+    let app = (info.name)();
+    let title = tr!("{app} could not be opened", app = app);
+    let dismissed = Rc::new(Cell::new(false));
+    let answered = Rc::clone(&dismissed);
+    let alert = Alert::new(&title, &error.to_string(), move |_| answered.set(true))
+        .primary(&tr!("OK"), "ok");
+    let mut ui = Ui::new(
+        Box::new(alert),
+        Context::new(TextSystem::new(), Appearance::default().palette()),
+    );
+    let fitted = ui.measure(Size::new(f32::INFINITY, f32::INFINITY));
+    let size = (fitted.width.ceil() as u32, fitted.height.ceil() as u32);
+    let shown = link
+        .open(Role::dialog(&title, info.id), size)
+        .and_then(|mut window| {
+            ui.set_appearance(window.appearance());
+            bande_toolkit::run(&mut window, &mut StartFailure { ui, dismissed })
+        });
+    match shown {
+        Ok(()) => {
+            tracing::error!("{error}");
+            Ok(())
+        }
+        Err(shown) => {
+            tracing::warn!("cannot show why the app could not open: {shown}");
+            Err(error)
+        }
+    }
 }
 
 fn reopen_saved_windows<P: Program>(program: &mut P, cx: &mut Cx<P>) -> bool {

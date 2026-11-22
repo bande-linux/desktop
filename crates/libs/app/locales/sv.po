@@ -18,3 +18,9 @@ msgstr "Öppna igen"
 
 msgid "Don't Reopen"
 msgstr "Öppna inte igen"
+
+msgid "{app} could not be opened"
+msgstr "Det gick inte att öppna {app}"
+
+msgid "OK"
+msgstr "OK"

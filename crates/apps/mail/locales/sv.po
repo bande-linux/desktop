@@ -112,6 +112,12 @@ msgstr "Nytt meddelande"
 msgid "Add Account…"
 msgstr "Lägg till konto…"
 
+msgid "Mailbox"
+msgstr "Brevlåda"
+
+msgid "Get Mail"
+msgstr "Hämta e-post"
+
 msgid "Find"
 msgstr "Sök"
 
@@ -126,12 +132,6 @@ msgstr "Stigande"
 
 msgid "Bcc Address Field"
 msgstr "Fält för hemlig kopia"
-
-msgid "Mailbox"
-msgstr "Brevlåda"
-
-msgid "Get Mail"
-msgstr "Hämta e-post"
 
 msgid "Mark All as Read"
 msgstr "Markera alla som lästa"

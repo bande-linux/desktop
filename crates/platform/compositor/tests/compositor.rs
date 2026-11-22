@@ -10,7 +10,7 @@ use bande_compositor::{
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{
     BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL, KEY_LEFTMETA,
-    KEY_Q, KEY_W,
+    KEY_Q, KEY_SPACE, KEY_TAB, KEY_W,
 };
 use bande_test_wayland::{
     BLUE, ConstraintAdjustment, Frames, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
@@ -294,6 +294,9 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
     chord(&mut server, &[KEY_ENTER]);
     assert!(server.force_quit_asks());
     chord(&mut server, &[KEY_ENTER]);
+    assert!(server.force_quit_asks());
+    chord(&mut server, &[KEY_TAB]);
+    chord(&mut server, &[KEY_SPACE]);
     let deadline = Instant::now() + Duration::from_secs(10);
     while server
         .windows()
@@ -312,7 +315,7 @@ fn a_hung_app_is_force_quit_from_the_keyboard() {
         editor
             .keys()
             .iter()
-            .all(|(key, _)| ![KEY_ESC, KEY_DOWN, KEY_ENTER].contains(key))
+            .all(|(key, _)| ![KEY_ESC, KEY_DOWN, KEY_ENTER, KEY_TAB, KEY_SPACE].contains(key))
     );
 }
 

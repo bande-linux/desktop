@@ -52,15 +52,10 @@ fn opaque_over(surface: &WlSurface, size: Size<i32, Logical>) -> bool {
 
 impl State {
     fn login_window_ready(&self) -> bool {
-        self.screens
-            .iter()
-            .filter(|screen| screen.mirror.is_none())
-            .all(|screen| {
-                let map = layer_map_for_output(&screen.output);
-                map.layers().any(|layer| {
-                    layer.namespace() == LOGIN_WINDOW_NAMESPACE && is_mapped(layer.wl_surface())
-                })
-            })
+        let map = layer_map_for_output(&self.main_screen().output);
+        map.layers().any(|layer| {
+            layer.namespace() == LOGIN_WINDOW_NAMESPACE && is_mapped(layer.wl_surface())
+        })
     }
 
     fn shell_ready(&self) -> bool {

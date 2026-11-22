@@ -1,5 +1,7 @@
 use bande_l10n::{text, tr};
-use bande_network::{ConnectionChange, KnownNetwork, Network, PrivateAddress, Security};
+use bande_network::{
+    ConnectionChange, KnownNetwork, Network, PrivateAddress, Security, valid_hotspot_password,
+};
 use bande_settings_panes::{PaneId, SettingId, Value};
 use bande_toolkit::ui::{
     Axis, Button, SecureField, SegmentedControl, Stack, TextField, Toggle, Widget,
@@ -27,10 +29,25 @@ pub(crate) const WIFI_FIELDS: [(SettingId, bande_l10n::Text, bande_l10n::Text); 
     ),
 ];
 
-pub(crate) const HIDDEN_SECURITY: [Security; 3] = [
+pub(crate) const WIFI_IPV6_FIELDS: [(SettingId, bande_l10n::Text, bande_l10n::Text); 2] = [
+    (
+        SettingId::WifiIpv6Address,
+        text!("IPv6 address"),
+        text!("2001:db8::20/64"),
+    ),
+    (
+        SettingId::WifiIpv6Router,
+        text!("IPv6 router"),
+        text!("2001:db8::1"),
+    ),
+];
+
+pub(crate) const HIDDEN_SECURITY: [Security; 5] = [
     Security::Open,
     Security::Personal { sae_only: false },
     Security::Personal { sae_only: true },
+    Security::Enterprise,
+    Security::Wep,
 ];
 
 const PRIVATE_ADDRESS: [(PrivateAddress, bande_l10n::Text); 3] = [
@@ -43,6 +60,7 @@ const PRIVATE_ADDRESS: [(PrivateAddress, bande_l10n::Text); 3] = [
 pub(crate) struct Other {
     pub name: String,
     pub security: Security,
+    pub hidden: bool,
 }
 
 impl Default for Other {
@@ -50,8 +68,15 @@ impl Default for Other {
         Self {
             name: String::new(),
             security: Security::Personal { sae_only: false },
+            hidden: true,
         }
     }
+}
+
+fn wep_warning() -> String {
+    tr!(
+        "WEP is not secure: anyone nearby can read what you send. Join only if the network can’t use WPA2 or WPA3."
+    )
 }
 
 fn ssid_text(ssid: &[u8]) -> String {
@@ -146,18 +171,17 @@ impl SettingsView {
         rows
     }
 
-    fn password_row(&mut self, name: &str) -> Box<dyn Widget> {
+    fn password_row(&mut self, name: &str, security: Security) -> Box<dyn Widget> {
         let field = SecureField::new(
             &tr!("Password"),
             FIELD_SIZE,
             submit(&self.intents, Intent::Password),
         );
         self.anchors.push((Anchor::Password, field.id()));
-        let detail = self
-            .join
-            .error
-            .clone()
-            .unwrap_or_else(|| tr!("Press Return to join or Escape to cancel"));
+        let detail = self.join.error.clone().unwrap_or_else(|| match security {
+            Security::Wep => wep_warning(),
+            _ => tr!("Press Return to join or Escape to cancel"),
+        });
         boxed(
             Row::new(
                 Text::new(
@@ -174,7 +198,11 @@ impl SettingsView {
         let Some(wifi) = self.wifi.present().cloned() else {
             return Vec::new();
         };
-        let mut rows = Vec::new();
+        let mut rows = self.handed_over_rows();
+        if let Some(outside) = &wifi.outside {
+            rows.extend(self.outside_rows(outside));
+            return rows;
+        }
         let scanned = !wifi.networks.is_empty();
         let others: Vec<Network> = wifi
             .networks
@@ -201,7 +229,14 @@ impl SettingsView {
             row = row.on_activate(move || join(ssid.clone()));
             rows.push(self.item_row(name.clone(), row));
             if self.join.asking.as_ref() == Some(&network.ssid) {
-                rows.push(self.password_row(&name));
+                rows.push(self.password_row(&name, network.security));
+            }
+            if let Some(other) = self
+                .other
+                .clone()
+                .filter(|other| !other.hidden && other.name == name)
+            {
+                rows.extend(self.join_form_rows(other));
             }
         }
         rows.extend(self.other_rows());
@@ -209,59 +244,70 @@ impl SettingsView {
     }
 
     fn other_rows(&mut self) -> Widgets {
-        let Some(other) = self.other.clone() else {
-            let mut ask = intent(&self.intents, |()| Intent::AskOther(true));
-            let button = Button::new(&tr!("Other…"), move || ask(()));
+        if let Some(other) = self.other.clone().filter(|other| other.hidden) {
+            return self.join_form_rows(other);
+        }
+        let mut ask = intent(&self.intents, |()| Intent::AskOther(true));
+        let button = Button::new(&tr!("Other…"), move || ask(()));
+        self.anchors
+            .push((Anchor::Item("other-network".to_owned()), button.id()));
+        vec![boxed(Row::new(
+            Text::new(
+                &tr!("Join a network that does not show its name"),
+                Tone::Muted,
+            )
+            .caption(),
+            Some(boxed(button)),
+        ))]
+    }
+
+    fn join_form_rows(&mut self, other: Other) -> Widgets {
+        let mut rows = Vec::new();
+        if other.hidden {
+            let mut rename = intent(&self.intents, Intent::OtherName);
+            let field = TextField::new(&tr!("Network name"), &other.name, move |text| {
+                rename(text.to_owned())
+            })
+            .without_text_checking();
             self.anchors
-                .push((Anchor::Item("other-network".to_owned()), button.id()));
-            return vec![boxed(Row::new(
-                Text::new(
-                    &tr!("Join a network that does not show its name"),
-                    Tone::Muted,
-                )
-                .caption(),
-                Some(boxed(button)),
-            ))];
-        };
-        let mut rename = intent(&self.intents, Intent::OtherName);
-        let field = TextField::new(&tr!("Network name"), &other.name, move |text| {
-            rename(text.to_owned())
-        })
-        .without_text_checking();
-        self.anchors
-            .push((Anchor::Setting(SettingId::OtherNetwork, None), field.id()));
-        let mut rows = vec![boxed(Row::new(
-            Text::new(&tr!("Network name"), Tone::Primary),
-            Some(boxed(field)),
-        ))];
-        let labels: Vec<String> = HIDDEN_SECURITY
-            .iter()
-            .map(|security| security.label())
-            .collect();
-        let selected = HIDDEN_SECURITY
-            .iter()
-            .position(|security| *security == other.security);
-        let choose = intent(&self.intents, Intent::OtherSecurity);
-        let segmented = SegmentedControl::new(&tr!("Security"), &labels, selected, choose);
-        self.anchors
-            .push((Anchor::Item("other-security".to_owned()), segmented.id()));
-        rows.push(boxed(Row::new(
-            Text::new(&tr!("Security"), Tone::Primary),
-            Some(boxed(segmented)),
-        )));
+                .push((Anchor::Setting(SettingId::OtherNetwork, None), field.id()));
+            rows.push(boxed(Row::new(
+                Text::new(&tr!("Network name"), Tone::Primary),
+                Some(boxed(field)),
+            )));
+            let labels: Vec<String> = HIDDEN_SECURITY
+                .iter()
+                .map(|security| security.label())
+                .collect();
+            let selected = HIDDEN_SECURITY
+                .iter()
+                .position(|security| *security == other.security);
+            let choose = intent(&self.intents, Intent::OtherSecurity);
+            let segmented = SegmentedControl::new(&tr!("Security"), &labels, selected, choose);
+            self.anchors
+                .push((Anchor::Item("other-security".to_owned()), segmented.id()));
+            rows.push(boxed(Row::new(
+                Text::new(&tr!("Security"), Tone::Primary),
+                Some(boxed(segmented)),
+            )));
+        }
         let joining = self.join.joining.as_deref() == Some(other.name.trim().as_bytes());
         let detail = if joining {
             tr!("Joining…")
+        } else if let Some(error) = self.join.error.clone() {
+            error
+        } else if other.security == Security::Wep {
+            wep_warning()
         } else {
-            self.join.error.clone().unwrap_or_else(|| {
-                tr!("Press Return in the password field to join, or Escape to cancel")
-            })
+            tr!("Press Return in the password field to join, or Escape to cancel")
         };
         let mut cancel = intent(&self.intents, |()| Intent::AskOther(false));
         let mut buttons = vec![boxed(
             Button::new(&tr!("Cancel"), move || cancel(())).cancel(),
         )];
-        if other.security.needs_password() {
+        if other.security == Security::Enterprise {
+            rows.extend(self.enterprise_rows(|password| Intent::JoinOther(Some(password))));
+        } else if other.security.needs_password() {
             let field = SecureField::new(
                 &tr!("Password"),
                 FIELD_SIZE,
@@ -437,6 +483,7 @@ impl SettingsView {
                 text!("Automatic"),
             ));
         }
+        addressing.extend(self.ipv6_rows(PaneId::Wifi, self.wifi_ipv6, &WIFI_IPV6_FIELDS));
         page.push(boxed(Caption::new(Text::label(&tr!("TCP/IP")))));
         page.push(boxed(Card::new(addressing)));
         let forget = if self.forgetting.as_ref() == Some(&Forget::Network(ssid.clone())) {
@@ -500,6 +547,7 @@ impl SettingsView {
         for ((id, _, _), value) in WIFI_FIELDS.iter().zip(values) {
             self.values.insert(*id, Value::Text(value));
         }
+        self.wifi_ipv6 = self.load_ipv6(known.ipv6, &WIFI_IPV6_FIELDS);
         self.wifi_manual = known.manual.is_some();
         self.detail = Some(Detail::Network(ssid));
         self.forgetting = None;
@@ -523,6 +571,10 @@ impl SettingsView {
             Some(Value::Text(text)) => text.clone(),
             _ => String::new(),
         };
+        if matches!(id, SettingId::WifiIpv6Address | SettingId::WifiIpv6Router) {
+            self.change_ipv6(PaneId::Wifi, path, &WIFI_IPV6_FIELDS);
+            return;
+        }
         let change = if self.wifi_manual {
             bande_network::parse_manual(
                 &text(SettingId::WifiAddress),
@@ -592,15 +644,119 @@ impl SettingsView {
             return;
         }
         let ssid = name.into_bytes();
+        let command = if other.security == Security::Enterprise {
+            let Some(login) = self.enterprise_login(password.unwrap_or_default()) else {
+                return;
+            };
+            NetworkCommand::JoinEnterprise(ssid.clone(), other.hidden, Box::new(login))
+        } else {
+            NetworkCommand::JoinHidden(ssid.clone(), other.security, password)
+        };
         self.join = crate::view::Join {
-            joining: Some(ssid.clone()),
+            joining: Some(ssid),
             ..crate::view::Join::default()
         };
-        self.commands
-            .push(crate::follow::Command::Network(NetworkCommand::JoinHidden(
-                ssid,
-                other.security,
-                password,
+        self.commands.push(crate::follow::Command::Network(command));
+    }
+
+    pub(crate) fn hotspot_rows(&mut self) -> Widgets {
+        let Some(wifi) = self.wifi.present().cloned() else {
+            return Vec::new();
+        };
+        if let Some(hotspot) = wifi.hotspot.as_ref().filter(|hotspot| hotspot.active) {
+            let mut stop = intent(&self.intents, |()| {
+                Intent::Network(NetworkCommand::StopHotspot)
+            });
+            let button = Button::new(&tr!("Turn Off"), move || stop(()));
+            self.anchors
+                .push((Anchor::Setting(SettingId::Hotspot, None), button.id()));
+            return vec![boxed(
+                Row::new(
+                    Text::new(
+                        &tr!("Sharing as “{name}”", name = hotspot.name.clone()),
+                        Tone::Primary,
+                    ),
+                    Some(boxed(button)),
+                )
+                .detail(
+                    Text::new(
+                        &tr!("Devices nearby can join with the hotspot’s password"),
+                        Tone::Muted,
+                    )
+                    .caption(),
+                ),
+            )];
+        }
+        self.values
+            .entry(SettingId::HotspotName)
+            .or_insert_with(|| {
+                Value::Text(
+                    wifi.hotspot
+                        .as_ref()
+                        .map(|hotspot| hotspot.name.clone())
+                        .unwrap_or_default(),
+                )
+            });
+        let mut rows = vec![self.manual_field(
+            SettingId::HotspotName,
+            text!("Hotspot name"),
+            text!("Name other devices see"),
+        )];
+        let field = SecureField::new(
+            &tr!("Hotspot password"),
+            FIELD_SIZE,
+            submit(&self.intents, |password| {
+                Intent::StartHotspot(Some(password))
+            }),
+        );
+        self.anchors
+            .push((Anchor::Setting(SettingId::Hotspot, None), field.id()));
+        rows.push(boxed(
+            Row::new(
+                Text::new(&tr!("Hotspot password"), Tone::Primary),
+                Some(boxed(field)),
+            )
+            .detail(
+                Text::new(
+                    &tr!("Type 8 to 63 characters and press Return to share this computer’s wired connection"),
+                    Tone::Muted,
+                )
+                .caption(),
+            ),
+        ));
+        if wifi.hotspot.is_some() {
+            let mut start = intent(&self.intents, |()| Intent::StartHotspot(None));
+            let button = Button::new(&tr!("Turn On"), move || start(()));
+            rows.push(boxed(Row::new(
+                Text::new(&tr!("Use the saved password"), Tone::Muted).caption(),
+                Some(boxed(button)),
             )));
+        }
+        rows
+    }
+
+    pub(crate) fn start_hotspot(&mut self, password: Option<String>) {
+        self.commit_drafts();
+        let name = match self.values.get(&SettingId::HotspotName) {
+            Some(Value::Text(name)) => name.trim().to_owned(),
+            _ => String::new(),
+        };
+        if name.is_empty() || name.len() > 32 {
+            self.fail_here(tr!("Type a hotspot name of up to 32 characters."));
+            return;
+        }
+        if password
+            .as_deref()
+            .is_some_and(|password| !valid_hotspot_password(password))
+        {
+            self.fail_here(tr!(
+                "Use a password of 8 to 63 letters, digits and symbols."
+            ));
+            return;
+        }
+        self.clear_failure();
+        self.commands.push(crate::follow::Command::Network(
+            NetworkCommand::StartHotspot(name, password),
+        ));
     }
 }

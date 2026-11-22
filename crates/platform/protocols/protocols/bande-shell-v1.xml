@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_shell_v1">
-  <interface name="bande_shell_v1" version="8">
+  <interface name="bande_shell_v1" version="9">
     <description summary="requests and events between the compositor and the shell">
       Offered only on the connections of the shell clients the compositor starts
       itself (the shell and the screenshot tool), never on the listening socket.
@@ -609,9 +609,19 @@
       <arg name="keysym" type="uint"/>
       <arg name="modifiers" type="uint"/>
     </request>
+
+    <request name="show_capture_options" since="9">
+      <description summary="open the screenshot and screen recording options">
+        Does what Print does: the screenshot tool shows its capture options,
+        or ends the screen recording it is making. With recording set, the
+        options open with recording the screen chosen, as Quick Settings'
+        Screen Recording asks.
+      </description>
+      <arg name="recording" type="uint" summary="1 to choose recording the screen"/>
+    </request>
   </interface>
 
-  <interface name="bande_app_v1" version="10">
+  <interface name="bande_app_v1" version="11">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -864,6 +874,15 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
     </request>
+
+    <event name="kept_on_top" since="11">
+      <description summary="the window menu's Keep on Top changed">
+        Sent when the compositor's own window menu set or cleared Keep on Top
+        for the toplevel, so the app's window menu shows the same state.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="keep" type="uint" summary="1 when the window keeps on top, 0 when not"/>
+    </event>
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for System Monitor">

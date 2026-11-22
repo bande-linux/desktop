@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <protocol name="bande_capture_v1">
-  <interface name="bande_capture_v1" version="1">
+  <interface name="bande_capture_v1" version="2">
     <description summary="what the screenshot tool needs beyond image capture">
       Offered only on the connections of the shell clients the compositor starts
       itself. Tells the screenshot tool where the windows on the screen are, so
@@ -38,6 +38,14 @@
       <description summary="the user pressed the capture options shortcut">
         Sent for Print, which opens the screenshot and screen recording
         options.
+      </description>
+    </event>
+
+    <event name="show_recording_options" since="2">
+      <description summary="the user asked to record the screen">
+        Sent when the shell asks for the capture options with recording the
+        screen chosen (bande_shell_v1.show_capture_options). Like show_options,
+        it ends a screen recording that is running.
       </description>
     </event>
   </interface>

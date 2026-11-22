@@ -2,9 +2,38 @@ use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp};
 
 use crate::ical::Trigger;
-use crate::store::Library;
+use crate::store::{Library, data_dir};
 
 const LOOKAHEAD: SignedDuration = SignedDuration::from_hours(24 * 15);
+const MISSED_LIMIT: SignedDuration = SignedDuration::from_hours(24);
+const CHECKED_FILE: &str = "alerts-checked";
+
+pub fn last_checked(now: Timestamp) -> Timestamp {
+    let earliest = now.saturating_sub(MISSED_LIMIT).unwrap_or(now);
+    let path = data_dir().join(CHECKED_FILE);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return now,
+        Err(error) => {
+            tracing::warn!("cannot read {}: {error}", path.display());
+            return now;
+        }
+    };
+    match text.trim().parse::<Timestamp>() {
+        Ok(at) => at.clamp(earliest, now),
+        Err(error) => {
+            tracing::warn!("cannot read {}: {error}", path.display());
+            now
+        }
+    }
+}
+
+pub fn save_checked(at: Timestamp) {
+    let path = data_dir().join(CHECKED_FILE);
+    if let Err(error) = bande_xdg::replace_file(&path, at.to_string().as_bytes()) {
+        tracing::warn!("cannot write {}: {error}", path.display());
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Due {

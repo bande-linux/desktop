@@ -1,3 +1,4 @@
+mod access;
 mod compose_view;
 mod format;
 mod paint;

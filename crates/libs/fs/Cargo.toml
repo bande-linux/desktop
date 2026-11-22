@@ -20,6 +20,9 @@ tracing.workspace = true
 bande-datetime.workspace = true
 bande-l10n.workspace = true
 bande-volumes.workspace = true
+icu_collator.workspace = true
+icu_decimal.workspace = true
+icu_locale_core.workspace = true
 bande-xdg.workspace = true
 zip.workspace = true
 

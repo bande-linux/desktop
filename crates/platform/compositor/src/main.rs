@@ -8,12 +8,12 @@ use bande_compositor::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings, REFRESH,
     REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
     SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
-    follow_appearance, follow_input_settings, follow_session, follow_shutdown, follow_sleep,
-    follow_system_keyboard, handle_power_key, notify_service_manager, render_material,
-    serve_app_states, serve_displays, serve_keyboard_monitor, user_config,
+    follow_appearance, follow_input_settings, follow_login_settings, follow_session,
+    follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, render_material,
+    serve_app_states, serve_displays, serve_global_shortcuts, serve_keyboard_monitor, user_config,
     watchdog_keepalive_interval,
 };
-use bande_config::{BUS_NAME, OBJECT_PATH};
+use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
 use bande_datetime::ClockChanges;
 use bande_datetime::timedate::zone_changes;
 use bande_inbox::Inbox;
@@ -39,6 +39,7 @@ const COMPOSITOR_STALL: &str = "compositor-stall";
 const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
+const LOGIN_DISPLAY_OFF: Duration = Duration::from_secs(10 * 60);
 const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);
 
 enum Backend {
@@ -698,6 +699,18 @@ fn follow_session_bus<O: FrameOutput + 'static>(
         Ok(monitor) => app.compositor.monitor_keyboard(monitor),
         Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
     }
+    let (sender, bound) = channel::channel();
+    match serve_global_shortcuts(bus, move |shortcuts| sender.send(shortcuts).is_ok()) {
+        Ok(shortcuts) => {
+            handle.insert_source(bound, |event, _, app: &mut App<O>| {
+                if let Event::Msg(shortcuts) = event {
+                    app.compositor.bind_global_shortcuts(shortcuts);
+                }
+            })?;
+            app.compositor.use_global_shortcuts(shortcuts);
+        }
+        Err(error) => tracing::warn!("apps cannot have global shortcuts: {error}"),
+    }
     match serve_app_states(bus) {
         Ok(states) => app.compositor.publish_app_states(states),
         Err(error) => tracing::warn!("the portal cannot see which apps have windows: {error}"),
@@ -746,6 +759,9 @@ fn start_user_session<O: FrameOutput + 'static>(
     }
     app.compositor
         .apply_input_settings(InputSettings::read().unwrap_or_else(InputSettings::system));
+    if let Ok(carried) = std::env::var(CARRIED_ACCESSIBILITY) {
+        app.compositor.carry_accessibility(&carried);
+    }
     let handle = event_loop.handle();
     if let Some(bus) = app.buses.session.clone() {
         follow_session_bus(&handle, app, &bus)?;
@@ -813,7 +829,19 @@ where
         }
         Session::Greeter => {
             end_greeter_when_hung(&event_loop.handle())?;
-            app.compositor.apply_input_settings(InputSettings::system());
+            app.compositor.apply_input_settings(InputSettings::login());
+            if let Some(runtime) = bande_xdg::runtime_dir() {
+                app.compositor
+                    .record_accessibility_in(login_accessibility_file(&runtime));
+            }
+            if let Some(bus) = &app.buses.session {
+                match serve_keyboard_monitor(bus) {
+                    Ok(monitor) => app.compositor.monitor_keyboard(monitor),
+                    Err(error) => {
+                        tracing::warn!("the screen reader cannot watch the keyboard: {error}");
+                    }
+                }
+            }
             let (sender, changes) = channel::channel();
             event_loop
                 .handle()
@@ -823,7 +851,7 @@ where
                     }
                 })
                 .map_err(|error| error.to_string())?;
-            keyboard_watch = follow_system_keyboard(move |settings| sender.send(settings).is_ok())
+            keyboard_watch = follow_login_settings(move |settings| sender.send(settings).is_ok())
                 .inspect_err(|error| tracing::warn!("cannot follow the keyboard: {error}"))
                 .ok();
             app.compositor.hold_frames_until(
@@ -861,9 +889,11 @@ where
                 if child.try_wait()?.is_some() {
                     return Ok(app);
                 }
+                app.compositor.keep_login_window_helpers();
                 SessionUpkeep::default()
             }
             Some(waiting) => {
+                app.compositor.keep_login_window_helpers();
                 if waiting.started.elapsed() >= SESSION_CLIENT_RESTART_THROTTLE {
                     *waiting = Greeter::start(&mut app.compositor);
                 }
@@ -963,6 +993,10 @@ where
         let idle_wait = compositor
             .idle_tick(now())
             .map(|at| at.saturating_sub(now()));
+        let blank_wait = greeter
+            .as_ref()
+            .and_then(|_| compositor.blank_when_idle(now(), LOGIN_DISPLAY_OFF))
+            .map(|at| at.saturating_sub(now()));
         let snap_wait = snap_due.map(|at| at.saturating_sub(now()));
         let watchdog_wait = compositor
             .watchdog_tick(now())
@@ -977,6 +1011,7 @@ where
             .into_iter()
             .chain(frame_wait)
             .chain(idle_wait)
+            .chain(blank_wait)
             .chain(snap_wait)
             .chain(watchdog_wait)
             .chain(night_wait)

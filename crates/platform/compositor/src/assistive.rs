@@ -1,9 +1,12 @@
+use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::mpsc::{Sender, channel};
 use std::thread;
 use std::time::Duration;
 
-use bande_config::{Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER};
+use bande_config::{
+    Accessibility, BUS_NAME, OBJECT_PATH, SCREEN_READER, accessibility_source, carried,
+};
 use bande_graphics::{Material, Palette, backdrop_tone};
 use bande_render::VulkanRenderer;
 use bande_spring::{Animated, Spring};
@@ -35,6 +38,7 @@ pub(crate) struct Assistive {
     screen_reader: Option<Child>,
     pub(crate) session_bus: Option<Connection>,
     remembering: Option<Sender<Remembered>>,
+    record: Option<PathBuf>,
     flash: Option<Flash>,
 }
 
@@ -90,6 +94,13 @@ pub fn follow_alerts(
 
 impl State {
     pub(crate) fn remember_setting(&mut self, property: &'static str, value: Value<'_>) {
+        if let Some(path) = &self.assistive.record {
+            let source = accessibility_source(&self.assistive.settings);
+            if let Err(error) = bande_xdg::replace_file(path, source) {
+                tracing::warn!("cannot keep the login window's {property}: {error}");
+            }
+            return;
+        }
         let Ok(value) = OwnedValue::try_from(value) else {
             return;
         };
@@ -254,6 +265,45 @@ impl Compositor {
 
     pub fn apply_accessibility(&mut self, settings: Accessibility) {
         self.state.apply_accessibility(settings);
+    }
+
+    pub fn record_accessibility_in(&mut self, path: PathBuf) {
+        self.state.assistive.record = Some(path);
+    }
+
+    pub fn carry_accessibility(&mut self, words: &str) {
+        let before = self.state.assistive.settings;
+        let mut after = before;
+        if let Err(error) = carried(words, &mut after) {
+            tracing::warn!("the login window's settings are not carried: {error}");
+        }
+        if after == before {
+            return;
+        }
+        self.state.apply_accessibility(after);
+        let flags = [
+            ("ScreenReader", after.screen_reader, before.screen_reader),
+            (
+                "IncreaseContrast",
+                after.increase_contrast,
+                before.increase_contrast,
+            ),
+            (
+                "ReduceTransparency",
+                after.reduce_transparency,
+                before.reduce_transparency,
+            ),
+            ("ReduceMotion", after.reduce_motion, before.reduce_motion),
+        ];
+        for (property, on, was) in flags {
+            if on && !was {
+                self.state.remember_setting(property, Value::from(true));
+            }
+        }
+        if after.text_size != before.text_size {
+            self.state
+                .remember_setting("TextSize", Value::from(after.text_size));
+        }
     }
 
     pub fn flash_screen(&mut self) {

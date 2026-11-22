@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use accesskit::{Action, ActionRequest, Role, TreeId};
-use bande_calculator::{Base, Binary, Engine, Failure, Input, Keypad, Mode, Unary};
+use bande_calculator::{Base, Binary, Engine, Failure, Input, Keypad, Mode, Numbers, Unary};
 use bande_toolkit::ui::{Context, Event, Key, Modifiers, Ui, Widget};
 use bande_toolkit::{Palette, Scheme, TextSystem};
 
@@ -121,4 +121,22 @@ fn errors_and_word_sizes_wrap_like_a_real_calculator() {
     assert_eq!(engine.display(), "FFFF");
     engine.set_mode(Mode::Basic);
     assert_eq!(engine.display(), "−1");
+}
+
+#[test]
+fn pasted_numbers_follow_the_locale_and_ambiguous_ones_are_refused() {
+    let mut engine = Engine::new();
+    engine.numbers = Numbers {
+        decimal: ',',
+        group: '\u{a0}',
+    };
+    assert!(engine.paste("3,14"));
+    assert_eq!(engine.display(), "3,14");
+    assert!(engine.paste("1 234 567,5"));
+    assert_eq!(engine.display(), "1\u{a0}234\u{a0}567,5");
+    assert!(!engine.paste("1.234"));
+    engine.numbers = Numbers::POINT;
+    assert!(!engine.paste("3,14"));
+    assert!(engine.paste("1,234.5"));
+    assert_eq!(engine.copy_text(), "1234.5");
 }

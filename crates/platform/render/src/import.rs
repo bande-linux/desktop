@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::fs::File;
+use std::io::{Seek, SeekFrom};
 use std::os::fd::BorrowedFd;
 use std::os::unix::fs::MetadataExt;
 use std::slice;
@@ -17,10 +18,10 @@ use smithay::wayland::compositor::SurfaceData;
 use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::shm::with_buffer_contents;
 
+use crate::formats::{self, Kind};
 use crate::{
     BYTES_PER_PIXEL, Image, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS,
-    TextureImage, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque,
-    linear_formats, target_format,
+    TextureImage, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque, target_format,
 };
 
 const GPU_LINEAR_ALIGNMENT: u32 = 16;
@@ -57,6 +58,45 @@ pub(crate) fn single_plane_layout(dmabuf: &Dmabuf) -> Result<PlaneLayout<'_>, Re
         return Err(RenderError::UnalignedDmabuf);
     }
     Ok(PlaneLayout { fd, offset, stride })
+}
+
+pub(crate) fn modifier_layout(
+    dmabuf: &Dmabuf,
+    planes: Option<usize>,
+) -> Result<Vec<vk::SubresourceLayout>, RenderError> {
+    if planes != Some(dmabuf.num_planes()) {
+        return Err(RenderError::UnsupportedFormat);
+    }
+    let Some(first) = dmabuf.handles().next() else {
+        return Err(RenderError::UnsupportedFormat);
+    };
+    for fd in dmabuf.handles().skip(1) {
+        if !same_object(first, fd)? {
+            return Err(RenderError::UnsupportedFormat);
+        }
+    }
+    let size = File::from(first.try_clone_to_owned()?).seek(SeekFrom::End(0))?;
+    let linear = dmabuf.format().modifier == Modifier::Linear;
+    dmabuf
+        .offsets()
+        .zip(dmabuf.strides())
+        .map(|(offset, stride)| {
+            if linear
+                && !(offset.is_multiple_of(GPU_LINEAR_ALIGNMENT)
+                    && stride.is_multiple_of(GPU_LINEAR_ALIGNMENT))
+            {
+                return Err(RenderError::UnalignedDmabuf);
+            }
+            if stride == 0 || u64::from(offset) >= size {
+                return Err(RenderError::BufferOutOfBounds);
+            }
+            Ok(vk::SubresourceLayout {
+                offset: u64::from(offset),
+                row_pitch: u64::from(stride),
+                ..Default::default()
+            })
+        })
+        .collect()
 }
 
 fn chroma_size(width: i32, height: i32) -> (i32, i32) {
@@ -285,36 +325,33 @@ impl VulkanRenderer {
         Ok(())
     }
 
-    fn sampled_video(
-        &mut self,
-        dmabuf: &Dmabuf,
-        luma: &PlaneLayout<'_>,
-        chroma: &PlaneLayout<'_>,
-    ) -> Result<VulkanTexture, RenderError> {
-        let size = dmabuf.size();
-        let file = File::from(luma.fd.try_clone_to_owned()?);
-        let layouts = [luma, chroma].map(|plane| vk::SubresourceLayout {
-            offset: u64::from(plane.offset),
-            row_pitch: u64::from(plane.stride),
-            ..Default::default()
-        });
-        let image = self.import_video_image(size.w, size.h, &layouts, file)?;
-        let (chroma_width, chroma_height) = chroma_size(size.w, size.h);
+    fn sampled_dmabuf(&mut self, dmabuf: &Dmabuf) -> Result<VulkanTexture, RenderError> {
+        let code = dmabuf.format().code;
+        let texel = formats::texel(code).ok_or(RenderError::UnsupportedFormat)?;
+        let image = self.import_image(dmabuf, texel, formats::SAMPLED)?;
+        let size = (image.width, image.height);
+        let (luma_format, chroma_format) = match texel.kind {
+            Kind::Colour { opaque } => {
+                let view = match self.create_view(image.image, texel.format, alpha_swizzle(opaque))
+                {
+                    Ok(view) => view,
+                    Err(error) => {
+                        self.destroy_image(&image);
+                        return Err(error);
+                    }
+                };
+                let id = self.imported_texture(Image { view, ..image });
+                return Ok(self.texture_of(id, None, size, code));
+            }
+            Kind::Video { luma, chroma } => (luma, chroma),
+        };
         let views = self
-            .plane_view(
-                image.image,
-                vk::Format::R8_UNORM,
-                vk::ImageAspectFlags::PLANE_0,
-            )
+            .plane_view(image.image, luma_format, vk::ImageAspectFlags::PLANE_0)
             .and_then(|luma_view| {
-                self.plane_view(
-                    image.image,
-                    vk::Format::R8G8_UNORM,
-                    vk::ImageAspectFlags::PLANE_1,
-                )
-                .map(|chroma_view| (luma_view, chroma_view))
-                // SAFETY: `luma_view` was just created and never used.
-                .inspect_err(|_| unsafe { self.device.destroy_image_view(luma_view, None) })
+                self.plane_view(image.image, chroma_format, vk::ImageAspectFlags::PLANE_1)
+                    .map(|chroma_view| (luma_view, chroma_view))
+                    // SAFETY: `luma_view` was just created and never used.
+                    .inspect_err(|_| unsafe { self.device.destroy_image_view(luma_view, None) })
             });
         let (luma_view, chroma_view) = match views {
             Ok(views) => views,
@@ -323,84 +360,65 @@ impl VulkanRenderer {
                 return Err(error);
             }
         };
-        let chroma_id = self.next_id();
-        self.textures.insert(
-            chroma_id,
-            TextureImage {
-                image: Image {
-                    image: vk::Image::null(),
-                    memory: vk::DeviceMemory::null(),
-                    view: chroma_view,
-                    width: chroma_width,
-                    height: chroma_height,
-                },
-                readable: true,
-                imported: true,
-            },
-        );
+        let chroma_size = chroma_size(size.0, size.1);
+        let chroma_id = self.imported_texture(Image {
+            image: vk::Image::null(),
+            memory: vk::DeviceMemory::null(),
+            view: chroma_view,
+            width: chroma_size.0,
+            height: chroma_size.1,
+        });
+        let chroma = self.texture_of(chroma_id, None, chroma_size, Fourcc::R8);
+        let id = self.imported_texture(Image {
+            view: luma_view,
+            ..image
+        });
+        Ok(self.texture_of(id, Some(Arc::new(chroma)), size, code))
+    }
+
+    fn imported_texture(&mut self, image: Image) -> u64 {
         let id = self.next_id();
         self.textures.insert(
             id,
             TextureImage {
-                image: Image {
-                    view: luma_view,
-                    ..image
-                },
+                image,
                 readable: false,
                 imported: true,
             },
         );
-        Ok(VulkanTexture {
-            _owned: Arc::new(self.owned(Resource::Texture(id))),
-            id,
-            chroma: Some(Arc::new(VulkanTexture {
-                _owned: Arc::new(self.owned(Resource::Texture(chroma_id))),
-                id: chroma_id,
-                chroma: None,
-                renderer: self.id,
-                width: chroma_width,
-                height: chroma_height,
-                format: Fourcc::R8,
-            })),
-            renderer: self.id,
-            width: size.w,
-            height: size.h,
-            format: Fourcc::Nv12,
-        })
+        id
     }
 
-    fn sample_video_directly(
-        &mut self,
-        dmabuf: &Dmabuf,
-        luma: &PlaneLayout<'_>,
-        chroma: &PlaneLayout<'_>,
-    ) -> Option<VulkanTexture> {
-        if !self.samples_video {
-            return None;
+    fn texture_of(
+        &self,
+        id: u64,
+        chroma: Option<Arc<VulkanTexture>>,
+        (width, height): (i32, i32),
+        format: Fourcc,
+    ) -> VulkanTexture {
+        VulkanTexture {
+            _owned: Arc::new(self.owned(Resource::Texture(id))),
+            id,
+            chroma,
+            renderer: self.id,
+            width,
+            height,
+            format,
         }
-        if ![luma, chroma].iter().all(|plane| {
-            plane.offset.is_multiple_of(GPU_LINEAR_ALIGNMENT)
-                && plane.stride.is_multiple_of(GPU_LINEAR_ALIGNMENT)
-        }) {
-            return None;
-        }
+    }
+
+    fn sample_directly(&mut self, dmabuf: &Dmabuf) -> Result<VulkanTexture, RenderError> {
         let weak = dmabuf.weak();
-        if let Some(texture) = self.dmabuf_textures.get(&weak).cloned() {
-            self.video_acquires.push(texture.id);
-            return Some(texture);
-        }
-        match self.sampled_video(dmabuf, luma, chroma) {
-            Ok(texture) => {
-                self.dmabuf_textures.insert(weak, texture.clone());
-                self.video_acquires.push(texture.id);
-                Some(texture)
+        let texture = match self.sampled_dmabufs.get(&weak) {
+            Some(texture) => texture.clone(),
+            None => {
+                let texture = self.sampled_dmabuf(dmabuf)?;
+                self.sampled_dmabufs.insert(weak, texture.clone());
+                texture
             }
-            Err(error) => {
-                tracing::warn!("copying video frames: {error}");
-                self.samples_video = false;
-                None
-            }
-        }
+        };
+        self.acquires.push(texture.id);
+        Ok(texture)
     }
 
     fn import_video_into(
@@ -409,9 +427,6 @@ impl VulkanRenderer {
         surface: Option<&SurfaceData>,
     ) -> Result<VulkanTexture, RenderError> {
         let (luma, chroma) = video_layout(dmabuf)?;
-        if let Some(texture) = self.sample_video_directly(dmabuf, &luma, &chroma) {
-            return Ok(texture);
-        }
         let size = dmabuf.size();
         let (chroma_width, chroma_height) = chroma_size(size.w, size.h);
         let weak = dmabuf.weak();
@@ -476,6 +491,13 @@ impl VulkanRenderer {
         surface: Option<&SurfaceData>,
         damage: Option<&[Rectangle<i32, BufferCoords>]>,
     ) -> Result<VulkanTexture, RenderError> {
+        if self.modifiers.sampled.contains_key(&dmabuf.format()) {
+            match self.sample_directly(dmabuf) {
+                Ok(texture) => return Ok(texture),
+                Err(error) if dmabuf.format().modifier != Modifier::Linear => return Err(error),
+                Err(error) => tracing::debug!("copying a dma-buf that cannot be sampled: {error}"),
+            }
+        }
         if dmabuf.format().code == Fourcc::Nv12 {
             return self.import_video_into(dmabuf, surface);
         }
@@ -603,7 +625,7 @@ impl ImportMemWl for VulkanRenderer {
 
 impl ImportDma for VulkanRenderer {
     fn dmabuf_formats(&self) -> FormatSet {
-        linear_formats()
+        self.dmabuf_planes().into_keys().collect()
     }
 
     fn import_dmabuf(

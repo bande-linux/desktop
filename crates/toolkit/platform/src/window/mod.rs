@@ -1145,6 +1145,19 @@ impl Window {
         }
     }
 
+    fn take_kept_on_top(&mut self) {
+        let kept_on_top = std::mem::take(&mut self.state.shell.kept_on_top);
+        let Ok(own) = self.toplevel().cloned() else {
+            return;
+        };
+        if let Some((_, keep)) = kept_on_top
+            .into_iter()
+            .rfind(|(toplevel, _)| *toplevel == own)
+        {
+            self.keep_on_top = keep;
+        }
+    }
+
     pub fn take_events(&mut self) -> Vec<WindowEvent> {
         self.take_arrival();
         self.take_drop();
@@ -1159,6 +1172,7 @@ impl Window {
             }
         }
         self.take_window_tiled();
+        self.take_kept_on_top();
         let events = std::mem::take(&mut self.state.events);
         if self.chrome.is_none() {
             return events;

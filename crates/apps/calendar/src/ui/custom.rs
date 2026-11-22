@@ -154,7 +154,7 @@ impl Custom {
             vec![(monthly, Width::Fill)],
             ROW,
         ));
-        let month = start.strftime("%B").to_string();
+        let month = formats.month_name(start.month());
         let yearly_choices = [
             tr!("on {month} {day}", day = start.day(), month = month.clone()),
             tr!("{on} of {month}", on = on_the, month = month),

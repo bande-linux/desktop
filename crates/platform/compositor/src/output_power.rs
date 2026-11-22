@@ -126,6 +126,13 @@ impl State {
         }
     }
 
+    pub(crate) fn power_off_every_output(&mut self) {
+        let names: Vec<String> = self.screens.iter().map(|screen| screen.name()).collect();
+        for output in names {
+            self.set_output_power(&output, Mode::Off);
+        }
+    }
+
     pub(crate) fn power_on_every_output(&mut self) {
         for output in self.output_power.off.clone() {
             self.set_output_power(&output, Mode::On);

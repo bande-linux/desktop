@@ -49,9 +49,11 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   login window's console fallback and the fault reporter's socket-activated services are not
   started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
   enabled by its own `postinst`. `bande-reporter` and `bande-greeter` create their state
-  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`; the login window's pictures
-  folder is `3733 root:_greetd`, so each person writes only their own picture and only the login
-  window reads it). The other scripts purge state, restart nothing else and run
+  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`; the login window's pictures and
+  failed-session folders are `3733 root:_greetd`, so each person writes only their own files and
+  only the login window reads them). `bande-greeter` ships its PAM service as the conffile
+  `/etc/pam.d/bande-greeter` (`debian/bande-greeter.pam`, after Debian's `gdm-password`), which
+  its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
   `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative.
 - **Version**: `debian/changelog` names the release, `X.Y.Z-1`, with `X.Y.Z` the
@@ -61,17 +63,20 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   binNMU-style build without the architecture-independent packages, so an sbuild build takes
   a source package with that entry.
 - **Tests**: `debian/tests` holds the autopkgtests: `desktop` (bande-desktop alone brings a
-  login window and sound, no X server, greetd as the display manager, the login window's
-  pictures folder), `every-package` (the one version, every program and file in
+  login window and sound, no X server, the login window as the display manager with greetd's
+  own service and configuration untouched and Bande's PAM service, its pictures and
+  failed-session folders, and purging it handing the display to greetd), `every-package` (the
+  one version, every program and file in
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
   `system-setup` (every package with its recommends brings none of the short list of packages
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
   display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and the `hosts`
   line of `/etc/nsswitch.conf` as they were, but for `libnss-mdns`'s own entry),
-  `display-manager` (next to LightDM, greetd is offered and not imposed), `coexistence`
-  (`bande-desktop` installs next to `gnome-core` without removing anything, and GNOME's keyring
-  keeps its PAM profile, socket and activation while Bande's stays out of a non-Bande login),
-  `services` (the
+  `display-manager` (next to LightDM, the login window is offered and not imposed,
+  `dpkg-reconfigure` switches both ways, and removing it gives the display back to LightDM),
+  `coexistence` (`bande-desktop` installs next to `gnome-core` without removing anything, and
+  GNOME's keyring keeps its PAM profile, socket and activation while Bande's stays out of a
+  non-Bande login), `services` (the
   settings service on a private bus, the compositor headless), `portal` (the colour scheme
   through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).
 
@@ -112,19 +117,21 @@ are in [performance.md](performance.md).
   It depends on the compositor, the core session services, the shell, the lock
   screen, the keyring (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and
   `libpam-systemd`, on PipeWire and WirePlumber, and on `bande-greeter | x-display-manager`, so there is always
-  a way to log in: the Bande login window under greetd, or the display manager the system
-  already has. It recommends `bande-greeter` anyway (greetd then asks which display manager to
-  start), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
+  a way to log in: the Bande login window, or the display manager the system already has. It
+  recommends `bande-greeter` anyway (debconf then asks which display manager to start; see
+  [session.md](session.md#display-manager-and-greeter)), Bande's Browser (`bande-browser`, built
+  from `browser/` on its own rhythm, so unversioned), fault reporting (`bande-reporter`, `bande-crash-reports`), printing, spell checking, the
   clipboard daemon, the screenshot tool, Files, Settings, the tray, file indexing
   (`bande-indexer`), automount, backups (`bande-backup`), the file chooser, the polkit agent, the keyring's PAM module and the default apps (every app but Velox),
   all built here at the same version, and the few Debian packages in
   [Runtime stack](#runtime-stack); being recommends, any of them can be removed or replaced. It
-  recommends no apps from Debian; a browser comes from Software. Network printers
+  recommends no apps from Debian. Network printers
   need nothing more; support for USB and older printers comes from Settings ▸ Printers. It installs
   `/usr/share/applications/x-bande-mimeapps.list` (`data/x-bande-mimeapps.list`), read only in a Bande session, which opens
   folders in Files, `.deb` files in the Package Installer, plain text (with source code and
-  logs, its subtypes) in Text Editor when it is installed and archives (zip, tar, gzip, bzip2, xz,
-  zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
+  logs, its subtypes) in Text Editor when it is installed, web pages and links in the Browser,
+  `mailto:` links in Mail, calendar files and `webcal:` links in Calendar, and archives (zip, tar,
+  gzip, bzip2, xz, zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
   itself only when no app opens it; other types open in an installed app
   whose desktop entry declares them, and a person's own choice in
   `~/.config/mimeapps.list` still wins. A file no installed app opens gets the Open With sheet in
@@ -163,10 +170,10 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
   ([overview.md](overview.md));
 - `fonts-noto-core`, `fonts-noto-cjk` (recommended): the fallback faces for scripts Inter does not cover;
 - `pipewire`, `wireplumber`: the sound service, screen capture and recording;
-- `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it);
-  the login window's user (`_greetd`) starts none of PipeWire, its Pulse server, WirePlumber or
-  the filter chain (`ConditionUser=!_greetd`), so the person's session never finds the sound
-  card busy;
+- `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it).
+  The login window's user (`_greetd`) gets PipeWire and WirePlumber from the ordinary user units,
+  so the screen reader can speak before anyone signs in; WirePlumber opens the sound card only for
+  the session active on the seat, so it moves to the person's session at sign-in;
 - `libspa-0.2-bluetooth` (recommended): Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi` (recommended): the AppStream icons Software shows, at 2×;
 - `systemd-oomd` (recommended): closes an app when memory stays under pressure.
@@ -210,7 +217,7 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
 - `bande-printd` recommends `avahi-daemon` too, which it browses for driverless printers; without
   it Settings ▸ Printers offers to install it and printers added by address still print;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
-  `greetd (>= 0.10.3-6)`;
+  `greetd (>= 0.10.3-6)`, which it runs from its own `bande-greeter.service`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides
   `xdg-desktop-portal-backend` and serves every interface itself (no `xdg-desktop-portal-gtk`);
 - `mesa-vulkan-drivers` and `libvulkan1` come with `bande-compositor`.

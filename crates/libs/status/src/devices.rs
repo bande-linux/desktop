@@ -226,7 +226,14 @@ fn wifi(network: &NetworkManager) -> Reading<Wifi> {
     Reading::from_answer("NetworkManager", read_wifi(network), wifi_in_kernel)
 }
 
-fn bluetooth(bluez: &BlueZ) -> Reading<Bluetooth> {
+fn wired(network: &NetworkManager) -> Reading<bool> {
+    let connected = network.ethernets().map(|ethernets| {
+        (!ethernets.is_empty()).then(|| ethernets.iter().any(|ethernet| ethernet.connected))
+    });
+    Reading::from_answer("NetworkManager", connected, || false)
+}
+
+pub fn bluetooth(bluez: &BlueZ) -> Reading<Bluetooth> {
     let radio = bluez.radio().map(|radio| {
         radio.map(|radio| Bluetooth {
             powered: radio.powered,
@@ -245,7 +252,12 @@ fn bluetooth(bluez: &BlueZ) -> Reading<Bluetooth> {
     Reading::from_answer("BlueZ", radio, adapter_in_kernel)
 }
 
-pub type Devices = (Reading<Battery>, Reading<Wifi>, Reading<Bluetooth>);
+pub type Devices = (
+    Reading<Battery>,
+    Reading<Wifi>,
+    Reading<Bluetooth>,
+    Reading<bool>,
+);
 
 #[derive(Debug, PartialEq)]
 pub enum Control {
@@ -290,19 +302,27 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
                 crate::captive::join_network(network, &found);
             }
         }
-        Command::SetBluetooth(on) => report("switch Bluetooth", bluez.set_powered(on)),
         Command::SignIn => match network.sign_in_page() {
             Ok(Some(page)) => crate::captive::open_page(&page),
             Ok(None) => {}
             Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
         },
+        Command::Sleep => report("sleep", sleep(system)),
+        Command::LockScreen => report("lock the screen", lock_screen(system)),
+        command => run_bluetooth(bluez, &command),
+    }
+}
+
+pub fn run_bluetooth(bluez: &BlueZ, command: &Command) {
+    match command {
+        Command::SetBluetooth(on) => report("switch Bluetooth", bluez.set_powered(*on)),
         Command::ForgetGadget(address) => {
-            if let Some(device) = paired(bluez, &address) {
+            if let Some(device) = paired(bluez, address) {
                 report("forget the device", bluez.forget(&device));
             }
         }
         Command::ToggleGadget(address) => {
-            if let Some(device) = paired(bluez, &address) {
+            if let Some(device) = paired(bluez, address) {
                 let result = if device.connected {
                     bluez.disconnect(&device)
                 } else {
@@ -311,8 +331,6 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
                 report("connect the device", result);
             }
         }
-        Command::Sleep => report("sleep", sleep(system)),
-        Command::LockScreen => report("lock the screen", lock_screen(system)),
         _ => {}
     }
 }
@@ -491,7 +509,12 @@ fn watch_devices(system: &Connection, controls: &Sender<Control>) -> zbus::Resul
 fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outbox<Update>) {
     let network = NetworkManager::new(system);
     let bluez = BlueZ::new(system);
-    let mut devices: Devices = (battery(system), wifi(&network), bluetooth(&bluez));
+    let mut devices: Devices = (
+        battery(system),
+        wifi(&network),
+        bluetooth(&bluez),
+        wired(&network),
+    );
     if !outbox.send(Update::Devices(devices.clone())) {
         return;
     }
@@ -520,6 +543,7 @@ fn run_controls(system: &Connection, controls: &Receiver<Control>, outbox: &Outb
         }
         if stale.contains(&Source::Wifi) {
             devices.1 = wifi(&network);
+            devices.3 = wired(&network);
         }
         if stale.contains(&Source::Bluetooth) {
             devices.2 = bluetooth(&bluez);
@@ -538,7 +562,7 @@ fn looks_alike(devices: &Devices, shown: &Devices) -> bool {
         (Reading::Present(wifi), Reading::Present(shown)) => wifi.looks_like(shown),
         (wifi, shown) => wifi == shown,
     };
-    wifi && devices.0 == shown.0 && devices.2 == shown.2
+    wifi && devices.0 == shown.0 && devices.2 == shown.2 && devices.3 == shown.3
 }
 
 pub fn follow_devices(system: &Connection, outbox: Outbox<Update>) -> Sender<Control> {

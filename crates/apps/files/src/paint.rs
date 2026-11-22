@@ -1259,7 +1259,12 @@ impl FilesView {
         let Some(controls) = &self.inspector_controls else {
             return y;
         };
-        let (runnable, access) = (controls.runnable, controls.access.clone());
+        let (runnable, access, group, enclosed) = (
+            controls.runnable,
+            controls.access.clone(),
+            controls.group,
+            controls.enclosed,
+        );
         if access.is_empty() {
             return y;
         }
@@ -1310,6 +1315,31 @@ impl FilesView {
                 ),
             ));
             y += CONTROL_HEIGHT + 6.0;
+        }
+        if let Some((id, _)) = group {
+            let label = self.label(&tr!("Owning group"), SMALL_SIZE, muted);
+            items.push(Item::Text {
+                origin: Point::new(
+                    inner.x,
+                    y + ((CONTROL_HEIGHT - label.height()) / 2.0).round(),
+                ),
+                paragraph: label,
+            });
+            frames.push((
+                id,
+                Rect::new(
+                    inner.x + FACT_COLUMN,
+                    y,
+                    inner.width - FACT_COLUMN,
+                    CONTROL_HEIGHT,
+                ),
+            ));
+            y += CONTROL_HEIGHT + 6.0;
+        }
+        if let Some(id) = enclosed {
+            y += 4.0;
+            frames.push((id, Rect::new(inner.x, y, inner.width, BUTTON_HEIGHT)));
+            y += BUTTON_HEIGHT + 6.0;
         }
         self.place_inspector_controls(area, frames);
         y

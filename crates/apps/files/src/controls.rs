@@ -79,6 +79,8 @@ pub(crate) enum Signal {
     RenameField(crate::batch_rename::RenameField, String),
     RenameChoice(crate::batch_rename::RenameChoice, usize),
     Access(bande_fs::Class, usize),
+    OwningGroup(usize),
+    ApplyToEnclosed,
     HideExtension(bool),
 }
 
@@ -652,6 +654,8 @@ impl FilesView {
                         self.dismiss_sheet();
                     }
                     Signal::Access(class, index) => self.set_access(class, index),
+                    Signal::OwningGroup(index) => self.set_owning_group(index),
+                    Signal::ApplyToEnclosed => self.ask_to_apply_to_enclosed(),
                     Signal::HideExtension(hidden) => self.set_extension_hidden(hidden),
                     Signal::Forward => self.forward(),
                     Signal::Scope(everywhere) => self.set_scope(everywhere),
@@ -1292,6 +1296,21 @@ impl FilesView {
     pub(crate) fn present(&mut self, sheet: Sheet) {
         let choose = self.choice();
         let alert = match &sheet {
+            Sheet::ApplyToEnclosed { folder, .. } => Alert::new(
+                &tr!(
+                    "Apply these permissions to everything in “{name}”?",
+                    name = folder
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                ),
+                &tr!(
+                    "Every item inside gets the same access and group. You can’t undo this action."
+                ),
+                choose,
+            )
+            .cancel(&tr!("Cancel"), "cancel")
+            .primary(&tr!("Apply"), "confirm"),
             Sheet::EmptyTrash => Alert::new(
                 &tr!("Are you sure you want to permanently erase the items in the Trash?"),
                 &tr!("You can’t undo this action."),
@@ -1319,11 +1338,25 @@ impl FilesView {
                 volume,
                 busy,
                 message,
+                programs,
             } => {
                 let name = location_title(&Location::Folder(volume.clone()));
+                let title = match programs.is_empty() {
+                    true => tr!(
+                        "The disk “{name}” wasn’t ejected because one or more programs may be using it.",
+                        name = name.clone()
+                    ),
+                    false => trn!(
+                        "The disk “{name}” wasn’t ejected because {programs} is using it.",
+                        "The disk “{name}” wasn’t ejected because these programs are using it: {programs}.",
+                        count = programs.len(),
+                        name = name.clone(),
+                        programs = programs.join(", ")
+                    ),
+                };
                 match busy {
                     true => Alert::new(
-                        &tr!("The disk “{name}” wasn’t ejected because one or more programs may be using it.", name = name),
+                        &title,
                         &tr!("To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."),
                         choose,
                     )

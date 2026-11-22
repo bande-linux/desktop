@@ -9,6 +9,7 @@ use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::shell::xdg::ShellClient;
 
+use crate::force_quit::relaunch_shell;
 use crate::shell::toplevel_names;
 use crate::state::{Compositor, State, client_pid};
 
@@ -18,6 +19,7 @@ pub(crate) const PING_SINCE: u32 = 2;
 const PING_INTERVAL: Duration = Duration::from_secs(1);
 const QUIT_PATIENCE: Duration = Duration::from_secs(10);
 const REPORT_HANG_AFTER: Duration = Duration::from_secs(10);
+const SHELL_RELAUNCH_AFTER: Duration = Duration::from_secs(5);
 const LOGOUT_TIMEOUT: &str = "logout-timeout";
 
 #[derive(PartialEq)]
@@ -114,6 +116,7 @@ struct Ping {
     given_up: bool,
     reported: bool,
     finished: bool,
+    relaunched: bool,
 }
 
 #[derive(Default)]
@@ -225,7 +228,35 @@ impl State {
                 true,
             );
             self.needs_redraw = true;
+            if matches!(pinged, Pinged::Shell(_)) {
+                self.choose_exclusive_layer();
+            }
         }
+    }
+
+    fn relaunch_hung_shell(&mut self, now: Duration) -> Option<Duration> {
+        let mut due = None;
+        for ping in self
+            .watchdog
+            .pings
+            .iter_mut()
+            .filter(|ping| ping.unresponsive && !ping.relaunched)
+        {
+            let Pinged::Shell(shell) = &ping.pinged else {
+                continue;
+            };
+            let relaunch_at = ping.sent + SHELL_RELAUNCH_AFTER;
+            if now < relaunch_at {
+                due = due.into_iter().chain([relaunch_at]).min();
+                continue;
+            }
+            ping.relaunched = true;
+            tracing::warn!("the shell stopped responding; starting it again");
+            if let Some(client) = shell.client() {
+                relaunch_shell(&client, true);
+            }
+        }
+        due
     }
 
     fn interacting_clients(&self) -> HashSet<ClientId> {
@@ -284,6 +315,7 @@ impl State {
                 given_up: false,
                 reported: false,
                 finished: false,
+                relaunched: false,
             });
         }
         for shell in self
@@ -313,6 +345,7 @@ impl State {
                 given_up: false,
                 reported: false,
                 finished: false,
+                relaunched: false,
             });
         }
     }
@@ -352,9 +385,11 @@ impl State {
         self.ping_clients(now);
         let shells = &self.shell_resources;
         let controls = &self.app_control_resources;
+        let mut shell_hung = false;
         for ping in &mut self.watchdog.pings {
             if ping.pending && !ping.unresponsive && now >= ping.sent + UNRESPONSIVE_AFTER {
                 ping.unresponsive = true;
+                shell_hung |= matches!(ping.pinged, Pinged::Shell(_));
                 announce(shells, controls, ping, false);
                 changed = true;
             }
@@ -384,6 +419,9 @@ impl State {
             .quit_asked
             .is_some_and(|asked| now >= asked + QUIT_PATIENCE);
         self.announce_apps_running();
+        if shell_hung {
+            self.choose_exclusive_layer();
+        }
         if changed {
             self.needs_redraw = true;
         }
@@ -405,6 +443,7 @@ impl State {
             .min()
             .into_iter()
             .chain(waiting_for_apps.then_some(now + PING_INTERVAL))
+            .chain(self.relaunch_hung_shell(now))
             .min()
     }
 }

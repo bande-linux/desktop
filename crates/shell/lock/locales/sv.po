@@ -7,14 +7,43 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Input source {name}"
+msgstr "Inmatningskälla {name}"
+
+msgid "Incorrect password. Try again."
+msgstr "Fel lösenord. Försök igen."
+
+msgid "That user name or password is not right. Try again."
+msgstr "Användarnamnet eller lösenordet stämmer inte. Försök igen."
+
+msgid "Your password has expired. Choose a new one."
+msgstr "Ditt lösenord har gått ut. Välj ett nytt."
+
+msgid "This account has expired. Ask your administrator to renew it."
+msgstr "Det här kontot har gått ut. Be din administratör att förnya det."
+
+msgid "This account cannot sign in here."
+msgstr "Det här kontot kan inte logga in här."
+
+msgid "Too many attempts. Wait a moment and try again."
+msgstr "För många försök. Vänta en stund och försök igen."
+
+msgid "Signing in is not available right now."
+msgstr "Det går inte att logga in just nu."
+
+msgid "Too many attempts. Try again in 1 second."
+msgid_plural "Too many attempts. Try again in {count} seconds."
+msgstr[0] "För många försök. Försök igen om 1 sekund."
+msgstr[1] "För många försök. Försök igen om {count} sekunder."
+
 msgid "{percent}%"
 msgstr "{percent} %"
 
 msgid "Locked. {name}"
 msgstr "Låst. {name}"
 
-msgid "Input source {name}"
-msgstr "Inmatningskälla {name}"
+msgid "Sign in. {name}"
+msgstr "Logga in. {name}"
 
 msgid "User {index} of {count}. Up and Down choose another."
 msgstr "Användare {index} av {count}. Upp och Ned väljer en annan."
@@ -22,17 +51,26 @@ msgstr "Användare {index} av {count}. Upp och Ned väljer en annan."
 msgid "Battery {percent}%"
 msgstr "Batteri {percent} %"
 
+msgid "Connected to {network}"
+msgstr "Ansluten till {network}"
+
+msgid "Connected by cable"
+msgstr "Ansluten med kabel"
+
+msgid "Offline"
+msgstr "Offline"
+
 msgid "Enter Password"
 msgstr "Ange lösenord"
 
-msgid "Checking the password"
-msgstr "Kontrollerar lösenordet"
+msgid "Users"
+msgstr "Användare"
+
+msgid "Checking"
+msgstr "Kontrollerar"
 
 msgid "Cancel"
 msgstr "Avbryt"
 
 msgid "Sleep"
 msgstr "Vila"
-
-msgid "Incorrect password. Try again."
-msgstr "Fel lösenord. Försök igen."

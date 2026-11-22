@@ -1,3 +1,4 @@
+use bande_datetime::DateFormats;
 use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
 use bande_toolkit::ui::{
@@ -5,7 +6,7 @@ use bande_toolkit::ui::{
     WidgetId,
 };
 use jiff::ToSpan;
-use jiff::civil::{Date, DateTime, Time};
+use jiff::civil::{DateTime, Time};
 use jiff::tz::TimeZone;
 
 use super::panel::{Arrow, Line, Panel, Width};
@@ -39,57 +40,14 @@ pub struct Inspector {
     alerts: Vec<Alert>,
     anchor: Option<Rect>,
     size: (f32, f32),
+    formats: DateFormats,
 }
 
-pub fn parse_time(text: &str) -> Option<Time> {
-    let lower = text.trim().to_lowercase();
-    let (body, afternoon) = match (lower.strip_suffix("pm"), lower.strip_suffix("am")) {
-        (Some(body), _) => (body.trim(), Some(true)),
-        (_, Some(body)) => (body.trim(), Some(false)),
-        _ => (lower.as_str(), None),
-    };
-    let (hours, minutes) = match body.split_once([':', '.', 'h']) {
-        Some((hours, minutes)) => (
-            hours.trim().parse::<i8>().ok()?,
-            minutes.trim().parse::<i8>().ok()?,
-        ),
-        None if body.len() > 2 => {
-            let split = body.len() - 2;
-            (
-                body.get(..split)?.parse().ok()?,
-                body.get(split..)?.parse().ok()?,
-            )
-        }
-        None => (body.parse().ok()?, 0),
-    };
-    let hours = match afternoon {
-        Some(true) if hours < 12 => hours + 12,
-        Some(false) if hours == 12 => 0,
-        Some(_) if !(1..=12).contains(&hours) => return None,
-        _ => hours,
-    };
-    Time::new(hours, minutes, 0, 0).ok()
-}
-
-pub fn parse_date(text: &str) -> Option<Date> {
-    let text = text.trim();
-    let parts: Vec<&str> = text.split(['-', '.', '/']).map(str::trim).collect();
-    let [a, b, c] = parts.as_slice() else {
-        return None;
-    };
-    let (year, month, day) = match a.len() == 4 {
-        true => (a.parse().ok()?, b.parse().ok()?, c.parse().ok()?),
-        false => (c.parse().ok()?, b.parse().ok()?, a.parse().ok()?),
-    };
-    Date::new(year, month, day).ok()
-}
-
-fn date_text(day: Date) -> String {
-    day.strftime("%Y-%m-%d").to_string()
-}
-
-fn time_text(at: DateTime) -> String {
-    at.strftime("%H:%M").to_string()
+fn time_text(formats: &DateFormats, at: DateTime) -> String {
+    at.to_zoned(TimeZone::UTC).map_or_else(
+        |_| at.strftime("%H:%M").to_string(),
+        |at| formats.clock_time(&at),
+    )
 }
 
 fn repeat_title(repeat: Repeat) -> String {
@@ -185,11 +143,11 @@ fn header(panel: &mut Panel, details: &Details, texts: &[String; 4]) {
     panel.line(Line::new(None, vec![(when, Width::Fill)], 18.0).separated());
 }
 
-fn end_of(end: EndRepeat) -> (usize, String) {
+fn end_of(formats: &DateFormats, end: EndRepeat) -> (usize, String) {
     match end {
         EndRepeat::Never => (0, String::new()),
         EndRepeat::After(count) => (1, count.to_string()),
-        EndRepeat::On(day) => (2, date_text(day)),
+        EndRepeat::On(day) => (2, formats.numeric_date(day)),
     }
 }
 
@@ -197,6 +155,7 @@ pub struct Context<'a> {
     pub local: &'a TimeZone,
     pub me: Option<&'a [String]>,
     pub time_zones: bool,
+    pub formats: &'a DateFormats,
 }
 
 fn details_of(found: &Found, event: &Event, context: &Context) -> Details {
@@ -261,7 +220,8 @@ impl Inspector {
         let details = details_of(&found, event, context);
         let zone_text = (context.time_zones && !details.all_day)
             .then(|| details.time_zone.clone().unwrap_or_default());
-        let (end_kind, end_text) = end_of(details.end_repeat);
+        let formats = context.formats;
+        let (end_kind, end_text) = end_of(formats, details.end_repeat);
         let last_day = match details.all_day {
             true => details
                 .end
@@ -272,10 +232,10 @@ impl Inspector {
             false => details.end.date(),
         };
         let texts = [
-            date_text(details.start.date()),
-            time_text(details.start),
-            date_text(last_day),
-            time_text(details.end),
+            formats.numeric_date(details.start.date()),
+            time_text(formats, details.start),
+            formats.numeric_date(last_day),
+            time_text(formats, details.end),
         ];
         let repeats = with_current(&Repeat::CHOICES, Repeat::Custom);
         let alerts = match details.all_day {
@@ -341,14 +301,14 @@ impl Inspector {
                 let start_time = panel.add(field(&texts[1], Signal::StartTime));
                 panel.line(Line::new(
                     Some(&tr!("Starts:")),
-                    vec![(start_date, Width::Fill), (start_time, Width::Fixed(64.0))],
+                    vec![(start_date, Width::Fill), (start_time, Width::Fixed(80.0))],
                     ROW,
                 ));
                 let end_date = panel.add(field(&texts[2], Signal::EndDate));
                 let end_time = panel.add(field(&texts[3], Signal::EndTime));
                 panel.line(Line::new(
                     Some(&tr!("Ends:")),
-                    vec![(end_date, Width::Fill), (end_time, Width::Fixed(64.0))],
+                    vec![(end_date, Width::Fill), (end_time, Width::Fixed(80.0))],
                     ROW,
                 ));
                 if let Some(zone) = &zone_text {
@@ -502,6 +462,7 @@ impl Inspector {
             anchor,
             size,
             found,
+            formats: formats.clone(),
         };
         (panel, inspector)
     }
@@ -569,8 +530,8 @@ impl Inspector {
     }
 
     fn times(&self) -> Option<(DateTime, DateTime)> {
-        let start_day = parse_date(&self.texts[0])?;
-        let end_day = parse_date(&self.texts[2])?;
+        let start_day = self.formats.parse_date(&self.texts[0])?;
+        let end_day = self.formats.parse_date(&self.texts[2])?;
         match self.details.all_day {
             true => {
                 let end_day = end_day.max(start_day);
@@ -583,8 +544,8 @@ impl Inspector {
                 ))
             }
             false => {
-                let start = start_day.to_datetime(parse_time(&self.texts[1])?);
-                let end = end_day.to_datetime(parse_time(&self.texts[3])?);
+                let start = start_day.to_datetime(self.formats.parse_time(&self.texts[1])?);
+                let end = end_day.to_datetime(self.formats.parse_time(&self.texts[3])?);
                 let end = match end <= start {
                     true => start.checked_add(1.hour()).ok()?,
                     false => end,
@@ -599,7 +560,10 @@ impl Inspector {
             .times()
             .unwrap_or((self.original.start, self.original.end));
         let (start, end) = match (self.details.all_day, self.original.all_day) {
-            (false, true) if self.times().is_none() || self.texts[1] == "00:00" => {
+            (false, true)
+                if self.times().is_none()
+                    || self.formats.parse_time(&self.texts[1]) == Some(Time::midnight()) =>
+            {
                 let start = start.date().to_datetime(Time::constant(9, 0, 0, 0));
                 (start, start.checked_add(1.hour()).unwrap_or(start))
             }
@@ -614,7 +578,11 @@ impl Inspector {
                     .filter(|count| *count > 0)
                     .unwrap_or(1),
             ),
-            2 => EndRepeat::On(parse_date(&self.end_text).unwrap_or(start.date())),
+            2 => EndRepeat::On(
+                self.formats
+                    .parse_date(&self.end_text)
+                    .unwrap_or(start.date()),
+            ),
             _ => EndRepeat::Never,
         };
         let details = Details {

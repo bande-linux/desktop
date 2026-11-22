@@ -1,4 +1,4 @@
-use bande_network::{KnownNetwork, Network, WifiLink};
+use bande_network::{Hotspot, KnownNetwork, Network, Outside, WifiLink};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WifiState {
@@ -7,11 +7,13 @@ pub struct WifiState {
     pub known: Vec<KnownNetwork>,
     pub link: WifiLink,
     pub sign_in: bool,
+    pub outside: Option<Outside>,
+    pub hotspot: Option<Hotspot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NetworkState {
-    pub ethernet: Option<bande_network::Ethernet>,
+    pub ethernets: Vec<bande_network::Ethernet>,
     pub vpns: Vec<bande_network::Vpn>,
 }
 

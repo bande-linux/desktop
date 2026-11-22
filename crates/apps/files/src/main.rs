@@ -26,7 +26,7 @@ use bande_fs::{History, Running, Trash};
 use bande_glance::{Action, GlanceLink, Panel, remembered_size, serve_worker};
 use bande_inbox::{Inbox, Outbox};
 use bande_l10n::tr;
-use bande_search::{recently_used_path, usage_path};
+use bande_search::{add_recently_used, recently_used_path, usage_path};
 use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{Event, frame_time};
 use bande_toolkit::{
@@ -1120,8 +1120,16 @@ impl Files {
         match request {
             Request::Open { app, files } => {
                 let token = window.activation_token(app.app_id()).ok();
-                if let Err(error) = launch_with(&app, &files, token.as_deref()) {
-                    tracing::warn!("cannot open with {}: {error}", app.id);
+                match launch_with(&app, &files, token.as_deref()) {
+                    Ok(()) => {
+                        let opened = files
+                            .iter()
+                            .filter(|file| !file.is_dir())
+                            .map(|file| (file.clone(), pane.view.mime_for(file)))
+                            .collect();
+                        add_recently_used(opened, app.name.clone(), app.exec.clone());
+                    }
+                    Err(error) => tracing::warn!("cannot open with {}: {error}", app.id),
                 }
             }
             Request::Compress { app, files } => {

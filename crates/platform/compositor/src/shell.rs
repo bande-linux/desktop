@@ -21,7 +21,7 @@ use crate::session::SessionRole;
 use crate::state::{ClientState, State, client_pid, is_mapped};
 
 pub(crate) const OPEN_TERMINAL_SINCE: u32 = 5;
-pub(crate) const SHELL_VERSION: u32 = 8;
+pub(crate) const SHELL_VERSION: u32 = 9;
 const INSERT_PATIENCE: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
@@ -594,6 +594,9 @@ impl Dispatch<BandeShellV1, ()> for State {
             }
             bande_shell_v1::Request::PassKey { keysym, modifiers } => {
                 state.pass_key(resource.client(), keysym, modifiers);
+            }
+            bande_shell_v1::Request::ShowCaptureOptions { recording } => {
+                state.show_capture_options(recording != 0);
             }
             bande_shell_v1::Request::Pong { .. } => state.shell_pong(resource.clone()),
             bande_shell_v1::Request::Destroy => {

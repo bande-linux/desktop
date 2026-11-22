@@ -11,6 +11,7 @@ pub enum Symbol {
     Logo,
     Wifi { bars: u8 },
     WifiOff,
+    Wired { connected: bool },
     Bolt,
 }
 
@@ -60,6 +61,20 @@ pub fn svg(symbol: Symbol, color: Color) -> String {
                 arcs(&WIFI_ARCS, 0, &color, 1.8)
             ),
         ),
+        Symbol::Wired { connected } => (
+            "0 0 18 14",
+            format!(
+                r#"<g fill="none" stroke="{color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="{}"><rect x="2" y="1" width="5" height="4" rx="1"/><rect x="11" y="1" width="5" height="4" rx="1"/><rect x="6.5" y="9" width="5" height="4" rx="1"/><path d="M4.5 5V7H13.5V5M9 7V9"/></g>{}"#,
+                if connected { 1.0 } else { 0.3 },
+                if connected {
+                    String::new()
+                } else {
+                    format!(
+                        r#"<path d="M3 1.5L15 13.5" stroke="{color}" stroke-width="1.6" stroke-linecap="round"/>"#
+                    )
+                }
+            ),
+        ),
         Symbol::Bolt => (
             "0 0 8 12",
             format!(r#"<path d="M5 0L0.4 6.9H3.6L2.6 12L7.6 4.8H4.4z" fill="{color}"/>"#),
@@ -71,7 +86,7 @@ pub fn svg(symbol: Symbol, color: Color) -> String {
 pub fn natural_size(symbol: Symbol) -> (f32, f32) {
     match symbol {
         Symbol::Logo => (15.0, 15.0),
-        Symbol::Wifi { .. } | Symbol::WifiOff => (17.0, 13.0),
+        Symbol::Wifi { .. } | Symbol::WifiOff | Symbol::Wired { .. } => (17.0, 13.0),
         Symbol::Bolt => (6.0, 9.0),
     }
 }

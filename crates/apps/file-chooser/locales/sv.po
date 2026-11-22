@@ -52,6 +52,21 @@ msgstr "Namn"
 msgid "Search"
 msgstr "Sök"
 
+msgid "Shortcuts for {app}"
+msgstr "Kortkommandon för {app}"
+
+msgid "Choose which shortcuts {app} responds to, and their keys. A shortcut holds Super, or both Ctrl and Alt."
+msgstr "Välj vilka kortkommandon {app} svarar på, och deras tangenter. Ett kortkommando innehåller Super, eller både Ctrl och Alt."
+
+msgid "Done"
+msgstr "Klar"
+
+msgid "Allow {app} to use keyboard shortcuts?"
+msgstr "Vill du tillåta {app} att använda kortkommandon?"
+
+msgid "{app} wants to respond to these shortcuts while you work in other apps. A shortcut holds Super, or both Ctrl and Alt."
+msgstr "{app} vill svara på de här kortkommandona medan du arbetar i andra appar. Ett kortkommando innehåller Super, eller både Ctrl och Alt."
+
 msgid "Add this web app to Applications?"
 msgstr "Vill du lägga till den här webbappen i Appar?"
 

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use smithay::backend::allocator::{Format as DmabufFormat, Fourcc, Modifier};
 use smithay::input::SeatState;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
@@ -34,6 +36,12 @@ use smithay::wayland::viewporter::ViewporterState;
 use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
 use smithay::wayland::xdg_activation::XdgActivationState;
 use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
+use smithay::wayland::alpha_modifier::AlphaModifierState;
+use smithay::wayland::commit_timing::CommitTimingManagerState;
+use smithay::wayland::content_type::ContentTypeState;
+use smithay::wayland::fifo::FifoManagerState;
+use smithay::wayland::single_pixel_buffer::SinglePixelBufferState;
+use smithay::wayland::xdg_system_bell::XdgSystemBellState;
 
 use super::{ClientState, ScanoutDevice, State};
 use crate::session::SessionRole;
@@ -41,7 +49,11 @@ use crate::{shell, trust};
 
 const MONOTONIC: u32 = 1;
 
-const DMABUF_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Nv12];
+const DMABUF_FOURCCS: [(Fourcc, usize); 3] = [
+    (Fourcc::Argb8888, 1),
+    (Fourcc::Xrgb8888, 1),
+    (Fourcc::Nv12, 2),
+];
 
 pub(crate) struct Globals {
     pub(crate) syncobj_state: Option<DrmSyncobjState>,
@@ -50,6 +62,7 @@ pub(crate) struct Globals {
     pub(crate) data_control_state: DataControlState,
     pub(crate) dmabuf_state: DmabufState,
     _dmabuf_global: DmabufGlobal,
+    pub(crate) dmabuf_planes: HashMap<DmabufFormat, usize>,
     pub(crate) compositor_state: CompositorState,
     pub(crate) xdg_shell_state: XdgShellState,
     pub(crate) shm_state: ShmState,
@@ -77,6 +90,13 @@ pub(crate) struct Globals {
     _relative_pointer_state: RelativePointerManagerState,
     pub(crate) session_lock_state: SessionLockManagerState,
     _security_context_state: SecurityContextState,
+    _fifo_state: FifoManagerState,
+    _commit_timing_state: CommitTimingManagerState,
+    _content_type_state: ContentTypeState,
+    _single_pixel_buffer_state: SinglePixelBufferState,
+    _alpha_modifier_state: AlphaModifierState,
+    _system_bell_state: XdgSystemBellState,
+    _tablet_state: smithay::wayland::tablet_manager::TabletManagerState,
 }
 
 impl Globals {
@@ -89,17 +109,24 @@ impl Globals {
                     .is_some_and(|state| state.role == Some(SessionRole::ClipboardDaemon))
             });
         let mut dmabuf_state = DmabufState::new();
+        let dmabuf_planes: HashMap<DmabufFormat, usize> = match scanout {
+            Some(scanout) => scanout.planes.clone(),
+            None => DMABUF_FOURCCS
+                .into_iter()
+                .map(|(code, planes)| {
+                    let format = DmabufFormat {
+                        code,
+                        modifier: Modifier::Linear,
+                    };
+                    (format, planes)
+                })
+                .collect(),
+        };
         let dmabuf_global = match scanout {
             Some(scanout) => {
                 dmabuf_state.create_global_with_default_feedback::<State>(handle, &scanout.feedback)
             }
-            None => dmabuf_state.create_global::<State>(
-                handle,
-                DMABUF_FOURCCS.map(|code| DmabufFormat {
-                    code,
-                    modifier: Modifier::Linear,
-                }),
-            ),
+            None => dmabuf_state.create_global::<State>(handle, dmabuf_planes.keys().copied()),
         };
         Self {
             syncobj_state: None,
@@ -108,6 +135,7 @@ impl Globals {
             data_control_state,
             dmabuf_state,
             _dmabuf_global: dmabuf_global,
+            dmabuf_planes,
             compositor_state: CompositorState::new::<State>(handle),
             xdg_shell_state: XdgShellState::new_with_capabilities::<State>(
                 handle,
@@ -115,6 +143,7 @@ impl Globals {
                     xdg_toplevel::WmCapabilities::Maximize,
                     xdg_toplevel::WmCapabilities::Fullscreen,
                     xdg_toplevel::WmCapabilities::Minimize,
+                    xdg_toplevel::WmCapabilities::WindowMenu,
                 ],
             ),
             shm_state: ShmState::new::<State>(handle, []),
@@ -152,6 +181,13 @@ impl Globals {
             _security_context_state: SecurityContextState::new::<State, _>(handle, |client| {
                 !trust::is_sandboxed(client)
             }),
+            _fifo_state: FifoManagerState::new::<State>(handle),
+            _commit_timing_state: CommitTimingManagerState::new::<State>(handle),
+            _content_type_state: ContentTypeState::new::<State>(handle),
+            _single_pixel_buffer_state: SinglePixelBufferState::new::<State>(handle),
+            _alpha_modifier_state: AlphaModifierState::new::<State>(handle),
+            _system_bell_state: XdgSystemBellState::new::<State>(handle),
+            _tablet_state: crate::touch::create_global(handle),
         }
     }
 }

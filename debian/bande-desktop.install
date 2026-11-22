@@ -1,10 +1,6 @@
 data/x-bande-mimeapps.list usr/share/applications/
-data/systemd/user.conf.d usr/lib/systemd/
 data/systemd/user/dbus.service.d usr/lib/systemd/user/
-data/systemd/user/filter-chain.service.d usr/lib/systemd/user/
 data/systemd/user/pipewire-pulse.service.d usr/lib/systemd/user/
-data/systemd/user/pipewire-pulse.socket.d usr/lib/systemd/user/
 data/systemd/user/pipewire.service.d usr/lib/systemd/user/
-data/systemd/user/pipewire.socket.d usr/lib/systemd/user/
 data/systemd/user/wireplumber.service.d usr/lib/systemd/user/
 data/systemd/user/xdg-desktop-portal.service.d usr/lib/systemd/user/

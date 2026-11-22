@@ -15,15 +15,22 @@ use crate::{
 };
 use accesskit::TreeUpdate;
 use bande_audio::{Audio, Level, Meter, meter_level};
+use bande_bar::menus::bluetooth_menu;
 use bande_bluetooth::{Bluetooth, adapter_in_kernel};
+use bande_bus::logind::own_session;
+use bande_bus::power_profiles::{BALANCED, POWER_SAVER, power_profiles};
+use bande_config::{BUS_NAME as CONFIG_BUS, NightLightValue, OBJECT_PATH as CONFIG_PATH};
 use bande_inbox::{Inbox, Outbox};
 use bande_network::{NetworkManager, wifi_in_kernel};
+use bande_network::{airplane_mode, set_airplane_mode};
 use bande_notify::client::NotificationsProxy;
-use bande_power::logind::own_session;
+use bande_status::Command as StatusCommand;
 use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
 use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
 use bande_status::captive::open_page;
+use bande_status::devices::run_bluetooth;
 use bande_status::session::full_name;
+use bande_status::status::Bluetooth as BluetoothStatus;
 use bande_status::status::Reading;
 use bande_toolkit::ui::{Animated, Event, Key, Menu, MenuItem, Pointer, Scroll, Spring, Ui};
 use bande_toolkit::{
@@ -36,14 +43,18 @@ use bande_xdg::{
     path_from_file_uri, running_app, spawn_detached,
 };
 use zbus::blocking::Connection;
+use zbus::proxy::CacheProperties;
 
-const JOIN: &str = "join:";
 const SETTINGS_APP: &str = "org.bande.Settings";
+const SCREENSHOT: &str = "org.bande.Screenshot";
+const SCREENSHOT_PATH: &str = "/org/bande/Screenshot";
 const SESSION: &str = "session:";
 const ARTWORK_PIXELS: u32 = 128;
 const ARTWORKS_KEPT: usize = 16;
 const METER_INTERVAL: Duration = Duration::from_millis(50);
 const SLIDE: f32 = 8.0;
+const DARK: &str = "dark";
+const LIGHT: &str = "light";
 
 enum Mode {
     Hidden,
@@ -91,13 +102,64 @@ struct Connected {
     network: Option<String>,
     sign_in: bool,
     bluetooth: Reading<bool>,
+    devices: Option<BluetoothStatus>,
     do_not_disturb: bool,
+    night_light: Option<bool>,
+    dark_style: Option<bool>,
+    power_mode: Option<String>,
+    airplane_mode: Option<bool>,
+    recording: Option<bool>,
+}
+
+fn config(session: &Connection) -> zbus::Result<zbus::blocking::Proxy<'static>> {
+    zbus::blocking::proxy::Builder::new(session)
+        .destination(CONFIG_BUS)?
+        .path(CONFIG_PATH)?
+        .interface(CONFIG_BUS)?
+        .cache_properties(CacheProperties::No)
+        .build()
+}
+
+fn read_night_light(session: &Connection) -> zbus::Result<NightLightValue> {
+    config(session)?.get_property("NightLight")
+}
+
+fn set_night_light(session: &Connection, on: bool) -> zbus::Result<()> {
+    let (_, schedule, from, to, warmth) = read_night_light(session)?;
+    config(session)?.set_property("NightLight", (on, schedule, from, to, warmth))?;
+    Ok(())
+}
+
+fn read_recording(session: &Connection) -> zbus::Result<bool> {
+    zbus::blocking::proxy::Builder::<zbus::blocking::Proxy<'_>>::new(session)
+        .destination(SCREENSHOT)?
+        .path(SCREENSHOT_PATH)?
+        .interface(SCREENSHOT)?
+        .cache_properties(CacheProperties::No)
+        .build()?
+        .get_property("Recording")
+}
+
+fn read_dark_style(session: &Connection) -> zbus::Result<bool> {
+    Ok(config(session)?.get_property::<String>("Appearance")? == DARK)
+}
+
+fn set_dark_style(session: &Connection, on: bool) -> zbus::Result<()> {
+    config(session)?.set_property("Appearance", if on { DARK } else { LIGHT })?;
+    Ok(())
+}
+
+fn quietly<T>(what: &str, result: zbus::Result<T>) -> Option<T> {
+    result
+        .inspect_err(|error| tracing::debug!("cannot read {what}: {error}"))
+        .ok()
 }
 
 fn read_connected(
     network: Option<&NetworkManager>,
     bluetooth: Option<&Bluetooth>,
     session: Option<&Connection>,
+    system: Option<&Connection>,
 ) -> Connected {
     let wifi = network.map_or(Reading::Absent, |network| {
         let enabled = network
@@ -119,10 +181,32 @@ fn read_connected(
                 .map(|radio| radio.map(|radio| radio.powered));
             Reading::from_answer("BlueZ", powered, adapter_in_kernel)
         }),
+        devices: bluetooth.and_then(|bluetooth| {
+            match bande_status::devices::bluetooth(bluetooth) {
+                Reading::Present(devices) => Some(devices),
+                _ => None,
+            }
+        }),
         do_not_disturb: session
             .and_then(|session| NotificationsProxy::new(session).ok())
             .and_then(|center| center.do_not_disturb().ok())
             .unwrap_or(false),
+        night_light: session
+            .and_then(|session| quietly("Night Light", read_night_light(session)))
+            .map(|(on, ..)| on),
+        dark_style: session.and_then(|session| quietly("the style", read_dark_style(session))),
+        recording: session
+            .and_then(|session| quietly("whether the screen is recorded", read_recording(session))),
+        power_mode: system.and_then(|system| {
+            quietly(
+                "the power mode",
+                power_profiles(system).and_then(|profiles| profiles.active_profile()),
+            )
+        }),
+        airplane_mode: airplane_mode()
+            .inspect_err(|error| tracing::debug!("cannot read the radios: {error}"))
+            .ok()
+            .flatten(),
     }
 }
 
@@ -140,7 +224,12 @@ fn follow_connected(
             let bluetooth = system.as_ref().map(Bluetooth::new);
             while wanted.recv().is_ok() {
                 wanted.try_iter().count();
-                let read = read_connected(network.as_ref(), bluetooth.as_ref(), session.as_ref());
+                let read = read_connected(
+                    network.as_ref(),
+                    bluetooth.as_ref(),
+                    session.as_ref(),
+                    system.as_ref(),
+                );
                 if !outbox.send(read) {
                     break;
                 }
@@ -238,17 +327,6 @@ fn artwork_key(player: &Player) -> String {
     )
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn unhex(text: &str) -> Option<Vec<u8>> {
-    (0..text.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(text.get(at..at + 2)?, 16).ok())
-        .collect()
-}
-
 fn moved(event: &Event, offset: Point) -> Event {
     let shift = |position: Point| Point::new(position.x - offset.x, position.y - offset.y);
     let pointer = |pointer: &Pointer| Pointer {
@@ -299,6 +377,12 @@ impl QuickSettings {
             sign_in,
             bluetooth,
             do_not_disturb,
+            night_light,
+            dark_style,
+            power_mode,
+            airplane_mode,
+            recording,
+            ..
         } = self.connected.clone();
         let snapshot = self.audio.as_deref().map(Audio::snapshot);
         let output = snapshot
@@ -327,6 +411,11 @@ impl QuickSettings {
             sign_in,
             bluetooth,
             do_not_disturb,
+            night_light,
+            dark_style,
+            power_mode,
+            airplane_mode,
+            recording,
             volume: output.map(|output| output.level.volume),
             outputs,
             output: output.map(|output| output.name.clone()),
@@ -408,7 +497,7 @@ impl QuickSettings {
             .map(|found| {
                 (
                     found.name(),
-                    format!("{JOIN}{}", hex(&found.ssid)),
+                    StatusCommand::Join(found.ssid.clone()).action(),
                     found.current,
                 )
             })
@@ -455,6 +544,51 @@ impl QuickSettings {
                     report("switch Do Not Disturb", center.set_do_not_disturb(on));
                 }
                 self.refresh();
+            }
+            Change::NightLight(on) => {
+                if let Some(session) = &self.session {
+                    report("switch Night Light", set_night_light(session, on));
+                }
+                self.refresh();
+            }
+            Change::DarkStyle(on) => {
+                if let Some(session) = &self.session {
+                    report("switch the dark style", set_dark_style(session, on));
+                }
+                self.refresh();
+            }
+            Change::PowerSaver(on) => {
+                if let Some(system) = &self.system {
+                    let profile = if on { POWER_SAVER } else { BALANCED };
+                    report(
+                        "switch the power mode",
+                        power_profiles(system)
+                            .and_then(|profiles| profiles.set_active_profile(profile)),
+                    );
+                }
+                self.refresh();
+            }
+            Change::AirplaneMode(on) => {
+                report("switch airplane mode", set_airplane_mode(on));
+                self.refresh();
+            }
+            Change::ScreenRecording => {
+                report(
+                    "open the screen recording options",
+                    window.show_capture_options(true),
+                );
+                self.dismiss(window);
+            }
+            Change::ChooseBluetoothDevice => {
+                if let Some(devices) = &self.connected.devices {
+                    report(
+                        "open the Bluetooth devices",
+                        window.show_menu(
+                            bluetooth_menu(devices),
+                            MenuPlacement::AtPoint(self.pointer),
+                        ),
+                    );
+                }
             }
             Change::Volume(volume) => {
                 let Some(audio) = &self.audio else {
@@ -533,6 +667,25 @@ impl QuickSettings {
                 self.players.promote(&bus_name);
                 self.load_artwork();
                 self.rebuild();
+            }
+        }
+    }
+
+    fn run_bluetooth(&mut self, window: &mut Window, command: &StatusCommand) {
+        match command {
+            StatusCommand::Settings(pane) => {
+                let command: Vec<&str> = ["bande-settings"]
+                    .into_iter()
+                    .chain(pane.as_deref())
+                    .collect();
+                self.launch(window, SETTINGS_APP, &command);
+                self.dismiss(window);
+            }
+            command => {
+                if let Some(bluetooth) = &self.bluetooth {
+                    run_bluetooth(bluetooth, command);
+                }
+                self.refresh();
             }
         }
     }
@@ -947,10 +1100,21 @@ impl App for QuickSettings {
                 self.run_changes(window);
             }
             WindowEvent::MenuAction(action) => {
-                if let Some(ssid) = action.strip_prefix(JOIN).and_then(unhex) {
-                    self.join(window, &ssid);
+                let command = StatusCommand::parse(&action);
+                if let Some(StatusCommand::Join(ssid)) = &command {
+                    self.join(window, ssid);
                 } else if let Some(keyword) = action.strip_prefix(SESSION) {
                     self.end_session(window, keyword);
+                } else if let Some(command) = command.filter(|command| {
+                    matches!(
+                        command,
+                        StatusCommand::SetBluetooth(_)
+                            | StatusCommand::ToggleGadget(_)
+                            | StatusCommand::ForgetGadget(_)
+                            | StatusCommand::Settings(_)
+                    )
+                }) {
+                    self.run_bluetooth(window, &command);
                 } else if let Mode::Panel { ui, .. } = &mut self.mode {
                     ui.menu_action(&action);
                     self.run_changes(window);

@@ -3,6 +3,9 @@ mod paint;
 
 use std::time::Duration;
 
+use accesskit::{Action, ActionRequest, Role};
+use bande_l10n::tr;
+
 use bande_spring::{Animated, Spring, State as Phase};
 use smithay::backend::renderer::element::Id;
 use smithay::desktop::{WindowSurfaceType, layer_map_for_output};
@@ -13,6 +16,7 @@ use smithay::wayland::shell::wlr_layer::Layer;
 
 use self::layout::lerp;
 pub(crate) use self::layout::{arrange, real_rect};
+use crate::access::{Announcer, Entry, Group, entry_of, grouped};
 use crate::gesture::Tracker;
 use crate::input::BTN_MIDDLE;
 use crate::label::Label;
@@ -70,6 +74,17 @@ pub(crate) struct Overview {
     returning: Option<(WlSurface, Motion)>,
     slots: Vec<Slot>,
     ids: Vec<Vec<Id>>,
+    pub(crate) announcer: Announcer,
+    announced: Option<Announced>,
+}
+
+#[derive(Clone, PartialEq)]
+struct Announced {
+    windows: Vec<(WlSurface, String)>,
+    selected: Option<usize>,
+    screen: usize,
+    workspaces: usize,
+    active: usize,
 }
 
 impl Overview {
@@ -238,6 +253,7 @@ impl State {
         }
         self.settle_overview(1.0, 0.0);
         self.relayout_overview();
+        self.announce_overview();
     }
 
     pub(crate) fn close_overview(&mut self) {
@@ -250,6 +266,8 @@ impl State {
         let spring = self.overview_spring(velocity);
         self.overview.settle_to(target, velocity, spring);
         if target == 0.0 {
+            self.overview.announced = None;
+            self.overview.announcer.withdraw();
             self.overview.press = None;
             let keeps_focus = self
                 .focused_window()
@@ -303,6 +321,98 @@ impl State {
             self.needs_redraw = true;
         }
         self.relayout_overview();
+        self.announce_overview();
+    }
+
+    fn overview_announcement(&self) -> Option<Announced> {
+        if self.overview.target == 0.0 {
+            return None;
+        }
+        let windows: Vec<(WlSurface, String)> = self
+            .overview
+            .slots
+            .iter()
+            .filter(|slot| self.selectable(&slot.surface))
+            .map(|slot| {
+                let (title, app_id) = toplevel_names(&slot.surface);
+                let label = if title.is_empty() { app_id } else { title };
+                (slot.surface.clone(), label)
+            })
+            .collect();
+        let selected = self
+            .overview
+            .selected
+            .as_ref()
+            .and_then(|selected| windows.iter().position(|(surface, _)| surface == selected));
+        let screen = self.pointer_screen();
+        let workspaces = &self.screens[screen].workspaces;
+        Some(Announced {
+            windows,
+            selected,
+            screen,
+            workspaces: workspaces.count(),
+            active: workspaces.active(),
+        })
+    }
+
+    fn announce_overview(&mut self) {
+        let announced = self.overview_announcement();
+        if announced == self.overview.announced {
+            return;
+        }
+        self.overview.announced.clone_from(&announced);
+        let Some(announced) = announced else {
+            return;
+        };
+        let windows = Group {
+            role: Role::ListBox,
+            item_role: Role::ListBoxOption,
+            label: tr!("Windows"),
+            clickable: true,
+            entries: announced
+                .windows
+                .iter()
+                .enumerate()
+                .map(|(index, (_, label))| {
+                    Entry::new(label.clone()).selected(announced.selected == Some(index))
+                })
+                .collect(),
+        };
+        let workspaces = Group {
+            role: Role::TabList,
+            item_role: Role::Tab,
+            label: tr!("Workspaces"),
+            clickable: true,
+            entries: (0..announced.workspaces)
+                .map(|position| {
+                    Entry::new(tr!("Workspace {number}", number = (position + 1)))
+                        .selected(position == announced.active)
+                })
+                .collect(),
+        };
+        let focus = announced.selected.map(|index| (0, index));
+        self.overview.announcer.publish(true, || {
+            grouped(&tr!("Overview"), &[windows, workspaces], focus)
+        });
+    }
+
+    pub(crate) fn overview_action(&mut self, request: &ActionRequest) {
+        let Some(announced) = self.overview.announced.clone() else {
+            return;
+        };
+        match entry_of(request.target_node).filter(|_| request.action == Action::Click) {
+            Some((0, index)) => {
+                if let Some((surface, _)) = announced.windows.get(index) {
+                    self.pick(surface.clone());
+                }
+            }
+            Some((1, index)) if index < announced.workspaces => {
+                self.switch_workspace(announced.screen, index);
+                self.relayout_overview();
+                self.announce_overview();
+            }
+            _ => {}
+        }
     }
 
     pub(crate) fn begin_overview_swipe(&mut self, time: u32, upward: bool) {
@@ -511,6 +621,7 @@ impl State {
             .clone()
             .filter(|surface| self.selectable(surface));
         self.relayout_overview();
+        self.announce_overview();
         self.needs_redraw = true;
     }
 

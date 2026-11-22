@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use bande_audio::{Level, VolumeKey};
+use bande_bus::power_profiles::{PERFORMANCE, POWER_SAVER};
 use bande_l10n::tr;
 use bande_status::brightness::DisplayLevel;
 use bande_status::status::Reading;
@@ -82,6 +83,11 @@ pub struct Status {
     pub sign_in: bool,
     pub bluetooth: Reading<bool>,
     pub do_not_disturb: bool,
+    pub night_light: Option<bool>,
+    pub dark_style: Option<bool>,
+    pub power_mode: Option<String>,
+    pub airplane_mode: Option<bool>,
+    pub recording: Option<bool>,
     pub volume: Option<f32>,
     pub outputs: Vec<Choice>,
     pub output: Option<String>,
@@ -110,6 +116,12 @@ pub enum Change {
     Wifi(bool),
     Bluetooth(bool),
     DoNotDisturb(bool),
+    NightLight(bool),
+    DarkStyle(bool),
+    PowerSaver(bool),
+    AirplaneMode(bool),
+    ScreenRecording,
+    ChooseBluetoothDevice,
     Volume(f32),
     VolumeReleased,
     Brightness(String, f32),
@@ -240,6 +252,16 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             },
             on,
             toggle: Change::Bluetooth,
+            details: Some(Change::ChooseBluetoothDevice),
+        });
+    }
+    if let Some(on) = status.airplane_mode {
+        specs.push(TileSpec {
+            title: tr!("Airplane Mode"),
+            detail: on_off(on),
+            symbol: "airplane-mode-symbolic",
+            on,
+            toggle: Change::AirplaneMode,
             details: None,
         });
     }
@@ -255,6 +277,55 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
         toggle: Change::DoNotDisturb,
         details: None,
     });
+    if let Some(on) = status.night_light {
+        specs.push(TileSpec {
+            title: tr!("Night Light"),
+            detail: on_off(on),
+            symbol: "night-light-symbolic",
+            on,
+            toggle: Change::NightLight,
+            details: None,
+        });
+    }
+    if let Some(on) = status.dark_style {
+        specs.push(TileSpec {
+            title: tr!("Dark Style"),
+            detail: on_off(on),
+            symbol: "weather-clear-night-symbolic",
+            on,
+            toggle: Change::DarkStyle,
+            details: None,
+        });
+    }
+    if let Some(mode) = &status.power_mode {
+        let saving = mode == POWER_SAVER;
+        specs.push(TileSpec {
+            title: tr!("Power Saver"),
+            detail: match mode.as_str() {
+                POWER_SAVER => on_off(true),
+                PERFORMANCE => tr!("Performance"),
+                _ => tr!("Balanced"),
+            },
+            symbol: if saving {
+                "battery-level-30-symbolic"
+            } else {
+                "battery-level-100-symbolic"
+            },
+            on: saving,
+            toggle: Change::PowerSaver,
+            details: None,
+        });
+    }
+    if let Some(on) = status.recording {
+        specs.push(TileSpec {
+            title: tr!("Screen Recording"),
+            detail: if on { tr!("Recording") } else { on_off(false) },
+            symbol: "media-record-symbolic",
+            on,
+            toggle: |_| Change::ScreenRecording,
+            details: None,
+        });
+    }
     if let Some(muted) = status.input_muted {
         specs.push(TileSpec {
             title: tr!("Microphone"),

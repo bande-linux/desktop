@@ -2,8 +2,10 @@ use std::time::{Duration, Instant};
 
 use bande_l10n::tr;
 
+use crate::access::{Announcer, window_with};
 use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
+use crate::shell::toplevel_names;
 use crate::state::{Compositor, OutputElement, State};
 use bande_graphics::{
     Key, Modifiers, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST, Palette, Scheme, TextSize,
@@ -26,6 +28,7 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_positioner::{
     Anchor, ConstraintAdjustment, Gravity,
 };
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Serial, Size};
@@ -36,6 +39,7 @@ const BELOW_GAP: i32 = 4;
 const SUBMENU_OVERLAP: i32 = 2;
 const SUBMENU_LIFT: i32 = -4;
 const SLIDE: f64 = 3.0;
+const KEPT_ON_TOP_SINCE: u32 = 11;
 
 type Frame = Rectangle<f64, Logical>;
 
@@ -90,6 +94,7 @@ impl MaximizeWait {
 #[derive(Default)]
 pub(crate) struct WindowMenus {
     open: Option<Open>,
+    pub(crate) announcer: Announcer,
     labels: Option<Labels>,
     text_size: TextSize,
     on_maximize: Option<WlSurface>,
@@ -341,17 +346,40 @@ impl State {
                 &tr!("Move to Workspace"),
                 Menu::new(self.desktop_items(index)),
             ),
+            item(tr!("Keep on Top"), "keep-on-top")
+                .checked(self.windows[index].keep_on_top)
+                .enabled(!self.windows[index].has_state(xdg_toplevel::State::Fullscreen)),
             MenuItem::separator(),
             item(tr!("Close"), "close").shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
         ])
     }
 
-    pub(crate) fn open_window_menu(&mut self, surface: &WlSurface, at: Point<f64, Logical>) {
+    pub(crate) fn open_window_menu(
+        &mut self,
+        surface: &WlSurface,
+        at: Point<f64, Logical>,
+        from_keyboard: bool,
+    ) {
         let Some(index) = self.window_index(surface) else {
             return;
         };
         let menu = self.window_menu(index);
-        self.open_menu(index, menu, Anchored::AtPoint(at), false);
+        self.open_menu(index, menu, Anchored::AtPoint(at), from_keyboard);
+    }
+
+    pub(crate) fn open_window_menu_from_keyboard(&mut self, surface: &WlSurface) {
+        let Some(window) = self.window_index(surface).map(|index| &self.windows[index]) else {
+            return;
+        };
+        let Some(geometry) = window.geometry() else {
+            return;
+        };
+        let bar = match window.title_bar_height() {
+            0 => WINDOW_HEADER_HEIGHT as i32,
+            bar => bar,
+        };
+        let at = Point::from((geometry.loc.x, geometry.loc.y + bar)).to_f64();
+        self.open_window_menu(surface, at, true);
     }
 
     pub(crate) fn show_client_window_menu(
@@ -361,14 +389,31 @@ impl State {
         serial: Serial,
         location: Point<i32, Logical>,
     ) {
-        if self.grab_start(seat, serial, surface).is_none() {
+        let from_pointer = self.grab_start(seat, serial, surface).is_some();
+        if !from_pointer && !self.keyboard_serial_of(seat, serial, surface) {
             return;
         }
         let Some(index) = self.window_index(surface) else {
             return;
         };
         let at = (self.windows[index].surface_origin() + location).to_f64();
-        self.open_window_menu(surface, at);
+        self.open_window_menu(surface, at, !from_pointer);
+    }
+
+    fn toggle_keep_on_top(&mut self, index: usize) {
+        let window = &mut self.windows[index];
+        window.keep_on_top = !window.keep_on_top;
+        let keep = u32::from(window.keep_on_top);
+        let toplevel = window.toplevel.xdg_toplevel().clone();
+        for app in self
+            .app_resources
+            .iter()
+            .filter(|app| app.client() == toplevel.client() && app.version() >= KEPT_ON_TOP_SINCE)
+        {
+            app.kept_on_top(&toplevel, keep);
+        }
+        self.needs_redraw = true;
+        self.refocus_pointer();
     }
 
     fn open_tiling_menu(&mut self, index: usize, held: bool) {
@@ -468,6 +513,7 @@ impl State {
         }
         self.show_cursor(CursorIcon::Default);
         self.needs_redraw = true;
+        self.announce_window_menu();
     }
 
     fn open_submenu(&mut self, level: usize, index: usize, from_keyboard: bool) {
@@ -513,6 +559,7 @@ impl State {
 
     pub(crate) fn drop_window_menu(&mut self) {
         self.window_menus.open = None;
+        self.window_menus.announcer.withdraw();
     }
 
     pub(crate) fn dismiss_window_menu(&mut self) {
@@ -520,6 +567,7 @@ impl State {
             return;
         };
         open.closing = true;
+        self.window_menus.announcer.withdraw();
         for panel in &mut open.panels {
             panel.motion.retarget(Look::hidden(panel.rect));
         }
@@ -565,6 +613,33 @@ impl State {
             }
             MenuOutcome::Dismiss => self.dismiss_window_menu(),
         }
+        self.announce_window_menu();
+    }
+
+    fn announce_window_menu(&mut self) {
+        let WindowMenus {
+            open, announcer, ..
+        } = &mut self.window_menus;
+        let Some(open) = open
+            .as_ref()
+            .filter(|open| !open.closing && open.resting.is_none())
+        else {
+            return;
+        };
+        let title = toplevel_names(&open.window).0;
+        let (nodes, roots, focus) = open.tracker.access();
+        announcer.publish(true, || window_with(&title, roots, nodes, focus));
+    }
+
+    pub(crate) fn window_menu_action_request(&mut self, request: &accesskit::ActionRequest) {
+        let Some(open) = self.window_menus.open.as_mut().filter(|open| !open.closing) else {
+            return;
+        };
+        let Some((level, index)) = open.tracker.item_for_node(request.target_node) else {
+            return;
+        };
+        let outcome = open.tracker.activate(level, index, Instant::now());
+        self.apply_menu_outcome(outcome, true);
     }
 
     fn window_menu_action(&mut self, surface: &WlSurface, action: &str) {
@@ -575,6 +650,7 @@ impl State {
             "minimize" => return self.minimize(surface),
             "maximize" => return self.toggle_maximize(surface),
             "close" => return self.windows[index].toplevel.send_close(),
+            "keep-on-top" => return self.toggle_keep_on_top(index),
             "place-fill" => return self.maximize(surface),
             "place-left" => Placement::Left,
             "place-right" => Placement::Right,

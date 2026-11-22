@@ -94,6 +94,9 @@ grep -qx 'Exec=bande-settings' "$root/usr/share/applications/org.bande.Settings.
 root=$(extract bande-greeter)
 grep -qx 'command = "/usr/libexec/bande-greeter-session"' "$root/usr/share/bande-greeter/greetd-config.toml"
 field bande-greeter Depends | grep -qF 'greetd (>= 0.10.3-6)'
+field bande-greeter Provides | grep -qx x-display-manager
+grep -qx 'ExecStart=/usr/sbin/greetd --config /usr/share/bande-greeter/greetd-config.toml' "$root/usr/lib/systemd/system/bande-greeter.service"
+test ! -e "$root/usr/lib/systemd/system/greetd.service.d"
 root=$(extract bande-lock)
 grep -qx '@include common-auth' "$root/etc/pam.d/bande-lock"
 field bande-lock Depends | grep -q libpam0g
@@ -186,8 +189,9 @@ for recommended in "bande-greeter (>= $version)" "bande-reporter (>= $version)" 
     relation Recommends "$recommended"
 done
 
-echo "== bande-desktop recommends only packages built here at $version, or Debian's"
-desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | while read -r package relation; do
+echo "== bande-desktop recommends only packages built here at $version, the browser, or Debian's"
+relation Recommends bande-browser
+desktop Recommends | tr ',' '\n' | sed 's/^ *//' | grep '^bande-\|^libpam-bande-' | grep -vx bande-browser | while read -r package relation; do
     [ "$relation" = "(>= $version)" ] || { echo "bande-desktop recommends $package $relation"; exit 1; }
     printf '%s\n' "${packages[@]}" "${independent[@]}" | grep -qxF "$package" || { echo "$package is not built here"; exit 1; }
 done

@@ -11,6 +11,7 @@ use crate::paint::colored;
 use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_content::{Contents, confine, worker_program};
 use bande_fs::archive_contents;
+use bande_thumbnails::Picture;
 use bande_toolkit::{Color, CpuRenderer, Item, Point, Scene, TextStyle, TextSystem};
 use bande_xdg::wait_for_exit;
 
@@ -22,6 +23,7 @@ const WORKER_TIME: Duration = Duration::from_secs(15);
 const MOST_PIXELS: u64 = 40 << 20;
 pub const SAMPLE_WIDTH: f32 = 760.0;
 const SAMPLE_SCALE: f64 = 2.0;
+const FONT_THUMBNAIL_TEXT: &str = "Aa";
 const ALPHABET: &str =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789 .,;:!?&@#%()[]";
 
@@ -32,6 +34,9 @@ pub struct Sample {
 }
 
 pub fn serve_worker(arguments: &[String]) -> Option<ExitCode> {
+    if let Some(code) = bande_thumbnails::serve_worker(arguments, &font_thumbnail) {
+        return Some(code);
+    }
     let [flag, path] = arguments else {
         return None;
     };
@@ -66,7 +71,7 @@ fn exit(result: io::Result<()>) -> ExitCode {
     }
 }
 
-fn font_sample(path: &Path) -> io::Result<Sample> {
+fn load_font(path: &Path) -> io::Result<(TextSystem, String)> {
     let mut bytes = Vec::new();
     std::fs::File::open(path)?
         .take(FONT_BYTES)
@@ -81,6 +86,44 @@ fn font_sample(path: &Path) -> io::Result<Sample> {
         .and_then(|(family, _)| fonts.collection.family_name(*family))
         .map(str::to_owned)
         .ok_or_else(|| io::Error::other("not a font"))?;
+    Ok((text, family))
+}
+
+fn font_thumbnail(path: &Path, pixels: u32) -> Option<Picture> {
+    let (mut text, family) = load_font(path).ok()?;
+    let side = pixels as f32;
+    let paragraph = colored(
+        &mut text,
+        FONT_THUMBNAIL_TEXT,
+        TextStyle::new(side * 0.5, Color::BLACK),
+        Some(&family),
+        &[],
+        None,
+    );
+    let origin = Point::new(
+        ((side - paragraph.width()) / 2.0).max(0.0),
+        ((side - paragraph.height()) / 2.0).max(0.0),
+    );
+    let scene = Scene {
+        width: pixels,
+        height: pixels,
+        background: Color::WHITE,
+        items: vec![Item::Text { origin, paragraph }],
+    };
+    let mut rgba = vec![0; pixels as usize * pixels as usize * 4];
+    CpuRenderer::new()
+        .render_into(&scene, 1.0, &mut rgba)
+        .inspect_err(|error| tracing::warn!("cannot draw a font thumbnail: {error:?}"))
+        .ok()?;
+    Some(Picture {
+        width: pixels,
+        height: pixels,
+        rgba,
+    })
+}
+
+fn font_sample(path: &Path) -> io::Result<Sample> {
+    let (mut text, family) = load_font(path)?;
     let sample = tr!("The quick brown fox jumps over the lazy dog.");
     let mut lines = vec![(family.clone(), 36.0), (ALPHABET.to_owned(), 22.0)];
     lines.extend([12.0, 18.0, 24.0, 36.0, 48.0, 64.0].map(|size| (sample.clone(), size)));

@@ -1,6 +1,7 @@
 mod access;
 mod account;
 mod app_chooser;
+mod global_shortcuts;
 mod launcher;
 mod print;
 
@@ -14,6 +15,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use bande_app::{Dropping, FileDrop};
 use bande_app_settings::{Stored, settings_folder};
 use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_file_chooser::{
@@ -21,17 +23,19 @@ use bande_file_chooser::{
 };
 use bande_files::{FilesSettings, rows, sidebar_file, with_volumes};
 use bande_l10n::tr;
+use bande_search::add_recently_used;
 use bande_toolkit::ui::Alert;
 use bande_toolkit::{App, Image, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 use bande_volumes::{media_roots, mounted_volumes, volume_icon};
 use bande_wallpaper::Fit;
 use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
-    data_dirs, read_user_dirs, replace_file, user_dir,
+    data_dirs, find_app, read_user_dirs, replace_file, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
-    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, PRINT, SET_WALLPAPER, SHARE_ACCOUNT,
-    encode, parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
+    ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, GLOBAL_SHORTCUTS, PRINT, SET_WALLPAPER,
+    SHARE_ACCOUNT, encode, parse, parse_access, parse_account, parse_app_chooser, parse_launcher,
+    parse_shortcuts,
 };
 use xdg_desktop_portal_bande::file_chooser::{Dialog, Mode, Selection};
 
@@ -45,6 +49,7 @@ const WAYLAND_PARENT: &str = "wayland:";
 struct FileDialog {
     view: ChooserView,
     chosen: Option<Finished>,
+    drop: FileDrop,
 }
 
 impl App for FileDialog {
@@ -54,6 +59,14 @@ impl App for FileDialog {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        match self.drop.event(window, &event, |_| true) {
+            Dropping::Over => return,
+            Dropping::Dropped(paths) => {
+                self.view.dropped(&paths);
+                return window.request_redraw();
+            }
+            Dropping::Other => {}
+        }
         let redraw = match event {
             WindowEvent::Input(input) => {
                 let handled = self.view.handle(&input);
@@ -147,6 +160,27 @@ fn title(dialog: &Dialog) -> String {
     }
 }
 
+fn remember_opened(paths: &[PathBuf], app_id: &str) {
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
+    let Some(app) = find_app(&entries, app_id) else {
+        return;
+    };
+    let mime = MimeDatabase::load(&data_dirs());
+    let opened = paths
+        .iter()
+        .map(|path| (path.clone(), mime.for_path(path)))
+        .collect();
+    if let Some(work) = add_recently_used(opened, app.name.clone(), app.exec.clone())
+        && work.join().is_err()
+    {
+        tracing::warn!("remembering the opened files stopped unexpectedly");
+    }
+}
+
 fn answer(selection: &Selection, dialog: &Dialog, folder: &Path) -> ExitCode {
     let remembered = match dialog.mode {
         Mode::Open {
@@ -160,6 +194,12 @@ fn answer(selection: &Selection, dialog: &Dialog, folder: &Path) -> ExitCode {
         Mode::Open { .. } | Mode::SaveMany { .. } => folder,
     };
     remember_folder(&dialog.app_id, remembered);
+    if let Mode::Open {
+        directory: false, ..
+    } = dialog.mode
+    {
+        remember_opened(&selection.paths, &dialog.app_id);
+    }
     let mut stdout = std::io::stdout();
     match stdout
         .write_all(&encode(selection, dialog))
@@ -220,7 +260,11 @@ fn run(dialog: Dialog) -> ExitCode {
         window.appearance(),
         TextSystem::new(),
     );
-    let mut app = FileDialog { view, chosen: None };
+    let mut app = FileDialog {
+        view,
+        chosen: None,
+        drop: FileDrop::default(),
+    };
     if let Err(error) = bande_toolkit::run(&mut window, &mut app) {
         tracing::error!("{error}");
     }
@@ -313,6 +357,15 @@ fn main() -> ExitCode {
     if mode == SHARE_ACCOUNT {
         return match parse_account(arguments) {
             Ok(details) => account::share(&details),
+            Err(error) => {
+                tracing::error!("{}", error.0);
+                ExitCode::from(UNAVAILABLE)
+            }
+        };
+    }
+    if mode == GLOBAL_SHORTCUTS {
+        return match parse_shortcuts(arguments) {
+            Ok(consent) => global_shortcuts::ask(&consent),
             Err(error) => {
                 tracing::error!("{}", error.0);
                 ExitCode::from(UNAVAILABLE)

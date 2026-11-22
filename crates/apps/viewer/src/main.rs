@@ -239,6 +239,7 @@ impl Viewer {
                     self.refresh_info(cx, sections);
                 }
                 Request::Changed => {}
+                Request::Open(paths) => self.open_paths(cx, paths),
             }
         }
         cx.refresh_menus();
@@ -557,6 +558,13 @@ fn main() -> ExitCode {
         && flag == WORKER_FLAG
     {
         return bande_viewer::run_pdf_worker(Path::new(path));
+    }
+    let words: Vec<String> = arguments
+        .iter()
+        .map(|argument| argument.to_string_lossy().into_owned())
+        .collect();
+    if let Some(code) = bande_thumbnails::serve_worker(&words, &|_, _| None) {
+        return code;
     }
     bande_app::run::<Viewer>(&INFO)
 }

@@ -13,6 +13,7 @@ accesskit.workspace = true
 bande-app.workspace = true
 bande-app-menu.workspace = true
 bande-app-settings.workspace = true
+bande-datetime.workspace = true
 bande-discovery.workspace = true
 bande-fs.workspace = true
 bande-https.workspace = true

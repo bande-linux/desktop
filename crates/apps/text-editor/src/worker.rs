@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
 use crate::document::Loaded;
+use crate::file::Stamp;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WriteError {
     Unmappable,
+    Changed,
     Io(String),
 }
 
@@ -17,7 +19,7 @@ pub enum Message {
         token: u64,
         revision: u64,
         path: PathBuf,
-        outcome: Result<(), WriteError>,
+        outcome: Result<Option<Stamp>, WriteError>,
     },
     Counted {
         token: u64,

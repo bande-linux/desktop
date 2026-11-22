@@ -6,8 +6,8 @@ use accesskit::TreeUpdate;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_calculator::{
-    Angle, Base, Engine, Keypad, Mode, WORD_SIZES, base_name, mode_name, parse_base, parse_mode,
-    restore, save,
+    Angle, Base, Engine, Keypad, Mode, Numbers, WORD_SIZES, base_name, mode_name, parse_base,
+    parse_mode, restore, save,
 };
 use bande_l10n::{Text, text, tr};
 use bande_toolkit::ui::{Context, Event, Key, TextView, Ui, Widget, WidgetId};
@@ -345,6 +345,7 @@ impl Program for Calculator {
 
     fn start(cx: &mut Cx<Self>, _arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut engine = Engine::new();
+        engine.numbers = Numbers::from_env();
         let tape = cx
             .state_file(STATE_FILE)
             .and_then(|file| std::fs::read_to_string(file).ok())

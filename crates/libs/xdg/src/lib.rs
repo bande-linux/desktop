@@ -36,15 +36,15 @@ pub use launch::{
     follow_oom_kills, launch, launch_action, launch_with, launch_with_arguments, open,
     spawn_detached, wait_for_exit,
 };
-pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN, unescape_xml};
+pub use mime::{DIRECTORY, MimeDatabase, OCTET_STREAM, TEXT_PLAIN, escape_xml, unescape_xml};
 pub use mimeapps::{
-    MimeApps, cache_home, config_dirs, config_home, data_home, mimeapps_paths, set_default_app,
-    state_home,
+    MimeApps, cache_home, config_dirs, config_home, data_home, mimeapps_paths, runtime_dir,
+    set_default_app, state_home,
 };
 pub use reopen::{
-    crashed_apps_file, forget_saved_windows, listed_apps, remember_running_apps, reopen_file,
-    reopen_listed_apps, running_apps_contents, running_apps_file, set_aside_apps_of_unclean_end,
-    take_apps_to_reopen,
+    crashed_apps_file, forget_saved_windows, global_shortcuts_file, listed_apps,
+    remember_running_apps, reopen_file, reopen_listed_apps, running_apps_contents,
+    running_apps_file, set_aside_apps_of_unclean_end, take_apps_to_reopen,
 };
 pub use units::unit_app_ids;
 pub use uri::{file_uri, path_from_file_uri, percent_decode, percent_encode};

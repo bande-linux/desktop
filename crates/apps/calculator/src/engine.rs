@@ -2,6 +2,7 @@ use std::hash::{BuildHasher, RandomState};
 use std::time::Instant;
 
 use crate::decimal::{Decimal, Failure};
+use crate::numbers::Numbers;
 
 pub const SHOWN_DIGITS: u32 = 16;
 const SCIENTIFIC_DIGITS: u32 = 16;
@@ -247,6 +248,7 @@ pub struct Engine {
     pub rpn: bool,
     pub second: bool,
     pub grouping: bool,
+    pub numbers: Numbers,
     x: Value,
     entry: Option<String>,
     shown: Option<String>,
@@ -291,23 +293,25 @@ fn group(digits: &str, size: usize, separator: char) -> String {
     grouped
 }
 
-fn group_number(text: &str, grouping: bool) -> String {
-    if !grouping {
-        return text.to_owned();
-    }
+fn group_number(text: &str, numbers: Numbers, grouping: bool) -> String {
     let (sign, rest) = match text.strip_prefix('-') {
         Some(rest) => ("-", rest),
         None => ("", text),
     };
     let split = rest.find(['.', 'e']).unwrap_or(rest.len());
     let (whole, tail) = rest.split_at(split);
-    format!("{sign}{}{tail}", group(whole, 3, ','))
+    let whole = match grouping {
+        true => group(whole, 3, numbers.group),
+        false => whole.to_owned(),
+    };
+    let tail = tail.replace('.', numbers.decimal.encode_utf8(&mut [0; 4]));
+    format!("{sign}{whole}{tail}")
 }
 
-pub fn format_real(value: Decimal, grouping: bool) -> String {
+fn format_real(value: Decimal) -> String {
     let rounded = value.rounded(SHOWN_DIGITS);
     let leading = rounded.leading_exponent();
-    let text = if rounded.is_zero() {
+    if rounded.is_zero() {
         "0".to_owned()
     } else if leading >= i64::from(SHOWN_DIGITS) || leading < SMALLEST_PLAIN {
         rounded.rounded(SCIENTIFIC_DIGITS).scientific()
@@ -316,13 +320,14 @@ pub fn format_real(value: Decimal, grouping: bool) -> String {
         value.rounded(u32::try_from(room).unwrap_or(1)).plain()
     } else {
         rounded.plain()
-    };
-    group_number(&text, grouping).replace('-', "−")
+    }
 }
 
-fn format_word(value: u64, base: Base, bits: u32, grouping: bool) -> String {
+fn format_word(value: u64, base: Base, bits: u32, numbers: Numbers, grouping: bool) -> String {
     match base {
-        Base::Decimal => group_number(&signed(value, bits).to_string(), grouping).replace('-', "−"),
+        Base::Decimal => {
+            group_number(&signed(value, bits).to_string(), numbers, grouping).replace('-', "−")
+        }
         Base::Hexadecimal => group(&format!("{value:X}"), 4, ' '),
         Base::Octal => format!("{value:o}"),
         Base::Binary => group(&format!("{value:b}"), 4, ' '),
@@ -361,6 +366,7 @@ impl Engine {
             rpn: false,
             second: false,
             grouping: true,
+            numbers: Numbers::POINT,
             x: Value::Real(Decimal::ZERO),
             entry: None,
             shown: None,
@@ -410,10 +416,16 @@ impl Engine {
         }
     }
 
+    fn localised(&self, plain: &str) -> String {
+        group_number(plain, self.numbers, self.grouping)
+    }
+
     fn format(&self, value: Value) -> String {
         match value {
-            Value::Real(real) => format_real(real, self.grouping),
-            Value::Word(word) => format_word(word, self.base, self.bits, self.grouping),
+            Value::Real(real) => self.localised(&format_real(real)).replace('-', "−"),
+            Value::Word(word) => {
+                format_word(word, self.base, self.bits, self.numbers, self.grouping)
+            }
         }
     }
 
@@ -422,9 +434,9 @@ impl Engine {
             Some(entry) => match self.mode {
                 Mode::Programmer => match self.base {
                     Base::Hexadecimal | Base::Binary => group(entry, 4, ' '),
-                    _ => group_number(entry, self.grouping),
+                    _ => self.localised(entry),
                 },
-                _ => group_number(entry, self.grouping).replace('-', "−"),
+                _ => self.localised(entry).replace('-', "−"),
             },
             None => self.format(self.x),
         }
@@ -447,23 +459,27 @@ impl Engine {
 
     pub fn copy_text(&self) -> String {
         match (self.entry.as_ref(), self.x) {
-            (Some(entry), _) if self.mode != Mode::Programmer => entry.clone(),
-            (_, Value::Real(real)) => format_real(real, false).replace('−', "-"),
-            (_, Value::Word(word)) => format_word(word, self.base, self.bits, false)
+            (Some(entry), _) if self.mode != Mode::Programmer => {
+                group_number(entry, self.numbers, false)
+            }
+            (_, Value::Real(real)) => group_number(&format_real(real), self.numbers, false),
+            (_, Value::Word(word)) => format_word(word, self.base, self.bits, self.numbers, false)
                 .replace(' ', "")
                 .replace('−', "-"),
         }
     }
 
     pub fn paste(&mut self, text: &str) -> bool {
-        let cleaned: String = text
-            .trim()
-            .replace('−', "-")
-            .chars()
-            .filter(|character| !matches!(character, ',' | ' ' | '_' | '\u{a0}'))
-            .collect();
         let value = match self.mode {
             Mode::Programmer => {
+                let cleaned: String = text
+                    .trim()
+                    .replace('−', "-")
+                    .chars()
+                    .filter(|character| {
+                        !character.is_whitespace() && !matches!(character, ',' | '_')
+                    })
+                    .collect();
                 let (negative, digits) = match cleaned.strip_prefix('-') {
                     Some(rest) => (true, rest),
                     None => (false, cleaned.as_str()),
@@ -481,7 +497,7 @@ impl Engine {
                 };
                 Value::Word(word & mask(self.bits))
             }
-            _ => match Decimal::parse(&cleaned) {
+            _ => match self.numbers.read(text).as_deref().and_then(Decimal::parse) {
                 Some(real) => Value::Real(real),
                 None => return false,
             },

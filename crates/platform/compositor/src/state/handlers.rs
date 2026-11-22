@@ -2,8 +2,8 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use super::{ClientState, State, is_mapped, send_preferred_scale};
+use smithay::backend::allocator::Buffer;
 use smithay::backend::allocator::dmabuf::Dmabuf;
-use smithay::backend::allocator::{Buffer, Fourcc, Modifier};
 use smithay::backend::renderer::utils::on_commit_buffer_handler;
 use smithay::desktop::{LayerSurface as MappedLayer, WindowSurfaceType, layer_map_for_output};
 use smithay::input::pointer::{CursorIcon, CursorImageStatus};
@@ -137,6 +137,7 @@ impl CompositorHandler for State {
 
     fn new_surface(&mut self, surface: &WlSurface) {
         crate::sync::wait_for_fences(surface);
+        crate::timing::wait_for_timed_commits(surface);
         crate::release::release_on_destruction(surface);
     }
 
@@ -182,11 +183,8 @@ impl DmabufHandler for State {
         dmabuf: Dmabuf,
         notifier: ImportNotifier,
     ) {
-        let planes_fit = match dmabuf.format().code {
-            Fourcc::Nv12 => dmabuf.num_planes() == 2,
-            _ => dmabuf.num_planes() == 1,
-        };
-        if planes_fit && dmabuf.format().modifier == Modifier::Linear {
+        let planes = self.globals.dmabuf_planes.get(&dmabuf.format());
+        if planes == Some(&dmabuf.num_planes()) {
             dmabuf.set_node(self.scanout_node);
             if let Err(error) = notifier.successful::<State>() {
                 tracing::debug!("a dmabuf import was answered too late: {error:?}");
@@ -285,8 +283,11 @@ impl XdgShellHandler for State {
         self.unmaximize(surface.wl_surface());
     }
 
-    fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<WlOutput>) {
+    fn fullscreen_request(&mut self, surface: ToplevelSurface, output: Option<WlOutput>) {
         if !self.decline_for_fixed_size(&surface) {
+            if let Some(screen) = output.and_then(|output| self.screen_of_output(&output)) {
+                self.move_to_screen(surface.wl_surface(), screen);
+            }
             self.fullscreen(surface.wl_surface());
         }
     }
@@ -461,11 +462,7 @@ impl WlrLayerShellHandler for State {
         };
         let screen = output
             .as_ref()
-            .and_then(|output| {
-                self.screens
-                    .iter()
-                    .position(|screen| screen.output.owns(output))
-            })
+            .and_then(|output| self.screen_of_output(output))
             .unwrap_or_else(|| self.screen_for_layer(&namespace));
         let mapped = MappedLayer::new(surface.clone(), namespace);
         let mut map = layer_map_for_output(&self.screens[screen].output);

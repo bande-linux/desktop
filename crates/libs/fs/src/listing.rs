@@ -1,13 +1,18 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fs;
 use std::io;
-use std::iter::Peekable;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::str::Chars;
+use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
 
 use bande_l10n::{tr, trn};
+use icu_collator::options::CollatorOptions;
+use icu_collator::preferences::CollationNumericOrdering;
+use icu_collator::{CollatorBorrowed, CollatorPreferences};
+use icu_decimal::input::Decimal;
+use icu_decimal::{DecimalFormatter, DecimalFormatterPreferences};
 
 use crate::group::{GroupBy, group_of};
 use crate::partial::{is_partial, sweep};
@@ -15,6 +20,27 @@ use crate::partial::{is_partial, sweep};
 use crate::trash::{Trash, TrashItem};
 
 use crate::DATES;
+
+static NAMES: LazyLock<Option<CollatorBorrowed<'static>>> = LazyLock::new(|| {
+    let mut preferences = CollatorPreferences::from(&bande_datetime::env_locale(&[
+        "LC_ALL",
+        "LC_COLLATE",
+        "LANG",
+    ]));
+    preferences.numeric_ordering = Some(CollationNumericOrdering::True);
+    CollatorBorrowed::try_new(preferences, CollatorOptions::default())
+        .inspect_err(|error| tracing::warn!("cannot sort names for this language: {error}"))
+        .ok()
+});
+
+thread_local! {
+    static NUMBERS: Option<DecimalFormatter> = {
+        let locale = bande_datetime::env_locale(&["LC_ALL", "LC_NUMERIC", "LANG"]);
+        DecimalFormatter::try_new(DecimalFormatterPreferences::from(&locale), Default::default())
+            .inspect_err(|error| tracing::warn!("cannot write numbers for this language: {error}"))
+            .ok()
+    };
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -134,6 +160,33 @@ pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
+pub const HIDDEN_LIST: &str = ".hidden";
+const LARGEST_HIDDEN_LIST: u64 = 64 << 10;
+
+/// The names a folder's `.hidden` file lists, one per line, to leave out like dot files.
+pub fn hidden_names(folder: &Path) -> HashSet<String> {
+    let mut text = String::new();
+    let read = fs::File::open(folder.join(HIDDEN_LIST)).and_then(|file| {
+        io::Read::read_to_string(&mut io::Read::take(file, LARGEST_HIDDEN_LIST), &mut text)
+    });
+    match read {
+        Ok(_) => text
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect(),
+        Err(error) => {
+            if error.kind() != io::ErrorKind::NotFound {
+                tracing::debug!(
+                    "cannot read {}: {error}",
+                    folder.join(HIDDEN_LIST).display()
+                );
+            }
+            HashSet::new()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SortBy {
     #[default]
@@ -230,6 +283,7 @@ pub fn merge(entries: &mut Vec<Entry>, chunk: Vec<Entry>, order: Sort) -> Vec<us
 pub struct Listing {
     names: fs::ReadDir,
     show_hidden: bool,
+    listed_hidden: HashSet<String>,
     done: bool,
     failure: Option<io::ErrorKind>,
 }
@@ -239,6 +293,10 @@ impl Listing {
         Ok(Self {
             names: fs::read_dir(folder)?,
             show_hidden,
+            listed_hidden: match show_hidden {
+                true => HashSet::new(),
+                false => hidden_names(folder),
+            },
             done: false,
             failure: None,
         })
@@ -270,7 +328,8 @@ impl Listing {
             let name = found.file_name().to_string_lossy().into_owned();
             if is_partial(&name) {
                 sweep(found.path());
-            } else if self.show_hidden || !is_hidden(&name) {
+            } else if self.show_hidden || !(is_hidden(&name) || self.listed_hidden.contains(&name))
+            {
                 entries.push(Entry::read(found.path(), name));
             }
         }
@@ -298,19 +357,6 @@ pub fn list_trash(trash: &Trash, order: Sort) -> Vec<Entry> {
     entries
 }
 
-fn digits(chars: &mut Peekable<Chars<'_>>) -> String {
-    let mut run = String::new();
-    while let Some(digit) = chars.next_if(char::is_ascii_digit) {
-        run.push(digit);
-    }
-    run
-}
-
-fn compare_numbers(a: &str, b: &str) -> Ordering {
-    let (a, b) = (a.trim_start_matches('0'), b.trim_start_matches('0'));
-    a.len().cmp(&b.len()).then_with(|| a.cmp(b))
-}
-
 pub fn same_volume(a: &Path, b: &Path) -> bool {
     let (on_a, on_b) = (
         bande_volumes::connected_volume_of(a),
@@ -326,28 +372,21 @@ pub fn same_volume(a: &Path, b: &Path) -> bool {
 }
 
 pub fn natural_order(a: &str, b: &str) -> Ordering {
-    let (mut left, mut right) = (a.chars().peekable(), b.chars().peekable());
-    loop {
-        match (left.peek().copied(), right.peek().copied()) {
-            (None, None) => return a.cmp(b),
-            (None, Some(_)) => return Ordering::Less,
-            (Some(_), None) => return Ordering::Greater,
-            (Some(l), Some(r)) if l.is_ascii_digit() && r.is_ascii_digit() => {
-                let order = compare_numbers(&digits(&mut left), &digits(&mut right));
-                if order != Ordering::Equal {
-                    return order;
-                }
-            }
-            (Some(l), Some(r)) => {
-                let order = l.to_lowercase().cmp(r.to_lowercase());
-                if order != Ordering::Equal {
-                    return order;
-                }
-                left.next();
-                right.next();
-            }
-        }
+    match &*NAMES {
+        Some(collator) => collator.compare(a, b),
+        None => a.to_lowercase().cmp(&b.to_lowercase()),
     }
+    .then_with(|| a.cmp(b))
+}
+
+fn decimal(value: f64, decimals: i32) -> String {
+    let mut number = Decimal::from((value * 10f64.powi(decimals)).round() as i64);
+    number.multiply_pow10(-(decimals as i16));
+    number.trim_end();
+    NUMBERS.with(|formatter| match formatter {
+        Some(formatter) => formatter.format(&number).to_string(),
+        None => number.to_string(),
+    })
 }
 
 pub fn format_size(bytes: u64) -> String {
@@ -359,7 +398,7 @@ pub fn format_size(bytes: u64) -> String {
     }
     let kilobytes = (bytes as f64 / 1e3).round();
     if kilobytes < 1e3 {
-        return tr!("{value} KB", value = kilobytes.to_string());
+        return tr!("{value} KB", value = decimal(kilobytes, 0));
     }
     let units = [(1e6, 1), (1e9, 2), (1e12, 2)];
     let (unit, (scale, decimals)) = units
@@ -369,8 +408,7 @@ pub fn format_size(bytes: u64) -> String {
             (bytes as f64 / scale * 10f64.powi(*decimals)).round() < 1e3 * 10f64.powi(*decimals)
         })
         .unwrap_or((2, units[2]));
-    let value = format!("{:.*}", decimals as usize, bytes as f64 / scale);
-    let value = value.trim_end_matches('0').trim_end_matches('.').to_owned();
+    let value = decimal(bytes as f64 / scale, decimals);
     match unit {
         0 => tr!("{value} MB", value = value),
         1 => tr!("{value} GB", value = value),

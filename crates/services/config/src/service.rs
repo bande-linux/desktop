@@ -179,6 +179,9 @@ fn publish_changes(
         if before.reopen_apps != after.reopen_apps {
             announce(guard.reopen_apps_changed(emitter).await);
         }
+        if before.remember_recent_files != after.remember_recent_files {
+            announce(guard.remember_recent_files_changed(emitter).await);
+        }
         if before.check_updates_automatically != after.check_updates_automatically {
             announce(guard.check_updates_automatically_changed(emitter).await);
         }
@@ -418,6 +421,9 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result
                         .map_err(|_| mismatch())?,
                 )
             }
+            "variable-refresh" => {
+                display.variable_refresh = Some(bool::try_from(value).map_err(|_| mismatch())?)
+            }
             _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
     }
@@ -591,6 +597,16 @@ impl ConfigInterface {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::fdo::Result<()> {
         self.write(&Setting::ReopenApps(on))
+    }
+
+    #[zbus(property)]
+    fn remember_recent_files(&self) -> bool {
+        self.store.current().remember_recent_files
+    }
+
+    #[zbus(property)]
+    fn set_remember_recent_files(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::RememberRecentFiles(on))
     }
 
     #[zbus(property)]
@@ -1389,6 +1405,10 @@ impl ConfigInterface {
                             .colour_profile
                             .as_deref()
                             .and_then(|profile| owned(profile.into())),
+                    ),
+                    (
+                        "variable-refresh",
+                        display.variable_refresh.and_then(|on| owned(on.into())),
                     ),
                 ]
                 .into_iter()

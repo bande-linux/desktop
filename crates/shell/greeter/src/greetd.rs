@@ -1,9 +1,11 @@
 use std::io::{self, Read, Write};
 
+use bande_lock::{Prompt, Refusal, clip_message};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 pub const SESSION: &str = "bande-session";
+const MESSAGE_LIMIT: u32 = 64 << 10;
 pub const SESSION_ENVIRONMENT: [&str; 3] = [
     "XDG_SESSION_TYPE=wayland",
     "XDG_CURRENT_DESKTOP=X-Bande",
@@ -76,23 +78,25 @@ impl Write for ByteCounter {
 pub fn read_message<T: for<'de> Deserialize<'de>>(stream: &mut impl Read) -> io::Result<T> {
     let mut length = [0u8; 4];
     stream.read_exact(&mut length)?;
-    let mut body = vec![0u8; u32::from_ne_bytes(length) as usize];
+    let length = u32::from_ne_bytes(length);
+    if length > MESSAGE_LIMIT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("greetd sent a message of {length} bytes"),
+        ));
+    }
+    let mut body = Zeroizing::new(vec![0u8; length as usize]);
     stream.read_exact(&mut body)?;
     Ok(serde_json::from_slice(&body)?)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Rejection {
-    WrongPassword,
-    Failed(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
     Send(Request),
-    Ask(String),
+    Ask(Prompt),
     Show(String),
-    Rejected(Rejection),
+    Refused(Refusal),
+    Authenticated,
     Started,
 }
 
@@ -106,17 +110,22 @@ enum Phase {
 
 #[derive(Debug)]
 pub struct Login {
-    password: Option<Zeroizing<String>>,
-    asked: bool,
     phase: Phase,
 }
 
+fn refusal_of(error_type: ErrorType, description: &str) -> Refusal {
+    let code = description.rsplit(": ").next().unwrap_or_default();
+    match (Refusal::from_pam_name(code), error_type) {
+        (Some(refusal), _) => refusal,
+        (None, ErrorType::AuthError) => Refusal::WrongAnswer,
+        (None, ErrorType::Error) => Refusal::Unavailable,
+    }
+}
+
 impl Login {
-    pub fn begin(username: &str, password: Zeroizing<String>) -> (Self, Request) {
+    pub fn begin(username: &str) -> (Self, Request) {
         (
             Self {
-                password: Some(password),
-                asked: false,
                 phase: Phase::Authenticating,
             },
             Request::CreateSession {
@@ -129,42 +138,52 @@ impl Login {
         self.phase == Phase::Idle
     }
 
+    pub fn is_cancelling(&self) -> bool {
+        self.phase == Phase::Cancelling
+    }
+
     pub fn answer(&self, text: Zeroizing<String>) -> Request {
         Request::PostAuthMessageResponse {
             response: Some(text),
         }
     }
 
+    pub fn start(&mut self, environment: &[String]) -> Request {
+        self.phase = Phase::Starting;
+        let mut env = SESSION_ENVIRONMENT.map(str::to_owned).to_vec();
+        env.extend_from_slice(environment);
+        Request::StartSession {
+            cmd: vec![SESSION.to_owned()],
+            env,
+        }
+    }
+
     pub fn cancel(&mut self) -> Request {
-        self.password = None;
         self.phase = Phase::Cancelling;
         Request::CancelSession
     }
 
     pub fn respond(&mut self, response: Response) -> Vec<Step> {
         match (self.phase, response) {
-            (Phase::Cancelling, _) => {
+            (Phase::Cancelling, Response::Error { description, .. }) => {
+                tracing::info!("greetd: {description}");
                 self.phase = Phase::Idle;
                 Vec::new()
             }
+            (Phase::Cancelling, Response::Success) => {
+                self.phase = Phase::Idle;
+                Vec::new()
+            }
+            (Phase::Cancelling, Response::AuthMessage { .. }) => vec![Step::Send(self.cancel())],
             (
                 _,
                 Response::AuthMessage {
-                    auth_message_type: AuthMessageType::Secret | AuthMessageType::Visible,
+                    auth_message_type: kind @ (AuthMessageType::Secret | AuthMessageType::Visible),
                     auth_message,
                 },
-            ) if self.password.is_none() => {
-                self.asked = true;
-                vec![Step::Ask(auth_message)]
-            }
-            (
-                _,
-                Response::AuthMessage {
-                    auth_message_type: AuthMessageType::Secret | AuthMessageType::Visible,
-                    ..
-                },
-            ) => vec![Step::Send(Request::PostAuthMessageResponse {
-                response: self.password.take(),
+            ) => vec![Step::Ask(Prompt {
+                text: clip_message(&auth_message),
+                visible: kind == AuthMessageType::Visible,
             })],
             (
                 _,
@@ -173,37 +192,27 @@ impl Login {
                     auth_message,
                 },
             ) => vec![
-                Step::Show(auth_message),
+                Step::Show(clip_message(&auth_message)),
                 Step::Send(Request::PostAuthMessageResponse { response: None }),
             ],
-            (Phase::Authenticating, Response::Success) => {
-                self.phase = Phase::Starting;
-                vec![Step::Send(Request::StartSession {
-                    cmd: vec![SESSION.to_owned()],
-                    env: SESSION_ENVIRONMENT.map(str::to_owned).to_vec(),
-                })]
-            }
+            (Phase::Authenticating, Response::Success) => vec![Step::Authenticated],
             (Phase::Starting, Response::Success) => {
                 self.phase = Phase::Idle;
                 vec![Step::Started]
             }
             (Phase::Idle, Response::Success) => Vec::new(),
             (
-                phase,
+                _,
                 Response::Error {
                     error_type,
                     description,
                 },
             ) => {
-                let wrong_password = error_type == ErrorType::AuthError
-                    && phase == Phase::Authenticating
-                    && !self.asked;
-                let rejection = if wrong_password {
-                    Rejection::WrongPassword
-                } else {
-                    Rejection::Failed(description)
-                };
-                vec![Step::Rejected(rejection), Step::Send(self.cancel())]
+                tracing::info!("not signed in: {description}");
+                vec![
+                    Step::Refused(refusal_of(error_type, &description)),
+                    Step::Send(self.cancel()),
+                ]
             }
         }
     }

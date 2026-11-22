@@ -1,0 +1,6 @@
+Files: debian/bande-greeter.templates debian/po/*
+Copyright: 2000-2004 Branden Robinson
+ The translators named in each debian/po file
+License: GPL-2.0-or-later
+Comment: The shared/default-x-display-manager debconf question and its
+ translations, which every display manager in Debian carries word for word.

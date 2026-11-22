@@ -1,7 +1,10 @@
-use accesskit::{Node, Role};
-use bande_graphics::{Item, Paragraph, Point, Rect, TextAlign, TextStyle, TextSystem};
+use accesskit::{Action, ActionRequest, Node, Role};
+use bande_graphics::{
+    ControlSize, Item, Paragraph, Point, Radius, Rect, Shape, TextAlign, TextStyle, TextSystem,
+};
 use bande_l10n::{Text, text};
 
+use super::control::{focus_ring, focus_ring_for};
 use super::{Context, Event, Key, Modifiers, Size, Widget, WidgetId};
 
 const MODIFIER_NAMES: [(&[&str], Text); 4] = [
@@ -35,6 +38,7 @@ const KEY_NAMES: [(&[&str], Text, Key); 16] = [
 ];
 
 const BODY_SIZE: f32 = 13.0;
+const FIELD_PADDING: f32 = 16.0;
 
 fn split(shortcut: &str) -> (Vec<&str>, &str) {
     let parts: Vec<&str> = shortcut.split('+').collect();
@@ -192,5 +196,179 @@ impl Widget for Shortcut {
         node.set_label(shortcut_label(&self.shortcut));
         node.set_keyboard_shortcut(shortcut_label(&self.shortcut));
         node
+    }
+}
+
+fn chord_text(key: Key, modifiers: Modifiers) -> String {
+    let held = [
+        (modifiers.shift, "Shift"),
+        (modifiers.control, "Ctrl"),
+        (modifiers.alt, "Alt"),
+        (modifiers.logo, "Super"),
+    ];
+    let key = match (KEY_NAMES.iter().find(|(_, _, named)| *named == key), key) {
+        (Some((names, _, _)), _) => names[0].to_owned(),
+        (None, Key::Function(number)) => format!("F{number}"),
+        (None, Key::Character(character)) => character.to_uppercase().collect(),
+        (None, _) => String::new(),
+    };
+    held.into_iter()
+        .filter(|(held, _)| *held)
+        .map(|(_, name)| name.to_owned())
+        .chain([key])
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
+/// A button that listens for the next chord when pressed, for choosing a shortcut's keys.
+pub struct ShortcutField {
+    id: WidgetId,
+    label: String,
+    shortcut: Option<String>,
+    listening: bool,
+    on_record: Box<dyn FnMut(&str) -> bool>,
+    paragraph: Option<Paragraph>,
+    frame: Rect,
+}
+
+impl ShortcutField {
+    /// `on_record` gets each chord pressed while listening, such as `Ctrl+Alt+M`, and
+    /// says whether the field takes it.
+    pub fn new(
+        label: &str,
+        shortcut: Option<&str>,
+        on_record: impl FnMut(&str) -> bool + 'static,
+    ) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            shortcut: shortcut.map(str::to_owned),
+            listening: false,
+            on_record: Box::new(on_record),
+            paragraph: None,
+            frame: Rect::default(),
+        }
+    }
+
+    fn shown(&self) -> String {
+        match (&self.shortcut, self.listening) {
+            (_, true) => text!("Press Keys…").tr(),
+            (Some(shortcut), false) => shortcut_label(shortcut),
+            (None, false) => text!("Choose Keys…").tr(),
+        }
+    }
+
+    fn record(&mut self, key: Key, modifiers: Modifiers) -> bool {
+        if key == Key::Escape && modifiers == Modifiers::default() {
+            self.listening = false;
+            return true;
+        }
+        let held = Modifiers {
+            shift: false,
+            ..modifiers
+        };
+        if held == Modifiers::default() {
+            return false;
+        }
+        let chord = chord_text(key, modifiers);
+        if (self.on_record)(&chord) {
+            self.shortcut = Some(chord);
+            self.listening = false;
+        }
+        true
+    }
+}
+
+impl Widget for ShortcutField {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, cx: &mut Context, _available: Size) -> Size {
+        let paragraph = cx.text.paragraph(
+            &self.shown(),
+            TextStyle::new(BODY_SIZE, cx.palette.ink).weight(TextStyle::MEDIUM),
+            None,
+            TextAlign::Start,
+        );
+        let size = Size::new(
+            (paragraph.width() + 2.0 * FIELD_PADDING).ceil(),
+            cx.control_height(ControlSize::Regular),
+        );
+        self.paragraph = Some(paragraph);
+        size
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let shape = Shape::rounded(self.frame, Radius::S);
+        items.push(Item::Fill {
+            shape,
+            paint: cx.palette.well.into(),
+        });
+        if self.listening {
+            focus_ring_for(&cx.palette, shape, items);
+        } else if cx.is_focused(self.id) {
+            focus_ring(cx, shape, items);
+        }
+        if let Some(paragraph) = &self.paragraph {
+            items.push(Item::Text {
+                origin: Point::new(
+                    self.frame.x + ((self.frame.width - paragraph.width()) / 2.0).round(),
+                    self.frame.y + ((self.frame.height - paragraph.height()) / 2.0).round(),
+                ),
+                paragraph: paragraph.clone(),
+            });
+        }
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Button);
+        node.set_label(self.label.clone());
+        node.set_value(self.shown());
+        if let Some(shortcut) = self.shortcut.as_deref().filter(|_| !self.listening) {
+            node.set_keyboard_shortcut(shortcut_label(shortcut));
+        }
+        node.add_action(Action::Click);
+        node
+    }
+
+    fn handle(&mut self, _cx: &mut Context, event: &Event) -> bool {
+        match event {
+            Event::Key { key, modifiers } if self.listening => self.record(*key, *modifiers),
+            Event::PointerUp(pointer)
+                if pointer.is_primary() && self.frame.contains(pointer.position) =>
+            {
+                self.listening = !self.listening;
+                true
+            }
+            Event::Key {
+                key: Key::Space,
+                modifiers,
+            } if *modifiers == Modifiers::default() => {
+                self.listening = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn perform(&mut self, _cx: &mut Context, request: &ActionRequest) -> bool {
+        if request.action == Action::Click {
+            self.listening = !self.listening;
+            return true;
+        }
+        false
+    }
+
+    fn accepts_focus(&self, cx: &Context) -> bool {
+        cx.keyboard_navigation
     }
 }

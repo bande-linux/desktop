@@ -43,6 +43,9 @@ msgstr "ett fel inträffade: {error}"
 msgid "{name} could not start because {reason}."
 msgstr "{name} kunde inte startas eftersom {reason}."
 
+msgid "Choose a window for the other half"
+msgstr "Välj ett fönster för andra halvan"
+
 msgid "Taskbar & Desktop"
 msgstr "Aktivitetsfält och skrivbord"
 
@@ -79,17 +82,38 @@ msgstr "Vill du tvinga de {count} markerade apparna att avsluta?"
 msgid "You will lose any unsaved changes."
 msgstr "Ändringar som inte har sparats går förlorade."
 
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Minimize"
+msgstr "Minimera"
+
+msgid "Maximize"
+msgstr "Maximera"
+
+msgid "Menus"
+msgstr "Menyer"
+
 msgid "The power button locks the screen and puts the computer to sleep"
 msgstr "Strömbrytaren låser skärmen och försätter datorn i vila"
 
 msgid "Remember the open apps to reopen them at the next login"
 msgstr "Kom ihåg öppna appar och öppna dem igen vid nästa inloggning"
 
-msgid "App Switcher"
-msgstr "Appbytare"
-
 msgid "Windows"
 msgstr "Fönster"
+
+msgid "Workspaces"
+msgstr "Arbetsytor"
+
+msgid "Workspace {number}"
+msgstr "Arbetsyta {number}"
+
+msgid "Overview"
+msgstr "Översikt"
+
+msgid "App Switcher"
+msgstr "Appbytare"
 
 msgid "{program} wants to read what you type."
 msgstr "{program} vill läsa det du skriver."
@@ -124,23 +148,14 @@ msgstr "Nederst till vänster"
 msgid "Bottom Right"
 msgstr "Nederst till höger"
 
-msgid "Maximize"
-msgstr "Maximera"
-
 msgid "Move to Next Display"
 msgstr "Flytta till nästa skärm"
 
 msgid "Restore Size"
 msgstr "Återställ storlek"
 
-msgid "Workspace {number}"
-msgstr "Arbetsyta {number}"
-
 msgid "New Workspace"
 msgstr "Ny arbetsyta"
-
-msgid "Minimize"
-msgstr "Minimera"
 
 msgid "Tile"
 msgstr "Placera"
@@ -148,5 +163,5 @@ msgstr "Placera"
 msgid "Move to Workspace"
 msgstr "Flytta till arbetsyta"
 
-msgid "Close"
-msgstr "Stäng"
+msgid "Keep on Top"
+msgstr "Behåll överst"

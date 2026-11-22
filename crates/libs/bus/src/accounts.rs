@@ -18,6 +18,8 @@ pub const ADMINISTRATOR: i32 = 1;
 pub trait AccountsService {
     fn find_user_by_name(&self, name: &str) -> zbus::Result<OwnedObjectPath>;
 
+    fn list_cached_users(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+
     fn create_user(
         &self,
         name: &str,
@@ -39,7 +41,19 @@ pub trait AccountsServiceUser {
     fn uid(&self) -> zbus::Result<u64>;
 
     #[zbus(property)]
+    fn user_name(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
     fn real_name(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
+    fn system_account(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn locked(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn shell(&self) -> zbus::Result<String>;
 
     #[zbus(property)]
     fn account_type(&self) -> zbus::Result<i32>;

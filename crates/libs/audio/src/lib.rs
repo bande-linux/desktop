@@ -60,6 +60,22 @@ pub struct Device {
     pub balance: Option<f32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Profile {
+    pub index: i32,
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SoundCard {
+    pub id: u32,
+    pub description: String,
+    pub bluetooth: bool,
+    pub profiles: Vec<Profile>,
+    pub active: Option<i32>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AppStream {
     pub ids: Vec<u32>,
@@ -89,6 +105,7 @@ pub struct Snapshot {
     pub outputs: Vec<Device>,
     pub inputs: Vec<Device>,
     pub apps: Vec<AppStream>,
+    pub cards: Vec<SoundCard>,
     pub capturing: Vec<Capture>,
     pub streaming: bool,
     pub default_output: Option<String>,
@@ -163,6 +180,7 @@ impl Snapshot {
             outputs,
             inputs,
             apps,
+            cards: cards(state),
             capturing: capturing(state),
             streaming: state
                 .nodes
@@ -187,6 +205,32 @@ impl Snapshot {
     pub fn default_input(&self) -> Option<&Device> {
         self.device(self.default_input.as_deref()?)
     }
+}
+
+fn cards(state: &State) -> Vec<SoundCard> {
+    let mut cards: Vec<SoundCard> = state
+        .cards
+        .iter()
+        .map(|(id, card)| SoundCard {
+            id: *id,
+            description: card.description.clone(),
+            bluetooth: card.bluetooth,
+            profiles: card
+                .profiles
+                .iter()
+                .filter(|(index, profile)| profile.available || card.active == Some(**index))
+                .map(|(index, profile)| Profile {
+                    index: *index,
+                    name: profile.name.clone(),
+                    description: profile.description.clone(),
+                })
+                .collect(),
+            active: card.active,
+        })
+        .filter(|card| card.profiles.len() > 1)
+        .collect();
+    cards.sort_by(|a, b| a.description.cmp(&b.description).then(a.id.cmp(&b.id)));
+    cards
 }
 
 fn capturing(state: &State) -> Vec<Capture> {
@@ -315,6 +359,14 @@ impl Audio {
         self.send(|done| Command::SetDefault {
             direction: device.direction,
             name: device.name.clone(),
+            done,
+        })
+    }
+
+    pub fn set_profile(&self, card: &SoundCard, profile: &Profile) -> Result<(), Error> {
+        self.send(|done| Command::SetProfile {
+            card: card.id,
+            index: profile.index,
             done,
         })
     }

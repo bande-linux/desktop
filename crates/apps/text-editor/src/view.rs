@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -8,14 +9,14 @@ use bande_l10n::{tr, trn};
 
 use crate::document::{Content, Format, Loaded, encode, read};
 use crate::encoding::{LineEnding, TextEncoding};
-use crate::file::{MAX_FILE_BYTES, read_bounded};
+use crate::file::{MAX_FILE_BYTES, Stamp, read_bounded, stamp};
 use crate::find::{self, Query};
 use crate::formats::{heading, markdown, rtf};
 use crate::session::seconds_now;
 use crate::session::{Record, Session};
 use crate::worker::{Message, WriteError, spawn};
 use accesskit::TreeUpdate;
-use bande_app::View;
+use bande_app::{Dropping, FileDrop, View};
 use bande_inbox::Outbox;
 use bande_toolkit::ui::{
     Alert, Alignment, BUTTON_HEIGHT, Button, CheckState, Checkbox, Context, Event, FreeLayout, Key,
@@ -23,10 +24,12 @@ use bande_toolkit::ui::{
     TextAttributes, TextField, TextView, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Color, Rect, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
+    Appearance, Color, Image, Rect, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
 };
+use bande_xdg::{ICON_THEMES, data_dirs, find_icon};
 
 const SETTLE: Duration = Duration::from_millis(1500);
+const SYMBOL_PIXELS: u32 = 32;
 const FIND_ROW: f32 = 40.0;
 const STATUS_HEIGHT: f32 = 24.0;
 const MARGIN: f32 = 8.0;
@@ -80,12 +83,14 @@ enum Asking {
     Failed,
     MakePlain,
     Lossy,
+    Changed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Request {
     Close,
     SaveAs,
+    Open(PathBuf),
     Remember(PathBuf),
 }
 
@@ -169,8 +174,11 @@ pub struct DocumentView {
     note: Option<String>,
     snapshot: Option<(u64, Arc<String>)>,
     saving: bool,
+    stamp: Option<Stamp>,
+    overwrite: bool,
     close_after_save: bool,
     requests: Vec<Request>,
+    drop: FileDrop,
     outbox: Outbox<Message>,
     session: Option<Session>,
     versions: Vec<u64>,
@@ -242,8 +250,11 @@ impl DocumentView {
             note: None,
             snapshot: None,
             saving: false,
+            stamp: None,
+            overwrite: false,
             close_after_save: false,
             requests: Vec::new(),
+            drop: FileDrop::default(),
             outbox,
             session,
             versions: Vec::new(),
@@ -420,12 +431,14 @@ impl DocumentView {
             damaged,
             lossy,
             from_disk,
+            stamp,
             words,
             characters,
         } = loaded;
         self.lossy = lossy && from_disk;
         self.loading = false;
         if from_disk {
+            self.stamp = stamp;
             self.encoding = encoding;
             self.line_ending = line_ending;
             if self.rich != rich.is_some() {
@@ -583,10 +596,19 @@ impl DocumentView {
             {
                 self.format = chosen;
             }
+            (true, None) if self.format != Format::Markdown => {
+                self.drop_formatting();
+                self.format = Format::Plain;
+                self.changed_format();
+            }
             (false, Some(Format::Markdown)) => self.format = Format::Markdown,
             (false, _) if self.format != Format::Markdown => self.format = Format::Plain,
             _ => {}
         }
+        let expected = match std::mem::take(&mut self.overwrite) {
+            false if self.path.as_ref() == Some(&path) => self.stamp,
+            _ => None,
+        };
         let content = self.content();
         let revision = self.revision();
         let (encoding, line_ending, format) = (self.encoding, self.line_ending, self.format);
@@ -594,18 +616,24 @@ impl DocumentView {
         let (outbox, token) = (self.outbox.clone(), self.token);
         let session = self.session.clone();
         spawn("save", move || {
-            let outcome =
-                encode(&content, format, encoding, line_ending, &title).and_then(|bytes| {
-                    if let Some(session) = &session
-                        && let Ok(before) = read_bounded(&path, MAX_FILE_BYTES)
-                        && before != bytes
-                        && let Err(error) = session.keep_version(&path, &before, seconds_now())
-                    {
-                        tracing::warn!("cannot keep the old version: {error}");
-                    }
-                    bande_xdg::replace_file(&path, &bytes)
-                        .map_err(|error| WriteError::Io(error.to_string()))
-                });
+            let changed = expected
+                .is_some_and(|expected| stamp(&path).is_some_and(|found| found != expected));
+            let outcome = match changed {
+                true => Err(WriteError::Changed),
+                false => encode(&content, format, encoding, line_ending, &title),
+            }
+            .and_then(|bytes| {
+                if let Some(session) = &session
+                    && let Ok(before) = read_bounded(&path, MAX_FILE_BYTES)
+                    && before != bytes
+                    && let Err(error) = session.keep_version(&path, &before, seconds_now())
+                {
+                    tracing::warn!("cannot keep the old version: {error}");
+                }
+                bande_xdg::replace_file(&path, &bytes)
+                    .map(|()| stamp(&path))
+                    .map_err(|error| WriteError::Io(write_failure(&error)))
+            });
             outbox.send(Message::Written {
                 token,
                 revision,
@@ -669,10 +697,16 @@ impl DocumentView {
         });
     }
 
-    pub fn written(&mut self, revision: u64, path: PathBuf, outcome: Result<(), WriteError>) {
+    pub fn written(
+        &mut self,
+        revision: u64,
+        path: PathBuf,
+        outcome: Result<Option<Stamp>, WriteError>,
+    ) {
         self.saving = false;
         match outcome {
-            Ok(()) => {
+            Ok(stamp) => {
+                self.stamp = stamp;
                 self.lossy &= self.path.as_ref() == Some(&path);
                 self.path = Some(path.clone());
                 self.saved = Some(revision);
@@ -692,13 +726,21 @@ impl DocumentView {
                     &[("save-unicode", true), ("cancel", false)],
                 );
             }
+            Err(WriteError::Changed) => {
+                self.ask(
+                    Asking::Changed,
+                    &tr!("“{name}” was changed by another app.", name = self.name()),
+                    &tr!("Saving replaces the changes made there since you opened it."),
+                    &[("save-anyway", true), ("cancel", false)],
+                );
+            }
             Err(WriteError::Io(error)) => {
                 self.close_after_save = false;
                 self.ask(
                     Asking::Failed,
                     &tr!("“{name}” could not be saved.", name = self.name()),
                     &error,
-                    &[("ok", true)],
+                    &[("save-as", true), ("cancel", false)],
                 );
             }
         }
@@ -782,6 +824,12 @@ impl DocumentView {
                 }
                 self.ui.set_focus(self.editor);
             }
+            (Some(Asking::Failed), "save-as") => self.requests.push(Request::SaveAs),
+            (Some(Asking::Changed), "save-anyway") => {
+                self.overwrite = true;
+                let close = self.close_after_save;
+                self.save(close);
+            }
             (Some(Asking::Failed), _) if self.unloaded => self.requests.push(Request::Close),
             (Some(Asking::MakePlain), "make-plain-confirm") => self.make_plain(true),
             (Some(Asking::Lossy), "save-copy") => {
@@ -845,11 +893,15 @@ impl DocumentView {
                 at,
             ),
             previous: host.insert(
-                Button::new("‹", click(Signal::Previous)).tooltip(&tr!("Find Previous")),
+                symbol_button(
+                    "go-up-symbolic",
+                    &tr!("Find Previous"),
+                    click(Signal::Previous),
+                ),
                 at,
             ),
             next: host.insert(
-                Button::new("›", click(Signal::Next)).tooltip(&tr!("Find Next")),
+                symbol_button("go-down-symbolic", &tr!("Find Next"), click(Signal::Next)),
                 at,
             ),
             done: host.insert(Button::new(&tr!("Done"), click(Signal::HideFind)), at),
@@ -1134,6 +1186,14 @@ impl DocumentView {
                 &[("make-plain-confirm", true), ("cancel", false)],
             );
         }
+        self.drop_formatting();
+        if self.format != Format::Markdown {
+            self.retarget(Format::Plain);
+        }
+        self.changed_format();
+    }
+
+    fn drop_formatting(&mut self) {
         let rich = self
             .ui
             .widget_ref::<TextView>(self.editor)
@@ -1147,12 +1207,8 @@ impl DocumentView {
             editor.set_text(&text);
         }
         self.rich = false;
-        if self.format != Format::Markdown {
-            self.retarget(Format::Plain);
-        }
         self.settings = Settings::PLAIN;
         self.apply_settings();
-        self.changed_format();
     }
 
     pub fn make_rich(&mut self) {
@@ -1455,6 +1511,14 @@ impl View for DocumentView {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
+        match self.drop.event(window, &event, Path::is_file) {
+            Dropping::Over => return true,
+            Dropping::Dropped(paths) => {
+                self.requests.extend(paths.into_iter().map(Request::Open));
+                return true;
+            }
+            Dropping::Other => {}
+        }
         if let WindowEvent::Input(input) = &event
             && let Some(handled) = self.key(input)
         {
@@ -1534,6 +1598,37 @@ pub fn line_ending_title(name: &str) -> String {
     }
 }
 
+fn symbol_button(icon: &str, label: &str, on_click: impl FnMut() + 'static) -> Button {
+    let image = find_icon(icon, SYMBOL_PIXELS, &ICON_THEMES, &data_dirs())
+        .and_then(|path| Image::load(&path, SYMBOL_PIXELS));
+    match image {
+        Some(image) => Button::symbol(image, label, on_click),
+        None => Button::new(label, on_click),
+    }
+}
+
+fn write_failure(error: &io::Error) -> String {
+    match error.kind() {
+        io::ErrorKind::PermissionDenied => {
+            tr!("You don’t have permission to change it. Save a copy somewhere else instead.")
+        }
+        io::ErrorKind::ReadOnlyFilesystem => {
+            tr!("The disk it is on can only be read. Save a copy somewhere else instead.")
+        }
+        io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded => {
+            tr!("There isn’t enough space on the disk. Free some space or save it somewhere else.")
+        }
+        io::ErrorKind::NotFound => {
+            tr!("Its folder no longer exists. Save it somewhere else instead.")
+        }
+        io::ErrorKind::FileTooLarge => tr!("It is too large for the disk it is on."),
+        _ => tr!(
+            "Something went wrong while writing it: {error}",
+            error = error.to_string()
+        ),
+    }
+}
+
 fn button_label(action: &str) -> String {
     match action {
         "cancel" => tr!("Cancel"),
@@ -1541,6 +1636,8 @@ fn button_label(action: &str) -> String {
         "make-plain-confirm" => tr!("Make Plain Text"),
         "ok" => tr!("OK"),
         "save" => tr!("Save"),
+        "save-anyway" => tr!("Save Anyway"),
+        "save-as" => tr!("Save As…"),
         "save-copy" => tr!("Save a Copy…"),
         "save-unicode" => tr!("Save as UTF-8"),
         other => other.to_owned(),

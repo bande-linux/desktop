@@ -43,6 +43,10 @@ pub trait Config {
     #[zbus(property)]
     fn set_reopen_apps(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn remember_recent_files(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_remember_recent_files(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn check_updates_automatically(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_check_updates_automatically(&self, on: bool) -> zbus::Result<()>;
@@ -313,10 +317,13 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
             .get("colour-profile")
             .and_then(|value| value.try_clone().ok())
             .and_then(|value| String::try_from(value).ok()),
+        variable_refresh: settings
+            .get("variable-refresh")
+            .and_then(|value| bool::try_from(value).ok()),
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 80] = [
+pub const CONFIG_SETTINGS: [SettingId; 81] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::Clock24Hour,
@@ -344,6 +351,7 @@ pub const CONFIG_SETTINGS: [SettingId; 80] = [
     SettingId::Accent,
     SettingId::TintedFrame,
     SettingId::ReopenApps,
+    SettingId::RememberRecentFiles,
     SettingId::LockMessage,
     SettingId::ShowPreviews,
     SettingId::CheckUpdatesAutomatically,
@@ -472,6 +480,9 @@ impl SettingsClient {
         if let Some(profile) = &display.colour_profile {
             settings.insert("colour-profile", profile.as_str().into());
         }
+        if let Some(on) = display.variable_refresh {
+            settings.insert("variable-refresh", on.into());
+        }
         self.config.set_display(identity, settings)
     }
 
@@ -561,6 +572,7 @@ impl SettingsClient {
             SettingId::Accent => Value::Keyword(self.config.accent()?),
             SettingId::TintedFrame => Value::Flag(self.config.tinted_frame()?),
             SettingId::ReopenApps => Value::Flag(self.config.reopen_apps()?),
+            SettingId::RememberRecentFiles => Value::Flag(self.config.remember_recent_files()?),
             SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
             SettingId::CheckUpdatesAutomatically => {
@@ -660,6 +672,9 @@ impl SettingsClient {
             (SettingId::Accent, Value::Keyword(keyword)) => self.config.set_accent(keyword),
             (SettingId::TintedFrame, Value::Flag(tinted)) => self.config.set_tinted_frame(*tinted),
             (SettingId::ReopenApps, Value::Flag(on)) => self.config.set_reopen_apps(*on),
+            (SettingId::RememberRecentFiles, Value::Flag(on)) => {
+                self.config.set_remember_recent_files(*on)
+            }
             (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
             (SettingId::ShowPreviews, Value::Flag(shown)) => self.config.set_show_previews(*shown),
             (SettingId::CheckUpdatesAutomatically, Value::Flag(on)) => {

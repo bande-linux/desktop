@@ -150,6 +150,7 @@ pub enum Refusal {
     Outside,
     Bomb,
     TooLarge,
+    Unsupported,
 }
 
 impl Refusal {
@@ -173,6 +174,9 @@ impl fmt::Display for Refusal {
                 "The archive expands to more than a thousand times its size, as a decompression bomb does."
             ),
             Self::TooLarge => text!("There isn’t enough free space for the expanded items."),
+            Self::Unsupported => {
+                text!("The archive uses a compression method or feature that isn’t supported.")
+            }
         };
         f.write_str(&id.tr())
     }
@@ -242,6 +246,9 @@ impl From<ZipError> for Stop {
             ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED) => {
                 Refusal::NeedsPassword.into()
             }
+            ZipError::UnsupportedArchive(_) | ZipError::CompressionMethodNotSupported(_) => {
+                Refusal::Unsupported.into()
+            }
             ZipError::Io(error) => Self::Io(error),
             error => Self::Io(io::Error::new(io::ErrorKind::InvalidData, error)),
         }
@@ -253,6 +260,10 @@ impl From<sevenz_rust2::Error> for Stop {
         match error {
             sevenz_rust2::Error::PasswordRequired => Refusal::NeedsPassword.into(),
             sevenz_rust2::Error::MaybeBadPassword(_) => Refusal::WrongPassword.into(),
+            sevenz_rust2::Error::UnsupportedVersion { .. }
+            | sevenz_rust2::Error::ExternalUnsupported
+            | sevenz_rust2::Error::UnsupportedCompressionMethod(_)
+            | sevenz_rust2::Error::Unsupported(_) => Refusal::Unsupported.into(),
             sevenz_rust2::Error::Io(error, _) | sevenz_rust2::Error::FileOpen(error, _) => {
                 Self::Io(error)
             }

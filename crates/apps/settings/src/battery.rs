@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, Sender};
 
+use bande_bus::power_profiles::{PowerProfilesProxyBlocking, power_profiles};
 use bande_l10n::text;
 use bande_settings_panes::SettingId;
 use bande_status::history::{PowerSource, UPower, charge_history, system_battery};
@@ -38,20 +39,6 @@ trait Device {
     fn time_to_empty(&self) -> zbus::Result<i64>;
     #[zbus(property)]
     fn time_to_full(&self) -> zbus::Result<i64>;
-}
-
-#[zbus::proxy(
-    interface = "org.freedesktop.UPower.PowerProfiles",
-    default_service = "org.freedesktop.UPower.PowerProfiles",
-    default_path = "/org/freedesktop/UPower/PowerProfiles"
-)]
-trait PowerProfiles {
-    #[zbus(property)]
-    fn active_profile(&self) -> zbus::Result<String>;
-    #[zbus(property)]
-    fn set_active_profile(&self, profile: &str) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn profiles(&self) -> zbus::Result<Vec<std::collections::HashMap<String, OwnedValue>>>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -205,9 +192,7 @@ fn read(system: &Connection) -> Option<PowerState> {
             return None;
         }
     };
-    let profiles = PowerProfilesProxyBlocking::builder(system)
-        .cache_properties(zbus::proxy::CacheProperties::No)
-        .build()
+    let profiles = power_profiles(system)
         .inspect_err(|error| tracing::warn!("cannot reach the power profiles: {error}"))
         .ok();
     Some(PowerState {
@@ -229,9 +214,7 @@ fn read(system: &Connection) -> Option<PowerState> {
 
 fn change(system: &Connection, command: BatteryCommand) -> zbus::Result<()> {
     match command {
-        BatteryCommand::Profile(profile) => {
-            PowerProfilesProxyBlocking::new(system)?.set_active_profile(&profile)
-        }
+        BatteryCommand::Profile(profile) => power_profiles(system)?.set_active_profile(&profile),
         BatteryCommand::ChargeLimit(enabled) => {
             let battery = system_battery(system)?
                 .ok_or_else(|| zbus::Error::Failure("no battery".to_owned()))?;

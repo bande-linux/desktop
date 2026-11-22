@@ -33,6 +33,8 @@ pub struct SecureField {
     on_edit: Option<OnEdit>,
     bullets: Option<Paragraph>,
     bullet_width: f32,
+    revealed: bool,
+    advances: Vec<f32>,
     placeholder_paragraph: Option<Paragraph>,
     go_button: bool,
     frame: Rect,
@@ -52,6 +54,8 @@ impl SecureField {
             on_edit: None,
             bullets: None,
             bullet_width: 0.0,
+            revealed: false,
+            advances: Vec::new(),
             placeholder_paragraph: None,
             go_button: false,
             frame: Rect::default(),
@@ -105,6 +109,11 @@ impl SecureField {
 
     pub fn set_placeholder(&mut self, placeholder: &str) {
         placeholder.clone_into(&mut self.placeholder);
+    }
+
+    /// Shows what is typed instead of bullets, for answers that are not secret.
+    pub fn set_revealed(&mut self, revealed: bool) {
+        self.revealed = revealed;
     }
 
     pub fn secret(&self) -> &str {
@@ -164,7 +173,15 @@ impl SecureField {
     }
 
     fn advance(&self, index: usize) -> f32 {
-        self.bullet_width * index as f32
+        match self.revealed {
+            true => self
+                .advances
+                .get(index)
+                .or(self.advances.last())
+                .copied()
+                .unwrap_or_default(),
+            false => self.bullet_width * index as f32,
+        }
     }
 
     fn scroll(&self) -> f32 {
@@ -254,11 +271,20 @@ impl SecureField {
     }
 
     fn index_at(&self, x: f32) -> usize {
+        let offset = x - self.text_origin(self.bullets.as_ref()).x;
+        if self.revealed {
+            return (0..=self.length())
+                .min_by(|a, b| {
+                    (self.advance(*a) - offset)
+                        .abs()
+                        .total_cmp(&(self.advance(*b) - offset).abs())
+                })
+                .unwrap_or_default();
+        }
         if self.bullet_width <= 0.0 {
             return 0;
         }
-        let origin = self.text_origin(self.bullets.as_ref()).x;
-        (((x - origin) / self.bullet_width).round().max(0.0) as usize).min(self.length())
+        ((offset / self.bullet_width).round().max(0.0) as usize).min(self.length())
     }
 
     fn edited(&mut self) {
@@ -304,13 +330,27 @@ impl Widget for SecureField {
     fn measure(&mut self, cx: &mut Context, available: Size) -> Size {
         self.scale = cx.text.scale();
         let count = self.length();
-        let bullets = cx.text.paragraph(
-            &std::iter::repeat_n(BULLET, count.max(1)).collect::<String>(),
-            TextStyle::new(self.font_size, cx.palette.ink),
-            None,
-            TextAlign::Start,
-        );
+        let style = TextStyle::new(self.font_size, cx.palette.ink);
+        let shown: Zeroizing<String> = match self.revealed {
+            true => self.secret.clone(),
+            false => Zeroizing::new(std::iter::repeat_n(BULLET, count.max(1)).collect()),
+        };
+        let bullets = cx.text.paragraph(&shown, style, None, TextAlign::Start);
         self.bullet_width = bullets.width() / count.max(1) as f32;
+        self.advances = match self.revealed {
+            true => self
+                .secret
+                .char_indices()
+                .map(|(at, _)| at)
+                .chain([self.secret.len()])
+                .map(|end| {
+                    cx.text
+                        .paragraph(&self.secret[..end], style, None, TextAlign::Start)
+                        .width()
+                })
+                .collect(),
+            false => Vec::new(),
+        };
         self.bullets = (count > 0).then_some(bullets);
         self.placeholder_paragraph = Some(cx.text.paragraph(
             &self.placeholder,
@@ -383,7 +423,14 @@ impl Widget for SecureField {
     }
 
     fn access(&self, cx: &Context) -> Node {
-        let mut node = Node::new(Role::PasswordInput);
+        let mut node = match self.revealed {
+            true => {
+                let mut node = Node::new(Role::TextInput);
+                node.set_value(self.secret.as_str());
+                node
+            }
+            false => Node::new(Role::PasswordInput),
+        };
         node.set_placeholder(self.placeholder.clone());
         if cx.caps_lock && cx.is_focused(self.id) {
             node.set_description(tr!("Caps Lock is on"));

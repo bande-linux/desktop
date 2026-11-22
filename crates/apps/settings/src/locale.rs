@@ -3,6 +3,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
+use bande_config::{Accessibility, carry, login_defaults};
 use bande_l10n::{text, tr};
 
 use crate::failure::explained;
@@ -50,6 +51,7 @@ pub struct LocaleState {
     pub region: Option<String>,
     pub pending: Option<SettingId>,
     pub login_sources: Vec<String>,
+    pub login_accessibility: String,
     pub translations: Vec<String>,
     pub packs: Packs,
 }
@@ -116,6 +118,7 @@ pub enum LocaleCommand {
     Language(String),
     Region(Option<String>),
     LoginKeyboard(Vec<String>),
+    LoginAccessibility(String),
 }
 
 pub(crate) fn same_locale(a: &str, b: &str) -> bool {
@@ -299,6 +302,7 @@ fn read(
             &locale.x11_layout().unwrap_or_default(),
             &locale.x11_variant().unwrap_or_default(),
         ),
+        login_accessibility: carry(&login_defaults(), &Accessibility::default()),
     })
 }
 
@@ -342,10 +346,24 @@ pub fn follow_locale(system: &Connection, updates: Updates) -> Sender<LocaleComm
                 updates.send(Update::Locale(read(&locale, available, &watch)));
                 continue;
             }
+            if let LocaleCommand::LoginAccessibility(words) = &command {
+                let mut arguments = vec!["accessibility".to_owned()];
+                arguments.extend(words.split_whitespace().map(str::to_owned));
+                if let Err(failure) = run_helper(&arguments) {
+                    updates.send(Update::Failed(
+                        SettingId::LoginAccessibility,
+                        keyboard_failure(failure),
+                    ));
+                }
+                updates.send(Update::Locale(read(&locale, available, &watch)));
+                continue;
+            }
             let (setting, chosen) = match command {
                 LocaleCommand::Language(language) => (SettingId::Language, Some(language)),
                 LocaleCommand::Region(region) => (SettingId::Region, region),
-                LocaleCommand::Read | LocaleCommand::LoginKeyboard(_) => continue,
+                LocaleCommand::Read
+                | LocaleCommand::LoginKeyboard(_)
+                | LocaleCommand::LoginAccessibility(_) => continue,
             };
             let current = match locale.locale() {
                 Ok(current) => with_user_choices(current),

@@ -115,5 +115,11 @@ msgstr "Insert"
 msgid "Menu"
 msgstr "Meny"
 
+msgid "Press Keys…"
+msgstr "Tryck på tangenter…"
+
+msgid "Choose Keys…"
+msgstr "Välj tangenter…"
+
 msgid "Press {chord} to release"
 msgstr "Tryck på {chord} för att släppa"

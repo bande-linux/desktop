@@ -7,4 +7,7 @@ bande\-session \- start a Bande desktop session
 Starts the Bande compositor and the session services in the user's systemd
 manager and waits until the session ends. A display manager runs it from the
 Bande session entry; it refuses to start a second session while one is
-running.
+running. When the session fails, ends as soon as it starts or is refused, it
+leaves a note in
+.I /var/lib/bande\-greeter/failed
+that the login window shows the next time it offers that person.

@@ -1,6 +1,4 @@
-use std::io::{Read, Write};
 use std::os::fd::{AsFd, BorrowedFd};
-use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 use std::thread;
 use std::time::Instant;
@@ -10,8 +8,9 @@ use bande_bus::logind::ManagerProxyBlocking;
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_keyboard::Layouts;
 use bande_lock::{
-    BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, PICTURE_PIXELS, User, Variant,
-    authenticate, current_user, is_deliberate, load_backdrop, load_picture,
+    BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, PICTURE_PIXELS, Purpose,
+    Refusal, Said, Transaction, User, Variant, current_user, is_deliberate, load_backdrop,
+    load_pictures,
 };
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
@@ -19,9 +18,6 @@ use bande_toolkit::{
 };
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zeroize::Zeroizing;
-
-const ACCEPTED: u8 = 1;
-const REJECTED: u8 = 0;
 
 fn variant_of(scheme: Scheme) -> Variant {
     match scheme {
@@ -40,17 +36,30 @@ trait Power {
     fn password_required(&self) -> zbus::Result<bool>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Minutes,
+    Transaction,
+    Devices,
+    Backdrop,
+    Picture,
+    Wakes,
+}
+
 struct Locker {
     screen: LockScreen,
     user: User,
-    verdicts: UnixStream,
-    verdict_sender: UnixStream,
+    transaction: Option<Transaction>,
+    asked: bool,
+    pending: Option<Zeroizing<String>>,
     minutes: MinuteTimer,
     backdrop: Option<Inbox<(Look, Image)>>,
     backdrop_requested: bool,
-    picture: Option<Inbox<Image>>,
+    picture: Option<Inbox<(usize, Image)>>,
     devices: Option<Devices>,
     layouts: Layouts,
+    sources: Vec<String>,
+    active_source: usize,
     wakes: Option<Inbox<()>>,
     power: Option<PowerProxyBlocking<'static>>,
     unlocked: bool,
@@ -71,24 +80,116 @@ impl Locker {
         }
     }
 
-    fn check(&mut self, password: Zeroizing<String>) {
-        let Ok(mut sender) = self.verdict_sender.try_clone() else {
-            self.screen.reject_password(frame_time().on_screen());
+    fn converse(&mut self) {
+        if self.transaction.is_some() {
             return;
-        };
-        let login = self.user.login.clone();
-        thread::spawn(move || {
-            let verdict = match authenticate(PAM_SERVICE, &login, &password) {
-                Ok(()) => ACCEPTED,
-                Err(error) => {
-                    tracing::warn!("{error}");
-                    REJECTED
-                }
-            };
-            if let Err(error) = sender.write_all(&[verdict]) {
-                tracing::warn!("cannot pass on the password verdict: {error}");
+        }
+        self.asked = false;
+        match Transaction::begin(PAM_SERVICE, &self.user.login) {
+            Ok(transaction) => self.transaction = Some(transaction),
+            Err(error) => {
+                tracing::warn!("cannot ask PAM: {error}");
+                self.screen
+                    .refuse(Refusal::Unavailable, frame_time().on_screen());
             }
-        });
+        }
+    }
+
+    fn start_over(&mut self) {
+        self.transaction = None;
+        self.pending = None;
+        self.screen.ask(None);
+        self.converse();
+    }
+
+    fn answer(&mut self, answer: Zeroizing<String>) {
+        if !self.asked {
+            self.pending = Some(answer);
+            return;
+        }
+        self.asked = false;
+        let sent = self
+            .transaction
+            .as_ref()
+            .is_some_and(|transaction| transaction.answer(answer));
+        if !sent {
+            self.start_over();
+        }
+    }
+
+    fn follow(&mut self, window: &mut Window) {
+        let said = self
+            .transaction
+            .as_mut()
+            .map(Transaction::drain)
+            .unwrap_or_default();
+        for said in said {
+            match said {
+                Said::Ask(prompt) => match self.pending.take() {
+                    Some(answer) if !prompt.visible => {
+                        self.asked = true;
+                        self.answer(answer);
+                    }
+                    _ => {
+                        self.asked = true;
+                        self.screen.ask(Some(&prompt));
+                    }
+                },
+                Said::Show(message) => self.screen.set_message(Some(message)),
+                Said::Done(Ok(())) => {
+                    self.transaction = None;
+                    self.screen.accepted();
+                    self.unlock(window);
+                }
+                Said::Done(Err(refusal)) => {
+                    self.screen.refuse(refusal, frame_time().on_screen());
+                    self.transaction = None;
+                    self.pending = None;
+                    self.converse();
+                }
+            }
+        }
+    }
+
+    fn sources_in_order(&self) -> Vec<(Source, BorrowedFd<'_>)> {
+        let mut sources = vec![(Source::Minutes, self.minutes.as_fd())];
+        sources.extend(
+            self.transaction
+                .as_ref()
+                .map(|transaction| (Source::Transaction, transaction.fd())),
+        );
+        sources.extend(
+            self.devices
+                .as_ref()
+                .map(|devices| (Source::Devices, devices.fd())),
+        );
+        sources.extend(
+            self.backdrop
+                .as_ref()
+                .map(|inbox| (Source::Backdrop, inbox.fd())),
+        );
+        sources.extend(
+            self.picture
+                .as_ref()
+                .map(|inbox| (Source::Picture, inbox.fd())),
+        );
+        sources.extend(self.wakes.as_ref().map(|inbox| (Source::Wakes, inbox.fd())));
+        sources
+    }
+
+    fn after_input(&mut self, window: &mut Window) {
+        if self.screen.take_cancel() {
+            self.start_over();
+        }
+        if let Some(answer) = self.screen.take_answer() {
+            self.answer(answer);
+        }
+        if self.screen.take_next_input_source() && self.sources.len() > 1 {
+            let next = (self.active_source + 1) % self.sources.len();
+            if let Err(error) = window.select_input_source(next) {
+                tracing::warn!("cannot switch the input source: {error}");
+            }
+        }
     }
 }
 
@@ -120,7 +221,9 @@ impl App for Locker {
                 self.unlock(window);
                 return;
             }
-            if !self.screen.wake_on(input, Instant::now()) {
+            let typed = self.screen.wake_on(input, Instant::now());
+            self.converse();
+            if !typed {
                 window.request_redraw();
                 return;
             }
@@ -129,6 +232,7 @@ impl App for Locker {
             WindowEvent::Input(input) => self.screen.handle(&input),
             WindowEvent::Accessibility(request) => {
                 self.screen.wake(Instant::now());
+                self.converse();
                 window.request_redraw();
                 self.screen.perform(&request)
             }
@@ -142,97 +246,93 @@ impl App for Locker {
                     .get(active)
                     .filter(|_| sources.len() > 1)
                     .map(|code| self.layouts.name(code));
+                self.sources = sources;
+                self.active_source = active;
                 self.screen.set_input_source(name)
             }
             _ => false,
         };
         if changed {
             window.request_redraw();
-            if let Some(password) = self.screen.take_password() {
-                self.check(password);
-            }
+            self.after_input(window);
         }
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        let mut sources = vec![self.verdicts.as_fd(), self.minutes.as_fd()];
-        sources.extend(self.devices.as_ref().map(Devices::fd));
-        sources.extend(self.backdrop.as_ref().map(Inbox::fd));
-        sources.extend(self.picture.as_ref().map(Inbox::fd));
-        sources.extend(self.wakes.as_ref().map(Inbox::fd));
-        sources
+        self.sources_in_order()
+            .into_iter()
+            .map(|(_, fd)| fd)
+            .collect()
     }
 
     fn source_ready(&mut self, window: &mut Window, index: usize) {
-        if index == 1 {
-            if let Err(error) = self.minutes.wait() {
-                tracing::warn!("cannot follow the clock: {error}");
-            }
-            self.screen.set_clock(&bande_datetime::now());
-            window.request_redraw();
+        let Some(source) = self
+            .sources_in_order()
+            .get(index)
+            .map(|(source, _)| *source)
+        else {
             return;
-        }
-        let backdrop_at = 2 + usize::from(self.devices.is_some());
-        let picture_at = backdrop_at + usize::from(self.backdrop.is_some());
-        if index == 2
-            && let Some(devices) = self.devices.as_mut()
-        {
-            if let Some((battery, wifi)) = devices.latest()
-                && self.screen.set_devices(battery, wifi.as_ref())
-            {
-                window.request_redraw();
+        };
+        match source {
+            Source::Minutes => {
+                if let Err(error) = self.minutes.wait() {
+                    tracing::warn!("cannot follow the clock: {error}");
+                }
+                self.screen.set_clock(&bande_datetime::now());
             }
-            return;
-        }
-        if index == backdrop_at && self.backdrop.is_some() {
-            if let Some((_, image)) = self
-                .backdrop
-                .take()
-                .and_then(|mut inbox| inbox.drain().pop())
-            {
+            Source::Transaction => self.follow(window),
+            Source::Devices => {
+                let Some(corner) = self.devices.as_mut().and_then(Devices::latest) else {
+                    return;
+                };
+                if !self
+                    .screen
+                    .set_devices(corner.battery, corner.wifi.as_ref(), corner.wired)
+                {
+                    return;
+                }
+            }
+            Source::Backdrop => {
+                let Some((_, image)) = self
+                    .backdrop
+                    .take()
+                    .and_then(|mut inbox| inbox.drain().pop())
+                else {
+                    return;
+                };
                 self.screen.set_backdrop(image, frame_time().on_screen());
-                window.request_redraw();
             }
-            return;
-        }
-        let wakes_at = picture_at + usize::from(self.picture.is_some());
-        if index == wakes_at
-            && let Some(wakes) = self.wakes.as_mut()
-        {
-            wakes.drain();
-            self.screen.wake(Instant::now());
-            window.request_redraw();
-            return;
-        }
-        if index == picture_at {
-            if let Some(picture) = self
-                .picture
-                .take()
-                .and_then(|mut inbox| inbox.drain().pop())
-            {
+            Source::Picture => {
+                let Some((_, picture)) = self
+                    .picture
+                    .take()
+                    .and_then(|mut inbox| inbox.drain().pop())
+                else {
+                    return;
+                };
                 self.screen.set_picture(picture);
-                window.request_redraw();
             }
-            return;
+            Source::Wakes => {
+                if let Some(wakes) = self.wakes.as_mut() {
+                    wakes.drain();
+                }
+                self.screen.wake(Instant::now());
+                self.converse();
+            }
         }
-        let mut verdict = [REJECTED];
-        if self.verdicts.read_exact(&mut verdict).is_err() {
-            return;
-        }
-        if verdict[0] == ACCEPTED {
-            self.unlock(window);
-        } else {
-            self.screen.reject_password(frame_time().on_screen());
-            window.request_redraw();
-        }
+        window.request_redraw();
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.screen.rests_at()
+        self.screen.deadline()
     }
 
     fn tick(&mut self, window: &mut Window, now: Instant) {
-        if self.screen.rest_when_due(now) {
+        if self.screen.tick(now) {
+            if self.screen.is_resting() {
+                self.transaction = None;
+                self.pending = None;
+            }
             window.request_redraw();
         }
     }
@@ -282,10 +382,9 @@ fn config_text(property: &str) -> String {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     set_dumpable_behavior(DumpableBehavior::NotDumpable)?;
     let user = current_user()?;
-    let picture = load_picture(user.login.clone(), PICTURE_PIXELS)
+    let picture = load_pictures(vec![user.login.clone()], PICTURE_PIXELS)
         .inspect_err(|error| tracing::warn!("cannot load the account picture: {error}"))
         .ok();
-    let (verdicts, verdict_sender) = UnixStream::pair()?;
     let mut window = Window::open(Role::Lock, (0, 0))?;
     let system = bande_bus::system()
         .inspect_err(|error| tracing::warn!("no system bus: {error}"))
@@ -297,16 +396,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             &bande_datetime::now(),
             window.appearance(),
             TextSystem::new(),
+            Purpose::Lock,
         ),
         user,
-        verdicts,
-        verdict_sender,
+        transaction: None,
+        asked: false,
+        pending: None,
         minutes: MinuteTimer::new()?,
         backdrop: None,
         backdrop_requested: false,
         picture,
         devices: system.as_ref().and_then(Devices::follow),
         layouts: Layouts::load(),
+        sources: Vec::new(),
+        active_source: 0,
         wakes: system.as_ref().and_then(|system| {
             follow_wakes(system)
                 .inspect_err(|error| tracing::warn!("cannot follow waking: {error}"))

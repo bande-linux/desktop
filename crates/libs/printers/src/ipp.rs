@@ -2,6 +2,8 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
+use crate::http::read_response;
+
 pub const OPERATION: u8 = 0x01;
 pub const JOB: u8 = 0x02;
 pub const PRINTER: u8 = 0x04;
@@ -23,6 +25,7 @@ const LANGUAGE: u8 = 0x48;
 const SUCCESS_LIMIT: u16 = 0x00FF;
 const HTTP_UNAUTHORIZED: u16 = 401;
 const HTTP_FORBIDDEN: u16 = 403;
+const ANSWER_LIMIT: usize = 16 << 20;
 const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -217,63 +220,13 @@ impl Request {
     }
 }
 
-pub fn read_http(mut reader: impl BufRead) -> Result<Vec<u8>> {
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    let status: u16 = line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|code| code.parse().ok())
-        .ok_or(Error::Malformed)?;
-    let mut length = None;
-    let mut chunked = false;
-    loop {
-        line.clear();
-        if reader.read_line(&mut line)? == 0 {
-            return Err(Error::Malformed);
-        }
-        let header = line.trim_end();
-        if header.is_empty() {
-            break;
-        }
-        let Some((name, value)) = header.split_once(':') else {
-            continue;
-        };
-        let value = value.trim();
-        if name.eq_ignore_ascii_case("content-length") {
-            length = value.parse::<usize>().ok();
-        } else if name.eq_ignore_ascii_case("transfer-encoding") {
-            chunked = value.eq_ignore_ascii_case("chunked");
-        }
+pub fn read_http(reader: impl BufRead) -> Result<Vec<u8>> {
+    let response = read_response(reader, ANSWER_LIMIT)?;
+    match response.status {
+        HTTP_UNAUTHORIZED | HTTP_FORBIDDEN => Err(Error::NotAllowed),
+        200 => Ok(response.body),
+        other => Err(Error::Refused(other, format!("HTTP {other}"))),
     }
-    match status {
-        HTTP_UNAUTHORIZED | HTTP_FORBIDDEN => return Err(Error::NotAllowed),
-        200 => {}
-        other => return Err(Error::Refused(other, format!("HTTP {other}"))),
-    }
-    let mut body = Vec::new();
-    if chunked {
-        loop {
-            line.clear();
-            reader.read_line(&mut line)?;
-            let size = usize::from_str_radix(line.trim().split(';').next().unwrap_or(""), 16)
-                .map_err(|_| Error::Malformed)?;
-            if size == 0 {
-                break;
-            }
-            let start = body.len();
-            body.resize(start + size, 0);
-            reader.read_exact(&mut body[start..])?;
-            line.clear();
-            reader.read_line(&mut line)?;
-        }
-    } else if let Some(length) = length {
-        body.resize(length, 0);
-        reader.read_exact(&mut body)?;
-    } else {
-        reader.read_to_end(&mut body)?;
-    }
-    Ok(body)
 }
 
 struct Cursor<'a> {

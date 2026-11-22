@@ -1,4 +1,5 @@
 mod client;
+pub mod http;
 pub mod ipp;
 mod mechanism;
 

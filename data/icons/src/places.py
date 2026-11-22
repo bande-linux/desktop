@@ -86,6 +86,30 @@ def removable():
                + circle(24, 39.5, 1.4, EMBER), defs)
 
 
+def device_body():
+    return gradient('body', '#504D47', '#2B2823')
+
+
+def camera():
+    return svg(48, path('M17 11h14l2.5 4H40a3 3 0 0 1 3 3v19a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V18a3 3 0 0 1 3-3h6.5z', 'url(#body)')
+               + circle(24, 27, 9, '#D9D7D3') + circle(24, 27, 6, '#58554F') + circle(38, 20, 1.4, EMBER), device_body())
+
+
+def phone():
+    return svg(48, rect(13, 4, 22, 40, 4, 'url(#body)') + rect(15, 8, 18, 31, 1, '#D9D7D3')
+               + circle(24, 41.5, 1.3, EMBER), device_body())
+
+
+def computer():
+    edge = 'stroke="#898680" stroke-width="0.8"'
+    defs = gradient('bezel', '#EDEBE7', '#D4D0CB') + gradient('screen', '#5A5750', '#46433E')
+    return svg(48, path('M20.5 33h7l1.2 6h-9.4Z', '#C9C4BD')
+               + rect(15, 38.6, 18, 2.6, 1.3, '#D4D0CB', edge)
+               + rect(5, 8, 38, 26, 3, 'url(#bezel)', edge)
+               + rect(7.5, 10.5, 33, 19, 1.5, 'url(#screen)')
+               + path('M7.5 12a1.5 1.5 0 0 1 1.5-1.5h30a1.5 1.5 0 0 1 1.5 1.5v4.5L7.5 23Z', '#FFFFFF', 'opacity="0.08"'), defs)
+
+
 def icons(tab_accent):
     tab = accent(tab_accent)
     return {name: (lambda symbol=symbol: folder(tab, symbol)) for name, symbol in FOLDERS.items()}
@@ -101,6 +125,9 @@ DEVICES = {
     'drive-harddisk': harddisk,
     'drive-removable-media': removable,
     'media-removable': removable,
+    'camera-photo': camera,
+    'phone': phone,
+    'computer': computer,
 }
 
 ACCENT_VARIANTS = {name: icons(name) for name in ACCENTS if name != 'ultramarine'}

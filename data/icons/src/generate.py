@@ -1,3 +1,5 @@
+# generate.py [--check]: writes the Bande icon themes in data/icons and our apps' hicolor icons, or
+# with --check fails when any of them differs from what it would write.
 import glob
 import os
 import sys
@@ -9,8 +11,6 @@ import files
 import places
 import symbols
 from common import ROOT
-
-ICONS = os.path.join(ROOT, 'data', 'icons')
 
 SCALABLE = {
     'scalable/apps': ('Applications', apps.ICONS),
@@ -36,40 +36,68 @@ def index(name, comment, inherits, directories, hidden=False):
     return text + ''.join(section(*entry) for entry in directories)
 
 
-def write(theme, directory, icons):
-    target = os.path.join(ICONS, theme, directory)
-    os.makedirs(target, exist_ok=True)
-    for stale in glob.glob(os.path.join(target, '*.svg')):
-        os.remove(stale)
-    for name, draw in sorted(icons.items()):
-        with open(os.path.join(target, f'{name}.svg'), 'w') as out:
-            out.write(draw())
+def render():
+    outputs = {}
+    owned = []
 
+    def theme_dir(theme, directory, icons):
+        target = os.path.join('data', 'icons', theme, directory)
+        owned.append(target)
+        for name, draw in icons.items():
+            outputs[os.path.join(target, f'{name}.svg')] = draw()
 
-def main():
     directories = []
     for size in (16, 24):
         directory = f'{size}x{size}/mimetypes'
-        write('Bande', directory, files.SMALL)
+        theme_dir('Bande', directory, files.SMALL)
         directories.append((directory, 'MimeTypes', size))
     for directory, (context, icons) in SCALABLE.items():
-        write('Bande', directory, icons)
+        theme_dir('Bande', directory, icons)
         directories.append((directory, context, 48))
     for directory, (context, icons) in SYMBOLIC.items():
-        write('Bande', directory, icons)
+        theme_dir('Bande', directory, icons)
         directories.append((directory, context, 16))
-    with open(os.path.join(ICONS, 'Bande', 'index.theme'), 'w') as out:
-        out.write(index('Bande', 'The Bande desktop icons in the Datum language', 'hicolor', directories))
+    outputs[os.path.join('data', 'icons', 'Bande', 'index.theme')] = index(
+        'Bande', 'The Bande desktop icons in the Datum language', 'hicolor', directories)
     for accent, icons in places.ACCENT_VARIANTS.items():
         theme = f'Bande-{accent.capitalize()}'
-        write(theme, 'scalable/places', icons)
-        with open(os.path.join(ICONS, theme, 'index.theme'), 'w') as out:
-            out.write(index(theme.replace('-', ' '), f'Bande folders with the {accent} accent', 'Bande',
-                            [('scalable/places', 'Places', 48)], hidden=True))
+        theme_dir(theme, 'scalable/places', icons)
+        outputs[os.path.join('data', 'icons', theme, 'index.theme')] = index(
+            theme.replace('-', ' '), f'Bande folders with the {accent} accent', 'Bande',
+            [('scalable/places', 'Places', 48)], hidden=True)
     for name, relative in apps.HICOLOR.items():
-        with open(os.path.join(ROOT, relative), 'w') as out:
-            out.write(apps.ICONS[name]())
+        outputs[relative] = apps.ICONS[name]()
+    return outputs, owned
+
+
+def stale(outputs, owned):
+    return sorted(found for directory in owned
+                  for found in glob.glob(os.path.join(ROOT, directory, '*.svg'))
+                  if os.path.relpath(found, ROOT) not in outputs)
+
+
+def check():
+    outputs, owned = render()
+    problems = [f'{relative} is not what the generator makes' for relative, text in sorted(outputs.items())
+                if not os.path.exists(os.path.join(ROOT, relative))
+                or open(os.path.join(ROOT, relative)).read() != text]
+    problems += [f'{os.path.relpath(found, ROOT)} is not made by the generator' for found in stale(outputs, owned)]
+    for problem in problems:
+        print(f'generate.py: {problem}', file=sys.stderr)
+    return 1 if problems else 0
+
+
+def main():
+    outputs, owned = render()
+    for found in stale(outputs, owned):
+        os.remove(found)
+    for relative, text in outputs.items():
+        target = os.path.join(ROOT, relative)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, 'w') as out:
+            out.write(text)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(check() if sys.argv[1:] == ['--check'] else main())

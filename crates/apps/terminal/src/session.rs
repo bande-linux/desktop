@@ -9,7 +9,7 @@ use alacritty_terminal::tty::{self, Options, Pty, Shell};
 use rustix::event::epoll::{self, CreateFlags, EventData, EventFlags};
 
 use crate::process::{self, Report, Reports};
-use bande_terminal_view::{GridSize, Terminal};
+use bande_terminal_view::{GridSize, Terminal, Theme};
 
 const READ_BUFFER: usize = 65536;
 const READS_PER_WAKE: usize = 16;
@@ -182,7 +182,7 @@ impl Session {
         }
     }
 
-    pub fn read(&mut self) -> Vec<Notice> {
+    pub fn read(&mut self, theme: &Theme) -> Vec<Notice> {
         let mut buffer = [0u8; READ_BUFFER];
         for _ in 0..READS_PER_WAKE {
             let mut master = self.pty.file();
@@ -210,7 +210,7 @@ impl Session {
             }
         }
         self.refresh_foreground();
-        let notices = self.take_notices();
+        let notices = self.take_notices(theme);
         self.flush();
         notices
     }
@@ -249,12 +249,17 @@ impl Session {
         }
     }
 
-    pub fn take_notices(&mut self) -> Vec<Notice> {
+    pub fn take_notices(&mut self, theme: &Theme) -> Vec<Notice> {
         let mut notices = std::mem::take(&mut self.notices);
         for event in self.terminal.take_events() {
             match event {
                 TermEvent::PtyWrite(text) => {
                     self.send(text.as_bytes());
+                }
+                TermEvent::ColorRequest(index, reply) => {
+                    if let Some(color) = self.terminal.reported_color(index, theme) {
+                        self.send(reply(color).as_bytes());
+                    }
                 }
                 TermEvent::TextAreaSizeRequest(reply) => {
                     let text = reply(self.terminal.window_size());

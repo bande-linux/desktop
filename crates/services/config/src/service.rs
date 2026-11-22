@@ -3,8 +3,8 @@ use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::time::{Duration, Instant};
 
 use bande_watch::{Changes, FolderWatch};
 use zbus::blocking::Connection;
@@ -42,6 +42,7 @@ pub enum ServiceError {
     Bus(zbus::Error),
     Watch(io::Error),
     Path(PathBuf),
+    Timer(io::Error),
 }
 
 impl fmt::Display for ServiceError {
@@ -50,6 +51,7 @@ impl fmt::Display for ServiceError {
             Self::Bus(error) => write!(f, "D-Bus: {error}"),
             Self::Watch(error) => write!(f, "cannot watch the configuration: {error}"),
             Self::Path(path) => write!(f, "{} has no parent directory", path.display()),
+            Self::Timer(error) => write!(f, "cannot time display trials: {error}"),
         }
     }
 }
@@ -71,6 +73,14 @@ impl From<io::Error> for ServiceError {
 pub struct ConfigService {
     _watch: Arc<FolderWatch>,
     _connection: Connection,
+    trials: Arc<TrialClock>,
+}
+
+impl Drop for ConfigService {
+    fn drop(&mut self) {
+        self.trials.lock().stopped = true;
+        self.trials.wake.notify_all();
+    }
 }
 
 type Published = Arc<Mutex<Arc<Config>>>;
@@ -100,6 +110,7 @@ impl ConfigService {
         }
         let published = Arc::new(Mutex::new(store.current()));
         let watching = Arc::new(OnceLock::new());
+        let trials = Arc::new(TrialClock::default());
 
         connection.object_server().at(
             OBJECT_PATH,
@@ -108,7 +119,7 @@ impl ConfigService {
                 path: path.to_path_buf(),
                 published: Arc::clone(&published),
                 watch: Arc::clone(&watching),
-                trial: Mutex::default(),
+                trials: Arc::clone(&trials),
                 trial_path: bande_xdg::state_home().map(|state| state.join(TRIAL_FILE)),
             },
         )?;
@@ -139,9 +150,16 @@ impl ConfigService {
             tracing::warn!("the configuration folder is already watched");
         }
         recover_trial(connection);
+        let timed = Arc::clone(&trials);
+        let timer = connection.clone();
+        std::thread::Builder::new()
+            .name("display-trial".to_owned())
+            .spawn(move || time_trials(&timer, &timed))
+            .map_err(ServiceError::Timer)?;
         Ok(Self {
             _watch: watch,
             _connection: connection.clone(),
+            trials,
         })
     }
 }
@@ -466,6 +484,47 @@ fn arranged(placement: &Placement) -> ArrangedDisplay {
 struct Trial {
     previous: BTreeMap<String, DisplaySettings>,
     round: u64,
+    deadline: Option<Instant>,
+    stopped: bool,
+}
+
+#[derive(Default)]
+struct TrialClock {
+    trial: Mutex<Trial>,
+    wake: Condvar,
+}
+
+impl TrialClock {
+    fn lock(&self) -> MutexGuard<'_, Trial> {
+        self.trial.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+fn time_trials(connection: &Connection, clock: &TrialClock) {
+    let mut trial = clock.lock();
+    while !trial.stopped {
+        let Some(deadline) = trial.deadline else {
+            trial = clock
+                .wake
+                .wait(trial)
+                .unwrap_or_else(PoisonError::into_inner);
+            continue;
+        };
+        let left = deadline.saturating_duration_since(Instant::now());
+        if !left.is_zero() {
+            trial = clock
+                .wake
+                .wait_timeout(trial, left)
+                .unwrap_or_else(PoisonError::into_inner)
+                .0;
+            continue;
+        }
+        trial.deadline = None;
+        let round = trial.round;
+        drop(trial);
+        end_trial(connection, round);
+        trial = clock.lock();
+    }
 }
 
 struct ConfigInterface {
@@ -473,7 +532,7 @@ struct ConfigInterface {
     path: PathBuf,
     published: Published,
     watch: Arc<OnceLock<Arc<FolderWatch>>>,
-    trial: Mutex<Trial>,
+    trials: Arc<TrialClock>,
     trial_path: Option<PathBuf>,
 }
 
@@ -547,7 +606,7 @@ impl ConfigInterface {
     }
 
     fn lock_trial(&self) -> MutexGuard<'_, Trial> {
-        self.trial.lock().unwrap_or_else(PoisonError::into_inner)
+        self.trials.lock()
     }
 
     fn forget_trial(&self) {
@@ -1619,11 +1678,10 @@ impl ConfigInterface {
         &self,
         identity: String,
         settings: HashMap<String, OwnedValue>,
-        #[zbus(connection)] connection: &zbus::Connection,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> zbus::fdo::Result<()> {
         let display = display_settings(&settings)?;
-        let round = {
+        {
             let mut trial = self.lock_trial();
             let before = self.store.current().display(&identity);
             if before == display {
@@ -1631,6 +1689,8 @@ impl ConfigInterface {
             }
             trial.previous.entry(identity.clone()).or_insert(before);
             trial.round += 1;
+            trial.deadline = Some(Instant::now() + DISPLAY_TRIAL);
+            self.trials.wake.notify_all();
             if let Some(path) = &self.trial_path {
                 bande_xdg::replace_file(path, crate::edit::displays_document(&trial.previous))
                     .map_err(|error| {
@@ -1640,18 +1700,8 @@ impl ConfigInterface {
                     })?;
             }
             self.write(&Setting::Display(identity, display))?;
-            trial.round
-        };
-        self.displays_changed(&emitter).await?;
-        let connection = Connection::from(connection.clone());
-        std::thread::Builder::new()
-            .name("display-trial".to_owned())
-            .spawn(move || {
-                std::thread::sleep(DISPLAY_TRIAL);
-                end_trial(&connection, round);
-            })
-            .map_err(|error| Failed(format!("cannot time the display settings: {error}")))?;
-        Ok(())
+        }
+        Ok(self.displays_changed(&emitter).await?)
     }
 
     fn keep_displays(&self) {

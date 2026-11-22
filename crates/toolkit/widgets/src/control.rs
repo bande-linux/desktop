@@ -4,6 +4,7 @@ use super::Context;
 
 const RING_WIDTH: f32 = 2.0;
 const RING_GAP: f32 = 1.0;
+pub const FOCUS_RING_OUTSET: f32 = RING_GAP + RING_WIDTH;
 const FIELD_OUTLINE: f32 = 1.5;
 const FIELD_RING_OPACITY: f32 = 0.35;
 const CHEVRON_WIDTH: f32 = 4.0;
@@ -44,18 +45,14 @@ fn ring(color: Color, shape: Shape, items: &mut Vec<Item>) {
     });
 }
 
-pub(crate) fn field_focus(cx: &Context, shape: Shape, items: &mut Vec<Item>) {
+pub(crate) fn field_focus(palette: &Palette, shape: Shape, items: &mut Vec<Item>) {
     let inset = FIELD_OUTLINE / 2.0;
     items.push(Item::Stroke {
         shape: Shape::rounded(shape.rect.inset(inset), shape.radius - inset),
         width: FIELD_OUTLINE,
-        paint: cx.palette.focus.into(),
+        paint: palette.focus.into(),
     });
-    ring(
-        cx.palette.focus.with_opacity(FIELD_RING_OPACITY),
-        shape,
-        items,
-    );
+    ring(palette.focus.with_opacity(FIELD_RING_OPACITY), shape, items);
 }
 
 pub(crate) fn outline(shape: Shape, color: Color, items: &mut Vec<Item>) {
@@ -168,13 +165,17 @@ pub(crate) fn square_capped(points: &[Point], width: f32) -> Path {
 }
 
 pub(crate) fn paint_field(cx: &Context, frame: Rect, focused: bool, items: &mut Vec<Item>) {
+    paint_field_for(&cx.palette, frame, focused, items);
+}
+
+pub fn paint_field_for(palette: &Palette, frame: Rect, focused: bool, items: &mut Vec<Item>) {
     let shape = Shape::rounded(frame, Radius::S);
     items.push(Item::Fill {
         shape,
-        paint: cx.palette.field.into(),
+        paint: palette.field.into(),
     });
     match focused {
-        true => field_focus(cx, shape, items),
-        false => outline(shape, cx.palette.edge, items),
+        true => field_focus(palette, shape, items),
+        false => outline(shape, palette.edge, items),
     }
 }

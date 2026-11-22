@@ -6,14 +6,14 @@ use bande_l10n::tr;
 use super::control::paint_field;
 use super::{Context, Cursor, Event, Key, Modifiers, Size, Widget, WidgetId};
 use bande_graphics::{
-    ControlSize, Item, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
+    ControlSize, Item, Palette, Paragraph, Path, Point, Radius, Rect, Shape, TextAlign, TextStyle,
 };
 use zeroize::Zeroizing;
 
 const BULLET: char = '\u{25CF}';
 const PADDING: f32 = 8.0;
 const CARET_WIDTH: f32 = 1.5;
-const CAPS_LOCK_SIZE: f32 = 12.0;
+pub const CAPS_LOCK_SIZE: f32 = 12.0;
 const CAPS_LOCK_STROKE: f32 = 1.25;
 const BODY_FONT: f32 = 13.0;
 const GO_INSET: f32 = 4.0;
@@ -128,36 +128,14 @@ impl SecureField {
 
     fn paint_caps_lock(&self, cx: &Context, items: &mut Vec<Item>) {
         let size = CAPS_LOCK_SIZE * (self.font_size / BODY_FONT).max(1.0);
-        let unit = size / CAPS_LOCK_SIZE;
         let right = self
             .go_rect()
             .map_or(self.frame.x + self.frame.width, |go| go.x);
-        let x = right - PADDING - size;
-        let y = self.frame.y + ((self.frame.height - size) / 2.0).round();
-        let at = |dx: f32, dy: f32| Point::new(x + dx * unit, y + dy * unit);
-        items.push(Item::StrokePath {
-            path: Path::through(&[
-                at(6.0, 0.5),
-                at(11.5, 6.0),
-                at(8.5, 6.0),
-                at(8.5, 8.5),
-                at(3.5, 8.5),
-                at(3.5, 6.0),
-                at(0.5, 6.0),
-            ])
-            .close(),
-            width: CAPS_LOCK_STROKE * unit,
-            paint: cx.palette.ink2.into(),
-        });
-        items.push(Item::Fill {
-            shape: Shape::rect(Rect::new(
-                at(3.5, 10.25).x - CAPS_LOCK_STROKE * unit / 2.0,
-                at(3.5, 10.25).y,
-                5.0 * unit + CAPS_LOCK_STROKE * unit,
-                1.5 * unit,
-            )),
-            paint: cx.palette.ink2.into(),
-        });
+        let origin = Point::new(
+            right - PADDING - size,
+            self.frame.y + ((self.frame.height - size) / 2.0).round(),
+        );
+        caps_lock_for(&cx.palette, origin, size, items);
     }
 
     fn text_origin(&self, paragraph: Option<&Paragraph>) -> Point {
@@ -492,4 +470,32 @@ impl Widget for SecureField {
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
     }
+}
+
+pub fn caps_lock_for(palette: &Palette, origin: Point, size: f32, items: &mut Vec<Item>) {
+    let unit = size / CAPS_LOCK_SIZE;
+    let at = |dx: f32, dy: f32| Point::new(origin.x + dx * unit, origin.y + dy * unit);
+    items.push(Item::StrokePath {
+        path: Path::through(&[
+            at(6.0, 0.5),
+            at(11.5, 6.0),
+            at(8.5, 6.0),
+            at(8.5, 8.5),
+            at(3.5, 8.5),
+            at(3.5, 6.0),
+            at(0.5, 6.0),
+        ])
+        .close(),
+        width: CAPS_LOCK_STROKE * unit,
+        paint: palette.ink2.into(),
+    });
+    items.push(Item::Fill {
+        shape: Shape::rect(Rect::new(
+            at(3.5, 10.25).x - CAPS_LOCK_STROKE * unit / 2.0,
+            at(3.5, 10.25).y,
+            5.0 * unit + CAPS_LOCK_STROKE * unit,
+            1.5 * unit,
+        )),
+        paint: palette.ink2.into(),
+    });
 }

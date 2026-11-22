@@ -242,7 +242,7 @@ impl Widget for TextField {
                     shape,
                     paint: cx.palette.field.into(),
                 });
-                field_focus(cx, shape, items);
+                field_focus(&cx.palette, shape, items);
             }
             Border::Search => {
                 let shape = Shape::rounded(self.frame, Radius::M);
@@ -251,7 +251,7 @@ impl Widget for TextField {
                     paint: cx.palette.well.into(),
                 });
                 if focused {
-                    field_focus(cx, shape, items);
+                    field_focus(&cx.palette, shape, items);
                 }
             }
             Border::None => {}

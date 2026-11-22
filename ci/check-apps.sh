@@ -2,7 +2,8 @@
 # check-apps.sh [app dir...]: static checks (no build) that each app (default: crates/apps/* but the
 # file chooser and the keyring prompt) is a bande-app app packaged like every other: the package is
 # bande-<dir>; the app id in src/main.rs names the .desktop file, its Icon= and the metainfo <id>;
-# Exec= starts the package; StartupNotify=true; its debian/control Depends has the toolkit's three
+# Exec= starts the package; StartupNotify=true; every MimeType= it declares has a default in
+# data/x-bande-mimeapps.list; its debian/control Depends has the toolkit's three
 # font packages (the template, which is not released, has no stanza);
 # src/main.rs calls bande_app::run and nothing in src/ runs its own loop or menu export. Fails on
 # any problem.
@@ -29,6 +30,10 @@ check() {
         grep -qx "Icon=$id" "$desktop" || problem "$dir" "Icon= is not $id"
         grep -q "^Exec=$package\( \|$\)" "$desktop" || problem "$dir" "Exec= does not start $package"
         grep -qx "StartupNotify=true" "$desktop" || problem "$dir" "no StartupNotify=true"
+        for mime in $(sed -n 's/^MimeType=//p' "$desktop" | tr ';' ' '); do
+            awk -F= -v mime="$mime" '$1 == mime { found = 1 } END { exit !found }' data/x-bande-mimeapps.list ||
+                problem "$dir" "$mime has no default in data/x-bande-mimeapps.list"
+        done
     fi
     if [ -f "$metainfo" ]; then
         grep -q "<id>$id</id>" "$metainfo" || problem "$dir" "the metainfo <id> is not $id"

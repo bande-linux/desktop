@@ -162,8 +162,9 @@ are in [performance.md](performance.md).
   recommends no apps from Debian. Network printers
   need nothing more; support for USB and older printers comes from Settings ▸ Printers. It installs
   `/usr/share/applications/x-bande-mimeapps.list` (`data/x-bande-mimeapps.list`), read only in a Bande session, which opens
-  folders in Files, `.deb` files in the Package Installer, plain text (with source code and
-  logs, its subtypes) in Text Editor when it is installed, web pages and links in the Browser,
+  folders in Files, `.deb` files in the Package Installer, every type a Bande app declares
+  in that app (plain text, Markdown, RTF, source code and logs in Text Editor when it is
+  installed, pictures and PDF in Viewer, audio and video in Player), web pages and links in the Browser,
   `mailto:` links in Mail, calendar files and `webcal:` links in Calendar, and archives (zip, tar,
   gzip, bzip2, xz, zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
   itself only when no app opens it; other types open in an installed app

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use bande_render::{RenderError, VulkanFrame, VulkanRenderer, VulkanTexture};
@@ -15,11 +16,19 @@ use crate::state::OutputElement;
 const REMEMBERED_FAILURES: usize = 256;
 
 static FAILED: LazyLock<Mutex<HashSet<Id>>> = LazyLock::new(Mutex::default);
+static LEFT_OUT: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn drawing_everything<T>(draw: impl FnOnce() -> T) -> (T, bool) {
+    LEFT_OUT.store(false, Ordering::Relaxed);
+    let drawn = draw();
+    (drawn, !LEFT_OUT.swap(false, Ordering::Relaxed))
+}
 
 fn skip_failed(id: &Id, error: RenderError) -> Result<(), RenderError> {
     if error.is_device_lost() {
         return Err(error);
     }
+    LEFT_OUT.store(true, Ordering::Relaxed);
     if let Ok(mut failed) = FAILED.lock() {
         if failed.len() >= REMEMBERED_FAILURES {
             failed.clear();

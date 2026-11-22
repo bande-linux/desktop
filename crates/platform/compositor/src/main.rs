@@ -422,7 +422,7 @@ fn reactivate(app: &mut App<DrmBackend>) {
 
 fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<DrmEventMetadata>) {
     let flipped = app.output.flipped(crtc, metadata).and_then(|flipped| {
-        let Some((name, vblank)) = flipped else {
+        let Some((name, vblank, shows_content)) = flipped else {
             return Ok(());
         };
         if !app.shown {
@@ -432,7 +432,8 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
                 vblank.time.saturating_sub(app.started).as_millis()
             );
         }
-        if let Some(marker) = app.first_frame_marker.take()
+        if shows_content
+            && let Some(marker) = app.first_frame_marker.take()
             && let Err(error) = std::fs::write(&marker, b"")
         {
             tracing::warn!(
@@ -949,7 +950,7 @@ where
             app.compositor.hold_frames_until(
                 Awaited::Shell,
                 app.started,
-                app.started + SHELL_READY_TIMEOUT,
+                now() + SHELL_READY_TIMEOUT,
             );
             (None, start_user_session(event_loop, &mut app)?)
         }
@@ -983,7 +984,7 @@ where
             app.compositor.hold_frames_until(
                 Awaited::LoginWindow,
                 app.started,
-                app.started + SHELL_READY_TIMEOUT,
+                now() + SHELL_READY_TIMEOUT,
             );
             let shown = app.output.frames_on_screen();
             app.compositor.fade_in_over(shown);

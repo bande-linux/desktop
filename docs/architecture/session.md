@@ -664,13 +664,16 @@ Each display starts in the mode Plymouth left on it, on the same CRTC, when the 
 that mode, so the first frame needs no modeset; the person's remembered mode or the highest
 refresh applies when their session's compositor starts. Before its first commit the login
 window's compositor reads each display's framebuffer (`DRM_IOCTL_MODE_GETFB2`, mapped as a dumb
-buffer), which is Plymouth's last frame, and once the login window is mapped that frame fades
+buffer), which is Plymouth's last frame, and once the login window can be drawn that frame fades
 out over it with the `standard` spring (`fade` with Reduce Motion). When the framebuffer cannot
 be read while Plymouth runs, the frame is the boot screen's own background and mark at
-Plymouth's scale, drawn by `bande-splash`. After its first frame is on screen the compositor
-creates `shown` there and the root `bande-greeter-splash.path` runs `plymouth quit
---retain-splash`. The background is Datum's `deep`, which is also the compositor's clear colour.
-On a system without Plymouth none of this runs.
+Plymouth's scale, drawn by `bande-splash`. The compositor holds its frames until the login
+window's buffer is imported for its renderer, not merely attached (at most 2.5 s), as the
+session's compositor does for the wallpaper and the Taskbar. Once a frame in which every element
+was drawn and the login window was among them is on screen, the compositor creates `shown`
+there and the root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`; Plymouth is
+not dismissed onto a frame that left the login window out. The background is Datum's `deep`,
+which is also the compositor's clear colour. On a system without Plymouth none of this runs.
 
 **Ending the session.** Log Out stops `bande-compositor.service` in the user's manager, never
 logind's `Session.Terminate`, which would leave the compositor holding the seat while greetd

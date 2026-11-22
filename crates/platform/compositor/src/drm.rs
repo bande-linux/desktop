@@ -36,6 +36,7 @@ use bande_render::VulkanRenderer;
 
 use crate::boot_screen::PLYMOUTH_PID;
 use crate::clock::{FrameOutput, Submission, Vblank};
+use crate::element::drawing_everything;
 use crate::render::{Snapshot, background};
 use crate::reveal::ShownFrame;
 use crate::scanout::{ScanoutAllocator, ScanoutExporter};
@@ -67,6 +68,7 @@ struct Head {
     lost_at: Option<Instant>,
     relink_wanted: bool,
     flip_pending: bool,
+    shows_content: bool,
     refused: bool,
     kept_mode: Option<Mode>,
     display_profile: Option<Profile>,
@@ -623,6 +625,7 @@ impl DrmBackend {
             lost_at: None,
             relink_wanted: false,
             flip_pending: false,
+            shows_content: false,
             refused: false,
             kept_mode,
             display_profile: edid_of(&self.device, info.handle())
@@ -809,7 +812,7 @@ impl DrmBackend {
         &mut self,
         crtc: crtc::Handle,
         metadata: Option<DrmEventMetadata>,
-    ) -> Result<Option<(String, Vblank)>, DrmBackendError> {
+    ) -> Result<Option<(String, Vblank, bool)>, DrmBackendError> {
         let Some(head) = self
             .heads
             .iter_mut()
@@ -828,6 +831,7 @@ impl DrmBackend {
                 sequence: metadata.map_or(0, |metadata| u64::from(metadata.sequence)),
                 time: event_time(metadata),
             },
+            head.shows_content,
         )))
     }
 
@@ -1261,6 +1265,7 @@ impl DrmBackend {
             return Ok(Submission::Paused);
         }
         if compositor.holds_frames() {
+            compositor.import_awaited(&mut self.renderer);
             return Ok(Submission::Unchanged);
         }
         let Some(settings) = compositor.output_settings(output) else {
@@ -1348,19 +1353,19 @@ impl DrmBackend {
             None => FrameFlags::DEFAULT | FrameFlags::ALLOW_PRIMARY_PLANE_SCANOUT_ANY,
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
-        let frame =
-            match head
-                .compositor
+        let (rendered, drew_everything) = drawing_everything(|| {
+            head.compositor
                 .render_frame(&mut self.renderer, &elements, background(), flags)
-            {
-                Ok(frame) => frame,
-                Err(error) if head.rendered && !self.renderer.is_lost() => {
-                    tracing::warn!("{output} copies its frames from now on: {error}");
-                    self.copy_frames(index)?;
-                    return Ok(Submission::Unchanged);
-                }
-                Err(error) => return Err(error.into()),
-            };
+        });
+        let frame = match rendered {
+            Ok(frame) => frame,
+            Err(error) if head.rendered && !self.renderer.is_lost() => {
+                tracing::warn!("{output} copies its frames from now on: {error}");
+                self.copy_frames(index)?;
+                return Ok(Submission::Unchanged);
+            }
+            Err(error) => return Err(error.into()),
+        };
         self.renderer.finish_uploads()?;
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;
@@ -1368,6 +1373,7 @@ impl DrmBackend {
         if empty {
             return Ok(Submission::Unchanged);
         }
+        head.shows_content = drew_everything && compositor.awaited_drawn(&self.renderer);
         match head.compositor.queue_frame(()) {
             Ok(()) => {
                 head.flip_pending = true;

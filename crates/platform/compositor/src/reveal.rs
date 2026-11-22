@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use bande_render::VulkanTexture;
+use bande_render::{VulkanRenderer, VulkanTexture};
 use bande_spring::{Animated, Spring};
-use smithay::backend::renderer::ContextId;
+use smithay::backend::renderer::utils::{import_surface_tree, with_renderer_surface_state};
+use smithay::backend::renderer::{ContextId, Renderer as _};
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Rectangle, Size};
@@ -35,6 +36,7 @@ pub(crate) enum Reveal {
         since: Duration,
         deadline: Duration,
         ready: Awaited,
+        drawable: bool,
         over: Vec<ShownFrame>,
     },
     Fading {
@@ -60,31 +62,44 @@ fn opaque_over(surface: &WlSurface, size: Size<i32, Logical>) -> bool {
         })
 }
 
+fn drawable(surface: &WlSurface, context: &ContextId<VulkanTexture>) -> bool {
+    with_renderer_surface_state(surface, |state| state.texture(context.clone()).is_some())
+        .unwrap_or(false)
+}
+
 impl State {
-    fn login_window_ready(&self) -> bool {
+    fn login_window(&self) -> Option<Vec<WlSurface>> {
         let map = layer_map_for_output(&self.main_screen().output);
-        map.layers().any(|layer| {
-            layer.namespace() == LOGIN_WINDOW_NAMESPACE && is_mapped(layer.wl_surface())
-        })
+        map.layers()
+            .find(|layer| {
+                layer.namespace() == LOGIN_WINDOW_NAMESPACE && is_mapped(layer.wl_surface())
+            })
+            .map(|layer| vec![layer.wl_surface().clone()])
     }
 
-    fn shell_ready(&self) -> bool {
-        self.screens
-            .iter()
-            .filter(|screen| screen.mirror.is_none())
-            .all(|screen| {
-                let map = layer_map_for_output(&screen.output);
-                let size = screen.rect().size;
-                let wallpaper = map.layers_on(Layer::Background).any(|layer| {
-                    map.layer_geometry(layer)
-                        .is_some_and(|geometry| geometry.size == size)
-                        && opaque_over(layer.wl_surface(), size)
-                });
-                let bar = map.layers().any(|layer| {
-                    layer.namespace() == BAR_NAMESPACE && is_mapped(layer.wl_surface())
-                });
-                wallpaper && bar
-            })
+    fn shell(&self) -> Option<Vec<WlSurface>> {
+        let mut surfaces = Vec::new();
+        for screen in self.screens.iter().filter(|screen| screen.mirror.is_none()) {
+            let map = layer_map_for_output(&screen.output);
+            let size = screen.rect().size;
+            let wallpaper = map.layers_on(Layer::Background).find(|layer| {
+                map.layer_geometry(layer)
+                    .is_some_and(|geometry| geometry.size == size)
+                    && opaque_over(layer.wl_surface(), size)
+            })?;
+            let bar = map.layers().find(|layer| {
+                layer.namespace() == BAR_NAMESPACE && is_mapped(layer.wl_surface())
+            })?;
+            surfaces.extend([wallpaper.wl_surface().clone(), bar.wl_surface().clone()]);
+        }
+        Some(surfaces)
+    }
+
+    fn awaited(&self, awaited: Awaited) -> Option<Vec<WlSurface>> {
+        match awaited {
+            Awaited::Shell => self.shell(),
+            Awaited::LoginWindow => self.login_window(),
+        }
     }
 
     fn show_login_window(&mut self, now: Duration, since: Duration, over: Vec<ShownFrame>) {
@@ -160,12 +175,44 @@ impl State {
 
 impl Compositor {
     pub fn hold_frames_until(&mut self, ready: Awaited, since: Duration, deadline: Duration) {
+        self.state.awaited = Some(ready);
         self.state.reveal = Reveal::Holding {
             since,
             deadline,
             ready,
+            drawable: false,
             over: Vec::new(),
         };
+    }
+
+    pub fn import_awaited(&mut self, renderer: &mut VulkanRenderer) {
+        let Reveal::Holding { ready, .. } = self.state.reveal else {
+            return;
+        };
+        let Some(surfaces) = self.state.awaited(ready) else {
+            return;
+        };
+        for surface in &surfaces {
+            if let Err(error) = import_surface_tree(renderer, surface) {
+                tracing::warn!("cannot draw what is awaited ({ready:?}) yet: {error}");
+            }
+        }
+        let context = renderer.context_id();
+        if surfaces.iter().all(|surface| drawable(surface, &context))
+            && let Reveal::Holding { drawable, .. } = &mut self.state.reveal
+        {
+            *drawable = true;
+            self.state.needs_redraw = true;
+        }
+    }
+
+    pub fn awaited_drawn(&self, renderer: &VulkanRenderer) -> bool {
+        let context = renderer.context_id();
+        self.state.awaited.is_none_or(|awaited| {
+            self.state
+                .awaited(awaited)
+                .is_some_and(|surfaces| surfaces.iter().all(|surface| drawable(surface, &context)))
+        })
     }
 
     pub fn fade_in_over(&mut self, frames: Vec<ShownFrame>) {
@@ -183,14 +230,11 @@ impl Compositor {
             since,
             deadline,
             ready: awaited,
+            drawable: ready,
             ..
         } = self.state.reveal
         else {
             return None;
-        };
-        let ready = match awaited {
-            Awaited::Shell => self.state.shell_ready(),
-            Awaited::LoginWindow => self.state.login_window_ready(),
         };
         if !ready && now < deadline {
             return Some(deadline);

@@ -173,6 +173,7 @@ impl FrameOutput for Renderer {
         output: &str,
     ) -> Result<Submission, RenderError> {
         if compositor.holds_frames() {
+            compositor.import_awaited(&mut self.vulkan);
             return Ok(Submission::Unchanged);
         }
         self.render_output(compositor, output)?;

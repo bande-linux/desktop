@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use bande_l10n::{text, tr, trn};
 use bande_packages::offline::{self, Results};
-use bande_packages::schedule::{check_due, check_interval};
+use bande_packages::schedule::{INSTALL, check_due, check_interval, software_updates};
 use bande_packages::{
     Class, Client, Error, ErrorCode, Failure, Mode, Progress, Restart, Status, flatpak,
     running_release,
@@ -24,7 +24,6 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::fdo::RequestNameFlags;
 use zbus::message;
 
-use crate::client::ConfigProxyBlocking;
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
@@ -874,7 +873,7 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     let SoftwareState::Available(packages) = checked else {
         return Ok(None);
     };
-    if automatic(session) {
+    if software_updates(session) == INSTALL {
         return update_automatically(session, system, &client, &packages);
     }
     announce_available(session, &packages)
@@ -919,15 +918,6 @@ fn announce_waiting(
         ),
     };
     announce(session, &tr!("Software updates are available"), &body)
-}
-
-fn automatic(session: &Connection) -> bool {
-    ConfigProxyBlocking::new(session)
-        .and_then(|config| config.automatic_updates())
-        .unwrap_or_else(|error| {
-            tracing::warn!("cannot read the automatic updates setting: {error}");
-            false
-        })
 }
 
 fn download_in_background(client: &Client, packages: &[Package]) {

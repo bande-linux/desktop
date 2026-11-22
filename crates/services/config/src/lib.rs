@@ -631,6 +631,26 @@ impl LidOnPower {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SoftwareUpdates {
+    #[default]
+    Off,
+    Notify,
+    Install,
+}
+
+impl SoftwareUpdates {
+    pub const ALL: [Self; 3] = [Self::Off, Self::Notify, Self::Install];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Notify => "notify",
+            Self::Install => "install",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AlertSound {
     #[default]
     Mallet,
@@ -965,8 +985,7 @@ pub struct Config {
     pub tinted_frame: bool,
     pub reopen_apps: bool,
     pub remember_recent_files: bool,
-    pub check_updates_automatically: bool,
-    pub automatic_updates: bool,
+    pub software_updates: SoftwareUpdates,
     pub update_check_every: Option<Duration>,
     pub lock_message: String,
     pub show_previews: bool,
@@ -1005,8 +1024,7 @@ impl Default for Config {
             tinted_frame: false,
             reopen_apps: true,
             remember_recent_files: true,
-            check_updates_automatically: false,
-            automatic_updates: false,
+            software_updates: SoftwareUpdates::Off,
             update_check_every: None,
             lock_message: String::new(),
             show_previews: true,
@@ -1167,12 +1185,12 @@ impl Parser<'_> {
                 "remember-recent-files" => self
                     .flag(node)
                     .map(|remember| config.remember_recent_files = remember),
-                "check-updates-automatically" => self
-                    .flag(node)
-                    .map(|on| config.check_updates_automatically = on),
-                "automatic-updates" => self
-                    .flag(node)
-                    .map(|automatic| config.automatic_updates = automatic),
+                "software-updates" => self
+                    .keyword(
+                        node,
+                        &SoftwareUpdates::ALL.map(|choice| (choice.keyword(), choice)),
+                    )
+                    .map(|updates| config.software_updates = updates),
                 "update-check-every" => self
                     .duration(node)
                     .map(|every| config.update_check_every = Some(every)),

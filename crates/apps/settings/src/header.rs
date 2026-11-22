@@ -64,7 +64,7 @@ impl SettingsView {
         let shown_above =
             !searching && self.pane == PaneId::SoftwareUpdate && self.attention().is_some();
         let selected =
-            id == self.pane || (!searching && !shown_above && self.pane.parent() == Some(id));
+            !shown_above && (id == self.pane || (!searching && self.pane.parent() == Some(id)));
         let palette = self.palette();
         let tint = if selected { palette.ink } else { palette.ink2 };
         let symbol = self.symbol(id.symbol(), SIDEBAR_SYMBOL, tint);
@@ -248,7 +248,7 @@ impl SettingsView {
                 (!parts.is_empty()).then(|| parts.join(" · "))
             }
             PaneId::About => self.about.as_ref().map(|about| about.model.clone()),
-            PaneId::Storage | PaneId::SoftwareUpdate | PaneId::Diagnostics | PaneId::SendReport => {
+            PaneId::Storage | PaneId::SoftwareUpdate | PaneId::Diagnostics => {
                 self.pane_summary(pane.id)
             }
             PaneId::NightLight => self.night_light_summary(),
@@ -256,11 +256,11 @@ impl SettingsView {
             | PaneId::Bar
             | PaneId::Search
             | PaneId::Accessibility
+            | PaneId::BarMore
+            | PaneId::DisplaysAdvanced
             | PaneId::KeyboardShortcuts
-            | PaneId::Mouse
-            | PaneId::Trackpad
+            | PaneId::Pointing
             | PaneId::Apps
-            | PaneId::LockScreen
             | PaneId::PrivacySecurity
             | PaneId::Passwords
             | PaneId::Camera

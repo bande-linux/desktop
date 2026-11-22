@@ -7,8 +7,8 @@ use crate::{
     Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, ComposeKey,
     Config, ConfigError, DEFAULT_BAR_GAP, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging,
     FocusSchedule, InputSource, LidOnPower, Mouse, NightLight, Placement, PrimaryButton,
-    ScrollMethod, Search, SearchCategory, SecondaryClick, Sound, Style, Suspend, Trackpad,
-    WallpaperFit, WallpaperVariant, accent_keyword, same_displays,
+    ScrollMethod, Search, SearchCategory, SecondaryClick, SoftwareUpdates, Sound, Style, Suspend,
+    Trackpad, WallpaperFit, WallpaperVariant, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,8 +19,7 @@ pub enum Setting {
     TintedFrame(bool),
     ReopenApps(bool),
     RememberRecentFiles(bool),
-    CheckUpdatesAutomatically(bool),
-    AutomaticUpdates(bool),
+    SoftwareUpdates(SoftwareUpdates),
     UpdateCheckEvery(Option<Duration>),
     LockMessage(String),
     ShowPreviews(bool),
@@ -124,17 +123,11 @@ impl Setting {
                 "lock-message",
                 (!message.is_empty()).then(|| message.clone().into()),
             ),
-            Self::CheckUpdatesAutomatically(on) => set(
+            Self::SoftwareUpdates(updates) => set(
                 &mut document,
                 None,
-                "check-updates-automatically",
-                on.then_some(KdlValue::Bool(true)),
-            ),
-            Self::AutomaticUpdates(on) => set(
-                &mut document,
-                None,
-                "automatic-updates",
-                on.then_some(KdlValue::Bool(true)),
+                "software-updates",
+                (*updates != SoftwareUpdates::Off).then(|| updates.keyword().into()),
             ),
             Self::UpdateCheckEvery(every) => set(
                 &mut document,

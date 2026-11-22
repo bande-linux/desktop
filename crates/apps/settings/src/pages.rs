@@ -303,9 +303,6 @@ impl SettingsView {
     ) -> Option<(Box<dyn Widget>, WidgetId)> {
         let id = setting.id;
         let value = match scope {
-            Some(_) if id == SettingId::ShowAllResolutions => {
-                Some(Value::Flag(self.show_all_resolutions))
-            }
             Some(display) if id == SettingId::Brightness => self
                 .display_levels
                 .iter()
@@ -494,7 +491,7 @@ impl SettingsView {
                 )
             }
             Kind::Resolutions => {
-                let sizes = scope?.resolutions();
+                let (sizes, separator) = scope?.resolutions();
                 if sizes.len() < 2 {
                     return None;
                 }
@@ -510,15 +507,23 @@ impl SettingsView {
                         .position(|(width, height)| size == format!("{width}x{height}")),
                     _ => None,
                 };
-                choice_control(&setting.label, &labels, selected, move |index| {
-                    if let Some((width, height)) = sizes.get(index) {
-                        set(Value::Keyword(format!("{width}x{height}")));
-                    }
-                })
+                boxed(
+                    PopUpButton::new(
+                        &setting.label,
+                        &labels,
+                        selected.unwrap_or(0),
+                        move |index| {
+                            if let Some((width, height)) = sizes.get(index) {
+                                set(Value::Keyword(format!("{width}x{height}")));
+                            }
+                        },
+                    )
+                    .separated_at(separator),
+                )
             }
             Kind::TextSizes => {
                 let display = scope?;
-                let (width, height) = display.resolutions().first().copied()?;
+                let (width, height) = display.resolutions().0.first().copied()?;
                 let looks = |percent: u32| {
                     tr!(
                         "Looks like {width} × {height}",
@@ -635,9 +640,6 @@ impl SettingsView {
         scope: Option<&Display>,
         matched: Option<&SettingHit>,
     ) -> Option<Box<dyn Widget>> {
-        if setting.id == SettingId::DisplayResolution && !self.show_all_resolutions {
-            return None;
-        }
         let unavailable = matches!(
             setting.id,
             SettingId::SleepAfter | SettingId::BatterySleepAfter
@@ -749,8 +751,9 @@ impl SettingsView {
             {
                 Vec::new()
             }
-            _ if setting.id == SettingId::BarGap
-                && self.values.get(&SettingId::BarFloating) != Some(&Value::Flag(true)) =>
+            _ if setting.id == SettingId::UpdateCheckEvery
+                && self.values.get(&SettingId::AutomaticUpdates)
+                    == Some(&Value::Keyword(bande_packages::schedule::OFF.to_owned())) =>
             {
                 Vec::new()
             }
@@ -1414,6 +1417,9 @@ impl SettingsView {
     }
 
     fn section_shown(&self, section: &Section) -> bool {
+        if !section.fits_pointers(self.pointing.mouse, self.pointing.trackpad) {
+            return false;
+        }
         section.settings.iter().all(|setting| match setting.id {
             SettingId::Networks => self.wifi.present().is_some_and(|wifi| wifi.enabled),
             SettingId::KnownNetworks | SettingId::Hotspot => self
@@ -1580,7 +1586,13 @@ impl SettingsView {
         matched: &dyn Fn(SettingId) -> Option<SettingHit>,
     ) -> Widgets {
         let mut page = Vec::new();
-        page.extend(self.arrangement_card().into_iter().flatten());
+        if section
+            .settings
+            .iter()
+            .any(|setting| setting.id == SettingId::DisplayUse)
+        {
+            page.extend(self.arrangement_card().into_iter().flatten());
+        }
         for display in self.displays.clone() {
             let title = display.name();
             page.push(boxed(Caption::new(Text::label(&title))));
@@ -1591,6 +1603,10 @@ impl SettingsView {
                     self.setting_row(setting, Some(&display), matched(setting.id).as_ref())
                 })
                 .collect();
+            if rows.is_empty() {
+                page.pop();
+                continue;
+            }
             page.push(boxed(Card::new(rows)));
         }
         page
@@ -1653,11 +1669,12 @@ impl SettingsView {
         let mut body: Widgets = notice.into_iter().collect();
         let sections: &[Section] = if body.is_empty() { &pane.sections } else { &[] };
         for section in sections {
-            if section
-                .settings
-                .iter()
-                .any(|setting| setting.id == SettingId::DisplayUse)
-            {
+            if section.settings.iter().any(|setting| {
+                matches!(
+                    setting.id,
+                    SettingId::DisplayUse | SettingId::RefreshRate | SettingId::ColourProfile
+                )
+            }) {
                 body.extend(self.display_sections(section, &matched));
                 continue;
             }

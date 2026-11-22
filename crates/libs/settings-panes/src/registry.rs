@@ -26,20 +26,20 @@ pub enum PaneId {
     Network,
     Appearance,
     Bar,
+    BarMore,
     Notifications,
     Search,
     Accessibility,
     Displays,
+    DisplaysAdvanced,
     NightLight,
     Sound,
     Keyboard,
     KeyboardShortcuts,
-    Mouse,
-    Trackpad,
+    Pointing,
     Printers,
     Sharing,
     Power,
-    LockScreen,
     Users,
     Passwords,
     PrivacySecurity,
@@ -54,31 +54,30 @@ pub enum PaneId {
     Storage,
     SoftwareUpdate,
     Diagnostics,
-    SendReport,
     Backup,
 }
 
 impl PaneId {
-    const KEYWORDS: [(Self, &'static str); 35] = [
+    const KEYWORDS: [(Self, &'static str); 34] = [
         (Self::Wifi, "wifi"),
         (Self::Bluetooth, "bluetooth"),
         (Self::Network, "network"),
         (Self::Appearance, "appearance"),
         (Self::Bar, "bar"),
+        (Self::BarMore, "bar-more"),
         (Self::Notifications, "notifications"),
         (Self::Search, "search"),
         (Self::Accessibility, "accessibility"),
         (Self::Displays, "displays"),
+        (Self::DisplaysAdvanced, "displays-advanced"),
         (Self::NightLight, "night-light"),
         (Self::Sound, "sound"),
         (Self::Keyboard, "keyboard"),
         (Self::KeyboardShortcuts, "keyboard-shortcuts"),
-        (Self::Mouse, "mouse"),
-        (Self::Trackpad, "trackpad"),
+        (Self::Pointing, "mouse-trackpad"),
         (Self::Printers, "printers"),
         (Self::Sharing, "sharing"),
         (Self::Power, "power"),
-        (Self::LockScreen, "lock-screen"),
         (Self::Users, "users"),
         (Self::Passwords, "passwords"),
         (Self::PrivacySecurity, "privacy-security"),
@@ -93,7 +92,6 @@ impl PaneId {
         (Self::Storage, "storage"),
         (Self::SoftwareUpdate, "software-update"),
         (Self::Diagnostics, "diagnostics"),
-        (Self::SendReport, "send-report"),
         (Self::Backup, "backup"),
     ];
 
@@ -107,32 +105,29 @@ impl PaneId {
             | Self::Notifications
             | Self::Search
             | Self::Accessibility => Some(Group::Desktop),
-            Self::Displays
-            | Self::Sound
-            | Self::Keyboard
-            | Self::Mouse
-            | Self::Trackpad
-            | Self::Printers => Some(Group::Devices),
+            Self::Displays | Self::Sound | Self::Keyboard | Self::Pointing | Self::Printers => {
+                Some(Group::Devices)
+            }
             Self::Power
-            | Self::LockScreen
             | Self::Users
-            | Self::Passwords
             | Self::PrivacySecurity
             | Self::Apps
             | Self::LanguageTime
+            | Self::SoftwareUpdate
             | Self::Backup
             | Self::About => Some(Group::System),
-            Self::KeyboardShortcuts
+            Self::BarMore
+            | Self::DisplaysAdvanced
+            | Self::KeyboardShortcuts
             | Self::NightLight
+            | Self::Passwords
             | Self::Camera
             | Self::Microphone
             | Self::Screenshots
             | Self::ScreenSharing
             | Self::Location
             | Self::Storage
-            | Self::SoftwareUpdate
-            | Self::Diagnostics
-            | Self::SendReport => None,
+            | Self::Diagnostics => None,
         }
     }
 
@@ -142,20 +137,18 @@ impl PaneId {
             Self::Bluetooth => "bluetooth-symbolic",
             Self::Network => "network-wired-symbolic",
             Self::Appearance => "weather-clear-night-symbolic",
-            Self::Bar => "view-sidebar-start-symbolic",
+            Self::Bar | Self::BarMore => "view-sidebar-start-symbolic",
             Self::Notifications => "preferences-system-notifications-symbolic",
             Self::Search => "system-search-symbolic",
             Self::Accessibility => "avatar-default-symbolic",
-            Self::Displays => "video-display-symbolic",
+            Self::Displays | Self::DisplaysAdvanced => "video-display-symbolic",
             Self::NightLight => "night-light-symbolic",
             Self::Sound => "audio-volume-high-symbolic",
             Self::Keyboard | Self::KeyboardShortcuts => "input-keyboard-symbolic",
-            Self::Mouse => "input-mouse-symbolic",
-            Self::Trackpad => "input-touchpad-symbolic",
+            Self::Pointing => "input-mouse-symbolic",
             Self::Printers => "printer-symbolic",
             Self::Sharing => "folder-publicshare-symbolic",
             Self::Power => "system-shutdown-symbolic",
-            Self::LockScreen => "system-lock-screen-symbolic",
             Self::Users => "system-users-symbolic",
             Self::Passwords => "dialog-password-symbolic",
             Self::PrivacySecurity => "changes-prevent-symbolic",
@@ -171,7 +164,6 @@ impl PaneId {
             Self::Backup => "document-open-recent-symbolic",
             Self::SoftwareUpdate => "view-refresh-symbolic",
             Self::Diagnostics => "dialog-warning-symbolic",
-            Self::SendReport => "dialog-warning-symbolic",
         }
     }
 
@@ -182,21 +174,21 @@ impl PaneId {
             Self::Network => tr!("Network"),
             Self::Appearance => tr!("Appearance"),
             Self::Bar => tr!("Taskbar"),
+            Self::BarMore => tr!(context = "taskbar", "More"),
             Self::Notifications => tr!("Notifications"),
             Self::Search => tr!("Search"),
             Self::Accessibility => tr!("Accessibility"),
             Self::Displays => tr!("Displays"),
+            Self::DisplaysAdvanced => tr!(context = "displays", "Advanced"),
             Self::NightLight => tr!("Night Light"),
             Self::Sound => tr!("Sound"),
             Self::Keyboard => tr!("Keyboard"),
             Self::KeyboardShortcuts => tr!("Keyboard Shortcuts"),
-            Self::Mouse => tr!("Mouse"),
-            Self::Trackpad => tr!("Trackpad"),
+            Self::Pointing => tr!("Mouse & Trackpad"),
             Self::Printers => tr!("Printers"),
             Self::Sharing => tr!("Sharing"),
             Self::Power => tr!("Power"),
-            Self::LockScreen => tr!("Lock Screen"),
-            Self::Users => tr!("Users & Groups"),
+            Self::Users => tr!("Users"),
             Self::Passwords => tr!("Passwords"),
             Self::PrivacySecurity => tr!("Privacy & Security"),
             Self::Camera => tr!("Camera"),
@@ -210,7 +202,6 @@ impl PaneId {
             Self::Storage => tr!("Storage"),
             Self::SoftwareUpdate => tr!("Software Update"),
             Self::Diagnostics => tr!("Diagnostics"),
-            Self::SendReport => tr!("Send Report…"),
             Self::Backup => tr!("Backup"),
         }
     }
@@ -224,26 +215,30 @@ impl PaneId {
                 tr!("Light, dark or automatic, accent color, wallpaper and text size")
             }
             Self::Bar => tr!("Where the taskbar sits and how it behaves"),
+            Self::BarMore => tr!("Spacing around a floating taskbar"),
             Self::Notifications => tr!("Banners and Notifications"),
             Self::Search => tr!("What the launcher finds and which folders it leaves out"),
             Self::Accessibility => {
                 tr!("Make the screen, sound, keyboard and pointer easier to use")
             }
             Self::Displays => tr!("Arrangement, resolution and size of each display"),
+            Self::DisplaysAdvanced => {
+                tr!("Refresh rate, variable refresh rate and color profile of each display")
+            }
             Self::NightLight => tr!("Warmer colors after dark"),
             Self::Sound => tr!("Output, input and sound effects"),
             Self::Keyboard => tr!("Input sources, key repeat and modifier keys"),
             Self::KeyboardShortcuts => tr!("The keys that work everywhere on the desktop"),
-            Self::Mouse => tr!("Buttons, scrolling and tracking speed"),
-            Self::Trackpad => tr!("Tapping, clicking, scrolling, tracking speed and gestures"),
+            Self::Pointing => {
+                tr!("Buttons, tapping, scrolling, tracking speed and trackpad gestures")
+            }
             Self::Printers => tr!("Add printers, pick the default, see what is printing and scan"),
             Self::Sharing => tr!("Share folders with other computers and allow remote login"),
-            Self::Power => tr!("Battery, power mode and what the lid does"),
-            Self::LockScreen => tr!("Screen saver, display off, sleep and the password"),
+            Self::Power => tr!("Battery, power mode, display off, sleep and the lid"),
             Self::Users => tr!("Your account and the others on this computer"),
             Self::Passwords => tr!("The passwords apps and networks keep in your keyring"),
             Self::PrivacySecurity => {
-                tr!("Which apps may use the camera, take screenshots or share the screen")
+                tr!("The lock screen, app permissions, recent files and clipboard history")
             }
             Self::Camera => tr!("Apps that asked to use the camera"),
             Self::Microphone => tr!("Apps that asked to use the microphone"),
@@ -251,14 +246,13 @@ impl PaneId {
             Self::ScreenSharing => tr!("Apps that remember what they may share"),
             Self::Location => tr!("Apps that asked for your location"),
             Self::Apps => tr!("Which apps open your files and links, and which open at login"),
-            Self::LanguageTime => tr!("Language, formats, time and time zone"),
+            Self::LanguageTime => tr!("Language, spelling, formats, time and time zone"),
             Self::About => tr!("This computer"),
             Self::Storage => tr!("What fills the disk and how to free up space"),
-            Self::SoftwareUpdate => tr!("Updates for Bande and Debian apps"),
+            Self::SoftwareUpdate => tr!("Updates for Bande, Debian apps and firmware"),
             Self::Diagnostics => tr!(
-                "What failed on this computer. Read each report, and choose whether it is sent."
+                "What failed on this computer. Read each report, choose whether it is sent, or tell what went wrong."
             ),
-            Self::SendReport => tr!("Tell what went wrong, with what this computer recorded."),
             Self::Backup => tr!("Hourly encrypted versions on an external disk"),
         }
     }
@@ -274,10 +268,14 @@ impl PaneId {
             Self::Bar => {
                 tr!("bar, dock, launcher, taskbar, panel, favourites, favorites")
             }
+            Self::BarMore => tr!("taskbar, spacing, gap, margin, floating"),
             Self::Notifications => tr!("alerts, banners"),
             Self::Search => tr!("launcher, super, results, recents, privacy"),
             Self::Accessibility => tr!("a11y, disability, assistive, vision, hearing, motor"),
             Self::Displays => tr!("monitor, screen, resolution, brightness, night light"),
+            Self::DisplaysAdvanced => tr!(
+                "advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr, color profile, colour profile, icc"
+            ),
             Self::NightLight => tr!(
                 "night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
             ),
@@ -286,24 +284,28 @@ impl PaneId {
             Self::KeyboardShortcuts => {
                 tr!("hotkeys, shortcuts, keys, super, command, combinations")
             }
-            Self::Mouse => tr!("pointer, cursor, click, scroll, wheel, buttons"),
-            Self::Trackpad => tr!("touchpad, pointer, cursor, tap, click, scroll"),
+            Self::Pointing => tr!(
+                "mouse, trackpad, touchpad, pointer, cursor, click, tap, scroll, wheel, buttons, gestures"
+            ),
             Self::Printers => {
                 tr!("print, printer, cups, queue, ipp, airprint, scan, scanner, escl")
             }
             Self::Sharing => {
                 tr!("share, file sharing, samba, smb, remote login, ssh, network folder")
             }
-            Self::Power => tr!("energy, battery, low power mode, power saver, lid"),
-            Self::LockScreen => tr!(
-                "auto lock, automatic lock, lock when idle, security, inactive, screen saver, screen timeout, password"
+            Self::Power => tr!(
+                "energy, battery, low power mode, power saver, lid, sleep, suspend, display off, screen timeout, inactive, idle"
             ),
-            Self::Users => tr!("account, user, password, login, administrator, admin"),
+            Self::Users => {
+                tr!("account, user, users, groups, password, login, administrator, admin")
+            }
             Self::Passwords => tr!(
                 "keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
             ),
             Self::PrivacySecurity => {
-                tr!("permissions, screen recording, camera access, privacy, security, clipboard")
+                tr!(
+                    "permissions, screen recording, camera access, privacy, security, clipboard, lock screen, auto lock, automatic lock, screen saver, password, recent files"
+                )
             }
             Self::Camera => tr!("webcam, video calls, camera access, permission"),
             Self::Microphone => tr!("mic, audio recording, microphone access, permission"),
@@ -316,19 +318,18 @@ impl PaneId {
                 "applications, login items, startup apps, autostart, open at login, default apps, open with"
             ),
             Self::LanguageTime => tr!(
-                "locale, region, formats, international, date, time, timezone, clock, ntp, translation"
+                "locale, region, formats, international, date, time, timezone, clock, ntp, translation, spelling, spell check"
             ),
             Self::About => tr!(
                 "about this computer, system information, specifications, specs, general, hostname, computer name, version"
             ),
             Self::Storage => tr!("disk, drive, space, ssd"),
-            Self::SoftwareUpdate => tr!("updates, upgrade, packages, apt, debian"),
-            Self::Diagnostics => tr!(
-                "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, privacy"
-            ),
-            Self::SendReport => {
-                tr!("bug, report, problem, freeze, crash, feedback, send, diagnose")
+            Self::SoftwareUpdate => {
+                tr!("updates, upgrade, packages, apt, debian, firmware, automatic updates")
             }
+            Self::Diagnostics => tr!(
+                "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, send report, bug, problem, feedback, diagnose, privacy"
+            ),
             Self::Backup => {
                 tr!("restore, versions, external disk, history, recover")
             }
@@ -351,8 +352,11 @@ impl PaneId {
 
     pub fn parent(self) -> Option<Self> {
         match self {
-            Self::Storage | Self::SoftwareUpdate | Self::SendReport => Some(Self::About),
+            Self::Storage => Some(Self::About),
             Self::Diagnostics => Some(Self::PrivacySecurity),
+            Self::Passwords => Some(Self::Users),
+            Self::BarMore => Some(Self::Bar),
+            Self::DisplaysAdvanced => Some(Self::Displays),
             Self::KeyboardShortcuts => Some(Self::Keyboard),
             Self::NightLight => Some(Self::Displays),
             Self::Camera
@@ -421,12 +425,13 @@ pub enum SettingId {
     BarAutoHide,
     BarFloating,
     BarGap,
+    BarMorePage,
     DisplayUse,
     DisplayResolution,
     DisplayScale,
     RefreshRate,
     ColourProfile,
-    ShowAllResolutions,
+    DisplaysAdvancedPage,
     DisplayRotation,
     VariableRefresh,
     ScreenSaverAfter,
@@ -469,7 +474,6 @@ pub enum SettingId {
     LoginItems,
     ReopenApps,
     RememberRecentFiles,
-    CheckUpdatesAutomatically,
     AutomaticUpdates,
     UpdateCheckEvery,
     BatteryLevel,
@@ -496,10 +500,8 @@ pub enum SettingId {
     AppLanguages,
     Region,
     StoragePage,
-    SoftwareUpdatePage,
     DiagnosticsPage,
     DiagnosticsList,
-    SendReportPage,
     SendReportForm,
     ShortcutsPage,
     Spelling,
@@ -545,6 +547,7 @@ pub enum SettingId {
     LockMessage,
     ShowPreviews,
     SavedPasswords,
+    PasswordsPage,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -745,6 +748,36 @@ impl Section {
         self.note = Some(note);
         self
     }
+
+    pub fn fits_pointers(&self, mouse: bool, trackpad: bool) -> bool {
+        self.settings.iter().all(|setting| match setting.id {
+            SettingId::MousePrimaryButton
+            | SettingId::MouseNaturalScrolling
+            | SettingId::MouseSpeed
+            | SettingId::MouseAcceleration => mouse,
+            SettingId::TrackpadTapToClick
+            | SettingId::TrackpadNaturalScrolling
+            | SettingId::TrackpadSpeed
+            | SettingId::TrackpadSecondaryClick
+            | SettingId::TrackpadDisableWhileTyping
+            | SettingId::TrackpadWorkspaceSwipe
+            | SettingId::TrackpadOverviewSwipe
+            | SettingId::TrackpadDesktopSpread
+            | SettingId::TrackpadLauncherPinch
+            | SettingId::TrackpadAcceleration
+            | SettingId::TrackpadDragging
+            | SettingId::TrackpadScrollMethod => trackpad,
+            _ => true,
+        })
+    }
+}
+
+pub fn with_pointers(panes: &mut Vec<Pane>, mouse: bool, trackpad: bool) {
+    for pane in panes.iter_mut() {
+        pane.sections
+            .retain(|section| section.fits_pointers(mouse, trackpad));
+    }
+    panes.retain(|pane| pane.id != PaneId::Pointing || !pane.sections.is_empty());
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1114,53 +1147,72 @@ fn desktop_panes() -> Vec<Pane> {
         ),
         pane(
             PaneId::Bar,
+            vec![
+                section(
+                    None,
+                    vec![
+                        setting(
+                            SettingId::BarEdge,
+                            tr!("Position on screen"),
+                            tr!("panel, taskbar, dock, edge, left, right, bottom, top"),
+                            Kind::Choices(keyword_choices(vec![
+                                (tr!("Left"), "left"),
+                                (tr!("Bottom"), "bottom"),
+                                (tr!("Right"), "right"),
+                                (tr!("Top"), "top"),
+                            ])),
+                        ),
+                        setting(
+                            SettingId::BarIconSize,
+                            tr!("Size"),
+                            tr!("icon size, bigger, smaller, large, small, width"),
+                            Kind::Range {
+                                range: BAR_SIZES,
+                                step: 4,
+                                low: tr!("Small"),
+                                high: tr!("Large"),
+                            },
+                        ),
+                        setting(
+                            SettingId::BarFloating,
+                            tr!(context = "taskbar", "Style"),
+                            tr!("floating, float, attached, dock, margin, edge, rounded"),
+                            Kind::Choices(vec![
+                                Choice {
+                                    label: tr!("Attached"),
+                                    value: Value::Flag(false),
+                                },
+                                Choice {
+                                    label: tr!("Floating"),
+                                    value: Value::Flag(true),
+                                },
+                            ]),
+                        ),
+                        switch(
+                            SettingId::BarAutoHide,
+                            tr!("Automatically hide and show the taskbar"),
+                            tr!("autohide, hide, show, reveal, dock"),
+                        ),
+                    ],
+                ),
+                section(None, vec![page(SettingId::BarMorePage, PaneId::BarMore)]),
+            ],
+        ),
+        pane(
+            PaneId::BarMore,
             vec![section(
                 None,
-                vec![
-                    setting(
-                        SettingId::BarEdge,
-                        tr!("Position on screen"),
-                        tr!("panel, taskbar, dock, edge, left, right, bottom, top"),
-                        Kind::Choices(keyword_choices(vec![
-                            (tr!("Left"), "left"),
-                            (tr!("Bottom"), "bottom"),
-                            (tr!("Right"), "right"),
-                            (tr!("Top"), "top"),
-                        ])),
-                    ),
-                    setting(
-                        SettingId::BarIconSize,
-                        tr!("Size"),
-                        tr!("icon size, bigger, smaller, large, small, width"),
-                        Kind::Range {
-                            range: BAR_SIZES,
-                            step: 4,
-                            low: tr!("Small"),
-                            high: tr!("Large"),
-                        },
-                    ),
-                    switch(
-                        SettingId::BarFloating,
-                        tr!("Float away from the screen edge"),
-                        tr!("floating, attached, dock, margin, edge, rounded"),
-                    ),
-                    setting(
-                        SettingId::BarGap,
-                        tr!("Spacing"),
-                        tr!("gap, margin, space, distance, edge, floating, maximized"),
-                        Kind::Range {
-                            range: BAR_GAPS,
-                            step: 2,
-                            low: tr!(context = "gap", "None"),
-                            high: tr!("Wide"),
-                        },
-                    ),
-                    switch(
-                        SettingId::BarAutoHide,
-                        tr!("Automatically hide and show the taskbar"),
-                        tr!("autohide, hide, show, reveal, dock"),
-                    ),
-                ],
+                vec![setting(
+                    SettingId::BarGap,
+                    tr!("Spacing"),
+                    tr!("gap, margin, space, distance, edge, floating, maximized"),
+                    Kind::Range {
+                        range: BAR_GAPS,
+                        step: 2,
+                        low: tr!(context = "gap", "None"),
+                        high: tr!("Wide"),
+                    },
+                )],
             )],
         ),
         pane(
@@ -1394,6 +1446,7 @@ fn accessibility_pane() -> Pane {
 fn device_panes() -> Vec<Pane> {
     vec![
         displays_pane(),
+        displays_advanced_pane(),
         night_light_pane(),
         sound_pane(),
         keyboard_pane(),
@@ -1409,8 +1462,7 @@ fn device_panes() -> Vec<Pane> {
                 )],
             )],
         ),
-        mouse_pane(),
-        trackpad_pane(),
+        pointing_pane(),
         pane(
             PaneId::Printers,
             vec![
@@ -1443,10 +1495,6 @@ fn displays_pane() -> Pane {
         vec![
             section(
                 None,
-                vec![page(SettingId::NightLightPage, PaneId::NightLight)],
-            ),
-            section(
-                None,
                 vec![
                     level(
                         SettingId::Brightness,
@@ -1461,26 +1509,17 @@ fn displays_pane() -> Pane {
                     ),
                     setting(
                         SettingId::DisplayScale,
-                        tr!("Size of text and controls"),
-                        tr!("scale, zoom, resolution, hidpi, bigger, smaller"),
+                        tr!("Scale"),
+                        tr!(
+                            "size of text and controls, zoom, resolution, hidpi, bigger, smaller, larger text, more space"
+                        ),
                         Kind::TextSizes,
-                    ),
-                    switch(
-                        SettingId::ShowAllResolutions,
-                        tr!("Show all resolutions"),
-                        tr!("resolution, modes, pixels, native"),
                     ),
                     setting(
                         SettingId::DisplayResolution,
                         tr!("Resolution"),
-                        tr!("pixels, size, mode, sharp"),
+                        tr!("pixels, size, mode, sharp, all resolutions, modes, native"),
                         Kind::Resolutions,
-                    ),
-                    setting(
-                        SettingId::RefreshRate,
-                        tr!("Refresh rate"),
-                        tr!("hertz, hz, smooth, frame rate"),
-                        Kind::RefreshRates,
                     ),
                     setting(
                         SettingId::DisplayRotation,
@@ -1488,20 +1527,44 @@ fn displays_pane() -> Pane {
                         tr!("rotate, portrait, landscape, orientation, turn"),
                         choice(rotation_choices()),
                     ),
-                    switch(
-                        SettingId::VariableRefresh,
-                        tr!("Variable refresh rate in full screen"),
-                        tr!("vrr, adaptive sync, freesync, games, video, smooth"),
-                    ),
-                    setting(
-                        SettingId::ColourProfile,
-                        tr!("Color profile"),
-                        tr!("colour, color, profile, icc, srgb, p3, wide gamut, calibration"),
-                        Kind::ColourProfiles,
-                    ),
+                ],
+            ),
+            section(
+                None,
+                vec![
+                    page(SettingId::NightLightPage, PaneId::NightLight),
+                    page(SettingId::DisplaysAdvancedPage, PaneId::DisplaysAdvanced),
                 ],
             ),
         ],
+    )
+}
+
+fn displays_advanced_pane() -> Pane {
+    pane(
+        PaneId::DisplaysAdvanced,
+        vec![section(
+            None,
+            vec![
+                setting(
+                    SettingId::RefreshRate,
+                    tr!("Refresh rate"),
+                    tr!("hertz, hz, smooth, frame rate"),
+                    Kind::RefreshRates,
+                ),
+                switch(
+                    SettingId::VariableRefresh,
+                    tr!("Variable refresh rate in full screen"),
+                    tr!("vrr, adaptive sync, freesync, games, video, smooth"),
+                ),
+                setting(
+                    SettingId::ColourProfile,
+                    tr!("Color profile"),
+                    tr!("colour, color, profile, icc, srgb, p3, wide gamut, calibration"),
+                    Kind::ColourProfiles,
+                ),
+            ],
+        )],
     )
 }
 
@@ -1723,15 +1786,6 @@ fn keyboard_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Spelling")),
-                vec![list(
-                    SettingId::Spelling,
-                    tr!("Spelling"),
-                    String::new(),
-                    List::Spelling,
-                )],
-            ),
-            section(
                 Some(tr!("Text Replacements")),
                 vec![list(SettingId::TextReplacements, tr!("Text Replacements"), tr!("text replacement, replace, abbreviation, shortcut, expand, snippet, autotext"),
                     List::TextReplacements,
@@ -1801,40 +1855,37 @@ fn acceleration(id: SettingId) -> Setting {
     .described(tr!("Faster movements move the pointer farther"))
 }
 
-fn mouse_pane() -> Pane {
+fn pointing_pane() -> Pane {
     pane(
-        PaneId::Mouse,
-        vec![section(
-            None,
-            vec![
-                setting(
-                    SettingId::MousePrimaryButton,
-                    tr!("Primary button"),
-                    tr!("left-handed, right-handed, swap buttons, click"),
-                    Kind::Choices(keyword_choices(vec![
-                        (tr!("Left"), "left"),
-                        (tr!("Right"), "right"),
-                    ])),
-                ),
-                setting(
-                    SettingId::MouseNaturalScrolling,
-                    tr!("Natural scrolling"),
-                    tr!("scroll direction, reverse, wheel"),
-                    Kind::Switch,
-                ),
-                speed(SettingId::MouseSpeed, tr!("pointer, cursor, acceleration")),
-                acceleration(SettingId::MouseAcceleration),
-            ],
-        )],
-    )
-}
-
-fn trackpad_pane() -> Pane {
-    pane(
-        PaneId::Trackpad,
+        PaneId::Pointing,
         vec![
             section(
-                Some(tr!("Click")),
+                Some(tr!("Mouse")),
+                vec![
+                    setting(
+                        SettingId::MousePrimaryButton,
+                        tr!("Primary button"),
+                        tr!("left-handed, right-handed, swap buttons, click"),
+                        Kind::Choices(keyword_choices(vec![
+                            (tr!("Left"), "left"),
+                            (tr!("Right"), "right"),
+                        ])),
+                    ),
+                    setting(
+                        SettingId::MouseNaturalScrolling,
+                        tr!("Natural scrolling"),
+                        tr!("scroll direction, reverse, wheel"),
+                        Kind::Switch,
+                    ),
+                    speed(
+                        SettingId::MouseSpeed,
+                        tr!("pointer, cursor, acceleration, mouse"),
+                    ),
+                    acceleration(SettingId::MouseAcceleration),
+                ],
+            ),
+            section(
+                Some(tr!("Trackpad")),
                 vec![
                     switch(
                         SettingId::TrackpadTapToClick,
@@ -1864,7 +1915,7 @@ fn trackpad_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Scroll")),
+                Some(tr!("Trackpad scrolling")),
                 vec![
                     switch(
                         SettingId::TrackpadNaturalScrolling,
@@ -1883,7 +1934,7 @@ fn trackpad_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Pointer")),
+                Some(tr!("Trackpad pointer")),
                 vec![
                     speed(
                         SettingId::TrackpadSpeed,
@@ -1898,7 +1949,7 @@ fn trackpad_pane() -> Pane {
                 ],
             ),
             section(
-                Some(tr!("Gestures")),
+                Some(tr!("Trackpad gestures")),
                 vec![
                     gesture(
                         SettingId::TrackpadWorkspaceSwipe,
@@ -1937,87 +1988,75 @@ fn gesture(id: SettingId, name: String, keywords: String, description: String) -
 fn system_panes() -> Vec<Pane> {
     vec![
         power_pane(),
-        lock_screen_pane(),
         pane(
             PaneId::Users,
-            vec![section(
-                None,
-                vec![list(SettingId::Accounts, tr!("Accounts"), tr!("change password, password, administrator, standard, login name, picture, photo, full name, add user, new user, delete user, remove user"), List::Accounts)],
-            )],
+            vec![
+                section(
+                    None,
+                    vec![list(
+                        SettingId::Accounts,
+                        tr!("Accounts"),
+                        tr!(
+                            "change password, password, administrator, standard, login name, picture, photo, full name, add user, new user, delete user, remove user"
+                        ),
+                        List::Accounts,
+                    )],
+                ),
+                section(
+                    None,
+                    vec![page(SettingId::PasswordsPage, PaneId::Passwords)],
+                ),
+            ],
         ),
         pane(
             PaneId::Passwords,
             vec![section(
                 None,
-                vec![list(SettingId::SavedPasswords, tr!("Saved passwords"), tr!("show password, copy password, change password, delete password, keyring"),
+                vec![list(
+                    SettingId::SavedPasswords,
+                    tr!("Saved passwords"),
+                    tr!("show password, copy password, change password, delete password, keyring"),
                     List::Passwords,
                 )],
             )],
         ),
-        pane(
-            PaneId::PrivacySecurity,
-            vec![
-                section(
-                    Some(tr!("This computer")),
-                    vec![list(SettingId::SecurityStatus, tr!("This computer"), tr!("remote login, ssh, security, sign-in page, captive portal, connectivity check"),
-                        List::SecurityStatus,
-                    )],
-                ),
-                section(
-                    Some(tr!("App permissions")),
-                    vec![
-                        page(SettingId::CameraPage, PaneId::Camera),
-                        page(SettingId::MicrophonePage, PaneId::Microphone),
-                        page(SettingId::ScreenshotsPage, PaneId::Screenshots),
-                        page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
-                        page(SettingId::LocationPage, PaneId::Location),
-                    ],
-                ),
-                section(
-                    Some(tr!("Diagnostics")),
-                    vec![page(SettingId::DiagnosticsPage, PaneId::Diagnostics)],
-                ),
-                section(
-                    Some(tr!("Keyboard access")),
-                    vec![list(SettingId::KeyboardAccess, tr!("Keyboard access"), tr!("input method, keylogger, typing, fcitx, ibus, virtual keyboard, input monitoring"),
-                        List::KeyboardAccess,
-                    )],
-                ),
-                section(
-                    Some(tr!("Clipboard")),
-                    vec![list(SettingId::ClipboardHistory, tr!("Clipboard history"), tr!("copy, paste, clear clipboard, forget copied, history"),
-                        List::Clipboard,
-                    )],
-                ),
-            ],
-        ),
+        privacy_pane(),
         pane(
             PaneId::Apps,
             vec![
                 section(
                     Some(tr!("Default apps")),
-                    vec![list(SettingId::DefaultApps, tr!("Default apps"), tr!("default browser, web browser, mail, email, music, video, pictures, photos, pdf, text editor, open with, file associations"),
+                    vec![list(
+                        SettingId::DefaultApps,
+                        tr!("Default apps"),
+                        tr!(
+                            "default browser, web browser, mail, email, music, video, pictures, photos, pdf, text editor, open with, file associations"
+                        ),
                         List::DefaultApps,
                     )],
                 ),
                 section(
                     Some(tr!("Open at login")),
-                    vec![list(SettingId::LoginItems, tr!("Open at login"), tr!("startup apps, autostart, launch at login, start automatically, when I log in"),
+                    vec![list(
+                        SettingId::LoginItems,
+                        tr!("Open at login"),
+                        tr!(
+                            "startup apps, autostart, launch at login, start automatically, when I log in"
+                        ),
                         List::LoginItems,
                     )],
                 ),
                 section(
                     Some(tr!("Reopen")),
                     vec![
-                        switch(SettingId::ReopenApps, tr!("Reopen windows when logging back in"), tr!("restore, resume, windows, session, log out, restart"))
-                            .described(tr!("Apps that were open when you logged out or restarted open again")),
-                    ],
-                ),
-                section(
-                    Some(tr!("Recent files")),
-                    vec![
-                        switch(SettingId::RememberRecentFiles, tr!("Remember recently opened files"), tr!("recents, recently used, history, documents, privacy"))
-                            .described(tr!("Files you open are listed in Recent and in other apps")),
+                        switch(
+                            SettingId::ReopenApps,
+                            tr!("Reopen windows when logging back in"),
+                            tr!("restore, resume, windows, session, log out, restart"),
+                        )
+                        .described(tr!(
+                            "Apps that were open when you logged out or restarted open again"
+                        )),
                     ],
                 ),
             ],
@@ -2028,70 +2067,174 @@ fn system_panes() -> Vec<Pane> {
         permission_pane(Permission::ScreenSharing),
         permission_pane(Permission::Location),
         language_time_pane(),
+        software_update_pane(),
         pane(
             PaneId::Backup,
             vec![section(
                 None,
-                vec![list(SettingId::BackupStatus, tr!("Backup"), tr!("back up, restore, disk, password, pause, oldest, versions"), List::Backup)],
+                vec![list(
+                    SettingId::BackupStatus,
+                    tr!("Backup"),
+                    tr!("back up, restore, disk, password, pause, oldest, versions"),
+                    List::Backup,
+                )],
             )],
         ),
         about_pane(),
         pane(
-            PaneId::SendReport,
-            vec![section(
-                None,
-                vec![list(SettingId::SendReportForm, tr!("Send Report"), tr!("bug, report, problem, freeze, crash, feedback, send, diagnose"),
-                    List::SendReport,
-                )],
-            )],
-        ),
-        pane(
             PaneId::Diagnostics,
-            vec![section(
-                None,
-                vec![list(SettingId::DiagnosticsList, tr!("Reports"), tr!("crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"),
-                    List::Diagnostics,
-                )],
-            )],
+            vec![
+                section(
+                    None,
+                    vec![list(
+                        SettingId::DiagnosticsList,
+                        tr!("Reports"),
+                        tr!(
+                            "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"
+                        ),
+                        List::Diagnostics,
+                    )],
+                ),
+                section(
+                    Some(tr!("Send Report")),
+                    vec![list(
+                        SettingId::SendReportForm,
+                        tr!("Send Report"),
+                        tr!("bug, report, problem, freeze, crash, feedback, send, diagnose"),
+                        List::SendReport,
+                    )],
+                ),
+            ],
         ),
         pane(
             PaneId::Storage,
             vec![
                 section(
                     None,
-                    vec![list(SettingId::StorageUsage, tr!("Storage"), tr!("disk space, free, used, available, full, capacity, trash, empty trash, apps, documents"),
+                    vec![list(
+                        SettingId::StorageUsage,
+                        tr!("Storage"),
+                        tr!(
+                            "disk space, free, used, available, full, capacity, trash, empty trash, apps, documents"
+                        ),
                         List::Storage,
                     )],
                 ),
                 section(
                     Some(tr!("Largest files")),
-                    vec![list(SettingId::LargeFiles, tr!("Largest files"), tr!("large files, big files, biggest, clean up, free up space, reclaim"), List::LargeFiles)],
+                    vec![list(
+                        SettingId::LargeFiles,
+                        tr!("Largest files"),
+                        tr!("large files, big files, biggest, clean up, free up space, reclaim"),
+                        List::LargeFiles,
+                    )],
                 ),
             ],
         ),
-        pane(
-            PaneId::SoftwareUpdate,
-            vec![section(
-                None,
-                vec![
-                    list(SettingId::SoftwareUpdates, tr!("Software Update"), tr!("install updates, check for updates, security updates, upgrade, packages, restart"),
-                        List::SoftwareUpdates,
-                    ),
-                    switch(SettingId::CheckUpdatesAutomatically, tr!("Check for updates automatically"), tr!("update check, automatic check, background check, network"))
-                        .described(tr!("While this and automatic updates are off, nothing is fetched until you click Check Now.")),
-                    setting(
-                        SettingId::UpdateCheckEvery,
-                        tr!("Check for updates"),
-                        tr!("update check, how often, schedule, interval, security updates"),
-                        choice(update_check_choices()),
-                    )
-                    .described(tr!("Between checks nothing is fetched or installed, even at startup. A longer wait also delays security fixes. Check Now always works.")),
-                    switch(SettingId::AutomaticUpdates, tr!("Automatically keep this computer up to date"), tr!("automatic updates, install automatically, background updates, unattended"))
-                        .described(tr!("Downloads updates in the background and installs them while the computer is idle. Updates that need your password or a restart wait for you.")),
-                ],
-            )],
-        ),
     ]
+}
+
+fn privacy_pane() -> Pane {
+    pane(
+        PaneId::PrivacySecurity,
+        vec![
+            section(
+                Some(tr!("Lock screen")),
+                vec![
+                    setting(
+                        SettingId::ScreenSaverAfter,
+                        tr!("Start Screen Saver when inactive"),
+                        tr!("idle, screen saver, screensaver, lock screen, auto lock, clock"),
+                        choice(durations(&SCREEN_SAVER_CHOICES)),
+                    ),
+                    setting(
+                        SettingId::RequirePasswordAfter,
+                        tr!("Require password after screen saver begins or display is turned off"),
+                        tr!("idle, password, security, lock screen, auto lock, automatic lock, lock when idle, grace"),
+                        choice(password_choices()),
+                    ),
+                    setting(
+                        SettingId::LockMessage,
+                        tr!("Message on the lock screen"),
+                        tr!("lock screen, message, contact, if found, note, text"),
+                        Kind::Text,
+                    )
+                    .described(tr!("Shown above the buttons while the screen is locked, such as how to return a lost computer")),
+                ],
+            ),
+            section(
+                Some(tr!("App permissions")),
+                vec![
+                    page(SettingId::CameraPage, PaneId::Camera),
+                    page(SettingId::MicrophonePage, PaneId::Microphone),
+                    page(SettingId::ScreenshotsPage, PaneId::Screenshots),
+                    page(SettingId::ScreenSharingPage, PaneId::ScreenSharing),
+                    page(SettingId::LocationPage, PaneId::Location),
+                ],
+            ),
+            section(
+                Some(tr!("Recent files")),
+                vec![
+                    switch(SettingId::RememberRecentFiles, tr!("Remember recently opened files"), tr!("recents, recently used, history, documents, privacy"))
+                        .described(tr!("Files you open are listed in Recent and in other apps")),
+                ],
+            ),
+            section(
+                Some(tr!("Clipboard")),
+                vec![list(SettingId::ClipboardHistory, tr!("Clipboard history"), tr!("copy, paste, clear clipboard, forget copied, history"),
+                    List::Clipboard,
+                )],
+            ),
+            section(
+                Some(tr!("Keyboard access")),
+                vec![list(SettingId::KeyboardAccess, tr!("Keyboard access"), tr!("input method, keylogger, typing, fcitx, ibus, virtual keyboard, input monitoring"),
+                    List::KeyboardAccess,
+                )],
+            ),
+            section(
+                Some(tr!("Diagnostics")),
+                vec![page(SettingId::DiagnosticsPage, PaneId::Diagnostics)],
+            ),
+            section(
+                Some(tr!("This computer")),
+                vec![list(SettingId::SecurityStatus, tr!("This computer"), tr!("remote login, ssh, security, sign-in page, captive portal, connectivity check"),
+                    List::SecurityStatus,
+                )],
+            ),
+        ],
+    )
+}
+
+fn software_update_pane() -> Pane {
+    pane(
+        PaneId::SoftwareUpdate,
+        vec![section(
+            None,
+            vec![
+                list(SettingId::SoftwareUpdates, tr!("Software Update"), tr!("install updates, check for updates, check now, security updates, upgrade, packages, firmware, restart"),
+                    List::SoftwareUpdates,
+                ),
+                setting(
+                    SettingId::AutomaticUpdates,
+                    tr!("Automatic updates"),
+                    tr!("check for updates automatically, automatic check, background check, install automatically, background updates, unattended, notify, network"),
+                    Kind::Choices(keyword_choices(vec![
+                        (tr!(context = "updates", "Off"), "off"),
+                        (tr!("Notify"), "notify"),
+                        (tr!("Install automatically"), "install"),
+                    ])),
+                )
+                .described(tr!("Notify checks for updates and tells you about them. Install automatically also downloads them and installs them while the computer is idle; updates that need your password or a restart wait for you. While off, nothing is fetched until you click Check Now.")),
+                setting(
+                    SettingId::UpdateCheckEvery,
+                    tr!("Check for updates"),
+                    tr!("update check, how often, schedule, interval, security updates"),
+                    choice(update_check_choices()),
+                )
+                .described(tr!("Between checks nothing is fetched or installed, even at startup. A longer wait also delays security fixes. Check Now always works.")),
+            ],
+        )],
+    )
 }
 
 fn permission_pane(permission: Permission) -> Pane {
@@ -2158,6 +2301,37 @@ fn power_pane() -> Pane {
                 ],
             ),
             section(
+                Some(tr!("When inactive")),
+                vec![
+                    setting(
+                        SettingId::DisplayOffAfter,
+                        tr!("Turn display off after"),
+                        tr!("idle, inactive, display sleep, blank, dim, screen timeout, energy"),
+                        choice(durations(&DISPLAY_OFF_CHOICES)),
+                    ),
+                    setting(
+                        SettingId::SleepAfter,
+                        tr!("Sleep after"),
+                        tr!("idle, inactive, suspend, energy, battery, power, computer sleep"),
+                        choice(sleep_choices()),
+                    ),
+                    setting(
+                        SettingId::BatteryDisplayOffAfter,
+                        tr!("Turn display off on battery after"),
+                        tr!(
+                            "idle, inactive, display sleep, blank, screen timeout, energy, battery, laptop"
+                        ),
+                        choice(durations(&DISPLAY_OFF_CHOICES)),
+                    ),
+                    setting(
+                        SettingId::BatterySleepAfter,
+                        tr!("Sleep on battery after"),
+                        tr!("idle, inactive, suspend, energy, battery, laptop, computer sleep"),
+                        choice(sleep_choices()),
+                    ),
+                ],
+            ),
+            section(
                 Some(tr!("On power adapter")),
                 vec![setting(
                     SettingId::LidOnPower,
@@ -2183,76 +2357,10 @@ pub fn without_sleep(panes: &mut [Pane]) {
                 )
             });
         }
-        if pane.id == PaneId::LockScreen {
-            pane.summary = tr!("Screen saver, display off and the password");
+        if pane.id == PaneId::Power {
+            pane.summary = tr!("Battery, power mode, display off and the lid");
         }
     }
-}
-
-fn lock_screen_pane() -> Pane {
-    pane(
-        PaneId::LockScreen,
-        vec![
-            section(
-                Some(tr!("When inactive")),
-                vec![
-                    setting(
-                        SettingId::ScreenSaverAfter,
-                        tr!("Start Screen Saver when inactive"),
-                        tr!("idle, screen saver, screensaver, lock screen, clock"),
-                        choice(durations(&SCREEN_SAVER_CHOICES)),
-                    ),
-                    setting(
-                        SettingId::DisplayOffAfter,
-                        tr!("Turn display off when inactive"),
-                        tr!("idle, display sleep, blank, dim, screen timeout, energy"),
-                        choice(durations(&DISPLAY_OFF_CHOICES)),
-                    ),
-                    setting(
-                        SettingId::SleepAfter,
-                        tr!("Sleep after"),
-                        tr!("idle, suspend, energy, battery, power, computer sleep"),
-                        choice(sleep_choices()),
-                    ),
-                ],
-            ),
-            section(
-                Some(tr!("On battery")),
-                vec![
-                    setting(
-                        SettingId::BatteryDisplayOffAfter,
-                        tr!("Turn display off on battery when inactive"),
-                        tr!("idle, display sleep, blank, screen timeout, energy, battery, laptop"),
-                        choice(durations(&DISPLAY_OFF_CHOICES)),
-                    ),
-                    setting(
-                        SettingId::BatterySleepAfter,
-                        tr!("Sleep on battery after"),
-                        tr!("idle, suspend, energy, battery, laptop, computer sleep"),
-                        choice(sleep_choices()),
-                    ),
-                ],
-            ),
-            section(
-                Some(tr!("When locked")),
-                vec![
-                    setting(
-                        SettingId::RequirePasswordAfter,
-                        tr!("Require password after screen saver begins or display is turned off"),
-                        tr!("idle, password, security, lock screen, auto lock, grace"),
-                        choice(password_choices()),
-                    ),
-                    setting(
-                        SettingId::LockMessage,
-                        tr!("Message on the lock screen"),
-                        tr!("lock screen, message, contact, if found, note, text"),
-                        Kind::Text,
-                    )
-                    .described(tr!("Shown above the buttons while the screen is locked, such as how to return a lost computer")),
-                ],
-            ),
-        ],
-    )
 }
 
 fn language_time_pane() -> Pane {
@@ -2279,6 +2387,17 @@ fn language_time_pane() -> Pane {
                         "app language, per-app language, language for one app, application language"
                     ),
                     List::AppLanguages,
+                )],
+            ),
+            section(
+                Some(tr!("Spelling")),
+                vec![list(
+                    SettingId::Spelling,
+                    tr!("Spelling"),
+                    tr!(
+                        "spell check, spellcheck, spelling languages, dictionary, hunspell, misspelled, typos"
+                    ),
+                    List::Spelling,
                 )],
             ),
             section(
@@ -2372,14 +2491,7 @@ fn about_pane() -> Pane {
                     List::BootScreen,
                 )],
             ),
-            section(
-                None,
-                vec![
-                    page(SettingId::StoragePage, PaneId::Storage),
-                    page(SettingId::SoftwareUpdatePage, PaneId::SoftwareUpdate),
-                    page(SettingId::SendReportPage, PaneId::SendReport),
-                ],
-            ),
+            section(None, vec![page(SettingId::StoragePage, PaneId::Storage)]),
         ],
     )
 }

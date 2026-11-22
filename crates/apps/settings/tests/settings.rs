@@ -2,8 +2,11 @@
 
 use std::sync::Arc;
 
+use bande_config::SoftwareUpdates;
 use bande_config::{Config, ConfigService, ConfigStore};
-use bande_settings::{Command, PaneId, SettingId, SettingsClient, SettingsView, Value};
+use bande_settings::{
+    Command, PaneId, PointingDevices, SettingId, SettingsClient, SettingsView, Value,
+};
 use bande_test_bus::SessionBus;
 use bande_toolkit::ui::{Event, Key, Modifiers};
 use bande_toolkit::{Palette, Scheme, TextSystem};
@@ -16,6 +19,52 @@ fn press(view: &mut SettingsView, key: Key) {
         modifiers: Modifiers::default(),
     });
     view.scene(SIZE.0, SIZE.1);
+}
+
+fn search(query: &str) -> SettingsView {
+    let mut view = SettingsView::new(Palette::for_scheme(Scheme::Light), TextSystem::new());
+    view.set_pointing_devices(PointingDevices {
+        mouse: true,
+        trackpad: false,
+    });
+    view.set_value(SettingId::BarFloating, Value::Flag(true));
+    view.scene(SIZE.0, SIZE.1);
+    for character in query.chars() {
+        press(&mut view, Key::Character(character));
+    }
+    view
+}
+
+#[test]
+fn moved_settings_are_found_in_their_pane_and_absent_devices_are_not() {
+    for (query, pane) in [
+        ("sleep after", PaneId::Power),
+        ("lock screen", PaneId::PrivacySecurity),
+        ("recent files", PaneId::PrivacySecurity),
+        ("send report", PaneId::Diagnostics),
+        ("saved passwords", PaneId::Passwords),
+        ("automatic updates", PaneId::SoftwareUpdate),
+        ("primary button", PaneId::Pointing),
+        ("spacing", PaneId::BarMore),
+    ] {
+        assert_eq!(
+            search(query).visible_panes().first(),
+            Some(&pane),
+            "{query}"
+        );
+    }
+    let mut panes = bande_settings_panes::panes();
+    bande_settings_panes::with_pointers(&mut panes, true, false);
+    assert!(
+        bande_settings_panes::search(&panes, "tap to click")
+            .iter()
+            .all(|hit| hit.setting(SettingId::TrackpadTapToClick).is_none())
+    );
+    assert_eq!(
+        PaneId::from_keyword("software-update"),
+        Some(PaneId::SoftwareUpdate)
+    );
+    assert_eq!(PaneId::SoftwareUpdate.parent(), None);
 }
 
 #[test]
@@ -59,4 +108,14 @@ fn a_setting_found_by_search_and_changed_from_the_keyboard_is_written_to_the_con
         client.get(SettingId::KeyRepeatRate).expect("repeat rate"),
         Value::Number(30)
     );
+
+    client
+        .set(
+            SettingId::AutomaticUpdates,
+            &Value::Keyword("install".to_owned()),
+        )
+        .expect("set automatic updates");
+    let written =
+        Config::parse(&std::fs::read_to_string(&path).expect("config.kdl")).expect("valid config");
+    assert_eq!(written.software_updates, SoftwareUpdates::Install);
 }

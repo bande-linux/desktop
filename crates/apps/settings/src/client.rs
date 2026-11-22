@@ -46,13 +46,9 @@ pub trait Config {
     #[zbus(property)]
     fn set_remember_recent_files(&self, on: bool) -> zbus::Result<()>;
     #[zbus(property)]
-    fn check_updates_automatically(&self) -> zbus::Result<bool>;
+    fn software_updates(&self) -> zbus::Result<String>;
     #[zbus(property)]
-    fn set_check_updates_automatically(&self, on: bool) -> zbus::Result<()>;
-    #[zbus(property)]
-    fn automatic_updates(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn set_automatic_updates(&self, on: bool) -> zbus::Result<()>;
+    fn set_software_updates(&self, value: &str) -> zbus::Result<()>;
 
     #[zbus(property)]
     fn update_check_every(&self) -> zbus::Result<u64>;
@@ -372,7 +368,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 85] = [
+pub const CONFIG_SETTINGS: [SettingId; 84] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::ClockFormat,
@@ -403,7 +399,6 @@ pub const CONFIG_SETTINGS: [SettingId; 85] = [
     SettingId::RememberRecentFiles,
     SettingId::LockMessage,
     SettingId::ShowPreviews,
-    SettingId::CheckUpdatesAutomatically,
     SettingId::AutomaticUpdates,
     SettingId::UpdateCheckEvery,
     SettingId::Wallpaper,
@@ -621,10 +616,7 @@ impl SettingsClient {
             SettingId::RememberRecentFiles => Value::Flag(self.config.remember_recent_files()?),
             SettingId::LockMessage => Value::Text(self.config.lock_message()?),
             SettingId::ShowPreviews => Value::Flag(self.config.show_previews()?),
-            SettingId::CheckUpdatesAutomatically => {
-                Value::Flag(self.config.check_updates_automatically()?)
-            }
-            SettingId::AutomaticUpdates => Value::Flag(self.config.automatic_updates()?),
+            SettingId::AutomaticUpdates => Value::Keyword(self.config.software_updates()?),
             SettingId::UpdateCheckEvery => Value::Seconds(self.config.update_check_every()?),
             SettingId::LowPowerOnBattery => Value::Flag(self.config.low_power_on_battery()?),
             SettingId::LidOnPower => Value::Keyword(self.config.lid_on_power()?),
@@ -730,11 +722,8 @@ impl SettingsClient {
             }
             (SettingId::LockMessage, Value::Text(message)) => self.config.set_lock_message(message),
             (SettingId::ShowPreviews, Value::Flag(shown)) => self.config.set_show_previews(*shown),
-            (SettingId::CheckUpdatesAutomatically, Value::Flag(on)) => {
-                self.config.set_check_updates_automatically(*on)
-            }
-            (SettingId::AutomaticUpdates, Value::Flag(on)) => {
-                self.config.set_automatic_updates(*on)
+            (SettingId::AutomaticUpdates, Value::Keyword(keyword)) => {
+                self.config.set_software_updates(keyword)
             }
             (SettingId::BarEdge, Value::Keyword(keyword)) => self.config.set_bar_edge(keyword),
             (SettingId::ClockFormat, Value::Keyword(keyword)) => {

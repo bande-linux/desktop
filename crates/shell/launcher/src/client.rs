@@ -609,11 +609,14 @@ fn settings_panes(sleeps: bool, hardware: Hardware) -> Vec<PaneInfo> {
     if !sleeps {
         bande_settings_panes::without_sleep(&mut panes);
     }
+    bande_settings_panes::with_pointers(
+        &mut panes,
+        hardware.pointing.mouse,
+        hardware.pointing.trackpad,
+    );
     panes.retain(|pane| match pane.id {
         PaneId::Wifi => hardware.wifi,
         PaneId::Bluetooth => hardware.bluetooth,
-        PaneId::Mouse => hardware.pointing.mouse,
-        PaneId::Trackpad => hardware.pointing.trackpad,
         _ => true,
     });
     panes

@@ -34,6 +34,10 @@ msgstr "Utseende"
 msgid "Taskbar"
 msgstr "Aktivitetsfält"
 
+msgctxt "taskbar"
+msgid "More"
+msgstr "Mer"
+
 msgid "Notifications"
 msgstr "Notiser"
 
@@ -45,6 +49,10 @@ msgstr "Hjälpmedel"
 
 msgid "Displays"
 msgstr "Skärmar"
+
+msgctxt "displays"
+msgid "Advanced"
+msgstr "Avancerat"
 
 msgid "Night Light"
 msgstr "Nattljus"
@@ -58,11 +66,8 @@ msgstr "Tangentbord"
 msgid "Keyboard Shortcuts"
 msgstr "Kortkommandon"
 
-msgid "Mouse"
-msgstr "Mus"
-
-msgid "Trackpad"
-msgstr "Styrplatta"
+msgid "Mouse & Trackpad"
+msgstr "Mus och styrplatta"
 
 msgid "Printers"
 msgstr "Skrivare"
@@ -73,11 +78,8 @@ msgstr "Delning"
 msgid "Power"
 msgstr "Ström"
 
-msgid "Lock Screen"
-msgstr "Låsskärm"
-
-msgid "Users & Groups"
-msgstr "Användare och grupper"
+msgid "Users"
+msgstr "Användare"
 
 msgid "Passwords"
 msgstr "Lösenord"
@@ -118,9 +120,6 @@ msgstr "Programuppdatering"
 msgid "Diagnostics"
 msgstr "Diagnostik"
 
-msgid "Send Report…"
-msgstr "Skicka rapport…"
-
 msgid "Backup"
 msgstr "Säkerhetskopia"
 
@@ -139,6 +138,9 @@ msgstr "Ljust, mörkt eller automatiskt, dekorfärg, skrivbordsbild och textstor
 msgid "Where the taskbar sits and how it behaves"
 msgstr "Var aktivitetsfältet sitter och hur det beter sig"
 
+msgid "Spacing around a floating taskbar"
+msgstr "Avstånd runt ett flytande aktivitetsfält"
+
 msgid "Banners and Notifications"
 msgstr "Banners och Notiser"
 
@@ -150,6 +152,9 @@ msgstr "Gör skärmen, ljudet, tangentbordet och pekaren enklare att använda"
 
 msgid "Arrangement, resolution and size of each display"
 msgstr "Placering, upplösning och storlek för varje skärm"
+
+msgid "Refresh rate, variable refresh rate and color profile of each display"
+msgstr "Uppdateringsfrekvens, variabel uppdateringsfrekvens och färgprofil för varje skärm"
 
 msgid "Warmer colors after dark"
 msgstr "Varmare färger efter mörkrets inbrott"
@@ -163,11 +168,8 @@ msgstr "Inmatningskällor, tangentupprepning och modifierartangenter"
 msgid "The keys that work everywhere on the desktop"
 msgstr "Tangenterna som fungerar överallt på skrivbordet"
 
-msgid "Buttons, scrolling and tracking speed"
-msgstr "Knappar, scrollning och pekarhastighet"
-
-msgid "Tapping, clicking, scrolling, tracking speed and gestures"
-msgstr "Tryck, klick, scrollning, pekarhastighet och gester"
+msgid "Buttons, tapping, scrolling, tracking speed and trackpad gestures"
+msgstr "Knappar, tryck, scrollning, pekarhastighet och gester på styrplattan"
 
 msgid "Add printers, pick the default, see what is printing and scan"
 msgstr "Lägg till skrivare, välj standard, se vad som skrivs ut och skanna"
@@ -175,11 +177,8 @@ msgstr "Lägg till skrivare, välj standard, se vad som skrivs ut och skanna"
 msgid "Share folders with other computers and allow remote login"
 msgstr "Dela mappar med andra datorer och tillåt fjärrinloggning"
 
-msgid "Battery, power mode and what the lid does"
-msgstr "Batteri, strömläge och vad locket gör"
-
-msgid "Screen saver, display off, sleep and the password"
-msgstr "Skärmsläckare, skärm av, vila och lösenordet"
+msgid "Battery, power mode, display off, sleep and the lid"
+msgstr "Batteri, strömläge, skärm av, vila och locket"
 
 msgid "Your account and the others on this computer"
 msgstr "Ditt konto och de andra på den här datorn"
@@ -187,8 +186,8 @@ msgstr "Ditt konto och de andra på den här datorn"
 msgid "The passwords apps and networks keep in your keyring"
 msgstr "Lösenorden som appar och nätverk förvarar i din nyckelring"
 
-msgid "Which apps may use the camera, take screenshots or share the screen"
-msgstr "Vilka appar som får använda kameran, ta skärmbilder eller dela skärmen"
+msgid "The lock screen, app permissions, recent files and clipboard history"
+msgstr "Låsskärmen, appbehörigheter, senaste filer och urklippshistorik"
 
 msgid "Apps that asked to use the camera"
 msgstr "Appar som bett om att få använda kameran"
@@ -208,8 +207,8 @@ msgstr "Appar som bett om din plats"
 msgid "Which apps open your files and links, and which open at login"
 msgstr "Vilka appar som öppnar dina filer och länkar, och vilka som öppnas vid inloggning"
 
-msgid "Language, formats, time and time zone"
-msgstr "Språk, format, tid och tidszon"
+msgid "Language, spelling, formats, time and time zone"
+msgstr "Språk, stavning, format, tid och tidszon"
 
 msgid "This computer"
 msgstr "Den här datorn"
@@ -217,14 +216,11 @@ msgstr "Den här datorn"
 msgid "What fills the disk and how to free up space"
 msgstr "Vad som fyller skivan och hur du frigör utrymme"
 
-msgid "Updates for Bande and Debian apps"
-msgstr "Uppdateringar för Bande och Debian-appar"
+msgid "Updates for Bande, Debian apps and firmware"
+msgstr "Uppdateringar för Bande, Debian-appar och fast programvara"
 
-msgid "What failed on this computer. Read each report, and choose whether it is sent."
-msgstr "Vad som har gått fel på den här datorn. Läs varje rapport och välj om den skickas."
-
-msgid "Tell what went wrong, with what this computer recorded."
-msgstr "Berätta vad som gick fel, tillsammans med det datorn har sparat."
+msgid "What failed on this computer. Read each report, choose whether it is sent, or tell what went wrong."
+msgstr "Vad som har gått fel på den här datorn. Läs varje rapport, välj om den skickas eller berätta vad som gick fel."
 
 msgid "Hourly encrypted versions on an external disk"
 msgstr "Krypterade versioner varje timme på en extern skiva"
@@ -244,6 +240,9 @@ msgstr "tema, look, färg, skrivbordsbild, bakgrund, bild, foto"
 msgid "bar, dock, launcher, taskbar, panel, favourites, favorites"
 msgstr "fält, dock, startare, aktivitetsfält, panel, favoriter"
 
+msgid "taskbar, spacing, gap, margin, floating"
+msgstr "aktivitetsfält, avstånd, mellanrum, marginal, flytande"
+
 msgid "alerts, banners"
 msgstr "aviseringar, banners"
 
@@ -255,6 +254,9 @@ msgstr "a11y, funktionsnedsättning, hjälpmedel, syn, hörsel, motorik"
 
 msgid "monitor, screen, resolution, brightness, night light"
 msgstr "bildskärm, skärm, upplösning, ljusstyrka, nattljus"
+
+msgid "advanced, monitor, refresh rate, hertz, hz, variable refresh, vrr, color profile, colour profile, icc"
+msgstr "avancerat, bildskärm, uppdateringsfrekvens, hertz, hz, variabel uppdatering, vrr, färgprofil, icc"
 
 msgid "night shift, blue light, warm, redshift, colour temperature, color temperature, eye strain"
 msgstr "night shift, blått ljus, varm, redshift, färgtemperatur, ansträngda ögon"
@@ -268,11 +270,8 @@ msgstr "tangenter, skriva"
 msgid "hotkeys, shortcuts, keys, super, command, combinations"
 msgstr "snabbtangenter, kortkommandon, tangenter, super, kommando, kombinationer"
 
-msgid "pointer, cursor, click, scroll, wheel, buttons"
-msgstr "pekare, markör, klicka, scrolla, hjul, knappar"
-
-msgid "touchpad, pointer, cursor, tap, click, scroll"
-msgstr "touchpad, pekare, markör, tryck, klicka, scrolla"
+msgid "mouse, trackpad, touchpad, pointer, cursor, click, tap, scroll, wheel, buttons, gestures"
+msgstr "mus, styrplatta, pekplatta, pekare, markör, klick, tryck, scrolla, hjul, knappar, gester"
 
 msgid "print, printer, cups, queue, ipp, airprint, scan, scanner, escl"
 msgstr "skriv ut, skrivare, cups, kö, ipp, airprint, skanna, skanner, escl"
@@ -280,20 +279,17 @@ msgstr "skriv ut, skrivare, cups, kö, ipp, airprint, skanna, skanner, escl"
 msgid "share, file sharing, samba, smb, remote login, ssh, network folder"
 msgstr "dela, fildelning, samba, smb, fjärrinloggning, ssh, nätverksmapp"
 
-msgid "energy, battery, low power mode, power saver, lid"
-msgstr "energi, batteri, strömsparläge, energisparläge, lock"
+msgid "energy, battery, low power mode, power saver, lid, sleep, suspend, display off, screen timeout, inactive, idle"
+msgstr "energi, batteri, lågeffektläge, energisparläge, lock, vila, viloläge, skärm av, skärmtimeout, inaktiv"
 
-msgid "auto lock, automatic lock, lock when idle, security, inactive, screen saver, screen timeout, password"
-msgstr "automatisk låsning, lås vid inaktivitet, säkerhet, inaktiv, skärmsläckare, skärmtidsgräns, lösenord"
-
-msgid "account, user, password, login, administrator, admin"
-msgstr "konto, användare, lösenord, inloggning, administratör, admin"
+msgid "account, user, users, groups, password, login, administrator, admin"
+msgstr "konto, användare, grupper, lösenord, inloggning, administratör, admin"
 
 msgid "keyring, saved passwords, secrets, wi-fi passwords, website passwords, accounts"
 msgstr "nyckelring, sparade lösenord, hemligheter, wi-fi-lösenord, webbplatslösenord, konton"
 
-msgid "permissions, screen recording, camera access, privacy, security, clipboard"
-msgstr "behörigheter, skärminspelning, kameraåtkomst, integritet, säkerhet, urklipp"
+msgid "permissions, screen recording, camera access, privacy, security, clipboard, lock screen, auto lock, automatic lock, screen saver, password, recent files"
+msgstr "behörigheter, skärminspelning, kameraåtkomst, integritet, säkerhet, urklipp, låsskärm, automatiskt lås, skärmsläckare, lösenord, senaste filer"
 
 msgid "webcam, video calls, camera access, permission"
 msgstr "webbkamera, videosamtal, kameraåtkomst, behörighet"
@@ -313,8 +309,8 @@ msgstr "platstjänster, gps, geoplats, var är jag"
 msgid "applications, login items, startup apps, autostart, open at login, default apps, open with"
 msgstr "program, inloggningsobjekt, startappar, autostart, öppna vid inloggning, standardappar, öppna med"
 
-msgid "locale, region, formats, international, date, time, timezone, clock, ntp, translation"
-msgstr "språkinställning, region, format, internationell, datum, tid, tidszon, klocka, ntp, översättning"
+msgid "locale, region, formats, international, date, time, timezone, clock, ntp, translation, spelling, spell check"
+msgstr "språkinställning, region, format, internationellt, datum, tid, tidszon, klocka, ntp, översättning, stavning, stavningskontroll"
 
 msgid "about this computer, system information, specifications, specs, general, hostname, computer name, version"
 msgstr "om den här datorn, systeminformation, specifikationer, specs, allmänt, värdnamn, datorns namn, version"
@@ -322,14 +318,11 @@ msgstr "om den här datorn, systeminformation, specifikationer, specs, allmänt,
 msgid "disk, drive, space, ssd"
 msgstr "skiva, disk, utrymme, ssd"
 
-msgid "updates, upgrade, packages, apt, debian"
-msgstr "uppdateringar, uppgradera, paket, apt, debian"
+msgid "updates, upgrade, packages, apt, debian, firmware, automatic updates"
+msgstr "uppdateringar, uppgradera, paket, apt, debian, fast programvara, firmware, automatiska uppdateringar"
 
-msgid "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, privacy"
-msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, core dump, logg, diagnostik, rapport, skicka, fel, integritet"
-
-msgid "bug, report, problem, freeze, crash, feedback, send, diagnose"
-msgstr "fel, rapport, problem, frysning, krasch, återkoppling, skicka, diagnos"
+msgid "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, send report, bug, problem, feedback, diagnose, privacy"
+msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, minnesdump, logg, diagnostik, rapport, skicka, skicka rapport, bugg, problem, återkoppling, diagnos, integritet"
 
 msgid "restore, versions, external disk, history, recover"
 msgstr "återställ, versioner, extern skiva, historik, återskapa"
@@ -560,11 +553,24 @@ msgstr "Liten"
 msgid "Large"
 msgstr "Stor"
 
-msgid "Float away from the screen edge"
-msgstr "Flyt fritt från skärmkanten"
+msgctxt "taskbar"
+msgid "Style"
+msgstr "Stil"
 
-msgid "floating, attached, dock, margin, edge, rounded"
-msgstr "flytande, fäst, dock, marginal, kant, rundad"
+msgid "floating, float, attached, dock, margin, edge, rounded"
+msgstr "flytande, flyta, fäst, docka, marginal, kant, rundad"
+
+msgid "Attached"
+msgstr "Fäst"
+
+msgid "Floating"
+msgstr "Flytande"
+
+msgid "Automatically hide and show the taskbar"
+msgstr "Dölj och visa aktivitetsfältet automatiskt"
+
+msgid "autohide, hide, show, reveal, dock"
+msgstr "dölj automatiskt, dölj, visa, avslöja, dock"
 
 msgid "Spacing"
 msgstr "Avstånd"
@@ -578,12 +584,6 @@ msgstr "Inget"
 
 msgid "Wide"
 msgstr "Stort"
-
-msgid "Automatically hide and show the taskbar"
-msgstr "Dölj och visa aktivitetsfältet automatiskt"
-
-msgid "autohide, hide, show, reveal, dock"
-msgstr "dölj automatiskt, dölj, visa, avslöja, dock"
 
 msgid "Do Not Disturb"
 msgstr "Stör ej"
@@ -822,35 +822,29 @@ msgstr "Använd som"
 msgid "main display, mirror, extend, primary, taskbar, bar"
 msgstr "huvudskärm, spegla, utöka, primär, aktivitetsfält, fält"
 
-msgid "Size of text and controls"
-msgstr "Storlek på text och kontroller"
+msgid "Scale"
+msgstr "Skala"
 
-msgid "scale, zoom, resolution, hidpi, bigger, smaller"
-msgstr "skala, zoom, upplösning, hidpi, större, mindre"
-
-msgid "Show all resolutions"
-msgstr "Visa alla upplösningar"
-
-msgid "resolution, modes, pixels, native"
-msgstr "upplösning, lägen, pixlar"
+msgid "size of text and controls, zoom, resolution, hidpi, bigger, smaller, larger text, more space"
+msgstr "storlek på text och kontroller, zoom, upplösning, hidpi, större, mindre, större text, mer utrymme"
 
 msgid "Resolution"
 msgstr "Upplösning"
 
-msgid "pixels, size, mode, sharp"
-msgstr "pixlar, storlek, läge, skarp"
-
-msgid "Refresh rate"
-msgstr "Uppdateringsfrekvens"
-
-msgid "hertz, hz, smooth, frame rate"
-msgstr "hertz, hz, jämn, bildfrekvens"
+msgid "pixels, size, mode, sharp, all resolutions, modes, native"
+msgstr "pixlar, storlek, läge, skarp, alla upplösningar, lägen, inbyggd"
 
 msgid "Rotation"
 msgstr "Rotation"
 
 msgid "rotate, portrait, landscape, orientation, turn"
 msgstr "rotera, stående, liggande, orientering, vrid"
+
+msgid "Refresh rate"
+msgstr "Uppdateringsfrekvens"
+
+msgid "hertz, hz, smooth, frame rate"
+msgstr "hertz, hz, jämn, bildfrekvens"
 
 msgid "Variable refresh rate in full screen"
 msgstr "Variabel uppdateringsfrekvens i helskärm"
@@ -1038,9 +1032,6 @@ msgstr "Lång"
 msgid "Short"
 msgstr "Kort"
 
-msgid "Spelling"
-msgstr "Stavning"
-
 msgid "Text Replacements"
 msgstr "Textersättningar"
 
@@ -1107,6 +1098,9 @@ msgstr "acceleration, precision, platt, spel"
 msgid "Faster movements move the pointer farther"
 msgstr "Snabbare rörelser flyttar pekaren längre"
 
+msgid "Mouse"
+msgstr "Mus"
+
 msgid "Primary button"
 msgstr "Primär knapp"
 
@@ -1119,11 +1113,11 @@ msgstr "Naturlig scrollning"
 msgid "scroll direction, reverse, wheel"
 msgstr "scrollriktning, omvänd, hjul"
 
-msgid "pointer, cursor, acceleration"
-msgstr "pekare, markör, acceleration"
+msgid "pointer, cursor, acceleration, mouse"
+msgstr "pekare, markör, acceleration, mus"
 
-msgid "Click"
-msgstr "Klick"
+msgid "Trackpad"
+msgstr "Styrplatta"
 
 msgid "Tap to click"
 msgstr "Tryck för att klicka"
@@ -1161,8 +1155,8 @@ msgstr "Två fingrar"
 msgid "Bottom right corner"
 msgstr "Nedre högra hörnet"
 
-msgid "Scroll"
-msgstr "Scrollning"
+msgid "Trackpad scrolling"
+msgstr "Scrollning med styrplattan"
 
 msgid "scroll direction, reverse, touchpad"
 msgstr "scrollriktning, omvänd, touchpad"
@@ -1176,8 +1170,8 @@ msgstr "scrolla, två fingrar, kantscrollning"
 msgid "One finger along the edge"
 msgstr "Ett finger längs kanten"
 
-msgid "Pointer"
-msgstr "Pekare"
+msgid "Trackpad pointer"
+msgstr "Pekare på styrplattan"
 
 msgid "pointer, cursor, acceleration, touchpad"
 msgstr "pekare, markör, acceleration, touchpad"
@@ -1188,8 +1182,8 @@ msgstr "Ignorera styrplattan medan du skriver"
 msgid "palm, touchpad, accidental"
 msgstr "handflata, touchpad, oavsiktlig"
 
-msgid "Gestures"
-msgstr "Gester"
+msgid "Trackpad gestures"
+msgstr "Gester på styrplattan"
 
 msgid "Swipe between workspaces"
 msgstr "Svep mellan arbetsytor"
@@ -1239,27 +1233,6 @@ msgstr "Sparade lösenord"
 msgid "show password, copy password, change password, delete password, keyring"
 msgstr "visa lösenord, kopiera lösenord, ändra lösenord, radera lösenord, nyckelring"
 
-msgid "remote login, ssh, security, sign-in page, captive portal, connectivity check"
-msgstr "fjärrinloggning, ssh, säkerhet, inloggningssida, captive portal, anslutningskontroll"
-
-msgid "App permissions"
-msgstr "Appbehörigheter"
-
-msgid "Keyboard access"
-msgstr "Tangentbordsåtkomst"
-
-msgid "input method, keylogger, typing, fcitx, ibus, virtual keyboard, input monitoring"
-msgstr "inmatningsmetod, keylogger, skriva, fcitx, ibus, virtuellt tangentbord, inmatningsövervakning"
-
-msgid "Clipboard"
-msgstr "Urklipp"
-
-msgid "Clipboard history"
-msgstr "Urklippshistorik"
-
-msgid "copy, paste, clear clipboard, forget copied, history"
-msgstr "kopiera, klistra in, rensa urklipp, glöm kopierat, historik"
-
 msgid "Default apps"
 msgstr "Standardappar"
 
@@ -1284,6 +1257,57 @@ msgstr "återställ, återuppta, fönster, session, logga ut, starta om"
 msgid "Apps that were open when you logged out or restarted open again"
 msgstr "Appar som var öppna när du loggade ut eller startade om öppnas igen"
 
+msgid "back up, restore, disk, password, pause, oldest, versions"
+msgstr "säkerhetskopiera, återställ, skiva, lösenord, pausa, äldsta, versioner"
+
+msgid "Reports"
+msgstr "Rapporter"
+
+msgid "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"
+msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, core dump, logg, diagnostik, rapport, skicka, fel, analys, integritet, radera"
+
+msgid "Send Report"
+msgstr "Skicka rapport"
+
+msgid "bug, report, problem, freeze, crash, feedback, send, diagnose"
+msgstr "fel, rapport, problem, frysning, krasch, återkoppling, skicka, diagnos"
+
+msgid "disk space, free, used, available, full, capacity, trash, empty trash, apps, documents"
+msgstr "diskutrymme, ledigt, använt, tillgängligt, fullt, kapacitet, papperskorg, töm papperskorgen, appar, dokument"
+
+msgid "Largest files"
+msgstr "Största filer"
+
+msgid "large files, big files, biggest, clean up, free up space, reclaim"
+msgstr "stora filer, största, städa, frigör utrymme, återvinn"
+
+msgid "Lock screen"
+msgstr "Låsskärm"
+
+msgid "Start Screen Saver when inactive"
+msgstr "Starta skärmsläckaren vid inaktivitet"
+
+msgid "idle, screen saver, screensaver, lock screen, auto lock, clock"
+msgstr "inaktiv, skärmsläckare, låsskärm, automatiskt lås, klocka"
+
+msgid "Require password after screen saver begins or display is turned off"
+msgstr "Kräv lösenord när skärmsläckaren startar eller skärmen stängs av"
+
+msgid "idle, password, security, lock screen, auto lock, automatic lock, lock when idle, grace"
+msgstr "inaktiv, lösenord, säkerhet, låsskärm, automatiskt lås, lås vid inaktivitet, fördröjning"
+
+msgid "Message on the lock screen"
+msgstr "Meddelande på låsskärmen"
+
+msgid "lock screen, message, contact, if found, note, text"
+msgstr "låsskärm, meddelande, kontakt, om hittad, anteckning, text"
+
+msgid "Shown above the buttons while the screen is locked, such as how to return a lost computer"
+msgstr "Visas ovanför knapparna medan skärmen är låst, till exempel hur en borttappad dator kan lämnas tillbaka"
+
+msgid "App permissions"
+msgstr "Appbehörigheter"
+
 msgid "Recent files"
 msgstr "Senaste filer"
 
@@ -1296,38 +1320,45 @@ msgstr "senaste, nyligen använda, historik, dokument, integritet"
 msgid "Files you open are listed in Recent and in other apps"
 msgstr "Filer du öppnar visas i Senaste och i andra appar"
 
-msgid "back up, restore, disk, password, pause, oldest, versions"
-msgstr "säkerhetskopiera, återställ, skiva, lösenord, pausa, äldsta, versioner"
+msgid "Clipboard"
+msgstr "Urklipp"
 
-msgid "Send Report"
-msgstr "Skicka rapport"
+msgid "Clipboard history"
+msgstr "Urklippshistorik"
 
-msgid "Reports"
-msgstr "Rapporter"
+msgid "copy, paste, clear clipboard, forget copied, history"
+msgstr "kopiera, klistra in, rensa urklipp, glöm kopierat, historik"
 
-msgid "crash, crashes, freeze, hang, quit unexpectedly, core dump, log, diagnostics, report, send, bug, analytics, privacy, delete"
-msgstr "krasch, kraschar, frysning, hänger sig, avslutades oväntat, core dump, logg, diagnostik, rapport, skicka, fel, analys, integritet, radera"
+msgid "Keyboard access"
+msgstr "Tangentbordsåtkomst"
 
-msgid "disk space, free, used, available, full, capacity, trash, empty trash, apps, documents"
-msgstr "diskutrymme, ledigt, använt, tillgängligt, fullt, kapacitet, papperskorg, töm papperskorgen, appar, dokument"
+msgid "input method, keylogger, typing, fcitx, ibus, virtual keyboard, input monitoring"
+msgstr "inmatningsmetod, keylogger, skriva, fcitx, ibus, virtuellt tangentbord, inmatningsövervakning"
 
-msgid "Largest files"
-msgstr "Största filer"
+msgid "remote login, ssh, security, sign-in page, captive portal, connectivity check"
+msgstr "fjärrinloggning, ssh, säkerhet, inloggningssida, captive portal, anslutningskontroll"
 
-msgid "large files, big files, biggest, clean up, free up space, reclaim"
-msgstr "stora filer, största, städa, frigör utrymme, återvinn"
+msgid "install updates, check for updates, check now, security updates, upgrade, packages, firmware, restart"
+msgstr "installera uppdateringar, sök efter uppdateringar, sök nu, säkerhetsuppdateringar, uppgradera, paket, fast programvara, starta om"
 
-msgid "install updates, check for updates, security updates, upgrade, packages, restart"
-msgstr "installera uppdateringar, sök efter uppdateringar, säkerhetsuppdateringar, uppgradering, paket, omstart"
+msgid "Automatic updates"
+msgstr "Automatiska uppdateringar"
 
-msgid "Check for updates automatically"
-msgstr "Sök efter uppdateringar automatiskt"
+msgid "check for updates automatically, automatic check, background check, install automatically, background updates, unattended, notify, network"
+msgstr "sök efter uppdateringar automatiskt, automatisk sökning, sökning i bakgrunden, installera automatiskt, uppdateringar i bakgrunden, obevakad, meddela, nätverk"
 
-msgid "update check, automatic check, background check, network"
-msgstr "uppdateringskontroll, automatisk kontroll, kontroll i bakgrunden, nätverk"
+msgctxt "updates"
+msgid "Off"
+msgstr "Av"
 
-msgid "While this and automatic updates are off, nothing is fetched until you click Check Now."
-msgstr "Så länge det här och automatiska uppdateringar är av hämtas ingenting förrän du klickar på Sök nu."
+msgid "Notify"
+msgstr "Meddela"
+
+msgid "Install automatically"
+msgstr "Installera automatiskt"
+
+msgid "Notify checks for updates and tells you about them. Install automatically also downloads them and installs them while the computer is idle; updates that need your password or a restart wait for you. While off, nothing is fetched until you click Check Now."
+msgstr "Meddela söker efter uppdateringar och berättar om dem. Installera automatiskt hämtar dem också och installerar dem medan datorn är inaktiv; uppdateringar som behöver ditt lösenord eller en omstart väntar på dig. Så länge det är av hämtas ingenting förrän du klickar på Sök nu."
 
 msgid "Check for updates"
 msgstr "Sök efter uppdateringar"
@@ -1337,15 +1368,6 @@ msgstr "uppdateringssökning, hur ofta, schema, intervall, säkerhetsuppdatering
 
 msgid "Between checks nothing is fetched or installed, even at startup. A longer wait also delays security fixes. Check Now always works."
 msgstr "Mellan sökningarna hämtas eller installeras ingenting, inte ens vid start. En längre väntan fördröjer också säkerhetsfixar. Sök nu fungerar alltid."
-
-msgid "Automatically keep this computer up to date"
-msgstr "Håll datorn uppdaterad automatiskt"
-
-msgid "automatic updates, install automatically, background updates, unattended"
-msgstr "automatiska uppdateringar, installera automatiskt, bakgrundsuppdateringar, obevakat"
-
-msgid "Downloads updates in the background and installs them while the computer is idle. Updates that need your password or a restart wait for you."
-msgstr "Hämtar uppdateringar i bakgrunden och installerar dem när datorn är inaktiv. Uppdateringar som kräver ditt lösenord eller en omstart väntar på dig."
 
 msgid "Battery"
 msgstr "Batteri"
@@ -1386,6 +1408,33 @@ msgstr "Strömkälla"
 msgid "power adapter, mains, plugged in, energy, sleep, power profiles"
 msgstr "strömadapter, nätström, ansluten, energi, vila, strömprofiler"
 
+msgid "When inactive"
+msgstr "Vid inaktivitet"
+
+msgid "Turn display off after"
+msgstr "Stäng av skärmen efter"
+
+msgid "idle, inactive, display sleep, blank, dim, screen timeout, energy"
+msgstr "inaktiv, skärmvila, släck, dämpa, skärmtimeout, energi"
+
+msgid "Sleep after"
+msgstr "Vila efter"
+
+msgid "idle, inactive, suspend, energy, battery, power, computer sleep"
+msgstr "inaktiv, viloläge, energi, batteri, ström, datorvila"
+
+msgid "Turn display off on battery after"
+msgstr "Stäng av skärmen på batteri efter"
+
+msgid "idle, inactive, display sleep, blank, screen timeout, energy, battery, laptop"
+msgstr "inaktiv, skärmvila, släck, skärmtimeout, energi, batteri, bärbar dator"
+
+msgid "Sleep on battery after"
+msgstr "Vila på batteri efter"
+
+msgid "idle, inactive, suspend, energy, battery, laptop, computer sleep"
+msgstr "inaktiv, viloläge, energi, batteri, bärbar dator, datorvila"
+
 msgid "On power adapter"
 msgstr "På nätadapter"
 
@@ -1401,62 +1450,8 @@ msgstr "Vila"
 msgid "Keep running"
 msgstr "Fortsätt köra"
 
-msgid "Screen saver, display off and the password"
-msgstr "Skärmsläckare, skärm av och lösenordet"
-
-msgid "When inactive"
-msgstr "Vid inaktivitet"
-
-msgid "Start Screen Saver when inactive"
-msgstr "Starta skärmsläckaren vid inaktivitet"
-
-msgid "idle, screen saver, screensaver, lock screen, clock"
-msgstr "inaktiv, skärmsläckare, låsskärm, klocka"
-
-msgid "Turn display off when inactive"
-msgstr "Stäng av skärmen vid inaktivitet"
-
-msgid "idle, display sleep, blank, dim, screen timeout, energy"
-msgstr "inaktiv, skärmvila, svart, dämpa, skärmtidsgräns, energi"
-
-msgid "Sleep after"
-msgstr "Vila efter"
-
-msgid "idle, suspend, energy, battery, power, computer sleep"
-msgstr "inaktiv, vänteläge, energi, batteri, ström, datorvila"
-
-msgid "On battery"
-msgstr "På batteri"
-
-msgid "Turn display off on battery when inactive"
-msgstr "Stäng av skärmen på batteri vid inaktivitet"
-
-msgid "idle, display sleep, blank, screen timeout, energy, battery, laptop"
-msgstr "inaktiv, skärmvila, släck, skärmtidsgräns, energi, batteri, bärbar dator"
-
-msgid "Sleep on battery after"
-msgstr "Vila på batteri efter"
-
-msgid "idle, suspend, energy, battery, laptop, computer sleep"
-msgstr "inaktiv, vänteläge, energi, batteri, bärbar dator, datorvila"
-
-msgid "When locked"
-msgstr "När låst"
-
-msgid "Require password after screen saver begins or display is turned off"
-msgstr "Kräv lösenord när skärmsläckaren startar eller skärmen stängs av"
-
-msgid "idle, password, security, lock screen, auto lock, grace"
-msgstr "inaktiv, lösenord, säkerhet, låsskärm, automatisk låsning, fördröjning"
-
-msgid "Message on the lock screen"
-msgstr "Meddelande på låsskärmen"
-
-msgid "lock screen, message, contact, if found, note, text"
-msgstr "låsskärm, meddelande, kontakt, om hittad, anteckning, text"
-
-msgid "Shown above the buttons while the screen is locked, such as how to return a lost computer"
-msgstr "Visas ovanför knapparna medan skärmen är låst, till exempel hur en borttappad dator kan lämnas tillbaka"
+msgid "Battery, power mode, display off and the lid"
+msgstr "Batteri, strömläge, skärm av och locket"
 
 msgid "Language"
 msgstr "Språk"
@@ -1466,6 +1461,12 @@ msgstr "gränssnittsspråk, översättning, lokalisering, engelska, svenska, tys
 
 msgid "app language, per-app language, language for one app, application language"
 msgstr "appspråk, språk per app, språk för en app, programspråk"
+
+msgid "Spelling"
+msgstr "Stavning"
+
+msgid "spell check, spellcheck, spelling languages, dictionary, hunspell, misspelled, typos"
+msgstr "stavningskontroll, stavningsspråk, ordbok, hunspell, felstavat, stavfel"
 
 msgid "Formats"
 msgstr "Format"

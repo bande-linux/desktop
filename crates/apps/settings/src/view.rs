@@ -14,7 +14,7 @@ use bande_l10n::tr;
 use bande_settings_panes::{
     AUTOMATIC, Kind, Pane, PaneId, Permission, Setting, SettingId, Value, panes,
 };
-use bande_settings_panes::{PaneHit, search};
+use bande_settings_panes::{PaneHit, search, with_pointers};
 use bande_status::brightness::{DisplayLevel, LevelRequest};
 use bande_toolkit::ui::{
     Alert, Context, Event, Key, Modifiers, PointerButton, ScrollState, SearchField, Size, Ui,
@@ -291,7 +291,6 @@ pub struct SettingsView {
     pub(crate) pairing: Option<Question>,
     pub(crate) pictures: Vec<(String, Pair)>,
     pub(crate) colour_profiles: Vec<(String, String)>,
-    pub(crate) show_all_resolutions: bool,
     pub(crate) thumbnails: HashMap<Pair, Option<Image>>,
     pub(crate) query: String,
     pub(crate) hits: Vec<PaneHit>,
@@ -412,7 +411,6 @@ impl SettingsView {
             pairing: None,
             pictures: Vec::new(),
             colour_profiles: Vec::new(),
-            show_all_resolutions: false,
             thumbnails: HashMap::new(),
             query: String::new(),
             hits: Vec::new(),
@@ -1114,7 +1112,10 @@ impl SettingsView {
             PaneId::Network => self.network.is_some(),
             PaneId::Notifications => self.values.contains_key(&SettingId::DoNotDisturb),
             PaneId::Sound => self.audio.is_some(),
-            PaneId::Displays | PaneId::NightLight => !self.displays.is_empty(),
+            PaneId::Displays | PaneId::DisplaysAdvanced | PaneId::NightLight => {
+                !self.displays.is_empty()
+            }
+            PaneId::BarMore => self.values.get(&SettingId::BarFloating) == Some(&Value::Flag(true)),
             PaneId::About => self.about.is_some(),
             PaneId::Appearance
             | PaneId::Accessibility
@@ -1123,7 +1124,6 @@ impl SettingsView {
             | PaneId::Keyboard
             | PaneId::KeyboardShortcuts
             | PaneId::Power
-            | PaneId::LockScreen
             | PaneId::PrivacySecurity
             | PaneId::Camera
             | PaneId::Screenshots
@@ -1135,12 +1135,10 @@ impl SettingsView {
             | PaneId::Passwords
             | PaneId::Storage
             | PaneId::Diagnostics
-            | PaneId::SendReport
             | PaneId::Backup
             | PaneId::SoftwareUpdate => true,
             PaneId::LanguageTime => self.locale.is_some() || self.time.is_some(),
-            PaneId::Mouse => self.pointing.mouse,
-            PaneId::Trackpad => self.pointing.trackpad,
+            PaneId::Pointing => self.pointing.mouse || self.pointing.trackpad,
             PaneId::Microphone | PaneId::Location => self.has_grants(pane),
         }
     }
@@ -2184,12 +2182,12 @@ impl SettingsView {
             PaneId::Printers => Command::Printers(PrinterCommand::Watch(on)),
             PaneId::Sharing if on => Command::Sharing(SharingCommand::Read),
             PaneId::About if on => Command::BootScreen(BootScreenCommand::Read),
-            PaneId::Keyboard if on => {
+            PaneId::Keyboard if on => Command::Locale(LocaleCommand::Read),
+            PaneId::LanguageTime if on => {
                 self.commands
                     .push(Command::Spelling(crate::spelling::SpellingCommand::Read));
                 Command::Locale(LocaleCommand::Read)
             }
-            PaneId::LanguageTime if on => Command::Locale(LocaleCommand::Read),
             _ => return,
         };
         self.commands.push(command);
@@ -2215,7 +2213,9 @@ impl SettingsView {
     }
 
     fn search_hits(&self, query: &str) -> Vec<PaneHit> {
-        search(&self.panes, query)
+        let mut panes = self.panes.clone();
+        with_pointers(&mut panes, self.pointing.mouse, self.pointing.trackpad);
+        search(&panes, query)
             .into_iter()
             .filter(|hit| self.available(hit.pane))
             .collect()
@@ -2612,11 +2612,6 @@ impl SettingsView {
     }
 
     fn change_display(&mut self, identity: String, id: SettingId, value: Value) {
-        if let (SettingId::ShowAllResolutions, Value::Flag(shown)) = (id, &value) {
-            self.show_all_resolutions = *shown;
-            self.invalidate();
-            return;
-        }
         let mut display = self
             .display_settings
             .get(&identity)

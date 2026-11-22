@@ -82,7 +82,7 @@ File contents, typed text, window titles and the clipboard are not read. Every t
 
 ## By hand, and after a freeze
 
-Settings ▸ General ▸ About ▸ Send Report… or `bande-diagnose [--send] [--describe TEXT]`. It makes a `manual` report with this boot's and the previous boot's logs, the core dump list, processes, failed services, disk use and anything a hang left behind. Settings shows it first, with Send Now, Copy, Delete, and Save to File when no server is configured. `bande-diagnose` works without the service as root, so it also runs from a text console; with no server it saves a text file in the home folder.
+Settings ▸ Privacy & Security ▸ Diagnostics ▸ Send Report or `bande-diagnose [--send] [--describe TEXT]`. It makes a `manual` report with this boot's and the previous boot's logs, the core dump list, processes, failed services, disk use and anything a hang left behind. Settings shows it first, with Send Now, Copy, Delete, and Save to File when no server is configured. `bande-diagnose` works without the service as root, so it also runs from a text console; with no server it saves a text file in the home folder.
 
 During a total freeze nothing runs. What survives: the journal up to its last sync and hang snapshots already fsynced.
 

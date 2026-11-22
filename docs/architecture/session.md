@@ -40,7 +40,8 @@ graph LR
 
 - Locking is built on `ext-session-lock-v1`. If the lock screen crashes the session stays
   locked: the compositor draws a blank frame and a new locker may take over.
-- **Idle** ([`config.kdl`](overview.md#configuration) `idle`, Settings ▸ Lock Screen): the
+- **Idle** ([`config.kdl`](overview.md#configuration) `idle`; Settings ▸ Privacy & Security ▸ Lock
+  screen for the screen saver and password, Settings ▸ Power ▸ When inactive for display off and sleep): the
   displays dim 10 s before the screen saver or the display turning off, whichever comes first
   (default 5 and 10 min). The screen saver is the lock screen resting (clock and date over the
   blurred wallpaper), so the saver hands over to the lock without a second surface. Input or
@@ -586,7 +587,7 @@ greetd changes an expired password with `pam_chauthtok` through the same convers
 `password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
 with no `password` stack: when `account` answers that the password has expired it unlocks the
 session it already holds and a notification asks the person to choose a new one in Settings ▸
-Users & Groups, which runs `passwd`. greetd's messages are refused above 64 KiB.
+Users, which runs `passwd`. greetd's messages are refused above 64 KiB.
 
 **Keyboard.** The field shows Caps Lock and, with several layouts, the active one as a button
 that switches to the next, as `Super+Space` does. The layouts and `XKBOPTIONS` are those in
@@ -789,9 +790,10 @@ privileged runs on their behalf.
 
 Packages come from Bande's signed APT repository ([packaging](packaging.md)).
 
-**Nothing is fetched by itself** unless the person switches on "Check for updates automatically"
-(`check-updates-automatically`, off by default) or automatic updates; until then the daily timer
-and an opened pane show the last check, and Check Now always fetches. `update-check-every` sets
+Settings ▸ Software Update has one choice, Automatic updates (`software-updates`): Off (the
+default), Notify or Install automatically. **Nothing is fetched by itself** while it is Off; the
+daily timer and an opened pane then show the last check, and Check Now always fetches. Notify
+checks and announces what is available. `update-check-every` sets
 the interval (When available, Every day, 7 or 31 days); security updates follow it. Each check
 leaves its outcome in `$XDG_STATE_HOME/bande/software-badge`, so Settings starts PackageKit only
 when the pane opens or a check is due.
@@ -844,7 +846,7 @@ plugged in; a reopened pane finds it again through fwupd's update state. Firmwar
 installed by automatic updates; the notification counts it as waiting. fwupd's errors map to
 messages that say what to do.
 
-**Automatic updates** (`automatic-updates`, off by default): the daily run downloads everything
+**Install automatically** (`software-updates "install"`): the daily run downloads everything
 in the background, waits for five minutes of idle (`ext-idle-notify-v1`, which honours
 inhibitors), checks again and installs the live and Flatpak updates when polkit allows them
 without a password. Boot and offline updates, and live ones that need a password, are never

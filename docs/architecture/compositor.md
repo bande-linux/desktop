@@ -138,7 +138,7 @@ when they reach the screen is Bande's own.
   primary plane without composition. A display whose connector can change its refresh without
   a mode-set gets variable refresh while a full-screen window on its active workspace says its
   content is a game or video (`wp_content_type_v1`), unless `variable-refresh #false` is in its
-  settings (Settings ▸ Displays ▸ Variable refresh rate in full screen); presentation feedback
+  settings (Settings ▸ Displays ▸ Advanced ▸ Variable refresh rate in full screen); presentation feedback
   then reports the refresh as variable, with the mode's as the fastest. Tearing page flips are
   not offered: Smithay 0.7's `DrmCompositor` cannot ask for `DRM_MODE_PAGE_FLIP_ASYNC`.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
@@ -195,8 +195,11 @@ when they reach the screen is Bande's own.
   display, aligning tops, bottoms or centres within 48 pt, and never onto another display; with
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
-  display, Extended, Mirror), Size of text and controls (Default, then Larger Text to More Space, each
-  shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation, Variable refresh rate in full screen and Colour profile. Every change is written to
+  display, Extended, Mirror), Scale (Default, then Larger Text to More Space, each
+  shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes
+  of its native shape first, then every other mode below a separator in the same menu) and
+  Rotation; Displays ▸ Advanced offers each display's Refresh rate, Variable refresh rate in full
+  screen and Colour profile. Every change is written to
   `config.kdl` and applied live. A change of resolution, refresh rate, rotation or variable
   refresh is a trial: Settings asks "Keep these display settings?" in a dialog that takes the
   keyboard focus, with Keep and Revert. Revert is the default, taken by Enter and Escape alike, so

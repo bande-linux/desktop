@@ -120,7 +120,7 @@ impl Display {
         )
     }
 
-    pub fn resolutions(&self) -> Vec<(i32, i32)> {
+    pub fn resolutions(&self) -> (Vec<(i32, i32)>, usize) {
         let mut sizes: Vec<(i32, i32)> = self
             .modes
             .iter()
@@ -132,7 +132,7 @@ impl Display {
         });
         sizes.dedup();
         let Some(&(native_width, native_height)) = sizes.first() else {
-            return sizes;
+            return (sizes, 0);
         };
         let shaped = |(width, height): &(i32, i32)| {
             (f64::from(*width) / f64::from(*height)
@@ -152,6 +152,12 @@ impl Display {
         {
             offered.push(current);
         }
-        offered
+        let suggested = offered.len();
+        let others: Vec<(i32, i32)> = sizes
+            .into_iter()
+            .filter(|size| !offered.contains(size))
+            .collect();
+        offered.extend(others);
+        (offered, suggested)
     }
 }

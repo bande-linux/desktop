@@ -17,8 +17,8 @@ use crate::{
     ClockFormat, ClockTime, ComposeKey, Config, ConfigStore, DisplaySettings, Dragging,
     FocusSchedule, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight,
     NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory,
-    SecondaryClick, Setting, Style, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant,
-    ZOOM_RANGE, accent_keyword, is_wallpaper_path, read_system_input_sources,
+    SecondaryClick, Setting, SoftwareUpdates, Style, Suspend, TEXT_SIZE_RANGE, WallpaperFit,
+    WallpaperVariant, ZOOM_RANGE, accent_keyword, is_wallpaper_path, read_system_input_sources,
     read_system_xkb_options,
 };
 
@@ -198,11 +198,8 @@ fn publish_changes(
         if before.remember_recent_files != after.remember_recent_files {
             announce(guard.remember_recent_files_changed(emitter).await);
         }
-        if before.check_updates_automatically != after.check_updates_automatically {
-            announce(guard.check_updates_automatically_changed(emitter).await);
-        }
-        if before.automatic_updates != after.automatic_updates {
-            announce(guard.automatic_updates_changed(emitter).await);
+        if before.software_updates != after.software_updates {
+            announce(guard.software_updates_changed(emitter).await);
         }
         if before.update_check_every != after.update_check_every {
             announce(guard.update_check_every_changed(emitter).await);
@@ -789,23 +786,14 @@ impl ConfigInterface {
     }
 
     #[zbus(property)]
-    fn check_updates_automatically(&self) -> bool {
-        self.store.current().check_updates_automatically
+    fn software_updates(&self) -> String {
+        self.store.current().software_updates.keyword().to_owned()
     }
 
     #[zbus(property)]
-    fn set_check_updates_automatically(&self, on: bool) -> zbus::fdo::Result<()> {
-        self.write(&Setting::CheckUpdatesAutomatically(on))
-    }
-
-    #[zbus(property)]
-    fn automatic_updates(&self) -> bool {
-        self.store.current().automatic_updates
-    }
-
-    #[zbus(property)]
-    fn set_automatic_updates(&self, on: bool) -> zbus::fdo::Result<()> {
-        self.write(&Setting::AutomaticUpdates(on))
+    fn set_software_updates(&self, value: String) -> zbus::fdo::Result<()> {
+        let updates = keyword(&SoftwareUpdates::ALL, SoftwareUpdates::keyword, &value)?;
+        self.write(&Setting::SoftwareUpdates(updates))
     }
 
     #[zbus(property)]

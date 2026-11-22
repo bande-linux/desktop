@@ -13,9 +13,7 @@ pub const CHECK_SLACK: Duration = Duration::from_secs(6 * 60 * 60);
 )]
 trait Config {
     #[zbus(property)]
-    fn check_updates_automatically(&self) -> zbus::Result<bool>;
-    #[zbus(property)]
-    fn automatic_updates(&self) -> zbus::Result<bool>;
+    fn software_updates(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn update_check_every(&self) -> zbus::Result<u64>;
 }
@@ -30,17 +28,20 @@ pub fn check_interval(session: &Connection) -> Option<Duration> {
     (seconds > 0).then(|| Duration::from_secs(seconds))
 }
 
-fn checks_automatically(session: &Connection) -> bool {
+pub fn software_updates(session: &Connection) -> String {
     ConfigProxyBlocking::new(session)
-        .and_then(|config| Ok(config.check_updates_automatically()? || config.automatic_updates()?))
+        .and_then(|config| config.software_updates())
         .unwrap_or_else(|error| {
-            tracing::warn!("cannot read whether to check for updates automatically: {error}");
-            false
+            tracing::warn!("cannot read what to do with software updates: {error}");
+            OFF.to_owned()
         })
 }
 
+pub const OFF: &str = "off";
+pub const INSTALL: &str = "install";
+
 pub fn check_due(session: &Connection, client: &Client) -> bool {
-    if !checks_automatically(session) {
+    if software_updates(session) == OFF {
         return false;
     }
     let Some(every) = check_interval(session) else {

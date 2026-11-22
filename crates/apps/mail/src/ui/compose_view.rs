@@ -1,9 +1,10 @@
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
+use bande_app::{Dropping, FileDrop};
 use bande_l10n::{Text, text, tr};
 
 use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};
@@ -11,15 +12,15 @@ use crate::message::{Address, Attachment, parse_addresses};
 use crate::store::Account;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
-use accesskit::{ActionRequest, TreeUpdate};
+use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeUpdate};
 use bande_toolkit::ui::{
     Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Label,
     Menu, PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
-    shortcut_pressed,
+    access_rect, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Item, Palette, Point, Radius, Rect,
-    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem, Window, WindowEvent,
 };
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
@@ -67,7 +68,9 @@ pub struct ComposeView {
     size: (f32, f32),
     sent: Option<Outgoing>,
     requests: Vec<ComposeRequest>,
+    drop: FileDrop,
     chips: Vec<(Rect, usize)>,
+    access: WidgetId,
     token: u64,
     closed: bool,
     unsent: Option<PathBuf>,
@@ -79,6 +82,7 @@ pub struct ComposeView {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComposeRequest {
     ChooseFiles,
+    Attach(Vec<PathBuf>),
     ShowMenu(Menu, Point),
     Clipboard(ClipboardRequest),
 }
@@ -197,7 +201,9 @@ impl ComposeView {
             size: (0.0, 0.0),
             sent: None,
             requests: Vec::new(),
+            drop: FileDrop::default(),
             chips: Vec::new(),
+            access: WidgetId::next(),
             token,
             closed: false,
             unsent,
@@ -609,8 +615,7 @@ impl ComposeView {
                 .find(|(chip, _)| chip.contains(pointer.position))
                 .map(|(_, index)| *index)
         {
-            self.draft.attachments.remove(index);
-            self.schedule_autosave();
+            self.remove_attachment(index);
             return true;
         }
         let handled = self.ui.handle(event);
@@ -628,13 +633,45 @@ impl ComposeView {
         handled
     }
 
+    pub fn dragged(&mut self, window: &mut Window, event: &WindowEvent) -> bool {
+        match self.drop.event(window, event, Path::is_file) {
+            Dropping::Over => true,
+            Dropping::Dropped(paths) => {
+                self.requests.push(ComposeRequest::Attach(paths));
+                true
+            }
+            Dropping::Other => false,
+        }
+    }
+
     pub fn pasted(&mut self, text: &str) -> bool {
         let handled = self.ui.pasted(text);
         self.after_ui();
         handled
     }
 
+    fn remove_attachment(&mut self, index: usize) {
+        if index < self.draft.attachments.len() {
+            self.draft.attachments.remove(index);
+            self.schedule_autosave();
+        }
+    }
+
+    fn chip_of(&self, node: NodeId) -> Option<usize> {
+        let owner = NodeId::from(self.access).0;
+        (node.0 >> 32 == owner)
+            .then(|| (node.0 & u64::from(u32::MAX)).checked_sub(1))
+            .flatten()
+            .and_then(|index| usize::try_from(index).ok())
+    }
+
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
+        if let Some(index) = self.chip_of(request.target_node) {
+            if request.action == Action::Click {
+                self.remove_attachment(index);
+            }
+            return true;
+        }
         let handled = self.ui.perform(request);
         self.after_ui();
         handled
@@ -687,7 +724,27 @@ impl ComposeView {
     }
 
     pub fn accessibility(&self) -> TreeUpdate {
-        self.ui.accessibility()
+        let mut tree = self.ui.accessibility();
+        let mut chips = Vec::new();
+        for (rect, index) in &self.chips {
+            let Some(attachment) = self.draft.attachments.get(*index) else {
+                continue;
+            };
+            let mut node = Node::new(Role::Button);
+            node.set_label(tr!("Remove “{name}”", name = attachment.name.as_str()));
+            node.set_description(bande_fs::format_size(attachment.data.len() as u64));
+            node.set_bounds(access_rect(*rect));
+            node.add_action(Action::Click);
+            let id = self.access.part(*index as u64);
+            chips.push(id);
+            tree.nodes.push((id, node));
+        }
+        if let Some((_, root)) = tree.nodes.first_mut() {
+            for chip in chips {
+                root.push_child(chip);
+            }
+        }
+        tree
     }
 
     pub fn text_input_area(&self) -> Option<Rect> {

@@ -123,8 +123,9 @@ are in [performance.md](performance.md).
   need nothing more; support for USB and older printers comes from Settings ▸ Printers. It installs
   `/usr/share/applications/x-bande-mimeapps.list` (`data/x-bande-mimeapps.list`), read only in a Bande session, which opens
   folders in Files, `.deb` files in the Package Installer, plain text (with source code and
-  logs, its subtypes) in Text Editor when it is installed and archives (zip, tar, gzip, bzip2, xz,
-  zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
+  logs, its subtypes) in Text Editor when it is installed, web pages and links in the Browser,
+  `mailto:` links in Mail, calendar files and `webcal:` links in Calendar, and archives (zip, tar,
+  gzip, bzip2, xz, zstd, 7-Zip) in Archives, which also makes Files' Compress; Files expands an archive
   itself only when no app opens it; other types open in an installed app
   whose desktop entry declares them, and a person's own choice in
   `~/.config/mimeapps.list` still wins. A file no installed app opens gets the Open With sheet in

@@ -420,6 +420,10 @@ Files: vendor/const-oid-0.10.2/*
 Copyright: RustCrypto Developers
 License: Apache-2.0 or MIT
 
+Files: vendor/constant_time_eq-0.6.1/*
+Copyright: Cesar Eduardo Barros <cesarb@cesarb.eti.br>
+License: CC0-1.0 or MIT-0 or Apache-2.0
+
 Files: vendor/convert_case-0.10.0/*
 Copyright: rutrum <dave@rutrum.net>
 License: MIT
@@ -489,6 +493,10 @@ License: MIT
 Files: vendor/data-url-0.3.2/*
 Copyright: Simon Sapin <simon.sapin@exyr.org>
 License: MIT or Apache-2.0
+
+Files: vendor/deflate64-0.1.12/*
+Copyright: anatawa12 <anatawa12@icloud.com>
+License: MIT
 
 Files: vendor/defmt-1.2.0/*
 Copyright: The Knurling-rs developers
@@ -1348,6 +1356,10 @@ Files: vendor/lzma-rust2-0.19.0/*
 Copyright: the lzma-rust2 authors
 License: Apache-2.0
 
+Files: vendor/lzma-rust2-0.23.0/*
+Copyright: the lzma-rust2 authors
+License: Apache-2.0
+
 Files: vendor/mailparse-0.16.1/*
 Copyright: Kartikaya Gupta
 License: 0BSD
@@ -1991,6 +2003,10 @@ License: MIT or Apache-2.0
 Files: vendor/sevenz-rust2-0.21.6/*
 Copyright: the sevenz-rust2 authors
 License: Apache-2.0
+
+Files: vendor/sha1-0.11.0/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
 
 Files: vendor/sha2-0.10.9/*
 Copyright: RustCrypto Developers
@@ -2809,7 +2825,7 @@ Files: vendor/zerofrom-derive-0.1.8/*
 Copyright: Manish Goregaokar <manishsmail@gmail.com>
 License: Unicode-3.0
 
-Files: vendor/zeroize-1.8.1/*
+Files: vendor/zeroize-1.9.2/*
 Copyright: The RustCrypto Project Developers
 License: Apache-2.0 or MIT
 

@@ -159,6 +159,9 @@ msgstr "Arkivet packas upp till mer än tusen gånger sin storlek, som en dekomp
 msgid "There isn’t enough free space for the expanded items."
 msgstr "Det finns inte tillräckligt med ledigt utrymme för de uppackade objekten."
 
+msgid "The archive uses a compression method or feature that isn’t supported."
+msgstr "Arkivet använder en komprimeringsmetod eller funktion som inte stöds."
+
 msgid "Archive"
 msgstr "Arkiv"
 

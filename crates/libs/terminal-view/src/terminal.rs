@@ -9,9 +9,13 @@ use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::Hyperlink;
 use alacritty_terminal::term::search::{Match, RegexIter, RegexSearch};
 use alacritty_terminal::term::{self, Config, Term, TermMode};
-use alacritty_terminal::vte::ansi::{ClearMode, CursorShape, CursorStyle, Handler, Processor};
+use alacritty_terminal::vte::ansi::{
+    ClearMode, Color as AnsiColor, CursorShape, CursorStyle, Handler, NamedColor, Processor, Rgb,
+};
 use bande_toolkit::ui::ScrollExtent;
 use bande_xdg::file_uri;
+
+use crate::theme::Theme;
 
 pub const SCROLLBACK: usize = 10_000;
 
@@ -232,6 +236,21 @@ impl Terminal {
 
     pub fn feed(&mut self, bytes: &[u8]) {
         self.parser.advance(&mut self.term, bytes);
+    }
+
+    pub fn reported_color(&self, index: usize, theme: &Theme) -> Option<Rgb> {
+        let color = match index {
+            256 => AnsiColor::Named(NamedColor::Foreground),
+            257 => AnsiColor::Named(NamedColor::Background),
+            258 => AnsiColor::Named(NamedColor::Cursor),
+            index => AnsiColor::Indexed(u8::try_from(index).ok()?),
+        };
+        let shown = theme.resolve(color, self.term.colors(), false);
+        Some(Rgb {
+            r: shown.r,
+            g: shown.g,
+            b: shown.b,
+        })
     }
 
     pub fn take_events(&mut self) -> Vec<TermEvent> {

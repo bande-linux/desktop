@@ -6,7 +6,10 @@ use jiff::civil::Date;
 use super::paint::calendar_color;
 use super::painter::Painter;
 use super::{Hit, ViewModel};
-use crate::store::AccountKind;
+use bande_toolkit::Shape;
+use bande_toolkit::ui::focus_ring_for;
+
+use crate::store::{Account, AccountKind, Library};
 
 const INSET: f32 = 10.0;
 const ROW: f32 = 26.0;
@@ -14,6 +17,29 @@ const HEADING: f32 = 28.0;
 const CHECK: f32 = 14.0;
 const MINI_CELL: f32 = 26.0;
 const MINI_HEADER: f32 = 28.0;
+
+pub(super) fn account_title(account: &Account) -> String {
+    match account.kind {
+        AccountKind::Local => tr!("Local"),
+        AccountKind::Subscription { .. } => tr!("Subscriptions"),
+        AccountKind::CalDav { .. } => account.name.clone(),
+    }
+}
+
+pub(super) fn order(library: &Library) -> Vec<usize> {
+    library
+        .accounts
+        .iter()
+        .flat_map(|account| {
+            library
+                .calendars
+                .iter()
+                .enumerate()
+                .filter(move |(_, calendar)| calendar.info.account == account.id)
+                .map(|(index, _)| index)
+        })
+        .collect()
+}
 
 pub fn paint(
     model: &ViewModel,
@@ -43,11 +69,7 @@ pub fn paint(
         if calendars.is_empty() || y + HEADING > mini.y {
             continue;
         }
-        let heading = match account.kind {
-            AccountKind::Local => tr!("Local"),
-            AccountKind::Subscription { .. } => tr!("Subscriptions"),
-            AccountKind::CalDav { .. } => account.name.clone(),
-        };
+        let heading = account_title(account);
         let heading_rect = Rect::new(
             area.x + INSET + 8.0,
             y + 4.0,
@@ -94,6 +116,9 @@ pub fn paint(
                 Rect::new(check.x + CHECK + 8.0, row.y, row.width - CHECK - 24.0, ROW),
                 TextAlign::Start,
             );
+            if model.calendar_ring == Some(index) {
+                focus_ring_for(&palette, Shape::rounded(row, Radius::S), &mut painter.items);
+            }
             painter.hit(row, Hit::Calendar(index));
             y += ROW;
         }

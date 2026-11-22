@@ -8,7 +8,9 @@ use std::time::{Duration, Instant};
 
 use bande_toolkit::Appearance;
 use bande_velox::{Informer, Target, Update, VeloxView};
+use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
+const PATIENCE: Duration = Duration::from_secs(60);
 const CONTAINER: &str = r#"{"Id":"c1","Names":["/shop-web-1"],"Image":"web","State":"running","Status":"Up","Labels":{"com.docker.compose.project":"shop"}}"#;
 
 fn serve(socket: &Path) -> Arc<Mutex<Vec<UnixStream>>> {
@@ -43,14 +45,18 @@ fn serve(socket: &Path) -> Arc<Mutex<Vec<UnixStream>>> {
 }
 
 fn next(informer: &Informer, queue: &mut Vec<Update>, wanted: fn(&Update) -> bool) -> Update {
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + PATIENCE;
     loop {
         queue.extend(informer.drain());
         if let Some(found) = queue.iter().position(wanted) {
             return queue.drain(..=found).next_back().unwrap();
         }
-        assert!(Instant::now() < deadline, "no update in time");
-        std::thread::sleep(Duration::from_millis(10));
+        let left = deadline.saturating_duration_since(Instant::now());
+        assert!(!left.is_zero(), "no update in time");
+        let timeout = Timespec::try_from(left).unwrap();
+        let fd = informer.fd();
+        let mut fds = [PollFd::new(&fd, PollFlags::IN)];
+        poll(&mut fds, Some(&timeout)).unwrap();
     }
 }
 

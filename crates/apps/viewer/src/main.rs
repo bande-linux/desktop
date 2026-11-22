@@ -239,6 +239,7 @@ impl Viewer {
                     self.refresh_info(cx, sections);
                 }
                 Request::Changed => {}
+                Request::Open(paths) => self.open_paths(cx, paths),
             }
         }
         cx.refresh_menus();

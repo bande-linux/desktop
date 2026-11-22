@@ -189,7 +189,11 @@ impl Builder<'_> {
             ],
             vec![
                 zero,
-                self.key(Input::Point, ".", Binding::Character('.')),
+                self.key(
+                    Input::Point,
+                    self.engine.numbers.decimal.encode_utf8(&mut [0; 4]),
+                    Binding::Character('.'),
+                ),
                 self.equals(),
             ],
         ]

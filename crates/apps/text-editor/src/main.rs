@@ -9,7 +9,7 @@ use bande_l10n::{Text, text, tr};
 use bande_text_editor::{
     CHOICES, COLORS, DocumentView, FAMILIES, Format, LineEnding, Loaded, MAX_FILE_BYTES, Message,
     Opening, Record, Request, Session, Settings, TextEncoding, choose_files, choose_save_path,
-    encoding_name, new_id, now, open, read, read_bounded, spawn,
+    encoding_name, new_id, now, open, read, read_bounded, spawn, stamp,
 };
 use bande_toolkit::ui::{Alignment, ListMarker};
 
@@ -57,6 +57,10 @@ fn load(path: &Path, chosen: Option<&'static encoding_rs::Encoding>) -> Result<L
             _ => error.to_string(),
         })
         .and_then(|bytes| open(path, bytes, chosen))
+        .map(|loaded| Loaded {
+            stamp: stamp(path),
+            ..loaded
+        })
 }
 
 const VERSION_COMMAND: &str = "version:";
@@ -115,7 +119,14 @@ impl TextEditor {
 
     fn new_document(&mut self, cx: &mut Cx<Self>) {
         let untitled = self.next_untitled();
-        let opened = self.open_view(cx, new_id(), untitled, now(), Settings::RICH, Format::Rtf);
+        let opened = self.open_view(
+            cx,
+            new_id(),
+            untitled,
+            now(),
+            Settings::PLAIN,
+            Format::Plain,
+        );
         if let Some((window, _)) = opened {
             self.serve(cx, window);
         }
@@ -255,6 +266,7 @@ impl TextEditor {
             match request {
                 Request::Close => cx.close(window),
                 Request::SaveAs => self.ask_save_path(cx, window),
+                Request::Open(path) => self.open_path(cx, path),
                 Request::Remember(path) => self.remember(&path),
             }
         }

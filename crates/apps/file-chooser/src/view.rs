@@ -1,3 +1,4 @@
+use crate::choice::control;
 use std::cell::{Cell as Flag, RefCell};
 use std::collections::HashMap;
 use std::os::fd::BorrowedFd;
@@ -683,6 +684,9 @@ impl ChooserView {
                 move |index| push(&intents, Intent::Filter(index)),
             )));
         }
+        for choice in &self.chooser.dialog().choices {
+            tools.push(control(choice, self.chooser.answers()));
+        }
         if !matches!(
             self.chooser.dialog().mode,
             Mode::Open {
@@ -1037,6 +1041,27 @@ impl ChooserView {
                     .map_or_else(|| PathBuf::from(key), |path| (*path).clone())
             })
             .collect()
+    }
+
+    pub fn dropped(&mut self, paths: &[PathBuf]) {
+        let Some(first) = paths.first() else {
+            return;
+        };
+        if let [folder] = paths
+            && bande_volumes::quick_is_dir(folder)
+        {
+            return self.go(folder.clone());
+        }
+        let Some(parent) = first.parent() else {
+            return;
+        };
+        self.go(parent.to_path_buf());
+        let beside: Vec<PathBuf> = paths
+            .iter()
+            .filter(|path| path.parent() == Some(parent))
+            .cloned()
+            .collect();
+        self.select(&beside);
     }
 
     fn select(&mut self, paths: &[PathBuf]) {

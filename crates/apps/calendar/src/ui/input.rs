@@ -9,7 +9,8 @@ use jiff::civil::{DateTime, Time};
 
 use super::geometry::{self, TimeGrid};
 use super::{
-    CalendarView, Confirm, Drag, Hit, Mode, Part, Request, SIDEBAR_WIDTH, Signal, TOOLBAR_HEIGHT,
+    CalendarView, Confirm, Drag, Hit, Mode, Pane, Part, Request, SIDEBAR_WIDTH, Signal,
+    TOOLBAR_HEIGHT,
 };
 use crate::edit::{Scope, new_event, shifted};
 use crate::store::Found;
@@ -271,9 +272,198 @@ fn scroll_by(view: &mut CalendarView, at: Point, step: f32, wheel: bool) -> bool
     }
 }
 
+fn cycle_pane(view: &mut CalendarView, forward: bool) -> bool {
+    let sidebar = super::sidebar::order(&view.library);
+    let current = match (view.ui.focus().is_some(), view.pane) {
+        (true, _) => 2,
+        (false, Pane::Content) => 0,
+        (false, Pane::Sidebar(_)) => 1,
+    };
+    let step = |pane: usize| match forward {
+        true => (pane + 1) % 3,
+        false => (pane + 2) % 3,
+    };
+    let mut next = step(current);
+    if next == 1 && sidebar.is_empty() {
+        next = step(next);
+    }
+    view.keyboard = true;
+    view.ui.clear_focus();
+    match next {
+        0 => view.pane = Pane::Content,
+        1 => {
+            let kept = match view.pane {
+                Pane::Sidebar(index) if sidebar.contains(&index) => Some(index),
+                _ => None,
+            };
+            if let Some(index) = kept.or(sidebar.first().copied()) {
+                view.pane = Pane::Sidebar(index);
+            }
+        }
+        _ => {
+            view.pane = Pane::Content;
+            let first = view.toolbar.add;
+            view.ui.set_focus(first);
+        }
+    }
+    true
+}
+
+fn sidebar_key(
+    view: &mut CalendarView,
+    key: Key,
+    modifiers: Modifiers,
+    index: usize,
+) -> Option<bool> {
+    let order = super::sidebar::order(&view.library);
+    let Some(position) = order.iter().position(|known| *known == index) else {
+        view.pane = Pane::Content;
+        return None;
+    };
+    let plain = modifiers == Modifiers::default();
+    let target = match key {
+        Key::Up if plain => position.checked_sub(1),
+        Key::Down if plain => Some(position + 1),
+        Key::Home if plain => Some(0),
+        Key::End if plain => order.len().checked_sub(1),
+        Key::Space | Key::Enter if plain => {
+            view.toggle_calendar(index);
+            return Some(true);
+        }
+        Key::Escape => {
+            view.pane = Pane::Content;
+            return Some(true);
+        }
+        Key::Menu => {
+            let at = view
+                .hits
+                .iter()
+                .find(|(_, hit)| *hit == Hit::Calendar(index))
+                .map(|(rect, _)| Point::new(rect.x + 24.0, rect.y + rect.height))?;
+            let menu = calendar_menu(view, index)?;
+            view.requests.push(Request::Menu(menu, at));
+            return Some(true);
+        }
+        Key::Left | Key::Right | Key::PageUp | Key::PageDown => return Some(false),
+        _ => return None,
+    };
+    if let Some(next) = target.and_then(|target| order.get(target)) {
+        view.pane = Pane::Sidebar(*next);
+    }
+    Some(true)
+}
+
+fn events_of_focus(view: &CalendarView) -> Vec<Found> {
+    let day = view.focus;
+    let mut found: Vec<Found> = view
+        .shown
+        .iter()
+        .filter(|found| found.occurrence.first_day <= day && day <= found.occurrence.last_day)
+        .cloned()
+        .collect();
+    found.sort_by(|a, b| {
+        (!a.occurrence.all_day, &a.occurrence.start)
+            .cmp(&(!b.occurrence.all_day, &b.occurrence.start))
+    });
+    found
+}
+
+fn step_event(view: &mut CalendarView, forward: bool) -> bool {
+    let events = events_of_focus(view);
+    let current = view
+        .selected_found()
+        .and_then(|selected| events.iter().position(|found| *found == selected));
+    let next = match (current, forward) {
+        (None, true) => Some(0),
+        (None, false) => events.len().checked_sub(1),
+        (Some(position), true) => Some(position + 1),
+        (Some(position), false) => position.checked_sub(1),
+    };
+    let Some(found) = next.and_then(|next| events.get(next)) else {
+        view.selected = None;
+        return false;
+    };
+    view.selected = Some(view.selection_of(found));
+    reveal(view, found);
+    true
+}
+
+fn reveal(view: &mut CalendarView, found: &Found) {
+    let Some(grid) = view.grid.filter(|_| !found.occurrence.all_day) else {
+        return;
+    };
+    let top = match found.occurrence.first_day < view.focus {
+        true => 0.0,
+        false => {
+            geometry::minutes_of(found.occurrence.start.datetime()) as f32 * grid.hour_height / 60.0
+        }
+    };
+    let visible = grid.hours_area().height;
+    if top < view.scroll || top > view.scroll + visible - grid.hour_height {
+        view.scroll = (top - grid.hour_height).max(0.0);
+    }
+}
+
+fn move_focus(view: &mut CalendarView, days: i64) -> bool {
+    view.keyboard = true;
+    let day = view.focus.saturating_add(days.days());
+    view.focus_day(day);
+    true
+}
+
+fn content_key(view: &mut CalendarView, key: Key, modifiers: Modifiers) -> Option<bool> {
+    if modifiers != Modifiers::default() && !(key == Key::Tab && modifiers.shift) {
+        return None;
+    }
+    let (first, last) = super::paint::period(view.mode, view.focus, view.first_weekday());
+    Some(match key {
+        Key::Left => move_focus(view, -1),
+        Key::Right => move_focus(view, 1),
+        Key::Up | Key::Down if matches!(view.mode, Mode::Month | Mode::Year) => {
+            move_focus(view, if key == Key::Up { -7 } else { 7 })
+        }
+        Key::Up | Key::Down => {
+            view.scroll += match key {
+                Key::Up => -view.hour_height,
+                _ => view.hour_height,
+            };
+            true
+        }
+        Key::PageUp | Key::PageDown => {
+            view.keyboard = true;
+            view.shift(if key == Key::PageUp { -1 } else { 1 });
+            true
+        }
+        Key::Home => move_focus(view, (first - view.focus).get_days().into()),
+        Key::End => move_focus(view, (last - view.focus).get_days() as i64 - 1),
+        Key::Tab => {
+            view.keyboard = true;
+            step_event(view, !modifiers.shift)
+        }
+        _ => return None,
+    })
+}
+
 fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Event) -> bool {
     if modifiers.logo {
         return false;
+    }
+    if key == Key::Function(6) && !modifiers.control && !modifiers.alt {
+        return cycle_pane(view, !modifiers.shift);
+    }
+    if view.ui.focus().is_none() {
+        let handled = match view.pane {
+            Pane::Sidebar(index) => {
+                view.keyboard = true;
+                sidebar_key(view, key, modifiers, index)
+            }
+            Pane::Content => content_key(view, key, modifiers),
+        };
+        match handled {
+            Some(true) => return true,
+            Some(false) if key != Key::Tab => return false,
+            _ => {}
+        }
     }
     let editing = view.ui.focus().is_some();
     if editing {
@@ -311,19 +501,14 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
             }
             _ => view.ui.handle(event),
         },
-        Key::Left => menu_command(view, ACTION_PREVIOUS),
-        Key::Right => menu_command(view, ACTION_NEXT),
-        Key::Up | Key::Down if matches!(view.mode, Mode::Day | Mode::Week) => {
-            view.scroll += match key {
-                Key::Up => -view.hour_height,
-                _ => view.hour_height,
-            };
-            true
-        }
         Key::Delete | Key::Backspace => menu_command(view, ACTION_DELETE),
         Key::Enter => match view.selected_found() {
             Some(found) => {
                 view.open_inspector(found);
+                true
+            }
+            None if matches!(view.mode, Mode::Month | Mode::Year) => {
+                view.set_mode(Mode::Day);
                 true
             }
             None => false,
@@ -376,6 +561,8 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
     let point = pointer.position;
     let double = pointer.count >= 2;
     view.press = Some(point);
+    view.keyboard = false;
+    view.pane = Pane::Content;
     let hit = hit_at(view, point);
     if pointer.button == PointerButton::Secondary {
         return match hit {
@@ -419,10 +606,8 @@ fn pointer_down(view: &mut CalendarView, pointer: &Pointer) -> bool {
     }
     match hit {
         Some(Hit::Calendar(index)) => {
-            if let Some(calendar) = view.library.calendars.get_mut(index) {
-                calendar.info.visible = !calendar.info.visible;
-                view.library.save(index);
-            }
+            view.pane = Pane::Sidebar(index);
+            view.toggle_calendar(index);
             true
         }
         Some(Hit::Account(_)) => false,

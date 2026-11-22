@@ -14,6 +14,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
+use bande_app::{Dropping, FileDrop};
 use bande_app_settings::{Stored, settings_folder};
 use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_file_chooser::{
@@ -46,6 +47,7 @@ const WAYLAND_PARENT: &str = "wayland:";
 struct FileDialog {
     view: ChooserView,
     chosen: Option<Finished>,
+    drop: FileDrop,
 }
 
 impl App for FileDialog {
@@ -55,6 +57,14 @@ impl App for FileDialog {
     }
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) {
+        match self.drop.event(window, &event, |_| true) {
+            Dropping::Over => return,
+            Dropping::Dropped(paths) => {
+                self.view.dropped(&paths);
+                return window.request_redraw();
+            }
+            Dropping::Other => {}
+        }
         let redraw = match event {
             WindowEvent::Input(input) => {
                 let handled = self.view.handle(&input);
@@ -248,7 +258,11 @@ fn run(dialog: Dialog) -> ExitCode {
         window.appearance(),
         TextSystem::new(),
     );
-    let mut app = FileDialog { view, chosen: None };
+    let mut app = FileDialog {
+        view,
+        chosen: None,
+        drop: FileDrop::default(),
+    };
     if let Err(error) = bande_toolkit::run(&mut window, &mut app) {
         tracing::error!("{error}");
     }

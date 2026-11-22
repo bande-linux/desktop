@@ -21,7 +21,7 @@ use crate::widgets::{
 use bande_audio::Direction;
 use bande_bluetooth::Kind as DeviceKind;
 use bande_config::Placement;
-use bande_config::{ACCENTS, MAX_INPUT_SOURCES};
+use bande_config::{ACCENTS, Accessibility, MAX_INPUT_SOURCES, carry};
 use bande_keyboard::{Action, shortcuts_in};
 use bande_settings_panes::SettingHit;
 use bande_settings_panes::{
@@ -791,6 +791,7 @@ impl SettingsView {
             List::AppVolumes => self.app_rows(),
             List::InputLevel => Vec::new(),
             List::InputSources => self.input_source_rows(),
+            List::LoginAccessibility => self.login_accessibility_rows(),
             List::Shortcuts => Vec::new(),
             List::About => self.about_rows(),
             List::Storage => self.storage_rows(),
@@ -904,6 +905,48 @@ impl SettingsView {
             ))),
         }
         rows
+    }
+
+    fn login_accessibility_rows(&mut self) -> Widgets {
+        let Some(login) = self
+            .locale
+            .as_ref()
+            .map(|locale| locale.login_accessibility.clone())
+        else {
+            return Vec::new();
+        };
+        let on = |id| self.values.get(&id) == Some(&Value::Flag(true));
+        let wanted = Accessibility {
+            screen_reader: on(SettingId::ScreenReader),
+            increase_contrast: on(SettingId::IncreaseContrast),
+            reduce_transparency: on(SettingId::ReduceTransparency),
+            reduce_motion: on(SettingId::ReduceMotion),
+            text_size: match self.values.get(&SettingId::TextSize) {
+                Some(Value::Number(percent)) => *percent,
+                _ => Accessibility::default().text_size,
+            },
+            ..Accessibility::default()
+        };
+        let words = carry(&wanted, &Accessibility::default());
+        if words == login {
+            return vec![muted_row(&tr!(
+                "The login screen uses these vision settings"
+            ))];
+        }
+        let button = (!self.refused.contains(&Privilege::Locale)).then(|| {
+            let mut send = intent(&self.intents, Intent::Locale);
+            boxed(Button::new(&tr!("Use at Login Screen"), move || {
+                send(LocaleCommand::LoginAccessibility(words.clone()))
+            }))
+        });
+        vec![boxed(Row::new(
+            Text::new(
+                &tr!("The login screen uses other vision settings"),
+                Tone::Muted,
+            )
+            .caption(),
+            button,
+        ))]
     }
 
     fn login_layouts_row(&mut self, sources: &[String], login: &[String]) -> Box<dyn Widget> {

@@ -4,6 +4,8 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
+use bande_config::{Accessibility, LOGIN_DEFAULTS, accessibility_source, carried};
+
 const LOCALE_FILE: &str = "/etc/locale.conf";
 const DEFAULT_LOCALE_FILE: &str = "/etc/default/locale";
 const LOCALE_GEN: &str = "/etc/locale.gen";
@@ -221,6 +223,14 @@ fn set_keyboard(codes: &[String]) -> io::Result<()> {
     Ok(())
 }
 
+fn set_login_accessibility(access: &Accessibility) -> io::Result<()> {
+    let path = Path::new(LOGIN_DEFAULTS);
+    if let Some(folder) = path.parent() {
+        fs::create_dir_all(folder)?;
+    }
+    write_atomically(path, &accessibility_source(access))
+}
+
 fn refuse(message: &str) -> ExitCode {
     eprintln!("{message}");
     ExitCode::from(2)
@@ -258,6 +268,13 @@ fn main() -> ExitCode {
                 return refuse("unknown keyboard layout");
             }
             finish(set_keyboard(codes))
+        }
+        Some((command, words)) if command == "accessibility" => {
+            let mut access = Accessibility::default();
+            match carried(&words.join(" "), &mut access) {
+                Ok(()) => finish(set_login_accessibility(&access)),
+                Err(error) => refuse(&error),
+            }
         }
         _ => refuse("bad arguments"),
     }

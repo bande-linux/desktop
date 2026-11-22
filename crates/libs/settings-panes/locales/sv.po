@@ -729,6 +729,12 @@ msgstr "Pekarens storlek"
 msgid "cursor size, mouse pointer, bigger pointer, arrow"
 msgstr "markörstorlek, muspekare, större pekare, pil"
 
+msgid "Login screen"
+msgstr "Inloggningsskärm"
+
+msgid "login, sign in, greeter, before signing in, screen reader at login"
+msgstr "inloggning, logga in, inloggningsskärm, före inloggning, skärmläsare vid inloggning"
+
 msgid "Hearing"
 msgstr "Hörsel"
 

@@ -1804,6 +1804,9 @@ impl SettingsView {
                     locale.pending = Some(SettingId::Region);
                 }
                 LocaleCommand::LoginKeyboard(codes) => locale.login_sources.clone_from(codes),
+                LocaleCommand::LoginAccessibility(words) => {
+                    locale.login_accessibility.clone_from(words);
+                }
                 LocaleCommand::Read => {}
             }
         }

@@ -1020,11 +1020,17 @@ msgstr "Skriv på mer än ett språk eller en layout"
 msgid "Up to {count} input sources can be used"
 msgstr "Upp till {count} inmatningskällor kan användas"
 
-msgid "The login screen uses these layouts"
-msgstr "Inloggningsskärmen använder de här layouterna"
+msgid "The login screen uses these vision settings"
+msgstr "Inloggningsskärmen använder de här synsinställningarna"
 
 msgid "Use at Login Screen"
 msgstr "Använd på inloggningsskärmen"
+
+msgid "The login screen uses other vision settings"
+msgstr "Inloggningsskärmen använder andra synsinställningar"
+
+msgid "The login screen uses these layouts"
+msgstr "Inloggningsskärmen använder de här layouterna"
 
 msgid "The login screen uses other layouts"
 msgstr "Inloggningsskärmen använder andra layouter"

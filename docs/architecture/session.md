@@ -370,15 +370,18 @@ brings up the dialog.
   - A device NetworkManager leaves unmanaged (ifupdown, systemd-networkd) shows its address from
     the kernel (rtnetlink) and why Settings leaves it alone. Bande never rewrites
     `/etc/network/interfaces` on its own: "Let Settings Manage This Connection…" runs
-    `bande-network-helper` under `pkexec` (`org.bande.network-helper`, admin each time). It shows
+    `bande-network-helper` under `pkexec` (`org.bande.network-helper`, admin, kept for a few
+    minutes). It shows
     the stanza lines it would disable, then keeps a copy of each file next to it (hidden in
     `interfaces.d`, which `source` globs), takes the interface down with `ifdown`, comments out
     only that interface's lines (splitting a shared `auto` line), reloads NetworkManager and adds
     an equivalent system connection (the Wi-Fi PSK in the root-only keyfile, as Debian's
     NetworkManager keeps it). It refuses anything it can't carry over safely (unknown options such
     as `post-up`, `wpa-conf`, mappings, bridges or VLANs on the interface, line continuations,
-    sources outside `interfaces.d`, a running `dhcpcd.service`), and puts every file back and the
-    interface up again if NetworkManager doesn't take over.
+    sources outside `interfaces.d`, a running `dhcpcd.service`). It reports the hand-over done
+    only once NetworkManager has connected the interface (within 90 seconds); otherwise it deletes
+    the connection it added, leaves the device unmanaged again, puts every file back and brings
+    the interface up again.
   - "Online" (`follow_online`, used by Software and Calendar) is NetworkManager's
     `CONNECTED_GLOBAL`, or a default route in the kernel through a device NetworkManager doesn't
     manage; nothing is sent to find out.

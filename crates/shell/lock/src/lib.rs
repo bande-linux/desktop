@@ -1016,6 +1016,15 @@ impl LockScreen {
         self.model.borrow().checking.is_some()
     }
 
+    pub fn can_switch_person(&mut self) -> bool {
+        let typed = self
+            .ui
+            .widget_as::<SecureField>(self.field)
+            .is_some_and(|field| !field.secret().is_empty());
+        let model = self.model.borrow();
+        model.checking.is_none() && model.asking.is_none() && !typed
+    }
+
     pub fn take_cancel(&mut self) -> bool {
         std::mem::take(&mut self.model.borrow_mut().cancel)
     }
@@ -1177,6 +1186,14 @@ impl LockScreen {
         if refusal.counts_as_attempt() {
             model.backoff.fail(at);
         }
+    }
+
+    pub fn backoff(&self) -> Backoff {
+        self.model.borrow().backoff.clone()
+    }
+
+    pub fn set_backoff(&mut self, backoff: Backoff) {
+        self.model.borrow_mut().backoff = backoff;
     }
 
     pub fn accepted(&mut self) {

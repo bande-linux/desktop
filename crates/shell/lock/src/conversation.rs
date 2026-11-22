@@ -118,7 +118,7 @@ impl Messages {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Backoff {
     failures: u32,
     until: Option<Instant>,

@@ -478,8 +478,12 @@ typed before the first prompt answers it. PAM's info and error messages stay und
 the last three of them, each at most 400 characters. Escape cancels; while checking it lets go
 of the conversation and starts a new one (greetd answers a cancel only once the module returns).
 greetd's and PAM's codes become sentences (wrong password, expired password or account, not
-allowed, too many attempts, unavailable); the raw text goes to the journal. After four wrong
-answers each further one waits 5 s, doubling to a minute, with a countdown under the field. The
+allowed, too many attempts, unavailable); the raw text goes to the journal. A refusal after an
+answer starts a new conversation at once; one before any prompt (`pam_nologin`, a PAM that cannot
+load) waits for the next answer, Escape or another person. After four wrong answers for the same
+login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
+the login window keeps the count per name across switching people. While a session is starting,
+the field holds text or a power confirmation is open, Up and Down do not switch people. The
 lock screen changes an expired password with `pam_chauthtok`; greetd runs no `pam_chauthtok`, so
 at login an expired password is only explained. greetd's messages are refused above 64 KiB.
 

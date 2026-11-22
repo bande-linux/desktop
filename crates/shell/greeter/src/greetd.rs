@@ -138,6 +138,10 @@ impl Login {
         self.phase == Phase::Idle
     }
 
+    pub fn is_starting(&self) -> bool {
+        self.phase == Phase::Starting
+    }
+
     pub fn is_cancelling(&self) -> bool {
         self.phase == Phase::Cancelling
     }

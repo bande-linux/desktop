@@ -51,6 +51,7 @@ struct Locker {
     user: User,
     transaction: Option<Transaction>,
     asked: bool,
+    answered: bool,
     pending: Option<Zeroizing<String>>,
     minutes: MinuteTimer,
     backdrop: Option<Inbox<(Look, Image)>>,
@@ -85,6 +86,7 @@ impl Locker {
             return;
         }
         self.asked = false;
+        self.answered = false;
         match Transaction::begin(PAM_SERVICE, &self.user.login) {
             Ok(transaction) => self.transaction = Some(transaction),
             Err(error) => {
@@ -108,6 +110,7 @@ impl Locker {
             return;
         }
         self.asked = false;
+        self.answered = true;
         let sent = self
             .transaction
             .as_ref()
@@ -145,7 +148,9 @@ impl Locker {
                     self.screen.refuse(refusal, frame_time().on_screen());
                     self.transaction = None;
                     self.pending = None;
-                    self.converse();
+                    if self.answered {
+                        self.converse();
+                    }
                 }
             }
         }
@@ -401,6 +406,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         user,
         transaction: None,
         asked: false,
+        answered: false,
         pending: None,
         minutes: MinuteTimer::new()?,
         backdrop: None,

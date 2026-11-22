@@ -483,7 +483,7 @@ fn follow_packs(
     let updates = updates.clone();
     let watch = Arc::clone(watch);
     let available = available.to_vec();
-    fetch_language_packs(wanted.clone(), move |fetched| {
+    fetch_language_packs(wanted.clone(), true, move |fetched| {
         let tongue = tongue(&wanted);
         let installed = installed_catalogs().contains(&tongue);
         let offered = installed || translations().contains(&tongue);
@@ -517,13 +517,28 @@ fn pack_names(code: &str) -> Vec<String> {
     names
 }
 
-pub(crate) fn fetch_language_packs(code: String, done: impl FnOnce(bool) + Send + 'static) {
+pub(crate) fn fetch_language_packs(
+    code: String,
+    dictionary: bool,
+    done: impl FnOnce(bool) + Send + 'static,
+) {
     spawn("language-packs", move || {
-        let names = pack_names(&code);
-        let names: Vec<&str> = names.iter().map(String::as_str).collect();
         let fetched = bande_bus::system()
             .map_err(bande_packages::Error::from)
-            .and_then(|system| Client::new(&system).install_missing(&names));
+            .and_then(|system| {
+                let client = Client::new(&system);
+                let mut names = pack_names(&code);
+                if dictionary {
+                    match crate::spelling::offered_dictionary(&client, &code) {
+                        Ok(name) => names.extend(name),
+                        Err(error) => {
+                            tracing::warn!("cannot look for a dictionary for {code}: {error}");
+                        }
+                    }
+                }
+                let names: Vec<&str> = names.iter().map(String::as_str).collect();
+                client.install_missing(&names)
+            });
         done(
             fetched
                 .inspect_err(|error| tracing::warn!("cannot fetch the language packs: {error}"))

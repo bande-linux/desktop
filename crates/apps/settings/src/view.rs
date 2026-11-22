@@ -1936,9 +1936,6 @@ impl SettingsView {
         if let Some(locale) = &mut self.locale {
             match &command {
                 LocaleCommand::Language(language) => {
-                    self.commands.push(Command::Spelling(
-                        crate::spelling::SpellingCommand::GetDictionary(language.clone()),
-                    ));
                     language.clone_into(&mut locale.language);
                     locale.pending = Some(SettingId::Language);
                 }

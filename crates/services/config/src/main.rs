@@ -3,7 +3,9 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use bande_config::{ConfigService, ConfigStore, ErrorNotifier, config_path, share_login_picture};
+use bande_config::{
+    ConfigService, ConfigStore, ErrorNotifier, config_path, login_look, share_login_look,
+};
 use zbus::blocking::Connection;
 
 fn open_in_editor(path: &Path) {
@@ -22,11 +24,11 @@ fn serve(path: &Path) -> Result<(ConfigService, Connection), Box<dyn Error>> {
         Arc::new(ConfigStore::default()),
         move |result| {
             if let Ok(loaded) = &result {
-                let config = &loaded.config;
+                let look = login_look(&loaded.config, std::env::home_dir().as_deref());
                 let mut shared = shared.lock().unwrap_or_else(PoisonError::into_inner);
-                if shared.as_ref() != Some(&config.wallpaper) {
-                    share_login_picture(&config.wallpaper);
-                    *shared = Some(config.wallpaper.clone());
+                if shared.as_ref() != Some(&look) {
+                    *shared = Some(look.clone());
+                    share_login_look(look);
                 }
             }
             notifier.report(result.as_ref().map(|loaded| loaded.problems.as_slice()));

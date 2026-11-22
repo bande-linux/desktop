@@ -1,4 +1,5 @@
 mod edit;
+mod login;
 mod login_picture;
 mod report;
 mod service;
@@ -14,9 +15,13 @@ pub use bande_design::Accent;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 
 pub use edit::Setting;
+pub use login::{
+    CARRIED_ACCESSIBILITY, LOGIN_DEFAULTS, accessibility_source, carried, carry,
+    login_accessibility_file, login_defaults, read_accessibility,
+};
 pub use login_picture::{
-    LOGIN_PICTURE_LIMIT, LOGIN_PICTURES, copy_login_picture, login_picture, login_picture_file,
-    share_login_picture,
+    LOGIN_LOOK_LIMIT, LOGIN_PICTURE_LIMIT, LOGIN_PICTURES, LoginLook, copy_login_look,
+    login_light_picture_file, login_look, login_look_file, login_picture_file, share_login_look,
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{
@@ -233,13 +238,29 @@ impl InputSource {
     }
 }
 
-pub fn system_input_sources(default_keyboard: &str) -> Vec<InputSource> {
-    let field = |name: &str| {
-        default_keyboard.lines().find_map(|line| {
-            let value = line.trim().strip_prefix(name)?.strip_prefix('=')?;
-            Some(value.trim().trim_matches('"').to_owned())
+fn keyboard_field(default_keyboard: &str, name: &str) -> Option<String> {
+    default_keyboard.lines().find_map(|line| {
+        let value = line.trim().strip_prefix(name)?.strip_prefix('=')?;
+        Some(value.trim().trim_matches('"').to_owned())
+    })
+}
+
+pub fn system_xkb_options(default_keyboard: &str) -> Vec<String> {
+    keyboard_field(default_keyboard, "XKBOPTIONS")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|option| {
+            option
+                .split_once(':')
+                .is_some_and(|(group, name)| is_xkb_name(group) && is_xkb_name(name))
         })
-    };
+        .map(str::to_owned)
+        .collect()
+}
+
+pub fn system_input_sources(default_keyboard: &str) -> Vec<InputSource> {
+    let field = |name: &str| keyboard_field(default_keyboard, name);
     let layouts = field("XKBLAYOUT").unwrap_or_default();
     let variants = field("XKBVARIANT").unwrap_or_default();
     let mut variants = variants.split(',');
@@ -284,9 +305,25 @@ pub fn system_keyboard<'a>(files: &[&'a str]) -> &'a str {
         .unwrap_or_default()
 }
 
+fn read_system_keyboard() -> String {
+    let files = SYSTEM_KEYBOARDS.map(|path| match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!("cannot read {path}: {error}");
+            }
+            String::new()
+        }
+    });
+    system_keyboard(&files.each_ref().map(String::as_str)).to_owned()
+}
+
 pub fn read_system_input_sources() -> Vec<InputSource> {
-    let files = SYSTEM_KEYBOARDS.map(|path| std::fs::read_to_string(path).unwrap_or_default());
-    system_input_sources(system_keyboard(&files.each_ref().map(String::as_str)))
+    system_input_sources(&read_system_keyboard())
+}
+
+pub fn read_system_xkb_options() -> Vec<String> {
+    system_xkb_options(&read_system_keyboard())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

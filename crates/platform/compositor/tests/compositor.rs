@@ -474,3 +474,29 @@ fn a_screen_sharing_viewer_clicks_and_types_and_its_keys_are_released_when_it_le
         "only the screenshot tool gets remote input"
     );
 }
+
+#[test]
+fn a_screen_sharing_viewer_only_watches_while_the_session_is_locked() {
+    let (mut server, mut editor) = focused_app();
+    let mut lock = locked(&mut server);
+    let mut screenshot = TestClient::connect_as_screenshot_tool(&mut server);
+    let socket = screenshot.connect_remote_input(&mut server);
+    let viewer = thread::spawn(move || act_as_a_remote_viewer(socket));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !viewer.is_finished() {
+        assert!(Instant::now() < deadline, "the viewer never finished");
+        roundtrip(&mut server, &mut [&mut editor, &mut lock, &mut screenshot]);
+        thread::sleep(Duration::from_millis(5));
+    }
+    viewer.join().unwrap();
+    roundtrip(&mut server, &mut [&mut editor, &mut lock, &mut screenshot]);
+    assert!(
+        lock.keys().is_empty(),
+        "no remote key reaches the lock screen"
+    );
+    assert!(
+        lock.buttons().is_empty(),
+        "no remote click reaches the lock screen"
+    );
+    assert!(!editor.keys().contains(&(KEY_A, true)));
+}

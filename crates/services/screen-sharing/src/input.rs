@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
@@ -9,11 +10,13 @@ use reis::ei;
 use reis::event::{Connection, Device, DeviceCapability, EiEvent};
 
 const DETENT: i32 = 120;
+const BUTTON: u32 = 1 << 31;
 const BUTTONS: [u32; 3] = [0x110, 0x112, 0x111];
 
 struct Emulated {
     connection: Option<Connection>,
     pointer: Option<Device>,
+    held: HashMap<u32, usize>,
     keys: Option<Device>,
     sequence: u32,
     region: Option<(f32, f32, f32, f32)>,
@@ -37,6 +40,26 @@ fn now_us() -> u64 {
 }
 
 impl Emulated {
+    /// Counts a press or release of `held` by one of the viewers sharing this connection;
+    /// whether the compositor should see it: the first press and the last release.
+    fn count(&mut self, held: u32, pressed: bool) -> bool {
+        let count = self.held.entry(held).or_default();
+        match pressed {
+            true => {
+                *count += 1;
+                *count == 1
+            }
+            false if *count == 0 => false,
+            false => {
+                *count -= 1;
+                if *count == 0 {
+                    self.held.remove(&held);
+                }
+                !self.held.contains_key(&held)
+            }
+        }
+    }
+
     fn take(&mut self, event: EiEvent) {
         match event {
             EiEvent::SeatAdded(added) => added.seat.bind_capabilities(
@@ -147,6 +170,7 @@ impl RemoteInput {
         let emulated = Arc::new(Mutex::new(Emulated {
             connection: None,
             pointer: None,
+            held: HashMap::new(),
             keys: None,
             sequence: 0,
             region: None,
@@ -199,6 +223,9 @@ impl Input for RemoteInput {
         let Some(code) = BUTTONS.get(usize::from(button)) else {
             return;
         };
+        if !lock(&self.emulated).count(u32::from(button) | BUTTON, pressed) {
+            return;
+        }
         let state = match pressed {
             true => ei::button::ButtonState::Press,
             false => ei::button::ButtonState::Released,
@@ -219,7 +246,10 @@ impl Input for RemoteInput {
     }
 
     fn key(&self, keysym: u32, down: bool) {
-        let emulated = lock(&self.emulated);
+        let mut emulated = lock(&self.emulated);
+        if !emulated.count(keysym & !BUTTON, down) {
+            return;
+        }
         let Some(keys) = emulated.keys.clone() else {
             return;
         };

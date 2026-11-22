@@ -27,3 +27,6 @@ msgstr "Någon tittar på den här skärmen"
 
 msgid "A viewer at {address} can see and control it. Click the screen symbol in the Taskbar to stop."
 msgstr "En visare på {address} kan se och styra den. Klicka på skärmsymbolen i aktivitetsfältet för att sluta."
+
+msgid "{computer} (locked)"
+msgstr "{computer} (låst)"

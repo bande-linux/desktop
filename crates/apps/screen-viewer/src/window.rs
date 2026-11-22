@@ -472,6 +472,11 @@ impl Pane {
                     self.stage = Stage::Asking(question);
                     self.rebuild();
                 }
+                Event::Renamed(name) => {
+                    if !name.is_empty() {
+                        self.title = name;
+                    }
+                }
                 Event::Connected { name, encrypted } => {
                     if !name.is_empty() {
                         self.title = name;
@@ -610,7 +615,7 @@ impl View for Pane {
                 .view
                 .and_then(|view| self.ui.widget_as::<SurfaceView>(view))
         {
-            view.release_keys();
+            view.release_held();
         }
     }
 

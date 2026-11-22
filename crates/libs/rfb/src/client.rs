@@ -17,8 +17,8 @@ use crate::clipboard::Clipboard;
 use crate::decode::Decoder;
 use crate::encode::Frame;
 use crate::protocol::{
-    Area, ENCODING_DESKTOP_SIZE, ENCODING_EXTENDED_CLIPBOARD, ENCODING_RAW, ENCODING_ZRLE,
-    LARGEST_SCREEN, PixelFormat, SECURITY_VENCRYPT, SECURITY_VNC, ServerMessage,
+    Area, ENCODING_DESKTOP_NAME, ENCODING_DESKTOP_SIZE, ENCODING_EXTENDED_CLIPBOARD, ENCODING_RAW,
+    ENCODING_ZRLE, LARGEST_SCREEN, PixelFormat, SECURITY_VENCRYPT, SECURITY_VNC, ServerMessage,
     VENCRYPT_X509_PLAIN, VENCRYPT_X509_VNC, Version, cut_text_message, key_event,
     parse_server_message, parse_version, pointer_event, set_encodings, set_pixel_format,
     update_request,
@@ -327,6 +327,8 @@ pub trait Screen {
     fn painted(&mut self, frame: &Frame, areas: &[Area]);
     /// The server's clipboard has this text now.
     fn copied(&mut self, text: String);
+    /// The server's screen has a new name, such as one that says it is locked.
+    fn renamed(&mut self, name: String);
 }
 
 fn send(transport: &mut Transport, message: &[u8]) -> io::Result<()> {
@@ -361,6 +363,7 @@ pub fn view(
             ENCODING_ZRLE,
             ENCODING_RAW,
             ENCODING_DESKTOP_SIZE,
+            ENCODING_DESKTOP_NAME,
             ENCODING_EXTENDED_CLIPBOARD,
         ]),
     )?;
@@ -419,6 +422,10 @@ pub fn view(
                 ServerMessage::Update(rectangles) => {
                     let mut areas = Vec::new();
                     for rectangle in &rectangles {
+                        if rectangle.encoding == ENCODING_DESKTOP_NAME {
+                            screen.renamed(String::from_utf8_lossy(&rectangle.data).into_owned());
+                            continue;
+                        }
                         if rectangle.encoding == ENCODING_DESKTOP_SIZE {
                             frame = Frame {
                                 width: u32::from(rectangle.area.width),

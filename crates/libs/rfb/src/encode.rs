@@ -3,8 +3,8 @@ use std::io;
 use flate2::{Compress, Compression, FlushCompress, Status};
 
 use crate::protocol::{
-    Area, Compact, ENCODING_DESKTOP_SIZE, ENCODING_RAW, ENCODING_ZRLE, PixelFormat,
-    rectangle_header,
+    Area, Compact, ENCODING_DESKTOP_NAME, ENCODING_DESKTOP_SIZE, ENCODING_RAW, ENCODING_ZRLE,
+    PixelFormat, rectangle_header,
 };
 
 const TILE: u32 = 64;
@@ -93,6 +93,7 @@ pub struct Encoder {
     pub format: PixelFormat,
     zrle: bool,
     pub desktop_size: bool,
+    pub desktop_name: bool,
     zlib: Compress,
 }
 
@@ -102,6 +103,7 @@ impl Default for Encoder {
             format: PixelFormat::NATIVE,
             zrle: false,
             desktop_size: false,
+            desktop_name: false,
             zlib: Compress::new(Compression::fast(), true),
         }
     }
@@ -111,6 +113,7 @@ impl Encoder {
     pub fn set_encodings(&mut self, encodings: &[i32]) {
         self.zrle = encodings.contains(&ENCODING_ZRLE);
         self.desktop_size = encodings.contains(&ENCODING_DESKTOP_SIZE);
+        self.desktop_name = encodings.contains(&ENCODING_DESKTOP_NAME);
     }
 
     /// Encodes the part of `area` inside `frame`; false when none of it is.

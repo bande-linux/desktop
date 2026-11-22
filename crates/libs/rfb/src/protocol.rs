@@ -6,10 +6,12 @@ pub const VENCRYPT_X509_PLAIN: u32 = 262;
 pub const ENCODING_RAW: i32 = 0;
 pub const ENCODING_ZRLE: i32 = 16;
 pub const ENCODING_DESKTOP_SIZE: i32 = -223;
+pub const ENCODING_DESKTOP_NAME: i32 = -307;
 pub const ENCODING_EXTENDED_CLIPBOARD: i32 = 0xc0a1_e5ce_u32 as i32;
 pub const MOST_CUT_TEXT: usize = 1 << 20;
 pub const LARGEST_SCREEN: u16 = 8192;
 const MOST_ZRLE: usize = 64 << 20;
+const MOST_NAME: usize = 4096;
 const MOST_ENCODINGS: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -323,6 +325,25 @@ pub fn rectangle_header(area: Area, encoding: i32, out: &mut Vec<u8>) {
     out.extend_from_slice(&encoding.to_be_bytes());
 }
 
+/// A framebuffer update that only renames the screen (the DesktopName pseudo-encoding).
+pub fn desktop_name(name: &str) -> Vec<u8> {
+    let mut message = Vec::new();
+    update_header(1, &mut message);
+    rectangle_header(
+        Area {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        },
+        ENCODING_DESKTOP_NAME,
+        &mut message,
+    );
+    message.extend_from_slice(&(name.len() as u32).to_be_bytes());
+    message.extend_from_slice(name.as_bytes());
+    message
+}
+
 pub fn update_header(rectangles: u16, out: &mut Vec<u8>) {
     out.extend_from_slice(&[0, 0]);
     out.extend_from_slice(&rectangles.to_be_bytes());
@@ -402,6 +423,17 @@ fn parse_update(
                         length
                     }
                 }
+            }
+            ENCODING_DESKTOP_NAME => {
+                let Some(length) = buffer.get(at..at + 4) else {
+                    return Ok(None);
+                };
+                at += 4;
+                let length = be32(length, 0) as usize;
+                if length > MOST_NAME {
+                    return Err(Refused::TooLong);
+                }
+                length
             }
             other => return Err(Refused::UnknownEncoding(other)),
         };

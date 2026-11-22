@@ -12,7 +12,8 @@ use bande_rfb::encode::{Encoder, Frame, changed_areas};
 use bande_rfb::protocol::{
     Area, ClientMessage, ENCODING_DESKTOP_SIZE, ENCODING_EXTENDED_CLIPBOARD, MOST_CUT_TEXT,
     SECURITY_VENCRYPT, SECURITY_VNC, VENCRYPT_X509_PLAIN, VENCRYPT_X509_VNC, VERSION, Version,
-    cut_text_message, parse_message, parse_version, rectangle_header, server_init, update_header,
+    cut_text_message, desktop_name, parse_message, parse_version, rectangle_header, server_init,
+    update_header,
 };
 use bande_rfb::transport::{Transport, read_array, read_u32};
 use ring::rand::{SecureRandom, SystemRandom};
@@ -25,12 +26,12 @@ use super::{Host, Viewing};
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const HANDSHAKE_DEADLINE: Duration = Duration::from_secs(60);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
-const FAILURE_DELAY: Duration = Duration::from_secs(1);
 const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 const MOST_CREDENTIAL: usize = 1024;
 const MOST_UNPARSED: usize = MOST_CUT_TEXT + 64 * 1024;
 const SERVER_CUT_TEXT: u8 = 3;
 const BUTTONS: u8 = 3;
+const MOST_HELD_KEYS: usize = 64;
 const WHEEL: [(u8, i32, i32); 4] = [
     (1 << 3, 0, -1),
     (1 << 4, 0, 1),
@@ -45,7 +46,7 @@ fn refused(why: &str) -> io::Error {
 }
 
 fn with_reason(code: Option<u32>, reason: &str) -> Vec<u8> {
-    let mut message = code.map(u32::to_be_bytes).unwrap_or_default().to_vec();
+    let mut message = code.map_or_else(Vec::new, |code| code.to_be_bytes().to_vec());
     message.extend_from_slice(&(reason.len() as u32).to_be_bytes());
     message.extend_from_slice(reason.as_bytes());
     message
@@ -127,7 +128,7 @@ fn shake_hands(
     host: &dyn Host,
     tls: &Arc<ServerConfig>,
     limits: &Arc<Limits>,
-) -> io::Result<Option<Transport>> {
+) -> io::Result<Option<(Transport, Seat)>> {
     socket.write_all(VERSION)?;
     let version = parse_version(&read_array::<12>(&mut socket)?)
         .ok_or_else(|| refused("the viewer speaks no known RFB version"))?;
@@ -186,13 +187,20 @@ fn shake_hands(
         }
         transport.flush()
     };
+    limits.slow_down();
     if checked == Checked::Wrong {
-        limits.failed(peer);
         tracing::info!("a viewer at {peer} gave a wrong password");
-        thread::sleep(FAILURE_DELAY);
+        limits.failed(peer);
         failure(&mut transport, "Wrong password.")?;
         return Ok(None);
     }
+    let Some(seat) = limits.seat() else {
+        failure(
+            &mut transport,
+            "Four viewers are connected. Try again later.",
+        )?;
+        return Ok(None);
+    };
     if !host.admit(peer) {
         tracing::info!("the viewer at {peer} was not let in");
         failure(
@@ -204,7 +212,7 @@ fn shake_hands(
     transport.write_all(&0u32.to_be_bytes())?;
     transport.flush()?;
     read_array::<1>(&mut transport)?;
-    Ok(Some(transport))
+    Ok(Some((transport, seat)))
 }
 
 struct Request {
@@ -253,11 +261,19 @@ struct Viewer<'a> {
     unparsed: Vec<u8>,
     buttons: u8,
     keys: Vec<u32>,
+    locked: bool,
+    name: String,
     _seat: Seat,
 }
 
 impl Drop for Viewer<'_> {
     fn drop(&mut self) {
+        self.release_held();
+    }
+}
+
+impl Viewer<'_> {
+    fn release_held(&mut self) {
         for keysym in std::mem::take(&mut self.keys) {
             self.viewing.input.key(keysym, false);
         }
@@ -266,10 +282,26 @@ impl Drop for Viewer<'_> {
                 self.viewing.input.button(button, false);
             }
         }
+        self.buttons = 0;
     }
-}
 
-impl Viewer<'_> {
+    fn follow_host(&mut self) -> io::Result<()> {
+        let locked = self.host.locked();
+        if locked && !self.locked {
+            self.release_held();
+        }
+        self.locked = locked;
+        let name = self.host.name();
+        if name != self.name {
+            if self.encoder.desktop_name {
+                self.transport.write_all(&desktop_name(&name))?;
+                self.transport.flush()?;
+            }
+            self.name = name;
+        }
+        Ok(())
+    }
+
     fn update(&mut self, frame: &Arc<Frame>) -> io::Result<()> {
         let Some(request) = self.request.take() else {
             return Ok(());
@@ -361,13 +393,16 @@ impl Viewer<'_> {
             ClientMessage::Key { down, keysym } => {
                 let held = self.keys.iter().position(|key| *key == keysym);
                 match (down, held) {
-                    (true, None) => self.keys.push(keysym),
+                    (true, None) if !self.locked && self.keys.len() < MOST_HELD_KEYS => {
+                        self.keys.push(keysym);
+                        self.viewing.input.key(keysym, true);
+                    }
                     (false, Some(at)) => {
                         self.keys.remove(at);
+                        self.viewing.input.key(keysym, false);
                     }
                     _ => {}
                 }
-                self.viewing.input.key(keysym, down);
             }
             ClientMessage::Pointer { buttons, x, y } => self.point(buttons, x, y),
             ClientMessage::CutText(text) => {
@@ -385,8 +420,14 @@ impl Viewer<'_> {
     }
 
     fn point(&mut self, buttons: u8, x: u16, y: u16) {
+        let buttons = match self.locked {
+            true => buttons & self.buttons,
+            false => buttons,
+        };
         let input = &self.viewing.input;
-        input.pointer(u32::from(x), u32::from(y));
+        if !self.locked {
+            input.pointer(u32::from(x), u32::from(y));
+        }
         let pressed = buttons & !self.buttons;
         let released = self.buttons & !buttons;
         for button in 0..BUTTONS {
@@ -456,6 +497,7 @@ impl Viewer<'_> {
             if latest.ended {
                 return Ok(());
             }
+            self.follow_host()?;
             self.share_clipboard(latest.copy_serial, latest.copied)?;
             if let Some(frame) = &latest.frame
                 && self.request.is_some()
@@ -509,11 +551,8 @@ fn serve_viewer(
     let shaken = shake_hands(socket, peer, host, tls, limits);
     drop(finished);
     drop(handshake);
-    let Some(mut transport) = shaken? else {
+    let Some((mut transport, seat)) = shaken? else {
         return Ok(());
-    };
-    let Some(seat) = limits.seat() else {
-        return Err(io::Error::other("four viewers are connected"));
     };
     let Some(viewing) = host.view(peer) else {
         return Err(io::Error::other("the screen cannot be shown"));
@@ -523,7 +562,8 @@ fn serve_viewer(
         .first_frame(FIRST_FRAME_TIMEOUT)
         .ok_or_else(|| io::Error::other("the screen showed no picture"))?;
     let area = frame.area();
-    transport.write_all(&server_init(area.width, area.height, &host.name()))?;
+    let name = host.name();
+    transport.write_all(&server_init(area.width, area.height, &name))?;
     transport.flush()?;
     let copy_serial = viewing.screen.latest().copy_serial;
     let mut viewer = Viewer {
@@ -542,9 +582,21 @@ fn serve_viewer(
         unparsed: Vec::new(),
         buttons: 0,
         keys: Vec::new(),
+        locked: host.locked(),
+        name,
         _seat: seat,
     };
     viewer.run()
+}
+
+fn refuse_at_once(socket: &TcpStream, reason: &str) {
+    let message = [VERSION.to_vec(), vec![0], with_reason(None, reason)].concat();
+    if let Err(error) = socket
+        .set_nonblocking(true)
+        .and_then(|()| (&*socket).write_all(&message))
+    {
+        tracing::debug!("cannot tell a viewer why it was refused: {error}");
+    }
 }
 
 /// Serves the viewers that connect to `listener` and that `allowed` lets through, each on a
@@ -572,9 +624,13 @@ pub fn serve(
             tracing::info!("refused a viewer at {peer}, which is not on the local network");
             continue;
         }
-        let Some(handshake) = limits.handshake(peer) else {
-            tracing::info!("refused a viewer at {peer}: it is already connecting");
-            continue;
+        let handshake = match limits.handshake(peer) {
+            Ok(handshake) => handshake,
+            Err(reason) => {
+                tracing::info!("refused a viewer at {peer}: {reason}");
+                refuse_at_once(&socket, reason);
+                continue;
+            }
         };
         let (host, tls, limits) = (Arc::clone(&host), Arc::clone(&tls), Arc::clone(&limits));
         let spawned =

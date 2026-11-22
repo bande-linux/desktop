@@ -1,4 +1,5 @@
 use std::net::IpAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::thread;
@@ -27,6 +28,7 @@ pub struct Desktop {
     password: Option<String>,
     capture: Mutex<Weak<Capture>>,
     name: String,
+    locked: AtomicBool,
 }
 
 fn config() -> Config {
@@ -62,6 +64,7 @@ impl Desktop {
             password,
             capture: Mutex::new(Weak::new()),
             name,
+            locked: AtomicBool::new(true),
         }
     }
 
@@ -78,16 +81,15 @@ impl Desktop {
         }
     }
 
-    /// Gives viewers the text copied here, when anyone is viewing.
-    fn locked(&self) -> bool {
-        bande_bus::system()
-            .and_then(|system| bande_bus::logind::own_session(&system)?.locked_hint())
-            .inspect_err(|error| {
-                tracing::warn!("cannot tell whether the screen is locked: {error}")
-            })
-            .unwrap_or(true)
+    /// Follows whether the session is locked; viewers then only watch, and are told.
+    pub fn set_locked(&self, locked: bool) {
+        self.locked.store(locked, Ordering::Release);
+        if let Some(capture) = self.capture().upgrade() {
+            capture.screen.nudge();
+        }
     }
 
+    /// Gives viewers the text copied here, when anyone is viewing.
     pub fn clipboard_changed(&self) {
         let Some(capture) = self.capture().upgrade() else {
             return;
@@ -231,7 +233,14 @@ impl Host for Desktop {
         }
     }
 
+    fn locked(&self) -> bool {
+        self.locked.load(Ordering::Acquire)
+    }
+
     fn name(&self) -> String {
-        self.name.clone()
+        match self.locked() {
+            true => tr!("{computer} (locked)", computer = self.name.clone()),
+            false => self.name.clone(),
+        }
     }
 }

@@ -47,6 +47,7 @@ struct TestHost {
     screen: Arc<Screen>,
     input: Arc<Recorded>,
     older_viewers: AtomicBool,
+    locked: AtomicBool,
 }
 
 impl Host for TestHost {
@@ -74,8 +75,15 @@ impl Host for TestHost {
         self.input.0.lock().unwrap().push(Sent::Copied(text));
     }
 
+    fn locked(&self) -> bool {
+        self.locked.load(Ordering::SeqCst)
+    }
+
     fn name(&self) -> String {
-        "test screen".to_owned()
+        match self.locked() {
+            true => "test screen (locked)".to_owned(),
+            false => "test screen".to_owned(),
+        }
     }
 }
 
@@ -107,6 +115,7 @@ impl Prompter for Answers {
 enum Shown {
     Picture(Frame),
     Copied(String),
+    Renamed(String),
 }
 
 struct Window(Sender<Shown>);
@@ -120,6 +129,10 @@ impl client::Screen for Window {
 
     fn copied(&mut self, text: String) {
         let _ = self.0.send(Shown::Copied(text));
+    }
+
+    fn renamed(&mut self, name: String) {
+        let _ = self.0.send(Shown::Renamed(name));
     }
 }
 
@@ -140,6 +153,7 @@ fn start(older_viewers: bool) -> (u16, Vec<u8>, Arc<TestHost>) {
         screen,
         input: Arc::default(),
         older_viewers: AtomicBool::new(older_viewers),
+        locked: AtomicBool::new(false),
     });
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -237,9 +251,30 @@ fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clip
                 assert_eq!(text, "κόσμε\nline");
                 break;
             }
-            Shown::Picture(_) => {}
+            Shown::Picture(_) | Shown::Renamed(_) => {}
         }
     }
+
+    host.locked.store(true, Ordering::SeqCst);
+    host.screen.nudge();
+    loop {
+        if let Shown::Renamed(name) = next(&seen) {
+            assert_eq!(
+                name, "test screen (locked)",
+                "the viewer is told the computer is locked"
+            );
+            break;
+        }
+    }
+    send(Command::Key {
+        keysym: 0x62,
+        down: true,
+    });
+    send(Command::Pointer {
+        x: 0,
+        y: 0,
+        buttons: 4,
+    });
     drop(commands);
     (&wake).write_all(&[1]).unwrap();
     viewer.join().unwrap();
@@ -253,6 +288,12 @@ fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clip
             Sent::Key(0x61, false),
             Sent::Button(0, false),
         ],
+    );
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(
+        host.input.0.lock().unwrap().len(),
+        6,
+        "a viewer only watches a locked computer: held input was let go and nothing more sent"
     );
 }
 
@@ -272,12 +313,18 @@ fn a_wrong_password_is_refused_and_older_viewers_need_permission() {
         [0, 1, 0, 0, 1, 6],
         "only X509Plain, with the whole password, until older viewers are allowed"
     );
-    let mut second = connected(port);
-    let mut greeting = [0; 12];
-    assert!(
-        second.read_exact(&mut greeting).is_err(),
-        "one handshake at a time from one address"
-    );
+    let mut busy = Answers {
+        password: PASSWORD,
+        seen: None,
+    };
+    match client::connect(connected(port), "127.0.0.1", false, &mut busy) {
+        Err(Failure::Refused(reason)) => assert_eq!(
+            reason, "This computer is already connecting.",
+            "one handshake at a time from one address, and the viewer is told why"
+        ),
+        Err(other) => panic!("expected a refusal, got {other:?}"),
+        Ok(_) => panic!("a second handshake from one address got in"),
+    }
     drop(socket);
     thread::sleep(Duration::from_millis(200));
     let mut answers = Answers {

@@ -59,6 +59,7 @@ pub enum Event {
     },
     Painted(Vec<Region>),
     Copied(String),
+    Renamed(String),
     Ended(Option<String>),
 }
 
@@ -275,6 +276,10 @@ impl Screen for Shown<'_> {
 
     fn copied(&mut self, text: String) {
         self.feed.send(Event::Copied(text));
+    }
+
+    fn renamed(&mut self, name: String) {
+        self.feed.send(Event::Renamed(name));
     }
 }
 

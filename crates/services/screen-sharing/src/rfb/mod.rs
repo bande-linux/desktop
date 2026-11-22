@@ -40,6 +40,8 @@ pub trait Host: Send + Sync {
     fn admit(&self, peer: IpAddr) -> bool;
     /// The viewer at `peer` sees the screen from now on.
     fn view(&self, peer: IpAddr) -> Option<Viewing>;
+    /// Whether the session is locked: viewers then only watch.
+    fn locked(&self) -> bool;
     /// A viewer copied this text.
     fn copied(&self, text: String);
     /// The name viewers show for this screen.

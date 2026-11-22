@@ -4,7 +4,7 @@ use std::os::fd::OwnedFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bande_content::{Decoded, Pixels, decode_confined};
 use bande_xdg::runtime_dir;
@@ -14,10 +14,10 @@ use rustix::fs::{MemfdFlags, memfd_create};
 
 use bande_l10n::tr;
 use bande_printers::http::Response;
-use bande_printers::{Error, ScanCapabilities, ScanOptions};
+use bande_printers::{Error, ScanCapabilities, ScanOptions, ScanSource};
 use roxmltree::{Document, Node};
 
-use crate::link::{Address, HttpRequest, http, is_identity_change};
+use crate::link::{Address, Cancel, HttpRequest, http, is_identity_change};
 use crate::store::Pins;
 
 pub const PLATEN: &str = "Platen";
@@ -31,7 +31,7 @@ pub const PAGE_LIMIT: usize = 128 << 20;
 pub const MOST_PAGES: usize = 200;
 const ANSWER_TIME: Duration = Duration::from_secs(30);
 const PAGE_TIME: Duration = Duration::from_secs(180);
-const BUSY_RETRIES: u32 = 15;
+const PAGE_DEADLINE: Duration = Duration::from_secs(300);
 const BUSY_PAUSE: Duration = Duration::from_secs(2);
 const STANDARD_RESOLUTIONS: [u32; 6] = [75, 100, 150, 200, 300, 600];
 const HIGHEST_RESOLUTION: u32 = 1200;
@@ -51,6 +51,7 @@ pub enum ScanError {
     FeederEmpty,
     NotSupported,
     Unreadable,
+    Cancelled,
     Refused(u16),
 }
 
@@ -67,6 +68,7 @@ impl ScanError {
             Self::FeederEmpty => tr!("Put the pages in the document feeder and try again."),
             Self::NotSupported => tr!("The scanner can’t scan this way."),
             Self::Unreadable => tr!("The scanner sent something that can’t be read."),
+            Self::Cancelled => tr!("Scanning was stopped."),
             Self::Refused(status) => tr!(
                 "The scanner refused to scan (error {status}).",
                 status = status.to_string()
@@ -107,26 +109,42 @@ pub struct Scanner {
     pub sources: Vec<Source>,
 }
 
-impl Scanner {
-    pub fn public(&self) -> ScanCapabilities {
-        let usable = || self.sources.iter().filter(|source| source.jpeg);
-        let mut resolutions: Vec<u32> = usable()
-            .flat_map(|source| source.resolutions.iter().copied())
-            .collect();
-        resolutions.sort_unstable();
-        resolutions.dedup();
-        let standard: Vec<u32> = resolutions
+impl Source {
+    fn public(&self) -> ScanSource {
+        let standard: Vec<u32> = self
+            .resolutions
             .iter()
             .copied()
             .filter(|dpi| STANDARD_RESOLUTIONS.contains(dpi))
             .collect();
-        ScanCapabilities {
-            sources: usable().map(|source| source.name.to_owned()).collect(),
-            color: usable().any(|source| source.color),
+        ScanSource {
+            name: self.name.to_owned(),
+            color: self.color,
             resolutions: match standard.is_empty() {
-                true => resolutions,
+                true => self.resolutions.clone(),
                 false => standard,
             },
+        }
+    }
+
+    fn resolution(&self, wanted: u32) -> u32 {
+        self.resolutions
+            .iter()
+            .copied()
+            .min_by_key(|dpi| dpi.abs_diff(wanted))
+            .unwrap_or(wanted)
+    }
+}
+
+impl Scanner {
+    pub fn public(&self) -> ScanCapabilities {
+        ScanCapabilities {
+            sources: self
+                .sources
+                .iter()
+                .filter(|source| source.jpeg)
+                .map(Source::public)
+                .collect(),
         }
     }
 }
@@ -235,6 +253,7 @@ pub fn capabilities(address: &Address, pins: &Pins) -> Result<Scanner, ScanError
             body: None,
             most: DESCRIPTION_LIMIT,
             answer: ANSWER_TIME,
+            cancel: None,
         },
     )?;
     match response.status {
@@ -243,17 +262,11 @@ pub fn capabilities(address: &Address, pins: &Pins) -> Result<Scanner, ScanError
     }
 }
 
-fn settings(scanner: &Scanner, source: &Source, options: &ScanOptions) -> String {
+fn settings(scanner: &Scanner, source: &Source, options: &ScanOptions, dpi: u32) -> String {
     let mode = match (options.color && source.color, source.gray) {
         (false, true) => GRAY,
         _ => COLOR,
     };
-    let dpi = source
-        .resolutions
-        .iter()
-        .copied()
-        .min_by_key(|dpi| dpi.abs_diff(options.resolution))
-        .unwrap_or(options.resolution);
     let mut parts = scanner
         .version
         .split('.')
@@ -301,102 +314,145 @@ fn job_path(address: &Address, location: &str) -> Option<String> {
     Some(path.trim_end_matches('/').to_owned())
 }
 
-fn get(address: &Address, pins: &Pins, path: &str, most: usize) -> Result<Response, ScanError> {
-    let request = HttpRequest {
-        method: "GET",
-        path,
-        body: None,
-        most,
-        answer: PAGE_TIME,
-    };
-    Ok(http(address, pins, &request)?)
+struct Job<'a> {
+    address: &'a Address,
+    pins: &'a Pins,
+    path: String,
+    ended: bool,
 }
 
-/// Scans with `options`, giving each page as the scanner sent it to `keep`, and returns how many
-/// pages there were.
+impl Drop for Job<'_> {
+    fn drop(&mut self) {
+        if self.ended {
+            return;
+        }
+        let request = HttpRequest {
+            method: "DELETE",
+            path: &self.path,
+            body: None,
+            most: ANSWER_LIMIT,
+            answer: ANSWER_TIME,
+            cancel: None,
+        };
+        if let Err(error) = http(self.address, self.pins, &request) {
+            tracing::info!("cannot end a scan job: {error}");
+        }
+    }
+}
+
+fn pause(cancel: &Cancel, deadline: Instant) -> Result<(), ScanError> {
+    if Instant::now() + BUSY_PAUSE > deadline {
+        return Err(ScanError::Busy);
+    }
+    std::thread::sleep(BUSY_PAUSE);
+    match cancel.stopped() {
+        true => Err(ScanError::Cancelled),
+        false => Ok(()),
+    }
+}
+
+fn ask(
+    address: &Address,
+    pins: &Pins,
+    request: &HttpRequest<'_>,
+    cancel: &Cancel,
+) -> Result<Response, ScanError> {
+    http(address, pins, request).map_err(|error| match cancel.stopped() {
+        true => ScanError::Cancelled,
+        false => error.into(),
+    })
+}
+
+/// Scans with `options`, giving each page as the scanner sent it to `keep`, and returns the
+/// resolution it scanned at. A scan stops when `cancel` is stopped, and the job is ended on the
+/// scanner whenever it did not end by itself.
 pub fn scan(
     address: &Address,
     pins: &Pins,
     scanner: &Scanner,
     options: &ScanOptions,
+    cancel: &Cancel,
     keep: &mut dyn FnMut(Vec<u8>) -> Result<(), ScanError>,
-) -> Result<usize, ScanError> {
+) -> Result<u32, ScanError> {
     let source = scanner
         .sources
         .iter()
         .find(|source| source.name == options.source && source.jpeg)
         .ok_or(ScanError::NotSupported)?;
-    let body = settings(scanner, source, options);
+    let dpi = source.resolution(options.resolution);
+    let body = settings(scanner, source, options, dpi);
     let jobs = format!("{}/ScanJobs", base(address));
-    let mut retries = 0;
+    let deadline = Instant::now() + PAGE_DEADLINE;
     let created = loop {
-        let created = http(
-            address,
-            pins,
-            &HttpRequest {
-                method: "POST",
-                path: &jobs,
-                body: Some(("text/xml", body.as_bytes())),
-                most: ANSWER_LIMIT,
-                answer: ANSWER_TIME,
-            },
-        )?;
+        let request = HttpRequest {
+            method: "POST",
+            path: &jobs,
+            body: Some(("text/xml", body.as_bytes())),
+            most: ANSWER_LIMIT,
+            answer: ANSWER_TIME,
+            cancel: Some(cancel),
+        };
+        let created = ask(address, pins, &request, cancel)?;
         match created.status {
-            UNAVAILABLE if retries < BUSY_RETRIES => {
-                retries += 1;
-                std::thread::sleep(BUSY_PAUSE);
-            }
+            UNAVAILABLE => pause(cancel, deadline)?,
             _ => break created,
         }
     };
     let feeder = source.name == FEEDER;
-    let job = match created.status {
+    let path = match created.status {
         CREATED => created
             .location
             .as_deref()
             .and_then(|location| job_path(address, location))
             .ok_or(ScanError::Unreadable)?,
         CONFLICT if feeder => return Err(ScanError::FeederEmpty),
-        CONFLICT | UNAVAILABLE => return Err(ScanError::Busy),
+        CONFLICT => return Err(ScanError::Busy),
         status => return Err(ScanError::Refused(status)),
     };
-    let next = format!("{job}/NextDocument");
+    let next = format!("{path}/NextDocument");
+    let mut job = Job {
+        address,
+        pins,
+        path,
+        ended: false,
+    };
     let mut pages = 0;
-    let mut retries = 0;
+    let mut deadline = Instant::now() + PAGE_DEADLINE;
     while pages < MOST_PAGES {
-        let response = get(address, pins, &next, PAGE_LIMIT)?;
+        let request = HttpRequest {
+            method: "GET",
+            path: &next,
+            body: None,
+            most: PAGE_LIMIT,
+            answer: deadline
+                .saturating_duration_since(Instant::now())
+                .min(PAGE_TIME)
+                .max(Duration::from_secs(1)),
+            cancel: Some(cancel),
+        };
+        let response = ask(address, pins, &request, cancel)?;
         match response.status {
             OK => {
-                retries = 0;
                 pages += 1;
                 keep(response.body)?;
                 if !feeder {
                     break;
                 }
+                if cancel.stopped() {
+                    return Err(ScanError::Cancelled);
+                }
+                deadline = Instant::now() + PAGE_DEADLINE;
             }
             NOT_FOUND if pages == 0 && feeder => return Err(ScanError::FeederEmpty),
-            NOT_FOUND if pages > 0 => break,
-            UNAVAILABLE if retries < BUSY_RETRIES => {
-                retries += 1;
-                std::thread::sleep(BUSY_PAUSE);
+            NOT_FOUND if pages > 0 => {
+                job.ended = true;
+                break;
             }
-            UNAVAILABLE => return Err(ScanError::Busy),
+            UNAVAILABLE => pause(cancel, deadline)?,
             status => return Err(ScanError::Refused(status)),
         }
     }
-    if !feeder {
-        let request = HttpRequest {
-            method: "DELETE",
-            path: &job,
-            body: None,
-            most: ANSWER_LIMIT,
-            answer: ANSWER_TIME,
-        };
-        if let Err(error) = http(address, pins, &request) {
-            tracing::debug!("cannot end a scan job: {error}");
-        }
-    }
-    Ok(pages)
+    Ok(dpi)
 }
 
 fn decoded(page: &[u8]) -> Result<(u32, u32, Vec<u8>), ScanError> {
@@ -477,6 +533,7 @@ pub fn clean_page(page: &[u8], color: bool) -> Result<OwnedFd, ScanError> {
 mod tests {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
+    use std::sync::atomic::AtomicBool;
 
     use super::*;
 
@@ -561,7 +618,7 @@ mod tests {
             "/eSCL/ScanJobs" => {
                 assert!(request.contains("<pwg:InputSource>Feeder</pwg:InputSource>"));
                 assert!(request.contains("<scan:ColorMode>Grayscale8</scan:ColorMode>"));
-                assert!(request.contains("<scan:XResolution>300</scan:XResolution>"));
+                assert!(request.contains("<scan:XResolution>150</scan:XResolution>"));
                 assert!(request.contains("<pwg:Height>4200</pwg:Height>"));
                 answer(
                     "201 Created",
@@ -580,23 +637,66 @@ mod tests {
         assert_eq!(
             scanner.public(),
             ScanCapabilities {
-                sources: vec![PLATEN.to_owned(), FEEDER.to_owned()],
-                color: true,
-                resolutions: vec![100, 150, 300, 600],
+                sources: vec![
+                    ScanSource {
+                        name: PLATEN.to_owned(),
+                        color: true,
+                        resolutions: vec![100, 300],
+                    },
+                    ScanSource {
+                        name: FEEDER.to_owned(),
+                        color: false,
+                        resolutions: vec![150, 300, 600],
+                    },
+                ],
             }
         );
         let options = ScanOptions {
             source: FEEDER.to_owned(),
             color: true,
-            resolution: 300,
+            resolution: 100,
         };
         let mut pages = Vec::new();
-        let scanned = scan(&address, &pins, &scanner, &options, &mut |page| {
+        let cancel = Cancel::default();
+        let scanned = scan(&address, &pins, &scanner, &options, &cancel, &mut |page| {
             pages.push(page);
             Ok(())
         });
-        assert_eq!(scanned, Ok(2));
+        assert_eq!(scanned, Ok(150));
         assert_eq!(pages, vec![page(), page()]);
+    }
+
+    #[test]
+    fn a_failed_scan_ends_its_job_on_the_scanner() {
+        let deleted = Arc::new(AtomicBool::new(false));
+        let seen = Arc::clone(&deleted);
+        let address = device(move |path, request| match path {
+            "/eSCL/ScannerCapabilities" => answer("200 OK", "", CAPABILITIES.as_bytes()),
+            "/eSCL/ScanJobs" => answer("201 Created", "Location: /eSCL/ScanJobs/9\r\n", b""),
+            "/eSCL/ScanJobs/9" if request.starts_with("DELETE") => {
+                seen.store(true, Ordering::Relaxed);
+                answer("200 OK", "", b"")
+            }
+            _ => answer("500 Internal Server Error", "", b""),
+        });
+        let pins = Pins::default();
+        let scanner = capabilities(&address, &pins).unwrap();
+        let options = ScanOptions {
+            source: FEEDER.to_owned(),
+            color: false,
+            resolution: 300,
+        };
+        let cancel = Cancel::default();
+        let scanned = scan(
+            &address,
+            &pins,
+            &scanner,
+            &options,
+            &cancel,
+            &mut |_| Ok(()),
+        );
+        assert_eq!(scanned, Err(ScanError::Refused(500)));
+        assert!(deleted.load(Ordering::Relaxed));
     }
 
     #[test]
@@ -618,10 +718,28 @@ mod tests {
             color: false,
             resolution: 300,
         };
-        let scanned = scan(&address, &pins, &scanner, &options, &mut |_| Ok(()));
+        let cancel = Cancel::default();
+        let scanned = scan(
+            &address,
+            &pins,
+            &scanner,
+            &options,
+            &cancel,
+            &mut |_| Ok(()),
+        );
         assert_eq!(scanned, Err(ScanError::Unreadable));
-        let next = get(&address, &pins, "/eSCL/ScanJobs/1/NextDocument", PAGE_LIMIT);
-        assert_eq!(next.err(), Some(ScanError::Unreadable));
+        let request = HttpRequest {
+            method: "GET",
+            path: "/eSCL/ScanJobs/1/NextDocument",
+            body: None,
+            most: PAGE_LIMIT,
+            answer: ANSWER_TIME,
+            cancel: None,
+        };
+        assert!(matches!(
+            http(&address, &pins, &request),
+            Err(Error::Malformed)
+        ));
         assert!(parse_capabilities(b"<!DOCTYPE x [<!ENTITY a \"b\">]><x>&a;</x>").is_none());
     }
 }

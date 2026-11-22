@@ -193,7 +193,7 @@ pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result
 }
 
 pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus::Result<bool> {
-    if bande_bus::logind::logind_sets("HandlePowerKey=") {
+    if bande_bus::systemd_config::setting("logind.conf", "HandlePowerKey").is_some() {
         return Ok(false);
     }
     let manager = ManagerProxyBlocking::new(connection)?;

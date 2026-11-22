@@ -89,12 +89,25 @@ impl Service {
             .map_err(fdo::Error::Failed)
     }
 
-    async fn scan(&self, scanner: String, options: ScanOptions) -> fdo::Result<Vec<OwnedFd>> {
+    async fn scan(
+        &self,
+        scanner: String,
+        options: ScanOptions,
+    ) -> fdo::Result<Vec<(OwnedFd, u32)>> {
         let spool = Arc::clone(&self.spool);
         blocking::unblock(move || spool.scan(&scanner, &options))
             .await
-            .map(|pages| pages.into_iter().map(OwnedFd::from).collect())
+            .map(|pages| {
+                pages
+                    .into_iter()
+                    .map(|(page, dpi)| (OwnedFd::from(page), dpi))
+                    .collect()
+            })
             .map_err(fdo::Error::Failed)
+    }
+
+    fn cancel_scan(&self, scanner: String) {
+        self.spool.cancel_scan(&scanner);
     }
 
     #[zbus(signal)]

@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use std::path::Path;
@@ -59,13 +59,17 @@ fn serve() -> Result<Services, Box<dyn Error>> {
         .flatten();
     let sleeper = Arc::clone(&idle);
     let reporter = session.clone();
+    let failure_notice = Mutex::new(0);
     let guard = SleepGuard::start(&system, LOCK_WAIT, move |sleep| {
         match sleep {
             Sleep::Starting => sleeper.sleeping(),
             Sleep::Woke | Sleep::Failed => sleeper.woke(),
         }
         if sleep == Sleep::Failed {
-            logind::report_failed_sleep(&reporter);
+            let mut notice = failure_notice
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            *notice = logind::report_failed_sleep(&reporter, *notice);
         }
         if let Some(lid) = &lid
             && sleep != Sleep::Starting

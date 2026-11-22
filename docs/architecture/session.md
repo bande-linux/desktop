@@ -75,16 +75,19 @@ graph LR
   (`/sys/power/resume`, set from `resume=` or the initramfs) and the command line has no
   `noresume`. Otherwise it is plain `Suspend`. `bande-power` ships
   `/usr/lib/systemd/sleep.conf.d/50-bande.conf` (`HibernateDelaySec=3h`,
-  `HibernateOnACPower=no`), which only `SuspendThenHibernate` reads and any `/etc` setting
-  overrides: on battery the computer hibernates after 3 hours asleep, or sooner when the battery,
+  `HibernateOnACPower=no`), which only `SuspendThenHibernate` reads. It overrides
+  `/etc/systemd/sleep.conf`, as every drop-in overrides the main file; an administrator changes it
+  with a drop-in in `/etc/systemd/sleep.conf.d/` (a later name, or `50-bande.conf` there to mask
+  it). On battery the computer hibernates after 3 hours asleep, or sooner when the battery,
   discharging, reaches 5 % (ACPI `_BTP` alarm or systemd-sleep's discharge estimate), so a laptop
   left in a bag for days keeps its charge. On the charger it stays suspended and wakes at once:
   systemd-sleep restarts the 3 hours at each check while on AC, so a laptop unplugged while asleep
   hibernates about 3 hours later. Where the firmware has no battery alarm,
   systemd-sleep wakes briefly to read the battery (about hourly, or from the discharge rate it
-  learned). Settings ▸ Power ▸ When inactive says whether sleep can hibernate, or why not ("isn't set up"
-  without a resume device). Nothing in the session wakes a
-  sleeping computer except an alarm or timer the user set in Clock; `mem_sleep` is the kernel's.
+  learned). Settings ▸ Power ▸ When inactive says whether sleep can hibernate, or why not ("isn't
+  set up" without a resume device), and when, from the effective `HibernateDelaySec=` and
+  `HibernateOnACPower=` (the main file, then the drop-ins by name, `/etc` masking `/usr/lib`, read
+  the way systemd does). Nothing in the session wakes a sleeping computer except an alarm or timer the user set in Clock; `mem_sleep` is the kernel's.
 - **The lid**: closing it locks the session and the computer sleeps at once, unless Settings ▸
   Power keeps it running on power or a display is connected (logind's `Docked`), where it keeps
   running with the built-in panel off. `bande-power` holds logind's `handle-lid-switch` inhibitor
@@ -93,14 +96,17 @@ graph LR
   (plain `Suspend`): `bande-power` lets go when the lid closes with a display connected or
   someone's `sleep` block inhibitor held, since logind's lid ignores those
   (`LidSwitchIgnoreInhibited=`), so playing audio or an app never keeps a closed laptop awake.
-  When the administrator sets any `HandleLidSwitch…=` in `logind.conf`, the lid is logind's
-  alone, except Keep running. A wake with the lid still closed (a charger, a USB device) sleeps
-  again 30 s later, as logind's `HoldoffTimeoutSec=` does. When logind leaves the lid alone (an
+  When the administrator sets `HandleLidSwitch=` or `HandleLidSwitchExternalPower=` in
+  `logind.conf` or its drop-ins, the lid is logind's alone, except Keep running. Letting go of the
+  inhibitor with the lid closed (unplugging with Keep running, a display disconnected) needs no
+  request: logind re-checks a closed lid on every pass of its event loop. A wake with the lid still
+  closed (a charger, a USB device) sleeps again 30 s later, as logind's `HoldoffTimeoutSec=` does. When logind leaves the lid alone (an
   inhibitor, or `HandleLidSwitch=` or `HandleLidSwitchExternalPower=` set to `ignore`), the
   compositor locks the session on closing it unless the computer is `Docked`.
 - **A sleep that fails** (the boot clock did not move past the monotonic one between
-  `PrepareForSleep` true and false) posts a "The Computer Didn't Sleep" notification, and
-  `bande-power` does not ask again for a closed lid until it opens.
+  `PrepareForSleep` true and false) posts a "The Computer Didn't Sleep" notification, replacing
+  the last one. With the lid closed `bande-power` tries once more 30 s later, then leaves the lid
+  to logind.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 

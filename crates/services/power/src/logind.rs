@@ -4,8 +4,8 @@ use std::time::Duration;
 
 pub use bande_bus::logind::{
     ManagerProxyBlocking, SessionProxyBlocking, follow_blocked, follow_lock_requests,
-    follow_locked_hint, hibernates_after_sleep, inhibit, logind_sets, own_session,
-    runs_in_virtual_machine, sleep,
+    follow_locked_hint, hibernates_after_sleep, inhibit, own_session, runs_in_virtual_machine,
+    sleep,
 };
 use bande_l10n::tr;
 use bande_notify::Urgency;
@@ -134,7 +134,7 @@ fn lock_and_wait(session: &SessionProxyBlocking<'_>, hint: &LockedHint, lock_wai
     hint.wait(lock_wait);
 }
 
-pub fn report_failed_sleep(session: &Connection) {
+pub fn report_failed_sleep(session: &Connection, replaces_id: u32) -> u32 {
     tracing::warn!("the computer did not sleep");
     let app_name = tr!("Power");
     let summary = tr!("The Computer Didn't Sleep");
@@ -143,7 +143,7 @@ pub fn report_failed_sleep(session: &Connection) {
         session,
         &Request {
             app_name: &app_name,
-            replaces_id: 0,
+            replaces_id,
             app_icon: "battery-caution",
             summary: &summary,
             body: &body,
@@ -153,7 +153,8 @@ pub fn report_failed_sleep(session: &Connection) {
             desktop_entry: None,
         },
     );
-    if let Err(error) = posted {
+    posted.unwrap_or_else(|error| {
         tracing::warn!("cannot report that the computer did not sleep: {error}");
-    }
+        replaces_id
+    })
 }

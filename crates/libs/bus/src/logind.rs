@@ -1,12 +1,14 @@
 use std::fs;
 use std::io;
 use std::os::fd::OwnedFd;
-use std::path::{Path, PathBuf};
 use std::thread;
+use std::time::Duration;
 
 use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
+
+use crate::systemd_config;
 
 #[zbus::proxy(
     interface = "org.freedesktop.login1.Manager",
@@ -211,46 +213,21 @@ pub fn runs_in_virtual_machine(system: &Connection) -> bool {
         .is_ok_and(|virtualization| !virtualization.is_empty())
 }
 
-const LOGIND_CONFIG_FOLDERS: [&str; 4] = [
-    "/etc/systemd",
-    "/run/systemd",
-    "/usr/local/lib/systemd",
-    "/usr/lib/systemd",
-];
-
-fn logind_files(folder: &Path) -> Vec<PathBuf> {
-    let mut files = vec![folder.join("logind.conf")];
-    match fs::read_dir(folder.join("logind.conf.d")) {
-        Ok(entries) => files.extend(
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| {
-                    path.extension()
-                        .is_some_and(|extension| extension == "conf")
-                }),
-        ),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => tracing::warn!("cannot read {}/logind.conf.d: {error}", folder.display()),
-    }
-    files
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HibernateDelay {
+    pub after: Option<Duration>,
+    pub on_ac_power: bool,
 }
 
-/// Answers whether the administrator's logind configuration sets a key starting with `prefix`.
-pub fn logind_sets(prefix: &str) -> bool {
-    LOGIND_CONFIG_FOLDERS
-        .iter()
-        .flat_map(|folder| logind_files(Path::new(folder)))
-        .any(|file| match fs::read_to_string(&file) {
-            Ok(text) => text
-                .lines()
-                .any(|line| line.trim_start().starts_with(prefix)),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
-            Err(error) => {
-                tracing::warn!("cannot read {}: {error}", file.display());
-                false
-            }
-        })
+/// When `SuspendThenHibernate` hibernates, from systemd-sleep's effective configuration.
+pub fn hibernate_delay() -> HibernateDelay {
+    let sleep = |key: &str| systemd_config::setting("sleep.conf", key);
+    HibernateDelay {
+        after: sleep("HibernateDelaySec").and_then(|delay| systemd_config::timespan(&delay)),
+        on_ac_power: sleep("HibernateOnACPower")
+            .and_then(|value| systemd_config::boolean(&value))
+            .unwrap_or(true),
+    }
 }
 
 #[cfg(test)]

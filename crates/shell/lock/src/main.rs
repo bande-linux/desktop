@@ -431,7 +431,7 @@ impl App for Locker {
 
 fn tell_password_expired() {
     let summary = tr!("Your password has expired");
-    let body = tr!("Choose a new one in Settings ▸ Users & Groups.");
+    let body = tr!("Choose a new one in Settings ▸ Users.");
     let app_name = tr!("Settings");
     let told = bande_bus::session().and_then(|session| {
         notify(

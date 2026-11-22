@@ -194,9 +194,12 @@ are in [performance.md](performance.md).
   update timer (`bande-update-check.timer`: 3 minutes after login, then daily) resolves the same
   names for the person's language in the local APT index, without fetching anything. When some
   are available and not installed, it offers them in a notification. Install installs them
-  through PackageKit, asking for the administrator's password through the polkit agent.
-  Dismissing the notification keeps those packs from being offered again; they are listed in
-  `$XDG_STATE_HOME/bande/translations-declined`. A maintainer script can't install the packs,
+  through PackageKit, asking for the administrator's password through the polkit agent. A
+  second notification then says they are installed or why they couldn't be; cancelling the
+  password says nothing. Clicking the notification opens Settings ▸ Language & Time. Not Now
+  keeps those packs from being offered again; they are listed in
+  `$XDG_STATE_HOME/bande/translations-declined`. Closing or clearing the notification only
+  postpones the offer to the next check. A maintainer script can't install the packs,
   since dpkg holds the lock while it runs.
   The Browser's packs (`bande-browser-l10n-<lang>`, built from `browser/l10n/languages`) are
   separate from the Browser, which is English only.

@@ -49,9 +49,11 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   login window's console fallback and the fault reporter's socket-activated services are not
   started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
   enabled by its own `postinst`. `bande-reporter` and `bande-greeter` create their state
-  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`; the login window's pictures
-  folder is `3733 root:_greetd`, so each person writes only their own picture and only the login
-  window reads it). The other scripts purge state, restart nothing else and run
+  folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`; the login window's pictures and
+  failed-session folders are `3733 root:_greetd`, so each person writes only their own files and
+  only the login window reads them). `bande-greeter` ships its PAM service as the conffile
+  `/etc/pam.d/bande-greeter` (`debian/bande-greeter.pam`, after Debian's `gdm-password`), which
+  its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
   `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative.
 - **Version**: `debian/changelog` names the release, `X.Y.Z-1`, with `X.Y.Z` the
@@ -61,8 +63,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   binNMU-style build without the architecture-independent packages, so an sbuild build takes
   a source package with that entry.
 - **Tests**: `debian/tests` holds the autopkgtests: `desktop` (bande-desktop alone brings a
-  login window and sound, no X server, greetd as the display manager, the login window's
-  pictures folder), `every-package` (the one version, every program and file in
+  login window and sound, no X server, greetd as the display manager through Bande's PAM
+  service, the login window's pictures and failed-session folders), `every-package` (the one version, every program and file in
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
   `system-setup` (every package with its recommends brings none of the short list of packages
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
@@ -160,10 +162,10 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
   ([overview.md](overview.md));
 - `fonts-noto-core`, `fonts-noto-cjk` (recommended): the fallback faces for scripts Inter does not cover;
 - `pipewire`, `wireplumber`: the sound service, screen capture and recording;
-- `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it);
-  the login window's user (`_greetd`) starts none of PipeWire, its Pulse server, WirePlumber or
-  the filter chain (`ConditionUser=!_greetd`), so the person's session never finds the sound
-  card busy;
+- `pipewire-pulse` (recommended): apps that play through PulseAudio (the session drop-ins start it).
+  The login window's user (`_greetd`) gets PipeWire and WirePlumber from the ordinary user units,
+  so the screen reader can speak before anyone signs in; WirePlumber opens the sound card only for
+  the session active on the seat, so it moves to the person's session at sign-in;
 - `libspa-0.2-bluetooth` (recommended): Bluetooth headphones, which the shell's Bluetooth menu connects;
 - `apt-config-icons-hidpi` (recommended): the AppStream icons Software shows, at 2×;
 - `systemd-oomd` (recommended): closes an app when memory stays under pressure.

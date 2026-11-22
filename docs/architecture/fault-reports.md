@@ -29,7 +29,7 @@ ca = /path/to/ca.pem
 
 `bande-reporter sending on|off` and Settings write `send`; `endpoint` names the server, and Settings offers the switch only once one is set. `ca`, optional and set with the endpoint, pins the roots the server's chain is checked against first; a chain they do not verify falls back to the system's roots.
 
-A daily check-in rides on the same sender: at boot, at login, when `serve` starts, when sending is switched on and on the resource wake-up every 10 minutes, an `outbox/checkin` marker is added if a day is due and this machine's minute of the policy's `checkin_hour` (UTC) has passed, or two days are due; and the sender posts it with the reports (see Protocol). Settings ▸ Diagnostics shows its exact contents. It carries no content of any kind.
+A daily check-in rides on the same sender: at boot, at login, when `serve` starts, when sending is switched on and on the resource wake-up every 10 minutes, an `outbox/checkin` marker is added if a day is due and this machine's minute of the policy's `checkin_hour` (UTC) has passed, or two days are due; and the sender posts it with the reports (see Protocol). Settings ▸ Privacy & Security ▸ Diagnostics shows its exact contents. It carries no content of any kind.
 
 `bande-reporter-send.path` starts `bande-reporter-send.service` while `outbox/` has anything in it, and the service exits when `outbox/` is empty, so nothing runs between faults. While reports wait it sleeps in `poll`. It wakes on a deadline, on a network change (rtnetlink), when the settings folder or the outbox changes, and, only while a large report waits for mains power, on a `power_supply` uevent.
 

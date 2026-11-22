@@ -1224,6 +1224,18 @@ msgstr "återställ, återuppta, fönster, session, logga ut, starta om"
 msgid "Apps that were open when you logged out or restarted open again"
 msgstr "Appar som var öppna när du loggade ut eller startade om öppnas igen"
 
+msgid "Recent files"
+msgstr "Senaste filer"
+
+msgid "Remember recently opened files"
+msgstr "Kom ihåg nyligen öppnade filer"
+
+msgid "recents, recently used, history, documents, privacy"
+msgstr "senaste, nyligen använda, historik, dokument, integritet"
+
+msgid "Files you open are listed in Recent and in other apps"
+msgstr "Filer du öppnar visas i Senaste och i andra appar"
+
 msgid "back up, restore, disk, password, pause, oldest, versions"
 msgstr "säkerhetskopiera, återställ, skiva, lösenord, pausa, äldsta, versioner"
 

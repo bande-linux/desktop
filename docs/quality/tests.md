@@ -39,6 +39,7 @@ Paths are under `crates/`.
 | `libs/volumes/src/server.rs` | A typed server address that could inject options or paths into the mount tools is refused. |
 | `libs/fs/tests/trash.rs` | A volume Trash whose `files` folder is a planted link is not used. |
 | `libs/fs/tests/operations.rs` | Regressions in file operations: Replace keeps the old item until the new one is complete; names that are not UTF-8 survive listing, copy and Keep Both. |
+| `libs/search/src/recents.rs` `opening_files_again_keeps_one_bookmark_each_and_counts_the_app` | Parser and writer of `recently-used.xbel`: opening a file again updates its one bookmark and counts the app, a new file gets its own, and names that need XML escaping read back. |
 | `apps/files/tests/files.rs` | Files: a file goes to the Trash and is put back; Quit during a copy asks, then goes through when the copy ends. |
 | `libs/xdg/tests/xdg.rs` | `.desktop` Exec parsing (quoting, escapes, field codes, reserved characters); a `.desktop` file opened in Files runs only when installed or marked executable by its owner. |
 | `apps/settings/tests/settings.rs` | Settings: a setting found by search and changed from the keyboard is written to `config.kdl` through `org.bande.Config`. |

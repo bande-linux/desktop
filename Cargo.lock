@@ -865,6 +865,7 @@ dependencies = [
  "bande-log",
  "bande-pdf",
  "bande-printers",
+ "bande-search",
  "bande-toolkit",
  "bande-volumes",
  "bande-wallpaper",

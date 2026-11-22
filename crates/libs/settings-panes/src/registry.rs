@@ -455,6 +455,7 @@ pub enum SettingId {
     Clock24Hour,
     LoginItems,
     ReopenApps,
+    RememberRecentFiles,
     CheckUpdatesAutomatically,
     AutomaticUpdates,
     UpdateCheckEvery,
@@ -1935,6 +1936,13 @@ fn system_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::ReopenApps, tr!("Reopen windows when logging back in"), tr!("restore, resume, windows, session, log out, restart"))
                             .described(tr!("Apps that were open when you logged out or restarted open again")),
+                    ],
+                ),
+                section(
+                    Some(tr!("Recent files")),
+                    vec![
+                        switch(SettingId::RememberRecentFiles, tr!("Remember recently opened files"), tr!("recents, recently used, history, documents, privacy"))
+                            .described(tr!("Files you open are listed in Recent and in other apps")),
                     ],
                 ),
             ],

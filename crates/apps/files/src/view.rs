@@ -2093,6 +2093,10 @@ impl FilesView {
         }
     }
 
+    pub fn mime_for(&self, path: &Path) -> String {
+        self.apps.mime_for(path)
+    }
+
     pub fn present_eject_failure(&mut self, failure: EjectFailure) {
         let openers = self.apps.openers();
         let mut programs: Vec<String> = failure

@@ -850,11 +850,11 @@ Recommends: accountsservice,
  pipewire,
  wireplumber,
  bande-notify (= ${binary:Version}),
- fwupd,
  packagekit,
  power-profiles-daemon,
  upower,
  network-manager
+Suggests: fwupd
 Description: Bande Settings: panes for the desktop and its devices with ranked search
  Settings of the Bande desktop in four groups: Connections (Wi-Fi with
  known networks, per-network details and hidden networks, Bluetooth,

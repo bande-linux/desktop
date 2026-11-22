@@ -1994,6 +1994,12 @@ msgstr "Uppdateringstjänsten stannade. Försök igen om en stund."
 msgid "Software Update"
 msgstr "Programuppdatering"
 
+msgid "The firmware update didn't install. The device keeps its earlier firmware."
+msgstr "Uppdateringen av den inbyggda programvaran installerades inte. Enheten behåller sin tidigare inbyggda programvara."
+
+msgid "{device}: {reason}"
+msgstr "{device}: {reason}"
+
 msgid "The desktop keeps running its old version until you log out"
 msgstr "Skrivbordet fortsätter köra sin gamla version tills du loggar ut"
 
@@ -2029,9 +2035,6 @@ msgstr "Det gick inte att hämta den inbyggda programvaran. Försök igen senare
 
 msgid "The firmware update service stopped. Try again in a moment."
 msgstr "Tjänsten för uppdatering av inbyggd programvara stoppades. Försök igen om en stund."
-
-msgid "{device}: {reason}"
-msgstr "{device}: {reason}"
 
 msgid "Show Updates"
 msgstr "Visa uppdateringar"
@@ -2075,6 +2078,9 @@ msgstr[1] "{count} av dem kräver omstart."
 
 msgid "Software updates are available"
 msgstr "Programuppdateringar är tillgängliga"
+
+msgid "Firmware updates aren't available from this computer's software sources."
+msgstr "Uppdateringar av inbyggd programvara finns inte i datorns programkällor."
 
 msgid "Check spelling"
 msgstr "Kontrollera stavning"
@@ -2165,6 +2171,15 @@ msgstr "och {count} till"
 
 msgid "Last checked {date}"
 msgstr "Senast sökt {date}"
+
+msgid "Install…"
+msgstr "Installera…"
+
+msgid "Firmware updates for this computer and its devices"
+msgstr "Uppdateringar av inbyggd programvara för datorn och dess enheter"
+
+msgid "Installs fwupd, which also checks for new firmware once a day by itself."
+msgstr "Installerar fwupd, som också själv söker efter ny inbyggd programvara en gång om dagen."
 
 msgid "Checking for updates…"
 msgstr "Söker efter uppdateringar…"

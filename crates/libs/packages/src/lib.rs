@@ -364,13 +364,18 @@ pub fn debian_arch() -> &'static str {
 }
 
 pub fn available(system: &Connection) -> zbus::Result<bool> {
+    provided(system, SERVICE)
+}
+
+/// Whether a program owns `service` on the bus or the bus can start one.
+pub fn provided(system: &Connection, service: &str) -> zbus::Result<bool> {
     let bus = DBusProxy::new(system)?;
-    let name = BusName::try_from(SERVICE)?;
+    let name = BusName::try_from(service)?;
     Ok(bus.name_has_owner(name)?
         || bus
             .list_activatable_names()?
             .iter()
-            .any(|activatable| activatable.as_str() == SERVICE))
+            .any(|activatable| activatable.as_str() == service))
 }
 
 #[zbus::proxy(

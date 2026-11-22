@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use bande_content::pdf::protocol::Use;
 use bande_content::pdf::session::Phase;
-use bande_content::{Block, Tone};
+use bande_content::{Block, Failure, Tone};
 use bande_fs::{format_date, format_size};
 use bande_l10n::{tr, trn};
 use bande_toolkit::{
@@ -332,7 +332,23 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
         _ if entry.is_folder() => String::new(),
         _ => format_size(entry.size),
     };
-    vec![subject.kind.clone(), size, modified]
+    let reason = match shown {
+        Shown::Failed(Failure::TooLarge { width, height }) => Some(tr!(
+            "Too large to preview ({width} × {height})",
+            width = width,
+            height = height
+        )),
+        Shown::Failed(Failure::FileTooLarge) => Some(tr!("Too large to preview")),
+        Shown::Failed(Failure::Damaged) => Some(tr!("This image is damaged")),
+        Shown::Failed(Failure::NotSupported) => Some(tr!("This kind of image can’t be previewed")),
+        Shown::Failed(Failure::Unreadable) => Some(tr!("This file can’t be read")),
+        Shown::Media(None) => Some(tr!("This can’t be played here")),
+        _ => None,
+    };
+    [subject.kind.clone(), size, modified]
+        .into_iter()
+        .chain(reason)
+        .collect()
 }
 
 impl Glance {

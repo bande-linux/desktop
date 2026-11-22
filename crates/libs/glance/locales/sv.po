@@ -77,6 +77,24 @@ msgstr "Det här dokumentet kan inte visas"
 msgid "This document is locked"
 msgstr "Det här dokumentet är låst"
 
+msgid "Too large to preview ({width} × {height})"
+msgstr "För stor för att förhandsvisas ({width} × {height})"
+
+msgid "Too large to preview"
+msgstr "För stor för att förhandsvisas"
+
+msgid "This image is damaged"
+msgstr "Bilden är skadad"
+
+msgid "This kind of image can’t be previewed"
+msgstr "Den här sortens bild kan inte förhandsvisas"
+
+msgid "This file can’t be read"
+msgstr "Filen kan inte läsas"
+
+msgid "This can’t be played here"
+msgstr "Det här kan inte spelas upp här"
+
 msgid "Installing…"
 msgstr "Installerar…"
 

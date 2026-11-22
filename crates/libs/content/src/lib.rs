@@ -51,6 +51,7 @@ pub enum Content {
     Folder { items: u64, bytes: Option<u64> },
     Archive,
     Media,
+    Failed(Failure),
     Other,
 }
 
@@ -212,10 +213,12 @@ pub fn content(path: &Path, mime: &str, current: &dyn Fn() -> bool) -> Content {
     if mime == "application/pdf" {
         return Content::Pdf(path.to_path_buf());
     }
-    if mime.starts_with("image/")
-        && let Ok(decoded) = decode_confined(path, PICTURE_SIDE)
-    {
-        return Content::Picture(decoded);
+    let mut unshown = Content::Other;
+    if mime.starts_with("image/") {
+        match decode_confined(path, PICTURE_SIDE) {
+            Ok(decoded) => return Content::Picture(decoded),
+            Err(failure) => unshown = Content::Failed(failure),
+        }
     }
     if is_font(mime) {
         return Content::Font;
@@ -228,7 +231,7 @@ pub fn content(path: &Path, mime: &str, current: &dyn Fn() -> bool) -> Content {
     }
     let textual = is_text(mime) || is_code(&extension) || mime == "application/octet-stream";
     let Some(text) = textual.then(|| text_up_to(path, TEXT_BYTES)).flatten() else {
-        return Content::Other;
+        return unshown;
     };
     let document = &text[..text.floor_char_boundary(DOCUMENT_BYTES)];
     match mime {

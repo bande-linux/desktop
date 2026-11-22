@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use bande_media_view::{Opening, Session, Stage};
 
-use bande_content::{Block, Code, Content, Contents, Frame, Level, Pixels};
+use bande_content::{Block, Code, Content, Contents, Failure, Frame, Level, Pixels};
 use bande_toolkit::Color;
 
 use crate::loader::{Loaded, installed_font};
@@ -100,6 +100,7 @@ pub enum Shown {
     Folder { items: u64, bytes: Option<u64> },
     Archive(Contents),
     Media(Option<Box<Stage>>),
+    Failed(Failure),
     Other,
 }
 
@@ -199,6 +200,7 @@ impl Shown {
             Content::Document(blocks) => Self::Document(DocumentView { blocks, laid: None }),
             Content::Folder { items, bytes } => Self::Folder { items, bytes },
             Content::Media => Self::Media(path.and_then(media_stage)),
+            Content::Failed(failure) => Self::Failed(failure),
             Content::Font | Content::Archive | Content::Other => Self::Other,
         }
     }

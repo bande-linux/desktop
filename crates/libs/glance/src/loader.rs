@@ -7,8 +7,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use bande_content::{Content, Contents, content};
-use bande_xdg::data_home;
+use bande_content::{Content, Contents, Decoded, Facts, Level, Pixels, content};
+use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
+use bande_xdg::{data_dirs, data_home};
 
 use crate::worker::{Sample, read_archive, read_font_sample};
 
@@ -28,6 +29,22 @@ pub struct Loader {
     generation: Arc<AtomicU64>,
 }
 
+fn thumbnailed(path: &Path, mime: &str) -> Option<Content> {
+    let cache = Cache::for_user()?;
+    let thumbnailers = Thumbnailers::load(&data_dirs());
+    let picture = thumbnail(&cache, &thumbnailers, path, mime, ThumbnailSize::XxLarge)?;
+    Some(Content::Picture(Decoded {
+        width: picture.width,
+        height: picture.height,
+        pixels: Pixels::Still(vec![Level {
+            width: picture.width,
+            height: picture.height,
+            rgba: Arc::new(picture.rgba),
+        }]),
+        facts: Facts::default(),
+    }))
+}
+
 fn load_one(
     asked: u64,
     path: &Path,
@@ -39,6 +56,9 @@ fn load_one(
     let loaded = match content(path, mime, &current) {
         Content::Font => Loaded::FontSample(read_font_sample(path)),
         Content::Archive => Loaded::Archive(read_archive(path)),
+        content @ (Content::Other | Content::Failed(_)) => {
+            Loaded::Content(thumbnailed(path, mime).unwrap_or(content))
+        }
         content => Loaded::Content(content),
     };
     if current() {

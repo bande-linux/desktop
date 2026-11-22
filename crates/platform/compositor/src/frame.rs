@@ -288,7 +288,7 @@ impl State {
         if button != BTN_LEFT {
             self.swallowed_button = Some(button);
             if button == BTN_RIGHT && matches!(zone, Zone::Control(_) | Zone::TitleBar) {
-                self.open_window_menu(&surface, self.pointer_location);
+                self.open_window_menu(&surface, self.pointer_location, false);
             }
             return true;
         }

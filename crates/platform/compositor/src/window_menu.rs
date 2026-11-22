@@ -26,6 +26,7 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_positioner::{
     Anchor, ConstraintAdjustment, Gravity,
 };
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Serial, Size};
@@ -36,6 +37,7 @@ const BELOW_GAP: i32 = 4;
 const SUBMENU_OVERLAP: i32 = 2;
 const SUBMENU_LIFT: i32 = -4;
 const SLIDE: f64 = 3.0;
+const KEPT_ON_TOP_SINCE: u32 = 11;
 
 type Frame = Rectangle<f64, Logical>;
 
@@ -341,17 +343,40 @@ impl State {
                 &tr!("Move to Workspace"),
                 Menu::new(self.desktop_items(index)),
             ),
+            item(tr!("Keep on Top"), "keep-on-top")
+                .checked(self.windows[index].keep_on_top)
+                .enabled(!self.windows[index].has_state(xdg_toplevel::State::Fullscreen)),
             MenuItem::separator(),
             item(tr!("Close"), "close").shortcut(&keys_of(Action::CloseWindow).unwrap_or_default()),
         ])
     }
 
-    pub(crate) fn open_window_menu(&mut self, surface: &WlSurface, at: Point<f64, Logical>) {
+    pub(crate) fn open_window_menu(
+        &mut self,
+        surface: &WlSurface,
+        at: Point<f64, Logical>,
+        from_keyboard: bool,
+    ) {
         let Some(index) = self.window_index(surface) else {
             return;
         };
         let menu = self.window_menu(index);
-        self.open_menu(index, menu, Anchored::AtPoint(at), false);
+        self.open_menu(index, menu, Anchored::AtPoint(at), from_keyboard);
+    }
+
+    pub(crate) fn open_window_menu_from_keyboard(&mut self, surface: &WlSurface) {
+        let Some(window) = self.window_index(surface).map(|index| &self.windows[index]) else {
+            return;
+        };
+        let Some(geometry) = window.geometry() else {
+            return;
+        };
+        let bar = match window.title_bar_height() {
+            0 => WINDOW_HEADER_HEIGHT as i32,
+            bar => bar,
+        };
+        let at = Point::from((geometry.loc.x, geometry.loc.y + bar)).to_f64();
+        self.open_window_menu(surface, at, true);
     }
 
     pub(crate) fn show_client_window_menu(
@@ -361,14 +386,30 @@ impl State {
         serial: Serial,
         location: Point<i32, Logical>,
     ) {
-        if self.grab_start(seat, serial, surface).is_none() {
+        let from_pointer = self.grab_start(seat, serial, surface).is_some();
+        if !from_pointer && !self.keyboard_serial_of(seat, serial, surface) {
             return;
         }
         let Some(index) = self.window_index(surface) else {
             return;
         };
         let at = (self.windows[index].surface_origin() + location).to_f64();
-        self.open_window_menu(surface, at);
+        self.open_window_menu(surface, at, !from_pointer);
+    }
+
+    fn toggle_keep_on_top(&mut self, index: usize) {
+        let window = &mut self.windows[index];
+        window.keep_on_top = !window.keep_on_top;
+        let keep = u32::from(window.keep_on_top);
+        let toplevel = window.toplevel.xdg_toplevel().clone();
+        for app in self
+            .app_resources
+            .iter()
+            .filter(|app| app.client() == toplevel.client() && app.version() >= KEPT_ON_TOP_SINCE)
+        {
+            app.kept_on_top(&toplevel, keep);
+        }
+        self.refocus_pointer();
     }
 
     fn open_tiling_menu(&mut self, index: usize, held: bool) {
@@ -575,6 +616,7 @@ impl State {
             "minimize" => return self.minimize(surface),
             "maximize" => return self.toggle_maximize(surface),
             "close" => return self.windows[index].toplevel.send_close(),
+            "keep-on-top" => return self.toggle_keep_on_top(index),
             "place-fill" => return self.maximize(surface),
             "place-left" => Placement::Left,
             "place-right" => Placement::Right,

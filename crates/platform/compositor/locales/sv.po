@@ -145,5 +145,8 @@ msgstr "Placera"
 msgid "Move to Workspace"
 msgstr "Flytta till arbetsyta"
 
+msgid "Keep on Top"
+msgstr "Behåll överst"
+
 msgid "Close"
 msgstr "Stäng"

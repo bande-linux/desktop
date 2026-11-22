@@ -82,6 +82,7 @@ fn pressed_key(keysym: u32, unshifted: Option<u32>) -> Option<Key> {
     let base = unshifted.unwrap_or(keysym);
     let key = match base {
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Key::Tab,
+        keysyms::KEY_space => Key::Space,
         keysyms::KEY_Escape => Key::Escape,
         keysyms::KEY_Print => Key::Print,
         keysyms::KEY_F1..=keysyms::KEY_F12 => {
@@ -247,6 +248,17 @@ impl State {
             Action::ShowDesktop => self.toggle_desktop(),
             Action::PreviousWorkspace => self.step_workspace(false),
             Action::NextWorkspace => self.step_workspace(true),
+            Action::MoveWindowToPreviousWorkspace | Action::MoveWindowToNextWorkspace => {
+                if let Some(focused) = focused {
+                    let forward = action == Action::MoveWindowToNextWorkspace;
+                    self.move_to_workspace(&focused, forward, true);
+                }
+            }
+            Action::WindowMenu => {
+                if let Some(focused) = focused {
+                    self.open_window_menu_from_keyboard(&focused);
+                }
+            }
             Action::CloseWindow => {
                 if let Some(window) = self
                     .windows

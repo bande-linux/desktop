@@ -24,10 +24,12 @@ use bande_toolkit::ui::{
     TextAttributes, TextField, TextView, Ui, Widget, WidgetId,
 };
 use bande_toolkit::{
-    Appearance, Color, Rect, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
+    Appearance, Color, Image, Rect, Scene, TextAlign, TextStyle, TextSystem, Window, WindowEvent,
 };
+use bande_xdg::{ICON_THEMES, data_dirs, find_icon};
 
 const SETTLE: Duration = Duration::from_millis(1500);
+const SYMBOL_PIXELS: u32 = 32;
 const FIND_ROW: f32 = 40.0;
 const STATUS_HEIGHT: f32 = 24.0;
 const MARGIN: f32 = 8.0;
@@ -891,11 +893,15 @@ impl DocumentView {
                 at,
             ),
             previous: host.insert(
-                Button::new("‹", click(Signal::Previous)).tooltip(&tr!("Find Previous")),
+                symbol_button(
+                    "go-up-symbolic",
+                    &tr!("Find Previous"),
+                    click(Signal::Previous),
+                ),
                 at,
             ),
             next: host.insert(
-                Button::new("›", click(Signal::Next)).tooltip(&tr!("Find Next")),
+                symbol_button("go-down-symbolic", &tr!("Find Next"), click(Signal::Next)),
                 at,
             ),
             done: host.insert(Button::new(&tr!("Done"), click(Signal::HideFind)), at),
@@ -1589,6 +1595,15 @@ pub fn line_ending_title(name: &str) -> String {
         "crlf" => tr!("CRLF (Carriage Return, Line Feed)"),
         "cr" => tr!("CR (Carriage Return)"),
         other => other.to_owned(),
+    }
+}
+
+fn symbol_button(icon: &str, label: &str, on_click: impl FnMut() + 'static) -> Button {
+    let image = find_icon(icon, SYMBOL_PIXELS, &ICON_THEMES, &data_dirs())
+        .and_then(|path| Image::load(&path, SYMBOL_PIXELS));
+    match image {
+        Some(image) => Button::symbol(image, label, on_click),
+        None => Button::new(label, on_click),
     }
 }
 

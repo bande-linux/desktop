@@ -61,6 +61,9 @@ pub enum Kind {
     Jpeg,
     Gif,
     Webp,
+    Tiff,
+    Bmp,
+    Ico,
     Svg,
     Pdf,
 }
@@ -72,6 +75,9 @@ impl Kind {
             Ok(ImageFormat::Jpeg) => return Some(Self::Jpeg),
             Ok(ImageFormat::Gif) => return Some(Self::Gif),
             Ok(ImageFormat::WebP) => return Some(Self::Webp),
+            Ok(ImageFormat::Tiff) => return Some(Self::Tiff),
+            Ok(ImageFormat::Bmp) => return Some(Self::Bmp),
+            Ok(ImageFormat::Ico) => return Some(Self::Ico),
             _ => {}
         }
         let head = &bytes[..bytes.len().min(1024)];
@@ -91,6 +97,9 @@ impl Kind {
             Self::Jpeg => "image/jpeg",
             Self::Gif => "image/gif",
             Self::Webp => "image/webp",
+            Self::Tiff => "image/tiff",
+            Self::Bmp => "image/bmp",
+            Self::Ico => "image/vnd.microsoft.icon",
             Self::Svg => "image/svg+xml",
             Self::Pdf => "application/pdf",
         }
@@ -141,16 +150,16 @@ pub fn decode(bytes: &[u8], kind: Kind) -> Result<Decoded, Failure> {
         Kind::Svg => decode_svg(bytes),
         Kind::Gif => decode_gif(bytes),
         Kind::Webp => decode_webp(bytes),
-        Kind::Png | Kind::Jpeg => decode_still(bytes, kind),
+        Kind::Png => decode_still(bytes, ImageFormat::Png),
+        Kind::Jpeg => decode_still(bytes, ImageFormat::Jpeg),
+        Kind::Tiff => decode_still(bytes, ImageFormat::Tiff),
+        Kind::Bmp => decode_still(bytes, ImageFormat::Bmp),
+        Kind::Ico => decode_still(bytes, ImageFormat::Ico),
         Kind::Pdf => Err(Failure::NotSupported),
     }
 }
 
-fn decode_still(bytes: &[u8], kind: Kind) -> Result<Decoded, Failure> {
-    let format = match kind {
-        Kind::Png => ImageFormat::Png,
-        _ => ImageFormat::Jpeg,
-    };
+fn decode_still(bytes: &[u8], format: ImageFormat) -> Result<Decoded, Failure> {
     let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
     reader.limits(limits());
     let mut decoder = reader.into_decoder().map_err(|_| Failure::Damaged)?;

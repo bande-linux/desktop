@@ -114,6 +114,9 @@ impl Viewer {
                 "image/jpeg",
                 "image/gif",
                 "image/webp",
+                "image/tiff",
+                "image/bmp",
+                "image/vnd.microsoft.icon",
                 "image/svg+xml",
                 "application/pdf",
             ]

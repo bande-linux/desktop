@@ -19,6 +19,15 @@ msgstr "GIF-bild"
 msgid "WebP image"
 msgstr "WebP-bild"
 
+msgid "TIFF image"
+msgstr "TIFF-bild"
+
+msgid "BMP image"
+msgstr "BMP-bild"
+
+msgid "Icon"
+msgstr "Ikon"
+
 msgid "SVG image"
 msgstr "SVG-bild"
 

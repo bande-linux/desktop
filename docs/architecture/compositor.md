@@ -166,7 +166,12 @@ when they reach the screen is Bande's own.
   resolution changes the pointer keeps its relative place on it. The last display is parked, not removed: nothing moves, no frames are drawn, it counts as off and the display bus does not list it; the same display picks up where it was, and another one replaces it the way any display replaces a departed one. When a display goes away its shown
   workspace's windows join the main display's shown workspace and its other workspaces join the
   main display's row, each window keeping its relative place; when it returns, those windows
-  and workspaces go back to it, at the place they had. `wlr-output-management-v1` lists the
+  and workspaces go back to it, at the place they had. Closing the lid sets the built-in panel
+  aside the same way while another display is connected: its windows and the main role go to
+  the others and its CRTC is turned off; opening the lid brings it and its windows back. With no
+  other display the closed panel stays the only one and is turned off. The lid follows
+  libinput's lid switch and logind's `LidClosed`, read at start and after waking, since libinput
+  does not report a lid opened during sleep. `wlr-output-management-v1` lists the
   displays (the head description is the display's name) and applies configurations from tools
   such as `wlr-randr`; Settings reads it. A display can mirror another (`mirror=` in the
   arrangement): it keeps no windows or workspaces of its own, the pointer does not enter it, and

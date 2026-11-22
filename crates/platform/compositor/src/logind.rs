@@ -45,6 +45,9 @@ trait Manager {
 
     fn can_suspend(&self) -> zbus::Result<String>;
 
+    #[zbus(property)]
+    fn lid_closed(&self) -> zbus::Result<bool>;
+
     fn suspend(&self, interactive: bool) -> zbus::Result<()>;
 
     #[zbus(signal)]
@@ -86,6 +89,33 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
             };
             if sender.send(sleep).is_err() {
                 return;
+            }
+        }
+    });
+    Ok(())
+}
+
+pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result<()> {
+    let manager = ManagerProxyBlocking::builder(connection)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
+    let wakes = manager.receive_prepare_for_sleep()?;
+    let closed = manager.lid_closed()?;
+    if sender.send(closed).is_err() {
+        return Ok(());
+    }
+    thread::spawn(move || {
+        for wake in wakes {
+            if wake.args().is_ok_and(|arguments| *arguments.start()) {
+                continue;
+            }
+            match manager.lid_closed() {
+                Ok(closed) => {
+                    if sender.send(closed).is_err() {
+                        return;
+                    }
+                }
+                Err(error) => tracing::warn!("cannot tell whether the lid is closed: {error}"),
             }
         }
     });

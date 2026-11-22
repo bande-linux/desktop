@@ -8,7 +8,7 @@ use bande_compositor::{
     FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings, REFRESH,
     REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
     SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
-    follow_appearance, follow_input_settings, follow_login_settings, follow_session,
+    follow_appearance, follow_input_settings, follow_lid, follow_login_settings, follow_session,
     follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, render_material,
     serve_app_states, serve_displays, serve_global_shortcuts, serve_keyboard_monitor, user_config,
     watchdog_keepalive_interval,
@@ -19,6 +19,7 @@ use bande_datetime::timedate::zone_changes;
 use bande_inbox::Inbox;
 use bande_log::fault::StallWatch;
 use smithay::backend::drm::{DrmEvent, DrmEventMetadata};
+use smithay::backend::input::{InputEvent, Switch, SwitchState, SwitchToggleEvent};
 use smithay::backend::udev::{UdevBackend, UdevEvent};
 use smithay::reexports::calloop::channel::{self, Event};
 use smithay::reexports::calloop::generic::Generic;
@@ -249,6 +250,9 @@ fn follow_display_settings(
 
 fn sync_heads(app: &mut App<DrmBackend>) {
     let outputs = app.compositor.outputs();
+    if let Err(error) = app.output.darken_all_but(&outputs) {
+        tracing::warn!("cannot turn off a display that is set aside: {error}");
+    }
     for name in &outputs {
         if let Some(settings) = app.compositor.output_settings(name)
             && let Err(error) = app.output.use_mode(name, settings.mode)
@@ -328,6 +332,12 @@ fn hotplug(app: &mut App<DrmBackend>) {
         }
         Err(error) => tracing::warn!("cannot look for displays: {error}"),
     }
+}
+
+fn lid_changed(app: &mut App<DrmBackend>, closed: bool) {
+    app.compositor.set_lid_closed(closed);
+    sync_heads(app);
+    app.schedulers.iter_mut().for_each(FrameScheduler::resume);
 }
 
 fn reactivate(app: &mut App<DrmBackend>) {
@@ -441,6 +451,12 @@ fn run_drm(
                 }
             },
         )?;
+        follow(
+            &handle,
+            "the lid",
+            |sender| follow_lid(system, sender),
+            lid_changed,
+        )?;
     }
     handle.insert_source(notifiers.device, |event, metadata, app| match event {
         DrmEvent::VBlank(crtc) => page_flipped(app, crtc, *metadata),
@@ -483,6 +499,11 @@ fn run_drm(
     let input = app.output.input_backend()?;
     handle.insert_source(input, |event, _, app| {
         app.compositor.track_libinput_device(&event);
+        if let InputEvent::SwitchToggle { event: switch } = &event
+            && SwitchToggleEvent::switch(switch) == Some(Switch::Lid)
+        {
+            lid_changed(app, SwitchToggleEvent::state(switch) == SwitchState::On);
+        }
         if let Err(error) = app.compositor.handle_input(event) {
             tracing::warn!("cannot deliver input: {error}");
         }

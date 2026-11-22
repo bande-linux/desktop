@@ -73,6 +73,17 @@ struct Head {
     converting: bool,
 }
 
+impl Head {
+    fn darken(&mut self) -> Result<(), DrmBackendError> {
+        if !self.dark {
+            self.compositor.clear()?;
+            self.dark = true;
+            self.flip_pending = false;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Colour {
     Unknown,
@@ -651,6 +662,18 @@ impl DrmBackend {
         self.heads.iter().map(|head| head.config.clone()).collect()
     }
 
+    pub fn darken_all_but(&mut self, shown: &[String]) -> Result<(), DrmBackendError> {
+        if !self.session.is_active() {
+            return Ok(());
+        }
+        for head in &mut self.heads {
+            if head.lost_at.is_none() && !shown.contains(&head.config.name) {
+                head.darken()?;
+            }
+        }
+        Ok(())
+    }
+
     fn head(&mut self, name: &str) -> Option<&mut Head> {
         self.heads.iter_mut().find(|head| head.config.name == name)
     }
@@ -1202,11 +1225,7 @@ impl DrmBackend {
             return Ok(Submission::Paused);
         }
         if !compositor.output_powered(output) {
-            if !head.dark {
-                head.compositor.clear()?;
-                head.dark = true;
-                head.flip_pending = false;
-            }
+            head.darken()?;
             return Ok(Submission::Paused);
         }
         if head.dark

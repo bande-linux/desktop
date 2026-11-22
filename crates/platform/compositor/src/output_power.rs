@@ -77,6 +77,7 @@ impl State {
 
     pub(crate) fn powered(&self, output: &str) -> bool {
         self.power_mode(output) == Mode::On
+            && !self.withholds(output)
             && !self
                 .screen_named(output)
                 .is_some_and(|screen| self.screens[screen].parked)

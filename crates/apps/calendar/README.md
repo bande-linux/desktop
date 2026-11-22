@@ -69,6 +69,7 @@ views. Packaged as `bande-calendar`.
   default), and with it off `--background` exits at once. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
   suspend or a clock change, and the view follows a change of the system time zone at once.
+  Alerts that fell due while Calendar was not running, up to a day back, show when it starts.
 - **Settings** (Calendar ▸ Settings…, stored in `~/.config/bande/calendar.conf`): default
   calendar, start of the week, the hours the day starts and ends (the rest is shaded and the
   week opens there), hours shown at a time, week numbers, default alerts for events and

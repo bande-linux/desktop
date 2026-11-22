@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
-use bande_calendar::alerts::{Due, due_between};
+use bande_calendar::alerts::{Due, due_between, last_checked, save_checked};
 use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
 use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION, Subject};
@@ -46,6 +46,7 @@ const PUSH_DELAY: Duration = Duration::from_secs(2);
 const RETRY: SignedDuration = SignedDuration::from_mins(15);
 const ALERT_HORIZON: SignedDuration = SignedDuration::from_hours(24);
 const FIRED_MEMORY: SignedDuration = SignedDuration::from_hours(24);
+const SAVE_CHECKED_EVERY: SignedDuration = SignedDuration::from_mins(10);
 const SNOOZE: SignedDuration = SignedDuration::from_mins(5);
 
 static INFO: Info = Info {
@@ -130,6 +131,7 @@ struct CalendarApp {
     next_clock: Option<Timestamp>,
     alert_at: Timestamp,
     alerts_checked: Timestamp,
+    checked_saved: Timestamp,
     fired: HashMap<String, Timestamp>,
     notices: Notices,
     shown: HashMap<u32, Subject>,
@@ -687,6 +689,7 @@ impl CalendarApp {
         let until = now
             .saturating_add(SignedDuration::from_secs(1))
             .unwrap_or(now);
+        let mut fired = false;
         for due in due_between(
             view.library(),
             self.alerts_checked.min(now),
@@ -694,6 +697,7 @@ impl CalendarApp {
             &self.zone,
         ) {
             if self.fired.insert(due.key.clone(), due.at).is_none() {
+                fired = true;
                 self.notices.notify(due, &self.zone, &self.formats);
             }
         }
@@ -707,6 +711,10 @@ impl CalendarApp {
         let forget = now.saturating_sub(FIRED_MEMORY).unwrap_or(now);
         self.fired.retain(|_, at| *at >= forget);
         self.alerts_checked = until;
+        if fired || until.duration_since(self.checked_saved) >= SAVE_CHECKED_EVERY {
+            save_checked(until);
+            self.checked_saved = until;
+        }
         let horizon = now.saturating_add(ALERT_HORIZON).unwrap_or(now);
         let next = due_between(view.library(), until, horizon, &self.zone)
             .first()
@@ -971,7 +979,8 @@ impl Program for CalendarApp {
             asked: HashSet::new(),
             next_clock: main.map(|_| next_minute()),
             alert_at: Timestamp::now(),
-            alerts_checked: Timestamp::now(),
+            alerts_checked: last_checked(Timestamp::now()),
+            checked_saved: Timestamp::now(),
             fired: HashMap::new(),
             notices: Notices::start()?,
             shown: HashMap::new(),

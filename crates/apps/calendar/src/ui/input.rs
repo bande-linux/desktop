@@ -494,6 +494,8 @@ fn key_down(view: &mut CalendarView, key: Key, modifiers: Modifiers, event: &Eve
         Key::Character(character) if command => match character.to_ascii_lowercase() {
             't' => menu_command(view, ACTION_TODAY),
             'z' if !modifiers.shift && !modifiers.alt => view.undo(),
+            'z' if !modifiers.alt => view.redo(),
+            'y' if !modifiers.shift && !modifiers.alt => view.redo(),
             'n' if modifiers.alt => menu_command(view, ACTION_NEW_CALENDAR),
             'n' => menu_command(view, ACTION_NEW_EVENT),
             'f' => menu_command(view, ACTION_FIND),

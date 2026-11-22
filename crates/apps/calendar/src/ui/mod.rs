@@ -198,10 +198,17 @@ pub(crate) enum Confirm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Undo {
+struct Snapshot {
     calendar: String,
     href: String,
-    data: String,
+    data: Option<String>,
+}
+
+fn keep(stack: &mut Vec<Snapshot>, snapshot: Snapshot) {
+    if stack.len() == UNDO_DEPTH {
+        stack.remove(0);
+    }
+    stack.push(snapshot);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,7 +267,8 @@ pub struct CalendarView {
     scrolled_once: bool,
     grid: Option<geometry::TimeGrid>,
     pending_open: Option<Selection>,
-    undo: Vec<Undo>,
+    undo: Vec<Snapshot>,
+    redo: Vec<Snapshot>,
 }
 
 impl CalendarView {
@@ -325,6 +333,7 @@ impl CalendarView {
             grid: None,
             pending_open: None,
             undo: Vec::new(),
+            redo: Vec::new(),
         }
     }
 
@@ -636,7 +645,9 @@ impl CalendarView {
     }
 
     pub fn open_new_calendar(&mut self, account: Option<&str>) {
-        self.close_inspector(true);
+        if !self.inspector_closed() {
+            return;
+        }
         let accounts: Vec<(String, String)> = self
             .library
             .accounts
@@ -821,7 +832,9 @@ impl CalendarView {
     }
 
     fn open_setup(&mut self, start: setup::Start) {
-        self.close_inspector(true);
+        if !self.inspector_closed() {
+            return;
+        }
         let mut setup = setup::AccountSetup::new(start, self.setup_replies.clone());
         setup.present(&mut self.ui);
         self.setup = Some(setup);
@@ -1171,30 +1184,66 @@ impl CalendarView {
         let Some(stored) = calendar.objects.get(object) else {
             return;
         };
-        if self.undo.len() == UNDO_DEPTH {
-            self.undo.remove(0);
-        }
-        self.undo.push(Undo {
+        let snapshot = Snapshot {
             calendar: calendar.info.id.clone(),
             href: stored.href.clone(),
-            data: stored.data.clone(),
-        });
+            data: Some(stored.data.clone()),
+        };
+        keep(&mut self.undo, snapshot);
+        self.redo.clear();
+    }
+
+    fn stored_at(&self, calendar: usize, href: &str) -> Option<usize> {
+        self.library
+            .calendars
+            .get(calendar)?
+            .objects
+            .iter()
+            .position(|stored| {
+                stored.href == href && stored.pending != Some(crate::store::Pending::Delete)
+            })
     }
 
     pub(crate) fn undo(&mut self) -> bool {
-        let Some(undo) = self.undo.pop() else {
+        self.step(true)
+    }
+
+    pub(crate) fn redo(&mut self) -> bool {
+        self.step(false)
+    }
+
+    fn step(&mut self, back: bool) -> bool {
+        let taken = match back {
+            true => self.undo.pop(),
+            false => self.redo.pop(),
+        };
+        let Some(snapshot) = taken else {
             return false;
         };
         self.close_inspector(false);
-        let Some(calendar) = self.library.calendar_index(&undo.calendar) else {
+        let Some(calendar) = self.library.calendar_index(&snapshot.calendar) else {
             return true;
         };
-        let Some(object) = self.library.restore(calendar, &undo.href, undo.data) else {
-            return true;
+        let current = self.stored_at(calendar, &snapshot.href);
+        let reverse = Snapshot {
+            data: current.map(|index| self.library.calendars[calendar].objects[index].data.clone()),
+            ..snapshot.clone()
         };
-        let day = self
-            .library
-            .object(calendar, object)
+        match back {
+            true => keep(&mut self.redo, reverse),
+            false => keep(&mut self.undo, reverse),
+        }
+        let shown = match snapshot.data {
+            Some(data) => self.library.restore(calendar, &snapshot.href, data),
+            None => {
+                if let Some(index) = current {
+                    self.library.remove_object(calendar, index);
+                }
+                None
+            }
+        };
+        let day = shown
+            .and_then(|object| self.library.object(calendar, object))
             .and_then(|object| object.events.first())
             .map(|event| event.start.date());
         if let Some(day) = day {
@@ -1316,7 +1365,9 @@ impl CalendarView {
     }
 
     pub(crate) fn open_inspector(&mut self, found: Found) {
-        self.close_inspector(true);
+        if !self.inspector_closed() {
+            return;
+        }
         let Some(event) = self.library.event(&found).cloned() else {
             return;
         };
@@ -1370,7 +1421,23 @@ impl CalendarView {
         }
     }
 
+    fn inspector_closed(&mut self) -> bool {
+        self.close_inspector(true);
+        self.inspector.is_none()
+    }
+
     pub(crate) fn close_inspector(&mut self, commit: bool) {
+        let unreadable = self
+            .inspector
+            .as_ref()
+            .filter(|inspector| commit && !inspector.read_only)
+            .and_then(inspector::Inspector::unreadable);
+        if let Some((field, title, message)) = unreadable {
+            self.ui.set_focus(field);
+            let alert = Alert::new(&title, &message, self.choice()).primary(&tr!("OK"), "cancel");
+            self.ui.present_dialog(alert);
+            return;
+        }
         let Some(inspector) = self.inspector.take() else {
             return;
         };

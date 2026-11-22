@@ -727,3 +727,15 @@ msgstr "Svaret gäller inte en händelse som du arrangerar, eller kommer inte fr
 
 msgid "This cancellation is older than the event in your calendar, or is not from its organizer."
 msgstr "Inställningen är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
+
+msgid "“{text}” is not a date"
+msgstr "”{text}” är inget datum"
+
+msgid "Enter a date such as {example}."
+msgstr "Ange ett datum som {example}."
+
+msgid "“{text}” is not a time"
+msgstr "”{text}” är ingen tid"
+
+msgid "Enter a time such as {example}."
+msgstr "Ange en tid som {example}."

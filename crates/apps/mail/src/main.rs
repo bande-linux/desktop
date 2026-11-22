@@ -97,6 +97,7 @@ impl View for Pane {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
         match (self, event) {
+            (Self::Main(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
             (Self::Compose(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
             (Self::Main(view), WindowEvent::Input(input)) => view.handle(&input),
             (Self::Compose(view), WindowEvent::Input(input)) => {
@@ -513,6 +514,7 @@ impl Mail {
                     self.open_compose(cx, *outgoing);
                 }
                 Request::OpenSettings => cx.open_settings(),
+                Request::Attach(paths) => self.picker.read(SHARED_FILES, paths),
                 Request::OpenLink(url) => self.open_url(cx, window, &url),
                 Request::OpenAttachment(path) => {
                     self.open_target(cx, window, &path.to_string_lossy())

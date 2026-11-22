@@ -23,6 +23,7 @@ struct Offer {
     id: u32,
     country: String,
     suggestion: ZoneSuggestion,
+    token: Option<String>,
 }
 
 #[derive(Default)]
@@ -131,6 +132,7 @@ fn offer(session: &Connection, offered: &Offered) {
                 id,
                 country,
                 suggestion,
+                token: None,
             });
         }
         Err(error) => tracing::warn!("cannot suggest a time zone: {error}"),
@@ -149,12 +151,17 @@ fn change_zone(system: &Connection, zone: String) {
 }
 
 fn answer(system: &Connection, offered: &Offered, signal: Signal) {
+    let mut offers = lock(offered);
     let (id, action) = match signal {
         Signal::ActionInvoked(id, action) => (id, Some(action)),
         Signal::Closed(id) => (id, None),
-        Signal::ActivationToken(..) => return,
+        Signal::ActivationToken(id, token) => {
+            if let Some(shown) = offers.shown.as_mut().filter(|shown| shown.id == id) {
+                shown.token = Some(token);
+            }
+            return;
+        }
     };
-    let mut offers = lock(offered);
     if offers.shown.as_ref().is_none_or(|shown| shown.id != id) {
         return;
     }
@@ -168,7 +175,8 @@ fn answer(system: &Connection, offered: &Offered, signal: Signal) {
         (Some(CHANGE_ACTION), ZoneSuggestion::Zone(zone)) => change_zone(system, zone),
         (Some(CHOOSE_ACTION | DEFAULT_ACTION), _) => {
             let command = [SETTINGS_PROGRAM, TIME_PANE];
-            if let Err(error) = bande_xdg::spawn_detached(SETTINGS_APP, &command, None, None) {
+            let token = offer.token.as_deref();
+            if let Err(error) = bande_xdg::spawn_detached(SETTINGS_APP, &command, None, token) {
                 tracing::warn!("cannot open the time zone settings: {error}");
             }
         }

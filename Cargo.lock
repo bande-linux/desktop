@@ -1912,7 +1912,6 @@ name = "bande-splash"
 version = "0.2.0"
 dependencies = [
  "bande-graphics",
- "bande-spring",
  "bande-widgets",
  "resvg",
 ]

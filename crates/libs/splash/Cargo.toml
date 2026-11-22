@@ -9,7 +9,6 @@ repository.workspace = true
 
 [dependencies]
 bande-graphics.workspace = true
-bande-spring.workspace = true
 bande-widgets.workspace = true
 resvg.workspace = true
 

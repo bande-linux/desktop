@@ -6,7 +6,6 @@ use std::path::Path;
 use bande_graphics::{
     Color, ControlSize, CpuRenderer, Image, Item, Palette, Point, Rect, Scene, Scheme, Shape,
 };
-use bande_spring::{Spring, State};
 use bande_widgets::{
     CAPS_LOCK_SIZE, FOCUS_RING_OUTSET, PROGRESS_CELL_GAP, PROGRESS_CELLS, PROGRESS_HEIGHT,
     caps_lock_for, indeterminate_sweep, paint_field_for, progress_cells_for,
@@ -28,7 +27,6 @@ const INDICATOR_ALIGNMENT: f64 = 0.64;
 const CELL_WIDTH: f32 = 6.0;
 const PLYMOUTH_FRAME_RATE: f64 = 30.0;
 const THROBBER_SECONDS: f64 = 2.0;
-const END_FRAMES: usize = 8;
 const ENTRY_WIDTH: f32 = 240.0;
 const BULLET: f32 = 6.0;
 const BULLET_PITCH: f32 = 12.0;
@@ -82,7 +80,7 @@ fn indicator_width() -> f32 {
     PROGRESS_CELLS as f32 * CELL_WIDTH + (PROGRESS_CELLS - 1) as f32 * PROGRESS_CELL_GAP
 }
 
-fn indicator(lit: impl Fn(f32) -> f32, alpha: f32) -> io::Result<Pixmap> {
+fn indicator(lit: impl Fn(f32) -> f32) -> io::Result<Pixmap> {
     let width = indicator_width();
     let mut cells = Vec::new();
     progress_cells_for(
@@ -95,26 +93,8 @@ fn indicator(lit: impl Fn(f32) -> f32, alpha: f32) -> io::Result<Pixmap> {
         width as u32,
         PROGRESS_HEIGHT as u32,
         Color::TRANSPARENT,
-        vec![Item::Opacity {
-            alpha,
-            items: cells,
-        }],
+        cells,
     )
-}
-
-fn fade_out(frame: usize) -> f32 {
-    if frame + 1 >= END_FRAMES {
-        return 0.0;
-    }
-    let still = State {
-        position: 1.0,
-        velocity: 0.0,
-    };
-    let seconds = frame as f64 / PLYMOUTH_FRAME_RATE;
-    Spring::FADE
-        .state_at(still, 0.0, seconds)
-        .position
-        .clamp(0.0, 1.0) as f32
 }
 
 fn icon(source: &str, width: u32, x: u32) -> io::Result<Pixmap> {
@@ -209,7 +189,7 @@ ConsoleLogBackgroundColor={background}
 MessageBelowAnimation=true
 
 [boot-up]
-UseEndAnimation=true
+UseEndAnimation=false
 
 [shutdown]
 UseEndAnimation=false
@@ -254,18 +234,10 @@ pub fn write_plymouth_theme(directory: &Path) -> io::Result<()> {
     write_png(directory, "watermark.png", &watermark)?;
     let frames = (THROBBER_SECONDS * PLYMOUTH_FRAME_RATE) as usize;
     for frame in 0..frames {
-        let pixmap = indicator(indeterminate_sweep(frame as f32 / frames as f32), 1.0)?;
+        let pixmap = indicator(indeterminate_sweep(frame as f32 / frames as f32))?;
         write_png(
             directory,
             &format!("throbber-{:04}.png", frame + 1),
-            &pixmap,
-        )?;
-    }
-    for frame in 0..END_FRAMES {
-        let pixmap = indicator(indeterminate_sweep(0.0), fade_out(frame))?;
-        write_png(
-            directory,
-            &format!("animation-{:04}.png", frame + 1),
             &pixmap,
         )?;
     }

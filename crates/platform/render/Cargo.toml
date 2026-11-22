@@ -17,3 +17,7 @@ naga.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+smithay = { workspace = true, features = ["backend_gbm"] }
+tracing-subscriber.workspace = true

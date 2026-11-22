@@ -12,7 +12,7 @@ use smithay::backend::drm::compositor::{
     DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement,
 };
 use smithay::backend::drm::{
-    DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode,
+    DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode, NodeType,
     VrrSupport,
 };
 use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
@@ -59,7 +59,7 @@ struct Head {
     config: OutputConfig,
     modes: Vec<Mode>,
     compositor: OutputCompositor,
-    rendered: bool,
+    buffers: Buffers,
     variable_refresh: bool,
     scanned_out: bool,
     dark: bool,
@@ -87,6 +87,33 @@ impl Head {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Buffers {
+    Tiled,
+    Linear,
+    Dumb,
+}
+
+impl Buffers {
+    fn next(self) -> Option<Self> {
+        match self {
+            Self::Tiled => Some(Self::Linear),
+            Self::Linear => Some(Self::Dumb),
+            Self::Dumb => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Buffers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Tiled => "tiled GBM buffers",
+            Self::Linear => "linear GBM buffers",
+            Self::Dumb => "dumb buffers",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Colour {
     Unknown,
@@ -103,10 +130,10 @@ pub struct DrmBackend {
     renderer: VulkanRenderer,
     node: DrmNode,
     feedback: DmabufFeedback,
+    feedback_device: u64,
     heads: Vec<Head>,
     libinput: Option<Libinput>,
     kelvin: Option<f64>,
-    copies_frames: bool,
     first_mode: FirstMode,
 }
 
@@ -484,8 +511,14 @@ impl DrmBackend {
         let node = DrmNode::from_file(&fd)?;
         let gbm = GbmDevice::new(fd).ok();
         let renderer = VulkanRenderer::new(Some(node.dev_id()))?;
+        let info = renderer.device_info();
+        tracing::info!("composing on {info} with {}", info.extensions.join(", "));
+        let feedback_device = match node.node_with_type(NodeType::Render) {
+            Some(Ok(render)) => render.dev_id(),
+            _ => node.dev_id(),
+        };
         let feedback =
-            DmabufFeedbackBuilder::new(node.dev_id(), renderer.dmabuf_formats()).build()?;
+            DmabufFeedbackBuilder::new(feedback_device, renderer.dmabuf_formats()).build()?;
         Ok(Self {
             session,
             path,
@@ -494,10 +527,10 @@ impl DrmBackend {
             renderer,
             node,
             feedback,
+            feedback_device,
             heads: Vec::new(),
             libinput: None,
             kelvin: None,
-            copies_frames: false,
             first_mode,
         })
     }
@@ -530,16 +563,26 @@ impl DrmBackend {
         crtc: crtc::Handle,
         mode: Mode,
         connector: connector::Handle,
-        rendered: bool,
+        buffers: Buffers,
     ) -> Result<OutputCompositor, DrmBackendError> {
         let surface = self.device.create_surface(crtc, mode, &[connector])?;
-        let allocator = match (&self.gbm, rendered) {
-            (Some(gbm), true) => ScanoutAllocator::Rendered(GbmAllocator::new(
-                gbm.clone(),
-                GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
-            )),
+        let allocator = match (&self.gbm, buffers) {
+            (Some(gbm), Buffers::Tiled | Buffers::Linear) => {
+                ScanoutAllocator::Rendered(GbmAllocator::new(
+                    gbm.clone(),
+                    GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
+                ))
+            }
             _ => ScanoutAllocator::Copied(DumbAllocator::new(self.device.device_fd().clone())),
         };
+        let mut render_formats = self.renderer.render_formats();
+        if buffers == Buffers::Linear {
+            render_formats = render_formats
+                .iter()
+                .filter(|format| format.modifier == Modifier::Linear)
+                .copied()
+                .collect();
+        }
         let (width, height) = mode.size();
         Ok(DrmCompositor::new(
             OutputModeSource::Static {
@@ -552,20 +595,57 @@ impl DrmBackend {
             allocator,
             ScanoutExporter::new(self.gbm.clone(), self.node),
             COLOR_FORMATS,
-            self.renderer.render_formats(),
+            render_formats,
             Size::from(CURSOR_SIZE),
             self.gbm.clone(),
         )?)
     }
 
-    fn renders_into_scanout_buffers(&self) -> bool {
-        !self.copies_frames
-            && self.gbm.is_some()
-            && self
-                .renderer
-                .render_formats()
-                .iter()
-                .any(|format| format.modifier != Modifier::Linear)
+    fn first_buffers(&self) -> Buffers {
+        let tiled = self
+            .renderer
+            .render_formats()
+            .iter()
+            .any(|format| format.modifier != Modifier::Linear);
+        match self.gbm.is_some() && tiled {
+            true => Buffers::Tiled,
+            false => Buffers::Dumb,
+        }
+    }
+
+    fn buffered_compositor(
+        &mut self,
+        (crtc, mode, connector): (crtc::Handle, Mode, connector::Handle),
+        mut buffers: Buffers,
+        name: &str,
+    ) -> Result<(OutputCompositor, Buffers), DrmBackendError> {
+        loop {
+            match (
+                self.output_compositor(crtc, mode, connector, buffers),
+                buffers.next(),
+            ) {
+                (Ok(compositor), _) => return Ok((compositor, buffers)),
+                (Err(error), Some(next)) => {
+                    tracing::warn!("{name} uses {next}: {error}");
+                    buffers = next;
+                }
+                (Err(error), None) => return Err(error),
+            }
+        }
+    }
+
+    fn feedback_for(&self, scanout: &FormatSet) -> Result<DmabufFeedback, DrmBackendError> {
+        let renderer_formats = self.renderer.dmabuf_formats();
+        let scanout: FormatSet = scanout
+            .iter()
+            .filter(|format| renderer_formats.contains(format))
+            .copied()
+            .collect();
+        Ok(
+            DmabufFeedbackBuilder::new(self.feedback_device, renderer_formats)
+                .add_preference_tranche(self.feedback_device, Some(TrancheFlags::Scanout), scanout)
+                .build()?,
+        )
     }
 
     fn create_head(&mut self, info: &connector::Info) -> Result<Option<Head>, DrmBackendError> {
@@ -585,38 +665,25 @@ impl DrmBackend {
         ) else {
             return Ok(None);
         };
-        let mut rendered = self.renders_into_scanout_buffers();
-        let compositor = match self.output_compositor(crtc, mode, info.handle(), rendered) {
-            Ok(compositor) => compositor,
-            Err(error) if rendered => {
-                tracing::warn!("{} copies its frames: {error}", connector_name(info));
-                rendered = false;
-                self.output_compositor(crtc, mode, info.handle(), false)?
-            }
-            Err(error) => return Err(error),
-        };
+        let (compositor, buffers) = self.buffered_compositor(
+            (crtc, mode, info.handle()),
+            self.first_buffers(),
+            &connector_name(info),
+        )?;
         let scanout_formats = compositor.surface().plane_info().formats.clone();
         let variable_refresh = matches!(
             compositor.vrr_supported(info.handle()),
             Ok(VrrSupport::Supported)
         );
-        let renderer_formats = self.renderer.dmabuf_formats();
         if self.heads.is_empty() {
-            let scanout: FormatSet = scanout_formats
-                .iter()
-                .filter(|format| renderer_formats.contains(format))
-                .copied()
-                .collect();
-            self.feedback = DmabufFeedbackBuilder::new(self.node.dev_id(), renderer_formats)
-                .add_preference_tranche(self.node.dev_id(), Some(TrancheFlags::Scanout), scanout)
-                .build()?;
+            self.feedback = self.feedback_for(&scanout_formats)?;
         }
         Ok(Some(Head {
             connector: info.handle(),
             config: head_config(&self.device, info, &modes),
             modes,
             compositor,
-            rendered,
+            buffers,
             variable_refresh,
             scanned_out: false,
             dark: false,
@@ -1217,24 +1284,28 @@ impl FrameOutput for DrmBackend {
 }
 
 impl DrmBackend {
-    fn copy_frames(&mut self, index: usize) -> Result<(), DrmBackendError> {
-        self.copies_frames = true;
+    fn fall_back(&mut self, index: usize, next: Buffers) -> Result<(), DrmBackendError> {
         let head = self.heads.remove(index);
         let (crtc, mode) = (head.compositor.crtc(), head.compositor.pending_mode());
+        let restore = head.buffers;
         drop(head.compositor);
-        let compositor = match self.output_compositor(crtc, mode, head.connector, false) {
-            Ok(compositor) => compositor,
+        let target = (crtc, mode, head.connector);
+        let (compositor, buffers) = match self.buffered_compositor(target, next, &head.config.name)
+        {
+            Ok(found) => found,
             Err(error) => {
-                tracing::warn!("{} cannot copy its frames: {error}", head.config.name);
-                self.copies_frames = false;
-                self.output_compositor(crtc, mode, head.connector, true)?
+                tracing::warn!("{} cannot fall back: {error}", head.config.name);
+                (
+                    self.output_compositor(crtc, mode, head.connector, restore)?,
+                    restore,
+                )
             }
         };
         self.heads.insert(
             index,
             Head {
                 compositor,
-                rendered: false,
+                buffers,
                 flip_pending: false,
                 tone: None,
                 ..head
@@ -1359,9 +1430,13 @@ impl DrmBackend {
         });
         let frame = match rendered {
             Ok(frame) => frame,
-            Err(error) if head.rendered && !self.renderer.is_lost() => {
-                tracing::warn!("{output} copies its frames from now on: {error}");
-                self.copy_frames(index)?;
+            Err(error)
+                if !self.renderer.is_lost()
+                    && !self.renderer.out_of_memory()
+                    && let Some(next) = head.buffers.next() =>
+            {
+                tracing::warn!("{output} uses {next} from now on: {error}");
+                self.fall_back(index, next)?;
                 return Ok(Submission::Unchanged);
             }
             Err(error) => return Err(error.into()),

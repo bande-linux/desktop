@@ -11,7 +11,7 @@ use smithay::reexports::rustix::ioctl;
 use crate::{
     ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DRAWING, DeviceExport, MappedExport, Program, Rect,
     RenderError, SAMPLED, TRANSFER_DESTINATION, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
-    VulkanTexture, barrier, disjoint, hand_over,
+    VulkanTexture, barrier, disjoint, hand_over, hand_over_buffers,
 };
 
 mod blur;
@@ -785,33 +785,21 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                     })
             })
             .collect();
-        let acquire = vk::BufferMemoryBarrier2::default()
-            .src_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
-            .dst_queue_family_index(family)
-            .dst_stage_mask(vk::PipelineStageFlags2::COPY)
-            .dst_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
-            .buffer(buffer)
-            .size(vk::WHOLE_SIZE);
-        let release = vk::BufferMemoryBarrier2::default()
-            .src_stage_mask(vk::PipelineStageFlags2::COPY)
-            .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
-            .src_queue_family_index(family)
-            .dst_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
-            .buffer(buffer)
-            .size(vk::WHOLE_SIZE);
+        let families = (family, self.renderer.foreign_family);
+        let writing = (
+            vk::PipelineStageFlags2::COPY,
+            vk::AccessFlags2::TRANSFER_WRITE,
+        );
         if source == self.image {
             barrier(device, commands, self.image, ATTACHMENT, TRANSFER_SOURCE);
         }
+        hand_over_buffers(device, commands, &[buffer], families, (true, writing));
         // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
         // ends the buffer, so `command_buffer` is recording and only this frame records into it;
         // `buffer` is the live import of the display dma-buf, `source` is in
         // `TRANSFER_SRC_OPTIMAL`, and `regions` are rects drawn inside the target, which
         // `device_export` checked fit in the buffer.
         unsafe {
-            device.cmd_pipeline_barrier2(
-                commands,
-                &vk::DependencyInfo::default().buffer_memory_barriers(slice::from_ref(&acquire)),
-            );
             device.cmd_copy_image_to_buffer(
                 commands,
                 source,
@@ -819,11 +807,8 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 buffer,
                 &regions,
             );
-            device.cmd_pipeline_barrier2(
-                commands,
-                &vk::DependencyInfo::default().buffer_memory_barriers(slice::from_ref(&release)),
-            );
         }
+        hand_over_buffers(device, commands, &[buffer], families, (false, writing));
     }
 
     fn record_readbacks(&self, source: vk::Image, readbacks: &[Readback]) {

@@ -1,5 +1,6 @@
 mod connections;
 mod proxy;
+pub mod rfkill;
 mod wifi;
 
 pub use connections::{

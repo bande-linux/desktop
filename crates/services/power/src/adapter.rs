@@ -25,7 +25,7 @@ trait UPower {
     default_service = "org.freedesktop.UPower.PowerProfiles",
     default_path = "/org/freedesktop/UPower/PowerProfiles"
 )]
-trait PowerProfiles {
+pub trait PowerProfiles {
     #[zbus(property)]
     fn active_profile(&self) -> zbus::Result<String>;
     #[zbus(property)]

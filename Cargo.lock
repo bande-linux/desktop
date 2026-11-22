@@ -1402,7 +1402,9 @@ version = "0.2.0"
 dependencies = [
  "accesskit",
  "bande-audio",
+ "bande-bar",
  "bande-bluetooth",
+ "bande-config",
  "bande-inbox",
  "bande-l10n",
  "bande-network",

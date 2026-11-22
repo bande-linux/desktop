@@ -334,7 +334,9 @@ brings up the dialog.
   Settings (`crates/libs/network`, `crates/libs/bluetooth`). Bande never rewrites
   `/etc/network/interfaces` or NetworkManager's configuration; a wired device that ifupdown or
   systemd-networkd manages is to be shown read-only in Settings, with Wi-Fi alone in the Taskbar
-  and Quick Settings.
+  and Quick Settings. Quick Settings' Airplane mode soft-blocks every radio through `/dev/rfkill`
+  (the active seat's through `uaccess`), and its Power Saver tile switches power-profiles-daemon
+  between `power-saver` and `balanced`.
 - **Service outages**: the bar, Quick Settings and Settings tell a stopped service from missing
   hardware (`bande_bus::Reading`): a failed UPower, NetworkManager or BlueZ read counts as absent
   only when sysfs has no battery, Wi-Fi radio or Bluetooth adapter; otherwise the item stays

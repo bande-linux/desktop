@@ -371,7 +371,7 @@ impl Program for Viewer {
             Entry::separator(),
             item(text!("Copy"), COPY, Some("Ctrl+C"), copyable),
             Entry::separator(),
-            item(text!("Find…"), FIND, Some("Ctrl+F"), document),
+            item(text!("Find"), FIND, Some("Ctrl+F"), document),
             item(text!("Find Next"), FIND_NEXT, Some("Ctrl+G"), document),
             item(
                 text!("Find Previous"),

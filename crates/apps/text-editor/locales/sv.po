@@ -190,9 +190,6 @@ msgstr "Stilar"
 msgid "Make Plain Text"
 msgstr "Gör till oformaterad text"
 
-msgid "Find…"
-msgstr "Sök…"
-
 msgid "Find and Replace…"
 msgstr "Sök och ersätt…"
 

@@ -148,8 +148,8 @@ msgstr "Ångra flytt till papperskorgen"
 msgid "Copy"
 msgstr "Kopiera"
 
-msgid "Find…"
-msgstr "Sök…"
+msgid "Find"
+msgstr "Sök"
 
 msgid "Find Next"
 msgstr "Sök nästa"

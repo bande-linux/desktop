@@ -726,7 +726,7 @@ impl Program for TextEditor {
         let view = cx.focused().and_then(|window| cx.view(window));
         let windowed = view.is_some();
         let find = vec![
-            item(text!("Find…"), "find")
+            item(text!("Find"), "find")
                 .shortcut("Ctrl+F")
                 .enabled(windowed),
             item(text!("Find and Replace…"), "find-replace")

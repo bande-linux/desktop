@@ -253,7 +253,8 @@ UI.
 - It is NetworkManager's secret agent (`org.bande.Secrets`, answering only NetworkManager's bus
   name): agent-owned secrets live in the login keyring under libnm's attributes, and new Wi-Fi
   or 802.1X passwords are asked through the keyring prompt. Wi-Fi joined from Bande keeps its
-  password system-wide.
+  password system-wide; Enterprise (802.1X) passwords and private-key passwords set in Settings
+  are agent-owned, so they stay in the keyring.
 - Items record the app that saved them (`bande:creator`); another app sees them locked until the
   user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). Prompts
   are `bande-secrets-prompt` processes, so the daemon never links the toolkit; the daemon is not
@@ -331,10 +332,36 @@ brings up the dialog.
   (About, Hide, Hide Other Apps, Show All Apps) are performed by the shell through
   `bande_shell_v1`, since an app cannot hide itself.
 - **Network and Bluetooth**: NetworkManager and BlueZ for Wi-Fi and pairing in Quick Settings and
-  Settings (`crates/libs/network`, `crates/libs/bluetooth`). Bande never rewrites
-  `/etc/network/interfaces` or NetworkManager's configuration; a wired device that ifupdown or
-  systemd-networkd manages is to be shown read-only in Settings, with Wi-Fi alone in the Taskbar
-  and Quick Settings.
+  Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar and Quick Settings show
+  Wi-Fi alone.
+  - Saved connections activate whatever their security; new WPA Enterprise networks (PEAP, TTLS,
+    TLS) and wired 802.1X need a CA certificate file or the system store with a server domain.
+    Hidden networks offer every security type, WEP with a warning. Every wired device is listed,
+    and IPv4 and IPv6 (automatic, manual, off) are set per connection.
+  - A device NetworkManager leaves unmanaged (ifupdown, systemd-networkd) shows its address from
+    the kernel (rtnetlink) and why Settings leaves it alone. Bande never rewrites
+    `/etc/network/interfaces` on its own: "Let Settings Manage This Connection…" runs
+    `bande-network-helper` under `pkexec` (`org.bande.network-helper`, admin each time). It shows
+    the stanza lines it would disable, then keeps a copy of each file next to it (hidden in
+    `interfaces.d`, which `source` globs), takes the interface down with `ifdown`, comments out
+    only that interface's lines (splitting a shared `auto` line), reloads NetworkManager and adds
+    an equivalent system connection (the Wi-Fi PSK in the root-only keyfile, as Debian's
+    NetworkManager keeps it). It refuses anything it can't carry over safely (unknown options such
+    as `post-up`, `wpa-conf`, mappings, bridges or VLANs on the interface, line continuations,
+    sources outside `interfaces.d`, a running `dhcpcd.service`), and puts every file back and the
+    interface up again if NetworkManager doesn't take over.
+  - "Online" (`follow_online`, used by Software and Calendar) is NetworkManager's
+    `CONNECTED_GLOBAL`, or a default route in the kernel through a device NetworkManager doesn't
+    manage; nothing is sent to find out.
+  - Hotspot: a shared `802-11-wireless` access-point connection (WPA2, CCMP). Airplane mode
+    (`bande_network::{airplane_mode, set_airplane_mode, follow_airplane_mode}`) blocks every
+    rfkill radio through `/dev/rfkill` and remembers in `$XDG_STATE_HOME/bande/airplane-radios`
+    which were on, to turn just those back on.
+  - Proxy (none, manual, PAC) is written to `~/.config/environment.d/60-bande-proxy.conf`
+    (`http_proxy`, `https_proxy`, `no_proxy` and their upper-case forms; PAC as libproxy's
+    `pac+URL`) and set in the user manager's and the D-Bus activation environment. libproxy reads
+    these outside GNOME, so GLib apps and the portal's ProxyResolver follow them, as do Qt and
+    command-line tools for a manual proxy; running apps pick them up at the next login.
 - **Service outages**: the bar, Quick Settings and Settings tell a stopped service from missing
   hardware (`bande_bus::Reading`): a failed UPower, NetworkManager or BlueZ read counts as absent
   only when sysfs has no battery, Wi-Fi radio or Bluetooth adapter; otherwise the item stays

@@ -28,8 +28,10 @@ use crate::backup::{BackupIntent, BackupView};
 use crate::battery::{BatteryCommand, PowerState};
 use crate::defaults::{DefaultApp, DefaultAppCommand};
 use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
+use crate::enterprise::{Certificate, EnterpriseField};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
+use crate::handover::{HandOver, HandOverCommand};
 use crate::language::{SAME_AS_LANGUAGE, locale_matches};
 use crate::locale::{DEFAULT_LOCALE, LocaleCommand, LocaleState, same_locale};
 use crate::login::{App, LoginCommand, LoginItems, app_matches, login_matches};
@@ -42,6 +44,7 @@ use crate::pointing::PointingDevices;
 use crate::printers::{PrinterCommand, PrintersState, Support};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
+use crate::proxies::ProxySettings;
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::sharing::{SharingCommand, SharingState};
 use crate::software::{Need, SoftwareCommand, SoftwareState};
@@ -51,6 +54,7 @@ use crate::time::{TimeCommand, TimeState, parse_manual, zone_matches};
 use crate::users::{Account, NewAccountForm, PasswordForm, PictureEdit, UsersCommand};
 use crate::widgets::{Column, Crossfade, Root};
 use crate::wifi::{HIDDEN_SECURITY, Other};
+use bande_network::Security;
 
 pub(crate) const PICK_RESULTS: usize = 8;
 const SECOND: Duration = Duration::from_secs(1);
@@ -111,6 +115,17 @@ pub(crate) enum Intent {
     OtherSecurity(usize),
     JoinOther(Option<String>),
     WifiManual(bool),
+    EnterpriseText(EnterpriseField, String),
+    EnterpriseMethod(usize),
+    EnterpriseAuthority(usize),
+    ChooseCertificate(Certificate),
+    OpenWired(String),
+    SecureWired(bool),
+    SaveWiredSecurity(String),
+    Ipv6Mode(PaneId, usize),
+    HandOver(Option<HandOverCommand>),
+    ProxyMode(usize),
+    StartHotspot(Option<String>),
     OpenPrinter(String),
     OpenReport(String),
     CopyReport(String),
@@ -235,6 +250,7 @@ pub(crate) struct Join {
 pub(crate) enum Detail {
     App(String),
     Network(Vec<u8>),
+    Wired(String),
     Printer(String),
     Account(String),
     Report(String),
@@ -284,6 +300,13 @@ pub struct SettingsView {
     pub(crate) detail: Option<Detail>,
     pub(crate) other: Option<Other>,
     pub(crate) wifi_manual: bool,
+    pub(crate) wifi_ipv6: usize,
+    pub(crate) ethernet_ipv6: usize,
+    pub(crate) enterprise: bande_network::Enterprise,
+    pub(crate) enterprise_file: bool,
+    pub(crate) securing_wired: bool,
+    pub(crate) handover: Option<HandOver>,
+    pub(crate) proxy: Option<ProxySettings>,
     pub(crate) printers: Option<PrintersState>,
     pub(crate) sharing: Option<SharingState>,
     pub(crate) installing_sharing: bool,
@@ -394,6 +417,13 @@ impl SettingsView {
             detail: None,
             other: None,
             wifi_manual: false,
+            wifi_ipv6: 0,
+            ethernet_ipv6: 0,
+            enterprise: bande_network::Enterprise::default(),
+            enterprise_file: false,
+            securing_wired: false,
+            handover: None,
+            proxy: None,
             printers: None,
             sharing: None,
             installing_sharing: false,
@@ -625,6 +655,7 @@ impl SettingsView {
                     SettingId::WifiPower,
                     SettingId::KnownNetworks,
                     SettingId::Networks,
+                    SettingId::Hotspot,
                 ],
             ),
             Update::Bluetooth(_) => (
@@ -643,6 +674,7 @@ impl SettingsView {
                     SettingId::EthernetAddress,
                     SettingId::EthernetRouter,
                     SettingId::EthernetDns,
+                    SettingId::AirplaneMode,
                 ],
             ),
             Update::Audio(_) => (
@@ -738,6 +770,17 @@ impl SettingsView {
                 self.wifi = wifi;
             }
             Update::Joined(ssid, outcome) => self.joined(ssid, outcome),
+            Update::Airplane(on) => match on {
+                Some(on) => {
+                    self.values.insert(SettingId::AirplaneMode, Value::Flag(on));
+                }
+                None => {
+                    self.values.remove(&SettingId::AirplaneMode);
+                }
+            },
+            Update::Proxy(proxy) => self.load_proxy(proxy),
+            Update::HandOver(handover) => self.handover = handover,
+            Update::Certificate(certificate, path) => self.choose_certificate(certificate, path),
             Update::Bluetooth(bluetooth) => {
                 if bluetooth.present().is_none() {
                     self.values.remove(&SettingId::BluetoothPower);
@@ -796,7 +839,18 @@ impl SettingsView {
             Update::Locale(locale) => self.locale = locale,
             Update::Pointing(devices) => self.set_pointing_devices(devices),
             Update::Network(network) => {
-                if let Some(ethernet) = network.ethernet.as_ref() {
+                let opened = match &self.detail {
+                    Some(Detail::Wired(interface)) => network
+                        .ethernets
+                        .iter()
+                        .find(|ethernet| ethernet.interface == *interface)
+                        .cloned(),
+                    _ => None,
+                };
+                if matches!(self.detail, Some(Detail::Wired(_))) && opened.is_none() {
+                    self.detail = None;
+                }
+                if let Some(ethernet) = opened.as_ref() {
                     self.manual_ipv4 |= ethernet.manual;
                     for (id, value) in [
                         (
@@ -1434,6 +1488,10 @@ impl SettingsView {
                 }
                 continue;
             }
+            if let Intent::EnterpriseText(..) = intent {
+                self.enterprise_intent(intent);
+                continue;
+            }
             if let Intent::PrinterAddress(address) = intent {
                 self.printer_address = address;
                 continue;
@@ -1457,6 +1515,7 @@ impl SettingsView {
                         self.focus_next = Some(Anchor::Item(match detail {
                             Detail::App(group) => format!("app:{group}"),
                             Detail::Network(ssid) => String::from_utf8_lossy(&ssid).into_owned(),
+                            Detail::Wired(interface) => format!("wired:{interface}"),
                             Detail::Printer(name) => format!("printer:{name}"),
                             Detail::Account(login) => format!("account:{login}"),
                             Detail::Report(id) => format!("report:{id}"),
@@ -1551,6 +1610,8 @@ impl SettingsView {
                 }
                 Intent::AskOther(asking) => {
                     self.join = Join::default();
+                    self.enterprise = bande_network::Enterprise::default();
+                    self.enterprise_file = false;
                     self.other = asking.then(Other::default);
                     self.focus_next = Some(if asking {
                         Anchor::Setting(SettingId::OtherNetwork, None)
@@ -1567,6 +1628,42 @@ impl SettingsView {
                 }
                 Intent::JoinOther(password) => self.join_other(password),
                 Intent::WifiManual(manual) => self.set_wifi_manual(manual),
+                Intent::EnterpriseText(..) => {}
+                intent @ (Intent::EnterpriseMethod(_) | Intent::EnterpriseAuthority(_)) => {
+                    self.enterprise_intent(intent)
+                }
+                Intent::ChooseCertificate(certificate) => {
+                    self.commands.push(Command::ChooseCertificate(certificate))
+                }
+                Intent::OpenWired(interface) => {
+                    self.open_wired(interface);
+                    *self.scroll.borrow_mut() = ScrollState::default();
+                }
+                Intent::SecureWired(open) => {
+                    self.join.error = None;
+                    if open {
+                        self.load_wired_security();
+                    }
+                    self.securing_wired = open;
+                    self.focus_next = Some(Anchor::Item(if open {
+                        format!("enterprise-{:?}", EnterpriseField::Identity)
+                    } else {
+                        "wired-security".to_owned()
+                    }));
+                }
+                Intent::SaveWiredSecurity(password) => self.save_wired_security(password),
+                Intent::Ipv6Mode(pane, mode) => self.set_ipv6_mode(pane, mode),
+                Intent::HandOver(command) => {
+                    self.handover = command.as_ref().map(|command| match command {
+                        HandOverCommand::Preview(interface) => HandOver::Asking(interface.clone()),
+                        HandOverCommand::Apply(interface) => HandOver::Applying(interface.clone()),
+                    });
+                    if let Some(command) = command {
+                        self.commands.push(Command::HandOver(command));
+                    }
+                }
+                Intent::ProxyMode(index) => self.set_proxy_mode(index),
+                Intent::StartHotspot(password) => self.start_hotspot(password),
                 Intent::OpenReport(id) => self.open_report(id),
                 Intent::CopyReport(text) => self.commands.push(Command::CopyText(text)),
                 Intent::DeleteReport(id) => {
@@ -1652,16 +1749,17 @@ impl SettingsView {
                 Intent::ManualIpv4(manual) => {
                     self.manual_ipv4 = manual;
                     let dns = self
-                        .network
-                        .as_ref()
-                        .and_then(|network| network.ethernet.as_ref())
+                        .opened_ethernet()
                         .filter(|_| manual)
                         .map(|ethernet| ethernet.addressing.dns.join(", "))
                         .unwrap_or_default();
                     self.values.insert(SettingId::EthernetDns, Value::Text(dns));
-                    if !manual {
+                    if !manual && let Some(ethernet) = self.opened_ethernet() {
                         self.commands
-                            .push(Command::Network(NetworkCommand::ConfigureEthernet(None)));
+                            .push(Command::Network(NetworkCommand::ConfigureEthernet(
+                                ethernet.interface,
+                                None,
+                            )));
                     }
                 }
                 Intent::SetAppRule(app) => {
@@ -1876,6 +1974,21 @@ impl SettingsView {
         if network.current {
             return;
         }
+        if password.is_none() && network.security == Security::Enterprise && !network.known {
+            self.join = Join::default();
+            self.enterprise = bande_network::Enterprise::default();
+            self.enterprise_file = false;
+            self.other = Some(Other {
+                name: network.name(),
+                security: Security::Enterprise,
+                hidden: false,
+            });
+            self.focus_next = Some(Anchor::Item(format!(
+                "enterprise-{:?}",
+                EnterpriseField::Identity
+            )));
+            return;
+        }
         if password.is_none() && network.security.needs_password() && !network.known {
             self.join = Join {
                 asking: Some(ssid),
@@ -2066,6 +2179,9 @@ impl SettingsView {
                 Command::Audio(AudioCommand::Mute(Direction::Input, muted))
             }
             (SettingId::WifiPower, Value::Flag(on)) => Command::Network(NetworkCommand::Power(on)),
+            (SettingId::AirplaneMode, Value::Flag(on)) => {
+                Command::Network(NetworkCommand::Airplane(on))
+            }
             (SettingId::BluetoothPower, Value::Flag(on)) => {
                 Command::Bluetooth(BluetoothCommand::Power(on))
             }
@@ -2082,15 +2198,19 @@ impl SettingsView {
         }
     }
 
-    fn commit_drafts(&mut self) {
+    pub(crate) fn commit_drafts(&mut self) {
         for (id, text) in std::mem::take(&mut self.drafts) {
             let text = text.trim().to_owned();
             let clearable = matches!(
                 id,
                 SettingId::EthernetRouter
                     | SettingId::EthernetDns
+                    | SettingId::EthernetIpv6Router
                     | SettingId::WifiRouter
                     | SettingId::WifiDns
+                    | SettingId::WifiIpv6Router
+                    | SettingId::ProxyHttps
+                    | SettingId::ProxyIgnore
                     | SettingId::LockMessage
             );
             if clearable || !text.is_empty() {
@@ -2107,7 +2227,39 @@ impl SettingsView {
         }
         if matches!(
             id,
-            SettingId::WifiAddress | SettingId::WifiRouter | SettingId::WifiDns
+            SettingId::ProxyHttp
+                | SettingId::ProxyHttps
+                | SettingId::ProxyIgnore
+                | SettingId::ProxyPac
+        ) {
+            self.values.insert(id, value);
+            self.change_proxy();
+            return;
+        }
+        if id == SettingId::HotspotName {
+            self.values.insert(id, value);
+            return;
+        }
+        if matches!(
+            id,
+            SettingId::EthernetIpv6Address | SettingId::EthernetIpv6Router
+        ) {
+            self.values.insert(id, value);
+            if let Some(path) = self
+                .opened_ethernet()
+                .and_then(|ethernet| ethernet.connection)
+            {
+                self.change_ipv6(PaneId::Network, path, &crate::network::ETHERNET_IPV6_FIELDS);
+            }
+            return;
+        }
+        if matches!(
+            id,
+            SettingId::WifiAddress
+                | SettingId::WifiRouter
+                | SettingId::WifiDns
+                | SettingId::WifiIpv6Address
+                | SettingId::WifiIpv6Router
         ) {
             self.values.insert(id, value);
             self.change_wifi_addressing(id);
@@ -2118,12 +2270,11 @@ impl SettingsView {
             SettingId::EthernetAddress | SettingId::EthernetRouter | SettingId::EthernetDns
         ) {
             self.values.insert(id, value);
+            let Some(ethernet) = self.opened_ethernet() else {
+                return;
+            };
             if !self.manual_ipv4 {
-                let path = self
-                    .network
-                    .as_ref()
-                    .and_then(|network| network.ethernet.as_ref())
-                    .and_then(|ethernet| ethernet.connection.clone());
+                let path = ethernet.connection.clone();
                 let servers = match self.values.get(&SettingId::EthernetDns) {
                     Some(Value::Text(text)) => bande_network::parse_dns(text),
                     _ => Some(Vec::new()),
@@ -2158,9 +2309,10 @@ impl SettingsView {
                 Some(manual) => {
                     self.clear_failure();
                     self.commands
-                        .push(Command::Network(NetworkCommand::ConfigureEthernet(Some(
-                            manual,
-                        ))));
+                        .push(Command::Network(NetworkCommand::ConfigureEthernet(
+                            ethernet.interface,
+                            Some(manual),
+                        )));
                 }
                 None => self.fail_here(tr!("Type an address such as 192.168.1.20/24, and the router and DNS servers as addresses such as 192.168.1.1.")),
             }

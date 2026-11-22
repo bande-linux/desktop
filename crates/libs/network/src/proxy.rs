@@ -26,6 +26,8 @@ pub trait NetworkManager {
 
     fn deactivate_connection(&self, active: &ObjectPath<'_>) -> zbus::Result<()>;
 
+    fn reload(&self, flags: u32) -> zbus::Result<()>;
+
     #[zbus(property)]
     fn active_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
 
@@ -70,6 +72,9 @@ pub trait Device {
 
     #[zbus(property)]
     fn available_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+
+    #[zbus(property)]
+    fn set_managed(&self, managed: bool) -> zbus::Result<()>;
 }
 
 #[zbus::proxy(
@@ -137,6 +142,13 @@ pub trait AccessPoint {
 )]
 pub trait Settings {
     fn list_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+
+    fn add_connection(
+        &self,
+        connection: HashMap<String, HashMap<String, OwnedValue>>,
+    ) -> zbus::Result<OwnedObjectPath>;
+
+    fn reload_connections(&self) -> zbus::Result<bool>;
 }
 
 #[zbus::proxy(

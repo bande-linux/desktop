@@ -161,15 +161,17 @@ impl SettingsView {
                 }
             }),
             PaneId::Network => self.network.as_ref().and_then(|network| {
-                let mut parts: Vec<String> = network
-                    .ethernet
+                let ethernets = &network.ethernets;
+                let connected = ethernets
                     .iter()
-                    .map(|ethernet| match (ethernet.connected, ethernet.cable) {
-                        (true, _) => tr!("Ethernet connected"),
-                        (false, true) => tr!("Ethernet not connected"),
-                        (false, false) => tr!("No cable"),
-                    })
-                    .collect();
+                    .any(|ethernet| ethernet.connected || ethernet.addressing.address.is_some());
+                let cable = ethernets.iter().any(|ethernet| ethernet.cable);
+                let mut parts: Vec<String> = match (ethernets.is_empty(), connected, cable) {
+                    (true, ..) => Vec::new(),
+                    (false, true, _) => vec![tr!("Ethernet connected")],
+                    (false, false, true) => vec![tr!("Ethernet not connected")],
+                    (false, false, false) => vec![tr!("No cable")],
+                };
                 parts.extend(
                     network
                         .vpns

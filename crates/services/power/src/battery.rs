@@ -39,13 +39,15 @@ pub trait DisplayDevice {
 
 pub struct BatteryNotifier {
     session: Connection,
+    system: Connection,
     shown: Mutex<Option<(Alert, u32)>>,
 }
 
 impl BatteryNotifier {
-    pub fn new(session: &Connection) -> Self {
+    pub fn new(session: &Connection, system: &Connection) -> Self {
         Self {
             session: session.clone(),
+            system: system.clone(),
             shown: Mutex::new(None),
         }
     }
@@ -74,10 +76,7 @@ impl BatteryNotifier {
             ),
             Alert::Critical => (
                 tr!("Battery Critically Low"),
-                tr!(
-                    "{percentage}% of the battery remains. Connect to power now, or the computer will sleep.",
-                    percentage = percentage
-                ),
+                self.critical_warning(percentage),
                 Urgency::Critical,
             ),
         };
@@ -99,6 +98,31 @@ impl BatteryNotifier {
         *shown = Some((alert, id));
         Ok(())
     }
+
+    fn critical_warning(&self, percentage: f64) -> String {
+        let action = UPowerProxyBlocking::new(&self.system)
+            .and_then(|upower| upower.get_critical_action())
+            .inspect_err(|error| tracing::warn!("cannot ask what an empty battery does: {error}"))
+            .unwrap_or_default();
+        match action.as_str() {
+            "PowerOff" => tr!(
+                "{percentage}% of the battery remains. Connect to power now, or the computer will shut down and unsaved work will be lost.",
+                percentage = percentage
+            ),
+            "Hibernate" | "HybridSleep" => tr!(
+                "{percentage}% of the battery remains. Connect to power now, or the computer will hibernate.",
+                percentage = percentage
+            ),
+            "Suspend" => tr!(
+                "{percentage}% of the battery remains. Connect to power now, or the computer will sleep.",
+                percentage = percentage
+            ),
+            _ => tr!(
+                "{percentage}% of the battery remains. Connect to power now.",
+                percentage = percentage
+            ),
+        }
+    }
 }
 
 #[zbus::proxy(
@@ -109,6 +133,8 @@ impl BatteryNotifier {
 pub trait UPower {
     #[zbus(property)]
     fn on_battery(&self) -> zbus::Result<bool>;
+
+    fn get_critical_action(&self) -> zbus::Result<String>;
 }
 
 pub fn chime_when_plugged_in(system: &Connection, session: &Connection) -> zbus::Result<()> {

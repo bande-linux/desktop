@@ -28,7 +28,7 @@ type Services = (
 fn serve() -> Result<Services, Box<dyn Error>> {
     let system = Connection::system()?;
     let session = Connection::session()?;
-    battery::watch(&system, Arc::new(BatteryNotifier::new(&session)))?;
+    battery::watch(&system, Arc::new(BatteryNotifier::new(&session, &system)))?;
     if let Err(error) = adapter::follow(&system, &session) {
         tracing::warn!("cannot follow the power adapter: {error}");
     }

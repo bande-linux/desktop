@@ -105,7 +105,8 @@ graph LR
   On battery it switches to the `power-saver` mode when UPower warns the battery is `Low` (or
   always, with "Use Power Saver on battery") and back to the previous mode on power.
   Battery alerts follow UPower's `WarningLevel`: a "Low Battery" notification at `Low`, replaced
-  by one that stays at `Critical` or `Action`. The compositor follows `Lock` on the session's own
+  by one that stays at `Critical` or `Action`, which says what UPower's `GetCriticalAction` will
+  do (sleep, hibernate or shut down with unsaved work lost). The compositor follows `Lock` on the session's own
   logind path (from `GetSession("auto")`; logind never signals on `session/auto`).
 - **Display brightness**: `bande-power` serves one model for all displays,
   `org.bande.Brightness` (`Displays`, `SetLevel`, `Refresh`), so Settings and Quick Settings

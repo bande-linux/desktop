@@ -147,6 +147,10 @@ impl Widget for CopyDiagnostics {
         self.button.accepts_focus(cx)
     }
 
+    fn focuses_on_click(&self) -> bool {
+        self.button.focuses_on_click()
+    }
+
     fn tooltip(&self) -> Option<&str> {
         Widget::tooltip(&self.button)
     }

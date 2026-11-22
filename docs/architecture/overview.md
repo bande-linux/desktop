@@ -145,9 +145,10 @@ Bande is a Wayland-only desktop by design:
   deliberately not built. Apps are expected to run natively on Wayland (GTK, Qt, Firefox,
   Chromium, SDL and winit all do).
 - **X11-only apps**: `bande_packages::x11` treats a package as X11-only when it needs an X11
-  library or a desktop Java runtime and no Wayland toolkit. Software leaves such apps out, the
-  Package Installer says so before installing (Install Anyway is a second, warned choice), and an
-  app of such a package that fails to open says it needs X11.
+  library or a desktop Java runtime and no Wayland toolkit, and treats the Minecraft launcher and
+  MultiMC, whose games open only on X11, the same way. Software leaves such apps out, the Package
+  Installer says so before installing (Install Anyway is a second, warned choice), and an app of
+  such a package that quits or crashes while opening says it needs X11.
 - **Compose tables**: `bande-desktop` depends on Debian's `libx11-data`, which is text files and no
   library: the Compose tables xkbcommon reads for dead keys are packaged there.
 - **Why**: Every frame, input event and protocol path stays on one modern stack with one

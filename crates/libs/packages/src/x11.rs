@@ -11,6 +11,7 @@ const X11_LIBRARIES: [&str; 6] = [
     "libxm4",
     "libmotif",
 ];
+const X11_GAME_LAUNCHERS: [&str; 2] = ["minecraft-launcher", "multimc"];
 const WAYLAND_TOOLKITS: [&str; 7] = [
     "libgtk-3-",
     "libgtk-4-",
@@ -35,8 +36,12 @@ fn desktop_java(name: &str) -> bool {
 }
 
 /// Whether a package with these `Depends` and `Pre-Depends` values draws only through X11: it
-/// needs an X11 library or a desktop Java runtime (whose AWT is X11 only) and no Wayland toolkit.
-pub fn needs_x11<'a>(fields: impl IntoIterator<Item = &'a str>) -> bool {
+/// needs an X11 library or a desktop Java runtime (whose AWT is X11 only) and no Wayland toolkit,
+/// or it is a game launcher whose games open only on X11.
+pub fn needs_x11<'a>(package: &str, fields: impl IntoIterator<Item = &'a str>) -> bool {
+    if X11_GAME_LAUNCHERS.contains(&package) {
+        return true;
+    }
     let names: Vec<&str> = fields.into_iter().flat_map(depends).collect();
     names
         .iter()
@@ -66,7 +71,7 @@ pub fn x11_only_packages(index: &str) -> HashSet<String> {
                 }
             }
             let package = package?;
-            needs_x11(fields).then(|| package.to_owned())
+            needs_x11(package, fields).then(|| package.to_owned())
         })
         .collect()
 }
@@ -99,7 +104,7 @@ pub fn installed_needs_x11(file: &Path) -> bool {
         "--showformat=${Depends}\n${Pre-Depends}\n".as_ref(),
         package.as_ref(),
     ])
-    .is_some_and(|fields| needs_x11(fields.lines()))
+    .is_some_and(|fields| needs_x11(package, fields.lines()))
 }
 
 /// Whether a Flatpak's metadata asks for X11 without Wayland or a fallback.

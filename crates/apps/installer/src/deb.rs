@@ -104,7 +104,7 @@ pub fn read(path: &Path) -> Option<Deb> {
         homepage: (*homepage).to_owned(),
         summary,
         description,
-        needs_x11: bande_packages::x11::needs_x11([*depends, *pre_depends]),
+        needs_x11: bande_packages::x11::needs_x11(name, [*depends, *pre_depends]),
     })
 }
 

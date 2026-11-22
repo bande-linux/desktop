@@ -1,15 +1,17 @@
 [Unit]
 Description=Bande login window
 Documentation=man:greetd(1)
-After=systemd-user-sessions.service plymouth-quit-wait.service
-After=getty@tty7.service
-Conflicts=getty@tty7.service greetd.service
+After=systemd-user-sessions.service plymouth-start.service plymouth-quit.service
+After=getty@tty1.service
+Conflicts=getty@tty1.service greetd.service plymouth-quit.service
+Wants=bande-greeter-splash.path
 OnFailure=bande-console-fallback.service
 StartLimitBurst=5
 StartLimitIntervalSec=30
 
 [Service]
 Type=simple
+ExecStartPre=-/usr/bin/plymouth deactivate
 ExecStart=/usr/sbin/greetd --config /usr/share/bande-greeter/greetd-config.toml
 IgnoreSIGPIPE=no
 SendSIGHUP=yes

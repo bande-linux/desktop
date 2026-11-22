@@ -1,13 +1,16 @@
 use std::time::Duration;
 
+use bande_render::VulkanTexture;
 use bande_spring::{Animated, Spring};
+use smithay::backend::renderer::ContextId;
 use smithay::desktop::layer_map_for_output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Rectangle, Size};
 use smithay::wayland::compositor::{RectangleKind, SurfaceAttributes, with_states};
 use smithay::wayland::shell::wlr_layer::Layer;
 
-use crate::motion::{BAR_NAMESPACE, SETTLED_ALPHA};
+use crate::motion::{BAR_NAMESPACE, Look, Motion, SETTLED_ALPHA};
+use crate::scene::{Closing, drawn_texture};
 use crate::state::{Compositor, State, is_mapped};
 
 const LOGIN_WINDOW_NAMESPACE: &str = "greeter";
@@ -18,6 +21,12 @@ pub enum Awaited {
     LoginWindow,
 }
 
+pub struct ShownFrame {
+    pub output: String,
+    pub texture: VulkanTexture,
+    pub context: ContextId<VulkanTexture>,
+}
+
 #[derive(Default)]
 pub(crate) enum Reveal {
     #[default]
@@ -26,6 +35,7 @@ pub(crate) enum Reveal {
         since: Duration,
         deadline: Duration,
         ready: Awaited,
+        over: Vec<ShownFrame>,
     },
     Fading {
         opacity: Animated<Duration>,
@@ -77,9 +87,29 @@ impl State {
             })
     }
 
-    fn show_login_window(&mut self, now: Duration, since: Duration) {
+    fn show_login_window(&mut self, now: Duration, since: Duration, over: Vec<ShownFrame>) {
         let waited = now.saturating_sub(since).as_millis();
         tracing::info!("the login window is shown {waited} ms after the compositor started");
+        let spring = match self.reduce_motion {
+            true => Spring::FADE,
+            false => Spring::STANDARD,
+        };
+        for frame in over {
+            let Some(screen) = self.screen_named(&frame.output) else {
+                continue;
+            };
+            let rect = self.screen_rect(screen).to_f64();
+            let drawn = drawn_texture(
+                frame.texture,
+                frame.context,
+                rect,
+                self.render_scale(screen),
+                self.decorations.scheme,
+            );
+            let motion = Motion::new(spring, Look::shown(rect), Look::hidden(rect));
+            self.closing
+                .push(Closing::covering(drawn, motion, frame.output));
+        }
         self.reveal = Reveal::Shown;
         self.needs_redraw = true;
     }
@@ -134,7 +164,14 @@ impl Compositor {
             since,
             deadline,
             ready,
+            over: Vec::new(),
         };
+    }
+
+    pub fn fade_in_over(&mut self, frames: Vec<ShownFrame>) {
+        if let Reveal::Holding { over, .. } = &mut self.state.reveal {
+            *over = frames;
+        }
     }
 
     pub fn holds_frames(&self) -> bool {
@@ -146,6 +183,7 @@ impl Compositor {
             since,
             deadline,
             ready: awaited,
+            ..
         } = self.state.reveal
         else {
             return None;
@@ -159,7 +197,13 @@ impl Compositor {
         }
         match awaited {
             Awaited::Shell => self.state.begin_reveal(now, since, ready),
-            Awaited::LoginWindow => self.state.show_login_window(now, since),
+            Awaited::LoginWindow => {
+                let over = match &mut self.state.reveal {
+                    Reveal::Holding { over, .. } => std::mem::take(over),
+                    _ => Vec::new(),
+                };
+                self.state.show_login_window(now, since, over);
+            }
         }
         None
     }

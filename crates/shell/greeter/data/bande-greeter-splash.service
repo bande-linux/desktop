@@ -1,0 +1,7 @@
+[Unit]
+Description=End the start screen once the login window is on screen
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/bin/plymouth quit --retain-splash

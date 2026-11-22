@@ -40,6 +40,7 @@ const STALL_LIMIT: Duration = Duration::from_secs(6);
 const GREETER_HANG_LIMIT_SECONDS: u32 = 20;
 const GREETER_HANG_CHECK: Duration = Duration::from_secs(10);
 const LOGIN_DISPLAY_OFF: Duration = Duration::from_secs(10 * 60);
+const LOGIN_WINDOW_SHOWN: &str = "/run/bande-greeter/shown";
 const MINIMUM_UPTIME_TO_RESTART: Duration = Duration::from_secs(300);
 
 enum Backend {
@@ -53,6 +54,7 @@ struct App<O> {
     schedulers: Vec<FrameScheduler>,
     started: Duration,
     shown: bool,
+    first_frame_marker: Option<PathBuf>,
     buses: Buses,
     displays: Option<DisplaysHandle>,
     loop_handle: LoopHandle<'static, App<O>>,
@@ -200,6 +202,7 @@ fn run_headless(session: Session, started: Duration, buses: Buses) -> Result<(),
         schedulers: vec![FrameScheduler::new(FrameClock::new(now(), REFRESH))],
         started,
         shown: false,
+        first_frame_marker: None,
         buses,
         displays: None,
         loop_handle: event_loop.handle(),
@@ -344,6 +347,14 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
                 vblank.time.saturating_sub(app.started).as_millis()
             );
         }
+        if let Some(marker) = app.first_frame_marker.take()
+            && let Err(error) = std::fs::write(&marker, b"")
+        {
+            tracing::warn!(
+                "cannot mark {} for the start screen: {error}",
+                marker.display()
+            );
+        }
         let App {
             compositor,
             schedulers,
@@ -464,6 +475,7 @@ fn run_drm(
         schedulers: Vec::new(),
         started,
         shown: false,
+        first_frame_marker: None,
         buses,
         displays: None,
         loop_handle: event_loop.handle(),
@@ -859,6 +871,9 @@ where
                 app.started,
                 app.started + SHELL_READY_TIMEOUT,
             );
+            let shown = app.output.frames_on_screen();
+            app.compositor.fade_in_over(shown);
+            app.first_frame_marker = Some(PathBuf::from(LOGIN_WINDOW_SHOWN));
             (Some(Greeter::start(&mut app.compositor)), None)
         }
     };

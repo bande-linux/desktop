@@ -1,7 +1,8 @@
 #!/bin/bash
-# bande-desktop alone, without recommends, brings a login window and sound and no X server; the
-# Bande login window is the display manager through its own PAM service, whose pictures folder only
-# it reads, and purging it hands the display to greetd.
+# bande-desktop alone, without recommends, brings a login window and sound and no X server or
+# Plymouth; the Bande login window is the display manager through its own PAM service, whose
+# pictures folder only it reads, its units hold without Plymouth, and purging it hands the display
+# to greetd.
 set -euo pipefail
 for package in bande-greeter greetd pipewire wireplumber; do
     [ "$(dpkg-query -W -f '${db:Status-Status}' "$package")" = installed ] || { echo "$package is missing"; exit 1; }
@@ -10,6 +11,11 @@ done
 x11=$(dpkg-query -W -f '${db:Status-Status} ${Package}\n' | awk '$1 == "installed" { print $2 }' |
     grep -E '^(xserver-|xwayland$|xorg$|x11-session-utils$|xinit$)' || true)
 [ -z "$x11" ] || { echo "installed: $x11"; exit 1; }
+[ "$(dpkg-query -W -f '${db:Status-Status}' plymouth 2> /dev/null)" != installed ] || { echo "plymouth is installed"; exit 1; }
+verified=$(systemd-analyze verify --man=no bande-greeter.service bande-greeter-splash.path \
+    bande-greeter-splash.service bande-console-fallback.service 2>&1)
+[ -z "$verified" ] || { echo "$verified"; exit 1; }
+[ "$(stat -c '%a %U %G' /run/bande-greeter)" = "755 _greetd _greetd" ]
 
 greetd_config=/usr/share/bande-greeter/greetd-config.toml
 grep -qx "ExecStart=/usr/sbin/greetd --config $greetd_config" /usr/lib/systemd/system/bande-greeter.service

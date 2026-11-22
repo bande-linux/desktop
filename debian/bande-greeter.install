@@ -3,4 +3,6 @@ crates/shell/greeter/data/bande-greeter-session usr/libexec/
 crates/shell/greeter/data/bande-console-fallback.service usr/lib/systemd/system/
 crates/shell/greeter/data/greetd-config.toml usr/share/bande-greeter/
 crates/shell/greeter/data/bande-greeter.service usr/lib/systemd/system/
+crates/shell/greeter/data/bande-greeter-splash.path usr/lib/systemd/system/
+crates/shell/greeter/data/bande-greeter-splash.service usr/lib/systemd/system/
 debian/build/l10n/development/bande-greeter/* usr/share/bande/l10n/bande-greeter/

@@ -510,7 +510,25 @@ show: a compositor leaving the screen closes its framebuffers with `DRM_IOCTL_MO
 which leaves them on their planes, and the next compositor's first commit replaces them without
 a modeset when the mode is the same. Unlocking is one compositor: the last lock frame fades out
 over the desktop, so input reaches the desktop at once. `Ctrl+Alt+F2` reaches a text console at
-any time, and when greetd gives up `bande-console-fallback.service` brings the console forward.
+any time, and when greetd gives up `bande-console-fallback.service` quits Plymouth, starts
+`getty@tty1` and brings the console forward.
+
+The boot screen (`bande-plymouth-theme`) hands over the same way. `bande-greeter.service` starts
+after `plymouth-start.service`, conflicts with `plymouth-quit.service` (so the end of boot does
+not quit it) and runs `plymouth deactivate` first, which stops Plymouth drawing and gives up the
+display while its last frame stays on screen; the `-` prefix makes this a no-op on a system
+without Plymouth. greetd and the sessions it starts use VT 1, Plymouth's terminal, so nothing
+switches VT. Before its first commit the login window's compositor reads each display's
+framebuffer (`DRM_IOCTL_MODE_GETFB2`, mapped as a dumb buffer), and once the login window is
+mapped that frame fades out over it with the `standard` spring (`fade` with Reduce Motion). When
+the framebuffer cannot be read while Plymouth runs (`/run/plymouth/pid`), the frame is the boot
+screen's own background and mark at Plymouth's scale, drawn by `bande-splash`. Only root may
+talk to Plymouth, so after its first frame is on screen the compositor creates
+`/run/bande-greeter/shown` (a `_greetd` folder from `debian/bande-greeter.tmpfiles`) and the
+root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`. The background is Datum's
+`deep`, which is also the compositor's clear colour. One frame can still differ: greetd sets
+the VT to text mode and clears it before it starts the greeter, so between Plymouth giving up
+the display and the first commit the console may show.
 
 **Ending the session.** Log Out stops `bande-compositor.service` in the user's manager, never
 logind's `Session.Terminate`, which would leave the compositor holding the seat while greetd
@@ -524,8 +542,8 @@ a refusal.
 **Installation.** `bande-greeter` is a display manager of its own, the way Debian's display
 managers are: it provides `x-display-manager`, shares the debconf question
 `shared/default-x-display-manager` and ships `bande-greeter.service`, which runs greetd with
-`/usr/share/bande-greeter/greetd-config.toml`, conflicts with `greetd.service` (both use VT 7)
-and starts `bande-console-fallback.service` when greetd gives up. greetd's own
+`/usr/share/bande-greeter/greetd-config.toml` on VT 1 (where it conflicts with `getty@tty1`),
+conflicts with `greetd.service` and starts `bande-console-fallback.service` when greetd gives up. greetd's own
 `greetd.service` and its conffile `/etc/greetd/config.toml` stay untouched. The chosen display
 manager is the daemon named in `/etc/X11/default-display-manager` (`/usr/bin/bande-greeter`
 for the login window), and `/etc/systemd/system/display-manager.service` links to its unit;

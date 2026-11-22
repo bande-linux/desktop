@@ -107,7 +107,7 @@ pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;
 pub use pointing::PointerSettings;
 pub use render::{FrameStats, Renderer, Snapshot};
-pub use reveal::Awaited;
+pub use reveal::{Awaited, ShownFrame};
 pub use screen::{OutputConfig, OutputMode, OutputSettings, automatic_scale};
 pub use session::{
     CLIPBOARD_DAEMON, GREETER, LOCK_SCREEN, REVIEW, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE,

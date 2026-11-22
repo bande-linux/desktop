@@ -325,10 +325,6 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
                 modified,
             ];
         }
-        Shown::Pdf(pdf) if pdf.phase() == Phase::Failed => tr!("This document cannot be shown"),
-        Shown::Pdf(pdf) if matches!(pdf.phase(), Phase::Locked { .. }) => {
-            tr!("This document is locked")
-        }
         _ if entry.is_folder() => String::new(),
         _ => format_size(entry.size),
     };
@@ -351,6 +347,12 @@ pub(crate) fn reason(shown: &Shown) -> Option<String> {
         Shown::Failed(Failure::NotSupported) => Some(tr!("This kind of image can’t be previewed")),
         Shown::Failed(Failure::Unreadable) => Some(tr!("This file can’t be read")),
         Shown::Media(None) => Some(tr!("This can’t be played here")),
+        Shown::Pdf(pdf) if pdf.phase() == Phase::Failed => {
+            Some(tr!("This document cannot be shown"))
+        }
+        Shown::Pdf(pdf) if matches!(pdf.phase(), Phase::Locked { .. }) => {
+            Some(tr!("This document is locked"))
+        }
         _ => None,
     }
 }

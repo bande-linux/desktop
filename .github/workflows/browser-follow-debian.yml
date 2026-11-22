@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'browser/**'
+      - '!browser/**/*.md'
       - '.github/workflows/browser-follow-debian.yml'
   schedule:
     - cron: '37 */6 * * *'
@@ -23,6 +24,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: browser-follow-debian-${{ inputs.debian_version || 'unstable' }}
+  cancel-in-progress: false
+
 defaults:
   run:
     working-directory: browser
@@ -38,6 +43,7 @@ jobs:
     outputs:
       debian: ${{ steps.versions.outputs.debian }}
       version: ${{ steps.versions.outputs.version }}
+      inputs: ${{ steps.versions.outputs.inputs }}
       build: ${{ steps.versions.outputs.build }}
     steps:
       - name: Check out (actions/checkout v7)
@@ -60,16 +66,18 @@ jobs:
             echo "::error::The archive serves no bande-browser in $SUITE; dispatch with force to publish the first one"
             exit 1
           fi
-          built=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=bande-version-$version" \
+          inputs=bande-inputs-$debian-$(scripts/inputs.sh)
+          built=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$(jq -rn --arg name "$inputs" '$name | @uri')" \
             --jq '[.artifacts[] | select(.expired | not)] | length')
           build=true
           if [ -z "$TEST_VERSION" ] && [ "$FORCE" != true ] && { [ "$published" = "$version" ] || [ "$built" -gt 0 ]; }; then
             build=false
           fi
-          echo "Debian: firefox-esr $debian; ours: $version; published: ${published:-none}; built: $built; build: $build"
+          echo "Debian: firefox-esr $debian; ours: $version; published: ${published:-none}; built from these inputs: $built; build: $build"
           {
             echo "debian=$debian"
             echo "version=$version"
+            echo "inputs=$inputs"
             echo "build=$build"
           } >> "$GITHUB_OUTPUT"
 
@@ -184,4 +192,11 @@ jobs:
         if: inputs.debian_version == '' && matrix.arch == 'arm64' && matrix.suite == fromJSON(needs.suites.outputs.list)[0]
         with:
           name: bande-version-${{ needs.check.outputs.version }}
+          path: ${{ runner.temp }}/version
+
+      - name: Record the inputs built (actions/upload-artifact v7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: inputs.debian_version == '' && matrix.arch == 'arm64' && matrix.suite == fromJSON(needs.suites.outputs.list)[0]
+        with:
+          name: ${{ needs.check.outputs.inputs }}
           path: ${{ runner.temp }}/version

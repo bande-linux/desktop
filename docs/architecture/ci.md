@@ -72,8 +72,10 @@ The workflows and what starts them:
 - `dict.yml`: `dict-YYYYMMDD` tags; builds the dictionary packs' source package `bande-dict`
   ([lookup.md](lookup.md)).
 - `browser-follow-debian.yml`: every six hours, to follow Debian's `firefox-esr` uploads,
-  pushes to `main` that change `browser/`, and dispatch; builds Bande's Browser
-  ([`browser/README.md`](../../browser/README.md)).
+  pushes to `main` that change `browser/` other than its Markdown docs, and dispatch; builds
+  Bande's Browser ([`browser/README.md`](../../browser/README.md)) only when Debian's version or
+  the hash of `browser/`'s inputs (`browser/scripts/inputs.sh`) has no build yet, one run at a
+  time.
 - `reproducible.yml`: weekly and on dispatch; below.
 - `debian-mode.yml`: weekly, on dispatch and on pull requests that change `Cargo.toml`,
   `Cargo.lock` or `debian/control`; below.

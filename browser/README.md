@@ -13,7 +13,7 @@ This directory holds no browser source. It holds what we change in Debian's:
 | `prefs/bande.js` | prefs only the rebuild needs, added after `settings.js` |
 | `search/` | search engines, with no partner codes |
 | `theme/` | chrome CSS using Bande's design tokens |
-| `scripts/` | the build, run the same way anywhere; `.github/workflows/browser-follow-debian.yml` runs it every 6 hours, on dispatch and on changes to `browser/` |
+| `scripts/` | the build, run the same way anywhere; `.github/workflows/browser-follow-debian.yml` checks every 6 hours, on dispatch and on changes to `browser/`, and builds only when Debian's version or the inputs (`scripts/inputs.sh`) changed |
 
 ## Two forms
 

@@ -2,7 +2,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params, params_from_iter};
 
 use crate::error::Result;
 use crate::imap::{Fetched, Flag, Flags, Folder, Role};
@@ -15,7 +15,6 @@ pub type MailboxId = i64;
 pub type MessageId = i64;
 
 const SCHEMA: &str = "
-PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -576,10 +575,12 @@ impl Store {
             .append(true)
             .mode(0o600)
             .open(path)?;
-        let connection = Connection::open(path)?;
+        let mut connection = Connection::open(path)?;
         connection.busy_timeout(Duration::from_secs(10))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
-        let indexed = connection
+        connection.pragma_update(None, "foreign_keys", true)?;
+        let schema = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let indexed = schema
             .query_row(
                 "SELECT 1 FROM sqlite_master WHERE name = 'message_words'",
                 [],
@@ -587,13 +588,14 @@ impl Store {
             )
             .optional()?
             .is_some();
-        connection.execute_batch(SCHEMA)?;
+        schema.execute_batch(SCHEMA)?;
         if !indexed {
-            connection.execute(
+            schema.execute(
                 "INSERT INTO message_words (message_words) VALUES ('rebuild')",
                 [],
             )?;
         }
+        schema.commit()?;
         Ok(Self { connection })
     }
 

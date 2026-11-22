@@ -36,6 +36,10 @@ const NEXT: &str = "next";
 const PREVIOUS: &str = "previous";
 const LOOP: &str = "loop";
 const FULL_SCREEN: &str = "full-screen";
+const QUEUE: &str = "queue";
+const REMOVE_FROM_QUEUE: &str = "remove-from-queue";
+const MOVE_UP: &str = "move-up";
+const MOVE_DOWN: &str = "move-down";
 const RATE_PREFIX: &str = "rate:";
 const AUDIO_PREFIX: &str = "audio:";
 const SUBTITLES_PREFIX: &str = "subtitles:";
@@ -343,7 +347,31 @@ impl Program for Player {
             Entry::separator(),
             item(text!("Loop"), LOOP, Some("Ctrl+L"), loaded).check(pane.is_some_and(Pane::loops)),
         ]);
-        let view = vec![item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true)];
+        let queue_key = match pane.is_some_and(Pane::queue_shown) {
+            true => text!("Hide Queue"),
+            false => text!("Show Queue"),
+        };
+        let editable = pane.is_some_and(Pane::can_edit_queue);
+        let view = vec![
+            item(queue_key, QUEUE, Some("F9"), pane.is_some()),
+            item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true),
+        ];
+        playback.extend([
+            Entry::separator(),
+            item(text!("Move Up in Queue"), MOVE_UP, Some("Alt+Up"), editable),
+            item(
+                text!("Move Down in Queue"),
+                MOVE_DOWN,
+                Some("Alt+Down"),
+                editable,
+            ),
+            item(
+                text!("Remove from Queue"),
+                REMOVE_FROM_QUEUE,
+                Some("Delete"),
+                pane.is_some_and(Pane::can_remove_from_queue),
+            ),
+        ]);
         Menus {
             menus: vec![
                 Entry::submenu(&tr!("File"), file),
@@ -382,6 +410,10 @@ impl Program for Player {
                 NEXT => pane.go(true),
                 PREVIOUS => pane.go(false),
                 LOOP => pane.toggle_loop(),
+                QUEUE => pane.toggle_queue(),
+                MOVE_UP => pane.move_selected(false),
+                MOVE_DOWN => pane.move_selected(true),
+                REMOVE_FROM_QUEUE => pane.remove_selected(),
                 SUBTITLES_OFF => pane.select_subtitles(None),
                 FULL_SCREEN => {
                     if let Err(error) = shown.toggle_full_screen() {

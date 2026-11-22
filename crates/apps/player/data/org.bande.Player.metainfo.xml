@@ -7,7 +7,7 @@
   <summary>Play audio and video files</summary>
   <summary xml:lang="sv">Spela upp ljud- och videofiler</summary>
   <description>
-    <p>Plays common music and film files with simple controls over the picture, full screen, speed, audio and subtitle tracks, subtitle files found next to a film or added by hand, and media keys, and picks a film up where it stopped.</p>
+    <p>Plays common music and film files with simple controls over the picture, full screen, speed, audio and subtitle tracks, and media keys. It loads subtitle files named after a film or added by hand, keeps a queue you can see and rearrange, and picks a film up where it stopped.</p>
   </description>
   <developer id="org.bande">
     <name>Bande</name>

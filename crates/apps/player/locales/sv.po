@@ -52,8 +52,23 @@ msgstr "Ljudspår"
 msgid "Loop"
 msgstr "Upprepa"
 
+msgid "Hide Queue"
+msgstr "Dölj kön"
+
+msgid "Show Queue"
+msgstr "Visa kön"
+
 msgid "Full Screen"
 msgstr "Helskärm"
+
+msgid "Move Up in Queue"
+msgstr "Flytta upp i kön"
+
+msgid "Move Down in Queue"
+msgstr "Flytta ned i kön"
+
+msgid "Remove from Queue"
+msgstr "Ta bort från kön"
 
 msgid "File"
 msgstr "Arkiv"
@@ -63,3 +78,18 @@ msgstr "Uppspelning"
 
 msgid "View"
 msgstr "Visa"
+
+msgid "Title"
+msgstr "Titel"
+
+msgid "State"
+msgstr "Läge"
+
+msgid "Move Up"
+msgstr "Flytta upp"
+
+msgid "Move Down"
+msgstr "Flytta ned"
+
+msgid "Playing"
+msgstr "Spelas"

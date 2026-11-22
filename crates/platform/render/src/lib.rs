@@ -340,7 +340,6 @@ pub struct VulkanRenderer {
     queue_family: u32,
     output_on_device: bool,
     modifiers: formats::Modifiers,
-    acquires: Vec<u64>,
     output_colour: Option<OutputColour>,
     encode_table: Option<(Arc<[[u8; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
@@ -616,7 +615,6 @@ impl VulkanRenderer {
             queue_family: chosen.family,
             output_on_device: chosen.output_on_device,
             modifiers: chosen.modifiers,
-            acquires: Vec::new(),
             output_colour: None,
             encode_table: None,
             colour_scratch: HashMap::new(),
@@ -1177,38 +1175,6 @@ impl VulkanRenderer {
         }?)
     }
 
-    fn record_acquires(&mut self) {
-        for id in std::mem::take(&mut self.acquires) {
-            let Some(texture) = self.textures.get_mut(&id) else {
-                continue;
-            };
-            let previous = if texture.readable {
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-            } else {
-                vk::ImageLayout::GENERAL
-            };
-            texture.readable = true;
-            let acquire = vk::ImageMemoryBarrier2::default()
-                .src_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
-                .dst_queue_family_index(self.queue_family)
-                .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
-                .dst_access_mask(vk::AccessFlags2::SHADER_SAMPLED_READ)
-                .old_layout(previous)
-                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image(texture.image.image)
-                .subresource_range(COLOR_RANGE);
-            // SAFETY: called from `record_copies`, between `begin_commands` and the end of the
-            // buffer, so `command_buffer` is recording; the barrier acquires the live imported
-            // image from the foreign queue.
-            unsafe {
-                self.device.cmd_pipeline_barrier2(
-                    self.command_buffer,
-                    &vk::DependencyInfo::default().image_memory_barriers(slice::from_ref(&acquire)),
-                );
-            }
-        }
-    }
-
     fn allocate(&self, info: &vk::MemoryAllocateInfo) -> Result<vk::DeviceMemory, vk::Result> {
         // SAFETY: `info` and every struct chained into it are borrowed for the call.
         unsafe { self.device.allocate_memory(info, None) }.inspect_err(|error| {
@@ -1564,7 +1530,6 @@ impl VulkanRenderer {
             self.destroy_image(&removed.image);
         }
         self.copies.retain(|copy| copy.texture != id);
-        self.acquires.retain(|&acquire| acquire != id);
     }
 
     fn forget_target(&mut self, id: u64) {
@@ -1713,7 +1678,7 @@ impl VulkanRenderer {
     }
 
     pub fn finish_uploads(&mut self) -> Result<(), RenderError> {
-        if self.copies.is_empty() && self.acquires.is_empty() {
+        if self.copies.is_empty() {
             return Ok(());
         }
         self.begin_commands()?;
@@ -1742,7 +1707,6 @@ impl VulkanRenderer {
     }
 
     fn record_copies(&mut self) {
-        self.record_acquires();
         let mut by_texture: HashMap<u64, Vec<&PendingCopy>> = HashMap::new();
         for copy in &self.copies {
             by_texture.entry(copy.texture).or_default().push(copy);
@@ -2128,6 +2092,21 @@ const ATTACHMENT: Usage = (
     vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
 );
 
+const DRAWING: Usage = (
+    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+    vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+    vk::AccessFlags2::from_raw(
+        vk::AccessFlags2::COLOR_ATTACHMENT_READ.as_raw()
+            | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE.as_raw(),
+    ),
+);
+
+const SAMPLED: Usage = (
+    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    vk::PipelineStageFlags2::FRAGMENT_SHADER,
+    vk::AccessFlags2::SHADER_SAMPLED_READ,
+);
+
 const TRANSFER_SOURCE: Usage = (
     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
     vk::PipelineStageFlags2::COPY,
@@ -2145,8 +2124,9 @@ fn hand_over(
     commands: vk::CommandBuffer,
     image: vk::Image,
     family: u32,
-    acquire: bool,
+    (acquire, usage): (bool, Usage),
 ) {
+    let (layout, stage, access) = usage;
     let foreign = vk::ImageMemoryBarrier2::default()
         .image(image)
         .subresource_range(COLOR_RANGE);
@@ -2155,22 +2135,21 @@ fn hand_over(
             .src_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
             .dst_queue_family_index(family)
             .old_layout(vk::ImageLayout::GENERAL)
-            .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .dst_access_mask(
-                vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-            ),
+            .new_layout(layout)
+            .dst_stage_mask(stage)
+            .dst_access_mask(access),
         false => foreign
             .src_queue_family_index(family)
             .dst_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
-            .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .old_layout(layout)
             .new_layout(vk::ImageLayout::GENERAL)
-            .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .src_access_mask(vk::AccessFlags2::COLOR_ATTACHMENT_WRITE),
+            .src_stage_mask(stage)
+            .src_access_mask(access & !vk::AccessFlags2::SHADER_SAMPLED_READ),
     };
     // SAFETY: callers record between `begin_commands` and the end of the buffer, on the renderer's
-    // thread, with `image` a live display buffer imported with `QUEUE_FAMILY_FOREIGN_EXT` enabled:
-    // released to the foreign queue in `GENERAL` after each frame, and acquired back the same way.
+    // thread, with `image` a live image imported with `QUEUE_FAMILY_FOREIGN_EXT` enabled: it is
+    // acquired from the foreign queue in `GENERAL` before the buffer uses it and released back
+    // the same way before the buffer ends, so it is never ours between buffers.
     unsafe {
         device.cmd_pipeline_barrier2(
             commands,

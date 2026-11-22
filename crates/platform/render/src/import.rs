@@ -382,7 +382,7 @@ impl VulkanRenderer {
             id,
             TextureImage {
                 image,
-                readable: false,
+                readable: true,
                 imported: true,
             },
         );
@@ -417,7 +417,6 @@ impl VulkanRenderer {
                 texture
             }
         };
-        self.acquires.push(texture.id);
         Ok(texture)
     }
 

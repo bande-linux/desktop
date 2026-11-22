@@ -103,8 +103,8 @@ when they reach the screen is Bande's own.
   also sample; headless it is version 3 with LINEAR only. A buffer is accepted only with exactly
   the planes its modifier has, all in one dma-buf, and carries the DRM node so that
   `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan
-  image with its modifier and explicit plane layout and sampled in place every frame (acquired
-  from the foreign queue), without a copy. A LINEAR buffer that cannot be sampled that way
+  image with its modifier and explicit plane layout and sampled in place every frame, without a copy: a frame acquires it from the foreign queue
+  before its first draw and releases it back in `GENERAL` when the frame ends. A LINEAR buffer that cannot be sampled that way
   (offset or stride not a multiple of 16, or a driver or lavapipe without the extension) is
   imported as a Vulkan buffer and its damaged rows copied into the surface's texture, so any
   stride works. Uploads are submitted with the frame, or on their own when no frame is rendered

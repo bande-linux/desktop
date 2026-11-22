@@ -5,7 +5,8 @@ use smithay::utils::{Physical, Rectangle};
 
 use super::{Quad, RoundedRect, Sampling, VulkanFrame, scissor};
 use crate::{
-    ATTACHMENT, COLOR_LAYERS, Image, Program, Rect, RenderError, TRANSFER_SOURCE, Usage, barrier,
+    ATTACHMENT, COLOR_LAYERS, Image, Program, Rect, RenderError, SAMPLED, TRANSFER_SOURCE, Usage,
+    barrier,
 };
 
 const MAX_PASSES: u32 = 6;
@@ -23,12 +24,6 @@ pub(crate) struct BlurChain {
     pub(crate) levels: Vec<Image>,
     pub(crate) used: bool,
 }
-
-pub(super) const SAMPLED: Usage = (
-    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-    vk::PipelineStageFlags2::FRAGMENT_SHADER,
-    vk::AccessFlags2::SHADER_SAMPLED_READ,
-);
 
 const COPY_DESTINATION: Usage = (
     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -176,7 +171,7 @@ impl VulkanFrame<'_, '_> {
             .collect())
     }
 
-    fn pause(&mut self) {
+    pub(super) fn pause(&mut self) {
         // SAFETY: the frame holds the renderer mutably while `command_buffer` records, and the
         // rendering on the target is open; `resume` begins it again.
         unsafe {
@@ -186,7 +181,7 @@ impl VulkanFrame<'_, '_> {
         };
     }
 
-    fn resume(&mut self) {
+    pub(super) fn resume(&mut self) {
         self.begin_rendering(self.target_view, self.bounds, vk::AttachmentLoadOp::LOAD);
         self.bound = None;
     }

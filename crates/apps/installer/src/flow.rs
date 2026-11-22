@@ -7,6 +7,7 @@ use bande_xdg::DesktopEntry;
 use crate::deb::{self, Deb, Machine};
 
 const INSTALLING: [Info; 3] = [Info::Installing, Info::Updating, Info::Downgrading];
+const FRESH_LISTS: u32 = 24 * 60 * 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
@@ -247,6 +248,18 @@ fn signed(client: &Client, deb: &Deb) -> Option<Signed> {
         })
 }
 
+fn refresh_old_lists(client: &Client) {
+    match client.seconds_since_refresh() {
+        Ok(age) if age < FRESH_LISTS => {}
+        Ok(_) => {
+            if let Err(error) = client.refresh(false) {
+                tracing::warn!("cannot refresh the package lists: {error}");
+            }
+        }
+        Err(error) => tracing::warn!("cannot read when the package lists were refreshed: {error}"),
+    }
+}
+
 pub fn install(
     client: &Client,
     path: &Path,
@@ -255,7 +268,10 @@ pub fn install(
 ) -> Outcome {
     let applied = match signed {
         Some(id) => client.install(&[id.to_owned()], Mode::Apply, progress),
-        None => client.install_files(path, Mode::Apply, progress),
+        None => {
+            refresh_old_lists(client);
+            client.install_files(path, Mode::Apply, progress)
+        }
     };
     match applied {
         Ok(applied) => {

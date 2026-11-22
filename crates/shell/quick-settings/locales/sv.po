@@ -31,6 +31,9 @@ msgstr "Inte tillgängligt"
 msgid "Wi-Fi"
 msgstr "Wi-Fi"
 
+msgid "Set up by the system"
+msgstr "Konfigurerat av systemet"
+
 msgid "Sign in required"
 msgstr "Inloggning krävs"
 

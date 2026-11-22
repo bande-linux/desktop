@@ -79,6 +79,7 @@ pub fn slide_from(anchor: Option<Anchor>, distance: f32) -> Point {
 #[derive(Debug, Clone, Default)]
 pub struct Status {
     pub wifi: Reading<bool>,
+    pub wifi_system: bool,
     pub network: Option<String>,
     pub sign_in: bool,
     pub bluetooth: Reading<bool>,
@@ -221,7 +222,21 @@ fn tiles(status: &Status, changes: &Changes) -> Vec<Box<dyn Widget>> {
             Change::Wifi,
         ));
     }
-    if let Reading::Present(on) = status.wifi {
+    if let Reading::Present(on) = status.wifi
+        && status.wifi_system
+    {
+        specs.push(TileSpec {
+            title: tr!("Wi-Fi"),
+            detail: status
+                .network
+                .clone()
+                .unwrap_or_else(|| tr!("Set up by the system")),
+            symbol: "network-wireless-signal-excellent-symbolic",
+            on,
+            toggle: |_| Change::ChooseNetwork,
+            details: Some(Change::ChooseNetwork),
+        });
+    } else if let Reading::Present(on) = status.wifi {
         specs.push(TileSpec {
             title: tr!("Wi-Fi"),
             detail: match (&status.network, on) {

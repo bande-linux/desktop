@@ -182,18 +182,29 @@ pub fn battery_menu(battery: &Battery, percentage_shown: bool) -> Menu {
 }
 
 pub fn wifi_menu(wifi: &Wifi) -> Menu {
+    if wifi.system {
+        let mut items = vec![
+            note(&tr!("Wi-Fi")).check(true),
+            note(&tr!("Set up by the system")),
+        ];
+        if let Some(network) = wifi.current() {
+            items.push(MenuItem::separator());
+            items.push(note(&network.name()).radio(true));
+        }
+        items.push(MenuItem::separator());
+        items.push(match wifi.manageable {
+            true => settings(tr!("Manage in Settings…"), "wifi"),
+            false => settings(tr!("Wi-Fi Settings…"), "wifi"),
+        });
+        return Menu::new(items);
+    }
     let mut items = vec![item(&tr!("Wi-Fi"), &Command::SetWifi(!wifi.enabled)).check(wifi.enabled)];
     if wifi.sign_in {
         items.push(MenuItem::separator());
         items.push(note(&tr!("Sign in required")));
         items.push(item(&tr!("Sign In…"), &Command::SignIn));
     }
-    if let Some(network) = wifi.current().filter(|network| network.system) {
-        items.push(MenuItem::separator());
-        items.push(note(&network.name()).radio(true));
-        items.push(note(&tr!("Set up by the system")));
-        items.push(settings(tr!("Manage in Settings…"), "wifi"));
-    } else if wifi.enabled {
+    if wifi.enabled {
         let mut networks: Vec<_> = wifi.networks.iter().collect();
         networks.sort_by(|a, b| {
             (b.current, b.known, b.strength).cmp(&(a.current, a.known, a.strength))
@@ -403,4 +414,35 @@ pub fn cascade(menus: &AppMenus<'_>) -> Menu {
         }
     }
     Menu::new(items).searchable(&tr!("Type to search"), &tr!("No Results"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wifi_set_up_by_the_system_is_never_switched_and_offered_only_when_possible() {
+        let wifi = |manageable| Wifi {
+            enabled: true,
+            system: true,
+            manageable,
+            ..Wifi::default()
+        };
+        for manageable in [false, true] {
+            let menu = wifi_menu(&wifi(manageable));
+            let enabled: Vec<&str> = menu
+                .items
+                .iter()
+                .filter(|item| item.enabled && !item.separator)
+                .map(|item| item.title.as_str())
+                .collect();
+            let offer = tr!("Manage in Settings…");
+            assert_eq!(enabled.contains(&offer.as_str()), manageable);
+            assert!(
+                menu.items
+                    .iter()
+                    .all(|item| !matches!(Command::parse(&item.action), Some(Command::SetWifi(_))))
+            );
+        }
+    }
 }

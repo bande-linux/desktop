@@ -34,13 +34,10 @@ pub struct Outside {
 
 impl Outside {
     pub(crate) fn of(interface: &str) -> Self {
-        let configured = ifupdown::read().map_or(true, |configuration| {
-            ifupdown::configures(&configuration, interface)
-        });
         Self {
             interface: interface.to_owned(),
             addressing: kernel::addressing(interface),
-            hand_over: configured && Path::new(IFDOWN).exists(),
+            hand_over: Path::new(IFDOWN).exists() && ifupdown::can_hand_over(interface),
         }
     }
 }

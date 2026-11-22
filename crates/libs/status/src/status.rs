@@ -33,6 +33,8 @@ pub struct Wifi {
     pub enabled: bool,
     pub networks: Vec<Network>,
     pub sign_in: bool,
+    pub system: bool,
+    pub manageable: bool,
 }
 
 impl Wifi {
@@ -44,6 +46,8 @@ impl Wifi {
         let signal = |strength: u8| (wifi_bars(strength), wifi_quarter(strength));
         self.enabled == other.enabled
             && self.sign_in == other.sign_in
+            && self.system == other.system
+            && self.manageable == other.manageable
             && self.networks.len() == other.networks.len()
             && self.networks.iter().zip(&other.networks).all(|(a, b)| {
                 a.ssid == b.ssid

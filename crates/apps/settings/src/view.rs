@@ -797,7 +797,7 @@ impl SettingsView {
             Update::Arrangements(arrangements) => self.arrangements = arrangements,
             Update::Audio(snapshot) => self.apply_audio(snapshot),
             Update::Wifi(wifi) => {
-                match wifi.present() {
+                match wifi.present().filter(|wifi| wifi.outside.is_none()) {
                     Some(wifi) => self
                         .values
                         .insert(SettingId::WifiPower, Value::Flag(wifi.enabled)),

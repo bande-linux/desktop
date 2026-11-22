@@ -145,17 +145,20 @@ msgstr "Visa procent"
 msgid "Wi-Fi"
 msgstr "Wi-Fi"
 
-msgid "Sign in required"
-msgstr "Inloggning krävs"
-
-msgid "Sign In…"
-msgstr "Logga in…"
-
 msgid "Set up by the system"
 msgstr "Konfigurerat av systemet"
 
 msgid "Manage in Settings…"
 msgstr "Hantera i Inställningar…"
+
+msgid "Wi-Fi Settings…"
+msgstr "Wi-Fi-inställningar…"
+
+msgid "Sign in required"
+msgstr "Inloggning krävs"
+
+msgid "Sign In…"
+msgstr "Logga in…"
 
 msgid "Saved Networks"
 msgstr "Sparade nätverk"
@@ -165,9 +168,6 @@ msgstr "Andra nätverk"
 
 msgid "{name} (secured)"
 msgstr "{name} (skyddat)"
-
-msgid "Wi-Fi Settings…"
-msgstr "Wi-Fi-inställningar…"
 
 msgid "Volume {percent}%"
 msgstr "Volym {percent} %"

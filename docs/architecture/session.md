@@ -472,10 +472,15 @@ brings up the dialog.
     router and DNS come from rtnetlink, and a Wi-Fi device's network name, signal and security
     from nl80211 (the scan result the card is associated with and the station's signal), so
     nothing is sent. The Taskbar, Quick Settings and Settings show that network as connected and
-    "Set up by the system"; it is never joined or scanned through NetworkManager.
-  - Bande never takes such a device over on its own. Where an ifupdown stanza sets it up (or the
-    root-only file can't be read), the Taskbar's Wi-Fi menu offers "Manage in Settings…" and
-    Settings ▸ Wi-Fi (or the wired device's page) offers the same, confirming in one sentence
+    "Set up by the system", read again whenever NetworkManager signals and when a menu, tile or
+    page showing it opens; it is never joined or scanned through NetworkManager. Its Wi-Fi switch
+    is shown on and can't be changed (the Taskbar menu disables it, Quick Settings' tile opens the
+    network menu, Settings hides it), since NetworkManager's radio switch doesn't reach it.
+  - Bande never takes such a device over on its own. Only where the helper could carry it over
+    (its stanza plans cleanly, or, while the files are readable only by root, `/run/network/ifstate`
+    shows ifupdown brought it up; never for systemd-networkd), the Wi-Fi menu in the Taskbar and
+    Quick Settings offers "Manage in Settings…" and Settings ▸ Wi-Fi (or the wired device's page)
+    offers the same, confirming in one sentence
     before it asks for the administrator password. It runs `bande-network-helper manage` under
     `pkexec` (`org.bande.network-helper`, admin, kept for a few minutes): the helper keeps a copy
     of each file it changes next to it (hidden in `interfaces.d`, which `source` globs), takes

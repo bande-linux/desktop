@@ -225,7 +225,8 @@ fn read_wifi(network: &NetworkManager) -> bande_network::Result<Option<Wifi>> {
     if !network.has_wifi()? {
         return Ok(None);
     }
-    let enabled = network.wifi_enabled()?;
+    let outside = network.wifi_outside()?;
+    let enabled = outside.is_some() || network.wifi_enabled()?;
     let networks = if enabled {
         match network.networks() {
             Err(bande_network::Error::NoWifiDevice) => return Ok(None),
@@ -238,6 +239,8 @@ fn read_wifi(network: &NetworkManager) -> bande_network::Result<Option<Wifi>> {
         enabled,
         networks,
         sign_in: matches!(network.sign_in_page(), Ok(Some(_))),
+        system: outside.is_some(),
+        manageable: outside.is_some_and(|outside| outside.hand_over),
     }))
 }
 

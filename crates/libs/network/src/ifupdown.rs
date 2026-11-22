@@ -9,6 +9,8 @@ use crate::{Ipv6, ManualIpv4, ManualIpv6};
 pub const INTERFACES: &str = "/etc/network/interfaces";
 pub const INTERFACES_FOLDER: &str = "/etc/network/interfaces.d";
 const NETWORK_FOLDER: &str = "/etc/network";
+const IFUPDOWN_STATE: &str = "/run/network/ifstate";
+const NET_CLASS: &str = "/sys/class/net";
 const SECRET_OPTIONS: [&str; 2] = ["wpa-psk", "wpa-password"];
 const HIDDEN_SECRET: &str = "••••••••";
 
@@ -329,13 +331,30 @@ fn read_under(root: &Path) -> io::Result<Configuration> {
     Ok(configuration)
 }
 
-pub fn configures(configuration: &Configuration, interface: &str) -> bool {
-    configuration.files.iter().any(|file| {
-        file.text.lines().any(|line| {
-            let mut words = line.split_whitespace();
-            words.next() == Some("iface") && words.next() == Some(interface)
-        })
+fn brought_up(state: &str, interface: &str) -> bool {
+    state.lines().any(|line| {
+        line.split_once('=')
+            .is_some_and(|(name, _)| name == interface)
     })
+}
+
+/// Whether Settings can hand `interface` to NetworkManager: its stanza is one the helper carries
+/// over, or, while the files are readable only by root, ifupdown brought it up.
+pub fn can_hand_over(interface: &str) -> bool {
+    let wireless = Path::new(NET_CLASS)
+        .join(interface)
+        .join("wireless")
+        .exists();
+    match read() {
+        Ok(configuration) => plan(&configuration, interface, wireless).is_ok(),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            fs::read_to_string(IFUPDOWN_STATE).is_ok_and(|state| brought_up(&state, interface))
+        }
+        Err(error) => {
+            tracing::debug!("cannot read the interfaces files: {error}");
+            false
+        }
+    }
 }
 
 fn mentions(words: &[&str], interface: &str) -> bool {
@@ -969,8 +988,8 @@ iface eth1 inet static
             })
         );
         assert_eq!(handed.edits.len(), 1, "the main file is left alone");
-        assert!(configures(&configuration, "wlan0"));
-        assert!(!configures(&configuration, "eth0"));
+        assert!(brought_up("lo=lo\nwlan0=wlan0\n", "wlan0"));
+        assert!(!brought_up("lo=lo\nwlan0.7=wlan0.7\n", "wlan0"));
 
         write(
             "etc/network/interfaces",

@@ -393,8 +393,12 @@ impl View for BrowserPane {
         self.view.deadline()
     }
 
-    fn tick(&mut self, _window: &mut Window, now: Instant) -> bool {
-        self.view.tick(now)
+    fn tick(&mut self, window: &mut Window, now: Instant) -> bool {
+        let ticked = self.view.tick(now);
+        if let Some(action) = self.view.auto_scroll(now) {
+            window.accept_drag(action);
+        }
+        ticked
     }
 
     fn animating(&self) -> bool {

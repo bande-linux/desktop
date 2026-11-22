@@ -26,7 +26,9 @@ const UPDATABLE: u64 = 1 << 1;
 const REMOTE_ENABLED: u64 = 1 << 0;
 const NEEDS_REBOOT: u64 = 1 << 8;
 const NEEDS_SHUTDOWN: u64 = 1 << 17;
+const NOTIFIED: u64 = 1 << 10;
 const STATE_PENDING: u32 = 1;
+const STATE_SUCCESS: u32 = 2;
 const STATE_NEEDS_REBOOT: u32 = 4;
 const REMOTE_DOWNLOAD: u32 = 1;
 const REMOTE_LOCAL: u32 = 2;
@@ -57,6 +59,12 @@ pub(crate) struct Update {
     pub(crate) notes: String,
     pub(crate) size: u64,
     pub(crate) at_restart: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Finished {
+    pub(crate) name: String,
+    pub(crate) installed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -273,6 +281,59 @@ pub(crate) fn pending(system: &Connection) -> Result<usize, Error> {
         .iter()
         .filter(|device| waiting(device))
         .count())
+}
+
+pub(crate) fn installed(system: &Connection) -> zbus::Result<bool> {
+    bande_packages::provided(system, SERVICE)
+}
+
+fn history(system: &Connection) -> Result<Vec<Record>, Error> {
+    match daemon(system)?.call("GetHistory", &()) {
+        Ok(devices) => Ok(devices),
+        Err(error) => match Error::from(error) {
+            Error::Failed(Problem::UpToDate, _) => Ok(Vec::new()),
+            other => Err(other),
+        },
+    }
+}
+
+fn result(system: &Connection, device: &str) -> Result<Option<Record>, Error> {
+    match daemon(system)?.call("GetResults", &(device,)) {
+        Ok(result) => Ok(Some(result)),
+        Err(error) => match Error::from(error) {
+            Error::Failed(Problem::UpToDate | Problem::Other, _) => Ok(None),
+            other => Err(other),
+        },
+    }
+}
+
+pub(crate) fn finished(system: &Connection) -> Result<Vec<Finished>, Error> {
+    let mut found = Vec::new();
+    for device in history(system)? {
+        if !restarts(&device) || flags(&device) & NOTIFIED != 0 || waiting(&device) {
+            continue;
+        }
+        let id = text(&device, "DeviceId");
+        let Some(result) = result(system, &id)? else {
+            continue;
+        };
+        let state: u32 = number(&result, "UpdateState").unwrap_or(0);
+        if state == STATE_PENDING || state == STATE_NEEDS_REBOOT || state == 0 {
+            continue;
+        }
+        if state != STATE_SUCCESS {
+            tracing::warn!(
+                "firmware update of {id} failed: {}",
+                text(&result, "UpdateError")
+            );
+        }
+        let () = daemon(system)?.call("ClearResults", &(id.as_str(),))?;
+        found.push(Finished {
+            name: text(&result, "Name"),
+            installed: state == STATE_SUCCESS,
+        });
+    }
+    Ok(found)
 }
 
 fn agent() -> ureq::Agent {

@@ -12,7 +12,9 @@ use crate::SessionBus;
 pub const SYSTEM_POWER_TOO_LOW: u64 = 1 << 0;
 const UPDATABLE: u64 = 1 << 1;
 const NEEDS_REBOOT: u64 = 1 << 8;
+const NOTIFIED: u64 = 1 << 10;
 const STATE_SUCCESS: u32 = 2;
+const STATE_FAILED: u32 = 3;
 const STATE_NEEDS_REBOOT: u32 = 4;
 const REMOTE_ENABLED: u64 = 1 << 0;
 const REMOTE_DOWNLOAD: u32 = 1;
@@ -40,12 +42,14 @@ impl Device {
 pub enum Call {
     UpdateMetadata(String, Vec<u8>, Vec<u8>),
     Install(String, Vec<u8>),
+    ClearResults(String),
 }
 
 #[derive(Default)]
 struct World {
     devices: Vec<Device>,
     states: HashMap<String, u32>,
+    notified: Vec<String>,
     calls: Vec<Call>,
     port: u16,
 }
@@ -81,6 +85,27 @@ fn read(fd: OwnedFd) -> Vec<u8> {
     read.map(|_| bytes).unwrap_or_default()
 }
 
+fn described(world: &World, device: &Device) -> Result<Record, FwupdError> {
+    let notified = match world.notified.iter().any(|id| id == device.id) {
+        true => NOTIFIED,
+        false => 0,
+    };
+    let flags = UPDATABLE | notified | if device.at_restart { NEEDS_REBOOT } else { 0 };
+    let state = world.states.get(device.id).copied().unwrap_or(0);
+    let version = match state {
+        STATE_SUCCESS => device.to,
+        _ => device.from,
+    };
+    record(vec![
+        ("DeviceId", Value::from(device.id)),
+        ("Name", Value::from(device.name)),
+        ("Version", Value::from(version)),
+        ("Flags", Value::from(flags)),
+        ("Problems", Value::from(device.problems)),
+        ("UpdateState", Value::from(state)),
+    ])
+}
+
 struct Fwupd(Shared);
 
 #[zbus::interface(name = "org.freedesktop.fwupd")]
@@ -90,23 +115,41 @@ impl Fwupd {
         world
             .devices
             .iter()
-            .map(|device| {
-                let flags = UPDATABLE | if device.at_restart { NEEDS_REBOOT } else { 0 };
-                let state = world.states.get(device.id).copied().unwrap_or(0);
-                let version = match state {
-                    STATE_SUCCESS => device.to,
-                    _ => device.from,
-                };
-                record(vec![
-                    ("DeviceId", Value::from(device.id)),
-                    ("Name", Value::from(device.name)),
-                    ("Version", Value::from(version)),
-                    ("Flags", Value::from(flags)),
-                    ("Problems", Value::from(device.problems)),
-                    ("UpdateState", Value::from(state)),
-                ])
-            })
+            .map(|device| described(&world, device))
             .collect()
+    }
+
+    fn get_history(&self) -> Result<Vec<Record>, FwupdError> {
+        let world = lock(&self.0);
+        let history: Vec<Record> = world
+            .devices
+            .iter()
+            .filter(|device| world.states.contains_key(device.id))
+            .map(|device| described(&world, device))
+            .collect::<Result<_, _>>()?;
+        match history.is_empty() {
+            true => Err(FwupdError::NothingToDo("No history".to_owned())),
+            false => Ok(history),
+        }
+    }
+
+    fn get_results(&self, id: String) -> Result<Record, FwupdError> {
+        let world = lock(&self.0);
+        if world.notified.contains(&id) {
+            return Err(FwupdError::NothingToDo("already notified".to_owned()));
+        }
+        let device = world
+            .devices
+            .iter()
+            .find(|device| device.id == id)
+            .ok_or_else(|| FwupdError::NotFound(id.clone()))?;
+        described(&world, device)
+    }
+
+    fn clear_results(&self, id: String) {
+        let mut world = lock(&self.0);
+        world.notified.push(id.clone());
+        world.calls.push(Call::ClearResults(id));
     }
 
     fn get_upgrades(&self, device_id: String) -> Result<Vec<Record>, FwupdError> {
@@ -227,6 +270,18 @@ impl FakeFwupd {
             _daemon: daemon,
             world,
         })
+    }
+
+    pub fn restart(&self, installed: bool) {
+        let state = match installed {
+            true => STATE_SUCCESS,
+            false => STATE_FAILED,
+        };
+        for waiting in lock(&self.world).states.values_mut() {
+            if *waiting == STATE_NEEDS_REBOOT {
+                *waiting = state;
+            }
+        }
     }
 
     pub fn take_calls(&self) -> Vec<Call> {

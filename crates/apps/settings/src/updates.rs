@@ -191,8 +191,34 @@ impl SettingsView {
         Some(self.status_row(&tr!("Last checked {date}", date = date), None, None))
     }
 
+    fn firmware_offer_row(&mut self) -> Option<Box<dyn Widget>> {
+        let offered = self.firmware_missing
+            && !matches!(
+                self.software,
+                SoftwareState::Unavailable
+                    | SoftwareState::Downloading { .. }
+                    | SoftwareState::Installing { .. }
+            );
+        if !offered {
+            return None;
+        }
+        let install = self.software_button(
+            &tr!("Install…"),
+            Intent::Software(SoftwareCommand::InstallFirmwareSupport),
+            false,
+        );
+        Some(self.status_row(
+            &tr!("Firmware updates for this computer and its devices"),
+            Some(&tr!(
+                "Installs fwupd, which also checks for new firmware once a day by itself."
+            )),
+            Some(install),
+        ))
+    }
+
     pub(crate) fn software_rows(&mut self) -> Widgets {
         let mut rows = self.update_rows();
+        rows.extend(self.firmware_offer_row());
         rows.extend(self.last_check_row());
         rows
     }

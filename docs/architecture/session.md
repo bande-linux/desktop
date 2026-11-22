@@ -867,8 +867,10 @@ Taskbar and Search watch the `applications` folders on `XDG_DATA_DIRS`, so a fir
 appears without logging out.
 
 **Firmware** (BIOS/UEFI, drives, docks and other devices) comes through fwupd
-(`org.freedesktop.fwupd`), which `bande-settings` recommends; without it Software Update shows
-no firmware. Settings is the fwupd client (`crates/apps/settings/src/software/firmware.rs`): only
+(`org.freedesktop.fwupd`), which `bande-settings` only suggests, because Debian's fwupd enables
+its own daily `fwupd-refresh.timer`. Without it Software Update shows one line, "Firmware updates
+for this computer and its devices", whose Install… installs `fwupd` through PackageKit and says
+that fwupd then checks for firmware once a day by itself; a check follows the install. Settings is the fwupd client (`crates/apps/settings/src/software/firmware.rs`): only
 a check that refreshes the package lists (Check Now, or a check the person switched on) downloads
 new metadata, for each enabled download remote in fwupd's own configuration (LVFS by default),
 skipping a remote whose `.jcat` signature is unchanged, and hands it to fwupd with
@@ -881,7 +883,9 @@ SHA-256 and passed to `Install` with interactive authorisation, so fwupd asks th
 (`update-internal`, kept for the following devices). Progress follows fwupd's `Percentage`.
 A device that installs during the restart (UEFI capsules: `needs-reboot`, then update state
 `needs-reboot`) joins the restart flow as "Restart to install", with a note to keep the computer
-plugged in; a reopened pane finds it again through fwupd's update state. Firmware is never
+plugged in; a reopened pane finds it again through fwupd's update state. After the restart the
+outcome of such an update (`GetHistory`, `GetResults`) is shown once, with the PackageKit offline
+results, then cleared with `ClearResults`. Firmware is never
 installed by automatic updates; the notification counts it as waiting. fwupd's errors map to
 messages that say what to do.
 

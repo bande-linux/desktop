@@ -63,6 +63,8 @@ pub const ROLES: [Role; 7] = [
             "image/heif",
             "image/avif",
             "image/tiff",
+            "image/bmp",
+            "image/vnd.microsoft.icon",
         ],
     },
     Role {

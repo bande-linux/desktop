@@ -326,6 +326,14 @@ impl DocumentView {
         self.saved != Some(self.revision()) || self.format_changed
     }
 
+    pub fn reloads_from(&self, changed: &Path) -> bool {
+        self.path.as_deref() == Some(changed)
+            && !self.loading
+            && !self.saving
+            && !self.is_edited()
+            && stamp(changed).is_some_and(|found| Some(found) != self.stamp)
+    }
+
     pub fn is_empty_untitled(&self) -> bool {
         self.path.is_none()
             && self
@@ -461,11 +469,15 @@ impl DocumentView {
         self.rich = rich.is_some();
         let text = match (rich, self.editor()) {
             (Some(rich), Some(editor)) => {
+                let caret = editor.selection();
                 editor.set_rich_text(&rich);
+                keep_caret(editor, &rich.text, caret);
                 rich.text
             }
             (None, Some(editor)) => {
+                let caret = editor.selection();
                 editor.set_text(&text);
+                keep_caret(editor, &text, caret);
                 text
             }
             (_, None) => text,
@@ -1317,7 +1329,13 @@ impl DocumentView {
             ),
             (false, None) => String::new(),
         };
+        let position = match self.loading {
+            true => None,
+            false => self.caret_position(),
+        }
+        .map(|(line, column)| tr!("Line {line}, Column {column}", line = line, column = column));
         let mut parts = vec![counts];
+        parts.extend(position);
         if self.format != Format::Plain {
             parts.push(format_title(self.format.name()));
         }
@@ -1329,13 +1347,7 @@ impl DocumentView {
         parts.retain(|part| !part.is_empty());
         parts.join("   ·   ")
     }
-        let position = match self.loading {
-            true => None,
-            false => self.caret_position(),
-        }
-        .map(|(line, column)| tr!("Line {line}, Column {column}", line = line, column = column));
 
-        parts.extend(position);
     fn fit(&mut self, label: &str) -> f32 {
         let style = TextStyle::new(13.0, self.ui.context().palette.ink);
         let width = self
@@ -1669,5 +1681,14 @@ fn button_label(action: &str) -> String {
         "save-copy" => tr!("Save a Copy…"),
         "save-unicode" => tr!("Save as UTF-8"),
         other => other.to_owned(),
+    }
+}
+
+fn keep_caret(editor: &mut TextView, text: &str, caret: std::ops::Range<usize>) {
+    if caret.end <= text.len()
+        && text.is_char_boundary(caret.start)
+        && text.is_char_boundary(caret.end)
+    {
+        editor.select(caret);
     }
 }

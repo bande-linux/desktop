@@ -32,6 +32,7 @@ pub enum Message {
         versions: Vec<u64>,
     },
     Chosen(Vec<PathBuf>),
+    Changed(Vec<PathBuf>),
     SaveTo {
         token: u64,
         path: Option<PathBuf>,

@@ -28,6 +28,7 @@ bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
+bande-watch.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

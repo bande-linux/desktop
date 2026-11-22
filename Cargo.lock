@@ -640,6 +640,7 @@ name = "bande-calendar"
 version = "0.2.0"
 dependencies = [
  "accesskit",
+ "bande-address-book",
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",

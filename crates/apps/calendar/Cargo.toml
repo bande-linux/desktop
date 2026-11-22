@@ -12,6 +12,7 @@ publish = false
 accesskit.workspace = true
 bande-app.workspace = true
 bande-content-lines.workspace = true
+bande-address-book.workspace = true
 bande-dav.workspace = true
 bande-discovery.workspace = true
 bande-network.workspace = true

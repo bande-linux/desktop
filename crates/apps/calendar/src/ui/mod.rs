@@ -287,6 +287,7 @@ pub(crate) struct Selection {
 
 pub struct CalendarView {
     library: Library,
+    contacts: bande_address_book::Directory,
     ui: Ui,
     host: WidgetId,
     access: WidgetId,
@@ -354,6 +355,7 @@ impl CalendarView {
         cx.keyboard_navigation = true;
         Self {
             library,
+            contacts: bande_address_book::Directory::open(),
             ui: Ui::new(Box::new(host), cx),
             host: host_id,
             access: WidgetId::next(),

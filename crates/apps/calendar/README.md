@@ -75,7 +75,7 @@ views. Packaged as `bande-calendar`.
   (`SCHEDULE-AGENT` other than `SERVER`), and who sent an invitation for its organizer
   (`SENT-BY`). Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
   times stay read-only), and on an event you organise in a CalDAV calendar you can add
-  invitees by address; the server sends the mail, and a change of time, repeat or exceptions
+  invitees by address (completed from Contacts as you type; a comma takes the suggestion); the server sends the mail, and a change of time, repeat or exceptions
   raises `SEQUENCE` so it goes out as an update; your own changes to an invitation, such as an
   alert, keep the organizer's `SEQUENCE`. Your addresses come from
   `calendar-user-address-set`.

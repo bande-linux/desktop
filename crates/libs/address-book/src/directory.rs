@@ -126,6 +126,17 @@ impl Directory {
     pub fn knows(&self, email: &str) -> bool {
         self.names.contains_key(&email.trim().to_lowercase())
     }
+
+    /// The rest of the first contact `token` starts, as `Name <address>` or the bare address.
+    pub fn complete(&self, token: &str) -> Option<String> {
+        self.addresses().find_map(|(name, email)| {
+            let full = match name.is_empty() {
+                true => email.to_owned(),
+                false => format!("{name} <{email}>"),
+            };
+            completes(&full, token).or_else(|| completes(email, token))
+        })
+    }
 }
 
 /// The rest of `candidate` when it starts with `token`, ignoring case: what an address field

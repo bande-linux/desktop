@@ -11,7 +11,7 @@ use bande_discovery::nearby::{Addresses, Availability, Browser};
 use bande_l10n::tr;
 
 use crate::escl::{self, ScanError, Scanner};
-use crate::link::{Address, is_identity_change, send_document};
+use crate::link::{Address, Cancel, is_identity_change, send_document};
 use crate::nearby::{Found, KINDS, printers, scanners};
 use crate::printer::{
     Payload, RemoteState, abilities, accepted_job, cancel_job, job_state, payload_for,
@@ -67,6 +67,7 @@ struct Inner {
     found: HashMap<String, Found>,
     scanners: HashMap<String, Found>,
     scanning: usize,
+    scans: HashMap<String, Arc<Cancel>>,
     usb: HashSet<String>,
     watchers: HashSet<String>,
     jobs: Vec<Job>,
@@ -496,18 +497,30 @@ impl Spool {
         &self,
         scanner: &str,
         options: &ScanOptions,
-    ) -> std::result::Result<Vec<OwnedFd>, String> {
+    ) -> std::result::Result<Vec<(OwnedFd, u32)>, String> {
         let _scanning = Scanning::new(self);
-        let (abilities, address, pins) = self
-            .reach_scanner(scanner)
-            .map_err(|error| error.sentence())?;
+        let cancel = Arc::new(Cancel::default());
+        self.lock()
+            .scans
+            .insert(scanner.to_owned(), Arc::clone(&cancel));
         let mut pages = Vec::new();
-        escl::scan(&address, &pins, &abilities, options, &mut |page| {
-            pages.push(escl::clean_page(&page, options.color)?);
-            Ok(())
-        })
-        .map_err(|error| error.sentence())?;
-        Ok(pages)
+        let scanned = self
+            .reach_scanner(scanner)
+            .and_then(|(abilities, address, pins)| {
+                escl::scan(&address, &pins, &abilities, options, &cancel, &mut |page| {
+                    pages.push(escl::clean_page(&page, options.color)?);
+                    Ok(())
+                })
+            });
+        self.lock().scans.remove(scanner);
+        let dpi = scanned.map_err(|error| error.sentence())?;
+        Ok(pages.into_iter().map(|page| (page, dpi)).collect())
+    }
+
+    pub fn cancel_scan(&self, scanner: &str) {
+        if let Some(cancel) = self.lock().scans.get(scanner) {
+            cancel.stop();
+        }
     }
 
     pub fn add_address(&self, address: &str) -> Result<String> {

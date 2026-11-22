@@ -1,6 +1,7 @@
 use std::io::{self, BufReader, Read, Write};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
-use std::sync::Arc;
+use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use bande_discovery::nearby::{Addresses, resolve_host};
@@ -130,7 +131,35 @@ fn target(address: &Address) -> io::Result<SocketAddr> {
 }
 
 fn connect(address: &Address, pins: &Pins, timeout: Duration) -> Result<Box<dyn Stream>> {
-    connect_waiting(address, pins, timeout, ANSWER_TIMEOUT)
+    connect_waiting(address, pins, timeout, ANSWER_TIMEOUT, None)
+}
+
+#[derive(Debug, Default)]
+pub struct Cancel {
+    stopped: AtomicBool,
+    socket: Mutex<Option<TcpStream>>,
+}
+
+impl Cancel {
+    pub fn stop(&self) {
+        self.stopped.store(true, Ordering::Relaxed);
+        let socket = self.socket.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(socket) = socket.as_ref() {
+            let _ = socket.shutdown(Shutdown::Both);
+        }
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.stopped.load(Ordering::Relaxed)
+    }
+
+    fn follow(&self, tcp: &TcpStream) -> io::Result<()> {
+        *self.socket.lock().unwrap_or_else(PoisonError::into_inner) = Some(tcp.try_clone()?);
+        match self.stopped() {
+            true => Err(io::Error::from(io::ErrorKind::Interrupted)),
+            false => Ok(()),
+        }
+    }
 }
 
 fn connect_waiting(
@@ -138,9 +167,13 @@ fn connect_waiting(
     pins: &Pins,
     timeout: Duration,
     answer: Duration,
+    cancel: Option<&Cancel>,
 ) -> Result<Box<dyn Stream>> {
     let target = target(address)?;
     let tcp = TcpStream::connect_timeout(&target, CONNECT_TIMEOUT)?;
+    if let Some(cancel) = cancel {
+        cancel.follow(&tcp)?;
+    }
     tcp.set_read_timeout(Some(answer))?;
     tcp.set_write_timeout(Some(timeout))?;
     tcp.set_nodelay(true)?;
@@ -211,10 +244,17 @@ pub struct HttpRequest<'a> {
     pub body: Option<(&'a str, &'a [u8])>,
     pub most: usize,
     pub answer: Duration,
+    pub cancel: Option<&'a Cancel>,
 }
 
 pub fn http(address: &Address, pins: &Pins, request: &HttpRequest<'_>) -> Result<Response> {
-    let mut stream = connect_waiting(address, pins, ANSWER_TIMEOUT, request.answer)?;
+    let mut stream = connect_waiting(
+        address,
+        pins,
+        ANSWER_TIMEOUT,
+        request.answer,
+        request.cancel,
+    )?;
     let mut head = format!(
         "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
         request.method,

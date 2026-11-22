@@ -25,6 +25,9 @@ msgstr "Skannern kan inte skanna på det här sättet."
 msgid "The scanner sent something that can’t be read."
 msgstr "Skannern skickade något som inte går att läsa."
 
+msgid "Scanning was stopped."
+msgstr "Skanningen avbröts."
+
 msgid "The scanner refused to scan (error {status})."
 msgstr "Skannern vägrade skanna (fel {status})."
 

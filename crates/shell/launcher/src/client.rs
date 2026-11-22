@@ -179,7 +179,7 @@ impl Previewer {
                         continue;
                     }
                     let entry = Entry::read(path, name);
-                    let mut content = preview(&entry, Image::from_rgba);
+                    let (mut content, _) = preview(&entry, Image::from_rgba);
                     if let (Preview::Other { .. }, Some(cache)) = (&content, &cache)
                         && let Some(picture) = thumbnail(
                             cache,

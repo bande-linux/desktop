@@ -810,6 +810,25 @@ remotes only when `bande_packages::schedule::check_due` says the automatic check
 Taskbar and Search watch the `applications` folders on `XDG_DATA_DIRS`, so a first Flatpak app
 appears without logging out.
 
+**Firmware** (BIOS/UEFI, drives, docks and other devices) comes through fwupd
+(`org.freedesktop.fwupd`), which `bande-settings` recommends; without it Software Update shows
+no firmware. Settings is the fwupd client (`crates/apps/settings/src/software/firmware.rs`): only
+a check that refreshes the package lists (Check Now, or a check the person switched on) downloads
+new metadata, for each enabled download remote in fwupd's own configuration (LVFS by default),
+skipping a remote whose `.jcat` signature is unchanged, and hands it to fwupd with
+`UpdateMetadata`. fwupd's configuration and its own `fwupd-refresh.timer` are left as Debian
+ships them. Each updatable device with a newer release is listed before the packages with its
+name, version from → to and the release notes. Update Now installs packages first, then each
+firmware: refused while fwupd reports a device problem (battery too low, mains needed, lid
+closed, update pending, busy), otherwise the cabinet is downloaded, checked against the release's
+SHA-256 and passed to `Install` with interactive authorisation, so fwupd asks through polkit
+(`update-internal`, kept for the following devices). Progress follows fwupd's `Percentage`.
+A device that installs during the restart (UEFI capsules: `needs-reboot`, then update state
+`needs-reboot`) joins the restart flow as "Restart to install", with a note to keep the computer
+plugged in; a reopened pane finds it again through fwupd's update state. Firmware is never
+installed by automatic updates; the notification counts it as waiting. fwupd's errors map to
+messages that say what to do.
+
 **Automatic updates** (`automatic-updates`, off by default): the daily run downloads everything
 in the background, waits for five minutes of idle (`ext-idle-notify-v1`, which honours
 inhibitors), checks again and installs the live and Flatpak updates when polkit allows them

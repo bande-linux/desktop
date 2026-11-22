@@ -1,5 +1,5 @@
 use std::os::fd::BorrowedFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
@@ -40,6 +40,7 @@ fn item(label: Text, action: &str) -> Entry {
 }
 
 struct Notes {
+    store: PathBuf,
     inbox: Inbox<Event>,
     workers: Vec<Worker>,
     accounts: Vec<Account>,
@@ -65,7 +66,7 @@ impl Notes {
             cx.raise(window, None);
             return;
         }
-        let store = match Store::open(&store_path()) {
+        let store = match Store::open(&self.store) {
             Ok(store) => store,
             Err(error) => return tracing::error!("cannot open the notes: {error}"),
         };
@@ -90,7 +91,7 @@ impl Notes {
             .into_iter()
             .filter(|account| used.contains(&account.id))
             .collect::<Vec<_>>();
-        if let Err(error) = Store::open(&store_path()).and_then(|store| {
+        if let Err(error) = Store::open(&self.store).and_then(|store| {
             store.keep_accounts(&used.iter().map(|account| account.id).collect::<Vec<_>>())
         }) {
             tracing::warn!("cannot forget unused accounts: {error}");
@@ -119,7 +120,7 @@ impl Notes {
                 None => self.workers.push(Worker::spawn(
                     account.clone(),
                     password,
-                    store_path(),
+                    self.store.clone(),
                     Network::default(),
                     self.inbox.outbox(),
                 )),
@@ -248,11 +249,13 @@ impl Program for Notes {
     type View = NotesView;
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
+        let store = store_path()?;
         let inbox = Inbox::new()?;
         if CHANGES.set(inbox.outbox()).is_err() {
             tracing::warn!("the settings already report their changes");
         }
         let mut notes = Self {
+            store,
             inbox,
             workers: Vec::new(),
             accounts: Vec::new(),

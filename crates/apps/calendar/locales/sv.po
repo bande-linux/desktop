@@ -718,3 +718,12 @@ msgstr "Idag"
 
 msgid "Search"
 msgstr "Sök"
+
+msgid "This invitation is older than the event in your calendar, or is not from its organizer."
+msgstr "Inbjudan är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
+
+msgid "This answer is not to an event you organize, or is not from one of its invitees."
+msgstr "Svaret gäller inte en händelse som du arrangerar, eller kommer inte från någon av de inbjudna."
+
+msgid "This cancellation is older than the event in your calendar, or is not from its organizer."
+msgstr "Inställningen är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."

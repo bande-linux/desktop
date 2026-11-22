@@ -24,6 +24,7 @@ accident. How each is built is in the subject documents ([compositor](compositor
 
 - **Between apps**: the target proposes the action; Ctrl copies and Shift moves, read live, and the pointer shows the outcome. Selected text drags; within one field it moves, into another it copies unless Shift is held. A target that accepts only copies is never turned into a move, so a file dropped on the Terminal stays in Files. An unconfirmed drop ends without action after 2 s, and an app that dies mid-drag leaves no grab behind, so nothing is deleted and the next click works.
 - **Files as text**: copied or dragged files are offered as `text/uri-list` and, for a text field, as their local paths, so pasting or dropping a file into a document or a field inserts its path, never a `file://` address. Pasting files is the keyboard equivalent of dropping them: Mail attaches them and the Terminal types their shell-quoted paths.
+- **Scrolling while dragging**: a drag held near the top or bottom of a Files list scrolls it, faster nearer the edge, so any folder in it can be reached.
 - **On the desktop**: a file dropped on empty desktop or a folder there moves when it comes from the same volume and copies from another one (a USB stick or a server), as in Files; Ctrl and Shift choose otherwise.
 
 ## Shortcuts

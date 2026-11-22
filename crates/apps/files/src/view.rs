@@ -269,6 +269,7 @@ pub struct FilesView {
     status_bar_file: Option<PathBuf>,
     templates: Option<PathBuf>,
     pub(crate) drop: Option<crate::drag::Hover>,
+    pub(crate) auto_scroll: Option<(Point, Instant)>,
     pub(crate) scrolls: Vec<(Location, ScrollState)>,
     pub(crate) tabs: Vec<TabSlot>,
     pub(crate) active_tab: usize,
@@ -437,6 +438,7 @@ impl FilesView {
             status_bar_file: None,
             templates: None,
             drop: None,
+            auto_scroll: None,
             scrolls: Vec::new(),
             tabs: vec![TabSlot::shown()],
             active_tab: 0,
@@ -927,6 +929,7 @@ impl FilesView {
                 .as_ref()
                 .zip(self.spring_delay)
                 .and_then(|(hover, delay)| hover.due(delay)),
+            self.auto_scroll_due(),
         ]
         .into_iter()
         .flatten()
@@ -947,6 +950,7 @@ impl FilesView {
             self.notice = None;
         }
         self.spring(now);
+        self.auto_scroll(now);
         if let Some((due, path)) = self.pending_rename.take() {
             if due > now {
                 self.pending_rename = Some((due, path));

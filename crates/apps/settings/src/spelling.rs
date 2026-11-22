@@ -77,7 +77,13 @@ fn read(proxy: &Proxy<'_>) -> zbus::Result<SpellingState> {
         missing: proxy
             .call::<_, _, Vec<String>>("MissingDictionaries", &())?
             .into_iter()
-            .filter(|name| dictionary_package(name).is_some())
+            .filter(|name| match offered_dictionary(name) {
+                Ok(package) => package.is_some(),
+                Err(error) => {
+                    tracing::warn!("cannot look for a dictionary for {name}: {error}");
+                    false
+                }
+            })
             .collect(),
         replacements,
     })
@@ -94,29 +100,35 @@ fn package_names(locale: &str) -> Vec<String> {
     names
 }
 
-fn dictionary_package(name: &str) -> Option<String> {
-    let system = bande_bus::system().ok()?;
-    let packages = bande_packages::Client::new(&system);
-    let names = package_names(name);
-    let exact = names.first()?;
-    packages
-        .resolve(std::slice::from_ref(exact))
-        .ok()?
-        .into_iter()
-        .next()
-        .map(|package| package.id)
+fn offered_dictionary(locale: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let names = package_names(locale);
+    let system = bande_bus::system()?;
+    let found = bande_packages::Client::new(&system).resolve(&names)?;
+    let Some(name) = names
+        .iter()
+        .find(|name| found.iter().any(|package| package.name == **name))
+    else {
+        return Ok(None);
+    };
+    let mut named = found.iter().filter(|package| package.name == *name);
+    if named
+        .clone()
+        .any(|package| package.info == bande_packages::Info::Installed)
+    {
+        return Ok(None);
+    }
+    Ok(named
+        .find(|package| package.info == bande_packages::Info::Available)
+        .map(|package| package.id.clone()))
 }
 
 fn get_dictionary(locale: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let names = package_names(locale);
-    let system = bande_bus::system()?;
-    let packages = bande_packages::Client::new(&system);
-    let found = packages.resolve(&names)?;
-    let Some(package) = found.first() else {
+    let Some(id) = offered_dictionary(locale)? else {
         return Ok(());
     };
-    packages.install(
-        std::slice::from_ref(&package.id),
+    let system = bande_bus::system()?;
+    bande_packages::Client::new(&system).install(
+        std::slice::from_ref(&id),
         bande_packages::Mode::Apply,
         &|_| {},
     )?;

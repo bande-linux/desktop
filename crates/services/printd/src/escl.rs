@@ -430,16 +430,16 @@ pub fn scan(
                 .max(Duration::from_secs(1)),
             cancel: Some(cancel),
         };
-        let response = ask(address, pins, &request, cancel)?;
+        let response = match ask(address, pins, &request, cancel) {
+            Err(ScanError::Cancelled) if pages > 0 => break,
+            answer => answer?,
+        };
         match response.status {
             OK => {
                 pages += 1;
                 keep(response.body)?;
-                if !feeder {
+                if !feeder || cancel.stopped() {
                     break;
-                }
-                if cancel.stopped() {
-                    return Err(ScanError::Cancelled);
                 }
                 deadline = Instant::now() + PAGE_DEADLINE;
             }
@@ -448,7 +448,10 @@ pub fn scan(
                 job.ended = true;
                 break;
             }
-            UNAVAILABLE => pause(cancel, deadline)?,
+            UNAVAILABLE => match pause(cancel, deadline) {
+                Err(ScanError::Cancelled) if pages > 0 => break,
+                paused => paused?,
+            },
             status => return Err(ScanError::Refused(status)),
         }
     }
@@ -664,6 +667,34 @@ mod tests {
         });
         assert_eq!(scanned, Ok(150));
         assert_eq!(pages, vec![page(), page()]);
+    }
+
+    #[test]
+    fn a_feeder_scan_stopped_midway_keeps_the_pages_it_has() {
+        let address = device(|path, _| match path {
+            "/eSCL/ScannerCapabilities" => answer("200 OK", "", CAPABILITIES.as_bytes()),
+            "/eSCL/ScanJobs" => answer("201 Created", "Location: /eSCL/ScanJobs/3\r\n", b""),
+            "/eSCL/ScanJobs/3/NextDocument" => answer("200 OK", "", &page()),
+            _ => answer("200 OK", "", b""),
+        });
+        let pins = Pins::default();
+        let scanner = capabilities(&address, &pins).unwrap();
+        let options = ScanOptions {
+            source: FEEDER.to_owned(),
+            color: false,
+            resolution: 300,
+        };
+        let cancel = Cancel::default();
+        let mut pages = 0;
+        let scanned = scan(&address, &pins, &scanner, &options, &cancel, &mut |_| {
+            pages += 1;
+            if pages == 2 {
+                cancel.stop();
+            }
+            Ok(())
+        });
+        assert_eq!(scanned, Ok(300));
+        assert_eq!(pages, 2);
     }
 
     #[test]

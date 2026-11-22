@@ -29,6 +29,7 @@ use zbus::blocking::Connection;
 
 const CUPS_PREFIX: &str = "cups:";
 const SCANNER_PIN: &str = "scan:";
+const EARLY_CANCEL: Duration = Duration::from_secs(10);
 const PDF_MAGIC: &[u8] = b"%PDF-";
 const LARGEST_DOCUMENT: u64 = 4 << 30;
 const FOLLOW_EVERY: Duration = Duration::from_secs(5);
@@ -68,6 +69,7 @@ struct Inner {
     scanners: HashMap<String, Found>,
     scanning: usize,
     scans: HashMap<String, Arc<Cancel>>,
+    early_cancels: HashMap<String, Instant>,
     usb: HashSet<String>,
     watchers: HashSet<String>,
     jobs: Vec<Job>,
@@ -493,21 +495,35 @@ impl Spool {
             .map_err(|error| error.sentence())
     }
 
+    pub fn begin_scan(&self, scanner: &str) -> std::result::Result<Arc<Cancel>, String> {
+        let mut inner = self.lock();
+        if inner.scans.contains_key(scanner) {
+            return Err(ScanError::Busy.sentence());
+        }
+        let cancel = Arc::new(Cancel::default());
+        if inner
+            .early_cancels
+            .remove(scanner)
+            .is_some_and(|when| when.elapsed() < EARLY_CANCEL)
+        {
+            cancel.stop();
+        }
+        inner.scans.insert(scanner.to_owned(), Arc::clone(&cancel));
+        Ok(cancel)
+    }
+
     pub fn scan(
         &self,
         scanner: &str,
         options: &ScanOptions,
+        cancel: &Cancel,
     ) -> std::result::Result<Vec<(OwnedFd, u32)>, String> {
         let _scanning = Scanning::new(self);
-        let cancel = Arc::new(Cancel::default());
-        self.lock()
-            .scans
-            .insert(scanner.to_owned(), Arc::clone(&cancel));
         let mut pages = Vec::new();
         let scanned = self
             .reach_scanner(scanner)
             .and_then(|(abilities, address, pins)| {
-                escl::scan(&address, &pins, &abilities, options, &cancel, &mut |page| {
+                escl::scan(&address, &pins, &abilities, options, cancel, &mut |page| {
                     pages.push(escl::clean_page(&page, options.color)?);
                     Ok(())
                 })
@@ -518,8 +534,14 @@ impl Spool {
     }
 
     pub fn cancel_scan(&self, scanner: &str) {
-        if let Some(cancel) = self.lock().scans.get(scanner) {
-            cancel.stop();
+        let mut inner = self.lock();
+        match inner.scans.get(scanner) {
+            Some(cancel) => cancel.stop(),
+            None => {
+                inner
+                    .early_cancels
+                    .insert(scanner.to_owned(), Instant::now());
+            }
         }
     }
 

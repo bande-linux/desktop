@@ -95,7 +95,8 @@ impl Service {
         options: ScanOptions,
     ) -> fdo::Result<Vec<(OwnedFd, u32)>> {
         let spool = Arc::clone(&self.spool);
-        blocking::unblock(move || spool.scan(&scanner, &options))
+        let cancel = spool.begin_scan(&scanner).map_err(fdo::Error::Failed)?;
+        blocking::unblock(move || spool.scan(&scanner, &options, &cancel))
             .await
             .map(|pages| {
                 pages

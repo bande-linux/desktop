@@ -1,3 +1,4 @@
+use std::fs;
 use std::io;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
@@ -7,13 +8,17 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 
 use bande_content::{Content, Contents, content};
+use bande_xdg::data_home;
 
 use crate::worker::{Sample, read_archive, read_font_sample};
+
+const FONTS: &str = "fonts";
 
 pub enum Loaded {
     Content(Content),
     FontSample(Option<Sample>),
     Archive(Option<Contents>),
+    FontInstalled(bool),
 }
 use bande_inbox::{Inbox, Outbox};
 
@@ -39,6 +44,26 @@ fn load_one(
     if current() {
         outbox.send((asked, loaded));
     }
+}
+
+pub fn installed_font(path: &Path) -> Option<PathBuf> {
+    Some(data_home()?.join(FONTS).join(path.file_name()?))
+}
+
+fn install_font(path: &Path) -> io::Result<()> {
+    let target = installed_font(path).ok_or_else(|| io::Error::other("no fonts folder"))?;
+    let folder = target
+        .parent()
+        .ok_or_else(|| io::Error::other("no fonts folder"))?;
+    fs::create_dir_all(folder)?;
+    let mut partial = target.clone().into_os_string();
+    partial.push(".partial");
+    let partial = PathBuf::from(partial);
+    fs::copy(path, &partial)
+        .and_then(|_| fs::rename(&partial, &target))
+        .inspect_err(|_| {
+            let _ = fs::remove_file(&partial);
+        })
 }
 
 impl Loader {
@@ -78,6 +103,27 @@ impl Loader {
     pub fn load(&self, path: PathBuf, mime: String) {
         let asked = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
         let _ = self.requests.send((asked, path, mime));
+    }
+
+    pub fn install_font(&self, path: PathBuf) {
+        let asked = self.generation.load(Ordering::Relaxed);
+        let outbox = self.loaded.outbox();
+        let spawned = thread::Builder::new()
+            .name("font installer".to_owned())
+            .spawn(move || {
+                let installed = install_font(&path)
+                    .inspect_err(|error| {
+                        tracing::warn!("cannot install the font {}: {error}", path.display());
+                    })
+                    .is_ok();
+                outbox.send((asked, Loaded::FontInstalled(installed)));
+            });
+        if let Err(error) = spawned {
+            tracing::warn!("cannot install a font: {error}");
+            self.loaded
+                .outbox()
+                .send((asked, Loaded::FontInstalled(false)));
+        }
     }
 
     pub fn fd(&self) -> BorrowedFd<'_> {

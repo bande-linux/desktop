@@ -28,9 +28,6 @@ msgstr "Uppspelningen stoppades"
 msgid "The player ran into a problem with this file."
 msgstr "Spelaren stötte på ett problem med den här filen."
 
-msgid "Playback controls"
-msgstr "Uppspelningsreglage"
-
 msgid "Pause"
 msgstr "Pausa"
 
@@ -42,3 +39,6 @@ msgstr "Tidslinje"
 
 msgid "Volume"
 msgstr "Volym"
+
+msgid "Playback controls"
+msgstr "Uppspelningsreglage"

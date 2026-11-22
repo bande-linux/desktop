@@ -34,6 +34,9 @@ msgstr "Kopiera"
 msgid "Unlock"
 msgstr "Lås upp"
 
+msgid "Install"
+msgstr "Installera"
+
 msgid "Open with {app}"
 msgstr "Öppna med {app}"
 
@@ -73,6 +76,15 @@ msgstr "Det här dokumentet kan inte visas"
 
 msgid "This document is locked"
 msgstr "Det här dokumentet är låst"
+
+msgid "Installing…"
+msgstr "Installerar…"
+
+msgid "Installed"
+msgstr "Installerat"
+
+msgid "The font couldn’t be installed."
+msgstr "Typsnittet kunde inte installeras."
 
 msgid "The quick brown fox jumps over the lazy dog."
 msgstr "Flygande bäckasiner söka hwila på mjuka tuvor."

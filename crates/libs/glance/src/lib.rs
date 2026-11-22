@@ -15,7 +15,7 @@ use bande_toolkit::ui::{Animated, Cursor, Event, Key, Modifiers, Spring};
 use bande_toolkit::{Image, Point, Rect, ResizeEdge, Window};
 use bande_xdg::{DesktopEntry, state_home};
 
-use crate::content::Shown;
+use crate::content::{Installation, Shown};
 use crate::loader::Loader;
 
 pub use panel::{GlanceLink, Link, Panel};
@@ -72,6 +72,7 @@ enum Hit {
     Rotate,
     Copy,
     Open,
+    Install,
     Tile(usize),
     Thumbnail(usize),
     Resize(ResizeEdge),
@@ -290,6 +291,21 @@ impl Glance {
         }
     }
 
+    fn install_font(&mut self) {
+        let Some(path) = self.path().cloned() else {
+            return;
+        };
+        if let Shown::Font(font) = &mut self.shown
+            && matches!(
+                font.installation,
+                Installation::Available | Installation::Failed
+            )
+        {
+            font.installation = Installation::Installing;
+            self.loader.install_font(path);
+        }
+    }
+
     fn unlock(&mut self) {
         if let Shown::Pdf(pdf) = &mut self.shown
             && !self.password.is_empty()
@@ -345,7 +361,7 @@ impl Glance {
                         .subjects
                         .get(self.at)
                         .map(|subject| subject.entry.path.clone());
-                    self.shown = Shown::from_loaded(content, path.as_deref());
+                    self.shown.receive(content, path.as_deref());
                     changed = true;
                 }
                 changed
@@ -530,6 +546,7 @@ impl Glance {
                     });
                 }
             }
+            Hit::Install => self.install_font(),
             Hit::Tile(index) => self.go_to(index),
             Hit::Thumbnail(page) => {
                 if let Shown::Pdf(pdf) = &self.shown {

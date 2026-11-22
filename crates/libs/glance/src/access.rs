@@ -33,6 +33,7 @@ impl Glance {
             Hit::Rotate => text!("Rotate Left"),
             Hit::Copy => text!("Copy"),
             Hit::Unlock => text!("Unlock"),
+            Hit::Install => text!("Install"),
             Hit::Open => {
                 let app = self.subject()?.app.as_ref()?.name.clone();
                 return Some(tr!("Open with {app}", app = app));

@@ -169,8 +169,8 @@ msgstr "Knappar, scrollning och pekarhastighet"
 msgid "Tapping, clicking, scrolling, tracking speed and gestures"
 msgstr "Tryck, klick, scrollning, pekarhastighet och gester"
 
-msgid "Add printers, pick the default and see what is printing"
-msgstr "Lägg till skrivare, välj standard och se vad som skrivs ut"
+msgid "Add printers, pick the default, see what is printing and scan"
+msgstr "Lägg till skrivare, välj standard, se vad som skrivs ut och skanna"
 
 msgid "Share folders with other computers and allow remote login"
 msgstr "Dela mappar med andra datorer och tillåt fjärrinloggning"
@@ -274,8 +274,8 @@ msgstr "pekare, markör, klicka, scrolla, hjul, knappar"
 msgid "touchpad, pointer, cursor, tap, click, scroll"
 msgstr "touchpad, pekare, markör, tryck, klicka, scrolla"
 
-msgid "print, printer, cups, queue, ipp, airprint"
-msgstr "skriv ut, skrivare, cups, kö, ipp, airprint"
+msgid "print, printer, cups, queue, ipp, airprint, scan, scanner, escl"
+msgstr "skriv ut, skrivare, cups, kö, ipp, airprint, skanna, skanner, escl"
 
 msgid "share, file sharing, samba, smb, remote login, ssh, network folder"
 msgstr "dela, fildelning, samba, smb, fjärrinloggning, ssh, nätverksmapp"

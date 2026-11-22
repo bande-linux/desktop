@@ -35,6 +35,7 @@ mod printers;
 mod privacy;
 mod privilege;
 mod proxies;
+mod scan;
 mod security_status;
 mod services;
 mod sharing;

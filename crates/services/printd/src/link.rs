@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bande_discovery::nearby::{Addresses, resolve_host};
+use bande_printers::http::{Response, read_response};
 use bande_printers::ipp::{Group, Request, parse, read_http};
 use bande_printers::{Error, Result};
 use ring::digest::{SHA256, digest};
@@ -18,6 +19,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(60);
 const SEND_TIMEOUT: Duration = Duration::from_secs(300);
 const IPP_PORT: u16 = 631;
+const HTTP_PORT: u16 = 80;
+const HTTPS_PORT: u16 = 443;
 const CHUNK_END: &[u8] = b"0\r\n\r\n";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,15 +34,17 @@ pub struct Address {
 impl Address {
     pub fn parse(uri: &str) -> Option<Self> {
         let (scheme, rest) = uri.split_once("://")?;
-        let secure = match scheme {
-            "ipp" => false,
-            "ipps" => true,
+        let (secure, default_port, default_resource) = match scheme {
+            "ipp" => (false, IPP_PORT, "ipp/print"),
+            "ipps" => (true, IPP_PORT, "ipp/print"),
+            "http" => (false, HTTP_PORT, ""),
+            "https" => (true, HTTPS_PORT, ""),
             _ => return None,
         };
-        let (authority, resource) = rest.split_once('/').unwrap_or((rest, "ipp/print"));
+        let (authority, resource) = rest.split_once('/').unwrap_or((rest, default_resource));
         let (host, port) = match authority.rsplit_once(':') {
             Some((host, port)) => (host, port.parse().ok()?),
-            None => (authority, IPP_PORT),
+            None => (authority, default_port),
         };
         (!host.is_empty()).then(|| Self {
             secure,
@@ -125,9 +130,18 @@ fn target(address: &Address) -> io::Result<SocketAddr> {
 }
 
 fn connect(address: &Address, pins: &Pins, timeout: Duration) -> Result<Box<dyn Stream>> {
+    connect_waiting(address, pins, timeout, ANSWER_TIMEOUT)
+}
+
+fn connect_waiting(
+    address: &Address,
+    pins: &Pins,
+    timeout: Duration,
+    answer: Duration,
+) -> Result<Box<dyn Stream>> {
     let target = target(address)?;
     let tcp = TcpStream::connect_timeout(&target, CONNECT_TIMEOUT)?;
-    tcp.set_read_timeout(Some(ANSWER_TIMEOUT))?;
+    tcp.set_read_timeout(Some(answer))?;
     tcp.set_write_timeout(Some(timeout))?;
     tcp.set_nodelay(true)?;
     if !address.secure {
@@ -189,6 +203,37 @@ pub fn send_document(
     stream.write_all(CHUNK_END)?;
     stream.flush()?;
     parse(&read_http(BufReader::new(stream))?)
+}
+
+pub struct HttpRequest<'a> {
+    pub method: &'a str,
+    pub path: &'a str,
+    pub body: Option<(&'a str, &'a [u8])>,
+    pub most: usize,
+    pub answer: Duration,
+}
+
+pub fn http(address: &Address, pins: &Pins, request: &HttpRequest<'_>) -> Result<Response> {
+    let mut stream = connect_waiting(address, pins, ANSWER_TIMEOUT, request.answer)?;
+    let mut head = format!(
+        "{} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
+        request.method,
+        request.path,
+        host_header(address)
+    );
+    if let Some((kind, body)) = request.body {
+        head.push_str(&format!(
+            "Content-Type: {kind}\r\nContent-Length: {}\r\n",
+            body.len()
+        ));
+    }
+    head.push_str("\r\n");
+    stream.write_all(head.as_bytes())?;
+    if let Some((_, body)) = request.body {
+        stream.write_all(body)?;
+    }
+    stream.flush()?;
+    read_response(BufReader::new(stream), request.most)
 }
 
 pub fn is_identity_change(error: &Error) -> bool {

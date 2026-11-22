@@ -263,8 +263,9 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   names it finds resolve when mounting; they stay out of an install because Avahi announces the
   computer on the network and `libnss-mdns` changes `/etc/nsswitch.conf`, so the Network folder
   offers to install them;
-- `bande-printd` suggests `avahi-daemon` too, which it browses for driverless printers; Settings ▸
-  Printers offers to install it and printers added by address print without it;
+- `bande-printd` suggests `avahi-daemon` too, which it browses for driverless printers and
+  scanners; Settings ▸ Printers offers to install it and printers added by address print without
+  it;
 - `bande-automount` recommends `bande-secrets`, whose prompt asks for the passphrase of an
   encrypted volume (without it a notification points to Disks), and `bolt`, which it asks to
   authorize Thunderbolt and USB4 devices;

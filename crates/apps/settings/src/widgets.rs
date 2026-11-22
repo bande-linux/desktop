@@ -1655,6 +1655,87 @@ impl Widget for Check {
     }
 }
 
+pub struct Preview {
+    id: WidgetId,
+    label: String,
+    image: Image,
+    frame: Rect,
+}
+
+impl Preview {
+    pub fn new(label: &str, image: Image) -> Self {
+        Self {
+            id: WidgetId::next(),
+            label: label.to_owned(),
+            image,
+            frame: Rect::default(),
+        }
+    }
+
+    fn picture(&self) -> Rect {
+        let room = Size::new(
+            self.frame.width - 2.0 * ROW_PADDING,
+            self.frame.height - 2.0 * ROW_PADDING,
+        );
+        let (width, height) = (
+            self.image.width().max(1) as f32,
+            self.image.height().max(1) as f32,
+        );
+        let scale = (room.width / width).min(room.height / height).max(0.0);
+        let size = Size::new((width * scale).round(), (height * scale).round());
+        Rect::new(
+            (self.frame.x + (self.frame.width - size.width) / 2.0).round(),
+            self.frame.y + ROW_PADDING,
+            size.width,
+            size.height,
+        )
+    }
+}
+
+impl Widget for Preview {
+    fn id(&self) -> WidgetId {
+        self.id
+    }
+
+    fn measure(&mut self, _cx: &mut Context, available: Size) -> Size {
+        let (width, height) = (
+            self.image.width().max(1) as f32,
+            self.image.height().max(1) as f32,
+        );
+        let room = available.width - 2.0 * ROW_PADDING;
+        let shown = (room * height / width).min(PREVIEW_HEIGHT);
+        Size::new(available.width, shown + 2.0 * ROW_PADDING)
+    }
+
+    fn place(&mut self, _cx: &mut Context, frame: Rect) {
+        self.frame = frame;
+    }
+
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn paint(&self, cx: &Context, items: &mut Vec<Item>) {
+        let rect = self.picture();
+        items.push(Item::Image {
+            rect,
+            image: self.image.clone(),
+        });
+        items.push(Item::Stroke {
+            shape: Shape::rounded(rect.inset(-0.5), 0.0),
+            width: 1.0,
+            paint: cx.palette.hairline.into(),
+        });
+    }
+
+    fn access(&self, _cx: &Context) -> Node {
+        let mut node = Node::new(Role::Image);
+        node.set_label(self.label.clone());
+        node
+    }
+}
+
+const PREVIEW_HEIGHT: f32 = 360.0;
 const THUMBNAIL: Size = Size::new(144.0, 90.0);
 const THUMBNAIL_GAP: f32 = Spacing::M as f32;
 const THUMBNAIL_RADIUS: f32 = Radius::M;

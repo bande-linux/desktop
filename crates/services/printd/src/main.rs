@@ -1,3 +1,4 @@
+mod escl;
 mod link;
 mod nearby;
 mod printer;
@@ -6,11 +7,9 @@ mod raster;
 mod service;
 mod store;
 
-use std::path::Path;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use bande_content::pdf::protocol::WORKER_FLAG;
 use bande_printers::{BUS_NAME, OBJECT_PATH};
 use zbus::blocking::Connection;
 use zbus::blocking::fdo::DBusProxy;
@@ -75,11 +74,9 @@ fn serve() -> zbus::Result<()> {
 }
 
 fn main() -> ExitCode {
-    let mut arguments = std::env::args().skip(1);
-    if arguments.next().as_deref() == Some(WORKER_FLAG)
-        && let Some(path) = arguments.next()
-    {
-        return bande_content::pdf::worker::run(Path::new(&path));
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = bande_content::serve_worker(&arguments) {
+        return code;
     }
     bande_log::init("bande-printd");
     if let Err(error) = serve() {

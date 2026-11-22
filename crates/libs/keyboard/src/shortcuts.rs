@@ -220,26 +220,30 @@ pub struct Shortcut {
     pub key: Key,
 }
 
+pub fn chord_keys(modifiers: Modifiers, key: Key) -> String {
+    let Modifiers {
+        shift,
+        ctrl,
+        alt,
+        logo,
+    } = modifiers;
+    [
+        (shift, "Shift"),
+        (ctrl, "Ctrl"),
+        (alt, "Alt"),
+        (logo, "Super"),
+    ]
+    .into_iter()
+    .filter(|(held, _)| *held)
+    .map(|(_, name)| name.to_owned())
+    .chain(Some(key.name()).filter(|name| !name.is_empty()))
+    .collect::<Vec<_>>()
+    .join("+")
+}
+
 impl Shortcut {
     pub fn keys(&self) -> String {
-        let Modifiers {
-            shift,
-            ctrl,
-            alt,
-            logo,
-        } = self.modifiers;
-        [
-            (shift, "Shift"),
-            (ctrl, "Ctrl"),
-            (alt, "Alt"),
-            (logo, "Super"),
-        ]
-        .into_iter()
-        .filter(|(held, _)| *held)
-        .map(|(_, name)| name.to_owned())
-        .chain(Some(self.key.name()).filter(|name| !name.is_empty()))
-        .collect::<Vec<_>>()
-        .join("+")
+        chord_keys(self.modifiers, self.key)
     }
 }
 

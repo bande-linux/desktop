@@ -98,6 +98,7 @@ pub(crate) enum Intent {
     ChangeAppLanguage(String),
     RemoveAppLanguage(String),
     RemoveLoginItem(String),
+    RevokeShortcut(String, String),
     OpenApp(String),
     SetAppRule(AppNotifications),
     Software(SoftwareCommand),
@@ -1673,6 +1674,10 @@ impl SettingsView {
                     self.commands
                         .push(Command::Notifications(NotificationCommand::Set(app)));
                 }
+                Intent::RevokeShortcut(app_id, id) => {
+                    self.commands
+                        .push(Command::Login(LoginCommand::RevokeShortcut(app_id, id)));
+                }
                 Intent::RemoveLoginItem(id) => {
                     self.focus_next = Some(Anchor::Setting(SettingId::LoginItems, None));
                     self.commands.push(Command::Login(LoginCommand::Remove(id)));
@@ -1938,7 +1943,9 @@ impl SettingsView {
                 self.commands
                     .push(Command::DefaultApp(DefaultAppCommand::Refresh));
             }
-            PaneId::LanguageTime => self.commands.push(Command::Login(LoginCommand::Refresh)),
+            PaneId::LanguageTime | PaneId::KeyboardShortcuts => {
+                self.commands.push(Command::Login(LoginCommand::Refresh));
+            }
             PaneId::Notifications => self
                 .commands
                 .push(Command::Notifications(NotificationCommand::Refresh)),

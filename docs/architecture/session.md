@@ -146,6 +146,14 @@ dialog that cannot start fails the request with response 2.
 - **DynamicLauncher**: "Add this web app to Applications?" with the icon, an editable name and the
   address. `RequestInstallToken` trusts only the app stores the other backends trust (GNOME
   Software, AppCenter, Discover).
+- **GlobalShortcuts**: only for calls from `xdg-desktop-portal`. `BindShortcuts` gives each new
+  shortcut its `preferred_trigger` when the trigger holds Super or both Ctrl and Alt, is no system
+  shortcut and no other app has it; a shortcut already bound keeps its keys. Bindings are kept per
+  app id in `$XDG_STATE_HOME/bande/global-shortcuts`, which the compositor follows: it takes a
+  bound chord before the focused app (not while locked or while shortcuts are inhibited) and
+  signals `org.bande.GlobalShortcuts.Activated` and `Deactivated` to the portal only, which emits
+  them for the app's sessions. Settings ▸ Keyboard Shortcuts lists them under App Shortcuts with
+  Remove. There is no `ConfigureShortcuts`, and an unassigned shortcut stays without keys.
 - **Account**: "Share your name and picture with <app>?"; Share returns the login, the
   AccountsService `RealName` (else the passwd name) and the picture as a `file://` URI.
 - **Secret**: only for calls from `xdg-desktop-portal` itself, hands a sandboxed app the 64-byte

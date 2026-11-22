@@ -7,6 +7,7 @@ pub mod dialog_process;
 pub mod dynamic_launcher;
 pub mod email;
 pub mod file_chooser;
+pub mod global_shortcuts;
 pub mod gtk;
 pub mod inhibit;
 pub mod notification;

@@ -7917,6 +7917,7 @@ dependencies = [
  "bande-config",
  "bande-datetime",
  "bande-design",
+ "bande-keyboard",
  "bande-log",
  "bande-printers",
  "bande-test-bus",

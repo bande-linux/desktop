@@ -647,6 +647,7 @@ impl State {
                     state.super_tap = false;
                 }
                 if !pressed {
+                    state.global_shortcuts.release(evdev_code, time);
                     return if state.held_shortcut_keys.contains(&evdev_code) {
                         state.held_shortcut_keys.retain(|held| *held != evdev_code);
                         FilterResult::Intercept(None)
@@ -654,13 +655,13 @@ impl State {
                         FilterResult::Forward
                     };
                 }
-                let binding = pressed_key(
+                let chord = pressed_key(
                     keysym.modified_sym().raw(),
                     keysym
                         .raw_latin_sym_or_raw_current_sym()
                         .map(|sym| sym.raw()),
-                )
-                .and_then(|key| Some((bound(keys_held(modifiers), key)?, key)));
+                );
+                let binding = chord.and_then(|key| Some((bound(keys_held(modifiers), key)?, key)));
                 if let Some((Action::TextConsole, key)) = binding {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::Bound(
@@ -738,6 +739,17 @@ impl State {
                 }) {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::Bound(action, key)));
+                }
+                if binding.is_none()
+                    && !state.is_locked()
+                    && !state.shortcuts_inhibited()
+                    && let Some(key) = chord
+                    && state
+                        .global_shortcuts
+                        .press(evdev_code, keys_held(modifiers), key, time)
+                {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(None);
                 }
                 if state.overview.is_open() && !modifiers.logo {
                     state.held_shortcut_keys.push(evdev_code);

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use zbus::blocking::Connection;
@@ -23,6 +23,7 @@ pub struct EjectFailure {
     pub mount_point: PathBuf,
     pub busy: bool,
     pub message: String,
+    pub programs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,10 +174,52 @@ fn failure(mount_point: PathBuf, error: &zbus::Error) -> EjectFailure {
         _ => (false, error.to_string()),
     };
     EjectFailure {
+        programs: match busy {
+            true => programs_using(&mount_point),
+            false => Vec::new(),
+        },
         mount_point,
         busy,
         message,
     }
+}
+
+/// The programs of this user with a file, folder or executable open on `mount_point`.
+pub fn programs_using(mount_point: &Path) -> Vec<String> {
+    let Ok(processes) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let own = std::process::id().to_string();
+    let mut programs: Vec<String> = processes
+        .flatten()
+        .map(|process| process.path())
+        .filter(|process| {
+            process
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name != own && name.bytes().all(|byte| byte.is_ascii_digit()))
+        })
+        .filter(|process| {
+            let open = std::fs::read_dir(process.join("fd"))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|fd| fd.path());
+            ["cwd", "root", "exe"]
+                .into_iter()
+                .map(|link| process.join(link))
+                .chain(open)
+                .filter_map(|link| std::fs::read_link(link).ok())
+                .any(|target| target.starts_with(mount_point))
+        })
+        .filter_map(|process| {
+            let program = std::fs::read_link(process.join("exe")).ok()?;
+            Some(program.file_name()?.to_string_lossy().into_owned())
+        })
+        .collect();
+    programs.sort();
+    programs.dedup();
+    programs
 }
 
 fn eject_all(

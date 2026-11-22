@@ -186,6 +186,11 @@ msgstr "Radera"
 msgid "The disk “{name}” wasn’t ejected because one or more programs may be using it."
 msgstr "Skivan ”{name}” matades inte ut eftersom ett eller flera program kan använda den."
 
+msgid "The disk “{name}” wasn’t ejected because {programs} is using it."
+msgid_plural "The disk “{name}” wasn’t ejected because these programs are using it: {programs}."
+msgstr[0] "Skivan ”{name}” matades inte ut eftersom {programs} använder den."
+msgstr[1] "Skivan ”{name}” matades inte ut eftersom de här programmen använder den: {programs}."
+
 msgid "To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."
 msgstr "Klicka på Tvinga utmatning för att mata ut skivan direkt. Program som använder den kan förlora ändringar som inte har sparats."
 

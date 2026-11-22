@@ -1338,11 +1338,25 @@ impl FilesView {
                 volume,
                 busy,
                 message,
+                programs,
             } => {
                 let name = location_title(&Location::Folder(volume.clone()));
+                let title = match programs.is_empty() {
+                    true => tr!(
+                        "The disk “{name}” wasn’t ejected because one or more programs may be using it.",
+                        name = name.clone()
+                    ),
+                    false => trn!(
+                        "The disk “{name}” wasn’t ejected because {programs} is using it.",
+                        "The disk “{name}” wasn’t ejected because these programs are using it: {programs}.",
+                        count = programs.len(),
+                        name = name.clone(),
+                        programs = programs.join(", ")
+                    ),
+                };
                 match busy {
                     true => Alert::new(
-                        &tr!("The disk “{name}” wasn’t ejected because one or more programs may be using it.", name = name),
+                        &title,
                         &tr!("To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."),
                         choose,
                     )

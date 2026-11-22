@@ -127,6 +127,7 @@ pub enum Sheet {
         volume: PathBuf,
         busy: bool,
         message: String,
+        programs: Vec<String>,
     },
     ChangeExtension {
         path: PathBuf,
@@ -2093,10 +2094,30 @@ impl FilesView {
     }
 
     pub fn present_eject_failure(&mut self, failure: EjectFailure) {
+        let openers = self.apps.openers();
+        let mut programs: Vec<String> = failure
+            .programs
+            .iter()
+            .map(|program| {
+                openers
+                    .iter()
+                    .find(|app| {
+                        app.exec
+                            .split_whitespace()
+                            .next()
+                            .and_then(|command| Path::new(command).file_name())
+                            .is_some_and(|command| command == program.as_str())
+                    })
+                    .map_or_else(|| program.clone(), |app| app.name.clone())
+            })
+            .collect();
+        programs.sort_by(|a, b| bande_fs::natural_order(a, b));
+        programs.dedup();
         self.present(Sheet::EjectFailed {
             volume: failure.mount_point,
             busy: failure.busy,
             message: failure.message,
+            programs,
         });
     }
 

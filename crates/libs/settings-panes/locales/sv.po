@@ -1472,3 +1472,12 @@ msgstr "Om den här datorn"
 
 msgid "model, chip, processor, cpu, memory, ram, version, debian, bande, serial number"
 msgstr "modell, chip, processor, cpu, minne, ram, version, debian, bande, serienummer"
+
+msgid "Startup"
+msgstr "Uppstart"
+
+msgid "Show a boot screen"
+msgstr "Visa en startskärm"
+
+msgid "boot screen, splash, start up, startup, logo, plymouth, grub, boot messages"
+msgstr "startskärm, splash, uppstart, starta, logotyp, plymouth, grub, startmeddelanden"

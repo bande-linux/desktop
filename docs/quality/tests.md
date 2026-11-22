@@ -102,6 +102,9 @@ Paths are under `crates/`.
 | `libs/vm/src/image.rs` `fedora_is_the_newest_release_its_keys_sign_from_fedoras_mirrors` | Untrusted input: from Fedora's release list Velox takes the newest final Generic cloud image whose release key it holds, only on Fedora's mirror, and derives its signed checksum file; a beta, a newer unsigned release, another image or another host is passed over. |
 | `libs/vm/tests/qmp.rs` `events_around_replies_and_jobs_are_kept_in_order` | Tricky protocol logic against a fake QEMU on a socket pair: QMP events that arrive between replies and around a snapshot job are kept, in order. |
 
+The autopkgtests in `debian/tests`, which check the installed packages, are listed in
+[packaging.md](../architecture/packaging.md).
+
 ## Support
 
 - `crates/testing/test-bus`: private `dbus-daemon` buses (`SessionBus`) that never activate the

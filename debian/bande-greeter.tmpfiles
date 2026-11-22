@@ -1,3 +1,4 @@
 d /var/lib/bande-greeter 0755 root root -
 d /var/lib/bande-greeter/pictures 3733 root _greetd -
 d /var/lib/bande-greeter/failed 3733 root _greetd -
+d /run/bande-greeter 0755 _greetd _greetd -

@@ -24,6 +24,7 @@ use zbus::blocking::fdo::PropertiesProxy;
 use crate::about::{About, AboutCommand, follow_about};
 use crate::backup::{BackupCommand, BackupUpdate, follow_backup};
 use crate::battery::{BatteryCommand, PowerState, follow_battery};
+use crate::boot_screen::{BootScreenCommand, BootScreenState, follow_boot_screen};
 use crate::brightness::follow_brightness;
 use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
@@ -107,6 +108,7 @@ pub enum Update {
     Security(SecurityStatus),
     Printers(PrintersState),
     Sharing(SharingState),
+    BootScreen(BootScreenState),
     PrinterAdded(bool),
     PrintingInstalled,
     InstallingVpnPlugin(bool),
@@ -147,6 +149,7 @@ pub enum Command {
     Printers(PrinterCommand),
     Sharing(SharingCommand),
     SignInPages(bool),
+    BootScreen(BootScreenCommand),
     Users(UsersCommand),
     Brightness(LevelRequest),
     Reveal(PathBuf),
@@ -435,6 +438,7 @@ pub struct Services {
     printers: Option<Sender<PrinterCommand>>,
     sharing: Sender<SharingCommand>,
     sign_in_pages: Sender<bool>,
+    boot_screen: Sender<BootScreenCommand>,
     users: Sender<UsersCommand>,
     _pointing: Option<FolderWatch>,
 }
@@ -487,6 +491,7 @@ impl Services {
             printers: system.map(|system| follow_printers(system, session, updates.clone())),
             sharing: follow_sharing(Some(session.clone()), system.cloned(), updates.clone()),
             sign_in_pages,
+            boot_screen: follow_boot_screen(system.cloned(), updates.clone()),
             users: follow_users(session, system, updates.clone()),
             _pointing: follow_pointing(PathBuf::from(UDEV_DATA), updates.clone())
                 .inspect_err(|error| tracing::warn!("cannot watch {UDEV_DATA}: {error}"))
@@ -537,6 +542,7 @@ impl Services {
             Command::Users(command) => self.users.send(command).is_ok(),
             Command::Sharing(command) => self.sharing.send(command).is_ok(),
             Command::SignInPages(on) => self.sign_in_pages.send(on).is_ok(),
+            Command::BootScreen(command) => self.boot_screen.send(command).is_ok(),
             Command::Printers(command) => self
                 .printers
                 .as_ref()

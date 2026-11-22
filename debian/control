@@ -1183,6 +1183,7 @@ Recommends: bande-greeter (>= ${source:Version}),
  fonts-noto-cjk,
  pipewire-pulse,
  libspa-0.2-bluetooth
+Suggests: bande-plymouth-theme (>= ${source:Version})
 Description: Bande desktop environment
  Bande is a Wayland desktop with its own compositor, shell, session
  services, login window and applications.
@@ -1204,6 +1205,26 @@ Description: icons and symbols of the Bande desktop
  the symbolic icons of the bar, menus and sidebars, with a folder variant
  for each accent colour. Every Bande program that draws icons depends on
  it, so none shows an empty space where a symbol belongs.
+
+Package: bande-plymouth-theme
+Build-Profiles: <!pkg.bande.l10n-only>
+Architecture: all
+Multi-Arch: foreign
+Depends: plymouth,
+ plymouth-themes,
+ fonts-inter,
+ ${misc:Depends}
+Description: boot screen of the Bande desktop
+ A Plymouth theme for the Bande desktop: the Bande mark on the desktop's
+ dark background with a quiet indicator while the computer starts and shuts
+ down, a progress bar while updates install at a restart, and a styled
+ prompt when a disk asks for its password. The login window fades in over
+ it.
+ .
+ It is the boot screen only when no other theme is chosen in
+ /etc/plymouth/plymouthd.conf or by an installed default theme, and only
+ when the kernel command line contains "splash"; Settings ▸ About ▸ Show a
+ boot screen adds that for GRUB.
 
 Package: bande-desktop-l10n-sv
 Architecture: all

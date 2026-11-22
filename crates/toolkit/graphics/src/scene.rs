@@ -253,6 +253,10 @@ impl Image {
 
     pub fn load_symbolic(path: &path::Path, size: u32, color: Color) -> Option<Self> {
         let source = String::from_utf8(read_image_file(path)?).ok()?;
+        Self::symbolic(&source, size, color)
+    }
+
+    pub fn symbolic(source: &str, size: u32, color: Color) -> Option<Self> {
         let ink = format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b);
         let recoloured = source
             .replace(SYMBOLIC_INK, &ink)

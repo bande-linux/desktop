@@ -3,6 +3,7 @@ use std::io;
 use std::time::Duration;
 
 use crate::pacing::{Commit, FramePacing};
+use crate::reveal::ShownFrame;
 use crate::state::Compositor;
 
 const SAFETY_MARGIN: Duration = Duration::from_millis(1);
@@ -254,6 +255,10 @@ pub trait FrameOutput {
     }
 
     fn flip_missed(&mut self, _output: &str) {}
+
+    fn frames_on_screen(&mut self) -> Vec<ShownFrame> {
+        Vec::new()
+    }
 
     fn restart_display(&mut self) -> Result<(), Self::Error> {
         Ok(())

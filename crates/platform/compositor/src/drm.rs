@@ -16,7 +16,7 @@ use smithay::backend::drm::{
     VrrSupport,
 };
 use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
-use smithay::backend::renderer::ImportDma;
+use smithay::backend::renderer::{ImportDma, ImportMem, Renderer as _};
 use smithay::backend::session::libseat::{LibSeatSession, LibSeatSessionNotifier};
 use smithay::backend::session::{Event as SessionEvent, Session};
 use smithay::output::OutputModeSource;
@@ -35,7 +35,8 @@ use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
 use bande_render::VulkanRenderer;
 
 use crate::clock::{FrameOutput, Submission, Vblank};
-use crate::render::background;
+use crate::render::{Snapshot, background};
+use crate::reveal::ShownFrame;
 use crate::scanout::{ScanoutAllocator, ScanoutExporter};
 use crate::screen::{OutputConfig, OutputMode};
 use crate::state::{Compositor, REFRESH, ScanoutDevice};
@@ -47,6 +48,8 @@ pub type DrmBackendError = Box<dyn Error>;
 type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
+const DRM_IOCTL_MODE_MAP_DUMB: libc::c_ulong = 0xC010_64B3;
+const PLYMOUTH_PID: &str = "/run/plymouth/pid";
 const CURSOR_SIZE: (u32, u32) = (64, 64);
 const COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Xrgb8888, Fourcc::Argb8888];
 
@@ -834,6 +837,131 @@ fn close_framebuffer(device: &DrmDevice, framebuffer: framebuffer::Handle) -> io
     }
 }
 
+fn splash_for(device: &DrmDevice, head: &Head) -> Option<Snapshot> {
+    let (width, height) = head.compositor.pending_mode().size();
+    let size = (u32::from(width), u32::from(height));
+    let millimetres = device
+        .get_connector(head.connector, false)
+        .ok()
+        .and_then(|info| info.size())
+        .unwrap_or_default();
+    match bande_splash::splash_frame(size, bande_splash::plymouth_scale(size, millimetres)) {
+        Ok(frame) => Some(Snapshot {
+            size: Size::from((frame.size.0 as i32, frame.size.1 as i32)),
+            rgba: frame.premultiplied_rgba,
+        }),
+        Err(error) => {
+            tracing::warn!("cannot draw the start screen: {error}");
+            None
+        }
+    }
+}
+
+fn shown_frame(device: &DrmDevice, connector: connector::Handle) -> io::Result<Option<Snapshot>> {
+    let Some(encoder) = device.get_connector(connector, false)?.current_encoder() else {
+        return Ok(None);
+    };
+    let Some(crtc) = device.get_encoder(encoder)?.crtc() else {
+        return Ok(None);
+    };
+    let Some(framebuffer) = device.get_crtc(crtc)?.framebuffer() else {
+        return Ok(None);
+    };
+    let info = device
+        .get_planar_framebuffer(framebuffer)
+        .map_err(io::Error::other)?;
+    let linear = info
+        .modifier()
+        .is_none_or(|modifier| modifier == Modifier::Linear);
+    let readable = matches!(info.pixel_format(), Fourcc::Xrgb8888 | Fourcc::Argb8888);
+    let Some(buffer) = info.buffers()[0] else {
+        return Ok(None);
+    };
+    let frame = match linear && readable {
+        true => read_buffer(
+            device,
+            buffer.into(),
+            info.size(),
+            info.pitches()[0],
+            info.offsets()[0],
+        ),
+        false => Ok(None),
+    };
+    if let Err(error) = device.close_buffer(buffer) {
+        tracing::warn!("cannot let go of the frame on screen: {error}");
+    }
+    frame
+}
+
+fn read_buffer(
+    device: &DrmDevice,
+    handle: u32,
+    (width, height): (u32, u32),
+    pitch: u32,
+    offset: u32,
+) -> io::Result<Option<Snapshot>> {
+    #[repr(C)]
+    struct MapDumb {
+        handle: u32,
+        pad: u32,
+        offset: u64,
+    }
+    let mut request = MapDumb {
+        handle,
+        pad: 0,
+        offset: 0,
+    };
+    let fd = device.device_fd().as_fd().as_raw_fd();
+    // SAFETY: DRM_IOCTL_MODE_MAP_DUMB reads and writes a struct drm_mode_map_dumb, which MapDumb
+    // matches field for field and which lives across the call.
+    if unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &mut request) } != 0 {
+        return Ok(None);
+    }
+    let row = width as usize * 4;
+    let length = offset as usize + pitch as usize * height.saturating_sub(1) as usize + row;
+    if (pitch as usize) < row || width == 0 || height == 0 {
+        return Ok(None);
+    }
+    let Ok(map_offset) = libc::off_t::try_from(request.offset) else {
+        return Ok(None);
+    };
+    // SAFETY: a fresh read-only shared mapping of the buffer the kernel just offered at
+    // map_offset; nothing else in this process refers to it, and it is unmapped below.
+    let mapped = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            length,
+            libc::PROT_READ,
+            libc::MAP_SHARED,
+            fd,
+            map_offset,
+        )
+    };
+    if mapped == libc::MAP_FAILED {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the mapping above is `length` bytes long and stays mapped until munmap below.
+    let bytes = unsafe { std::slice::from_raw_parts(mapped.cast::<u8>(), length) };
+    let mut rgba = Vec::with_capacity(row * height as usize);
+    for line in 0..height as usize {
+        let start = offset as usize + line * pitch as usize;
+        for [blue, green, red, _] in bytes[start..start + row].as_chunks::<4>().0 {
+            rgba.extend_from_slice(&[*red, *green, *blue, 0xFF]);
+        }
+    }
+    // SAFETY: `mapped` and `length` are the mapping made above, and `bytes` is not used again.
+    if unsafe { libc::munmap(mapped, length) } != 0 {
+        tracing::warn!(
+            "cannot unmap the frame on screen: {}",
+            io::Error::last_os_error()
+        );
+    }
+    Ok(Some(Snapshot {
+        size: Size::from((width as i32, height as i32)),
+        rgba,
+    }))
+}
+
 fn colour_of(device: &DrmDevice, crtc: crtc::Handle) -> Colour {
     let size = device
         .get_crtc(crtc)
@@ -899,6 +1027,48 @@ fn tint(device: &DrmDevice, head: &mut Head, kelvin: f64) {
 
 impl FrameOutput for DrmBackend {
     type Error = DrmBackendError;
+
+    fn frames_on_screen(&mut self) -> Vec<ShownFrame> {
+        let splash_shown = Path::new(PLYMOUTH_PID).exists();
+        let frames: Vec<(String, Snapshot)> = self
+            .heads
+            .iter()
+            .filter_map(|head| {
+                let name = &head.config.name;
+                match shown_frame(&self.device, head.connector) {
+                    Ok(Some(frame)) => return Some((name.clone(), frame)),
+                    Ok(None) => {}
+                    Err(error) => tracing::warn!("cannot read what {name} shows: {error}"),
+                }
+                splash_shown
+                    .then(|| splash_for(&self.device, head))
+                    .flatten()
+                    .map(|frame| (name.clone(), frame))
+            })
+            .collect();
+        let context = self.renderer.context_id();
+        frames
+            .into_iter()
+            .filter_map(|(output, frame)| {
+                self.renderer
+                    .import_memory(
+                        &frame.rgba,
+                        Fourcc::Abgr8888,
+                        (frame.size.w, frame.size.h).into(),
+                        false,
+                    )
+                    .inspect_err(|error| {
+                        tracing::warn!("cannot fade in over what {output} shows: {error}")
+                    })
+                    .ok()
+                    .map(|texture| ShownFrame {
+                        output,
+                        texture,
+                        context: context.clone(),
+                    })
+            })
+            .collect()
+    }
 
     fn set_color_temperature(&mut self, kelvin: f64) {
         self.kelvin = Some(kelvin);

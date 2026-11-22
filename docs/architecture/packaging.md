@@ -47,8 +47,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   restart the units: the user units of the session services are enabled for every user and
   never started from a package; `bande-backup`'s timer and service are neither enabled nor
   started (Settings turns backups on; `postinst` restarts a running backup service), the
-  login window's console fallback and the fault reporter's socket-activated services are not
-  started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
+  login window's console fallback, its boot screen path unit and the fault reporter's
+  socket-activated services are not started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
   enabled by its own `postinst`. `bande-reporter` and `bande-greeter` create their state
   folders with `systemd-tmpfiles` (`debian/<package>.tmpfiles`; the login window's pictures and
   failed-session folders are `3733 root:_greetd`, so each person writes only their own files and
@@ -56,7 +56,11 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `/etc/pam.d/bande-greeter` (`debian/bande-greeter.pam`, after Debian's `gdm-password`), which
   its greetd configuration names, so greetd's own `/etc/pam.d/greetd` stays untouched. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
-  `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative.
+  `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative and the
+  boot screen a `default.plymouth` alternative (`dh_installalternatives`). The boot screen's
+  initramfs hook (`dh_installinitramfs`) rebuilds the initramfs through initramfs-tools'
+  trigger; no maintainer script runs `update-initramfs`, `update-grub` or
+  `plymouth-set-default-theme`, and none touches plymouth's or GRUB's configuration.
 - **Version**: `debian/changelog` names the release, `X.Y.Z-1`, with `X.Y.Z` the
   `[workspace.package] version`; a packaging-only fix is `X.Y.Z-2` (tag `vX.Y.Z-2`). A build
   for a Debian release adds an entry with that release's suffix, `X.Y.Z-1~deb14` for forky
@@ -69,7 +73,9 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   failed-session folders, and purging it handing the display to greetd), `every-package` (the
   one version, every program and file in
   `ci/runtime-deps` without recommends, the installed compositor serving Wayland clients),
-  `system-setup` (every package with its recommends brings none of the short list of packages
+  `boot-screen` (the boot screen is a `default.plymouth` alternative that only applies when no
+  other theme is chosen, the initramfs carries it, its link and Inter, and purging it leaves
+  neither the alternative nor the theme there), `system-setup` (every package with its recommends brings none of the short list of packages
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
   display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and the `hosts`
   line of `/etc/nsswitch.conf` as they were, but for `libnss-mdns`'s own entry),
@@ -114,6 +120,15 @@ are in [performance.md](performance.md).
 - **`bande-icon-theme`** (architecture `all`): the Bande icon theme and its accent variants from `data/icons`. Every
   package that draws icons depends on it, so a symbol never goes missing because the shell is
   not installed.
+- **`bande-plymouth-theme`** (architecture `all`): the boot screen, a Plymouth `two-step` theme
+  that `bande-plymouth-theme` (a program of `crates/libs/splash`, never installed) draws at build
+  time from the Datum tokens and the mark in `data/branding/mark.svg`, the same mark the bar
+  shows. Debian's desktop tasks install no Plymouth, so `bande-desktop` only suggests it;
+  Settings ▸ About ▸ Show a boot screen installs it and adds `splash` to the kernel command line
+  through `/etc/default/grub.d/bande-splash.cfg`, the one file it writes, and on a boot manager
+  other than GRUB says what to do instead. Plymouth draws images at their own size and doubles
+  them on a HiDPI display, with no larger variant to choose, so the assets are drawn on whole
+  pixels at scale 1.
 - **`bande-desktop`** (architecture `all`, section `metapackages`): the one package that installs a complete Bande desktop.
   It depends on the compositor, the core session services, the shell, the lock
   screen, the keyring (`bande-secrets`) and the portal backend at the same version, on `dbus-user-session`, logind and

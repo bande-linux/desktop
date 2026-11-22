@@ -46,7 +46,12 @@ endif
 	$(CARGO) prepare-debian $(REGISTRY)
 
 override_dh_auto_build-indep:
+ifneq (,$(filter pkg.bande.l10n-only,$(DEB_BUILD_PROFILES)))
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool
+else
+	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool --bin bande-plymouth-theme
+	$(OUT)/bande-plymouth-theme $(BUILD)/plymouth/bande
+endif
 	$(MAKE) -f debian/rules catalogs
 
 override_dh_auto_build-arch:
@@ -76,7 +81,7 @@ override_dh_auto_test-indep override_dh_auto_install override_dh_dwz:
 
 override_dh_installsystemd:
 	dh_installsystemd -pbande-backup --no-enable --no-start bande-backup.timer bande-backup.service
-	dh_installsystemd -pbande-greeter --no-start bande-console-fallback.service
+	dh_installsystemd -pbande-greeter --no-start bande-console-fallback.service bande-greeter-splash.path bande-greeter-splash.service
 	dh_installsystemd -pbande-reporter --no-start bande-reporter.service bande-reporter-send.service
 	dh_installsystemd -pbande-reporter bande-reporter-send.path bande-reporter.socket bande-reporter-resources.service
 	dh_installsystemd --remaining-packages

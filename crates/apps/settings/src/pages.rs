@@ -854,6 +854,7 @@ impl SettingsView {
             List::KnownNetworks => self.known_network_rows(),
             List::Printers => self.printer_rows(),
             List::Sharing => self.sharing_rows(),
+            List::BootScreen => self.boot_screen_rows(),
             List::Accounts => self.account_rows(),
             List::NearbyPrinters => self.add_printer_rows(),
             List::Networks => self.network_rows(),

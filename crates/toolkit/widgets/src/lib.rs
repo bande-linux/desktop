@@ -63,12 +63,15 @@ pub use menu::{
     placement_layout,
 };
 pub use pop_up_button::PopUpButton;
-pub use progress::{LevelIndicator, PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE, Spinner};
+pub use progress::{
+    LevelIndicator, PROGRESS_CELL_GAP, PROGRESS_CELLS, PROGRESS_HEIGHT, ProgressBar, SPINNER_SIZE,
+    Spinner, indeterminate_sweep, progress_cells_for,
+};
 pub use radio_group::RadioGroup;
 pub use reorder::{Lifted, Reorder, ReorderSlot};
 pub use scroll::{ScrollExtent, ScrollState, ScrollView, Scrollbar, ScrollbarAction};
 pub use search_field::SearchField;
-pub use secure_field::SecureField;
+pub use secure_field::{CAPS_LOCK_SIZE, SecureField, caps_lock_for};
 pub use segmented::{SEGMENTED_HEIGHT, SegmentedControl};
 pub use sheet::Alert;
 use sheet::Sheet;
@@ -106,7 +109,7 @@ pub use bande_graphics::{
     Captured, Cursor, Event, Key, Modifiers, Pointer, PointerButton, Scroll, ScrollPhase,
     ScrollSource, SurfaceId, SurfaceScaling, past_drag_slop,
 };
-pub use control::{focus_ring, focus_ring_for, row_fill};
+pub use control::{FOCUS_RING_OUTSET, focus_ring, focus_ring_for, paint_field_for, row_fill};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragAction {

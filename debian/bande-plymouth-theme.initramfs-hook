@@ -1,0 +1,69 @@
+#!/bin/sh
+# Adds the Bande boot screen to the initramfs when Plymouth shows it: the fonts it names, and
+# when default.plymouth chooses it, the theme, its plugins and that link as well.
+set -e
+
+PREREQ="plymouth"
+
+prereqs()
+{
+	echo "${PREREQ}"
+}
+
+case "${1}" in
+	prereqs)
+		prereqs
+		exit 0
+		;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+THEMES=/usr/share/plymouth/themes
+FONT=/usr/share/fonts/opentype/inter/Inter-Regular.otf
+
+configured_theme()
+{
+	for file in /etc/plymouth/plymouthd.conf /usr/share/plymouth/plymouthd.defaults
+	do
+		theme=$(sed -n 's/^[[:space:]]*Theme[[:space:]]*=[[:space:]]*//p' "${file}" 2> /dev/null | tail -n 1)
+		if [ -n "${theme}" ] && [ -r "${THEMES}/${theme}/${theme}.plymouth" ]
+		then
+			echo "${theme}"
+			return
+		fi
+	done
+}
+
+copy_linked_theme()
+{
+	plugins="$(plymouth --get-splash-plugin-path)"
+	copy_exec "${plugins}/two-step.so"
+	copy_exec "${plugins}/label-pango.so"
+	mkdir -p "${DESTDIR}${THEMES}"
+	cp -r --dereference "${THEMES}/bande" "${DESTDIR}${THEMES}"
+	cp --dereference "${THEMES}/default.plymouth" "${DESTDIR}${THEMES}/default.plymouth"
+	mkdir -p "${DESTDIR}/etc/fonts/conf.d" "${DESTDIR}/var/cache/fontconfig" "${DESTDIR}/usr/local/share/fonts"
+	cp -dRp /etc/fonts/fonts.conf "${DESTDIR}/etc/fonts"
+	cp -rL /etc/fonts/conf.d/60-latin.conf "${DESTDIR}/etc/fonts/conf.d"
+	if [ -e /etc/default/keyboard ]
+	then
+		mkdir -p "${DESTDIR}/etc/default"
+		cp /etc/default/keyboard "${DESTDIR}/etc/default"
+	fi
+}
+
+case "$(configured_theme)" in
+	bande)
+		;;
+	"")
+		[ "$(readlink -f "${THEMES}/default.plymouth")" = "${THEMES}/bande/bande.plymouth" ] || exit 0
+		copy_linked_theme
+		;;
+	*)
+		exit 0
+		;;
+esac
+
+copy_file font "${FONT}" || [ $? -eq 1 ]
+fc-cache -s -y "${DESTDIR}" > /dev/null

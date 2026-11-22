@@ -534,6 +534,7 @@ pub enum SettingId {
     Printers,
     NearbyPrinters,
     Sharing,
+    BootScreen,
     Accounts,
     FullName,
     LockMessage,
@@ -559,6 +560,7 @@ pub enum List {
     Printers,
     NearbyPrinters,
     Sharing,
+    BootScreen,
     KnownNetworks,
     Networks,
     PairedDevices,
@@ -2304,6 +2306,17 @@ fn about_pane() -> Pane {
                         "model, chip, processor, cpu, memory, ram, version, debian, bande, serial number"
                     ),
                     List::About,
+                )],
+            ),
+            section(
+                Some(tr!("Startup")),
+                vec![list(
+                    SettingId::BootScreen,
+                    tr!("Show a boot screen"),
+                    tr!(
+                        "boot screen, splash, start up, startup, logo, plymouth, grub, boot messages"
+                    ),
+                    List::BootScreen,
                 )],
             ),
             section(

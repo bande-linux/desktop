@@ -170,6 +170,7 @@ bande-settings = { path = "crates/apps/settings" }
 bande-settings-panes = { path = "crates/libs/settings-panes" }
 bande-shell = { path = "crates/shell/shell" }
 bande-sound = { path = "crates/services/sound", default-features = false }
+bande-splash = { path = "crates/libs/splash" }
 bande-spring = { path = "crates/libs/spring" }
 bande-status = { path = "crates/libs/status" }
 bande-taskbar-model = { path = "crates/libs/taskbar-model" }

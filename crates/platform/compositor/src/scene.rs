@@ -1008,6 +1008,33 @@ pub(crate) fn shaped_radius(area: Area, shown: Area, scale: f64) -> f64 {
     CORNER_RADIUS * scale * shrink
 }
 
+pub(crate) fn drawn_texture(
+    texture: VulkanTexture,
+    context: ContextId<VulkanTexture>,
+    rect: Rectangle<f64, Logical>,
+    scale: f64,
+    scheme: Scheme,
+) -> Drawn {
+    let area = rect.to_physical(scale);
+    let size = (f64::from(texture.width()), f64::from(texture.height()));
+    Drawn {
+        pieces: vec![Piece {
+            id: Id::new(),
+            texture,
+            src: Rectangle::<f64, BufferCoords>::from_size(size.into()),
+            transform: Transform::Normal,
+            geometry: area.to_i32_round(),
+        }],
+        context,
+        area,
+        look: Look::shown(rect),
+        shading: Shading {
+            active: false,
+            scheme,
+        },
+    }
+}
+
 pub(crate) fn drawn_screen(
     surface: &WlSurface,
     renderer: &mut VulkanRenderer,

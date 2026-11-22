@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use bande_status::status::{Battery, Wifi, wifi_bars};
 use bande_toolkit::{Color, Image, Item, Palette, Rect, Shape};
 
+const MARK: &str = include_str!("../../../../data/branding/mark.svg");
 const BATTERY_WIDTH: f32 = 23.0;
 const BATTERY_HEIGHT: f32 = 11.5;
 
@@ -41,12 +42,7 @@ fn arcs(paths: &[&str], lit: u8, color: &str, width: f32) -> String {
 pub fn svg(symbol: Symbol, color: Color) -> String {
     let color = hex(color);
     let (view, body) = match symbol {
-        Symbol::Logo => (
-            "0 0 16 16",
-            format!(
-                r#"<mask id="b"><rect width="16" height="16" fill="white"/><path d="M5.33 3.2V12.8M5.33 3.2H7.47A2.13 2.13 0 0 1 7.47 7.47H5.33M5.33 7.47H8A2.67 2.67 0 0 1 8 12.8H5.33" fill="none" stroke="black" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></mask><rect x="1" y="1" width="14" height="14" rx="4.2" fill="{color}" mask="url(#b)"/>"#
-            ),
-        ),
+        Symbol::Logo => return MARK.replace("currentColor", &color),
         Symbol::Wifi { bars } => (
             "0 0 18 14",
             format!(

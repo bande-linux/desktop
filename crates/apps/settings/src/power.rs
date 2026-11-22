@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use bande_bus::logind::HibernateDelay;
 use bande_l10n::tr;
 use bande_toolkit::ui::Toggle;
 
@@ -11,10 +14,27 @@ const HEALTHY_CAPACITY: f64 = 80.0;
 
 fn duration(minutes: u32) -> String {
     let (hours, minutes) = (minutes / 60, minutes % 60);
-    if hours == 0 {
-        tr!("{minutes} min", minutes = minutes)
-    } else {
-        tr!("{hours} h {minutes} min", hours = hours, minutes = minutes)
+    match (hours, minutes) {
+        (0, _) => tr!("{minutes} min", minutes = minutes),
+        (_, 0) => tr!("{hours} h", hours = hours),
+        _ => tr!("{hours} h {minutes} min", hours = hours, minutes = minutes),
+    }
+}
+
+fn hibernation_text(delay: HibernateDelay) -> String {
+    let minutes = |after: Duration| u32::try_from(after.as_secs() / 60).unwrap_or(u32::MAX);
+    match (delay.after, delay.on_ac_power) {
+        (Some(after), false) => tr!(
+            "After {time} asleep on battery, the computer saves its state and turns off. Waking then takes a few seconds longer.",
+            time = duration(minutes(after))
+        ),
+        (Some(after), true) => tr!(
+            "After {time} asleep, the computer saves its state and turns off. Waking then takes a few seconds longer.",
+            time = duration(minutes(after))
+        ),
+        (None, _) => tr!(
+            "When the battery runs low during sleep, the computer saves its state and turns off. Waking then takes a few seconds longer."
+        ),
     }
 }
 
@@ -128,7 +148,7 @@ impl SettingsView {
         };
         let mut rows = Vec::new();
         match power.hibernation.as_deref() {
-            Some("yes") => rows.push(muted_row(&tr!("After 3 hours asleep on battery, the computer saves its state and turns off. Waking then takes a few seconds longer."))),
+            Some("yes") => rows.push(muted_row(&hibernation_text(power.hibernate_delay))),
             Some(NO_RESUME) => rows.push(muted_row(&tr!("Hibernation isn't set up, so sleep lasts until the battery runs out."))),
             Some("na") => rows.push(muted_row(&tr!("This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."))),
             Some(_) => rows.push(muted_row(&tr!("The administrator doesn't allow hibernation, so sleep lasts until the battery runs out."))),

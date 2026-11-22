@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, Sender};
 
+use bande_bus::logind::HibernateDelay;
 use bande_bus::power_profiles::{PowerProfilesProxyBlocking, power_profiles};
 use bande_l10n::text;
 use bande_settings_panes::SettingId;
@@ -78,6 +79,7 @@ pub struct PowerState {
     pub on_battery: bool,
     pub lid: bool,
     pub hibernation: Option<String>,
+    pub hibernate_delay: HibernateDelay,
     pub profiles: Profiles,
     pub profile: Option<String>,
 }
@@ -213,6 +215,7 @@ fn read(system: &Connection) -> Option<PowerState> {
     Some(PowerState {
         battery,
         hibernation,
+        hibernate_delay: bande_bus::logind::hibernate_delay(),
         on_battery,
         lid: upower
             .lid_is_present()

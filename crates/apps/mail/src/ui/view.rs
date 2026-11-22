@@ -1351,9 +1351,30 @@ impl MailView {
     }
 
     pub fn delete_selected(&mut self) {
+        let targets = self.targets();
+        let gone = self.delete(targets);
+        self.leave_targets(&gone);
+    }
+
+    pub fn discard_draft(&mut self, draft: &Original) {
+        let summary = match (
+            self.store.summary(draft.id),
+            self.store.message_id(draft.id),
+        ) {
+            (Ok(Some(summary)), Ok(Some(message_id))) if message_id == draft.message_id => summary,
+            (Err(error), _) | (_, Err(error)) => {
+                return tracing::warn!("cannot discard the draft: {error}");
+            }
+            _ => return,
+        };
+        self.delete(vec![summary]);
+        self.reload();
+    }
+
+    fn delete(&mut self, summaries: Vec<Summary>) -> Vec<MessageId> {
         let mut moves = Vec::new();
         let mut expunged = Vec::new();
-        for summary in self.targets() {
+        for summary in summaries {
             let in_trash = self
                 .mailbox_of(&summary)
                 .is_some_and(|mailbox| mailbox.role == Some(Role::Trash));
@@ -1372,7 +1393,7 @@ impl MailView {
                 Err(error) => tracing::warn!("cannot delete the messages: {error}"),
             }
         }
-        self.leave_targets(&gone);
+        gone
     }
 
     fn default_account(&self) -> Option<Account> {

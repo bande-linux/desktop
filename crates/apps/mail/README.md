@@ -100,7 +100,7 @@ apt install bande-mail
   `~/.local/share/bande-mail/unsent/` until the server has it, so a message survives a crash or
   quitting offline: it opens again the next time Mail starts, still replacing the draft it came
   from and answering the message it replies to. Both copies keep the Bcc recipients. Double-click a draft, or press Return, to carry on; saving it again or
-  sending it removes the older copy.
+  sending it removes the older copy. Message ▸ Discard Draft closes the message without keeping it, after asking, and moves the draft it came from to the Trash.
 - **Offline store.** One SQLite database in `~/.local/share/bande-mail/` holds the accounts,
   folders, headers, flags and message bodies (bodies up to 2 MB are fetched ahead, larger ones
   when opened). Flag changes, moves and deletions apply at once and are queued until the

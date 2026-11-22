@@ -42,6 +42,7 @@ enum Signal {
     Send,
     Attach,
     From(usize),
+    Discard,
     Dismissed,
 }
 
@@ -73,6 +74,7 @@ pub struct ComposeView {
     access: WidgetId,
     token: u64,
     closed: bool,
+    discarded: Option<Original>,
     unsent: Option<PathBuf>,
     recovered: bool,
     autosaved: Option<Draft>,
@@ -206,6 +208,7 @@ impl ComposeView {
             access: WidgetId::next(),
             token,
             closed: false,
+            discarded: None,
             unsent,
             recovered,
             autosaved: None,
@@ -555,6 +558,7 @@ impl ComposeView {
                 Signal::Send => self.try_send(),
                 Signal::Attach => self.requests.push(ComposeRequest::ChooseFiles),
                 Signal::From(index) => self.change_sender(index),
+                Signal::Discard => self.discard(),
                 Signal::Dismissed => {}
             }
         }
@@ -624,13 +628,46 @@ impl ComposeView {
     }
 
     pub fn menu_action(&mut self, action: &str) -> bool {
-        if action == "send" {
-            self.try_send();
-            return true;
+        match action {
+            "send" => self.try_send(),
+            "discard-draft" => self.confirm_discard(),
+            _ => {
+                let handled = self.ui.menu_action(action);
+                self.after_ui();
+                return handled;
+            }
         }
-        let handled = self.ui.menu_action(action);
-        self.after_ui();
-        handled
+        true
+    }
+
+    fn confirm_discard(&mut self) {
+        if self.ui.has_sheet() {
+            return;
+        }
+        let message = match self.replaces {
+            Some(_) => tr!("The draft is moved to the Trash."),
+            None => tr!("The message is not kept."),
+        };
+        let signals = Rc::clone(&self.signals);
+        self.ui.present_sheet(
+            Alert::new(&tr!("Discard this message?"), &message, move |choice| {
+                if choice == "discard" {
+                    signals.borrow_mut().push(Signal::Discard);
+                }
+            })
+            .destructive(&tr!("Discard"), "discard")
+            .cancel(&tr!("Cancel"), "cancel"),
+        );
+    }
+
+    fn discard(&mut self) {
+        self.discard_unsent();
+        self.discarded = self.replaces.take();
+        self.closed = true;
+    }
+
+    pub fn take_discarded(&mut self) -> Option<Original> {
+        self.discarded.take()
     }
 
     pub fn dragged(&mut self, window: &mut Window, event: &WindowEvent) -> bool {

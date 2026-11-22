@@ -440,6 +440,7 @@ impl Mail {
         };
         let requests = view.take_requests();
         let sent = view.take_sent();
+        let discarded = view.take_discarded();
         let finished = view.finished();
         let token = view.token();
         for request in requests {
@@ -468,6 +469,11 @@ impl Mail {
             if !delivered {
                 tracing::warn!("no account sends from this address");
             }
+        }
+        if let Some(draft) = discarded
+            && let Some(main) = main_view(cx, self.main, &mut self.parked)
+        {
+            main.discard_draft(&draft);
         }
         if finished {
             self.keep_draft(cx, window);
@@ -677,9 +683,12 @@ impl Program for Mail {
             _ => self.parked.as_deref(),
         };
         let windowed = cx.windows().next().is_some();
+        let composing = cx
+            .focused()
+            .is_some_and(|window| matches!(cx.view(window), Some(Pane::Compose(_))));
         Menus {
             menus: view
-                .map(|view| menus::app_menus(view, self.main.is_some(), windowed))
+                .map(|view| menus::app_menus(view, self.main.is_some(), windowed, composing))
                 .unwrap_or_default(),
             window: menus::window_menu(),
         }

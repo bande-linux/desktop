@@ -70,6 +70,9 @@ msgstr "Meddelande"
 msgid "Send"
 msgstr "Skicka"
 
+msgid "Discard Draft"
+msgstr "Släng utkast"
+
 msgid "Reply"
 msgstr "Svara"
 
@@ -234,6 +237,21 @@ msgstr "OK"
 
 msgid "The message was not sent"
 msgstr "Meddelandet skickades inte"
+
+msgid "The draft is moved to the Trash."
+msgstr "Utkastet flyttas till papperskorgen."
+
+msgid "The message is not kept."
+msgstr "Meddelandet sparas inte."
+
+msgid "Discard this message?"
+msgstr "Släng meddelandet?"
+
+msgid "Discard"
+msgstr "Släng"
+
+msgid "Cancel"
+msgstr "Avbryt"
 
 msgid "Remove “{name}”"
 msgstr "Ta bort ”{name}”"
@@ -424,9 +442,6 @@ msgstr "Ta bort villkor"
 
 msgid "Then"
 msgstr "Då"
-
-msgid "Cancel"
-msgstr "Avbryt"
 
 msgid "Save Rule"
 msgstr "Spara regel"

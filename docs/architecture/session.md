@@ -335,8 +335,10 @@ PipeWire's socket.
   greetd and a lingering user manager keep what they had, so a choice in Settings would
   otherwise need a restart. The login window reads the same file through
   `bande-greeter-session`.
-- Settings ▸ Language & Region writes the person's file and, for an administrator, the system
-  default through `bande-locale-helper` under `pkexec` (`org.bande.locale-helper`), since Debian
+- Settings ▸ Language & Region writes only the person's file, asking for an administrator only
+  when a chosen locale is not generated yet (`bande-locale-helper generate` under `pkexec`,
+  `org.bande.locale-helper`). "Use at Login Screen and for New Users" copies the person's
+  language and region to the system default through `bande-locale-helper locale`, since Debian
   forbids localed's `SetLocale` even to root; localed is only read. The helper accepts only UTF-8
   names from `/usr/share/i18n/SUPPORTED`, runs `locale-gen --keep-existing` before replacing
   `/etc/default/locale` atomically, and `/etc/locale.conf` too where it is a file of its own

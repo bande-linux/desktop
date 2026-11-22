@@ -1921,6 +1921,10 @@ impl SettingsView {
                     locale.region.clone_from(region);
                     locale.pending = Some(SettingId::Region);
                 }
+                LocaleCommand::LoginLanguage => {
+                    locale.login_language.clone_from(&locale.language);
+                    locale.login_region.clone_from(&locale.region);
+                }
                 LocaleCommand::LoginKeyboard(codes) => locale.login_sources.clone_from(codes),
                 LocaleCommand::LoginAccessibility(words) => {
                     locale.login_accessibility.clone_from(words);

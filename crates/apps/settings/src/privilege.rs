@@ -32,7 +32,6 @@ impl Privilege {
             SettingId::AutomaticTime | SettingId::DateAndTime | SettingId::TimeZone => {
                 Some(Self::Time)
             }
-            SettingId::Language | SettingId::Region => Some(Self::Locale),
             SettingId::ComputerName => Some(Self::Hostname),
             _ => None,
         }

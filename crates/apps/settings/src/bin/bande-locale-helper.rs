@@ -189,6 +189,18 @@ fn run(command: &mut Command) -> io::Result<()> {
     )))
 }
 
+fn generate(wanted: &[&str]) -> io::Result<()> {
+    let locale_gen = read_if_present(LOCALE_GEN)?;
+    let enabled = enabled_locale_gen(&locale_gen, wanted);
+    if enabled != locale_gen {
+        write_atomically(&real_path(LOCALE_GEN), &enabled)?;
+    }
+    if !wanted.is_empty() {
+        run(tool("/usr/sbin/locale-gen").arg("--keep-existing"))?;
+    }
+    Ok(())
+}
+
 fn set_locale(assignments: &[String]) -> io::Result<()> {
     let wanted: Vec<&str> = assignments
         .iter()
@@ -196,14 +208,7 @@ fn set_locale(assignments: &[String]) -> io::Result<()> {
         .filter_map(|assignment| assignment.split_once('=').map(|(_, value)| value))
         .filter(|value| !value.is_empty() && *value != BUILT_IN_LOCALE)
         .collect();
-    let locale_gen = read_if_present(LOCALE_GEN)?;
-    let enabled = enabled_locale_gen(&locale_gen, &wanted);
-    if enabled != locale_gen {
-        write_atomically(&real_path(LOCALE_GEN), &enabled)?;
-    }
-    if !wanted.is_empty() {
-        run(tool("/usr/sbin/locale-gen").arg("--keep-existing"))?;
-    }
+    generate(&wanted)?;
     let default = real_path(DEFAULT_LOCALE_FILE);
     let own = real_path(LOCALE_FILE);
     let own = (own != default && own.exists()).then_some(own);
@@ -268,6 +273,15 @@ fn main() -> ExitCode {
                 return refuse("unknown locale");
             }
             finish(set_locale(assignments))
+        }
+        Some((command, locales)) if command == "generate" && !locales.is_empty() => {
+            let supported = fs::read_to_string(SUPPORTED).unwrap_or_default();
+            let names = supported_names(&supported);
+            let wanted: Vec<&str> = locales.iter().map(String::as_str).collect();
+            if !wanted.iter().all(|locale| names.contains(locale)) {
+                return refuse("unknown locale");
+            }
+            finish(generate(&wanted))
         }
         Some((command, codes))
             if command == "keyboard" && !codes.is_empty() && codes.len() <= MAX_LAYOUTS =>

@@ -4,8 +4,11 @@ use bande_settings_panes::SettingId;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, SearchField, Stack, Widget};
 
-use crate::locale::{AvailableLocale, LocaleState, Packs, locale_label};
+use crate::locale::{
+    AvailableLocale, LocaleCommand, LocaleState, Packs, locale_label, same_locale,
+};
 use crate::pages::{Widgets, boxed, muted_row, submit};
+use crate::privilege::Privilege;
 use crate::view::{Anchor, Intent, Picker, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
 
@@ -182,15 +185,35 @@ impl SettingsView {
                 None,
             )));
         }
-        rows.push(boxed(Row::new(
+        rows.push(next_login_row());
+        rows.push(self.login_language_row(&locale));
+        rows
+    }
+
+    fn login_language_row(&mut self, locale: &LocaleState) -> Box<dyn Widget> {
+        let same_region = match (&locale.region, &locale.login_region) {
+            (None, None) => true,
+            (Some(mine), Some(login)) => same_locale(mine, login),
+            _ => false,
+        };
+        if same_locale(&locale.language, &locale.login_language) && same_region {
+            return muted_row(&tr!("The login screen uses this language and region"));
+        }
+        let button = (!self.refused.contains(&Privilege::Locale)).then(|| {
+            let mut send = intent(&self.intents, Intent::Locale);
+            boxed(Button::new(
+                &tr!("Use at Login Screen and for New Users"),
+                move || send(LocaleCommand::LoginLanguage),
+            ))
+        });
+        boxed(Row::new(
             Text::new(
-                &tr!("Changes take effect the next time you log in"),
+                &tr!("The login screen uses another language or region"),
                 Tone::Muted,
             )
             .caption(),
-            None,
-        )));
-        rows
+            button,
+        ))
     }
 
     pub(crate) fn app_language_rows(&mut self) -> Widgets {
@@ -285,6 +308,18 @@ impl SettingsView {
                 .detail(Text::new(&preview, Tone::Muted).caption()),
             ));
         }
+        rows.push(next_login_row());
         rows
     }
+}
+
+fn next_login_row() -> Box<dyn Widget> {
+    boxed(Row::new(
+        Text::new(
+            &tr!("Changes take effect the next time you log in"),
+            Tone::Muted,
+        )
+        .caption(),
+        None,
+    ))
 }

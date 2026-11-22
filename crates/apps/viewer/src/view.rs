@@ -636,6 +636,10 @@ impl FileView {
     }
 
     pub fn rotate(&mut self, clockwise: bool) {
+        if self.is_document() {
+            self.with_pdf(|pdf| pdf.rotate(clockwise));
+            return;
+        }
         self.with_canvas(|canvas| canvas.orient(canvas.orientation().rotated(clockwise)));
     }
 
@@ -805,15 +809,10 @@ impl FileView {
         if let Some(page) = chosen {
             self.with_pdf(|pdf| pdf.go_to_page(page));
         }
-        let picture = self.has_picture();
-        let zoomable = picture || self.is_document();
-        for (index, id) in self.toolbar.tools.iter().enumerate().skip(1) {
-            let enabled = match index {
-                3 => picture,
-                _ => zoomable,
-            };
+        let zoomable = self.has_picture() || self.is_document();
+        for id in self.toolbar.tools.iter().skip(1) {
             if let Some(button) = self.ui.widget_as::<Button>(*id) {
-                button.set_enabled(enabled);
+                button.set_enabled(zoomable);
             }
         }
         let has_sidebar = self.has_sidebar();

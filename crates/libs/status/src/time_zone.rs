@@ -7,7 +7,7 @@ use bande_datetime::daylight::ZONE_TAB;
 use bande_datetime::timedate::TimedateProxyBlocking;
 use bande_datetime::{ZoneSuggestion, city_name, suggested_zone};
 use bande_l10n::tr;
-use bande_notify::client::{self, Request, Signal};
+use bande_notify::client::{self, Listener, Request, Signal};
 use bande_notify::{DEFAULT_ACTION, Urgency};
 use zbus::blocking::Connection;
 
@@ -187,17 +187,18 @@ fn answer(system: &Connection, offered: &Offered, signal: Signal) {
 
 pub fn suggest_time_zones(system: &Connection, session: &Connection) {
     let offered: Offered = Arc::default();
-    let answers = (system.clone(), session.clone(), Arc::clone(&offered));
-    thread::spawn(move || {
-        let (system, session, offered) = answers;
-        let listened = client::listen(&session, |signal| {
-            answer(&system, &offered, signal);
-            true
-        });
-        if let Err(error) = listened {
-            tracing::warn!("time zone suggestions cannot be answered: {error}");
+    match Listener::new(session) {
+        Ok(listener) => {
+            let (system, offered) = (system.clone(), Arc::clone(&offered));
+            thread::spawn(move || {
+                listener.listen(|signal| {
+                    answer(&system, &offered, signal);
+                    true
+                });
+            });
         }
-    });
+        Err(error) => tracing::warn!("time zone suggestions cannot be answered: {error}"),
+    }
     let (system, session) = (system.clone(), session.clone());
     thread::spawn(move || {
         let followed = bande_network::follow_online(&system, |online| {

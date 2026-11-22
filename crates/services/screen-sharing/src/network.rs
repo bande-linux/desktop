@@ -27,6 +27,10 @@ fn networks() -> Vec<(IpAddr, IpAddr)> {
     let mut first: *mut libc::ifaddrs = std::ptr::null_mut();
     // SAFETY: getifaddrs fills `first` with a list that freeifaddrs releases below.
     if unsafe { libc::getifaddrs(&mut first) } != 0 {
+        tracing::warn!(
+            "cannot list this computer's networks: {}",
+            std::io::Error::last_os_error()
+        );
         return Vec::new();
     }
     let mut found = Vec::new();

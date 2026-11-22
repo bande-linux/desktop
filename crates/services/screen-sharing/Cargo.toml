@@ -25,7 +25,6 @@ service = [
     "dep:ring",
     "dep:rustix",
     "dep:rustls",
-    "dep:tracing",
     "dep:zbus",
 ]
 
@@ -36,6 +35,7 @@ required-features = ["service"]
 [dependencies]
 libc.workspace = true
 sha2.workspace = true
+tracing.workspace = true
 bande-xdg.workspace = true
 bande-bus = { workspace = true, optional = true }
 bande-config = { workspace = true, optional = true }
@@ -52,7 +52,6 @@ reis = { workspace = true, optional = true }
 ring = { workspace = true, optional = true }
 rustix = { workspace = true, optional = true, features = ["event", "net"] }
 rustls = { workspace = true, optional = true }
-tracing = { workspace = true, optional = true }
 zbus = { workspace = true, optional = true }
 
 [lints]

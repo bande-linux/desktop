@@ -85,6 +85,9 @@ flatpak flatpak optional
 /usr/bin/pinentry-fltk pinentry-fltk optional
 /usr/bin/pinentry-curses pinentry-curses optional
 /usr/bin/pinentry-tty pinentry-tty optional
+/usr/bin/ksshaskpass ksshaskpass optional
+/usr/lib/openssh/gnome-ssh-askpass ssh-askpass-gnome optional
+/usr/bin/lxqt-openssh-askpass lxqt-openssh-askpass optional
 /usr/libexec/bande-sharing-helper bande-settings depends
 /usr/share/bande/bande-davfs2.conf bande-automount depends
 /usr/share/bande/l10n bande-compositor optional

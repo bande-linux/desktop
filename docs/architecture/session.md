@@ -308,6 +308,14 @@ UI.
   `X-Bande`) it executes the first of `pinentry-gnome3`, `pinentry-qt`, `pinentry-gtk-2`,
   `pinentry-fltk`, `pinentry-curses` and `pinentry-tty` that is installed, so other desktops and
   terminals keep their own. It does not register `pinentry-x11`, which is for X11 pinentries.
+- SSH asks the same prompt for a key's passphrase or a confirmation when it has no terminal (Git
+  in an editor, `ssh-add` from a launcher): the same package ships `/usr/libexec/bande-ssh-askpass`
+  as the `ssh-askpass` alternative at priority 40, above `ksshaskpass` (35) and
+  `ssh-askpass-gnome` (30), which OpenSSH finds at `/usr/bin/ssh-askpass` with `WAYLAND_DISPLAY`
+  set, so the session exports nothing. It runs `bande-secrets-prompt --passphrase`, or `--confirm`
+  and `--message` for `SSH_ASKPASS_PROMPT=confirm` and `none` (a security key's touch, whose prompt
+  closes when SSH ends the askpass), and prints the passphrase on standard output. Outside a Bande
+  session it executes `ksshaskpass`, `gnome-ssh-askpass` or `lxqt-openssh-askpass`.
 
 ### Updates during a session
 

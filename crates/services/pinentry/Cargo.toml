@@ -1,6 +1,6 @@
 [package]
 name = "pinentry-bande"
-description = "pinentry for GnuPG that asks with the Bande keyring prompt"
+description = "pinentry for GnuPG and askpass for SSH that ask with the Bande keyring prompt"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

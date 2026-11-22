@@ -679,14 +679,19 @@ Depends: ${shlibs:Depends},
  pinentry-curses,
  ${misc:Depends}
 Recommends: bande-secrets (= ${binary:Version})
-Enhances: gpg-agent
-Provides: pinentry
-Description: pinentry for GnuPG that asks with the Bande keyring prompt
+Enhances: gpg-agent,
+ openssh-client
+Provides: pinentry,
+ ssh-askpass
+Description: pinentry for GnuPG and askpass for SSH with the Bande keyring prompt
  GnuPG's gpg-agent runs a pinentry to ask for the passphrase of a key or
- the PIN of a smartcard. In a Bande session this one asks with the Bande
- keyring's prompt, on Wayland, with the screen reader and keyboard like
- every other prompt; elsewhere it hands over to another installed
- pinentry, such as pinentry-gnome3, pinentry-qt or pinentry-curses.
+ the PIN of a smartcard, and SSH runs an askpass to ask for a key's
+ passphrase or a confirmation when it has no terminal, as in an editor's
+ Git. In a Bande session both ask with the Bande keyring's prompt, on
+ Wayland, with the screen reader and keyboard like every other prompt;
+ elsewhere they hand over to another installed pinentry, such as
+ pinentry-gnome3, pinentry-qt or pinentry-curses, or askpass, such as
+ ksshaskpass or ssh-askpass-gnome.
 
 Package: libpam-bande-secrets
 Architecture: any
@@ -1227,6 +1232,7 @@ Recommends: bande-greeter (>= ${source:Version}),
  bande-backup (>= ${source:Version}),
  bande-file-chooser (>= ${source:Version}),
  bande-polkit (>= ${source:Version}),
+ pinentry-bande (>= ${source:Version}),
  apt-config-icons-hidpi,
  libpam-bande-secrets (>= ${source:Version}),
  bande-terminal (>= ${source:Version}),

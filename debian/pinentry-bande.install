@@ -1,2 +1,4 @@
 debian/build/bin/pinentry-bande usr/bin/
+debian/build/bin/bande-ssh-askpass usr/libexec/
 debian/build/l10n/development/pinentry-bande/* usr/share/bande/l10n/pinentry-bande/
+debian/build/l10n/development/bande-ssh-askpass/* usr/share/bande/l10n/bande-ssh-askpass/

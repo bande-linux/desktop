@@ -60,7 +60,7 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   when it first writes the login window's `/etc/bande/login.kdl`; purging `bande-reporter` or
   `bande-settings` removes the file it wrote there, and the folder once it is empty. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
-  `/usr/lib/<multiarch>/security`); `pinentry-bande` is a `pinentry` alternative
+  `/usr/lib/<multiarch>/security`); `pinentry-bande` is a `pinentry` and `ssh-askpass` alternative
   ([session](session.md#keyring-bande-secrets)), Terminal is an `x-terminal-emulator` alternative and the
   boot screen a `default.plymouth` alternative (`dh_installalternatives`). The boot screen's
   initramfs hook (`dh_installinitramfs`) rebuilds the initramfs through initramfs-tools'

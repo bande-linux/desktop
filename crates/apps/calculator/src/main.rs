@@ -296,8 +296,8 @@ impl Calculator {
             mode(Mode::Scientific, text!("Scientific"), "Ctrl+2"),
             mode(Mode::Programmer, text!("Programmer"), "Ctrl+3"),
             Entry::separator(),
-            Entry::item(&tr!("RPN Mode"), RPN).radio(engine.rpn),
-            Entry::item(&tr!("Show Thousands Separators"), GROUPING).radio(engine.grouping),
+            Entry::item(&tr!("RPN Mode"), RPN).check(engine.rpn),
+            Entry::item(&tr!("Show Thousands Separators"), GROUPING).check(engine.grouping),
             Entry::separator(),
             Entry::item(&tr!("Degrees"), DEGREES)
                 .radio(engine.angle == Angle::Degrees)
@@ -373,7 +373,7 @@ impl Program for Calculator {
             ],
             window: vec![
                 Entry::item(&tr!("Calculator"), SHOW_CALCULATOR),
-                Entry::item(&tr!("Paper Tape"), PAPER_TAPE).radio(self.tape.is_some()),
+                Entry::item(&tr!("Paper Tape"), PAPER_TAPE).check(self.tape.is_some()),
             ],
         }
     }

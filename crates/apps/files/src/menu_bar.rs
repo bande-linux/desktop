@@ -78,7 +78,7 @@ fn column_entries(view: &FilesView) -> Vec<Entry> {
         .into_iter()
         .map(|column| {
             Entry::item(&list_column_title(column), &list_column_action(column))
-                .radio(shown.contains(&column))
+                .check(shown.contains(&column))
         })
         .collect::<Vec<_>>();
     if shown.len() > 1 {
@@ -172,7 +172,7 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
                 plain(text!("as Gallery"), "gallery"),
                 Entry::separator(),
                 Entry::item(&tr!("Use Groups"), "use-groups")
-                    .radio(view.browser().groups().is_some()),
+                    .check(view.browser().groups().is_some()),
                 submenu(text!("Group By"), group_entries(view)),
                 submenu(text!("Sort By"), sort_entries(view)),
                 submenu(text!("Columns"), column_entries(view)),

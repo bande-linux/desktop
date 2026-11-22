@@ -506,15 +506,15 @@ impl TextEditor {
                 vec![
                     item(text!("Bold"), "style:bold")
                         .shortcut("Ctrl+B")
-                        .radio(attributes.bold),
+                        .check(attributes.bold),
                     item(text!("Italic"), "style:italic")
                         .shortcut("Ctrl+I")
-                        .radio(attributes.italic),
+                        .check(attributes.italic),
                     item(text!("Underline"), "style:underline")
                         .shortcut("Ctrl+U")
-                        .radio(attributes.underline),
+                        .check(attributes.underline),
                     item(text!("Strikethrough"), "style:strikethrough")
-                        .radio(attributes.strikethrough),
+                        .check(attributes.strikethrough),
                     Entry::separator(),
                     item(text!("Bigger"), "style:bigger").shortcut("Ctrl+="),
                     item(text!("Smaller"), "style:smaller").shortcut("Ctrl+-"),

@@ -202,7 +202,7 @@ pub struct Entry {
     version: Option<String>,
     enabled: bool,
     separator: bool,
-    selected: Option<bool>,
+    toggle: Option<(&'static str, bool)>,
     children: Vec<Entry>,
 }
 
@@ -216,7 +216,7 @@ impl Entry {
             version: None,
             enabled: true,
             separator: false,
-            selected: None,
+            toggle: None,
             children: Vec::new(),
         }
     }
@@ -269,7 +269,14 @@ impl Entry {
 
     pub fn radio(self, selected: bool) -> Self {
         Self {
-            selected: Some(selected),
+            toggle: Some(("radio", selected)),
+            ..self
+        }
+    }
+
+    pub fn check(self, checked: bool) -> Self {
+        Self {
+            toggle: Some(("checkmark", checked)),
             ..self
         }
     }
@@ -294,9 +301,9 @@ impl Entry {
         if !self.children.is_empty() {
             properties.insert("children-display".to_owned(), Value::from("submenu"));
         }
-        if let Some(selected) = self.selected {
-            properties.insert("toggle-type".to_owned(), Value::from("radio"));
-            properties.insert("toggle-state".to_owned(), Value::from(i32::from(selected)));
+        if let Some((kind, on)) = self.toggle {
+            properties.insert("toggle-type".to_owned(), Value::from(kind));
+            properties.insert("toggle-state".to_owned(), Value::from(i32::from(on)));
         }
         if let Some(shortcut) = &self.shortcut {
             let keys = shortcut

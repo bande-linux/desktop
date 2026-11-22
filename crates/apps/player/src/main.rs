@@ -286,7 +286,7 @@ impl Program for Player {
         }
         playback.extend([
             Entry::separator(),
-            item(text!("Loop"), LOOP, Some("Ctrl+L"), loaded).radio(pane.is_some_and(Pane::loops)),
+            item(text!("Loop"), LOOP, Some("Ctrl+L"), loaded).check(pane.is_some_and(Pane::loops)),
         ]);
         let view = vec![item(text!("Full Screen"), FULL_SCREEN, Some("F11"), true)];
         Menus {

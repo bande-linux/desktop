@@ -55,7 +55,7 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool) -> Vec<Entry> {
                 .push(Entry::item(&tr!("Ascending"), "sort-ascending").radio(settings.ascending));
             entries.push(Entry::separator());
             entries.push(
-                Entry::item(&tr!("Bcc Address Field"), "bcc-field").radio(settings.bcc_field),
+                Entry::item(&tr!("Bcc Address Field"), "bcc-field").check(settings.bcc_field),
             );
             entries
         }),

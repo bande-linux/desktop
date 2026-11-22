@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -21,6 +22,7 @@ pub const BUS_NAME: &str = "org.bande.Screenshot";
 pub const PATH: &str = "/org/bande/Screenshot";
 pub const INTERFACE: &str = "org.bande.Screenshot";
 pub const PORTAL: &str = "org.freedesktop.impl.portal.desktop.bande";
+const SCREEN_SHARING: &str = "/usr/libexec/bande-screen-sharing";
 pub const SCREEN_ID: &str = "monitor:screen";
 pub const MONITOR: u32 = 1;
 pub const WINDOW: u32 = 2;
@@ -201,20 +203,16 @@ impl Casting {
         Some((started.node_id, started.width, started.height))
     }
 
-    pub fn share(self: &Arc<Self>, id: &str, cursor: bool) -> Option<(u32, u32, u32)> {
+    pub fn share(self: &Arc<Self>, id: &str, cursor: bool, title: &str) -> Option<(u32, u32, u32)> {
         let opened = self.open(id, cursor, true)?;
         let mut indicator = lock(&self.indicator);
         if indicator.is_none() {
             let casting = Arc::downgrade(self);
-            match Indicator::show(
-                Activity::Sharing,
-                &tr!("Sharing your screen. Click to stop."),
-                move || {
-                    if let Some(casting) = casting.upgrade() {
-                        casting.stop_all();
-                    }
-                },
-            ) {
+            match Indicator::show(Activity::Sharing, title, move || {
+                if let Some(casting) = casting.upgrade() {
+                    casting.stop_all();
+                }
+            }) {
                 Ok(shown) => *indicator = Some(shown),
                 Err(error) => tracing::warn!("cannot show the sharing indicator: {error}"),
             }
@@ -308,6 +306,53 @@ async fn from_portal(header: &Header<'_>, connection: &zbus::Connection) -> zbus
     }
 }
 
+async fn from_screen_sharing(
+    header: &Header<'_>,
+    connection: &zbus::Connection,
+) -> zbus::fdo::Result<()> {
+    let denied = || {
+        zbus::fdo::Error::AccessDenied("only screen sharing may show the screen to a viewer".into())
+    };
+    let bus = zbus::fdo::DBusProxy::new(connection).await?;
+    let sender = header.sender().ok_or_else(denied)?;
+    let caller = bus
+        .get_connection_unix_process_id(sender.clone().into())
+        .await?;
+    match std::fs::read_link(format!("/proc/{caller}/exe")) {
+        Ok(program) if program == std::path::Path::new(SCREEN_SHARING) => Ok(()),
+        _ => Err(denied()),
+    }
+}
+
+fn stop_when_gone(casting: &Arc<Casting>, connection: &zbus::Connection, owner: String, node: u32) {
+    let connection = Connection::from(connection.clone());
+    let casting = Arc::downgrade(casting);
+    std::thread::spawn(move || {
+        let changes = zbus::blocking::fdo::DBusProxy::new(&connection)
+            .and_then(|bus| bus.receive_name_owner_changed_with_args(&[(0, owner.as_str())]));
+        let changes = match changes {
+            Ok(changes) => changes,
+            Err(error) => {
+                tracing::warn!("cannot follow the screen sharing service: {error}");
+                return;
+            }
+        };
+        for change in changes {
+            let gone = change.args().is_ok_and(|args| args.new_owner().is_none());
+            let Some(casting) = casting.upgrade() else {
+                return;
+            };
+            if !casting.is_open(node) {
+                return;
+            }
+            if gone {
+                casting.stop(&[node]);
+                return;
+            }
+        }
+    });
+}
+
 impl Service {
     async fn ask<T: Send + 'static>(
         &self,
@@ -368,7 +413,11 @@ impl Service {
         let started = blocking::unblock(move || {
             let mut started = Vec::new();
             for id in &ids {
-                match casting.share(id, cursor_mode == CURSOR_EMBEDDED) {
+                match casting.share(
+                    id,
+                    cursor_mode == CURSOR_EMBEDDED,
+                    &tr!("Sharing your screen. Click to stop."),
+                ) {
                     Some(stream) => started.push((id.clone(), stream)),
                     None => {
                         let nodes: Vec<u32> =
@@ -411,6 +460,50 @@ impl Service {
         from_portal(&header, connection).await?;
         let casting = Arc::clone(&self.casting);
         blocking::unblock(move || casting.stop(&nodes)).await;
+        Ok(())
+    }
+
+    async fn start_viewer_stream(
+        &self,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &zbus::Connection,
+    ) -> zbus::fdo::Result<(u32, u32, u32, i32, i32, zbus::zvariant::OwnedFd)> {
+        from_screen_sharing(&header, connection).await?;
+        let owner = header.sender().map(ToString::to_string).unwrap_or_default();
+        let casting = Arc::clone(&self.casting);
+        let started = blocking::unblock(move || {
+            let (ours, theirs) = std::os::unix::net::UnixStream::pair()
+                .inspect_err(|error| tracing::warn!("cannot make the input socket: {error}"))
+                .ok()?;
+            let (x, y) = casting
+                .engine
+                .displays()
+                .first()
+                .map_or((0, 0), |display| (display.x, display.y));
+            let (node, width, height) = casting.share(
+                SCREEN_ID,
+                true,
+                &tr!("Someone is viewing your screen. Click to stop."),
+            )?;
+            casting.engine.connect_input(OwnedFd::from(ours));
+            Some((node, width, height, x, y, OwnedFd::from(theirs)))
+        })
+        .await
+        .ok_or_else(|| zbus::fdo::Error::Failed("the screen cannot be shared".to_owned()))?;
+        let (node, width, height, x, y, socket) = started;
+        stop_when_gone(&self.casting, connection, owner, node);
+        Ok((node, width, height, x, y, socket.into()))
+    }
+
+    async fn stop_viewer_stream(
+        &self,
+        node: u32,
+        #[zbus(header)] header: Header<'_>,
+        #[zbus(connection)] connection: &zbus::Connection,
+    ) -> zbus::fdo::Result<()> {
+        from_screen_sharing(&header, connection).await?;
+        let casting = Arc::clone(&self.casting);
+        blocking::unblock(move || casting.stop(&[node])).await;
         Ok(())
     }
 

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use bande_fs::{
-    Entry, FolderChanges, Listing, Sort, Trash, compare, is_hidden, is_partial, list, list_trash,
-    merge, sort,
+    Entry, FolderChanges, HIDDEN_LIST, Listing, Sort, Trash, compare, hidden_names, is_hidden,
+    is_partial, list, list_trash, merge, sort,
 };
 use bande_volumes::{leads_to_connected_volume, on_connected_volume};
 
@@ -129,7 +129,13 @@ impl Column {
         row
     }
 
-    fn patch(&mut self, path: &Path, sort: Sort, show_hidden: bool) {
+    fn patch(
+        &mut self,
+        path: &Path,
+        sort: Sort,
+        show_hidden: bool,
+        listed_hidden: &HashSet<String>,
+    ) {
         if self.edits.len() >= MAX_EDITS {
             self.replaced();
         }
@@ -143,7 +149,8 @@ impl Column {
             return;
         }
         let old = self.entries.iter().position(|entry| entry.path == path);
-        let shown = !is_partial(&name) && (show_hidden || !is_hidden(&name));
+        let shown = !is_partial(&name)
+            && (show_hidden || !(is_hidden(&name) || listed_hidden.contains(&name)));
         let fresh = (shown && path.symlink_metadata().is_ok())
             .then(|| Entry::read(path.to_path_buf(), name));
         if let (Some(row), Some(entry)) = (old, &fresh)
@@ -1195,9 +1202,13 @@ impl Browser {
             .get(index + 1)
             .map(|child| child.location.clone());
         let (sort, show_hidden) = (self.order(), self.show_hidden);
+        let listed_hidden = match (show_hidden, self.columns[index].folder()) {
+            (false, Some(folder)) => hidden_names(folder),
+            _ => HashSet::new(),
+        };
         let column = &mut self.columns[index];
         for path in paths {
-            column.patch(path, sort, show_hidden);
+            column.patch(path, sort, show_hidden, &listed_hidden);
         }
         let lost_selection = previous_row.is_some() && column.selected.is_none();
         self.follow_selection(index, previous_row, lost_selection, child_was);
@@ -1219,6 +1230,14 @@ impl Browser {
                 whole.push(root);
             }
         }
+        whole.extend(
+            changes
+                .entries
+                .iter()
+                .filter(|path| path.file_name().is_some_and(|name| name == HIDDEN_LIST))
+                .filter_map(|path| path.parent())
+                .map(Path::to_path_buf),
+        );
         let info_dirs = self.trash_info_dirs();
         whole.extend(
             changes

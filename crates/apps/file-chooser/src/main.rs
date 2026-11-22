@@ -21,13 +21,14 @@ use bande_file_chooser::{
 };
 use bande_files::{FilesSettings, rows, sidebar_file, with_volumes};
 use bande_l10n::tr;
+use bande_search::add_recently_used;
 use bande_toolkit::ui::Alert;
 use bande_toolkit::{App, Image, Rect, Role, Scene, TextSystem, Window, WindowEvent};
 use bande_volumes::{media_roots, mounted_volumes, volume_icon};
 use bande_wallpaper::Fit;
 use bande_xdg::{
     Locale, MimeDatabase, UserDir, app_name, applications, config_home, current_desktops,
-    data_dirs, read_user_dirs, replace_file, user_dir,
+    data_dirs, find_app, read_user_dirs, replace_file, user_dir,
 };
 use xdg_desktop_portal_bande::dialog_process::{
     ACCESS, CANCELLED, CHOOSE_APP, CHOSEN, CREATE_LAUNCHER, PRINT, SET_WALLPAPER, SHARE_ACCOUNT,
@@ -147,6 +148,27 @@ fn title(dialog: &Dialog) -> String {
     }
 }
 
+fn remember_opened(paths: &[PathBuf], app_id: &str) {
+    let entries = applications(
+        &data_dirs(),
+        Locale::from_env().as_ref(),
+        &current_desktops(),
+    );
+    let Some(app) = find_app(&entries, app_id) else {
+        return;
+    };
+    let mime = MimeDatabase::load(&data_dirs());
+    let opened = paths
+        .iter()
+        .map(|path| (path.clone(), mime.for_path(path)))
+        .collect();
+    if let Some(work) = add_recently_used(opened, app.name.clone(), app.exec.clone())
+        && work.join().is_err()
+    {
+        tracing::warn!("remembering the opened files stopped unexpectedly");
+    }
+}
+
 fn answer(selection: &Selection, dialog: &Dialog, folder: &Path) -> ExitCode {
     let remembered = match dialog.mode {
         Mode::Open {
@@ -160,6 +182,12 @@ fn answer(selection: &Selection, dialog: &Dialog, folder: &Path) -> ExitCode {
         Mode::Open { .. } | Mode::SaveMany { .. } => folder,
     };
     remember_folder(&dialog.app_id, remembered);
+    if let Mode::Open {
+        directory: false, ..
+    } = dialog.mode
+    {
+        remember_opened(&selection.paths, &dialog.app_id);
+    }
     let mut stdout = std::io::stdout();
     match stdout
         .write_all(&encode(selection, dialog))

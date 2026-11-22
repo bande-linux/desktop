@@ -36,6 +36,16 @@ pub fn posix_locale(value: &str) -> Locale {
     language.parse().unwrap_or(FALLBACK)
 }
 
+/// The locale named by the first set of `variables`, such as `["LC_ALL", "LC_NUMERIC", "LANG"]`.
+pub fn env_locale(variables: &[&str]) -> Locale {
+    let value = variables
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .find(|value| !value.is_empty())
+        .unwrap_or_default();
+    posix_locale(&value)
+}
+
 #[derive(Debug, Clone)]
 pub struct DateFormats {
     preferences: DateTimeFormatterPreferences,
@@ -174,12 +184,7 @@ impl DateFormats {
     }
 
     pub fn from_env() -> Self {
-        let value = LOCALE_VARIABLES
-            .iter()
-            .filter_map(|name| std::env::var(name).ok())
-            .find(|value| !value.is_empty())
-            .unwrap_or_default();
-        Self::for_locale(&posix_locale(&value))
+        Self::for_locale(&env_locale(&LOCALE_VARIABLES))
     }
 
     pub fn clock(&self, at: &Zoned) -> String {

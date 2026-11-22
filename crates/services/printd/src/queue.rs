@@ -86,6 +86,26 @@ fn record_path(id: u32) -> Option<PathBuf> {
     queue_folder().map(|folder| folder.join(format!("{id}.json")))
 }
 
+fn keep_unprinted(record: &Path) -> Option<PathBuf> {
+    let document = record.with_extension("pdf");
+    let stem = record.file_stem()?.to_string_lossy();
+    let kept = record.with_file_name(format!("unprinted-{stem}.pdf"));
+    if let Err(error) = std::fs::remove_file(record) {
+        tracing::warn!(
+            "cannot set aside the print job {}: {error}",
+            record.display()
+        );
+        return None;
+    }
+    match std::fs::rename(&document, &kept) {
+        Ok(()) => Some(kept),
+        Err(error) => {
+            tracing::warn!("cannot keep the document {}: {error}", document.display());
+            None
+        }
+    }
+}
+
 impl Spool {
     pub fn new(session: Connection, announce: Box<dyn Fn() + Send + Sync>) -> Arc<Self> {
         let mut inner = Inner {
@@ -94,22 +114,34 @@ impl Spool {
             last_busy: Some(Instant::now()),
             ..Inner::default()
         };
+        let mut unreadable = Vec::new();
         if let Some(folder) = queue_folder()
             && let Ok(entries) = std::fs::read_dir(folder)
         {
             for entry in entries.flatten() {
-                let stored = std::fs::read(entry.path())
-                    .ok()
-                    .filter(|_| entry.path().extension().is_some_and(|kind| kind == "json"))
-                    .and_then(|bytes| serde_json::from_slice::<StoredJob>(&bytes).ok());
-                if let Some(stored) = stored {
-                    inner.next_job = inner.next_job.max(stored.id + 1);
-                    inner.jobs.push(Job {
-                        stored,
-                        state: "waiting",
-                        message: String::new(),
-                        cancelled: Arc::default(),
+                let record = entry.path();
+                if record.extension().is_none_or(|kind| kind != "json") {
+                    continue;
+                }
+                let stored = std::fs::read(&record)
+                    .map_err(|error| error.to_string())
+                    .and_then(|bytes| {
+                        serde_json::from_slice::<StoredJob>(&bytes).map_err(|e| e.to_string())
                     });
+                match stored {
+                    Ok(stored) => {
+                        inner.next_job = inner.next_job.max(stored.id + 1);
+                        inner.jobs.push(Job {
+                            stored,
+                            state: "waiting",
+                            message: String::new(),
+                            cancelled: Arc::default(),
+                        });
+                    }
+                    Err(error) => {
+                        tracing::warn!("cannot read the print job {}: {error}", record.display());
+                        unreadable.extend(keep_unprinted(&record));
+                    }
                 }
             }
         }
@@ -130,6 +162,15 @@ impl Spool {
                 announce,
             }
         });
+        for kept in unreadable {
+            spool.tell(
+                &tr!("A document did not print"),
+                &tr!(
+                    "Its print settings could not be read. The document is kept at {path}.",
+                    path = kept.display().to_string()
+                ),
+            );
+        }
         spool.start_workers();
         spool
     }
@@ -219,10 +260,10 @@ impl Spool {
             let Some(address) = Address::parse(&uri) else {
                 continue;
             };
-            let Ok((_, model)) = abilities(&address, &uri, &self.pins) else {
+            let id = format!("usb:{port}");
+            let Ok((_, model)) = abilities(&address, &uri, &self.pins.of(&id)) else {
                 break;
             };
-            let id = format!("usb:{port}");
             let mut inner = self.lock();
             inner.printers.known.insert(
                 id.clone(),
@@ -240,7 +281,8 @@ impl Spool {
 
     fn found(&self, found: Vec<Found>) {
         let mut inner = self.lock();
-        let previous = std::mem::take(&mut inner.found);
+        let before = inner.printers.known.clone();
+        inner.found.clear();
         for printer in found {
             let id = printer.id();
             let known = inner.printers.known.entry(id.clone()).or_default();
@@ -251,9 +293,7 @@ impl Spool {
             known.secure.clone_from(&printer.secure);
             inner.found.insert(id, printer);
         }
-        let changed =
-            previous.keys().collect::<HashSet<_>>() != inner.found.keys().collect::<HashSet<_>>();
-        if changed {
+        if inner.printers.known != before {
             inner.printers.save();
         }
         drop(inner);
@@ -322,7 +362,7 @@ impl Spool {
             });
         }
         let known = self.known(printer).ok_or(Error::Malformed)?;
-        let (found, _) = self.reach(&known)?;
+        let (found, _) = self.reach(printer, &known)?;
         Ok(found.public())
     }
 
@@ -330,13 +370,14 @@ impl Spool {
         self.lock().printers.known.get(printer).cloned()
     }
 
-    fn reach(&self, known: &Known) -> Result<(crate::printer::Abilities, String)> {
+    fn reach(&self, printer: &str, known: &Known) -> Result<(crate::printer::Abilities, String)> {
         let mut last = Error::Malformed;
+        let pins = self.pins.of(printer);
         for uri in [&known.secure, &known.plain].into_iter().flatten() {
             let Some(address) = Address::parse(uri) else {
                 continue;
             };
-            match abilities(&address, uri, &self.pins) {
+            match abilities(&address, uri, &pins) {
                 Ok((found, _)) => return Ok((found, uri.clone())),
                 Err(error) if is_identity_change(&error) => return Err(error),
                 Err(error) => last = error,
@@ -355,21 +396,13 @@ impl Spool {
 
     pub fn forget(&self, printer: &str) {
         let mut inner = self.lock();
-        let forgotten = inner.printers.known.remove(printer);
+        inner.printers.known.remove(printer);
         if inner.printers.default.as_deref() == Some(printer) {
             inner.printers.default = None;
         }
         inner.printers.save();
         drop(inner);
-        for uri in forgotten
-            .iter()
-            .flat_map(|known| [&known.secure, &known.plain])
-            .flatten()
-        {
-            if let Some(address) = Address::parse(uri) {
-                self.pins.forget(&address.host);
-            }
-        }
+        self.pins.forget(printer);
         self.touched();
     }
 
@@ -390,7 +423,7 @@ impl Spool {
         }
         let (_, model) = Address::parse(&uri)
             .ok_or(Error::Malformed)
-            .and_then(|parsed| abilities(&parsed, &uri, &self.pins))?;
+            .and_then(|parsed| abilities(&parsed, &uri, &self.pins.of(&uri)))?;
         if !model.is_empty() {
             known.name.clone_from(&model);
             known.model = model;
@@ -547,15 +580,19 @@ impl Spool {
     }
 
     fn tell_failure(&self, job: &StoredJob, failure: &str) {
-        let name = tr!("Printing");
         let summary = tr!("“{title}” did not print", title = job.title.clone());
+        self.tell(&summary, failure);
+    }
+
+    fn tell(&self, summary: &str, failure: &str) {
+        let name = tr!("Printing");
         let sent = client::notify(
             &self.session,
             &Request {
                 app_name: &name,
                 replaces_id: 0,
                 app_icon: "printer-error",
-                summary: &summary,
+                summary,
                 body: failure,
                 actions: &[],
                 urgency: Urgency::Normal,
@@ -587,7 +624,7 @@ impl Spool {
             let known = self
                 .known(&job.printer)
                 .ok_or_else(|| tr!("That printer is no longer known."))?;
-            let reached = self.reach(&known);
+            let reached = self.reach(&job.printer, &known);
             let (found, uri) = match reached {
                 Ok(reached) => reached,
                 Err(error) if is_identity_change(&error) => {
@@ -620,7 +657,8 @@ impl Spool {
             self.set_state(job.id, "sending", String::new());
             let request = print_request(&uri, &job.title, &job.options, &payload);
             let is_cancelled = || cancelled.load(Ordering::Relaxed);
-            let sent = send_document(&address, &self.pins, request, &mut |out| match &payload {
+            let pins = self.pins.of(&job.printer);
+            let sent = send_document(&address, &pins, request, &mut |out| match &payload {
                 Payload::Pdf => io::copy(&mut File::open(&path)?, out).map(drop),
                 Payload::Raster(plan) => write_document(&path, plan, &is_cancelled, out),
             });
@@ -675,20 +713,21 @@ impl Spool {
     ) -> std::result::Result<(), String> {
         let mut failures = 0;
         let mut warned = false;
+        let pins = self.pins.of(&job.printer);
         self.set_state(job.id, "printing", String::new());
         loop {
             if cancelled.load(Ordering::Relaxed) {
-                if let Err(error) = cancel_job(address, uri, &self.pins, remote) {
+                if let Err(error) = cancel_job(address, uri, &pins, remote) {
                     tracing::warn!("cannot cancel on the printer: {error}");
                 }
                 return Ok(());
             }
-            match job_state(address, uri, &self.pins, remote) {
+            match job_state(address, uri, &pins, remote) {
                 Ok(RemoteState::Done) => return Ok(()),
                 Ok(RemoteState::Stopped(reason)) => return Err(reason),
                 Ok(RemoteState::Going) => {
                     failures = 0;
-                    let trouble = printer_state_reasons(address, uri, &self.pins)
+                    let trouble = printer_state_reasons(address, uri, &pins)
                         .unwrap_or_default()
                         .into_iter()
                         .find_map(|reason| {

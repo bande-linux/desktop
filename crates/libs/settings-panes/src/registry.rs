@@ -192,7 +192,7 @@ impl PaneId {
             Self::KeyboardShortcuts => tr!("Keyboard Shortcuts"),
             Self::Mouse => tr!("Mouse"),
             Self::Trackpad => tr!("Trackpad"),
-            Self::Printers => tr!("Printers & Scanners"),
+            Self::Printers => tr!("Printers"),
             Self::Sharing => tr!("Sharing"),
             Self::Power => tr!("Power"),
             Self::LockScreen => tr!("Lock Screen"),
@@ -288,7 +288,7 @@ impl PaneId {
             }
             Self::Mouse => tr!("pointer, cursor, click, scroll, wheel, buttons"),
             Self::Trackpad => tr!("touchpad, pointer, cursor, tap, click, scroll"),
-            Self::Printers => tr!("print, printer, cups, queue, scanner, ipp, airprint"),
+            Self::Printers => tr!("print, printer, cups, queue, ipp, airprint"),
             Self::Sharing => {
                 tr!("share, file sharing, samba, smb, remote login, ssh, network folder")
             }
@@ -387,6 +387,7 @@ pub enum SettingId {
     OutputVolume,
     OutputMuted,
     OutputDevice,
+    DeviceProfiles,
     InputVolume,
     InputMuted,
     InputDevice,
@@ -460,6 +461,7 @@ pub enum SettingId {
     Clock24Hour,
     LoginItems,
     ReopenApps,
+    RememberRecentFiles,
     CheckUpdatesAutomatically,
     AutomaticUpdates,
     UpdateCheckEvery,
@@ -561,6 +563,7 @@ pub enum List {
     PairedDevices,
     NearbyDevices,
     OutputDevices,
+    DeviceProfiles,
     InputDevices,
     InputLevel,
     AppVolumes,
@@ -1557,6 +1560,14 @@ fn sound_pane() -> Pane {
                         tr!("speakers, headphones, output device"),
                         List::OutputDevices,
                     ),
+                    list(
+                        SettingId::DeviceProfiles,
+                        tr!("Device profiles"),
+                        tr!(
+                            "hdmi, displayport, digital output, bluetooth, a2dp, hfp, headset, high quality, profile, sound card"
+                        ),
+                        List::DeviceProfiles,
+                    ),
                     setting(
                         SettingId::OutputBalance,
                         tr!("Balance"),
@@ -1964,6 +1975,13 @@ fn system_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::ReopenApps, tr!("Reopen windows when logging back in"), tr!("restore, resume, windows, session, log out, restart"))
                             .described(tr!("Apps that were open when you logged out or restarted open again")),
+                    ],
+                ),
+                section(
+                    Some(tr!("Recent files")),
+                    vec![
+                        switch(SettingId::RememberRecentFiles, tr!("Remember recently opened files"), tr!("recents, recently used, history, documents, privacy"))
+                            .described(tr!("Files you open are listed in Recent and in other apps")),
                     ],
                 ),
             ],

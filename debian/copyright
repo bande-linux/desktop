@@ -942,6 +942,14 @@ Files: vendor/icu_calendar_data-2.4.0/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
 
+Files: vendor/icu_collator-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_collator_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
 Files: vendor/icu_collections-2.4.0/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
@@ -2345,12 +2353,20 @@ Files: vendor/usvg-0.48.1/*
 Copyright: the usvg authors
 License: Apache-2.0 or MIT
 
+Files: vendor/utf16_iter-1.1.0/*
+Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
+License: Apache-2.0 or MIT
+
 Files: vendor/utf8-zero-0.8.1/*
 Copyright: Simon Sapin <simon.sapin@exyr.org>
  Martin Algesten <martin@algesten.se>
 License: MIT or Apache-2.0
 
 Files: vendor/utf8_iter-1.0.4/*
+Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
+License: Apache-2.0 or MIT
+
+Files: vendor/utf_types-1.0.0/*
 Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
 License: Apache-2.0 or MIT
 
@@ -2700,6 +2716,10 @@ License: Apache-2.0 with LLVM exception or Apache-2.0 or MIT
 Files: vendor/write-fonts-0.48.1/*
 Copyright: the write-fonts authors
 License: MIT or Apache-2.0
+
+Files: vendor/write16-1.0.0/*
+Copyright: the write16 authors
+License: Apache-2.0 or MIT
 
 Files: vendor/writeable-0.6.4/*
 Copyright: The ICU4X Project Developers

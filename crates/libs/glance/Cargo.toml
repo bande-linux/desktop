@@ -17,6 +17,7 @@ bande-fs.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-media-view.workspace = true
+bande-thumbnails.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 

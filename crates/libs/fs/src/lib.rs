@@ -21,9 +21,9 @@ pub use group::{
     ARCHIVES, AppGroup, DOCUMENTS, DateGroup, Group, GroupBy, KindGroup, SizeGroup, group_of,
 };
 pub use listing::{
-    Entry, Kind, Listing, Recency, Sort, SortBy, compare, format_civil_date, format_date,
-    format_list_date, format_size, is_hidden, list, list_date, list_trash, merge, natural_order,
-    same_volume, sort,
+    Entry, HIDDEN_LIST, Kind, Listing, Recency, Sort, SortBy, compare, format_civil_date,
+    format_date, format_list_date, format_size, hidden_names, is_hidden, list, list_date,
+    list_trash, merge, natural_order, same_volume, sort,
 };
 pub use naming::{
     ExtensionChange, duplicate_name, keep_both_name, typed_location, untitled_folder,
@@ -35,7 +35,10 @@ pub use ops::{
     make_alias, new_document, new_folder, rename,
 };
 pub use partial::is_partial;
-pub use permissions::{Access, Class, access, runnable, set_mode, with_access, with_runnable};
+pub use permissions::{
+    Access, Class, access, apply_to_enclosed, own_groups, runnable, set_group, set_mode,
+    with_access, with_runnable,
+};
 pub use trash::{Trash, TrashDir, TrashItem};
 pub use undo::{Action, History, Step};
 pub use watch::{FolderChanges, FolderWatch};

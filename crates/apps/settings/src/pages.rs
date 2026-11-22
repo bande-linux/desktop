@@ -18,7 +18,7 @@ use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Swatch, Swatches, Text,
     Thumbnail, Thumbnails, Tone,
 };
-use bande_audio::Direction;
+use bande_audio::{Direction, SoundCard};
 use bande_bluetooth::Kind as DeviceKind;
 use bande_config::Placement;
 use bande_config::{ACCENTS, MAX_INPUT_SOURCES};
@@ -54,6 +54,45 @@ pub(crate) fn submit(intents: &Intents, make: fn(String) -> Intent) -> impl FnMu
 
 pub(crate) fn muted_row(text: &str) -> Box<dyn Widget> {
     boxed(Row::new(Text::new(text, Tone::Muted), None))
+}
+
+const HIGH_QUALITY: &str = "a2dp-sink";
+const HEADSET: &str = "headset-head-unit";
+
+fn profile_titles(card: &SoundCard) -> Vec<String> {
+    let named: Vec<(String, &str)> = card
+        .profiles
+        .iter()
+        .map(|profile| {
+            let name = profile.name.as_str();
+            let bluetooth = |prefix: &str| {
+                name.strip_prefix(prefix)
+                    .filter(|_| card.bluetooth)
+                    .map(|codec| codec.trim_start_matches('-'))
+            };
+            if name == "off" {
+                (tr!("Off"), "")
+            } else if let Some(codec) = bluetooth(HIGH_QUALITY) {
+                (tr!("High quality (A2DP)"), codec)
+            } else if let Some(codec) = bluetooth(HEADSET) {
+                (tr!("Headset (HFP)"), codec)
+            } else if profile.description.is_empty() {
+                (profile.name.clone(), "")
+            } else {
+                (profile.description.clone(), "")
+            }
+        })
+        .collect();
+    named
+        .iter()
+        .map(|(title, codec)| {
+            let shared = named.iter().filter(|(other, _)| other == title).count() > 1;
+            match shared && !codec.is_empty() {
+                true => format!("{title} · {}", codec.to_uppercase()),
+                false => title.clone(),
+            }
+        })
+        .collect()
 }
 
 fn picture_name(name: &str) -> String {
@@ -745,6 +784,39 @@ impl SettingsView {
             .collect()
     }
 
+    fn profile_rows(&mut self) -> Widgets {
+        let Some(audio) = self.audio.clone() else {
+            return Vec::new();
+        };
+        if audio.cards.is_empty() {
+            return vec![muted_row(&tr!("No device has a choice of profiles"))];
+        }
+        audio
+            .cards
+            .into_iter()
+            .map(|card| {
+                let titles = profile_titles(&card);
+                let indexes: Vec<i32> = card.profiles.iter().map(|profile| profile.index).collect();
+                let selected = indexes
+                    .iter()
+                    .position(|index| Some(*index) == card.active)
+                    .unwrap_or(0);
+                let id = card.id;
+                let mut choose = intent(&self.intents, move |index| Intent::Profile(id, index));
+                let menu = PopUpButton::new(&card.description, &titles, selected, move |at| {
+                    if let Some(index) = indexes.get(at) {
+                        choose(*index);
+                    }
+                });
+                let row = Row::new(
+                    Text::new(&card.description, Tone::Primary),
+                    Some(boxed(menu)),
+                );
+                self.item_row(format!("card:{id}"), row)
+            })
+            .collect()
+    }
+
     fn app_rows(&mut self) -> Widgets {
         let Some(audio) = self.audio.clone() else {
             return Vec::new();
@@ -788,6 +860,7 @@ impl SettingsView {
             List::PairedDevices => self.device_rows(true),
             List::NearbyDevices => self.device_rows(false),
             List::OutputDevices => self.audio_rows(Direction::Output),
+            List::DeviceProfiles => self.profile_rows(),
             List::InputDevices => self.audio_rows(Direction::Input),
             List::AppVolumes => self.app_rows(),
             List::InputLevel => Vec::new(),

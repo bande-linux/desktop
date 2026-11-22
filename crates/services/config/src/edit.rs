@@ -18,6 +18,7 @@ pub enum Setting {
     Accent(Accent),
     TintedFrame(bool),
     ReopenApps(bool),
+    RememberRecentFiles(bool),
     CheckUpdatesAutomatically(bool),
     AutomaticUpdates(bool),
     UpdateCheckEvery(Option<Duration>),
@@ -99,6 +100,12 @@ impl Setting {
                 &mut document,
                 None,
                 "reopen-apps",
+                (!on).then_some(KdlValue::Bool(false)),
+            ),
+            Self::RememberRecentFiles(on) => set(
+                &mut document,
+                None,
+                "remember-recent-files",
                 (!on).then_some(KdlValue::Bool(false)),
             ),
             Self::ShowPreviews(shown) => set(

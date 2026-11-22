@@ -7,11 +7,9 @@ use std::time::{Duration, Instant};
 use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{Request, notify};
+use bande_taskbar_model::bus::show_badge;
 use zbus::blocking::Connection;
-use zbus::zvariant::Value;
 
-const LAUNCHER_INTERFACE: &str = "com.canonical.Unity.LauncherEntry";
-const LAUNCHER_PATH: &str = "/org/bande/Terminal";
 const BELL: &str = "bell";
 const BELL_GAP: Duration = Duration::from_millis(250);
 
@@ -90,25 +88,9 @@ fn serve(app_id: &str, receiver: &Receiver<Outgoing>) {
         Ok(connection) => connection,
         Err(error) => return tracing::warn!("cannot reach the session bus: {error}"),
     };
-    let uri = format!("application://{app_id}.desktop");
     for outgoing in receiver {
         let result = match outgoing {
-            Outgoing::Badge(count) => {
-                let properties = HashMap::from([
-                    ("count", Value::from(i64::from(count))),
-                    ("count-visible", Value::from(count > 0)),
-                    ("urgent", Value::from(count > 0)),
-                ]);
-                connection
-                    .emit_signal(
-                        None::<&str>,
-                        LAUNCHER_PATH,
-                        LAUNCHER_INTERFACE,
-                        "Update",
-                        &(uri.as_str(), properties),
-                    )
-                    .map(|_| ())
-            }
+            Outgoing::Badge(count) => show_badge(&connection, app_id, count, true),
             Outgoing::Bell => {
                 bande_sound::play(&connection, BELL);
                 Ok(())

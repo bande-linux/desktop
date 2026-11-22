@@ -3,9 +3,9 @@ use std::os::fd::BorrowedFd;
 
 use bande_inbox::{Inbox, Outbox};
 use bande_l10n::tr;
-use zbus::blocking::{Connection, MessageIterator};
+use bande_notify::client::{self, Signal};
+use zbus::blocking::Connection;
 use zbus::zvariant::Value;
-use zbus::{MatchRule, message};
 
 const APP_ID: &str = "org.bande.Clock";
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -47,33 +47,11 @@ pub struct Notices {
 }
 
 fn listen(outbox: &Outbox<Notice>) -> zbus::Result<()> {
-    let connection = Connection::session()?;
-    let rule = MatchRule::builder()
-        .msg_type(message::Type::Signal)
-        .interface(NOTIFICATIONS)?
-        .path(NOTIFICATIONS_PATH)?
-        .build();
-    for signal in MessageIterator::for_match_rule(rule, &connection, None)?.flatten() {
-        let header = signal.header();
-        let body = signal.body();
-        let notice = match header.member().map(|member| member.as_str()) {
-            Some("ActionInvoked") => body
-                .deserialize::<(u32, String)>()
-                .ok()
-                .map(|(id, key)| Notice::Invoked(id, key)),
-            Some("NotificationClosed") => body
-                .deserialize::<(u32, u32)>()
-                .ok()
-                .map(|(id, _)| Notice::Closed(id)),
-            _ => None,
-        };
-        if let Some(notice) = notice
-            && !outbox.send(notice)
-        {
-            break;
-        }
-    }
-    Ok(())
+    client::listen(&Connection::session()?, |signal| match signal {
+        Signal::ActionInvoked(id, key) => outbox.send(Notice::Invoked(id, key)),
+        Signal::Closed(id) => outbox.send(Notice::Closed(id)),
+        Signal::ActivationToken(..) => true,
+    })
 }
 
 fn show(ring: &Ring) -> zbus::Result<u32> {
@@ -150,15 +128,7 @@ impl Notices {
 
     pub fn withdraw(&self, id: u32) {
         in_background("withdraw", move || {
-            let closed = Connection::session().and_then(|connection| {
-                connection.call_method(
-                    Some(NOTIFICATIONS),
-                    NOTIFICATIONS_PATH,
-                    Some(NOTIFICATIONS),
-                    "CloseNotification",
-                    &id,
-                )
-            });
+            let closed = Connection::session().and_then(|session| client::close(&session, id));
             if let Err(error) = closed {
                 tracing::debug!("cannot withdraw a notification: {error}");
             }

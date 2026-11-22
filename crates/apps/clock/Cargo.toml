@@ -21,6 +21,7 @@ bande-app-menu.workspace = true
 bande-datetime.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
+bande-notify.workspace = true
 bande-sound.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true

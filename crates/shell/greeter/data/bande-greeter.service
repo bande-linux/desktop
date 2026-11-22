@@ -5,6 +5,8 @@ After=systemd-user-sessions.service plymouth-quit-wait.service
 After=getty@tty7.service
 Conflicts=getty@tty7.service greetd.service
 OnFailure=bande-console-fallback.service
+StartLimitBurst=5
+StartLimitIntervalSec=30
 
 [Service]
 Type=simple
@@ -15,8 +17,6 @@ TimeoutStopSec=30s
 KeyringMode=shared
 Restart=always
 RestartSec=1
-StartLimitBurst=5
-StartLimitIntervalSec=30
 
 [Install]
 Alias=display-manager.service

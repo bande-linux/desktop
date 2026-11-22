@@ -251,6 +251,9 @@ impl Widget for UserList {
     fn access(&self, _cx: &Context) -> Node {
         let mut node = Node::new(Role::ListBox);
         node.set_label(self.label.clone());
+        if self.peers.is_empty() {
+            node.set_hidden();
+        }
         node
     }
 

@@ -448,6 +448,11 @@ impl Greeter {
             }
             return;
         }
+        if self.login.is_none() {
+            self.pending = Some(answer);
+            self.converse();
+            return;
+        }
         if !self.asked || self.awaiting {
             self.pending = Some(answer);
             return;

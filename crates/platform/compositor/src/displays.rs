@@ -331,7 +331,7 @@ impl State {
         self.screens
             .push(Screen::new(&self.display_handle, config, settings));
         let screen = self.screens.len() - 1;
-        self.bring_back(&identity, screen);
+        self.bring_back(&self.identity_of(screen), screen);
         match parked {
             Some(parked) => self.remove_screen(parked),
             None => self.after_screens_changed(),
@@ -400,7 +400,7 @@ impl State {
             return;
         }
         let from = self.screen_rect(screen);
-        let identity = self.screens[screen].config.identity();
+        let identity = self.identity_of(screen);
         let shown = self.screens[screen].workspaces.active_id();
         let spaces: Vec<u64> = self.screens[screen]
             .workspaces

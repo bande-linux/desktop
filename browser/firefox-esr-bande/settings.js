@@ -152,6 +152,7 @@ pref("widget.use-xdg-desktop-portal.file-picker", 1);
 pref("widget.use-xdg-desktop-portal.mime-handler", 1);
 pref("widget.use-xdg-desktop-portal.settings", 1);
 pref("widget.use-xdg-desktop-portal.open-uri", 1);
+pref("media.webrtc.camera.allow-pipewire", true);
 pref("browser.tabs.inTitlebar", 1);
 pref("browser.compactmode.show", true);
 pref("signon.management.page.breach-alerts.enabled", false, locked);

@@ -161,7 +161,16 @@ fn serve(
                     tracing::warn!("cannot copy {}: {error}", original.display());
                     not_copied(error)
                 }
-                _ => flow::inspect(client, path, machine, deb.as_ref(), x11_accepted),
+                _ => flow::inspect(
+                    client,
+                    path,
+                    machine,
+                    deb.as_ref(),
+                    x11_accepted,
+                    &|progress| {
+                        out.send(Message::State(State::Refreshing(progress)));
+                    },
+                ),
             };
             if !out.send(Message::State(state)) {
                 break;

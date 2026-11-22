@@ -54,10 +54,13 @@ pub enum State {
     },
     Present,
     NeedsX11,
+    Refreshing(Progress),
     Ready(Preview),
     Blocked {
         missing: Vec<String>,
+        conflicts: Vec<String>,
         details: String,
+        stale: bool,
     },
     Installing(Progress),
     Installed {
@@ -143,6 +146,7 @@ pub fn inspect(
     machine: &Machine,
     deb: Option<&Deb>,
     x11_accepted: bool,
+    refreshing: &dyn Fn(Progress),
 ) -> State {
     let Some(deb) = deb else {
         return State::Invalid;
@@ -156,10 +160,11 @@ pub fn inspect(
     if deb.needs_x11 && !x11_accepted {
         return State::NeedsX11;
     }
-    preview(client, path, deb)
+    let fresh = refresh_old_lists(client, refreshing);
+    preview(client, path, deb, fresh)
 }
 
-pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
+fn preview(client: &Client, path: &Path, deb: &Deb, fresh: bool) -> State {
     let present = match installed(client, deb) {
         Ok(present) => present,
         Err(error) => return failed(&error, Problem::Install),
@@ -184,8 +189,10 @@ pub fn preview(client: &Client, path: &Path, deb: &Deb) -> State {
             removes: others(&applied, &deb.name, &[Info::Removing, Info::Obsoleting]),
         }),
         Err(Error::Failed(failure)) if failure.code == ErrorCode::Dependencies => State::Blocked {
-            missing: deb::missing_requirements(&failure.details),
+            missing: deb::relations(&failure.details, &deb::REQUIRES),
+            conflicts: deb::relations(&failure.details, &deb::CONFLICTS),
             details: failure.details,
+            stale: !fresh,
         },
         Err(error) => failed(&error, Problem::Install),
     }
@@ -248,15 +255,19 @@ fn signed(client: &Client, deb: &Deb) -> Option<Signed> {
         })
 }
 
-fn refresh_old_lists(client: &Client) {
+fn refresh_old_lists(client: &Client, refreshing: &dyn Fn(Progress)) -> bool {
     match client.seconds_since_refresh() {
-        Ok(age) if age < FRESH_LISTS => {}
-        Ok(_) => {
-            if let Err(error) = client.refresh(false) {
-                tracing::warn!("cannot refresh the package lists: {error}");
-            }
-        }
+        Ok(age) if age < FRESH_LISTS => return true,
+        Ok(_) => {}
         Err(error) => tracing::warn!("cannot read when the package lists were refreshed: {error}"),
+    }
+    refreshing(Progress::default());
+    match client.refresh(false, refreshing) {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::warn!("cannot refresh the package lists: {error}");
+            false
+        }
     }
 }
 
@@ -268,10 +279,7 @@ pub fn install(
 ) -> Outcome {
     let applied = match signed {
         Some(id) => client.install(&[id.to_owned()], Mode::Apply, progress),
-        None => {
-            refresh_old_lists(client);
-            client.install_files(path, Mode::Apply, progress)
-        }
+        None => client.install_files(path, Mode::Apply, progress),
     };
     match applied {
         Ok(applied) => {

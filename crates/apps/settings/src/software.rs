@@ -223,7 +223,7 @@ pub fn check(client: &Client, refresh: Refresh) -> SoftwareState {
         if refresh == Refresh::Always
             || (may_fetch && client.seconds_since_refresh()? >= FRESH_SECONDS)
         {
-            client.refresh(false)?;
+            client.refresh(false, &|_| {})?;
             refresh_flatpak_catalogue();
         }
         let found = client.updates()?;

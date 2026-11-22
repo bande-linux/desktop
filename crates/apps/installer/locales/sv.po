@@ -109,6 +109,15 @@ msgstr "Installera från programvarukällor"
 msgid "Enter an administrator’s password in the dialog to continue, or cancel it to stop."
 msgstr "Ange en administratörs lösenord i dialogrutan för att fortsätta, eller avbryt den för att stoppa."
 
+msgid "Updating the list of available packages…"
+msgstr "Uppdaterar listan över tillgängliga paket…"
+
+msgid "Skip"
+msgstr "Hoppa över"
+
+msgid "This makes sure that the packages it needs can be found and downloaded."
+msgstr "Det ser till att paketen som behövs kan hittas och hämtas."
+
 msgid "Close"
 msgstr "Stäng"
 
@@ -145,6 +154,14 @@ msgstr "Leta efter en version som stöder Wayland, eller be utvecklaren om en."
 msgid "Install Anyway…"
 msgstr "Installera ändå…"
 
+msgid "Can’t install: it conflicts with a package on this computer: {names}"
+msgid_plural "Can’t install: it conflicts with packages on this computer: {names}"
+msgstr[0] "Det går inte att installera: det krockar med ett paket på den här datorn: {names}"
+msgstr[1] "Det går inte att installera: det krockar med paket på den här datorn: {names}"
+
+msgid "Remove the conflicting software first, or look for a version of “{name}” that works with it."
+msgstr "Ta bort programvaran som krockar först, eller leta efter en version av ”{name}” som fungerar med den."
+
 msgid "Can’t install: this package was made for another release of Debian or Ubuntu."
 msgstr "Det går inte att installera: paketet är gjort för en annan version av Debian eller Ubuntu."
 
@@ -155,6 +172,12 @@ msgstr[1] "Den här datorn har inte paketen som behövs: {names}"
 
 msgid "Look for a download made for this system, or ask its developer for one."
 msgstr "Leta efter en nedladdning gjord för det här systemet, eller be utvecklaren om en."
+
+msgid "The list of available packages wasn’t updated, so it may be out of date. Check your internet connection, then try again to update it."
+msgstr "Listan över tillgängliga paket uppdaterades inte, så den kan vara inaktuell. Kontrollera internetanslutningen och försök sedan igen för att uppdatera den."
+
+msgid "Try Again"
+msgstr "Försök igen"
 
 msgid "“{name}” is installed."
 msgstr "”{name}” är installerat."
@@ -208,9 +231,6 @@ msgstr "Det gick inte att installera paketet. Försök igen, eller öppna Detalj
 
 msgid "The package couldn’t be removed. Try again, or open Details to see what went wrong."
 msgstr "Det gick inte att ta bort paketet. Försök igen, eller öppna Detaljer för att se vad som gick fel."
-
-msgid "Try Again"
-msgstr "Försök igen"
 
 msgid "Nothing was changed, because no administrator’s password was given. If no password window appeared, log out and back in, then try again."
 msgstr "Ingenting har ändrats eftersom inget administratörslösenord angavs. Om inget lösenordsfönster visades, logga ut och in igen och försök sedan på nytt."

@@ -125,19 +125,22 @@ pub fn compare(version: &str, other: &str) -> Ordering {
     }
 }
 
-pub fn missing_requirements(details: &str) -> Vec<String> {
-    let mut missing: Vec<String> = details
+pub const REQUIRES: [&str; 2] = ["Pre-Depends:", "Depends:"];
+pub const CONFLICTS: [&str; 2] = ["Breaks:", "Conflicts:"];
+
+pub fn relations(details: &str, fields: &[&str]) -> Vec<String> {
+    let mut named: Vec<String> = details
         .lines()
         .filter_map(|line| {
-            let (_, after) = line.split_once("Depends:")?;
+            let (_, after) = fields.iter().find_map(|field| line.split_once(field))?;
             let (requirement, reason) = after.split_once(" but ").unwrap_or((after, ""));
             let requirement = requirement.trim();
             (!requirement.is_empty() && !reason.starts_with("it is not going to be installed"))
                 .then(|| requirement.to_owned())
         })
         .collect();
-    missing.dedup();
-    missing
+    named.dedup();
+    named
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -452,6 +452,30 @@ impl Installer {
         widgets
     }
 
+    fn refreshing(&self, progress: &Progress) -> Widgets {
+        let status = match progress.status {
+            Status::Waiting => status_line(Status::Waiting),
+            _ => tr!("Updating the list of available packages…"),
+        };
+        let fraction = match progress.status {
+            Status::Authorizing | Status::Waiting => None,
+            _ => progress.percent.map(|percent| percent as f32 / 100.0),
+        };
+        let mut skip = self.button(&tr!("Skip"), Intent::Cancel);
+        skip.set_enabled(progress.allow_cancel);
+        vec![
+            boxed(Label::new(&status)),
+            boxed(ProgressBar::new(&status, fraction)),
+            boxed(
+                Label::new(&tr!(
+                    "This makes sure that the packages it needs can be found and downloaded."
+                ))
+                .secondary(),
+            ),
+            row(vec![boxed(skip)]),
+        ]
+    }
+
     fn body(&self) -> Widgets {
         let close = || boxed(self.button(&tr!("Close"), Intent::Close));
         let done = || boxed(self.button(&tr!("Done"), Intent::Close).primary());
@@ -510,25 +534,56 @@ impl Installer {
                 ]),
             ],
             State::Ready(preview) => self.preview(preview),
-            State::Blocked { missing, details } => {
-                let mut widgets = vec![boxed(Label::new(&tr!(
-                    "Can’t install: this package was made for another release of Debian or Ubuntu."
-                )))];
-                if !missing.is_empty() {
+            State::Blocked {
+                missing,
+                conflicts,
+                details,
+                stale,
+            } => {
+                let mut widgets = Vec::new();
+                if missing.is_empty() && !conflicts.is_empty() {
                     widgets.push(boxed(Label::new(&trn!(
-                        "This computer doesn’t have the package it needs: {names}",
-                        "This computer doesn’t have the packages it needs: {names}",
-                        count = missing.len(),
-                        names = missing.join(", ")
+                        "Can’t install: it conflicts with a package on this computer: {names}",
+                        "Can’t install: it conflicts with packages on this computer: {names}",
+                        count = conflicts.len(),
+                        names = conflicts.join(", ")
+                    ))));
+                    widgets.push(boxed(Label::new(&tr!(
+                        "Remove the conflicting software first, or look for a version of “{name}” that works with it.",
+                        name = name
+                    ))));
+                } else {
+                    widgets.push(boxed(Label::new(&tr!(
+                        "Can’t install: this package was made for another release of Debian or Ubuntu."
+                    ))));
+                    if !missing.is_empty() {
+                        widgets.push(boxed(Label::new(&trn!(
+                            "This computer doesn’t have the package it needs: {names}",
+                            "This computer doesn’t have the packages it needs: {names}",
+                            count = missing.len(),
+                            names = missing.join(", ")
+                        ))));
+                    }
+                    widgets.push(boxed(Label::new(&tr!(
+                        "Look for a download made for this system, or ask its developer for one."
                     ))));
                 }
-                widgets.push(boxed(Label::new(&tr!(
-                    "Look for a download made for this system, or ask its developer for one."
-                ))));
+                if *stale {
+                    widgets.push(boxed(Label::new(&tr!(
+                        "The list of available packages wasn’t updated, so it may be out of date. Check your internet connection, then try again to update it."
+                    ))));
+                }
                 widgets.push(disclosure(&tr!("Details"), details));
-                widgets.push(row(vec![close()]));
+                let mut buttons = vec![close()];
+                if *stale {
+                    buttons.push(boxed(
+                        self.button(&tr!("Try Again"), Intent::Retry).primary(),
+                    ));
+                }
+                widgets.push(row(buttons));
                 widgets
             }
+            State::Refreshing(progress) => self.refreshing(progress),
             State::Installing(progress) | State::Removing(progress) => self.working(progress),
             State::Installed { apps, restart } => {
                 let mut widgets = vec![boxed(Label::new(&tr!(

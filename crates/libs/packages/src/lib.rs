@@ -418,8 +418,8 @@ impl Client {
         }
     }
 
-    pub fn refresh(&self, force: bool) -> Result<(), Error> {
-        self.run("RefreshCache", &(force,), &|_| {}).map(drop)
+    pub fn refresh(&self, force: bool, progress: &dyn Fn(Progress)) -> Result<(), Error> {
+        self.run("RefreshCache", &(force,), progress).map(drop)
     }
 
     pub fn seconds_since_refresh(&self) -> Result<u32, Error> {

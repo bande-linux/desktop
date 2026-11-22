@@ -464,7 +464,8 @@ what the one before could not save:
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon, at most once every 10 s; the session and its apps stay, and notifications live in
   `bande-notify`. A hung shell shows in Force Quit as "Taskbar & Desktop (Not Responding)" with
-  Relaunch. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
+  Relaunch; at 2 s without an answer its keyboard-exclusive surfaces lose the keyboard, and at
+  5 s the compositor kills it through its pidfd (after `SIGQUIT`) for the supervisor to restart. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
   while locked is killed and restarted.
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without

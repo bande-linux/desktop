@@ -174,7 +174,7 @@ fn window_scene(content: Vec<Item>, palette: &Palette) -> Scene {
     }
 }
 
-fn relaunch_shell(client: &Client, unresponsive: bool) {
+pub(crate) fn relaunch_shell(client: &Client, unresponsive: bool) {
     let Some(process) = client
         .get_data::<ClientState>()
         .and_then(|state| state.process.get())

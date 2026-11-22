@@ -7,7 +7,7 @@ use bande_l10n::{text, tr, trn};
 use bande_packages::Client;
 use bande_printers::{
     Cups, Job, JobInfo, JobState, Kind, Mechanism, PrintClient, Printer, PrinterInfo, PrinterState,
-    SPOOLER, mechanism_available,
+    SPOOLER, ScanOptions, ScannerInfo, mechanism_available,
 };
 use bande_settings_panes::PaneId;
 use bande_toolkit::Spacing;
@@ -20,12 +20,14 @@ use crate::follow::{Update, Updates, spawn};
 use crate::forget::Forget;
 use crate::general::info_row;
 use crate::pages::{Widgets, boxed, muted_row};
+use crate::scan::{self, Format, Page};
 use crate::services::{SETTLE, signals};
 use crate::users::{accounts, members_of};
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Text, Tone};
 
 pub(crate) const PRINTER_SYMBOL: &str = "printer-symbolic";
+const SCANNER_SYMBOL: &str = "scanner-symbolic";
 const CUPS_PREFIX: &str = "cups:";
 const PRINTER_ADMINS: &str = "lpadmin";
 const PRINTING_PACKAGES: [&str; 3] = ["cups", "cups-pk-helper", "ipp-usb"];
@@ -36,6 +38,7 @@ pub struct PrintersState {
     pub needs_avahi: bool,
     pub may_change: bool,
     pub printers: Vec<PrinterInfo>,
+    pub scanners: Vec<ScannerInfo>,
     pub jobs: Vec<JobInfo>,
     pub queues: Vec<Printer>,
     pub queue_jobs: Vec<Job>,
@@ -51,6 +54,9 @@ pub enum PrinterCommand {
     Cancel(u32),
     AddAddress(String),
     InstallPrinting(Support),
+    ScanCapabilities(String),
+    Scan(String, ScanOptions),
+    SaveScan(Vec<Page>, Format),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,20 +76,27 @@ impl Support {
 
 fn read(session: &Connection, cups: &Cups, system: &Connection) -> Option<PrintersState> {
     let client = PrintClient::new(session).ok()?;
-    let (printers, jobs, needs_avahi) =
-        match (client.printers(), client.jobs(), client.needs_avahi()) {
-            (Ok(printers), Ok(jobs), Ok(needs_avahi)) => (printers, jobs, needs_avahi),
-            (Err(error), ..) | (_, Err(error), _) | (.., Err(error)) => {
-                tracing::warn!("cannot reach the print service: {error}");
-                return None;
-            }
-        };
+    let (printers, scanners, jobs, needs_avahi) = match (
+        client.printers(),
+        client.scanners(),
+        client.jobs(),
+        client.needs_avahi(),
+    ) {
+        (Ok(printers), Ok(scanners), Ok(jobs), Ok(needs_avahi)) => {
+            (printers, scanners, jobs, needs_avahi)
+        }
+        (Err(error), ..) | (_, Err(error), ..) | (_, _, Err(error), _) | (.., Err(error)) => {
+            tracing::warn!("cannot reach the print service: {error}");
+            return None;
+        }
+    };
     let cups_installed = cups.installed();
     Some(PrintersState {
         cups_installed,
         needs_avahi,
         may_change: administers_printers() || mechanism_available(system),
         printers,
+        scanners,
         jobs,
         queues: match cups_installed {
             true => cups.printers().unwrap_or_default(),
@@ -256,6 +269,27 @@ pub fn follow_printers(
                         }
                     })
                 }
+                PrinterCommand::ScanCapabilities(scanner) => {
+                    let (session, updates) = (commands_session.clone(), updates.clone());
+                    spawn("scan-capabilities", move || {
+                        updates.send(scan::capabilities(&session, &scanner));
+                    });
+                    Ok(())
+                }
+                PrinterCommand::Scan(scanner, options) => {
+                    let (session, updates) = (commands_session.clone(), updates.clone());
+                    spawn("scan", move || {
+                        updates.send(scan::scan(&session, &scanner, &options));
+                    });
+                    Ok(())
+                }
+                PrinterCommand::SaveScan(pages, format) => {
+                    let (session, updates) = (commands_session.clone(), updates.clone());
+                    spawn("save-scan", move || {
+                        updates.send(scan::save(&session, &pages, format));
+                    });
+                    Ok(())
+                }
                 PrinterCommand::AddAddress(address) => {
                     let added = service(&|client| client.add_address(&address).map(drop));
                     updates.send(Update::PrinterAdded(added.is_ok()));
@@ -364,7 +398,18 @@ impl SettingsView {
         if state.needs_avahi {
             rows.push(self.install_avahi_row());
         }
-        if state.printers.is_empty() {
+        let scanners_only: Vec<ScannerInfo> = state
+            .scanners
+            .iter()
+            .filter(|scanner| {
+                !state
+                    .printers
+                    .iter()
+                    .any(|printer| printer.id == scanner.id)
+            })
+            .cloned()
+            .collect();
+        if state.printers.is_empty() && scanners_only.is_empty() {
             if rows.is_empty() {
                 rows.push(muted_row(&tr!(
                     "No printers on this network yet. They appear here as soon as they are found."
@@ -387,6 +432,20 @@ impl SettingsView {
             .detail(Text::new(&text, Tone::Muted).caption())
             .on_activate(move || open(id.clone()));
             rows.push(self.item_row(format!("printer:{}", printer.id), row));
+        }
+        for scanner in scanners_only {
+            let mut open = intent(&self.intents, Intent::OpenPrinter);
+            let id = scanner.id.clone();
+            let row = Row::new(
+                Text::new(&scanner.name, Tone::Primary),
+                Some(boxed(Label::new("›"))),
+            )
+            .detail(Text::new(&tr!("Scanner"), Tone::Muted).caption())
+            .on_activate(move || open(id.clone()));
+            rows.push(self.item_row(format!("printer:{}", scanner.id), row));
+        }
+        if state.printers.is_empty() {
+            return rows;
         }
         let titles: Vec<String> = state
             .printers
@@ -471,7 +530,10 @@ impl SettingsView {
             .push((Anchor::Item("printers-avahi".to_owned()), button.id()));
         boxed(
             Row::new(
-                Text::new(&tr!("Finding printers nearby needs Avahi"), Tone::Primary),
+                Text::new(
+                    &tr!("Finding printers and scanners nearby needs Avahi"),
+                    Tone::Primary,
+                ),
                 Some(boxed(button)),
             )
             .detail(Text::new(&detail, Tone::Muted).caption()),
@@ -511,16 +573,45 @@ impl SettingsView {
         )
     }
 
+    fn scanner_page(&mut self, state: &PrintersState, id: &str) -> Option<Widgets> {
+        let scanner = state.scanners.iter().find(|scanner| scanner.id == id)?;
+        let mut page: Widgets = self.back_button(PaneId::Printers).into_iter().collect();
+        let ink = self.palette().ink;
+        let symbol = self.symbol(SCANNER_SYMBOL, HEADER_SYMBOL, ink);
+        page.push(boxed(Header::new(
+            symbol,
+            Text::new(&scanner.name, Tone::Primary).role(TextRole::Title),
+            &tr!("Scanner"),
+            None,
+        )));
+        let about: Widgets = [
+            (text!("Kind"), &scanner.model),
+            (text!("Location"), &scanner.location),
+        ]
+        .into_iter()
+        .filter(|(_, value)| !value.is_empty())
+        .map(|(label, value)| info_row(&label.tr(), value))
+        .collect();
+        if !about.is_empty() {
+            page.push(boxed(Card::new(about)));
+        }
+        page.extend(self.scan_rows(id));
+        Some(page)
+    }
+
     pub(crate) fn printer_page(&mut self) -> Option<Widgets> {
         let Some(Detail::Printer(id)) = self.detail.clone() else {
             return None;
         };
         let state = self.printers.clone()?;
-        let printer = state
+        let Some(printer) = state
             .printers
             .iter()
-            .find(|printer| printer.id == id)?
-            .clone();
+            .find(|printer| printer.id == id)
+            .cloned()
+        else {
+            return self.scanner_page(&state, &id);
+        };
         let queue = self.queue_of(&printer);
         let mut page: Widgets = self.back_button(PaneId::Printers).into_iter().collect();
         let ink = self.palette().ink;
@@ -547,6 +638,7 @@ impl SettingsView {
         if !about.is_empty() {
             page.push(boxed(Card::new(about)));
         }
+        page.extend(self.scan_rows(&id));
         page.push(boxed(Caption::new(Text::label(&tr!("Print Queue")))));
         let mut rows = Vec::new();
         for job in state.jobs.iter().filter(|job| job.printer == id) {

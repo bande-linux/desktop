@@ -48,6 +48,12 @@ msgstr "None (show colours as sent)"
 msgid "Documents waiting for it are canceled. You can add it again later."
 msgstr "Documents waiting for it are cancelled. You can add it again later."
 
+msgid "Color"
+msgstr "Colour"
+
+msgid "Grayscale"
+msgstr "Greyscale"
+
 msgid "The update was canceled."
 msgstr "The update was cancelled."
 

@@ -236,7 +236,7 @@ impl PaneId {
             Self::KeyboardShortcuts => tr!("The keys that work everywhere on the desktop"),
             Self::Mouse => tr!("Buttons, scrolling and tracking speed"),
             Self::Trackpad => tr!("Tapping, clicking, scrolling, tracking speed and gestures"),
-            Self::Printers => tr!("Add printers, pick the default and see what is printing"),
+            Self::Printers => tr!("Add printers, pick the default, see what is printing and scan"),
             Self::Sharing => {
                 tr!("Share folders and the screen with other computers and allow remote login")
             }
@@ -290,7 +290,9 @@ impl PaneId {
             }
             Self::Mouse => tr!("pointer, cursor, click, scroll, wheel, buttons"),
             Self::Trackpad => tr!("touchpad, pointer, cursor, tap, click, scroll"),
-            Self::Printers => tr!("print, printer, cups, queue, ipp, airprint"),
+            Self::Printers => {
+                tr!("print, printer, cups, queue, ipp, airprint, scan, scanner, escl")
+            }
             Self::Sharing => {
                 tr!(
                     "share, file sharing, samba, smb, remote login, ssh, network folder, screen sharing, vnc, remote desktop"

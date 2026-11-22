@@ -44,6 +44,7 @@ use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
 use crate::proxies::{ProxySettings, read_proxy, write_proxy};
+use crate::scan::ScanUpdate;
 use crate::security_status::{SecurityStatus, follow_security_status};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
@@ -112,6 +113,7 @@ pub enum Update {
     Sharing(SharingState),
     BootScreen(BootScreenState),
     PrinterAdded(bool),
+    Scan(ScanUpdate),
     PrintingInstalled,
     InstallingVpnPlugin(bool),
     Accounts(Vec<Account>, bool),

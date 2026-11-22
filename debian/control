@@ -432,12 +432,12 @@ Depends: ${shlibs:Depends},
  default-dbus-session-bus | dbus-session-bus,
  ${misc:Depends}
 Suggests: avahi-daemon
-Description: Bande print service: prints to network printers without CUPS
+Description: Bande print service: prints to and scans from network devices without CUPS
  Serves org.bande.Print on the session bus: finds IPP Everywhere
- (driverless) printers on the network through Avahi, keeps a
- queue of documents for each user and sends them over IPP, with CUPS
- queues too where CUPS is installed. It starts when asked and exits when
- nothing is left to do.
+ (driverless) printers and eSCL scanners on the network through Avahi,
+ keeps a queue of documents for each user and sends them over IPP, with
+ CUPS queues too where CUPS is installed, and scans pages over eSCL. It
+ starts when asked and exits when nothing is left to do.
 
 Package: bande-reporter
 Architecture: any
@@ -874,6 +874,7 @@ Recommends: accountsservice,
  pipewire,
  wireplumber,
  bande-notify (= ${binary:Version}),
+ fwupd,
  packagekit,
  power-profiles-daemon,
  upower,
@@ -884,8 +885,8 @@ Description: Bande Settings: panes for the desktop and its devices with ranked s
  network), Desktop (appearance and wallpaper, the bar, notifications per
  app, accessibility), Devices (displays, sound, keyboard, trackpad and
  mouse) and System (power, users and groups, apps that open at login,
- language and time, about this computer with storage and software
- update), with a search field that ranks the matching settings and marks
+ language and time, about this computer with storage, software and
+ firmware updates), with a search field that ranks the matching settings and marks
  them. Every pane follows changes made elsewhere while it is open.
  Desktop settings go through org.bande.Config, which writes config.kdl. A
  polkit rule lets administrators (members of sudo) change the time zone,

@@ -1,7 +1,5 @@
-use std::fs;
 use std::io;
 use std::os::fd::OwnedFd;
-use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::thread;
 use std::time::Duration;
@@ -124,13 +122,6 @@ fn keep_priority_from_new_threads() -> io::Result<()> {
     }
 }
 
-const LOGIND_CONFIG_FOLDERS: [&str; 4] = [
-    "/etc/systemd",
-    "/run/systemd",
-    "/usr/local/lib/systemd",
-    "/usr/lib/systemd",
-];
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionRequest {
     Lock,
@@ -201,42 +192,8 @@ pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result
     Ok(())
 }
 
-fn logind_files(folder: &Path) -> Vec<PathBuf> {
-    let mut files = vec![folder.join("logind.conf")];
-    match fs::read_dir(folder.join("logind.conf.d")) {
-        Ok(entries) => files.extend(
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| {
-                    path.extension()
-                        .is_some_and(|extension| extension == "conf")
-                }),
-        ),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => tracing::warn!("cannot read {}/logind.conf.d: {error}", folder.display()),
-    }
-    files
-}
-
-fn power_key_configured() -> bool {
-    LOGIND_CONFIG_FOLDERS
-        .iter()
-        .flat_map(|folder| logind_files(Path::new(folder)))
-        .any(|file| match fs::read_to_string(&file) {
-            Ok(text) => text
-                .lines()
-                .any(|line| line.trim_start().starts_with("HandlePowerKey=")),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
-            Err(error) => {
-                tracing::warn!("cannot read {}: {error}", file.display());
-                false
-            }
-        })
-}
-
 pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus::Result<bool> {
-    if power_key_configured() {
+    if bande_bus::logind::logind_sets("HandlePowerKey=") {
         return Ok(false);
     }
     let manager = ManagerProxyBlocking::new(connection)?;

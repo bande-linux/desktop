@@ -137,6 +137,9 @@ pub enum Class {
     Boot,
     Offline,
     Flatpak,
+    Firmware {
+        at_restart: bool,
+    },
 }
 
 impl Class {

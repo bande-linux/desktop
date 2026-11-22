@@ -35,6 +35,7 @@ mod printers;
 mod privacy;
 mod privilege;
 mod proxies;
+mod scan;
 mod security_status;
 mod services;
 mod sharing;
@@ -59,7 +60,9 @@ pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;
 pub use follow::{Command, Feed, Services, Update, Updates, feed, follow_config, worker};
-pub use locale::{AvailableLocale, LocaleCommand, LocaleState, supported_locales};
+pub use locale::{
+    AvailableLocale, LocaleCommand, LocaleState, announce_translations, supported_locales,
+};
 pub use login::{App, LoginCommand, LoginItems, login_items, login_matches};
 pub use night::{clock_text, night_summary};
 pub use notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
@@ -73,8 +76,8 @@ pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };
 pub use software::{
-    Need, Package, Reboot, Refresh, SoftwareCommand, SoftwareState, UpdateNotice, announce_updates,
-    check, follow_software, open_updates, update,
+    Need, Notice, Package, Reboot, Refresh, SoftwareCommand, SoftwareState, UPDATE_NOTICE,
+    announce_updates, check, follow_software, open_updates, update,
 };
 pub use state::{Answer, BluetoothState, Display, Joined, Mode, NetworkState, Question, WifiState};
 pub use storage::{Category, Storage, StorageCommand, Tally, categorize, tally};

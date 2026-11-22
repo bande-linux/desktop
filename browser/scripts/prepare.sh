@@ -80,13 +80,13 @@ rm -f debian/google.key debian/mls.key debian/browser.desktop.in debian/browser-
     debian/browser.preinst.in debian/browser.postrm.in debian/firefox.in
 sed -i 's/^stamps\/dh_install:: debian\/noinstall debian\/$($(PRODUCT))-symbolic.svg/stamps\/dh_install:: debian\/noinstall/' debian/rules
 cat "$repo/firefox-esr-bande/settings.js" "$repo/prefs/bande.js" > debian/00-bande.js
-while IFS=: read -r window name name_sv; do
-    printf '[Desktop Entry]\nType=Application\nName=%s\nName[sv]=%s\nIcon=org.bande.Browser\nExec=bande-browser\nNoDisplay=true\n' \
-        "$name" "$name_sv" > "debian/org.bande.Browser.$window.desktop"
+while IFS=: read -r window name name_sv name_de; do
+    printf '[Desktop Entry]\nType=Application\nName=%s\nName[de]=%s\nName[sv]=%s\nIcon=org.bande.Browser\nExec=bande-browser\nNoDisplay=true\n' \
+        "$name" "$name_de" "$name_sv" > "debian/org.bande.Browser.$window.desktop"
     cp "$repo/branding/org.bande.Browser.svg" "debian/org.bande.Browser.$window.svg"
 done <<'WINDOWS'
-PictureInPicture:Picture-in-Picture:Bild-i-bild
-Sharing:Sharing Indicator:Delningsindikator
+PictureInPicture:Picture-in-Picture:Bild-i-bild:Bild-im-Bild
+Sharing:Sharing Indicator:Delningsindikator:Freigabe-Anzeige
 WINDOWS
 cp "$repo/branding/org.bande.Browser.desktop" "$repo/branding/org.bande.Browser.metainfo.xml" "$repo/branding/org.bande.Browser.svg" debian/
 sed -i "s|^</component>|  <releases>\n    <release version=\"$version\" date=\"$(date -d "$released" +%F)\"/>\n  </releases>\n</component>|" \
@@ -131,8 +131,9 @@ cp "$repo"/theme/pages/* browser/base/content/
 cp "$repo/l10n/en-US/bande.ftl" browser/locales/en-US/browser/
 for lang in $(cat "$repo/l10n/languages"); do
     [ ! -f "$repo/l10n/$lang/bande.ftl" ] || cp "$repo/l10n/$lang/bande.ftl" "l10n-$lang/browser/browser/"
-    [ ! -f "$repo/l10n/$lang/browserContext.ftl" ] ||
-        cat "$repo/l10n/$lang/browserContext.ftl" >> "l10n-$lang/browser/browser/browserContext.ftl"
+    (cd "$repo/l10n/$lang" && find . -name '*.ftl' -not -name bande.ftl) | while read -r ftl; do
+        cat "$repo/l10n/$lang/$ftl" >> "l10n-$lang/browser/browser/$ftl"
+    done
 done
 cat "$repo/theme/preferences.css" >> browser/themes/shared/preferences/preferences.css
 

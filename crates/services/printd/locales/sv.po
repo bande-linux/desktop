@@ -7,6 +7,27 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "The scanner can’t be reached. Check that it is turned on and on this network."
+msgstr "Det går inte att nå skannern. Kontrollera att den är påslagen och på det här nätverket."
+
+msgid "The scanner's identity has changed, so nothing was scanned. If it was replaced or reset, remove it in Settings ▸ Printers and try again."
+msgstr "Skannerns identitet har ändrats, så inget skannades. Om den har bytts ut eller återställts tar du bort den i Inställningar ▸ Skrivare och försöker igen."
+
+msgid "The scanner is busy. Try again in a moment."
+msgstr "Skannern är upptagen. Försök igen om en stund."
+
+msgid "Put the pages in the document feeder and try again."
+msgstr "Lägg sidorna i dokumentmataren och försök igen."
+
+msgid "The scanner can’t scan this way."
+msgstr "Skannern kan inte skanna på det här sättet."
+
+msgid "The scanner sent something that can’t be read."
+msgstr "Skannern skickade något som inte går att läsa."
+
+msgid "The scanner refused to scan (error {status})."
+msgstr "Skannern vägrade skanna (fel {status})."
+
 msgid "The printer is out of paper."
 msgstr "Skrivaren har slut på papper."
 

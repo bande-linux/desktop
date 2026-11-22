@@ -82,15 +82,3 @@ Last-Update: 2026-11-08
  settings-translations-offer-to-translate-label =
      .label = Offer full page translation
  
---- firefox-esr-153.6.0esr.orig/l10n-sv-SE/browser/browser/preferences/preferences.ftl
-+++ firefox-esr-153.6.0esr/l10n-sv-SE/browser/browser/preferences/preferences.ftl
-@@ -401,6 +401,9 @@ settings-translations-header =
-     .aria-label = Översättningar
-     .description = Översätt sidor eller markerad text. För att skydda din integritet sparas översättningarna på din enhet.
-     .label = Översättningar
-+bande-translations-enable =
-+    .label = Slå på översättning
-+    .description = Översättningen sker på den här datorn. När du slår på den hämtas språkmodellerna du använder från Mozilla. Innan dess hämtas ingenting.
- settings-translations-offer-to-translate-label =
-     .label = Erbjud helsidesöversättning
- settings-translations-more-settings-button =

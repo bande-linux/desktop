@@ -25,9 +25,9 @@ impl Remembered {
             SoftwareState::UpToDate => Self::UpToDate,
             SoftwareState::Available(packages) if packages.is_empty() => Self::UpToDate,
             SoftwareState::Available(packages) => Self::Available(packages.len()),
-            SoftwareState::Prepared(_)
+            SoftwareState::Prepared { .. }
             | SoftwareState::Installed {
-                reboot: Some(Reboot::Install(_)),
+                reboot: Some(Reboot::Install { .. }),
                 ..
             } => Self::RestartToUpdate,
             SoftwareState::Installed { .. } => Self::UpToDate,

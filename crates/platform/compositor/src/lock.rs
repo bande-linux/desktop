@@ -145,6 +145,7 @@ impl State {
         if !focused_lock && self.lock_surface() == Some(surface) {
             self.set_keyboard_focus(Some(surface.clone()));
         }
+        self.settle_lock();
         true
     }
 
@@ -200,23 +201,36 @@ impl State {
             .map(|screen| screen.name())
             .filter(|name| self.powered(name))
             .collect();
-        if names.is_empty() {
-            return;
-        }
+        let dark_and_covered = names.is_empty() && self.lock_covers_dark_screens();
         let Some(lock) = &mut self.lock else {
             return;
         };
-        if !names.iter().all(|name| lock.presented.contains(name)) {
+        if names.is_empty() && !dark_and_covered
+            || !names.iter().all(|name| lock.presented.contains(name))
+        {
             return;
         }
         lock.latched.clear();
         lock.presented.clear();
-        if let Some(confirmation) = lock.confirmation.take() {
+        let confirmation = lock.confirmation.take();
+        let confirmed = confirmation.is_some();
+        if let Some(confirmation) = confirmation {
             confirmation.lock();
-        } else if !lock.reported {
+        }
+        if (dark_and_covered || !confirmed) && !lock.reported {
             lock.reported = true;
             self.report_lock_state(true);
         }
+    }
+
+    fn lock_covers_dark_screens(&self) -> bool {
+        self.lock_shown()
+            && (0..self.screens.len())
+                .filter(|screen| !self.screens[*screen].parked)
+                .all(|screen| {
+                    self.lock_surface_on(screen)
+                        .is_some_and(|surface| mapped_size(surface).is_some())
+                })
     }
 
     fn report_lock_state(&self, locked: bool) {

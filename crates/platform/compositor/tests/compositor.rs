@@ -151,6 +151,24 @@ fn super_l_on_the_lock_screen_locks_again_instead_of_waking_it() {
 }
 
 #[test]
+fn a_lock_behind_dark_displays_is_ready_once_its_surface_is_drawn() {
+    let (mut server, mut editor) = focused_app();
+    let (reports, reported) = std::sync::mpsc::channel();
+    server.report_session(reports);
+    let mut power = TestClient::connect(&mut server);
+    power.turn_the_display_off(&mut server);
+
+    let mut lock = locked(&mut server);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor, &mut power]);
+
+    assert!(
+        reported
+            .try_iter()
+            .any(|report| report == SessionReport::Locked(true))
+    );
+}
+
+#[test]
 fn a_consented_input_method_sees_keys_only_in_a_text_field_that_is_no_password() {
     let (mut server, mut editor) = focused_app();
     let _consent = grant_consent(&mut server, "read-keys sandboxed org.example.Ime\n");

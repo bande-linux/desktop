@@ -12,6 +12,8 @@ use crate::failure::failed;
 use crate::follow::{Update, Updates, spawn};
 use crate::services::{follow_state, signals};
 
+pub const NO_RESUME: &str = "no-resume";
+
 const UPOWER_PATH: &str = "/org/freedesktop/UPower";
 const UPOWER_SERVICE: &str = "org.freedesktop.UPower";
 const POWER_PROFILES_SERVICE: &str = "org.freedesktop.UPower.PowerProfiles";
@@ -201,6 +203,12 @@ fn read(system: &Connection) -> Option<PowerState> {
             .and_then(|manager| manager.can_suspend_then_hibernate())
             .inspect_err(|error| tracing::warn!("cannot ask whether sleep may hibernate: {error}"))
             .ok()
+            .map(
+                |answer| match answer == "yes" && !bande_bus::logind::resume_configured() {
+                    true => NO_RESUME.to_owned(),
+                    false => answer,
+                },
+            )
     });
     Some(PowerState {
         battery,

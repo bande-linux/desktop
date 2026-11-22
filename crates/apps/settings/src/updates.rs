@@ -86,13 +86,13 @@ impl SettingsView {
                     tr!("Restart to finish updating"),
                     tr!("Some updates take effect after a restart"),
                 ),
-                Reboot::Install(count) => (
+                Reboot::Install { count, firmware } => (
                     trn!(
                         "Restart to install 1 update",
                         "Restart to install {count} updates",
                         count = count
                     ),
-                    restart_hint(),
+                    restart_hint(firmware),
                 ),
             };
             let buttons =
@@ -131,6 +131,25 @@ impl SettingsView {
         rows
     }
 
+    fn firmware_detail(package: &Package, at_restart: bool) -> String {
+        let versions = match package.from.is_empty() {
+            true => tr!("Firmware {to}", to = package.version.clone()),
+            false => tr!(
+                "Firmware {from} → {to}",
+                from = package.from.clone(),
+                to = package.version.clone()
+            ),
+        };
+        let versions = match at_restart {
+            true => tr!("{versions} · Installs during restart", versions = versions),
+            false => versions,
+        };
+        match package.summary.is_empty() {
+            true => versions,
+            false => format!("{versions}\n{}", package.summary),
+        }
+    }
+
     fn package_rows(packages: &[Package]) -> Widgets {
         let mut rows: Widgets = packages
             .iter()
@@ -140,6 +159,7 @@ impl SettingsView {
                     (package.size > 0).then(|| boxed(Label::new(&format_size(package.size))));
                 let version = match package.class {
                     Class::Flatpak => tr!("{version} · Flatpak", version = package.version.clone()),
+                    Class::Firmware { at_restart } => Self::firmware_detail(package, at_restart),
                     _ => package.version.clone(),
                 };
                 boxed(
@@ -241,7 +261,7 @@ impl SettingsView {
                 &tr!("You can keep working while updates install"),
                 percent,
             )],
-            SoftwareState::Prepared(count) => {
+            SoftwareState::Prepared { count, firmware } => {
                 let restart = self.software_button(
                     &tr!("Restart Now"),
                     Intent::EndSession(SessionEnd::Restart),
@@ -253,7 +273,7 @@ impl SettingsView {
                         "Restart to install {count} updates",
                         count = count
                     ),
-                    Some(&restart_hint()),
+                    Some(&restart_hint(firmware)),
                     Some(restart),
                 )]
             }

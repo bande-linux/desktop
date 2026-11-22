@@ -8,8 +8,9 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_l10n::tr;
 use bande_settings::{
-    Command, Displays, Feed, PaneId, PointingDevices, Services, SettingsView, SoftwareCommand,
-    UDEV_DATA, UpdateNotice, announce_updates, feed, sidebar_width,
+    Command, Displays, Feed, Notice, PaneId, PointingDevices, Services, SettingsView,
+    SoftwareCommand, UDEV_DATA, UPDATE_NOTICE, announce_translations, announce_updates, feed,
+    sidebar_width,
 };
 use bande_settings_panes::panes as panes_list;
 use bande_toolkit::{
@@ -366,6 +367,7 @@ impl Program for Settings {
 
 const CHECK_UPDATES: &str = "--check-updates";
 const ANNOUNCE_UPDATES: &str = "--announce-updates";
+const ANNOUNCE_TRANSLATIONS: &str = "--announce-translations";
 const DELETED: &str = " (deleted)";
 
 fn installed_program() -> Result<String, std::io::Error> {
@@ -376,7 +378,8 @@ fn installed_program() -> Result<String, std::io::Error> {
 }
 
 fn check_updates() -> Result<(), Box<dyn std::error::Error>> {
-    start_announcer(ANNOUNCE_UPDATES)
+    start_announcer(ANNOUNCE_UPDATES)?;
+    start_announcer(ANNOUNCE_TRANSLATIONS)
 }
 
 fn start_announcer(flag: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -401,11 +404,17 @@ fn announce_updates_and_open_on_click() -> Result<(), Box<dyn std::error::Error>
     announce_and_open_on_click(|session| announce_updates(session, &system))
 }
 
+fn announce_translations_and_install_on_click() -> Result<(), Box<dyn std::error::Error>> {
+    let session = bande_bus::session()?;
+    let system = bande_bus::system()?;
+    Ok(announce_translations(&session, &system)?)
+}
+
 fn announce_and_open_on_click(
     announce: impl FnOnce(&zbus::blocking::Connection) -> zbus::Result<Option<u32>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let session = bande_bus::session()?;
-    let notice = UpdateNotice::listen(&session)?;
+    let notice = Notice::listen(&session, UPDATE_NOTICE)?;
     let Some(id) = announce(&session)? else {
         return Ok(());
     };
@@ -437,6 +446,10 @@ fn main() -> ExitCode {
         [flag] if flag == ANNOUNCE_UPDATES => {
             bande_log::init(INFO.package);
             finish(announce_updates_and_open_on_click())
+        }
+        [flag] if flag == ANNOUNCE_TRANSLATIONS => {
+            bande_log::init(INFO.package);
+            finish(announce_translations_and_install_on_click())
         }
         _ => bande_app::run::<Settings>(&INFO),
     }

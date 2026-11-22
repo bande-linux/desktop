@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Instant;
 
 use bande_datetime::{DateFormats, posix_locale};
-use bande_lock::{LockScreen, User};
+use bande_lock::{LockScreen, Purpose, User};
 use bande_test_wayland::keys::{
     KEY_A, KEY_B, KEY_BACKSPACE, KEY_C, KEY_D, KEY_ENTER, KEY_LEFTCTRL, KEY_X,
 };
@@ -27,6 +27,7 @@ fn lock_screen() -> LockScreen {
         &"2026-10-28T09:41:00[UTC]".parse().expect("a zoned time"),
         Appearance::default(),
         TextSystem::new(),
+        Purpose::Lock,
     )
 }
 
@@ -51,7 +52,7 @@ impl App for Locked {
             }
             _ => return,
         }
-        if let Some(password) = self.screen.take_password() {
+        if let Some(password) = self.screen.take_answer() {
             self.submitted += 1;
             let _ = self.passwords.send(password.to_string());
             self.screen.reject(Instant::now());

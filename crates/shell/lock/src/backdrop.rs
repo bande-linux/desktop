@@ -13,7 +13,7 @@ use bande_xdg::data_dirs;
 #[derive(Debug, Clone)]
 pub enum BackdropSource {
     Session,
-    Picture(Option<Arc<File>>),
+    Picture(Option<Arc<File>>, Fit),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,15 +41,16 @@ pub fn load_backdrop(
                 BackdropSource::Session => (
                     bande_bus::session()
                         .map(|session| read(&session))
+                        .inspect_err(|error| tracing::warn!("no session bus: {error}"))
                         .unwrap_or_default(),
                     None,
                 ),
-                BackdropSource::Picture(picture) => {
+                BackdropSource::Picture(picture, fit) => {
                     let path = picture.as_deref().map(opened_path);
                     let choice = Choice {
                         light: path.clone(),
                         dark: path,
-                        ..Choice::default()
+                        fit,
                     };
                     (choice, picture)
                 }
@@ -87,27 +88,35 @@ pub fn load_backdrop(
     Ok(received)
 }
 
-pub fn load_picture(login: String, size: u32) -> io::Result<Inbox<Image>> {
+pub fn load_pictures(logins: Vec<String>, size: u32) -> io::Result<Inbox<(usize, Image)>> {
     let received = Inbox::new()?;
     let sender = received.outbox();
     thread::Builder::new()
         .name("picture".to_owned())
         .spawn(move || {
-            let Some(path) = bande_bus::system()
-                .ok()
-                .and_then(|system| bande_status::accounts::picture(&system, &login))
-            else {
-                return;
-            };
-            match render(&path, Fit::Fill, size, size) {
-                Ok(picture) => {
-                    if let Some(image) =
-                        Image::from_rgba(picture.width, picture.height, picture.rgba)
-                    {
-                        sender.send(image);
-                    }
+            let system = match bande_bus::system() {
+                Ok(system) => system,
+                Err(error) => {
+                    tracing::warn!("no account pictures without the system bus: {error}");
+                    return;
                 }
-                Err(error) => tracing::warn!("cannot show {}: {error}", path.display()),
+            };
+            for (index, login) in logins.iter().enumerate() {
+                let Some(path) = bande_status::accounts::picture(&system, login) else {
+                    continue;
+                };
+                let image = match render(&path, Fit::Fill, size, size) {
+                    Ok(picture) => Image::from_rgba(picture.width, picture.height, picture.rgba),
+                    Err(error) => {
+                        tracing::warn!("cannot show {}: {error}", path.display());
+                        None
+                    }
+                };
+                if let Some(image) = image
+                    && !sender.send((index, image))
+                {
+                    return;
+                }
             }
         })?;
     Ok(received)

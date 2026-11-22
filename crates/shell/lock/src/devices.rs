@@ -2,9 +2,17 @@ use std::os::fd::BorrowedFd;
 use std::sync::mpsc::Sender;
 
 use bande_inbox::Inbox;
+use bande_network::Wired;
 use bande_status::Update;
 use bande_status::devices::{Control, follow_devices};
 use bande_status::status::{Battery, Wifi};
+
+#[derive(Debug, Clone, Default)]
+pub struct Corner {
+    pub battery: Option<Battery>,
+    pub wifi: Option<Wifi>,
+    pub wired: Option<Wired>,
+}
 
 pub struct Devices {
     inbox: Inbox<Update>,
@@ -27,15 +35,17 @@ impl Devices {
         self.inbox.fd()
     }
 
-    pub fn latest(&mut self) -> Option<(Option<Battery>, Option<Wifi>)> {
+    pub fn latest(&mut self) -> Option<Corner> {
         self.inbox
             .drain()
             .into_iter()
             .rev()
             .find_map(|update| match update {
-                Update::Devices((battery, wifi, _)) => {
-                    Some((battery.into_present(), wifi.into_present()))
-                }
+                Update::Devices((battery, wifi, _, wired)) => Some(Corner {
+                    battery: battery.into_present(),
+                    wifi: wifi.into_present(),
+                    wired: wired.into_present(),
+                }),
                 _ => None,
             })
     }

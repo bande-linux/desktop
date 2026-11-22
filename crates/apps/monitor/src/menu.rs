@@ -1,7 +1,6 @@
 use bande_l10n::{Text, text, tr};
 
 use crate::model::{Column, Filter, Frequency, Tab};
-use crate::signal::Stop;
 use bande_app_menu::{Entry, edit_submenu};
 use bande_toolkit::ui::{Menu, MenuItem};
 
@@ -20,10 +19,9 @@ pub enum MenuCommand {
     ShowCores,
     Filter(Filter),
     Frequency(Frequency),
-    Signal(Stop),
 }
 
-const ACTIONS: [(MenuCommand, &str); 30] = [
+const ACTIONS: [(MenuCommand, &str); 24] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -54,32 +52,7 @@ const ACTIONS: [(MenuCommand, &str); 30] = [
         MenuCommand::Frequency(Frequency::Normally),
         "frequency-normally",
     ),
-    (MenuCommand::Signal(Stop::Hangup), "signal-hup"),
-    (MenuCommand::Signal(Stop::Interrupt), "signal-int"),
-    (MenuCommand::Signal(Stop::Pause), "signal-stop"),
-    (MenuCommand::Signal(Stop::Resume), "signal-cont"),
-    (MenuCommand::Signal(Stop::User1), "signal-usr1"),
-    (MenuCommand::Signal(Stop::User2), "signal-usr2"),
 ];
-
-pub(crate) fn signal_title(how: Stop) -> String {
-    match how.id() {
-        "hup" => tr!("Hangup (SIGHUP)"),
-        "int" => tr!("Interrupt (SIGINT)"),
-        "stop" => tr!("Pause (SIGSTOP)"),
-        "cont" => tr!("Continue (SIGCONT)"),
-        "usr1" => tr!("User 1 (SIGUSR1)"),
-        "usr2" => tr!("User 2 (SIGUSR2)"),
-        other => other.to_owned(),
-    }
-}
-
-fn signal_item_title(how: Stop) -> String {
-    match how {
-        Stop::Resume => signal_title(how),
-        _ => tr!("{signal}…", signal = signal_title(how)),
-    }
-}
 
 impl MenuCommand {
     pub fn action(self) -> &'static str {
@@ -127,18 +100,6 @@ pub fn process_menu(selected: Selected) -> Menu {
             .push(item(text!("Show in Files"), MenuCommand::ShowInFiles).enabled(selected.located));
     }
     items.extend([
-        MenuItem::separator(),
-        MenuItem::submenu(
-            &tr!("Send Signal to Process"),
-            Menu::new(
-                Stop::SENDABLE
-                    .map(|how| {
-                        MenuItem::new(&signal_item_title(how), MenuCommand::Signal(how).action())
-                            .enabled(selected.stoppable)
-                    })
-                    .to_vec(),
-            ),
-        ),
         MenuItem::separator(),
         item(text!("Copy Name"), MenuCommand::CopyName),
         item(text!("Copy PID"), MenuCommand::CopyPid).enabled(selected.has_pid),
@@ -198,13 +159,6 @@ pub fn app_menus(
         Entry::separator(),
         process(text!("Quit Process…"), MenuCommand::Quit).shortcut("Ctrl+E"),
         process(text!("Force Quit Process…"), MenuCommand::ForceQuit),
-        Entry::submenu(
-            &tr!("Send Signal to Process"),
-            Stop::SENDABLE
-                .map(|how| Entry::item(&signal_item_title(how), MenuCommand::Signal(how).action()))
-                .to_vec(),
-        )
-        .enabled(windowed),
         process(text!("Inspect"), MenuCommand::Inspect).shortcut("Ctrl+I"),
     ]);
     if files {

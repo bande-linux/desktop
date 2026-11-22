@@ -189,27 +189,6 @@ msgstr "Bara ägaren eller en administratör kan se detta."
 msgid "System Monitor"
 msgstr "Systemövervakare"
 
-msgid "Hangup (SIGHUP)"
-msgstr "Lägg på (SIGHUP)"
-
-msgid "Interrupt (SIGINT)"
-msgstr "Avbryt (SIGINT)"
-
-msgid "Pause (SIGSTOP)"
-msgstr "Pausa (SIGSTOP)"
-
-msgid "Continue (SIGCONT)"
-msgstr "Fortsätt (SIGCONT)"
-
-msgid "User 1 (SIGUSR1)"
-msgstr "Användare 1 (SIGUSR1)"
-
-msgid "User 2 (SIGUSR2)"
-msgstr "Användare 2 (SIGUSR2)"
-
-msgid "{signal}…"
-msgstr "{signal}…"
-
 msgid "Force Quit…"
 msgstr "Tvinga avslut…"
 
@@ -221,9 +200,6 @@ msgstr "Granska"
 
 msgid "Show in Files"
 msgstr "Visa i Filer"
-
-msgid "Send Signal to Process"
-msgstr "Skicka signal till process"
 
 msgid "Copy Name"
 msgstr "Kopiera namn"
@@ -516,20 +492,6 @@ msgstr "Avsluta"
 
 msgid "Cancel"
 msgstr "Avbryt"
-
-msgid "Do you want to send {signal} to “{name}”?"
-msgid_plural "Do you want to send {signal} to the {count} selected items?"
-msgstr[0] "Vill du skicka {signal} till ”{name}”?"
-msgstr[1] "Vill du skicka {signal} till de {count} markerade objekten?"
-
-msgid "A paused process does nothing until it gets Continue. Pausing a part of the desktop can freeze the screen."
-msgstr "En pausad process gör ingenting förrän den får Fortsätt. Om du pausar en del av skrivbordet kan skärmen frysa."
-
-msgid "A process that doesn’t handle this signal ends at once, and any unsaved changes are lost."
-msgstr "En process som inte hanterar den här signalen avslutas direkt, och osparade ändringar går förlorade."
-
-msgid "Send"
-msgstr "Skicka"
 
 msgid "“{name}” belongs to another user."
 msgstr "”{name}” tillhör en annan användare."

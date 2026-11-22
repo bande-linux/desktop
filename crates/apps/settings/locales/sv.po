@@ -884,6 +884,18 @@ msgstr "Språktjänsten"
 msgid "Couldn't read the current language and region."
 msgstr "Det gick inte att läsa det aktuella språket och den aktuella regionen."
 
+msgid "Install"
+msgstr "Installera"
+
+msgid "Settings"
+msgstr "Inställningar"
+
+msgid "Translations are available for your language"
+msgstr "Översättningar finns för ditt språk"
+
+msgid "Some installed software can show its text in your language once its translation is installed."
+msgstr "En del installerade program kan visa sin text på ditt språk när översättningen har installerats."
+
 msgid "Couldn't change the app's language."
 msgstr "Det gick inte att ändra appens språk."
 
@@ -892,9 +904,6 @@ msgstr "Det gick inte att ändra appens kortkommando."
 
 msgid "Couldn't change the apps that open at login."
 msgstr "Det gick inte att ändra vilka appar som öppnas vid inloggning."
-
-msgid "Settings"
-msgstr "Inställningar"
 
 msgid "View"
 msgstr "Visa"
@@ -1651,9 +1660,6 @@ msgstr "För en skrivare som inte dyker upp: dess IP-adress eller värdnamn"
 
 msgid "Add by address"
 msgstr "Lägg till via adress"
-
-msgid "Install"
-msgstr "Installera"
 
 msgid "Installing…"
 msgstr "Installerar…"

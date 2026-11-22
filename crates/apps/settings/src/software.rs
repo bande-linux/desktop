@@ -27,8 +27,8 @@ use crate::client::ConfigProxyBlocking;
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
-use bande_notify::Urgency;
 use bande_notify::client::{Request, close, notify};
+use bande_notify::{CloseReason, Urgency};
 
 const FRESH_SECONDS: u32 = 60 * 60;
 const REBOOT_REQUIRED: &str = "/run/reboot-required";
@@ -548,15 +548,16 @@ fn announce(session: &Connection, summary: &str, body: &str) -> zbus::Result<Opt
     .map(Some)
 }
 
-const NOTICE_NAME: &str = "org.bande.Settings.UpdateNotice";
+pub const UPDATE_NOTICE: &str = "org.bande.Settings.UpdateNotice";
 
-pub struct UpdateNotice {
+pub struct Notice {
     session: Connection,
     messages: MessageIterator,
+    name: &'static str,
 }
 
-impl UpdateNotice {
-    pub fn listen(session: &Connection) -> zbus::Result<Self> {
+impl Notice {
+    pub fn listen(session: &Connection, name: &'static str) -> zbus::Result<Self> {
         let messages = MessageIterator::from(session);
         let rule = MatchRule::builder()
             .msg_type(message::Type::Signal)
@@ -564,36 +565,53 @@ impl UpdateNotice {
             .build();
         DBusProxy::new(session)?.add_match_rule(rule)?;
         session.request_name_with_flags(
-            NOTICE_NAME,
+            name,
             RequestNameFlags::ReplaceExisting | RequestNameFlags::AllowReplacement,
         )?;
         Ok(Self {
             session: session.clone(),
             messages,
+            name,
         })
     }
 
     pub fn clicked(self, id: u32) -> zbus::Result<bool> {
+        Ok(self.answer(id)? == Reply::Clicked)
+    }
+
+    pub fn answer(self, id: u32) -> zbus::Result<Reply> {
         for message in self.messages.flatten() {
             let header = message.header();
             match header.member().map(|member| member.as_str()) {
                 Some("ActionInvoked") if message.body().deserialize::<(u32, String)>()?.0 == id => {
-                    return Ok(true);
+                    return Ok(Reply::Clicked);
                 }
-                Some("NotificationClosed")
-                    if message.body().deserialize::<(u32, u32)>()?.0 == id =>
-                {
-                    return Ok(false);
+                Some("NotificationClosed") => {
+                    let (closed, reason) = message.body().deserialize::<(u32, u32)>()?;
+                    if closed == id {
+                        return Ok(if reason == CloseReason::Dismissed as u32 {
+                            Reply::Dismissed
+                        } else {
+                            Reply::Gone
+                        });
+                    }
                 }
-                Some("NameLost") if message.body().deserialize::<&str>()? == NOTICE_NAME => {
+                Some("NameLost") if message.body().deserialize::<&str>()? == self.name => {
                     close(&self.session, id)?;
-                    return Ok(false);
+                    return Ok(Reply::Gone);
                 }
                 _ => {}
             }
         }
-        Ok(false)
+        Ok(Reply::Gone)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reply {
+    Clicked,
+    Dismissed,
+    Gone,
 }
 
 pub(crate) fn restart_hint() -> String {

@@ -503,7 +503,8 @@ A repository is `BandeBackups/<machine-id>` on any drive but the startup one, an
 share, or a restic rest server; Settings can erase a blank or foreign disk to make one. Two keys
 open it: a random one in `/var/lib/bande-backup/key` that runs the backups, and the person's
 password, for restoring when the machine is gone. The disk is mounted under `/run/bande-backup`
-only during work. Files browses `restic mount` read-only under `/run/bande-backup-browse`, with
+only during work; NFS mounts as version 4, or version 3 with `nolock`, so neither needs this
+computer's `rpcbind`, which stays as `nfs-common` sets it up. Files browses `restic mount` read-only under `/run/bande-backup-browse`, with
 the old owner and mode enforced by the kernel, and restores by copying as the person, so nothing
 privileged runs on their behalf.
 

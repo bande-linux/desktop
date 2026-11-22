@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command as Process;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
@@ -111,16 +110,7 @@ fn install_package(package: &str) -> Result<(), String> {
     let client = Client::new(&system);
     client
         .install_missing(&[package])
-        .map_err(|error| error.to_string())?;
-    if package == "nfs-common" {
-        let quiet = Process::new("systemctl")
-            .args(["disable", "--now", "rpcbind.socket", "rpcbind.service"])
-            .status();
-        if let Err(error) = quiet {
-            tracing::warn!("cannot stop rpcbind: {error}");
-        }
-    }
-    Ok(())
+        .map_err(|error| error.to_string())
 }
 
 fn sender_of(header: &Header<'_>) -> fdo::Result<String> {

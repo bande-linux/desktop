@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_app::{Dropping, FileDrop, View};
-use bande_media::{FailureKind, MediaInfo, Playback, VideoInfo};
+use bande_media::{FailureKind, MediaInfo, Opening, Playback, VideoInfo};
 use bande_media_view::{Session, StageWidget};
 use bande_toolkit::ui::{Context, Event, Key, Ui, Widget, WidgetId};
 use bande_toolkit::{Appearance, Rect, Scene, Sizing, TextSystem, Window, WindowEvent};
@@ -75,13 +75,47 @@ impl Pane {
         let Some(path) = self.queue.get(self.at).cloned() else {
             return;
         };
-        let loaded = self.with_stage(|widget| widget.stage_mut().session_mut().load(&path, true));
-        if let Some(Err(error)) = loaded {
-            tracing::warn!("cannot start the media engine: {error}");
-        }
+        self.open(
+            Opening {
+                path,
+                ..Opening::default()
+            },
+            true,
+        );
         self.fitted = false;
         self.remembered = None;
         self.menus_changed = true;
+    }
+
+    fn open(&mut self, opening: Opening, play: bool) {
+        let loaded = self.with_stage(|widget| widget.stage_mut().session_mut().load(opening, play));
+        if let Some(Err(error)) = loaded {
+            tracing::warn!("cannot start the media engine: {error}");
+        }
+    }
+
+    pub fn add_subtitles(&mut self, subtitles: PathBuf) {
+        let Some(path) = self.queue.get(self.at).cloned() else {
+            return;
+        };
+        let play = self.is_playing();
+        let start_ms = self.session().map_or(0, |session| {
+            session.position(Instant::now()).as_millis() as u64
+        });
+        self.open(
+            Opening {
+                path,
+                subtitles: Some(subtitles),
+                start_ms,
+            },
+            play,
+        );
+        self.remembered = None;
+        self.menus_changed = true;
+    }
+
+    pub fn has_video(&self) -> bool {
+        self.session().is_some_and(Session::has_video)
     }
 
     fn widget(&self) -> Option<&StageWidget> {

@@ -16,6 +16,12 @@ msgstr "Öppna media"
 msgid "Audio and video"
 msgstr "Ljud och video"
 
+msgid "Add Subtitle File"
+msgstr "Lägg till undertextfil"
+
+msgid "Subtitles"
+msgstr "Undertexter"
+
 msgid "Off"
 msgstr "Av"
 
@@ -28,6 +34,9 @@ msgstr "Spela upp"
 msgid "Open…"
 msgstr "Öppna…"
 
+msgid "Add Subtitle File…"
+msgstr "Lägg till undertextfil…"
+
 msgid "Next"
 msgstr "Nästa"
 
@@ -39,9 +48,6 @@ msgstr "Hastighet"
 
 msgid "Audio Track"
 msgstr "Ljudspår"
-
-msgid "Subtitles"
-msgstr "Undertexter"
 
 msgid "Loop"
 msgstr "Upprepa"

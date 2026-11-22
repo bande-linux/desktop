@@ -1,0 +1,21 @@
+[package]
+name = "pinentry-bande"
+description = "pinentry for GnuPG that asks with the Bande keyring prompt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-xdg.workspace = true
+tracing.workspace = true
+bande-log.workspace = true
+rustix = { workspace = true, features = ["process"] }
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,2 @@
+debian/build/bin/pinentry-bande usr/bin/
+debian/build/l10n/development/pinentry-bande/* usr/share/bande/l10n/pinentry-bande/

@@ -79,6 +79,12 @@ flatpak flatpak optional
 /usr/libexec/bande-network-helper bande-settings depends
 /usr/libexec/bande-mount-helper bande-automount depends
 /usr/libexec/bande-secrets-prompt bande-secrets depends
+/usr/bin/pinentry-gnome3 pinentry-gnome3 optional
+/usr/bin/pinentry-qt pinentry-qt optional
+/usr/bin/pinentry-gtk-2 pinentry-gtk2 optional
+/usr/bin/pinentry-fltk pinentry-fltk optional
+/usr/bin/pinentry-curses pinentry-curses optional
+/usr/bin/pinentry-tty pinentry-tty optional
 /usr/libexec/bande-sharing-helper bande-settings depends
 /usr/share/bande/bande-davfs2.conf bande-automount depends
 /usr/share/bande/l10n bande-compositor optional

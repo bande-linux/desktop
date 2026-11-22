@@ -60,7 +60,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   when it first writes the login window's `/etc/bande/login.kdl`; purging `bande-reporter` or
   `bande-settings` removes the file it wrote there, and the folder once it is empty. The other scripts purge state, restart nothing else and run
   `pam-auth-update` for `libpam-bande-secrets` (`Multi-Arch: same`, its module in
-  `/usr/lib/<multiarch>/security`); Terminal is an `x-terminal-emulator` alternative and the
+  `/usr/lib/<multiarch>/security`); `pinentry-bande` is a `pinentry` alternative
+  ([session](session.md#keyring-bande-secrets)), Terminal is an `x-terminal-emulator` alternative and the
   boot screen a `default.plymouth` alternative (`dh_installalternatives`). The boot screen's
   initramfs hook (`dh_installinitramfs`) rebuilds the initramfs through initramfs-tools'
   trigger. GRUB has no trigger to regenerate `grub.cfg`, so the boot screen's `postinst` and
@@ -113,7 +114,8 @@ are in [performance.md](performance.md).
 
 - **The programs** (architecture `amd64`, `arm64`): `bande-compositor`, the session services
   (`bande-config`, `bande-notify`, `bande-power`, `bande-printd`, `bande-reporter`, `bande-crash-reports`, `bande-sound`, `bande-spell`, `bande-clipboard`, `bande-tray`, `bande-indexer`,
-  `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`,
+  `bande-automount`, `bande-backup`, `bande-polkit`, `bande-secrets` with `libpam-bande-secrets`
+  and `pinentry-bande`,
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`, `bande-lookup`, `bande-terminal`, `bande-software`,

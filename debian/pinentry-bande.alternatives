@@ -1,0 +1,6 @@
+Name: pinentry
+Link: /usr/bin/pinentry
+Alternative: /usr/bin/pinentry-bande
+Dependents:
+  /usr/share/man/man1/pinentry.1.gz pinentry.1.gz /usr/share/man/man1/pinentry-bande.1.gz
+Priority: 95

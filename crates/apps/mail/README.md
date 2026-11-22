@@ -209,7 +209,7 @@ the HTTPS autoconfig fetch are small, synchronous and bounded by timeouts.
 Running: `gpg`, `gpg-agent` and `gpgsm` (Recommends) for signed and encrypted mail, `scdaemon`
 (Suggests) for smartcards. Without them, S/MIME signatures are still checked, OpenPGP signatures
 show as made with a key you don't have, and encrypted mail as mail none of your keys can open.
-A key with a passphrase needs a pinentry that works in the session.
+`pinentry-bande` (Recommends) asks for passphrases and smartcard PINs with the keyring's prompt.
 
 ## Licence
 

@@ -127,6 +127,7 @@ pub struct FileView {
     thumbnails: Option<Thumbnails>,
     copies: Option<Inbox<Option<Vec<u8>>>>,
     saves: Option<Inbox<Saved>>,
+    saving: Vec<PathBuf>,
     trashed: Option<(TrashItem, usize)>,
     session: Option<Session>,
     sidebar_shown: bool,
@@ -217,6 +218,7 @@ impl FileView {
             thumbnails: None,
             copies: None,
             saves: None,
+            saving: Vec::new(),
             trashed: None,
             session: None,
             sidebar_shown: several,
@@ -737,10 +739,20 @@ impl FileView {
             self.with_pdf(|pdf| pdf.rotate(clockwise));
             return;
         }
-        self.with_canvas(|canvas| canvas.orient(canvas.orientation().rotated(clockwise)));
+        if self.can_turn() {
+            self.with_canvas(|canvas| canvas.orient(canvas.orientation().rotated(clockwise)));
+        }
+    }
+
+    pub fn can_turn(&self) -> bool {
+        self.path()
+            .is_none_or(|path| !self.saving.iter().any(|saving| saving == path))
     }
 
     pub fn rotation_saving(&self) -> Option<Saving> {
+        if !self.can_turn() {
+            return None;
+        }
         let canvas = self.canvas()?;
         let picture = canvas.picture()?;
         if canvas.is_animated() || canvas.orientation() == Orientation::default() {
@@ -800,14 +812,16 @@ impl FileView {
         let Some(outbox) = self.saves.as_ref().map(Inbox::outbox) else {
             return self.refused(&path, Refusal::Unwritable);
         };
+        let saving = path.clone();
         let spawned = std::thread::Builder::new()
             .name("save".to_owned())
             .spawn(move || {
                 let saved = save();
                 outbox.send((path, saved));
             });
-        if let Err(error) = spawned {
-            tracing::warn!("cannot save: {error}");
+        match spawned {
+            Ok(_) => self.saving.push(saving),
+            Err(error) => tracing::warn!("cannot save: {error}"),
         }
     }
 
@@ -815,6 +829,9 @@ impl FileView {
         let saved = self.saves.as_mut().map(Inbox::drain).unwrap_or_default();
         let changed = !saved.is_empty();
         for (path, result) in saved {
+            if let Some(at) = self.saving.iter().position(|saving| *saving == path) {
+                self.saving.remove(at);
+            }
             match result {
                 Ok(()) if Some(path.as_path()) == self.path() => self.load_current(),
                 Ok(()) => {}
@@ -843,7 +860,9 @@ impl FileView {
     }
 
     pub fn flip(&mut self, vertical: bool) {
-        self.with_canvas(|canvas| canvas.orient(canvas.orientation().flipped(vertical)));
+        if self.can_turn() {
+            self.with_canvas(|canvas| canvas.orient(canvas.orientation().flipped(vertical)));
+        }
     }
 
     pub fn has_picture(&self) -> bool {

@@ -396,6 +396,7 @@ impl Program for Viewer {
             ]);
         }
         let zoomable = picture || document;
+        let turnable = document || picture && view.is_some_and(FileView::can_turn);
         view_menu.extend([
             Entry::separator(),
             item(text!("Actual Size"), ACTUAL_SIZE, Some("Ctrl+0"), zoomable),
@@ -415,17 +416,27 @@ impl Program for Viewer {
                 text!("Rotate Left"),
                 ROTATE_LEFT,
                 Some("Shift+Ctrl+R"),
-                zoomable,
+                turnable,
             ),
             item(
                 text!("Rotate Right"),
                 ROTATE_RIGHT,
                 Some("Ctrl+R"),
-                zoomable,
+                turnable,
             ),
             Entry::separator(),
-            item(text!("Flip Horizontal"), FLIP_HORIZONTAL, None, picture),
-            item(text!("Flip Vertical"), FLIP_VERTICAL, None, picture),
+            item(
+                text!("Flip Horizontal"),
+                FLIP_HORIZONTAL,
+                None,
+                turnable && picture,
+            ),
+            item(
+                text!("Flip Vertical"),
+                FLIP_VERTICAL,
+                None,
+                turnable && picture,
+            ),
             Entry::separator(),
             match saving {
                 Some(Saving::Copy) => item(

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use bande_datetime::city_name;
 use bande_datetime::daylight::ZONE_TAB;
 
 const COUNTRIES: &str = "/usr/share/zoneinfo/iso3166.tab";
@@ -9,10 +10,6 @@ pub struct City {
     pub zone: String,
     pub name: String,
     pub country: String,
-}
-
-pub fn city_name(zone: &str) -> String {
-    zone.rsplit('/').next().unwrap_or(zone).replace('_', " ")
 }
 
 fn rows(file: &str) -> Vec<Vec<String>> {

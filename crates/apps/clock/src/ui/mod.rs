@@ -5,8 +5,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use bande_app::View;
-use bande_datetime::DateFormats;
 use bande_datetime::daylight::{Sky, place_of, sky};
+use bande_datetime::{DateFormats, city_name};
 use bande_l10n::{Text, text, tr};
 use bande_sound::Alert as Sound;
 use bande_toolkit::ui::{
@@ -23,7 +23,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
 
 use self::widgets::{Digits, Fixed, Line};
-use crate::cities::{self, City, city_name};
+use crate::cities::{self, City};
 use crate::model::{Alarm, Clock, DEFAULT_SOUND, Days, Timer, TimerState, boot_now};
 
 const HEADER: f32 = WINDOW_HEADER_HEIGHT as f32;

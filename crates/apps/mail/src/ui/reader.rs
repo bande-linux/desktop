@@ -63,16 +63,65 @@ fn image_of(picture: Picture) -> Option<Image> {
     Image::from_rgba(picture.width, picture.height, picture.rgba)
 }
 
+fn line(kind: BlockKind, text: String) -> Block {
+    Block {
+        kind,
+        quote: 0,
+        text,
+        bold: Vec::new(),
+        links: Vec::new(),
+        image: None,
+    }
+}
+
+fn document_of(content: &Content, settings: &MailSettings) -> Document {
+    let plain = content.plain.is_some() && (settings.plain_text || content.html.is_none());
+    let mut document = content.document(settings.plain_text);
+    if plain && settings.fixed_width {
+        for block in &mut document.blocks {
+            if block.kind == BlockKind::Paragraph {
+                block.kind = BlockKind::Preformatted;
+            }
+        }
+    }
+    document
+}
+
+fn add_forwarded(document: &mut Document, forwarded: &Content, settings: &MailSettings) {
+    let envelope = &forwarded.envelope;
+    document.blocks.push(line(BlockKind::Rule, String::new()));
+    document
+        .blocks
+        .push(line(BlockKind::Heading, tr!("Forwarded Message")));
+    let date = envelope.date.map(|date| {
+        full_date(
+            date,
+            &bande_datetime::local_zone(),
+            &DateFormats::from_env(),
+        )
+    });
+    for shown in [
+        (!envelope.from.is_empty()).then(|| tr!("From: {names}", names = names(&envelope.from))),
+        (!envelope.to.is_empty()).then(|| tr!("To: {names}", names = names(&envelope.to))),
+        (!envelope.subject.is_empty())
+            .then(|| tr!("Subject: {subject}", subject = envelope.subject.clone())),
+        date.map(|date| tr!("Date: {date}", date = date)),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        document.blocks.push(line(BlockKind::Paragraph, shown));
+    }
+    let body = document_of(forwarded, settings);
+    document.blocks.extend(body.blocks);
+    document.remote_images += body.remote_images;
+}
+
 impl Reading {
     pub fn new(content: Content, downloaded: bool, settings: &MailSettings) -> Self {
-        let plain = content.plain.is_some() && (settings.plain_text || content.html.is_none());
-        let mut document = content.document(settings.plain_text);
-        if plain && settings.fixed_width {
-            for block in &mut document.blocks {
-                if block.kind == BlockKind::Paragraph {
-                    block.kind = BlockKind::Preformatted;
-                }
-            }
+        let mut document = document_of(&content, settings);
+        for forwarded in &content.forwarded {
+            add_forwarded(&mut document, forwarded, settings);
         }
         let mut pictures = HashMap::new();
         let mut pixels = 0u64;

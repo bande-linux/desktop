@@ -55,7 +55,8 @@ apt install bande-mail
   replies from Sent and the account's other mailboxes (not Trash or Junk): the chosen message and
   unread ones open, the others as a line that opens on a click. Each open message shows its
   headers, the plain text or sanitised HTML, quoted text folded behind Show Quoted Text, and the
-  attachments; Reply, Reply All and Forward (in the message or the toolbar) act on the message
+  attachments; a message forwarded as an attachment (`message/rfc822`) is shown below with its
+  own headers, and its attachments join the others; Reply, Reply All and Forward (in the message or the toolbar) act on the message
   last clicked, marked with a bar in the accent colour while the reader has focus. Delete, Flag,
   Mark as Read or Unread, Move, Junk, Archive and Apply Rules act on that message too when the
   reader has focus (after a click in it), and on the selected rows when the list has focus; a

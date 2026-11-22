@@ -100,10 +100,12 @@ pub struct IdleMachine {
     locked: bool,
     locked_when_idle: bool,
     lock_pending: bool,
-    awaiting_lock: bool,
+    lock_sent: Option<Duration>,
+    others_lock: bool,
+    asleep: bool,
     display_off_when_locked: bool,
     woke_locked: bool,
-    password_required: bool,
+    grace_ends: Option<Duration>,
     inhibitors: Vec<Inhibitor>,
     assertions: Vec<Assertion>,
     sleep_overdue: bool,
@@ -123,10 +125,12 @@ impl IdleMachine {
             locked: false,
             locked_when_idle: false,
             lock_pending: false,
-            awaiting_lock: false,
+            lock_sent: None,
+            others_lock: false,
+            asleep: false,
             display_off_when_locked: false,
             woke_locked: false,
-            password_required: true,
+            grace_ends: None,
             inhibitors: Vec::new(),
             assertions: Vec::new(),
             sleep_overdue: false,
@@ -162,8 +166,25 @@ impl IdleMachine {
         thresholds
     }
 
-    pub fn idle_for(&mut self, idle: Duration) -> Vec<Command> {
+    pub fn password_required(&self, now: Duration) -> bool {
+        self.grace_ends.is_none_or(|ends| now >= ends)
+    }
+
+    fn lock_failed(&self, now: Duration) -> bool {
+        self.lock_sent
+            .is_some_and(|sent| now >= sent + LOCK_SETTLES_IN)
+    }
+
+    fn rests_locked(&self, idle: Duration) -> bool {
+        self.locked && !self.locked_when_idle && idle >= LOCKED_DISPLAY_OFF_AFTER
+    }
+
+    pub fn idle_for(&mut self, idle: Duration, now: Duration) -> Vec<Command> {
         if !self.inhibitors.is_empty() {
+            if !self.display_off && self.rests_locked(idle) {
+                self.display_off = true;
+                return vec![Command::DisplayOff];
+            }
             return Vec::new();
         }
         let reached = |after: Option<Duration>| after.is_some_and(|after| idle >= after);
@@ -177,32 +198,35 @@ impl IdleMachine {
             self.stage = Stage::Resting;
             self.idle_hint = true;
             commands.push(Command::IdleHint(true));
-            if !self.locked {
+            if !self.locked || self.lock_failed(now) {
                 self.locked = true;
                 self.locked_when_idle = true;
                 self.lock_pending = true;
-                self.awaiting_lock = true;
-                if !self.policy.require_password_after.is_zero() {
-                    self.password_required = false;
+                self.lock_sent = Some(now);
+                if !self.policy.require_password_after.is_zero()
+                    && !self.asleep
+                    && !self.others_lock
+                {
+                    self.grace_ends = self
+                        .policy
+                        .password_after()
+                        .map(|after| (now + after).saturating_sub(idle));
                     commands.push(Command::RequirePassword(false));
                 }
                 commands.push(Command::Lock);
             }
         }
-        if !self.password_required && reached(self.policy.password_after()) {
-            self.password_required = true;
-            commands.push(Command::RequirePassword(true));
+        if reached(self.policy.password_after()) {
+            commands.extend(self.require_password());
         }
-        if !self.display_off
-            && (reached(self.policy.display_off_after)
-                || (self.locked && !self.locked_when_idle && idle >= LOCKED_DISPLAY_OFF_AFTER))
+        if !self.display_off && (reached(self.policy.display_off_after) || self.rests_locked(idle))
         {
             let lock_overdue = reached(
                 self.policy
                     .display_off_after
                     .map(|off| off + LOCK_SETTLES_IN),
             );
-            if self.awaiting_lock && !lock_overdue {
+            if self.lock_sent.is_some() && !lock_overdue {
                 self.display_off_when_locked = true;
             } else {
                 self.display_off = true;
@@ -231,10 +255,12 @@ impl IdleMachine {
     }
 
     pub fn sleeping(&mut self) -> Vec<Command> {
+        self.asleep = true;
         self.require_password()
     }
 
     pub fn woke(&mut self) -> Vec<Command> {
+        self.asleep = false;
         self.locked_when_idle = false;
         self.woke_locked = self.locked;
         Vec::new()
@@ -244,24 +270,26 @@ impl IdleMachine {
         if std::mem::take(&mut self.lock_pending) {
             return Vec::new();
         }
+        self.others_lock = true;
         self.require_password()
     }
 
     fn require_password(&mut self) -> Vec<Command> {
-        if std::mem::replace(&mut self.password_required, true) {
-            return Vec::new();
+        match self.grace_ends.take() {
+            Some(_) => vec![Command::RequirePassword(true)],
+            None => Vec::new(),
         }
-        vec![Command::RequirePassword(true)]
     }
 
-    pub fn resumed(&mut self) -> Vec<Command> {
+    pub fn resumed(&mut self, now: Duration) -> Vec<Command> {
         self.stage = Stage::Active;
         self.sleep_overdue = false;
         let mut commands = Vec::new();
-        if std::mem::take(&mut self.awaiting_lock) {
+        if self.lock_failed(now) {
             self.locked = false;
             self.locked_when_idle = false;
             self.lock_pending = false;
+            self.lock_sent = None;
             commands = self.require_password();
         }
         commands.extend(self.undim());
@@ -319,6 +347,9 @@ impl IdleMachine {
             if self.stage == Stage::Dimmed {
                 self.stage = Stage::Active;
             }
+            if self.locked {
+                return Vec::new();
+            }
             return self.undim();
         }
         self.stage = Stage::Active;
@@ -328,7 +359,7 @@ impl IdleMachine {
 
     pub fn set_locked(&mut self, locked: bool) -> Vec<Command> {
         self.locked = locked;
-        self.awaiting_lock = false;
+        self.lock_sent = None;
         let display_off = std::mem::take(&mut self.display_off_when_locked);
         if locked {
             if display_off && !self.display_off {
@@ -339,6 +370,7 @@ impl IdleMachine {
         }
         self.locked_when_idle = false;
         self.lock_pending = false;
+        self.others_lock = false;
         self.woke_locked = false;
         self.require_password()
     }
@@ -377,23 +409,31 @@ impl IdleMachine {
 mod tests {
     use super::*;
 
-    #[test]
-    fn sleep_or_a_lock_request_during_the_password_grace_period_requires_the_password() {
-        let minutes = |minutes: u64| Duration::from_secs(minutes * 60);
+    fn minutes(minutes: u64) -> Duration {
+        Duration::from_secs(minutes * 60)
+    }
+
+    fn grace_machine() -> IdleMachine {
         let policy = Policy {
             screen_saver_after: Some(minutes(5)),
             display_off_after: Some(minutes(10)),
             require_password_after: minutes(5),
             suspend_after: Some(minutes(10)),
         };
-        let policy = Policies {
+        IdleMachine::new(Policies {
             on_power: policy,
             on_battery: policy,
-        };
+        })
+    }
+
+    #[test]
+    fn sleep_or_a_lock_request_during_the_password_grace_period_requires_the_password() {
+        let booted = minutes(100);
         for asleep in [true, false] {
-            let mut machine = IdleMachine::new(policy);
-            let saver = machine.idle_for(minutes(5));
+            let mut machine = grace_machine();
+            let saver = machine.idle_for(minutes(5), booted);
             assert!(saver.contains(&Command::RequirePassword(false)));
+            assert!(!machine.password_required(booted));
             assert!(machine.lock_requested().is_empty());
             machine.set_locked(true);
             let required = match asleep {
@@ -401,6 +441,29 @@ mod tests {
                 false => machine.lock_requested(),
             };
             assert_eq!(required, vec![Command::RequirePassword(true)]);
+            assert!(machine.password_required(booted));
         }
+    }
+
+    #[test]
+    fn the_grace_period_ends_on_time_and_never_covers_a_lock_the_user_started() {
+        let locked_at = minutes(100);
+        let mut machine = grace_machine();
+        machine.idle_for(minutes(5), locked_at);
+        machine.resumed(locked_at + Duration::from_secs(1));
+        machine.set_locked(true);
+        machine.set_inhibited(Inhibitor::ScreenSaver, true);
+        assert!(
+            machine
+                .idle_for(minutes(10), locked_at + minutes(5))
+                .is_empty()
+        );
+        assert!(!machine.password_required(locked_at + minutes(5) - Duration::from_secs(1)));
+        assert!(machine.password_required(locked_at + minutes(5)));
+
+        let mut machine = grace_machine();
+        assert!(machine.lock_requested().is_empty());
+        machine.idle_for(minutes(5), locked_at);
+        assert!(machine.password_required(locked_at));
     }
 }

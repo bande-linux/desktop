@@ -50,9 +50,11 @@ graph LR
   is a grace period: until it passes, any input dismisses the saver. Locks from `Super+L`,
   logind, sleep and the power button always ask: `bande-power` requires the password on
   logind's `Lock` and on `PrepareForSleep` before it lets the computer sleep, even when the
-  saver already rests within its grace period. The grace period is `org.bande.Power`'s
-  `PasswordRequired` property; any process of the user could lengthen it through `config.kdl`
-  anyway, so it adds no new trust.
+  saver already rests within its grace period. Only the idle lock `bande-power` asks for gets
+  one: a lock someone else asked logind for (`Super+L` included) never does. The grace period
+  is `org.bande.Power`'s `PasswordRequired` property, which ends at a fixed time on the boot
+  clock however long an inhibitor holds the display awake; any process of the user could
+  lengthen it through `config.kdl` anyway, so it adds no new trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
   when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row in
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
@@ -74,7 +76,8 @@ graph LR
   | `zwp_idle_inhibitor_v1` on a surface | Player, Glance, mpv, Chromium, Firefox | the compositor, while the surface's window is on screen (covered or not); not while minimized |
 
   `bande-power` holds one logind `idle` inhibitor per `ScreenSaver` request, so every one shows
-  in `systemd-inhibit --list`. Idle time restarts when the last inhibitor ends, so a finished
+  in `systemd-inhibit --list`. Behind a lock the user started, nothing holds the display awake:
+  it turns off after a minute, as without a video. Idle time restarts when the last inhibitor ends, so a finished
   film does not lock the screen at once.
 - **Keeping the computer awake** only holds back idle sleep; Sleep in a menu, the power button
   and the lid always work, so these are not logind `sleep` block inhibitors (those would turn

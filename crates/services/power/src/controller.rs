@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::io::{self, Write};
 use std::os::unix::net::UnixStream;
 
+use rustix::time::{ClockId, clock_gettime};
 use zbus::blocking::Connection;
 
 use crate::backlight::KeyboardBacklight;
@@ -112,7 +113,14 @@ impl IdleController {
     }
 
     pub fn idle_for(&self, idle: Duration) {
-        self.run(|machine| machine.idle_for(idle));
+        self.run(|machine| machine.idle_for(idle, boot_now()));
+    }
+
+    pub fn password_required(&self) -> bool {
+        self.machine
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .password_required(boot_now())
     }
 
     pub fn sleeping(&self) {
@@ -128,7 +136,7 @@ impl IdleController {
     }
 
     pub fn resumed(&self) {
-        self.run(IdleMachine::resumed);
+        self.run(|machine| machine.resumed(boot_now()));
     }
 
     pub fn set_inhibited(&self, inhibitor: Inhibitor, held: bool) {
@@ -174,6 +182,10 @@ impl IdleController {
             .unwrap_or_else(PoisonError::into_inner)
             .thresholds()
     }
+}
+
+fn boot_now() -> Duration {
+    Duration::try_from(clock_gettime(ClockId::Boottime)).unwrap_or_default()
 }
 
 fn policies(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policies> {
@@ -337,7 +349,7 @@ pub fn logind_executor(
         let result = match command {
             Command::Lock => session.lock(),
             Command::IdleHint(idle) => session.set_idle_hint(idle),
-            Command::RequirePassword(required) => password.require(required),
+            Command::RequirePassword(_) => password.changed(),
             Command::Suspend if virtual_machine => Ok(()),
             Command::Suspend => logind::sleep(&manager, false).map(|slept| {
                 if !slept {

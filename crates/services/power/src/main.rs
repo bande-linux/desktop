@@ -11,7 +11,7 @@ use bande_power::brightness::{Lights, Options};
 use bande_power::controller::{self, IdleController};
 use bande_power::idle::{Assertion, Inhibitor};
 use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
-use bande_power::password::PasswordPolicy;
+use bande_power::password::{self, PasswordPolicy};
 use bande_power::screensaver::InhibitionService;
 use bande_power::{adapter, audio, gadgets};
 use zbus::blocking::Connection;
@@ -47,9 +47,10 @@ fn serve() -> Result<Services, Box<dyn Error>> {
                 Options::system(Path::new(SYSFS_BACKLIGHT)),
             )?,
             KeyboardBacklight::find(Path::new(SYSFS_LEDS)),
-            PasswordPolicy::serve(&session)?,
+            PasswordPolicy::new(&session),
         ),
     ));
+    password::serve(&session, Arc::clone(&idle))?;
     let sleeper = Arc::clone(&idle);
     let guard = SleepGuard::start(&system, LOCK_WAIT, move |start| match start {
         true => sleeper.sleeping(),

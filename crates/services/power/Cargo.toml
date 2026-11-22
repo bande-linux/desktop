@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 bande-edid.workspace = true
-rustix.workspace = true
+rustix = { workspace = true, features = ["time"] }
 tracing.workspace = true
 bande-audio.workspace = true
 bande-bluetooth.workspace = true

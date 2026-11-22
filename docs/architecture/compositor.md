@@ -188,8 +188,11 @@ when they reach the screen is Bande's own.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Size of text and controls (Default, then Larger Text to More Space, each
   shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation, Variable refresh rate in full screen and Colour profile. Every change is written to
-  `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
-  settings?" with Keep and Revert and comes back by itself after 15 s.
+  `config.kdl` and applied live. A change other than the colour profile is a trial: Settings
+  shows "Keep these display settings?" with Keep and Revert, and unless Keep is chosen within
+  15 s `bande-config` itself restores every display changed since the trial began, so closing
+  or losing Settings, logging out or switching off during the countdown cannot keep a mode the
+  display can't show.
 
 - **Colour.** Each display has a colour profile (`colour-profile` in its settings, Settings ▸
   Displays ▸ Colour profile): "This display" (the default) builds a profile from

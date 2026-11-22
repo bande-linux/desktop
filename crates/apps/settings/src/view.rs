@@ -235,15 +235,6 @@ fn plain(modifiers: &Modifiers) -> bool {
     !modifiers.logo && !modifiers.control && !modifiers.alt
 }
 
-pub const KEEP_DISPLAY_SETTINGS: Duration = Duration::from_secs(15);
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Keep {
-    pub(crate) identity: String,
-    pub(crate) previous: DisplaySettings,
-    pub(crate) until: Instant,
-}
-
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Join {
     pub asking: Option<Vec<u8>>,
@@ -268,7 +259,7 @@ pub struct SettingsView {
     pub(crate) display_levels: Vec<DisplayLevel>,
     pub(crate) arrangements: Vec<Vec<Placement>>,
     pub(crate) displays: Vec<Display>,
-    pub(crate) keep: Option<Keep>,
+    pub(crate) keep: Option<Instant>,
     pub(crate) audio: Option<Snapshot>,
     pub(crate) input_level: Rc<Cell<f32>>,
     pub(crate) wifi: Reading<WifiState>,
@@ -2412,17 +2403,17 @@ impl SettingsView {
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        let keep = self.keep.as_ref()?;
-        let left = keep.until.saturating_duration_since(Instant::now());
+        let until = self.keep?;
+        let left = until.saturating_duration_since(Instant::now());
         let tick = Duration::from_nanos(left.subsec_nanos().into());
         Some(Instant::now() + if tick.is_zero() { SECOND } else { tick })
     }
 
     pub fn tick(&mut self, now: Instant) {
-        let Some(keep) = &self.keep else {
+        let Some(until) = self.keep else {
             return;
         };
-        if now >= keep.until {
+        if now >= until {
             self.keep_displays(false);
         } else {
             self.invalidate();
@@ -2430,8 +2421,8 @@ impl SettingsView {
     }
 
     pub(crate) fn seconds_left(&self) -> u64 {
-        self.keep.as_ref().map_or(0, |keep| {
-            keep.until
+        self.keep.map_or(0, |until| {
+            until
                 .saturating_duration_since(Instant::now())
                 .as_secs_f64()
                 .ceil() as u64
@@ -2439,15 +2430,10 @@ impl SettingsView {
     }
 
     fn keep_displays(&mut self, keep: bool) {
-        let Some(pending) = self.keep.take() else {
+        if self.keep.take().is_none() {
             return;
-        };
-        if !keep {
-            self.display_settings
-                .insert(pending.identity.clone(), pending.previous.clone());
-            self.commands
-                .push(Command::Display(pending.identity, pending.previous));
         }
+        self.commands.push(Command::KeepDisplays(keep));
         self.invalidate();
     }
 
@@ -2555,7 +2541,7 @@ impl SettingsView {
             .cloned()
             .unwrap_or_default();
         let previous = display.clone();
-        let mut confirm = false;
+        let mut trial = true;
         match (id, value) {
             (SettingId::Brightness, Value::Fraction(level)) => {
                 self.set_display_level(&identity, level);
@@ -2574,12 +2560,10 @@ impl SettingsView {
                 };
                 display.resolution = Some((width, height));
                 display.refresh_rate = None;
-                confirm = true;
             }
             (SettingId::DisplayRotation, Value::Number(degrees)) => {
                 display.rotation = Rotation::from_degrees(degrees)
                     .filter(|rotation| *rotation != Rotation::Upright);
-                confirm = true;
             }
             (SettingId::DisplayScale, Value::Number(percent)) => {
                 display.scale = Some(f64::from(percent) / 100.0);
@@ -2599,24 +2583,21 @@ impl SettingsView {
                     return;
                 }
                 display.colour_profile = (profile != bande_colour::DISPLAY).then_some(profile);
+                trial = self.keep.is_some();
             }
             _ => return,
         }
-        if confirm && display != previous {
-            let previous = match &self.keep {
-                Some(keep) if keep.identity == identity => keep.previous.clone(),
-                _ => previous,
-            };
-            self.keep_displays(true);
-            self.keep = Some(Keep {
-                identity: identity.clone(),
-                previous,
-                until: Instant::now() + KEEP_DISPLAY_SETTINGS,
-            });
+        if display == previous {
+            return;
         }
         self.display_settings
             .insert(identity.clone(), display.clone());
-        self.commands.push(Command::Display(identity, display));
+        if trial {
+            self.keep = Some(Instant::now() + bande_config::DISPLAY_TRIAL);
+            self.commands.push(Command::TryDisplay(identity, display));
+        } else {
+            self.commands.push(Command::Display(identity, display));
+        }
     }
 
     fn rebuild(&mut self) {

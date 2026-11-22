@@ -26,8 +26,8 @@ pub use login_picture::{
 };
 pub use report::{EDIT_ACTION, ErrorNotifier};
 pub use service::{
-    ArrangedDisplay, BUS_NAME, ConfigService, FocusScheduleValue, NightLightValue, OBJECT_PATH,
-    ServiceError,
+    ArrangedDisplay, BUS_NAME, ConfigService, DISPLAY_TRIAL, FocusScheduleValue, NightLightValue,
+    OBJECT_PATH, ServiceError,
 };
 pub use store::{ConfigStore, Loaded, ReloadError};
 

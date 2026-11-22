@@ -1,3 +1,6 @@
+# mono.py: writes glyphs.json, the outlines of JetBrains Mono Bold (BANDE_MONO_FONT) that the file
+# icon labels are drawn from, so that generating the icons does not depend on the installed font.
+import json
 import os
 import struct
 
@@ -156,28 +159,46 @@ def contour_path(contour, transform):
     return ''.join(out)
 
 
-_font = None
+GLYPHS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'glyphs.json')
+_glyphs = None
 
 
-def font():
-    global _font
-    if _font is None:
-        _font = Font(FONT)
-    return _font
+def extract():
+    face = Font(FONT)
+    glyphs = {ch: {'advance': face.advance(face.cmap.get(ch, 0)),
+                   'contours': [[[x, y, int(on)] for x, y, on in contour]
+                                for contour in face.contours(face.cmap.get(ch, 0))]}
+              for ch in map(chr, range(0x20, 0x7F))}
+    with open(GLYPHS, 'w') as out:
+        json.dump({'units': face.units, 'glyphs': glyphs}, out, separators=(',', ':'), sort_keys=True)
+        out.write('\n')
+
+
+def glyphs():
+    global _glyphs
+    if _glyphs is None:
+        with open(GLYPHS) as source:
+            _glyphs = json.load(source)
+    return _glyphs
 
 
 def text_path(text, cx, baseline, size, tracking=0.0):
-    face = font()
-    scale = size / face.units
-    advances = [face.advance(face.cmap.get(ch, 0)) * scale for ch in text]
+    table = glyphs()
+    scale = size / table['units']
+    shapes = [table['glyphs'][ch] for ch in text]
+    advances = [shape['advance'] * scale for shape in shapes]
     width = sum(advances) + tracking * (len(text) - 1)
     x = cx - width / 2
     parts = []
-    for ch, advance in zip(text, advances):
+    for shape, advance in zip(shapes, advances):
         origin = x
         def transform(px, py, origin=origin):
             return (origin + px * scale, baseline - py * scale)
-        for contour in face.contours(face.cmap.get(ch, 0)):
-            parts.append(contour_path(contour, transform))
+        for contour in shape['contours']:
+            parts.append(contour_path([(px, py, bool(on)) for px, py, on in contour], transform))
         x += advance + tracking
     return ''.join(parts), width
+
+
+if __name__ == '__main__':
+    extract()

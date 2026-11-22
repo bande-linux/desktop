@@ -2,7 +2,9 @@ use std::path::Path;
 use std::thread;
 
 use bande_config::{
-    Accessibility, BUS_NAME, Config, OBJECT_PATH, config_path, read_system_input_sources,
+    Accessibility, BUS_NAME, Config, LOGIN_DEFAULTS, OBJECT_PATH, config_path,
+    login_accessibility_file, login_defaults, read_accessibility, read_system_input_sources,
+    read_system_xkb_options,
 };
 use bande_watch::{Changes, FolderWatch};
 use zbus::blocking::Connection;
@@ -24,7 +26,9 @@ pub struct InputSettings {
 impl InputSettings {
     fn of(config: &Config) -> Self {
         Self {
-            keyboard: KeyboardSettings::resolve(&config.keyboard, read_system_input_sources),
+            keyboard: KeyboardSettings::resolve(&config.keyboard, || {
+                (read_system_input_sources(), read_system_xkb_options())
+            }),
             pointer: PointerSettings {
                 trackpad: config.trackpad,
                 mouse: config.mouse,
@@ -39,6 +43,16 @@ impl InputSettings {
 
     pub fn read() -> Option<Self> {
         user_config().map(|config| Self::of(&config))
+    }
+
+    pub fn login() -> Self {
+        let accessibility = bande_xdg::runtime_dir()
+            .and_then(|runtime| read_accessibility(&login_accessibility_file(&runtime)))
+            .unwrap_or_else(login_defaults);
+        Self {
+            accessibility,
+            ..Self::system()
+        }
     }
 }
 
@@ -95,13 +109,18 @@ pub fn follow_input_settings(
     Ok(())
 }
 
-pub fn follow_system_keyboard(
+pub fn follow_login_settings(
     mut publish: impl FnMut(InputSettings) -> bool + Send + 'static,
 ) -> std::io::Result<FolderWatch> {
     let watch = FolderWatch::spawn(Changes::Any, move |_| {
-        publish(InputSettings::system());
+        publish(InputSettings::login());
     })?;
     watch.watch(Path::new(SYSTEM_KEYBOARD_FOLDER))?;
+    if let Some(folder) = Path::new(LOGIN_DEFAULTS).parent()
+        && let Err(error) = watch.watch(folder)
+    {
+        tracing::warn!("cannot follow {}: {error}", folder.display());
+    }
     Ok(watch)
 }
 

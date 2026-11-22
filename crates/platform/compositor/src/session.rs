@@ -262,6 +262,11 @@ impl Compositor {
         }
     }
 
+    pub fn keep_login_window_helpers(&mut self) {
+        self.keep_screen_reader();
+        self.state.announce_displays();
+    }
+
     pub fn keep_session_clients_running(&mut self) -> SessionUpkeep {
         let mut upkeep = SessionUpkeep::default();
         self.keep_lock_screen(&mut upkeep);

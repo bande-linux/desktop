@@ -80,6 +80,15 @@ impl Compositor {
         self.state.needs_redraw = true;
     }
 
+    pub fn blank_when_idle(&mut self, now: Duration, after: Duration) -> Option<Duration> {
+        let due = self.state.idle.last_activity.unwrap_or(now) + after;
+        if now < due {
+            return Some(due);
+        }
+        self.state.power_off_every_output();
+        None
+    }
+
     pub fn idle_tick(&mut self, now: Duration) -> Option<Duration> {
         let state = &mut self.state;
         state

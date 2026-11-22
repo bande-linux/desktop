@@ -23,15 +23,24 @@ const HUD_HOLD: Duration = Duration::from_millis(800);
 pub struct KeyboardSettings {
     pub input_sources: Vec<InputSource>,
     pub caps_lock: CapsLock,
+    pub options: Vec<String>,
     pub repeat_rate: u32,
     pub repeat_delay: Duration,
 }
 
 impl KeyboardSettings {
-    pub fn resolve(keyboard: &Keyboard, system: impl FnOnce() -> Vec<InputSource>) -> Self {
+    pub fn resolve(
+        keyboard: &Keyboard,
+        system: impl FnOnce() -> (Vec<InputSource>, Vec<String>),
+    ) -> Self {
+        let (input_sources, options) = match keyboard.input_sources.is_empty() {
+            true => system(),
+            false => (keyboard.input_sources.clone(), Vec::new()),
+        };
         Self {
-            input_sources: keyboard.input_sources_or(system),
+            input_sources,
             caps_lock: keyboard.caps_lock,
+            options,
             repeat_rate: keyboard.repeat_rate,
             repeat_delay: keyboard.repeat_delay,
         }
@@ -48,7 +57,12 @@ impl KeyboardSettings {
         (
             join(|source| &source.layout),
             join(|source| source.variant.as_deref().unwrap_or("")),
-            self.caps_lock.xkb_option().map(str::to_owned),
+            self.caps_lock
+                .xkb_option()
+                .into_iter()
+                .chain(self.options.iter().map(String::as_str))
+                .map(str::to_owned)
+                .reduce(|options, option| options + "," + &option),
         )
     }
 }

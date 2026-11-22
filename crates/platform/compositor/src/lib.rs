@@ -89,7 +89,7 @@ pub use environment::{
 };
 pub use gesture::Gesture;
 pub use input_settings::{
-    InputSettings, follow_input_settings, follow_system_keyboard, user_config,
+    InputSettings, follow_input_settings, follow_login_settings, user_config,
 };
 pub use keyboard_monitor::{
     KEYBOARD_MONITOR_NAME, KeyboardMonitorHandle, SCREEN_READER_NAME, serve_keyboard_monitor,

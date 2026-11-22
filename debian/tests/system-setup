@@ -27,7 +27,7 @@ setup() {
 version=$(candidate bande-desktop)
 restic=$(candidate restic)
 ours=()
-for package in $(apt-cache pkgnames | grep -E '^(bande-|libpam-bande-|xdg-desktop-portal-bande$)' | sort); do
+for package in $(apt-cache pkgnames | grep -E '^(bande-|libpam-bande-|xdg-desktop-portal-bande$)' | grep -v -- '-dbgsym$' | sort); do
     [ "$(candidate "$package")" = "$version" ] || continue
     [ "$package" != bande-backup ] || [ -n "${restic#(none)}" ] || continue
     ours+=("$package")

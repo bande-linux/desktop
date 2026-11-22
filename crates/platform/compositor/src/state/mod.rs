@@ -24,7 +24,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_shm::Format;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle};
-use smithay::utils::{Logical, Physical, Point, Rectangle, Size, Transform};
+use smithay::utils::{Logical, Physical, Point, Rectangle, Serial, Size, Transform};
 use smithay::wayland::compositor::{
     CompositorClientState, SurfaceAttributes,
     TraversalAction, with_surface_tree_downward,
@@ -166,6 +166,7 @@ pub struct State {
     pub(crate) touch: crate::touch::Touch,
     pub(crate) app_states: crate::app_states::AppStates,
     pub(crate) needs_redraw: bool,
+    pub(crate) key_press_serial: Option<Serial>,
     pub(crate) reveal: crate::reveal::Reveal,
     pub(crate) pointer_location: Point<f64, Logical>,
     pub(crate) cursor_shown: bool,
@@ -327,6 +328,7 @@ impl Compositor {
             touch: crate::touch::Touch::default(),
             app_states: crate::app_states::AppStates::default(),
             needs_redraw: false,
+            key_press_serial: None,
             reveal: crate::reveal::Reveal::default(),
             pointer_location: (center.w, center.h).into(),
             cursor_shown: false,

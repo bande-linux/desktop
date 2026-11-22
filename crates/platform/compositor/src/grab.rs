@@ -192,10 +192,7 @@ impl State {
         let focused = keyboard
             .current_focus()
             .is_some_and(|focus| focus.client() == surface.client());
-        focused
-            && keyboard
-                .last_enter()
-                .is_some_and(|entered| entered <= serial)
+        focused && self.key_press_serial == Some(serial)
     }
 
     fn undo_move(&self, surface: &WlSurface) -> Option<Undo> {

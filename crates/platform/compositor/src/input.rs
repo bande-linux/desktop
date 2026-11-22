@@ -627,11 +627,15 @@ impl State {
             keyboard.unset_grab(state);
         }
         let before = keyboard.modifier_state();
+        let serial = SERIAL_COUNTER.next_serial();
+        if pressed {
+            state.key_press_serial = Some(serial);
+        }
         let action = keyboard.input(
             state,
             Keycode::new(evdev_code + EVDEV_OFFSET),
             key_state,
-            SERIAL_COUNTER.next_serial(),
+            serial,
             time,
             |state, modifiers, keysym| {
                 let serialized = modifiers.serialized;

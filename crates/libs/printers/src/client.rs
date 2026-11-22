@@ -82,10 +82,15 @@ pub struct ScannerInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
-pub struct ScanCapabilities {
-    pub sources: Vec<String>,
+pub struct ScanSource {
+    pub name: String,
     pub color: bool,
     pub resolutions: Vec<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
+pub struct ScanCapabilities {
+    pub sources: Vec<ScanSource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -170,9 +175,17 @@ impl<'a> PrintClient<'a> {
         self.proxy.call("ScanCapabilities", &(scanner,))
     }
 
-    pub fn scan(&self, scanner: &str, options: &ScanOptions) -> zbus::Result<Vec<OwnedFd>> {
-        let pages: Vec<zbus::zvariant::OwnedFd> = self.proxy.call("Scan", &(scanner, options))?;
-        Ok(pages.into_iter().map(OwnedFd::from).collect())
+    pub fn scan(&self, scanner: &str, options: &ScanOptions) -> zbus::Result<Vec<(OwnedFd, u32)>> {
+        let pages: Vec<(zbus::zvariant::OwnedFd, u32)> =
+            self.proxy.call("Scan", &(scanner, options))?;
+        Ok(pages
+            .into_iter()
+            .map(|(page, dpi)| (OwnedFd::from(page), dpi))
+            .collect())
+    }
+
+    pub fn cancel_scan(&self, scanner: &str) -> zbus::Result<()> {
+        self.proxy.call("CancelScan", &(scanner,))
     }
 
     pub fn changes(&self) -> zbus::Result<zbus::blocking::proxy::SignalIterator<'a>> {

@@ -1712,6 +1712,15 @@ msgstr "Typ"
 msgid "Location"
 msgstr "Plats"
 
+msgid "It shows up again when it is found on this network, and its identity is learned anew."
+msgstr "Den dyker upp igen när den hittas på det här nätverket, och dess identitet lärs in på nytt."
+
+msgid "Remove this scanner"
+msgstr "Ta bort den här skannern"
+
+msgid "Remove “{name}”?"
+msgstr "Vill du ta bort ”{name}”?"
+
 msgid "Address"
 msgstr "Adress"
 
@@ -1735,9 +1744,6 @@ msgstr "Gör till standard"
 
 msgid "Use as the default printer"
 msgstr "Använd som standardskrivare"
-
-msgid "Remove “{name}”?"
-msgstr "Vill du ta bort ”{name}”?"
 
 msgid "Documents waiting for it are canceled. You can add it again later."
 msgstr "Dokument som väntar på den avbryts. Du kan lägga till den igen senare."
@@ -1839,6 +1845,9 @@ msgstr "Upplösning"
 msgid "Scanning…"
 msgstr "Skannar…"
 
+msgid "Stopping…"
+msgstr "Avbryter…"
+
 msgid "Saving…"
 msgstr "Sparar…"
 
@@ -1868,8 +1877,22 @@ msgstr "Spara…"
 msgid "Save the scanned pages"
 msgstr "Spara de skannade sidorna"
 
+msgid "Keep"
+msgstr "Behåll"
+
 msgid "Discard"
 msgstr "Släng"
+
+msgid "Discard the scanned page?"
+msgid_plural "Discard the {count} scanned pages?"
+msgstr[0] "Vill du slänga den skannade sidan?"
+msgstr[1] "Vill du slänga de {count} skannade sidorna?"
+
+msgid "They have not been saved."
+msgstr "De har inte sparats."
+
+msgid "Discard…"
+msgstr "Släng…"
 
 msgid "Start over"
 msgstr "Börja om"
@@ -2453,9 +2476,6 @@ msgstr "Skriv datum och tid som år-månad-dag timmar:minuter, till exempel 2026
 
 msgid "Keep these display settings?"
 msgstr "Vill du behålla de här skärminställningarna?"
-
-msgid "Keep"
-msgstr "Behåll"
 
 msgid "Revert"
 msgstr "Återställ"

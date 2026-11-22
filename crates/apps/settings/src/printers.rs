@@ -56,7 +56,8 @@ pub enum PrinterCommand {
     InstallPrinting(Support),
     ScanCapabilities(String),
     Scan(String, ScanOptions),
-    SaveScan(Vec<Page>, Format),
+    CancelScan(String),
+    SaveScan(String, Vec<Page>, Format),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,10 +284,14 @@ pub fn follow_printers(
                     });
                     Ok(())
                 }
-                PrinterCommand::SaveScan(pages, format) => {
+                PrinterCommand::CancelScan(scanner) => {
+                    scan::cancel(&commands_session, &scanner);
+                    Ok(())
+                }
+                PrinterCommand::SaveScan(scanner, pages, format) => {
                     let (session, updates) = (commands_session.clone(), updates.clone());
                     spawn("save-scan", move || {
-                        updates.send(scan::save(&session, &pages, format));
+                        updates.send(scan::save(&session, &scanner, &pages, format));
                     });
                     Ok(())
                 }
@@ -596,7 +601,41 @@ impl SettingsView {
             page.push(boxed(Card::new(about)));
         }
         page.extend(self.scan_rows(id));
+        let remove = self.remove_row(
+            id,
+            &scanner.name,
+            &tr!("It shows up again when it is found on this network, and its identity is learned anew."),
+            &tr!("Remove this scanner"),
+        );
+        page.push(boxed(Card::new(vec![remove])));
         Some(page)
+    }
+
+    fn remove_row(
+        &mut self,
+        id: &str,
+        name: &str,
+        consequence: &str,
+        label: &str,
+    ) -> Box<dyn Widget> {
+        let forget = Forget::Printer(id.to_owned());
+        if self.forgetting.as_ref() == Some(&forget) {
+            return self.confirm_row(
+                &tr!("Remove “{name}”?", name = name.to_owned()),
+                consequence,
+                &tr!("Remove"),
+            );
+        }
+        let mut ask = intent(&self.intents, move |()| {
+            Intent::AskForget(Some(forget.clone()))
+        });
+        let button = Button::new(&tr!("Remove…"), move || ask(()));
+        self.anchors
+            .push((Anchor::Item(format!("printer:{id}")), button.id()));
+        boxed(Row::new(
+            Text::new(label, Tone::Primary),
+            Some(boxed(button)),
+        ))
     }
 
     pub(crate) fn printer_page(&mut self) -> Option<Widgets> {
@@ -713,25 +752,13 @@ impl SettingsView {
             )));
         }
         let removable = printer.kind != Kind::Direct || !printer.reachable;
-        let forget = Forget::Printer(id.clone());
-        if !removable {
-        } else if self.forgetting.as_ref() == Some(&forget) {
-            actions.push(self.confirm_row(
-                &tr!("Remove “{name}”?", name = printer.name.clone()),
+        if removable {
+            actions.push(self.remove_row(
+                &id,
+                &printer.name,
                 &tr!("Documents waiting for it are canceled. You can add it again later."),
-                &tr!("Remove"),
+                &tr!("Remove this printer"),
             ));
-        } else {
-            let mut ask = intent(&self.intents, move |()| {
-                Intent::AskForget(Some(forget.clone()))
-            });
-            let button = Button::new(&tr!("Remove…"), move || ask(()));
-            self.anchors
-                .push((Anchor::Item(format!("printer:{id}")), button.id()));
-            actions.push(boxed(Row::new(
-                Text::new(&tr!("Remove this printer"), Tone::Primary),
-                Some(boxed(button)),
-            )));
         }
         if !actions.is_empty() {
             page.push(boxed(Card::new(actions)));

@@ -7,16 +7,17 @@ use std::sync::Arc;
 use bande_app::choose_save_file;
 use bande_l10n::{tr, trn};
 use bande_pdf::Picture;
-use bande_printers::{PrintClient, ScanCapabilities, ScanOptions};
+use bande_printers::{PrintClient, ScanCapabilities, ScanOptions, ScanSource};
 use bande_toolkit::Image;
-use bande_toolkit::ui::{Button, PopUpButton, Widget};
+use bande_toolkit::Spacing;
+use bande_toolkit::ui::{Axis, Button, PopUpButton, Stack, Widget};
 use image::{ImageFormat, ImageReader};
 use zbus::blocking::Connection;
 
-use crate::follow::Update;
+use crate::follow::{Command, Update};
 use crate::pages::{Widgets, boxed, muted_row};
 use crate::printers::PrinterCommand;
-use crate::view::{Anchor, Intent, SettingsView, intent};
+use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, Preview, Row, Text, Tone};
 
 const PLATEN: &str = "Platen";
@@ -73,7 +74,7 @@ impl fmt::Debug for Page {
 pub enum ScanUpdate {
     Capabilities(String, Result<ScanCapabilities, String>),
     Scanned(String, Result<(Vec<Page>, Option<Image>), String>),
-    Saved(Result<Option<String>, String>),
+    Saved(String, Result<Option<String>, String>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,14 +85,18 @@ pub enum ScanIntent {
     Format(usize),
     Retry,
     Start,
+    Cancel,
     Save,
     Discard,
+    ConfirmDiscard,
+    KeepPages,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Busy {
     Asking,
     Scanning,
+    Cancelling,
     Saving,
 }
 
@@ -107,6 +112,7 @@ pub struct ScanState {
     preview: Option<Image>,
     busy: Option<Busy>,
     message: Option<String>,
+    asking_discard: bool,
 }
 
 impl ScanState {
@@ -122,6 +128,7 @@ impl ScanState {
             preview: None,
             busy: Some(Busy::Asking),
             message: None,
+            asking_discard: false,
         }
     }
 
@@ -132,13 +139,24 @@ impl ScanState {
         }
     }
 
+    fn source(&self) -> Option<&ScanSource> {
+        self.capabilities.as_ref()?.sources.get(self.source)
+    }
+
     fn options(&self) -> Option<ScanOptions> {
-        let capabilities = self.capabilities.as_ref()?;
+        let source = self.source()?;
         Some(ScanOptions {
-            source: capabilities.sources.get(self.source)?.clone(),
-            color: self.color && capabilities.color,
+            source: source.name.clone(),
+            color: self.color && source.color,
             resolution: self.resolution,
         })
+    }
+
+    fn discard(&mut self) {
+        self.pages.clear();
+        self.preview = None;
+        self.format = Format::Pdf;
+        self.asking_discard = false;
     }
 }
 
@@ -210,7 +228,7 @@ pub fn scan(session: &Connection, scanner: &str, options: &ScanOptions) -> Updat
         .and_then(|pages| {
             let pages = pages
                 .into_iter()
-                .map(|page| read_page(page, options.resolution))
+                .map(|(page, dpi)| read_page(page, dpi))
                 .collect::<Result<Vec<_>, _>>()?;
             let preview = pages
                 .last()
@@ -253,7 +271,14 @@ fn encoded(pages: &[Page], format: Format) -> Result<Vec<u8>, String> {
     }
 }
 
-pub fn save(session: &Connection, pages: &[Page], format: Format) -> Update {
+pub fn cancel(session: &Connection, scanner: &str) {
+    let cancelled = PrintClient::new(session).and_then(|client| client.cancel_scan(scanner));
+    if let Err(error) = cancelled {
+        tracing::warn!("cannot stop a scan: {error}");
+    }
+}
+
+pub fn save(session: &Connection, scanner: &str, pages: &[Page], format: Format) -> Update {
     let name = format!(
         "{}.{}",
         tr!(context = "document", "Scan"),
@@ -272,7 +297,7 @@ pub fn save(session: &Connection, pages: &[Page], format: Format) -> Update {
             Err(tr!("Couldn’t save the scan."))
         }
     };
-    Update::Scan(ScanUpdate::Saved(saved))
+    Update::Scan(ScanUpdate::Saved(scanner.to_owned(), saved))
 }
 
 fn write(path: &Path, pages: &[Page], format: Format) -> Result<(), String> {
@@ -284,40 +309,57 @@ fn write(path: &Path, pages: &[Page], format: Format) -> Result<(), String> {
 }
 
 impl SettingsView {
+    fn opened_scan(&mut self) -> Option<&mut ScanState> {
+        let Some(Detail::Printer(id)) = &self.detail else {
+            return None;
+        };
+        self.scans.get_mut(id)
+    }
+
     pub(crate) fn open_scanner(&mut self, id: &str) {
         let known = self
             .printers
             .as_ref()
             .is_some_and(|state| state.scanners.iter().any(|scanner| scanner.id == id));
-        if !known || self.scan.as_ref().is_some_and(|scan| scan.scanner == id) {
+        if !known || self.scans.contains_key(id) {
             return;
         }
-        self.scan = Some(ScanState::new(id));
-        self.commands.push(crate::follow::Command::Printers(
-            PrinterCommand::ScanCapabilities(id.to_owned()),
-        ));
+        self.scans.insert(id.to_owned(), ScanState::new(id));
+        self.commands
+            .push(Command::Printers(PrinterCommand::ScanCapabilities(
+                id.to_owned(),
+            )));
     }
 
     pub(crate) fn scan_update(&mut self, update: ScanUpdate) {
-        let Some(scan) = self.scan.as_mut() else {
+        let id = match &update {
+            ScanUpdate::Capabilities(id, _)
+            | ScanUpdate::Scanned(id, _)
+            | ScanUpdate::Saved(id, _) => id.clone(),
+        };
+        let opened = matches!(&self.detail, Some(Detail::Printer(shown)) if *shown == id);
+        let Some(scan) = self.scans.get_mut(&id) else {
             return;
         };
+        let mut focus = None;
         match update {
-            ScanUpdate::Capabilities(id, answer) if id == scan.scanner => {
+            ScanUpdate::Capabilities(_, answer) => {
                 scan.busy = None;
                 match answer {
                     Ok(capabilities) => {
-                        scan.resolution = nearest(&capabilities.resolutions, scan.resolution);
                         scan.source = scan
                             .source
                             .min(capabilities.sources.len().saturating_sub(1));
                         scan.capabilities = Some(capabilities);
+                        if let Some(source) = scan.source() {
+                            scan.resolution = nearest(&source.resolutions, scan.resolution);
+                        }
                         scan.message = None;
                     }
                     Err(message) => scan.message = Some(message),
                 }
             }
-            ScanUpdate::Scanned(id, scanned) if id == scan.scanner => {
+            ScanUpdate::Scanned(_, scanned) => {
                 scan.busy = None;
                 match scanned {
                     Ok((pages, preview)) => {
@@ -327,39 +369,49 @@ impl SettingsView {
                         if !scan.formats().contains(&scan.format) {
                             scan.format = Format::Pdf;
                         }
-                        self.focus_next = Some(Anchor::Item("scan-save".to_owned()));
+                        focus = Some("scan-save");
                     }
                     Err(message) => scan.message = Some(message),
                 }
             }
-            ScanUpdate::Saved(saved) => {
+            ScanUpdate::Saved(_, saved) => {
                 scan.busy = None;
                 match saved {
                     Ok(Some(name)) => {
-                        scan.pages.clear();
-                        scan.preview = None;
-                        scan.format = Format::Pdf;
+                        scan.discard();
                         scan.message = Some(tr!("Saved “{name}”", name = name));
-                        self.focus_next = Some(Anchor::Item("scan".to_owned()));
+                        focus = Some("scan");
                     }
                     Ok(None) => {}
                     Err(message) => scan.message = Some(message),
                 }
             }
-            _ => {}
+        }
+        if opened && let Some(anchor) = focus {
+            self.focus_next = Some(Anchor::Item(anchor.to_owned()));
         }
     }
 
     pub(crate) fn scan_intent(&mut self, change: ScanIntent) {
-        let Some(scan) = self.scan.as_mut() else {
+        let Some(scan) = self.opened_scan() else {
             return;
         };
-        let capabilities = scan.capabilities.clone().unwrap_or_default();
+        let id = scan.scanner.clone();
+        let mut command = None;
+        let mut focus = None;
         match change {
-            ScanIntent::Source(index) => scan.source = index,
+            ScanIntent::Source(index) => {
+                scan.source = index;
+                if let Some(source) = scan.source() {
+                    scan.resolution = nearest(&source.resolutions, scan.resolution);
+                }
+            }
             ScanIntent::Color(index) => scan.color = index == 0,
             ScanIntent::Resolution(index) => {
-                if let Some(dpi) = capabilities.resolutions.get(index) {
+                if let Some(dpi) = scan
+                    .source()
+                    .and_then(|source| source.resolutions.get(index))
+                {
                     scan.resolution = *dpi;
                 }
             }
@@ -371,10 +423,7 @@ impl SettingsView {
             ScanIntent::Retry => {
                 scan.busy = Some(Busy::Asking);
                 scan.message = None;
-                let id = scan.scanner.clone();
-                self.commands.push(crate::follow::Command::Printers(
-                    PrinterCommand::ScanCapabilities(id),
-                ));
+                command = Some(PrinterCommand::ScanCapabilities(id));
             }
             ScanIntent::Start => {
                 if let Some(options) = scan.options()
@@ -382,31 +431,48 @@ impl SettingsView {
                 {
                     scan.busy = Some(Busy::Scanning);
                     scan.message = None;
-                    let id = scan.scanner.clone();
-                    self.commands
-                        .push(crate::follow::Command::Printers(PrinterCommand::Scan(
-                            id, options,
-                        )));
+                    scan.asking_discard = false;
+                    command = Some(PrinterCommand::Scan(id, options));
+                    focus = Some("scan");
+                }
+            }
+            ScanIntent::Cancel => {
+                if scan.busy == Some(Busy::Scanning) {
+                    scan.busy = Some(Busy::Cancelling);
+                    command = Some(PrinterCommand::CancelScan(id));
                 }
             }
             ScanIntent::Save => {
                 if !scan.pages.is_empty() && scan.busy.is_none() {
                     scan.busy = Some(Busy::Saving);
                     scan.message = None;
-                    self.commands
-                        .push(crate::follow::Command::Printers(PrinterCommand::SaveScan(
-                            scan.pages.clone(),
-                            scan.format,
-                        )));
+                    scan.asking_discard = false;
+                    command = Some(PrinterCommand::SaveScan(
+                        id,
+                        scan.pages.clone(),
+                        scan.format,
+                    ));
                 }
             }
             ScanIntent::Discard => {
-                scan.pages.clear();
-                scan.preview = None;
-                scan.format = Format::Pdf;
-                scan.message = None;
-                self.focus_next = Some(Anchor::Item("scan".to_owned()));
+                scan.asking_discard = true;
+                focus = Some("scan-keep");
             }
+            ScanIntent::KeepPages => {
+                scan.asking_discard = false;
+                focus = Some("scan-discard");
+            }
+            ScanIntent::ConfirmDiscard => {
+                scan.discard();
+                scan.message = None;
+                focus = Some("scan");
+            }
+        }
+        if let Some(command) = command {
+            self.commands.push(Command::Printers(command));
+        }
+        if let Some(anchor) = focus {
+            self.focus_next = Some(Anchor::Item(anchor.to_owned()));
         }
     }
 
@@ -441,7 +507,7 @@ impl SettingsView {
     }
 
     pub(crate) fn scan_rows(&mut self, scanner: &str) -> Widgets {
-        let Some(scan) = self.scan.clone().filter(|scan| scan.scanner == scanner) else {
+        let Some(scan) = self.scans.get(scanner).cloned() else {
             return Vec::new();
         };
         let mut page: Widgets = vec![boxed(Caption::new(Text::label(&tr!("Scan"))))];
@@ -465,7 +531,7 @@ impl SettingsView {
             let titles: Vec<String> = capabilities
                 .sources
                 .iter()
-                .map(|source| source_title(source))
+                .map(|source| source_title(&source.name))
                 .collect();
             rows.push(self.scan_menu(
                 &tr!("Source"),
@@ -475,7 +541,8 @@ impl SettingsView {
                 ScanIntent::Source,
             ));
         }
-        if capabilities.color {
+        let source = scan.source().cloned().unwrap_or_default();
+        if source.color {
             rows.push(self.scan_menu(
                 &tr!("Color"),
                 "scan-color",
@@ -484,13 +551,13 @@ impl SettingsView {
                 ScanIntent::Color,
             ));
         }
-        if capabilities.resolutions.len() > 1 {
-            let titles: Vec<String> = capabilities
+        if source.resolutions.len() > 1 {
+            let titles: Vec<String> = source
                 .resolutions
                 .iter()
                 .map(|dpi| tr!("{dpi} dpi", dpi = dpi.to_string()))
                 .collect();
-            let selected = capabilities
+            let selected = source
                 .resolutions
                 .iter()
                 .position(|dpi| *dpi == scan.resolution)
@@ -505,6 +572,7 @@ impl SettingsView {
         }
         let status = match (scan.busy, &scan.message) {
             (Some(Busy::Scanning), _) => tr!("Scanning…"),
+            (Some(Busy::Cancelling), _) => tr!("Stopping…"),
             (Some(Busy::Saving), _) => tr!("Saving…"),
             (_, Some(message)) => message.clone(),
             _ if scan.pages.is_empty() => {
@@ -520,7 +588,15 @@ impl SettingsView {
             true => tr!("Scan"),
             false => tr!("Scan More"),
         };
-        let button = self.scan_button(&label, "scan", idle, ScanIntent::Start);
+        let button = match scan.busy {
+            Some(Busy::Scanning | Busy::Cancelling) => self.scan_button(
+                &tr!("Cancel"),
+                "scan",
+                scan.busy == Some(Busy::Scanning),
+                ScanIntent::Cancel,
+            ),
+            _ => self.scan_button(&label, "scan", idle, ScanIntent::Start),
+        };
         rows.push(boxed(
             Row::new(
                 Text::new(&tr!("Scan with these settings"), Tone::Primary),
@@ -556,12 +632,41 @@ impl SettingsView {
                 Text::new(&tr!("Save the scanned pages"), Tone::Primary),
                 Some(save),
             )));
-            let discard =
-                self.scan_button(&tr!("Discard"), "scan-discard", idle, ScanIntent::Discard);
-            rows.push(boxed(Row::new(
-                Text::new(&tr!("Start over"), Tone::Primary),
-                Some(discard),
-            )));
+            if scan.asking_discard {
+                let keep = self.scan_button(&tr!("Keep"), "scan-keep", true, ScanIntent::KeepPages);
+                let discard = self.scan_button(
+                    &tr!("Discard"),
+                    "scan-discard",
+                    idle,
+                    ScanIntent::ConfirmDiscard,
+                );
+                rows.push(boxed(
+                    Row::new(
+                        Text::new(
+                            &trn!(
+                                "Discard the scanned page?",
+                                "Discard the {count} scanned pages?",
+                                count = scan.pages.len()
+                            ),
+                            Tone::Primary,
+                        ),
+                        Some(boxed(Stack::new(
+                            Axis::Horizontal,
+                            Spacing::S as f32,
+                            0.0,
+                            vec![keep, discard],
+                        ))),
+                    )
+                    .detail(Text::new(&tr!("They have not been saved."), Tone::Muted).caption()),
+                ));
+            } else {
+                let discard =
+                    self.scan_button(&tr!("Discard…"), "scan-discard", idle, ScanIntent::Discard);
+                rows.push(boxed(Row::new(
+                    Text::new(&tr!("Start over"), Tone::Primary),
+                    Some(discard),
+                )));
+            }
         }
         page.push(boxed(Card::new(rows)));
         page

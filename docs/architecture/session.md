@@ -70,10 +70,12 @@ graph LR
   the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`
   (logind checks swap, resume and Secure Boot), so a sleeping laptop hibernates before its
   battery runs out (`HibernateDelaySec=` in `sleep.conf` decides when). Settings ▸ Power says
-  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`. While someone
-  holds logind's `handle-lid-switch` inhibitor (Settings ▸ Power keeping the computer running
-  with the lid closed on power), closing the lid locks the session through logind unless
-  logind counts the computer as `Docked`.
+  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`. When logind leaves
+  the lid alone, because someone holds its `handle-lid-switch` inhibitor (Settings ▸ Power
+  keeping the computer running with the lid closed on power) or `HandleLidSwitch=` or
+  `HandleLidSwitchExternalPower=` is `ignore`, closing the lid locks the session through logind
+  unless logind counts the computer as `Docked`. Where only one of the two is `ignore`, the
+  other source sleeps as well, which locks anyway.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 

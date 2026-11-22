@@ -98,6 +98,9 @@ msgstr "Bilden är skadad"
 msgid "Took too long to preview"
 msgstr "Förhandsvisningen tog för lång tid"
 
+msgid "Previewing this needs the libheif1 package"
+msgstr "Paketet libheif1 behövs för att förhandsvisa den här"
+
 msgid "This kind of image can’t be previewed"
 msgstr "Den här sortens bild kan inte förhandsvisas"
 

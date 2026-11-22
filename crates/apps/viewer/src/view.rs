@@ -156,6 +156,7 @@ fn failure_text(failure: &Failure) -> String {
         Failure::Damaged => tr!("The file is damaged or is not in a format Viewer understands."),
         Failure::FileTooLarge => tr!("The file is too large to open."),
         Failure::TimedOut => tr!("The file took too long to open."),
+        Failure::MissingDecoder => tr!("Opening this picture needs the libheif1 package."),
         Failure::TooLarge { width, height } => tr_with(
             text!("The image is too large to open ({width} × {height} pixels)."),
             &[("width", width.to_string()), ("height", height.to_string())],

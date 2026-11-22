@@ -92,8 +92,6 @@ Build-Depends: debhelper-compat (= 14),
  librust-krilla-0.8+raster-images-dev (>= 0.8.2-~~) <!pkg.bande.vendor>,
  librust-libc-0.2-dev (>= 0.2.186-~~) <!pkg.bande.vendor>,
  librust-libc-0.2+default-dev (>= 0.2.186-~~) <!pkg.bande.vendor>,
- librust-libheif-rs-2-dev (>= 2.7.0-~~) <!pkg.bande.vendor>,
- librust-libheif-rs-2+default-dev (>= 2.7.0-~~) <!pkg.bande.vendor>,
  librust-libloading-0.8-dev (>= 0.8.9-~~) <!pkg.bande.vendor>,
  librust-libloading-0.8+default-dev (>= 0.8.9-~~) <!pkg.bande.vendor>,
  librust-lzma-rust2-0.23-dev (>= 0.23.0-~~) <!pkg.bande.vendor>,
@@ -294,13 +292,13 @@ Build-Depends-Arch: pkgconf,
  capnproto,
  libgstreamer1.0-dev,
  libgstreamer-plugins-base1.0-dev,
- libheif-dev,
  dbus-daemon <!nocheck>,
  dbus-bin <!nocheck>,
  libvulkan1 <!nocheck>,
  mesa-vulkan-drivers <!nocheck>,
  at-spi2-core <!nocheck>,
  libfontconfig1 <!nocheck>,
+ libheif1 <!nocheck>,
  libwayland-client0 <!nocheck>,
  procps <!nocheck>,
  fonts-inter <!nocheck>,
@@ -543,6 +541,7 @@ Depends: ${shlibs:Depends},
  fonts-inter,
  fonts-manrope,
  ${misc:Depends}
+Recommends: libheif1
 Description: Bande portal dialogs: Open and Save, Open With and permissions
  The dialogs of xdg-desktop-portal-bande: the Bande Open and Save dialogs
  (favourite places and volumes in a sidebar, a path bar, a sortable list
@@ -736,7 +735,8 @@ Recommends: pipewire,
  bande-tray (= ${binary:Version}),
  xdg-user-dirs,
  fonts-noto-color-emoji,
- bluez
+ bluez,
+ libheif1
 Description: Bande shell: the desktop, the bar, notifications and the launcher
  The shell of the Bande desktop, one process for the whole session. On
  every display it draws the desktop, the wallpaper in its light and dark
@@ -803,7 +803,8 @@ Depends: ${shlibs:Depends},
  fonts-manrope,
  fonts-jetbrains-mono,
  ${misc:Depends}
-Recommends: fonts-dejavu-core
+Recommends: fonts-dejavu-core,
+ libheif1
 Description: Bande Files: the file manager of the Bande desktop
  The file manager of the Bande desktop: folders open in Miller columns
  driven by the arrow keys, and Space shows the selected file in Glance.
@@ -1114,7 +1115,8 @@ Depends: ${shlibs:Depends},
  fonts-manrope,
  fonts-jetbrains-mono,
  ${misc:Depends}
-Recommends: bande-files (= ${binary:Version})
+Recommends: bande-files (= ${binary:Version}),
+ libheif1
 Description: image and PDF viewer for the Bande desktop
  The image and PDF viewer of the Bande desktop: opens photos and pictures
  from Files, zooms, rotates and flips them, steps through a folder, plays

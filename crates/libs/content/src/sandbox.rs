@@ -32,6 +32,13 @@ const ALLOWED: &[libc::c_long] = &[
     libc::SYS_clock_gettime,
 ];
 
+const THREADS: &[libc::c_long] = &[
+    libc::SYS_clone3,
+    libc::SYS_set_robust_list,
+    libc::SYS_rseq,
+    libc::SYS_sched_getaffinity,
+];
+
 fn statement(code: u16, k: u32) -> libc::sock_filter {
     libc::sock_filter {
         code,
@@ -41,8 +48,8 @@ fn statement(code: u16, k: u32) -> libc::sock_filter {
     }
 }
 
-fn program() -> Vec<libc::sock_filter> {
-    let count = ALLOWED.len();
+fn program(allowed: &[libc::c_long]) -> Vec<libc::sock_filter> {
+    let count = allowed.len();
     let mut filter = vec![
         statement(LOAD, ARCH_OFFSET),
         libc::sock_filter {
@@ -54,7 +61,7 @@ fn program() -> Vec<libc::sock_filter> {
         statement(RETURN, KILL),
         statement(LOAD, NUMBER_OFFSET),
     ];
-    for (index, number) in ALLOWED.iter().enumerate() {
+    for (index, number) in allowed.iter().enumerate() {
         filter.push(libc::sock_filter {
             code: JUMP_EQUAL,
             jt: (count - index) as u8,
@@ -70,7 +77,15 @@ fn program() -> Vec<libc::sock_filter> {
 /// Allows this process only to compute, allocate, read and write open descriptors and exit from
 /// now on; any other system call fails. Returns whether the filter is in place.
 pub fn only_compute_from_now_on() -> bool {
-    let filter = program();
+    confine_to(ALLOWED)
+}
+
+pub(crate) fn only_compute_and_start_threads_from_now_on() -> bool {
+    confine_to(&[ALLOWED, THREADS].concat())
+}
+
+fn confine_to(allowed: &[libc::c_long]) -> bool {
+    let filter = program(allowed);
     let Ok(len) = u16::try_from(filter.len()) else {
         return false;
     };

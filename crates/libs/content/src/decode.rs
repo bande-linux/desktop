@@ -10,10 +10,11 @@ use image::codecs::webp::WebPDecoder;
 use image::metadata::Orientation;
 use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits};
 use jxl_oxide::{AllocTracker, JxlImage};
-use libheif_rs::{ColorSpace, DecodingOptions, HeifContext, LibHeif, RgbChroma};
+use resvg::usvg::fontdb::{Database, Family, Query};
 use serde::{Deserialize, Serialize};
 
 use crate::facts::{Facts, camera_facts, container_facts};
+use crate::heif::Libheif;
 
 pub const MAX_FILE_BYTES: u64 = 512 << 20;
 pub const MAX_PIXELS: u64 = 100_000_000;
@@ -23,6 +24,14 @@ const MAX_FRAMES: usize = 4096;
 const SMALLEST_LEVEL: u32 = 256;
 const SVG_SIDE: f32 = 2048.0;
 const SVG_MAX_SIDE: f32 = 8192.0;
+const SERIF: &[&str] = &["DejaVu Serif", "Noto Serif", "Liberation Serif", "Inter"];
+const SANS_SERIF: &[&str] = &["Inter", "DejaVu Sans", "Noto Sans", "Liberation Sans"];
+const MONOSPACE: &[&str] = &[
+    "JetBrains Mono",
+    "DejaVu Sans Mono",
+    "Noto Sans Mono",
+    "Liberation Mono",
+];
 const MIN_DELAY: Duration = Duration::from_millis(20);
 const DEFAULT_DELAY: Duration = Duration::from_millis(100);
 const JXL_CODESTREAM: &[u8] = &[0xff, 0x0a];
@@ -64,6 +73,7 @@ pub enum Failure {
     TooLarge { width: u32, height: u32 },
     FileTooLarge,
     TimedOut,
+    MissingDecoder,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,7 +186,7 @@ pub fn read_file(path: &Path) -> Result<Vec<u8>, Failure> {
     }
 }
 
-fn allowed(width: u32, height: u32) -> Result<(), Failure> {
+pub(crate) fn allowed(width: u32, height: u32) -> Result<(), Failure> {
     match width == 0 || height == 0 {
         true => Err(Failure::Damaged),
         false if u64::from(width) * u64::from(height) > MAX_PIXELS => {
@@ -192,35 +202,45 @@ fn limits() -> Limits {
     limits
 }
 
+/// Decodes `bytes` in this process. HEIF and AVIF are only decoded by `decode_confined`.
 pub fn decode(bytes: &[u8], kind: Kind) -> Result<Decoded, Failure> {
-    decode_with(bytes, kind, &svg_options(kind))
-}
-
-pub(crate) fn svg_options(kind: Kind) -> resvg::usvg::Options<'static> {
-    let mut options = resvg::usvg::Options::default();
-    if kind == Kind::Svg {
-        options.fontdb_mut().load_system_fonts();
-    }
-    options
-}
-
-pub(crate) fn decode_with(
-    bytes: &[u8],
-    kind: Kind,
-    svg: &resvg::usvg::Options<'_>,
-) -> Result<Decoded, Failure> {
     match kind {
-        Kind::Svg => decode_svg(bytes, svg),
-        Kind::Gif => decode_gif(bytes),
-        Kind::Webp => decode_webp(bytes),
-        Kind::Png => decode_still(bytes, ImageFormat::Png),
-        Kind::Jpeg => decode_still(bytes, ImageFormat::Jpeg),
-        Kind::Tiff => decode_still(bytes, ImageFormat::Tiff),
-        Kind::Bmp => decode_still(bytes, ImageFormat::Bmp),
-        Kind::Ico => decode_still(bytes, ImageFormat::Ico),
-        Kind::Heif | Kind::Avif => decode_heif(bytes),
-        Kind::Jxl => decode_jxl(bytes),
-        Kind::Pdf => Err(Failure::NotSupported),
+        Kind::Heif | Kind::Avif => Err(Failure::NotSupported),
+        _ => Prepared::new(bytes, kind)?.decode(bytes),
+    }
+}
+
+pub(crate) enum Prepared {
+    Svg(Box<resvg::usvg::Tree>),
+    Heif(Libheif, Kind),
+    Other(Kind),
+}
+
+impl Prepared {
+    pub(crate) fn new(bytes: &[u8], kind: Kind) -> Result<Self, Failure> {
+        Ok(match kind {
+            Kind::Svg => Self::Svg(Box::new(parse_svg(bytes)?)),
+            Kind::Heif | Kind::Avif => Self::Heif(Libheif::load()?, kind),
+            _ => Self::Other(kind),
+        })
+    }
+
+    pub(crate) fn decode(&self, bytes: &[u8]) -> Result<Decoded, Failure> {
+        match self {
+            Self::Svg(tree) => render_svg(tree),
+            Self::Heif(libheif, kind) => decode_heif(libheif, bytes, *kind),
+            Self::Other(Kind::Gif) => decode_gif(bytes),
+            Self::Other(Kind::Webp) => decode_webp(bytes),
+            Self::Other(Kind::Png) => decode_still(bytes, ImageFormat::Png),
+            Self::Other(Kind::Jpeg) => decode_still(bytes, ImageFormat::Jpeg),
+            Self::Other(Kind::Tiff) => decode_still(bytes, ImageFormat::Tiff),
+            Self::Other(Kind::Bmp) => decode_still(bytes, ImageFormat::Bmp),
+            Self::Other(Kind::Ico) => decode_still(bytes, ImageFormat::Ico),
+            Self::Other(Kind::Jxl) => decode_jxl(bytes),
+            Self::Other(Kind::Svg | Kind::Heif | Kind::Avif | Kind::Pdf) => {
+                Err(Failure::NotSupported)
+            }
+        }
     }
 }
 
@@ -244,30 +264,8 @@ fn decode_still(bytes: &[u8], format: ImageFormat) -> Result<Decoded, Failure> {
     Ok(still(image.into_rgba8(), facts))
 }
 
-fn decode_heif(bytes: &[u8]) -> Result<Decoded, Failure> {
-    let context = HeifContext::read_from_bytes(bytes).map_err(|_| Failure::Damaged)?;
-    let handle = context
-        .primary_image_handle()
-        .map_err(|_| Failure::Damaged)?;
-    allowed(handle.width(), handle.height())?;
-    let mut options = DecodingOptions::new().ok_or(Failure::Damaged)?;
-    options.set_convert_hdr_to_8bit(true);
-    let image = LibHeif::new()
-        .decode(&handle, ColorSpace::Rgb(RgbChroma::Rgba), Some(options))
-        .map_err(|_| Failure::Damaged)?;
-    let plane = image.planes().interleaved.ok_or(Failure::Damaged)?;
-    allowed(plane.width, plane.height)?;
-    let row = plane.width as usize * 4;
-    let mut rgba = Vec::with_capacity(row * plane.height as usize);
-    for line in plane
-        .data
-        .chunks(plane.stride.max(1))
-        .take(plane.height as usize)
-    {
-        rgba.extend_from_slice(line.get(..row).ok_or(Failure::Damaged)?);
-    }
-    let picture =
-        image::RgbaImage::from_raw(plane.width, plane.height, rgba).ok_or(Failure::Damaged)?;
+fn decode_heif(libheif: &Libheif, bytes: &[u8], kind: Kind) -> Result<Decoded, Failure> {
+    let picture = libheif.decode(bytes, kind)?;
     Ok(still(picture, container_facts(bytes)))
 }
 
@@ -446,8 +444,54 @@ fn decode_webp(bytes: &[u8]) -> Result<Decoded, Failure> {
     Ok(still(image.into_rgba8(), camera_facts(exif)))
 }
 
-fn decode_svg(bytes: &[u8], options: &resvg::usvg::Options<'_>) -> Result<Decoded, Failure> {
-    let tree = resvg::usvg::Tree::from_data(bytes, options).map_err(|_| Failure::Damaged)?;
+fn resolves(fonts: &Database, family: Family<'_>) -> bool {
+    let query = Query {
+        families: &[family],
+        ..Query::default()
+    };
+    fonts.query(&query).is_some()
+}
+
+fn installed<'a>(fonts: &Database, names: &[&'a str]) -> Option<&'a str> {
+    names
+        .iter()
+        .find(|name| resolves(fonts, Family::Name(name)))
+        .copied()
+}
+
+fn system_fonts(fonts: &mut Database) {
+    fonts.load_system_fonts();
+    if !resolves(fonts, Family::Serif)
+        && let Some(name) = installed(fonts, SERIF)
+    {
+        fonts.set_serif_family(name);
+    }
+    if let Some(name) = installed(fonts, SANS_SERIF) {
+        if !resolves(fonts, Family::SansSerif) {
+            fonts.set_sans_serif_family(name);
+        }
+        if !resolves(fonts, Family::Cursive) {
+            fonts.set_cursive_family(name);
+        }
+        if !resolves(fonts, Family::Fantasy) {
+            fonts.set_fantasy_family(name);
+        }
+    }
+    if !resolves(fonts, Family::Monospace)
+        && let Some(name) = installed(fonts, MONOSPACE)
+    {
+        fonts.set_monospace_family(name);
+    }
+}
+
+fn parse_svg(bytes: &[u8]) -> Result<resvg::usvg::Tree, Failure> {
+    let mut options = resvg::usvg::Options::default();
+    system_fonts(options.fontdb_mut());
+    options.image_href_resolver.resolve_string = Box::new(|_, _| None);
+    resvg::usvg::Tree::from_data(bytes, &options).map_err(|_| Failure::Damaged)
+}
+
+fn render_svg(tree: &resvg::usvg::Tree) -> Result<Decoded, Failure> {
     let size = tree.size();
     let longest = size.width().max(size.height());
     if !longest.is_finite() || longest <= 0.0 {
@@ -459,7 +503,7 @@ fn decode_svg(bytes: &[u8], options: &resvg::usvg::Options<'_>) -> Result<Decode
     allowed(width, height)?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height).ok_or(Failure::Damaged)?;
     resvg::render(
-        &tree,
+        tree,
         resvg::tiny_skia::Transform::from_scale(scale, scale),
         &mut pixmap.as_mut(),
     );

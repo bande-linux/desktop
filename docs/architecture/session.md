@@ -265,7 +265,10 @@ UI.
   session: started by the login socket or by `bande-session.target`, with no D-Bus activation
   file, so in another desktop that desktop's keyring (GNOME Keyring, KWallet) owns the name and
   is activated as before. The login socket is in `sockets.target` because PAM opens the session
-  before `bande-session.target` starts; nothing writes to it outside Bande.
+  before `bande-session.target` starts. When the socket starts it and logind lists no session of
+  the user whose `Desktop` is `bande` (`pam_systemd` registers the session first, as its
+  pam-auth-update profile sorts before `bande-secrets`), it stays off the bus: it answers the
+  waiting login messages, following a password change but unlocking nothing, and exits.
 - Keyrings are oo7's v1 files in `~/.local/share/bande/keyrings/v1/<name>.keyring` (written 0600
   through a temporary file): `login` (alias `default`), the in-memory `session`, and any an app
   creates. GNOME Keyring's files are not read.
@@ -275,8 +278,11 @@ UI.
   `XDG_CURRENT_DESKTOP` names `X-Bande`, as every display manager sets them for `pam_systemd` (the
   module checks the socket is the user's, the daemon takes messages only from root; a failed
   send is logged through `pam_syslog`, never the password; a missing socket is no failure), and
-  `password` re-encrypts the login keyring when the old password opens it and the change comes
-  from a Bande session; after a change made elsewhere, the next unlock offers to update it. The lock screen runs `auth` only, so it unlocks
+  `password` re-encrypts the login keyring, wherever the password is changed (`passwd` at a
+  console, over SSH, in another desktop), when the old password opens it and the user's systemd
+  instance runs, which holds the socket. A change made without it (by root for another user, or
+  with no user instance) leaves the keyring on the old password, and the next unlock offers to
+  update it. The lock screen runs `auth` only, so it unlocks
   nothing; the login keyring stays unlocked while the screen is locked. When the login password
   does not open the keyring, the next unlock offers to update its password or start a new one
   (the old file is kept).

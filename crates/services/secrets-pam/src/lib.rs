@@ -156,20 +156,6 @@ unsafe fn opens_bande(handle: *mut PamHandle) -> bool {
     names_bande(session.as_deref(), current.as_deref())
 }
 
-/// # Safety
-/// `handle` is the live handle PAM passed to the calling hook.
-unsafe fn runs_in_bande(handle: *mut PamHandle) -> bool {
-    let session = std::env::var_os("XDG_SESSION_DESKTOP");
-    let current = std::env::var_os("XDG_CURRENT_DESKTOP");
-    // SAFETY: handle is the live handle PAM passed to the calling hook.
-    let opening = unsafe { opens_bande(handle) };
-    opening
-        || names_bande(
-            session.as_ref().map(|name| name.as_encoded_bytes()),
-            current.as_ref().map(|names| names.as_encoded_bytes()),
-        )
-}
-
 fn peer_is(stream: &UnixStream, uid: libc::uid_t) -> bool {
     let mut credentials = libc::ucred {
         pid: 0,
@@ -352,10 +338,6 @@ pub unsafe extern "C" fn pam_sm_chauthtok(
     let (Some(old), Some(new)) = (old, new) else {
         return PAM_IGNORE;
     };
-    // SAFETY: handle is the live handle PAM passed to this hook.
-    if !unsafe { runs_in_bande(handle) } {
-        return PAM_IGNORE;
-    }
     // SAFETY: handle is the live handle PAM passed to this hook.
     if let Some(uid) = unsafe { user_id(handle) } {
         // SAFETY: handle is the live handle PAM passed to this hook.

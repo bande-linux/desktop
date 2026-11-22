@@ -82,8 +82,9 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   `display-manager` (next to LightDM, the login window is offered and not imposed,
   `dpkg-reconfigure` switches both ways, and removing it gives the display back to LightDM),
   `coexistence` (`bande-desktop` installs next to `gnome-core` without removing anything, and
-  GNOME's keyring keeps its PAM profile, socket and activation while Bande's stays out of a
-  non-Bande login), `services` (the
+  GNOME's keyring keeps its PAM profile, socket and activation, and Bande's keyring, started
+  while logind (python-dbusmock's template) lists only a GNOME session of the user, exits
+  without taking `org.freedesktop.secrets`, which it takes once a Bande session is listed), `services` (the
   settings service on a private bus, the compositor headless), `portal` (the colour scheme
   through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).
 

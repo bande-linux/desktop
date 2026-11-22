@@ -190,25 +190,6 @@ pub(crate) struct SetupSheet {
     pub(crate) password_field: WidgetId,
 }
 
-fn open_files() -> HashSet<PathBuf> {
-    let Ok(processes) = std::fs::read_dir("/proc") else {
-        return HashSet::new();
-    };
-    processes
-        .filter_map(|entry| entry.ok())
-        .filter(|process| {
-            process
-                .file_name()
-                .to_str()
-                .is_some_and(|name| name.parse::<u32>().is_ok())
-        })
-        .filter_map(|process| std::fs::read_dir(process.path().join("fd")).ok())
-        .flatten()
-        .filter_map(|entry| entry.ok())
-        .filter_map(|fd| std::fs::read_link(fd.path()).ok())
-        .collect()
-}
-
 pub struct MailView {
     pub(crate) store: Store,
     store_path: PathBuf,
@@ -466,13 +447,17 @@ impl MailView {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let text = format!(
-            "{}\n{}\n{}\n\n{}",
-            envelope.subject,
-            names(&envelope.from),
-            tr!("To: {names}", names = names(&envelope.to)),
-            reading.content.text(),
+        let mut lines = vec![envelope.subject.clone(), names(&envelope.from)];
+        lines.extend(
+            envelope
+                .date
+                .map(|date| full_date(date, &self.zone, &self.formats)),
         );
+        lines.push(tr!("To: {names}", names = names(&envelope.to)));
+        if !envelope.cc.is_empty() {
+            lines.push(tr!("Cc: {names}", names = names(&envelope.cc)));
+        }
+        let text = format!("{}\n\n{}", lines.join("\n"), reading.content.text());
         let title = match summary.subject.is_empty() {
             true => tr!("No Subject"),
             false => summary.subject.clone(),
@@ -1813,14 +1798,8 @@ impl MailView {
             })
             .map(|(_, path, _)| path)
             .collect::<Vec<_>>();
-        if unedited.is_empty() {
-            return;
-        }
-        let in_use = open_files();
         for path in unedited {
-            let real = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-            if !in_use.contains(&real)
-                && std::fs::remove_file(&path).is_ok()
+            if std::fs::remove_file(&path).is_ok()
                 && let Some(folder) = path.parent()
             {
                 let _ = std::fs::remove_dir(folder);

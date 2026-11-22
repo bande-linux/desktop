@@ -1892,8 +1892,47 @@ msgstr "Programuppdatering"
 msgid "The desktop keeps running its old version until you log out"
 msgstr "Skrivbordet fortsätter köra sin gamla version tills du loggar ut"
 
+msgid "The battery is too low to update firmware safely. Charge it and try again."
+msgstr "Batteriet är för svagt för att uppdatera den inbyggda programvaran säkert. Ladda det och försök igen."
+
+msgid "The device's battery is too low. Charge it and try again."
+msgstr "Enhetens batteri är för svagt. Ladda det och försök igen."
+
+msgid "Plug in the computer to install this firmware update."
+msgstr "Anslut datorn till ström för att installera den här uppdateringen av den inbyggda programvaran."
+
+msgid "Open the lid to install this firmware update."
+msgstr "Fäll upp locket för att installera den här uppdateringen av den inbyggda programvaran."
+
+msgid "A firmware update is already waiting for a restart."
+msgstr "En uppdatering av den inbyggda programvaran väntar redan på en omstart."
+
+msgid "The device is busy. Try again in a moment."
+msgstr "Enheten är upptagen. Försök igen om en stund."
+
+msgid "The device isn't connected. Connect it and try again."
+msgstr "Enheten är inte ansluten. Anslut den och försök igen."
+
+msgid "The device needs your attention. Follow its instructions and try again."
+msgstr "Enheten behöver din uppmärksamhet. Följ dess instruktioner och försök igen."
+
+msgid "The firmware file is damaged or not signed. Try again later."
+msgstr "Filen med den inbyggda programvaran är skadad eller inte signerad. Försök igen senare."
+
+msgid "Could not download the firmware. Try again later."
+msgstr "Det gick inte att hämta den inbyggda programvaran. Försök igen senare."
+
+msgid "The firmware update service stopped. Try again in a moment."
+msgstr "Tjänsten för uppdatering av inbyggd programvara stoppades. Försök igen om en stund."
+
+msgid "{device}: {reason}"
+msgstr "{device}: {reason}"
+
 msgid "Show Updates"
 msgstr "Visa uppdateringar"
+
+msgid "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
+msgstr "Uppdateringarna installeras medan datorn startar om. Håll datorn ansluten till ström tills den har startat igen."
 
 msgid "Updates install while the computer restarts"
 msgstr "Uppdateringarna installeras medan datorn startar om"
@@ -2003,6 +2042,15 @@ msgstr "{apps} och {last}"
 
 msgid "Quit and reopen {apps} to use the new versions"
 msgstr "Avsluta och öppna {apps} igen för att använda de nya versionerna"
+
+msgid "Firmware {to}"
+msgstr "Inbyggd programvara {to}"
+
+msgid "Firmware {from} → {to}"
+msgstr "Inbyggd programvara {from} → {to}"
+
+msgid "{versions} · Installs during restart"
+msgstr "{versions} · Installeras vid omstart"
 
 msgid "{version} · Flatpak"
 msgstr "{version} · Flatpak"

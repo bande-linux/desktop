@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+sha2.workspace = true
 bande-bus.workspace = true
 accesskit.workspace = true
 bande-app.workspace = true
@@ -17,6 +18,7 @@ image.workspace = true
 jiff.workspace = true
 libc.workspace = true
 libloading.workspace = true
+roxmltree.workspace = true
 rustix = { workspace = true, features = ["fs", "pty"] }
 tracing.workspace = true
 xkbcommon.workspace = true
@@ -38,6 +40,7 @@ bande-packages.workspace = true
 bande-settings-panes.workspace = true
 bande-sound.workspace = true
 bande-edid.workspace = true
+bande-https.workspace = true
 bande-status.workspace = true
 bande-toolkit.workspace = true
 bande-volumes.workspace = true

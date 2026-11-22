@@ -459,7 +459,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wp_content_type_v1` | Game, video or photo content | implemented; game and video in full screen turn on variable refresh |
 | `wp_single_pixel_buffer_v1` | One-colour buffers (backgrounds, letterboxing) | implemented, drawn as a solid fill |
 | `wp_alpha_modifier_v1` | Surface opacity set by the client | implemented |
-| `xdg_system_bell_v1` | The terminal bell | implemented: the window's app asks for attention in the taskbar unless it is focused |
+| `xdg_system_bell_v1` | The terminal bell | implemented: it plays the alert sound through `bande-sound`, so the screen flashes when Settings ▸ Accessibility asks for that, and an unfocused window's app asks for attention in the taskbar |
 | `wp_tearing_control_v1` | Tearing page flips for games | not served: needs async page flips in Smithay's `DrmCompositor` |
 | `xdg_toplevel_icon_v1` | A window's own icon | not served: the taskbar shows the app's desktop entry icon, and `bande_shell_v1` has no way to pass a client icon |
 | `wp_drm_lease_v1` | Lease a VR headset's connector | not served |

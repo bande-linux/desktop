@@ -708,6 +708,7 @@ dependencies = [
  "bande-log",
  "bande-protocols",
  "bande-render",
+ "bande-sound",
  "bande-spring",
  "bande-test-bus",
  "bande-test-wayland",

@@ -31,6 +31,7 @@ bande-l10n.workspace = true
 bande-log.workspace = true
 bande-protocols = { workspace = true, features = ["server"] }
 bande-render.workspace = true
+bande-splash.workspace = true
 bande-spring.workspace = true
 bande-wallpaper.workspace = true
 bande-widgets.workspace = true

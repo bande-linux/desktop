@@ -97,6 +97,9 @@ Paths are under `crates/`.
 | `libs/vm/src/autostart.rs` `autostart_units_quote_what_systemd_would_expand` | Untrusted input: a machine name or path with `%`, spaces or a newline must not be expanded or split by systemd in the autostart unit. |
 | `libs/vm/tests/qmp.rs` `events_around_replies_and_jobs_are_kept_in_order` | Tricky protocol logic against a fake QEMU on a socket pair: QMP events that arrive between replies and around a snapshot job are kept, in order. |
 
+The autopkgtests in `debian/tests`, which check the installed packages, are listed in
+[packaging.md](../architecture/packaging.md).
+
 ## Support
 
 - `crates/testing/test-bus`: private `dbus-daemon` buses (`SessionBus`) that never activate the

@@ -1,0 +1,17 @@
+[package]
+name = "bande-splash"
+description = "Bande boot screen: the Plymouth theme and the frame the login window fades in over"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bande-graphics.workspace = true
+bande-spring.workspace = true
+bande-widgets.workspace = true
+resvg.workspace = true
+
+[lints]
+workspace = true

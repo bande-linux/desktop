@@ -707,6 +707,7 @@ dependencies = [
  "bande-log",
  "bande-protocols",
  "bande-render",
+ "bande-splash",
  "bande-spring",
  "bande-test-bus",
  "bande-test-wayland",
@@ -1698,6 +1699,16 @@ dependencies = [
  "spellbook",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-splash"
+version = "0.2.0"
+dependencies = [
+ "bande-graphics",
+ "bande-spring",
+ "bande-widgets",
+ "resvg",
 ]
 
 [[package]]

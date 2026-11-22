@@ -48,7 +48,12 @@ endif
 	$(CARGO) prepare-debian $(REGISTRY)
 
 override_dh_auto_build-indep:
+ifneq (,$(filter pkg.bande.l10n-only,$(DEB_BUILD_PROFILES)))
 	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool
+else
+	$(CARGO) build $(LOCKED) --profile $(PROFILE) --bin bande-l10n-tool --bin bande-plymouth-theme
+	$(OUT)/bande-plymouth-theme $(BUILD)/plymouth/bande
+endif
 	$(MAKE) -f debian/rules catalogs
 
 override_dh_auto_build-arch:

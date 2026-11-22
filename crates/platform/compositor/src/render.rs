@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io;
 
 use bande_render::{DeviceInfo, MemoryUse, OffscreenTarget, RenderError, VulkanRenderer};
+use bande_splash::splash_background;
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::damage::{Error as DamageError, OutputDamageTracker};
 use smithay::backend::renderer::{Bind, Color32F, Offscreen};
@@ -10,10 +11,10 @@ use smithay::utils::{Physical, Size, Transform};
 use crate::clock::{FrameOutput, Submission};
 use crate::state::Compositor;
 
-pub const BACKGROUND: [u8; 3] = [0x20, 0x28, 0x30];
-
 pub fn background() -> Color32F {
-    let [red, green, blue] = BACKGROUND.map(|channel| f32::from(channel) / 255.0);
+    let colour = splash_background();
+    let [red, green, blue] =
+        [colour.r, colour.g, colour.b].map(|channel| f32::from(channel) / 255.0);
     Color32F::new(red, green, blue, 1.0)
 }
 

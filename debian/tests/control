@@ -46,3 +46,7 @@ Depends: bande-compositor, bande-notify, bande-clipboard, bande-config, bande-po
  bande-desktop, bande-icon-theme, bande-desktop-l10n-sv, bande-desktop-l10n-en-gb,
  desktop-file-utils, appstream, systemd
 Restrictions: allow-stderr
+
+Tests: boot-screen
+Depends: bande-plymouth-theme, initramfs-tools, kmod
+Restrictions: needs-root, breaks-testbed, allow-stderr

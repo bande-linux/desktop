@@ -1,0 +1,46 @@
+#!/bin/bash
+# The boot screen is a default.plymouth alternative that applies only when no other theme is
+# chosen, the initramfs carries it with its link, plugins and font, and purging it leaves neither
+# the alternative nor the theme in the next initramfs.
+set -euo pipefail
+themes=/usr/share/plymouth/themes
+theme=$themes/bande/bande.plymouth
+version=0.0.0-boot-screen
+mkdir -p "/usr/lib/modules/$version"
+depmod "$version"
+image=$AUTOPKGTEST_TMP/initrd.img
+initramfs() {
+    mkinitramfs -o "$image" "$version" 2> /dev/null
+    lsinitramfs "$image"
+}
+never() {
+    if "$@"; then
+        echo "unexpected: $*"
+        exit 1
+    fi
+}
+
+update-alternatives --query default.plymouth | grep -qx "Value: $theme"
+[ "$(readlink -f "$themes/default.plymouth")" = "$theme" ]
+never grep -qs '^[[:space:]]*Theme' /etc/plymouth/plymouthd.conf
+contents=$(initramfs)
+for file in "${theme#/}" "${themes#/}/default.plymouth" usr/share/fonts/opentype/inter/Inter-Regular.otf; do
+    grep -qx "$file" <<< "$contents" || { echo "the initramfs lacks $file"; exit 1; }
+done
+grep -q '/two-step\.so$' <<< "$contents"
+grep -q '/label-pango\.so$' <<< "$contents"
+grep -q "^ImageDir=$themes/bande$" "$theme"
+
+cp /etc/plymouth/plymouthd.conf "$AUTOPKGTEST_TMP/plymouthd.conf"
+printf '[Daemon]\nTheme=spinner\n' >> /etc/plymouth/plymouthd.conf
+contents=$(initramfs)
+never grep -q "^${themes#/}/bande" <<< "$contents"
+cp "$AUTOPKGTEST_TMP/plymouthd.conf" /etc/plymouth/plymouthd.conf
+
+DEBIAN_FRONTEND=noninteractive apt-get purge --yes bande-plymouth-theme > /dev/null
+never grep -q "$theme" <<< "$(update-alternatives --query default.plymouth 2> /dev/null || true)"
+test ! -e "$themes/bande"
+contents=$(initramfs)
+never grep -q "^${themes#/}/bande" <<< "$contents"
+never grep -q Inter-Regular <<< "$contents"
+echo "the boot screen applies only when chosen by nothing else and leaves with its package"

@@ -145,9 +145,10 @@ when they reach the screen is Bande's own.
   and the GPU share), imported with the same per-memory-plane layouts as client buffers and handed
   between the GPU and the display through the foreign queue (a buffer's first frame starts from
   `UNDEFINED`, as it is drawn whole); a colour profile converts into a scratch image and copies
-  back. Otherwise, or after such a buffer once fails to render (its modifier is then dropped and
-  the output switches for the session), it renders into dumb buffers that the renderer binds as
-  dma-bufs: each frame is rendered into its own image and its
+  back. When such a buffer fails to render, its modifier is dropped and the output (and every
+  display set up after it in the session) steps down: first to LINEAR GBM buffers, then to dumb
+  buffers. With LINEAR GBM or dumb buffers, or without a tiled modifier, the renderer binds the
+  buffer as a dma-buf: each frame is rendered into its own image and its
   drawn regions copied out (the buffer acquired from and released to the foreign queue around the copy), by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
   otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. Only the first card with a connected display is driven; displays on a second GPU stay dark. udev change
   events probe the connectors again, so plugging a display in or out takes effect without

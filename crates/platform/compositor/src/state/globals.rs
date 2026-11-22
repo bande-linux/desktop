@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use smithay::backend::allocator::{Format as DmabufFormat, Fourcc, Modifier};
 use smithay::input::SeatState;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
-use smithay::reexports::wayland_server::DisplayHandle;
+use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+use smithay::reexports::wayland_server::{DisplayHandle, Weak};
 use smithay::wayland::compositor::CompositorState;
 use smithay::wayland::cursor_shape::CursorShapeManagerState;
 use smithay::wayland::dmabuf::{DmabufGlobal, DmabufState};
@@ -61,8 +62,9 @@ pub(crate) struct Globals {
     pub(crate) primary_selection_state: PrimarySelectionState,
     pub(crate) data_control_state: DataControlState,
     pub(crate) dmabuf_state: DmabufState,
-    _dmabuf_global: DmabufGlobal,
+    pub(crate) dmabuf_global: DmabufGlobal,
     pub(crate) dmabuf_planes: HashMap<DmabufFormat, usize>,
+    pub(crate) feedback_surfaces: Vec<Weak<WlSurface>>,
     pub(crate) compositor_state: CompositorState,
     pub(crate) xdg_shell_state: XdgShellState,
     pub(crate) shm_state: ShmState,
@@ -134,8 +136,9 @@ impl Globals {
             primary_selection_state,
             data_control_state,
             dmabuf_state,
-            _dmabuf_global: dmabuf_global,
+            dmabuf_global,
             dmabuf_planes,
+            feedback_surfaces: Vec::new(),
             compositor_state: CompositorState::new::<State>(handle),
             xdg_shell_state: XdgShellState::new_with_capabilities::<State>(
                 handle,

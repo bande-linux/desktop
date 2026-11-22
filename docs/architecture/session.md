@@ -642,8 +642,9 @@ Settings ▸ Sharing works with Debian's own Samba and SSH setup and never rewri
 
 - **File sharing** is `smbd` enabled and running with Debian's `/etc/samba/smb.conf`; turning it
   off disables `smbd`. `nmbd` is left as the administrator set it. Installing Samba from Sharing
-  disables `smbd` and `nmbd`, which the package's own scripts start, so nothing listens until
-  the person turns sharing on.
+  masks `smbd` and `nmbd` first, so the package's own scripts cannot start them, then disables
+  them; nothing listens until the person turns sharing on, which unmasks both. If the install
+  fails, the masks are lifted again.
 - **Folders** are Samba usershares (`net usershare`, which Debian's build enables in
   `/var/lib/samba/usershares`, mode 1770 for `sambashare`): the helper runs `net` as the person,
   with their own primary group and `sambashare` added, so their account is not changed. Listing

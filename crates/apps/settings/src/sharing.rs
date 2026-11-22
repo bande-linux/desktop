@@ -223,7 +223,16 @@ fn run(command: SharingCommand, system: Option<&Connection>, session: Option<&Co
             None,
         ),
         SharingCommand::InstallSamba => {
-            install(system, SAMBA) && helper(&["samba-installed"], None)
+            if !helper(&["samba-installing"], None) {
+                return false;
+            }
+            if install(system, SAMBA) {
+                return helper(&["samba-installed"], None);
+            }
+            if !helper(&["samba-not-installed"], None) {
+                tracing::warn!("smbd and nmbd stay masked after Samba was not installed");
+            }
+            false
         }
         SharingCommand::InstallAvahi => install(system, AVAHI),
         SharingCommand::Password(password) => helper(&["password"], Some(&password)),

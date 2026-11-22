@@ -841,6 +841,7 @@ dependencies = [
  "bande-toolkit",
  "bande-volumes",
  "rustix 1.1.6",
+ "ruzstd",
  "serde",
  "tracing",
  "zbus",

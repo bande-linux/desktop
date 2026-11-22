@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Seek, SeekFrom, Write};
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -30,6 +30,7 @@ const COMPRESSED: [bande_fs::Format; 3] = [
     bande_fs::Format::Gzip,
 ];
 const PARTITION_START: u64 = 1 << 20;
+const MAX_XZ_INDEX: u64 = 1 << 20;
 const FILESYSTEMS: [&str; 10] = [
     "ext2", "ext3", "ext4", "vfat", "exfat", "ntfs", "xfs", "btrfs", "f2fs", "udf",
 ];
@@ -486,7 +487,7 @@ fn restore(
     let compression = bande_fs::Format::of(file).filter(|format| COMPRESSED.contains(format));
     let objects = Objects::load(system)?;
     let capacity: u64 = objects.get(target, BLOCK, "Size").unwrap_or(0);
-    if compression.is_none() && size > capacity {
+    if least_restored_size(file)?.is_some_and(|expanded| expanded > capacity) {
         return Err(Failure::Failed(tr!("The image is too big.")));
     }
     let released = release(system, &members(system, target)?, true)?;
@@ -499,6 +500,72 @@ fn restore(
     };
     copy(decoded, &device)?;
     Ok(device.sync_all()?)
+}
+
+pub fn least_restored_size(file: &Path) -> io::Result<Option<u64>> {
+    let mut image = File::open(file)?;
+    match bande_fs::Format::of(file).filter(|format| COMPRESSED.contains(format)) {
+        None => Ok(Some(image.metadata()?.len())),
+        Some(bande_fs::Format::Gzip) => {
+            let mut size = [0; 4];
+            image.seek(SeekFrom::End(-4))?;
+            image.read_exact(&mut size)?;
+            Ok(Some(u64::from(u32::from_le_bytes(size))))
+        }
+        Some(bande_fs::Format::Zstd) => {
+            let mut frame = ruzstd::decoding::FrameDecoder::new();
+            Ok(frame
+                .reset(BufReader::new(image))
+                .ok()
+                .map(|()| frame.content_size())
+                .filter(|size| *size > 0))
+        }
+        Some(_) => xz_size(&mut image),
+    }
+}
+
+fn xz_size(image: &mut File) -> io::Result<Option<u64>> {
+    let mut footer = [0; 12];
+    image.seek(SeekFrom::End(-12))?;
+    image.read_exact(&mut footer)?;
+    let [_, _, _, _, b0, b1, b2, b3, _, _, b'Y', b'Z'] = footer else {
+        return Ok(None);
+    };
+    let index_size = (u64::from(u32::from_le_bytes([b0, b1, b2, b3])) + 1) * 4;
+    if index_size > MAX_XZ_INDEX {
+        return Ok(None);
+    }
+    let mut index = vec![0; index_size as usize];
+    image.seek(SeekFrom::End(-12 - index_size as i64))?;
+    image.read_exact(&mut index)?;
+    let mut bytes = index.into_iter();
+    if bytes.next() != Some(0) {
+        return Ok(None);
+    }
+    let mut number = || {
+        let mut value = 0u64;
+        for (shift, byte) in (0..63).step_by(7).zip(bytes.by_ref()) {
+            value |= u64::from(byte & 0x7f) << shift;
+            if byte & 0x80 == 0 {
+                return Some(value);
+            }
+        }
+        None
+    };
+    let Some(records) = number() else {
+        return Ok(None);
+    };
+    let mut total = 0u64;
+    for _ in 0..records {
+        let (Some(_), Some(size)) = (number(), number()) else {
+            return Ok(None);
+        };
+        let Some(sum) = total.checked_add(size) else {
+            return Ok(None);
+        };
+        total = sum;
+    }
+    Ok(Some(total))
 }
 
 fn mount_image(system: &Connection, file: &PathBuf) -> Result<Outcome, Failure> {

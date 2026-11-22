@@ -485,3 +485,6 @@ msgstr "Partitionera"
 
 msgid "No disks found."
 msgstr "Inga skivor hittades."
+
+msgid "Restoring {target} from {image} replaces all data stored on it. You can’t undo this action. Its expanded size can’t be checked first. If it doesn’t fit, the restore stops when the disk is full."
+msgstr "Om du återställer {target} från {image} ersätts alla data på den. Du kan inte ångra det här. Avbildningens uppackade storlek kan inte kontrolleras i förväg. Om den inte får plats avbryts återställningen när disken är full."

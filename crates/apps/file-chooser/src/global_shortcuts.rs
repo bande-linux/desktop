@@ -25,7 +25,6 @@ type Answers = Rc<RefCell<Vec<Answer>>>;
 fn row(
     index: usize,
     proposal: &Proposal,
-    initially_on: bool,
     answers: &Answers,
     taken: &Rc<[Trigger]>,
 ) -> Box<dyn Widget> {
@@ -34,18 +33,11 @@ fn row(
         false => proposal.description.clone(),
     };
     let switching = Rc::clone(answers);
-    let checkbox = Checkbox::new(
-        &title,
-        match initially_on {
-            true => CheckState::On,
-            false => CheckState::Off,
-        },
-        move |on| {
-            if let Some(answer) = switching.borrow_mut().get_mut(index) {
-                answer.on = on;
-            }
-        },
-    );
+    let checkbox = Checkbox::new(&title, CheckState::On, move |on| {
+        if let Some(answer) = switching.borrow_mut().get_mut(index) {
+            answer.on = on;
+        }
+    });
     let (recording, taken) = (Rc::clone(answers), Rc::clone(taken));
     let keys = proposal.trigger.map(Trigger::keys);
     let field = ShortcutField::new(&title, keys.as_deref(), move |chord| {
@@ -83,14 +75,13 @@ pub fn ask(consent: &Consent) -> ExitCode {
         &current_desktops(),
     );
     let app = app_name(&entries, &consent.app_id);
-    let initially_on = |proposal: &Proposal| !consent.configuring || proposal.trigger.is_some();
     let answers: Answers = Rc::new(RefCell::new(
         consent
             .shortcuts
             .iter()
             .map(|proposal| Answer {
                 id: proposal.id.clone(),
-                on: initially_on(proposal),
+                on: true,
                 trigger: proposal.trigger,
             })
             .collect(),
@@ -123,7 +114,7 @@ pub fn ask(consent: &Consent) -> ExitCode {
             .shortcuts
             .iter()
             .enumerate()
-            .map(|(index, proposal)| row(index, proposal, initially_on(proposal), &answers, &taken))
+            .map(|(index, proposal)| row(index, proposal, &answers, &taken))
             .collect();
         Alert::new(&title, &message, move |action| chosen.set(action == ALLOW))
             .accessory(Stack::new(Axis::Vertical, SPACING, 0.0, rows))

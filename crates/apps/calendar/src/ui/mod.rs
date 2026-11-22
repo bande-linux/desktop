@@ -20,7 +20,7 @@ use std::rc::Rc;
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_datetime::DateFormats;
 use bande_inbox::Outbox;
-use bande_l10n::tr;
+use bande_l10n::{tr, trn};
 use bande_toolkit::ui::{Alert, ClipboardRequest, Context, Cursor, FreeLayout, Menu, Ui, WidgetId};
 use bande_toolkit::{
     Appearance, Header, Item, Palette, Point, Radius, Rect, SHEET_INSET, Scene, Shape, TextAlign,
@@ -78,6 +78,7 @@ pub enum Request {
     },
     Changed,
     Mail(String),
+    Read(Vec<std::path::PathBuf>),
     Export {
         name: String,
         data: String,
@@ -889,7 +890,8 @@ impl CalendarView {
             return false;
         };
         let name = self.library.calendars[calendar].info.name.clone();
-        let title = tr!(
+        let title = trn!(
+            "Add {count} event to “{calendar}”?",
             "Add {count} events to “{calendar}”?",
             count = objects.len(),
             calendar = name
@@ -901,6 +903,10 @@ impl CalendarView {
             .primary(&tr!("Add"), "accept");
         self.ui.present_dialog(alert);
         true
+    }
+
+    pub fn read_files(&mut self, paths: Vec<std::path::PathBuf>) {
+        self.requests.push(Request::Read(paths));
     }
 
     pub fn offer_subscription(&mut self, url: &str) {

@@ -414,8 +414,19 @@ msgstr "Kalenderns händelser raderas också, även på servern."
 msgid "Delete"
 msgstr "Radera"
 
-msgid "Add {count} events to “{calendar}”?"
-msgstr "Vill du lägga till {count} händelser i ”{calendar}”?"
+msgid "Add {count} event to “{calendar}”?"
+msgid_plural "Add {count} events to “{calendar}”?"
+msgstr[0] "Vill du lägga till {count} händelse i ”{calendar}”?"
+msgstr[1] "Vill du lägga till {count} händelser i ”{calendar}”?"
+
+msgid "“{file}” has no events."
+msgstr "”{file}” innehåller inga händelser."
+
+msgid "Can’t read “{file}”: {error}"
+msgstr "Det gick inte att läsa ”{file}”: {error}"
+
+msgid "Can’t open “{file}”: {error}"
+msgstr "Det gick inte att öppna ”{file}”: {error}"
 
 msgid "From {file}"
 msgstr "Från {file}"

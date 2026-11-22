@@ -26,6 +26,7 @@ use crate::views::ViewMode;
 
 const COMPUTER_ICONS: [&str; 2] = ["computer", "network-server"];
 const SHARE_ICONS: [&str; 1] = ["folder-remote"];
+const SCREEN_ICONS: [&str; 2] = ["org.bande.ScreenSharing", "video-display"];
 const ROW_INSET: f32 = 4.0;
 const NAME_SIZE: f32 = 13.0;
 const SMALL_SIZE: f32 = 11.0;
@@ -147,9 +148,10 @@ impl FilesView {
             return self.icons.first(&["folder"], pixels);
         }
         if let Some(address) = entry.server_address() {
-            let names: &[&str] = match is_share(address) {
-                true => &SHARE_ICONS,
-                false => &COMPUTER_ICONS,
+            let names: &[&str] = match (address.starts_with("vnc://"), is_share(address)) {
+                (true, _) => &SCREEN_ICONS,
+                (false, true) => &SHARE_ICONS,
+                (false, false) => &COMPUTER_ICONS,
             };
             return self.icons.first(names, pixels);
         }

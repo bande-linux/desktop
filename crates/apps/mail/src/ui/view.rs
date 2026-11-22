@@ -619,7 +619,23 @@ impl MailView {
                 self.requests.push(Request::Attach(paths));
                 true
             }
-            Dropping::Other => false,
+            Dropping::Other => {
+                let handled = match window.drive(&mut self.ui, event.clone()) {
+                    Ok(unhandled) => unhandled.is_none(),
+                    Err(error) => {
+                        tracing::warn!("cannot take the dragged text: {error}");
+                        false
+                    }
+                };
+                self.after_ui();
+                handled
+            }
+        }
+    }
+
+    pub fn start_text_drag(&mut self, window: &mut Window) {
+        if let Err(error) = window.start_text_drag(&mut self.ui) {
+            tracing::warn!("cannot drag the selected text: {error}");
         }
     }
 

@@ -99,7 +99,11 @@ impl View for Pane {
         match (self, event) {
             (Self::Main(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
             (Self::Compose(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
-            (Self::Main(view), WindowEvent::Input(input)) => view.handle(&input),
+            (Self::Main(view), WindowEvent::Input(input)) => {
+                let handled = view.handle(&input);
+                view.start_text_drag(window);
+                handled
+            }
             (Self::Compose(view), WindowEvent::Input(input)) => {
                 let handled = view.handle(&input);
                 view.start_text_drag(window);

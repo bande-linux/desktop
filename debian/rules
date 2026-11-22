@@ -86,6 +86,10 @@ override_dh_installsystemd:
 	dh_installsystemd -pbande-reporter bande-reporter-send.path bande-reporter.socket bande-reporter-resources.service
 	dh_installsystemd --remaining-packages
 
+override_dh_installsystemduser:
+	dh_installsystemduser -pbande-screen-sharing --no-enable
+	dh_installsystemduser --remaining-packages
+
 override_dh_installdocs:
 	dh_installdocs
 ifneq (,$(filter pkg.bande.vendor,$(DEB_BUILD_PROFILES)))

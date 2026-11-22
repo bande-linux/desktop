@@ -36,6 +36,8 @@ Build-Depends: debhelper-compat (= 14),
  librust-cms-0.2+std-dev (>= 0.2.3-~~) <!pkg.bande.vendor>,
  librust-data-encoding-2-dev (>= 2.11.0-~~) <!pkg.bande.vendor>,
  librust-data-encoding-2+default-dev (>= 2.11.0-~~) <!pkg.bande.vendor>,
+ librust-des-0.9-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
+ librust-des-0.9+default-dev (>= 0.9.0-~~) <!pkg.bande.vendor>,
  librust-encoding-rs-0.8-dev (>= 0.8.35-~~) <!pkg.bande.vendor>,
  librust-encoding-rs-0.8+default-dev (>= 0.8.35-~~) <!pkg.bande.vendor>,
  librust-fatfs-0.3-dev (>= 0.3.6-~~) <!pkg.bande.vendor>,
@@ -129,8 +131,12 @@ Build-Depends: debhelper-compat (= 14),
  librust-quote-1+default-dev (>= 1.0.47-~~) <!pkg.bande.vendor>,
  librust-raw-window-handle-0.6-dev (>= 0.6.2-~~) <!pkg.bande.vendor>,
  librust-raw-window-handle-0.6+default-dev (>= 0.6.2-~~) <!pkg.bande.vendor>,
+ librust-rcgen-0.14-dev (>= 0.14.7-~~) <!pkg.bande.vendor>,
+ librust-rcgen-0.14+ring-dev (>= 0.14.7-~~) <!pkg.bande.vendor>,
  librust-regex-1-dev (>= 1.13.1-~~) <!pkg.bande.vendor>,
  librust-regex-1+default-dev (>= 1.13.1-~~) <!pkg.bande.vendor>,
+ librust-reis-0.7-dev (>= 0.7.1-~~) <!pkg.bande.vendor>,
+ librust-reis-0.7+calloop-dev (>= 0.7.1-~~) <!pkg.bande.vendor>,
  librust-resvg-0.48-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
  librust-resvg-0.48+memmap-fonts-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
  librust-resvg-0.48+raster-images-dev (>= 0.48.0-~~) <!pkg.bande.vendor>,
@@ -791,6 +797,24 @@ Description: Bande screenshots: saves pictures of the screen or of a dragged-out
  sharing, the PipeWire streams, and screenshots apps ask for.
  bande-compositor starts it and keeps it running.
 
+Package: bande-screen-sharing
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: net
+Depends: ${shlibs:Depends},
+ bande-screenshot (= ${binary:Version}),
+ ${misc:Depends}
+Description: Bande Screen Sharing: lets VNC viewers see and control the screen
+ Lets VNC viewers on other computers on the local network see and control
+ the screen, over RFB (RFC 6143), once Screen Sharing is turned on in
+ Settings > Sharing. Viewers need a password and connect over TLS with a
+ certificate made for this computer; plain VNC authentication for older
+ viewers is a separate choice. By default the person at the computer
+ allows each connection, a symbol in the Taskbar shows while someone is
+ connected and stops sharing with one click. The computer is announced
+ on the local network through Avahi when it is installed.
+
 Package: bande-files
 Architecture: any
 Built-Using: ${cargo:Built-Using}
@@ -1231,6 +1255,7 @@ Recommends: bande-greeter (>= ${source:Version}),
  bande-reporter (>= ${source:Version}),
  bande-crash-reports (>= ${source:Version}),
  bande-screenshot (>= ${source:Version}),
+ bande-screen-sharing (>= ${source:Version}),
  bande-files (>= ${source:Version}),
  bande-settings (>= ${source:Version}),
  bande-tray (>= ${source:Version}),

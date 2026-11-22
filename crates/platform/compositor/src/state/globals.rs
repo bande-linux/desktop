@@ -96,6 +96,7 @@ pub(crate) struct Globals {
     _single_pixel_buffer_state: SinglePixelBufferState,
     _alpha_modifier_state: AlphaModifierState,
     _system_bell_state: XdgSystemBellState,
+    _tablet_state: smithay::wayland::tablet_manager::TabletManagerState,
 }
 
 impl Globals {
@@ -142,6 +143,7 @@ impl Globals {
                     xdg_toplevel::WmCapabilities::Maximize,
                     xdg_toplevel::WmCapabilities::Fullscreen,
                     xdg_toplevel::WmCapabilities::Minimize,
+                    xdg_toplevel::WmCapabilities::WindowMenu,
                 ],
             ),
             shm_state: ShmState::new::<State>(handle, []),
@@ -185,6 +187,7 @@ impl Globals {
             _single_pixel_buffer_state: SinglePixelBufferState::new::<State>(handle),
             _alpha_modifier_state: AlphaModifierState::new::<State>(handle),
             _system_bell_state: XdgSystemBellState::new::<State>(handle),
+            _tablet_state: crate::touch::create_global(handle),
         }
     }
 }

@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+use accesskit::{Action, ActionRequest, Role};
+use bande_l10n::tr;
+
 use bande_graphics::{
     Color, ControlHover, DOUBLE_CLICK_INTERVAL, Palette, RESIZE_WALL_BAND, Rect, ResizeEdge, Scene,
     Scheme, TextAlign, TitleBar, WalledSides, WindowControl, WindowControls, resize_zone,
@@ -16,6 +19,8 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Buffer as BufferCoords, Logical, Physical, Point, Rectangle, Transform};
 
+use crate::access::Announcer;
+use crate::access::{Entry, Group, entry_of, grouped};
 use crate::cursor_set::Pointer;
 use crate::grab::resize_pointer;
 use crate::input::{BTN_LEFT, BTN_RIGHT};
@@ -81,6 +86,25 @@ pub(crate) struct Decorations {
     pub(crate) scheme: Scheme,
     pointed: Option<(WlSurface, Zone)>,
     last_click: Option<(WlSurface, u32)>,
+    pub(crate) announcer: Announcer,
+    announced: Option<Announced>,
+}
+
+#[derive(Clone, PartialEq)]
+struct Announced {
+    surface: WlSurface,
+    title: String,
+    fixed: bool,
+    menu: bool,
+}
+
+fn control_label(control: WindowControl) -> String {
+    match control {
+        WindowControl::Close => tr!("Close"),
+        WindowControl::Minimize => tr!("Minimize"),
+        WindowControl::Maximize => tr!("Maximize"),
+        WindowControl::Menu => tr!("Menus"),
+    }
 }
 
 fn zone_at(window: &Window, location: Point<f64, Logical>) -> Option<Zone> {
@@ -288,7 +312,7 @@ impl State {
         if button != BTN_LEFT {
             self.swallowed_button = Some(button);
             if button == BTN_RIGHT && matches!(zone, Zone::Control(_) | Zone::TitleBar) {
-                self.open_window_menu(&surface, self.pointer_location);
+                self.open_window_menu(&surface, self.pointer_location, false);
             }
             return true;
         }
@@ -395,7 +419,70 @@ impl State {
             .is_some_and(|keyboard| keyboard.modifier_state().alt)
     }
 
+    fn framed_focus(&self) -> Option<Announced> {
+        let surface = self.focused_window()?;
+        let window = &self.windows[self.window_index(&surface)?];
+        if window.title_bar_height() == 0 && window.controls_over_content_height() == 0 {
+            return None;
+        }
+        Some(Announced {
+            title: toplevel_names(&surface).0,
+            fixed: window.fixed_size(),
+            menu: menu_address(&surface).is_some(),
+            surface,
+        })
+    }
+
+    fn announce_frame(&mut self) {
+        let focus = self.framed_focus();
+        if focus == self.decorations.announced {
+            return;
+        }
+        self.decorations.announced.clone_from(&focus);
+        let Some(focus) = focus else {
+            self.decorations.announcer.withdraw();
+            return;
+        };
+        let group = Group {
+            role: Role::TitleBar,
+            item_role: Role::Button,
+            label: focus.title.clone(),
+            clickable: true,
+            entries: WindowControl::shown(focus.menu)
+                .map(|control| {
+                    Entry::new(control_label(control))
+                        .disabled(control == WindowControl::Maximize && focus.fixed)
+                })
+                .collect(),
+        };
+        self.decorations
+            .announcer
+            .publish(false, || grouped(&focus.title, &[group], None));
+    }
+
+    pub(crate) fn frame_action(&mut self, request: &ActionRequest) {
+        let Some(focus) = self.decorations.announced.clone() else {
+            return;
+        };
+        let control = entry_of(request.target_node)
+            .filter(|(group, _)| *group == 0 && request.action == Action::Click)
+            .and_then(|(_, index)| WindowControl::shown(focus.menu).nth(index));
+        let Some(index) = self.window_index(&focus.surface) else {
+            return;
+        };
+        match control {
+            Some(WindowControl::Close) => self.windows[index].toplevel.send_close(),
+            Some(WindowControl::Minimize) => self.minimize(&focus.surface),
+            Some(WindowControl::Maximize) if !focus.fixed => self.toggle_maximize(&focus.surface),
+            Some(WindowControl::Menu) => {
+                self.show_menus_of(&focus.surface);
+            }
+            Some(WindowControl::Maximize) | None => {}
+        }
+    }
+
     pub(crate) fn paint_title_bars(&mut self, renderer: &mut VulkanRenderer) {
+        self.announce_frame();
         let key = self.focused_window();
         let alternate = self.alternate_held();
         let scales: Vec<f64> = self

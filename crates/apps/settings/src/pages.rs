@@ -1020,6 +1020,51 @@ impl SettingsView {
                 .collect();
             page.push(boxed(Card::new(rows)));
         }
+        let shortcuts = self
+            .login
+            .as_ref()
+            .map(|login| login.shortcuts.clone())
+            .unwrap_or_default();
+        if !shortcuts.is_empty() {
+            page.push(boxed(Caption::new(Text::label(&tr!("App Shortcuts")))));
+            let rows = shortcuts
+                .into_iter()
+                .map(|shortcut| {
+                    let mut revoke = intent(&self.intents, |(app_id, id)| {
+                        Intent::RevokeShortcut(app_id, id)
+                    });
+                    let (app_id, id) = (shortcut.app.id.clone(), shortcut.id.clone());
+                    let remove = Button::new(&tr!("Remove"), move || {
+                        revoke((app_id.clone(), id.clone()));
+                    })
+                    .tooltip(&tr!("Stop this shortcut from working in the app"));
+                    let mut controls: Widgets = shortcut
+                        .keys
+                        .as_deref()
+                        .map(|keys| boxed(Shortcut::new(keys)))
+                        .into_iter()
+                        .collect();
+                    controls.push(boxed(remove));
+                    let title = match shortcut.description.is_empty() {
+                        true => shortcut.id.clone(),
+                        false => shortcut.description.clone(),
+                    };
+                    boxed(
+                        Row::new(
+                            Text::new(&title, Tone::Primary),
+                            Some(boxed(Stack::new(
+                                Axis::Horizontal,
+                                Spacing::M as f32,
+                                0.0,
+                                controls,
+                            ))),
+                        )
+                        .detail(Text::new(&shortcut.app.name, Tone::Muted).caption()),
+                    )
+                })
+                .collect();
+            page.push(boxed(Card::new(rows)));
+        }
         page
     }
 

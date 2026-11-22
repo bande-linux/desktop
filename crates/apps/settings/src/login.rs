@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 
+use bande_keyboard::{GlobalShortcut, Trigger, read_global_shortcuts, write_global_shortcuts};
 use bande_l10n::text;
 use bande_xdg::{
     DesktopEntry, Locale, app_languages, applications, autostart_dir, current_desktops, data_dirs,
-    opens_at_login, set_app_language, set_open_at_login,
+    global_shortcuts_file, opens_at_login, set_app_language, set_open_at_login,
 };
 
 use bande_settings_panes::PaneId;
@@ -18,11 +19,20 @@ pub struct App {
     pub name: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppShortcut {
+    pub app: App,
+    pub id: String,
+    pub description: String,
+    pub keys: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LoginItems {
     pub items: Vec<App>,
     pub apps: Vec<App>,
     pub languages: Vec<(App, String)>,
+    pub shortcuts: Vec<AppShortcut>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +41,7 @@ pub enum LoginCommand {
     Add(String),
     Remove(String),
     SetLanguage(String, Option<String>),
+    RevokeShortcut(String, String),
 }
 
 fn sorted(mut apps: Vec<App>) -> Vec<App> {
@@ -111,6 +122,53 @@ fn languages(apps: &[DesktopEntry]) -> Vec<(App, String)> {
     chosen
 }
 
+fn read_shortcuts(file: &Path) -> std::io::Result<Vec<GlobalShortcut>> {
+    match std::fs::read_to_string(file) {
+        Ok(text) => Ok(read_global_shortcuts(&text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(error) => Err(error),
+    }
+}
+
+fn shortcuts(apps: &[DesktopEntry]) -> Vec<AppShortcut> {
+    let Some(file) = global_shortcuts_file() else {
+        return Vec::new();
+    };
+    let bound = read_shortcuts(&file)
+        .inspect_err(|error| tracing::warn!("cannot read the apps' shortcuts: {error}"))
+        .unwrap_or_default();
+    let mut listed: Vec<AppShortcut> = bound
+        .into_iter()
+        .map(|shortcut| {
+            let name = apps
+                .iter()
+                .find(|app| app.app_id() == shortcut.app_id)
+                .map_or_else(|| shortcut.app_id.clone(), |app| app.name.clone());
+            AppShortcut {
+                app: App {
+                    id: shortcut.app_id,
+                    name,
+                },
+                id: shortcut.id,
+                description: shortcut.description,
+                keys: shortcut.trigger.map(Trigger::keys),
+            }
+        })
+        .collect();
+    listed.sort_by_key(|shortcut| shortcut.app.name.to_lowercase());
+    listed
+}
+
+fn revoke_shortcut(app_id: &str, id: &str) -> std::io::Result<()> {
+    let file = global_shortcuts_file()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no state folder"))?;
+    let kept: Vec<GlobalShortcut> = read_shortcuts(&file)?
+        .into_iter()
+        .filter(|shortcut| shortcut.app_id != app_id || shortcut.id != id)
+        .collect();
+    bande_xdg::replace_file(&file, write_global_shortcuts(&kept))
+}
+
 fn run(dir: &Path, apps: &[DesktopEntry], command: LoginCommand) -> std::io::Result<()> {
     match command {
         LoginCommand::Refresh => Ok(()),
@@ -126,6 +184,7 @@ fn run(dir: &Path, apps: &[DesktopEntry], command: LoginCommand) -> std::io::Res
             let code = code.map(|code| code.replace(".UTF-8", ""));
             set_app_language(id.trim_end_matches(".desktop"), code.as_deref())
         }
+        LoginCommand::RevokeShortcut(app_id, id) => revoke_shortcut(&app_id, &id),
     }
 }
 
@@ -152,6 +211,10 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
                 LoginCommand::SetLanguage(..) => (
                     PaneId::LanguageTime,
                     text!("Couldn't change the app's language."),
+                ),
+                LoginCommand::RevokeShortcut(..) => (
+                    PaneId::KeyboardShortcuts,
+                    text!("Couldn't remove the app's shortcut."),
                 ),
                 _ => (
                     PaneId::Apps,
@@ -183,6 +246,7 @@ pub fn follow_login_items(updates: Updates) -> Sender<LoginCommand> {
                         .collect(),
                 ),
                 languages: languages(apps),
+                shortcuts: shortcuts(apps),
             };
             if !updates.send(Update::Login(state)) {
                 break;

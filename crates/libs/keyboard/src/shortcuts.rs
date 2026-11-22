@@ -38,11 +38,14 @@ pub enum Action {
     MinimizeWindow,
     TileWindow,
     MoveWindowToDisplay,
+    WindowMenu,
     NextApp,
     PreviousApp,
     OpenTerminal,
     PreviousWorkspace,
     NextWorkspace,
+    MoveWindowToPreviousWorkspace,
+    MoveWindowToNextWorkspace,
     Overview,
     ShowDesktop,
     CaptureScreen,
@@ -68,11 +71,15 @@ impl Action {
             Self::CloseWindow
             | Self::MinimizeWindow
             | Self::TileWindow
-            | Self::MoveWindowToDisplay => Area::Windows,
+            | Self::MoveWindowToDisplay
+            | Self::WindowMenu => Area::Windows,
             Self::NextApp | Self::PreviousApp | Self::OpenTerminal => Area::Apps,
-            Self::PreviousWorkspace | Self::NextWorkspace | Self::Overview | Self::ShowDesktop => {
-                Area::Workspaces
-            }
+            Self::PreviousWorkspace
+            | Self::NextWorkspace
+            | Self::MoveWindowToPreviousWorkspace
+            | Self::MoveWindowToNextWorkspace
+            | Self::Overview
+            | Self::ShowDesktop => Area::Workspaces,
             Self::CaptureScreen | Self::CaptureArea | Self::CaptureOptions => Area::Screenshots,
             Self::ToggleZoom | Self::ZoomIn | Self::ZoomOut | Self::ToggleScreenReader => {
                 Area::Accessibility
@@ -96,11 +103,14 @@ impl Action {
             Self::MoveWindowToDisplay => {
                 tr!("Move the window to the display beside (any arrow key)")
             }
+            Self::WindowMenu => tr!("Open the window menu"),
             Self::NextApp => tr!("Switch apps (hold Alt to choose)"),
             Self::PreviousApp => tr!("Switch apps backwards"),
             Self::OpenTerminal => tr!("Open Terminal"),
             Self::PreviousWorkspace => tr!("Previous workspace"),
             Self::NextWorkspace => tr!("Next workspace"),
+            Self::MoveWindowToPreviousWorkspace => tr!("Move the window to the previous workspace"),
+            Self::MoveWindowToNextWorkspace => tr!("Move the window to the next workspace"),
             Self::Overview => tr!("Show all windows"),
             Self::ShowDesktop => tr!("Show the desktop"),
             Self::CaptureScreen => tr!("Capture the screen"),
@@ -153,12 +163,17 @@ const CTRL_SUPER: Modifiers = Modifiers {
     ..SUPER
 };
 const ALT_SUPER: Modifiers = Modifiers { alt: true, ..SUPER };
+const SHIFT_CTRL_SUPER: Modifiers = Modifiers {
+    shift: true,
+    ..CTRL_SUPER
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
     Tap,
     Character(char),
     Tab,
+    Space,
     Escape,
     Print,
     Function(u8),
@@ -185,6 +200,7 @@ impl Key {
             Self::Tap => String::new(),
             Self::Character(character) => character.to_ascii_uppercase().to_string(),
             Self::Tab => "Tab".to_owned(),
+            Self::Space => "Space".to_owned(),
             Self::Escape => "Esc".to_owned(),
             Self::Print => "Print".to_owned(),
             Self::Function(number) => format!("F{number}"),
@@ -204,26 +220,30 @@ pub struct Shortcut {
     pub key: Key,
 }
 
+pub fn chord_keys(modifiers: Modifiers, key: Key) -> String {
+    let Modifiers {
+        shift,
+        ctrl,
+        alt,
+        logo,
+    } = modifiers;
+    [
+        (shift, "Shift"),
+        (ctrl, "Ctrl"),
+        (alt, "Alt"),
+        (logo, "Super"),
+    ]
+    .into_iter()
+    .filter(|(held, _)| *held)
+    .map(|(_, name)| name.to_owned())
+    .chain(Some(key.name()).filter(|name| !name.is_empty()))
+    .collect::<Vec<_>>()
+    .join("+")
+}
+
 impl Shortcut {
     pub fn keys(&self) -> String {
-        let Modifiers {
-            shift,
-            ctrl,
-            alt,
-            logo,
-        } = self.modifiers;
-        [
-            (shift, "Shift"),
-            (ctrl, "Ctrl"),
-            (alt, "Alt"),
-            (logo, "Super"),
-        ]
-        .into_iter()
-        .filter(|(held, _)| *held)
-        .map(|(_, name)| name.to_owned())
-        .chain(Some(self.key.name()).filter(|name| !name.is_empty()))
-        .collect::<Vec<_>>()
-        .join("+")
+        chord_keys(self.modifiers, self.key)
     }
 }
 
@@ -235,16 +255,27 @@ const fn shortcut(action: Action, modifiers: Modifiers, key: Key) -> Shortcut {
     }
 }
 
-pub const SHORTCUTS: [Shortcut; 26] = [
+pub const SHORTCUTS: [Shortcut; 29] = [
     shortcut(Action::CloseWindow, ALT, Key::Function(4)),
     shortcut(Action::MinimizeWindow, SUPER, Key::Character('h')),
     shortcut(Action::TileWindow, SUPER, Key::AnyArrow),
     shortcut(Action::MoveWindowToDisplay, SHIFT_SUPER, Key::AnyArrow),
+    shortcut(Action::WindowMenu, ALT, Key::Space),
     shortcut(Action::NextApp, ALT, Key::Tab),
     shortcut(Action::PreviousApp, SHIFT_ALT, Key::Tab),
     shortcut(Action::OpenTerminal, CTRL_ALT, Key::Character('t')),
     shortcut(Action::PreviousWorkspace, CTRL_SUPER, Key::Left),
     shortcut(Action::NextWorkspace, CTRL_SUPER, Key::Right),
+    shortcut(
+        Action::MoveWindowToPreviousWorkspace,
+        SHIFT_CTRL_SUPER,
+        Key::Left,
+    ),
+    shortcut(
+        Action::MoveWindowToNextWorkspace,
+        SHIFT_CTRL_SUPER,
+        Key::Right,
+    ),
     shortcut(Action::Overview, SUPER, Key::Character('w')),
     shortcut(Action::ShowDesktop, SUPER, Key::Character('d')),
     shortcut(Action::CaptureScreen, SHIFT, Key::Print),

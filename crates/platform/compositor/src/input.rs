@@ -82,6 +82,7 @@ fn pressed_key(keysym: u32, unshifted: Option<u32>) -> Option<Key> {
     let base = unshifted.unwrap_or(keysym);
     let key = match base {
         keysyms::KEY_Tab | keysyms::KEY_ISO_Left_Tab => Key::Tab,
+        keysyms::KEY_space => Key::Space,
         keysyms::KEY_Escape => Key::Escape,
         keysyms::KEY_Print => Key::Print,
         keysyms::KEY_F1..=keysyms::KEY_F12 => {
@@ -247,6 +248,17 @@ impl State {
             Action::ShowDesktop => self.toggle_desktop(),
             Action::PreviousWorkspace => self.step_workspace(false),
             Action::NextWorkspace => self.step_workspace(true),
+            Action::MoveWindowToPreviousWorkspace | Action::MoveWindowToNextWorkspace => {
+                if let Some(focused) = focused {
+                    let forward = action == Action::MoveWindowToNextWorkspace;
+                    self.move_to_workspace(&focused, forward, true);
+                }
+            }
+            Action::WindowMenu => {
+                if let Some(focused) = focused {
+                    self.open_window_menu_from_keyboard(&focused);
+                }
+            }
             Action::CloseWindow => {
                 if let Some(window) = self
                     .windows
@@ -367,6 +379,15 @@ impl Compositor {
                 },
                 event.time_msec(),
             ),
+            event @ (InputEvent::TouchDown { .. }
+            | InputEvent::TouchMotion { .. }
+            | InputEvent::TouchUp { .. }
+            | InputEvent::TouchFrame { .. }
+            | InputEvent::TouchCancel { .. }
+            | InputEvent::TabletToolProximity { .. }
+            | InputEvent::TabletToolAxis { .. }
+            | InputEvent::TabletToolTip { .. }
+            | InputEvent::TabletToolButton { .. }) => self.handle_touch(event),
             _ => return Ok(()),
         }
         self.flush_clients()
@@ -635,6 +656,7 @@ impl State {
                     state.super_tap = false;
                 }
                 if !pressed {
+                    state.global_shortcuts.release(evdev_code, time);
                     return if state.held_shortcut_keys.contains(&evdev_code) {
                         state.held_shortcut_keys.retain(|held| *held != evdev_code);
                         FilterResult::Intercept(None)
@@ -642,13 +664,13 @@ impl State {
                         FilterResult::Forward
                     };
                 }
-                let binding = pressed_key(
+                let chord = pressed_key(
                     keysym.modified_sym().raw(),
                     keysym
                         .raw_latin_sym_or_raw_current_sym()
                         .map(|sym| sym.raw()),
-                )
-                .and_then(|key| Some((bound(keys_held(modifiers), key)?, key)));
+                );
+                let binding = chord.and_then(|key| Some((bound(keys_held(modifiers), key)?, key)));
                 if let Some((Action::TextConsole, key)) = binding {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::Bound(
@@ -726,6 +748,17 @@ impl State {
                 }) {
                     state.held_shortcut_keys.push(evdev_code);
                     return FilterResult::Intercept(Some(Shortcut::Bound(action, key)));
+                }
+                if binding.is_none()
+                    && !state.is_locked()
+                    && !state.shortcuts_inhibited()
+                    && let Some(key) = chord
+                    && state
+                        .global_shortcuts
+                        .press(evdev_code, keys_held(modifiers), key, time)
+                {
+                    state.held_shortcut_keys.push(evdev_code);
+                    return FilterResult::Intercept(None);
                 }
                 if state.overview.is_open() && !modifiers.logo {
                     state.held_shortcut_keys.push(evdev_code);

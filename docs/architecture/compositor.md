@@ -273,7 +273,7 @@ when they reach the screen is Bande's own.
   show-desktop pinch, with `momentum` above 2 workspaces/s; a new swipe during the settle
   takes over from where the row is. Keyboard (Super is the system key and Ctrl belongs to
   apps, so `Ctrl+Left/Right` alone is not taken): `Ctrl+Super+Left/Right` switch to the
-  neighbour. A window being dragged by its title
+  neighbour, and `Shift+Ctrl+Super+Left/Right` take the focused window along. A window being dragged by its title
   bar comes along to whichever workspace the user switches to. A switch started while the
   row is still moving keeps its velocity. `bande_app_v1.move_to_workspace`
   moves a window from its menu without following it: it slides off the screen and the
@@ -311,15 +311,21 @@ when they reach the screen is Bande's own.
   icons and name painted on the CPU with `bande-graphics` into memory buffers at the output
   scale, and window thumbnails drawn from the windows' own textures as in the overview. App
   names and icons come from desktop entries through `bande-xdg`, cached, and reread at most
-  every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
-  window holding a list box whose selected option has the focus) only while it shows.
+  every 30 s while an app is unknown. `access.rs` publishes the compositor's own UI through AccessKit, each as its own
+  window, with actions coming back through one channel: the switcher card (a list box whose
+  selected option has the focus) only while it shows; the window and Tile menus (the
+  toolkit's menu nodes, focus on the highlighted item); the overview (a list of windows and a
+  tab list of workspaces); the free-half panel (a list of windows); and the title bar or
+  Browser control well of the focused window (title-bar buttons that click, without taking the
+  screen reader's focus).
   `recall.rs` keeps the window memory file (written by its own thread, the latest state winning and flushed at exit, so a slow disk never holds a frame), `assist.rs` the free-half panel, which reuses the
   overview's `arrange` and the switcher's thumbnails.
 - **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
   pidfd taken at connection, and through `cgroup.kill` when they run in their own scope. The
   shell is listed as "Taskbar & Desktop" with Relaunch, which kills it for the supervisor to
-  start again.
+  start again; a shell that leaves a ping unanswered loses any keyboard-exclusive layer focus
+  at 2 s and is relaunched the same way at 5 s.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
   and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`. The loop
@@ -437,10 +443,11 @@ Status is what `crates/platform/compositor` serves on `main`.
 | :--- | :--- | :--- |
 | `wl_compositor` / `wl_subcompositor` | Core surfaces and hierarchy | implemented |
 | `wl_shm` | Shared-memory buffers | implemented |
-| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | pointer and keyboard implemented, touch not |
+| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | implemented; a touchscreen maps to the first display; a finger on a client surface goes to it as `wl_touch` (a move or resize asked with that touch's serial becomes ours), and a finger on our title bars and frame zones, menus, overview, switcher or free-half panel, or while a popup holds the grab, works as the left button; a swipe up from the display's bottom edge opens the overview |
+| `zwp_tablet_manager_v2` | Pen tablets and styluses | implemented: a client that bound it gets the pen on its surfaces (pressure, tilt, buttons); elsewhere, and for every other client, the pen moves the pointer, its tip is the left button and a barrel button the right |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | implemented where the device supports syncobj eventfds |
-| `xdg_wm_base` | Application windows and popups | implemented; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
+| `xdg_wm_base` | Application windows and popups | implemented; `wm_capabilities` lists maximize, fullscreen, minimize and the window menu; `set_fullscreen` moves the window to the output it names; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | implemented |
 | `wp_presentation` | Presentation timing, VSync | implemented |
@@ -478,5 +485,5 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | implemented |
 | `zwlr_output_power_management_v1` | Display power for idle and lock | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimized windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the focused window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
-| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | implemented, every client |
+| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button; `kept_on_top` (version 11) when the compositor's window menu changes Keep on Top | implemented, every client |
 | `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

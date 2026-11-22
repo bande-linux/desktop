@@ -611,7 +611,7 @@
     </request>
   </interface>
 
-  <interface name="bande_app_v1" version="10">
+  <interface name="bande_app_v1" version="11">
     <description summary="requests from the desktop to a whole app">
       Offered to every client. A client that binds it takes over app-level
       requests that the compositor would otherwise express per window: while
@@ -864,6 +864,15 @@
       </description>
       <arg name="toplevel" type="object" interface="xdg_toplevel"/>
     </request>
+
+    <event name="kept_on_top" since="11">
+      <description summary="the window menu's Keep on Top changed">
+        Sent when the compositor's own window menu set or cleared Keep on Top
+        for the toplevel, so the app's window menu shows the same state.
+      </description>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+      <arg name="keep" type="uint" summary="1 when the window keeps on top, 0 when not"/>
+    </event>
   </interface>
   <interface name="bande_app_control_v1" version="1">
     <description summary="quitting apps and watching them answer, for System Monitor">

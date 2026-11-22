@@ -29,6 +29,7 @@ pub(crate) const END_SESSION_SINCE: u32 = 3;
 pub(crate) const MENU_BUTTON_SINCE: u32 = 4;
 pub(crate) const PANEL_SINCE: u32 = 5;
 pub(crate) const POPOVER_SINCE: u32 = 10;
+pub(crate) const APP_VERSION: u32 = 11;
 const LOOK_UP_ID: &str = "org.bande.Lookup";
 const LOOK_UP_PATH: &str = "/org/bande/Lookup";
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
@@ -67,6 +68,7 @@ pub(crate) struct Shell {
     displays: Vec<String>,
     pub(crate) menus_open: Vec<(XdgToplevel, bool)>,
     pub(crate) window_tiled: Vec<(XdgToplevel, bool)>,
+    pub(crate) kept_on_top: Vec<(XdgToplevel, bool)>,
 }
 
 impl Shell {
@@ -515,6 +517,9 @@ impl Dispatch<BandeAppV1, ()> for State {
             }
             bande_app_v1::Event::WindowTiled { toplevel, tiled } => {
                 state.shell.window_tiled.push((toplevel, tiled != 0));
+            }
+            bande_app_v1::Event::KeptOnTop { toplevel, keep } => {
+                state.shell.kept_on_top.push((toplevel, keep != 0));
             }
             _ => {}
         }

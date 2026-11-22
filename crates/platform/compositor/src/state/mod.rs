@@ -161,6 +161,8 @@ pub struct State {
     pub(crate) materials: crate::material::Materials,
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
+    pub(crate) global_shortcuts: crate::global_shortcuts::GlobalShortcuts,
+    pub(crate) touch: crate::touch::Touch,
     pub(crate) app_states: crate::app_states::AppStates,
     pub(crate) needs_redraw: bool,
     pub(crate) reveal: crate::reveal::Reveal,
@@ -223,13 +225,14 @@ impl Compositor {
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
         seat.add_pointer();
+        seat.add_touch();
         crate::idle::create_global(&handle);
         crate::output_power::create_global(&handle);
         crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
-        handle.create_global::<State, BandeAppV1, ()>(10, ());
+        handle.create_global::<State, BandeAppV1, ()>(11, ());
         crate::resume::create_global(&handle);
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
@@ -318,6 +321,8 @@ impl Compositor {
             materials: crate::material::Materials::default(),
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
+            global_shortcuts: crate::global_shortcuts::GlobalShortcuts::default(),
+            touch: crate::touch::Touch::default(),
             app_states: crate::app_states::AppStates::default(),
             needs_redraw: false,
             reveal: crate::reveal::Reveal::default(),
@@ -359,12 +364,13 @@ impl Compositor {
         fences
             .handle()
             .insert_source(requests, |event, _, state: &mut State| {
-                if let smithay::reexports::calloop::channel::Event::Msg(request) = event {
-                    state.force_quit_action(request);
+                if let smithay::reexports::calloop::channel::Event::Msg((overlay, request)) = event
+                {
+                    state.access_action(overlay, request);
                 }
             })
             .map_err(|error| io::Error::other(error.error))?;
-        state.force_quit.take_actions(actions);
+        state.connect_access(&actions);
         state.watch_consents();
         Ok(Self {
             display,

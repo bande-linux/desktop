@@ -9,6 +9,7 @@ const REOPEN_FILE: &str = "bande/reopen";
 const RUNNING_FILE: &str = "bande/running";
 const CRASHED_FILE: &str = "bande/crashed";
 const RESUME_FOLDER: &str = "bande/resume";
+const GLOBAL_SHORTCUTS_FILE: &str = "bande/global-shortcuts";
 
 fn state_file(name: &str) -> Option<PathBuf> {
     crate::state_home().map(|state| state.join(name))
@@ -16,6 +17,10 @@ fn state_file(name: &str) -> Option<PathBuf> {
 
 pub fn reopen_file() -> Option<PathBuf> {
     state_file(REOPEN_FILE)
+}
+
+pub fn global_shortcuts_file() -> Option<PathBuf> {
+    state_file(GLOBAL_SHORTCUTS_FILE)
 }
 
 pub fn running_apps_file() -> Option<PathBuf> {

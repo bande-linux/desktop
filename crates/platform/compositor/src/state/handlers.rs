@@ -283,8 +283,11 @@ impl XdgShellHandler for State {
         self.unmaximize(surface.wl_surface());
     }
 
-    fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<WlOutput>) {
+    fn fullscreen_request(&mut self, surface: ToplevelSurface, output: Option<WlOutput>) {
         if !self.decline_for_fixed_size(&surface) {
+            if let Some(screen) = output.and_then(|output| self.screen_of_output(&output)) {
+                self.move_to_screen(surface.wl_surface(), screen);
+            }
             self.fullscreen(surface.wl_surface());
         }
     }
@@ -459,11 +462,7 @@ impl WlrLayerShellHandler for State {
         };
         let screen = output
             .as_ref()
-            .and_then(|output| {
-                self.screens
-                    .iter()
-                    .position(|screen| screen.output.owns(output))
-            })
+            .and_then(|output| self.screen_of_output(output))
             .unwrap_or_else(|| self.screen_for_layer(&namespace));
         let mapped = MappedLayer::new(surface.clone(), namespace);
         let mut map = layer_map_for_output(&self.screens[screen].output);

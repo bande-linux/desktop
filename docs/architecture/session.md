@@ -146,6 +146,14 @@ dialog that cannot start fails the request with response 2.
 - **DynamicLauncher**: "Add this web app to Applications?" with the icon, an editable name and the
   address. `RequestInstallToken` trusts only the app stores the other backends trust (GNOME
   Software, AppCenter, Discover).
+- **GlobalShortcuts**: only for calls from `xdg-desktop-portal`. `BindShortcuts` gives each new
+  shortcut its `preferred_trigger` when the trigger holds Super or both Ctrl and Alt, is no system
+  shortcut and no other app has it; a shortcut already bound keeps its keys. Bindings are kept per
+  app id in `$XDG_STATE_HOME/bande/global-shortcuts`, which the compositor follows: it takes a
+  bound chord before the focused app (not while locked or while shortcuts are inhibited) and
+  signals `org.bande.GlobalShortcuts.Activated` and `Deactivated` to the portal only, which emits
+  them for the app's sessions. Settings ▸ Keyboard Shortcuts lists them under App Shortcuts with
+  Remove. There is no `ConfigureShortcuts`, and an unassigned shortcut stays without keys.
 - **Account**: "Share your name and picture with <app>?"; Share returns the login, the
   AccountsService `RealName` (else the passwd name) and the picture as a `file://` URI.
 - **Secret**: only for calls from `xdg-desktop-portal` itself, hands a sandboxed app the 64-byte
@@ -334,7 +342,9 @@ brings up the dialog.
   Settings (`crates/libs/network`, `crates/libs/bluetooth`). Bande never rewrites
   `/etc/network/interfaces` or NetworkManager's configuration; a wired device that ifupdown or
   systemd-networkd manages is to be shown read-only in Settings, with Wi-Fi alone in the Taskbar
-  and Quick Settings.
+  and Quick Settings. Quick Settings' Airplane mode soft-blocks every radio through `/dev/rfkill`
+  (the active seat's through `uaccess`), and its Power Saver tile switches power-profiles-daemon
+  between `power-saver` and `balanced`.
 - **Service outages**: the bar, Quick Settings and Settings tell a stopped service from missing
   hardware (`bande_bus::Reading`): a failed UPower, NetworkManager or BlueZ read counts as absent
   only when sysfs has no battery, Wi-Fi radio or Bluetooth adapter; otherwise the item stays
@@ -464,7 +474,8 @@ what the one before could not save:
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon, at most once every 10 s; the session and its apps stay, and notifications live in
   `bande-notify`. A hung shell shows in Force Quit as "Taskbar & Desktop (Not Responding)" with
-  Relaunch. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
+  Relaunch; at 2 s without an answer its keyboard-exclusive surfaces lose the keyboard, and at
+  5 s the compositor kills it through its pidfd (after `SIGQUIT`) for the supervisor to restart. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
   while locked is killed and restarted.
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without

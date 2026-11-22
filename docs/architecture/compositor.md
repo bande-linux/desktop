@@ -324,8 +324,9 @@ when they reach the screen is Bande's own.
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
   pidfd taken at connection, and through `cgroup.kill` when they run in their own scope. The
   shell is listed as "Taskbar & Desktop" with Relaunch, which kills it for the supervisor to
-  start again; a shell that leaves a ping unanswered loses any keyboard-exclusive layer focus
-  at 2 s and is relaunched the same way at 5 s.
+  start again; a shell client that leaves a ping unanswered loses any keyboard-exclusive layer
+  focus at 2 s, and `bande-shell` itself is relaunched the same way at 5 s (the lock screen,
+  screenshots and session dialogs only lose the keyboard).
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
   and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`. The loop

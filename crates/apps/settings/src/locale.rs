@@ -16,6 +16,8 @@ pub use bande_l10n::system::{AvailableLocale, base, read_supported, supported_lo
 
 const HELPER: &str = "/usr/libexec/bande-locale-helper";
 const PACKS: &str = "bande-desktop-l10n-";
+const BROWSER_PACKS: &str = "bande-browser-l10n-";
+const BROWSER: &str = "org.bande.Browser";
 const OWN_CATALOGS: &str = "bande-settings";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const HELPER_REFUSED_VALUE: i32 = 2;
@@ -502,10 +504,15 @@ fn pack_names(code: &str) -> Vec<String> {
         .unwrap_or(code)
         .to_lowercase()
         .replace('_', "-");
-    let mut names = vec![
-        format!("{PACKS}{regional}"),
-        format!("{PACKS}{}", tongue(code)),
-    ];
+    let tongue = tongue(code);
+    let mut prefixes = vec![PACKS];
+    if bande_xdg::is_installed(BROWSER) {
+        prefixes.push(BROWSER_PACKS);
+    }
+    let mut names: Vec<String> = prefixes
+        .into_iter()
+        .flat_map(|prefix| [format!("{prefix}{regional}"), format!("{prefix}{tongue}")])
+        .collect();
     names.dedup();
     names
 }

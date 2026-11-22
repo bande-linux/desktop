@@ -184,8 +184,10 @@ are in [performance.md](performance.md).
   architecture-independent packages ([ci.md](ci.md#jobs)). See [localisation.md](localisation.md).
   Settings ▸ Language puts the languages with a pack (installed or in the APT index) first. When
   a language is chosen there, for the system or for one app, Settings installs its missing pack
-  (`bande-desktop-l10n-<lang>-<region>` and `bande-desktop-l10n-<lang>`) through PackageKit on
-  its own thread, says while Bande's text is being fetched, and says when it could not be.
+  (`bande-desktop-l10n-<lang>-<region>` and `bande-desktop-l10n-<lang>`, the same two names of
+  `bande-browser-l10n-` when the Browser is installed, and for the system its Hunspell dictionary)
+  through PackageKit on its own thread, says while Bande's text is being fetched, and says when it
+  could not be.
 - **`bande-archive-keyring`, `bande-apt-source`** are built and published by the APT
   repository itself (`bande-linux/apt`), not here. Installation is described in the
   top-level `README.md`.

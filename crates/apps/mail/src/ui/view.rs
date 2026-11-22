@@ -71,6 +71,7 @@ const FLAG_COLORS: [Text; 7] = [
     text!("Gray"),
 ];
 const MAX_PICTURE_BYTES: usize = 10 << 20;
+const CORRESPONDENTS_READ: usize = 5000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
@@ -430,6 +431,21 @@ impl MailView {
             .iter()
             .map(|(account, _)| account.clone())
             .collect()
+    }
+
+    pub fn correspondents(&self) -> Vec<crate::message::Address> {
+        let mut found = self
+            .store
+            .correspondents(CORRESPONDENTS_READ)
+            .inspect_err(|error| tracing::warn!("cannot read known addresses: {error}"))
+            .unwrap_or_default();
+        found.retain(|address| {
+            !self
+                .accounts
+                .iter()
+                .any(|(account, _)| account.email.eq_ignore_ascii_case(&address.email))
+        });
+        found
     }
 
     pub fn fds(&self) -> Vec<BorrowedFd<'_>> {

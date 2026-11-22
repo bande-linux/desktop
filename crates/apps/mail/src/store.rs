@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 
 use crate::error::Result;
 use crate::imap::{Fetched, Flag, Flags, Folder, Role};
-use crate::message::{Address, Content, Envelope};
+use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::{Security, Server};
 
 pub type AccountId = i64;
@@ -868,6 +868,36 @@ impl Store {
             .query_map(params_from_iter(values.iter()), summary_from)?
             .collect::<rusqlite::Result<_>>()?;
         Ok(summaries)
+    }
+
+    pub fn correspondents(&self, limit: usize) -> Result<Vec<Address>> {
+        let mut statement = self.connection.prepare(
+            "SELECT m.sender_name, m.sender_email, \
+             CASE WHEN b.role = 'sent' THEN m.recipients ELSE '' END \
+             FROM messages m JOIN mailboxes b ON b.id = m.mailbox \
+             WHERE b.role IS NULL OR b.role NOT IN ('junk', 'trash') \
+             ORDER BY m.date DESC LIMIT ?1",
+        )?;
+        let rows = statement.query_map([i64::try_from(limit).unwrap_or(i64::MAX)], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut seen = std::collections::HashSet::new();
+        let mut found = Vec::new();
+        for row in rows {
+            let (name, email, recipients) = row?;
+            for address in
+                std::iter::once(Address { name, email }).chain(parse_addresses(&recipients))
+            {
+                if !address.email.is_empty() && seen.insert(address.email.to_lowercase()) {
+                    found.push(address);
+                }
+            }
+        }
+        Ok(found)
     }
 
     pub fn conversation(&self, of: &Summary) -> Result<Vec<Summary>> {

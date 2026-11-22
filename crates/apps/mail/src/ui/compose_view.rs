@@ -87,6 +87,9 @@ pub struct ComposeView {
     more: WidgetId,
     more_frame: Rect,
     removed: Vec<(usize, Attachment)>,
+    known: Vec<Address>,
+    typed: Vec<(WidgetId, String)>,
+    completion: Option<(WidgetId, String)>,
     access: WidgetId,
     token: u64,
     closed: bool,
@@ -113,6 +116,18 @@ fn joined(addresses: &[Address]) -> String {
         .join(", ")
 }
 
+fn completes(candidate: &str, token: &str) -> Option<String> {
+    let mut rest = candidate.char_indices();
+    for typed in token.chars() {
+        let (_, known) = rest.next()?;
+        if !known.to_lowercase().eq(typed.to_lowercase()) {
+            return None;
+        }
+    }
+    let rest = rest.as_str();
+    (!rest.is_empty()).then(|| rest.to_owned())
+}
+
 fn rows(from: bool, bcc: bool) -> Vec<Text> {
     let mut rows = vec![text!("To:"), text!("Cc:")];
     if bcc {
@@ -130,6 +145,7 @@ impl ComposeView {
         outgoing: Outgoing,
         senders: Vec<Account>,
         bcc_field: bool,
+        known: Vec<Address>,
         palette: Palette,
         text: TextSystem,
     ) -> Self {
@@ -227,6 +243,9 @@ impl ComposeView {
             more,
             more_frame: Rect::default(),
             removed: Vec::new(),
+            known,
+            typed: Vec::new(),
+            completion: None,
             access: WidgetId::next(),
             token,
             closed: false,
@@ -239,6 +258,10 @@ impl ComposeView {
         for index in 0..view.draft.attachments.len() {
             view.insert_chip(index);
         }
+        view.typed = [view.to, view.cc, view.bcc]
+            .into_iter()
+            .map(|field| (field, view.field_text(field)))
+            .collect();
         let first = match view.draft.to.is_empty() {
             true => view.to,
             false => view.body,
@@ -703,6 +726,7 @@ impl ComposeView {
                 Signal::Dismissed => {}
             }
         }
+        self.complete_address();
         if let Some(request) = self.ui.take_clipboard_request() {
             self.requests.push(ComposeRequest::Clipboard(request));
         }
@@ -710,6 +734,72 @@ impl ComposeView {
             self.requests.push(ComposeRequest::ShowMenu(menu, at));
         }
         self.schedule_autosave();
+    }
+
+    fn complete_address(&mut self) {
+        let Some(field) = self.ui.focus().filter(|focused| {
+            [self.to, self.cc].contains(focused) || (self.bcc_shown && *focused == self.bcc)
+        }) else {
+            return;
+        };
+        let text = self.field_text(field);
+        let completion = self.completion.take().filter(|(id, _)| *id == field);
+        if completion.as_ref().is_some_and(|(_, shown)| *shown == text) {
+            self.completion = completion;
+            return;
+        }
+        let Some(at) = self.typed.iter().position(|(id, _)| *id == field) else {
+            self.typed.push((field, text));
+            return;
+        };
+        let before = std::mem::replace(&mut self.typed[at].1, text.clone());
+        if let Some((_, shown)) = completion
+            && let Some(separator) = text.strip_prefix(before.as_str())
+            && [",", ";"].contains(&separator)
+        {
+            self.set_field(field, &format!("{shown}, "), None);
+            return;
+        }
+        let selection = self
+            .ui
+            .widget_ref::<TextField>(field)
+            .map(TextField::selection)
+            .unwrap_or_default();
+        if text.len() <= before.len()
+            || !text.starts_with(before.as_str())
+            || selection != (text.len()..text.len())
+        {
+            return;
+        }
+        let token = text
+            .rsplit([',', ';'])
+            .next()
+            .unwrap_or_default()
+            .trim_start();
+        if token.chars().count() < 2 {
+            return;
+        }
+        let Some(rest) = self.known.iter().find_map(|address| {
+            [address.full(), address.email.clone()]
+                .into_iter()
+                .find_map(|candidate| completes(&candidate, token))
+        }) else {
+            return;
+        };
+        let shown = format!("{text}{rest}");
+        self.set_field(field, &shown, Some(text.len()..shown.len()));
+        self.completion = Some((field, shown));
+    }
+
+    fn set_field(&mut self, field: WidgetId, text: &str, selected: Option<std::ops::Range<usize>>) {
+        let Some(widget) = self.ui.widget_as::<TextField>(field) else {
+            return;
+        };
+        widget.replace_text(text);
+        widget.select(selected.unwrap_or(text.len()..text.len()));
+        if let Some((_, typed)) = self.typed.iter_mut().find(|(id, _)| *id == field) {
+            text.clone_into(typed);
+        }
     }
 
     fn schedule_autosave(&mut self) {

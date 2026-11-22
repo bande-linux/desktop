@@ -86,7 +86,9 @@ apt install bande-mail
   to is synced right after the move. Mailbox ▸ New Mailbox… and a mailbox's menu in the sidebar
   create, rename and delete mailboxes on the server; the special mailboxes keep their names.
 - **Compose** opens its own window, with From when there are several accounts, and Bcc when
-  View ▸ Bcc Address Field is on or the message has Bcc recipients. Replies quote the
+  View ▸ Bcc Address Field is on or the message has Bcc recipients. To, Cc and Bcc complete an address as you type it, from the senders of
+  your mail and the recipients of mail you sent, as found in the offline store; Tab, a comma or
+  End takes the suggestion. Replies quote the
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and replaces the previous account's signature when From
   changes. Files are

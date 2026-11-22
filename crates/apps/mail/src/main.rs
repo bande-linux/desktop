@@ -250,13 +250,20 @@ impl Mail {
     }
 
     fn open_compose(&mut self, cx: &mut Cx<Self>, outgoing: Outgoing) -> Option<WindowId> {
-        let (senders, bcc_field) = main_view(cx, self.main, &mut self.parked)
-            .map(|view| (view.accounts(), view.settings().bcc_field))
+        let (senders, bcc_field, known) = main_view(cx, self.main, &mut self.parked)
+            .map(|view| {
+                (
+                    view.accounts(),
+                    view.settings().bcc_field,
+                    view.correspondents(),
+                )
+            })
             .unwrap_or_default();
         let mut view = ComposeView::new(
             outgoing,
             senders,
             bcc_field,
+            known,
             Appearance::default().palette(),
             TextSystem::new(),
         );

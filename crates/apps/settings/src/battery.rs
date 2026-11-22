@@ -75,6 +75,7 @@ pub struct PowerState {
     pub battery: Option<BatteryState>,
     pub on_battery: bool,
     pub lid: bool,
+    pub hibernation: Option<String>,
     pub profiles: Profiles,
     pub profile: Option<String>,
 }
@@ -195,8 +196,15 @@ fn read(system: &Connection) -> Option<PowerState> {
     let profiles = power_profiles(system)
         .inspect_err(|error| tracing::warn!("cannot reach the power profiles: {error}"))
         .ok();
+    let hibernation = battery.as_ref().and_then(|_| {
+        bande_bus::logind::ManagerProxyBlocking::new(system)
+            .and_then(|manager| manager.can_suspend_then_hibernate())
+            .inspect_err(|error| tracing::warn!("cannot ask whether sleep may hibernate: {error}"))
+            .ok()
+    });
     Some(PowerState {
         battery,
+        hibernation,
         on_battery,
         lid: upower
             .lid_is_present()

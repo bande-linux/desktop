@@ -254,6 +254,61 @@ impl State {
         self.focus(Some(surface.clone()));
     }
 
+    pub(crate) fn withholds(&self, name: &str) -> bool {
+        self.lid_closed && bande_edid::is_internal_connector(name)
+    }
+
+    fn any_screen_shown(&self) -> bool {
+        self.screens
+            .iter()
+            .any(|screen| !screen.parked && !self.withholds(&screen.name()))
+    }
+
+    fn add_arranged(&mut self, config: OutputConfig) {
+        let Some(default) = config.default_settings() else {
+            return;
+        };
+        let heads: Vec<OutputConfig> = self
+            .screens
+            .iter()
+            .filter(|screen| !screen.parked)
+            .map(|screen| screen.config.clone())
+            .chain([config.clone()])
+            .collect();
+        let main = self.main_screen().name();
+        let settings = crate::arrange::arrange(&heads, &main, &self.display_config)
+            .into_iter()
+            .find(|display| display.name == config.name)
+            .map_or(default, |display| display.settings);
+        self.add_screen(config, settings);
+    }
+
+    fn rebalance_withheld(&mut self) {
+        let (returning, kept) = std::mem::take(&mut self.withheld)
+            .into_iter()
+            .partition(|config| !self.withholds(&config.name));
+        self.withheld = kept;
+        for config in returning {
+            self.add_arranged(config);
+        }
+        if !self.any_screen_shown() {
+            if self.screens.iter().all(|screen| screen.parked)
+                && let Some(config) = self.withheld.pop()
+            {
+                self.add_arranged(config);
+            }
+            return;
+        }
+        while let Some(screen) = self
+            .screens
+            .iter()
+            .position(|screen| !screen.parked && self.withholds(&screen.name()))
+        {
+            self.withheld.push(self.screens[screen].config.clone());
+            self.remove_screen(screen);
+        }
+    }
+
     fn parked_screen(&self) -> Option<usize> {
         self.screens.iter().position(|screen| screen.parked)
     }
@@ -276,7 +331,7 @@ impl State {
         self.screens
             .push(Screen::new(&self.display_handle, config, settings));
         let screen = self.screens.len() - 1;
-        self.bring_back(&identity, screen);
+        self.bring_back(&self.identity_of(screen), screen);
         match parked {
             Some(parked) => self.remove_screen(parked),
             None => self.after_screens_changed(),
@@ -345,7 +400,7 @@ impl State {
             return;
         }
         let from = self.screen_rect(screen);
-        let identity = self.screens[screen].config.identity();
+        let identity = self.identity_of(screen);
         let shown = self.screens[screen].workspaces.active_id();
         let spaces: Vec<u64> = self.screens[screen]
             .workspaces
@@ -561,34 +616,49 @@ impl Compositor {
     }
 
     pub fn add_output(&mut self, config: OutputConfig) {
-        let Some(default) = config.default_settings() else {
+        self.state.note_activity();
+        if self.state.withholds(&config.name) && self.state.any_screen_shown() {
+            self.state.withheld.push(config);
             return;
-        };
-        let heads: Vec<OutputConfig> = self
-            .state
-            .screens
-            .iter()
-            .filter(|screen| !screen.parked)
-            .map(|screen| screen.config.clone())
-            .chain([config.clone()])
-            .collect();
-        let main = self.state.main_screen().name();
-        let settings = crate::arrange::arrange(&heads, &main, &self.state.display_config)
-            .into_iter()
-            .find(|display| display.name == config.name)
-            .map_or(default, |display| display.settings);
-        self.state.add_screen(config, settings);
+        }
+        self.state.add_arranged(config);
+        self.state.rebalance_withheld();
         self.state.arrange_screens();
     }
 
     pub fn remove_output(&mut self, output: &str) {
-        if let Some(screen) = self.state.screen_named(output) {
+        let withheld = self.state.withheld.len();
+        self.state.withheld.retain(|config| config.name != output);
+        if self.state.withheld.len() == withheld
+            && let Some(screen) = self.state.screen_named(output)
+        {
             self.state.remove_screen(screen);
-            self.state.arrange_screens();
         }
+        self.state.rebalance_withheld();
+        self.state.arrange_screens();
+    }
+
+    pub fn set_lid_closed(&mut self, closed: bool) {
+        if self.state.lid_closed == closed {
+            return;
+        }
+        tracing::info!("the lid was {}", if closed { "closed" } else { "opened" });
+        self.state.lid_closed = closed;
+        self.state.rebalance_withheld();
+        self.state.arrange_screens();
+        self.state.needs_redraw = true;
     }
 
     pub fn refit_output(&mut self, config: OutputConfig) {
+        if let Some(withheld) = self
+            .state
+            .withheld
+            .iter_mut()
+            .find(|withheld| withheld.name == config.name)
+        {
+            *withheld = config;
+            return;
+        }
         if let Some(screen) = self.state.screen_named(&config.name) {
             self.state.screens[screen].config = config;
             self.state.arrange_screens();

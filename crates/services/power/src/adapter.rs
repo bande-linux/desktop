@@ -5,20 +5,11 @@ use std::thread;
 use bande_bus::power_profiles::{POWER_SAVER, power_profiles};
 use bande_l10n::tr;
 
+use crate::battery::{DisplayDeviceProxyBlocking, LOW_WARNING_LEVEL, UPowerProxyBlocking};
 use crate::logind;
 use zbus::blocking::Connection;
 
 const KEEP_RUNNING: &str = "keep-running";
-
-#[zbus::proxy(
-    interface = "org.freedesktop.UPower",
-    default_service = "org.freedesktop.UPower",
-    default_path = "/org/freedesktop/UPower"
-)]
-trait UPower {
-    #[zbus(property)]
-    fn on_battery(&self) -> zbus::Result<bool>;
-}
 
 #[zbus::proxy(
     interface = "org.bande.Config",
@@ -35,6 +26,7 @@ trait Config {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Situation {
     pub on_battery: bool,
+    pub battery_low: bool,
     pub low_power_on_battery: bool,
     pub keep_running_with_lid_closed: bool,
 }
@@ -46,7 +38,8 @@ pub struct AdapterPolicy {
 
 impl AdapterPolicy {
     pub fn profile_for(&mut self, situation: Situation, current: &str) -> Option<String> {
-        let saving = situation.on_battery && situation.low_power_on_battery;
+        let saving =
+            situation.on_battery && (situation.low_power_on_battery || situation.battery_low);
         match (&self.saved_profile, saving) {
             (None, true) if current != POWER_SAVER => {
                 self.saved_profile = Some(current.to_owned());
@@ -65,9 +58,16 @@ impl AdapterPolicy {
     }
 }
 
-fn situation(upower: &UPowerProxyBlocking<'_>, config: &ConfigProxyBlocking<'_>) -> Situation {
+fn situation(
+    upower: &UPowerProxyBlocking<'_>,
+    battery: &DisplayDeviceProxyBlocking<'_>,
+    config: &ConfigProxyBlocking<'_>,
+) -> Situation {
     Situation {
         on_battery: upower.on_battery().unwrap_or(false),
+        battery_low: battery
+            .warning_level()
+            .is_ok_and(|level| level >= LOW_WARNING_LEVEL),
         low_power_on_battery: config.low_power_on_battery().unwrap_or(false),
         keep_running_with_lid_closed: config
             .lid_on_power()
@@ -77,15 +77,23 @@ fn situation(upower: &UPowerProxyBlocking<'_>, config: &ConfigProxyBlocking<'_>)
 
 pub fn follow(system: &Connection, session: &Connection) -> zbus::Result<()> {
     let upower = UPowerProxyBlocking::new(system)?;
+    let battery = DisplayDeviceProxyBlocking::new(system)?;
     let config = ConfigProxyBlocking::new(session)?;
     let profiles = power_profiles(system)?;
     let (changed, changes) = mpsc::channel();
-    let battery = upower.receive_on_battery_changed();
+    let plugs = upower.receive_on_battery_changed();
+    let levels = battery.receive_warning_level_changed();
     let low_power = config.receive_low_power_on_battery_changed();
     let lid = config.receive_lid_on_power_changed();
     let notify = changed.clone();
     thread::spawn(move || {
-        battery.for_each(|_| {
+        plugs.for_each(|_| {
+            let _ = notify.send(());
+        })
+    });
+    let notify = changed.clone();
+    thread::spawn(move || {
+        levels.for_each(|_| {
             let _ = notify.send(());
         })
     });
@@ -105,7 +113,7 @@ pub fn follow(system: &Connection, session: &Connection) -> zbus::Result<()> {
         let mut policy = AdapterPolicy::default();
         let mut lid_hold: Option<OwnedFd> = None;
         loop {
-            let situation = situation(&upower, &config);
+            let situation = situation(&upower, &battery, &config);
             if let Ok(current) = profiles.active_profile()
                 && let Some(profile) = policy.profile_for(situation, &current)
                 && let Err(error) = profiles.set_active_profile(&profile)

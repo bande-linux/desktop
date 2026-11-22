@@ -129,21 +129,40 @@ pub enum Suspend {
     Never,
 }
 
+impl Suspend {
+    pub fn after(self, display_off_after: Option<Duration>) -> Option<Duration> {
+        match self {
+            Self::WithDisplayOff => display_off_after,
+            Self::After(after) => Some(after),
+            Self::Never => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OnBattery {
+    pub display_off_after: Option<Duration>,
+    pub suspend: Suspend,
+}
+
+impl OnBattery {
+    pub fn suspend_after(&self) -> Option<Duration> {
+        self.suspend.after(self.display_off_after)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Idle {
     pub screen_saver_after: Option<Duration>,
     pub display_off_after: Option<Duration>,
     pub require_password_after: Duration,
     pub suspend: Suspend,
+    pub on_battery: OnBattery,
 }
 
 impl Idle {
     pub fn suspend_after(&self) -> Option<Duration> {
-        match self.suspend {
-            Suspend::WithDisplayOff => self.display_off_after,
-            Suspend::After(after) => Some(after),
-            Suspend::Never => None,
-        }
+        self.suspend.after(self.display_off_after)
     }
 }
 
@@ -918,6 +937,10 @@ impl Default for Config {
                 display_off_after: Some(Duration::from_secs(10 * 60)),
                 require_password_after: Duration::ZERO,
                 suspend: Suspend::WithDisplayOff,
+                on_battery: OnBattery {
+                    display_off_after: Some(Duration::from_secs(5 * 60)),
+                    suspend: Suspend::WithDisplayOff,
+                },
             },
             keyboard: Keyboard {
                 repeat_rate: 25,
@@ -1319,17 +1342,23 @@ impl Parser<'_> {
                         })?,
                     };
                 }
-                "suspend-after" => {
-                    idle.suspend = match self.duration_or_never(child)? {
-                        Some(after) => Suspend::After(after),
-                        None => Suspend::Never,
-                    };
+                "suspend-after" => idle.suspend = self.suspend(child)?,
+                "display-off-after-on-battery" => {
+                    idle.on_battery.display_off_after = self.duration_or_never(child)?;
                 }
+                "suspend-after-on-battery" => idle.on_battery.suspend = self.suspend(child)?,
                 _ => return Err(self.unknown_child("idle", child)),
             }
             Ok(())
         });
         idle
+    }
+
+    fn suspend(&self, node: &KdlNode) -> Result<Suspend, ConfigError> {
+        Ok(match self.duration_or_never(node)? {
+            Some(after) => Suspend::After(after),
+            None => Suspend::Never,
+        })
     }
 
     fn duration_or_never(&self, node: &KdlNode) -> Result<Option<Duration>, ConfigError> {

@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -8,8 +8,9 @@ use std::os::unix::net::UnixStream;
 use zbus::blocking::Connection;
 
 use crate::backlight::KeyboardBacklight;
+use crate::battery::{DisplayDeviceProxyBlocking, LOW_WARNING_LEVEL, UPowerProxyBlocking};
 use crate::brightness::Lights;
-use crate::idle::{Assertion, Command, IdleMachine, Inhibitor, Policy};
+use crate::idle::{Assertion, Command, IdleMachine, Inhibitor, Policies, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 use crate::password::PasswordPolicy;
 
@@ -30,6 +31,12 @@ pub trait Config {
 
     #[zbus(property)]
     fn idle_suspend_after(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn idle_battery_display_off_after(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn idle_battery_suspend_after(&self) -> zbus::Result<u64>;
 }
 
 type Executor = Box<dyn Fn(Command) + Send + Sync>;
@@ -78,9 +85,9 @@ pub struct IdleController {
 }
 
 impl IdleController {
-    pub fn new(policy: Policy, execute: impl Fn(Command) + Send + Sync + 'static) -> Self {
+    pub fn new(policies: Policies, execute: impl Fn(Command) + Send + Sync + 'static) -> Self {
         Self {
-            machine: Mutex::new(IdleMachine::new(policy)),
+            machine: Mutex::new(IdleMachine::new(policies)),
             execute: Box::new(execute),
             wayland_listeners: Mutex::new(Vec::new()),
         }
@@ -108,6 +115,18 @@ impl IdleController {
         self.run(|machine| machine.idle_for(idle));
     }
 
+    pub fn sleeping(&self) {
+        self.run(IdleMachine::sleeping);
+    }
+
+    pub fn woke(&self) {
+        self.run(IdleMachine::woke);
+    }
+
+    pub fn lock_requested(&self) {
+        self.run(IdleMachine::lock_requested);
+    }
+
     pub fn resumed(&self) {
         self.run(IdleMachine::resumed);
     }
@@ -120,12 +139,16 @@ impl IdleController {
         self.run(|machine| machine.set_asserted(assertion, held));
     }
 
+    pub fn set_power_source(&self, on_battery: bool, battery_low: bool) {
+        self.run(|machine| machine.set_power_source(on_battery, battery_low));
+    }
+
     pub fn set_locked(&self, locked: bool) {
         self.run(|machine| machine.set_locked(locked));
     }
 
-    pub fn set_policy(&self, policy: Policy) {
-        self.run(|machine| machine.set_policy(policy));
+    pub fn set_policies(&self, policies: Policies) {
+        self.run(|machine| machine.set_policies(policies));
         self.tell_wayland(Command::RestartIdleTimers);
     }
 
@@ -139,11 +162,11 @@ impl IdleController {
         Ok(changes)
     }
 
-    pub fn computer_sleeps_after(&self) -> Option<Duration> {
+    pub fn sleep_after(&self) -> Option<Duration> {
         self.machine
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .computer_sleeps_after()
+            .sleep_after()
     }
 
     pub fn thresholds(&self) -> Vec<Duration> {
@@ -154,18 +177,26 @@ impl IdleController {
     }
 }
 
-fn policy(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policy> {
+fn policies(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policies> {
     let unless_never = |seconds: u64| (seconds > 0).then(|| Duration::from_secs(seconds));
-    Ok(Policy {
+    let on_power = Policy {
         screen_saver_after: unless_never(config.idle_screen_saver_after()?),
         display_off_after: unless_never(config.idle_display_off_after()?),
         require_password_after: Duration::from_secs(config.idle_require_password_after()?),
         suspend_after: unless_never(config.idle_suspend_after()?),
+    };
+    Ok(Policies {
+        on_power,
+        on_battery: Policy {
+            display_off_after: unless_never(config.idle_battery_display_off_after()?),
+            suspend_after: unless_never(config.idle_battery_suspend_after()?),
+            ..on_power
+        },
     })
 }
 
-pub fn configured_policy(session: &Connection) -> zbus::Result<Policy> {
-    policy(&ConfigProxyBlocking::new(session)?)
+pub fn configured_policies(session: &Connection) -> zbus::Result<Policies> {
+    policies(&ConfigProxyBlocking::new(session)?)
 }
 
 fn refresh_on<T>(
@@ -177,8 +208,8 @@ fn refresh_on<T>(
     let controller = Arc::clone(controller);
     thread::spawn(move || {
         for _ in changes {
-            if let Ok(policy) = policy(&config) {
-                controller.set_policy(policy);
+            if let Ok(policies) = policies(&config) {
+                controller.set_policies(policies);
             }
         }
     });
@@ -206,7 +237,17 @@ pub fn follow_config(session: &Connection, controller: &Arc<IdleController>) -> 
         &config,
         controller,
     );
-    controller.set_policy(policy(&config)?);
+    refresh_on(
+        config.receive_idle_battery_display_off_after_changed(),
+        &config,
+        controller,
+    );
+    refresh_on(
+        config.receive_idle_battery_suspend_after_changed(),
+        &config,
+        controller,
+    );
+    controller.set_policies(policies(&config)?);
     Ok(())
 }
 
@@ -230,9 +271,54 @@ pub fn follow_sleep_inhibitors(
     })
 }
 
+pub fn follow_power_source(
+    system: &Connection,
+    controller: &Arc<IdleController>,
+) -> zbus::Result<()> {
+    let upower = UPowerProxyBlocking::new(system)?;
+    let battery = DisplayDeviceProxyBlocking::new(system)?;
+    let (changed, changes) = mpsc::channel();
+    let plugs = upower.receive_on_battery_changed();
+    let levels = battery.receive_warning_level_changed();
+    let notify = changed.clone();
+    thread::spawn(move || {
+        plugs.for_each(|_| {
+            let _ = notify.send(());
+        })
+    });
+    thread::spawn(move || {
+        levels.for_each(|_| {
+            let _ = changed.send(());
+        })
+    });
+    let controller = Arc::clone(controller);
+    thread::spawn(move || {
+        loop {
+            controller.set_power_source(
+                upower.on_battery().unwrap_or(false),
+                battery
+                    .warning_level()
+                    .is_ok_and(|level| level >= LOW_WARNING_LEVEL),
+            );
+            if changes.recv().is_err() {
+                return;
+            }
+        }
+    });
+    Ok(())
+}
+
 pub fn follow_lock(system: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {
     let controller = Arc::clone(controller);
     logind::follow_locked_hint(system, move |locked| controller.set_locked(locked))
+}
+
+pub fn follow_lock_requests(
+    system: &Connection,
+    controller: &Arc<IdleController>,
+) -> zbus::Result<()> {
+    let controller = Arc::clone(controller);
+    logind::follow_lock_requests(system, move || controller.lock_requested())
 }
 
 pub fn logind_executor(
@@ -254,11 +340,7 @@ pub fn logind_executor(
             Command::IdleHint(idle) => session.set_idle_hint(idle),
             Command::RequirePassword(required) => password.require(required),
             Command::Suspend if virtual_machine => Ok(()),
-            Command::Suspend => match manager.can_suspend() {
-                Ok(answer) if answer == "yes" => manager.suspend(false),
-                Ok(_) => Ok(()),
-                Err(error) => Err(error),
-            },
+            Command::Suspend => logind::sleep(&manager, false).map(drop),
             Command::Dim => {
                 let lit = keyboard
                     .as_ref()

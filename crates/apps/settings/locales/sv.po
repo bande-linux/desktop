@@ -567,6 +567,12 @@ msgstr "Bara en administratör kan ändra detta."
 msgid "Couldn't make this change."
 msgstr "Det gick inte att göra ändringen."
 
+msgid "This computer can't sleep, so it stays on when idle."
+msgstr "Den här datorn kan inte vila, så den förblir på när den inte används."
+
+msgid "A virtual machine doesn't sleep when idle, since a sleeping guest looks like a crash and loses its network. Sleep from the menu still works."
+msgstr "En virtuell maskin vilar inte när den inte används, eftersom en vilande gäst ser ut som en krasch och tappar sitt nätverk. Vila från menyn fungerar ändå."
+
 msgid "The desktop settings service"
 msgstr "Tjänsten för skrivbordsinställningar"
 
@@ -1191,6 +1197,9 @@ msgstr "Spegla"
 msgid "Mirror {display}"
 msgstr "Spegla {display}"
 
+msgid "Never"
+msgstr "Aldrig"
+
 msgid "The display turns off first, so the screen saver doesn't start."
 msgstr "Skärmen stängs av först, så skärmsläckaren startar inte."
 
@@ -1555,6 +1564,18 @@ msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofil
 
 msgid "This computer doesn't offer power modes."
 msgstr "Den här datorn har inga strömlägen."
+
+msgid "Hibernation"
+msgstr "Viloläge på disk"
+
+msgid "Before the battery runs out during sleep"
+msgstr "Innan batteriet tar slut under vila"
+
+msgid "This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."
+msgstr "Den här datorn kan inte gå i viloläge på disk, så vilan varar tills batteriet tar slut. Viloläge på disk kräver växlingsutrymme minst lika stort som minnet och går inte medan Secure Boot låser kärnan."
+
+msgid "The administrator doesn't allow hibernation, so sleep lasts until the battery runs out."
+msgstr "Administratören tillåter inte viloläge på disk, så vilan varar tills batteriet tar slut."
 
 msgid "This computer can't sleep, so it stays on when idle. The display still turns off as set in Lock Screen."
 msgstr "Den här datorn kan inte vila, så den förblir på när den inte används. Skärmen stängs ändå av enligt Låsskärm."

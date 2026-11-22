@@ -28,8 +28,7 @@ type Services = (
 fn serve() -> Result<Services, Box<dyn Error>> {
     let system = Connection::system()?;
     let session = Connection::session()?;
-    let guard = SleepGuard::start(&system, LOCK_WAIT)?;
-    battery::watch(&system, Arc::new(BatteryNotifier::new(&session)))?;
+    battery::watch(&system, Arc::new(BatteryNotifier::new(&session, &system)))?;
     if let Err(error) = gadgets::watch(&system, &session) {
         tracing::warn!("Bluetooth batteries are not followed: {error}");
     }
@@ -38,7 +37,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     }
     battery::chime_when_plugged_in(&system, &session)?;
     let idle = Arc::new(IdleController::new(
-        controller::configured_policy(&session)?,
+        controller::configured_policies(&session)?,
         controller::logind_executor(
             ManagerProxyBlocking::new(&system)?,
             logind::own_session(&system)?,
@@ -51,6 +50,11 @@ fn serve() -> Result<Services, Box<dyn Error>> {
             PasswordPolicy::serve(&session)?,
         ),
     ));
+    let sleeper = Arc::clone(&idle);
+    let guard = SleepGuard::start(&system, LOCK_WAIT, move |start| match start {
+        true => sleeper.sleeping(),
+        false => sleeper.woke(),
+    })?;
     let logind = system.clone();
     let inhibited = Arc::clone(&idle);
     let asserted = Arc::clone(&idle);
@@ -66,8 +70,12 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     )?;
     controller::follow_config(&session, &idle)?;
     controller::follow_lock(&system, &idle)?;
+    controller::follow_lock_requests(&system, &idle)?;
     controller::follow_idle_inhibitors(&system, &idle)?;
     controller::follow_sleep_inhibitors(&system, &idle)?;
+    if let Err(error) = controller::follow_power_source(&system, &idle) {
+        tracing::warn!("cannot follow the battery for idle sleep: {error}");
+    }
     let streams = Arc::clone(&idle);
     audio::follow_streams(move |streaming| streams.set_asserted(Assertion::Streams, streaming));
     match wayland_client::Connection::connect_to_env() {

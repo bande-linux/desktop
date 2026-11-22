@@ -45,6 +45,9 @@ trait Manager {
 
     fn can_suspend(&self) -> zbus::Result<String>;
 
+    #[zbus(property)]
+    fn lid_closed(&self) -> zbus::Result<bool>;
+
     fn suspend(&self, interactive: bool) -> zbus::Result<()>;
 
     #[zbus(signal)]
@@ -52,6 +55,28 @@ trait Manager {
 
     #[zbus(signal)]
     fn prepare_for_shutdown(&self, start: bool) -> zbus::Result<()>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.RealtimeKit1",
+    default_service = "org.freedesktop.RealtimeKit1",
+    default_path = "/org/freedesktop/RealtimeKit1"
+)]
+trait RealtimeKit {
+    fn make_thread_high_priority(&self, thread: u64, priority: i32) -> zbus::Result<()>;
+}
+
+const HIGH_PRIORITY_NICE_LEVEL: i32 = -11;
+
+pub fn raise_priority(connection: &Connection) {
+    let thread = rustix::thread::gettid().as_raw_nonzero().get();
+    let raised = RealtimeKitProxyBlocking::new(connection).and_then(|rtkit| {
+        rtkit.make_thread_high_priority(thread.unsigned_abs().into(), HIGH_PRIORITY_NICE_LEVEL)
+    });
+    match raised {
+        Ok(()) => tracing::info!("drawing and input run at a higher priority"),
+        Err(error) => tracing::debug!("drawing and input keep the normal priority: {error}"),
+    }
 }
 
 const LOGIND_CONFIG_FOLDERS: [&str; 4] = [
@@ -86,6 +111,33 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
             };
             if sender.send(sleep).is_err() {
                 return;
+            }
+        }
+    });
+    Ok(())
+}
+
+pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result<()> {
+    let manager = ManagerProxyBlocking::builder(connection)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
+    let wakes = manager.receive_prepare_for_sleep()?;
+    let closed = manager.lid_closed()?;
+    if sender.send(closed).is_err() {
+        return Ok(());
+    }
+    thread::spawn(move || {
+        for wake in wakes {
+            if wake.args().is_ok_and(|arguments| *arguments.start()) {
+                continue;
+            }
+            match manager.lid_closed() {
+                Ok(closed) => {
+                    if sender.send(closed).is_err() {
+                        return;
+                    }
+                }
+                Err(error) => tracing::warn!("cannot tell whether the lid is closed: {error}"),
             }
         }
     });
@@ -134,7 +186,8 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
     let session = SessionProxyBlocking::builder(connection)
         .path(manager.get_session("auto")?)?
         .build()?;
-    let inhibitor = manager.clone();
+    let sleeper = bande_bus::logind::ManagerProxyBlocking::new(connection)?;
+    let inhibitor = manager;
     let inhibit = move || {
         inhibitor
             .inhibit(
@@ -166,13 +219,7 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
             if let Err(error) = session.request_lock() {
                 tracing::warn!("cannot lock on the power button: {error}");
             }
-            let slept = manager
-                .can_suspend()
-                .and_then(|answer| match answer.as_str() {
-                    "yes" => manager.suspend(false),
-                    _ => Ok(()),
-                });
-            if let Err(error) = slept {
+            if let Err(error) = bande_bus::logind::sleep(&sleeper, false) {
                 tracing::warn!("cannot sleep on the power button: {error}");
             }
         }

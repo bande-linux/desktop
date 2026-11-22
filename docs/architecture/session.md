@@ -48,14 +48,21 @@ graph LR
   input clears the field and rests again.
 - "Require password after screen saver begins or display is turned off" (default immediately)
   is a grace period: until it passes, any input dismisses the saver. Locks from `Super+L`,
-  logind, sleep and the power button always ask. The grace period is `org.bande.Power`'s
+  logind, sleep and the power button always ask: `bande-power` requires the password on
+  logind's `Lock` and on `PrepareForSleep` before it lets the computer sleep, even when the
+  saver already rests within its grace period. The grace period is `org.bande.Power`'s
   `PasswordRequired` property; any process of the user could lengthen it through `config.kdl`
   anyway, so it adds no new trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
-  when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row is
-  hidden). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
-  loses its network. Sleep never comes before the display turns off; Settings says so on a row
+  when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row in
+  Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
+  loses its network, and Settings says so on the sleep row. Sleep never comes before the display turns off; Settings says so on a row
   whose choice is overridden.
+- On a computer with a battery, every sleep Bande asks for (idle, the menus, the lock screen,
+  the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`
+  (logind checks swap, resume and Secure Boot), so a sleeping laptop hibernates before its
+  battery runs out (`HibernateDelaySec=` in `sleep.conf` decides when). Settings ▸ Power says
+  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 
@@ -75,7 +82,9 @@ graph LR
   paused one, the system's filters or Bande's event sounds), the portal's suspend flag
   (`org.bande.Power.KeepAwake`) and someone else's logind `sleep` inhibitor keep it awake;
   after the last one the computer sleeps after a full `suspend-after`. Audio alone keeps the
-  computer but not the display awake; CPU load, builds and MPRIS keep nothing awake.
+  computer but not the display awake; CPU load, builds and MPRIS keep nothing awake. On battery
+  a stream holds sleep off for at most 30 minutes past the sleep time and not at all once UPower
+  warns the battery is `Low`, since a game, a call app or a silent web page may keep one open.
 - The power button: the compositor holds logind's `handle-power-key` inhibitor while its user
   session is active and logind's configuration leaves `HandlePowerKey=` unset, and on a press
   shorter than five seconds locks the session through logind and asks for `Suspend` when
@@ -89,9 +98,15 @@ graph LR
   `InhibitDelayMaxSec` of 5). Its idle state machine maps the compositor's
   `ext-idle-notify-v1` thresholds to dim, saver, password required, display off and suspend; it
   skips locking a locked session and turns the display off after 60 s on a lock it did not
-  start. Dimming lowers each display with real brightness control to a quarter of its level.
+  start or after waking. When the lock and the display turning off come together (no screen
+  saver), the display turns off once `LockedHint` is set, at most 5 s later, so the lock is
+  presented and sleep need not wait for it. A wake nobody unlocks (a wake alarm, a charger, a spurious wake)
+  sleeps again after 2 minutes without input when idle sleep is on. Dimming lowers each display with real brightness control to a quarter of its level.
+  On battery it switches to the `power-saver` mode when UPower warns the battery is `Low` (or
+  always, with "Use Power Saver on battery") and back to the previous mode on power.
   Battery alerts follow UPower's `WarningLevel`: a "Low Battery" notification at `Low`, replaced
-  by one that stays at `Critical` or `Action`. The compositor follows `Lock` on the session's own
+  by one that stays at `Critical` or `Action`, which says what UPower's `GetCriticalAction` will
+  do (sleep, hibernate or shut down with unsaved work lost). The compositor follows `Lock` on the session's own
   logind path (from `GetSession("auto")`; logind never signals on `session/auto`).
 - **Display brightness**: `bande-power` serves one model for all displays,
   `org.bande.Brightness` (`Displays`, `SetLevel`, `Refresh`), so Settings and Quick Settings
@@ -680,6 +695,10 @@ what the one before could not save:
 - **Too many processes**: each app scope gets the default `TasksMax` (15 % of the kernel's limit)
   and `app.slice` 25 % (set by `bande-session` at start, with the oomd limit), under logind's 33 %
   for the user, so a fork bomb leaves room for the session.
+- **The processor is busy** (a big build): `bande-session` gives `app.slice` half the CPU weight
+  of `session.slice`, and the compositor asks `rtkit` to raise its drawing and input thread to
+  nice −11 (`MakeThreadHighPriority`), keeping the normal priority when rtkit is missing or
+  refuses, so the pointer and animations stay smooth.
 - **The disk is full**: configuration and state are written to a staging file and renamed
   (`bande_xdg::replace_file`), so a failed write leaves the old file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; after

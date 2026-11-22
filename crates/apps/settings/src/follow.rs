@@ -89,7 +89,7 @@ pub enum Update {
     Time(Option<TimeState>),
     Login(LoginItems),
     Power(Option<PowerState>),
-    CannotSleep,
+    IdleSleepUnavailable { sleeps: bool, why: String },
     NotificationApps(Vec<AppNotifications>),
     Software(SoftwareState),
     SoftwareChecked(Option<i64>),
@@ -246,7 +246,15 @@ fn hide_sleep_if_unavailable(system: &Connection, updates: Updates) {
     let system = system.clone();
     spawn("can-sleep", move || {
         if !can_sleep(&system) {
-            updates.send(Update::CannotSleep);
+            updates.send(Update::IdleSleepUnavailable {
+                sleeps: false,
+                why: tr!("This computer can't sleep, so it stays on when idle."),
+            });
+        } else if bande_bus::logind::runs_in_virtual_machine(&system) {
+            updates.send(Update::IdleSleepUnavailable {
+                sleeps: true,
+                why: tr!("A virtual machine doesn't sleep when idle, since a sleeping guest looks like a crash and loses its network. Sleep from the menu still works."),
+            });
         }
     });
 }

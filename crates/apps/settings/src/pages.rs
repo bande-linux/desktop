@@ -529,8 +529,19 @@ impl SettingsView {
         if setting.id == SettingId::DisplayResolution && !self.show_all_resolutions {
             return None;
         }
-        let (control, focus) = match self.allowed(setting.id) {
+        let unavailable = matches!(
+            setting.id,
+            SettingId::SleepAfter | SettingId::BatterySleepAfter
+        )
+        .then(|| self.idle_sleep_unavailable.clone())
+        .flatten();
+        let (control, focus) = match self.allowed(setting.id) && unavailable.is_none() {
             true => self.control(setting, scope)?,
+            false if unavailable.is_some() => {
+                let label = Label::new(&tr!("Never"));
+                let focus = label.id();
+                (boxed(label), focus)
+            }
             false => {
                 let shown = match self.values.get(&setting.id)? {
                     Value::Flag(true) => tr!("On"),
@@ -549,9 +560,8 @@ impl SettingsView {
         let label = Text::new(&setting.label, Tone::Primary)
             .highlighted(matched.map(|hit| hit.label.clone()).unwrap_or_default());
         let mut row = Row::new(label, Some(control)).highlighted(matched.is_some());
-        if let Some(detail) = setting
-            .description
-            .clone()
+        if let Some(detail) = unavailable
+            .or_else(|| setting.description.clone())
             .or_else(|| self.inactivity_note(setting.id))
         {
             row = row.detail(Text::new(&detail, Tone::Muted).caption());
@@ -1316,6 +1326,7 @@ impl SettingsView {
             SettingId::BatteryLevel => battery,
             SettingId::PowerMode => modes,
             SettingId::LowPowerOnBattery => modes && battery,
+            SettingId::BatteryDisplayOffAfter | SettingId::BatterySleepAfter => battery,
             SettingId::LidOnPower => power.is_some_and(|power| power.lid),
             SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
             _ => true,

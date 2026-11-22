@@ -119,6 +119,15 @@ impl SettingsView {
             }
             Profiles::Offered(_) => {}
         }
+        match power.hibernation.as_deref() {
+            Some("yes") => rows.push(info_row(
+                &tr!("Hibernation"),
+                &tr!("Before the battery runs out during sleep"),
+            )),
+            Some("na") => rows.push(muted_row(&tr!("This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."))),
+            Some(_) => rows.push(muted_row(&tr!("The administrator doesn't allow hibernation, so sleep lasts until the battery runs out."))),
+            None => {}
+        }
         if !self.sleeps {
             rows.push(muted_row(&tr!("This computer can't sleep, so it stays on when idle. The display still turns off as set in Lock Screen.")));
         }

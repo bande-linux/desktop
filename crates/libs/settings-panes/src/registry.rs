@@ -431,6 +431,8 @@ pub enum SettingId {
     DisplayOffAfter,
     RequirePasswordAfter,
     SleepAfter,
+    BatteryDisplayOffAfter,
+    BatterySleepAfter,
     KeyRepeatRate,
     KeyRepeatDelay,
     InputSources,
@@ -2149,9 +2151,12 @@ fn power_pane() -> Pane {
 pub fn without_sleep(panes: &mut [Pane]) {
     for pane in panes {
         for section in &mut pane.sections {
-            section
-                .settings
-                .retain(|setting| setting.id != SettingId::SleepAfter);
+            section.settings.retain(|setting| {
+                !matches!(
+                    setting.id,
+                    SettingId::SleepAfter | SettingId::BatterySleepAfter
+                )
+            });
         }
         if pane.id == PaneId::LockScreen {
             pane.summary = tr!("Screen saver, display off and the password");
@@ -2182,6 +2187,23 @@ fn lock_screen_pane() -> Pane {
                         SettingId::SleepAfter,
                         tr!("Sleep after"),
                         tr!("idle, suspend, energy, battery, power, computer sleep"),
+                        choice(sleep_choices()),
+                    ),
+                ],
+            ),
+            section(
+                Some(tr!("On battery")),
+                vec![
+                    setting(
+                        SettingId::BatteryDisplayOffAfter,
+                        tr!("Turn display off on battery when inactive"),
+                        tr!("idle, display sleep, blank, screen timeout, energy, battery, laptop"),
+                        choice(durations(&DISPLAY_OFF_CHOICES)),
+                    ),
+                    setting(
+                        SettingId::BatterySleepAfter,
+                        tr!("Sleep on battery after"),
+                        tr!("idle, suspend, energy, battery, laptop, computer sleep"),
                         choice(sleep_choices()),
                     ),
                 ],

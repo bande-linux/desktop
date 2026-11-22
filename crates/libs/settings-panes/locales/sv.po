@@ -1398,6 +1398,21 @@ msgstr "Vila efter"
 msgid "idle, suspend, energy, battery, power, computer sleep"
 msgstr "inaktiv, vänteläge, energi, batteri, ström, datorvila"
 
+msgid "On battery"
+msgstr "På batteri"
+
+msgid "Turn display off on battery when inactive"
+msgstr "Stäng av skärmen på batteri vid inaktivitet"
+
+msgid "idle, display sleep, blank, screen timeout, energy, battery, laptop"
+msgstr "inaktiv, skärmvila, släck, skärmtidsgräns, energi, batteri, bärbar dator"
+
+msgid "Sleep on battery after"
+msgstr "Vila på batteri efter"
+
+msgid "idle, suspend, energy, battery, laptop, computer sleep"
+msgstr "inaktiv, vänteläge, energi, batteri, bärbar dator, datorvila"
+
 msgid "When locked"
 msgstr "När låst"
 

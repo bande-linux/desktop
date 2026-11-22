@@ -292,6 +292,7 @@ pub struct SettingsView {
     pub(crate) language_app: Option<String>,
     pub(crate) power: Option<PowerState>,
     pub(crate) sleeps: bool,
+    pub(crate) idle_sleep_unavailable: Option<String>,
     pub(crate) notification_apps: Option<Vec<AppNotifications>>,
     pub(crate) detail: Option<Detail>,
     pub(crate) other: Option<Other>,
@@ -411,6 +412,7 @@ impl SettingsView {
             language_app: None,
             power: None,
             sleeps: true,
+            idle_sleep_unavailable: None,
             notification_apps: None,
             detail: None,
             other: None,
@@ -897,9 +899,9 @@ impl SettingsView {
                 }
                 self.power = power;
             }
-            Update::CannotSleep => {
-                self.sleeps = false;
-                bande_settings_panes::without_sleep(&mut self.panes);
+            Update::IdleSleepUnavailable { sleeps, why } => {
+                self.sleeps = sleeps;
+                self.idle_sleep_unavailable = Some(why);
                 self.availability_changed();
             }
             Update::Diagnostics(diagnostics) => {

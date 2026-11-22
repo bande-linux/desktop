@@ -32,8 +32,8 @@ use bande_datetime::DateFormats;
 use bande_keyring::Keyring;
 use bande_toolkit::ui::{
     Alert, ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, MenuItem, Modifiers,
-    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, past_drag_slop,
-    shortcut_pressed,
+    Pointer, PointerButton, ScrollState, TextField, Ui, Widget, WidgetId, opens_menu,
+    past_drag_slop, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, Header, Palette, Point, Rect, SHEET_INSET, TextSystem, WINDOW_HEADER_HEIGHT,
@@ -2677,8 +2677,7 @@ impl MailView {
                 self.focus = Pane::List;
                 true
             }
-            Key::Menu => self.keyboard_menu(),
-            Key::Function(10) if modifiers.shift && bare => self.keyboard_menu(),
+            _ if opens_menu(key, modifiers) => self.keyboard_menu(),
             Key::Escape if self.focus == Pane::Reader && self.reader_target.is_some() => {
                 self.reader_target = None;
                 true

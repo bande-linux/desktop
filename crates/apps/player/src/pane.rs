@@ -120,7 +120,6 @@ impl Pane {
         let choices: Choices = Rc::default();
         let mut host = FreeLayout::new();
         let stage = host.insert(StageWidget::new(), Rect::default());
-        let table = host.insert(queue_table(&choices), Rect::default());
         let host_id = Widget::id(&host);
         let mut ui = Ui::new(
             Box::new(host),
@@ -132,7 +131,7 @@ impl Pane {
             ui,
             host: host_id,
             stage,
-            table,
+            table: WidgetId::next(),
             choices,
             queue_shown: false,
             queue,
@@ -147,7 +146,6 @@ impl Pane {
             positions,
         };
         pane.load();
-        pane.fill_queue();
         pane
     }
 
@@ -176,10 +174,20 @@ impl Pane {
 
     pub fn toggle_queue(&mut self) {
         self.queue_shown = !self.queue_shown;
-        let focus = match self.queue_shown {
-            true => self.table,
-            false => self.stage,
+        let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) else {
+            return;
         };
+        let focus = match self.queue_shown {
+            true => {
+                self.table = host.insert(queue_table(&self.choices), Rect::default());
+                self.table
+            }
+            false => {
+                host.remove(self.table);
+                self.stage
+            }
+        };
+        self.fill_queue();
         self.ui.set_focus(focus);
     }
 

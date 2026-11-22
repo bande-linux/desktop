@@ -67,6 +67,7 @@ pub(crate) enum Command {
         device: u32,
         profile_device: i32,
     },
+    Arrived(String),
     Stop(u64),
     Quit,
 }
@@ -413,6 +414,7 @@ impl Graph {
         let node: Node = self.registry.bind(global)?;
         let info_shared = Arc::clone(&self.shared);
         let param_shared = Arc::clone(&self.shared);
+        let commands = self.commands.clone();
         let listener = node
             .add_listener_local()
             .info(move |info| {
@@ -458,8 +460,13 @@ impl Graph {
                         .or_else(|| props.get("pipewire.access.portal.app_id"))
                         .map(str::to_owned),
                 });
+                let headphones = kind == Kind::Device(Direction::Output)
+                    && props.get("device.api") == Some("bluez5");
+                let mut arrived = false;
                 info_shared.update(|state| {
+                    let started = state.connected;
                     let node = state.nodes.entry(id).or_default();
+                    arrived = headphones && started && node.name.is_empty();
                     node.direction = match kind {
                         Kind::Device(direction) => Some(direction),
                         Kind::AppStream | Kind::Capture(_) | Kind::Camera => None,
@@ -471,9 +478,12 @@ impl Graph {
                     node.camera = camera;
                     node.app = app;
                     node.device = device;
-                    node.name = name;
+                    node.name = name.clone();
                     node.description = description;
                 });
+                if arrived {
+                    let _ = commands.send(Command::Arrived(name));
+                }
             })
             .param(move |_, kind, _, _, pod| {
                 if kind != ParamType::Props {
@@ -721,6 +731,13 @@ impl Graph {
         }
     }
 
+    fn arrived(&self, name: &str) -> Result<(), Error> {
+        match self.shared.follow_jacks.load(Ordering::Relaxed) {
+            true => self.set_default(Direction::Output, name),
+            false => Ok(()),
+        }
+    }
+
     fn set_level(&self, id: u32, change: Change) -> Result<(), Error> {
         let (node, current) = {
             let state = self.shared.lock();
@@ -902,6 +919,12 @@ fn serve(
             } => {
                 if let Err(error) = command_graph.plugged(device, profile_device) {
                     tracing::warn!("cannot switch to the plugged-in device: {error}");
+                }
+                return;
+            }
+            Command::Arrived(name) => {
+                if let Err(error) = command_graph.arrived(&name) {
+                    tracing::warn!("cannot switch to the connected headphones: {error}");
                 }
                 return;
             }

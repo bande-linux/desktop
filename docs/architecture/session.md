@@ -247,7 +247,8 @@ UI.
   the shell over `bande_shell_v1`.
 - Device lists leave out a port that is unavailable (judged as WirePlumber's
   `haveAvailableRoutes`, followed live), so Headphones appear only while plugged in. Plugging in
-  makes the jack the default once per session (`bande-sound`); unplugging falls back to the
+  makes the jack the default once per session (`bande-sound`), and Bluetooth headphones become
+  the default output each time they connect; unplugging or disconnecting falls back to the
   previous choice. Filter-chain streams are never listed as apps, and a `hide-parent` node hides
   its raw speaker. Settings ▸ Sound has a balance for stereo outputs, and lists the profiles of
   each card that has a choice (`EnumProfile`, set with `SPA_PARAM_Profile` and saved), so an HDMI

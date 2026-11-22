@@ -84,6 +84,8 @@ impl State {
             let rect = self.screen_rect(screen).to_f64();
             location.y >= rect.loc.y + rect.size.h - EDGE_ZONE
         }) && !self.compositor_takes_touch()
+            && !self.is_locked()
+            && !self.login_window
     }
 
     fn touch_serial_of(&self, serial: Serial, surface: &WlSurface) -> Option<TouchSlot> {

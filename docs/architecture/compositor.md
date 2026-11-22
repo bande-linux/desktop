@@ -444,7 +444,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | :--- | :--- | :--- |
 | `wl_compositor` / `wl_subcompositor` | Core surfaces and hierarchy | implemented |
 | `wl_shm` | Shared-memory buffers | implemented |
-| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | implemented; a touchscreen maps to the first display; a finger on a client surface goes to it as `wl_touch` (a move or resize asked with that touch's serial becomes ours), and a finger on our title bars and frame zones, menus, overview, switcher or free-half panel, or while a popup holds the grab, works as the left button; a swipe up from the display's bottom edge opens the overview |
+| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | implemented; a touchscreen maps to the first display; a finger on a client surface goes to it as `wl_touch` (a move or resize asked with that touch's serial becomes ours), and a finger on our title bars and frame zones, menus, overview, switcher or free-half panel, or while a popup holds the grab, works as the left button; a swipe up from the display's bottom edge opens the overview, except while locked or at the login window, where the overview never opens |
 | `zwp_tablet_manager_v2` | Pen tablets and styluses | implemented: a client that bound it gets the pen on its surfaces (pressure, tilt, buttons); elsewhere, and for every other client, the pen moves the pointer, its tip is the left button and a barrel button the right |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | implemented where the device supports syncobj eventfds |

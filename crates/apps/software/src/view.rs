@@ -7,7 +7,7 @@ use std::sync::mpsc::Sender;
 
 use bande_l10n::{text, tr, trn};
 
-use crate::catalog::{self, Block, Bundle, Category, Component, Icon, flatpak_needs_x11, search};
+use crate::catalog::{self, Block, Bundle, Category, Component, Icon, search};
 use crate::media::{self, Loaded, Media, Request, ShotError};
 use crate::online;
 use crate::widgets::{AppRow, Grid, Picture};
@@ -18,6 +18,7 @@ use bande_inbox::Inbox;
 use bande_packages::flatpak::{
     self, Canceller as FlatpakCanceller, Installed, Permission, permissions,
 };
+use bande_packages::x11::flatpak_needs_x11;
 use bande_packages::{Canceller, Client, Package, Progress, Status};
 use bande_toolkit::ui::{
     Axis, Button, Context, Disclosure, Label, ProgressBar, ScrollState, ScrollView, SearchField,

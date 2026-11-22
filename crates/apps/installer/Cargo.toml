@@ -19,6 +19,7 @@ bande-fs.workspace = true
 bande-l10n.workspace = true
 bande-packages.workspace = true
 bande-toolkit.workspace = true
+bande-volumes.workspace = true
 bande-xdg.workspace = true
 
 [dev-dependencies]

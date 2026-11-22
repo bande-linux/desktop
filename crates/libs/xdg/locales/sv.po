@@ -10,6 +10,9 @@ msgstr ""
 msgid "{app} could not be opened"
 msgstr "Det gick inte att öppna {app}"
 
+msgid "It needs X11, which Bande doesn’t run. Look for a version that supports Wayland."
+msgstr "Appen kräver X11, som Bande inte kör. Leta efter en version som stöder Wayland."
+
 msgid "It quit while opening. Try again, or reinstall it if this keeps happening."
 msgstr "Appen avslutades under start. Försök igen, eller installera om den om det fortsätter."
 

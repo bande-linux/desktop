@@ -161,7 +161,7 @@ msgstr "Tangens"
 msgid "Inverse Tangent"
 msgstr "Omvänd tangens"
 
-msgid "Euler's Number"
+msgid "Euler’s Number"
 msgstr "Eulers tal"
 
 msgid "Exponent"
@@ -224,7 +224,7 @@ msgstr "Skifta X åt vänster med Y"
 msgid "Shift X Right by Y"
 msgstr "Skifta X åt höger med Y"
 
-msgid "Two's Complement"
+msgid "Two’s Complement"
 msgstr "Tvåkomplement"
 
 msgid "Flip Bytes"
@@ -233,7 +233,7 @@ msgstr "Vänd byte"
 msgid "Flip Words"
 msgstr "Vänd ord"
 
-msgid "One's Complement"
+msgid "One’s Complement"
 msgstr "Ettkomplement"
 
 msgid "FF"

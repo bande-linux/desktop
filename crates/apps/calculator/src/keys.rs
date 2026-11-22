@@ -308,7 +308,7 @@ impl Builder<'_> {
                     (Unary::Atan, "tan⁻¹", text!("Inverse Tangent")),
                     't',
                 ),
-                constant(Constant::E, "e", text!("Euler's Number"), 'e'),
+                constant(Constant::E, "e", text!("Euler’s Number"), 'e'),
                 self.named(
                     Input::Exponent,
                     "EE",
@@ -408,7 +408,7 @@ impl Builder<'_> {
                 self.digit(4),
                 self.digit(5),
                 self.digit(6),
-                function(Unary::TwosComplement, "2's", text!("Two's Complement"), 'n'),
+                function(Unary::TwosComplement, "2’s", text!("Two’s Complement"), 'n'),
                 self.operator(Binary::Subtract),
             ],
             vec![
@@ -417,7 +417,7 @@ impl Builder<'_> {
                 self.digit(1),
                 self.digit(2),
                 self.digit(3),
-                function(Unary::OnesComplement, "1's", text!("One's Complement"), '~'),
+                function(Unary::OnesComplement, "1’s", text!("One’s Complement"), '~'),
                 self.operator(Binary::Add),
             ],
             vec![

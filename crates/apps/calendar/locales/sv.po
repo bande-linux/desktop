@@ -132,6 +132,39 @@ msgstr "Visa alla händelser"
 msgid "Search Results"
 msgstr "Sökresultat"
 
+msgid "Not known"
+msgstr "Okänt"
+
+msgid "Free"
+msgstr "Ledig"
+
+msgid "Busy {times}"
+msgstr "Upptagen {times}"
+
+msgid "Availability"
+msgstr "Tillgänglighet"
+
+msgid "Asking the server…"
+msgstr "Frågar servern…"
+
+msgid "Free at:"
+msgstr "Ledigt:"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Can’t get availability: {error}"
+msgstr "Kan inte hämta tillgänglighet: {error}"
+
+msgid "No common free time in the next two weeks."
+msgstr "Ingen gemensam ledig tid de närmaste två veckorna."
+
+msgid "Everyone is free at these times."
+msgstr "Alla är lediga vid de här tiderna."
+
+msgid "The server doesn’t share everyone’s availability."
+msgstr "Servern delar inte allas tillgänglighet."
+
 msgid "first"
 msgstr "första"
 
@@ -185,6 +218,39 @@ msgstr "Avbryt"
 
 msgid "OK"
 msgstr "OK"
+
+msgid "room"
+msgstr "rum"
+
+msgid "resource"
+msgstr "resurs"
+
+msgid "group"
+msgstr "grupp"
+
+msgid "People and Rooms"
+msgstr "Personer och rum"
+
+msgid "Name or address"
+msgstr "Namn eller adress"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Find:"
+msgstr "Sök:"
+
+msgid "Search the people, rooms and resources on your server."
+msgstr "Sök bland personer, rum och resurser på din server."
+
+msgid "Searching…"
+msgstr "Söker…"
+
+msgid "No one found."
+msgstr "Ingen hittades."
+
+msgid "Can’t search: {error}"
+msgstr "Kan inte söka: {error}"
 
 msgid "This invitation is older than the event in your calendar, or is not from its organizer."
 msgstr "Inbjudan är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
@@ -360,8 +426,20 @@ msgstr "tackat nej"
 msgid "no reply"
 msgstr "inget svar"
 
+msgid "not sent"
+msgstr "inte skickad"
+
+msgid "sent by {sender}"
+msgstr "skickad av {sender}"
+
 msgid "Invitees:"
 msgstr "Inbjudna:"
+
+msgid "People and Rooms…"
+msgstr "Personer och rum…"
+
+msgid "Availability…"
+msgstr "Tillgänglighet…"
 
 msgid "This calendar is read-only."
 msgstr "Den här kalendern är skrivskyddad."
@@ -443,6 +521,9 @@ msgstr "Kalenderns händelser raderas också, även på servern."
 
 msgid "Delete"
 msgstr "Radera"
+
+msgid "You"
+msgstr "Du"
 
 msgid "Add {count} event to “{calendar}”?"
 msgid_plural "Add {count} events to “{calendar}”?"
@@ -736,6 +817,3 @@ msgstr "Prenumerationer"
 
 msgid "Today"
 msgstr "Idag"
-
-msgid "Search"
-msgstr "Sök"

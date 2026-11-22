@@ -1,5 +1,7 @@
 mod access;
+mod availability;
 mod custom;
+mod directory;
 pub mod geometry;
 mod imip;
 mod input;
@@ -113,6 +115,16 @@ pub enum Request {
         name: String,
         data: String,
     },
+    Availability {
+        account: String,
+        organizer: String,
+        attendees: Vec<String>,
+        window: crate::ical::freebusy::Period,
+    },
+    Directory {
+        account: String,
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,6 +164,14 @@ pub(crate) enum Signal {
     NameAccount(usize),
     NameSubmit,
     NameCancel,
+    Availability,
+    AvailabilityClose,
+    Suggestion(usize),
+    Directory,
+    DirectoryText(String),
+    DirectorySearch,
+    DirectoryPick(usize),
+    DirectoryClose,
 }
 
 pub(crate) type Signals = Rc<RefCell<Vec<Signal>>>;
@@ -287,6 +307,8 @@ pub struct CalendarView {
     setup: Option<setup::AccountSetup>,
     setup_replies: Outbox<setup::Reply>,
     custom: Option<custom::Custom>,
+    availability: Option<availability::Sheet>,
+    directory: Option<directory::Sheet>,
     naming: Option<naming::Naming>,
     confirm: Option<Confirm>,
     offers: VecDeque<(Vec<CalendarObject>, String)>,
@@ -352,6 +374,8 @@ impl CalendarView {
             setup: None,
             setup_replies,
             custom: None,
+            availability: None,
+            directory: None,
             naming: None,
             confirm: None,
             offers: VecDeque::new(),
@@ -983,6 +1007,140 @@ impl CalendarView {
         custom.close(&mut self.ui);
     }
 
+    fn inspected_account(&self) -> Option<(String, Vec<String>)> {
+        let calendar = self.inspector.as_ref()?.found.calendar;
+        let account = self.library.calendars.get(calendar)?.info.account.clone();
+        Some((account, self.me(calendar)?))
+    }
+
+    fn working_hours(&self) -> (u8, u8) {
+        (self.settings.day_start, self.settings.day_end)
+    }
+
+    pub(crate) fn open_availability(&mut self) {
+        let Some((account, me)) = self.inspected_account() else {
+            return;
+        };
+        let Some(inspector) = &self.inspector else {
+            return;
+        };
+        let Some((start, end)) = inspector.span(&self.zone) else {
+            return;
+        };
+        let zone = inspector.shown_zone(&self.zone);
+        let mut attendees = inspector.attendees();
+        if !attendees
+            .iter()
+            .any(|(address, _)| me.iter().any(|mine| mine.eq_ignore_ascii_case(address)))
+            && let Some(mine) = me.first()
+        {
+            attendees.insert(0, (mine.clone(), tr!("You")));
+        }
+        let formats = self.formats.clone();
+        let weekend = |day: Weekday| formats.is_weekend(day);
+        let hours = crate::schedule::Hours {
+            zone: &zone,
+            day: self.working_hours(),
+            weekend: &weekend,
+        };
+        let asked = availability::Asked {
+            attendees: &attendees,
+            event: (start.timestamp(), end.timestamp()),
+            day: start.date(),
+            hours: &hours,
+            now: self.now.timestamp(),
+        };
+        let (Some(window), Some((panel, sheet))) = (
+            asked.window(),
+            availability::Sheet::build(&self.signals, &asked, &self.formats),
+        ) else {
+            return;
+        };
+        self.requests.push(Request::Availability {
+            account,
+            organizer: me.first().cloned().unwrap_or_default(),
+            attendees: attendees.into_iter().map(|(address, _)| address).collect(),
+            window,
+        });
+        self.availability = Some(sheet);
+        self.ui.present_sheet(panel);
+    }
+
+    pub fn show_availability(
+        &mut self,
+        answers: Result<Vec<(String, crate::caldav::Availability)>, String>,
+    ) {
+        let Some(sheet) = &mut self.availability else {
+            return;
+        };
+        let zone = self.inspector.as_ref().map_or_else(
+            || self.zone.clone(),
+            |inspector| inspector.shown_zone(&self.zone),
+        );
+        let formats = self.formats.clone();
+        let weekend = |day: Weekday| formats.is_weekend(day);
+        let hours = crate::schedule::Hours {
+            zone: &zone,
+            day: (self.settings.day_start, self.settings.day_end),
+            weekend: &weekend,
+        };
+        sheet.answered(&mut self.ui, answers, &self.formats, &hours);
+    }
+
+    pub(crate) fn finish_availability(&mut self, suggestion: Option<usize>) {
+        let Some(sheet) = self.availability.take() else {
+            return;
+        };
+        let chosen = suggestion.and_then(|index| sheet.chosen(index));
+        sheet.close(&mut self.ui);
+        if let (Some((start, end)), Some(inspector)) = (chosen, &mut self.inspector) {
+            let zone = inspector.shown_zone(&self.zone);
+            inspector.set_span(
+                &mut self.ui,
+                &start.to_zoned(zone.clone()),
+                &end.to_zoned(zone),
+            );
+        }
+    }
+
+    pub(crate) fn open_directory(&mut self) {
+        if self.inspected_account().is_none() {
+            return;
+        }
+        let (panel, sheet) = directory::Sheet::build(&self.signals);
+        self.directory = Some(sheet);
+        self.ui.present_sheet(panel);
+    }
+
+    pub(crate) fn search_directory(&mut self) {
+        let (Some((account, _)), Some(sheet)) = (self.inspected_account(), &self.directory) else {
+            return;
+        };
+        let text = sheet.text.trim().to_owned();
+        if text.is_empty() {
+            return;
+        }
+        sheet.searching(&mut self.ui);
+        self.requests.push(Request::Directory { account, text });
+    }
+
+    pub fn show_directory(&mut self, found: Result<Vec<crate::caldav::Principal>, String>) {
+        if let Some(sheet) = &mut self.directory {
+            sheet.answered(&mut self.ui, found);
+        }
+    }
+
+    pub(crate) fn finish_directory(&mut self, pick: Option<usize>) {
+        let Some(sheet) = self.directory.take() else {
+            return;
+        };
+        sheet.close(&mut self.ui);
+        let picked = pick.and_then(|index| sheet.picked(index));
+        if let (Some(principal), Some(inspector)) = (picked, &mut self.inspector) {
+            inspector.add_invitee(&mut self.ui, principal);
+        }
+    }
+
     pub fn open_account_setup(&mut self) {
         self.open_setup(setup::Start::Add);
     }
@@ -1347,7 +1505,8 @@ impl CalendarView {
             return;
         };
         match crate::edit::remove_occurrence(&object, found.occurrence.key, scope) {
-            Some(kept) => {
+            Some(mut kept) => {
+                self.settle(found.calendar, &object, &mut kept);
                 self.library.put_object(found.calendar, kept);
             }
             None => self.library.remove_object(found.calendar, found.object),
@@ -1368,7 +1527,7 @@ impl CalendarView {
         let Some(object) = self.library.object(found.calendar, found.object) else {
             return;
         };
-        let moved = crate::edit::reschedule(
+        let mut moved = crate::edit::reschedule(
             object,
             found.occurrence.event,
             found.occurrence.key,
@@ -1378,6 +1537,8 @@ impl CalendarView {
             scope,
             &self.zone,
         );
+        let object = object.clone();
+        self.settle(found.calendar, &object, &mut moved);
         self.library.put_object(found.calendar, moved);
         self.requests.push(Request::Changed);
     }
@@ -1401,10 +1562,13 @@ impl CalendarView {
             &self.zone,
         );
         let mut edited = edited;
+        let object = object.clone();
+        self.settle(found.calendar, &object, &mut edited);
         if let Some(me) = self.me(found.calendar)
             && let Some(master) = edited.master_mut()
         {
             crate::invite::invite(master, &me, &details.invitees);
+            crate::invite::set_user_types(master, &details.user_types);
         }
         let uid = edited.uid().to_owned();
         let target = calendar.filter(|target| *target != found.calendar);
@@ -1423,6 +1587,11 @@ impl CalendarView {
             key: found.occurrence.key,
         });
         self.requests.push(Request::Changed);
+    }
+
+    fn settle(&self, calendar: usize, original: &CalendarObject, edited: &mut CalendarObject) {
+        let me = self.me(calendar).unwrap_or_default();
+        crate::invite::settle_sequence(original, edited, &me);
     }
 
     pub(crate) fn me(&self, calendar: usize) -> Option<Vec<String>> {

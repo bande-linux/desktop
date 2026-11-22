@@ -34,6 +34,12 @@ fn only_the_organizer_can_update_or_cancel_and_only_an_invitee_can_answer_for_it
     assert!(invite::may_update(&stored, &newer));
     let merged = invite::merge_update(&stored, newer);
     assert_eq!(merged.master().unwrap().alarms.len(), 1);
+    let mut moved = merged.clone();
+    let master = moved.master_mut().unwrap();
+    master.alarms.clear();
+    master.sequence += 1;
+    invite::settle_sequence(&merged, &mut moved, &me);
+    assert_eq!(moved.master().unwrap().sequence, 3);
 
     let attendees = "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:ann@example.org\r\n\
 ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:bob@example.org\r\n";

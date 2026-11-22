@@ -4,43 +4,10 @@ use super::client::Client;
 use super::http::{Error, join};
 use super::xml::{CALDAV, DAV, Element, escape, parse_element};
 use crate::ical::freebusy::{self, Period};
+use crate::invite::UserType;
 
 const SEARCH_LIMIT: usize = 20;
 const NAMESPACES: &str = "xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UserType {
-    Individual,
-    Group,
-    Room,
-    Resource,
-    Unknown,
-}
-
-impl UserType {
-    pub fn of(value: Option<&str>) -> Self {
-        match value
-            .map(|value| value.trim().to_ascii_uppercase())
-            .as_deref()
-        {
-            None | Some("INDIVIDUAL") => Self::Individual,
-            Some("GROUP") => Self::Group,
-            Some("ROOM") => Self::Room,
-            Some("RESOURCE") => Self::Resource,
-            Some(_) => Self::Unknown,
-        }
-    }
-
-    pub fn value(self) -> &'static str {
-        match self {
-            Self::Individual => "INDIVIDUAL",
-            Self::Group => "GROUP",
-            Self::Room => "ROOM",
-            Self::Resource => "RESOURCE",
-            Self::Unknown => "UNKNOWN",
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Principal {

@@ -334,6 +334,13 @@ fn caldav_kind(server: String, user: String, found: Discovered) -> AccountKind {
     }
 }
 
+fn caldav_of(view: &CalendarView, account: &str) -> Option<(String, String)> {
+    match view.library().account(account).map(|known| &known.kind) {
+        Some(AccountKind::CalDav { user, home, .. }) => Some((user.clone(), home.clone())),
+        _ => None,
+    }
+}
+
 fn host_of(url: &str) -> &str {
     url.split("://")
         .nth(1)
@@ -672,6 +679,8 @@ impl CalendarApp {
                         refreshed: None,
                     });
                 }
+                Reply::Availability(answers) => view.show_availability(answers),
+                Reply::Directory(found) => view.show_directory(found),
                 Reply::ChangeFailed(error) => {
                     tracing::warn!("cannot change a calendar: {error}");
                     view.set_status(Some(error));
@@ -738,6 +747,33 @@ impl CalendarApp {
                     self.session.clone(),
                     Some((name, data)),
                 ),
+                Request::Availability {
+                    account,
+                    organizer,
+                    attendees,
+                    window,
+                } => {
+                    if let Some((user, home)) = caldav_of(view, &account) {
+                        self.worker.send(Job::Availability {
+                            account,
+                            user,
+                            home,
+                            organizer,
+                            attendees,
+                            window,
+                        });
+                    }
+                }
+                Request::Directory { account, text } => {
+                    if let Some((user, home)) = caldav_of(view, &account) {
+                        self.worker.send(Job::Directory {
+                            account,
+                            user,
+                            home,
+                            text,
+                        });
+                    }
+                }
                 Request::Collection {
                     account,
                     url,

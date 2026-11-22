@@ -30,12 +30,49 @@ impl Answer {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UserType {
+    Individual,
+    Group,
+    Room,
+    Resource,
+    Unknown,
+}
+
+impl UserType {
+    pub fn of(value: Option<&str>) -> Self {
+        match value
+            .map(|value| value.trim().to_ascii_uppercase())
+            .as_deref()
+        {
+            None | Some("INDIVIDUAL") => Self::Individual,
+            Some("GROUP") => Self::Group,
+            Some("ROOM") => Self::Room,
+            Some("RESOURCE") => Self::Resource,
+            Some(_) => Self::Unknown,
+        }
+    }
+
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::Individual => "INDIVIDUAL",
+            Self::Group => "GROUP",
+            Self::Room => "ROOM",
+            Self::Resource => "RESOURCE",
+            Self::Unknown => "UNKNOWN",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invitee {
     pub address: String,
     pub name: String,
     pub answer: Answer,
     pub organizer: bool,
+    pub kind: UserType,
+    pub undelivered: bool,
+    pub sent_by: Option<String>,
 }
 
 fn address(value: &str) -> &str {
@@ -64,6 +101,47 @@ fn invitee(property: &Property, organizer: bool) -> Invitee {
             false => Answer::of(property.param("PARTSTAT")),
         },
         organizer,
+        kind: UserType::of(property.param("CUTYPE")),
+        undelivered: undelivered(property),
+        sent_by: property
+            .param("SENT-BY")
+            .map(|sender| address(sender.trim_matches('"')).to_owned()),
+    }
+}
+
+fn undelivered(property: &Property) -> bool {
+    let failed = property.param("SCHEDULE-STATUS").is_some_and(|status| {
+        status
+            .trim_matches('"')
+            .split(',')
+            .any(|code| code.trim_start().starts_with(['3', '5']))
+    });
+    let elsewhere = property
+        .param("SCHEDULE-AGENT")
+        .is_some_and(|agent| !agent.eq_ignore_ascii_case("SERVER"));
+    failed || elsewhere
+}
+
+pub fn set_user_types(event: &mut Event, kinds: &[(String, UserType)]) {
+    for attendee in event
+        .component
+        .properties
+        .iter_mut()
+        .filter(|property| property.name.eq_ignore_ascii_case("ATTENDEE"))
+    {
+        let Some((_, kind)) = kinds
+            .iter()
+            .find(|(known, _)| address(&attendee.value).eq_ignore_ascii_case(known))
+            .filter(|(_, kind)| *kind != UserType::Individual)
+        else {
+            continue;
+        };
+        attendee
+            .params
+            .retain(|(name, _)| !name.eq_ignore_ascii_case("CUTYPE"));
+        attendee
+            .params
+            .push(("CUTYPE".to_owned(), kind.value().to_owned()));
     }
 }
 
@@ -317,4 +395,26 @@ pub fn take_reply(
         }
     }
     taken.then_some((updated, replier))
+}
+
+fn rescheduled(before: &Event, after: &Event) -> bool {
+    before.start != after.start
+        || before.end != after.end
+        || before.rule != after.rule
+        || before.exdates != after.exdates
+        || before.rdates != after.rdates
+}
+
+pub fn settle_sequence(original: &CalendarObject, edited: &mut CalendarObject, me: &[String]) {
+    let attending = organizer_of(original).is_some() && !organized_by(original, me);
+    let master = original.master().map_or(0, |master| master.sequence);
+    for event in &mut edited.events {
+        match counterpart(original, event) {
+            Some(before) if attending || !rescheduled(before, event) => {
+                event.sequence = before.sequence
+            }
+            None if attending => event.sequence = master,
+            _ => {}
+        }
+    }
 }

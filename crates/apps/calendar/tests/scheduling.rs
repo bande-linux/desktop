@@ -4,7 +4,8 @@ use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use bande_calendar::caldav::{Availability, Client, Precondition, UserType};
+use bande_calendar::caldav::{Availability, Client, Precondition};
+use bande_calendar::invite::UserType;
 use bande_calendar::schedule::{Hours, free_slots};
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp};

@@ -954,6 +954,9 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
     if let Some(naming) = &mut view.naming {
         naming.apply(&signal);
     }
+    if let (Signal::DirectoryText(text), Some(directory)) = (&signal, &mut view.directory) {
+        directory.text = text.clone();
+    }
     match signal {
         Signal::Today => {
             let today = view.now.date();
@@ -997,6 +1000,13 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
         Signal::CustomCancel => view.finish_custom(false),
         Signal::NameSubmit => view.submit_naming(),
         Signal::NameCancel => view.cancel_naming(),
+        Signal::Availability => view.open_availability(),
+        Signal::AvailabilityClose => view.finish_availability(None),
+        Signal::Suggestion(index) => view.finish_availability(Some(index)),
+        Signal::Directory => view.open_directory(),
+        Signal::DirectorySearch => view.search_directory(),
+        Signal::DirectoryPick(index) => view.finish_directory(Some(index)),
+        Signal::DirectoryClose => view.finish_directory(None),
         _ => {}
     }
 }

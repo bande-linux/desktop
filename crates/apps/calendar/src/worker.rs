@@ -6,7 +6,8 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use bande_keyring::Keyring;
 
-use crate::caldav::{Client, Credentials, Error};
+use crate::caldav::{Availability, Client, Credentials, Error, Principal};
+use crate::ical::freebusy::Period;
 use crate::store::{AccountKind, Calendar};
 use crate::sync::{Outcome, sync_calendar};
 
@@ -26,6 +27,20 @@ pub enum Job {
         user: String,
         url: String,
         change: Change,
+    },
+    Availability {
+        account: String,
+        user: String,
+        home: String,
+        organizer: String,
+        attendees: Vec<String>,
+        window: Period,
+    },
+    Directory {
+        account: String,
+        user: String,
+        home: String,
+        text: String,
     },
 }
 
@@ -59,6 +74,8 @@ pub enum Reply {
         color: String,
     },
     ChangeFailed(String),
+    Availability(Result<Vec<(String, Availability)>, String>),
+    Directory(Result<Vec<Principal>, String>),
 }
 
 pub struct Worker {
@@ -108,6 +125,13 @@ impl Passwords {
         self.known.insert(account.to_owned(), password.clone());
         Some(password)
     }
+}
+
+fn signed_in(passwords: &mut Passwords, account: &str, user: String) -> Client {
+    let credentials = passwords
+        .get(account)
+        .map(|password| Credentials { user, password });
+    Client::new(credentials.as_ref())
 }
 
 fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
@@ -162,10 +186,7 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             url,
             change,
         } => {
-            let credentials = passwords
-                .get(&account)
-                .map(|password| Credentials { user, password });
-            let client = Client::new(credentials.as_ref());
+            let client = signed_in(passwords, &account, user);
             let result = match &change {
                 Change::Make { name, color } => client.make_calendar(&url, name, color),
                 Change::Rename(name) => client.rename(&url, name),
@@ -182,6 +203,36 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                 (Ok(()), _) => {}
                 (Err(error), _) => reply(Reply::ChangeFailed(error.to_string())),
             }
+        }
+        Job::Availability {
+            account,
+            user,
+            home,
+            organizer,
+            attendees,
+            window,
+        } => {
+            let client = signed_in(passwords, &account, user);
+            let answers = client
+                .scheduling(&home)
+                .and_then(|scheduling| {
+                    client.availability(&scheduling, &organizer, &attendees, window)
+                })
+                .map_err(|error| error.to_string());
+            reply(Reply::Availability(answers));
+        }
+        Job::Directory {
+            account,
+            user,
+            home,
+            text,
+        } => {
+            let client = signed_in(passwords, &account, user);
+            let found = client
+                .scheduling(&home)
+                .and_then(|scheduling| client.search_principals(&scheduling.principal, &text))
+                .map_err(|error| error.to_string());
+            reply(Reply::Directory(found));
         }
         Job::Forget(account) => {
             passwords.known.remove(&account);

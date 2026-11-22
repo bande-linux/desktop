@@ -239,6 +239,7 @@ pub struct Details {
     pub end_repeat: EndRepeat,
     pub alert: Alert,
     pub invitees: Vec<String>,
+    pub user_types: Vec<(String, crate::invite::UserType)>,
     pub time_zone: Option<String>,
 }
 

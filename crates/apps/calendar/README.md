@@ -63,10 +63,31 @@ views. Packaged as `bande-calendar`.
   calendar and notes. Changing a recurring event asks whether it is for this event only (an
   override) or all events.
 - **Invitations** through the server (RFC 6638 implicit scheduling): the inspector lists the organizer and invitees with their
-  answers, Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
+  answers, whether one is a room, resource or group (`CUTYPE`), when the server could not
+  deliver to them (`SCHEDULE-STATUS` 3.x or 5.x) or leaves sending to someone else
+  (`SCHEDULE-AGENT` other than `SERVER`), and who sent an invitation for its organizer
+  (`SENT-BY`). Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
   times stay read-only), and on an event you organise in a CalDAV calendar you can add
-  invitees by address; the server sends the mail. Your addresses come from
+  invitees by address; the server sends the mail, and a change of time, repeat or exceptions
+  raises `SEQUENCE` so it goes out as an update; your own changes to an invitation, such as an
+  alert, keep the organizer's `SEQUENCE`. Your addresses come from
   `calendar-user-address-set`.
+- **People and rooms.** People and Rooms… in the inspector searches the server's directory
+  (RFC 3744 `principal-property-search` on `displayname` and `calendar-user-address-set`) for
+  colleagues, rooms and resources; one picked is added as an invitee, a room or resource with
+  its `CUTYPE`, and its answer shows like anyone's.
+- **Availability.** Availability… in the inspector of a timed event you organise shows, for
+  you and every invitee, when they are busy during the event's working day, with the event
+  outlined, and offers the next three times within working hours (the day's start and end from
+  Settings, on the locale's working days) in the next two weeks when everyone is free; picking
+  one sets the event's times. It asks the account's scheduling outbox (RFC 6638 `VFREEBUSY`
+  `REQUEST`), and for anyone the outbox does not answer for, or on a server without one, a
+  RFC 4791 `free-busy-query` on that person's calendars found through the directory. Someone
+  the server shares nothing about is shown as not known.
+- **What goes to the server.** Directory searches and availability are asked only when you
+  press Search in People and Rooms or open Availability, only of the CalDAV server of the
+  event's own account, and carry only the typed text, or the invitees' addresses and the two
+  weeks asked about; answers are kept only while the sheet is open.
 - **Invitations by mail** (iMIP, RFC 6047), opened from Mail or as a file: a `REQUEST` that
   invites one of your addresses asks Accept, Maybe or Decline, keeps the event with your
   answer and your own alerts (Decline removes it; for one occurrence, only that occurrence is

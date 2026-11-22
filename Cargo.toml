@@ -54,6 +54,7 @@ kamadak-exif = "0.6.1"
 kdl = { version = "6.7.1", default-features = false, features = ["span"] }
 krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
 libc = "0.2.186"
+libheif-rs = "2.7.0"
 libloading = "0.8.9"
 lzma-rust2 = { version = "0.23", default-features = false, features = ["std", "xz", "encoder"] }
 mailparse = "0.16"

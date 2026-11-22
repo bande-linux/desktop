@@ -64,7 +64,13 @@ fn load(path: &Path) -> Result<Opened, Failure> {
     if kind == Kind::Pdf {
         return Ok(Opened::Document);
     }
-    let mut decoded = bande_content::decode(&bytes, kind)?;
+    let mut decoded = match kind {
+        Kind::Heif | Kind::Avif => Decoded {
+            facts: bande_content::container_facts(&bytes),
+            ..bande_content::decode_confined(path, u32::MAX)?
+        },
+        _ => bande_content::decode(&bytes, kind)?,
+    };
     decoded.facts.kind = Some(kind);
     Ok(Opened::Image(Box::new(decoded)))
 }

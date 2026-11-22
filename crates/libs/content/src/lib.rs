@@ -18,7 +18,7 @@ pub use decode::{
     Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, decode_file,
     open, read_file,
 };
-pub use facts::{Facts, camera_facts};
+pub use facts::{Facts, camera_facts, container_facts};
 pub use import::Importer;
 pub use text::{Block, Code, Tone, highlight, html, is_code, markdown, rtf};
 

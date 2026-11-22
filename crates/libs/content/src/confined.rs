@@ -10,14 +10,14 @@ use std::time::{Duration, Instant};
 use bande_xdg::wait_for_exit;
 use serde::{Deserialize, Serialize};
 
-use crate::decode::{Decoded, Failure, Frame, Kind, Level, Pixels, decode_file};
+use crate::decode::{Decoded, Failure, Frame, Kind, Level, MAX_PIXELS, Pixels, decode_file};
 use crate::facts::Facts;
 use crate::pdf::protocol;
 use crate::{confine, worker_program};
 
 const PICTURE_FLAG: &str = "--picture-worker";
 const PICTURE_TIME: Duration = Duration::from_secs(20);
-const PICTURE_BYTES: u64 = 256 << 20;
+const PICTURE_BYTES: u64 = MAX_PIXELS * 6;
 const HEAD_BYTES: u64 = 1024;
 
 #[derive(Serialize, Deserialize)]

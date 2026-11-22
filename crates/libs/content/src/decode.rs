@@ -9,9 +9,11 @@ use image::codecs::gif::GifDecoder;
 use image::codecs::webp::WebPDecoder;
 use image::metadata::Orientation;
 use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits};
+use jxl_oxide::{AllocTracker, JxlImage};
+use libheif_rs::{ColorSpace, DecodingOptions, HeifContext, LibHeif, RgbChroma};
 use serde::{Deserialize, Serialize};
 
-use crate::facts::{Facts, camera_facts};
+use crate::facts::{Facts, camera_facts, container_facts};
 
 pub const MAX_FILE_BYTES: u64 = 512 << 20;
 pub const MAX_PIXELS: u64 = 100_000_000;
@@ -23,6 +25,13 @@ const SVG_SIDE: f32 = 2048.0;
 const SVG_MAX_SIDE: f32 = 8192.0;
 const MIN_DELAY: Duration = Duration::from_millis(20);
 const DEFAULT_DELAY: Duration = Duration::from_millis(100);
+const JXL_CODESTREAM: &[u8] = &[0xff, 0x0a];
+const JXL_CONTAINER: &[u8] = b"\0\0\0\x0cJXL \r\n\x87\n";
+const FILE_TYPE_BOX: &[u8] = b"ftyp";
+const AVIF_BRANDS: [&[u8; 4]; 2] = [b"avif", b"avis"];
+const HEIF_BRANDS: [&[u8; 4]; 8] = [
+    b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"mif1", b"msf1",
+];
 
 pub struct Level {
     pub width: u32,
@@ -65,12 +74,45 @@ pub enum Kind {
     Tiff,
     Bmp,
     Ico,
+    Heif,
+    Avif,
+    Jxl,
     Svg,
     Pdf,
 }
 
+fn brands(bytes: &[u8]) -> Vec<&[u8; 4]> {
+    if bytes.get(4..8) != Some(FILE_TYPE_BOX) {
+        return Vec::new();
+    }
+    let size = bytes
+        .get(..4)
+        .and_then(|size| size.try_into().ok())
+        .map_or(0, |size| u32::from_be_bytes(size) as usize);
+    bytes
+        .get(8..size.min(bytes.len()))
+        .unwrap_or_default()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != 1)
+        .map(|(_, brand)| brand)
+        .collect()
+}
+
 impl Kind {
     pub fn of(bytes: &[u8], path: &Path) -> Option<Self> {
+        if bytes.starts_with(JXL_CODESTREAM) || bytes.starts_with(JXL_CONTAINER) {
+            return Some(Self::Jxl);
+        }
+        let brands = brands(bytes);
+        if brands.iter().any(|brand| AVIF_BRANDS.contains(brand)) {
+            return Some(Self::Avif);
+        }
+        if brands.iter().any(|brand| HEIF_BRANDS.contains(brand)) {
+            return Some(Self::Heif);
+        }
         match image::guess_format(bytes) {
             Ok(ImageFormat::Png) => return Some(Self::Png),
             Ok(ImageFormat::Jpeg) => return Some(Self::Jpeg),
@@ -101,6 +143,9 @@ impl Kind {
             Self::Tiff => "image/tiff",
             Self::Bmp => "image/bmp",
             Self::Ico => "image/vnd.microsoft.icon",
+            Self::Heif => "image/heif",
+            Self::Avif => "image/avif",
+            Self::Jxl => "image/jxl",
             Self::Svg => "image/svg+xml",
             Self::Pdf => "application/pdf",
         }
@@ -156,6 +201,8 @@ pub fn decode(bytes: &[u8], kind: Kind) -> Result<Decoded, Failure> {
         Kind::Tiff => decode_still(bytes, ImageFormat::Tiff),
         Kind::Bmp => decode_still(bytes, ImageFormat::Bmp),
         Kind::Ico => decode_still(bytes, ImageFormat::Ico),
+        Kind::Heif | Kind::Avif => decode_heif(bytes),
+        Kind::Jxl => decode_jxl(bytes),
         Kind::Pdf => Err(Failure::NotSupported),
     }
 }
@@ -178,6 +225,62 @@ fn decode_still(bytes: &[u8], format: ImageFormat) -> Result<Decoded, Failure> {
     image.apply_orientation(orientation);
     let facts = camera_facts(exif);
     Ok(still(image.into_rgba8(), facts))
+}
+
+fn decode_heif(bytes: &[u8]) -> Result<Decoded, Failure> {
+    let context = HeifContext::read_from_bytes(bytes).map_err(|_| Failure::Damaged)?;
+    let handle = context
+        .primary_image_handle()
+        .map_err(|_| Failure::Damaged)?;
+    allowed(handle.width(), handle.height())?;
+    let mut options = DecodingOptions::new().ok_or(Failure::Damaged)?;
+    options.set_convert_hdr_to_8bit(true);
+    let image = LibHeif::new()
+        .decode(&handle, ColorSpace::Rgb(RgbChroma::Rgba), Some(options))
+        .map_err(|_| Failure::Damaged)?;
+    let plane = image.planes().interleaved.ok_or(Failure::Damaged)?;
+    allowed(plane.width, plane.height)?;
+    let row = plane.width as usize * 4;
+    let mut rgba = Vec::with_capacity(row * plane.height as usize);
+    for line in plane
+        .data
+        .chunks(plane.stride.max(1))
+        .take(plane.height as usize)
+    {
+        rgba.extend_from_slice(line.get(..row).ok_or(Failure::Damaged)?);
+    }
+    let picture =
+        image::RgbaImage::from_raw(plane.width, plane.height, rgba).ok_or(Failure::Damaged)?;
+    Ok(still(picture, container_facts(bytes)))
+}
+
+fn decode_jxl(bytes: &[u8]) -> Result<Decoded, Failure> {
+    let image = JxlImage::builder()
+        .alloc_tracker(AllocTracker::with_limit(DECODER_BYTES as usize))
+        .read(bytes)
+        .map_err(|_| Failure::Damaged)?;
+    let (width, height) = (image.width(), image.height());
+    allowed(width, height)?;
+    let render = image.render_frame(0).map_err(|_| Failure::Damaged)?;
+    let mut stream = render.stream();
+    let channels = stream.channels() as usize;
+    if (stream.width(), stream.height()) != (width, height) || channels == 0 {
+        return Err(Failure::Damaged);
+    }
+    let mut samples = vec![0u8; width as usize * height as usize * channels];
+    stream.write_to_buffer(&mut samples);
+    let rgba = samples
+        .chunks_exact(channels)
+        .flat_map(|pixel| match *pixel {
+            [grey] => [grey, grey, grey, u8::MAX],
+            [grey, alpha] => [grey, grey, grey, alpha],
+            [red, green, blue] => [red, green, blue, u8::MAX],
+            [red, green, blue, alpha, ..] => [red, green, blue, alpha],
+            [] => [0; 4],
+        })
+        .collect();
+    let picture = image::RgbaImage::from_raw(width, height, rgba).ok_or(Failure::Damaged)?;
+    Ok(still(picture, Facts::default()))
 }
 
 fn still(rgba: image::RgbaImage, facts: Facts) -> Decoded {

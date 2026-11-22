@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 bande-volumes.workspace = true
-image = { workspace = true, features = ["gif", "jpeg", "png", "webp"] }
+image.workspace = true
 md-5.workspace = true
 png.workspace = true
 tracing.workspace = true

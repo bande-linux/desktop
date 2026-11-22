@@ -4,11 +4,12 @@ use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_content::pdf::worker::first_page;
-use bande_content::{confine, run_worker};
+use bande_content::{Pixels, confine, decode_file, run_worker};
 use bande_xdg::{find_executable, wait_for_exit};
 use image::DynamicImage;
 
@@ -223,6 +224,27 @@ fn fit(image: DynamicImage, size: ThumbnailSize) -> Picture {
     }
 }
 
+fn picture(path: &Path, size: ThumbnailSize) -> Option<Picture> {
+    let decoded = decode_file(path).ok()?;
+    let (width, height, rgba) = match decoded.pixels {
+        Pixels::Still(mut levels) => {
+            let fitting = levels
+                .iter()
+                .rposition(|level| level.width.max(level.height) >= size.pixels())
+                .unwrap_or(0);
+            let level = levels.swap_remove(fitting);
+            (level.width, level.height, level.rgba)
+        }
+        Pixels::Animation(frames) => (
+            decoded.width,
+            decoded.height,
+            frames.into_iter().next()?.rgba,
+        ),
+    };
+    let rgba = Arc::try_unwrap(rgba).unwrap_or_else(|shared| (*shared).clone());
+    fit_pixels(width, height, rgba, size)
+}
+
 fn decode(path: &Path) -> Option<DynamicImage> {
     image::ImageReader::open(path)
         .ok()?
@@ -281,7 +303,7 @@ fn generate(
     font: FontDrawing<'_>,
 ) -> Option<Picture> {
     let made = if mime.starts_with("image/") {
-        decode(path).map(|image| fit(image, size))
+        picture(path, size)
     } else if mime == PDF {
         first_page(path, size.pixels())
             .and_then(|(width, height, rgba)| fit_pixels(width, height, rgba, size))

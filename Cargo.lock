@@ -1134,6 +1134,7 @@ dependencies = [
  "bande-keyboard",
  "bande-l10n",
  "bande-log",
+ "bande-notify",
  "bande-spring",
  "bande-status",
  "bande-test-wayland",

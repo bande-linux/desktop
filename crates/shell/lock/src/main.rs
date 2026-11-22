@@ -7,11 +7,14 @@ use accesskit::TreeUpdate;
 use bande_bus::logind::ManagerProxyBlocking;
 use bande_datetime::{DateFormats, MinuteTimer};
 use bande_keyboard::Layouts;
+use bande_l10n::tr;
 use bande_lock::{
-    BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, PICTURE_PIXELS, Purpose,
-    Refusal, Said, Transaction, User, Variant, current_user, is_deliberate, load_backdrop,
+    Accepted, BackdropSource, Devices, Inbox, LockScreen, Look, PAM_SERVICE, PICTURE_PIXELS,
+    Purpose, Refusal, Said, Transaction, User, Variant, current_user, is_deliberate, load_backdrop,
     load_pictures,
 };
+use bande_notify::Urgency;
+use bande_notify::client::{Request, notify};
 use bande_toolkit::ui::frame_time;
 use bande_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
@@ -139,10 +142,13 @@ impl Locker {
                     }
                 },
                 Said::Show(message) => self.screen.set_message(Some(message)),
-                Said::Done(Ok(())) => {
+                Said::Done(Ok(accepted)) => {
                     self.transaction = None;
                     self.screen.accepted();
                     self.unlock(window);
+                    if accepted == Accepted::PasswordExpired {
+                        tell_password_expired();
+                    }
                 }
                 Said::Done(Err(refusal)) => {
                     self.screen.refuse(refusal, frame_time().on_screen());
@@ -352,6 +358,31 @@ impl App for Locker {
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.screen.accessibility())
+    }
+}
+
+fn tell_password_expired() {
+    let summary = tr!("Your password has expired");
+    let body = tr!("Choose a new one in Settings ▸ Users & Groups.");
+    let app_name = tr!("Settings");
+    let told = bande_bus::session().and_then(|session| {
+        notify(
+            &session,
+            &Request {
+                app_name: &app_name,
+                replaces_id: 0,
+                app_icon: "org.bande.Settings",
+                summary: &summary,
+                body: &body,
+                actions: &[],
+                urgency: Urgency::Critical,
+                sound: None,
+                desktop_entry: Some("org.bande.Settings"),
+            },
+        )
+    });
+    if let Err(error) = told {
+        tracing::warn!("cannot say that the password has expired: {error}");
     }
 }
 

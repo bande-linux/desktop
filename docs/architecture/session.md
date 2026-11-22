@@ -275,8 +275,8 @@ UI.
   module checks the socket is the user's, the daemon takes messages only from root; a failed
   send is logged through `pam_syslog`, never the password; a missing socket is no failure), and
   `password` re-encrypts the login keyring when the old password opens it and the change comes
-  from a Bande session; after a change made elsewhere, the next unlock offers to update it. The lock screen runs `auth` only, so it unlocks
-  nothing; the login keyring stays unlocked while the screen is locked. When the login password
+  from a Bande session; after a change made elsewhere, the next unlock offers to update it. The lock screen runs `auth` and `account` only, so it
+  unlocks nothing; the login keyring stays unlocked while the screen is locked. When the login password
   does not open the keyring, the next unlock offers to update its password or start a new one
   (the old file is kept).
 - It is NetworkManager's secret agent (`org.bande.Secrets`, answering only NetworkManager's bus
@@ -483,9 +483,12 @@ answer starts a new conversation at once; one before any prompt (`pam_nologin`, 
 load) waits for the next answer, Escape or another person. After four wrong answers for the same
 login name each further one waits 5 s, doubling to a minute, with a countdown under the field;
 the login window keeps the count per name across switching people. While a session is starting,
-the field holds text or a power confirmation is open, Up and Down do not switch people. The
-lock screen changes an expired password with `pam_chauthtok`; greetd runs no `pam_chauthtok`, so
-at login an expired password is only explained. greetd's messages are refused above 64 KiB.
+the field holds text or a power confirmation is open, Up and Down do not switch people. At login
+greetd changes an expired password with `pam_chauthtok` through the same conversation (the
+`password` stack of `bande-greeter`). The lock screen cannot change one, as it runs as the user
+with no `password` stack: when `account` answers that the password has expired it unlocks the
+session it already holds and a notification asks the person to choose a new one in Settings ▸
+Users & Groups, which runs `passwd`. greetd's messages are refused above 64 KiB.
 
 **Keyboard.** The field shows Caps Lock and, with several layouts, the active one as a button
 that switches to the next, as `Super+Space` does. The layouts and `XKBOPTIONS` are those in

@@ -37,7 +37,7 @@ pub use choices::Peer;
 use choices::{SourceButton, UserList};
 pub use conversation::{Backoff, Messages, Prompt, Refusal, clip_message};
 pub use devices::{Corner, Devices};
-pub use pam::{Said, Transaction};
+pub use pam::{Accepted, Said, Transaction};
 pub use user::{User, current as current_user, display_name};
 
 pub const PAM_SERVICE: &str = "bande-lock";

@@ -74,3 +74,12 @@ msgstr "Avbryt"
 
 msgid "Sleep"
 msgstr "Vila"
+
+msgid "Your password has expired"
+msgstr "Ditt lösenord har gått ut"
+
+msgid "Choose a new one in Settings ▸ Users & Groups."
+msgstr "Välj ett nytt i Inställningar ▸ Användare och grupper."
+
+msgid "Settings"
+msgstr "Inställningar"

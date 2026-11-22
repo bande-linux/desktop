@@ -111,12 +111,18 @@ impl SurfaceView {
         self.cursor = Some(cursor);
     }
 
-    /// Lets go of every key held down, as when the window stops getting keys.
-    pub fn release_keys(&mut self) {
+    /// Lets go of every key and button held down, as when the window stops getting input.
+    pub fn release_held(&mut self) {
         for (code, keysym) in std::mem::take(&mut self.held_keys) {
             (self.on_input)(SurfaceInput::Key {
                 code,
                 keysym,
+                pressed: false,
+            });
+        }
+        for button in std::mem::take(&mut self.held_buttons) {
+            (self.on_input)(SurfaceInput::Button {
+                button,
                 pressed: false,
             });
         }
@@ -163,13 +169,7 @@ impl SurfaceView {
     }
 
     fn end_capture(&mut self, cx: &Context) {
-        for (code, keysym) in std::mem::take(&mut self.held_keys) {
-            (self.on_input)(SurfaceInput::Key {
-                code,
-                keysym,
-                pressed: false,
-            });
-        }
+        self.release_held();
         self.captured = false;
         self.hint_until = None;
         cx.animate(&mut self.hint, 0.0, Spring::FADE);

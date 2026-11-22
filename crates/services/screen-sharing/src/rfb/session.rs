@@ -12,7 +12,8 @@ use bande_rfb::encode::{Encoder, Frame, changed_areas};
 use bande_rfb::protocol::{
     Area, ClientMessage, ENCODING_DESKTOP_SIZE, ENCODING_EXTENDED_CLIPBOARD, MOST_CUT_TEXT,
     SECURITY_VENCRYPT, SECURITY_VNC, VENCRYPT_X509_PLAIN, VENCRYPT_X509_VNC, VERSION, Version,
-    cut_text_message, parse_message, parse_version, rectangle_header, server_init, update_header,
+    cut_text_message, desktop_name, parse_message, parse_version, rectangle_header, server_init,
+    update_header,
 };
 use bande_rfb::transport::{Transport, read_array, read_u32};
 use ring::rand::{SecureRandom, SystemRandom};
@@ -30,6 +31,7 @@ const MOST_CREDENTIAL: usize = 1024;
 const MOST_UNPARSED: usize = MOST_CUT_TEXT + 64 * 1024;
 const SERVER_CUT_TEXT: u8 = 3;
 const BUTTONS: u8 = 3;
+const MOST_HELD_KEYS: usize = 64;
 const WHEEL: [(u8, i32, i32); 4] = [
     (1 << 3, 0, -1),
     (1 << 4, 0, 1),
@@ -259,11 +261,19 @@ struct Viewer<'a> {
     unparsed: Vec<u8>,
     buttons: u8,
     keys: Vec<u32>,
+    locked: bool,
+    name: String,
     _seat: Seat,
 }
 
 impl Drop for Viewer<'_> {
     fn drop(&mut self) {
+        self.release_held();
+    }
+}
+
+impl Viewer<'_> {
+    fn release_held(&mut self) {
         for keysym in std::mem::take(&mut self.keys) {
             self.viewing.input.key(keysym, false);
         }
@@ -272,10 +282,26 @@ impl Drop for Viewer<'_> {
                 self.viewing.input.button(button, false);
             }
         }
+        self.buttons = 0;
     }
-}
 
-impl Viewer<'_> {
+    fn follow_host(&mut self) -> io::Result<()> {
+        let locked = self.host.locked();
+        if locked && !self.locked {
+            self.release_held();
+        }
+        self.locked = locked;
+        let name = self.host.name();
+        if name != self.name {
+            if self.encoder.desktop_name {
+                self.transport.write_all(&desktop_name(&name))?;
+                self.transport.flush()?;
+            }
+            self.name = name;
+        }
+        Ok(())
+    }
+
     fn update(&mut self, frame: &Arc<Frame>) -> io::Result<()> {
         let Some(request) = self.request.take() else {
             return Ok(());
@@ -367,13 +393,16 @@ impl Viewer<'_> {
             ClientMessage::Key { down, keysym } => {
                 let held = self.keys.iter().position(|key| *key == keysym);
                 match (down, held) {
-                    (true, None) => self.keys.push(keysym),
+                    (true, None) if !self.locked && self.keys.len() < MOST_HELD_KEYS => {
+                        self.keys.push(keysym);
+                        self.viewing.input.key(keysym, true);
+                    }
                     (false, Some(at)) => {
                         self.keys.remove(at);
+                        self.viewing.input.key(keysym, false);
                     }
                     _ => {}
                 }
-                self.viewing.input.key(keysym, down);
             }
             ClientMessage::Pointer { buttons, x, y } => self.point(buttons, x, y),
             ClientMessage::CutText(text) => {
@@ -391,8 +420,14 @@ impl Viewer<'_> {
     }
 
     fn point(&mut self, buttons: u8, x: u16, y: u16) {
+        let buttons = match self.locked {
+            true => buttons & self.buttons,
+            false => buttons,
+        };
         let input = &self.viewing.input;
-        input.pointer(u32::from(x), u32::from(y));
+        if !self.locked {
+            input.pointer(u32::from(x), u32::from(y));
+        }
         let pressed = buttons & !self.buttons;
         let released = self.buttons & !buttons;
         for button in 0..BUTTONS {
@@ -462,6 +497,7 @@ impl Viewer<'_> {
             if latest.ended {
                 return Ok(());
             }
+            self.follow_host()?;
             self.share_clipboard(latest.copy_serial, latest.copied)?;
             if let Some(frame) = &latest.frame
                 && self.request.is_some()
@@ -526,7 +562,8 @@ fn serve_viewer(
         .first_frame(FIRST_FRAME_TIMEOUT)
         .ok_or_else(|| io::Error::other("the screen showed no picture"))?;
     let area = frame.area();
-    transport.write_all(&server_init(area.width, area.height, &host.name()))?;
+    let name = host.name();
+    transport.write_all(&server_init(area.width, area.height, &name))?;
     transport.flush()?;
     let copy_serial = viewing.screen.latest().copy_serial;
     let mut viewer = Viewer {
@@ -545,6 +582,8 @@ fn serve_viewer(
         unparsed: Vec::new(),
         buttons: 0,
         keys: Vec::new(),
+        locked: host.locked(),
+        name,
         _seat: seat,
     };
     viewer.run()

@@ -101,6 +101,12 @@ fn run() -> Result<(), Box<dyn Error>> {
     let desktop = Arc::new(Desktop::new(session.clone(), name.clone()));
     follow_ended(&session, Arc::downgrade(&desktop))?;
     follow_clipboard(&session, Arc::downgrade(&desktop))?;
+    let locking = Arc::downgrade(&desktop);
+    bande_bus::logind::follow_locked_hint(&bande_bus::system()?, move |locked| {
+        if let Some(desktop) = locking.upgrade() {
+            desktop.set_locked(locked);
+        }
+    })?;
     let _announced = match bande_discovery::nearby::announce(&name, SERVICE_KIND, PORT) {
         Ok(Some(announced)) => Some(announced),
         Ok(None) => {

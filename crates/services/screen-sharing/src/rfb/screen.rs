@@ -58,6 +58,11 @@ impl Screen {
         self.changed.notify_all();
     }
 
+    /// Wakes viewers to look at what changed besides the picture.
+    pub fn nudge(&self) {
+        Self::wake(&mut self.lock());
+    }
+
     /// Gives viewers the text copied on this computer.
     pub fn copy(&self, text: String) {
         let mut shown = self.lock();

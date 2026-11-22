@@ -1,4 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::path::Path;
 
 fn address_of(socket: *const libc::sockaddr) -> Option<IpAddr> {
     if socket.is_null() {
@@ -23,39 +24,52 @@ fn address_of(socket: *const libc::sockaddr) -> Option<IpAddr> {
     }
 }
 
-const VIRTUAL: [&str; 24] = [
-    "tun",
-    "tap",
-    "wg",
-    "ppp",
-    "docker",
-    "br-",
-    "virbr",
-    "veth",
-    "vnet",
-    "lxc",
-    "lxdbr",
-    "incusbr",
-    "zt",
-    "tailscale",
-    "nordlynx",
-    "vmnet",
-    "vboxnet",
-    "cni",
-    "flannel",
-    "podman",
-    "sit",
-    "gre",
-    "ip6tnl",
-    "teredo",
-];
+const NET: &str = "/sys/class/net";
+const ARPHRD_ETHER: &str = "1";
 const SHORTEST_IPV4_PREFIX: u32 = 8;
 const SHORTEST_IPV6_PREFIX: u32 = 64;
 const TEREDO: (u128, u32) = (0x2001_0000 << 96, 32);
 const SIX_TO_FOUR: (u128, u32) = (0x2002 << 112, 16);
 
+/// What an interface is, by what the kernel says of it rather than by its name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Link {
+    /// An Ethernet or Wi-Fi card.
+    Hardware,
+    /// A bridge with such a card among its ports.
+    Bridge,
+    /// A tunnel, VPN, container or virtual machine link, or anything else.
+    Virtual,
+}
+
+fn has_hardware(name: &str) -> bool {
+    let interface = Path::new(NET).join(name);
+    let ethernet = std::fs::read_to_string(interface.join("type"))
+        .is_ok_and(|kind| kind.trim() == ARPHRD_ETHER);
+    ethernet && !interface.join("tun_flags").exists() && interface.join("device").exists()
+}
+
+fn link_of(name: &str) -> Link {
+    if name.is_empty() || name.contains('/') || name.starts_with('.') {
+        return Link::Virtual;
+    }
+    if has_hardware(name) {
+        return Link::Hardware;
+    }
+    let ports = std::fs::read_dir(Path::new(NET).join(name).join("brif"));
+    let bridges_hardware = ports.is_ok_and(|ports| {
+        ports
+            .flatten()
+            .any(|port| has_hardware(&port.file_name().to_string_lossy()))
+    });
+    match bridges_hardware {
+        true => Link::Bridge,
+        false => Link::Virtual,
+    }
+}
+
 struct Interface {
-    name: String,
+    link: Link,
     flags: u32,
     address: IpAddr,
     mask: IpAddr,
@@ -72,15 +86,12 @@ fn within(address: u128, (network, length): (u128, u32)) -> bool {
     address >> (128 - length) == network >> (128 - length)
 }
 
-/// Whether an interface leads to the local network: up, a real link and not a tunnel, VPN,
-/// container or virtual machine bridge, with a prefix no shorter than a LAN's.
-fn is_local_link(name: &str, flags: u32, address: IpAddr, mask: IpAddr) -> bool {
+/// Whether an interface leads to the local network: up, a card or a bridge of one, not a
+/// tunnel, VPN, container or virtual machine link, with a prefix no shorter than a LAN's.
+fn is_local_link(link: Link, flags: u32, address: IpAddr, mask: IpAddr) -> bool {
     let up = libc::IFF_UP as u32 | libc::IFF_RUNNING as u32;
     let virtual_link = libc::IFF_LOOPBACK as u32 | libc::IFF_POINTOPOINT as u32;
-    if flags & up != up || flags & virtual_link != 0 {
-        return false;
-    }
-    if VIRTUAL.iter().any(|prefix| name.starts_with(prefix)) {
+    if flags & up != up || flags & virtual_link != 0 || link == Link::Virtual {
         return false;
     }
     match address {
@@ -116,7 +127,7 @@ fn interfaces() -> Vec<Interface> {
             (address_of(entry.ifa_addr), address_of(entry.ifa_netmask))
         {
             found.push(Interface {
-                name,
+                link: link_of(&name),
                 flags: entry.ifa_flags,
                 address,
                 mask,
@@ -134,7 +145,7 @@ fn networks() -> Vec<(IpAddr, IpAddr)> {
         .into_iter()
         .filter(|interface| {
             is_local_link(
-                &interface.name,
+                interface.link,
                 interface.flags,
                 interface.address,
                 interface.mask,
@@ -186,45 +197,55 @@ mod tests {
         let v4 = |text: &str| IpAddr::V4(text.parse().unwrap());
         let v6 = |text: &str| IpAddr::V6(text.parse().unwrap());
         let lan = v6("ffff:ffff:ffff:ffff::");
+        let class_c = v4("255.255.255.0");
         assert!(is_local_link(
-            "wlp2s0",
+            Link::Hardware,
             up,
             v4("192.168.1.20"),
-            v4("255.255.255.0")
+            class_c
         ));
-        assert!(is_local_link("enp3s0", up, v6("fe80::1"), lan));
+        assert!(is_local_link(Link::Bridge, up, v4("192.168.1.20"), class_c));
+        assert!(is_local_link(Link::Hardware, up, v6("fe80::1"), lan));
+        let down = libc::IFF_BROADCAST as u32;
         assert!(!is_local_link(
-            "enp3s0",
-            libc::IFF_BROADCAST as u32,
+            Link::Hardware,
+            down,
             v4("192.168.1.20"),
-            v4("255.255.255.0")
+            class_c
         ));
+        assert!(!is_local_link(Link::Virtual, up, v4("10.8.0.2"), class_c));
+        let point_to_point = up | libc::IFF_POINTOPOINT as u32;
         assert!(!is_local_link(
-            "wg0",
-            up,
-            v4("10.8.0.2"),
-            v4("255.255.255.0")
-        ));
-        assert!(!is_local_link(
-            "docker0",
-            up,
-            v4("172.17.0.1"),
-            v4("255.255.0.0")
-        ));
-        assert!(!is_local_link(
-            "eth0",
-            up | libc::IFF_POINTOPOINT as u32,
+            Link::Hardware,
+            point_to_point,
             v4("10.0.0.2"),
             v4("255.0.0.0")
         ));
-        assert!(!is_local_link("eth0", up, v4("10.0.0.2"), v4("0.0.0.0")));
-        assert!(!is_local_link("eth0", up, v6("2001:0:53aa:64c::1"), lan));
-        assert!(!is_local_link("eth0", up, v6("2002:c000:204::1"), lan));
         assert!(!is_local_link(
-            "eth0",
+            Link::Hardware,
+            up,
+            v4("10.0.0.2"),
+            v4("0.0.0.0")
+        ));
+        assert!(!is_local_link(
+            Link::Hardware,
+            up,
+            v6("2001:0:53aa:64c::1"),
+            lan
+        ));
+        assert!(!is_local_link(
+            Link::Hardware,
+            up,
+            v6("2002:c000:204::1"),
+            lan
+        ));
+        assert!(!is_local_link(
+            Link::Hardware,
             up,
             v6("2a00:1450::1"),
             v6("ffff:ffff::")
         ));
+        assert_eq!(link_of("../lo"), Link::Virtual);
+        assert_eq!(link_of("lo"), Link::Virtual);
     }
 }

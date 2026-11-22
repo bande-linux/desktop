@@ -8,6 +8,7 @@ use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
 
 use crate::content::Shown;
+use crate::paint::reason;
 use crate::{Glance, Hit};
 
 const ROOT: NodeId = NodeId(1);
@@ -94,6 +95,14 @@ impl Glance {
                     height = picture.height
                 ));
             }
+            let status = match &self.shown {
+                Shown::Font(font) => font.installation.note(),
+                shown => reason(shown),
+            };
+            if let Some(status) = status {
+                description.push_str(", ");
+                description.push_str(&status);
+            }
             if let Some((at, count)) = self.position() {
                 description.push_str(", ");
                 description.push_str(&tr!("{at} of {count}", at = at, count = count));
@@ -111,6 +120,9 @@ impl Glance {
             node.set_label(label);
             node.set_bounds(bounds(rect));
             node.add_action(AccessAction::Click);
+            if hit == Hit::Install {
+                node.set_keyboard_shortcut(tr!("Ctrl+Shift+I"));
+            }
             nodes.push((NodeId(FIRST + index as u64), node));
         }
         if let Some(text) = self.readable_text() {

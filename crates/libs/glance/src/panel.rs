@@ -31,6 +31,7 @@ pub struct Link {
     multiple: bool,
     typing: bool,
     playing: bool,
+    installable: bool,
     path: Option<PathBuf>,
     origin: Option<Rect>,
     copied: Option<PathBuf>,
@@ -113,6 +114,7 @@ impl Link {
             Key::Left | Key::Right => plain && self.multiple,
             Key::Enter => command,
             Key::Character('=' | '+' | '-' | '0' | 'l' | 'L') => command,
+            Key::Character('i' | 'I') => command && modifiers.shift && self.installable,
             _ => false,
         }
     }
@@ -179,6 +181,7 @@ impl Panel {
         let mut link = self.link.borrow_mut();
         link.typing = self.shown.as_ref().is_some_and(Glance::wants_typing);
         link.playing = self.shown.as_ref().is_some_and(Glance::plays_media);
+        link.installable = self.shown.as_ref().is_some_and(Glance::offers_install);
         if self.shown.as_ref().is_some_and(Glance::is_closing) {
             link.shown = false;
         }

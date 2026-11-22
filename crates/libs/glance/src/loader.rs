@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::os::fd::BorrowedFd;
@@ -7,17 +8,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use bande_content::{Content, Contents, Decoded, Facts, Level, Pixels, content};
+use bande_content::{Content, Contents, Decoded, Facts, Failure, Level, Pixels, content};
 use bande_thumbnails::{Cache, ThumbnailSize, Thumbnailers, thumbnail};
 use bande_xdg::{data_dirs, data_home};
 
 use crate::worker::{Sample, read_archive, read_font_sample};
 
 const FONTS: &str = "fonts";
+const NAME_CLASHES: u32 = 100;
 
 pub enum Loaded {
     Content(Content),
-    FontSample(Option<Sample>),
+    FontSample(Option<Sample>, bool),
     Archive(Option<Contents>),
     FontInstalled(bool),
 }
@@ -54,8 +56,16 @@ fn load_one(
 ) {
     let current = || latest.load(Ordering::Relaxed) == asked;
     let loaded = match content(path, mime, &current) {
-        Content::Font => Loaded::FontSample(read_font_sample(path)),
+        Content::Font => {
+            let installed = font_placement(path)
+                .inspect_err(|error| {
+                    tracing::warn!("cannot check the font {}: {error}", path.display());
+                })
+                .is_ok_and(|placement| matches!(placement, Placement::Installed));
+            Loaded::FontSample(read_font_sample(path), installed)
+        }
         Content::Archive => Loaded::Archive(read_archive(path)),
+        content @ Content::Failed(Failure::TimedOut) => Loaded::Content(content),
         content @ (Content::Other | Content::Failed(_)) => {
             Loaded::Content(thumbnailed(path, mime).unwrap_or(content))
         }
@@ -66,12 +76,68 @@ fn load_one(
     }
 }
 
-pub fn installed_font(path: &Path) -> Option<PathBuf> {
-    Some(data_home()?.join(FONTS).join(path.file_name()?))
+enum Placement {
+    Installed,
+    At(PathBuf),
+}
+
+fn font_placement(path: &Path) -> io::Result<Placement> {
+    let own = data_home()
+        .ok_or_else(|| io::Error::other("no fonts folder"))?
+        .join(FONTS);
+    let canonical = fs::canonicalize(path)?;
+    let in_font_folder = data_dirs()
+        .into_iter()
+        .map(|folder| folder.join(FONTS))
+        .chain([own.clone()])
+        .filter_map(|folder| fs::canonicalize(folder).ok())
+        .any(|folder| canonical.starts_with(folder));
+    if in_font_folder {
+        return Ok(Placement::Installed);
+    }
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::other("no file name"))?;
+    for number in 1..=NAME_CLASHES {
+        let candidate = match number {
+            1 => own.join(name),
+            _ => own.join(numbered(path, number)),
+        };
+        match same_contents(path, &candidate) {
+            Ok(true) => return Ok(Placement::Installed),
+            Ok(false) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(Placement::At(candidate));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::other("too many fonts with this name"))
+}
+
+fn numbered(path: &Path, number: u32) -> OsString {
+    let mut name = path.file_stem().unwrap_or_default().to_os_string();
+    name.push(format!("-{number}"));
+    if let Some(extension) = path.extension() {
+        name.push(".");
+        name.push(extension);
+    }
+    name
+}
+
+fn same_contents(path: &Path, other: &Path) -> io::Result<bool> {
+    let length = fs::metadata(other)?.len();
+    if fs::metadata(path)?.len() != length {
+        return Ok(false);
+    }
+    Ok(fs::read(path)? == fs::read(other)?)
 }
 
 fn install_font(path: &Path) -> io::Result<()> {
-    let target = installed_font(path).ok_or_else(|| io::Error::other("no fonts folder"))?;
+    let target = match font_placement(path)? {
+        Placement::Installed => return Ok(()),
+        Placement::At(target) => target,
+    };
     let folder = target
         .parent()
         .ok_or_else(|| io::Error::other("no fonts folder"))?;

@@ -89,6 +89,9 @@ msgstr "För stor för att förhandsvisas"
 msgid "This image is damaged"
 msgstr "Bilden är skadad"
 
+msgid "Took too long to preview"
+msgstr "Förhandsvisningen tog för lång tid"
+
 msgid "This kind of image can’t be previewed"
 msgstr "Den här sortens bild kan inte förhandsvisas"
 
@@ -106,6 +109,9 @@ msgstr "Installerat"
 
 msgid "The font couldn’t be installed."
 msgstr "Typsnittet kunde inte installeras."
+
+msgid "Ctrl+Shift+I"
+msgstr "Ctrl+Skift+I"
 
 msgid "The quick brown fox jumps over the lazy dog."
 msgstr "Flygande bäckasiner söka hwila på mjuka tuvor."

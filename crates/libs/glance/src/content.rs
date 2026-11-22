@@ -4,9 +4,10 @@ use std::time::Instant;
 use bande_media_view::{Opening, Session, Stage};
 
 use bande_content::{Block, Code, Content, Contents, Failure, Frame, Level, Pixels};
+use bande_l10n::tr;
 use bande_toolkit::Color;
 
-use crate::loader::{Loaded, installed_font};
+use crate::loader::Loaded;
 use crate::worker::Sample;
 use bande_toolkit::{Image, Paragraph};
 
@@ -71,10 +72,30 @@ pub enum Installation {
     Failed,
 }
 
+impl Installation {
+    pub fn note(self) -> Option<String> {
+        match self {
+            Self::Available => None,
+            Self::Installing => Some(tr!("Installing…")),
+            Self::Installed => Some(tr!("Installed")),
+            Self::Failed => Some(tr!("The font couldn’t be installed.")),
+        }
+    }
+}
+
 pub struct FontView {
     pub sample: Image,
     pub tinted: Option<(Color, Image)>,
     pub installation: Installation,
+}
+
+impl FontView {
+    pub fn offers_install(&self) -> bool {
+        matches!(
+            self.installation,
+            Installation::Available | Installation::Failed
+        )
+    }
 }
 
 impl FontView {
@@ -132,7 +153,7 @@ impl Shown {
                 return;
             }
             Loaded::Content(content) => Self::from_content(content, path),
-            Loaded::FontSample(sample) => sample
+            Loaded::FontSample(sample, installed) => sample
                 .and_then(
                     |Sample {
                          width,
@@ -141,9 +162,6 @@ impl Shown {
                      }| { Image::from_premultiplied(width, height, rgba) },
                 )
                 .map_or(Self::Other, |sample| {
-                    let installed = path
-                        .and_then(installed_font)
-                        .is_some_and(|installed| installed.is_file());
                     Self::Font(Box::new(FontView {
                         sample,
                         tinted: None,

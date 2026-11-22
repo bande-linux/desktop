@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
+use bande_address_book::vcard::Birthday;
 use bande_dav::{Cached, read_or_set_aside};
 pub use bande_dav::{Pending, new_uid};
 use bande_l10n::tr;
@@ -13,6 +14,7 @@ use crate::ical::{CalendarObject, Event, Occurrence};
 pub const ACCOUNTS_FILE: &str = "accounts.json";
 const CALENDARS_DIR: &str = "calendars";
 pub const LOCAL_ACCOUNT: &str = "local";
+pub const BIRTHDAYS_CALENDAR: &str = "birthdays";
 const PROGRAM: &str = "bande-calendar";
 
 pub fn data_dir() -> PathBuf {
@@ -407,11 +409,55 @@ impl Library {
         }
     }
 
+    /// Shows `people`'s birthdays as a read-only calendar that is made from Contacts each
+    /// time and never saved; none removes it.
+    pub fn set_birthdays(&mut self, people: &[(String, String, Birthday)]) {
+        self.calendars
+            .retain(|calendar| calendar.info.id != BIRTHDAYS_CALENDAR);
+        if people.is_empty() {
+            return;
+        }
+        let mut calendar = Calendar::new(CalendarInfo {
+            id: BIRTHDAYS_CALENDAR.to_owned(),
+            account: LOCAL_ACCOUNT.to_owned(),
+            url: None,
+            name: tr!("Birthdays"),
+            color: "#2B8A3E".to_owned(),
+            read_only: true,
+            visible: true,
+            ctag: None,
+            sync_token: None,
+            refreshed: None,
+            opened: false,
+        });
+        for (uid, name, birthday) in people {
+            let (rule, year) = match (birthday.month, birthday.day) {
+                (2, 29) => ("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1", 2000),
+                _ => ("FREQ=YEARLY", birthday.year.unwrap_or(2000)),
+            };
+            let start = format!("{year:04}{:02}{:02}", birthday.month, birthday.day);
+            let summary =
+                bande_content_lines::escape(&tr!("{name}’s birthday", name = name.clone()));
+            let data = format!(
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Bande//Calendar//EN\r\nBEGIN:VEVENT\r\n\
+                 UID:birthday-{uid}\r\nDTSTAMP:20000101T000000Z\r\nDTSTART;VALUE=DATE:{start}\r\n\
+                 RRULE:{rule}\r\nSUMMARY:{summary}\r\nTRANSP:TRANSPARENT\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+            );
+            calendar
+                .objects
+                .push(Stored::new(format!("birthday-{uid}.ics"), None, data, None));
+        }
+        self.calendars.push(calendar);
+    }
+
     pub fn save(&self, index: usize) {
         crate::offer::offer_to_search(&self.calendars);
         let (Some(dir), Some(calendar)) = (&self.dir, self.calendars.get(index)) else {
             return;
         };
+        if calendar.info.id == BIRTHDAYS_CALENDAR {
+            return;
+        }
         let file = calendar_file(dir, &calendar.info.id);
         let written = serde_json::to_string(calendar)
             .map_err(std::io::Error::other)

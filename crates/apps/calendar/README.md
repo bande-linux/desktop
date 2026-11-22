@@ -17,7 +17,10 @@ views. Packaged as `bande-calendar`.
   as HTTP Basic or Digest (RFC 7616, SHA-256 or MD5), and only over HTTPS (or to this computer,
   for a local server). A failure says what went wrong (unreachable, certificate not valid, user
   name or password refused, unsupported sign-in, no calendar there, server error) and keeps
-  every field editable. Passwords go to the Secret Service, never to disk. Several accounts,
+  every field editable. Passwords go to the Secret Service, never to disk. With Contacts
+  installed, "Also use this account for Contacts" (on by default) offers the server and sign-in
+  to Contacts, and an account offered by Contacts' sheet is adopted at the next sync once its
+  calendars are found (`bande_dav::offer`). Several accounts,
   plus a local calendar. Settings ▸ Accounts shows each account's server and user name, and
   Server Settings… changes them; the sheet opens in the Settings window. When the server
   refuses the password, Calendar asks for it again, with Server Settings… in the same sheet,
@@ -120,7 +123,9 @@ views. Packaged as `bande-calendar`.
   Alerts that fell due while Calendar was not running, up to a day back, show when it starts.
 - **Settings** (Calendar ▸ Settings…, stored in `~/.config/bande/calendar.conf`): default
   calendar, start of the week, the hours the day starts and ends (the rest is shaded and the
-  week opens there), hours shown at a time, week numbers, default alerts for events and
+  week opens there), hours shown at a time, week numbers, birthdays from Contacts (off by default:
+  a read-only, never-synced Birthdays calendar made from the contacts' `BDAY`, a 29 February one on
+  the last day of February), default alerts for events and
   all-day events, alerts when Calendar is closed, refresh intervals, adding, re-signing and removing accounts, and time zone
   support. With it, the inspector shows each timed event's zone, its times are shown and typed
   in that zone, a new zone keeps the wall times of the whole series (exceptions and end date

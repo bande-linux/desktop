@@ -26,7 +26,8 @@ use bande_calendar::wake::WallAlarm;
 use bande_calendar::worker::{Job, Reply, Worker};
 use bande_content_lines::read_file;
 use bande_datetime::DateFormats;
-use bande_dav::{Discovered, RemoteCalendar};
+use bande_dav::offer::{self, Offer};
+use bande_dav::{Discovered, RemoteCalendar, Service};
 use bande_design::{Accent, Scheme};
 use bande_inbox::Inbox;
 use bande_l10n::{Text, text, tr, trn};
@@ -436,6 +437,9 @@ impl CalendarApp {
             self.next_push = None;
             self.synced = Some(now);
         }
+        if caldav || !offer::waiting(Service::CalDav).is_empty() {
+            self.worker.send(Job::Adopt);
+        }
         if calendars.is_empty() {
             return;
         }
@@ -498,11 +502,24 @@ impl CalendarApp {
     fn setup_done(&mut self, view: &mut CalendarView, done: Done) {
         let (account, user, password) = match done {
             Done::Added {
+                address,
                 server,
                 user,
                 password,
                 found,
+                also_contacts,
             } => {
+                if also_contacts {
+                    self.worker.send(Job::Offer {
+                        offer: Offer {
+                            id: new_uid(),
+                            address,
+                            server: server.clone(),
+                            user: user.clone(),
+                        },
+                        password: password.clone(),
+                    });
+                }
                 let id = new_uid();
                 let name = match user.contains('@') {
                     true => user.clone(),
@@ -727,12 +744,45 @@ impl CalendarApp {
                     };
                     view.set_status(Some(status));
                 }
+                Reply::Adopted {
+                    offer,
+                    credentials,
+                    result,
+                } => match result {
+                    Ok(found) => self.setup_done(
+                        view,
+                        Done::Added {
+                            address: offer.address,
+                            server: offer.server,
+                            user: credentials.user,
+                            password: credentials.password,
+                            found,
+                            also_contacts: false,
+                        },
+                    ),
+                    Err(error) => {
+                        tracing::warn!("cannot use {} for Calendar: {error}", offer.address);
+                        view.set_status(Some(tr!(
+                            "{address} could not be used for Calendar: {error}",
+                            address = offer.address,
+                            error = error.to_string()
+                        )));
+                    }
+                },
+                Reply::OfferFailed(error) => {
+                    tracing::warn!("cannot offer the account to Contacts: {error}");
+                    view.set_status(Some(tr!(
+                        "The account could not be offered to Contacts: {error}",
+                        error = error
+                    )));
+                }
                 Reply::ChangeFailed(error) => {
                     tracing::warn!("cannot change a calendar: {error}");
                     view.set_status(Some(error));
                 }
                 Reply::Finished => {
                     self.syncing = false;
+                    view.refresh_birthdays();
                     let now = Zoned::now().with_time_zone(self.zone.clone());
                     let status = self.errors.first().cloned().unwrap_or_else(|| {
                         tr!("Updated {time}", time = clock(&self.formats, &now))

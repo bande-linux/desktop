@@ -9,7 +9,8 @@ use crate::caldav::{Availability, Principal, availability, scheduling, search_pr
 use crate::ical::freebusy::Period;
 use crate::store::{AccountKind, Calendar};
 use crate::sync::{Outcome, sync_calendar};
-use bande_dav::{Client, Credentials, Error, RemoteCalendar, Service};
+use bande_dav::offer::{self, Offer};
+use bande_dav::{Client, Credentials, Discovered, Error, RemoteCalendar, Service};
 
 const KEYRING: &str = "org.bande.Calendar";
 
@@ -17,6 +18,11 @@ const KEYRING: &str = "org.bande.Calendar";
 pub enum Job {
     Sync(Vec<(AccountKind, String, Calendar)>),
     Forget(String),
+    Adopt,
+    Offer {
+        offer: Offer,
+        password: String,
+    },
     SetPassword {
         account: String,
         user: String,
@@ -61,6 +67,12 @@ pub enum Change {
 #[derive(Debug)]
 pub enum Reply {
     Synced(Outcome),
+    Adopted {
+        offer: Offer,
+        credentials: Credentials,
+        result: Result<Discovered, Error>,
+    },
+    OfferFailed(String),
     Refreshed {
         calendar: String,
         data: String,
@@ -224,6 +236,23 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             });
         }
         Job::Forget(account) => passwords.forget(&account),
+        Job::Adopt => {
+            let answered = offer::adopt(Service::CalDav, |client, server| {
+                client.discover_calendars(server)
+            });
+            for (offer, credentials, result) in answered {
+                reply(Reply::Adopted {
+                    offer,
+                    credentials,
+                    result,
+                });
+            }
+        }
+        Job::Offer { offer, password } => {
+            if let Err(error) = offer::make(Service::CardDav, &offer, &password) {
+                reply(Reply::OfferFailed(error));
+            }
+        }
     }
 }
 

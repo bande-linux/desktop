@@ -24,7 +24,7 @@ use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowError,
     WindowEvent,
 };
-use bande_xdg::{Apps, config_dirs, data_dirs, data_home, replace_file};
+use bande_xdg::{Apps, config_dirs, data_dirs, replace_file};
 
 use crate::notices::{Announcer, Clicked, Notices};
 use crate::picker::{MAX_ATTACHMENT, Picked, Picker};
@@ -49,7 +49,7 @@ static INFO: Info = Info {
 
 fn settings_window(appearance: Appearance) -> Box<dyn View> {
     Box::new(SettingsView::new(
-        store_path(),
+        bande_mail_core::accounts::store_path(),
         appearance,
         TextSystem::new(),
     ))
@@ -181,12 +181,6 @@ struct Mail {
     picker: Picker,
     changes: Inbox<Change>,
     notices: Notices,
-}
-
-fn store_path() -> PathBuf {
-    data_home()
-        .unwrap_or_else(|| PathBuf::from(".local/share"))
-        .join("bande-mail/mail.sqlite3")
 }
 
 fn save_attachment(name: String, data: Vec<u8>, announcer: Announcer) {
@@ -649,7 +643,7 @@ impl Program for Mail {
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut view = MailView::new(
-            store_path(),
+            bande_mail_core::accounts::store_path(),
             load_settings(),
             Appearance::default().palette(),
             TextSystem::new(),

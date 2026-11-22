@@ -33,6 +33,7 @@ fn a_series_moved_to_another_zone_keeps_its_times_exceptions_and_end() {
         end_repeat: EndRepeat::On(date(2026, 12, 1)),
         alert: Alert::None,
         invitees: Vec::new(),
+        user_types: Vec::new(),
         time_zone: Some("America/New_York".into()),
     };
     let moved = apply_details(&object, 0, first, &details, Scope::Series, &local);

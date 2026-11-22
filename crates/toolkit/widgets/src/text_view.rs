@@ -66,6 +66,10 @@ impl TextView {
         self
     }
 
+    pub fn set_read_only(&mut self, read_only: bool) {
+        self.editor.set_read_only(read_only);
+    }
+
     pub fn borderless(self) -> Self {
         Self {
             borderless: true,

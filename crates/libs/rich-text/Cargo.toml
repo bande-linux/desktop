@@ -1,0 +1,16 @@
+[package]
+name = "bande-rich-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Rich text for Bande's Text Editor and Notes: HTML read into the toolkit's rich text and written back"
+publish = false
+
+[dependencies]
+bande-toolkit.workspace = true
+html5ever.workspace = true
+
+[lints]
+workspace = true

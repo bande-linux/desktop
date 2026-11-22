@@ -118,10 +118,14 @@ fn status_code(text: &str) -> Option<u16> {
     text.split_whitespace().nth(1)?.parse().ok()
 }
 
-pub fn parse_multistatus(body: &str) -> Result<Multistatus, Error> {
+pub fn parse_element(body: &str) -> Result<Element, Error> {
     let document =
         roxmltree::Document::parse(body).map_err(|error| Error::Xml(error.to_string()))?;
-    let root = Element::from_node(document.root_element());
+    Ok(Element::from_node(document.root_element()))
+}
+
+pub fn parse_multistatus(body: &str) -> Result<Multistatus, Error> {
+    let root = parse_element(body)?;
     if !root.is(DAV, "multistatus") {
         return Err(Error::Xml(format!(
             "expected a multistatus, got {}",

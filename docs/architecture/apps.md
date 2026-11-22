@@ -2,17 +2,18 @@
 
 Every Bande app is built on `bande-app` (`crates/libs/app`) and lives in `crates/apps/<name>`,
 packaged as `bande-<name>`: Files, Settings, Dictionary (Look Up), Terminal, Software, Package
-Installer, System Monitor, Mail, Calendar, Contacts, Velox, Calculator, Player, Viewer, Clock, Text Editor,
+Installer, System Monitor, Mail, Notes, Calendar, Contacts, Velox, Calculator, Player, Viewer, Clock, Text Editor,
 Disks and Archives. The file chooser portal and the keyring prompt are the two programs there that
 are not. `crates/apps/template` is the starting point of a new app (`ci/new-app.sh <dir> <Id>
 "<Name>"`), a real app that is checked and tested with the others and never released. Code that
 several apps share is a library in `crates/libs` (`bande-discovery`: DNS SRV and TXT service
-discovery for account setup; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
+discovery for account setup; `bande-mail-core`: mail accounts, their setup sheet, IMAP and SMTP, shared by Mail and Notes;
+`bande-rich-text`: HTML read into the toolkit's rich text, shared by Text Editor and Notes; `bande-terminal-view`: the terminal widget; `bande-vm`: QEMU virtual
 machines in systemd user units; `bande-keyring`: passwords in the Secret Service; `bande-dav`:
 CalDAV and CardDAV with offline sync; `bande-content-lines`: iCalendar and vCard content lines;
 `bande-address-book`: vCard, the offline address books and their CardDAV sync).
 `ci/check-apps.sh` checks that every app is built and packaged this way. A crate's own
-`README.md` describes an app where it needs more than its metainfo (Mail, Calendar, Contacts, Clock,
+`README.md` describes an app where it needs more than its metainfo (Mail, Notes, Calendar, Contacts, Clock,
 Velox).
 
 ## The boundary

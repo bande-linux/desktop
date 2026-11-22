@@ -149,6 +149,7 @@ bande-launcher = { path = "crates/shell/launcher" }
 bande-lock = { path = "crates/shell/lock" }
 bande-log = { path = "crates/libs/log" }
 bande-lookup = { path = "crates/apps/lookup" }
+bande-mail-core = { path = "crates/libs/mail-core" }
 bande-media = { path = "crates/libs/media" }
 bande-media-view = { path = "crates/libs/media-view" }
 bande-network = { path = "crates/libs/network" }
@@ -165,6 +166,7 @@ bande-quick-settings = { path = "crates/shell/quick-settings" }
 bande-render = { path = "crates/platform/render" }
 bande-reporter = { path = "crates/services/reporter" }
 bande-review = { path = "crates/testing/review" }
+bande-rich-text = { path = "crates/libs/rich-text" }
 bande-sample = { path = "crates/testing/sample" }
 bande-screenshot = { path = "crates/shell/screenshot" }
 bande-search = { path = "crates/libs/search" }

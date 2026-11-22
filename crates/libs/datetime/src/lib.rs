@@ -51,6 +51,7 @@ pub fn env_locale(variables: &[&str]) -> Locale {
 pub struct DateFormats {
     preferences: DateTimeFormatterPreferences,
     first_weekday: jiff::civil::Weekday,
+    weekend: Vec<jiff::civil::Weekday>,
 }
 
 fn gregorian(day: jiff::civil::Date) -> Option<Date<Gregorian>> {
@@ -155,19 +156,32 @@ fn without_month(Parts(mut parts): Parts) -> Option<String> {
 
 impl DateFormats {
     pub fn for_locale(locale: &Locale) -> Self {
-        let first_weekday =
-            WeekInformation::try_new(locale.into()).map_or(jiff::civil::Weekday::Monday, |week| {
-                jiff::civil::Weekday::from_monday_one_offset(week.first_weekday as i8)
-                    .unwrap_or(jiff::civil::Weekday::Monday)
-            });
+        let weekday = |day: icu_calendar::types::Weekday| {
+            jiff::civil::Weekday::from_monday_one_offset(day as i8).ok()
+        };
+        let week = WeekInformation::try_new(locale.into()).ok();
+        let first_weekday = week
+            .as_ref()
+            .and_then(|week| weekday(week.first_weekday))
+            .unwrap_or(jiff::civil::Weekday::Monday);
+        let weekend = week.map_or_else(
+            || vec![jiff::civil::Weekday::Saturday, jiff::civil::Weekday::Sunday],
+            |week| week.weekend().filter_map(weekday).collect(),
+        );
         Self {
             preferences: locale.into(),
             first_weekday,
+            weekend,
         }
     }
 
     pub fn first_weekday(&self) -> jiff::civil::Weekday {
         self.first_weekday
+    }
+
+    /// Whether `day` is a weekend day where this locale is used.
+    pub fn is_weekend(&self, day: jiff::civil::Weekday) -> bool {
+        self.weekend.contains(&day)
     }
 
     pub fn month(&self, at: &Zoned) -> Month {

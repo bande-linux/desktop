@@ -12,7 +12,6 @@ publish = false
 bande-volumes.workspace = true
 accesskit.workspace = true
 encoding_rs.workspace = true
-html5ever.workspace = true
 regex.workspace = true
 roxmltree.workspace = true
 rustix = { workspace = true, features = ["fs"] }
@@ -26,6 +25,7 @@ jiff.workspace = true
 bande-app-menu.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
+bande-rich-text.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 bande-watch.workspace = true

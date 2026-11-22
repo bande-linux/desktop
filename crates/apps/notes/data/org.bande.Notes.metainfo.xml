@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.bande.Notes</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Notes</name>
+  <name xml:lang="sv">Anteckningar</name>
+  <summary>Write notes on this computer or in your mail account</summary>
+  <summary xml:lang="sv">Skriv anteckningar på datorn eller i ditt e-postkonto</summary>
+  <description>
+    <p>Notes with headings, lists and simple formatting, kept on this computer or in the Notes folder of an IMAP mail account, in the IMAP notes format other clients use, so the same notes open on your other devices too.</p>
+  </description>
+  <developer id="org.bande">
+    <name>Bande</name>
+  </developer>
+  <launchable type="desktop-id">org.bande.Notes.desktop</launchable>
+  <url type="homepage">https://github.com/bande-linux/desktop</url>
+  <content_rating type="oars-1.1"/>
+</component>

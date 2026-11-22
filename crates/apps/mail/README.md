@@ -14,7 +14,8 @@ apt install bande-mail
   name, an address and a password. Mail looks up the servers of the address's domain and shows
   them, with user name, hosts, ports and security (TLS, STARTTLS), in the server settings step
   to confirm or change; Enter Server Settings Manually goes there directly. Sign In checks that
-  both IMAP and SMTP accept the password before the account is added. A failure says what went
+  both IMAP and SMTP accept the password before the account is added. When Notes is installed,
+  Also use this account for Notes (on by default) lets Notes keep its notes in the account too. A failure says what went
   wrong (server unreachable, certificate not valid, no encryption offered, user name or password
   refused, server error) and keeps every field editable. When a saved password stops working,
   the password sheet also leads to Server Settings…. Several accounts work side by side.
@@ -136,7 +137,8 @@ their usual English names.
 
 ## Tests
 
-`tests/mail.rs` starts Debian's `dovecot` as the current user on a free loopback port, with a
+`tests/mail.rs` starts Debian's `dovecot` as the current user on a free loopback port
+(`bande_mail_core::testing`, shared with Notes), with a
 small SMTP listener beside it, and checks that a message sent after the IMAP session went stale
 goes out once, without injected headers or its Bcc, and is kept in Sent. It skips itself when
 `/usr/sbin/dovecot` is not installed. It also checks that a `mailto:` link cannot add Bcc
@@ -158,7 +160,8 @@ noted:
 | `zeroize` | keeps the typed password out of freed memory (already used by the toolkit) |
 | `jiff`, `roxmltree`, `zbus`, `accesskit`, `tracing` | shared with the desktop |
 
-No IMAP, SMTP, DNS or HTTP crate is used: the maintained IMAP crates are async-only or not in
+The accounts, the setup sheet and the IMAP and SMTP clients are `bande-mail-core`, shared with
+Notes. No IMAP, SMTP, DNS or HTTP crate is used: the maintained IMAP crates are async-only or not in
 Debian, and the desktop has no async runtime. The IMAP and SMTP clients, the SRV/MX lookup and
 the HTTPS autoconfig fetch are small, synchronous and bounded by timeouts.
 

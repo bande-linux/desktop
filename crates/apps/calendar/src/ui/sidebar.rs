@@ -15,6 +15,7 @@ const INSET: f32 = 10.0;
 const ROW: f32 = 26.0;
 const HEADING: f32 = 28.0;
 const CHECK: f32 = 14.0;
+const READ_ONLY_WIDTH: f32 = 64.0;
 const MINI_CELL: f32 = 26.0;
 const MINI_HEADER: f32 = 28.0;
 
@@ -110,12 +111,31 @@ pub fn paint(
                 }
                 false => painter.stroke(check.inset(0.75), Radius::XS, 1.5, color),
             }
+            let shared = calendar.info.read_only && calendar.info.url.is_some();
+            let note = match shared {
+                true => READ_ONLY_WIDTH,
+                false => 0.0,
+            };
+            let name = Rect::new(
+                check.x + CHECK + 8.0,
+                row.y,
+                row.width - CHECK - 24.0 - note,
+                ROW,
+            );
             painter.label(
                 &calendar.info.name,
                 TextStyle::role(TextRole::Body, palette.ink),
-                Rect::new(check.x + CHECK + 8.0, row.y, row.width - CHECK - 24.0, ROW),
+                name,
                 TextAlign::Start,
             );
+            if shared {
+                painter.label(
+                    &tr!("read-only"),
+                    TextStyle::role(TextRole::Callout, palette.ink3),
+                    Rect::new(name.x + name.width, row.y, note, ROW),
+                    TextAlign::End,
+                );
+            }
             if model.calendar_ring == Some(index) {
                 focus_ring_for(&palette, Shape::rounded(row, Radius::S), &mut painter.items);
             }

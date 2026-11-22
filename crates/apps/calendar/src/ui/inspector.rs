@@ -2,18 +2,19 @@ use bande_datetime::DateFormats;
 use bande_l10n::{text, tr};
 use bande_toolkit::Rect;
 use bande_toolkit::ui::{
-    Button, CheckState, Checkbox, Label, PopUpButton, TEXT_FIELD_HEIGHT, TextField, TextView,
+    Button, CheckState, Checkbox, Label, PopUpButton, TEXT_FIELD_HEIGHT, TextField, TextView, Ui,
     WidgetId,
 };
-use jiff::ToSpan;
 use jiff::civil::{DateTime, Time};
 use jiff::tz::TimeZone;
+use jiff::{ToSpan, Zoned};
 
 use super::panel::{Arrow, Line, Panel, Width};
 use super::{Signal, Signals, sender};
+use crate::caldav::Principal;
 use crate::edit::{Alert, Details, EndRepeat, Repeat, zone_name};
 use crate::ical::{Event, Rule};
-use crate::invite::{Answer, Invitee, invitees, my_answer, parse_addresses};
+use crate::invite::{Answer, Invitee, UserType, invitees, my_answer, parse_addresses};
 use crate::store::Found;
 
 const WIDTH: f32 = 320.0;
@@ -33,6 +34,9 @@ pub struct Inspector {
     end_kind: usize,
     end_text: String,
     invite_text: String,
+    invite_field: Option<WidgetId>,
+    invited: Vec<(String, String)>,
+    user_types: Vec<(String, UserType)>,
     zone_text: Option<String>,
     calendars: Vec<usize>,
     calendar_choice: usize,
@@ -96,6 +100,13 @@ pub(super) fn answer_title(answer: Answer) -> String {
     }
 }
 
+fn shown_name(invitee: &Invitee) -> String {
+    match invitee.name.is_empty() {
+        true => invitee.address.clone(),
+        false => invitee.name.clone(),
+    }
+}
+
 fn invitee_lines(panel: &mut Panel, invited: &[Invitee]) {
     if invited.is_empty() {
         return;
@@ -103,10 +114,7 @@ fn invitee_lines(panel: &mut Panel, invited: &[Invitee]) {
     let text = invited
         .iter()
         .map(|invitee| {
-            let name = match invitee.name.is_empty() {
-                true => invitee.address.clone(),
-                false => invitee.name.clone(),
-            };
+            let name = shown_name(invitee);
             let status = match invitee.organizer {
                 true => tr!("organizer"),
                 false => match invitee.answer {
@@ -116,7 +124,16 @@ fn invitee_lines(panel: &mut Panel, invited: &[Invitee]) {
                     Answer::Pending => tr!("no reply"),
                 },
             };
-            format!("{name} · {status}")
+            let mut parts = vec![name];
+            parts.extend(super::directory::kind_title(invitee.kind));
+            parts.push(status);
+            if invitee.undelivered {
+                parts.push(tr!("not sent"));
+            }
+            if let Some(sender) = &invitee.sent_by {
+                parts.push(tr!("sent by {sender}", sender = sender.clone()));
+            }
+            parts.join(" · ")
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -185,8 +202,25 @@ fn details_of(found: &Found, event: &Event, context: &Context) -> Details {
         end_repeat: EndRepeat::of(event.rule.as_ref(), &event.start, local),
         alert: Alert::of(&event.alarms, all_day),
         invitees: Vec::new(),
+        user_types: Vec::new(),
         time_zone,
     }
+}
+
+fn scheduling_line(panel: &mut Panel, signals: &Signals, all_day: bool) {
+    let send = sender(signals);
+    let directory = panel.add(Button::new(&tr!("People and Rooms…"), move || {
+        send(Signal::Directory)
+    }));
+    let mut cells = vec![(directory, Width::Fill)];
+    if !all_day {
+        let send = sender(signals);
+        let availability = panel.add(Button::new(&tr!("Availability…"), move || {
+            send(Signal::Availability)
+        }));
+        cells.push((availability, Width::Fill));
+    }
+    panel.line(Line::new(None, cells, ROW));
 }
 
 fn with_current<T: PartialEq + Copy>(choices: &[T], current: T) -> Vec<T> {
@@ -245,6 +279,7 @@ impl Inspector {
         };
         let mut panel = Panel::new(None, WIDTH, LABEL_WIDTH);
         let mut title_field = None;
+        let mut invite_field = None;
         let mut time_fields = [None; 4];
         if read_only {
             header(&mut panel, &details, &texts);
@@ -407,11 +442,13 @@ impl Inspector {
                 let field = panel.add(TextField::new(&tr!("Add Invitees"), "", move |text| {
                     send(Signal::Invitees(text.to_owned()))
                 }));
+                invite_field = panel.id_of(field);
                 panel.line(Line::new(
                     Some(&tr!("Invitees:")),
                     vec![(field, Width::Fill)],
                     ROW,
                 ));
+                scheduling_line(&mut panel, signals, details.all_day);
             }
             let send = sender(signals);
             let names: Vec<&str> = calendars.iter().map(|(_, name)| name.as_str()).collect();
@@ -459,6 +496,12 @@ impl Inspector {
             end_kind,
             end_text,
             invite_text: String::new(),
+            invite_field,
+            invited: invited
+                .iter()
+                .map(|invitee| (invitee.address.clone(), shown_name(invitee)))
+                .collect(),
+            user_types: Vec::new(),
             zone_text,
             calendars: calendars.into_iter().map(|(index, _)| index).collect(),
             calendar_choice: selected,
@@ -623,6 +666,7 @@ impl Inspector {
             end,
             end_repeat,
             invitees: parse_addresses(&self.invite_text),
+            user_types: self.user_types.clone(),
             time_zone: match self.zone_text.as_deref() {
                 Some("") | None => self.original.time_zone.clone(),
                 Some(name) => Some(name.to_owned()),
@@ -644,5 +688,61 @@ impl Inspector {
 
     pub fn chosen_calendar(&self) -> Option<usize> {
         self.calendars.get(self.calendar_choice).copied()
+    }
+
+    pub fn attendees(&self) -> Vec<(String, String)> {
+        let mut all = self.invited.clone();
+        for address in parse_addresses(&self.invite_text) {
+            if !all
+                .iter()
+                .any(|(known, _)| known.eq_ignore_ascii_case(&address))
+            {
+                all.push((address.clone(), address));
+            }
+        }
+        all
+    }
+
+    pub fn add_invitee(&mut self, ui: &mut Ui, principal: &Principal) {
+        let Some(address) = principal.addresses.first() else {
+            return;
+        };
+        let text = match self.invite_text.trim() {
+            "" => address.clone(),
+            typed => format!("{typed}, {address}"),
+        };
+        if let Some(field) = self.invite_field {
+            ui.update_widget::<TextField>(field, |field, _| field.replace_text(&text));
+        }
+        self.invite_text = text;
+        self.user_types.push((address.clone(), principal.kind));
+    }
+
+    pub fn shown_zone(&self, local: &TimeZone) -> TimeZone {
+        self.details
+            .time_zone
+            .as_deref()
+            .and_then(|name| jiff::tz::db().get(name).ok())
+            .unwrap_or_else(|| local.clone())
+    }
+
+    pub fn span(&self, local: &TimeZone) -> Option<(Zoned, Zoned)> {
+        let zone = self.shown_zone(local);
+        let (start, end) = self.times().filter(|_| !self.details.all_day)?;
+        Some((start.to_zoned(zone.clone()).ok()?, end.to_zoned(zone).ok()?))
+    }
+
+    pub fn set_span(&mut self, ui: &mut Ui, start: &Zoned, end: &Zoned) {
+        self.texts = [
+            self.formats.numeric_date(start.date()),
+            time_text(&self.formats, start.datetime()),
+            self.formats.numeric_date(end.date()),
+            time_text(&self.formats, end.datetime()),
+        ];
+        for (field, text) in self.time_fields.iter().zip(&self.texts) {
+            if let Some(field) = field {
+                ui.update_widget::<TextField>(*field, |field, _| field.replace_text(text));
+            }
+        }
     }
 }

@@ -99,7 +99,7 @@ fn inline(builder: &mut Builder, text: &str, base: &TextAttributes) {
             && let Some(end) = closings.after(at + 1, "`")
         {
             flush(builder, &mut plain, &attributes);
-            let code = super::TextAttributes {
+            let code = TextAttributes {
                 family: super::code().family,
                 ..attributes.clone()
             };

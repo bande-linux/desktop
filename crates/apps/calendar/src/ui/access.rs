@@ -167,6 +167,9 @@ impl CalendarView {
                 let calendar = self.library.calendars.get(index)?;
                 let mut node = Node::new(Role::CheckBox);
                 node.set_label(calendar.info.name.as_str());
+                if calendar.info.read_only && calendar.info.url.is_some() {
+                    node.set_description(tr!("read-only"));
+                }
                 node.set_toggled(match calendar.info.visible {
                     true => Toggled::True,
                     false => Toggled::False,

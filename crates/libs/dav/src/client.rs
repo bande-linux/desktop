@@ -157,7 +157,7 @@ impl Client {
         }
     }
 
-    fn follow(
+    pub(crate) fn follow(
         &self,
         method: &str,
         url: &str,
@@ -175,7 +175,18 @@ impl Client {
         Err(Error::Network(format!("too many redirects from {url}")))
     }
 
-    pub(crate) fn multistatus(
+    /// Sends one request, signing in when the server asks.
+    pub fn send(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Option<&str>,
+    ) -> Result<Response, Error> {
+        self.http.send(method, url, headers, body)
+    }
+
+    pub fn multistatus(
         &self,
         method: &str,
         url: &str,
@@ -192,7 +203,7 @@ impl Client {
         Ok((url.clone(), parse_multistatus(&response.body)?))
     }
 
-    fn first_href(
+    pub fn first_href(
         &self,
         url: &str,
         namespace: &str,
@@ -314,12 +325,7 @@ impl Client {
             })
             .unwrap_or_default()
             .iter()
-            .filter_map(|href| {
-                href.get(..7)
-                    .filter(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
-                    .and_then(|_| href.get(7..))
-                    .map(str::to_owned)
-            })
+            .filter_map(|href| mail_address(href))
             .collect();
         Ok(Discovered {
             principal,
@@ -574,6 +580,15 @@ impl Client {
 
 fn path_of(url: &str) -> &str {
     &url[origin(url).len()..]
+}
+
+/// The mail address of a `mailto:` calendar user address.
+pub fn mail_address(href: &str) -> Option<String> {
+    let href = href.trim();
+    href.get(..7)
+        .filter(|scheme| scheme.eq_ignore_ascii_case("mailto:"))
+        .and_then(|_| href.get(7..))
+        .map(str::to_owned)
 }
 
 pub(crate) fn last_segment(url: &str) -> String {

@@ -1,5 +1,6 @@
 mod event;
 mod file;
+pub mod freebusy;
 mod rule;
 mod tz;
 mod value;

@@ -38,6 +38,8 @@ impl CalendarView {
             Method::Request if self.invited(first) => self.offer_invitation(first.clone()),
             Method::Reply => self.take_reply(first),
             Method::Cancel => self.offer_cancel(first),
+            Method::Counter => self.offer_counter(first),
+            Method::DeclineCounter => self.take_declined_counter(first),
             _ => self.offer_import(objects, file),
         }
     }
@@ -230,6 +232,116 @@ impl CalendarView {
             title = title,
             names = name
         ));
+        true
+    }
+
+    fn offer_counter(&mut self, counter: &CalendarObject) -> bool {
+        let me = self.my_addresses();
+        let taken = self
+            .stored_object(counter.uid())
+            .and_then(|(calendar, _, stored)| {
+                let (updated, proposer) = invite::take_counter(stored, counter, &me, &self.zone)?;
+                Some((calendar, stored.clone(), updated, proposer))
+            });
+        let Some((calendar, stored, updated, proposer)) = taken else {
+            self.status = Some(tr!(
+                "This proposal is not for an event you organize, or is not from one of its invitees."
+            ));
+            return true;
+        };
+        let Some(proposed) = counter.events.first() else {
+            return false;
+        };
+        let current = invite::counterpart_of(&stored, proposed)
+            .map_or_else(String::new, |event| self.when(event));
+        let name = match proposer.name.is_empty() {
+            true => proposer.address.clone(),
+            false => proposer.name.clone(),
+        };
+        let title = title_of(proposed);
+        let message = match current.is_empty() {
+            true => self.when(proposed),
+            false => tr!(
+                "{when} instead of {current}",
+                when = self.when(proposed),
+                current = current
+            ),
+        };
+        self.go_to(proposed.start.date());
+        self.confirm = Some(Confirm::Counter {
+            calendar: self.library.calendars[calendar].info.id.clone(),
+            updated: Box::new(updated),
+            proposer: proposer.address,
+            title: title.clone(),
+        });
+        let alert = Alert::new(
+            &tr!(
+                "{name} proposes a new time for “{title}”",
+                name = name,
+                title = title
+            ),
+            &message,
+            self.choice(),
+        )
+        .cancel(&tr!("Later"), "cancel")
+        .other(&tr!("Decline"), "decline")
+        .primary(&tr!("Accept Proposal"), "accept");
+        self.ui.present_dialog(alert);
+        true
+    }
+
+    pub(crate) fn answer_counter(
+        &mut self,
+        calendar: &str,
+        updated: CalendarObject,
+        proposer: &str,
+        title: &str,
+        action: &str,
+    ) {
+        match action {
+            "accept" => {
+                let Some(calendar) = self.library.calendar_index(calendar) else {
+                    return;
+                };
+                if let Some(index) = self.library.calendars[calendar].find(updated.uid()) {
+                    self.remember(calendar, index);
+                }
+                self.library.put_object(calendar, updated);
+                self.requests.push(Request::Changed);
+            }
+            "decline" => {
+                let subject = tr!("Proposal declined: {title}", title = title.to_owned());
+                let body = tr!(
+                    "“{title}” stays at the time it has.",
+                    title = title.to_owned()
+                );
+                self.requests.push(Request::Mail(format!(
+                    "mailto:{}?subject={}&body={}",
+                    query(proposer),
+                    query(&subject),
+                    query(&body)
+                )));
+            }
+            _ => {}
+        }
+    }
+
+    fn take_declined_counter(&mut self, decline: &CalendarObject) -> bool {
+        let title = decline.events.first().map(title_of).unwrap_or_default();
+        self.status = Some(
+            match self
+                .stored_object(decline.uid())
+                .is_some_and(|(_, _, stored)| invite::declined_counter(stored, decline))
+            {
+                true => tr!(
+                    "The organizer of “{title}” declined the time you proposed.",
+                    title = title
+                ),
+                false => tr!(
+                    "This answer to a proposal is not from the organizer of an event in your calendars."
+                ),
+            },
+        );
         true
     }
 

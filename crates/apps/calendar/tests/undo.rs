@@ -34,6 +34,7 @@ fn an_undone_delete_comes_back_at_its_own_address_even_while_the_delete_is_being
         ctag: None,
         sync_token: None,
         refreshed: None,
+        opened: false,
     });
     calendar.objects.push(Stored::new(
         HREF.into(),

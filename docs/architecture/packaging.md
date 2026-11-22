@@ -112,7 +112,7 @@ are in [performance.md](performance.md).
   `xdg-desktop-portal-bande`), the shell clients (`bande-shell`,
   `bande-screenshot`, `bande-lock`, `bande-greeter`) and the apps (`bande-files`,
   `bande-settings`, `bande-file-chooser`, `bande-lookup`, `bande-terminal`, `bande-software`,
-  `bande-installer`, `bande-monitor`, `bande-mail`, `bande-calendar`, `bande-contacts`, `bande-velox`,
+  `bande-installer`, `bande-monitor`, `bande-mail`, `bande-notes`, `bande-calendar`, `bande-contacts`, `bande-velox`,
   `bande-calculator`, `bande-player`, `bande-viewer`, `bande-clock`, `bande-text-editor`,
   `bande-disks`, `bande-archive`). Package names stay `bande-*` whatever directory the crate
   lives in ([decision 0003](../decisions/0003-repository-layout.md)); a program may ship in

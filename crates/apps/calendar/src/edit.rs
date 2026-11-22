@@ -239,6 +239,7 @@ pub struct Details {
     pub end_repeat: EndRepeat,
     pub alert: Alert,
     pub invitees: Vec<String>,
+    pub user_types: Vec<(String, crate::invite::UserType)>,
     pub time_zone: Option<String>,
 }
 
@@ -422,15 +423,7 @@ pub fn reschedule(
         .is_some_and(|master| master.rule.is_some() || !master.rdates.is_empty());
     let editing_override = event.recurrence_id.is_some();
     if recurring && scope == Scope::Occurrence && !editing_override {
-        let mut exception = event.clone();
-        exception
-            .component
-            .properties
-            .retain(|property| !["RRULE", "EXDATE", "RDATE"].contains(&property.name.as_str()));
-        exception.rule = None;
-        exception.exdates.clear();
-        exception.rdates.clear();
-        exception.recurrence_id = Some(moment_of(key, &event.start));
+        let mut exception = exception_of(&event, moment_of(key, &event.start));
         exception.start = place(&event.start, start, all_day, local);
         exception.end = place(&event.end, end, all_day, local);
         exception.sequence += 1;
@@ -474,6 +467,19 @@ pub fn reschedule(
         event.sequence += 1;
     }
     object
+}
+
+pub fn exception_of(master: &Event, recurrence_id: Moment) -> Event {
+    let mut exception = master.clone();
+    exception
+        .component
+        .properties
+        .retain(|property| !["RRULE", "EXDATE", "RDATE"].contains(&property.name.as_str()));
+    exception.rule = None;
+    exception.exdates.clear();
+    exception.rdates.clear();
+    exception.recurrence_id = Some(recurrence_id);
+    exception
 }
 
 pub fn remove_occurrence(

@@ -176,6 +176,7 @@ pub struct DocumentView {
     position: Option<(u64, usize, (usize, usize))>,
     saving: bool,
     stamp: Option<Stamp>,
+    reloading_from: Option<u64>,
     overwrite: bool,
     close_after_save: bool,
     requests: Vec<Request>,
@@ -253,6 +254,7 @@ impl DocumentView {
             position: None,
             saving: false,
             stamp: None,
+            reloading_from: None,
             overwrite: false,
             close_after_save: false,
             requests: Vec::new(),
@@ -432,6 +434,11 @@ impl DocumentView {
         self.loading = true;
     }
 
+    pub fn start_reloading(&mut self) {
+        self.reloading_from = Some(self.revision());
+        self.loading = true;
+    }
+
     pub fn loaded(&mut self, loaded: Loaded) {
         let Loaded {
             text,
@@ -446,8 +453,15 @@ impl DocumentView {
             words,
             characters,
         } = loaded;
-        self.lossy = lossy && from_disk;
         self.loading = false;
+        if self
+            .reloading_from
+            .take()
+            .is_some_and(|revision| revision != self.revision())
+        {
+            return self.persist();
+        }
+        self.lossy = lossy && from_disk;
         if from_disk {
             self.stamp = stamp;
             self.encoding = encoding;
@@ -501,6 +515,7 @@ impl DocumentView {
 
     pub fn failed(&mut self, error: &str) {
         self.loading = false;
+        self.reloading_from = None;
         self.unloaded = self.saved.is_some() && self.revision() == self.counted;
         self.asking = Some(Asking::Failed);
         let signals = Rc::clone(&self.signals);

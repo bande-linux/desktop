@@ -686,7 +686,7 @@ impl TextEditor {
                 continue;
             };
             let (token, encoding) = (view.token, view.encoding.encoding);
-            view.start_loading(Some(path.clone()));
+            view.start_reloading();
             self.load_into(token, path, Some(encoding));
             self.serve(cx, window);
         }

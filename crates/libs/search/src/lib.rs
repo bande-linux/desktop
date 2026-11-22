@@ -1,6 +1,7 @@
 mod calc;
 mod index;
 mod matcher;
+mod offers;
 mod recents;
 mod scoped;
 mod service;
@@ -10,6 +11,7 @@ mod usage;
 pub use calc::{Calculation, calculate, format_number};
 pub use index::{CACHE_TAG, FileHit, FileIndex, FileResults, MAX_ENTRIES, MAX_HITS, skipped_name};
 pub use matcher::{EXACT, FUZZY, INITIALS, PREFIX, Query, SUBSTRING, WORD, WORDS, fold};
+pub use offers::offer_in_background;
 pub use recents::{
     FILE_KEY, RecentlyUsed, Recents, add_recently_used, is_excluded, recent_files, recently_used,
     recently_used_path, remembers_recent_files,

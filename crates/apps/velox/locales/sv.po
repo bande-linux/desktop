@@ -1282,9 +1282,6 @@ msgstr "Meddela när en container stoppas oväntat"
 msgid "Quick Access"
 msgstr "Snabbåtkomst"
 
-msgid "Command palette (Ctrl+K)"
-msgstr "Kommandopalett (Ctrl+K)"
-
 msgid "Status item in the Taskbar"
 msgstr "Statussymbol i Aktivitetsfältet"
 

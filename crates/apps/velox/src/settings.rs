@@ -18,7 +18,6 @@ const DESKTOP_ENTRY: &str = "org.bande.Velox.desktop";
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VeloxSettings {
     pub notify_crashes: bool,
-    pub command_palette: bool,
     pub status_item: bool,
 }
 
@@ -40,7 +39,6 @@ impl Stored for VeloxSettings {
             let on = flag(value).unwrap_or_default();
             match key {
                 "notify-crashes" => settings.notify_crashes = on,
-                "command-palette" => settings.command_palette = on,
                 "status-item" => settings.status_item = on,
                 _ => {}
             }
@@ -50,8 +48,8 @@ impl Stored for VeloxSettings {
 
     fn to_text(&self) -> String {
         format!(
-            "notify-crashes = {}\ncommand-palette = {}\nstatus-item = {}\n",
-            self.notify_crashes, self.command_palette, self.status_item
+            "notify-crashes = {}\nstatus-item = {}\n",
+            self.notify_crashes, self.status_item
         )
     }
 }
@@ -174,12 +172,6 @@ pub fn settings_form(appearance: Appearance, settings: &Shared<VeloxSettings>) -
                 ),
             ),
             FormLine::Heading(tr!("Quick Access")),
-            FormLine::Row(
-                tr!("Command palette (Ctrl+K)"),
-                toggle(settings, text!("Command palette (Ctrl+K)"), |settings| {
-                    &mut settings.command_palette
-                }),
-            ),
             FormLine::Row(
                 tr!("Status item in the Taskbar"),
                 toggle(settings, text!("Status item in the Taskbar"), |settings| {

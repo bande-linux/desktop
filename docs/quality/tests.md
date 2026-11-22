@@ -95,6 +95,7 @@ Paths are under `crates/`.
 | `apps/disks/tests/safety.rs` `the_system_disk_stays_untouchable_while_a_usb_stick_is_erased_and_ejected` | Security boundary: the system disk, its EFI system partition and the partition holding `/` offer no Erase, Restore or Eject and their commands do nothing; a spare partition there asks with its device, size and a system-disk warning; erasing a USB stick names it with its device and size and queues exactly one erase, nothing else while it runs. |
 | `libs/vm/src/password.rs` `matches_glibc_sha512_crypt` | Tricky format logic: the password hash given to cloud-init must equal glibc's SHA-512 `crypt`, or the guest refuses the password. |
 | `libs/vm/src/autostart.rs` `autostart_units_quote_what_systemd_would_expand` | Untrusted input: a machine name or path with `%`, spaces or a newline must not be expanded or split by systemd in the autostart unit. |
+| `libs/vm/src/image.rs` `fedora_is_the_newest_release_its_keys_sign_from_fedoras_mirrors` | Untrusted input: from Fedora's release list Velox takes the newest final Generic cloud image whose release key it holds, only on Fedora's mirror, and derives its signed checksum file; a beta, a newer unsigned release, another image or another host is passed over. |
 | `libs/vm/tests/qmp.rs` `events_around_replies_and_jobs_are_kept_in_order` | Tricky protocol logic against a fake QEMU on a socket pair: QMP events that arrive between replies and around a snapshot job are kept, in order. |
 
 ## Support

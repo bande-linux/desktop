@@ -13,6 +13,9 @@ msgstr "Hämtningen är skadad: kontrollsumman är {actual}, inte {expected}."
 msgid "{file} is not in the vendor’s checksums."
 msgstr "{file} finns inte bland utgivarens kontrollsummor."
 
+msgid "No {os} release is signed with a key Velox knows."
+msgstr "Ingen utgåva av {os} är signerad med en nyckel som Velox känner till."
+
 msgid "This snapshot no longer exists."
 msgstr "Ögonblicksbilden finns inte längre."
 

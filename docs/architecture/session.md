@@ -159,7 +159,8 @@ dialog that cannot start fails the request with response 2.
   records other keys or unticks it; Don't Allow declines them all. Every answer is remembered, a
   declined shortcut as one without keys, so the app is asked only about shortcuts it has not
   asked for before. `ConfigureShortcuts` shows the same list for the app's shortcuts. Bindings
-  are kept per app id in `$XDG_STATE_HOME/bande/global-shortcuts`, which the compositor follows:
+  are kept per app id in `$XDG_STATE_HOME/bande/global-shortcuts` (the portal and Settings change
+  it holding `global-shortcuts.lock`), which the compositor follows:
   it takes a bound chord before the focused app (not while locked or while shortcuts are
   inhibited) and signals `org.bande.GlobalShortcuts.Activated` and `Deactivated` to the portal
   only, which emits them for the app's sessions. The portal follows the file too and emits

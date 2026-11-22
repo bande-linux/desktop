@@ -163,7 +163,6 @@ fn results(shortcuts: Vec<Described>) -> HashMap<String, OwnedValue> {
 #[derive(Clone)]
 struct Store {
     file: Option<PathBuf>,
-    writing: Arc<Mutex<()>>,
     announced: Arc<Mutex<Vec<GlobalShortcut>>>,
 }
 
@@ -180,25 +179,25 @@ impl Store {
         let Some(file) = &self.file else {
             return Err(io::Error::other("there is no state folder"));
         };
-        let _held = lock(&self.writing);
-        let before = read_file(file)?;
-        let after = change(before.clone());
-        if let Some(app_id) = quiet {
-            let mut announced = lock(&self.announced);
-            announced.retain(|shortcut| shortcut.app_id != app_id);
-            announced.extend(
-                after
-                    .iter()
-                    .filter(|shortcut| shortcut.app_id == app_id)
-                    .cloned(),
-            );
-        }
-        if after != before {
-            if let Some(folder) = file.parent() {
-                std::fs::create_dir_all(folder)?;
+        let mut after = Vec::new();
+        bande_xdg::change_file(file, |text| {
+            let before = read_global_shortcuts(text);
+            after = change(before.clone());
+            if let Some(app_id) = quiet {
+                let mut announced = lock(&self.announced);
+                announced.retain(|shortcut| shortcut.app_id != app_id);
+                announced.extend(
+                    after
+                        .iter()
+                        .filter(|shortcut| shortcut.app_id == app_id)
+                        .cloned(),
+                );
             }
-            bande_xdg::replace_file(file, write_global_shortcuts(&after))?;
-        }
+            Ok(match after == before {
+                true => text.to_owned(),
+                false => write_global_shortcuts(&after),
+            })
+        })?;
         Ok(after)
     }
 }
@@ -408,7 +407,6 @@ impl GlobalShortcuts {
     ) -> zbus::Result<()> {
         let store = Store {
             file: bande_xdg::global_shortcuts_file(),
-            writing: Arc::default(),
             announced: Arc::default(),
         };
         let sessions = Sessions::default();

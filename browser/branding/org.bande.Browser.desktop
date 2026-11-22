@@ -1,10 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=Browser
+Name[de]=Browser
 Name[sv]=Webbläsare
 Comment=Browse the web
+Comment[de]=Im Web surfen
 Comment[sv]=Surfa på webben
 GenericName=Web Browser
+GenericName[de]=Webbrowser
 GenericName[sv]=Webbläsare
 Icon=org.bande.Browser
 Exec=bande-browser %u
@@ -17,10 +20,12 @@ Actions=new-window;new-private-window;
 
 [Desktop Action new-window]
 Name=New Window
+Name[de]=Neues Fenster
 Name[sv]=Nytt fönster
 Exec=bande-browser --new-window %u
 
 [Desktop Action new-private-window]
 Name=New Private Window
+Name[de]=Neues privates Fenster
 Name[sv]=Nytt privat fönster
 Exec=bande-browser --private-window %u

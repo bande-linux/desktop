@@ -11,6 +11,7 @@ This directory holds no browser source. It holds what we change in Debian's:
 | `branding/` | name, icon, desktop file and metainfo, added with `--with-branding` |
 | `firefox-esr-bande/` | the settings package's source; its `settings.js` holds the prefs both forms share, the second line of defence behind the removals |
 | `prefs/bande.js` | prefs only the rebuild needs, added after `settings.js` |
+| `l10n/` | `languages`, the language packs built besides English; Bande's own strings per language (`bande.ftl`) and lines added to Firefox's files at the same path under `browser/browser/` |
 | `search/` | search engines, with no partner codes |
 | `theme/` | chrome CSS using Bande's design tokens |
 | `scripts/` | the build, run the same way anywhere; `.github/workflows/browser-follow-debian.yml` checks every 6 hours, on dispatch and on changes to `browser/`, and builds only when Debian's version or the inputs (`scripts/inputs.sh`) changed |
@@ -46,6 +47,7 @@ This directory holds no browser source. It holds what we change in Debian's:
 - **App menu:** the ⋮ button left of the well, as in Bande's own apps.
 - **Bookmarks Toolbar:** the favorites bar, shown in every window.
 - **Updates:** from apt only; the browser's own updater is off.
+- **Languages:** English is built in. Each language in `l10n/languages` (Swedish and German) is a package, `bande-browser-l10n-<lang>`, which Settings installs for the person's language. The browser follows the system language. Debian's `firefox-esr-l10n-<lang>` packages aren't used: they depend on `firefox-esr` itself, say Firefox and lack Bande's strings.
 
 ## Build
 

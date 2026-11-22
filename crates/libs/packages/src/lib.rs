@@ -137,9 +137,15 @@ pub enum Class {
     Boot,
     Offline,
     Flatpak,
-    Firmware {
-        at_restart: bool,
-    },
+    Firmware(Applies),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Applies {
+    #[default]
+    Now,
+    AtRestart,
+    AtShutdown,
 }
 
 impl Class {

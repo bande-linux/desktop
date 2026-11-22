@@ -14,11 +14,12 @@ use zbus::zvariant::{OwnedValue, Value};
 
 use crate::{
     ACCENTS, Accessibility, AlertSound, Appearance, BarEdge, CURSOR_SIZE_RANGE, CapsLock,
-    ClockFormat, ClockTime, Config, ConfigStore, DisplaySettings, Dragging, FocusSchedule,
-    InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight, NightSchedule,
-    Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory, SecondaryClick,
-    Setting, Style, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant, ZOOM_RANGE,
-    accent_keyword, is_wallpaper_path, read_system_input_sources,
+    ClockFormat, ClockTime, ComposeKey, Config, ConfigStore, DisplaySettings, Dragging,
+    FocusSchedule, InputSource, LidOnPower, Loaded, NIGHT_LIGHT_WARMTH_RANGE, NightLight,
+    NightSchedule, Placement, PrimaryButton, ReloadError, Rotation, ScrollMethod, SearchCategory,
+    SecondaryClick, Setting, Style, Suspend, TEXT_SIZE_RANGE, WallpaperFit, WallpaperVariant,
+    ZOOM_RANGE, accent_keyword, is_wallpaper_path, read_system_input_sources,
+    read_system_xkb_options,
 };
 
 pub type ArrangedDisplay = (String, i32, i32, bool, String);
@@ -313,6 +314,12 @@ fn publish_changes(
         }
         if before.keyboard.caps_lock != after.keyboard.caps_lock {
             announce(guard.caps_lock_changed(emitter).await);
+        }
+        if before.keyboard.compose != after.keyboard.compose {
+            announce(guard.compose_key_changed(emitter).await);
+        }
+        if before.keyboard.system_switch != after.keyboard.system_switch {
+            announce(guard.system_layout_switch_changed(emitter).await);
         }
         if before.trackpad.tap_to_click != after.trackpad.tap_to_click {
             announce(guard.trackpad_tap_to_click_changed(emitter).await);
@@ -1242,13 +1249,46 @@ impl ConfigInterface {
 
     #[zbus(property)]
     fn caps_lock(&self) -> String {
-        self.store.current().keyboard.caps_lock.keyword().to_owned()
+        self.store
+            .current()
+            .keyboard
+            .caps_lock
+            .unwrap_or_else(|| CapsLock::of_options(&read_system_xkb_options()))
+            .keyword()
+            .to_owned()
     }
 
     #[zbus(property)]
     fn set_caps_lock(&self, value: String) -> zbus::fdo::Result<()> {
         let caps_lock = keyword(&CapsLock::ALL, CapsLock::keyword, &value)?;
         self.write(&Setting::CapsLock(caps_lock))
+    }
+
+    #[zbus(property)]
+    fn compose_key(&self) -> String {
+        self.store
+            .current()
+            .keyboard
+            .compose
+            .unwrap_or_else(|| ComposeKey::of_options(&read_system_xkb_options()))
+            .keyword()
+            .to_owned()
+    }
+
+    #[zbus(property)]
+    fn set_compose_key(&self, value: String) -> zbus::fdo::Result<()> {
+        let compose = keyword(&ComposeKey::ALL, ComposeKey::keyword, &value)?;
+        self.write(&Setting::Compose(compose))
+    }
+
+    #[zbus(property)]
+    fn system_layout_switch(&self) -> bool {
+        self.store.current().keyboard.system_switch
+    }
+
+    #[zbus(property)]
+    fn set_system_layout_switch(&self, on: bool) -> zbus::fdo::Result<()> {
+        self.write(&Setting::SystemSwitch(on))
     }
 
     #[zbus(property)]

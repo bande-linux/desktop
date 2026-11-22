@@ -208,6 +208,14 @@ pub trait Config {
     #[zbus(property)]
     fn set_caps_lock(&self, value: &str) -> zbus::Result<()>;
     #[zbus(property)]
+    fn compose_key(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn set_compose_key(&self, value: &str) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn system_layout_switch(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_system_layout_switch(&self, on: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn trackpad_tap_to_click(&self) -> zbus::Result<bool>;
     #[zbus(property)]
     fn set_trackpad_tap_to_click(&self, on: bool) -> zbus::Result<()>;
@@ -364,7 +372,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 83] = [
+pub const CONFIG_SETTINGS: [SettingId; 85] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::ClockFormat,
@@ -415,6 +423,8 @@ pub const CONFIG_SETTINGS: [SettingId; 83] = [
     SettingId::KeyRepeatDelay,
     SettingId::InputSources,
     SettingId::CapsLock,
+    SettingId::ComposeKey,
+    SettingId::SystemLayoutSwitch,
     SettingId::TrackpadTapToClick,
     SettingId::TrackpadNaturalScrolling,
     SettingId::TrackpadSpeed,
@@ -651,6 +661,8 @@ impl SettingsClient {
             SettingId::KeyRepeatDelay => Value::Number(self.config.key_repeat_delay()?),
             SettingId::InputSources => Value::Codes(self.config.input_sources()?),
             SettingId::CapsLock => Value::Keyword(self.config.caps_lock()?),
+            SettingId::ComposeKey => Value::Keyword(self.config.compose_key()?),
+            SettingId::SystemLayoutSwitch => Value::Flag(self.config.system_layout_switch()?),
             SettingId::TrackpadTapToClick => Value::Flag(self.config.trackpad_tap_to_click()?),
             SettingId::TrackpadNaturalScrolling => {
                 Value::Flag(self.config.trackpad_natural_scrolling()?)
@@ -831,6 +843,12 @@ impl SettingsClient {
                 self.config.set_input_sources(codes.clone())
             }
             (SettingId::CapsLock, Value::Keyword(keyword)) => self.config.set_caps_lock(keyword),
+            (SettingId::ComposeKey, Value::Keyword(keyword)) => {
+                self.config.set_compose_key(keyword)
+            }
+            (SettingId::SystemLayoutSwitch, Value::Flag(on)) => {
+                self.config.set_system_layout_switch(*on)
+            }
             (SettingId::AlertSound, Value::Keyword(keyword)) => {
                 self.config.set_alert_sound(keyword)?;
                 bande_sound::play(

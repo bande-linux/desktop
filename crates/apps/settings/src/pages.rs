@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::sync::LazyLock;
 use std::time::Instant;
 
 use bande_l10n::{text, tr};
@@ -37,6 +38,12 @@ const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
 const ROW_INSET: f32 = Spacing::M as f32;
 const VOLUME_STEP: f64 = 1.0 / 16.0;
+
+static SYSTEM_SWITCHES_LAYOUTS: LazyLock<bool> = LazyLock::new(|| {
+    bande_config::read_system_xkb_options()
+        .iter()
+        .any(|option| bande_config::switches_layouts(option))
+});
 pub(crate) const FIELD_SIZE: f32 = 13.0;
 
 pub(crate) type Widgets = Vec<Box<dyn Widget>>;
@@ -1327,6 +1334,7 @@ impl SettingsView {
             SettingId::BatteryDisplayOffAfter | SettingId::BatterySleepAfter => battery,
             SettingId::LidOnPower => power.is_some_and(|power| power.lid),
             SettingId::AutomaticTime => self.time.as_ref().is_some_and(|time| time.can_automatic),
+            SettingId::SystemLayoutSwitch => *SYSTEM_SWITCHES_LAYOUTS,
             _ => true,
         }
     }

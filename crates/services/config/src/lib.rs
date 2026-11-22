@@ -385,6 +385,81 @@ impl CapsLock {
             Self::Off => Some("caps:none"),
         }
     }
+
+    /// Whether `option` is an xkb option that changes what Caps Lock does.
+    pub fn remaps(option: &str) -> bool {
+        option.starts_with("caps:")
+            || matches!(option, "ctrl:nocaps" | "ctrl:swapcaps" | "compose:caps")
+    }
+
+    /// What Caps Lock does under the xkb `options`.
+    pub fn of_options(options: &[String]) -> Self {
+        options
+            .iter()
+            .find_map(|option| match option.as_str() {
+                "ctrl:nocaps" | "ctrl:swapcaps" | "caps:ctrl_modifier" => Some(Self::Control),
+                "compose:caps" => Some(Self::Compose),
+                "caps:none" => Some(Self::Off),
+                escape if escape.starts_with("caps:") && escape.contains("escape") => {
+                    Some(Self::Escape)
+                }
+                _ => None,
+            })
+            .unwrap_or(Self::CapsLock)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ComposeKey {
+    #[default]
+    None,
+    RightAlt,
+    RightControl,
+    Menu,
+}
+
+impl ComposeKey {
+    pub const ALL: [Self; 4] = [Self::None, Self::RightAlt, Self::RightControl, Self::Menu];
+
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::RightAlt => "right-alt",
+            Self::RightControl => "right-control",
+            Self::Menu => "menu",
+        }
+    }
+
+    pub fn xkb_option(self) -> Option<&'static str> {
+        match self {
+            Self::None => None,
+            Self::RightAlt => Some("compose:ralt"),
+            Self::RightControl => Some("compose:rctrl"),
+            Self::Menu => Some("compose:menu"),
+        }
+    }
+
+    /// Whether `option` is an xkb option that makes a key other than Caps Lock compose.
+    pub fn remaps(option: &str) -> bool {
+        option.starts_with("compose:") && option != "compose:caps"
+    }
+
+    /// The compose key under the xkb `options`.
+    pub fn of_options(options: &[String]) -> Self {
+        options
+            .iter()
+            .find_map(|option| {
+                Self::ALL
+                    .into_iter()
+                    .find(|key| key.xkb_option() == Some(option.as_str()))
+            })
+            .unwrap_or(Self::None)
+    }
+}
+
+/// Whether `option` is an xkb option that switches between layouts.
+pub fn switches_layouts(option: &str) -> bool {
+    option.starts_with("grp:")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -392,7 +467,9 @@ pub struct Keyboard {
     pub repeat_rate: u32,
     pub repeat_delay: Duration,
     pub input_sources: Vec<InputSource>,
-    pub caps_lock: CapsLock,
+    pub caps_lock: Option<CapsLock>,
+    pub compose: Option<ComposeKey>,
+    pub system_switch: bool,
 }
 
 impl Keyboard {
@@ -946,7 +1023,9 @@ impl Default for Config {
                 repeat_rate: 25,
                 repeat_delay: Duration::from_millis(600),
                 input_sources: Vec::new(),
-                caps_lock: CapsLock::CapsLock,
+                caps_lock: None,
+                compose: None,
+                system_switch: true,
             },
             trackpad: Trackpad::default(),
             mouse: Mouse::default(),
@@ -1475,11 +1554,18 @@ impl Parser<'_> {
                 }
                 "input-sources" => keyboard.input_sources = self.input_sources(child)?,
                 "caps-lock" => {
-                    keyboard.caps_lock = self.keyword(
+                    keyboard.caps_lock = Some(self.keyword(
                         child,
                         &CapsLock::ALL.map(|choice| (choice.keyword(), choice)),
-                    )?
+                    )?)
                 }
+                "compose" => {
+                    keyboard.compose = Some(self.keyword(
+                        child,
+                        &ComposeKey::ALL.map(|choice| (choice.keyword(), choice)),
+                    )?)
+                }
+                "system-switch" => keyboard.system_switch = self.flag(child)?,
                 _ => return Err(self.unknown_child("keyboard", child)),
             }
             Ok(())

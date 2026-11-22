@@ -4,11 +4,11 @@ use std::time::Duration;
 use kdl::{KdlDocument, KdlEntry, KdlEntryFormat, KdlNode, KdlValue};
 
 use crate::{
-    Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, Config,
-    ConfigError, DEFAULT_BAR_GAP, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging, FocusSchedule,
-    InputSource, LidOnPower, Mouse, NightLight, Placement, PrimaryButton, ScrollMethod, Search,
-    SearchCategory, SecondaryClick, Sound, Style, Suspend, Trackpad, WallpaperFit,
-    WallpaperVariant, accent_keyword, same_displays,
+    Accent, Accessibility, AlertSound, Appearance, BarEdge, CapsLock, ClockFormat, ComposeKey,
+    Config, ConfigError, DEFAULT_BAR_GAP, DEFAULT_BAR_ICON_SIZE, DisplaySettings, Dragging,
+    FocusSchedule, InputSource, LidOnPower, Mouse, NightLight, Placement, PrimaryButton,
+    ScrollMethod, Search, SearchCategory, SecondaryClick, Sound, Style, Suspend, Trackpad,
+    WallpaperFit, WallpaperVariant, accent_keyword, same_displays,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,6 +45,8 @@ pub enum Setting {
     KeyRepeatDelay(Duration),
     InputSources(Vec<InputSource>),
     CapsLock(CapsLock),
+    Compose(ComposeKey),
+    SystemSwitch(bool),
     TrackpadTapToClick(bool),
     TrackpadNaturalScrolling(bool),
     TrackpadSpeed(f64),
@@ -266,7 +268,19 @@ impl Setting {
                 &mut document,
                 Some("keyboard"),
                 "caps-lock",
-                (*caps_lock != CapsLock::default()).then(|| caps_lock.keyword().into()),
+                Some(caps_lock.keyword().into()),
+            ),
+            Self::Compose(compose) => set(
+                &mut document,
+                Some("keyboard"),
+                "compose",
+                Some(compose.keyword().into()),
+            ),
+            Self::SystemSwitch(on) => set(
+                &mut document,
+                Some("keyboard"),
+                "system-switch",
+                (!*on).then_some(KdlValue::Bool(false)),
             ),
             Self::TrackpadTapToClick(on) => set(
                 &mut document,

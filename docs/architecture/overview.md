@@ -198,7 +198,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   appearance "dark"             // "dark" (default) | "light" | "automatic"
   bar { edge "left"; size 40; auto-hide #false; floating #true; gap 8 }   // edge "left" | "bottom" | "right" | "top"
   idle { screen-saver-after "5m"; display-off-after "10m"; require-password-after "immediately"; display-off-after-on-battery "5m" }   // or "never"; suspend-after and suspend-after-on-battery follow the display unless set
-  keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
+  keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape"; compose "right-alt"; system-switch #false }   // caps-lock and compose follow XKBOPTIONS unless set; system-switch #false drops its grp: options
   trackpad { tap-to-click #true; natural-scrolling #true }
   search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false
   display "Example EX27 0001" { scale 1.5; refresh-rate 120; variable-refresh #false }   // variable refresh is on unless #false

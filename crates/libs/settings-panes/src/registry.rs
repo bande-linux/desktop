@@ -437,6 +437,8 @@ pub enum SettingId {
     KeyRepeatDelay,
     InputSources,
     CapsLock,
+    ComposeKey,
+    SystemLayoutSwitch,
     Shortcuts,
     TrackpadTapToClick,
     TrackpadNaturalScrolling,
@@ -1679,12 +1681,19 @@ fn keyboard_pane() -> Pane {
         vec![
             section(
                 Some(tr!("Input sources")),
-                vec![list(
-                    SettingId::InputSources,
-                    tr!("Input sources"),
-                    tr!("keyboard layout, language, input method, switch, dvorak, qwerty, azerty"),
-                    List::InputSources,
-                )],
+                vec![
+                    list(
+                        SettingId::InputSources,
+                        tr!("Input sources"),
+                        tr!("keyboard layout, language, input method, switch, dvorak, qwerty, azerty"),
+                        List::InputSources,
+                    ),
+                    switch(
+                        SettingId::SystemLayoutSwitch,
+                        tr!("Also switch with the keys set when installing"),
+                        tr!("alt shift, ctrl shift, layout switch, toggle, xkb, installer"),
+                    ),
+                ],
             ),
             section(
                 Some(tr!("Key repeat")),
@@ -1729,7 +1738,8 @@ fn keyboard_pane() -> Pane {
             .noted(tr!("As you type, the text on the left is replaced with the text on the right.")),
             section(
                 Some(tr!("Modifier keys")),
-                vec![setting(
+                vec![
+                    setting(
                     SettingId::CapsLock,
                     tr!("Caps Lock key"),
                     tr!("modifier, escape, control, compose, uppercase"),
@@ -1740,7 +1750,19 @@ fn keyboard_pane() -> Pane {
                         (tr!("Compose"), "compose"),
                         (tr!("No action"), "off"),
                     ])),
-                )],
+                ),
+                setting(
+                    SettingId::ComposeKey,
+                    tr!("Compose key"),
+                    tr!("compose, dead keys, accents, special characters, right alt, menu"),
+                    Kind::Menu(keyword_choices(vec![
+                        (tr!("None"), "none"),
+                        (tr!("Right Alt"), "right-alt"),
+                        (tr!("Right Control"), "right-control"),
+                        (tr!("Menu"), "menu"),
+                    ])),
+                ),
+                ],
             ),
             section(
                 None,

@@ -64,8 +64,8 @@ msgstr "Mus"
 msgid "Trackpad"
 msgstr "Styrplatta"
 
-msgid "Printers & Scanners"
-msgstr "Skrivare och skannrar"
+msgid "Printers"
+msgstr "Skrivare"
 
 msgid "Sharing"
 msgstr "Delning"
@@ -274,8 +274,8 @@ msgstr "pekare, markör, klicka, scrolla, hjul, knappar"
 msgid "touchpad, pointer, cursor, tap, click, scroll"
 msgstr "touchpad, pekare, markör, tryck, klicka, scrolla"
 
-msgid "print, printer, cups, queue, scanner, ipp, airprint"
-msgstr "skriv ut, skrivare, cups, kö, skanner, ipp, airprint"
+msgid "print, printer, cups, queue, ipp, airprint"
+msgstr "skriv ut, skrivare, cups, kö, ipp, airprint"
 
 msgid "share, file sharing, samba, smb, remote login, ssh, network folder"
 msgstr "dela, fildelning, samba, smb, fjärrinloggning, ssh, nätverksmapp"
@@ -776,9 +776,6 @@ msgstr "snabbtangenter, tangenter, super, kommando, kombinationer"
 
 msgid "file sharing, samba, smb, remote login, ssh, shared folders"
 msgstr "fildelning, samba, smb, fjärrinloggning, ssh, delade mappar"
-
-msgid "Printers"
-msgstr "Skrivare"
 
 msgid "default printer, queue, jobs, pause, resume, remove, cancel"
 msgstr "standardskrivare, kö, jobb, pausa, återuppta, ta bort, avbryt"

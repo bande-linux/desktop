@@ -192,7 +192,7 @@ impl PaneId {
             Self::KeyboardShortcuts => tr!("Keyboard Shortcuts"),
             Self::Mouse => tr!("Mouse"),
             Self::Trackpad => tr!("Trackpad"),
-            Self::Printers => tr!("Printers & Scanners"),
+            Self::Printers => tr!("Printers"),
             Self::Sharing => tr!("Sharing"),
             Self::Power => tr!("Power"),
             Self::LockScreen => tr!("Lock Screen"),
@@ -288,7 +288,7 @@ impl PaneId {
             }
             Self::Mouse => tr!("pointer, cursor, click, scroll, wheel, buttons"),
             Self::Trackpad => tr!("touchpad, pointer, cursor, tap, click, scroll"),
-            Self::Printers => tr!("print, printer, cups, queue, scanner, ipp, airprint"),
+            Self::Printers => tr!("print, printer, cups, queue, ipp, airprint"),
             Self::Sharing => {
                 tr!("share, file sharing, samba, smb, remote login, ssh, network folder")
             }

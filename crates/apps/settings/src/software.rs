@@ -1,4 +1,5 @@
 mod badge;
+mod firmware;
 mod idle;
 mod stale;
 
@@ -42,6 +43,7 @@ const IDLE_FOR: Duration = Duration::from_secs(5 * 60);
 pub struct Package {
     pub id: String,
     pub name: String,
+    pub from: String,
     pub version: String,
     pub summary: String,
     pub size: u64,
@@ -50,7 +52,14 @@ pub struct Package {
 
 impl Package {
     pub(crate) fn needs_restart(&self) -> bool {
-        matches!(self.class, Class::Boot | Class::Offline)
+        matches!(
+            self.class,
+            Class::Boot | Class::Offline | Class::Firmware { at_restart: true }
+        )
+    }
+
+    fn is_firmware(&self) -> bool {
+        matches!(self.class, Class::Firmware { .. })
     }
 }
 
@@ -71,7 +80,7 @@ pub enum Refresh {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reboot {
     Finish,
-    Install(usize),
+    Install { count: usize, firmware: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,7 +103,10 @@ pub enum SoftwareState {
     Installing {
         percent: Option<u32>,
     },
-    Prepared(usize),
+    Prepared {
+        count: usize,
+        firmware: bool,
+    },
     Installed {
         count: usize,
         reboot: Option<Reboot>,
@@ -111,9 +123,9 @@ pub enum SoftwareState {
 impl SoftwareState {
     pub(crate) fn pending(&self) -> Option<String> {
         match self {
-            Self::Prepared(_)
+            Self::Prepared { .. }
             | Self::Installed {
-                reboot: Some(Reboot::Install(_)),
+                reboot: Some(Reboot::Install { .. }),
                 ..
             } => Some(tr!("Restart to install updates")),
             Self::Installed {
@@ -201,6 +213,7 @@ fn flatpak_updates() -> Vec<Package> {
                 true => update.id,
                 false => update.name,
             },
+            from: String::new(),
             version: update.version,
             summary: String::new(),
             size: 0,
@@ -217,23 +230,56 @@ fn refresh_flatpak_catalogue() {
     }
 }
 
-pub fn check(client: &Client, refresh: Refresh) -> SoftwareState {
+fn firmware_updates(system: &Connection, refresh: bool) -> Vec<Package> {
+    if refresh
+        && let Err(error) = firmware::refresh(system)
+        && !matches!(error, firmware::Error::Missing)
+    {
+        tracing::warn!("cannot refresh the firmware metadata: {error}");
+    }
+    let updates = firmware::updates(system).unwrap_or_else(|error| {
+        if !matches!(error, firmware::Error::Missing) {
+            tracing::warn!("cannot look for firmware updates: {error}");
+        }
+        Vec::new()
+    });
+    let mut packages: Vec<Package> = updates
+        .into_iter()
+        .map(|update| Package {
+            id: update.device,
+            name: update.name,
+            from: update.from,
+            version: update.to,
+            summary: update.notes,
+            size: update.size,
+            class: Class::Firmware {
+                at_restart: update.at_restart,
+            },
+        })
+        .collect();
+    packages.sort_by(|a, b| a.name.cmp(&b.name));
+    packages
+}
+
+pub fn check(system: &Connection, client: &Client, refresh: Refresh) -> SoftwareState {
     let checked = || -> Result<SoftwareState, Error> {
         let may_fetch = refresh != Refresh::Never;
-        if refresh == Refresh::Always
-            || (may_fetch && client.seconds_since_refresh()? >= FRESH_SECONDS)
-        {
+        let refreshing = refresh == Refresh::Always
+            || (may_fetch && client.seconds_since_refresh()? >= FRESH_SECONDS);
+        if refreshing {
             client.refresh(false, &|_| {})?;
             refresh_flatpak_catalogue();
         }
         let found = client.updates()?;
         let flatpaks = may_fetch.then(flatpak_updates).unwrap_or_default();
-        if found.is_empty() && flatpaks.is_empty() {
+        let mut listed = firmware_updates(system, refreshing);
+        if found.is_empty() && flatpaks.is_empty() && listed.is_empty() {
             return Ok(SoftwareState::UpToDate);
         }
         let ids: Vec<String> = found.iter().map(|package| package.id.clone()).collect();
         if ids.is_empty() {
-            return Ok(SoftwareState::Available(flatpaks));
+            listed.extend(flatpaks);
+            return Ok(SoftwareState::Available(listed));
         }
         let sizes: HashMap<String, u64> = client
             .details(&ids)?
@@ -257,13 +303,15 @@ pub fn check(client: &Client, refresh: Refresh) -> SoftwareState {
                 size: sizes.get(&package.id).copied().unwrap_or(0),
                 id: package.id,
                 name: package.name,
+                from: String::new(),
                 version: package.version,
                 summary: package.summary,
             })
             .collect();
         packages.extend(flatpaks);
         packages.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(SoftwareState::Available(packages))
+        listed.extend(packages);
+        Ok(SoftwareState::Available(listed))
     };
     checked().unwrap_or_else(|error| broken(Stage::Check, &error))
 }
@@ -289,12 +337,27 @@ fn finished_offline(system: &Connection) -> Result<Option<SoftwareState>, Error>
     }))
 }
 
+fn pending_firmware(system: &Connection) -> usize {
+    firmware::pending(system).unwrap_or_else(|error| {
+        if !matches!(error, firmware::Error::Missing) {
+            tracing::warn!("cannot read the pending firmware updates: {error}");
+        }
+        0
+    })
+}
+
 fn waiting_offline(system: &Connection) -> Result<Option<SoftwareState>, Error> {
-    if !offline::triggered(system)? {
-        return Ok(None);
-    }
-    let prepared = offline::prepared(system)?;
-    Ok((!prepared.is_empty()).then_some(SoftwareState::Prepared(prepared.len())))
+    let prepared = match offline::triggered(system)? {
+        true => offline::prepared(system)?.len(),
+        false => 0,
+    };
+    let firmware = pending_firmware(system);
+    Ok(
+        (prepared + firmware > 0).then_some(SoftwareState::Prepared {
+            count: prepared + firmware,
+            firmware: firmware > 0,
+        }),
+    )
 }
 
 pub fn last_check(client: &Client) -> Option<i64> {
@@ -320,7 +383,7 @@ pub fn open_updates(session: &Connection, system: &Connection, client: &Client) 
                 true => Refresh::WhenStale,
                 false => Refresh::Never,
             };
-            match check(client, refresh) {
+            match check(system, client, refresh) {
                 SoftwareState::UpToDate => installed_earlier(),
                 state => state,
             }
@@ -443,10 +506,146 @@ fn update_flatpaks(
     )
 }
 
+fn firmware_reason(error: &firmware::Error) -> String {
+    tracing::warn!("fwupd: {error}");
+    match error {
+        firmware::Error::Failed(problem, _) => match problem {
+            firmware::Problem::BatteryLow => {
+                tr!("The battery is too low to update firmware safely. Charge it and try again.")
+            }
+            firmware::Problem::DeviceBatteryLow => {
+                tr!("The device's battery is too low. Charge it and try again.")
+            }
+            firmware::Problem::AcPowerRequired => {
+                tr!("Plug in the computer to install this firmware update.")
+            }
+            firmware::Problem::LidClosed => tr!("Open the lid to install this firmware update."),
+            firmware::Problem::AlreadyPending => {
+                tr!("A firmware update is already waiting for a restart.")
+            }
+            firmware::Problem::Busy => tr!("The device is busy. Try again in a moment."),
+            firmware::Problem::NotReachable => {
+                tr!("The device isn't connected. Connect it and try again.")
+            }
+            firmware::Problem::NeedsUserAction => {
+                tr!("The device needs your attention. Follow its instructions and try again.")
+            }
+            firmware::Problem::NotAuthorized => tr!("Only an administrator can change this."),
+            firmware::Problem::Invalid => {
+                tr!("The firmware file is damaged or not signed. Try again later.")
+            }
+            firmware::Problem::UpToDate | firmware::Problem::Other => {
+                tr!("Something went wrong. Try again later.")
+            }
+        },
+        firmware::Error::Offline(_) => {
+            tr!("You're offline. Connect to the internet and try again.")
+        }
+        firmware::Error::Download(_) => tr!("Could not download the firmware. Try again later."),
+        firmware::Error::Missing | firmware::Error::Vanished | firmware::Error::Bus(_) => {
+            tr!("The firmware update service stopped. Try again in a moment.")
+        }
+    }
+}
+
+struct Flashed {
+    now: usize,
+    at_restart: usize,
+}
+
+fn install_firmware(
+    system: &Connection,
+    devices: &[&Package],
+    report: &dyn Fn(SoftwareState),
+) -> Result<Flashed, String> {
+    let mut flashed = Flashed {
+        now: 0,
+        at_restart: 0,
+    };
+    for device in devices {
+        let waits = firmware::install(system, &device.id, &|step| {
+            report(match step {
+                firmware::Step::Downloading(percent) => SoftwareState::Downloading { percent },
+                firmware::Step::Installing(percent) => SoftwareState::Installing { percent },
+            })
+        })
+        .map_err(|error| {
+            tr!(
+                "{device}: {reason}",
+                device = device.name.clone(),
+                reason = firmware_reason(&error)
+            )
+        })?;
+        match waits {
+            true => flashed.at_restart += 1,
+            false => flashed.now += 1,
+        }
+    }
+    Ok(flashed)
+}
+
+fn with_firmware(state: SoftwareState, flashed: &Flashed) -> SoftwareState {
+    let firmware = flashed.at_restart > 0;
+    match state {
+        SoftwareState::Prepared { count, .. } => SoftwareState::Prepared {
+            count: count + flashed.at_restart,
+            firmware,
+        },
+        SoftwareState::Installed {
+            count,
+            reboot,
+            logout,
+            apps,
+        } => SoftwareState::Installed {
+            count: count + flashed.now,
+            reboot: match reboot {
+                Some(Reboot::Install { count, .. }) => Some(Reboot::Install {
+                    count: count + flashed.at_restart,
+                    firmware,
+                }),
+                _ if firmware => Some(Reboot::Install {
+                    count: flashed.at_restart,
+                    firmware,
+                }),
+                other => other,
+            },
+            logout,
+            apps,
+        },
+        other => other,
+    }
+}
+
 pub fn update(
     system: &Connection,
     client: &Client,
     packages: &[Package],
+    report: &dyn Fn(SoftwareState),
+) -> SoftwareState {
+    let (devices, packages): (Vec<&Package>, Vec<&Package>) =
+        packages.iter().partition(|package| package.is_firmware());
+    let state = update_packages(system, client, &packages, report);
+    if devices.is_empty()
+        || !matches!(
+            state,
+            SoftwareState::Installed { .. } | SoftwareState::Prepared { .. }
+        )
+    {
+        return state;
+    }
+    match install_firmware(system, &devices, report) {
+        Ok(flashed) => with_firmware(state, &flashed),
+        Err(reason) => SoftwareState::Failed {
+            during: Stage::Install,
+            reason,
+        },
+    }
+}
+
+fn update_packages(
+    system: &Connection,
+    client: &Client,
+    packages: &[&Package],
     report: &dyn Fn(SoftwareState),
 ) -> SoftwareState {
     let (flatpaks, debian): (Vec<&Package>, Vec<&Package>) = packages
@@ -477,7 +676,10 @@ pub fn update(
             pulls_offline(client, &now_ids).map_err(|error| (Stage::Install, error))?;
         if now.is_empty() || pulls_offline {
             prepare(system, client, &ids(&debian), report)?;
-            return Ok(SoftwareState::Prepared(debian.len()));
+            return Ok(SoftwareState::Prepared {
+                count: debian.len(),
+                firmware: false,
+            });
         }
         let applied = client
             .update(&now_ids, Mode::Apply, &|progress: Progress| {
@@ -500,7 +702,10 @@ pub fn update(
             .then_some(Reboot::Finish)
         } else {
             prepare(system, client, &ids(&offline), report)?;
-            Some(Reboot::Install(offline.len()))
+            Some(Reboot::Install {
+                count: offline.len(),
+                firmware: false,
+            })
         };
         Ok(SoftwareState::Installed {
             count: now.len() + flatpaks.len(),
@@ -614,8 +819,13 @@ pub enum Reply {
     Gone,
 }
 
-pub(crate) fn restart_hint() -> String {
-    tr!("Updates install while the computer restarts")
+pub(crate) fn restart_hint(firmware: bool) -> String {
+    match firmware {
+        true => tr!(
+            "Updates install while the computer restarts. Keep the computer plugged in until it has started again."
+        ),
+        false => tr!("Updates install while the computer restarts"),
+    }
 }
 
 pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Result<Option<u32>> {
@@ -637,13 +847,13 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
         }
         _ => {}
     }
-    if let Ok(Some(SoftwareState::Prepared(count))) = waiting_offline(system) {
+    if let Ok(Some(SoftwareState::Prepared { count, firmware })) = waiting_offline(system) {
         let summary = trn!(
             "Restart to install 1 update",
             "Restart to install {count} updates",
             count = count
         );
-        return announce(session, &summary, &restart_hint());
+        return announce(session, &summary, &restart_hint(firmware));
     }
     if restart_pending() {
         return announce(
@@ -659,7 +869,7 @@ pub fn announce_updates(session: &Connection, system: &Connection) -> zbus::Resu
     if !check_due(session, &client) {
         return Ok(None);
     }
-    let checked = check(&client, Refresh::Always);
+    let checked = check(system, &client, Refresh::Always);
     badge::remember(&checked);
     let SoftwareState::Available(packages) = checked else {
         return Ok(None);
@@ -723,6 +933,7 @@ fn automatic(session: &Connection) -> bool {
 fn download_in_background(client: &Client, packages: &[Package]) {
     let (flatpaks, debian): (Vec<&Package>, Vec<&Package>) = packages
         .iter()
+        .filter(|package| !package.is_firmware())
         .partition(|package| package.class == Class::Flatpak);
     if !debian.is_empty()
         && let Err(error) = client.download(&ids(&debian), &|_| {})
@@ -741,8 +952,13 @@ struct Sorted {
 }
 
 fn sort_updates(client: &Client, packages: Vec<Package>, live: bool) -> Sorted {
+    let firmware = packages
+        .iter()
+        .filter(|package| package.class == Class::Firmware { at_restart: false })
+        .count();
     let (mut now, later): (Vec<Package>, Vec<Package>) = packages
         .into_iter()
+        .filter(|package| package.class != Class::Firmware { at_restart: false })
         .partition(|package| matches!(package.class, Class::Flatpak | Class::Live));
     let debian: Vec<&Package> = now
         .iter()
@@ -751,13 +967,13 @@ fn sort_updates(client: &Client, packages: Vec<Package>, live: bool) -> Sorted {
     let count = debian.len();
     let mut sorted = Sorted {
         now: Vec::new(),
-        approve: 0,
+        approve: firmware,
         restart: later.len(),
     };
     if pulls_offline(client, &ids(&debian)).unwrap_or(true) {
         sorted.restart += count;
     } else if !live {
-        sorted.approve = count;
+        sorted.approve += count;
     } else {
         sorted.now = now;
         return sorted;
@@ -778,7 +994,7 @@ fn update_automatically(
         tracing::warn!("cannot wait for the computer to be idle: {error}");
         return announce_available(session, packages);
     }
-    let SoftwareState::Available(packages) = check(client, Refresh::WhenStale) else {
+    let SoftwareState::Available(packages) = check(system, client, Refresh::WhenStale) else {
         return Ok(None);
     };
     let Sorted {
@@ -797,14 +1013,14 @@ fn update_automatically(
         Some(SoftwareState::Failed { reason, .. }) => {
             announce(session, &tr!("Could not install updates"), &reason)
         }
-        Some(SoftwareState::Prepared(count)) => announce(
+        Some(SoftwareState::Prepared { count, firmware }) => announce(
             session,
             &trn!(
                 "Restart to install 1 update",
                 "Restart to install {count} updates",
                 count = count
             ),
-            &restart_hint(),
+            &restart_hint(firmware),
         ),
         _ if approve + restart > 0 => announce_waiting(session, approve, restart),
         Some(SoftwareState::Installed {
@@ -864,7 +1080,7 @@ pub fn follow_software(
                 }
                 SoftwareCommand::Check => {
                     updates.send(Update::Software(SoftwareState::Checking));
-                    check(&client, Refresh::Always)
+                    check(&system, &client, Refresh::Always)
                 }
                 SoftwareCommand::Update(packages) => {
                     updates.send(Update::Software(SoftwareState::Downloading {
@@ -885,7 +1101,7 @@ pub fn follow_software(
                         }));
                     });
                     match repaired {
-                        Ok(()) => check(&client, Refresh::WhenStale),
+                        Ok(()) => check(&system, &client, Refresh::WhenStale),
                         Err(error) => broken(Stage::Install, &error),
                     }
                 }

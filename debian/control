@@ -850,6 +850,7 @@ Recommends: accountsservice,
  pipewire,
  wireplumber,
  bande-notify (= ${binary:Version}),
+ fwupd,
  packagekit,
  power-profiles-daemon,
  upower,
@@ -860,8 +861,8 @@ Description: Bande Settings: panes for the desktop and its devices with ranked s
  network), Desktop (appearance and wallpaper, the bar, notifications per
  app, accessibility), Devices (displays, sound, keyboard, trackpad and
  mouse) and System (power, users and groups, apps that open at login,
- language and time, about this computer with storage and software
- update), with a search field that ranks the matching settings and marks
+ language and time, about this computer with storage, software and
+ firmware updates), with a search field that ranks the matching settings and marks
  them. Every pane follows changes made elsewhere while it is open.
  Desktop settings go through org.bande.Config, which writes config.kdl. A
  polkit rule lets administrators (members of sudo) change the time zone,

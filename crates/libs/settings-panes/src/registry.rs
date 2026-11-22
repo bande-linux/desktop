@@ -1760,6 +1760,7 @@ fn keyboard_pane() -> Pane {
                         (tr!("Right Alt"), "right-alt"),
                         (tr!("Right Control"), "right-control"),
                         (tr!("Menu key"), "menu"),
+                        (tr!("Set by the system"), "system"),
                     ])),
                 ),
                 ],

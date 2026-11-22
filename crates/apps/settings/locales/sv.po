@@ -2220,11 +2220,11 @@ msgstr "Skriv datum och tid som år-månad-dag timmar:minuter, till exempel 2026
 msgid "Keep these display settings?"
 msgstr "Vill du behålla de här skärminställningarna?"
 
-msgid "Revert"
-msgstr "Återställ"
-
 msgid "Keep"
 msgstr "Behåll"
+
+msgid "Revert"
+msgstr "Återställ"
 
 msgid "Fixed"
 msgstr "Fast"

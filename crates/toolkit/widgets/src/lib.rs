@@ -382,8 +382,8 @@ pub trait Widget: Any {
         false
     }
 
-    fn shortcut(&self) -> Option<Key> {
-        None
+    fn shortcuts(&self) -> &[Key] {
+        &[]
     }
 
     fn tooltip(&self) -> Option<&str> {
@@ -471,7 +471,7 @@ fn hit_path(widget: &dyn Widget, point: Point, path: &mut Vec<WidgetId>) -> bool
 }
 
 fn equivalent(widget: &dyn Widget, key: Key) -> Option<WidgetId> {
-    if widget.shortcut() == Some(key) {
+    if widget.shortcuts().contains(&key) {
         return Some(widget.id());
     }
     widget
@@ -686,14 +686,16 @@ impl Ui {
         });
         let mut order = Vec::new();
         focus_order(self.active(), &self.cx, &mut order);
-        let primary = equivalent(self.active(), Key::Enter);
-        self.cx.focus = order
-            .into_iter()
-            .find(|id| {
-                self.lookup(*id)
-                    .is_some_and(|widget| widget.shortcut().is_none())
+        let primary = equivalent(self.active(), Key::Enter).filter(|id| self.accepts_focus(*id));
+        let safe = primary.filter(|id| equivalent(self.active(), Key::Escape) == Some(*id));
+        self.cx.focus = safe
+            .or_else(|| {
+                order.into_iter().find(|id| {
+                    self.lookup(*id)
+                        .is_some_and(|widget| widget.shortcuts().is_empty())
+                })
             })
-            .or(primary.filter(|id| self.accepts_focus(*id)));
+            .or(primary);
     }
 
     pub fn set_sheet_top(&mut self, top: f32) {

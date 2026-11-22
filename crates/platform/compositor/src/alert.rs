@@ -2,8 +2,10 @@ use std::cell::RefCell;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use accesskit::{Node, NodeId, Role};
 use bande_l10n::tr;
 
+use crate::access::{Announcer, window_with};
 use crate::label::{Label, LabelStyle, Look};
 use crate::session::SHELL;
 use crate::state::{Compositor, OutputElement, State};
@@ -20,6 +22,7 @@ const ALERT_STYLE: LabelStyle = LabelStyle {
 };
 const ALERT_MARGIN: f64 = 24.0;
 const ALERT_GAP: f64 = 8.0;
+const FIRST_ALERT: u64 = 2;
 
 struct Alert {
     executable: PathBuf,
@@ -45,6 +48,30 @@ pub(crate) struct Alerts {
     alerts: Vec<Alert>,
     generation: u64,
     rendered: RefCell<Vec<Rendered>>,
+    announcer: Announcer,
+}
+
+impl Alerts {
+    fn announce(&mut self) {
+        self.announcer.withdraw();
+        if self.alerts.is_empty() {
+            return;
+        }
+        let (ids, nodes): (Vec<NodeId>, Vec<(NodeId, Node)>) = self
+            .alerts
+            .iter()
+            .zip(FIRST_ALERT..)
+            .map(|(alert, id)| {
+                let mut node = Node::new(Role::Alert);
+                node.set_label(alert.message.as_str());
+                (NodeId(id), (NodeId(id), node))
+            })
+            .unzip();
+        let focus = ids.first().copied();
+        self.announcer.publish(true, || {
+            window_with(&tr!("Desktop problems"), ids, nodes, focus)
+        });
+    }
 }
 
 impl State {
@@ -64,6 +91,7 @@ impl State {
         }
         tracing::error!("{message}");
         alerts.generation += 1;
+        alerts.announce();
         self.needs_redraw = true;
     }
 
@@ -95,6 +123,7 @@ impl State {
         alerts.alerts.retain(|alert| alert.executable != executable);
         if alerts.alerts.len() != before {
             alerts.generation += 1;
+            alerts.announce();
             self.needs_redraw = true;
         }
     }

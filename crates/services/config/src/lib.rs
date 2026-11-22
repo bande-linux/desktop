@@ -416,6 +416,7 @@ pub enum ComposeKey {
     RightAlt,
     RightControl,
     Menu,
+    System,
 }
 
 impl ComposeKey {
@@ -427,12 +428,13 @@ impl ComposeKey {
             Self::RightAlt => "right-alt",
             Self::RightControl => "right-control",
             Self::Menu => "menu",
+            Self::System => "system",
         }
     }
 
     pub fn xkb_option(self) -> Option<&'static str> {
         match self {
-            Self::None => None,
+            Self::None | Self::System => None,
             Self::RightAlt => Some("compose:ralt"),
             Self::RightControl => Some("compose:rctrl"),
             Self::Menu => Some("compose:menu"),
@@ -444,15 +446,19 @@ impl ComposeKey {
         option.starts_with("compose:") && option != "compose:caps"
     }
 
-    /// The compose key under the xkb `options`.
+    /// The compose key under the xkb `options`: `System` for a compose option no other choice
+    /// sets.
     pub fn of_options(options: &[String]) -> Self {
         options
             .iter()
-            .find_map(|option| {
+            .filter(|option| Self::remaps(option))
+            .map(|option| {
                 Self::ALL
                     .into_iter()
                     .find(|key| key.xkb_option() == Some(option.as_str()))
+                    .unwrap_or(Self::System)
             })
+            .next()
             .unwrap_or(Self::None)
     }
 }

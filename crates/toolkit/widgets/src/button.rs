@@ -32,6 +32,7 @@ pub struct Button {
 enum ButtonRole {
     Plain,
     Primary,
+    Safe,
     Cancel,
     Quiet,
     Link,
@@ -87,6 +88,14 @@ impl Button {
         }
     }
 
+    /// The default button that also answers Escape: the choice that is safe to take unseen.
+    pub fn safe(self) -> Self {
+        Self {
+            role: ButtonRole::Safe,
+            ..self
+        }
+    }
+
     pub fn cancel(self) -> Self {
         Self {
             role: ButtonRole::Cancel,
@@ -128,7 +137,7 @@ impl Button {
             return TextStyle::new(FONT_SIZE, palette.ink3).weight(TextStyle::MEDIUM);
         }
         match self.role {
-            ButtonRole::Primary => {
+            ButtonRole::Primary | ButtonRole::Safe => {
                 TextStyle::new(FONT_SIZE, palette.on_accent).weight(TextStyle::SEMIBOLD)
             }
             ButtonRole::Destructive => {
@@ -158,7 +167,7 @@ impl Button {
             return self.symbol.is_none().then_some(palette.well);
         }
         match self.role {
-            ButtonRole::Primary => Some(shaded(palette.accent)),
+            ButtonRole::Primary | ButtonRole::Safe => Some(shaded(palette.accent)),
             ButtonRole::Link => None,
             ButtonRole::Destructive => Some(shaded(palette.danger)),
             ButtonRole::Plain | ButtonRole::Cancel if self.symbol.is_none() => {
@@ -301,12 +310,13 @@ impl Widget for Button {
         self.tooltip.as_deref()
     }
 
-    fn shortcut(&self) -> Option<Key> {
+    fn shortcuts(&self) -> &[Key] {
         match self.role {
-            ButtonRole::Primary => Some(Key::Enter),
-            ButtonRole::Cancel => Some(Key::Escape),
+            ButtonRole::Primary => &[Key::Enter],
+            ButtonRole::Safe => &[Key::Enter, Key::Escape],
+            ButtonRole::Cancel => &[Key::Escape],
             ButtonRole::Plain | ButtonRole::Quiet | ButtonRole::Link | ButtonRole::Destructive => {
-                None
+                &[]
             }
         }
     }

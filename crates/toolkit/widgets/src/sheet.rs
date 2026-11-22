@@ -170,6 +170,16 @@ impl Alert {
         self
     }
 
+    /// The choice taken by Enter and Escape alike, for an alert whose other choices must be
+    /// made deliberately.
+    pub fn safe(mut self, title: &str, action: &str) -> Self {
+        let button = self.make(title, action).safe();
+        let at = self.button_count();
+        self.buttons.insert(at, Box::new(button));
+        self.primary_count += 1;
+        self
+    }
+
     pub fn destructive(mut self, title: &str, action: &str) -> Self {
         let button = self.make(title, action).destructive();
         let at = self.button_count();

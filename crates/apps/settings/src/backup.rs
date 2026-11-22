@@ -218,8 +218,7 @@ pub fn follow_backup(
     sender
 }
 
-fn when(seconds: u64) -> String {
-    let formats = DateFormats::from_env();
+fn when(formats: &DateFormats, seconds: u64) -> String {
     let Some(at) = i64::try_from(seconds)
         .ok()
         .and_then(|seconds| jiff::Timestamp::from_second(seconds).ok())
@@ -781,7 +780,10 @@ impl SettingsView {
         let last = if status.last_success == 0 {
             tr!("No backup yet")
         } else {
-            tr!("Last backup: {when}", when = when(status.last_success))
+            tr!(
+                "Last backup: {when}",
+                when = when(&self.date_formats(), status.last_success)
+            )
         };
         let (title, detail, control) = match status.phase.as_str() {
             phase::BACKING_UP => {
@@ -806,7 +808,10 @@ impl SettingsView {
                 let resume = self
                     .backup_button(&tr!("Resume"), BackupIntent::Command(BackupCommand::Resume));
                 (
-                    tr!("Paused until {when}", when = when(status.paused_until)),
+                    tr!(
+                        "Paused until {when}",
+                        when = when(&self.date_formats(), status.paused_until)
+                    ),
                     Some(last),
                     Some(resume),
                 )
@@ -872,7 +877,10 @@ impl SettingsView {
             count = status.versions
         );
         let detail = if status.oldest > 0 {
-            let oldest = tr!("Oldest version: {when}", when = when(status.oldest));
+            let oldest = tr!(
+                "Oldest version: {when}",
+                when = when(&self.date_formats(), status.oldest)
+            );
             format!("{disk}\n{versions}. {oldest}")
         } else {
             disk

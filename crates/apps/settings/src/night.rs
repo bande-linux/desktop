@@ -22,11 +22,12 @@ fn time(text: &str) -> Option<Time> {
     Time::new(hour.parse().ok()?, minute.parse().ok()?, 0, 0).ok()
 }
 
-fn shown(next: Timestamp, now: &Zoned) -> String {
-    DateFormats::from_env().clock_time(&next.to_zoned(now.time_zone().clone()))
+fn shown(formats: &DateFormats, next: Timestamp, now: &Zoned) -> String {
+    formats.clock_time(&next.to_zoned(now.time_zone().clone()))
 }
 
 pub fn night_summary(
+    formats: &DateFormats,
     on: bool,
     custom: Option<(&str, &str)>,
     now: &Zoned,
@@ -44,7 +45,7 @@ pub fn night_summary(
     let Some((night, next)) = scheduled else {
         return tr!("On");
     };
-    let until = shown(next, now);
+    let until = shown(formats, next, now);
     (if night {
         text!("On until {time}")
     } else {
@@ -74,12 +75,12 @@ impl SettingsView {
         match (on, scheduled) {
             (true, Some((true, next))) => Some(tr!(
                 "Do Not Disturb is on until {time}",
-                time = shown(next, &now)
+                time = shown(&self.date_formats(), next, &now)
             )),
             (true, _) => Some(tr!("Do Not Disturb is on")),
             (false, Some((false, next))) => Some(tr!(
                 "Do Not Disturb turns on at {time}",
-                time = shown(next, &now)
+                time = shown(&self.date_formats(), next, &now)
             )),
             (false, _) => None,
         }
@@ -103,6 +104,12 @@ impl SettingsView {
             })
             .flatten();
         let place = self.time.as_ref().and_then(|time| time.place);
-        Some(night_summary(*on, custom, &(self.clock)(), place))
+        Some(night_summary(
+            &self.date_formats(),
+            *on,
+            custom,
+            &(self.clock)(),
+            place,
+        ))
     }
 }

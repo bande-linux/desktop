@@ -294,6 +294,7 @@ pub struct SettingsView {
     pub(crate) hits: Vec<PaneHit>,
     pub(crate) pane: PaneId,
     pub(crate) layouts: Option<Layouts>,
+    pub(crate) altgr: RefCell<Option<(Vec<String>, bool)>>,
     pub(crate) pointing: PointingDevices,
     pub(crate) about: Option<About>,
     pub(crate) diagnostics: Diagnostics,
@@ -414,6 +415,7 @@ impl SettingsView {
             hits: Vec::new(),
             pane: PaneId::Appearance,
             layouts: None,
+            altgr: RefCell::default(),
             pointing: PointingDevices::default(),
             about: None,
             diagnostics: Diagnostics::default(),
@@ -971,6 +973,7 @@ impl SettingsView {
                 }
                 self.failures.insert(pane, error);
             }
+            Update::TrialFailed => self.keep_displays(false),
             Update::Refused(refused) => self.refused = refused,
             Update::DefaultApps(defaults) => self.default_apps = Some(defaults),
             Update::Permissions(permissions) => self.permissions = permissions,
@@ -2478,8 +2481,8 @@ impl SettingsView {
             &countdown(until),
             move |action| send(action == KEEP),
         )
-        .cancel(&tr!("Revert"), REVERT)
-        .primary(&tr!("Keep"), KEEP);
+        .other(&tr!("Keep"), KEEP)
+        .safe(&tr!("Revert"), REVERT);
         self.keep = Some(Trial {
             until,
             alert: alert.id(),

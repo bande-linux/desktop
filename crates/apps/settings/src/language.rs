@@ -1,6 +1,6 @@
 use bande_datetime::{DateFormats, posix_locale};
 use bande_l10n::tr;
-use bande_settings_panes::SettingId;
+use bande_settings_panes::{SettingId, Value};
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Axis, Button, SearchField, Stack, Widget};
 
@@ -80,6 +80,17 @@ pub fn locale_matches(
 }
 
 impl SettingsView {
+    fn clock_format(&self) -> &str {
+        match self.values.get(&SettingId::ClockFormat) {
+            Some(Value::Keyword(format)) => format,
+            _ => "",
+        }
+    }
+
+    pub(crate) fn date_formats(&self) -> DateFormats {
+        DateFormats::for_language().with_clock_format(self.clock_format())
+    }
+
     fn locale_row(&mut self, id: SettingId, label: &str, shown: &str, picker: Picker) -> Widgets {
         let button = self.allowed(id).then(|| {
             let mut change = intent(&self.intents, move |()| Intent::Pick(Some(picker)));
@@ -293,7 +304,8 @@ impl SettingsView {
         };
         let formats = DateFormats::for_locale(&posix_locale(
             locale.region.as_deref().unwrap_or(&locale.language),
-        ));
+        ))
+        .with_clock_format(self.clock_format());
         if let Some(sample) = sample() {
             let preview = format!(
                 "{} · {}",

@@ -101,6 +101,7 @@ pub enum Update {
     InputLevel(f32),
     Failed(SettingId, String),
     PaneFailed(PaneId, String),
+    TrialFailed,
     Refused(Vec<Privilege>),
     DefaultApps(Vec<DefaultApp>),
     Permissions(Grants),
@@ -399,6 +400,9 @@ pub fn worker(session: &Connection, updates: Updates) -> Sender<Command> {
                     _ => (Ok(()), Vec::new()),
                 };
                 if let Err(error) = result {
+                    if matches!(command, Command::TryDisplay(..)) {
+                        updates.send(Update::TrialFailed);
+                    }
                     updates.send(match restore.first() {
                         Some(setting) => Update::Failed(
                             *setting,

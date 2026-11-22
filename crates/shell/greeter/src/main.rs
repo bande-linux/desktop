@@ -265,7 +265,7 @@ impl Greeter {
         let user = self.current();
         let mut screen = LockScreen::new(
             &user,
-            DateFormats::from_env(),
+            DateFormats::for_language(),
             &bande_datetime::now(),
             self.appearance(),
             self.text.sharing_fonts(),
@@ -1002,7 +1002,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let text = TextSystem::new();
     let placeholder = LockScreen::new(
         &other_user(None),
-        DateFormats::from_env(),
+        DateFormats::for_language(),
         &bande_datetime::now(),
         Appearance::default(),
         text.sharing_fonts(),

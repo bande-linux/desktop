@@ -351,6 +351,10 @@ impl State {
             match effect {
                 Effect::Close => self.close_force_quit(),
                 Effect::ForceQuit(keys) => self.force_quit_keys(&keys),
+                Effect::LogOut => {
+                    self.close_force_quit();
+                    self.log_out_requested = true;
+                }
             }
         }
     }
@@ -622,6 +626,10 @@ impl State {
 impl Compositor {
     pub fn show_force_quit(&mut self) {
         self.state.open_force_quit();
+    }
+
+    pub fn take_log_out(&mut self) -> bool {
+        std::mem::take(&mut self.state.log_out_requested)
     }
 
     pub fn force_quit_tick(&mut self, now: Instant) -> Option<Instant> {

@@ -922,7 +922,13 @@ where
                     ..SessionUpkeep::default()
                 }
             }
-            None => app.compositor.keep_session_clients_running(),
+            None => {
+                if app.compositor.take_log_out() {
+                    tracing::info!("logging out from Force Quit");
+                    return Ok(app);
+                }
+                app.compositor.keep_session_clients_running()
+            }
         };
         for (executable, error) in &upkeep.failures {
             app.compositor.report_start_failure(executable, error);

@@ -66,6 +66,13 @@ impl State {
         self.needs_redraw = true;
     }
 
+    pub(crate) fn report_shell_crash_loop(&mut self, executable: &Path) {
+        self.raise_alert(
+            executable,
+            tr!("The taskbar and desktop keep stopping. Press Ctrl+Alt+Esc to log out."),
+        );
+    }
+
     pub(crate) fn clear_alert(&mut self, executable: &Path) {
         let alerts = &mut self.alerts;
         let before = alerts.alerts.len();

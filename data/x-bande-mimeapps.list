@@ -18,6 +18,7 @@ x-scheme-handler/https=org.bande.Browser.desktop;
 text/html=org.bande.Browser.desktop;
 application/xhtml+xml=org.bande.Browser.desktop;
 x-scheme-handler/mailto=org.bande.Mail.desktop;
+message/rfc822=org.bande.Mail.desktop;
 text/calendar=org.bande.Calendar.desktop;
 x-scheme-handler/webcal=org.bande.Calendar.desktop;
 x-scheme-handler/webcals=org.bande.Calendar.desktop;

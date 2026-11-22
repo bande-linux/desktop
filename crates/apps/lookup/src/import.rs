@@ -265,8 +265,9 @@ fn import_stardict(ifo: &Path) -> Result<(String, String, Vec<NewEntry>), Failur
             ),
         };
         at = end + 1 + offset_size + 4;
-        let article = data
-            .get(start..start + size)
+        let article = start
+            .checked_add(size)
+            .and_then(|end| data.get(start..end))
             .ok_or_else(|| broken("an entry points outside the data"))?;
         let text = stardict_fields(types.as_deref(), article)?;
         entries.push(NewEntry {

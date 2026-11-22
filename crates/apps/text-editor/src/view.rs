@@ -82,6 +82,7 @@ enum Asking {
     GoToLine,
     Failed,
     MakePlain,
+    SavePlain,
     Lossy,
     Changed,
 }
@@ -177,6 +178,7 @@ pub struct DocumentView {
     saving: bool,
     stamp: Option<Stamp>,
     reloading_from: Option<u64>,
+    plain_target: Option<PathBuf>,
     overwrite: bool,
     close_after_save: bool,
     requests: Vec<Request>,
@@ -255,6 +257,7 @@ impl DocumentView {
             saving: false,
             stamp: None,
             reloading_from: None,
+            plain_target: None,
             overwrite: false,
             close_after_save: false,
             requests: Vec::new(),
@@ -618,15 +621,33 @@ impl DocumentView {
     }
 
     pub fn save_to(&mut self, path: PathBuf) {
+        self.save_to_as(path, false);
+    }
+
+    fn save_to_as(&mut self, path: PathBuf, plain: bool) {
         if self.saving {
             return;
         }
-        self.saving = true;
+        let rich_on_disk = self.path.as_ref() == Some(&path) && self.format.is_rich();
         match (self.rich, Format::by_extension(&path)) {
             (true, Some(chosen))
                 if chosen != Format::Markdown || self.format == Format::Markdown =>
             {
                 self.format = chosen;
+            }
+            (true, None) if rich_on_disk => {}
+            (true, None) if self.format != Format::Markdown && !plain => {
+                let name = path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.plain_target = Some(path);
+                return self.ask(
+                    Asking::SavePlain,
+                    &tr!("Save “{name}” as plain text?", name = name),
+                    &tr!("Its fonts, styles, colors and lists will be lost. To keep them, save it with a name that ends in .rtf."),
+                    &[("make-plain-confirm", true), ("cancel", false)],
+                );
             }
             (true, None) if self.format != Format::Markdown => {
                 self.drop_formatting();
@@ -637,6 +658,7 @@ impl DocumentView {
             (false, _) if self.format != Format::Markdown => self.format = Format::Plain,
             _ => {}
         }
+        self.saving = true;
         let expected = match std::mem::take(&mut self.overwrite) {
             false if self.path.as_ref() == Some(&path) => self.stamp,
             _ => None,
@@ -864,6 +886,11 @@ impl DocumentView {
             }
             (Some(Asking::Failed), _) if self.unloaded => self.requests.push(Request::Close),
             (Some(Asking::MakePlain), "make-plain-confirm") => self.make_plain(true),
+            (Some(Asking::SavePlain), "make-plain-confirm") => {
+                if let Some(path) = self.plain_target.take() {
+                    self.save_to_as(path, true);
+                }
+            }
             (Some(Asking::Lossy), "save-copy") => {
                 self.lossy = false;
                 self.retarget(Format::Rtf);

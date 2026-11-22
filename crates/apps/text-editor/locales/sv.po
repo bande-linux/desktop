@@ -429,3 +429,9 @@ msgstr "Spara en kopia…"
 
 msgid "Save as UTF-8"
 msgstr "Spara som UTF-8"
+
+msgid "Save “{name}” as plain text?"
+msgstr "Vill du spara ”{name}” som oformaterad text?"
+
+msgid "Its fonts, styles, colors and lists will be lost. To keep them, save it with a name that ends in .rtf."
+msgstr "Typsnitt, stilar, färger och listor går förlorade. Spara med ett namn som slutar på .rtf för att behålla dem."

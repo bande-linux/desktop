@@ -588,7 +588,7 @@ Depends: ${shlibs:Depends},
  pkexec,
  systemd,
  ${misc:Depends}
-Recommends: bande-secrets (= ${source:Version}),
+Recommends: bande-secrets (= ${binary:Version}),
  bolt,
  cifs-utils,
  smbclient,

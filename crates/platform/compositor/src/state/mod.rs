@@ -358,12 +358,13 @@ impl Compositor {
         fences
             .handle()
             .insert_source(requests, |event, _, state: &mut State| {
-                if let smithay::reexports::calloop::channel::Event::Msg(request) = event {
-                    state.force_quit_action(request);
+                if let smithay::reexports::calloop::channel::Event::Msg((overlay, request)) = event
+                {
+                    state.access_action(overlay, request);
                 }
             })
             .map_err(|error| io::Error::other(error.error))?;
-        state.force_quit.take_actions(actions);
+        state.connect_access(&actions);
         state.watch_consents();
         Ok(Self {
             display,

@@ -293,8 +293,13 @@ when they reach the screen is Bande's own.
   icons and name painted on the CPU with `bande-graphics` into memory buffers at the output
   scale, and window thumbnails drawn from the windows' own textures as in the overview. App
   names and icons come from desktop entries through `bande-xdg`, cached, and reread at most
-  every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
-  window holding a list box whose selected option has the focus) only while it shows.
+  every 30 s while an app is unknown. `access.rs` publishes the compositor's own UI through AccessKit, each as its own
+  window, with actions coming back through one channel: the switcher card (a list box whose
+  selected option has the focus) only while it shows; the window and Tile menus (the
+  toolkit's menu nodes, focus on the highlighted item); the overview (a list of windows and a
+  tab list of workspaces); the free-half panel (a list of windows); and the title bar or
+  Browser control well of the focused window (title-bar buttons that click, without taking the
+  screen reader's focus).
   `recall.rs` keeps the window memory file (written by its own thread, the latest state winning and flushed at exit, so a slow disk never holds a frame), `assist.rs` the free-half panel, which reuses the
   overview's `arrange` and the switcher's thumbnails.
 - **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or

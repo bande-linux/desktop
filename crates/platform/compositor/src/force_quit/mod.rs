@@ -4,7 +4,7 @@ mod view;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use accesskit::{ActionHandler, ActionRequest, ActivationHandler, DeactivationHandler, TreeUpdate};
+use accesskit::ActionRequest;
 use accesskit_unix::Adapter;
 use bande_graphics::{
     Appearance, Color, Elevation, FRAME_HEADER_HEIGHT, Item, Key, Modifiers, Palette, Pointer,
@@ -19,12 +19,12 @@ use smithay::backend::renderer::element::memory::{
 };
 use smithay::input::keyboard::{Keysym, keysyms};
 use smithay::input::pointer::AxisFrame;
-use smithay::reexports::calloop::channel::Sender;
 use smithay::reexports::wayland_server::{Client, Resource};
 use smithay::utils::{Logical, Point, Rectangle, Size};
 
 pub(crate) use self::kill::Process;
 use self::view::{CONTENT, Effect, ForceQuitView, Listed, SHELL_KEY};
+use crate::access::{self, AccessRequests, Overlay};
 use crate::input::{BTN_LEFT, BTN_MIDDLE, BTN_RIGHT};
 use crate::shell::toplevel_names;
 use crate::state::{ClientState, Compositor, OutputElement, State};
@@ -60,7 +60,7 @@ struct Open {
 #[derive(Default)]
 pub(crate) struct ForceQuit {
     open: Option<Open>,
-    actions: Option<Sender<ActionRequest>>,
+    actions: Option<AccessRequests>,
 }
 
 impl ForceQuit {
@@ -68,32 +68,8 @@ impl ForceQuit {
         self.open.is_some()
     }
 
-    pub(crate) fn take_actions(&mut self, actions: Sender<ActionRequest>) {
+    pub(crate) fn take_actions(&mut self, actions: AccessRequests) {
         self.actions = Some(actions);
-    }
-}
-
-struct Inactive;
-
-impl ActivationHandler for Inactive {
-    fn request_initial_tree(&mut self) -> Option<TreeUpdate> {
-        None
-    }
-}
-
-impl DeactivationHandler for Inactive {
-    fn deactivate_accessibility(&mut self) {}
-}
-
-struct Actions(Option<Sender<ActionRequest>>);
-
-impl ActionHandler for Actions {
-    fn do_action(&mut self, request: ActionRequest) {
-        if let Some(actions) = &self.0
-            && actions.send(request).is_err()
-        {
-            tracing::debug!("Force Quit is closed");
-        }
     }
 }
 
@@ -339,8 +315,7 @@ impl State {
             view.select(vec![front]);
         }
         view.focus_list();
-        let mut adapter =
-            Adapter::new(Inactive, Actions(self.force_quit.actions.clone()), Inactive);
+        let mut adapter = access::adapter(Overlay::ForceQuit, self.force_quit.actions.as_ref());
         adapter.update_if_active(|| view.accessibility());
         adapter.update_window_focus_state(true);
         self.force_quit.open = Some(Open {

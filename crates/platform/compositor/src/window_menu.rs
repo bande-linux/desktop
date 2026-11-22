@@ -2,8 +2,10 @@ use std::time::{Duration, Instant};
 
 use bande_l10n::tr;
 
+use crate::access::{Announcer, window_with};
 use crate::label::Labels;
 use crate::motion::{Look, Motion, Tick};
+use crate::shell::toplevel_names;
 use crate::state::{Compositor, OutputElement, State};
 use bande_graphics::{
     Key, Modifiers, PLACEMENTS_AFTER_HOLD, PLACEMENTS_AFTER_REST, Palette, Scheme, TextSize,
@@ -92,6 +94,7 @@ impl MaximizeWait {
 #[derive(Default)]
 pub(crate) struct WindowMenus {
     open: Option<Open>,
+    pub(crate) announcer: Announcer,
     labels: Option<Labels>,
     text_size: TextSize,
     on_maximize: Option<WlSurface>,
@@ -509,6 +512,7 @@ impl State {
         }
         self.show_cursor(CursorIcon::Default);
         self.needs_redraw = true;
+        self.announce_window_menu();
     }
 
     fn open_submenu(&mut self, level: usize, index: usize, from_keyboard: bool) {
@@ -554,6 +558,7 @@ impl State {
 
     pub(crate) fn drop_window_menu(&mut self) {
         self.window_menus.open = None;
+        self.window_menus.announcer.withdraw();
     }
 
     pub(crate) fn dismiss_window_menu(&mut self) {
@@ -561,6 +566,7 @@ impl State {
             return;
         };
         open.closing = true;
+        self.window_menus.announcer.withdraw();
         for panel in &mut open.panels {
             panel.motion.retarget(Look::hidden(panel.rect));
         }
@@ -606,6 +612,33 @@ impl State {
             }
             MenuOutcome::Dismiss => self.dismiss_window_menu(),
         }
+        self.announce_window_menu();
+    }
+
+    fn announce_window_menu(&mut self) {
+        let WindowMenus {
+            open, announcer, ..
+        } = &mut self.window_menus;
+        let Some(open) = open
+            .as_ref()
+            .filter(|open| !open.closing && open.resting.is_none())
+        else {
+            return;
+        };
+        let title = toplevel_names(&open.window).0;
+        let (nodes, roots, focus) = open.tracker.access();
+        announcer.publish(true, || window_with(&title, roots, nodes, focus));
+    }
+
+    pub(crate) fn window_menu_action_request(&mut self, request: &accesskit::ActionRequest) {
+        let Some(open) = self.window_menus.open.as_mut().filter(|open| !open.closing) else {
+            return;
+        };
+        let Some((level, index)) = open.tracker.item_for_node(request.target_node) else {
+            return;
+        };
+        let outcome = open.tracker.activate(level, index, Instant::now());
+        self.apply_menu_outcome(outcome, true);
     }
 
     fn window_menu_action(&mut self, surface: &WlSurface, action: &str) {

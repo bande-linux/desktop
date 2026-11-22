@@ -6,7 +6,10 @@ pub const VENCRYPT_X509_PLAIN: u32 = 262;
 pub const ENCODING_RAW: i32 = 0;
 pub const ENCODING_ZRLE: i32 = 16;
 pub const ENCODING_DESKTOP_SIZE: i32 = -223;
+pub const ENCODING_EXTENDED_CLIPBOARD: i32 = 0xc0a1_e5ce_u32 as i32;
 pub const MOST_CUT_TEXT: usize = 1 << 20;
+pub const LARGEST_SCREEN: u16 = 8192;
+const MOST_ZRLE: usize = 64 << 20;
 const MOST_ENCODINGS: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,13 +180,55 @@ pub enum ClientMessage {
     UpdateRequest { incremental: bool, area: Area },
     Key { down: bool, keysym: u32 },
     Pointer { buttons: u8, x: u16, y: u16 },
-    CutText(String),
+    CutText(CutText),
+}
+
+/// Clipboard text: Latin-1 as RFC 6143 has it, or a message of the extended clipboard
+/// pseudo-encoding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CutText {
+    Latin1(String),
+    Extended(Vec<u8>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Malformed {
     UnknownMessage(u8),
     TooLong,
+}
+
+fn cut_text_length(message: &[u8]) -> Result<usize, Malformed> {
+    let length = be32(message, 4) as i32;
+    let length = usize::try_from(length.unsigned_abs()).unwrap_or(usize::MAX);
+    match length > MOST_CUT_TEXT {
+        true => Err(Malformed::TooLong),
+        false => Ok(length),
+    }
+}
+
+fn cut_text(message: &[u8]) -> CutText {
+    match (be32(message, 4) as i32) < 0 {
+        true => CutText::Extended(message[8..].to_vec()),
+        false => CutText::Latin1(message[8..].iter().map(|&byte| char::from(byte)).collect()),
+    }
+}
+
+/// A cut text message of `kind` (3 from a server, 6 from a viewer).
+pub fn cut_text_message(kind: u8, text: &CutText) -> Vec<u8> {
+    let (length, bytes): (i32, Vec<u8>) = match text {
+        CutText::Latin1(text) => {
+            let bytes: Vec<u8> = text
+                .chars()
+                .map(|character| u8::try_from(u32::from(character)).unwrap_or(b'?'))
+                .collect();
+            (bytes.len() as i32, bytes)
+        }
+        CutText::Extended(bytes) => (-(bytes.len() as i32), bytes.clone()),
+    };
+    let mut message = vec![kind, 0, 0, 0];
+    message.extend_from_slice(&length.to_be_bytes());
+    message.extend_from_slice(&bytes);
+    message
 }
 
 fn be16(bytes: &[u8], at: usize) -> u16 {
@@ -214,13 +259,7 @@ pub fn parse_message(buffer: &[u8]) -> Result<Option<(ClientMessage, usize)>, Ma
         4 => 8,
         5 => 6,
         6 => match buffer.len() >= 8 {
-            true => {
-                let length = usize::try_from(be32(buffer, 4)).unwrap_or(usize::MAX);
-                if length > MOST_CUT_TEXT {
-                    return Err(Malformed::TooLong);
-                }
-                8 + length
-            }
+            true => 8 + cut_text_length(buffer)?,
             false => return Ok(None),
         },
         other => return Err(Malformed::UnknownMessage(other)),
@@ -260,7 +299,7 @@ pub fn parse_message(buffer: &[u8]) -> Result<Option<(ClientMessage, usize)>, Ma
             x: be16(message, 2),
             y: be16(message, 4),
         },
-        _ => ClientMessage::CutText(message[8..].iter().map(|&byte| char::from(byte)).collect()),
+        _ => ClientMessage::CutText(cut_text(message)),
     };
     Ok(Some((parsed, needed)))
 }
@@ -289,6 +328,164 @@ pub fn update_header(rectangles: u16, out: &mut Vec<u8>) {
     out.extend_from_slice(&rectangles.to_be_bytes());
 }
 
+/// A rectangle of a framebuffer update, its pixel data not yet decoded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rectangle {
+    pub area: Area,
+    pub encoding: i32,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServerMessage {
+    Update(Vec<Rectangle>),
+    Bell,
+    CutText(CutText),
+    Colours,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refused {
+    UnknownMessage(u8),
+    UnknownEncoding(i32),
+    OutsideScreen,
+    TooLong,
+}
+
+fn parse_update(
+    buffer: &[u8],
+    mut size: (u16, u16),
+) -> Result<Option<(ServerMessage, usize)>, Refused> {
+    if buffer.len() < 4 {
+        return Ok(None);
+    }
+    let count = be16(buffer, 2);
+    let mut at = 4;
+    let mut rectangles = Vec::with_capacity(usize::from(count).min(1024));
+    for _ in 0..count {
+        let Some(header) = buffer.get(at..at + 12) else {
+            return Ok(None);
+        };
+        let area = Area {
+            x: be16(header, 0),
+            y: be16(header, 2),
+            width: be16(header, 4),
+            height: be16(header, 6),
+        };
+        let encoding = be32(header, 8) as i32;
+        at += 12;
+        let length = match encoding {
+            ENCODING_DESKTOP_SIZE => {
+                if area.width > LARGEST_SCREEN || area.height > LARGEST_SCREEN {
+                    return Err(Refused::OutsideScreen);
+                }
+                size = (area.width, area.height);
+                0
+            }
+            ENCODING_RAW | ENCODING_ZRLE => {
+                let right = u32::from(area.x) + u32::from(area.width);
+                let bottom = u32::from(area.y) + u32::from(area.height);
+                if right > u32::from(size.0) || bottom > u32::from(size.1) {
+                    return Err(Refused::OutsideScreen);
+                }
+                match encoding {
+                    ENCODING_RAW => usize::from(area.width) * usize::from(area.height) * 4,
+                    _ => {
+                        let Some(length) = buffer.get(at..at + 4) else {
+                            return Ok(None);
+                        };
+                        at += 4;
+                        let length = be32(length, 0) as usize;
+                        if length > MOST_ZRLE {
+                            return Err(Refused::TooLong);
+                        }
+                        length
+                    }
+                }
+            }
+            other => return Err(Refused::UnknownEncoding(other)),
+        };
+        let Some(data) = buffer.get(at..at + length) else {
+            return Ok(None);
+        };
+        at += length;
+        rectangles.push(Rectangle {
+            area,
+            encoding,
+            data: data.to_vec(),
+        });
+    }
+    Ok(Some((ServerMessage::Update(rectangles), at)))
+}
+
+/// The next whole message from a server, for a viewer of a screen of `size` that asked for
+/// 32-bit pixels, Raw, ZRLE and DesktopSize.
+pub fn parse_server_message(
+    buffer: &[u8],
+    size: (u16, u16),
+) -> Result<Option<(ServerMessage, usize)>, Refused> {
+    let Some(&kind) = buffer.first() else {
+        return Ok(None);
+    };
+    match kind {
+        0 => parse_update(buffer, size),
+        1 => {
+            if buffer.len() < 6 {
+                return Ok(None);
+            }
+            let length = 6 + usize::from(be16(buffer, 4)) * 6;
+            Ok((buffer.len() >= length).then_some((ServerMessage::Colours, length)))
+        }
+        2 => Ok(Some((ServerMessage::Bell, 1))),
+        3 => {
+            if buffer.len() < 8 {
+                return Ok(None);
+            }
+            let length = 8 + cut_text_length(buffer).map_err(|_| Refused::TooLong)?;
+            Ok(buffer
+                .get(..length)
+                .map(|message| (ServerMessage::CutText(cut_text(message)), length)))
+        }
+        other => Err(Refused::UnknownMessage(other)),
+    }
+}
+
+pub fn set_pixel_format(format: PixelFormat) -> Vec<u8> {
+    let mut message = vec![0, 0, 0, 0];
+    message.extend_from_slice(&format.to_bytes());
+    message
+}
+
+pub fn set_encodings(encodings: &[i32]) -> Vec<u8> {
+    let mut message = vec![2, 0];
+    message.extend_from_slice(&(encodings.len() as u16).to_be_bytes());
+    for encoding in encodings {
+        message.extend_from_slice(&encoding.to_be_bytes());
+    }
+    message
+}
+
+pub fn update_request(incremental: bool, area: Area) -> Vec<u8> {
+    let mut message = vec![3, u8::from(incremental)];
+    for value in [area.x, area.y, area.width, area.height] {
+        message.extend_from_slice(&value.to_be_bytes());
+    }
+    message
+}
+
+pub fn key_event(keysym: u32, down: bool) -> Vec<u8> {
+    let mut message = vec![4, u8::from(down), 0, 0];
+    message.extend_from_slice(&keysym.to_be_bytes());
+    message
+}
+
+pub fn pointer_event(buttons: u8, x: u16, y: u16) -> Vec<u8> {
+    let mut message = vec![5, buttons];
+    message.extend_from_slice(&x.to_be_bytes());
+    message.extend_from_slice(&y.to_be_bytes());
+    message
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,7 +505,7 @@ mod tests {
                 6
             )))
         );
-        let huge_text = [6, 0, 0, 0, 0xff, 0xff, 0xff, 0xff];
+        let huge_text = [6, 0, 0, 0, 0x7f, 0xff, 0xff, 0xff];
         assert_eq!(parse_message(&huge_text), Err(Malformed::TooLong));
         let many_encodings = [2, 0, 0xff, 0xff];
         assert_eq!(parse_message(&many_encodings), Err(Malformed::TooLong));

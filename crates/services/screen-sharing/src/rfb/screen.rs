@@ -5,13 +5,15 @@ use std::time::Duration;
 
 use rustix::event::{EventfdFlags, eventfd};
 
-use super::Frame;
+use bande_rfb::encode::Frame;
 
 #[derive(Default)]
 struct Shown {
     frame: Option<Arc<Frame>>,
     serial: u64,
     ended: bool,
+    copied: Option<String>,
+    copy_serial: u64,
     wakers: Vec<Weak<OwnedFd>>,
 }
 
@@ -26,6 +28,8 @@ pub(crate) struct Latest {
     pub frame: Option<Arc<Frame>>,
     pub serial: u64,
     pub ended: bool,
+    pub copied: Option<String>,
+    pub copy_serial: u64,
 }
 
 impl Screen {
@@ -54,6 +58,14 @@ impl Screen {
         self.changed.notify_all();
     }
 
+    /// Gives viewers the text copied on this computer.
+    pub fn copy(&self, text: String) {
+        let mut shown = self.lock();
+        shown.copied = Some(text);
+        shown.copy_serial += 1;
+        Self::wake(&mut shown);
+    }
+
     /// Ends viewing: every viewer is disconnected.
     pub fn end(&self) {
         let mut shown = self.lock();
@@ -73,6 +85,8 @@ impl Screen {
             frame: shown.frame.clone(),
             serial: shown.serial,
             ended: shown.ended,
+            copied: shown.copied.clone(),
+            copy_serial: shown.copy_serial,
         }
     }
 

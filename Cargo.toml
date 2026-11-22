@@ -168,6 +168,7 @@ bande-polkit = { path = "crates/services/polkit" }
 bande-power = { path = "crates/services/power" }
 bande-printd = { path = "crates/services/printd" }
 bande-printers = { path = "crates/libs/printers" }
+bande-rfb = { path = "crates/libs/rfb" }
 bande-protocols = { path = "crates/platform/protocols" }
 bande-quick-settings = { path = "crates/shell/quick-settings" }
 bande-render = { path = "crates/platform/render" }

@@ -19,6 +19,8 @@ const ANSWER_TIMEOUT: Duration = Duration::from_secs(30);
 const ALLOW: &str = "allow";
 const DENY: &str = "deny";
 const SETTINGS: &str = "org.bande.Settings";
+pub const CLIPBOARD: &str = "org.bande.Clipboard";
+pub const CLIPBOARD_PATH: &str = "/org/bande/Clipboard";
 
 pub struct Desktop {
     session: Connection,
@@ -73,6 +75,28 @@ impl Desktop {
             && nodes.contains(&capture.node)
         {
             capture.screen.end();
+        }
+    }
+
+    /// Gives viewers the text copied here, when anyone is viewing.
+    pub fn clipboard_changed(&self) {
+        let Some(capture) = self.capture().upgrade() else {
+            return;
+        };
+        let text: zbus::Result<String> = self
+            .session
+            .call_method(
+                Some(CLIPBOARD),
+                CLIPBOARD_PATH,
+                Some(CLIPBOARD),
+                "Text",
+                &(),
+            )
+            .and_then(|reply| reply.body().deserialize());
+        match text {
+            Ok(text) if !text.is_empty() => capture.screen.copy(text),
+            Ok(_) => {}
+            Err(error) => tracing::warn!("cannot read the clipboard for viewers: {error}"),
         }
     }
 
@@ -177,6 +201,18 @@ impl Host for Desktop {
             input: Arc::clone(&capture.input) as _,
             kept: capture,
         })
+    }
+
+    fn copied(&self, text: String) {
+        if let Err(error) = self.session.call_method(
+            Some(CLIPBOARD),
+            CLIPBOARD_PATH,
+            Some(CLIPBOARD),
+            "CopyText",
+            &text,
+        ) {
+            tracing::warn!("cannot copy what a viewer copied: {error}");
+        }
     }
 
     fn name(&self) -> String {

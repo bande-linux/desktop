@@ -16,10 +16,11 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::{MatchRule, message};
 
 use crate::capture::{SCREENSHOT_INTERFACE, SCREENSHOT_PATH};
-use crate::host::Desktop;
+use crate::host::{CLIPBOARD, CLIPBOARD_PATH, Desktop};
 
 const HOSTNAME: &str = "/proc/sys/kernel/hostname";
 const SERVICE_KIND: &str = "_rfb._tcp";
+const BUS_NAME: &str = "org.bande.ScreenSharing";
 
 fn computer_name() -> String {
     std::fs::read_to_string(HOSTNAME)
@@ -60,6 +61,28 @@ fn follow_ended(session: &Connection, desktop: Weak<Desktop>) -> zbus::Result<()
     Ok(())
 }
 
+fn follow_clipboard(session: &Connection, desktop: Weak<Desktop>) -> zbus::Result<()> {
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .interface(CLIPBOARD)?
+        .path(CLIPBOARD_PATH)?
+        .member("Changed")?
+        .build();
+    let signals = MessageIterator::for_match_rule(rule, session, None)?;
+    thread::Builder::new()
+        .name("clipboard".into())
+        .spawn(move || {
+            for _ in signals.flatten() {
+                let Some(desktop) = desktop.upgrade() else {
+                    return;
+                };
+                desktop.clipboard_changed();
+            }
+        })
+        .map_err(|error| zbus::Error::Failure(error.to_string()))?;
+    Ok(())
+}
+
 fn run() -> Result<(), Box<dyn Error>> {
     let session = bande_bus::session()?;
     let name = computer_name();
@@ -67,6 +90,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let listener = listen()?;
     let desktop = Arc::new(Desktop::new(session.clone(), name.clone()));
     follow_ended(&session, Arc::downgrade(&desktop))?;
+    follow_clipboard(&session, Arc::downgrade(&desktop))?;
     let _announced = match bande_discovery::nearby::announce(&name, SERVICE_KIND, PORT) {
         Ok(Some(announced)) => Some(announced),
         Ok(None) => {
@@ -78,6 +102,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             None
         }
     };
+    session.request_name(BUS_NAME)?;
     tracing::info!("viewers on the local network can connect on port {PORT}");
     serve(&listener, desktop, tls, network::on_local_network)?;
     Ok(())

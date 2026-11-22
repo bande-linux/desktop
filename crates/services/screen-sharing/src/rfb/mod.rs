@@ -1,7 +1,5 @@
-mod auth;
-mod encode;
+mod attempts;
 pub mod identity;
-mod protocol;
 mod screen;
 mod session;
 
@@ -9,7 +7,7 @@ use std::any::Any;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-pub use encode::Frame;
+pub use bande_rfb::encode::Frame;
 pub use screen::Screen;
 pub use session::serve;
 
@@ -39,6 +37,8 @@ pub trait Host: Send + Sync {
     fn admit(&self, peer: IpAddr) -> bool;
     /// The viewer at `peer` sees the screen from now on.
     fn view(&self, peer: IpAddr) -> Option<Viewing>;
+    /// A viewer copied this text.
+    fn copied(&self, text: String);
     /// The name viewers show for this screen.
     fn name(&self) -> String;
 }

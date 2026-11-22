@@ -5,13 +5,16 @@ use std::rc::Rc;
 
 use bande_keyboard::Trigger;
 use bande_l10n::tr;
-use bande_toolkit::ui::{Alert, Axis, CheckState, Checkbox, ShortcutField, Stack, Widget};
+use bande_toolkit::ui::{
+    Alert, Axis, CheckState, Checkbox, ScrollView, ShortcutField, Stack, Widget,
+};
 use bande_xdg::{Locale, app_name, applications, current_desktops, data_dirs};
 use xdg_desktop_portal_bande::dialog_process::{CANCELLED, CHOSEN, encode_decisions};
 use xdg_desktop_portal_bande::global_shortcuts::{Consent, Proposal};
 
 const ALLOW: &str = "allow";
 const SPACING: f32 = 8.0;
+const LIST_HEIGHT: f32 = 320.0;
 const UNAVAILABLE: u8 = 2;
 
 struct Answer {
@@ -117,7 +120,10 @@ pub fn ask(consent: &Consent) -> ExitCode {
             .map(|(index, proposal)| row(index, proposal, &answers, &taken))
             .collect();
         Alert::new(&title, &message, move |action| chosen.set(action == ALLOW))
-            .accessory(Stack::new(Axis::Vertical, SPACING, 0.0, rows))
+            .accessory(
+                ScrollView::new(Stack::new(Axis::Vertical, SPACING, 0.0, rows))
+                    .at_most(LIST_HEIGHT),
+            )
             .cancel(&cancel, "cancel")
             .primary(&accept, ALLOW)
     });

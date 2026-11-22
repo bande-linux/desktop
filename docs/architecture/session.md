@@ -150,9 +150,11 @@ dialog that cannot start fails the request with response 2.
 - **DynamicLauncher**: "Add this web app to Applications?" with the icon, an editable name and the
   address. `RequestInstallToken` trusts only the app stores the other backends trust (GNOME
   Software, AppCenter, Discover).
-- **GlobalShortcuts** (version 2): only for calls from `xdg-desktop-portal`. `BindShortcuts` binds
+- **GlobalShortcuts** (version 2): only for calls from `xdg-desktop-portal`, and never for an app
+  with no app id (one started outside an app scope). `BindShortcuts` takes at most 32 shortcuts
+  with ids of up to 64 bytes and descriptions cut at 256 characters, and binds
   nothing until the user answers "Allow <app> to use keyboard shortcuts?", which lists each new
-  shortcut with its description and proposed keys: the `preferred_trigger` when it holds Super or
+  shortcut with its description and proposed keys in a list that scrolls: the `preferred_trigger` when it holds Super or
   both Ctrl and Alt, is no system shortcut and nobody has it. Per shortcut the user keeps it,
   records other keys or unticks it; Don't Allow declines them all. Every answer is remembered, a
   declined shortcut as one without keys, so the app is asked only about shortcuts it has not

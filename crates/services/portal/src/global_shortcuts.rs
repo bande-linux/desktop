@@ -27,6 +27,10 @@ type Described = (String, HashMap<String, OwnedValue>);
 type Sessions = Arc<Mutex<HashMap<OwnedObjectPath, String>>>;
 type Requested = (String, String, Option<Trigger>);
 
+const MAX_SHORTCUTS: usize = 32;
+const MAX_ID_BYTES: usize = 64;
+const MAX_DESCRIPTION_CHARS: usize = 256;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proposal {
     pub id: String,
@@ -221,7 +225,9 @@ impl Session {
     ) {
         lock(&self.sessions).remove(&self.path);
         bande_bus::warn_unsent("Closed", Self::closed(&emitter).await);
-        let _ = server.remove::<Self, _>(&self.path).await;
+        if let Err(error) = server.remove::<Self, _>(&self.path).await {
+            tracing::warn!("cannot close the shortcuts session {}: {error}", self.path);
+        }
     }
 
     #[zbus(signal)]
@@ -340,12 +346,14 @@ fn follow_changes(
 fn requested_of(shortcuts: &[Described]) -> Vec<Requested> {
     shortcuts
         .iter()
+        .filter(|(id, _)| !id.is_empty() && id.len() <= MAX_ID_BYTES)
+        .take(MAX_SHORTCUTS)
         .map(|(id, details)| {
             let description: String = option(details, "description").unwrap_or_default();
             let preferred: Option<String> = option(details, "preferred_trigger");
             (
                 id.clone(),
-                description,
+                description.chars().take(MAX_DESCRIPTION_CHARS).collect(),
                 preferred.as_deref().and_then(Trigger::parse),
             )
         })
@@ -501,6 +509,10 @@ impl GlobalShortcuts {
     ) -> (u32, HashMap<String, OwnedValue>) {
         if !from_frontend(connection, &header).await {
             tracing::warn!("refused global shortcuts that did not come from xdg-desktop-portal");
+            return (OTHER, HashMap::new());
+        }
+        if app_id.is_empty() {
+            tracing::info!("refused global shortcuts for an app with no app id");
             return (OTHER, HashMap::new());
         }
         let path = OwnedObjectPath::from(session_handle.to_owned());

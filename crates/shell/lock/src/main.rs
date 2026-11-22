@@ -1,7 +1,7 @@
 use std::os::fd::{AsFd, BorrowedFd};
 use std::process::ExitCode;
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
 use bande_bus::logind::ManagerProxyBlocking;
@@ -20,6 +20,7 @@ use bande_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
+use zbus::names::BusName;
 use zeroize::Zeroizing;
 
 fn variant_of(scheme: Scheme) -> Variant {
@@ -71,18 +72,21 @@ struct Locker {
 
 struct Power {
     cached: PowerProxyBlocking<'static>,
-    fresh: PowerProxyBlocking<'static>,
+    fresh: zbus::blocking::Connection,
 }
+
+const POWER_NAME: &str = "org.bande.Power";
+const POWER_UNIT: &str = "bande-power.service";
+const FRESH_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 impl Power {
     fn connect() -> zbus::Result<Self> {
-        let session = bande_bus::session()?;
         Ok(Self {
-            cached: PowerProxyBlocking::builder(&session)
+            cached: PowerProxyBlocking::builder(&bande_bus::session()?)
                 .cache_properties(zbus::proxy::CacheProperties::Yes)
                 .build()?,
-            fresh: PowerProxyBlocking::builder(&session)
-                .cache_properties(zbus::proxy::CacheProperties::No)
+            fresh: zbus::blocking::connection::Builder::session()?
+                .method_timeout(FRESH_READ_TIMEOUT)
                 .build()?,
         })
     }
@@ -94,13 +98,36 @@ impl Power {
             .flatten()
             .unwrap_or(true)
             || self
-                .fresh
-                .password_required()
+                .fresh_password_required()
                 .inspect_err(|error| {
                     tracing::warn!("cannot ask whether a password is needed: {error}")
                 })
                 .unwrap_or(true)
     }
+
+    fn fresh_password_required(&self) -> zbus::Result<bool> {
+        let bus = zbus::blocking::fdo::DBusProxy::new(&self.fresh)?;
+        let owner = bus.get_name_owner(BusName::try_from(POWER_NAME)?)?;
+        let process = bus.get_connection_unix_process_id(owner.as_ref().into())?;
+        if !runs_in_power_unit(process) {
+            tracing::warn!("{owner} answers for {POWER_NAME} from outside {POWER_UNIT}");
+            return Ok(true);
+        }
+        PowerProxyBlocking::builder(&self.fresh)
+            .destination(owner.into_inner())?
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()?
+            .password_required()
+    }
+}
+
+fn runs_in_power_unit(process: u32) -> bool {
+    std::fs::read_to_string(format!("/proc/{process}/cgroup")).is_ok_and(|cgroups| {
+        cgroups
+            .lines()
+            .filter_map(|line| line.strip_prefix("0::"))
+            .any(|path| path.rsplit('/').next() == Some(POWER_UNIT))
+    })
 }
 
 impl Locker {

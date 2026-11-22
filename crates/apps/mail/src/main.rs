@@ -217,11 +217,7 @@ impl View for Pane {
 const MESSAGE_MIME: &str = "message/rfc822";
 
 fn app_wide(command: &str) -> bool {
-    matches!(
-        command,
-        "compose" | "add-account" | "get-mail" | "new-mailbox" | "bcc-field"
-    ) || command.starts_with("sort-")
-        || command.starts_with("compose-to:")
+    matches!(command, "compose" | "add-account" | "get-mail") || command.starts_with("compose-to:")
 }
 
 fn message_file(apps: &Apps, argument: &str, directory: &Path) -> Option<PathBuf> {
@@ -818,13 +814,14 @@ impl Program for Mail {
             _ => self.parked.as_deref(),
         };
         let focused = cx.focused().and_then(|window| cx.view(window));
-        let message = matches!(focused, Some(Pane::Message(_)));
+        if let Some(Pane::Message(message)) = focused {
+            return Menus {
+                menus: menus::message_menus(message.printable().is_some()),
+                window: menus::window_menu(),
+            };
+        }
         let shown = menus::Shown {
-            viewer: self.main.is_some() && !message,
-            printable: match focused {
-                Some(Pane::Message(message)) => message.printable().is_some(),
-                _ => self.main.is_some(),
-            },
+            viewer: self.main.is_some(),
             windowed: cx.windows().next().is_some(),
             composing: matches!(focused, Some(Pane::Compose(_))),
         };

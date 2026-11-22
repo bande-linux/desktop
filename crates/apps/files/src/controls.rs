@@ -424,6 +424,16 @@ impl FilesView {
         if self.glance_key(key, modifiers) {
             return true;
         }
+        let on_control = self.ui.focus().is_some_and(|focus| focus != self.table);
+        if key == Key::Escape && on_control {
+            self.focus_content();
+            return true;
+        }
+        if (on_control || (key == Key::Tab && !modifiers.control))
+            && self.ui.handle(&Event::Key { key, modifiers })
+        {
+            return true;
+        }
         if key == Key::Escape && self.shown_table().is_some_and(Table::is_moving_column) {
             return self.ui.handle(&Event::Key { key, modifiers });
         }
@@ -436,9 +446,7 @@ impl FilesView {
         if self.key(key, modifiers) {
             return true;
         }
-        self.mode == ViewMode::List
-            && key != Key::Tab
-            && self.ui.handle(&Event::Key { key, modifiers })
+        self.mode == ViewMode::List && self.ui.handle(&Event::Key { key, modifiers })
     }
 
     fn over_control(&mut self, at: Point) -> bool {

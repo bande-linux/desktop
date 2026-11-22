@@ -1,7 +1,8 @@
 use std::fmt;
-use std::fs::File;
-use std::io::{Cursor, Read};
-use std::path::Path;
+use std::fs::{DirBuilder, File, OpenOptions};
+use std::io::{Cursor, Read, Write};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bande_app::choose_save_file;
@@ -11,12 +12,13 @@ use bande_printers::{PrintClient, ScanCapabilities, ScanOptions, ScanSource};
 use bande_toolkit::Image;
 use bande_toolkit::Spacing;
 use bande_toolkit::ui::{Alert, Axis, Button, PopUpButton, Stack, Widget};
+use bande_xdg::state_home;
 use image::{ImageFormat, ImageReader};
 use zbus::blocking::Connection;
 
 use crate::follow::{Command, Update};
 use crate::pages::{Widgets, boxed, muted_row};
-use crate::printers::PrinterCommand;
+use crate::printers::{PrinterCommand, PrintersState};
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, Preview, Row, Text, Tone};
 use bande_settings_panes::PaneId;
@@ -27,6 +29,9 @@ const DEFAULT_RESOLUTION: u32 = 300;
 const PAGE_LIMIT: u64 = 128 << 20;
 const PREVIEW_PIXELS: u32 = 720;
 const POINTS_PER_INCH: f32 = 72.0;
+const STATE_FOLDER: &str = "bande";
+const KEPT_FOLDER: &str = "scans";
+const NAME_FILE: &str = "name";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
@@ -76,6 +81,7 @@ pub enum ScanUpdate {
     Capabilities(String, Result<ScanCapabilities, String>),
     Scanned(String, Result<(Vec<Page>, Option<Image>), String>),
     Saved(String, Result<Option<String>, String>),
+    Kept(String, String, Vec<Page>, Option<Image>),
 }
 
 /// Whether the window closes or the app quits once the scanned pages are taken care of.
@@ -115,6 +121,7 @@ enum Busy {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScanState {
     scanner: String,
+    name: String,
     capabilities: Option<ScanCapabilities>,
     source: usize,
     color: bool,
@@ -128,9 +135,10 @@ pub struct ScanState {
 }
 
 impl ScanState {
-    fn new(scanner: &str) -> Self {
+    fn new(scanner: &str, name: &str) -> Self {
         Self {
             scanner: scanner.to_owned(),
+            name: name.to_owned(),
             capabilities: None,
             source: 0,
             color: true,
@@ -212,6 +220,129 @@ pub fn capabilities(session: &Connection, scanner: &str) -> Update {
     Update::Scan(ScanUpdate::Capabilities(scanner.to_owned(), answer))
 }
 
+fn kept_folder() -> Option<PathBuf> {
+    state_home().map(|state| state.join(STATE_FOLDER).join(KEPT_FOLDER))
+}
+
+fn folder_of(scanner: &str) -> Option<PathBuf> {
+    let name: String = scanner.bytes().map(|byte| format!("{byte:02x}")).collect();
+    kept_folder().map(|folder| folder.join(name))
+}
+
+fn scanner_of(folder: &Path) -> Option<String> {
+    let name = folder.file_name()?.to_str()?;
+    let bytes = (0..name.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(name.get(at..at + 2)?, 16).ok())
+        .collect::<Option<Vec<u8>>>()?;
+    String::from_utf8(bytes).ok()
+}
+
+fn create_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)?
+        .write_all(bytes)
+}
+
+fn keep_pages(scanner: &str, name: &str, pages: &[Page]) -> std::io::Result<()> {
+    let folder = folder_of(scanner).ok_or_else(|| std::io::Error::other("no state folder"))?;
+    DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&folder)?;
+    let label = folder.join(NAME_FILE);
+    if !label.exists() {
+        create_private(&label, name.as_bytes())?;
+    }
+    let first = std::fs::read_dir(&folder)?
+        .flatten()
+        .filter(|entry| entry.path().extension().is_some_and(|kind| kind == "jpg"))
+        .count();
+    for (number, page) in (first..).zip(pages) {
+        create_private(
+            &folder.join(format!("{number:04}-{}.jpg", page.dpi)),
+            &page.jpeg,
+        )?;
+    }
+    Ok(())
+}
+
+fn forget_pages(scanner: &str) {
+    let Some(folder) = folder_of(scanner) else {
+        return;
+    };
+    match std::fs::remove_dir_all(&folder) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!("cannot remove the kept scan {}: {error}", folder.display()),
+    }
+}
+
+fn kept_scan(folder: &Path) -> std::io::Result<Option<(String, String, Vec<Page>)>> {
+    let Some(scanner) = scanner_of(folder) else {
+        return Ok(None);
+    };
+    let name = std::fs::read_to_string(folder.join(NAME_FILE)).unwrap_or_else(|_| scanner.clone());
+    let mut files: Vec<PathBuf> = std::fs::read_dir(folder)?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|kind| kind == "jpg"))
+        .collect();
+    files.sort();
+    let mut pages = Vec::new();
+    for file in files {
+        let dpi = file
+            .file_stem()
+            .and_then(|stem| stem.to_str()?.split_once('-')?.1.parse().ok())
+            .unwrap_or(DEFAULT_RESOLUTION);
+        match read_page(File::open(&file)?.into(), dpi) {
+            Ok(page) => pages.push(page),
+            Err(_) => tracing::warn!("skipping the unreadable kept page {}", file.display()),
+        }
+    }
+    Ok((!pages.is_empty()).then_some((scanner, name, pages)))
+}
+
+/// The pages scanned earlier and not saved or discarded yet, one update per scanner.
+pub fn kept() -> Vec<Update> {
+    let Some(folder) = kept_folder() else {
+        return Vec::new();
+    };
+    let entries = match std::fs::read_dir(&folder) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(error) => {
+            tracing::warn!(
+                "cannot read the kept scans in {}: {error}",
+                folder.display()
+            );
+            return Vec::new();
+        }
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| match kept_scan(&entry.path()) {
+            Ok(found) => found,
+            Err(error) => {
+                tracing::warn!(
+                    "cannot read the kept scan {}: {error}",
+                    entry.path().display()
+                );
+                None
+            }
+        })
+        .map(|(scanner, name, pages)| {
+            let preview = pages
+                .last()
+                .and_then(|page| Image::decode(&page.jpeg, PREVIEW_PIXELS));
+            Update::Scan(ScanUpdate::Kept(scanner, name, pages, preview))
+        })
+        .collect()
+}
+
 fn read_page(page: std::os::fd::OwnedFd, dpi: u32) -> Result<Page, String> {
     let unreadable = |error: &dyn fmt::Display| {
         tracing::warn!("cannot read a scanned page: {error}");
@@ -233,7 +364,7 @@ fn read_page(page: std::os::fd::OwnedFd, dpi: u32) -> Result<Page, String> {
     })
 }
 
-pub fn scan(session: &Connection, scanner: &str, options: &ScanOptions) -> Update {
+pub fn scan(session: &Connection, scanner: &str, name: &str, options: &ScanOptions) -> Update {
     let scanned = PrintClient::new(session)
         .and_then(|client| client.scan(scanner, options))
         .map_err(reason)
@@ -242,6 +373,9 @@ pub fn scan(session: &Connection, scanner: &str, options: &ScanOptions) -> Updat
                 .into_iter()
                 .map(|(page, dpi)| read_page(page, dpi))
                 .collect::<Result<Vec<_>, _>>()?;
+            if let Err(error) = keep_pages(scanner, name, &pages) {
+                tracing::warn!("cannot keep the scanned pages until they are saved: {error}");
+            }
             let preview = pages
                 .last()
                 .and_then(|page| Image::decode(&page.jpeg, PREVIEW_PIXELS));
@@ -309,6 +443,9 @@ pub fn save(session: &Connection, scanner: &str, pages: &[Page], format: Format)
             Err(tr!("Couldn’t save the scan."))
         }
     };
+    if let Ok(Some(_)) = saved {
+        forget_pages(scanner);
+    }
     Update::Scan(ScanUpdate::Saved(scanner.to_owned(), saved))
 }
 
@@ -377,8 +514,9 @@ impl SettingsView {
                 }
             }
             DISCARD => {
-                for scan in self.scans.values_mut() {
+                for (id, scan) in &mut self.scans {
                     scan.discard();
+                    forget_pages(id);
                 }
                 self.leaving = None;
                 self.commands.push(Command::Leave(leaving));
@@ -406,15 +544,50 @@ impl SettingsView {
         self.scans.get_mut(id)
     }
 
+    pub(crate) fn scanner_name(&self, id: &str) -> Option<String> {
+        let state = self.printers.as_ref();
+        state
+            .and_then(|state| state.scanners.iter().find(|scanner| scanner.id == id))
+            .map(|scanner| scanner.name.clone())
+            .or_else(|| self.scans.get(id).map(|scan| scan.name.clone()))
+    }
+
+    pub(crate) fn kept_away(&self, state: &PrintersState) -> Vec<(String, String)> {
+        let mut away: Vec<(String, String)> = self
+            .scans
+            .iter()
+            .filter(|(id, scan)| {
+                !scan.pages.is_empty()
+                    && !state.printers.iter().any(|printer| printer.id == **id)
+                    && !state.scanners.iter().any(|scanner| scanner.id == **id)
+            })
+            .map(|(id, scan)| (id.clone(), scan.name.clone()))
+            .collect();
+        away.sort_by_key(|(_, name)| name.to_lowercase());
+        away
+    }
+
+    pub(crate) fn unsaved_pages_of(&self, id: &str) -> usize {
+        self.scans.get(id).map_or(0, |scan| scan.pages.len())
+    }
+
     pub(crate) fn open_scanner(&mut self, id: &str) {
-        let known = self
+        let Some(name) = self
             .printers
             .as_ref()
-            .is_some_and(|state| state.scanners.iter().any(|scanner| scanner.id == id));
-        if !known || self.scans.contains_key(id) {
+            .and_then(|state| state.scanners.iter().find(|scanner| scanner.id == id))
+            .map(|scanner| scanner.name.clone())
+        else {
+            return;
+        };
+        let scan = self
+            .scans
+            .entry(id.to_owned())
+            .or_insert_with(|| ScanState::new(id, &name));
+        if scan.capabilities.is_some() || scan.busy.is_some() || scan.message.is_some() {
             return;
         }
-        self.scans.insert(id.to_owned(), ScanState::new(id));
+        scan.busy = Some(Busy::Asking);
         self.commands
             .push(Command::Printers(PrinterCommand::ScanCapabilities(
                 id.to_owned(),
@@ -426,6 +599,18 @@ impl SettingsView {
             ScanUpdate::Capabilities(id, _)
             | ScanUpdate::Scanned(id, _)
             | ScanUpdate::Saved(id, _) => id.clone(),
+            ScanUpdate::Kept(id, name, pages, preview) => {
+                let scan = self
+                    .scans
+                    .entry(id.clone())
+                    .or_insert_with(|| ScanState::new(id, name));
+                scan.busy = None;
+                if scan.pages.is_empty() {
+                    scan.pages.clone_from(pages);
+                    scan.preview.clone_from(preview);
+                }
+                return;
+            }
         };
         let opened = matches!(&self.detail, Some(Detail::Printer(shown)) if *shown == id);
         let Some(scan) = self.scans.get_mut(&id) else {
@@ -465,6 +650,7 @@ impl SettingsView {
                     Err(message) => scan.message = Some(message),
                 }
             }
+            ScanUpdate::Kept(..) => {}
             ScanUpdate::Saved(_, saved) => {
                 scan.busy = None;
                 finished = Some(matches!(saved, Ok(Some(_))));
@@ -527,7 +713,7 @@ impl SettingsView {
                     scan.busy = Some(Busy::Scanning);
                     scan.message = None;
                     scan.asking_discard = false;
-                    command = Some(PrinterCommand::Scan(id, options));
+                    command = Some(PrinterCommand::Scan(id, scan.name.clone(), options));
                     focus = Some("scan");
                 }
             }
@@ -559,6 +745,7 @@ impl SettingsView {
             }
             ScanIntent::ConfirmDiscard => {
                 scan.discard();
+                forget_pages(&id);
                 scan.message = None;
                 focus = Some("scan");
             }
@@ -606,99 +793,105 @@ impl SettingsView {
             return Vec::new();
         };
         let mut page: Widgets = vec![boxed(Caption::new(Text::label(&tr!("Scan"))))];
-        let Some(capabilities) = scan.capabilities.clone() else {
-            let row = match (scan.busy, &scan.message) {
-                (Some(Busy::Asking), _) | (_, None) => {
-                    muted_row(&tr!("Asking the scanner what it can do…"))
-                }
-                (_, Some(message)) => {
-                    let retry =
-                        self.scan_button(&tr!("Try Again"), "scan", true, ScanIntent::Retry);
-                    boxed(Row::new(Text::new(message, Tone::Muted), Some(retry)))
-                }
-            };
-            page.push(boxed(Card::new(vec![row])));
-            return page;
-        };
         let idle = scan.busy.is_none();
         let mut rows = Vec::new();
-        if capabilities.sources.len() > 1 {
-            let titles: Vec<String> = capabilities
-                .sources
-                .iter()
-                .map(|source| source_title(&source.name))
-                .collect();
-            rows.push(self.scan_menu(
-                &tr!("Source"),
-                "scan-source",
-                &titles,
-                scan.source,
-                ScanIntent::Source,
-            ));
-        }
-        let source = scan.source().cloned().unwrap_or_default();
-        if source.color {
-            rows.push(self.scan_menu(
-                &tr!("Color"),
-                "scan-color",
-                &[tr!("Color"), tr!("Grayscale")],
-                usize::from(!scan.color),
-                ScanIntent::Color,
-            ));
-        }
-        if source.resolutions.len() > 1 {
-            let titles: Vec<String> = source
-                .resolutions
-                .iter()
-                .map(|dpi| tr!("{dpi} dpi", dpi = dpi.to_string()))
-                .collect();
-            let selected = source
-                .resolutions
-                .iter()
-                .position(|dpi| *dpi == scan.resolution)
-                .unwrap_or(0);
-            rows.push(self.scan_menu(
-                &tr!("Resolution"),
-                "scan-resolution",
-                &titles,
-                selected,
-                ScanIntent::Resolution,
-            ));
-        }
-        let status = match (scan.busy, &scan.message) {
-            (Some(Busy::Scanning), _) => tr!("Scanning…"),
-            (Some(Busy::Cancelling), _) => tr!("Stopping…"),
-            (Some(Busy::Saving), _) => tr!("Saving…"),
-            (_, Some(message)) => message.clone(),
-            _ if scan.pages.is_empty() => {
-                tr!("Place the page on the scanner or the pages in its feeder")
+        match scan.capabilities.clone() {
+            None => {
+                let row = match (scan.busy, &scan.message) {
+                    (Some(Busy::Asking), _) => {
+                        muted_row(&tr!("Asking the scanner what it can do…"))
+                    }
+                    (_, None) => muted_row(&tr!(
+                        "The scanner isn’t on this network now. Its scanned pages can still be saved."
+                    )),
+                    (_, Some(message)) => {
+                        let retry =
+                            self.scan_button(&tr!("Try Again"), "scan", true, ScanIntent::Retry);
+                        boxed(Row::new(Text::new(message, Tone::Muted), Some(retry)))
+                    }
+                };
+                rows.push(row);
             }
-            _ => trn!(
-                "1 page scanned",
-                "{count} pages scanned",
-                count = scan.pages.len()
-            ),
-        };
-        let label = match scan.pages.is_empty() {
-            true => tr!("Scan"),
-            false => tr!("Scan More"),
-        };
-        let button = match scan.busy {
-            Some(Busy::Scanning | Busy::Cancelling) => self.scan_button(
-                &tr!("Cancel"),
-                "scan",
-                scan.busy == Some(Busy::Scanning),
-                ScanIntent::Cancel,
-            ),
-            _ => self.scan_button(&label, "scan", idle, ScanIntent::Start),
-        };
-        rows.push(boxed(
-            Row::new(
-                Text::new(&tr!("Scan with these settings"), Tone::Primary),
-                Some(button),
-            )
-            .detail(Text::new(&status, Tone::Muted).caption()),
-        ));
+            Some(capabilities) => {
+                if capabilities.sources.len() > 1 {
+                    let titles: Vec<String> = capabilities
+                        .sources
+                        .iter()
+                        .map(|source| source_title(&source.name))
+                        .collect();
+                    rows.push(self.scan_menu(
+                        &tr!("Source"),
+                        "scan-source",
+                        &titles,
+                        scan.source,
+                        ScanIntent::Source,
+                    ));
+                }
+                let source = scan.source().cloned().unwrap_or_default();
+                if source.color {
+                    rows.push(self.scan_menu(
+                        &tr!("Color"),
+                        "scan-color",
+                        &[tr!("Color"), tr!("Grayscale")],
+                        usize::from(!scan.color),
+                        ScanIntent::Color,
+                    ));
+                }
+                if source.resolutions.len() > 1 {
+                    let titles: Vec<String> = source
+                        .resolutions
+                        .iter()
+                        .map(|dpi| tr!("{dpi} dpi", dpi = dpi.to_string()))
+                        .collect();
+                    let selected = source
+                        .resolutions
+                        .iter()
+                        .position(|dpi| *dpi == scan.resolution)
+                        .unwrap_or(0);
+                    rows.push(self.scan_menu(
+                        &tr!("Resolution"),
+                        "scan-resolution",
+                        &titles,
+                        selected,
+                        ScanIntent::Resolution,
+                    ));
+                }
+                let status = match (scan.busy, &scan.message) {
+                    (Some(Busy::Scanning), _) => tr!("Scanning…"),
+                    (Some(Busy::Cancelling), _) => tr!("Stopping…"),
+                    (Some(Busy::Saving), _) => tr!("Saving…"),
+                    (_, Some(message)) => message.clone(),
+                    _ if scan.pages.is_empty() => {
+                        tr!("Place the page on the scanner or the pages in its feeder")
+                    }
+                    _ => trn!(
+                        "1 page scanned",
+                        "{count} pages scanned",
+                        count = scan.pages.len()
+                    ),
+                };
+                let label = match scan.pages.is_empty() {
+                    true => tr!("Scan"),
+                    false => tr!("Scan More"),
+                };
+                let button = match scan.busy {
+                    Some(Busy::Scanning | Busy::Cancelling) => self.scan_button(
+                        &tr!("Cancel"),
+                        "scan",
+                        scan.busy == Some(Busy::Scanning),
+                        ScanIntent::Cancel,
+                    ),
+                    _ => self.scan_button(&label, "scan", idle, ScanIntent::Start),
+                };
+                rows.push(boxed(
+                    Row::new(
+                        Text::new(&tr!("Scan with these settings"), Tone::Primary),
+                        Some(button),
+                    )
+                    .detail(Text::new(&status, Tone::Muted).caption()),
+                ));
+            }
+        }
         if !scan.pages.is_empty() {
             if let Some(preview) = scan.preview.clone() {
                 let label = tr!(

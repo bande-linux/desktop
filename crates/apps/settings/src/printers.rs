@@ -55,7 +55,7 @@ pub enum PrinterCommand {
     AddAddress(String),
     InstallPrinting(Support),
     ScanCapabilities(String),
-    Scan(String, ScanOptions),
+    Scan(String, String, ScanOptions),
     CancelScan(String),
     SaveScan(String, Vec<Page>, Format),
 }
@@ -180,6 +180,12 @@ pub fn follow_printers(
     let reading = system.clone();
     let session = session.clone();
     let commands_session = crate::follow::waiting_session(&session);
+    let restoring = updates.clone();
+    spawn("kept-scans", move || {
+        for kept in scan::kept() {
+            restoring.send(kept);
+        }
+    });
     spawn("printers", move || {
         while changes.recv().is_ok() {
             std::thread::sleep(SETTLE);
@@ -277,10 +283,10 @@ pub fn follow_printers(
                     });
                     Ok(())
                 }
-                PrinterCommand::Scan(scanner, options) => {
+                PrinterCommand::Scan(scanner, name, options) => {
                     let (session, updates) = (commands_session.clone(), updates.clone());
                     spawn("scan", move || {
-                        updates.send(scan::scan(&session, &scanner, &options));
+                        updates.send(scan::scan(&session, &scanner, &name, &options));
                     });
                     Ok(())
                 }
@@ -414,7 +420,8 @@ impl SettingsView {
             })
             .cloned()
             .collect();
-        if state.printers.is_empty() && scanners_only.is_empty() {
+        let away = self.kept_away(&state);
+        if state.printers.is_empty() && scanners_only.is_empty() && away.is_empty() {
             if rows.is_empty() {
                 rows.push(muted_row(&tr!(
                     "No printers on this network yet. They appear here as soon as they are found."
@@ -423,10 +430,13 @@ impl SettingsView {
             return rows;
         }
         for printer in &state.printers {
-            let text = state_text(
-                printer,
-                self.queue_of(printer).as_ref(),
-                self.waiting_jobs(printer),
+            let text = self.with_unsaved(
+                state_text(
+                    printer,
+                    self.queue_of(printer).as_ref(),
+                    self.waiting_jobs(printer),
+                ),
+                &printer.id,
             );
             let mut open = intent(&self.intents, Intent::OpenPrinter);
             let id = printer.id.clone();
@@ -445,9 +455,28 @@ impl SettingsView {
                 Text::new(&scanner.name, Tone::Primary),
                 Some(boxed(Label::new("›"))),
             )
-            .detail(Text::new(&tr!("Scanner"), Tone::Muted).caption())
+            .detail(
+                Text::new(&self.with_unsaved(tr!("Scanner"), &scanner.id), Tone::Muted).caption(),
+            )
             .on_activate(move || open(id.clone()));
             rows.push(self.item_row(format!("printer:{}", scanner.id), row));
+        }
+        for (id, name) in away {
+            let mut open = intent(&self.intents, Intent::OpenPrinter);
+            let target = id.clone();
+            let row = Row::new(
+                Text::new(&name, Tone::Primary),
+                Some(boxed(Label::new("›"))),
+            )
+            .detail(
+                Text::new(
+                    &self.with_unsaved(tr!("Not on this network"), &id),
+                    Tone::Muted,
+                )
+                .caption(),
+            )
+            .on_activate(move || open(target.clone()));
+            rows.push(self.item_row(format!("printer:{id}"), row));
         }
         if state.printers.is_empty() {
             return rows;
@@ -578,32 +607,53 @@ impl SettingsView {
         )
     }
 
+    fn with_unsaved(&self, text: String, id: &str) -> String {
+        match self.unsaved_pages_of(id) {
+            0 => text,
+            count => format!(
+                "{text} · {}",
+                trn!(
+                    "1 scanned page not saved",
+                    "{count} scanned pages not saved",
+                    count = count
+                )
+            ),
+        }
+    }
+
     fn scanner_page(&mut self, state: &PrintersState, id: &str) -> Option<Widgets> {
-        let scanner = state.scanners.iter().find(|scanner| scanner.id == id)?;
+        let name = self.scanner_name(id)?;
+        let scanner = state.scanners.iter().find(|scanner| scanner.id == id);
         let mut page: Widgets = self.back_button(PaneId::Printers).into_iter().collect();
         let ink = self.palette().ink;
         let symbol = self.symbol(SCANNER_SYMBOL, HEADER_SYMBOL, ink);
         page.push(boxed(Header::new(
             symbol,
-            Text::new(&scanner.name, Tone::Primary).role(TextRole::Title),
-            &tr!("Scanner"),
+            Text::new(&name, Tone::Primary).role(TextRole::Title),
+            &match scanner {
+                Some(_) => tr!("Scanner"),
+                None => tr!("Not on this network"),
+            },
             None,
         )));
-        let about: Widgets = [
-            (text!("Kind"), &scanner.model),
-            (text!("Location"), &scanner.location),
-        ]
-        .into_iter()
-        .filter(|(_, value)| !value.is_empty())
-        .map(|(label, value)| info_row(&label.tr(), value))
-        .collect();
+        let (model, location) = scanner.map_or_else(Default::default, |scanner| {
+            (scanner.model.clone(), scanner.location.clone())
+        });
+        let about: Widgets = [(text!("Kind"), &model), (text!("Location"), &location)]
+            .into_iter()
+            .filter(|(_, value)| !value.is_empty())
+            .map(|(label, value)| info_row(&label.tr(), value))
+            .collect();
         if !about.is_empty() {
             page.push(boxed(Card::new(about)));
         }
         page.extend(self.scan_rows(id));
+        if scanner.is_none() {
+            return Some(page);
+        }
         let remove = self.remove_row(
             id,
-            &scanner.name,
+            &name,
             &tr!("It shows up again when it is found on this network, and its identity is learned anew."),
             &tr!("Remove this scanner"),
         );

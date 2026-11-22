@@ -27,7 +27,7 @@ use crate::net::Network;
 use crate::picture::Picture;
 use crate::settings::MailSettings;
 use crate::store::{MessageId, Store, Summary};
-use crate::ui::reader::{Clock, Entry, Reading, Remote, Target, Thread};
+use crate::ui::reader::{Clock, Entry, Reading, Target, Thread};
 use crate::ui::reader_pane::{
     Look, ReaderPane, address_menu, attachment_menu, fetch_remote, link_alert, link_menu,
     paint_link_target,
@@ -81,6 +81,7 @@ pub struct MessageView {
     hits: Vec<(Rect, Target)>,
     hover: Option<Target>,
     answers: Rc<RefCell<Vec<Answer>>>,
+    approved: Vec<String>,
     requests: Vec<Request>,
     access: WidgetId,
 }
@@ -170,6 +171,7 @@ impl MessageView {
             hits: Vec::new(),
             hover: None,
             answers: Rc::default(),
+            approved: Vec::new(),
             requests: Vec::new(),
             access: WidgetId::next(),
         })
@@ -260,10 +262,9 @@ impl MessageView {
         remember_certificates(&self.store, &content);
         let summary = summary_of(&content, raw.len());
         let reading = Reading::new(content, true, &self.settings);
-        let asked = self
-            .reader
-            .focused()
-            .is_some_and(|(_, shown)| shown.remote != Remote::Blocked);
+        let sources = reading.remote_sources();
+        let asked =
+            !sources.is_empty() && sources.iter().all(|source| self.approved.contains(source));
         self.reader.thread = Some(Thread {
             entries: vec![Entry {
                 summary,
@@ -316,6 +317,7 @@ impl MessageView {
         let Some(sources) = self.reader.start_remote(MESSAGE) else {
             return;
         };
+        self.approved.extend(sources.iter().cloned());
         let outbox = self.arrived.outbox();
         fetch_remote(sources, self.network.clone(), move |pictures| {
             outbox.send(Arrived::Pictures(pictures));

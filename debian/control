@@ -399,7 +399,7 @@ Section: misc
 Depends: ${shlibs:Depends},
  default-dbus-session-bus | dbus-session-bus,
  ${misc:Depends}
-Recommends: avahi-daemon
+Suggests: avahi-daemon
 Description: Bande print service: prints to network printers without CUPS
  Serves org.bande.Print on the session bus: finds IPP Everywhere
  (driverless) printers on the network through Avahi, keeps a
@@ -571,8 +571,8 @@ Recommends: cifs-utils,
  go-mtpfs,
  gphotofs,
  libmtp-common,
- fuse3,
- avahi-daemon,
+ fuse3
+Suggests: avahi-daemon,
  libnss-mdns
 Description: Bande removable media mounting
  Mounts removable drives through UDisks2 as they appear, connects to SMB,

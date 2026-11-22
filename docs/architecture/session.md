@@ -752,6 +752,39 @@ Settings ▸ Sharing works with Debian's own Samba and SSH setup and never rewri
   folders. The sharing password is the person's Samba password (`smbpasswd -a`).
 - **Remote login** enables or disables `ssh.service`.
 
+**Screen Sharing** (`crates/services/screen-sharing`, package `bande-screen-sharing`) lets VNC
+viewers on other computers see and control the screen over RFB (RFC 6143). It is on while the
+user unit `bande-screen-sharing.service` is enabled (Settings ▸ Sharing; the package never
+enables it), and listens on port 5900 only then:
+
+- **Who may connect.** Only peers on a network one of this computer's interfaces is on (or the
+  computer itself); others are dropped before a byte is read. Nothing changes the firewall and
+  nothing asks the router to forward the port. A password of at least 8 characters, kept in the
+  keyring and read when the service starts (Settings restarts it after a change), is required
+  before Settings turns sharing on. Viewers are offered VeNCrypt only: X509Plain or X509Vnc over
+  TLS 1.2 or 1.3 with a self-signed certificate made for this computer on first start
+  (`$XDG_DATA_HOME/bande/screen-sharing`, its fingerprint shown in Settings). Plain VNC
+  authentication (RFB 3.3 and viewers without VeNCrypt) only after **Allow older viewers**.
+  Wrong passwords are slowed by a second each, five from one address or thirty in all within ten
+  minutes refuse further tries, a handshake has a minute, at most four viewers connect at once,
+  and every client message is bounded (`rfb/protocol.rs`).
+- **Asking.** With **Ask before someone connects** (the default) a viewer that knows the password
+  waits on a notification with Allow and Deny for 30 seconds; no answer is Deny. Without it, a
+  notification says who connected.
+- **The screen.** Once a viewer is let in, the service calls the screenshot tool's
+  `StartViewerStream`, which only `/usr/libexec/bande-screen-sharing` may call: the first
+  display as a PipeWire stream with the pointer drawn in, and a socket on which the compositor
+  serves EIS (`bande_capture_v1.connect_input`). While anyone views, the Taskbar shows the screen
+  symbol ("Someone is viewing your screen"); clicking it ends the stream and disconnects every
+  viewer. The stream stops when the last viewer leaves or the service goes away.
+- **RFB.** Raw and ZRLE (zlib, solid, palette and raw tiles), DesktopSize when the display
+  changes size, any true-colour pixel format; only changed 64×64 tiles are sent, when the viewer
+  asks. RFB keysyms are typed through `ei_text`; buttons 4 to 7 scroll. Clipboard text from a
+  viewer is not used.
+- **Found nearby.** While on, `_rfb._tcp` is announced through Avahi when it is installed
+  (`bande_discovery::nearby::announce`); without it Settings offers to install it and shows the
+  addresses to type.
+
 ## Backups
 
 Scheduled, versioned backups with `restic` (`crates/services/backup`). `bande-backupd` is a

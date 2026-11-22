@@ -45,7 +45,8 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   authors and licence from its `Cargo.toml`, then each licence's text from `ci/licenses`.
 - **Units and maintainer scripts**: `dh_installsystemd` and `dh_installsystemduser` enable and
   restart the units: the user units of the session services are enabled for every user and
-  never started from a package; `bande-backup`'s timer and service are neither enabled nor
+  never started from a package, except `bande-screen-sharing.service`, which only Settings
+  enables; `bande-backup`'s timer and service are neither enabled nor
   started (Settings turns backups on; `postinst` restarts a running backup service), the
   login window's console fallback, its boot screen path unit and the fault reporter's
   socket-activated services are not started, and `bande-crash-reports@.service`, a template that `dh_installsystemd` skips, is
@@ -242,6 +243,8 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   plugins (the codecs); `gstreamer1.0-plugins-bad` stays out because it pulls GTK 3;
 - `bande-screenshot` recommends `gst-launch-1.0`, `pipewiresrc`, the VP8 encoder and the H.264
   encoder for MP4: screen recording is offered only when they are there;
+- `bande-screen-sharing` depends on `bande-screenshot`, which shows it the screen; the desktop
+  recommends it, and Settings installs it from Sharing when it is missing;
 - `bande-reporter` recommends `eu-stack` (elfutils) for the stacks of a hung program and
   `bande-crash-reports` `libdw` for systemd-coredump's stack traces; a report without them
   has no stack;

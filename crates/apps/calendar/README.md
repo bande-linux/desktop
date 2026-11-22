@@ -35,6 +35,9 @@ views. Packaged as `bande-calendar`.
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.
+  Undo (Ctrl+Z) takes back a delete, a move or a change of length: a deleted event comes back
+  with its own UID at its own address (`If-None-Match: *`), so other clients see the same event
+  return, and a moved one is written back with its earlier times.
 - **iCalendar.** Its own parser and writer: line folding, escaping, unknown properties and
   components kept on round trip, `RRULE` (every frequency and `BY*` part, `COUNT`, `UNTIL`,
   `BYSETPOS`, week numbers), `EXDATE`, `RDATE`, `RECURRENCE-ID` overrides, all-day events,
@@ -85,7 +88,7 @@ views. Packaged as `bande-calendar`.
   the window opens when there is something to confirm.
 
 Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Page Up/Page Down previous/next, Ctrl+N new
-event, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the selected event (or the
+event, Ctrl+F search, Ctrl+R refresh, Delete to delete, Ctrl+Z to undo, Enter to open the selected event (or the
 focused day, in the month and year views), Ctrl+W close and Ctrl+Q quit. The arrow keys move the
 focused day (Up and Down by a week in the month and year views, and scroll the hours in the day
 and week views), Home and End go to the first and last day shown, and Tab and Shift+Tab select
@@ -121,5 +124,6 @@ Settings.
 over 64 MiB. `tests/accounts.rs` finds a CalDAV server from a domain's records and signs in with
 Digest after a wrong password, and never sends a password over plain HTTP to anything but this
 computer. `tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
-exceptions and end follow. The whole test list and the reason for each is in
+exceptions and end follow. `tests/undo.rs` undoes a delete while a sync pushes it and checks
+the event comes back at its own address. The whole test list and the reason for each is in
 `docs/quality/tests.md`.

@@ -719,6 +719,40 @@ impl Library {
         self.save(calendar);
     }
 
+    pub fn restore(&mut self, calendar: usize, href: &str, data: String) -> Option<usize> {
+        let target = self.calendars.get_mut(calendar)?;
+        if target.info.read_only {
+            return None;
+        }
+        let local = target.info.account == LOCAL_ACCOUNT;
+        let index = match target.objects.iter().position(|stored| stored.href == href) {
+            Some(index) => {
+                let stored = &mut target.objects[index];
+                stored.pending = match (local, stored.pending) {
+                    (true, _) => None,
+                    (false, Some(Pending::Delete)) => {
+                        stored.etag = None;
+                        Some(Pending::Create)
+                    }
+                    (false, Some(Pending::Create)) => Some(Pending::Create),
+                    (false, _) => Some(Pending::Update),
+                };
+                stored.data = data;
+                stored.reparse();
+                index
+            }
+            None => {
+                let pending = (!local).then_some(Pending::Create);
+                target
+                    .objects
+                    .push(Stored::new(href.to_owned(), None, data, pending));
+                target.objects.len() - 1
+            }
+        };
+        self.save(calendar);
+        Some(index)
+    }
+
     pub fn move_object(&mut self, from: usize, object: usize, to: usize) -> Option<usize> {
         let moved = self.object(from, object)?.clone();
         if from == to || self.calendars.get(to)?.info.read_only {

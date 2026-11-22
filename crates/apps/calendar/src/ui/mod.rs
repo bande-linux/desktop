@@ -38,6 +38,7 @@ pub use toolbar::TOOLBAR_HEIGHT;
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 const MAX_ZONES: usize = 12;
+const UNDO_DEPTH: usize = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -184,6 +185,13 @@ pub(crate) enum Confirm {
     DeleteCalendar(usize),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Undo {
+    calendar: String,
+    href: String,
+    data: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pane {
     Content,
@@ -239,6 +247,7 @@ pub struct CalendarView {
     scrolled_once: bool,
     grid: Option<geometry::TimeGrid>,
     pending_open: Option<Selection>,
+    undo: Vec<Undo>,
 }
 
 impl CalendarView {
@@ -301,6 +310,7 @@ impl CalendarView {
             scrolled_once: false,
             grid: None,
             pending_open: None,
+            undo: Vec::new(),
         }
     }
 
@@ -1098,7 +1108,49 @@ impl CalendarView {
         }
     }
 
+    fn remember(&mut self, found: &Found) {
+        let Some(calendar) = self.library.calendars.get(found.calendar) else {
+            return;
+        };
+        let Some(stored) = calendar.objects.get(found.object) else {
+            return;
+        };
+        if self.undo.len() == UNDO_DEPTH {
+            self.undo.remove(0);
+        }
+        self.undo.push(Undo {
+            calendar: calendar.info.id.clone(),
+            href: stored.href.clone(),
+            data: stored.data.clone(),
+        });
+    }
+
+    pub(crate) fn undo(&mut self) -> bool {
+        let Some(undo) = self.undo.pop() else {
+            return false;
+        };
+        self.close_inspector(false);
+        let Some(calendar) = self.library.calendar_index(&undo.calendar) else {
+            return true;
+        };
+        let Some(object) = self.library.restore(calendar, &undo.href, undo.data) else {
+            return true;
+        };
+        let day = self
+            .library
+            .object(calendar, object)
+            .and_then(|object| object.events.first())
+            .map(|event| event.start.date());
+        if let Some(day) = day {
+            self.go_to(day);
+        }
+        self.selected = None;
+        self.requests.push(Request::Changed);
+        true
+    }
+
     pub(crate) fn apply_delete(&mut self, found: &Found, scope: Scope) {
+        self.remember(found);
         let Some(object) = self.library.object(found.calendar, found.object).cloned() else {
             return;
         };
@@ -1120,6 +1172,7 @@ impl CalendarView {
         all_day: bool,
         scope: Scope,
     ) {
+        self.remember(found);
         let Some(object) = self.library.object(found.calendar, found.object) else {
             return;
         };

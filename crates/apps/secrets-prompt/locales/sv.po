@@ -110,3 +110,6 @@ msgstr "Lösenorden stämmer inte överens. Försök igen."
 
 msgid "The password you entered is incorrect."
 msgstr "Lösenordet du angav är fel."
+
+msgid "The passphrase you entered is incorrect."
+msgstr "Lösenfrasen du angav är fel."

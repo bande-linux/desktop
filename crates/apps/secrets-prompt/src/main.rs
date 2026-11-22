@@ -382,7 +382,11 @@ impl Prompt {
         match line {
             "wrong" if self.stage == Stage::Waiting => {
                 self.first = None;
-                self.present(Some(tr!("The password you entered is incorrect.")));
+                let wrong = match self.request.mode {
+                    Mode::Passphrase => tr!("The passphrase you entered is incorrect."),
+                    _ => tr!("The password you entered is incorrect."),
+                };
+                self.present(Some(wrong));
             }
             _ => self.stage = Stage::Done,
         }

@@ -22,7 +22,7 @@ use bande_volumes::udisks::{BLOCK, Change, ENCRYPTED, FILESYSTEM, Objects, Udisk
 use devices::Devices;
 use failing::FailingDisks;
 use thunderbolt::Thunderbolt;
-use unlock::Unlocked;
+use unlock::{Prompt, Unlocked};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -132,6 +132,7 @@ struct State {
     locked: HashMap<OwnedObjectPath, String>,
     unlocked: bool,
     waiting: HashSet<OwnedObjectPath>,
+    prompts: HashMap<OwnedObjectPath, Prompt>,
 }
 
 type Shared = Arc<Mutex<State>>;
@@ -251,10 +252,15 @@ impl Automounter {
 
     fn unlock(&self, path: &OwnedObjectPath, label: String) {
         let (system, session, path) = (self.system.clone(), self.session.clone(), path.clone());
+        let state = Arc::clone(&self.state);
         let spawned = thread::Builder::new()
             .name("unlock".to_owned())
-            .spawn(
-                move || match unlock::ask_and_unlock(&system, &path, &label) {
+            .spawn(move || {
+                let unlocked = unlock::ask_and_unlock(&system, &path, &label, |prompt| {
+                    lock(&state).prompts.insert(path.clone(), prompt);
+                });
+                lock(&state).prompts.remove(&path);
+                match unlocked {
                     Unlocked::Opened(cleartext) => {
                         notice::mount(&system, &session, &cleartext, &label)
                     }
@@ -264,8 +270,8 @@ impl Automounter {
                         tracing::warn!("cannot unlock {path}: {error}");
                         notice::not_unlocked(&session, &label);
                     }
-                },
-            );
+                }
+            });
         if let Err(error) = spawned {
             tracing::warn!("cannot ask for the passphrase: {error}");
         }
@@ -329,6 +335,9 @@ impl Automounter {
                 .any(|name| name == ENCRYPTED || name == BLOCK)
             {
                 state.locked.remove(path);
+                if let Some(prompt) = state.prompts.remove(path) {
+                    prompt.close();
+                }
             }
             if !interfaces
                 .iter()

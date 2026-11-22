@@ -51,6 +51,7 @@ pub enum State {
         native: String,
     },
     Present,
+    NeedsX11,
     Ready(Preview),
     Blocked {
         missing: Vec<String>,
@@ -134,7 +135,13 @@ pub fn installed(client: &Client, deb: &Deb) -> Result<Option<Package>, Error> {
         .find(|package| package.arch == deb.arch || deb.arch == "all" || package.arch == "all"))
 }
 
-pub fn inspect(client: &Client, path: &Path, machine: &Machine, deb: Option<&Deb>) -> State {
+pub fn inspect(
+    client: &Client,
+    path: &Path,
+    machine: &Machine,
+    deb: Option<&Deb>,
+    x11_accepted: bool,
+) -> State {
     let Some(deb) = deb else {
         return State::Invalid;
     };
@@ -143,6 +150,9 @@ pub fn inspect(client: &Client, path: &Path, machine: &Machine, deb: Option<&Deb
             arch: deb.arch.clone(),
             native: machine.native.clone(),
         };
+    }
+    if deb.needs_x11 && !x11_accepted {
+        return State::NeedsX11;
     }
     preview(client, path, deb)
 }

@@ -7,8 +7,8 @@ use bande_packages::{
     Client, Error, ErrorCode, Info, Mode, Package, Progress, Status, native, schedule,
 };
 
-use crate::catalog::flatpak_needs_x11;
 use crate::media::Loaded;
+use bande_packages::x11::flatpak_needs_x11;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Job {

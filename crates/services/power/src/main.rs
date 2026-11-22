@@ -13,7 +13,7 @@ use bande_power::idle::{Assertion, Inhibitor};
 use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
 use bande_power::password::PasswordPolicy;
 use bande_power::screensaver::InhibitionService;
-use bande_power::{adapter, audio};
+use bande_power::{adapter, audio, gadgets};
 use zbus::blocking::Connection;
 
 const LOCK_WAIT: Duration = Duration::from_secs(3);
@@ -30,6 +30,9 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     let session = Connection::session()?;
     let guard = SleepGuard::start(&system, LOCK_WAIT)?;
     battery::watch(&system, Arc::new(BatteryNotifier::new(&session)))?;
+    if let Err(error) = gadgets::watch(&system, &session) {
+        tracing::warn!("Bluetooth batteries are not followed: {error}");
+    }
     if let Err(error) = adapter::follow(&system, &session) {
         tracing::warn!("cannot follow the power adapter: {error}");
     }

@@ -34,6 +34,21 @@ msgstr "Logga in"
 msgid "This network asks you to sign in before you can use the internet."
 msgstr "Nätverket kräver att du loggar in innan du kan använda internet."
 
+msgid "Make sure it’s turned on and nearby, then try again."
+msgstr "Kontrollera att den är påslagen och i närheten och försök sedan igen."
+
+msgid "Turn Bluetooth on, then try again."
+msgstr "Slå på Bluetooth och försök sedan igen."
+
+msgid "It may be connected to another device, such as a phone. Disconnect it there, then try again."
+msgstr "Den kan vara ansluten till en annan enhet, till exempel en telefon. Koppla från den där och försök sedan igen."
+
+msgid "Couldn’t connect to {name}"
+msgstr "Det gick inte att ansluta till {name}"
+
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
 msgid "Are you sure you want to restart your computer now?"
 msgstr "Vill du verkligen starta om datorn nu?"
 

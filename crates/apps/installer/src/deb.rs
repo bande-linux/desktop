@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 use bande_toolkit::Image;
 use bande_xdg::DesktopEntry;
 
-const SHOW_FORMAT: &str = "${Package}\\n${Version}\\n${Architecture}\\n${Maintainer}\\n${Installed-Size}\\n${Homepage}\\n${Description}";
+const SHOW_FORMAT: &str = "${Package}\\n${Version}\\n${Architecture}\\n${Maintainer}\\n${Installed-Size}\\n${Homepage}\\n${Depends}\\n${Pre-Depends}\\n${Description}";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Deb {
@@ -19,6 +19,7 @@ pub struct Deb {
     pub homepage: String,
     pub summary: String,
     pub description: String,
+    pub needs_x11: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,7 +77,18 @@ pub fn read(path: &Path) -> Option<Deb> {
     }
     let text = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = text.lines().collect();
-    let [name, version, arch, maintainer, size, homepage, rest @ ..] = lines.as_slice() else {
+    let [
+        name,
+        version,
+        arch,
+        maintainer,
+        size,
+        homepage,
+        depends,
+        pre_depends,
+        rest @ ..,
+    ] = lines.as_slice()
+    else {
         return None;
     };
     if name.is_empty() || version.is_empty() || arch.is_empty() {
@@ -92,6 +104,7 @@ pub fn read(path: &Path) -> Option<Deb> {
         homepage: (*homepage).to_owned(),
         summary,
         description,
+        needs_x11: bande_packages::x11::needs_x11([*depends, *pre_depends]),
     })
 }
 
@@ -117,8 +130,10 @@ pub fn missing_requirements(details: &str) -> Vec<String> {
         .lines()
         .filter_map(|line| {
             let (_, after) = line.split_once("Depends:")?;
-            let requirement = after.split(" but ").next().unwrap_or(after).trim();
-            (!requirement.is_empty()).then(|| requirement.to_owned())
+            let (requirement, reason) = after.split_once(" but ").unwrap_or((after, ""));
+            let requirement = requirement.trim();
+            (!requirement.is_empty() && !reason.starts_with("it is not going to be installed"))
+                .then(|| requirement.to_owned())
         })
         .collect();
     missing.dedup();

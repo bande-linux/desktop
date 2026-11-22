@@ -52,6 +52,30 @@ msgstr "Lås upp ”{name}”, välj Filöverföring på den om den frågar och 
 msgid "Unlock Your Device"
 msgstr "Lås upp enheten"
 
+msgid "Open Disks"
+msgstr "Öppna Skivor"
+
+msgid "“{label}” wasn’t unlocked"
+msgstr "”{label}” låstes inte upp"
+
+msgid "Open Disks to unlock it."
+msgstr "Öppna Skivor för att låsa upp den."
+
+msgid "“{label}” couldn’t be opened"
+msgstr "Det gick inte att öppna ”{label}”"
+
+msgid "Open Disks to check it."
+msgstr "Öppna Skivor för att kontrollera den."
+
+msgid "It may not have been shut down fully in Windows. Open it read-only, or start Windows, shut it down fully and connect the disk again."
+msgstr "Den kanske inte stängdes av helt i Windows. Öppna den skrivskyddad, eller starta Windows, stäng av helt och anslut skivan igen."
+
+msgid "Open Read-Only"
+msgstr "Öppna skrivskyddad"
+
+msgid "This computer can’t read the format of this disk."
+msgstr "Den här datorn kan inte läsa skivans format."
+
 msgid "Manage Storage…"
 msgstr "Hantera lagring…"
 
@@ -63,3 +87,27 @@ msgstr "Skivan är nästan full"
 
 msgid "Only {free} is left. Make room by removing files you no longer need."
 msgstr "Bara {free} är kvar. Frigör utrymme genom att ta bort filer du inte längre behöver."
+
+msgid "Allow Once"
+msgstr "Tillåt en gång"
+
+msgid "Always Allow"
+msgstr "Tillåt alltid"
+
+msgid "Thunderbolt"
+msgstr "Thunderbolt"
+
+msgid "Allow “{name}”?"
+msgstr "Tillåta ”{name}”?"
+
+msgid "A Thunderbolt device gets direct access to this computer. Allow it only if you know where it came from."
+msgstr "En Thunderbolt-enhet får direkt åtkomst till datorn. Tillåt den bara om du vet var den kommer ifrån."
+
+msgid "“{label}” is encrypted"
+msgstr "”{label}” är krypterad"
+
+msgid "Enter its passphrase to open it."
+msgstr "Ange lösenfrasen för att öppna den."
+
+msgid "Unlock"
+msgstr "Lås upp"

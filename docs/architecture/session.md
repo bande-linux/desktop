@@ -247,7 +247,8 @@ UI.
   the shell over `bande_shell_v1`.
 - Device lists leave out a port that is unavailable (judged as WirePlumber's
   `haveAvailableRoutes`, followed live), so Headphones appear only while plugged in. Plugging in
-  makes the jack the default once per session (`bande-sound`); unplugging falls back to the
+  makes the jack the default once per session (`bande-sound`), and Bluetooth headphones become
+  the default output each time they connect; unplugging or disconnecting falls back to the
   previous choice. Filter-chain streams are never listed as apps, and a `hide-parent` node hides
   its raw speaker. Settings ▸ Sound has a balance for stereo outputs, and lists the profiles of
   each card that has a choice (`EnumProfile`, set with `SPA_PARAM_Profile` and saved), so an HDMI
@@ -390,9 +391,12 @@ brings up the dialog.
   name has an owner, so it never D-Bus-activates an app. Items marked `x-bande-shell-action`
   (About, Hide, Hide Other Apps, Show All Apps) are performed by the shell through
   `bande_shell_v1`, since an app cannot hide itself.
-- **Network and Bluetooth**: NetworkManager and BlueZ for Wi-Fi and pairing in Quick Settings and
-  Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar and Quick Settings show
-  Wi-Fi alone.
+- **Network and Bluetooth**: NetworkManager and BlueZ for Wi-Fi in Quick Settings and Settings,
+  and pairing in Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar and Quick
+  Settings show Wi-Fi alone. The shell and Settings register the pairing agent again whenever
+  `org.bluez` gets an owner, the computer is discoverable while Settings ▸ Bluetooth is open, a
+  paired device that fails to connect from the Taskbar or Quick Settings posts why, and
+  `bande-power` warns once at 15% and again at 5% when a connected device's `Battery1` runs low.
   - Saved connections activate whatever their security; new WPA Enterprise networks (PEAP, TTLS,
     TLS) and wired 802.1X need a CA certificate file or the system store with a server domain.
     Hidden networks offer every security type, WEP with a warning. Every wired device is listed,
@@ -437,7 +441,12 @@ brings up the dialog.
 - **Removable media** (`bande-automount`): every filesystem UDisks2 hints for automounting is
   mounted when it appears, but only while the session is active and unlocked; drives that appear
   while locked are mounted on unlock. A drive removed while mounted posts "Disk Not Ejected
-  Properly"; encrypted volumes wait for the UI. `bande-volumes` holds the one UDisks2 client that
+  Properly". An encrypted volume asks for its passphrase in the `bande-secrets-prompt` dialog
+  (again after a wrong one) and is mounted once unlocked; without the prompt, a notification
+  points to Disks. A volume that fails to mount posts why, offering a read-only mount for NTFS
+  that was not shut down fully. A Thunderbolt or USB4 device that `boltd` holds back asks, while
+  the session is unlocked, to be allowed once (`Authorize`) or always (`EnrollDevice` with the
+  `auto` policy). `bande-volumes` holds the one UDisks2 client that
   automount, Files, the desktop and Disks share. Eject unmounts every filesystem of the drive,
   locks its encrypted volumes, then calls `Drive.Eject` or else `PowerOff`; a failure is reported
   to the caller, not only logged. A drive whose SMART status turns failing posts one critical

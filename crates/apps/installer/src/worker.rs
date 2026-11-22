@@ -12,7 +12,7 @@ use crate::flow::{self, Outcome, State};
 
 #[derive(Debug, Clone)]
 pub enum Job {
-    Inspect,
+    Inspect { x11_accepted: bool },
     Install(Option<String>),
     AskRemove,
     Remove,
@@ -57,13 +57,50 @@ impl Messages {
     }
 }
 
+fn readable_by_packagekit(path: &Path) -> bool {
+    !bande_volumes::on_connected_volume(path)
+        && !bande_xdg::runtime_dir().is_some_and(|runtime| path.starts_with(runtime))
+}
+
+fn staged_copy(path: &Path) -> io::Result<PathBuf> {
+    let directory = bande_xdg::cache_home()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no cache folder"))?
+        .join("bande-installer");
+    std::fs::create_dir_all(&directory)?;
+    let name = path.file_name().unwrap_or("package.deb".as_ref());
+    let copy = directory.join(format!("{}-{}", std::process::id(), name.to_string_lossy()));
+    std::fs::copy(path, &copy)?;
+    Ok(copy)
+}
+
 fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out: &Messages) {
+    let staged = match readable_by_packagekit(path) {
+        true => None,
+        false => staged_copy(path)
+            .inspect_err(|error| tracing::warn!("cannot copy {}: {error}", path.display()))
+            .ok(),
+    };
+    serve(
+        client,
+        staged.as_deref().unwrap_or(path),
+        machine,
+        jobs,
+        out,
+    );
+    if let Some(copy) = staged
+        && let Err(error) = std::fs::remove_file(&copy)
+    {
+        tracing::debug!("cannot remove {}: {error}", copy.display());
+    }
+}
+
+fn serve(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out: &Messages) {
     let mut deb: Option<Deb> = None;
     let progress = |progress: Progress| {
         out.send(Message::Progress(progress));
     };
     for job in jobs {
-        if let Job::Inspect = job {
+        if let Job::Inspect { x11_accepted } = job {
             deb = deb::read(path);
             if !out.send(Message::Read(deb.clone())) {
                 break;
@@ -73,6 +110,7 @@ fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out
                 path,
                 machine,
                 deb.as_ref(),
+                x11_accepted,
             ))) {
                 break;
             }
@@ -85,7 +123,7 @@ fn run(client: &Client, path: &Path, machine: &Machine, jobs: Receiver<Job>, out
             continue;
         };
         let outcome = match job {
-            Job::Inspect => continue,
+            Job::Inspect { .. } => continue,
             Job::Install(signed) => flow::install(client, path, signed.as_deref(), &progress),
             Job::AskRemove => Outcome::Done(flow::removal(client, known)),
             Job::Remove => flow::remove(client, known, &progress),

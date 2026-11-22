@@ -542,6 +542,7 @@ dependencies = [
  "tracing",
  "udev",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -612,6 +613,7 @@ name = "bande-bluetooth"
 version = "0.2.0"
 dependencies = [
  "blocking",
+ "tracing",
  "zbus",
 ]
 
@@ -1066,6 +1068,7 @@ dependencies = [
  "bande-l10n",
  "bande-packages",
  "bande-toolkit",
+ "bande-volumes",
  "bande-xdg",
  "image",
  "tempfile",
@@ -1432,6 +1435,7 @@ name = "bande-power"
 version = "0.2.0"
 dependencies = [
  "bande-audio",
+ "bande-bluetooth",
  "bande-bus",
  "bande-edid",
  "bande-l10n",
@@ -2111,6 +2115,7 @@ dependencies = [
  "bande-l10n",
  "bande-log",
  "bande-notify",
+ "bande-packages",
  "bande-volumes",
  "bande-watch",
  "rustix 1.1.6",

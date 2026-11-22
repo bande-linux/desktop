@@ -5,8 +5,11 @@ mod failing;
 pub mod health;
 pub mod mounts;
 mod mounts_bus;
+mod notice;
+mod unlock;
 pub use bande_volumes::server;
 pub mod space;
+mod thunderbolt;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -15,9 +18,11 @@ use std::thread;
 use bande_l10n::tr;
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
-use bande_volumes::udisks::{BLOCK, Change, FILESYSTEM, Objects, UDISKS, Udisks};
+use bande_volumes::udisks::{BLOCK, Change, ENCRYPTED, FILESYSTEM, Objects, Udisks};
 use devices::Devices;
 use failing::FailingDisks;
+use thunderbolt::Thunderbolt;
+use unlock::Unlocked;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -86,20 +91,36 @@ struct Volume {
     mounted: bool,
 }
 
+fn label(objects: &Objects, path: &str) -> String {
+    ["IdLabel", "HintName"]
+        .into_iter()
+        .map(|key| objects.text(path, BLOCK, key))
+        .find(|label| !label.is_empty())
+        .unwrap_or_else(|| tr!("Untitled"))
+}
+
+fn hinted_automount(objects: &Objects, path: &str) -> bool {
+    let flag = |key: &str| objects.flag(path, BLOCK, key);
+    flag("HintAuto") && !flag("HintIgnore") && !flag("HintSystem")
+}
+
+fn locked_label(objects: &Objects, path: &str) -> Option<String> {
+    let locked = objects.has(path, BLOCK)
+        && objects.has(path, ENCRYPTED)
+        && objects
+            .path(path, ENCRYPTED, "CleartextDevice")
+            .is_none_or(|cleartext| cleartext == "/");
+    (locked && hinted_automount(objects, path)).then(|| label(objects, path))
+}
+
 impl Volume {
     fn from_objects(objects: &Objects, path: &str) -> Option<Self> {
         if !objects.has(path, BLOCK) || !objects.has(path, FILESYSTEM) {
             return None;
         }
-        let flag = |key: &str| objects.flag(path, BLOCK, key);
-        let label = ["IdLabel", "HintName"]
-            .into_iter()
-            .map(|key| objects.text(path, BLOCK, key))
-            .find(|label| !label.is_empty())
-            .unwrap_or_else(|| tr!("Untitled"));
         Some(Self {
-            label,
-            automount: flag("HintAuto") && !flag("HintIgnore") && !flag("HintSystem"),
+            label: label(objects, path),
+            automount: hinted_automount(objects, path),
             mounted: !objects.mount_points(path).is_empty(),
         })
     }
@@ -108,6 +129,7 @@ impl Volume {
 #[derive(Default)]
 struct State {
     volumes: HashMap<OwnedObjectPath, Volume>,
+    locked: HashMap<OwnedObjectPath, String>,
     unlocked: bool,
     waiting: HashSet<OwnedObjectPath>,
 }
@@ -124,6 +146,7 @@ pub struct Automounter {
     state: Shared,
     devices: Mutex<Option<Devices>>,
     failing: FailingDisks,
+    thunderbolt: Thunderbolt,
 }
 
 impl Automounter {
@@ -139,6 +162,7 @@ impl Automounter {
             state: Shared::default(),
             devices: Mutex::new(None),
             failing: FailingDisks::new(session),
+            thunderbolt: Thunderbolt::new(system, session),
         });
         match follow_session(system) {
             Ok((login, changes)) => {
@@ -157,6 +181,12 @@ impl Automounter {
                 });
             }
             Err(error) => tracing::warn!("cannot follow the login session: {error}"),
+        }
+        automounter
+            .thunderbolt
+            .session_changed(lock(&automounter.state).unlocked);
+        if let Err(error) = automounter.thunderbolt.follow() {
+            tracing::warn!("Thunderbolt devices are not followed: {error}");
         }
         let watcher = Arc::clone(&automounter);
         Udisks::follow(system, move |objects, change| {
@@ -182,6 +212,22 @@ impl Automounter {
     }
 
     fn appeared(&self, objects: &Objects, path: &OwnedObjectPath) {
+        if let Some(label) = locked_label(objects, path) {
+            let ask = {
+                let mut state = lock(&self.state);
+                if state.locked.insert(path.clone(), label.clone()).is_some() {
+                    return;
+                }
+                if !state.unlocked {
+                    state.waiting.insert(path.clone());
+                }
+                state.unlocked
+            };
+            if ask {
+                self.unlock(path, label);
+            }
+            return;
+        }
         let mount = {
             let mut state = lock(&self.state);
             let Some(volume) = Volume::from_objects(objects, path) else {
@@ -203,14 +249,35 @@ impl Automounter {
         }
     }
 
-    fn mount(&self, path: &OwnedObjectPath) {
-        let options: HashMap<&str, OwnedValue> = HashMap::new();
-        if let Err(error) =
-            self.system
-                .call_method(Some(UDISKS), path, Some(FILESYSTEM), "Mount", &(options,))
-        {
-            tracing::warn!("cannot mount {path}: {error}");
+    fn unlock(&self, path: &OwnedObjectPath, label: String) {
+        let (system, session, path) = (self.system.clone(), self.session.clone(), path.clone());
+        let spawned = thread::Builder::new()
+            .name("unlock".to_owned())
+            .spawn(
+                move || match unlock::ask_and_unlock(&system, &path, &label) {
+                    Unlocked::Opened(cleartext) => {
+                        notice::mount(&system, &session, &cleartext, &label)
+                    }
+                    Unlocked::Cancelled => {}
+                    Unlocked::NoPrompt => notice::not_unlocked(&session, &label),
+                    Unlocked::Failed(error) => {
+                        tracing::warn!("cannot unlock {path}: {error}");
+                        notice::not_unlocked(&session, &label);
+                    }
+                },
+            );
+        if let Err(error) = spawned {
+            tracing::warn!("cannot ask for the passphrase: {error}");
         }
+    }
+
+    fn mount(&self, path: &OwnedObjectPath) {
+        let label = lock(&self.state)
+            .volumes
+            .get(path)
+            .map(|volume| volume.label.clone())
+            .unwrap_or_default();
+        notice::mount(&self.system, &self.session, path, &label);
     }
 
     fn session_changed(&self, unlocked: bool) {
@@ -222,6 +289,8 @@ impl Automounter {
         {
             devices.session_changed(unlocked);
         }
+        self.thunderbolt.session_changed(unlocked);
+        let mut unlocks = Vec::new();
         let ready: Vec<OwnedObjectPath> = {
             let mut state = lock(&self.state);
             state.unlocked = unlocked;
@@ -229,6 +298,11 @@ impl Automounter {
                 return;
             }
             let waiting = std::mem::take(&mut state.waiting);
+            unlocks.extend(
+                waiting
+                    .iter()
+                    .filter_map(|path| Some((path.clone(), state.locked.get(path)?.clone()))),
+            );
             waiting
                 .into_iter()
                 .filter(|path| {
@@ -239,6 +313,9 @@ impl Automounter {
                 })
                 .collect()
         };
+        for (path, label) in unlocks {
+            self.unlock(&path, label);
+        }
         for path in &ready {
             self.mount(path);
         }
@@ -247,6 +324,12 @@ impl Automounter {
     fn disappeared(&self, path: &OwnedObjectPath, interfaces: &[String]) {
         let volume = {
             let mut state = lock(&self.state);
+            if interfaces
+                .iter()
+                .any(|name| name == ENCRYPTED || name == BLOCK)
+            {
+                state.locked.remove(path);
+            }
             if !interfaces
                 .iter()
                 .any(|name| name == FILESYSTEM || name == BLOCK)

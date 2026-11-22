@@ -43,6 +43,9 @@ msgstr "Tar bort…"
 msgid "Working…"
 msgstr "Arbetar…"
 
+msgid "It would install, but it won’t open: its windows can’t appear in Bande."
+msgstr "Den skulle installeras, men den går inte att öppna: dess fönster kan inte visas i Bande."
+
 msgid "Version {version} · {size}"
 msgstr "Version {version} · {size}"
 
@@ -133,11 +136,25 @@ msgstr "Version {version} är installerad."
 msgid "Remove…"
 msgstr "Ta bort…"
 
-msgid "Can’t install: it needs packages that aren’t available"
-msgstr "Det går inte att installera: paketet behöver andra paket som inte är tillgängliga"
+msgid "“{name}” needs X11, which Bande doesn’t run."
+msgstr "”{name}” kräver X11, som Bande inte kör."
 
-msgid "Needs {names}"
-msgstr "Behöver {names}"
+msgid "Look for a version that supports Wayland, or ask its developer for one."
+msgstr "Leta efter en version som stöder Wayland, eller be utvecklaren om en."
+
+msgid "Install Anyway…"
+msgstr "Installera ändå…"
+
+msgid "Can’t install: this package was made for another release of Debian or Ubuntu."
+msgstr "Det går inte att installera: paketet är gjort för en annan version av Debian eller Ubuntu."
+
+msgid "This computer doesn’t have the package it needs: {names}"
+msgid_plural "This computer doesn’t have the packages it needs: {names}"
+msgstr[0] "Den här datorn har inte paketet som behövs: {names}"
+msgstr[1] "Den här datorn har inte paketen som behövs: {names}"
+
+msgid "Look for a download made for this system, or ask its developer for one."
+msgstr "Leta efter en nedladdning gjord för det här systemet, eller be utvecklaren om en."
 
 msgid "“{name}” is installed."
 msgstr "”{name}” är installerat."

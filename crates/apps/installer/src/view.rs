@@ -27,6 +27,7 @@ const PADDING: f32 = 24.0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Intent {
     Install,
+    InstallAnyway,
     InstallSigned,
     Cancel,
     AskRemove,
@@ -78,6 +79,10 @@ fn status_line(status: Status) -> String {
     }
 }
 
+fn x11_warning() -> String {
+    tr!("It would install, but it won’t open: its windows can’t appear in Bande.")
+}
+
 fn row(children: Widgets) -> Box<dyn Widget> {
     boxed(Stack::new(Axis::Horizontal, SPACING, 0.0, children).trailing())
 }
@@ -92,6 +97,7 @@ pub struct Installer {
     state: State,
     ready: Option<State>,
     refused: bool,
+    x11_accepted: bool,
     jobs: Sender<Job>,
     feed: Feed,
     canceller: Canceller,
@@ -124,6 +130,7 @@ impl Installer {
             state: State::Reading,
             ready: None,
             refused: false,
+            x11_accepted: false,
             jobs,
             feed,
             canceller,
@@ -133,7 +140,9 @@ impl Installer {
             closed: false,
             restart: false,
         };
-        installer.ask(Job::Inspect);
+        installer.ask(Job::Inspect {
+            x11_accepted: false,
+        });
         installer.rebuild();
         Ok(installer)
     }
@@ -232,9 +241,16 @@ impl Installer {
                 self.ask(Job::Remove);
             }
             Intent::Back => self.back(),
+            Intent::InstallAnyway => {
+                self.x11_accepted = true;
+                self.state = State::Reading;
+                self.ask(Job::Inspect { x11_accepted: true });
+            }
             Intent::Retry => {
                 self.state = State::Reading;
-                self.ask(Job::Inspect);
+                self.ask(Job::Inspect {
+                    x11_accepted: self.x11_accepted,
+                });
             }
             Intent::Open(index) => {
                 if let State::Installed { apps, .. } = &self.state
@@ -336,15 +352,17 @@ impl Installer {
             Action::Upgrade(from) => Some((text!("Upgrades from {from} to {to}"), from)),
             Action::Downgrade(from) => Some((text!("Downgrades from {from} to {to}"), from)),
         };
-        let mut widgets: Widgets = change
-            .map(|(id, from)| {
-                boxed(Label::new(&id.tr_args(&[
-                    ("from", &from.clone() as &dyn std::fmt::Display),
-                    ("to", &deb.version.clone() as &dyn std::fmt::Display),
-                ])))
-            })
+        let mut widgets: Widgets = deb
+            .needs_x11
+            .then(|| boxed(Label::new(&x11_warning())))
             .into_iter()
             .collect();
+        widgets.extend(change.map(|(id, from)| {
+            boxed(Label::new(&id.tr_args(&[
+                ("from", &from.clone() as &dyn std::fmt::Display),
+                ("to", &deb.version.clone() as &dyn std::fmt::Display),
+            ])))
+        }));
         if let Action::Downgrade(from) = &preview.action {
             widgets.push(boxed(Label::new(&tr!(
                 "This is older than the installed version {from}.",
@@ -477,17 +495,36 @@ impl Installer {
                     ]),
                 ]
             }
+            State::NeedsX11 => vec![
+                boxed(Label::new(&tr!(
+                    "“{name}” needs X11, which Bande doesn’t run.",
+                    name = name
+                ))),
+                boxed(Label::new(&x11_warning())),
+                boxed(Label::new(&tr!(
+                    "Look for a version that supports Wayland, or ask its developer for one."
+                ))),
+                row(vec![
+                    boxed(self.button(&tr!("Install Anyway…"), Intent::InstallAnyway)),
+                    boxed(self.button(&tr!("Close"), Intent::Close).primary()),
+                ]),
+            ],
             State::Ready(preview) => self.preview(preview),
             State::Blocked { missing, details } => {
                 let mut widgets = vec![boxed(Label::new(&tr!(
-                    "Can’t install: it needs packages that aren’t available"
+                    "Can’t install: this package was made for another release of Debian or Ubuntu."
                 )))];
                 if !missing.is_empty() {
-                    widgets.push(boxed(Label::new(&tr!(
-                        "Needs {names}",
+                    widgets.push(boxed(Label::new(&trn!(
+                        "This computer doesn’t have the package it needs: {names}",
+                        "This computer doesn’t have the packages it needs: {names}",
+                        count = missing.len(),
                         names = missing.join(", ")
                     ))));
                 }
+                widgets.push(boxed(Label::new(&tr!(
+                    "Look for a download made for this system, or ask its developer for one."
+                ))));
                 widgets.push(disclosure(&tr!("Details"), details));
                 widgets.push(row(vec![close()]));
                 widgets

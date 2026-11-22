@@ -2,6 +2,7 @@ pub mod flatpak;
 pub mod offline;
 pub mod schedule;
 mod transaction;
+pub mod x11;
 
 use std::collections::HashMap;
 use std::fmt;

@@ -754,6 +754,16 @@ fn tell(bus: zbus::Result<Connection>, app_id: &str, failure: Failure, program: 
     let entry = find_app(&entries, app_id);
     let app = app_name(&entries, app_id);
     let (summary, body) = match failure {
+        Failure::NotOpened
+            if entry.is_some_and(|entry| bande_packages::x11::installed_needs_x11(&entry.path)) =>
+        {
+            (
+                tr!("{app} could not be opened", app = app),
+                tr!(
+                    "It needs X11, which Bande doesn’t run. Look for a version that supports Wayland."
+                ),
+            )
+        }
         Failure::NotOpened => (
             tr!("{app} could not be opened", app = app),
             tr!("It quit while opening. Try again, or reinstall it if this keeps happening."),

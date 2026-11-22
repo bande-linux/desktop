@@ -25,5 +25,20 @@ msgstr "Kritiskt lågt batteri"
 msgid "{percentage}% of the battery remains. Connect to power now, or the computer will sleep."
 msgstr "{percentage} % av batteriet återstår. Anslut till ström nu, annars försätts datorn i vila."
 
+msgid "{name} Battery Low"
+msgstr "Låg batterinivå i {name}"
+
+msgid "{name} Battery Almost Empty"
+msgstr "Batteriet i {name} är nästan tomt"
+
+msgid "{level}% remains. Charge it soon."
+msgstr "{level} % återstår. Ladda den snart."
+
+msgid "{level}% remains. Charge it now."
+msgstr "{level} % återstår. Ladda den nu."
+
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
 msgid "Lock the screen before the computer sleeps"
 msgstr "Lås skärmen innan datorn försätts i vila"

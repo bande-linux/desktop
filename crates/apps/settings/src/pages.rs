@@ -19,7 +19,7 @@ use crate::widgets::{
     Thumbnail, Thumbnails, Tone,
 };
 use bande_audio::{Direction, SoundCard};
-use bande_bluetooth::Kind as DeviceKind;
+use bande_bluetooth::{Device, Kind as DeviceKind};
 use bande_config::Placement;
 use bande_config::{ACCENTS, Accessibility, MAX_INPUT_SOURCES, carry};
 use bande_keyboard::{Action, Trigger, shortcuts_in};
@@ -668,11 +668,23 @@ impl SettingsView {
         let Some(bluetooth) = self.bluetooth.present().cloned() else {
             return Vec::new();
         };
+        let visible = (!paired && bluetooth.powered && !bluetooth.name.is_empty()).then(|| {
+            muted_row(&tr!(
+                "While this page is open, nearby devices can find this computer as “{name}”.",
+                name = bluetooth.name
+            ))
+        });
         let devices = if paired {
             bluetooth.paired
         } else {
             bluetooth.nearby
         };
+        let mut rows = self.listed_devices(paired, devices);
+        rows.extend(visible);
+        rows
+    }
+
+    fn listed_devices(&mut self, paired: bool, devices: Vec<Device>) -> Widgets {
         if devices.is_empty() {
             return vec![muted_row(&if paired {
                 tr!("No devices paired yet")

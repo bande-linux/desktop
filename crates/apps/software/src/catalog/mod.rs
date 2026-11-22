@@ -3,7 +3,6 @@ mod component;
 mod dep11;
 mod lang;
 mod search;
-mod x11;
 mod xml;
 
 use std::collections::{HashMap, HashSet};
@@ -12,6 +11,7 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use bande_packages::x11::x11_only_packages;
 use bande_xdg::Locale;
 use flate2::read::MultiGzDecoder;
 
@@ -19,7 +19,6 @@ pub use category::Category;
 pub use component::{Block, Bundle, Component, Icon, Release, Screenshot};
 pub use dep11::parse as parse_dep11;
 pub use search::search;
-pub use x11::{flatpak_needs_x11, x11_only_packages};
 pub use xml::{Source, parse as parse_xml};
 
 pub const SYSTEM_ROOTS: [&str; 2] = ["/usr/share/swcatalog", "/var/lib/swcatalog"];

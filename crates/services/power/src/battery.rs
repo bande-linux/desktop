@@ -6,7 +6,7 @@ use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::Connection;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Alert {
     Low,
     Critical,

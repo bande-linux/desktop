@@ -5,6 +5,7 @@ pub mod battery;
 pub mod brightness;
 pub mod controller;
 pub mod ddc;
+pub mod gadgets;
 pub mod idle;
 pub mod logind;
 pub mod password;

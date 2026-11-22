@@ -251,6 +251,9 @@ depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManag
   offers to install them;
 - `bande-printd` suggests `avahi-daemon` too, which it browses for driverless printers; Settings ▸
   Printers offers to install it and printers added by address print without it;
+- `bande-automount` recommends `bande-secrets`, whose prompt asks for the passphrase of an
+  encrypted volume (without it a notification points to Disks), and `bolt`, which it asks to
+  authorize Thunderbolt and USB4 devices;
 - `bande-automount` depends on UDisks, `bande-polkit` on `polkitd`, and `bande-greeter` on
   `greetd (>= 0.10.3-6)`, which it runs from its own `bande-greeter.service`;
 - `xdg-desktop-portal-bande` depends on `xdg-desktop-portal`, provides

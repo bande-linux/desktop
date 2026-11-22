@@ -371,8 +371,7 @@ Recommends: upower,
  bande-config (= ${binary:Version})
 Description: Bande power service: sleep locking, battery alerts and idle inhibition
  Locks the session before the computer sleeps through a logind delay
- inhibitor, makes the power button lock the session, posts low and
- critical battery notifications from UPower, serves
+ inhibitor, posts low and critical battery notifications from UPower, serves
  org.freedesktop.ScreenSaver so applications can keep the screen on,
  holding a logind idle inhibitor for each request, and keeps the computer
  from sleeping when idle while a sound stream runs. Controls the

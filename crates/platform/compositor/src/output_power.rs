@@ -22,7 +22,7 @@ pub(crate) struct OutputPower {
     lighting_up: bool,
     swallowed_keys: Vec<u32>,
     power_key_pressed_at: Option<u32>,
-    sleep_requests: Option<Sender<()>>,
+    power_key_presses: Option<Sender<()>>,
 }
 
 pub(crate) fn create_global(display: &DisplayHandle) {
@@ -120,9 +120,9 @@ impl State {
         if pressed {
             power.power_key_pressed_at = Some(time);
         } else if held.is_some_and(|at| time.wrapping_sub(at) < POWER_KEY_HELD_MILLIS)
-            && let Some(requests) = &power.sleep_requests
+            && let Some(presses) = &power.power_key_presses
         {
-            let _ = requests.send(());
+            let _ = presses.send(());
         }
     }
 
@@ -146,8 +146,8 @@ impl Compositor {
         std::mem::take(&mut self.state.output_power.turned_on)
     }
 
-    pub fn sleep_on_the_power_key(&mut self, requests: Sender<()>) {
-        self.state.output_power.sleep_requests = Some(requests);
+    pub fn send_power_key_presses(&mut self, presses: Sender<()>) {
+        self.state.output_power.power_key_presses = Some(presses);
     }
 
     pub fn take_virtual_terminal(&mut self) -> Option<i32> {

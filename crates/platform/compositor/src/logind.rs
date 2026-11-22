@@ -14,6 +14,9 @@ use zbus::zvariant::OwnedObjectPath;
 trait Session {
     fn set_locked_hint(&self, locked: bool) -> zbus::Result<()>;
 
+    #[zbus(name = "Lock")]
+    fn request_lock(&self) -> zbus::Result<()>;
+
     #[zbus(signal)]
     fn lock(&self) -> zbus::Result<()>;
 }
@@ -76,10 +79,23 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
     Ok(())
 }
 
-pub fn sleep_on_request(connection: &Connection, requests: Receiver<()>) -> zbus::Result<()> {
+pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus::Result<()> {
     let manager = ManagerProxyBlocking::new(connection)?;
+    let held = manager.inhibit(
+        "handle-power-key",
+        "Bande",
+        &tr!("The power button locks the screen and puts the computer to sleep"),
+        "block",
+    )?;
+    let session = SessionProxyBlocking::builder(connection)
+        .path(manager.get_session("auto")?)?
+        .build()?;
     thread::spawn(move || {
-        for () in requests {
+        let _held = held;
+        for () in presses {
+            if let Err(error) = session.request_lock() {
+                tracing::warn!("cannot lock on the power button: {error}");
+            }
             let slept = manager
                 .can_suspend()
                 .and_then(|answer| match answer.as_str() {

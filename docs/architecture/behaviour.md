@@ -79,7 +79,7 @@ accident. How each is built is in the subject documents ([compositor](compositor
 
 - **Night Light** warms every display from sunset to sunrise at the time zone's location, or between set times, through each display's gamma ramp, fading over a minute ([compositor](compositor.md#night-light)).
 - **Sleep when idle**: by default the computer sleeps when the display turns off; `idle suspend-after` changes or disables it.
-- **Power button**: a press locks and, where the computer can sleep, sleeps; holding it five seconds powers off, the way out of a hung session. Nothing holds logind's power-key inhibitor, since logind applies it to the long press too ([compositor](compositor.md#sleep-and-wake)).
+- **Power button**: in a Bande session a press locks and, where the computer can sleep, sleeps; the compositor holds logind's power-key inhibitor for this, so logind's settings stay Debian's for the login window, the console and other desktops. Holding the button down is left to the firmware's forced power-off, the way out of a hung session ([compositor](compositor.md#sleep-and-wake)).
 - **Power settings**: Settings ▸ Power shows only what the computer has (battery history and health, charge limit, lid, power modes), and when something is missing it says what and why rather than showing an empty pane.
 - **Sleep and wake**: the lock screen shows the moment the computer wakes, never the desktop. Every way to sleep goes through logind, and sleep waits (at most 3 s) until the lock screen is on every display ([compositor](compositor.md#sleep-and-wake)).
 

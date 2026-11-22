@@ -96,7 +96,7 @@ pub use keyboard_monitor::{
 };
 pub use keymap::KeyboardSettings;
 pub use logind::{
-    SessionRequest, Sleep, follow_session, follow_shutdown, follow_sleep, sleep_on_request,
+    SessionRequest, Sleep, follow_session, follow_shutdown, follow_sleep, handle_power_key,
 };
 pub use material::{MaterialPicture, MaterialRequest, render_material};
 pub use night::NightTick;

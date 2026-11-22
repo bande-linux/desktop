@@ -76,8 +76,9 @@ graph LR
   (`org.bande.Power.KeepAwake`) and someone else's logind `sleep` inhibitor keep it awake;
   after the last one the computer sleeps after a full `suspend-after`. Audio alone keeps the
   computer but not the display awake; CPU load, builds and MPRIS keep nothing awake.
-- The power button always locks through logind, and the compositor asks for `Suspend` on a press
-  shorter than the five-second hold when `CanSuspend` is `yes`.
+- The power button: the compositor holds logind's `handle-power-key` inhibitor in a user session,
+  and on a press shorter than five seconds locks the session through logind and asks for
+  `Suspend` when `CanSuspend` is `yes`.
 - **Lock screen** (`crates/shell/lock`): date, time, the user's picture (AccountsService
   `IconFile`, or the initial on the accent colour) and name, and a secure field. PAM
   (`/etc/pam.d/bande-lock`) runs off the UI thread with a progress row after 200 ms; a rejected

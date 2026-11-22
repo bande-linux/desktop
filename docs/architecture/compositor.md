@@ -372,11 +372,12 @@ a session switch or wake once the first frame has flipped.
    clocks wake on `CLOCK_REALTIME` timers with `TFD_TIMER_CANCEL_ON_SET`, which fire on resume;
    notification expiry runs on `CLOCK_BOOTTIME`.
 
-The power button: `bande-power` ships a logind drop-in with `HandlePowerKey=lock` and
-`HandlePowerKeyLongPress=poweroff`. Where `CanSuspend` is `yes`, the compositor also suspends on a
-press released within five seconds, seen through libinput, so logind's lock still works while the
-compositor is hung. Where the computer cannot sleep, the displays turn off after a minute on the
-locked screen.
+The power button: in a user session the compositor holds logind's `handle-power-key` block
+inhibitor, so logind leaves the key to it, and on a press released within five seconds, seen
+through libinput, it locks its own session through logind and, where `CanSuspend` is `yes`,
+suspends. Nothing changes logind's own settings, so the login window, the text console and other
+desktops keep Debian's behaviour. Where the computer cannot sleep, the displays turn off after a
+minute on the locked screen.
 
 When every display is off and one lights up, the compositor drops key presses and their releases
 before the accessibility key filters and the screen reader's monitor see them, until a frame has

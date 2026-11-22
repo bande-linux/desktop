@@ -245,8 +245,10 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
             if let Err(error) = session.request_lock() {
                 tracing::warn!("cannot lock on the power button: {error}");
             }
-            if let Err(error) = bande_bus::logind::sleep(&sleeper, false) {
-                tracing::warn!("cannot sleep on the power button: {error}");
+            match bande_bus::logind::sleep(&sleeper, false) {
+                Ok(true) => {}
+                Ok(false) => tracing::info!("logind does not let the computer sleep now"),
+                Err(error) => tracing::warn!("cannot sleep on the power button: {error}"),
             }
         }
     });

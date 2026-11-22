@@ -198,3 +198,6 @@ msgstr "servern erbjuder inget inloggningssätt som E-post kan: {methods}"
 
 msgid "the message has no recipients"
 msgstr "meddelandet har inga mottagare"
+
+msgid "There is no folder for the mail accounts, because neither XDG_DATA_HOME nor HOME is set."
+msgstr "Det finns ingen mapp för e-postkontona, eftersom varken XDG_DATA_HOME eller HOME är angiven."

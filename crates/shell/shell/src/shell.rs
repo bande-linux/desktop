@@ -19,7 +19,7 @@ use bande_l10n::tr;
 use bande_launcher::LauncherShell;
 use bande_notifications::Notifications;
 use bande_quick_settings::QuickSettings;
-use bande_status::captive::{follow_captive_portal, open_page};
+use bande_status::captive::follow_captive_portal;
 use bande_status::hub::StatusHub;
 use bande_status::memory::{
     CGROUP_ROOT, MEMINFO, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
@@ -476,7 +476,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             tracing::warn!("Bluetooth devices can pair only from Settings: {error}");
         }
         if let Some(session) = &context.session {
-            follow_captive_portal(system, session, open_page);
+            follow_captive_portal(system, session);
             suggest_time_zones(system, session);
         }
     }

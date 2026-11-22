@@ -1854,7 +1854,7 @@ impl MailView {
     }
 
     fn attachment_name(&self, index: usize) -> Option<String> {
-        let attachment = self.focused()?.1.content.attachments.get(index)?;
+        let attachment = self.focused()?.1.content.every_attachment().nth(index)?;
         let name = attachment
             .name
             .replace(['/', '\\', '\0'], "_")
@@ -1868,7 +1868,7 @@ impl MailView {
 
     fn attachment_data(&self, index: usize) -> Option<Vec<u8>> {
         self.focused()
-            .and_then(|(_, reading)| reading.content.attachments.get(index))
+            .and_then(|(_, reading)| reading.content.every_attachment().nth(index))
             .map(|attachment| attachment.data.clone())
     }
 

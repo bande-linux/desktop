@@ -2,6 +2,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use bande_l10n::tr;
 use bande_mail_core::accounts::AccountId;
 use bande_mail_core::error::Result;
 use bande_toolkit::ui::RichText;
@@ -110,7 +111,7 @@ pub fn store_path() -> std::io::Result<PathBuf> {
         .ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "there is no folder for the notes: neither XDG_DATA_HOME nor HOME is set",
+                tr!("There is no folder for the notes, because neither XDG_DATA_HOME nor HOME is set."),
             )
         })
 }

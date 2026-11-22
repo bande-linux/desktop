@@ -851,7 +851,7 @@ impl NotesView {
             signature: String::new(),
             enabled: true,
         };
-        let added = accounts::open(&accounts::store_path()).and_then(|mail| {
+        let added = accounts::open_store().and_then(|mail| {
             let id = match accounts::list(&mail)?
                 .into_iter()
                 .find(|known| known.email.eq_ignore_ascii_case(&account.email))

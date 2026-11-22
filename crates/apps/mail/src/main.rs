@@ -650,7 +650,7 @@ impl Program for Mail {
 
     fn start(cx: &mut Cx<Self>, arguments: Vec<String>) -> Result<Self, bande_app::Error> {
         let mut view = MailView::new(
-            bande_mail_core::accounts::store_path(),
+            bande_mail_core::accounts::store_path()?,
             load_settings(),
             Appearance::default().palette(),
             TextSystem::new(),

@@ -455,14 +455,6 @@ impl Content {
             ..Self::default()
         };
         nested.walk(&mail, depth + 1);
-        let offset = self.attachments.len();
-        self.inline.extend(
-            nested
-                .inline
-                .drain(..)
-                .map(|(id, index)| (id, index + offset)),
-        );
-        self.attachments.append(&mut nested.attachments);
         let deeper = std::mem::take(&mut nested.forwarded);
         self.forwarded.push(nested);
         self.forwarded.extend(deeper);
@@ -488,7 +480,15 @@ impl Content {
         preview(&self.text())
     }
 
-    pub fn inline_part(&self, source: &str) -> Option<&Attachment> {
+    pub fn sections(&self) -> impl Iterator<Item = &Content> {
+        std::iter::once(self).chain(&self.forwarded)
+    }
+
+    pub fn every_attachment(&self) -> impl Iterator<Item = &Attachment> {
+        self.sections().flat_map(|section| &section.attachments)
+    }
+
+    pub fn inline_index(&self, source: &str) -> Option<usize> {
         let id = source
             .get(..4)
             .filter(|scheme| scheme.eq_ignore_ascii_case("cid:"))
@@ -496,7 +496,7 @@ impl Content {
         self.inline
             .iter()
             .find(|(known, _)| known == id)
-            .and_then(|(_, index)| self.attachments.get(*index))
+            .map(|(_, index)| *index)
     }
 }
 

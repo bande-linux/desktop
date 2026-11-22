@@ -29,7 +29,6 @@ use bande_notify::client::NotificationsProxy;
 use bande_status::Command as StatusCommand;
 use bande_status::backlight::{KeyboardLight, SYSFS_LEDS};
 use bande_status::brightness::{DisplayLevel, LevelRequest, follow_levels, level_requests};
-use bande_status::captive::open_page;
 use bande_status::devices::run_bluetooth;
 use bande_status::session::full_name;
 use bande_status::status::Bluetooth as BluetoothStatus;
@@ -174,7 +173,7 @@ enum Work {
 enum Answer {
     Connected(Connected),
     Networks(Vec<(String, String, bool)>),
-    SignIn(String),
+    SignIn,
     NeedsPassword,
 }
 
@@ -233,8 +232,9 @@ impl Worker {
 
     fn networks(&self) -> Option<Answer> {
         let network = self.network.as_ref()?;
-        if let Ok(Some(page)) = network.sign_in_page() {
-            return Some(Answer::SignIn(page));
+        if matches!(network.sign_in_page(), Ok(Some(_))) {
+            bande_status::captive::sign_in(network, None);
+            return Some(Answer::SignIn);
         }
         report("look for Wi-Fi networks", network.scan());
         let choices = network
@@ -655,8 +655,7 @@ impl QuickSettings {
                     self.show_menu(window, chooser_menu(&choices));
                 }
             }
-            Answer::SignIn(page) => {
-                open_page(&page);
+            Answer::SignIn => {
                 self.dismiss(window);
             }
             Answer::NeedsPassword => {

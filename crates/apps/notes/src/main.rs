@@ -81,7 +81,7 @@ impl Notes {
     }
 
     fn reconcile(&mut self, cx: &mut Cx<Self>, fresh: Option<(AccountId, String)>) {
-        let found = accounts::open(&accounts::store_path())
+        let found = accounts::open_store()
             .and_then(|mail| Ok((accounts::list(&mail)?, accounts::notes(&mail)?)));
         let (all, used) = match found {
             Ok(found) => found,
@@ -170,7 +170,7 @@ impl Notes {
                     .find(|known| known.id == account)
                     .map(|known| known.email.clone())
                     .unwrap_or_default();
-                if let Err(error) = accounts::open(&accounts::store_path())
+                if let Err(error) = accounts::open_store()
                     .and_then(|mail| accounts::set_notes(&mail, account, false))
                 {
                     tracing::warn!("cannot stop using {email} for Notes: {error}");

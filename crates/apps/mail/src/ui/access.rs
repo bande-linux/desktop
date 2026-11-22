@@ -325,8 +325,8 @@ impl MailView {
                     .reading
                     .as_ref()?
                     .content
-                    .attachments
-                    .get(*index)?;
+                    .every_attachment()
+                    .nth(*index)?;
                 (Role::Button, attachment.name.clone())
             }
             Target::LoadRemote(_) => (Role::Button, tr!("Load Remote Content")),

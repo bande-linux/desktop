@@ -822,7 +822,6 @@ impl LockScreen {
 
     pub fn offer_power(&mut self, powers: &[PowerAction]) {
         self.model.borrow_mut().powers = powers.to_vec();
-        self.ui.context().keyboard_navigation = true;
         self.show_power_row();
     }
 
@@ -944,16 +943,8 @@ impl LockScreen {
 
     pub fn set_peers(&mut self, peers: Vec<Peer>, selected: usize) {
         let chosen = self.chosen.clone();
-        let shown = self
-            .ui
-            .widget_as::<UserList>(self.users)
-            .map(|users| {
-                users.show(peers, selected, &chosen);
-                !users.is_empty()
-            })
-            .unwrap_or_default();
-        if shown {
-            self.ui.context().keyboard_navigation = true;
+        if let Some(users) = self.ui.widget_as::<UserList>(self.users) {
+            users.show(peers, selected, &chosen);
         }
     }
 

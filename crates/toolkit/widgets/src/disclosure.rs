@@ -236,8 +236,12 @@ impl Widget for Disclosure {
         }
     }
 
-    fn accepts_focus(&self, cx: &Context) -> bool {
-        cx.keyboard_navigation
+    fn accepts_focus(&self, _cx: &Context) -> bool {
+        true
+    }
+
+    fn focuses_on_click(&self) -> bool {
+        false
     }
 
     fn hit_children(&self, point: Point) -> bool {

@@ -428,7 +428,7 @@ impl Widget for Toolbar {
             )),
             paint: cx.palette.hairline.into(),
         });
-        let focused = cx.is_focused(self.id) && cx.keyboard_navigation;
+        let focused = cx.is_focused(self.id);
         for (index, (frame, label)) in self.frames.iter().zip(&self.labels).enumerate() {
             let command = COMMANDS[index];
             let chosen = command == Command::Tool(self.tool);
@@ -548,7 +548,7 @@ impl Widget for Toolbar {
         }
     }
 
-    fn accepts_focus(&self, cx: &Context) -> bool {
-        cx.keyboard_navigation
+    fn accepts_focus(&self, _cx: &Context) -> bool {
+        true
     }
 }

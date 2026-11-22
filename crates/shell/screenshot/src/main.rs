@@ -179,7 +179,6 @@ fn ui_with(window: &Window, layout: FreeLayout) -> Ui {
         Box::new(layout),
         Context::new(TextSystem::new(), appearance.palette()),
     );
-    ui.context().keyboard_navigation = true;
     ui.context().reduce_motion = appearance.reduce_motion;
     ui.set_appearance(appearance);
     ui

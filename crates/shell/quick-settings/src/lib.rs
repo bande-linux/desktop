@@ -453,7 +453,6 @@ pub fn panel(status: &Status, palette: Palette, text: TextSystem, changes: &Chan
     }
     let mut root = Stack::new(Axis::Vertical, GAP, PADDING, controls);
     let mut cx = Context::new(text, palette);
-    cx.keyboard_navigation = true;
     let height = root
         .measure(&mut cx, Size::new(PANEL_WIDTH, f32::INFINITY))
         .height;

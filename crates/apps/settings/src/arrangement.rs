@@ -355,7 +355,7 @@ impl Widget for Arrangement {
         true
     }
 
-    fn accepts_focus(&self, cx: &Context) -> bool {
-        cx.keyboard_navigation && self.screens.len() > 1
+    fn accepts_focus(&self, _cx: &Context) -> bool {
+        self.screens.len() > 1
     }
 }

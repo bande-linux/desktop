@@ -171,7 +171,6 @@ impl Size {
 pub struct Context {
     pub text: TextSystem,
     pub palette: Palette,
-    pub keyboard_navigation: bool,
     pub window_active: bool,
     pub reduce_motion: bool,
     pub caps_lock: bool,
@@ -221,7 +220,6 @@ impl Context {
         Self {
             text,
             palette,
-            keyboard_navigation: false,
             window_active: true,
             reduce_motion: false,
             caps_lock: false,
@@ -344,6 +342,10 @@ pub trait Widget: Any {
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         false
+    }
+
+    fn focuses_on_click(&self) -> bool {
+        true
     }
 
     fn text_input_area(&self) -> Option<Rect> {
@@ -885,7 +887,12 @@ impl Ui {
                 if self.captured.is_none() {
                     self.captured = Some((target, pointer.button));
                 }
-                if pointer.is_primary() && self.accepts_focus(target) {
+                if pointer.is_primary()
+                    && self.accepts_focus(target)
+                    && self
+                        .lookup(target)
+                        .is_some_and(|widget| widget.focuses_on_click())
+                {
                     self.cx.focus = Some(target);
                 }
                 let delivered = self.deliver(target, event);

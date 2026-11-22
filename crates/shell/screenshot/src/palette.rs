@@ -304,7 +304,7 @@ impl Widget for Palette {
                 paint: cx.palette.hairline.into(),
             });
         }
-        let focused = cx.is_focused(self.id) && cx.keyboard_navigation;
+        let focused = cx.is_focused(self.id);
         for (index, segment) in SEGMENTS.iter().enumerate() {
             let frame = self.frames[index];
             let center = Point::new(frame.x + frame.width / 2.0, frame.y + frame.height / 2.0);

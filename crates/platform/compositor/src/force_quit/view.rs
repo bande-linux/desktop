@@ -96,7 +96,6 @@ impl ForceQuitView {
         .primary();
         button.set_enabled(false);
         let mut cx = Context::new(text, appearance.palette());
-        cx.keyboard_navigation = true;
         let width = [tr!("Relaunch"), tr!("Force Quit")]
             .iter()
             .map(|title| {

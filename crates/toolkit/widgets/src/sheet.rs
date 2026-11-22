@@ -414,21 +414,33 @@ mod tests {
     use crate::{Context, Event, Key, Modifiers, Palette, TextSystem, Ui};
 
     fn press(alert: impl FnOnce(Box<dyn FnMut(&str)>) -> Alert, key: Key) -> Option<String> {
+        presses(alert, &[key])
+    }
+
+    fn press_after_tab(
+        alert: impl FnOnce(Box<dyn FnMut(&str)>) -> Alert,
+        key: Key,
+    ) -> Option<String> {
+        presses(alert, &[Key::Tab, key])
+    }
+
+    fn presses(alert: impl FnOnce(Box<dyn FnMut(&str)>) -> Alert, keys: &[Key]) -> Option<String> {
         let chosen = Rc::new(RefCell::new(None));
         let answer = chosen.clone();
-        let mut cx = Context::new(
+        let cx = Context::new(
             TextSystem::new(),
             Palette::for_scheme(bande_graphics::Scheme::Light),
         );
-        cx.keyboard_navigation = true;
         let mut ui = Ui::new(Box::new(Button::new("Behind", || {})), cx);
         ui.present_dialog(alert(Box::new(move |action| {
             *answer.borrow_mut() = Some(action.to_owned())
         })));
-        ui.handle(&Event::Key {
-            key,
-            modifiers: Modifiers::default(),
-        });
+        for key in keys {
+            ui.handle(&Event::Key {
+                key: *key,
+                modifiers: Modifiers::default(),
+            });
+        }
         chosen.take()
     }
 
@@ -447,11 +459,48 @@ mod tests {
         };
         assert_eq!(press(erase, Key::Space).as_deref(), Some("cancel"));
         assert_eq!(press(erase, Key::Enter), None);
+        assert_eq!(press_after_tab(erase, Key::Space).as_deref(), Some("erase"));
         let revert = |choose| {
             Alert::new("Keep?", "", choose)
                 .other("Keep", "keep")
                 .safe("Revert", "revert")
         };
         assert_eq!(press(revert, Key::Space).as_deref(), Some("revert"));
+    }
+
+    #[test]
+    fn a_click_on_a_button_leaves_the_keyboard_focus_where_it_was() {
+        let field = crate::TextField::new("", "", |_| {});
+        let field_id = field.id();
+        let bold = Button::new("Bold", || {});
+        let bold_id = bold.id();
+        let root = crate::Stack::new(
+            crate::Axis::Vertical,
+            0.0,
+            0.0,
+            vec![Box::new(field), Box::new(bold)],
+        );
+        let cx = Context::new(
+            TextSystem::new(),
+            Palette::for_scheme(bande_graphics::Scheme::Light),
+        );
+        let mut ui = Ui::new(Box::new(root), cx);
+        ui.layout(Size::new(300.0, 200.0));
+        ui.set_focus(field_id);
+        let centre = ui
+            .widget_ref::<Button>(bold_id)
+            .map(|button| button.frame())
+            .map(|frame| {
+                crate::Point::new(frame.x + frame.width / 2.0, frame.y + frame.height / 2.0)
+            })
+            .unwrap_or_default();
+        ui.handle(&Event::PointerDown(crate::Pointer::at(centre)));
+        ui.handle(&Event::PointerUp(crate::Pointer::at(centre)));
+        assert_eq!(ui.focus(), Some(field_id));
+        ui.handle(&Event::Key {
+            key: Key::Tab,
+            modifiers: Modifiers::default(),
+        });
+        assert_eq!(ui.focus(), Some(bold_id));
     }
 }

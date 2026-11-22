@@ -350,8 +350,7 @@ impl CalendarView {
         let toolbar = toolbar::Toolbar::new(&mut host, &signals, Mode::Week);
         let host_id = bande_toolkit::ui::Widget::id(&host);
         let today = now.date();
-        let mut cx = Context::new(text, palette);
-        cx.keyboard_navigation = true;
+        let cx = Context::new(text, palette);
         Self {
             library,
             ui: Ui::new(Box::new(host), cx),

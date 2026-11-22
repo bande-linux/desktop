@@ -211,7 +211,7 @@ impl Widget for Grid {
                     paint: cx.palette.accent_text.into(),
                 });
             }
-            if focused && index == self.current && cx.keyboard_navigation {
+            if focused && index == self.current {
                 focus_ring(
                     cx,
                     Shape::rounded(well.inset(-RING), TILE_RADIUS + RING),

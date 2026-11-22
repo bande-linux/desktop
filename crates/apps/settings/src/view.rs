@@ -391,8 +391,7 @@ impl SettingsView {
         let placeholder = || Box::new(Column::new(0.0, 0.0, Vec::new())) as Box<dyn Widget>;
         let root = Root::new(Box::new(field), placeholder(), placeholder());
         let root_id = root.id();
-        let mut cx = Context::new(text, palette);
-        cx.keyboard_navigation = true;
+        let cx = Context::new(text, palette);
         let mut view = Self {
             panes: panes(),
             values: HashMap::new(),

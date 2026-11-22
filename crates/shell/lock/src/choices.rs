@@ -208,10 +208,6 @@ impl UserList {
             })
             .collect();
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.peers.is_empty()
-    }
 }
 
 impl Widget for UserList {
@@ -375,7 +371,7 @@ impl Widget for SourceButton {
         true
     }
 
-    fn accepts_focus(&self, cx: &Context) -> bool {
-        self.name.is_some() && cx.keyboard_navigation
+    fn accepts_focus(&self, _cx: &Context) -> bool {
+        self.name.is_some()
     }
 }

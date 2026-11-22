@@ -88,8 +88,9 @@ impl Warnings {
 pub fn watch(system: &Connection, session: &Connection) -> zbus::Result<()> {
     let messages = MessageIterator::from(system);
     let bus = DBusProxy::new(system)?;
-    for rule in change_rules()? {
-        bus.add_match_rule(rule)?;
+    let rules = change_rules()?;
+    for rule in &rules {
+        bus.add_match_rule(rule.clone())?;
     }
     let bluetooth = Bluetooth::new(system);
     let mut warnings = Warnings {
@@ -101,7 +102,10 @@ pub fn watch(system: &Connection, session: &Connection) -> zbus::Result<()> {
         .spawn(move || {
             warnings.check_all(&bluetooth);
             for message in messages.flatten() {
-                if shown_change(&message) {
+                let from_bluez = rules
+                    .iter()
+                    .any(|rule| rule.matches(&message).is_ok_and(|matched| matched));
+                if from_bluez && shown_change(&message) {
                     warnings.check_all(&bluetooth);
                 }
             }

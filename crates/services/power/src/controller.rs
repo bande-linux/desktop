@@ -149,7 +149,6 @@ impl IdleController {
 
     pub fn set_policies(&self, policies: Policies) {
         self.run(|machine| machine.set_policies(policies));
-        self.tell_wayland(Command::RestartIdleTimers);
     }
 
     pub fn wayland_commands(&self) -> io::Result<UnixStream> {
@@ -340,7 +339,11 @@ pub fn logind_executor(
             Command::IdleHint(idle) => session.set_idle_hint(idle),
             Command::RequirePassword(required) => password.require(required),
             Command::Suspend if virtual_machine => Ok(()),
-            Command::Suspend => logind::sleep(&manager, false).map(drop),
+            Command::Suspend => logind::sleep(&manager, false).map(|slept| {
+                if !slept {
+                    tracing::info!("logind does not let the computer sleep when idle");
+                }
+            }),
             Command::Dim => {
                 let lit = keyboard
                     .as_ref()

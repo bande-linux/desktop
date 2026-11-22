@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
+use bande_l10n::tr;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use zbus::blocking::Connection;
@@ -12,6 +13,8 @@ const MANAGER: &str = "org.freedesktop.systemd1.Manager";
 const WAKE_UNIT: &str = "bande-clock-wake";
 const WAKE_ACCURACY_USEC: u64 = 1_000_000;
 const RTC_CLASS: &str = "/sys/class/rtc";
+const SCREEN_SAVER: &str = "org.freedesktop.ScreenSaver";
+const SCREEN_SAVER_PATH: &str = "/org/freedesktop/ScreenSaver";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Summary {
@@ -39,6 +42,8 @@ impl Published {
 pub struct Bus {
     connection: Connection,
     shown: Summary,
+    ringing: bool,
+    awake: Option<u32>,
 }
 
 impl Bus {
@@ -52,7 +57,43 @@ impl Bus {
         Ok(Self {
             connection: connection.clone(),
             shown: Summary::default(),
+            ringing: false,
+            awake: None,
         })
+    }
+
+    pub fn keep_awake(&mut self, ringing: bool) {
+        if self.ringing == ringing {
+            return;
+        }
+        self.ringing = ringing;
+        if ringing {
+            self.awake = self
+                .connection
+                .call_method(
+                    Some(SCREEN_SAVER),
+                    SCREEN_SAVER_PATH,
+                    Some(SCREEN_SAVER),
+                    "Inhibit",
+                    &(tr!("Clock"), tr!("An alarm or timer is ringing")),
+                )
+                .and_then(|reply| reply.body().deserialize::<u32>())
+                .inspect_err(|error| {
+                    tracing::warn!("cannot keep the screen on while ringing: {error}")
+                })
+                .ok();
+        } else if let Some(cookie) = self.awake.take() {
+            let released = self.connection.call_method(
+                Some(SCREEN_SAVER),
+                SCREEN_SAVER_PATH,
+                Some(SCREEN_SAVER),
+                "UnInhibit",
+                &(cookie,),
+            );
+            if let Err(error) = released {
+                tracing::warn!("cannot let the screen turn off after ringing: {error}");
+            }
+        }
     }
 
     pub fn publish(&mut self, summary: Summary) {

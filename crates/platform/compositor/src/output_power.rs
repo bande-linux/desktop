@@ -134,6 +134,11 @@ impl State {
         }
     }
 
+    pub(crate) fn power_new_output(&mut self, output: &str) {
+        let dark = !self.any_screen_lit() && !self.output_power.off.is_empty();
+        self.set_output_power(output, if dark { Mode::Off } else { Mode::On });
+    }
+
     pub(crate) fn power_on_every_output(&mut self) {
         for output in self.output_power.off.clone() {
             self.set_output_power(&output, Mode::On);

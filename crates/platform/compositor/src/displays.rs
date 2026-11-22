@@ -616,7 +616,7 @@ impl Compositor {
     }
 
     pub fn add_output(&mut self, config: OutputConfig) {
-        self.state.note_activity();
+        self.state.power_new_output(&config.name);
         if self.state.withholds(&config.name) && self.state.any_screen_shown() {
             self.state.withheld.push(config);
             return;
@@ -638,12 +638,19 @@ impl Compositor {
         self.state.arrange_screens();
     }
 
+    pub fn lid_closed(&self) -> bool {
+        self.state.lid_closed
+    }
+
     pub fn set_lid_closed(&mut self, closed: bool) {
         if self.state.lid_closed == closed {
             return;
         }
         tracing::info!("the lid was {}", if closed { "closed" } else { "opened" });
         self.state.lid_closed = closed;
+        if !closed {
+            self.state.note_activity();
+        }
         self.state.rebalance_withheld();
         self.state.arrange_screens();
         self.state.needs_redraw = true;

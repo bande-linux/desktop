@@ -1,3 +1,4 @@
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::mpsc::{Sender, channel};
@@ -249,6 +250,11 @@ impl Compositor {
             (true, None) => {
                 let mut command = Command::new(SCREEN_READER);
                 command.arg("--replace").env("DISPLAY", "");
+                // SAFETY: the closure runs between fork and exec and only does an atomic load and
+                // setpriority, which are async-signal-safe.
+                unsafe {
+                    command.pre_exec(crate::logind::normal_priority);
+                }
                 if let Some(name) = &self.socket_name {
                     command.env("WAYLAND_DISPLAY", name);
                 }

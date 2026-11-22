@@ -574,11 +574,14 @@ impl SettingsView {
             Some(Value::Seconds(seconds)) => Some(*seconds),
             _ => None,
         };
-        let display_off = seconds(SettingId::DisplayOffAfter)?;
+        let display_off = seconds(match id {
+            SettingId::BatterySleepAfter => SettingId::BatteryDisplayOffAfter,
+            _ => SettingId::DisplayOffAfter,
+        })?;
         let note = match id {
             SettingId::ScreenSaverAfter => (display_off > 0 && display_off <= seconds(id)?)
                 .then_some(text!("The display turns off first, so the screen saver doesn't start.")),
-            SettingId::SleepAfter => {
+            SettingId::SleepAfter | SettingId::BatterySleepAfter => {
                 let sleep = seconds(id)?;
                 (sleep > 0 && sleep < display_off).then_some(text!("The computer stays awake until the display turns off."))
             }

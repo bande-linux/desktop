@@ -700,7 +700,8 @@ what the one before could not save:
 - **The processor is busy** (a big build): `bande-session` gives `app.slice` half the CPU weight
   of `session.slice`, and the compositor asks `rtkit` to raise its drawing and input thread to
   nice −11 (`MakeThreadHighPriority`), keeping the normal priority when rtkit is missing or
-  refuses, so the pointer and animations stay smooth.
+  refuses, so the pointer and animations stay smooth. The clients it starts and the wallpaper
+  material thread go back to the normal priority.
 - **The disk is full**: configuration and state are written to a staging file and renamed
   (`bande_xdg::replace_file`), so a failed write leaves the old file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; after

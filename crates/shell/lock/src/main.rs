@@ -65,16 +65,47 @@ struct Locker {
     sources: Vec<String>,
     active_source: usize,
     wakes: Option<Inbox<()>>,
-    power: Option<PowerProxyBlocking<'static>>,
+    power: Option<Power>,
     unlocked: bool,
+}
+
+struct Power {
+    cached: PowerProxyBlocking<'static>,
+    fresh: PowerProxyBlocking<'static>,
+}
+
+impl Power {
+    fn connect() -> zbus::Result<Self> {
+        let session = bande_bus::session()?;
+        Ok(Self {
+            cached: PowerProxyBlocking::builder(&session)
+                .cache_properties(zbus::proxy::CacheProperties::Yes)
+                .build()?,
+            fresh: PowerProxyBlocking::builder(&session)
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()?,
+        })
+    }
+
+    fn password_required(&self) -> bool {
+        self.cached
+            .cached_password_required()
+            .ok()
+            .flatten()
+            .unwrap_or(true)
+            || self
+                .fresh
+                .password_required()
+                .inspect_err(|error| {
+                    tracing::warn!("cannot ask whether a password is needed: {error}")
+                })
+                .unwrap_or(true)
+    }
 }
 
 impl Locker {
     fn password_required(&self) -> bool {
-        self.power
-            .as_ref()
-            .and_then(|power| power.cached_password_required().ok().flatten())
-            .unwrap_or(true)
+        self.power.as_ref().is_none_or(Power::password_required)
     }
 
     fn unlock(&mut self, window: &mut Window) {
@@ -452,8 +483,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .inspect_err(|error| tracing::warn!("cannot follow waking: {error}"))
                 .ok()
         }),
-        power: bande_bus::session()
-            .and_then(|session| PowerProxyBlocking::new(&session))
+        power: Power::connect()
             .inspect_err(|error| tracing::warn!("the password is always required: {error}"))
             .ok(),
         unlocked: false,

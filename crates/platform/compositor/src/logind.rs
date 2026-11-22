@@ -2,8 +2,10 @@ use std::fs;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::sync::mpsc::Receiver;
 use std::thread;
+use std::time::Duration;
 
 use bande_l10n::tr;
 use smithay::reexports::calloop::channel::Sender;
@@ -68,14 +70,33 @@ trait RealtimeKit {
 
 const HIGH_PRIORITY_NICE_LEVEL: i32 = -11;
 
+static NORMAL_NICE_LEVEL: OnceLock<i32> = OnceLock::new();
+
 pub fn raise_priority(connection: &Connection) {
+    let normal = match rustix::process::getpriority_process(None) {
+        Ok(normal) => normal,
+        Err(error) => {
+            tracing::debug!("drawing and input keep the normal priority: {error}");
+            return;
+        }
+    };
     let thread = rustix::thread::gettid().as_raw_nonzero().get();
     let raised = RealtimeKitProxyBlocking::new(connection).and_then(|rtkit| {
         rtkit.make_thread_high_priority(thread.unsigned_abs().into(), HIGH_PRIORITY_NICE_LEVEL)
     });
     match raised {
-        Ok(()) => tracing::info!("drawing and input run at a higher priority"),
+        Ok(()) => {
+            NORMAL_NICE_LEVEL.get_or_init(|| normal);
+            tracing::info!("drawing and input run at a higher priority");
+        }
         Err(error) => tracing::debug!("drawing and input keep the normal priority: {error}"),
+    }
+}
+
+pub fn normal_priority() -> io::Result<()> {
+    match NORMAL_NICE_LEVEL.get() {
+        Some(&nice) => rustix::process::setpriority_process(None, nice).map_err(io::Error::from),
+        None => Ok(()),
     }
 }
 
@@ -117,6 +138,8 @@ pub fn follow_sleep(connection: &Connection, sender: Sender<Sleep>) -> zbus::Res
     Ok(())
 }
 
+const LID_SETTLES_AFTER_WAKE: Duration = Duration::from_secs(2);
+
 pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result<()> {
     let manager = ManagerProxyBlocking::builder(connection)
         .cache_properties(zbus::proxy::CacheProperties::No)
@@ -131,13 +154,16 @@ pub fn follow_lid(connection: &Connection, sender: Sender<bool>) -> zbus::Result
             if wake.args().is_ok_and(|arguments| *arguments.start()) {
                 continue;
             }
-            match manager.lid_closed() {
-                Ok(closed) => {
-                    if sender.send(closed).is_err() {
-                        return;
+            for wait in [Duration::ZERO, LID_SETTLES_AFTER_WAKE] {
+                thread::sleep(wait);
+                match manager.lid_closed() {
+                    Ok(closed) => {
+                        if sender.send(closed).is_err() {
+                            return;
+                        }
                     }
+                    Err(error) => tracing::warn!("cannot tell whether the lid is closed: {error}"),
                 }
-                Err(error) => tracing::warn!("cannot tell whether the lid is closed: {error}"),
             }
         }
     });
@@ -219,8 +245,10 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
             if let Err(error) = session.request_lock() {
                 tracing::warn!("cannot lock on the power button: {error}");
             }
-            if let Err(error) = bande_bus::logind::sleep(&sleeper, false) {
-                tracing::warn!("cannot sleep on the power button: {error}");
+            match bande_bus::logind::sleep(&sleeper, false) {
+                Ok(true) => {}
+                Ok(false) => tracing::info!("logind does not let the computer sleep now"),
+                Err(error) => tracing::warn!("cannot sleep on the power button: {error}"),
             }
         }
     });

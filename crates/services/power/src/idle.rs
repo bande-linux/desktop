@@ -257,7 +257,15 @@ impl IdleMachine {
     pub fn resumed(&mut self) -> Vec<Command> {
         self.stage = Stage::Active;
         self.sleep_overdue = false;
-        self.undim()
+        let mut commands = Vec::new();
+        if std::mem::take(&mut self.awaiting_lock) {
+            self.locked = false;
+            self.locked_when_idle = false;
+            self.lock_pending = false;
+            commands = self.require_password();
+        }
+        commands.extend(self.undim());
+        commands
     }
 
     fn kept_awake(&self, idle: Duration) -> bool {

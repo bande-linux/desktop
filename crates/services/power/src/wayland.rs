@@ -27,7 +27,7 @@ struct Watcher {
     seat: Option<WlSeat>,
     notifier: Option<ExtIdleNotifierV1>,
     power: Option<ZwlrOutputPowerManagerV1>,
-    outputs: Vec<WlOutput>,
+    outputs: Vec<(u32, WlOutput)>,
     shortest: Option<Duration>,
 }
 
@@ -83,7 +83,7 @@ impl Watcher {
         let Some(power) = &self.power else {
             return;
         };
-        for output in &self.outputs {
+        for (_, output) in &self.outputs {
             let control = power.get_output_power(output, &queue.handle(), ());
             control.set_mode(mode);
             control.destroy();
@@ -199,11 +199,10 @@ impl Dispatch<WlRegistry, ()> for Watcher {
         _: &Connection,
         handle: &QueueHandle<Self>,
     ) {
-        if let wl_registry::Event::Global {
-            name, interface, ..
-        } = event
-        {
-            match interface.as_str() {
+        match event {
+            wl_registry::Event::Global {
+                name, interface, ..
+            } => match interface.as_str() {
                 "wl_seat" if watcher.seat.is_none() => {
                     watcher.seat = Some(registry.bind(name, 1, handle, ()));
                 }
@@ -213,9 +212,15 @@ impl Dispatch<WlRegistry, ()> for Watcher {
                 "zwlr_output_power_manager_v1" => {
                     watcher.power = Some(registry.bind(name, 1, handle, ()));
                 }
-                "wl_output" => watcher.outputs.push(registry.bind(name, 1, handle, ())),
+                "wl_output" => watcher
+                    .outputs
+                    .push((name, registry.bind(name, 1, handle, ()))),
                 _ => {}
+            },
+            wl_registry::Event::GlobalRemove { name } => {
+                watcher.outputs.retain(|(bound, _)| *bound != name);
             }
+            _ => {}
         }
     }
 }

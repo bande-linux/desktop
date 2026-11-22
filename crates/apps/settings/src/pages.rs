@@ -22,7 +22,7 @@ use crate::widgets::{
 use bande_audio::{Direction, SoundCard};
 use bande_bluetooth::{Device, Kind as DeviceKind};
 use bande_config::Placement;
-use bande_config::{ACCENTS, Accessibility, MAX_INPUT_SOURCES, carry};
+use bande_config::{ACCENTS, Accessibility, ComposeKey, InputSource, MAX_INPUT_SOURCES, carry};
 use bande_keyboard::{Action, Trigger, shortcuts_in};
 use bande_settings_panes::SettingHit;
 use bande_settings_panes::{
@@ -33,6 +33,7 @@ use bande_toolkit::ui::{
     SegmentedControl, Shortcut, ShortcutField, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
 use bande_toolkit::{Scheme, Spacing, TextRole};
+use xkbcommon::xkb;
 
 const PAGE_PADDING: f32 = Spacing::XL as f32;
 const PAGE_SPACING: f32 = Spacing::S as f32;
@@ -169,12 +170,87 @@ fn choice_control(
     }
 }
 
+fn right_alt_is_altgr(codes: &[String]) -> bool {
+    let sources: Vec<InputSource> = codes
+        .iter()
+        .filter_map(|code| InputSource::parse(code))
+        .collect();
+    let join =
+        |part: fn(&InputSource) -> &str| sources.iter().map(part).collect::<Vec<_>>().join(",");
+    let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+    let Some(keymap) = xkb::Keymap::new_from_names(
+        &context,
+        "",
+        "",
+        &join(|source| &source.layout),
+        &join(|source| source.variant.as_deref().unwrap_or("")),
+        None,
+        xkb::KEYMAP_COMPILE_NO_FLAGS,
+    ) else {
+        tracing::warn!("cannot compile the keyboard layouts {codes:?}");
+        return true;
+    };
+    let Some(right_alt) = keymap.key_by_name("RALT") else {
+        return false;
+    };
+    (0..keymap.num_layouts()).any(|layout| {
+        keymap
+            .key_get_syms_by_level(right_alt, layout, 0)
+            .contains(&xkb::Keysym::ISO_Level3_Shift)
+    })
+}
+
+fn offered_choices<'a>(choices: &'a [Choice], offered: Option<&[String]>) -> Vec<&'a Choice> {
+    choices
+        .iter()
+        .filter(|choice| match (offered, &choice.value) {
+            (Some(offered), Value::Keyword(keyword)) => offered.contains(keyword),
+            _ => true,
+        })
+        .collect()
+}
+
 impl SettingsView {
     fn offered(&self, id: SettingId) -> Option<Vec<String>> {
         match id {
             SettingId::PowerMode => self.power.as_ref().map(|power| power.offered().to_vec()),
+            SettingId::ComposeKey => Some(self.compose_keys()),
             _ => None,
         }
+    }
+
+    fn right_alt_is_altgr(&self) -> bool {
+        let codes = self.input_sources();
+        let mut known = self.altgr.borrow_mut();
+        match &*known {
+            Some((checked, altgr)) if *checked == codes => *altgr,
+            _ => {
+                let altgr = right_alt_is_altgr(&codes);
+                *known = Some((codes, altgr));
+                altgr
+            }
+        }
+    }
+
+    fn compose_keys(&self) -> Vec<String> {
+        let current = match self.values.get(&SettingId::ComposeKey) {
+            Some(Value::Keyword(keyword)) => keyword.as_str(),
+            _ => "",
+        };
+        let altgr = self.right_alt_is_altgr();
+        ComposeKey::ALL
+            .into_iter()
+            .chain([ComposeKey::System])
+            .filter(|key| {
+                key.keyword() == current
+                    || match key {
+                        ComposeKey::RightAlt => !altgr,
+                        ComposeKey::System => false,
+                        _ => true,
+                    }
+            })
+            .map(|key| key.keyword().to_owned())
+            .collect()
     }
 
     fn setting_intent(
@@ -212,16 +288,10 @@ impl SettingsView {
             None => self.values.get(&id).cloned(),
         };
         let mut set = self.setting_intent(id, scope);
+        let offered = self.offered(id);
         let control: Box<dyn Widget> = match &setting.kind {
             Kind::Choices(choices) => {
-                let offered = self.offered(id);
-                let choices: Vec<&Choice> = choices
-                    .iter()
-                    .filter(|choice| match (&offered, &choice.value) {
-                        (Some(offered), Value::Keyword(keyword)) => offered.contains(keyword),
-                        _ => true,
-                    })
-                    .collect();
+                let choices = offered_choices(choices, offered.as_deref());
                 let selected = value
                     .as_ref()
                     .and_then(|value| choices.iter().position(|choice| choice.value == *value));
@@ -270,13 +340,14 @@ impl SettingsView {
                 ))
             }
             Kind::Menu(choices) => {
+                let choices = offered_choices(choices, offered.as_deref());
                 let labels: Vec<String> =
                     choices.iter().map(|choice| choice.label.clone()).collect();
                 let values: Vec<Value> =
                     choices.iter().map(|choice| choice.value.clone()).collect();
                 let selected = value
                     .as_ref()
-                    .and_then(|value| setting.kind.position(value))
+                    .and_then(|value| values.iter().position(|choice| choice == value))
                     .unwrap_or(0);
                 boxed(PopUpButton::new(
                     &setting.label,

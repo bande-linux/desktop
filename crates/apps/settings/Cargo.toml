@@ -19,6 +19,7 @@ libc.workspace = true
 libloading.workspace = true
 rustix = { workspace = true, features = ["fs", "pty"] }
 tracing.workspace = true
+xkbcommon.workspace = true
 bande-app-menu.workspace = true
 bande-audio.workspace = true
 bande-bluetooth.workspace = true

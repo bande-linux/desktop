@@ -1,0 +1,12 @@
+[package]
+name = "bande-content-lines"
+description = "Content lines of iCalendar and vCard, shared by Calendar and Contacts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true

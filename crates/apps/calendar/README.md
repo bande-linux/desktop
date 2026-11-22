@@ -119,10 +119,10 @@ open on that field and says what to type.
 
 | Path | What it is |
 |---|---|
-| `src/ical/` | iCalendar: content lines, values and durations, time zones, recurrence, events |
-| `src/caldav/` | HTTP, WebDAV XML, DNS SRV, discovery and the CalDAV requests |
+| `src/ical/` | iCalendar: values and durations, time zones, recurrence, events, on the content lines of `bande-content-lines` |
+| `crates/libs/dav` (`bande-dav`) | HTTP with Basic and Digest, WebDAV XML, discovery, the CalDAV requests and the sync of a collection, shared with Contacts |
 | `src/store.rs` | accounts, calendars and the offline cache in `~/.local/share/bande-calendar` |
-| `src/sync.rs` | push pending changes, pull with sync-token or ctag/etag, apply the outcome |
+| `src/sync.rs` | a calendar's sync through `bande-dav`, a refused edit kept as a copy, and applying the outcome |
 | `src/edit.rs` | the edits the UI makes: create, move a series or one occurrence, delete, details |
 | `src/alerts.rs` | which alarms fall due |
 | `src/settings.rs` | the settings and the messages the Settings window sends the app |

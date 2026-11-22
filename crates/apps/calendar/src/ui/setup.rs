@@ -12,10 +12,10 @@ use bande_toolkit::ui::{
 };
 
 use super::panel::{Line, Panel, Width};
-use crate::caldav::{Client, Credentials, Discovered, Error};
 use crate::ical::CalendarObject;
 use crate::store::{Account, AccountKind};
 use crate::worker::http_url;
+use bande_dav::{Client, Credentials, Discovered, Error, Service};
 
 const WIDTH: f32 = 500.0;
 const LABEL_WIDTH: f32 = 104.0;
@@ -573,7 +573,7 @@ impl AccountSetup {
                 } else {
                     let address = self.address.clone();
                     self.spawn(ui, &tr!("Looking up the server…"), move || {
-                        Answer::Found(Client::find(&address, &Resolver::system()))
+                        Answer::Found(Client::find(Service::CalDav, &address, &Resolver::system()))
                     });
                 }
             }
@@ -593,7 +593,10 @@ impl AccountSetup {
                 };
                 let server = self.server.clone();
                 self.spawn(ui, &tr!("Signing in…"), move || {
-                    Answer::Signed(Client::new(Some(&credentials)).discover(&server))
+                    Answer::Signed(
+                        Client::new(Service::CalDav, Some(&credentials))
+                            .discover_calendars(&server),
+                    )
                 });
             }
             Step::Subscription if self.url.is_empty() => {
@@ -602,12 +605,12 @@ impl AccountSetup {
             Step::Subscription => {
                 let url = http_url(&self.url);
                 self.spawn(ui, &tr!("Updating…"), move || {
-                    Answer::Fetched(Client::new(None).get(&url).and_then(|resource| {
-                        match CalendarObject::parse(&resource.data) {
+                    Answer::Fetched(Client::new(Service::CalDav, None).get(&url).and_then(
+                        |resource| match CalendarObject::parse(&resource.data) {
                             Ok(_) => Ok(resource.data),
                             Err(_) => Err(Error::NotFound(url)),
-                        }
-                    }))
+                        },
+                    ))
                 });
             }
             Step::Password if password.is_empty() => {

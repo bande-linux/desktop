@@ -122,8 +122,10 @@ bande-colour = { path = "crates/libs/colour" }
 bande-compositor = { path = "crates/platform/compositor" }
 bande-config = { path = "crates/services/config" }
 bande-content = { path = "crates/libs/content" }
+bande-content-lines = { path = "crates/libs/content-lines" }
 bande-crash-reports = { path = "crates/services/crash-reports" }
 bande-datetime = { path = "crates/libs/datetime" }
+bande-dav = { path = "crates/libs/dav" }
 bande-design = { path = "crates/toolkit/design" }
 bande-desktop-surface = { path = "crates/shell/desktop" }
 bande-dict = { path = "crates/libs/dict" }

@@ -4,10 +4,12 @@ use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
 
-use super::lines::{self, Component, ParseError, Property, escape, split_list, unescape};
 use super::rule::Rule;
 use super::tz::{Zones, vtimezone};
 use super::value::{Duration, InstanceKey, Moment};
+use bande_content_lines::{
+    self as lines, Component, ParseError, Property, escape, split_list, unescape,
+};
 
 pub(super) const PRODUCT: &str = "-//Bande//Calendar 0.1//EN";
 
@@ -387,7 +389,7 @@ impl CalendarObject {
         calendar
             .components
             .extend(self.events.iter().map(|event| event.to_component(stamp)));
-        calendar.to_ics()
+        calendar.to_text()
     }
 
     pub fn occurrences(&self, from: Timestamp, to: Timestamp, local: &TimeZone) -> Vec<Occurrence> {

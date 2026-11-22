@@ -1,7 +1,8 @@
 use std::cell::RefCell;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use bande_dav::{Cached, read_or_set_aside};
+pub use bande_dav::{Pending, new_uid};
 use bande_l10n::tr;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -61,13 +62,6 @@ pub struct CalendarInfo {
     pub refreshed: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Pending {
-    Create,
-    Update,
-    Delete,
-}
-
 type Expansion = (Timestamp, Timestamp, TimeZone, Vec<Occurrence>);
 
 #[derive(Debug, Default)]
@@ -95,6 +89,32 @@ pub struct Stored {
     pub parsed: Option<CalendarObject>,
     #[serde(skip)]
     expanded: Expanded,
+}
+
+impl Cached for Stored {
+    fn fresh(href: String, etag: Option<String>, data: String, pending: Option<Pending>) -> Self {
+        Self::new(href, etag, data, pending)
+    }
+
+    fn href(&self) -> &str {
+        &self.href
+    }
+
+    fn data(&self) -> &str {
+        &self.data
+    }
+
+    fn pending(&self) -> Option<Pending> {
+        self.pending
+    }
+
+    fn set_etag(&mut self, etag: Option<String>) {
+        self.etag = etag;
+    }
+
+    fn set_pending(&mut self, pending: Option<Pending>) {
+        self.pending = pending;
+    }
 }
 
 impl Stored {
@@ -267,61 +287,8 @@ pub struct Library {
     pub calendars: Vec<Calendar>,
 }
 
-pub fn new_uid() -> String {
-    let mut bytes = [0u8; 16];
-    let read =
-        std::fs::File::open("/dev/urandom").and_then(|mut random| random.read_exact(&mut bytes));
-    if read.is_err() {
-        let now = Timestamp::now().as_nanosecond().to_le_bytes();
-        bytes.copy_from_slice(&now);
-        bytes[0] ^= std::process::id() as u8;
-    }
-    bytes[6] = (bytes[6] & 0x0F) | 0x40;
-    bytes[8] = (bytes[8] & 0x3F) | 0x80;
-    let hex: String = bytes.iter().map(|byte| format!("{byte:02X}")).collect();
-    format!(
-        "{}-{}-{}-{}-{}",
-        &hex[0..8],
-        &hex[8..12],
-        &hex[12..16],
-        &hex[16..20],
-        &hex[20..32]
-    )
-}
-
-fn read_or_set_aside<T: serde::de::DeserializeOwned>(file: &Path) -> Option<T> {
-    let text = std::fs::read_to_string(file).ok()?;
-    match serde_json::from_str(&text) {
-        Ok(value) => Some(value),
-        Err(error) => {
-            let aside = file.with_extension("broken");
-            tracing::warn!(
-                "cannot read {}: {error}; keeping it as {}",
-                file.display(),
-                aside.display()
-            );
-            if let Err(error) = std::fs::rename(file, &aside) {
-                tracing::warn!("cannot keep {}: {error}", aside.display());
-            }
-            None
-        }
-    }
-}
-
 pub fn href_for(calendar: &CalendarInfo, uid: &str) -> String {
-    let safe: String = uid
-        .chars()
-        .map(
-            |character| match character.is_ascii_alphanumeric() || "-_.".contains(character) {
-                true => character,
-                false => '_',
-            },
-        )
-        .collect();
-    match &calendar.url {
-        Some(url) => format!("{}/{safe}.ics", url.trim_end_matches('/')),
-        None => format!("{safe}.ics"),
-    }
+    bande_dav::href_for(calendar.url.as_deref(), uid, "ics")
 }
 
 fn calendar_file(dir: &Path, id: &str) -> PathBuf {

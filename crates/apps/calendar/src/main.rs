@@ -11,7 +11,6 @@ use bande_app::{
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between, last_checked, save_checked};
-use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
 use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION, Subject};
 use bande_calendar::online::System;
@@ -26,6 +25,7 @@ use bande_calendar::ui::{
 use bande_calendar::wake::WallAlarm;
 use bande_calendar::worker::{Job, Reply, Worker};
 use bande_datetime::DateFormats;
+use bande_dav::Discovered;
 use bande_design::{Accent, Scheme};
 use bande_inbox::Inbox;
 use bande_l10n::{Text, text, tr};

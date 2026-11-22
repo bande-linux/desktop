@@ -6,9 +6,9 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use bande_keyring::Keyring;
 
-use crate::caldav::{Client, Credentials, Error};
 use crate::store::{AccountKind, Calendar};
 use crate::sync::{Outcome, sync_calendar};
+use bande_dav::{Client, Credentials, Error, Service};
 
 const KEYRING: &str = "org.bande.Calendar";
 
@@ -120,10 +120,13 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
                             user: user.clone(),
                             password,
                         });
-                        sync_calendar(&Client::new(credentials.as_ref()), &calendar)
-                            .map(Reply::Synced)
+                        sync_calendar(
+                            &Client::new(Service::CalDav, credentials.as_ref()),
+                            &calendar,
+                        )
+                        .map(Reply::Synced)
                     }
-                    AccountKind::Subscription { url, .. } => Client::new(None)
+                    AccountKind::Subscription { url, .. } => Client::new(Service::CalDav, None)
                         .get(&http_url(url))
                         .map(|resource| Reply::Refreshed {
                             calendar: calendar.info.id.clone(),
@@ -165,7 +168,7 @@ fn run(job: Job, passwords: &mut Passwords, reply: &mut dyn FnMut(Reply)) {
             let credentials = passwords
                 .get(&account)
                 .map(|password| Credentials { user, password });
-            let client = Client::new(credentials.as_ref());
+            let client = Client::new(Service::CalDav, credentials.as_ref());
             let result = match &change {
                 Change::Make { name, color } => client.make_calendar(&url, name, color),
                 Change::Rename(name) => client.rename(&url, name),

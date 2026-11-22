@@ -628,10 +628,11 @@ dependencies = [
  "bande-app",
  "bande-app-menu",
  "bande-app-settings",
+ "bande-content-lines",
  "bande-datetime",
+ "bande-dav",
  "bande-design",
  "bande-discovery",
- "bande-https",
  "bande-inbox",
  "bande-keyring",
  "bande-l10n",
@@ -640,14 +641,11 @@ dependencies = [
  "bande-search",
  "bande-toolkit",
  "bande-xdg",
- "base64 0.22.1",
  "jiff",
  "md-5 0.10.6",
- "roxmltree 0.21.2",
  "rustix 1.1.6",
  "serde",
  "serde_json",
- "sha2 0.11.1",
  "tempfile",
  "tracing",
  "zbus",
@@ -766,6 +764,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "bande-content-lines"
+version = "0.2.0"
+
+[[package]]
 name = "bande-crash-reports"
 version = "0.2.0"
 dependencies = [
@@ -788,6 +790,23 @@ dependencies = [
  "rustix 1.1.6",
  "writeable",
  "zbus",
+]
+
+[[package]]
+name = "bande-dav"
+version = "0.2.0"
+dependencies = [
+ "bande-discovery",
+ "bande-https",
+ "bande-keyring",
+ "bande-xdg",
+ "base64 0.22.1",
+ "md-5 0.10.6",
+ "roxmltree 0.21.2",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tracing",
 ]
 
 [[package]]

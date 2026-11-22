@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 
-use bande_calendar::caldav::{Client, Credentials, Error};
+use bande_dav::{Client, Credentials, Error, Service};
 use bande_discovery::testing::{Record, nameserver};
 use md5::{Digest, Md5};
 
@@ -99,10 +99,13 @@ fn dav_server(address: &str) -> u16 {
 }
 
 fn client(password: &str) -> Client {
-    Client::new(Some(&Credentials {
-        user: "jane".to_owned(),
-        password: password.to_owned(),
-    }))
+    Client::new(
+        Service::CalDav,
+        Some(&Credentials {
+            user: "jane".to_owned(),
+            password: password.to_owned(),
+        }),
+    )
 }
 
 #[test]
@@ -121,11 +124,14 @@ fn a_digest_caldav_server_found_from_the_domains_records_signs_in_after_a_wrong_
         },
     ])
     .unwrap();
-    let server = Client::find("jane@bande.test", &resolver).unwrap();
+    let server = Client::find(Service::CalDav, "jane@bande.test", &resolver).unwrap();
     assert_eq!(server, format!("http://localhost:{port}/dav/"));
 
-    assert_eq!(client("wrong").discover(&server), Err(Error::Unauthorized));
-    let found = client("secret").discover(&server).unwrap();
+    assert_eq!(
+        client("wrong").discover_calendars(&server),
+        Err(Error::Unauthorized)
+    );
+    let found = client("secret").discover_calendars(&server).unwrap();
     assert_eq!(found.home, format!("http://localhost:{port}/dav/jane/cal/"));
     assert_eq!(found.addresses, ["jane@bande.test"]);
     assert_eq!(found.calendars[0].name, "Work");
@@ -134,6 +140,6 @@ fn a_digest_caldav_server_found_from_the_domains_records_signs_in_after_a_wrong_
 #[test]
 fn a_password_is_sent_only_over_https_or_to_this_computer() {
     let port = dav_server("127.0.0.2:0");
-    let refused = client("secret").discover(&format!("http://127.0.0.2:{port}/"));
+    let refused = client("secret").discover_calendars(&format!("http://127.0.0.2:{port}/"));
     assert!(matches!(refused, Err(Error::Insecure(_))), "{refused:?}");
 }

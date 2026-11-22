@@ -7,7 +7,7 @@ use std::path::Path;
 use rustix::fs::OFlags;
 
 use super::event::PRODUCT;
-use super::lines::{self, Component, Property, escape};
+use bande_content_lines::{self as lines, Component, Property, escape};
 
 pub const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -58,5 +58,5 @@ pub fn export<'a>(name: &str, objects: impl IntoIterator<Item = &'a str>) -> Str
             }
         }
     }
-    calendar.to_ics()
+    calendar.to_text()
 }

@@ -1,7 +1,9 @@
-use super::http::Error;
+use crate::client::Service;
+use crate::http::Error;
 
 pub const DAV: &str = "DAV:";
 pub const CALDAV: &str = "urn:ietf:params:xml:ns:caldav";
+pub const CARDDAV: &str = "urn:ietf:params:xml:ns:carddav";
 pub const CALSERVER: &str = "http://calendarserver.org/ns/";
 pub const CALENDAR_COLOR_NS: &str = "http://apple.com/ns/ical/";
 
@@ -89,6 +91,16 @@ impl Entry {
         self.props.iter().find(|prop| prop.is(namespace, name))
     }
 
+    /// Whether `current-user-privilege-set` (RFC 3744) says the user may not write here.
+    pub fn read_only(&self) -> bool {
+        self.prop(DAV, "current-user-privilege-set")
+            .is_some_and(|set| {
+                set.find(DAV, "write").is_none()
+                    && set.find(DAV, "write-content").is_none()
+                    && set.find(DAV, "all").is_none()
+            })
+    }
+
     pub fn text(&self, namespace: &str, name: &str) -> Option<&str> {
         self.prop(namespace, name)
             .map(|prop| prop.text.as_str())
@@ -162,7 +174,7 @@ pub fn escape(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-const NAMESPACES: &str = "xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" xmlns:cs=\"http://calendarserver.org/ns/\" xmlns:ic=\"http://apple.com/ns/ical/\"";
+const NAMESPACES: &str = "xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" xmlns:card=\"urn:ietf:params:xml:ns:carddav\" xmlns:cs=\"http://calendarserver.org/ns/\" xmlns:ic=\"http://apple.com/ns/ical/\"";
 
 pub fn propfind(props: &[&str]) -> String {
     format!(
@@ -181,9 +193,13 @@ pub fn sync_collection(token: Option<&str>) -> String {
     )
 }
 
-pub fn multiget(hrefs: &[String]) -> String {
+pub fn multiget(service: Service, hrefs: &[String]) -> String {
+    let (report, data) = match service {
+        Service::CalDav => ("c:calendar-multiget", "c:calendar-data"),
+        Service::CardDav => ("card:addressbook-multiget", "card:address-data"),
+    };
     format!(
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<c:calendar-multiget {NAMESPACES}><d:prop><d:getetag/><c:calendar-data/></d:prop>{}</c:calendar-multiget>",
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<{report} {NAMESPACES}><d:prop><d:getetag/><{data}/></d:prop>{}</{report}>",
         hrefs
             .iter()
             .map(|href| format!("<d:href>{}</d:href>", escape(href)))

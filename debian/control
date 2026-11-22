@@ -624,14 +624,14 @@ Depends: ${shlibs:Depends},
  ${misc:Depends}
 Recommends: libpam-bande-secrets (= ${binary:Version})
 Provides: org.freedesktop.secrets
-Conflicts: gnome-keyring
 Description: Bande keyring: the Secret Service of the Bande desktop
  The keyring of the Bande desktop: it keeps the passwords apps save, such
  as mail accounts, calendars, browsers and VPNs, encrypted with the login
  password, and serves them through the freedesktop Secret Service. The
  login keyring is unlocked when you log in and follows password changes.
  When an app asks for a password another app saved, the keyring asks
- first. Started with the session or by D-Bus activation.
+ first. It runs only in a Bande session, so other desktops keep their own
+ keyring.
 
 Package: libpam-bande-secrets
 Architecture: any
@@ -644,9 +644,10 @@ Depends: ${shlibs:Depends},
  bande-secrets (= ${binary:Version}),
  ${misc:Depends}
 Description: PAM module that unlocks the Bande keyring at login
- Unlocks the Bande login keyring with the password you log in with, and
- re-encrypts it when you change your password. The lock screen and sudo
- pass through it without unlocking anything. Enabled through
+ Unlocks the Bande login keyring with the password you log in to a Bande
+ session with, and re-encrypts it when you change your password from Bande.
+ Other desktops, the console, the lock screen and sudo pass through it
+ without starting or unlocking anything. Enabled through
  pam-auth-update.
 
 Package: bande-shell

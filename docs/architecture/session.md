@@ -239,15 +239,22 @@ UI.
 ### Keyring (`bande-secrets`)
 
 - `crates/services/secrets` is the session's `org.freedesktop.secrets` (`plain` and
-  `dh-ietf1024-sha256-aes128-cbc-pkcs7` sessions), D-Bus and socket activated, idle in epoll.
+  `dh-ietf1024-sha256-aes128-cbc-pkcs7` sessions), idle in epoll. It runs only in a Bande
+  session: started by the login socket or by `bande-session.target`, with no D-Bus activation
+  file, so in another desktop that desktop's keyring (GNOME Keyring, KWallet) owns the name and
+  is activated as before. The login socket is in `sockets.target` because PAM opens the session
+  before `bande-session.target` starts; nothing writes to it outside Bande.
 - Keyrings are oo7's v1 files in `~/.local/share/bande/keyrings/v1/<name>.keyring` (written 0600
   through a temporary file): `login` (alias `default`), the in-memory `session`, and any an app
   creates. GNOME Keyring's files are not read.
-- `libpam-bande-secrets` (pam-auth-update profile `bande-secrets`): `auth` keeps the typed
-  password, `session` hands it to the daemon over `/run/user/<uid>/bande-secrets/pam` (the
+- `libpam-bande-secrets` (pam-auth-update profile `bande-secrets`, beside GNOME Keyring's own):
+  `auth` keeps the typed password, `session` hands it to the daemon over
+  `/run/user/<uid>/bande-secrets/pam` only when PAM's `XDG_SESSION_DESKTOP` is `bande` or its
+  `XDG_CURRENT_DESKTOP` names `X-Bande`, as every display manager sets them for `pam_systemd` (the
   module checks the socket is the user's, the daemon takes messages only from root; a failed
-  send is logged through `pam_syslog`, never the password), and `password` re-encrypts the login
-  keyring when the old password opens it. The lock screen runs `auth` only, so it unlocks
+  send is logged through `pam_syslog`, never the password; a missing socket is no failure), and
+  `password` re-encrypts the login keyring when the old password opens it and the change comes
+  from a Bande session; after a change made elsewhere, the next unlock offers to update it. The lock screen runs `auth` only, so it unlocks
   nothing; the login keyring stays unlocked while the screen is locked. When the login password
   does not open the keyring, the next unlock offers to update its password or start a new one
   (the old file is kept).

@@ -120,15 +120,14 @@ done
 
 echo "== the keyring and its PAM module"
 root=$(extract bande-secrets)
-service="$root/usr/share/dbus-1/services/org.bande.Secrets.service"
-grep -qx 'Name=org.freedesktop.secrets' "$service"
-grep -qx 'SystemdService=bande-secrets.service' "$service"
-test -x "$root$(sed -n 's/^Exec=//p' "$service")"
+test ! -e "$root/usr/share/dbus-1/services/org.bande.Secrets.service"
+test -x "$root/usr/libexec/bande-secrets"
 test -x "$root/usr/libexec/bande-secrets-prompt"
 grep -qx 'ListenStream=%t/bande-secrets/pam' "$root/usr/lib/systemd/user/bande-secrets.socket"
 grep -qx 'BusName=org.freedesktop.secrets' "$root/usr/lib/systemd/user/bande-secrets.service"
 field bande-secrets Provides | grep -qw org.freedesktop.secrets
-field bande-secrets Conflicts | grep -qw gnome-keyring
+grep -qx 'WantedBy=bande-session.target' "$root/usr/lib/systemd/user/bande-secrets.service"
+[ -z "$(field bande-secrets Conflicts)" ]
 root=$(extract libpam-bande-secrets)
 test -s "$root/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/security/pam_bande_secrets.so"
 grep -qP '^\toptional\tpam_bande_secrets.so$' "$root/usr/share/pam-configs/bande-secrets"

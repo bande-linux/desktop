@@ -1,0 +1,34 @@
+#!/bin/bash
+# Next to GNOME, installing bande-desktop with its recommends removes nothing, both keyrings keep
+# their PAM profiles, GNOME Keyring alone is D-Bus activatable as org.freedesktop.secrets, and a
+# session that is not Bande's gets its secrets from GNOME Keyring.
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+installed() {
+    dpkg-query -W -f '${db:Status-Status} ${binary:Package}\n' | sed -n 's/^installed //p' | sort
+}
+before=$(installed)
+apt-get install -y -q -o APT::Install-Recommends=true bande-desktop < /dev/null
+gone=$(comm -23 <(echo "$before") <(installed))
+[ -z "$gone" ] || { echo "installing bande-desktop removed" $gone; exit 1; }
+
+for stack in common-auth common-session common-password; do
+    grep -q pam_gnome_keyring.so "/etc/pam.d/$stack"
+    grep -q pam_bande_secrets.so "/etc/pam.d/$stack"
+done
+activatable=$(grep -lx 'Name=org.freedesktop.secrets' /usr/share/dbus-1/services/*.service)
+[ "$activatable" = /usr/share/dbus-1/services/org.freedesktop.secrets.service ]
+dpkg -S "$activatable" | grep -q '^gnome-keyring:'
+
+runtime=$(mktemp -d)
+chmod 0700 "$runtime"
+export XDG_RUNTIME_DIR="$runtime" XDG_CURRENT_DESKTOP=GNOME
+dbus-run-session -- bash -euo pipefail -c '
+    printf hunter2 | secret-tool store --collection=session --label=coexistence test coexistence
+    [ "$(secret-tool lookup test coexistence)" = hunter2 ]
+    owner=$(dbus-send --session --print-reply=literal --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus.GetConnectionUnixProcessID string:org.freedesktop.secrets | awk "{print \$2}")
+    [ "$(readlink "/proc/$owner/exe")" = /usr/bin/gnome-keyring-daemon ]
+'
+[ ! -e "$runtime/bande-secrets" ]
+echo "bande-desktop installs next to GNOME, whose keyring keeps working outside Bande"

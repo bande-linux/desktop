@@ -68,7 +68,10 @@ debhelper compat 14, built with Debian's `rustc` and `cargo` through dh-cargo's 
   that take over system-wide setup, such as `systemd-resolved`, `iwd`, a firewall or another
   display manager, and leaves `/etc/resolv.conf`, `/etc/network/interfaces` and the `hosts`
   line of `/etc/nsswitch.conf` as they were, but for `libnss-mdns`'s own entry),
-  `display-manager` (next to LightDM, greetd is offered and not imposed), `services` (the
+  `display-manager` (next to LightDM, greetd is offered and not imposed), `coexistence`
+  (`bande-desktop` installs next to `gnome-core` without removing anything, and GNOME's keyring
+  keeps its PAM profile, socket and activation while Bande's stays out of a non-Bande login),
+  `services` (the
   settings service on a private bus, the compositor headless), `portal` (the colour scheme
   through `xdg-desktop-portal`) and `metadata` (desktop entries, metainfo and units validate).
 
@@ -168,8 +171,8 @@ package for a while, and the feature says what is missing. `bande-desktop` itsel
 - `apt-config-icons-hidpi` (recommended): the AppStream icons Software shows, at 2×;
 - `systemd-oomd` (recommended): closes an app when memory stays under pressure.
 
-It does not pull in `gnome-keyring` (the Bande keyring replaces it and conflicts with it, so the
-bus name has one owner), `pipewire-alsa` or `cups` (`bande-printd` prints to network printers
+It does not pull in `gnome-keyring` (it installs beside Bande's keyring, which runs only in a Bande
+session, so another desktop's keyring owns `org.freedesktop.secrets` there), `pipewire-alsa` or `cups` (`bande-printd` prints to network printers
 without it; Settings ▸ Printers installs `cups` and `ipp-usb` on demand for USB and older printers), `xdg-utils` (Bande opens files and links with `bande_xdg::open`, so neither its X11 tools
 nor a fallback terminal come along), Qt's portal platform theme, `at-spi2-core` (a screen reader
 depends on it) or the fonts, PackageKit, AppStream, UPower, UDisks, NetworkManager and

@@ -23,6 +23,10 @@ const ANSWER_TIMEOUT: Duration = Duration::from_secs(20);
 const LOG_WARNING: c_int = 4;
 const LOG_INFO: c_int = 6;
 const AS_TEXT: &CStr = c"%s";
+const SESSION_DESKTOP: &CStr = c"XDG_SESSION_DESKTOP";
+const CURRENT_DESKTOP: &CStr = c"XDG_CURRENT_DESKTOP";
+const BANDE_SESSION_DESKTOP: &[u8] = b"bande";
+const BANDE_DESKTOP_NAME: &[u8] = b"X-Bande";
 
 #[repr(C)]
 pub struct PamHandle {
@@ -50,6 +54,7 @@ unsafe extern "C" {
         name: *const c_char,
         data: *mut *const c_void,
     ) -> c_int;
+    fn pam_getenv(handle: *mut PamHandle, name: *const c_char) -> *const c_char;
     fn pam_syslog(handle: *const PamHandle, priority: c_int, format: *const c_char, ...);
 }
 
@@ -119,6 +124,52 @@ unsafe fn user_id(handle: *mut PamHandle) -> Option<libc::uid_t> {
     (status == 0 && !found.is_null()).then_some(entry.pw_uid)
 }
 
+fn names_bande(session_desktop: Option<&[u8]>, current_desktop: Option<&[u8]>) -> bool {
+    session_desktop == Some(BANDE_SESSION_DESKTOP)
+        || current_desktop.is_some_and(|names| {
+            names
+                .split(|byte| *byte == b':')
+                .any(|name| name == BANDE_DESKTOP_NAME)
+        })
+}
+
+/// # Safety
+/// `handle` is the live handle PAM passed to the calling hook.
+unsafe fn pam_variable(handle: *mut PamHandle, name: &CStr) -> Option<Vec<u8>> {
+    // SAFETY: handle is the live handle PAM passed to the calling hook and name is NUL-terminated.
+    let value = unsafe { pam_getenv(handle, name.as_ptr()) };
+    // SAFETY: a non-null pam_getenv result is a NUL-terminated string owned by PAM, valid until
+    // the environment changes, and copied before this hook returns.
+    (!value.is_null()).then(|| unsafe { CStr::from_ptr(value) }.to_bytes().to_vec())
+}
+
+/// # Safety
+/// `handle` is the live handle PAM passed to the calling hook.
+unsafe fn opens_bande(handle: *mut PamHandle) -> bool {
+    // SAFETY: handle is the live handle PAM passed to the calling hook.
+    let (session, current) = unsafe {
+        (
+            pam_variable(handle, SESSION_DESKTOP),
+            pam_variable(handle, CURRENT_DESKTOP),
+        )
+    };
+    names_bande(session.as_deref(), current.as_deref())
+}
+
+/// # Safety
+/// `handle` is the live handle PAM passed to the calling hook.
+unsafe fn runs_in_bande(handle: *mut PamHandle) -> bool {
+    let session = std::env::var_os("XDG_SESSION_DESKTOP");
+    let current = std::env::var_os("XDG_CURRENT_DESKTOP");
+    // SAFETY: handle is the live handle PAM passed to the calling hook.
+    let opening = unsafe { opens_bande(handle) };
+    opening
+        || names_bande(
+            session.as_ref().map(|name| name.as_encoded_bytes()),
+            current.as_ref().map(|names| names.as_encoded_bytes()),
+        )
+}
+
 fn peer_is(stream: &UnixStream, uid: libc::uid_t) -> bool {
     let mut credentials = libc::ucred {
         pid: 0,
@@ -166,8 +217,11 @@ fn send_all(stream: &UnixStream, mut bytes: &[u8]) -> Option<()> {
 
 fn send(uid: libc::uid_t, message: &[u8]) -> Result<(), Failure> {
     let socket = format!("/run/user/{uid}/bande-secrets/pam");
-    let mut stream = UnixStream::connect(socket)
-        .map_err(|_| warning(c"cannot reach the keyring login socket"))?;
+    let mut stream = match UnixStream::connect(socket) {
+        Ok(stream) => stream,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(warning(c"cannot reach the keyring login socket")),
+    };
     if !peer_is(&stream, uid) {
         return Err(warning(c"the keyring login socket belongs to another user"));
     }
@@ -258,7 +312,10 @@ pub unsafe extern "C" fn pam_sm_open_session(
     // it alive until the pam_set_data below replaces it, after the last use of password.
     let password = unsafe { &*data.cast::<Password>() };
     // SAFETY: handle is the live handle PAM passed to this hook.
-    if let Some(uid) = unsafe { user_id(handle) } {
+    if unsafe { opens_bande(handle) }
+        // SAFETY: handle is the live handle PAM passed to this hook.
+        && let Some(uid) = unsafe { user_id(handle) }
+    {
         // SAFETY: handle is the live handle PAM passed to this hook.
         unsafe { report(handle, send(uid, &message(UNLOCK, &[password]))) };
     }
@@ -295,6 +352,10 @@ pub unsafe extern "C" fn pam_sm_chauthtok(
     let (Some(old), Some(new)) = (old, new) else {
         return PAM_IGNORE;
     };
+    // SAFETY: handle is the live handle PAM passed to this hook.
+    if !unsafe { runs_in_bande(handle) } {
+        return PAM_IGNORE;
+    }
     // SAFETY: handle is the live handle PAM passed to this hook.
     if let Some(uid) = unsafe { user_id(handle) } {
         // SAFETY: handle is the live handle PAM passed to this hook.

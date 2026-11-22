@@ -22,6 +22,11 @@ Tests: display-manager
 Depends: bande-desktop, lightdm, bsdutils, debconf
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
+Tests: coexistence
+Depends: gnome-core, gnome-keyring, libpam-gnome-keyring, libsecret-tools, dbus-daemon, dbus-bin,
+ apt
+Restrictions: needs-root, breaks-testbed, allow-stderr
+
 Tests: services
 Depends: bande-config, bande-compositor, dbus-daemon, dbus-bin
 Restrictions: allow-stderr

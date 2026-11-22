@@ -104,7 +104,7 @@ cancels the older one, and `source` fails a tag whose commit is not on `main`.
 - `install (<suite>, <arch>)`: in a clean `debian:<suite>` on the native runner, runs the
   autopkgtests of the source package against that architecture's and the `all` packages
   (`autopkgtest --no-built-binaries <dsc> <debs> -- null`): `desktop`, `every-package`,
-  `system-setup`, `display-manager`, `services`, `portal` and `metadata` (see
+  `system-setup`, `display-manager`, `coexistence`, `services`, `portal` and `metadata` (see
   [packaging.md](packaging.md#the-source-package)). A Debian package that the release lacks is a
   warning: `bande-desktop` only recommends `bande-backup`, and `every-package` installs it only
   when its dependencies can be.

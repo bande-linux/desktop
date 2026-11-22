@@ -512,18 +512,7 @@ impl DrmBackend {
         let node = DrmNode::from_file(&fd)?;
         let gbm = GbmDevice::new(fd).ok();
         let mut renderer = VulkanRenderer::new(Some(node.dev_id()))?;
-        let mut allocator = gbm
-            .clone()
-            .map(|gbm| GbmAllocator::new(gbm, GbmBufferFlags::RENDERING));
-        renderer.prove_unexported(|format| {
-            let buffer = allocator
-                .as_mut()?
-                .create_buffer(64, 64, format.code, &[format.modifier])
-                .ok()?;
-            (buffer.format() == format)
-                .then(|| buffer.export().ok())
-                .flatten()
-        });
+        prove_with_gbm(&mut renderer, gbm.as_ref());
         let info = renderer.device_info();
         tracing::info!("composing on {info} with {}", info.extensions.join(", "));
         let feedback_device = match node.node_with_type(NodeType::Render) {
@@ -1296,6 +1285,19 @@ impl FrameOutput for DrmBackend {
     }
 }
 
+fn prove_with_gbm(renderer: &mut VulkanRenderer, gbm: Option<&GbmDevice<DrmDeviceFd>>) {
+    let mut allocator = gbm.map(|gbm| GbmAllocator::new(gbm.clone(), GbmBufferFlags::RENDERING));
+    renderer.prove_unexported(|format| {
+        let buffer = allocator
+            .as_mut()?
+            .create_buffer(64, 64, format.code, &[format.modifier])
+            .ok()?;
+        (buffer.format() == format)
+            .then(|| buffer.export().ok())
+            .flatten()
+    });
+}
+
 impl DrmBackend {
     fn fall_back(&mut self, index: usize, next: Buffers) -> Result<(), DrmBackendError> {
         let head = self.heads.remove(index);
@@ -1333,7 +1335,15 @@ impl DrmBackend {
             self.renderer.is_lost(),
             self.renderer.memory_use()
         );
-        self.renderer = self.renderer.renew()?;
+        let mut renewed = self.renderer.renew()?;
+        prove_with_gbm(&mut renewed, self.gbm.as_ref());
+        if renewed.dmabuf_planes() != self.renderer.dmabuf_planes() {
+            tracing::warn!(
+                "the restarted renderer offers other dma-buf formats than clients were told"
+            );
+        }
+        self.renderer.restore_feedback(&self.feedback);
+        self.renderer = renewed;
         for head in &mut self.heads {
             head.compositor.reset_buffers();
         }

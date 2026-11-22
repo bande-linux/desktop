@@ -213,6 +213,7 @@ impl FrameOutput for Renderer {
         );
         self.outputs.clear();
         self.vulkan = self.vulkan.renew()?;
+        self.vulkan.prove_unexported(|_| None);
         Ok(())
     }
 }

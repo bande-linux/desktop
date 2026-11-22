@@ -504,9 +504,7 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
     let found = match foreign_pixel(&gpu.gbm, &dmabuf) {
         Ok(found) => found,
         Err(error) => {
-            println!(
-                "skipped checking the scan-out of {format:?}: GBM cannot read it back ({error})"
-            );
+            println!("scan-out not checked for {format:?}: GBM cannot read it back ({error})");
             return Ok(false);
         }
     };
@@ -548,6 +546,9 @@ fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
          {rendered_total} scanned-out formats; the others are skipped above"
     );
     assert!(sampled_verified > 0, "no sampled format could be checked");
+    if rendered_total > 0 && rendered_verified == 0 {
+        println!("scan-out not checked: GBM could read none of the scanout buffers back");
+    }
     let refused = gpu.renderer.refused_formats();
     assert!(refused.is_empty(), "the driver refused {refused:?}");
     assert_eq!(vulkan_errors(), 0, "Vulkan reported errors");

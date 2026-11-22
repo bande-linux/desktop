@@ -107,7 +107,8 @@ when they reach the screen is Bande's own.
   before its first draw and releases it back in `GENERAL` when the frame ends. A LINEAR buffer that cannot be sampled that way
   (offset or stride not a multiple of 16, or a driver or lavapipe without the extension) is
   imported as a Vulkan buffer and its damaged rows copied into the surface's texture, so any
-  stride works. Uploads are submitted with the frame, or on their own when no frame is rendered
+  stride works. A LINEAR plane whose stride is shorter than a row, or whose last row ends past
+  the dma-buf, is refused. Uploads are submitted with the frame, or on their own when no frame is rendered
   (a covered window that keeps drawing, direct scanout), so pending staging memory cannot pile
   up. Explicit sync is `linux-drm-syncobj-v1`, offered when the DRM device supports syncobj
   eventfds.

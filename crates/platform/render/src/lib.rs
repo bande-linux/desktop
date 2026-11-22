@@ -1044,7 +1044,7 @@ impl VulkanRenderer {
             formats::SAMPLED => self.modifiers.sampled.get(&format),
             _ => self.modifiers.rendered.get(&format),
         };
-        let layouts = import::modifier_layout(dmabuf, known.copied())?;
+        let layouts = import::modifier_layout(dmabuf, known.copied(), texel)?;
         let Some(fd) = dmabuf.handles().next() else {
             return Err(RenderError::UnsupportedFormat);
         };
@@ -1836,7 +1836,7 @@ impl VulkanRenderer {
     fn device_export(&self, dmabuf: &Dmabuf) -> Result<DeviceExport, RenderError> {
         let layout = import::single_plane_layout(dmabuf)?;
         let imported = self.import_dmabuf_memory(layout.fd, vk::BufferUsageFlags::TRANSFER_DST)?;
-        if layout.end(dmabuf.size()) > imported.size {
+        if !layout.fits(dmabuf.size(), imported.size) {
             self.destroy_imported(&imported);
             return Err(RenderError::BufferOutOfBounds);
         }
@@ -1870,9 +1870,7 @@ impl VulkanRenderer {
         let fd = layout.fd.try_clone_to_owned()?;
         let length = usize::try_from(File::from(fd.try_clone()?).seek(SeekFrom::End(0))?)
             .map_err(|_| RenderError::BufferOutOfBounds)?;
-        let end = usize::try_from(layout.end(dmabuf.size()))
-            .map_err(|_| RenderError::BufferOutOfBounds)?;
-        if end > length {
+        if !layout.fits(dmabuf.size(), length as u64) {
             return Err(RenderError::BufferOutOfBounds);
         }
         // SAFETY: a new shared mapping of the dma-buf's whole `length`; `MappedExport` owns it and

@@ -33,12 +33,20 @@ pub(crate) struct PlaneLayout<'a> {
 }
 
 impl PlaneLayout<'_> {
-    pub(crate) fn end(&self, size: Size<i32, BufferCoords>) -> u64 {
-        let rows = u64::from(size.h.unsigned_abs().saturating_sub(1));
-        u64::from(self.offset)
-            + rows * u64::from(self.stride)
-            + u64::from(size.w.unsigned_abs()) * BYTES_PER_PIXEL as u64
+    pub(crate) fn fits(&self, size: Size<i32, BufferCoords>, length: u64) -> bool {
+        let row = u64::from(size.w.unsigned_abs()) * BYTES_PER_PIXEL as u64;
+        fits(
+            self.offset,
+            self.stride,
+            (row, size.h.unsigned_abs().into()),
+            length,
+        )
     }
+}
+
+pub(crate) fn fits(offset: u32, stride: u32, (row, rows): (u64, u64), length: u64) -> bool {
+    let (offset, stride) = (u64::from(offset), u64::from(stride));
+    stride >= row && offset + stride * rows.saturating_sub(1) + row <= length
 }
 
 pub(crate) fn single_plane_layout(dmabuf: &Dmabuf) -> Result<PlaneLayout<'_>, RenderError> {
@@ -63,6 +71,7 @@ pub(crate) fn single_plane_layout(dmabuf: &Dmabuf) -> Result<PlaneLayout<'_>, Re
 pub(crate) fn modifier_layout(
     dmabuf: &Dmabuf,
     planes: Option<usize>,
+    texel: formats::Texel,
 ) -> Result<Vec<vk::SubresourceLayout>, RenderError> {
     if planes != Some(dmabuf.num_planes()) {
         return Err(RenderError::UnsupportedFormat);
@@ -77,17 +86,23 @@ pub(crate) fn modifier_layout(
     }
     let size = File::from(first.try_clone_to_owned()?).seek(SeekFrom::End(0))?;
     let linear = dmabuf.format().modifier == Modifier::Linear;
+    let extent = dmabuf.size();
+    let rows = texel.plane_rows(extent.w.unsigned_abs(), extent.h.unsigned_abs());
     dmabuf
         .offsets()
         .zip(dmabuf.strides())
-        .map(|(offset, stride)| {
+        .zip(rows)
+        .map(|((offset, stride), plane)| {
             if linear
                 && !(offset.is_multiple_of(GPU_LINEAR_ALIGNMENT)
                     && stride.is_multiple_of(GPU_LINEAR_ALIGNMENT))
             {
                 return Err(RenderError::UnalignedDmabuf);
             }
-            if stride == 0 || u64::from(offset) >= size {
+            if stride == 0
+                || u64::from(offset) >= size
+                || linear && !fits(offset, stride, plane, size)
+            {
                 return Err(RenderError::BufferOutOfBounds);
             }
             Ok(vk::SubresourceLayout {
@@ -434,14 +449,14 @@ impl VulkanRenderer {
             None => {
                 let imported =
                     self.import_dmabuf_memory(luma.fd, vk::BufferUsageFlags::TRANSFER_SRC)?;
-                let luma_end = u64::from(luma.offset)
-                    + u64::from(size.h.unsigned_abs().saturating_sub(1)) * u64::from(luma.stride)
-                    + u64::from(size.w.unsigned_abs());
-                let chroma_end = u64::from(chroma.offset)
-                    + u64::from(chroma_height.unsigned_abs().saturating_sub(1))
-                        * u64::from(chroma.stride)
-                    + u64::from(chroma_width.unsigned_abs()) * 2;
-                if luma_end.max(chroma_end) > imported.size {
+                let luma_rows = (size.w.unsigned_abs().into(), size.h.unsigned_abs().into());
+                let chroma_rows = (
+                    u64::from(chroma_width.unsigned_abs()) * 2,
+                    chroma_height.unsigned_abs().into(),
+                );
+                if !fits(luma.offset, luma.stride, luma_rows, imported.size)
+                    || !fits(chroma.offset, chroma.stride, chroma_rows, imported.size)
+                {
                     self.destroy_imported(&imported);
                     return Err(RenderError::BufferOutOfBounds);
                 }
@@ -509,7 +524,7 @@ impl VulkanRenderer {
             None => {
                 let imported =
                     self.import_dmabuf_memory(layout.fd, vk::BufferUsageFlags::TRANSFER_SRC)?;
-                if layout.end(size) > imported.size {
+                if !layout.fits(size, imported.size) {
                     self.destroy_imported(&imported);
                     return Err(RenderError::BufferOutOfBounds);
                 }
@@ -645,5 +660,26 @@ impl ImportDmaWl for VulkanRenderer {
     ) -> Result<VulkanTexture, RenderError> {
         let dmabuf = get_dmabuf(buffer).map_err(|_| RenderError::UnknownBuffer)?;
         self.import_dmabuf_into(dmabuf, surface, Some(damage))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fits;
+
+    #[test]
+    fn a_plane_fits_only_with_whole_rows_inside_the_buffer() {
+        let row = (64 * 4, 32);
+        assert!(fits(0, 256, row, 256 * 32));
+        assert!(fits(128, 512, row, 128 + 512 * 31 + 256));
+        assert!(!fits(128, 512, row, 128 + 512 * 31 + 255));
+        assert!(!fits(0, 252, row, 1 << 20));
+        assert!(!fits(0, 0, row, 1 << 20));
+        assert!(!fits(
+            u32::MAX,
+            u32::MAX,
+            (u64::from(u32::MAX), u64::from(i32::MAX.unsigned_abs())),
+            u64::from(u32::MAX) << 8
+        ));
     }
 }

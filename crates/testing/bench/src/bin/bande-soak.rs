@@ -10,8 +10,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_compositor::{
-    Compositor, FrameClock, FrameOutput, FrameScheduler, LockReport, OutputConfig, REFRESH,
-    RenderError, Renderer, SessionRole, Submission,
+    Compositor, FrameClock, FrameOutput, FrameScheduler, OutputConfig, REFRESH, RenderError,
+    Renderer, SessionReport, SessionRole, Submission,
 };
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::utils::{Point, Size};
@@ -100,7 +100,7 @@ struct Soak {
     home: PathBuf,
     apps: BTreeMap<&'static str, Child>,
     services: Vec<Child>,
-    lock_states: Receiver<LockReport>,
+    session_reports: Receiver<SessionReport>,
     locked: bool,
     last_upkeep: Instant,
     last_pump: Instant,
@@ -190,8 +190,8 @@ fn percentile(sorted: &[Duration], fraction: f64) -> f64 {
 impl Soak {
     fn start(binaries: PathBuf, home: PathBuf, out: PathBuf) -> Result<Self, Box<dyn Error>> {
         let mut server = Compositor::new(Size::from(OUTPUT))?;
-        let (states, lock_states) = mpsc::channel();
-        server.report_lock_states(states);
+        let (states, session_reports) = mpsc::channel();
+        server.report_session(states);
         server.set_lock_screen(&binaries.join("bande-lock"));
         server.start_session_client(&binaries.join("bande-shell"), SessionRole::Shell)?;
         let mut services = Vec::new();
@@ -215,7 +215,7 @@ impl Soak {
             home,
             apps: BTreeMap::new(),
             services,
-            lock_states,
+            session_reports,
             locked: false,
             last_upkeep: now,
             last_pump: now,
@@ -260,8 +260,8 @@ impl Soak {
                 }
                 self.watch_for_hangs();
             }
-            while let Ok(report) = self.lock_states.try_recv() {
-                if let LockReport::Locked(locked) = report {
+            while let Ok(report) = self.session_reports.try_recv() {
+                if let SessionReport::Locked(locked) = report {
                     self.locked = locked;
                 }
             }

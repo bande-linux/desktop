@@ -881,8 +881,8 @@ fn start_user_session<O: FrameOutput + 'static>(
     }
     let system = app.buses.system.clone();
     if let Some(system) = &system {
-        let (lock_states, reported) = std::sync::mpsc::channel();
-        app.compositor.report_lock_states(lock_states);
+        let (session_reports, reported) = std::sync::mpsc::channel();
+        app.compositor.report_session(session_reports);
         follow(
             &handle,
             "the logind session",

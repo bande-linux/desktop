@@ -55,8 +55,8 @@ graph LR
   is `org.bande.Power`'s `PasswordRequired` property, which ends at a fixed time on the boot
   clock however long an inhibitor holds the display awake. The lock screen believes a "no"
   only from the owner of the name running in `bande-power.service`, answering within a second;
-  any process of the user could
-  lengthen it through `config.kdl` anyway, so it adds no new trust.
+  any process of the user could lengthen it through `config.kdl` anyway, so it adds no new
+  trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
   when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row in
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
@@ -66,7 +66,10 @@ graph LR
   the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`
   (logind checks swap, resume and Secure Boot), so a sleeping laptop hibernates before its
   battery runs out (`HibernateDelaySec=` in `sleep.conf` decides when). Settings ▸ Power says
-  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`.
+  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`. While someone
+  holds logind's `handle-lid-switch` inhibitor (Settings ▸ Power keeping the computer running
+  with the lid closed on power), closing the lid locks the session through logind unless
+  logind counts the computer as `Docked`.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 

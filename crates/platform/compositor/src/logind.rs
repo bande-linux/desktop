@@ -50,6 +50,12 @@ trait Manager {
     #[zbus(property)]
     fn lid_closed(&self) -> zbus::Result<bool>;
 
+    #[zbus(property)]
+    fn docked(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn block_inhibited(&self) -> zbus::Result<String>;
+
     fn suspend(&self, interactive: bool) -> zbus::Result<()>;
 
     #[zbus(signal)]
@@ -113,9 +119,10 @@ pub enum SessionRequest {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LockReport {
-    Started,
+pub enum SessionReport {
+    LockStarted,
     Locked(bool),
+    LidClosed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,14 +304,24 @@ pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus
     Ok(())
 }
 
+fn lid_left_to_the_session(manager: &ManagerProxyBlocking<'_>) -> zbus::Result<bool> {
+    Ok(!manager.docked()?
+        && manager
+            .block_inhibited()?
+            .split(':')
+            .any(|what| what == "handle-lid-switch"))
+}
+
 pub fn follow_session(
     connection: &Connection,
-    lock_reports: Receiver<LockReport>,
+    lock_reports: Receiver<SessionReport>,
     requests: Sender<SessionRequest>,
 ) -> zbus::Result<()> {
-    let path = ManagerProxyBlocking::new(connection)?.get_session("auto")?;
+    let manager = ManagerProxyBlocking::builder(connection)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
     let session = SessionProxyBlocking::builder(connection)
-        .path(path)?
+        .path(manager.get_session("auto")?)?
         .build()?;
     let locks = session.receive_lock()?;
     thread::spawn(move || {
@@ -317,12 +334,21 @@ pub fn follow_session(
     thread::spawn(move || {
         for report in lock_reports {
             match report {
-                LockReport::Started => {
+                SessionReport::LockStarted => {
                     if let Err(error) = session.request_lock() {
                         tracing::warn!("cannot tell logind about the lock: {error}");
                     }
                 }
-                LockReport::Locked(locked) => {
+                SessionReport::LidClosed => match lid_left_to_the_session(&manager) {
+                    Ok(false) => {}
+                    Ok(true) => {
+                        if let Err(error) = session.request_lock() {
+                            tracing::warn!("cannot lock with the lid closed: {error}");
+                        }
+                    }
+                    Err(error) => tracing::warn!("cannot tell who handles the lid: {error}"),
+                },
+                SessionReport::Locked(locked) => {
                     if let Err(error) = session.set_locked_hint(locked) {
                         tracing::warn!("cannot tell logind the session is locked: {error}");
                     }

@@ -9,7 +9,7 @@ use smithay::wayland::session_lock::{
     LockSurface, SessionLockHandler, SessionLockManagerState, SessionLocker,
 };
 
-use crate::logind::LockReport;
+use crate::logind::SessionReport;
 use crate::motion::{Look, Motion};
 use crate::scene::{Closing, Drawn, drawn_screen};
 use crate::state::{State, mapped_size};
@@ -220,11 +220,11 @@ impl State {
     }
 
     fn report_lock_state(&self, locked: bool) {
-        self.report_lock(LockReport::Locked(locked));
+        self.report_to_session(SessionReport::Locked(locked));
     }
 
-    fn report_lock(&self, report: LockReport) {
-        if let Some(states) = &self.lock_states {
+    pub(crate) fn report_to_session(&self, report: SessionReport) {
+        if let Some(states) = &self.session_reports {
             let _ = states.send(report);
         }
     }
@@ -234,7 +234,7 @@ impl State {
             return;
         }
         self.lock_screen_requested = true;
-        self.report_lock(LockReport::Started);
+        self.report_to_session(SessionReport::LockStarted);
     }
 
     fn release_grabs(&mut self) {

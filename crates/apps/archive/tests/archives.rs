@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fs::{self, File};
+use std::io::Write;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -8,6 +9,7 @@ use std::process::Command;
 use bande_archive::{ArchiveSettings, Ended, Work};
 use bande_fs::{Format, Refusal};
 use tar::{EntryType, Header};
+use zip::AesMode;
 use zip::write::SimpleFileOptions;
 
 fn made(work: std::io::Result<Work>) -> Ended {
@@ -79,6 +81,13 @@ fn compressed_items_expand_back_without_setuid_and_encrypted_archives_ask_for_th
         let mode = fs::metadata(expanded.join("run.sh")).unwrap().permissions();
         assert_eq!(mode.mode() & 0o7777, 0o755, "{format:?}");
     }
+    let aes = dir.path().join("aes.zip");
+    let mut zip = zip::ZipWriter::new(File::create(&aes).unwrap());
+    let locked = SimpleFileOptions::default().with_aes_encryption(AesMode::Aes256, "secret");
+    zip.start_file("Photos/trip/note.txt", locked).unwrap();
+    zip.write_all(b"hello").unwrap();
+    zip.finish().unwrap();
+    asks_for_the_password(&aes, "Photos");
     let Ok(_) = Command::new("7z").arg("i").output() else {
         return;
     };
@@ -90,14 +99,18 @@ fn compressed_items_expand_back_without_setuid_and_encrypted_archives_ask_for_th
             .arg(&archive)
             .arg(&photos);
         assert!(seven.output().unwrap().status.success());
-        let asked = |password, wrong| match expand(&archive, password) {
-            Ended::Password { wrong: asked, .. } => asked == wrong,
-            _ => false,
-        };
-        assert!(asked(None, false) && asked(Some("nope"), true), "{name}");
-        let expanded = done(expand(&archive, Some("secret")));
-        assert_eq!(fs::read(expanded.join("trip/note.txt")).unwrap(), b"hello");
+        asks_for_the_password(&archive, name);
     }
+}
+
+fn asks_for_the_password(archive: &Path, name: &str) {
+    let asked = |password, wrong| match expand(archive, password) {
+        Ended::Password { wrong: asked, .. } => asked == wrong,
+        _ => false,
+    };
+    assert!(asked(None, false) && asked(Some("nope"), true), "{name}");
+    let expanded = done(expand(archive, Some("secret")));
+    assert_eq!(fs::read(expanded.join("trip/note.txt")).unwrap(), b"hello");
 }
 
 #[test]

@@ -11,8 +11,8 @@ use bande_bluetooth::{
 use bande_bus::Reading;
 use bande_l10n::text;
 use bande_network::{
-    ConnectionChange, JoinOutcome, ManualIpv4, NetworkManager, Security, WifiLink, set_strength,
-    strength_signal, wifi_in_kernel,
+    ConnectionChange, Enterprise, JoinOutcome, ManualIpv4, NetworkManager, Security, WifiLink,
+    follow_airplane_mode, set_airplane_mode, set_strength, strength_signal, wifi_in_kernel,
 };
 use bande_settings_panes::PaneId;
 use zbus::blocking::{Connection, MessageIterator};
@@ -36,6 +36,7 @@ pub enum AudioCommand {
     Balance(f32),
     Mute(Direction, bool),
     Default(Direction, String),
+    Profile(u32, i32),
     App(String, f32),
     Feedback,
     Listen(bool),
@@ -47,10 +48,15 @@ pub enum NetworkCommand {
     Scan,
     Join(bande_network::Network, Option<String>),
     JoinHidden(Vec<u8>, Security, Option<String>),
+    JoinEnterprise(Vec<u8>, bool, Box<Enterprise>),
     Forget(Vec<u8>),
     ChangeConnection(PaneId, String, ConnectionChange),
     SignIn,
-    ConfigureEthernet(Option<ManualIpv4>),
+    ConfigureEthernet(String, Option<ManualIpv4>),
+    SecureEthernet(String, Option<Box<Enterprise>>),
+    StartHotspot(String, Option<String>),
+    StopHotspot,
+    Airplane(bool),
     ConnectVpn(String),
     DisconnectVpn(String),
     RemoveVpn(String),
@@ -113,6 +119,20 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), bande_audio::Er
                 .device(&name)
                 .ok_or(bande_audio::Error::NoSuchDevice)?;
             audio.set_default(device)
+        }
+        AudioCommand::Profile(card, index) => {
+            let snapshot = audio.snapshot();
+            let card = snapshot
+                .cards
+                .iter()
+                .find(|known| known.id == card)
+                .ok_or(bande_audio::Error::NoSuchDevice)?;
+            let profile = card
+                .profiles
+                .iter()
+                .find(|profile| profile.index == index)
+                .ok_or(bande_audio::Error::NoSuchDevice)?;
+            audio.set_profile(card, profile)
         }
         AudioCommand::App(name, volume) => {
             let snapshot = audio.snapshot();
@@ -287,7 +307,8 @@ fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiStat
         return Ok(None);
     }
     let enabled = network.wifi_enabled()?;
-    let (networks, link) = if enabled {
+    let outside = network.wifi_outside()?;
+    let (networks, link) = if enabled && outside.is_none() {
         let networks = match network.networks() {
             Err(bande_network::Error::NoWifiDevice) => return Ok(None),
             networks => networks?,
@@ -302,6 +323,12 @@ fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiStat
         known: network.known_networks()?,
         link,
         sign_in: enabled && matches!(network.sign_in_page(), Ok(Some(_))),
+        outside,
+        hotspot: network
+            .hotspot()
+            .inspect_err(|error| tracing::warn!("cannot read the hotspot: {error}"))
+            .ok()
+            .flatten(),
     }))
 }
 
@@ -365,8 +392,14 @@ fn follow_wifi(reader: NetworkManager, updates: Updates, changes: Receiver<Netwo
 
 fn read_network(network: &NetworkManager) -> NetworkState {
     NetworkState {
-        ethernet: network.ethernet().ok().flatten(),
-        vpns: network.vpns().unwrap_or_default(),
+        ethernets: network
+            .ethernets()
+            .inspect_err(|error| tracing::warn!("cannot read the wired devices: {error}"))
+            .unwrap_or_default(),
+        vpns: network
+            .vpns()
+            .inspect_err(|error| tracing::warn!("cannot read the VPNs: {error}"))
+            .unwrap_or_default(),
     }
 }
 
@@ -398,6 +431,12 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
         signals(system, rule, changed.clone(), network_change, || true);
     }
     follow_wifi(NetworkManager::new(system), updates.clone(), changes);
+    let radios = updates.clone();
+    spawn("airplane", move || {
+        if let Err(error) = follow_airplane_mode(|on| radios.send(Update::Airplane(on))) {
+            tracing::warn!("cannot follow the radios: {error}");
+        }
+    });
     let (sender, receiver) = mpsc::channel();
     let network = NetworkManager::new(system);
     let bus = system.clone();
@@ -431,14 +470,44 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     text!("Couldn't turn Wi-Fi on or off."),
                     network.set_wifi_enabled(on),
                 ),
-                NetworkCommand::ConfigureEthernet(manual) => {
+                NetworkCommand::ConfigureEthernet(interface, manual) => report(
+                    &updates,
+                    PaneId::Network,
+                    text!("Couldn't change the network settings."),
+                    network.configure_ethernet(&interface, manual.as_ref()),
+                ),
+                NetworkCommand::SecureEthernet(interface, login) => report(
+                    &updates,
+                    PaneId::Network,
+                    text!("Couldn't change how this connection signs in."),
+                    network.secure_ethernet(&interface, login.as_deref()),
+                ),
+                NetworkCommand::StartHotspot(name, password) => {
+                    let started = network.start_hotspot(&name, password.as_deref());
+                    let failed = match started {
+                        Ok(JoinOutcome::Joined) => None,
+                        Ok(outcome) => Some(outcome.to_string()),
+                        Err(error) => Some(error.to_string()),
+                    };
                     report(
                         &updates,
-                        PaneId::Network,
-                        text!("Couldn't change the network settings."),
-                        network.configure_ethernet(manual.as_ref()),
+                        PaneId::Wifi,
+                        text!("Couldn't turn the hotspot on."),
+                        failed.map_or(Ok(()), Err),
                     );
                 }
+                NetworkCommand::StopHotspot => report(
+                    &updates,
+                    PaneId::Wifi,
+                    text!("Couldn't turn the hotspot off."),
+                    network.stop_hotspot(),
+                ),
+                NetworkCommand::Airplane(on) => report(
+                    &updates,
+                    PaneId::Network,
+                    text!("Couldn't turn airplane mode on or off."),
+                    set_airplane_mode(on),
+                ),
                 NetworkCommand::ConnectVpn(path) => report(
                     &updates,
                     PaneId::Network,
@@ -489,6 +558,10 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                 }
                 NetworkCommand::JoinHidden(ssid, security, password) => {
                     let outcome = joined(network.join_hidden(&ssid, security, password.as_deref()));
+                    updates.send(Update::Joined(ssid, outcome));
+                }
+                NetworkCommand::JoinEnterprise(ssid, hidden, login) => {
+                    let outcome = joined(network.join_enterprise(&ssid, hidden, &login));
                     updates.send(Update::Joined(ssid, outcome));
                 }
             }

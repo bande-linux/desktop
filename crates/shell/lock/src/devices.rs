@@ -2,7 +2,6 @@ use std::os::fd::BorrowedFd;
 use std::sync::mpsc::Sender;
 
 use bande_inbox::Inbox;
-use bande_network::Wired;
 use bande_status::Update;
 use bande_status::devices::{Control, follow_devices};
 use bande_status::status::{Battery, Wifi};
@@ -11,7 +10,7 @@ use bande_status::status::{Battery, Wifi};
 pub struct Corner {
     pub battery: Option<Battery>,
     pub wifi: Option<Wifi>,
-    pub wired: Option<Wired>,
+    pub wired: Option<bool>,
 }
 
 pub struct Devices {

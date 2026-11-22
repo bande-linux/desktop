@@ -157,6 +157,15 @@ msgstr "Länk"
 msgid "Icon size"
 msgstr "Ikonstorlek"
 
+msgid "Apply these permissions to everything in “{name}”?"
+msgstr "Använda de här behörigheterna för allt i ”{name}”?"
+
+msgid "Every item inside gets the same access and group. You can’t undo this action."
+msgstr "Alla objekt i mappen får samma åtkomst och grupp. Du kan inte ångra det."
+
+msgid "Apply"
+msgstr "Använd"
+
 msgid "Are you sure you want to permanently erase the items in the Trash?"
 msgstr "Vill du verkligen radera objekten i papperskorgen permanent?"
 
@@ -176,6 +185,11 @@ msgstr "Radera"
 
 msgid "The disk “{name}” wasn’t ejected because one or more programs may be using it."
 msgstr "Skivan ”{name}” matades inte ut eftersom ett eller flera program kan använda den."
+
+msgid "The disk “{name}” wasn’t ejected because {programs} is using it."
+msgid_plural "The disk “{name}” wasn’t ejected because these programs are using it: {programs}."
+msgstr[0] "Skivan ”{name}” matades inte ut eftersom {programs} använder den."
+msgstr[1] "Skivan ”{name}” matades inte ut eftersom de här programmen använder den: {programs}."
 
 msgid "To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."
 msgstr "Klicka på Tvinga utmatning för att mata ut skivan direkt. Program som använder den kan förlora ändringar som inte har sparats."
@@ -279,6 +293,15 @@ msgstr "Dölj filändelse"
 
 msgid "Allow running as a program"
 msgstr "Tillåt körning som program"
+
+msgid "Owning group"
+msgstr "Ägande grupp"
+
+msgid "The group couldn’t be changed: {error}"
+msgstr "Gruppen kunde inte ändras: {error}"
+
+msgid "Apply to Enclosed Items…"
+msgstr "Använd för objekt i mappen…"
 
 msgid "The permissions couldn’t be changed: {error}"
 msgstr "Det gick inte att ändra behörigheterna: {error}"

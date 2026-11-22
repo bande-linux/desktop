@@ -116,6 +116,10 @@ impl Casting {
         })
     }
 
+    fn recording(&self) -> bool {
+        lock(&self.running).iter().any(|running| !running.shared)
+    }
+
     pub fn is_open(&self, node: u32) -> bool {
         lock(&self.running)
             .iter()
@@ -453,6 +457,11 @@ impl Service {
         from_portal(&header, connection).await?;
         self.ui.send(UiRequest::Cancel);
         Ok(())
+    }
+
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn recording(&self) -> bool {
+        self.casting.recording()
     }
 }
 

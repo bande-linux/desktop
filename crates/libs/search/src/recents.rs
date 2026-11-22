@@ -43,6 +43,150 @@ pub fn recently_used(xbel: &str) -> Vec<(PathBuf, u64)> {
         .collect()
 }
 
+const XBEL_START: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<xbel version=\"1.0\"\n      \
+     xmlns:bookmark=\"http://www.freedesktop.org/standards/desktop-bookmarks\"\n      \
+     xmlns:mime=\"http://www.freedesktop.org/standards/shared-mime-info\"\n>\n";
+const XBEL_END: &str = "</xbel>";
+const APPLICATIONS_END: &str = "</bookmark:applications>";
+
+fn with_attribute(tag: &str, name: &str, value: &str) -> String {
+    let key = format!(" {name}=\"");
+    match tag.find(&key) {
+        Some(start) => {
+            let from = start + key.len();
+            let end = tag[from..]
+                .find('"')
+                .map_or(tag.len(), |length| from + length);
+            format!("{}{value}{}", &tag[..from], &tag[end..])
+        }
+        None => {
+            let at = tag
+                .rfind("/>")
+                .or_else(|| tag.rfind('>'))
+                .unwrap_or(tag.len());
+            format!("{} {name}=\"{value}\"{}", tag[..at].trim_end(), &tag[at..])
+        }
+    }
+}
+
+fn application_tag(name: &str, exec: &str, now: &str, count: u64) -> String {
+    format!(
+        "<bookmark:application name=\"{}\" exec=\"{}\" modified=\"{now}\" count=\"{count}\"/>",
+        bande_xdg::escape_xml(name),
+        bande_xdg::escape_xml(&format!("'{exec}'")),
+    )
+}
+
+fn used_again(bookmark: &str, name: &str, exec: &str, now: &str) -> String {
+    let open_end = bookmark.find('>').map_or(bookmark.len(), |end| end + 1);
+    let (open, mut rest) = (
+        bookmark[..open_end].to_owned(),
+        bookmark[open_end..].to_owned(),
+    );
+    let open = with_attribute(&with_attribute(&open, "modified", now), "visited", now);
+    let named = format!(
+        "<bookmark:application name=\"{}\"",
+        bande_xdg::escape_xml(name)
+    );
+    match rest.find(&named) {
+        Some(start) => {
+            let end = rest[start..]
+                .find("/>")
+                .map_or(rest.len(), |length| start + length + 2);
+            let count = attribute(&rest[start..end], "count")
+                .and_then(|count| count.parse::<u64>().ok())
+                .unwrap_or(0);
+            rest.replace_range(start..end, &application_tag(name, exec, now, count + 1));
+        }
+        None => match rest.find(APPLICATIONS_END) {
+            Some(at) => rest.insert_str(at, &application_tag(name, exec, now, 1)),
+            None => tracing::debug!("a recently used file lists no applications"),
+        },
+    }
+    open + &rest
+}
+
+fn new_bookmark(href: &str, mime: &str, name: &str, exec: &str, now: &str) -> String {
+    format!(
+        "  <bookmark href=\"{href}\" added=\"{now}\" modified=\"{now}\" visited=\"{now}\">\n    \
+         <info>\n      <metadata owner=\"http://freedesktop.org\">\n        \
+         <mime:mime-type type=\"{}\"/>\n        <bookmark:applications>\n          {}\n        \
+         </bookmark:applications>\n      </metadata>\n    </info>\n  </bookmark>\n",
+        bande_xdg::escape_xml(mime),
+        application_tag(name, exec, now, 1),
+    )
+}
+
+fn with_recently_used(xbel: &str, files: &[(PathBuf, String)], name: &str, exec: &str) -> String {
+    let now = jiff::Timestamp::now()
+        .strftime("%Y-%m-%dT%H:%M:%S%.6fZ")
+        .to_string();
+    let mut xbel = match xbel.contains(XBEL_END) {
+        true => xbel.to_owned(),
+        false => format!("{XBEL_START}{XBEL_END}\n"),
+    };
+    for (path, mime) in files {
+        let href = bande_xdg::escape_xml(&bande_xdg::file_uri(path));
+        let opening = format!("<bookmark href=\"{href}\"");
+        match xbel.find(&opening) {
+            Some(start) => {
+                let end = xbel[start..]
+                    .find("</bookmark>")
+                    .map_or(xbel.len(), |length| start + length);
+                let updated = used_again(&xbel[start..end], name, exec, &now);
+                xbel.replace_range(start..end, &updated);
+            }
+            None => {
+                let at = xbel.rfind(XBEL_END).unwrap_or(xbel.len());
+                xbel.insert_str(at, &new_bookmark(&href, mime, name, exec, &now));
+            }
+        }
+    }
+    xbel
+}
+
+fn remembers_recent_files() -> bool {
+    bande_config::config_path()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|source| bande_config::Config::parse(&source).ok())
+        .is_none_or(|config| config.remember_recent_files)
+}
+
+/// Adds `files` to `recently-used.xbel` as opened with the app `name` that `exec` runs, unless
+/// remembering recent files is off. Works on the thread it returns.
+pub fn add_recently_used(
+    files: Vec<(PathBuf, String)>,
+    name: String,
+    exec: String,
+) -> Option<thread::JoinHandle<()>> {
+    let work = move || {
+        if !remembers_recent_files() {
+            return;
+        }
+        let Some(path) = recently_used_path() else {
+            return;
+        };
+        let xbel = match std::fs::read_to_string(&path) {
+            Ok(xbel) => xbel,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),
+            Err(error) => {
+                tracing::warn!("cannot read {}: {error}", path.display());
+                return;
+            }
+        };
+        let written =
+            bande_xdg::replace_file(&path, with_recently_used(&xbel, &files, &name, &exec));
+        if let Err(error) = written {
+            tracing::warn!("cannot remember the recently opened files: {error}");
+        }
+    };
+    thread::Builder::new()
+        .name("recently-used".to_owned())
+        .spawn(work)
+        .inspect_err(|error| tracing::warn!("cannot remember the recently opened files: {error}"))
+        .ok()
+}
+
 pub type Recents = Vec<(PathBuf, u64)>;
 
 pub struct RecentlyUsed {
@@ -125,4 +269,40 @@ pub fn recent_files(
         })
         .take(limit)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{recently_used, with_recently_used};
+
+    #[test]
+    fn opening_files_again_keeps_one_bookmark_each_and_counts_the_app() {
+        let report = (
+            PathBuf::from("/home/a/R&D <draft>.odt"),
+            "application/x-test".to_owned(),
+        );
+        let notes = (PathBuf::from("/home/a/notes.txt"), "text/plain".to_owned());
+        let once = with_recently_used(
+            "",
+            std::slice::from_ref(&report),
+            "Text Editor",
+            "bande-text-editor %U",
+        );
+        let twice = with_recently_used(
+            &once,
+            &[report.clone(), notes.clone()],
+            "Text Editor",
+            "bande-text-editor %U",
+        );
+        let paths: Vec<PathBuf> = recently_used(&twice)
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect();
+        assert_eq!(paths, vec![report.0, notes.0]);
+        assert_eq!(twice.matches("count=\"2\"").count(), 1);
+        assert_eq!(twice.matches("<bookmark:application ").count(), 2);
+        assert!(twice.ends_with("</xbel>\n"));
+    }
 }

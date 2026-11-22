@@ -1,33 +1,30 @@
+use bande_datetime::DateFormats;
 use bande_l10n::tr;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
-pub fn list_date(seconds: i64, now: Timestamp, zone: &TimeZone) -> String {
+pub fn list_date(seconds: i64, now: Timestamp, zone: &TimeZone, formats: &DateFormats) -> String {
     let Ok(time) = Timestamp::from_second(seconds) else {
         return String::new();
     };
     let (time, now) = (time.to_zoned(zone.clone()), now.to_zoned(zone.clone()));
     let (day, today) = (time.date(), now.date());
     if day == today {
-        return time.strftime("%H:%M").to_string();
+        return formats.clock_time(&time);
     }
     if today.yesterday().is_ok_and(|yesterday| yesterday == day) {
         return tr!("Yesterday");
     }
     let days = (today - day).get_days();
     if (0..7).contains(&days) {
-        return time.strftime("%A").to_string();
+        return formats.weekday(&time);
     }
-    time.strftime("%d/%m/%Y").to_string()
+    formats.date(&time, day.year() != today.year())
 }
 
-pub fn full_date(seconds: i64, zone: &TimeZone) -> String {
+pub fn full_date(seconds: i64, zone: &TimeZone, formats: &DateFormats) -> String {
     Timestamp::from_second(seconds)
-        .map(|time| {
-            time.to_zoned(zone.clone())
-                .strftime("%-d %B %Y at %H:%M")
-                .to_string()
-        })
+        .map(|time| formats.date_time(&time.to_zoned(zone.clone()), true))
         .unwrap_or_default()
 }
 

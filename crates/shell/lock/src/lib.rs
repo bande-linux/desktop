@@ -15,7 +15,6 @@ use bande_bar::symbols::{
 };
 pub use bande_datetime::DateFormats;
 use bande_l10n::tr;
-use bande_network::Wired;
 use bande_spring::State;
 pub use bande_status::devices::PowerAction;
 use bande_status::session::Ending;
@@ -701,12 +700,12 @@ pub struct LockScreen {
     formats: DateFormats,
 }
 
-fn network_of(wifi: Option<&Wifi>, wired: Option<&Wired>) -> Option<(Symbol, String)> {
+fn network_of(wifi: Option<&Wifi>, wired: Option<bool>) -> Option<(Symbol, String)> {
     if let Some(network) = wifi.and_then(Wifi::current) {
         let label = tr!("Connected to {network}", network = network.name().as_str());
         return Some((wifi_symbol(wifi), label));
     }
-    if wired.is_some_and(|wired| wired.connected) {
+    if wired == Some(true) {
         return Some((Symbol::Wired { connected: true }, tr!("Connected by cable")));
     }
     match (wifi, wired) {
@@ -973,7 +972,7 @@ impl LockScreen {
         &mut self,
         battery: Option<Battery>,
         wifi: Option<&Wifi>,
-        wired: Option<&Wired>,
+        wired: Option<bool>,
     ) -> bool {
         let mut model = self.model.borrow_mut();
         let network = network_of(wifi, wired);

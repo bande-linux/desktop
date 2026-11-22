@@ -10,7 +10,7 @@ use bande_compositor::{
     SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
     follow_appearance, follow_input_settings, follow_login_settings, follow_session,
     follow_shutdown, follow_sleep, notify_service_manager, render_material, serve_app_states,
-    serve_displays, serve_keyboard_monitor, sleep_on_request, user_config,
+    serve_displays, serve_global_shortcuts, serve_keyboard_monitor, sleep_on_request, user_config,
     watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
@@ -698,6 +698,18 @@ fn follow_session_bus<O: FrameOutput + 'static>(
     match serve_keyboard_monitor(bus) {
         Ok(monitor) => app.compositor.monitor_keyboard(monitor),
         Err(error) => tracing::warn!("assistive technologies cannot watch the keyboard: {error}"),
+    }
+    let (sender, bound) = channel::channel();
+    match serve_global_shortcuts(bus, move |shortcuts| sender.send(shortcuts).is_ok()) {
+        Ok(shortcuts) => {
+            handle.insert_source(bound, |event, _, app: &mut App<O>| {
+                if let Event::Msg(shortcuts) = event {
+                    app.compositor.bind_global_shortcuts(shortcuts);
+                }
+            })?;
+            app.compositor.use_global_shortcuts(shortcuts);
+        }
+        Err(error) => tracing::warn!("apps cannot have global shortcuts: {error}"),
     }
     match serve_app_states(bus) {
         Ok(states) => app.compositor.publish_app_states(states),

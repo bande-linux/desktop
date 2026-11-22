@@ -1,4 +1,6 @@
+use accesskit::{Action, ActionRequest, Role};
 use bande_graphics::{Elevation, Palette, Radius};
+use bande_l10n::tr;
 use bande_render::VulkanRenderer;
 use bande_spring::Spring;
 use smithay::backend::renderer::element::Id;
@@ -6,9 +8,11 @@ use smithay::input::keyboard::keysyms;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle};
 
+use crate::access::{Announcer, Entry, Group, entry_of, grouped};
 use crate::motion::{Look, Motion, Tick};
 use crate::overview::{arrange, real_rect};
 use crate::scene::{Casting, FillElement, Shading, cast_shadows, premultiplied, rounded};
+use crate::shell::toplevel_names;
 use crate::state::{Compositor, OutputElement, State};
 use crate::tile::Tile;
 
@@ -37,6 +41,7 @@ struct Offer {
 #[derive(Default)]
 pub(crate) struct Assist {
     offer: Option<Offer>,
+    pub(crate) announcer: Announcer,
 }
 
 impl Assist {
@@ -133,12 +138,58 @@ impl State {
             shadow: Casting::new(),
         });
         self.needs_redraw = true;
+        self.announce_assist();
+    }
+
+    fn announce_assist(&mut self) {
+        let Some(offer) = self.assist.offer.as_ref().filter(|offer| !offer.closing) else {
+            return;
+        };
+        let title = tr!("Choose a window for the other half");
+        let group = Group {
+            role: Role::ListBox,
+            item_role: Role::ListBoxOption,
+            label: title.clone(),
+            clickable: true,
+            entries: offer
+                .candidates
+                .iter()
+                .enumerate()
+                .map(|(index, surface)| {
+                    let (name, app_id) = toplevel_names(surface);
+                    let label = if name.is_empty() { app_id } else { name };
+                    Entry::new(label).selected(index == offer.selected)
+                })
+                .collect(),
+        };
+        let focus = Some((0, offer.selected));
+        self.assist
+            .announcer
+            .publish(true, || grouped(&title, &[group], focus));
+    }
+
+    pub(crate) fn assist_action(&mut self, request: &ActionRequest) {
+        let chosen = entry_of(request.target_node)
+            .filter(|(group, _)| *group == 0 && request.action == Action::Click)
+            .and_then(|(_, index)| {
+                self.assist
+                    .offer
+                    .as_ref()
+                    .filter(|offer| !offer.closing)?
+                    .candidates
+                    .get(index)
+                    .cloned()
+            });
+        if let Some(surface) = chosen {
+            self.fill_with(surface);
+        }
     }
 
     pub(crate) fn dismiss_assist(&mut self) {
         let reduce = self.reduce_motion;
         if let Some(offer) = self.assist.offer.as_mut().filter(|offer| !offer.closing) {
             offer.closing = true;
+            self.assist.announcer.withdraw();
             let hidden = Look::hidden(offer.panel);
             offer.look.retarget(if reduce {
                 hidden
@@ -220,6 +271,7 @@ impl State {
             _ => {}
         }
         self.needs_redraw = true;
+        self.announce_assist();
     }
 
     fn assist_hit(&self, at: Point<f64, Logical>) -> Option<Option<usize>> {
@@ -242,6 +294,7 @@ impl State {
         {
             offer.selected = index;
             self.needs_redraw = true;
+            self.announce_assist();
         }
     }
 

@@ -53,7 +53,7 @@ pub(crate) fn rendering_error(error: DamageError<RenderError>) -> RenderError {
 impl Renderer {
     pub fn new() -> Result<Self, RenderError> {
         Ok(Self {
-            vulkan: VulkanRenderer::new()?,
+            vulkan: VulkanRenderer::new(None)?,
             outputs: HashMap::new(),
         })
     }
@@ -201,7 +201,7 @@ impl FrameOutput for Renderer {
             },
         );
         self.outputs.clear();
-        self.vulkan = VulkanRenderer::new()?;
+        self.vulkan = VulkanRenderer::new(None)?;
         Ok(())
     }
 }

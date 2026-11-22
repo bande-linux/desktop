@@ -1,8 +1,9 @@
 use std::io::{self, BufReader, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
 
+use bande_discovery::nearby::{Addresses, resolve_host};
 use bande_printers::ipp::{Group, Request, parse, read_http};
 use bande_printers::{Error, Result};
 use ring::digest::{SHA256, digest};
@@ -55,7 +56,6 @@ impl<T: Read + Write + Send> Stream for T {}
 #[derive(Debug)]
 struct FirstUse {
     pins: Pins,
-    host: String,
     provider: Arc<CryptoProvider>,
 }
 
@@ -69,7 +69,7 @@ impl ServerCertVerifier for FirstUse {
         _now: UnixTime,
     ) -> std::result::Result<ServerCertVerified, rustls::Error> {
         let print = digest(&SHA256, end_entity.as_ref());
-        match self.pins.check(&self.host, print.as_ref()) {
+        match self.pins.check(print.as_ref()) {
             true => Ok(ServerCertVerified::assertion()),
             false => Err(rustls::Error::General("changed identity".to_owned())),
         }
@@ -110,11 +110,22 @@ impl ServerCertVerifier for FirstUse {
     }
 }
 
-fn connect(address: &Address, pins: &Pins, timeout: Duration) -> Result<Box<dyn Stream>> {
-    let target = (address.host.as_str(), address.port)
+fn target(address: &Address) -> io::Result<SocketAddr> {
+    let mut host = address.host.clone();
+    if host.ends_with(".local") {
+        match resolve_host(&host, Addresses::Ipv4) {
+            Ok(found) => host = found,
+            Err(error) => tracing::debug!("cannot resolve {host} through Avahi: {error}"),
+        }
+    }
+    (host.as_str(), address.port)
         .to_socket_addrs()?
         .next()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such printer"))?;
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such printer"))
+}
+
+fn connect(address: &Address, pins: &Pins, timeout: Duration) -> Result<Box<dyn Stream>> {
+    let target = target(address)?;
     let tcp = TcpStream::connect_timeout(&target, CONNECT_TIMEOUT)?;
     tcp.set_read_timeout(Some(ANSWER_TIMEOUT))?;
     tcp.set_write_timeout(Some(timeout))?;
@@ -129,7 +140,6 @@ fn connect(address: &Address, pins: &Pins, timeout: Duration) -> Result<Box<dyn 
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(FirstUse {
             pins: pins.clone(),
-            host: address.host.clone(),
             provider,
         }))
         .with_no_client_auth();

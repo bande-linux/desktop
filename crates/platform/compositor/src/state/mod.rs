@@ -72,6 +72,7 @@ pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 pub struct ScanoutDevice {
     pub node: DrmNode,
     pub feedback: DmabufFeedback,
+    pub planes: std::collections::HashMap<smithay::backend::allocator::Format, usize>,
 }
 
 pub(crate) struct ExclusiveLayer {
@@ -160,6 +161,8 @@ pub struct State {
     pub(crate) materials: crate::material::Materials,
     pub(crate) keys: crate::access_keys::AccessKeys,
     pub(crate) keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor,
+    pub(crate) global_shortcuts: crate::global_shortcuts::GlobalShortcuts,
+    pub(crate) touch: crate::touch::Touch,
     pub(crate) app_states: crate::app_states::AppStates,
     pub(crate) needs_redraw: bool,
     pub(crate) reveal: crate::reveal::Reveal,
@@ -222,13 +225,14 @@ impl Compositor {
         seat.add_keyboard(XkbConfig::default(), 600, 25)
             .map_err(io::Error::other)?;
         seat.add_pointer();
+        seat.add_touch();
         crate::idle::create_global(&handle);
         crate::output_power::create_global(&handle);
         crate::menu_button::create_globals(&handle);
         let center = settings.logical_size().to_f64().downscale(2.0);
         let screen = Screen::new(&handle, config, settings);
         handle.create_global::<State, BandeShellV1, ()>(crate::shell::SHELL_VERSION, ());
-        handle.create_global::<State, BandeAppV1, ()>(10, ());
+        handle.create_global::<State, BandeAppV1, ()>(11, ());
         crate::resume::create_global(&handle);
         handle.create_global::<State, BandeAppControlV1, ()>(1, ());
         handle.create_global::<State, smithay::reexports::wayland_protocols::xdg::toplevel_drag::v1::server::xdg_toplevel_drag_manager_v1::XdgToplevelDragManagerV1, ()>(1, ());
@@ -317,6 +321,8 @@ impl Compositor {
             materials: crate::material::Materials::default(),
             keys: crate::access_keys::AccessKeys::default(),
             keyboard_monitor: crate::keyboard_monitor::KeyboardMonitor::default(),
+            global_shortcuts: crate::global_shortcuts::GlobalShortcuts::default(),
+            touch: crate::touch::Touch::default(),
             app_states: crate::app_states::AppStates::default(),
             needs_redraw: false,
             reveal: crate::reveal::Reveal::default(),
@@ -358,12 +364,13 @@ impl Compositor {
         fences
             .handle()
             .insert_source(requests, |event, _, state: &mut State| {
-                if let smithay::reexports::calloop::channel::Event::Msg(request) = event {
-                    state.force_quit_action(request);
+                if let smithay::reexports::calloop::channel::Event::Msg((overlay, request)) = event
+                {
+                    state.access_action(overlay, request);
                 }
             })
             .map_err(|error| io::Error::other(error.error))?;
-        state.force_quit.take_actions(actions);
+        state.connect_access(&actions);
         state.watch_consents();
         Ok(Self {
             display,
@@ -448,33 +455,11 @@ impl Compositor {
     }
 
     fn latch_screen(&mut self, screen: usize) {
-        let state = &mut self.state;
-        state.latch_lock(screen);
-        let unmapped = state
-            .windows
-            .iter()
-            .filter(|window| state.screen_of(window) == screen)
-            .filter(|window| {
-                window.size.is_none() || (state.overview.is_shown() && window.visible())
-            })
-            .map(|window| window.surface().clone());
-        let cursor = match &state.cursor_status {
-            CursorImageStatus::Surface(surface) => Some(surface.clone()),
-            _ => None,
-        };
-        let drag_icon = state.drag_icon();
-        let pointed = (state.pointer_screen() == screen)
-            .then_some(cursor.into_iter().chain(drag_icon))
-            .into_iter()
-            .flatten();
-        let roots = state
-            .stack(screen)
-            .into_iter()
-            .map(|(surface, _)| surface)
-            .chain(unmapped)
-            .chain(pointed)
-            .collect::<Vec<_>>();
-        let latched = &mut state.screens[screen];
+        self.state.latch_lock(screen);
+        let roots = self.state.latch_roots(screen);
+        let hidden = self.state.hidden_barriers(screen, &roots);
+        let latched = &mut self.state.screens[screen];
+        latched.latched_barriers.extend(hidden);
         for root in roots {
             with_surface_tree_downward(
                 &root,
@@ -503,12 +488,47 @@ impl Compositor {
                     latched
                         .latched_releases
                         .extend(crate::release::take_replaced(states));
+                    latched
+                        .latched_barriers
+                        .extend(crate::timing::take_barrier(surface, states));
                 },
                 |_, _, _| true,
             );
         }
     }
+}
 
+impl State {
+    pub(crate) fn latch_roots(&self, screen: usize) -> Vec<WlSurface> {
+        let state = self;
+        let unmapped = state
+            .windows
+            .iter()
+            .filter(|window| state.screen_of(window) == screen)
+            .filter(|window| {
+                window.size.is_none() || (state.overview.is_shown() && window.visible())
+            })
+            .map(|window| window.surface().clone());
+        let cursor = match &state.cursor_status {
+            CursorImageStatus::Surface(surface) => Some(surface.clone()),
+            _ => None,
+        };
+        let drag_icon = state.drag_icon();
+        let pointed = (state.pointer_screen() == screen)
+            .then_some(cursor.into_iter().chain(drag_icon))
+            .into_iter()
+            .flatten();
+        state
+            .stack(screen)
+            .into_iter()
+            .map(|(surface, _)| surface)
+            .chain(unmapped)
+            .chain(pointed)
+            .collect()
+    }
+}
+
+impl Compositor {
     fn present_screen(&mut self, screen: usize, vblank: Vblank, flipped: bool) -> io::Result<()> {
         let presented = &mut self.state.screens[screen];
         let refresh = presented.refresh();
@@ -531,6 +551,8 @@ impl Compositor {
         for callback in presented.latched_frame_callbacks.drain(..) {
             callback.send(millis);
         }
+        let barriers = std::mem::take(&mut presented.latched_barriers);
+        self.state.signal_barriers(barriers);
         self.state.confirm_lock(screen);
         self.state.lit_up();
         self.display.flush_clients()
@@ -617,6 +639,9 @@ fn send_preferred_scale(surface: &WlSurface, scale: f64) {
 }
 
 fn buffer_size(buffer: &WlBuffer) -> Option<Size<i32, Physical>> {
+    if smithay::wayland::single_pixel_buffer::get_single_pixel_buffer(buffer).is_ok() {
+        return Some(Size::from((1, 1)));
+    }
     match get_dmabuf(buffer) {
         Ok(dmabuf) => Some(Size::from((dmabuf.size().w, dmabuf.size().h))),
         Err(_) => shm_size(buffer),

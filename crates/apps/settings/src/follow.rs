@@ -29,7 +29,9 @@ use crate::client::{CONFIG_SETTINGS, SettingsClient};
 use crate::consent::{KeyboardAccess, follow_keyboard_access};
 use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::diagnostics::{Diagnostics, DiagnosticsCommand, follow_diagnostics};
+use crate::enterprise::Certificate;
 use crate::failure::{explained, pane_failed, sentence};
+use crate::handover::{HandOver, HandOverCommand, hand_over};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
@@ -40,6 +42,7 @@ use crate::pointing::{PointingDevices, UDEV_DATA, follow_pointing};
 use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
+use crate::proxies::{ProxySettings, read_proxy, write_proxy};
 use crate::security_status::{SecurityStatus, follow_security_status};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
@@ -65,6 +68,10 @@ pub enum Update {
     Wifi(Reading<WifiState>),
     Network(NetworkState),
     Joined(Vec<u8>, Joined),
+    Airplane(Option<bool>),
+    Proxy(ProxySettings),
+    HandOver(Option<HandOver>),
+    Certificate(Certificate, PathBuf),
     Bluetooth(Reading<BluetoothState>),
     Pairing(Option<Question>),
     Pictures(Vec<(String, Pair)>),
@@ -144,6 +151,9 @@ pub enum Command {
     Reveal(PathBuf),
     EndSession(SessionEnd),
     ImportVpn,
+    Proxy(ProxySettings),
+    HandOver(HandOverCommand),
+    ChooseCertificate(Certificate),
     ExcludeFolder,
     AddColourProfile(String),
     ClearClipboard,
@@ -440,6 +450,10 @@ impl Services {
             hide_sleep_if_unavailable(system, updates.clone());
         }
         follow_security_status(system, updates);
+        let proxy = updates.clone();
+        spawn("proxy", move || {
+            proxy.send(Update::Proxy(read_proxy()));
+        });
         let listed = updates.clone();
         spawn("colour-profiles", move || {
             listed.send(Update::ColourProfiles(crate::colour::installed()));
@@ -582,6 +596,49 @@ impl Services {
                             text!("Couldn't add this folder to the excluded folders."),
                             error,
                         ));
+                    }
+                });
+                true
+            }
+            Command::Proxy(settings) => {
+                let (session, updates) = (self.connection.clone(), self.updates.clone());
+                spawn("proxy", move || {
+                    if let Err(error) = write_proxy(&session, &settings) {
+                        updates.send(pane_failed(
+                            PaneId::Network,
+                            text!("Couldn't change the proxy."),
+                            error,
+                        ));
+                    }
+                    updates.send(Update::Proxy(read_proxy()));
+                });
+                true
+            }
+            Command::HandOver(command) => {
+                hand_over(command, self.updates.clone());
+                true
+            }
+            Command::ChooseCertificate(certificate) => {
+                let (session, updates) = (self.connection.clone(), self.updates.clone());
+                spawn("choose-certificate", move || {
+                    let chosen = choose_file(
+                        &session,
+                        &certificate.title(),
+                        Some((
+                            tr!("Certificates and keys"),
+                            [
+                                "*.pem", "*.crt", "*.cer", "*.der", "*.p12", "*.pfx", "*.key",
+                            ]
+                            .map(|pattern| (0, pattern.to_owned()))
+                            .to_vec(),
+                        )),
+                    );
+                    match chosen {
+                        Ok(Some(path)) => {
+                            updates.send(Update::Certificate(certificate, path));
+                        }
+                        Ok(None) => {}
+                        Err(error) => tracing::warn!("cannot choose a certificate: {error}"),
                     }
                 });
                 true

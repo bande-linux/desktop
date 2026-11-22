@@ -10,6 +10,7 @@ use crate::settings::MailSettings;
 use crate::store::{MessageId, Summary};
 use crate::ui::format::{full_date, initials, list_date};
 use crate::ui::symbols::{Symbol, Symbols};
+use bande_datetime::DateFormats;
 use bande_toolkit::{
     Color, Image, Item, Palette, Paragraph, Point, Rect, Shape, TextAlign, TextRole, TextStyle,
     TextSystem,
@@ -295,7 +296,13 @@ fn respond_buttons(writer: &mut Writer<'_>, id: MessageId, y: f32) -> f32 {
     left
 }
 
-fn header(writer: &mut Writer<'_>, entry: &Entry, reading: &Reading, many: bool, zone: &TimeZone) {
+fn header(
+    writer: &mut Writer<'_>,
+    entry: &Entry,
+    reading: &Reading,
+    many: bool,
+    clock: &Clock<'_>,
+) {
     let palette = *writer.palette;
     let id = entry.summary.id;
     let top = writer.y;
@@ -305,7 +312,7 @@ fn header(writer: &mut Writer<'_>, entry: &Entry, reading: &Reading, many: bool,
     let text_x = MARGIN + AVATAR + AVATAR_GAP;
     let date = envelope
         .date
-        .map(|date| full_date(date, zone))
+        .map(|date| full_date(date, clock.zone, clock.formats))
         .unwrap_or_default();
     let date = writer.text.paragraph(
         &date,
@@ -366,7 +373,7 @@ fn header(writer: &mut Writer<'_>, entry: &Entry, reading: &Reading, many: bool,
     writer.y += SECTION_GAP;
 }
 
-fn collapsed(writer: &mut Writer<'_>, summary: &Summary, now: Timestamp, zone: &TimeZone) {
+fn collapsed(writer: &mut Writer<'_>, summary: &Summary, clock: &Clock<'_>) {
     let palette = *writer.palette;
     let top = writer.y;
     let shown = sender_name(&summary.sender);
@@ -377,7 +384,7 @@ fn collapsed(writer: &mut Writer<'_>, summary: &Summary, now: Timestamp, zone: &
     );
     let text_x = MARGIN + SMALL_AVATAR + AVATAR_GAP;
     let date = writer.text.paragraph(
-        &list_date(summary.date, now, zone),
+        &list_date(summary.date, clock.now, clock.zone, clock.formats),
         TextStyle::role(TextRole::Callout, palette.ink3),
         None,
         TextAlign::Start,
@@ -678,10 +685,10 @@ fn expanded(
     entry: &Entry,
     reading: &Reading,
     many: bool,
-    zone: &TimeZone,
+    clock: &Clock<'_>,
 ) {
     let id = entry.summary.id;
-    header(writer, entry, reading, many, zone);
+    header(writer, entry, reading, many, clock);
     if !reading.downloaded {
         banner(writer, &tr!("Downloading the message…"), None);
     } else if reading.document.remote_images > 0 {
@@ -701,6 +708,7 @@ fn expanded(
 
 pub struct Clock<'a> {
     pub zone: &'a TimeZone,
+    pub formats: &'a DateFormats,
     pub now: Timestamp,
 }
 
@@ -734,9 +742,9 @@ pub fn lay_out(
         };
         let targets = std::mem::take(&mut writer.layout.targets);
         match &entry.reading {
-            Some(reading) => expanded(&mut writer, entry, reading, many, clock.zone),
+            Some(reading) => expanded(&mut writer, entry, reading, many, &clock),
             None => {
-                collapsed(&mut writer, &entry.summary, clock.now, clock.zone);
+                collapsed(&mut writer, &entry.summary, &clock);
                 writer.y += SECTION_GAP;
             }
         }

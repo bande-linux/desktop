@@ -13,6 +13,7 @@ use xdg_desktop_portal_bande::dialog_process::{DIALOG_PROGRAM, DialogProcess};
 use xdg_desktop_portal_bande::dynamic_launcher::DynamicLauncher;
 use xdg_desktop_portal_bande::email::Email;
 use xdg_desktop_portal_bande::file_chooser::FileChooser;
+use xdg_desktop_portal_bande::global_shortcuts::GlobalShortcuts;
 use xdg_desktop_portal_bande::gtk::GtkHomes;
 use xdg_desktop_portal_bande::inhibit::Inhibit;
 use xdg_desktop_portal_bande::notification::Notification;
@@ -103,7 +104,7 @@ fn serve() -> zbus::Result<Connection> {
             server.at(
                 OBJECT_PATH,
                 Wallpaper {
-                    ui: dialogs,
+                    ui: dialogs.clone(),
                     folder: data_home.join(BACKGROUNDS),
                     session: connection.clone(),
                 },
@@ -111,6 +112,7 @@ fn serve() -> zbus::Result<Connection> {
         }
     }
     Inhibit::serve(&connection, system.as_ref())?;
+    GlobalShortcuts::serve(&connection, dialogs)?;
     Notification::serve(&connection)?;
     Background::serve(&connection)?;
     close_sessions_when_sharing_ends(&connection, &tool_connection)?;

@@ -1075,7 +1075,8 @@ impl TerminalWindow {
         if self.tabs.is_empty() {
             return window.close();
         }
-        let notices = self.session().take_notices();
+        let theme = self.painter.theme;
+        let notices = self.session().take_notices(&theme);
         self.handle_notices(window, self.active, notices);
         self.remove_exited(window);
         if !self.tabs.is_empty() {
@@ -2131,7 +2132,7 @@ impl View for TerminalWindow {
         }) else {
             return false;
         };
-        let notices = self.tabs[tab].sessions[remaining].read();
+        let notices = self.tabs[tab].sessions[remaining].read(&self.painter.theme);
         self.handle_notices(window, tab, notices);
         self.remove_exited(window);
         if self.tabs.is_empty() {

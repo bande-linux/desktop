@@ -40,8 +40,32 @@ msgstr "Ej ansluten"
 msgid "Bluetooth"
 msgstr "Bluetooth"
 
+msgid "Airplane Mode"
+msgstr "Flygplansläge"
+
 msgid "Do Not Disturb"
 msgstr "Stör ej"
+
+msgid "Night Light"
+msgstr "Nattljus"
+
+msgid "Dark Style"
+msgstr "Mörk stil"
+
+msgid "Power Saver"
+msgstr "Strömsparläge"
+
+msgid "Performance"
+msgstr "Prestanda"
+
+msgid "Balanced"
+msgstr "Balanserat"
+
+msgid "Screen Recording"
+msgstr "Skärminspelning"
+
+msgid "Recording"
+msgstr "Spelar in"
 
 msgid "Microphone"
 msgstr "Mikrofon"

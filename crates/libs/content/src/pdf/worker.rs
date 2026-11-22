@@ -22,7 +22,7 @@ use hayro::{RenderCache, RenderSettings, render_into};
 use crate::confine;
 use crate::decode::read_file;
 use crate::pdf::outline::{details, outline};
-use crate::pdf::protocol::{self, Ask, Glyph, MAX_RENDER_PIXELS, Opened, Render, Reply};
+use crate::pdf::protocol::{self, Ask, Glyph, MAX_RENDER_PIXELS, Opened, Render, Reply, Use};
 
 const MAX_GLYPHS: usize = 200_000;
 const ASCENT: f64 = 800.0;
@@ -141,6 +141,32 @@ pub fn run(path: &Path) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+/// The first page of the PDF at `path` drawn to fit a `longest` pixel square, as width, height
+/// and RGBA, or nothing when it cannot be read or is locked.
+pub fn first_page(path: &Path, longest: u32) -> Option<(u32, u32, Vec<u8>)> {
+    let pdf = Pdf::new(Arc::new(read_file(path).ok()?)).ok()?;
+    let pages = pdf.pages();
+    let page = pages.first()?;
+    let (width, height) = page.render_dimensions();
+    let scale = longest as f32 / width.max(height).max(1.0);
+    let render = Render {
+        page: 0,
+        scale,
+        x: 0,
+        y: 0,
+        width: ((width * scale).round() as u32).max(1),
+        height: ((height * scale).round() as u32).max(1),
+        purpose: Use::Thumbnail,
+    };
+    let pixels = draw(
+        page,
+        &RenderCache::new(),
+        &InterpreterSettings::default(),
+        &render,
+    );
+    Some((render.width, render.height, pixels))
 }
 
 fn version(pdf: &Pdf) -> String {

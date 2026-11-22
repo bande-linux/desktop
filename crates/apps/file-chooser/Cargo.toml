@@ -10,13 +10,16 @@ repository.workspace = true
 [dependencies]
 accesskit.workspace = true
 tracing.workspace = true
+bande-app.workspace = true
 bande-app-settings.workspace = true
 bande-content.workspace = true
 bande-inbox.workspace = true
 bande-pdf = { workspace = true, features = ["pages"] }
 bande-printers.workspace = true
+bande-search.workspace = true
 bande-files.workspace = true
 bande-fs.workspace = true
+bande-keyboard.workspace = true
 bande-l10n.workspace = true
 bande-log.workspace = true
 bande-toolkit.workspace = true

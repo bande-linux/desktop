@@ -1,3 +1,4 @@
+mod formats;
 mod frame;
 mod import;
 mod rect;
@@ -39,13 +40,18 @@ const REQUIRED_EXTENSIONS: [&CStr; 3] = [
     ash::khr::external_memory_fd::NAME,
     ash::ext::external_memory_dma_buf::NAME,
 ];
-const VIDEO_SAMPLING_EXTENSIONS: [&CStr; 2] = [
+const MODIFIER_EXTENSIONS: [&CStr; 2] = [
     ash::ext::image_drm_format_modifier::NAME,
     ash::ext::queue_family_foreign::NAME,
 ];
-const VIDEO_FORMAT: vk::Format = vk::Format::G8_B8R8_2PLANE_420_UNORM;
 const TARGET_FORMATS: [vk::Format; 2] = [vk::Format::B8G8R8A8_UNORM, vk::Format::R8G8B8A8_UNORM];
 const TEXTURE_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Abgr8888];
+const TARGET_FOURCCS: [Fourcc; 4] = [
+    Fourcc::Argb8888,
+    Fourcc::Xrgb8888,
+    Fourcc::Abgr8888,
+    Fourcc::Xbgr8888,
+];
 
 static NEXT_RENDERER: AtomicU64 = AtomicU64::new(1);
 
@@ -280,6 +286,7 @@ struct Target {
     format: vk::Format,
     rendered: bool,
     export: Option<Export>,
+    direct: bool,
 }
 
 struct Staging {
@@ -332,8 +339,8 @@ pub struct VulkanRenderer {
     queue: vk::Queue,
     queue_family: u32,
     output_on_device: bool,
-    samples_video: bool,
-    video_acquires: Vec<u64>,
+    modifiers: formats::Modifiers,
+    acquires: Vec<u64>,
     output_colour: Option<OutputColour>,
     encode_table: Option<(Arc<[[u8; 3]]>, VulkanTexture)>,
     colour_scratch: HashMap<(i32, i32, vk::Format), Image>,
@@ -356,6 +363,7 @@ pub struct VulkanRenderer {
     targets: HashMap<u64, Target>,
     dmabuf_targets: HashMap<WeakDmabuf, u64>,
     dmabuf_textures: HashMap<WeakDmabuf, VulkanTexture>,
+    sampled_dmabufs: HashMap<WeakDmabuf, VulkanTexture>,
     imports: HashMap<WeakDmabuf, Imported>,
     staging: Vec<Staging>,
     copies: Vec<PendingCopy>,
@@ -408,17 +416,25 @@ struct Chosen {
     physical: vk::PhysicalDevice,
     family: u32,
     output_on_device: bool,
-    samples_video: bool,
+    modifiers: formats::Modifiers,
     info: DeviceInfo,
 }
 
-fn device_rank(kind: vk::PhysicalDeviceType) -> u8 {
-    match kind {
-        vk::PhysicalDeviceType::DISCRETE_GPU | vk::PhysicalDeviceType::INTEGRATED_GPU => 0,
-        vk::PhysicalDeviceType::VIRTUAL_GPU => 1,
-        vk::PhysicalDeviceType::CPU => 2,
-        _ => 3,
+fn device_rank(kind: vk::PhysicalDeviceType, drives_display: bool) -> u8 {
+    if drives_display {
+        return 0;
     }
+    match kind {
+        vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
+        vk::PhysicalDeviceType::DISCRETE_GPU => 2,
+        vk::PhysicalDeviceType::VIRTUAL_GPU => 3,
+        vk::PhysicalDeviceType::CPU => 4,
+        _ => 5,
+    }
+}
+
+fn node_of(major: i64, minor: i64) -> u64 {
+    smithay::reexports::rustix::fs::makedev(major as u32, minor as u32)
 }
 
 fn text(name: Result<&CStr, std::ffi::FromBytesUntilNulError>) -> String {
@@ -426,65 +442,7 @@ fn text(name: Result<&CStr, std::ffi::FromBytesUntilNulError>) -> String {
         .unwrap_or_default()
 }
 
-fn samples_linear_nv12(instance: &ash::Instance, physical: vk::PhysicalDevice) -> bool {
-    let linear = u64::from(Modifier::Linear);
-    let mut list = vk::DrmFormatModifierPropertiesListEXT::default();
-    let mut properties = vk::FormatProperties2::default().push_next(&mut list);
-    // SAFETY: `physical` was enumerated from this `instance`, and `properties` with its chained
-    // `list` outlives the call.
-    unsafe {
-        instance.get_physical_device_format_properties2(physical, VIDEO_FORMAT, &mut properties);
-    }
-    let mut modifiers = vec![
-        vk::DrmFormatModifierPropertiesEXT::default();
-        list.drm_format_modifier_count as usize
-    ];
-    let mut list = vk::DrmFormatModifierPropertiesListEXT::default()
-        .drm_format_modifier_properties(&mut modifiers);
-    let mut properties = vk::FormatProperties2::default().push_next(&mut list);
-    // SAFETY: `physical` belongs to this `instance`; `list` now points at `modifiers`, which has
-    // room for the `drm_format_modifier_count` entries the first query reported.
-    unsafe {
-        instance.get_physical_device_format_properties2(physical, VIDEO_FORMAT, &mut properties);
-    }
-    let listed = modifiers.iter().any(|modifier| {
-        modifier.drm_format_modifier == linear
-            && modifier.drm_format_modifier_plane_count == 2
-            && modifier
-                .drm_format_modifier_tiling_features
-                .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE)
-    });
-    if !listed {
-        return false;
-    }
-    let mut modifier_info = vk::PhysicalDeviceImageDrmFormatModifierInfoEXT::default()
-        .drm_format_modifier(linear)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-    let mut external_info = vk::PhysicalDeviceExternalImageFormatInfo::default()
-        .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
-    let info = vk::PhysicalDeviceImageFormatInfo2::default()
-        .format(VIDEO_FORMAT)
-        .ty(vk::ImageType::TYPE_2D)
-        .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
-        .usage(vk::ImageUsageFlags::SAMPLED)
-        .flags(vk::ImageCreateFlags::MUTABLE_FORMAT)
-        .push_next(&mut modifier_info)
-        .push_next(&mut external_info);
-    let mut external = vk::ExternalImageFormatProperties::default();
-    let mut result = vk::ImageFormatProperties2::default().push_next(&mut external);
-    // SAFETY: `physical` belongs to this `instance`; `info`, `result` and the structs chained into
-    // them outlive the call.
-    let supported = unsafe {
-        instance.get_physical_device_image_format_properties2(physical, &info, &mut result)
-    };
-    supported.is_ok()
-        && external
-            .external_memory_properties
-            .external_memory_features
-            .contains(vk::ExternalMemoryFeatureFlags::IMPORTABLE)
-}
-
-fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
+fn choose_device(instance: &ash::Instance, display: Option<u64>) -> Result<Chosen, RenderError> {
     // SAFETY: `instance` is a live instance, not destroyed before `choose_device` returns.
     let physicals = unsafe { instance.enumerate_physical_devices() }?;
     physicals
@@ -531,26 +489,28 @@ fn choose_device(instance: &ash::Instance) -> Result<Chosen, RenderError> {
                 driver: text(driver.driver_name_as_c_str()),
                 software: properties.device_type == vk::PhysicalDeviceType::CPU,
                 max_image_side: properties.limits.max_image_dimension2_d,
-                render_device: (node.has_render == vk::TRUE).then(|| {
-                    smithay::reexports::rustix::fs::makedev(
-                        node.render_major as u32,
-                        node.render_minor as u32,
-                    )
-                }),
+                render_device: (node.has_render == vk::TRUE)
+                    .then(|| node_of(node.render_major, node.render_minor)),
             };
+            let primary = (node.has_primary == vk::TRUE)
+                .then(|| node_of(node.primary_major, node.primary_minor));
+            let drives_display = display
+                .is_some_and(|display| [primary, info.render_device].contains(&Some(display)));
+            let knows_modifiers = MODIFIER_EXTENSIONS.iter().all(|wanted| {
+                extensions
+                    .iter()
+                    .any(|extension| extension.extension_name_as_c_str() == Ok(*wanted))
+            });
             Some((
-                device_rank(properties.device_type),
+                device_rank(properties.device_type, drives_display),
                 Chosen {
                     physical,
                     family: u32::try_from(family).ok()?,
                     output_on_device: on_real_gpu,
-                    samples_video: on_real_gpu
-                        && VIDEO_SAMPLING_EXTENSIONS.iter().all(|wanted| {
-                            extensions
-                                .iter()
-                                .any(|extension| extension.extension_name_as_c_str() == Ok(*wanted))
-                        })
-                        && samples_linear_nv12(instance, physical),
+                    modifiers: match on_real_gpu && knows_modifiers {
+                        true => formats::query(instance, physical),
+                        false => formats::Modifiers::default(),
+                    },
                     info,
                 },
             ))
@@ -576,19 +536,15 @@ fn is_opaque(format: Fourcc) -> Option<bool> {
     }
 }
 
-fn linear_formats() -> FormatSet {
-    TEXTURE_FOURCCS
-        .iter()
-        .chain([&Fourcc::Nv12])
-        .map(|&code| Format {
-            code,
-            modifier: Modifier::Linear,
-        })
-        .collect()
+fn linear(codes: &[Fourcc]) -> impl Iterator<Item = Format> + '_ {
+    codes.iter().map(|&code| Format {
+        code,
+        modifier: Modifier::Linear,
+    })
 }
 
 impl VulkanRenderer {
-    pub fn new() -> Result<Self, RenderError> {
+    pub fn new(display: Option<u64>) -> Result<Self, RenderError> {
         // SAFETY: loading runs the system Vulkan loader's initialisers once; the returned `Entry`
         // keeps the library loaded for as long as the renderer holds it in `_entry`.
         let entry = unsafe { ash::Entry::load() }?;
@@ -603,7 +559,7 @@ impl VulkanRenderer {
                 None,
             )
         }?;
-        let chosen = match choose_device(&instance) {
+        let chosen = match choose_device(&instance, display) {
             Ok(chosen) => chosen,
             Err(error) => {
                 // SAFETY: `choose_device` failed, so `instance` has no child objects and is never
@@ -623,8 +579,9 @@ impl VulkanRenderer {
             .iter()
             .chain(
                 chosen
-                    .samples_video
-                    .then_some(&VIDEO_SAMPLING_EXTENSIONS)
+                    .modifiers
+                    .any()
+                    .then_some(&MODIFIER_EXTENSIONS)
                     .into_iter()
                     .flatten(),
             )
@@ -658,8 +615,8 @@ impl VulkanRenderer {
             queue: unsafe { device.get_device_queue(chosen.family, 0) },
             queue_family: chosen.family,
             output_on_device: chosen.output_on_device,
-            samples_video: chosen.samples_video,
-            video_acquires: Vec::new(),
+            modifiers: chosen.modifiers,
+            acquires: Vec::new(),
             output_colour: None,
             encode_table: None,
             colour_scratch: HashMap::new(),
@@ -683,6 +640,7 @@ impl VulkanRenderer {
             targets: HashMap::new(),
             dmabuf_targets: HashMap::new(),
             dmabuf_textures: HashMap::new(),
+            sampled_dmabufs: HashMap::new(),
             imports: HashMap::new(),
             staging: Vec::new(),
             copies: Vec::new(),
@@ -931,6 +889,21 @@ impl VulkanRenderer {
         self.output_colour = colour;
     }
 
+    pub fn dmabuf_planes(&self) -> HashMap<Format, usize> {
+        let mut planes: HashMap<Format, usize> = linear(&TEXTURE_FOURCCS)
+            .map(|format| (format, 1))
+            .chain(linear(&[Fourcc::Nv12]).map(|format| (format, 2)))
+            .collect();
+        planes.extend(&self.modifiers.sampled);
+        planes
+    }
+
+    pub fn render_formats(&self) -> FormatSet {
+        linear(&TARGET_FOURCCS)
+            .chain(self.modifiers.rendered.keys().copied())
+            .collect()
+    }
+
     pub fn device_info(&self) -> &DeviceInfo {
         &self.info
     }
@@ -1062,26 +1035,42 @@ impl VulkanRenderer {
         }
     }
 
-    fn import_video_image(
+    pub(crate) fn import_image(
         &self,
-        width: i32,
-        height: i32,
-        layouts: &[vk::SubresourceLayout],
-        file: File,
+        dmabuf: &Dmabuf,
+        texel: formats::Texel,
+        usage: vk::ImageUsageFlags,
     ) -> Result<Image, RenderError> {
+        let format = dmabuf.format();
+        let known = match usage {
+            formats::SAMPLED => self.modifiers.sampled.get(&format),
+            _ => self.modifiers.rendered.get(&format),
+        };
+        let layouts = import::modifier_layout(dmabuf, known.copied())?;
+        let Some(fd) = dmabuf.handles().next() else {
+            return Err(RenderError::UnsupportedFormat);
+        };
+        let file = File::from(fd.try_clone_to_owned()?);
+        let (width, height) = (dmabuf.size().w, dmabuf.size().h);
+        if width <= 0 || height <= 0 || width.max(height).unsigned_abs() > self.info.max_image_side
+        {
+            return Err(RenderError::ImageTooLarge);
+        }
         let mut explicit = vk::ImageDrmFormatModifierExplicitCreateInfoEXT::default()
-            .drm_format_modifier(u64::from(Modifier::Linear))
-            .plane_layouts(layouts);
+            .drm_format_modifier(u64::from(format.modifier))
+            .plane_layouts(&layouts);
         let mut external = vk::ExternalMemoryImageCreateInfo::default()
             .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
-        // SAFETY: only reached when `samples_video` enabled `VK_EXT_image_drm_format_modifier`;
-        // `explicit` (borrowing `layouts`) and `external` outlive the call.
+        // SAFETY: `modifier_layout` only passes a format and modifier the device reported for this
+        // usage, so `VK_EXT_image_drm_format_modifier` is enabled, with one layout per memory plane
+        // the modifier has; the size is within `max_image_side`, and `explicit` (borrowing
+        // `layouts`) and `external` outlive the call.
         let image = unsafe {
             self.device.create_image(
                 &vk::ImageCreateInfo::default()
-                    .flags(vk::ImageCreateFlags::MUTABLE_FORMAT)
+                    .flags(texel.flags())
                     .image_type(vk::ImageType::TYPE_2D)
-                    .format(VIDEO_FORMAT)
+                    .format(texel.format)
                     .extent(vk::Extent3D {
                         width: width.unsigned_abs(),
                         height: height.unsigned_abs(),
@@ -1091,7 +1080,7 @@ impl VulkanRenderer {
                     .array_layers(1)
                     .samples(vk::SampleCountFlags::TYPE_1)
                     .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
-                    .usage(vk::ImageUsageFlags::SAMPLED)
+                    .usage(usage)
                     .sharing_mode(vk::SharingMode::EXCLUSIVE)
                     .initial_layout(vk::ImageLayout::UNDEFINED)
                     .push_next(&mut explicit)
@@ -1188,8 +1177,8 @@ impl VulkanRenderer {
         }?)
     }
 
-    fn record_video_acquires(&mut self) {
-        for id in std::mem::take(&mut self.video_acquires) {
+    fn record_acquires(&mut self) {
+        for id in std::mem::take(&mut self.acquires) {
             let Some(texture) = self.textures.get_mut(&id) else {
                 continue;
             };
@@ -1491,6 +1480,44 @@ impl VulkanRenderer {
         Ok(memory)
     }
 
+    fn direct_target(&mut self, dmabuf: &Dmabuf) -> Result<u64, RenderError> {
+        let texel = formats::texel(dmabuf.format().code).ok_or(RenderError::UnsupportedFormat)?;
+        let mut image = self.import_image(dmabuf, texel, formats::RENDERED)?;
+        image.view =
+            match self.create_view(image.image, texel.format, vk::ComponentSwizzle::IDENTITY) {
+                Ok(view) => view,
+                Err(error) => {
+                    self.destroy_image(&image);
+                    return Err(error);
+                }
+            };
+        let id = self.next_id();
+        self.targets.insert(
+            id,
+            Target {
+                image,
+                format: texel.format,
+                rendered: false,
+                export: None,
+                direct: true,
+            },
+        );
+        Ok(id)
+    }
+
+    fn dmabuf_target(&mut self, dmabuf: &Dmabuf) -> Result<u64, RenderError> {
+        if self.modifiers.rendered.contains_key(&dmabuf.format()) {
+            match self.direct_target(dmabuf) {
+                Ok(id) => return Ok(id),
+                Err(error) if dmabuf.format().modifier != Modifier::Linear => return Err(error),
+                Err(error) => tracing::warn!("copying frames into the display buffer: {error}"),
+            }
+        }
+        let export = self.dmabuf_export(dmabuf)?;
+        let size = dmabuf.size();
+        self.create_target(size.w, size.h, dmabuf.format().code, Some(export))
+    }
+
     fn create_target(
         &mut self,
         width: i32,
@@ -1526,6 +1553,7 @@ impl VulkanRenderer {
                 format: vk_format,
                 rendered: false,
                 export,
+                direct: false,
             },
         );
         Ok(id)
@@ -1536,7 +1564,7 @@ impl VulkanRenderer {
             self.destroy_image(&removed.image);
         }
         self.copies.retain(|copy| copy.texture != id);
-        self.video_acquires.retain(|&acquire| acquire != id);
+        self.acquires.retain(|&acquire| acquire != id);
     }
 
     fn forget_target(&mut self, id: u64) {
@@ -1569,6 +1597,7 @@ impl VulkanRenderer {
 
     fn collect_garbage(&mut self) {
         self.dmabuf_textures.retain(|weak, _| !weak.is_gone());
+        self.sampled_dmabufs.retain(|weak, _| !weak.is_gone());
         let gone_targets: Vec<u64> = self
             .dmabuf_targets
             .iter()
@@ -1684,7 +1713,7 @@ impl VulkanRenderer {
     }
 
     pub fn finish_uploads(&mut self) -> Result<(), RenderError> {
-        if self.copies.is_empty() && self.video_acquires.is_empty() {
+        if self.copies.is_empty() && self.acquires.is_empty() {
             return Ok(());
         }
         self.begin_commands()?;
@@ -1713,7 +1742,7 @@ impl VulkanRenderer {
     }
 
     fn record_copies(&mut self) {
-        self.record_video_acquires();
+        self.record_acquires();
         let mut by_texture: HashMap<u64, Vec<&PendingCopy>> = HashMap::new();
         for copy in &self.copies {
             by_texture.entry(copy.texture).or_default().push(copy);
@@ -2005,8 +2034,7 @@ impl Bind<Dmabuf> for VulkanRenderer {
         let id = match self.dmabuf_targets.get(&dmabuf.weak()) {
             Some(&id) => id,
             None => {
-                let export = self.dmabuf_export(dmabuf)?;
-                let id = self.create_target(size.w, size.h, format, Some(export))?;
+                let id = self.dmabuf_target(dmabuf)?;
                 self.dmabuf_targets.insert(dmabuf.weak(), id);
                 id
             }
@@ -2021,7 +2049,7 @@ impl Bind<Dmabuf> for VulkanRenderer {
     }
 
     fn supported_formats(&self) -> Option<FormatSet> {
-        Some(linear_formats())
+        Some(self.render_formats())
     }
 }
 
@@ -2035,6 +2063,7 @@ impl Drop for VulkanRenderer {
             let _ = self.device.device_wait_idle();
         }
         self.dmabuf_textures.clear();
+        self.sampled_dmabufs.clear();
         for (_, texture) in std::mem::take(&mut self.textures) {
             self.destroy_image(&texture.image);
         }
@@ -2104,6 +2133,51 @@ const TRANSFER_SOURCE: Usage = (
     vk::PipelineStageFlags2::COPY,
     vk::AccessFlags2::TRANSFER_READ,
 );
+
+const TRANSFER_DESTINATION: Usage = (
+    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+    vk::PipelineStageFlags2::COPY,
+    vk::AccessFlags2::TRANSFER_WRITE,
+);
+
+fn hand_over(
+    device: &ash::Device,
+    commands: vk::CommandBuffer,
+    image: vk::Image,
+    family: u32,
+    acquire: bool,
+) {
+    let foreign = vk::ImageMemoryBarrier2::default()
+        .image(image)
+        .subresource_range(COLOR_RANGE);
+    let foreign = match acquire {
+        true => foreign
+            .src_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
+            .dst_queue_family_index(family)
+            .old_layout(vk::ImageLayout::GENERAL)
+            .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(
+                vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+            ),
+        false => foreign
+            .src_queue_family_index(family)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT)
+            .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .new_layout(vk::ImageLayout::GENERAL)
+            .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags2::COLOR_ATTACHMENT_WRITE),
+    };
+    // SAFETY: callers record between `begin_commands` and the end of the buffer, on the renderer's
+    // thread, with `image` a live display buffer imported with `QUEUE_FAMILY_FOREIGN_EXT` enabled:
+    // released to the foreign queue in `GENERAL` after each frame, and acquired back the same way.
+    unsafe {
+        device.cmd_pipeline_barrier2(
+            commands,
+            &vk::DependencyInfo::default().image_memory_barriers(slice::from_ref(&foreign)),
+        );
+    }
+}
 
 fn alpha_swizzle(opaque: bool) -> vk::ComponentSwizzle {
     if opaque {

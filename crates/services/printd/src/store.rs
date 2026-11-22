@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use bande_printers::JobOptions;
 use bande_xdg::{replace_file, state_home};
@@ -58,7 +58,10 @@ impl Printers {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Pins(Arc<Mutex<HashMap<String, String>>>);
+pub struct Pins {
+    all: Arc<Mutex<HashMap<String, String>>>,
+    printer: String,
+}
 
 impl Pins {
     pub fn load() -> Self {
@@ -66,38 +69,53 @@ impl Pins {
             .and_then(|state| std::fs::read(state.join(PINS)).ok())
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
-        Self(Arc::new(Mutex::new(pins)))
+        Self {
+            all: Arc::new(Mutex::new(pins)),
+            printer: String::new(),
+        }
     }
 
-    pub fn check(&self, host: &str, print: &[u8]) -> bool {
+    pub fn of(&self, printer: &str) -> Self {
+        Self {
+            all: Arc::clone(&self.all),
+            printer: printer.to_owned(),
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, HashMap<String, String>> {
+        self.all.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn check(&self, print: &[u8]) -> bool {
         let hex: String = print.iter().map(|byte| format!("{byte:02x}")).collect();
-        let mut pins = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        match pins.get(host) {
+        let mut pins = self.lock();
+        match pins.get(&self.printer) {
             Some(known) => *known == hex,
             None => {
-                pins.insert(host.to_owned(), hex);
-                if let Some(state) = state_folder() {
-                    let written = serde_json::to_string(&*pins)
-                        .map_err(std::io::Error::other)
-                        .and_then(|text| replace_file(&state.join(PINS), &text));
-                    if let Err(error) = written {
-                        tracing::warn!("cannot remember a printer's identity: {error}");
-                    }
-                }
+                pins.insert(self.printer.clone(), hex);
+                save_pins(&pins, "cannot remember a printer's identity");
                 true
             }
         }
     }
 
-    pub fn forget(&self, host: &str) {
-        let mut pins = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if pins.remove(host).is_some()
-            && let Some(state) = state_folder()
-            && let Ok(text) = serde_json::to_string(&*pins)
-            && let Err(error) = replace_file(&state.join(PINS), &text)
-        {
-            tracing::warn!("cannot forget a printer's identity: {error}");
+    pub fn forget(&self, printer: &str) {
+        let mut pins = self.lock();
+        if pins.remove(printer).is_some() {
+            save_pins(&pins, "cannot forget a printer's identity");
         }
+    }
+}
+
+fn save_pins(pins: &HashMap<String, String>, failure: &str) {
+    let Some(state) = state_folder() else {
+        return;
+    };
+    let written = serde_json::to_string(pins)
+        .map_err(std::io::Error::other)
+        .and_then(|text| replace_file(&state.join(PINS), &text));
+    if let Err(error) = written {
+        tracing::warn!("{failure}: {error}");
     }
 }
 

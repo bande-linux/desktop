@@ -1,3 +1,4 @@
+pub mod choice;
 mod model;
 mod view;
 

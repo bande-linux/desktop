@@ -72,7 +72,9 @@ pub use secure_field::SecureField;
 pub use segmented::{SEGMENTED_HEIGHT, SegmentedControl};
 pub use sheet::Alert;
 use sheet::Sheet;
-pub use shortcut::{Shortcut, ShortcutText, parse_shortcut, shortcut_label, shortcut_pressed};
+pub use shortcut::{
+    Shortcut, ShortcutField, ShortcutText, parse_shortcut, shortcut_label, shortcut_pressed,
+};
 pub use slider::{SLIDER_HEIGHT, Slider};
 pub use spelling::{SpellReply, SpellRequest, install_spelling, receive_spelling};
 pub use stack::{Axis, Stack};

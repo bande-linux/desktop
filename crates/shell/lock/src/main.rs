@@ -285,11 +285,10 @@ impl App for Locker {
                 let Some(corner) = self.devices.as_mut().and_then(Devices::latest) else {
                     return;
                 };
-                if !self.screen.set_devices(
-                    corner.battery,
-                    corner.wifi.as_ref(),
-                    corner.wired.as_ref(),
-                ) {
+                if !self
+                    .screen
+                    .set_devices(corner.battery, corner.wifi.as_ref(), corner.wired)
+                {
                     return;
                 }
             }

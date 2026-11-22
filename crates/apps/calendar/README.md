@@ -31,7 +31,7 @@ views. Packaged as `bande-calendar`.
   `COLOR` (a CSS colour name) or the de-facto `X-APPLE-CALENDAR-COLOR`. The subscription sheet
   also opens for a `webcal:` link given to Calendar.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
-  without a network and pushes changes as soon as NetworkManager says the network is back.
+  without a network and pushes changes as soon as the network is back (`bande_network::follow_online`).
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.
@@ -69,6 +69,7 @@ views. Packaged as `bande-calendar`.
   default), and with it off `--background` exits at once. Alerts,
   the clock and refreshes wait on one `CLOCK_REALTIME` timer, so they fire on time after a
   suspend or a clock change, and the view follows a change of the system time zone at once.
+  Alerts that fell due while Calendar was not running, up to a day back, show when it starts.
 - **Settings** (Calendar ▸ Settings…, stored in `~/.config/bande/calendar.conf`): default
   calendar, start of the week, the hours the day starts and ends (the rest is shaded and the
   week opens there), hours shown at a time, week numbers, default alerts for events and
@@ -83,9 +84,17 @@ views. Packaged as `bande-calendar`.
   Refresh Calendars syncs in the background and Import… and Export… show only the file chooser;
   the window opens when there is something to confirm.
 
-Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
-Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
-selected event, Ctrl+W close and Ctrl+Q quit.
+Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Page Up/Page Down previous/next, Ctrl+N new
+event, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the selected event (or the
+focused day, in the month and year views), Ctrl+W close and Ctrl+Q quit. The arrow keys move the
+focused day (Up and Down by a week in the month and year views, and scroll the hours in the day
+and week views), Home and End go to the first and last day shown, and Tab and Shift+Tab select
+the focused day's events in turn. F6 moves between the calendar, the calendar list (Up and Down
+to choose, Space to show or hide, Menu for its menu) and the toolbar. Every day, event and
+calendar is in the accessibility tree.
+
+Dates and times are typed and shown the way the locale writes them; a date that starts with a
+four-digit year is read as year-month-day.
 
 ## Layout
 

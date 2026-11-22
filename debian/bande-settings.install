@@ -7,8 +7,11 @@ crates/apps/settings/data/bande-update-check.timer usr/lib/systemd/user/
 crates/apps/settings/data/50-bande-settings.rules usr/share/polkit-1/rules.d/
 debian/build/bin/bande-sharing-helper usr/libexec/
 crates/apps/settings/data/org.bande.sharing-helper.policy usr/share/polkit-1/actions/
+debian/build/bin/bande-network-helper usr/libexec/
+crates/apps/settings/data/org.bande.network-helper.policy usr/share/polkit-1/actions/
 debian/build/bin/bande-locale-helper usr/libexec/
 crates/apps/settings/data/org.bande.locale-helper.policy usr/share/polkit-1/actions/
 debian/build/l10n/development/bande-locale-helper/* usr/share/bande/l10n/bande-locale-helper/
+debian/build/l10n/development/bande-network-helper/* usr/share/bande/l10n/bande-network-helper/
 debian/build/l10n/development/bande-settings/* usr/share/bande/l10n/bande-settings/
 debian/build/l10n/development/bande-sharing-helper/* usr/share/bande/l10n/bande-sharing-helper/

@@ -192,7 +192,7 @@ impl PaneId {
             Self::KeyboardShortcuts => tr!("Keyboard Shortcuts"),
             Self::Mouse => tr!("Mouse"),
             Self::Trackpad => tr!("Trackpad"),
-            Self::Printers => tr!("Printers & Scanners"),
+            Self::Printers => tr!("Printers"),
             Self::Sharing => tr!("Sharing"),
             Self::Power => tr!("Power"),
             Self::LockScreen => tr!("Lock Screen"),
@@ -219,7 +219,7 @@ impl PaneId {
         match self {
             Self::Wifi => tr!("Join networks and see how you are connected"),
             Self::Bluetooth => tr!("Connect headphones, keyboards and other devices"),
-            Self::Network => tr!("Wired connections and VPNs"),
+            Self::Network => tr!("Wired connections, VPNs, proxy and airplane mode"),
             Self::Appearance => {
                 tr!("Light, dark or automatic, accent color, wallpaper and text size")
             }
@@ -267,7 +267,7 @@ impl PaneId {
         match self {
             Self::Wifi => tr!("wireless, wlan, internet, network"),
             Self::Bluetooth => tr!("wireless, headphones, mouse, keyboard, speaker"),
-            Self::Network => tr!("internet, connection, lan"),
+            Self::Network => tr!("internet, connection, lan, airplane, proxy"),
             Self::Appearance => tr!(
                 "theme, look, colour, color, wallpaper, background, desktop picture, picture, photo, image"
             ),
@@ -288,7 +288,7 @@ impl PaneId {
             }
             Self::Mouse => tr!("pointer, cursor, click, scroll, wheel, buttons"),
             Self::Trackpad => tr!("touchpad, pointer, cursor, tap, click, scroll"),
-            Self::Printers => tr!("print, printer, cups, queue, scanner, ipp, airprint"),
+            Self::Printers => tr!("print, printer, cups, queue, ipp, airprint"),
             Self::Sharing => {
                 tr!("share, file sharing, samba, smb, remote login, ssh, network folder")
             }
@@ -371,7 +371,11 @@ pub enum SettingId {
     WifiAddress,
     WifiRouter,
     WifiDns,
+    WifiIpv6Address,
+    WifiIpv6Router,
     OtherNetwork,
+    Hotspot,
+    HotspotName,
     BluetoothPower,
     PairedDevices,
     NearbyDevices,
@@ -383,6 +387,7 @@ pub enum SettingId {
     OutputVolume,
     OutputMuted,
     OutputDevice,
+    DeviceProfiles,
     InputVolume,
     InputMuted,
     InputDevice,
@@ -421,6 +426,7 @@ pub enum SettingId {
     ColourProfile,
     ShowAllResolutions,
     DisplayRotation,
+    VariableRefresh,
     ScreenSaverAfter,
     DisplayOffAfter,
     RequirePasswordAfter,
@@ -456,6 +462,7 @@ pub enum SettingId {
     Clock24Hour,
     LoginItems,
     ReopenApps,
+    RememberRecentFiles,
     CheckUpdatesAutomatically,
     AutomaticUpdates,
     UpdateCheckEvery,
@@ -471,7 +478,15 @@ pub enum SettingId {
     EthernetAddress,
     EthernetRouter,
     EthernetDns,
+    EthernetIpv6Address,
+    EthernetIpv6Router,
     Vpns,
+    AirplaneMode,
+    Proxy,
+    ProxyHttp,
+    ProxyHttps,
+    ProxyIgnore,
+    ProxyPac,
     Language,
     AppLanguages,
     Region,
@@ -549,6 +564,7 @@ pub enum List {
     PairedDevices,
     NearbyDevices,
     OutputDevices,
+    DeviceProfiles,
     InputDevices,
     InputLevel,
     AppVolumes,
@@ -570,6 +586,8 @@ pub enum List {
     SoftwareUpdates,
     Ethernet,
     Vpns,
+    Hotspot,
+    Proxy,
     Languages,
     AppLanguages,
     Regions,
@@ -930,7 +948,11 @@ fn connection_panes() -> Vec<Pane> {
                 ),
                 section(
                     Some(tr!("Other Networks")),
-                    vec![list(SettingId::Networks, tr!("Other Networks"), tr!("join, connect, ssid, hidden, other, password"), List::Networks)],
+                    vec![list(SettingId::Networks, tr!("Other Networks"), tr!("join, connect, ssid, hidden, other, password, enterprise, 802.1x, eduroam, peap, ttls, wep"), List::Networks)],
+                ),
+                section(
+                    Some(tr!("Hotspot")),
+                    vec![list(SettingId::Hotspot, tr!("Hotspot"), tr!("share, tethering, access point, personal hotspot"), List::Hotspot)],
                 ),
             ],
         )
@@ -960,13 +982,18 @@ fn connection_panes() -> Vec<Pane> {
         pane(
             PaneId::Network,
             vec![
+                section(None, vec![switch(SettingId::AirplaneMode, tr!("Airplane Mode"), tr!("flight mode, radios, wireless off, rfkill"))]),
                 section(
                     Some(tr!("Ethernet")),
-                    vec![list(SettingId::Ethernet, tr!("Ethernet"), tr!("wired, cable, lan, ip address, dns, router, gateway, dhcp, static ip, manual address, subnet"), List::Ethernet)],
+                    vec![list(SettingId::Ethernet, tr!("Ethernet"), tr!("wired, cable, lan, ip address, ipv6, dns, router, gateway, dhcp, static ip, manual address, subnet, 802.1x, ifupdown"), List::Ethernet)],
                 ),
                 section(
                     Some(tr!("VPN")),
                     vec![list(SettingId::Vpns, tr!("VPN"), tr!("wireguard, openvpn, tunnel, private network, import, work network"), List::Vpns)],
+                ),
+                section(
+                    Some(tr!("Proxy")),
+                    vec![list(SettingId::Proxy, tr!("Proxy"), tr!("http proxy, https proxy, pac, automatic configuration, bypass"), List::Proxy)],
                 ),
             ],
         ),
@@ -1454,6 +1481,11 @@ fn displays_pane() -> Pane {
                         tr!("rotate, portrait, landscape, orientation, turn"),
                         choice(rotation_choices()),
                     ),
+                    switch(
+                        SettingId::VariableRefresh,
+                        tr!("Variable refresh rate in full screen"),
+                        tr!("vrr, adaptive sync, freesync, games, video, smooth"),
+                    ),
                     setting(
                         SettingId::ColourProfile,
                         tr!("Color profile"),
@@ -1535,6 +1567,14 @@ fn sound_pane() -> Pane {
                         tr!("Play sound through"),
                         tr!("speakers, headphones, output device"),
                         List::OutputDevices,
+                    ),
+                    list(
+                        SettingId::DeviceProfiles,
+                        tr!("Device profiles"),
+                        tr!(
+                            "hdmi, displayport, digital output, bluetooth, a2dp, hfp, headset, high quality, profile, sound card"
+                        ),
+                        List::DeviceProfiles,
                     ),
                     setting(
                         SettingId::OutputBalance,
@@ -1943,6 +1983,13 @@ fn system_panes() -> Vec<Pane> {
                     vec![
                         switch(SettingId::ReopenApps, tr!("Reopen windows when logging back in"), tr!("restore, resume, windows, session, log out, restart"))
                             .described(tr!("Apps that were open when you logged out or restarted open again")),
+                    ],
+                ),
+                section(
+                    Some(tr!("Recent files")),
+                    vec![
+                        switch(SettingId::RememberRecentFiles, tr!("Remember recently opened files"), tr!("recents, recently used, history, documents, privacy"))
+                            .described(tr!("Files you open are listed in Recent and in other apps")),
                     ],
                 ),
             ],

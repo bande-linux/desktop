@@ -1,7 +1,7 @@
 use bande_protocols::server::bande_capture_v1::{self, BandeCaptureV1};
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::{
-    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New,
+    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
 
 use crate::shell::is_shell;
@@ -9,12 +9,17 @@ use crate::state::State;
 
 impl State {
     pub(crate) fn create_capture_shell_global(display: &DisplayHandle) {
-        display.create_global::<State, BandeCaptureV1, ()>(1, ());
+        display.create_global::<State, BandeCaptureV1, ()>(2, ());
     }
 
-    pub(crate) fn show_capture_options(&mut self) {
+    pub(crate) fn show_capture_options(&mut self, recording: bool) {
         for capture in &self.capture_resources {
-            capture.show_options();
+            match recording
+                && capture.version() >= bande_capture_v1::EVT_SHOW_RECORDING_OPTIONS_SINCE
+            {
+                true => capture.show_recording_options(),
+                false => capture.show_options(),
+            }
         }
     }
 

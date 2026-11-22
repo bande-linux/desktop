@@ -185,6 +185,7 @@ pub struct DisplaySettings {
     pub scale: Option<f64>,
     pub rotation: Option<Rotation>,
     pub colour_profile: Option<String>,
+    pub variable_refresh: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -862,6 +863,7 @@ pub struct Config {
     pub accent: Accent,
     pub tinted_frame: bool,
     pub reopen_apps: bool,
+    pub remember_recent_files: bool,
     pub check_updates_automatically: bool,
     pub automatic_updates: bool,
     pub update_check_every: Option<Duration>,
@@ -901,6 +903,7 @@ impl Default for Config {
             accent: Accent::default(),
             tinted_frame: false,
             reopen_apps: true,
+            remember_recent_files: true,
             check_updates_automatically: false,
             automatic_updates: false,
             update_check_every: None,
@@ -1054,6 +1057,9 @@ impl Parser<'_> {
                     .map(|message| config.lock_message = message),
                 "show-previews" => self.flag(node).map(|shown| config.show_previews = shown),
                 "reopen-apps" => self.flag(node).map(|reopen| config.reopen_apps = reopen),
+                "remember-recent-files" => self
+                    .flag(node)
+                    .map(|remember| config.remember_recent_files = remember),
                 "check-updates-automatically" => self
                     .flag(node)
                     .map(|on| config.check_updates_automatically = on),
@@ -1712,6 +1718,7 @@ impl Parser<'_> {
                 }
                 "rotation" => display.rotation = Some(self.rotation(child)?),
                 "colour-profile" => display.colour_profile = Some(self.string(child)?),
+                "variable-refresh" => display.variable_refresh = Some(self.flag(child)?),
                 _ => return Err(self.unknown_child(node.name().value(), child)),
             }
             Ok(())

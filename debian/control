@@ -59,8 +59,12 @@ Build-Depends: debhelper-compat (= 14),
  librust-httparse-1+default-dev (>= 1.10.1-~~) <!pkg.bande.vendor>,
  librust-icu-calendar-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
  librust-icu-calendar-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-collator-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-collator-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
  librust-icu-datetime-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
  librust-icu-datetime-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-decimal-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
+ librust-icu-decimal-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
  librust-icu-locale-core-2-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
  librust-icu-locale-core-2+default-dev (>= 2.2.0-~~) <!pkg.bande.vendor>,
  librust-image-0.25-dev (>= 0.25.10-~~) <!pkg.bande.vendor>,
@@ -244,7 +248,11 @@ Build-Depends: debhelper-compat (= 14),
  librust-zeroize-1+default-dev (>= 1.8.1-~~) <!pkg.bande.vendor>,
  librust-zeroize-1+serde-dev (>= 1.8.1-~~) <!pkg.bande.vendor>,
  librust-zip-9-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
+ librust-zip-9+aes-crypto-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
+ librust-zip-9+bzip2-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
  librust-zip-9+deflate-flate2-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
+ librust-zip-9+deflate64-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
+ librust-zip-9+lzma-dev (>= 9.1.3-~~) <!pkg.bande.vendor>,
 # librust: end
 Build-Depends-Arch: pkgconf,
  libwayland-dev,
@@ -823,13 +831,18 @@ Depends: ${shlibs:Depends},
  kbd,
  locales,
  ${misc:Depends}
+Provides: x-display-manager
 Description: Bande login window: signs users in through greetd
  The login window of the Bande desktop: greetd runs it as its greeter
  inside bande-compositor --greeter, and it lists the people who can sign
  in, asks for the chosen person's password and has greetd start their
- Bande session. It becomes greetd's greeter through a drop-in for
- greetd.service; greetd itself asks which display manager to start when
- another one is installed.
+ Bande session.
+ .
+ It is a display manager of its own, bande-greeter.service, which runs
+ greetd with Bande's configuration and leaves greetd.service and
+ /etc/greetd/config.toml alone. When several display managers are
+ installed, debconf asks which one starts; dpkg-reconfigure bande-greeter
+ changes the choice.
 
 Package: bande-terminal
 Architecture: any
@@ -1157,6 +1170,7 @@ Recommends: bande-greeter (>= ${source:Version}),
  bande-mail (>= ${source:Version}),
  bande-calendar (>= ${source:Version}),
  bande-lookup (>= ${source:Version}),
+ bande-browser,
  systemd-oomd,
  bande-printd (>= ${source:Version}),
  bande-spell (>= ${source:Version}),

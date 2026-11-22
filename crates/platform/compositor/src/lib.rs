@@ -29,7 +29,9 @@ mod force_quit;
 mod frame;
 mod frame_callbacks;
 mod gesture;
+mod global_shortcuts;
 mod grab;
+mod hints;
 mod idle;
 mod ime;
 mod input;
@@ -64,7 +66,9 @@ mod state;
 mod switcher;
 mod sync;
 mod tile;
+mod timing;
 mod toplevel_drag;
+mod touch;
 mod trust;
 mod typing;
 mod watchdog;
@@ -88,6 +92,7 @@ pub use environment::{
     export_session_environment, notify_service_manager, watchdog_keepalive_interval,
 };
 pub use gesture::Gesture;
+pub use global_shortcuts::{GlobalShortcutsHandle, serve_global_shortcuts};
 pub use input_settings::{
     InputSettings, follow_input_settings, follow_login_settings, user_config,
 };

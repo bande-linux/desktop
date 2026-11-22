@@ -1,3 +1,4 @@
+use crate::choice::{Answers, answers};
 use bande_inbox::Inbox;
 use bande_volumes::leads_to_connected_volume as on_server;
 use std::io;
@@ -132,6 +133,7 @@ pub struct Chooser {
     pub name: String,
     pub show_extensions: bool,
     show_hidden: bool,
+    answers: Answers,
 }
 
 impl Chooser {
@@ -148,6 +150,7 @@ impl Chooser {
             .or_else(|| (!dialog.filters.is_empty()).then_some(0));
         let mut chooser = Self {
             name: initial_name(&dialog),
+            answers: answers(&dialog.choices),
             dialog,
             mime,
             folder: PathBuf::new(),
@@ -163,6 +166,10 @@ impl Chooser {
             chooser.folder = folder;
         }
         chooser
+    }
+
+    pub fn answers(&self) -> &Answers {
+        &self.answers
     }
 
     pub fn dialog(&self) -> &Dialog {
@@ -329,7 +336,7 @@ impl Chooser {
     fn selection(&self, paths: Vec<PathBuf>) -> Selection {
         Selection {
             paths,
-            choices: Vec::new(),
+            choices: self.answers.borrow().clone(),
             filter: self
                 .filter
                 .and_then(|index| self.dialog.filters.get(index))

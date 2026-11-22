@@ -110,7 +110,7 @@ pub type Reply<T> = Arc<dyn Fn(T) + Send + Sync>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineEvent {
-    ShowOptions,
+    ShowOptions(bool),
     StreamEnded(u64),
 }
 
@@ -151,7 +151,7 @@ impl Engine {
             output_sources: globals.bind(&handle, 1..=1, ()).ok(),
             toplevel_sources: globals.bind(&handle, 1..=1, ()).ok(),
             copy: globals.bind(&handle, 1..=1, ()).ok(),
-            shell: globals.bind(&handle, 1..=1, ()).ok(),
+            shell: globals.bind(&handle, 1..=2, ()).ok(),
             toplevels: Vec::new(),
             listed: Vec::new(),
             listings: VecDeque::new(),
@@ -966,7 +966,10 @@ impl Dispatch<BandeCaptureV1, ()> for Capture {
                 }
             }
             bande_capture_v1::Event::ShowOptions => {
-                capture.events.send(EngineEvent::ShowOptions);
+                capture.events.send(EngineEvent::ShowOptions(false));
+            }
+            bande_capture_v1::Event::ShowRecordingOptions => {
+                capture.events.send(EngineEvent::ShowOptions(true));
             }
             _ => {}
         }

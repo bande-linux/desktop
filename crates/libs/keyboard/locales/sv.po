@@ -37,6 +37,9 @@ msgstr "Placera fönstret på ena sidan (valfri piltangent)"
 msgid "Move the window to the display beside (any arrow key)"
 msgstr "Flytta fönstret till intilliggande skärm (valfri piltangent)"
 
+msgid "Open the window menu"
+msgstr "Öppna fönstermenyn"
+
 msgid "Switch apps (hold Alt to choose)"
 msgstr "Byt app (håll ned Alt för att välja)"
 
@@ -51,6 +54,12 @@ msgstr "Föregående arbetsyta"
 
 msgid "Next workspace"
 msgstr "Nästa arbetsyta"
+
+msgid "Move the window to the previous workspace"
+msgstr "Flytta fönstret till föregående arbetsyta"
+
+msgid "Move the window to the next workspace"
+msgstr "Flytta fönstret till nästa arbetsyta"
 
 msgid "Show all windows"
 msgstr "Visa alla fönster"

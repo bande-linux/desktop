@@ -18,18 +18,18 @@ use crate::widgets::{
     Caption, Captioned, Card, Check, Column, Fade, Row, SIDEBAR_SYMBOL, Swatch, Swatches, Text,
     Thumbnail, Thumbnails, Tone,
 };
-use bande_audio::Direction;
+use bande_audio::{Direction, SoundCard};
 use bande_bluetooth::Kind as DeviceKind;
 use bande_config::Placement;
 use bande_config::{ACCENTS, Accessibility, MAX_INPUT_SOURCES, carry};
-use bande_keyboard::{Action, shortcuts_in};
+use bande_keyboard::{Action, Trigger, shortcuts_in};
 use bande_settings_panes::SettingHit;
 use bande_settings_panes::{
     AUTOMATIC, Choice, Kind, List, MAX_SEGMENTS, PaneId, SCALES, Section, Setting, SettingId, Value,
 };
 use bande_toolkit::ui::{
     Axis, Button, Label, LevelIndicator, PopUpButton, ScrollView, SearchField, SecureField,
-    SegmentedControl, Shortcut, Slider, Stack, TextField, Toggle, Widget, WidgetId,
+    SegmentedControl, Shortcut, ShortcutField, Slider, Stack, TextField, Toggle, Widget, WidgetId,
 };
 use bande_toolkit::{Scheme, Spacing, TextRole};
 
@@ -54,6 +54,45 @@ pub(crate) fn submit(intents: &Intents, make: fn(String) -> Intent) -> impl FnMu
 
 pub(crate) fn muted_row(text: &str) -> Box<dyn Widget> {
     boxed(Row::new(Text::new(text, Tone::Muted), None))
+}
+
+const HIGH_QUALITY: &str = "a2dp-sink";
+const HEADSET: &str = "headset-head-unit";
+
+fn profile_titles(card: &SoundCard) -> Vec<String> {
+    let named: Vec<(String, &str)> = card
+        .profiles
+        .iter()
+        .map(|profile| {
+            let name = profile.name.as_str();
+            let bluetooth = |prefix: &str| {
+                name.strip_prefix(prefix)
+                    .filter(|_| card.bluetooth)
+                    .map(|codec| codec.trim_start_matches('-'))
+            };
+            if name == "off" {
+                (tr!("Off"), "")
+            } else if let Some(codec) = bluetooth(HIGH_QUALITY) {
+                (tr!("High quality (A2DP)"), codec)
+            } else if let Some(codec) = bluetooth(HEADSET) {
+                (tr!("Headset (HFP)"), codec)
+            } else if profile.description.is_empty() {
+                (profile.name.clone(), "")
+            } else {
+                (profile.description.clone(), "")
+            }
+        })
+        .collect();
+    named
+        .iter()
+        .map(|(title, codec)| {
+            let shared = named.iter().filter(|(other, _)| other == title).count() > 1;
+            match shared && !codec.is_empty() {
+                true => format!("{title} · {}", codec.to_uppercase()),
+                false => title.clone(),
+            }
+        })
+        .collect()
 }
 
 fn picture_name(name: &str) -> String {
@@ -102,6 +141,7 @@ fn display_value(
                 .rotation
                 .map_or(display.rotation, |rotation| rotation.degrees()),
         ),
+        SettingId::VariableRefresh => Value::Flag(output.variable_refresh.unwrap_or(true)),
         _ => return None,
     })
 }
@@ -744,6 +784,39 @@ impl SettingsView {
             .collect()
     }
 
+    fn profile_rows(&mut self) -> Widgets {
+        let Some(audio) = self.audio.clone() else {
+            return Vec::new();
+        };
+        if audio.cards.is_empty() {
+            return vec![muted_row(&tr!("No device has a choice of profiles"))];
+        }
+        audio
+            .cards
+            .into_iter()
+            .map(|card| {
+                let titles = profile_titles(&card);
+                let indexes: Vec<i32> = card.profiles.iter().map(|profile| profile.index).collect();
+                let selected = indexes
+                    .iter()
+                    .position(|index| Some(*index) == card.active)
+                    .unwrap_or(0);
+                let id = card.id;
+                let mut choose = intent(&self.intents, move |index| Intent::Profile(id, index));
+                let menu = PopUpButton::new(&card.description, &titles, selected, move |at| {
+                    if let Some(index) = indexes.get(at) {
+                        choose(*index);
+                    }
+                });
+                let row = Row::new(
+                    Text::new(&card.description, Tone::Primary),
+                    Some(boxed(menu)),
+                );
+                self.item_row(format!("card:{id}"), row)
+            })
+            .collect()
+    }
+
     fn app_rows(&mut self) -> Widgets {
         let Some(audio) = self.audio.clone() else {
             return Vec::new();
@@ -787,6 +860,7 @@ impl SettingsView {
             List::PairedDevices => self.device_rows(true),
             List::NearbyDevices => self.device_rows(false),
             List::OutputDevices => self.audio_rows(Direction::Output),
+            List::DeviceProfiles => self.profile_rows(),
             List::InputDevices => self.audio_rows(Direction::Input),
             List::AppVolumes => self.app_rows(),
             List::InputLevel => Vec::new(),
@@ -808,6 +882,8 @@ impl SettingsView {
             List::SoftwareUpdates => self.software_rows(),
             List::Ethernet => self.ethernet_rows(),
             List::Vpns => self.vpn_rows(),
+            List::Hotspot => self.hotspot_rows(),
+            List::Proxy => self.proxy_rows(),
             List::Languages => self.language_rows(),
             List::AppLanguages => self.app_language_rows(),
             List::Regions => self.region_rows(),
@@ -1062,6 +1138,70 @@ impl SettingsView {
                 .collect();
             page.push(boxed(Card::new(rows)));
         }
+        let shortcuts = self
+            .login
+            .as_ref()
+            .map(|login| login.shortcuts.clone())
+            .unwrap_or_default();
+        if !shortcuts.is_empty() {
+            page.push(boxed(Caption::new(Text::label(&tr!("App Shortcuts")))));
+            let rows = shortcuts
+                .iter()
+                .map(|shortcut| {
+                    let title = match shortcut.description.is_empty() {
+                        true => shortcut.id.clone(),
+                        false => shortcut.description.clone(),
+                    };
+                    let taken: Vec<Trigger> = shortcuts
+                        .iter()
+                        .filter(|other| other.app.id != shortcut.app.id || other.id != shortcut.id)
+                        .filter_map(|other| other.trigger)
+                        .collect();
+                    let mut record = intent(&self.intents, |(app_id, id, trigger)| {
+                        Intent::SetShortcut(app_id, id, Some(trigger))
+                    });
+                    let (app_id, id) = (shortcut.app.id.clone(), shortcut.id.clone());
+                    let keys = shortcut.trigger.map(Trigger::keys);
+                    let field = ShortcutField::new(&title, keys.as_deref(), move |chord| {
+                        match Trigger::parse(chord)
+                            .filter(|trigger| trigger.assignable() && !taken.contains(trigger))
+                        {
+                            Some(trigger) => {
+                                record((app_id.clone(), id.clone(), trigger));
+                                true
+                            }
+                            None => false,
+                        }
+                    });
+                    let mut controls: Widgets = vec![boxed(field)];
+                    if shortcut.trigger.is_some() {
+                        let mut turn_off = intent(&self.intents, |(app_id, id)| {
+                            Intent::SetShortcut(app_id, id, None)
+                        });
+                        let (app_id, id) = (shortcut.app.id.clone(), shortcut.id.clone());
+                        controls.push(boxed(
+                            Button::new(&tr!("Turn Off"), move || {
+                                turn_off((app_id.clone(), id.clone()));
+                            })
+                            .tooltip(&tr!("Stop this shortcut from working in the app")),
+                        ));
+                    }
+                    boxed(
+                        Row::new(
+                            Text::new(&title, Tone::Primary),
+                            Some(boxed(Stack::new(
+                                Axis::Horizontal,
+                                Spacing::M as f32,
+                                0.0,
+                                controls,
+                            ))),
+                        )
+                        .detail(Text::new(&shortcut.app.name, Tone::Muted).caption()),
+                    )
+                })
+                .collect();
+            page.push(boxed(Card::new(rows)));
+        }
         page
     }
 
@@ -1139,9 +1279,11 @@ impl SettingsView {
 
     fn section_shown(&self, section: &Section) -> bool {
         section.settings.iter().all(|setting| match setting.id {
-            SettingId::KnownNetworks | SettingId::Networks => {
-                self.wifi.present().is_some_and(|wifi| wifi.enabled)
-            }
+            SettingId::Networks => self.wifi.present().is_some_and(|wifi| wifi.enabled),
+            SettingId::KnownNetworks | SettingId::Hotspot => self
+                .wifi
+                .present()
+                .is_some_and(|wifi| wifi.enabled && wifi.outside.is_none()),
             SettingId::PairedDevices | SettingId::NearbyDevices => self
                 .bluetooth
                 .present()
@@ -1377,6 +1519,11 @@ impl SettingsView {
             && let Some(network) = self.network_page()
         {
             return self.page(network);
+        }
+        if pane.id == PaneId::Network
+            && let Some(wired) = self.wired_page()
+        {
+            return self.page(wired);
         }
         if pane.id == PaneId::Diagnostics
             && let Some(report) = self.report_page()

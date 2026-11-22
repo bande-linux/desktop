@@ -146,6 +146,19 @@ dialog that cannot start fails the request with response 2.
 - **DynamicLauncher**: "Add this web app to Applications?" with the icon, an editable name and the
   address. `RequestInstallToken` trusts only the app stores the other backends trust (GNOME
   Software, AppCenter, Discover).
+- **GlobalShortcuts** (version 2): only for calls from `xdg-desktop-portal`. `BindShortcuts` binds
+  nothing until the user answers "Allow <app> to use keyboard shortcuts?", which lists each new
+  shortcut with its description and proposed keys: the `preferred_trigger` when it holds Super or
+  both Ctrl and Alt, is no system shortcut and nobody has it. Per shortcut the user keeps it,
+  records other keys or unticks it; Don't Allow declines them all. Every answer is remembered, a
+  declined shortcut as one without keys, so the app is asked only about shortcuts it has not
+  asked for before. `ConfigureShortcuts` shows the same list for the app's shortcuts. Bindings
+  are kept per app id in `$XDG_STATE_HOME/bande/global-shortcuts`, which the compositor follows:
+  it takes a bound chord before the focused app (not while locked or while shortcuts are
+  inhibited) and signals `org.bande.GlobalShortcuts.Activated` and `Deactivated` to the portal
+  only, which emits them for the app's sessions. The portal follows the file too and emits
+  `ShortcutsChanged` when an app's shortcuts change outside `BindShortcuts`. Settings ▸ Keyboard
+  Shortcuts lists them under App Shortcuts, where the keys can be recorded again or turned off.
 - **Account**: "Share your name and picture with <app>?"; Share returns the login, the
   AccountsService `RealName` (else the passwd name) and the picture as a `file://` URI.
 - **Secret**: only for calls from `xdg-desktop-portal` itself, hands a sandboxed app the 64-byte
@@ -161,7 +174,7 @@ dialog that cannot start fails the request with response 2.
   theme, fonts, cursor and animations, `org.gnome.desktop.sound` `event-sounds`, and
   `org.gnome.desktop.wm.preferences` `button-layout` `:minimize,maximize,close`, so GTK,
   libadwaita, Firefox and Qt put their window controls on the right in Bande's order.
-- Not implemented: GlobalShortcuts, InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is
+- Not implemented: InputCapture, RemoteDesktop, Clipboard and Usb; Lockdown is
   the frontend's default (nothing locked down).
 
 **Capture lives in the screenshot tool.** The portal has no Wayland connection: Screenshot and
@@ -193,7 +206,10 @@ UI.
 - **Screen recording**: a private PipeWire stream into `gst-launch-1.0`, MP4 (H.264, from
   `gstreamer1.0-plugins-ugly`) or else WebM (VP8). A stop symbol sits in the Taskbar; stopping
   sends end of stream, so the file is finalised. Without GStreamer the palette says what to
-  install.
+  install. Quick Settings' Screen Recording tile asks the compositor for the palette with Record
+  Entire Screen chosen (`bande_shell_v1.show_capture_options`, passed on as
+  `bande_capture_v1.show_recording_options`); while recording, the tile is on, reading
+  `org.bande.Screenshot`'s `Recording`, and stops the recording as Print does.
 
 **Third-party toolkits** follow the appearance:
 
@@ -225,7 +241,9 @@ UI.
   `haveAvailableRoutes`, followed live), so Headphones appear only while plugged in. Plugging in
   makes the jack the default once per session (`bande-sound`); unplugging falls back to the
   previous choice. Filter-chain streams are never listed as apps, and a `hide-parent` node hides
-  its raw speaker. Settings ▸ Sound has a balance for stereo outputs.
+  its raw speaker. Settings ▸ Sound has a balance for stereo outputs, and lists the profiles of
+  each card that has a choice (`EnumProfile`, set with `SPA_PARAM_Profile` and saved), so an HDMI
+  or DisplayPort output can be switched on; Bluetooth shows High quality (A2DP) and Headset (HFP).
 - The display and keyboard brightness keys work the same way, also while locked: 16 steps
   (quarter steps with Shift+Alt) on the display under the pointer or the `kbd_backlight` LED, in
   the volume HUD, which names the display when there are several.
@@ -253,7 +271,8 @@ UI.
 - It is NetworkManager's secret agent (`org.bande.Secrets`, answering only NetworkManager's bus
   name): agent-owned secrets live in the login keyring under libnm's attributes, and new Wi-Fi
   or 802.1X passwords are asked through the keyring prompt. Wi-Fi joined from Bande keeps its
-  password system-wide.
+  password system-wide; Enterprise (802.1X) passwords and private-key passwords set in Settings
+  are agent-owned, so they stay in the keyring.
 - Items record the app that saved them (`bande:creator`); another app sees them locked until the
   user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). Prompts
   are `bande-secrets-prompt` processes, so the daemon never links the toolkit; the daemon is not
@@ -331,10 +350,39 @@ brings up the dialog.
   (About, Hide, Hide Other Apps, Show All Apps) are performed by the shell through
   `bande_shell_v1`, since an app cannot hide itself.
 - **Network and Bluetooth**: NetworkManager and BlueZ for Wi-Fi and pairing in Quick Settings and
-  Settings (`crates/libs/network`, `crates/libs/bluetooth`). Bande never rewrites
-  `/etc/network/interfaces` or NetworkManager's configuration; a wired device that ifupdown or
-  systemd-networkd manages is to be shown read-only in Settings, with Wi-Fi alone in the Taskbar
-  and Quick Settings.
+  Settings (`crates/libs/network`, `crates/libs/bluetooth`); the Taskbar and Quick Settings show
+  Wi-Fi alone.
+  - Saved connections activate whatever their security; new WPA Enterprise networks (PEAP, TTLS,
+    TLS) and wired 802.1X need a CA certificate file or the system store with a server domain.
+    Hidden networks offer every security type, WEP with a warning. Every wired device is listed,
+    and IPv4 and IPv6 (automatic, manual, off) are set per connection.
+  - A device NetworkManager leaves unmanaged (ifupdown, systemd-networkd) shows its address from
+    the kernel (rtnetlink) and why Settings leaves it alone. Bande never rewrites
+    `/etc/network/interfaces` on its own: "Let Settings Manage This Connection…" runs
+    `bande-network-helper` under `pkexec` (`org.bande.network-helper`, admin each time). It shows
+    the stanza lines it would disable, then keeps a copy of each file next to it (hidden in
+    `interfaces.d`, which `source` globs), takes the interface down with `ifdown`, comments out
+    only that interface's lines (splitting a shared `auto` line), reloads NetworkManager and adds
+    an equivalent system connection (the Wi-Fi PSK in the root-only keyfile, as Debian's
+    NetworkManager keeps it). It refuses anything it can't carry over safely (unknown options such
+    as `post-up`, `wpa-conf`, mappings, bridges or VLANs on the interface, line continuations,
+    sources outside `interfaces.d`, a running `dhcpcd.service`), and puts every file back and the
+    interface up again if NetworkManager doesn't take over.
+  - "Online" (`follow_online`, used by Software and Calendar) is NetworkManager's
+    `CONNECTED_GLOBAL`, or a default route in the kernel through a device NetworkManager doesn't
+    manage; nothing is sent to find out.
+  - Hotspot: a shared `802-11-wireless` access-point connection (WPA2, CCMP). Airplane mode
+    (`bande_network::{airplane_mode, set_airplane_mode, follow_airplane_mode}`) blocks every
+    rfkill radio through `/dev/rfkill` and remembers in `$XDG_STATE_HOME/bande/airplane-radios`
+    which were on, to turn just those back on.
+  - Proxy (none, manual, PAC) is written to `~/.config/environment.d/60-bande-proxy.conf`
+    (`http_proxy`, `https_proxy`, `no_proxy` and their upper-case forms; PAC as libproxy's
+    `pac+URL`) and set in the user manager's and the D-Bus activation environment. libproxy reads
+    these outside GNOME, so GLib apps and the portal's ProxyResolver follow them, as do Qt and
+    command-line tools for a manual proxy; running apps pick them up at the next login.
+  - Quick Settings' Airplane mode tile uses the same functions (the active seat reaches
+    `/dev/rfkill` through `uaccess`), and its Power Saver tile switches power-profiles-daemon
+    between `power-saver` and `balanced`.
 - **Service outages**: the bar, Quick Settings and Settings tell a stopped service from missing
   hardware (`bande_bus::Reading`): a failed UPower, NetworkManager or BlueZ read counts as absent
   only when sysfs has no battery, Wi-Fi radio or Bluetooth adapter; otherwise the item stays
@@ -465,21 +513,31 @@ ends the login scope, `bande-session` traps the signal and stops the service. Re
 Down call logind's `Reboot` and `PowerOff`; the confirmation stays open until answered and shows
 a refusal.
 
-**Installation.** `/etc/greetd/config.toml` is greetd's conffile and stays untouched:
-`bande-greeter` ships `/usr/share/bande-greeter/greetd-config.toml` and a drop-in,
-`/usr/lib/systemd/system/greetd.service.d/bande.conf`, pointing `--config` at it. Which display
-manager runs is chosen the Debian way (greetd >= 0.10.3-6 provides `x-display-manager` and
-shares the debconf question `shared/default-x-display-manager`); `bande-greeter` never touches
-it. To override:
+**Installation.** `bande-greeter` is a display manager of its own, the way Debian's display
+managers are: it provides `x-display-manager`, shares the debconf question
+`shared/default-x-display-manager` and ships `bande-greeter.service`, which runs greetd with
+`/usr/share/bande-greeter/greetd-config.toml`, conflicts with `greetd.service` (both use VT 7)
+and starts `bande-console-fallback.service` when greetd gives up. greetd's own
+`greetd.service` and its conffile `/etc/greetd/config.toml` stay untouched. The chosen display
+manager is the daemon named in `/etc/X11/default-display-manager` (`/usr/bin/bande-greeter`
+for the login window), and `/etc/systemd/system/display-manager.service` links to its unit;
+every display manager's maintainer scripts keep the two in step with the debconf answer.
 
-- another greetd configuration: copy the drop-in to
-  `/etc/systemd/system/greetd.service.d/bande.conf` and change its `--config`, or mask it with
-  `ln -s /dev/null /etc/systemd/system/greetd.service.d/bande.conf` to go back to
-  `/etc/greetd/config.toml`;
-- another display manager: `dpkg-reconfigure greetd` (or the other manager's package) and pick it.
+- Where no display manager is chosen yet, debconf offers the login window and greetd (which
+  `bande-greeter` depends on) with the login window preselected, so a non-interactive install
+  chooses it. Next to another display manager the existing choice is preselected, so a
+  non-interactive install keeps it.
+- `dpkg-reconfigure bande-greeter` (or any display manager's package) switches.
+- Removing `bande-greeter` while it is chosen asks at critical priority for another installed
+  display manager, preselecting one other than greetd (greetd's own greeter only if nothing
+  else is installed), and links it; with none left, the link goes and the computer starts to
+  the text console. Only these scripts touch the link: `deb-systemd-helper`, whose purge
+  removes an alias whatever it points to, never manages `bande-greeter.service`.
+- Another greetd configuration for the login window: `systemctl edit bande-greeter` and set
+  `ExecStart=` and a new `ExecStart=/usr/sbin/greetd --config …`.
 
-Either takes effect after `systemctl daemon-reload` and a restart of the display manager,
-which ends the sessions it started.
+A switch takes effect at the next start, or at once with `systemctl restart
+display-manager.service`, which ends the sessions it started.
 
 **Wallpaper at login.** The login window shows the wallpaper of the person it offers, starting
 with whoever signed in last (`$XDG_STATE_HOME/bande-greeter/last-user` in greetd's home,
@@ -503,7 +561,8 @@ what the one before could not save:
 - **The shell crashes or hangs**: the compositor restarts the shell clients and the clipboard
   daemon, at most once every 10 s; the session and its apps stay, and notifications live in
   `bande-notify`. A hung shell shows in Force Quit as "Taskbar & Desktop (Not Responding)" with
-  Relaunch. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
+  Relaunch; at 2 s without an answer its keyboard-exclusive surfaces lose the keyboard, and at
+  5 s the compositor kills it through its pidfd (after `SIGQUIT`) for the supervisor to restart. The session stays locked if the lock screen dies, and a lock screen silent for 10 s
   while locked is killed and restarted.
 - **Frames stop reaching the display**: a failed frame is retried four times a second (one log
   line per distinct error) and a page flip missing for a second is written off. After 3 s without
@@ -534,8 +593,8 @@ what the one before could not save:
   a session without a clean log out, the next asks "Reopen your apps?" before anything starts.
 - **The record**: every failure of a Bande program leaves one report, kept on the computer unless
   sending is on ([fault reports](fault-reports.md)). Core dumps go to `systemd-coredump`
-  (`bande-desktop` sets `DefaultLimitCORE=infinity` for the user manager, whose soft limit is
-  otherwise 0). Programs that hold passwords (`bande-lock`, `bande-greeter`, `bande-polkit`,
+  (`bande-crash-reports`, which depends on it, sets `DefaultLimitCORE=infinity` for the user
+  manager, whose soft limit is otherwise 0). Programs that hold passwords (`bande-lock`, `bande-greeter`, `bande-polkit`,
   `bande-secrets`, `bande-clipboard`) are not dumpable, so only their panic text is recorded.
   Symbols are in [packaging](packaging.md).
 

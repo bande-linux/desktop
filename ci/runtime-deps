@@ -36,6 +36,9 @@ gst-inspect-1.0 gstreamer1.0-tools optional
 gst-launch-1.0 gstreamer1.0-tools optional
 nmcli network-manager optional
 /usr/sbin/NetworkManager network-manager optional
+/usr/sbin/ifup ifupdown optional
+/usr/sbin/ifdown ifupdown optional
+/usr/sbin/ifquery ifupdown optional
 /usr/bin/fusermount3 fuse3 optional
 /usr/bin/go-mtpfs go-mtpfs optional
 /usr/bin/gphotofs gphotofs optional
@@ -70,6 +73,7 @@ flatpak flatpak optional
 /usr/libexec/bande-consent bande-settings depends
 /usr/libexec/bande-file-chooser bande-file-chooser depends
 /usr/libexec/bande-locale-helper bande-settings depends
+/usr/libexec/bande-network-helper bande-settings depends
 /usr/libexec/bande-mount-helper bande-automount depends
 /usr/libexec/bande-secrets-prompt bande-secrets depends
 /usr/libexec/bande-sharing-helper bande-settings depends

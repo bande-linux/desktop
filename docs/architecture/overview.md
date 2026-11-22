@@ -158,8 +158,8 @@ own apps and third-party apps use the same keys, so the compositor translates no
 | Modifier | Role | Examples |
 | :--- | :--- | :--- |
 | **`Ctrl`** | Shortcuts inside apps and text fields | `Ctrl+C` (copy), `Ctrl+V` (paste), `Ctrl+X` (cut), `Ctrl+Z` (undo), `Ctrl+W` (close window), `Ctrl+Q` (quit), `Ctrl+F` (find), `Ctrl+click` (toggle an item in a selection) |
-| **`Super`** | The system only, never an app action | a tap of `Super` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+W` (overview), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Quick Settings), `Ctrl+Super+Left/Right` (workspaces), Super+drag (move a window) |
-| **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Tab` (switcher), `Alt+Click` (toggle disclosure) |
+| **`Super`** | The system only, never an app action | a tap of `Super` (Search), `Super+arrows` (tiling), `Super+H` (minimize), `Super+L` (lock), `Super+W` (overview), `Super+D` (desktop), `Super+V` (clipboard history), `Super+.` (emoji), `Super+N` and `Super+S` (notifications, Quick Settings), `Ctrl+Super+Left/Right` (workspaces), `Shift+Ctrl+Super+Left/Right` (move the window to a workspace), Super+drag (move a window) |
+| **`Alt`** | Navigation in apps, alternate actions | `Alt+Left/Right` (back and forward), `Alt+Up` (enclosing folder), `Alt+F4` (close window), `Alt+Space` (window menu), `Alt+Tab` (switcher), `Alt+Click` (toggle disclosure) |
 | **`Shift`** | Reversal, extending a selection, the second set of commands | `Shift+Ctrl+Z` (redo), `Shift+Ctrl+N` (new folder), Terminal's `Shift+Ctrl+C/V`, `Shift+Drag` (move) |
 
 - **Screenshots and Terminal**: `Print` (options), `Shift+Print` (the screen),
@@ -185,7 +185,7 @@ to it, and it can be edited by hand while the session runs. Apps keep their own 
 small `key = value` file each next to it (`files.conf`, `terminal.conf`).
 
 - **Schema** (`crates/services/config`, KDL 2.0): top-level `appearance`, `style`, `accent`,
-  `tinted-frame`, `clock`, `reopen-apps`, `check-updates-automatically`, `automatic-updates`, `lock-message`, `show-previews`, and the sections
+  `tinted-frame`, `clock`, `reopen-apps`, `remember-recent-files`, `check-updates-automatically`, `automatic-updates`, `lock-message`, `show-previews`, and the sections
   `accessibility`, `bar`, `idle`, `keyboard`, `trackpad`, `mouse`, `power`, `sound`, `wallpaper`,
   `night-light`, `do-not-disturb`, `search`, `display "<name>"` (one per display, named by EDID maker, model and serial) and
   `arrangement` (one per set of displays). Every setting is optional and has a default.
@@ -196,7 +196,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }
   search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false
-  display "Example EX27 0001" { scale 1.5; refresh-rate 120 }
+  display "Example EX27 0001" { scale 1.5; refresh-rate 120; variable-refresh #false }   // variable refresh is on unless #false
   arrangement {
       display "Example Panel 0002" x=0 y=0 main=#true
       display "Example EX27 0001" x=1504 y=-300

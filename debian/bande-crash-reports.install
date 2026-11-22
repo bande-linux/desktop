@@ -2,3 +2,4 @@ debian/build/bin/bande-crash-reports usr/libexec/
 crates/services/crash-reports/data/bande-crash-reports@.service usr/lib/systemd/system/
 crates/services/crash-reports/data/systemd-coredump@.service.d usr/lib/systemd/system/
 crates/services/crash-reports/data/user@.service.d usr/lib/systemd/system/
+crates/services/crash-reports/data/user.conf.d usr/lib/systemd/

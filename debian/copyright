@@ -64,6 +64,13 @@ License: public-domain
  signing key and the Fedora Project's release keys, embedded to check the
  signed checksums of downloaded cloud images.
 
+Files: debian/bande-greeter.templates debian/po/*
+Copyright: 2000-2004 Branden Robinson
+ The translators named in each debian/po file
+License: GPL-2.0-or-later
+Comment: The shared/default-x-display-manager debconf question and its
+ translations, which every display manager in Debian carries word for word.
+
 Files: vendor/accesskit-0.25.2/*
 Copyright: The AccessKit contributors
 License: MIT or Apache-2.0
@@ -413,6 +420,10 @@ Files: vendor/const-oid-0.10.2/*
 Copyright: RustCrypto Developers
 License: Apache-2.0 or MIT
 
+Files: vendor/constant_time_eq-0.6.1/*
+Copyright: Cesar Eduardo Barros <cesarb@cesarb.eti.br>
+License: CC0-1.0 or MIT-0 or Apache-2.0
+
 Files: vendor/convert_case-0.10.0/*
 Copyright: rutrum <dave@rutrum.net>
 License: MIT
@@ -482,6 +493,10 @@ License: MIT
 Files: vendor/data-url-0.3.2/*
 Copyright: Simon Sapin <simon.sapin@exyr.org>
 License: MIT or Apache-2.0
+
+Files: vendor/deflate64-0.1.12/*
+Copyright: anatawa12 <anatawa12@icloud.com>
+License: MIT
 
 Files: vendor/defmt-1.2.0/*
 Copyright: The Knurling-rs developers
@@ -935,6 +950,14 @@ Files: vendor/icu_calendar_data-2.4.0/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
 
+Files: vendor/icu_collator-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
+Files: vendor/icu_collator_data-2.4.0/*
+Copyright: The ICU4X Project Developers
+License: Unicode-3.0
+
 Files: vendor/icu_collections-2.4.0/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
@@ -1330,6 +1353,10 @@ Copyright: Maciej Hirsz <hello@maciej.codes>
 License: MIT or Apache-2.0
 
 Files: vendor/lzma-rust2-0.19.0/*
+Copyright: the lzma-rust2 authors
+License: Apache-2.0
+
+Files: vendor/lzma-rust2-0.23.0/*
 Copyright: the lzma-rust2 authors
 License: Apache-2.0
 
@@ -1977,6 +2004,10 @@ Files: vendor/sevenz-rust2-0.21.6/*
 Copyright: the sevenz-rust2 authors
 License: Apache-2.0
 
+Files: vendor/sha1-0.11.0/*
+Copyright: RustCrypto Developers
+License: MIT or Apache-2.0
+
 Files: vendor/sha2-0.10.9/*
 Copyright: RustCrypto Developers
 License: MIT or Apache-2.0
@@ -2338,12 +2369,20 @@ Files: vendor/usvg-0.48.1/*
 Copyright: the usvg authors
 License: Apache-2.0 or MIT
 
+Files: vendor/utf16_iter-1.1.0/*
+Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
+License: Apache-2.0 or MIT
+
 Files: vendor/utf8-zero-0.8.1/*
 Copyright: Simon Sapin <simon.sapin@exyr.org>
  Martin Algesten <martin@algesten.se>
 License: MIT or Apache-2.0
 
 Files: vendor/utf8_iter-1.0.4/*
+Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
+License: Apache-2.0 or MIT
+
+Files: vendor/utf_types-1.0.0/*
 Copyright: Henri Sivonen <hsivonen@hsivonen.fi>
 License: Apache-2.0 or MIT
 
@@ -2694,6 +2733,10 @@ Files: vendor/write-fonts-0.48.1/*
 Copyright: the write-fonts authors
 License: MIT or Apache-2.0
 
+Files: vendor/write16-1.0.0/*
+Copyright: the write16 authors
+License: Apache-2.0 or MIT
+
 Files: vendor/writeable-0.6.4/*
 Copyright: The ICU4X Project Developers
 License: Unicode-3.0
@@ -2782,7 +2825,7 @@ Files: vendor/zerofrom-derive-0.1.8/*
 Copyright: Manish Goregaokar <manishsmail@gmail.com>
 License: Unicode-3.0
 
-Files: vendor/zeroize-1.8.1/*
+Files: vendor/zeroize-1.9.2/*
 Copyright: The RustCrypto Project Developers
 License: Apache-2.0 or MIT
 
@@ -3012,6 +3055,15 @@ License: CDLA-Permissive-2.0
  5.4. "Results" means any outcome obtained by computational analysis
  of Data, including for example machine learning models and models'
  insights.
+
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation; either version 2 of the License, or (at your option) any later
+ version.
+ .
+ On Debian systems, the full text of the GNU General Public License, Version 2
+ can be found in /usr/share/common-licenses/GPL-2.
 
 License: ISC
  Permission to use, copy, modify, and/or distribute this software for any

@@ -3,14 +3,15 @@
 # setup, and leaves /etc/resolv.conf, the hosts line of /etc/nsswitch.conf and
 # /etc/network/interfaces as they were. The one allowed change is libnss-mdns adding
 # mdns4_minimal to the hosts line, Debian's way to resolve the .local names Files finds.
-# greetd is Bande's login window, which the display-manager test shows is offered, not imposed.
+# bande-greeter (with greetd) is Bande's login window, which the display-manager test shows is
+# offered, not imposed.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 takes_over=(
     systemd-resolved systemd-networkd resolvconf openresolv netplan.io connman iwd
     firewalld ufw apparmor-profiles apparmor-profiles-extra x-display-manager
 )
-allowed=(greetd)
+allowed=(bande-greeter greetd)
 candidate() {
     apt-cache policy "$1" | sed -n 's/^ *Candidate: //p'
 }

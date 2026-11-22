@@ -4,6 +4,7 @@ use bande_toolkit::ui::RichText;
 use encoding_rs::Encoding;
 
 use crate::encoding::{Decoded, LineEnding, TextEncoding, decode};
+use crate::file::Stamp;
 use crate::find::words;
 use crate::formats::{docx, html, markdown, odt, rtf};
 use crate::worker::WriteError;
@@ -93,6 +94,7 @@ pub struct Loaded {
     pub damaged: bool,
     pub lossy: bool,
     pub from_disk: bool,
+    pub stamp: Option<Stamp>,
     pub words: usize,
     pub characters: usize,
 }
@@ -111,6 +113,7 @@ impl Loaded {
             damaged: decoded.damaged,
             lossy: false,
             from_disk: true,
+            stamp: None,
         }
     }
 }

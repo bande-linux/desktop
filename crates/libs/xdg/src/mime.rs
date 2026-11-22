@@ -597,6 +597,14 @@ impl MimeDatabase {
     }
 }
 
+pub fn escape_xml(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 pub fn unescape_xml(text: &str) -> String {
     text.replace("&lt;", "<")
         .replace("&gt;", ">")

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use bande_bluetooth::{Bluetooth as BlueZ, adapter_in_kernel, shown_change};
 use bande_inbox::{Inbox, Outbox};
-use bande_network::{NetworkManager, Wired, set_strength, strength_signal, wifi_in_kernel};
+use bande_network::{NetworkManager, set_strength, strength_signal, wifi_in_kernel};
 use serde::Deserialize;
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::{Connection, MessageIterator};
@@ -226,11 +226,14 @@ fn wifi(network: &NetworkManager) -> Reading<Wifi> {
     Reading::from_answer("NetworkManager", read_wifi(network), wifi_in_kernel)
 }
 
-fn wired(network: &NetworkManager) -> Reading<Wired> {
-    Reading::from_answer("NetworkManager", network.wired(), || false)
+fn wired(network: &NetworkManager) -> Reading<bool> {
+    let connected = network.ethernets().map(|ethernets| {
+        (!ethernets.is_empty()).then(|| ethernets.iter().any(|ethernet| ethernet.connected))
+    });
+    Reading::from_answer("NetworkManager", connected, || false)
 }
 
-fn bluetooth(bluez: &BlueZ) -> Reading<Bluetooth> {
+pub fn bluetooth(bluez: &BlueZ) -> Reading<Bluetooth> {
     let radio = bluez.radio().map(|radio| {
         radio.map(|radio| Bluetooth {
             powered: radio.powered,
@@ -253,7 +256,7 @@ pub type Devices = (
     Reading<Battery>,
     Reading<Wifi>,
     Reading<Bluetooth>,
-    Reading<Wired>,
+    Reading<bool>,
 );
 
 #[derive(Debug, PartialEq)]
@@ -299,19 +302,27 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
                 crate::captive::join_network(network, &found);
             }
         }
-        Command::SetBluetooth(on) => report("switch Bluetooth", bluez.set_powered(on)),
         Command::SignIn => match network.sign_in_page() {
             Ok(Some(page)) => crate::captive::open_page(&page),
             Ok(None) => {}
             Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
         },
+        Command::Sleep => report("sleep", sleep(system)),
+        Command::LockScreen => report("lock the screen", lock_screen(system)),
+        command => run_bluetooth(bluez, &command),
+    }
+}
+
+pub fn run_bluetooth(bluez: &BlueZ, command: &Command) {
+    match command {
+        Command::SetBluetooth(on) => report("switch Bluetooth", bluez.set_powered(*on)),
         Command::ForgetGadget(address) => {
-            if let Some(device) = paired(bluez, &address) {
+            if let Some(device) = paired(bluez, address) {
                 report("forget the device", bluez.forget(&device));
             }
         }
         Command::ToggleGadget(address) => {
-            if let Some(device) = paired(bluez, &address) {
+            if let Some(device) = paired(bluez, address) {
                 let result = if device.connected {
                     bluez.disconnect(&device)
                 } else {
@@ -320,8 +331,6 @@ fn run(system: &Connection, network: &NetworkManager, bluez: &BlueZ, command: Co
                 report("connect the device", result);
             }
         }
-        Command::Sleep => report("sleep", sleep(system)),
-        Command::LockScreen => report("lock the screen", lock_screen(system)),
         _ => {}
     }
 }

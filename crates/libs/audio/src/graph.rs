@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Cursor, ErrorKind};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -58,6 +58,11 @@ pub(crate) enum Command {
         peak: Arc<AtomicU32>,
         done: Reply,
     },
+    SetProfile {
+        card: u32,
+        index: i32,
+        done: Reply,
+    },
     Plugged {
         device: u32,
         profile_device: i32,
@@ -110,12 +115,28 @@ pub(crate) struct App {
     pub icon: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ProfileState {
+    pub name: String,
+    pub description: String,
+    pub available: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CardState {
+    pub description: String,
+    pub bluetooth: bool,
+    pub profiles: BTreeMap<i32, ProfileState>,
+    pub active: Option<i32>,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct State {
     pub generation: u64,
     pub connection: u64,
     pub connected: bool,
     pub nodes: HashMap<u32, NodeState>,
+    pub cards: HashMap<u32, CardState>,
     pub links: HashMap<u32, (u32, u32)>,
     routes: HashMap<(u32, i32), Volumes>,
     ports: HashMap<(u32, i32), bool>,
@@ -299,6 +320,28 @@ fn route(object: &Object) -> Option<Route> {
     })
 }
 
+fn profile(object: &Object) -> Option<(i32, ProfileState)> {
+    let mut index = None;
+    let mut found = ProfileState {
+        available: true,
+        ..ProfileState::default()
+    };
+    for property in &object.properties {
+        match (property.key, &property.value) {
+            (sys::SPA_PARAM_PROFILE_index, Value::Int(value)) => index = Some(*value),
+            (sys::SPA_PARAM_PROFILE_name, Value::String(name)) => found.name.clone_from(name),
+            (sys::SPA_PARAM_PROFILE_description, Value::String(description)) => {
+                found.description.clone_from(description);
+            }
+            (sys::SPA_PARAM_PROFILE_available, Value::Id(id)) => {
+                found.available = id.0 != sys::SPA_PARAM_AVAILABILITY_no;
+            }
+            _ => {}
+        }
+    }
+    Some((index?, found))
+}
+
 fn default_name(value: Option<&str>) -> Option<String> {
     let json: serde_json::Value = serde_json::from_str(value?).ok()?;
     json.get("name")?.as_str().map(str::to_owned)
@@ -456,9 +499,48 @@ impl Graph {
         let seen = Rc::clone(&routes);
         let shared = Arc::clone(&self.shared);
         let commands = self.commands.clone();
+        let props = global.props;
+        let description = props
+            .and_then(|props| {
+                props
+                    .get("device.description")
+                    .or_else(|| props.get("device.nick"))
+                    .or_else(|| props.get("device.name"))
+            })
+            .unwrap_or_default()
+            .to_owned();
+        let bluetooth = props.and_then(|props| props.get("device.api")) == Some("bluez5");
+        self.shared.update(|state| {
+            state.cards.insert(
+                id,
+                CardState {
+                    description,
+                    bluetooth,
+                    ..CardState::default()
+                },
+            );
+        });
         let listener = proxy
             .add_listener_local()
             .param(move |_, kind, index, _, pod| {
+                if matches!(kind, ParamType::EnumProfile | ParamType::Profile) {
+                    let found = pod.and_then(object).as_ref().and_then(profile);
+                    shared.update(|state| {
+                        let card = state.cards.entry(id).or_default();
+                        match (kind, found) {
+                            (ParamType::EnumProfile, found) => {
+                                if index == 0 {
+                                    card.profiles.clear();
+                                }
+                                if let Some((index, found)) = found {
+                                    card.profiles.insert(index, found);
+                                }
+                            }
+                            (_, found) => card.active = found.map(|(index, _)| index),
+                        }
+                    });
+                    return;
+                }
                 let mut routes = seen.borrow_mut();
                 if kind == ParamType::Route && index == 0 {
                     routes.active.clear();
@@ -503,7 +585,12 @@ impl Graph {
                 }
             })
             .register();
-        proxy.subscribe_params(&[ParamType::EnumRoute, ParamType::Route]);
+        proxy.subscribe_params(&[
+            ParamType::EnumRoute,
+            ParamType::Route,
+            ParamType::EnumProfile,
+            ParamType::Profile,
+        ]);
         self.bound.borrow_mut().devices.insert(
             global.id,
             BoundDevice {
@@ -544,6 +631,7 @@ impl Graph {
         if bound.devices.remove(&id).is_some() {
             self.shared.update(|state| {
                 state.routes.retain(|(device, _), _| *device != id);
+                state.cards.remove(&id);
                 state.ports.retain(|(device, _), _| *device != id);
             });
         }
@@ -596,6 +684,22 @@ impl Graph {
         };
         let value = serde_json::json!({ "name": name }).to_string();
         metadata.set_property(0, key, Some("Spa:String:JSON"), Some(&value));
+        Ok(())
+    }
+
+    fn set_profile(&self, card: u32, index: i32) -> Result<(), Error> {
+        let bound = self.bound.borrow();
+        let device = bound.devices.get(&card).ok_or(Error::NoSuchDevice)?;
+        let bytes = serialize(Object {
+            type_: sys::SPA_TYPE_OBJECT_ParamProfile,
+            id: sys::SPA_PARAM_Profile,
+            properties: vec![
+                Property::new(sys::SPA_PARAM_PROFILE_index, Value::Int(index)),
+                Property::new(sys::SPA_PARAM_PROFILE_save, Value::Bool(true)),
+            ],
+        })?;
+        let pod = Pod::from_bytes(&bytes).ok_or(Error::PipeWire("invalid profile".into()))?;
+        device.proxy.set_param(ParamType::Profile, 0, pod);
         Ok(())
     }
 
@@ -778,6 +882,9 @@ fn serve(
                 done,
             } => (command_graph.set_default(direction, &name), done),
             Command::SetLevel { id, change, done } => (command_graph.set_level(id, change), done),
+            Command::SetProfile { card, index, done } => {
+                (command_graph.set_profile(card, index), done)
+            }
             Command::Play {
                 samples,
                 gain,

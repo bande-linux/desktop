@@ -498,6 +498,7 @@ impl FrameScheduler {
                     compositor.take_redraw_on(&name);
                     self.wanted = false;
                     compositor.animate_on(&name, vblank.time);
+                    compositor.release_timed_commits_on(&name, vblank.time);
                     compositor.latch_on(&name);
                     let deadline = self.clock.deadline(vblank);
                     let submission = output.submit(compositor, &name).inspect_err(|_| {

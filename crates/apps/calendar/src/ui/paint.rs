@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use bande_datetime::Month;
 use bande_l10n::tr;
+use bande_toolkit::ui::focus_ring_for;
 use bande_toolkit::{Color, Point, Radius, Rect, Scheme, Shape, TextAlign, TextRole, TextStyle};
 use jiff::Timestamp;
 use jiff::ToSpan;
@@ -13,7 +14,8 @@ use super::geometry::{
 };
 use super::painter::{Painter, parse_color};
 use super::{Drag, Hit, Mode, Part, ViewModel};
-use crate::store::Found;
+use crate::store::{Found, Library};
+use bande_datetime::DateFormats;
 
 const MONTH_HEADER: f32 = 28.0;
 const MONTH_LINE: f32 = 18.0;
@@ -124,9 +126,8 @@ fn instant(day: Date, model: &ViewModel) -> Timestamp {
         .unwrap_or(Timestamp::UNIX_EPOCH)
 }
 
-fn summary(model: &ViewModel, found: &Found) -> String {
-    let summary = model
-        .library
+pub(super) fn summary(library: &Library, found: &Found) -> String {
+    let summary = library
         .event(found)
         .map(|event| event.summary.clone())
         .unwrap_or_default();
@@ -136,11 +137,15 @@ fn summary(model: &ViewModel, found: &Found) -> String {
     }
 }
 
-fn time_label(model: &ViewModel, at: &jiff::Zoned) -> String {
-    let (time, period) = model.formats.time(at);
-    match period {
-        Some(period) => format!("{time} {period}"),
-        None => time,
+pub(super) fn when(formats: &DateFormats, found: &Found) -> String {
+    let start = &found.occurrence.start;
+    match found.occurrence.all_day {
+        true => formats.date(start, true),
+        false => format!(
+            "{}, {}",
+            formats.date(start, true),
+            formats.clock_time(start)
+        ),
     }
 }
 
@@ -212,6 +217,19 @@ fn preview_of(model: &ViewModel, found: &Found) -> Option<(DateTime, DateTime, b
     }
 }
 
+fn day_ring(model: &ViewModel, day: Date, frame: Rect, painter: &mut ViewPainter) {
+    if model.day_ring && day == model.focus {
+        focus_ring_for(
+            &model.palette,
+            Shape::rounded(
+                frame.inset((frame.width.min(frame.height) / 8.0).min(4.0)),
+                Radius::S,
+            ),
+            &mut painter.items,
+        );
+    }
+}
+
 fn week_number(days: &[Date]) -> Option<i8> {
     days.get(3).map(|day| day.iso_week_date().week())
 }
@@ -272,6 +290,7 @@ fn day_header(model: &ViewModel, grid: &TimeGrid, painter: &mut ViewPainter) {
             badge,
             TextAlign::Center,
         );
+        day_ring(model, day, frame, painter);
         painter.hit(frame, Hit::MonthDay(day));
     }
     painter.line(
@@ -433,7 +452,7 @@ fn paint_week(
             rect,
             color,
             selected,
-            &summary(model, found),
+            &summary(model.library, found),
             None,
         );
         painter.hit(rect, Hit::Event(*index, Part::Body));
@@ -509,7 +528,7 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
         if hour > 0 && hour < 24 {
             let label = at_minutes(today, hour * 60)
                 .to_zoned(model.zone.clone())
-                .map(|at| time_label(model, &at))
+                .map(|at| model.formats.clock_time(&at))
                 .unwrap_or_default();
             painter.label(
                 &label,
@@ -582,7 +601,7 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
             ));
             let time = start
                 .to_zoned(model.zone.clone())
-                .map(|at| time_label(model, &at))
+                .map(|at| model.formats.clock_time(&at))
                 .ok();
             event_block(
                 model,
@@ -590,7 +609,7 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
                 rect,
                 color,
                 selected,
-                &summary(model, found),
+                &summary(model.library, found),
                 time.as_deref(),
             );
             painter.hit(rect, Hit::Event(*found_index, Part::Body));
@@ -644,7 +663,7 @@ fn paint_hours(model: &ViewModel, grid: &TimeGrid, shown: &[Found], painter: &mu
             );
             let label = start
                 .to_zoned(model.zone.clone())
-                .map(|at| time_label(model, &at))
+                .map(|at| model.formats.clock_time(&at))
                 .ok();
             event_block(
                 model,
@@ -766,9 +785,13 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
             if !month.contains(*day) {
                 painter.fill(cell, 0.0, palette.well.with_opacity(0.35));
             }
+            day_ring(model, *day, cell, painter);
             painter.hit(cell, Hit::MonthDay(*day));
             let number = match day.day() {
-                1 => format!("{} {}", day.strftime("%b"), day.day()),
+                1 => day.to_zoned(model.zone.clone()).map_or_else(
+                    |_| day.day().to_string(),
+                    |at| model.formats.date(&at, false),
+                ),
                 _ => day.day().to_string(),
             };
             let style = TextStyle::role(
@@ -816,7 +839,7 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
                 false => text_on(model, color),
             };
             painter.label(
-                &summary(model, found),
+                &summary(model.library, found),
                 TextStyle::new(11.5, ink).weight(TextStyle::SEMIBOLD),
                 Rect::new(rect.x + 6.0, rect.y, rect.width - 8.0, rect.height),
                 TextAlign::Start,
@@ -875,7 +898,7 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
                             .unwrap_or(found.occurrence.start.clone())
                     },
                 );
-                let time = time_label(model, &start);
+                let time = model.formats.clock_time(&start);
                 let time_style = TextStyle::new(
                     11.0,
                     match selected {
@@ -895,7 +918,7 @@ fn paint_month(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut Vie
                     rect.height,
                 );
                 painter.label(
-                    &summary(model, found),
+                    &summary(model.library, found),
                     TextStyle::new(11.5, ink),
                     text_rect,
                     TextAlign::Start,
@@ -948,7 +971,7 @@ fn paint_year(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut View
             height,
         );
         let current = first.year() == today.year() && first.month() == today.month();
-        let title = first.strftime("%B").to_string();
+        let title = model.formats.month_name(first.month());
         let title_rect = Rect::new(frame.x + 4.0, frame.y, frame.width, 24.0);
         painter.label(
             &title,
@@ -1017,6 +1040,7 @@ fn paint_year(model: &ViewModel, shown: &[Found], area: Rect, painter: &mut View
                     cell,
                     TextAlign::Center,
                 );
+                day_ring(model, *day, cell, painter);
                 painter.hit(cell, Hit::YearDay(*day));
             }
         }
@@ -1072,19 +1096,12 @@ fn paint_results(model: &ViewModel, area: Rect, painter: &mut ViewPainter) {
         let color = calendar_color(model, found.calendar);
         painter.fill(Rect::new(row.x + 8.0, row.y + 10.0, 8.0, 8.0), 4.0, color);
         painter.label(
-            &summary(model, found),
+            &summary(model.library, found),
             TextStyle::role(TextRole::BodyStrong, palette.ink),
             Rect::new(row.x + 24.0, row.y + 4.0, row.width - 32.0, 20.0),
             TextAlign::Start,
         );
-        let when = match found.occurrence.all_day {
-            true => model.formats.date(&found.occurrence.start, true),
-            false => format!(
-                "{}, {}",
-                model.formats.date(&found.occurrence.start, true),
-                time_label(model, &found.occurrence.start)
-            ),
-        };
+        let when = when(model.formats, found);
         painter.label(
             &when,
             TextStyle::role(TextRole::Callout, palette.ink2),

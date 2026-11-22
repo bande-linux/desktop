@@ -10,7 +10,8 @@ use std::fmt;
 
 use icu_datetime::fieldsets::{DE, E, M, MD, MDE, T, YM, YMD};
 use icu_datetime::input::{Date, DateTime, Time};
-use icu_datetime::parts::MONTH;
+use icu_datetime::options::YearStyle;
+use icu_datetime::parts::{DAY, MONTH, YEAR};
 use icu_datetime::{DateTimeFormatterPreferences, FixedCalendarDateTimeFormatter};
 use icu_locale_core::preferences::extensions::unicode::keywords::HourCycle;
 use icu_locale_core::{Locale, locale};
@@ -36,6 +37,16 @@ pub fn posix_locale(value: &str) -> Locale {
     language.parse().unwrap_or(FALLBACK)
 }
 
+/// The locale named by the first set of `variables`, such as `["LC_ALL", "LC_NUMERIC", "LANG"]`.
+pub fn env_locale(variables: &[&str]) -> Locale {
+    let value = variables
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .find(|value| !value.is_empty())
+        .unwrap_or_default();
+    posix_locale(&value)
+}
+
 #[derive(Debug, Clone)]
 pub struct DateFormats {
     preferences: DateTimeFormatterPreferences,
@@ -52,6 +63,37 @@ fn date_of(at: &Zoned) -> Option<Date<Gregorian>> {
 
 fn time_of(at: &Zoned) -> Option<Time> {
     Time::try_new(at.hour() as u8, at.minute() as u8, 0, 0).ok()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Field {
+    Year,
+    Month,
+    Day,
+}
+
+const ISO_ORDER: [Field; 3] = [Field::Year, Field::Month, Field::Day];
+
+fn full_year(digits: &str) -> Option<i16> {
+    let year: i16 = digits.parse().ok()?;
+    Some(match digits.len() {
+        1 | 2 => 2000 + year,
+        _ => year,
+    })
+}
+
+fn hours_minutes(body: &str) -> Option<(i8, i8)> {
+    match body.split_once([':', '.', 'h']) {
+        Some((hours, minutes)) => Some((hours.trim().parse().ok()?, minutes.trim().parse().ok()?)),
+        None if body.len() > 2 => {
+            let split = body.len() - 2;
+            Some((
+                body.get(..split)?.parse().ok()?,
+                body.get(split..)?.parse().ok()?,
+            ))
+        }
+        None => Some((body.parse().ok()?, 0)),
+    }
 }
 
 #[derive(Default)]
@@ -174,12 +216,7 @@ impl DateFormats {
     }
 
     pub fn from_env() -> Self {
-        let value = LOCALE_VARIABLES
-            .iter()
-            .filter_map(|name| std::env::var(name).ok())
-            .find(|value| !value.is_empty())
-            .unwrap_or_default();
-        Self::for_locale(&posix_locale(&value))
+        Self::for_locale(&env_locale(&LOCALE_VARIABLES))
     }
 
     pub fn clock(&self, at: &Zoned) -> String {
@@ -271,6 +308,105 @@ impl DateFormats {
     pub fn clock_time(&self, at: &Zoned) -> String {
         let (time, period) = self.time(at);
         period.map_or(time.clone(), |period| format!("{time} {period}"))
+    }
+
+    pub fn numeric_date(&self, day: jiff::civil::Date) -> String {
+        FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+            self.preferences,
+            YMD::short().with_year_style(YearStyle::Full),
+        )
+        .ok()
+        .zip(gregorian(day))
+        .map(|(formatter, date)| formatter.format(&date).to_string())
+        .unwrap_or_else(|| day.strftime("%Y-%m-%d").to_string())
+    }
+
+    fn date_order(&self) -> [Field; 3] {
+        let fields = FixedCalendarDateTimeFormatter::<Gregorian, _>::try_new(
+            self.preferences,
+            YMD::short().with_year_style(YearStyle::Full),
+        )
+        .ok()
+        .zip(gregorian(jiff::civil::date(2001, 2, 3)))
+        .and_then(|(formatter, date)| {
+            let mut parts = Parts::default();
+            formatter.format(&date).write_to_parts(&mut parts).ok()?;
+            let fields: Vec<Field> = parts
+                .0
+                .iter()
+                .filter_map(|(part, _)| match *part {
+                    Some(YEAR) => Some(Field::Year),
+                    Some(MONTH) => Some(Field::Month),
+                    Some(DAY) => Some(Field::Day),
+                    _ => None,
+                })
+                .collect();
+            <[Field; 3]>::try_from(fields).ok()
+        });
+        fields.unwrap_or(ISO_ORDER)
+    }
+
+    /// Reads a numeric date typed in this locale's field order, or in ISO order when it starts
+    /// with a full year.
+    pub fn parse_date(&self, text: &str) -> Option<jiff::civil::Date> {
+        let numbers: Vec<&str> = text
+            .split(|character: char| !character.is_ascii_digit())
+            .filter(|number| !number.is_empty())
+            .collect();
+        let [first, second, third] = numbers.as_slice() else {
+            return None;
+        };
+        let order = match first.len() > 2 {
+            true => ISO_ORDER,
+            false => self.date_order(),
+        };
+        let (mut year, mut month, mut day) = (None, None, None);
+        for (field, number) in order.into_iter().zip([first, second, third]) {
+            match field {
+                Field::Year => year = full_year(number),
+                Field::Month => month = number.parse().ok(),
+                Field::Day => day = number.parse().ok(),
+            }
+        }
+        jiff::civil::Date::new(year?, month?, day?).ok()
+    }
+
+    /// Reads a time of day typed with this locale's or the English day periods, or on a 24-hour
+    /// clock.
+    pub fn parse_time(&self, text: &str) -> Option<jiff::civil::Time> {
+        let lower = text.trim().to_lowercase();
+        let period = |hour: i8| {
+            jiff::civil::date(2026, 1, 1)
+                .at(hour, 0, 0, 0)
+                .to_zoned(jiff::tz::TimeZone::UTC)
+                .ok()
+                .and_then(|at| self.time(&at).1)
+                .map(|period| period.to_lowercase())
+        };
+        let periods = [
+            (period(1), false),
+            (period(13), true),
+            (Some("am".to_owned()), false),
+            (Some("pm".to_owned()), true),
+        ];
+        let (body, afternoon) = periods
+            .iter()
+            .filter_map(|(marker, afternoon)| Some((marker.as_deref()?, *afternoon)))
+            .find_map(|(marker, afternoon)| {
+                lower
+                    .strip_suffix(marker)
+                    .or_else(|| lower.strip_prefix(marker))
+                    .map(|body| (body.trim(), Some(afternoon)))
+            })
+            .unwrap_or((lower.as_str(), None));
+        let (hours, minutes) = hours_minutes(body)?;
+        let hours = match afternoon {
+            Some(_) if !(1..=12).contains(&hours) => return None,
+            Some(true) if hours < 12 => hours + 12,
+            Some(false) if hours == 12 => 0,
+            _ => hours,
+        };
+        jiff::civil::Time::new(hours, minutes, 0, 0).ok()
     }
 
     pub fn date(&self, at: &Zoned, with_year: bool) -> String {

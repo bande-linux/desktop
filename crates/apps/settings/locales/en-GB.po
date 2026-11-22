@@ -22,6 +22,9 @@ msgstr "Colour profiles"
 msgid "Choose a Color Profile"
 msgstr "Choose a Colour Profile"
 
+msgid "Settings checks that the network’s server is the one your organization runs"
+msgstr "Settings checks that the network’s server is the one your organisation runs"
+
 msgid "Trash"
 msgstr "Bin"
 

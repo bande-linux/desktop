@@ -217,9 +217,18 @@ impl State {
             }
             (None, None) => return,
         }
+        self.choose_exclusive_layer();
+    }
+
+    pub(crate) fn choose_exclusive_layer(&mut self) {
         let holder = self
             .exclusive_candidates
             .iter()
+            .filter(|(candidate, _)| {
+                candidate
+                    .client()
+                    .is_none_or(|client| !self.watchdog.is_unresponsive(&client.id()))
+            })
             .max_by_key(|(_, layer)| *layer == Layer::Overlay)
             .map(|(candidate, _)| candidate.clone());
         if holder.as_ref() == self.exclusive_layer.as_ref().map(|layer| &layer.surface) {

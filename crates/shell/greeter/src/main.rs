@@ -278,7 +278,7 @@ impl Greeter {
         screen.set_devices(
             self.corner.battery,
             self.corner.wifi.as_ref(),
-            self.corner.wired.as_ref(),
+            self.corner.wired,
         );
         if !self.users.is_empty() {
             let (listed, peers) = self.peer_list();
@@ -812,11 +812,8 @@ impl Surfaces for Greeter {
                 let Some(corner) = self.devices.as_mut().and_then(Devices::latest) else {
                     return;
                 };
-                self.screen.set_devices(
-                    corner.battery,
-                    corner.wifi.as_ref(),
-                    corner.wired.as_ref(),
-                );
+                self.screen
+                    .set_devices(corner.battery, corner.wifi.as_ref(), corner.wired);
                 self.corner = corner;
                 if let Some(system) = &self.system {
                     self.power_answers = ask_powers(system);

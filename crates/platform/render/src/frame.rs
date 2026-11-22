@@ -10,8 +10,8 @@ use smithay::reexports::rustix::ioctl;
 
 use crate::{
     ATTACHMENT, BYTES_PER_PIXEL, COLOR_LAYERS, DeviceExport, MappedExport, Program, Rect,
-    RenderError, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer, VulkanTexture, barrier,
-    disjoint,
+    RenderError, TRANSFER_DESTINATION, TRANSFER_SOURCE, VulkanFramebuffer, VulkanRenderer,
+    VulkanTexture, barrier, disjoint, hand_over,
 };
 
 mod blur;
@@ -157,6 +157,7 @@ pub struct VulkanFrame<'frame, 'buffer> {
     turn: Transform,
     area: (i32, i32),
     drawn: Vec<Rect>,
+    direct: bool,
     finished: bool,
     _framebuffer: PhantomData<&'frame mut VulkanFramebuffer<'buffer>>,
 }
@@ -188,11 +189,12 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             .targets
             .get(&framebuffer.id)
             .ok_or(RenderError::ForeignResource)?;
-        let (image, view, format, rendered) = (
+        let (image, view, format, rendered, direct) = (
             target.image.image,
             target.image.view,
             target.format,
             target.rendered,
+            target.direct,
         );
         let bounds = Rect::new(0, 0, target.image.width, target.image.height);
         let area = turn
@@ -205,26 +207,21 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
         renderer.record_copies();
         let device = &renderer.device;
         let commands = renderer.command_buffer;
-        let before = if rendered {
-            ATTACHMENT
-        } else {
-            (
-                vk::ImageLayout::UNDEFINED,
-                vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-                vk::AccessFlags2::NONE,
-            )
-        };
-        barrier(
-            device,
-            commands,
-            image,
-            before,
-            (
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
-                vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-            ),
+        let drawing = (
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+            vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
         );
+        let unwritten = (
+            vk::ImageLayout::UNDEFINED,
+            vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+            vk::AccessFlags2::NONE,
+        );
+        match (direct, rendered) {
+            (true, true) => hand_over(device, commands, image, renderer.queue_family, true),
+            (_, false) => barrier(device, commands, image, unwritten, drawing),
+            (false, true) => barrier(device, commands, image, ATTACHMENT, drawing),
+        }
         let frame = Self {
             renderer,
             target: framebuffer.id,
@@ -238,6 +235,7 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             turn,
             area: (area.w, area.h),
             drawn: Vec::new(),
+            direct,
             finished: false,
             _framebuffer: PhantomData,
         };
@@ -502,6 +500,9 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
                 .cmd_end_rendering(self.renderer.command_buffer)
         };
         let drawn = disjoint(std::mem::take(&mut self.drawn), self.bounds);
+        if self.direct {
+            return self.finish_direct(&drawn);
+        }
         let export = self
             .renderer
             .targets
@@ -548,6 +549,92 @@ impl<'frame, 'buffer> VulkanFrame<'frame, 'buffer> {
             target.rendered = true;
         }
         written
+    }
+
+    fn finish_direct(&mut self, drawn: &[Rect]) -> Result<(), RenderError> {
+        if let Some(colour) = self.renderer.output_colour.clone()
+            && !drawn.is_empty()
+        {
+            match self.convert_output(colour, drawn) {
+                Ok(scratch) => self.record_converted_copy(scratch, drawn),
+                Err(error) => {
+                    tracing::warn!("showing colours unconverted: {error}");
+                    self.renderer.output_colour = None;
+                }
+            }
+        }
+        let renderer = &mut *self.renderer;
+        hand_over(
+            &renderer.device,
+            renderer.command_buffer,
+            self.image,
+            renderer.queue_family,
+            false,
+        );
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it,
+        // and every rendering it began has ended.
+        unsafe { renderer.device.end_command_buffer(renderer.command_buffer) }?;
+        renderer.submit_and_wait()?;
+        renderer.retire_unused_blur_chains();
+        renderer.recycle_staging();
+        if let Some(target) = renderer.targets.get_mut(&self.target) {
+            target.rendered = true;
+        }
+        Ok(())
+    }
+
+    fn record_converted_copy(&self, scratch: vk::Image, drawn: &[Rect]) {
+        let device = &self.renderer.device;
+        let commands = self.renderer.command_buffer;
+        let regions: Vec<_> = drawn
+            .iter()
+            .map(|rect| {
+                let offset = vk::Offset3D {
+                    x: rect.x,
+                    y: rect.y,
+                    z: 0,
+                };
+                vk::ImageCopy::default()
+                    .src_subresource(COLOR_LAYERS)
+                    .src_offset(offset)
+                    .dst_subresource(COLOR_LAYERS)
+                    .dst_offset(offset)
+                    .extent(vk::Extent3D {
+                        width: rect.width.unsigned_abs(),
+                        height: rect.height.unsigned_abs(),
+                        depth: 1,
+                    })
+            })
+            .collect();
+        barrier(
+            device,
+            commands,
+            self.image,
+            blur::SAMPLED,
+            TRANSFER_DESTINATION,
+        );
+        // SAFETY: the frame holds the renderer mutably from `begin_commands` until `finish_frame`
+        // ends the buffer, so `command_buffer` is recording and only this frame records into it;
+        // `convert_output` left `scratch` in `TRANSFER_SRC_OPTIMAL`, the barrier above moved the
+        // target to `TRANSFER_DST_OPTIMAL`, and both have the frame's size, which holds `drawn`.
+        unsafe {
+            device.cmd_copy_image(
+                commands,
+                scratch,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                self.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+            );
+        }
+        barrier(
+            device,
+            commands,
+            self.image,
+            TRANSFER_DESTINATION,
+            ATTACHMENT,
+        );
     }
 
     fn record_output(&mut self, export: &DeviceExport, drawn: &[Rect]) -> Option<vk::Image> {

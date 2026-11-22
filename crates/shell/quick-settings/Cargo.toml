@@ -1,6 +1,6 @@
 [package]
 name = "bande-quick-settings"
-description = "Bande Quick Settings: Wi-Fi, Bluetooth, Do Not Disturb and sound, and the volume and brightness HUD, as a part of bande-shell"
+description = "Bande Quick Settings: radios, Do Not Disturb, Night Light, style, power mode and sound, and the volume and brightness HUD, as a part of bande-shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,12 +11,14 @@ repository.workspace = true
 accesskit.workspace = true
 tracing.workspace = true
 bande-audio.workspace = true
+bande-bar.workspace = true
 bande-bluetooth.workspace = true
+bande-bus.workspace = true
+bande-config.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-network.workspace = true
 bande-notify.workspace = true
-bande-power.workspace = true
 bande-sound.workspace = true
 bande-status.workspace = true
 bande-toolkit.workspace = true

@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
-use bande_app::View;
+use bande_app::{Dropping, FileDrop, View};
 use bande_inbox::Inbox;
 use bande_l10n::{text, tr};
 use bande_thumbnails::{Request as ThumbRequest, ThumbnailSize, Thumbnails};
@@ -64,6 +64,7 @@ pub enum Signal {
 pub enum Request {
     ShowInfo,
     Changed,
+    Open(Vec<PathBuf>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,6 +124,7 @@ pub struct FileView {
     hidden: bool,
     full_screen: bool,
     requests: Vec<Request>,
+    drop: FileDrop,
 }
 
 fn failure_text(failure: &Failure) -> String {
@@ -210,13 +212,16 @@ impl FileView {
             hidden: false,
             full_screen: false,
             requests: Vec::new(),
+            drop: FileDrop::default(),
         };
         view.fill_sidebar();
         view.load_current();
         if view.paths.is_empty() {
             let (title, detail) = (
                 tr!("No file is open"),
-                tr!("Open an image or a PDF document with File ▸ Open… or from Files."),
+                tr!(
+                    "Open an image or a PDF document with File ▸ Open…, from Files or by dropping it here."
+                ),
             );
             view.with_canvas(|canvas| canvas.show_message(&title, &detail));
         }
@@ -1130,6 +1135,14 @@ impl View for FileView {
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
         if let WindowEvent::ToplevelChanged(state) = &event {
             self.set_hidden(state.suspended);
+        }
+        match self.drop.event(window, &event, Path::is_file) {
+            Dropping::Over => return true,
+            Dropping::Dropped(paths) => {
+                self.requests.push(Request::Open(paths));
+                return true;
+            }
+            Dropping::Other => {}
         }
         let handled = match window.drive(&mut self.ui, event) {
             Ok(Some(WindowEvent::Input(input))) => self.key(&input),

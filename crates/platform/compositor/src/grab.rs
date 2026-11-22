@@ -178,6 +178,26 @@ impl State {
         Some(start)
     }
 
+    pub(crate) fn keyboard_serial_of(
+        &self,
+        seat: &WlSeat,
+        serial: Serial,
+        surface: &WlSurface,
+    ) -> bool {
+        let Some(keyboard) =
+            Seat::<State>::from_resource(seat).and_then(|seat| seat.get_keyboard())
+        else {
+            return false;
+        };
+        let focused = keyboard
+            .current_focus()
+            .is_some_and(|focus| focus.client() == surface.client());
+        focused
+            && keyboard
+                .last_enter()
+                .is_some_and(|entered| entered <= serial)
+    }
+
     fn undo_move(&self, surface: &WlSurface) -> Option<Undo> {
         let window = &self.windows[self.window_index(surface)?];
         let placement = match window.tile {
@@ -194,6 +214,9 @@ impl State {
 
     pub(crate) fn request_move(&mut self, surface: &WlSurface, seat: &WlSeat, serial: Serial) {
         let Some(mut start) = self.grab_start(seat, serial, surface) else {
+            if self.take_over_touch(serial, surface) {
+                self.move_from_title_bar(surface, BTN_LEFT);
+            }
             return;
         };
         if let Some(pointer) = self.seat.get_pointer() {
@@ -253,6 +276,9 @@ impl State {
         edges: ResizeEdge,
     ) {
         let Some(start) = self.grab_start(seat, serial, surface) else {
+            if self.take_over_touch(serial, surface) {
+                self.resize_from_frame(surface, edges, BTN_LEFT);
+            }
             return;
         };
         if self.begin_resize(surface, edges) {

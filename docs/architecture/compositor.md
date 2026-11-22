@@ -93,24 +93,38 @@ when they reach the screen is Bande's own.
   title bar. Everything else in the row is the client's, so free tab-row space stays its own
   move request. Full screen removes the well. The rule is the app id plus client-side, so a build
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
-- **dma-buf.** `linux-dmabuf-v1` serves single-plane ARGB8888 and XRGB8888 buffers, and NV12 for
-  video (one dmabuf for both planes, BT.709 limited range, converted in the `video` shader; on a
-  real GPU that reports importing LINEAR NV12, its planes are sampled in place when stride and offsets are multiples of 16, and
-  otherwise copied to two textures), with the
-  LINEAR modifier: version 3 headless, version 4 with feedback (main device and a scanout tranche
-  of the primary plane's formats) on a DRM device, whose node accepted dma-bufs carry so that
-  `DrmCompositor` can scan them out. A dma-buf is imported once as a Vulkan buffer and its
-  damaged rows are copied into the surface's texture, so any stride works on drivers without
-  `VK_EXT_image_drm_format_modifier`. Uploads are submitted with the frame, or on their own when
-  no frame is rendered (a covered window that keeps drawing, direct scanout), so pending staging
-  memory cannot pile up. Explicit sync is `linux-drm-syncobj-v1`, offered when the DRM device
-  supports syncobj eventfds.
+- **dma-buf.** `linux-dmabuf-v1` serves every format and modifier the GPU reports it can sample
+  from an imported dma-buf (`VK_EXT_image_drm_format_modifier`, asked once per device in
+  `render/src/formats.rs`): ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and
+  P010 for video (one dma-buf for both planes, BT.709 limited range, converted in the `video`
+  shader), each with its tiled and compressed modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and
+  NV12 always. On a DRM device it is version 4 with feedback: the main tranche names the render
+  device and a scanout tranche lists the primary plane's formats and modifiers that the GPU can
+  also sample; headless it is version 3 with LINEAR only. A buffer is accepted only with exactly
+  the planes its modifier has, all in one dma-buf, and carries the DRM node so that
+  `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan
+  image with its modifier and explicit plane layout and sampled in place every frame (acquired
+  from the foreign queue), without a copy. A LINEAR buffer that cannot be sampled that way
+  (offset or stride not a multiple of 16, or a driver or lavapipe without the extension) is
+  imported as a Vulkan buffer and its damaged rows copied into the surface's texture, so any
+  stride works. Uploads are submitted with the frame, or on their own when no frame is rendered
+  (a covered window that keeps drawing, direct scanout), so pending staging memory cannot pile
+  up. Explicit sync is `linux-drm-syncobj-v1`, offered when the DRM device supports syncobj
+  eventfds.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
   `--drm-device`) through a libseat session and drives every connected connector on its own
-  CRTC, each with its own `DrmCompositor`, frame clock and scheduler; it renders into
+  CRTC, each with its own `DrmCompositor`, frame clock and scheduler. The renderer runs on the
+  Vulkan device whose `VK_EXT_physical_device_drm` primary or render node is that card, so the
+  GPU that drives the display also composes and the dma-buf feedback names the right device;
+  without a match it takes an integrated GPU before a discrete one. When the GPU can render into
+  a tiled modifier of the primary plane, the frames are drawn straight into GBM scanout buffers
+  (`GbmAllocator` with `RENDERING | SCANOUT`, the modifier chosen by GBM among those the plane
+  and the GPU share), handed between the GPU and the display through the foreign queue; a colour
+  profile converts into a scratch image and copies back. Otherwise, or after such a buffer once
+  fails to render (the output then switches for the session), it renders into
   dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
   drawn regions copied out, by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
-  otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. udev change
+  otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. Only the first card with a connected display is driven; displays on a second GPU stay dark. udev change
   events probe the connectors again, so plugging a display in or out takes effect without
   restarting the session. A connector that goes away is held as lost for three seconds before it
   counts as gone, so a monitor's own hotplug pulse (many pulse it about 0.6 s after waking, which
@@ -120,7 +134,11 @@ when they reach the screen is Bande's own.
   change event. The link is set good again in the frame path, after any pending flip. A display is named by its EDID (maker from the PNP id, model and serial from the
   descriptors, falling back to the product code and serial number; two displays with the same
   name are told apart by their connector). A fullscreen opaque dma-buf window is put on the
-  primary plane without composition.
+  primary plane without composition. A display whose connector can change its refresh without
+  a mode-set gets variable refresh while a full-screen window on its active workspace says its
+  content is a game or video (`wp_content_type_v1`), unless `variable-refresh #false` is in its
+  settings (Settings ▸ Displays ▸ Variable refresh rate in full screen). Tearing page flips are
+  not offered: Smithay 0.7's `DrmCompositor` cannot ask for `DRM_MODE_PAGE_FLIP_ASYNC`.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
   (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`
   (followed live through `org.bande.Config`): the arrangement remembered for exactly the
@@ -167,7 +185,7 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Size of text and controls (Default, then Larger Text to More Space, each
-  shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation and Colour profile. Every change is written to
+  shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation, Variable refresh rate in full screen and Colour profile. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s.
 
@@ -255,7 +273,7 @@ when they reach the screen is Bande's own.
   show-desktop pinch, with `momentum` above 2 workspaces/s; a new swipe during the settle
   takes over from where the row is. Keyboard (Super is the system key and Ctrl belongs to
   apps, so `Ctrl+Left/Right` alone is not taken): `Ctrl+Super+Left/Right` switch to the
-  neighbour. A window being dragged by its title
+  neighbour, and `Shift+Ctrl+Super+Left/Right` take the focused window along. A window being dragged by its title
   bar comes along to whichever workspace the user switches to. A switch started while the
   row is still moving keeps its velocity. `bande_app_v1.move_to_workspace`
   moves a window from its menu without following it: it slides off the screen and the
@@ -293,15 +311,21 @@ when they reach the screen is Bande's own.
   icons and name painted on the CPU with `bande-graphics` into memory buffers at the output
   scale, and window thumbnails drawn from the windows' own textures as in the overview. App
   names and icons come from desktop entries through `bande-xdg`, cached, and reread at most
-  every 30 s while an app is unknown. `access.rs` publishes the card through AccessKit (a
-  window holding a list box whose selected option has the focus) only while it shows.
+  every 30 s while an app is unknown. `access.rs` publishes the compositor's own UI through AccessKit, each as its own
+  window, with actions coming back through one channel: the switcher card (a list box whose
+  selected option has the focus) only while it shows; the window and Tile menus (the
+  toolkit's menu nodes, focus on the highlighted item); the overview (a list of windows and a
+  tab list of workspaces); the free-half panel (a list of windows); and the title bar or
+  Browser control well of the focused window (title-bar buttons that click, without taking the
+  screen reader's focus).
   `recall.rs` keeps the window memory file (written by its own thread, the latest state winning and flushed at exit, so a slow disk never holds a frame), `assist.rs` the free-half panel, which reuses the
   overview's `arrange` and the switcher's thumbnails.
 - **Force Quit** (`force_quit/`): the compositor's own window, so it opens when the shell or
   the focused app hangs; [behaviour](behaviour.md) has the rules. Apps are killed through a
   pidfd taken at connection, and through `cgroup.kill` when they run in their own scope. The
   shell is listed as "Taskbar & Desktop" with Relaunch, which kills it for the supervisor to
-  start again.
+  start again; a shell that leaves a ping unanswered loses any keyboard-exclusive layer focus
+  at 2 s and is relaunched the same way at 5 s.
 - **Not responding.** Whenever the user interacts with a window, and for every app when Force
   Quit opens, the compositor pings the app through `xdg_wm_base.ping` (at most once a second),
   and shell clients, whose surfaces are not toplevels, through `bande_shell_v1.ping`. The loop
@@ -419,13 +443,24 @@ Status is what `crates/platform/compositor` serves on `main`.
 | :--- | :--- | :--- |
 | `wl_compositor` / `wl_subcompositor` | Core surfaces and hierarchy | implemented |
 | `wl_shm` | Shared-memory buffers | implemented |
-| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | pointer and keyboard implemented, touch not |
+| `wl_seat` (`pointer`, `keyboard`, `touch`) | Input | implemented; a touchscreen maps to the first display; a finger on a client surface goes to it as `wl_touch` (a move or resize asked with that touch's serial becomes ours), and a finger on our title bars and frame zones, menus, overview, switcher or free-half panel, or while a popup holds the grab, works as the left button; a swipe up from the display's bottom edge opens the overview |
+| `zwp_tablet_manager_v2` | Pen tablets and styluses | implemented: a client that bound it gets the pen on its surfaces (pressure, tilt, buttons); elsewhere, and for every other client, the pen moves the pointer, its tip is the left button and a barrel button the right |
 | `linux-dmabuf-v1` | Zero-copy GPU buffer import | implemented (see above) |
 | `linux-drm-syncobj-v1` | Explicit sync | implemented where the device supports syncobj eventfds |
-| `xdg_wm_base` | Application windows and popups | implemented; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
+| `xdg_wm_base` | Application windows and popups | implemented; `wm_capabilities` lists maximize, fullscreen, minimize and the window menu; `set_fullscreen` moves the window to the output it names; a minimized or hidden window, a window on a workspace out of view once the workspaces settle, and every window while the session is locked, get the `suspended` state |
 | `wlr-layer-shell-unstable-v1` | Taskbar, notifications, overlays | implemented |
 | `wp_fractional_scale_v1` / `wp_viewporter` | HiDPI and fractional scaling | implemented |
 | `wp_presentation` | Presentation timing, VSync | implemented |
+| `wp_fifo_v1` | FIFO presentation without frame callbacks (Mesa WSI, SDL, Proton) | implemented: a barrier is lifted when the frame that latched it is presented, a hidden window's at the next presentation of its display |
+| `wp_commit_timing_v1` | Commits that wait for a presentation time | implemented: released at the start of the first frame shown at or after the time; a waiting commit keeps its display's frames coming |
+| `wp_content_type_v1` | Game, video or photo content | implemented; game and video in full screen turn on variable refresh |
+| `wp_single_pixel_buffer_v1` | One-colour buffers (backgrounds, letterboxing) | implemented, drawn as a solid fill |
+| `wp_alpha_modifier_v1` | Surface opacity set by the client | implemented |
+| `xdg_system_bell_v1` | The terminal bell | implemented: the window's app asks for attention in the taskbar unless it is focused |
+| `wp_tearing_control_v1` | Tearing page flips for games | not served: needs async page flips in Smithay's `DrmCompositor` |
+| `xdg_toplevel_icon_v1` | A window's own icon | not served: the taskbar shows the app's desktop entry icon, and `bande_shell_v1` has no way to pass a client icon |
+| `wp_drm_lease_v1` | Lease a VR headset's connector | not served |
+| `wp_color_management_v1` | HDR and wide-gamut client content | not served (see the colour paragraph above) |
 | `ext-session-lock-v1` | Screen locking | implemented, `bande-lock` only |
 | `wl_data_device_manager` | Clipboard and drag and drop | implemented |
 | `zwp_primary_selection_v1` | Middle-click paste | implemented |
@@ -443,12 +478,12 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `zxdg_output_manager_v1` | Each display's logical position and size, and its name, for clients that place or scale by output | implemented (v3) |
 | `wlr-output-management-v1` | Display arrangement and hotplug configuration | implemented (v4; enabled heads only, no custom modes) |
 | `ext-image-capture-source-v1` / `ext-image-copy-capture-v1` | Screen capture for screenshots and the portal | implemented, shell clients only: output and toplevel sources (a window alone, title bar and rounded corners kept, shadow left out, transparent around it, from any workspace and while minimized), shm buffers and LINEAR ARGB8888 dmabufs (copied by the GPU, offered when the renderer knows its render node); a session's first frame is rendered at once and later frames wait for the screen to change; a resized window announces its new size before failing the frame; window frames are withheld while the session is locked; cursor sessions are not implemented |
-| `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print | implemented, shell clients only |
+| `bande_capture_v1` (own, `bande-capture-v1.xml`) | Window frames on the current workspace for the screenshot tool's window mode, `show_options` on Print, `show_recording_options` for Quick Settings | implemented, shell clients only |
 | `wp_cursor_shape_v1` | Cursor shapes, drawn from Bande's own set | implemented |
 | `zwp_pointer_constraints_v1` / `relative_pointer` | Pointer lock for games | implemented |
 | `zwp_pointer_gestures_v1` | Trackpad gestures | implemented, v3: swipes, pinches and holds the compositor does not claim go to the client under the pointer |
 | `zwp_keyboard_shortcuts_inhibit_v1` | Keyboard passthrough for VMs and remote desktop | implemented |
 | `zwlr_output_power_management_v1` | Display power for idle and lock | implemented |
 | `bande_shell_v1` (own) | Launcher, screenshots, active app, volume keys, Quick Settings, taskbar icon rectangles, apps that stopped responding; for the taskbar: hide, quit and force quit an app, activate one window by its foreign-toplevel identifier, minimized windows, attention requests, rounded blur for shell surfaces, `show_app_menu` to open an app's menus below a window's menu button, `active_menus` (version 4) with the focused window's menu address, `open_terminal` (version 5) for `Ctrl+Alt+T`, `dismiss_on_press_outside` and `move_layer` (version 7, places remembered per display in `$XDG_STATE_HOME/bande/layer-places`) for the launcher; workspaces, the workspace of each window and `show_windows` for the overview and an app's windows | implemented, shell clients only |
-| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button | implemented, every client |
+| `bande_app_v1` (own, in `bande-shell-v1.xml`) | App-level requests: `quit_requested` on the bar's or the taskbar's Quit instead of closing every window; `place_window` and `move_to_workspace` for the window menu; `offer_placements` (version 8) for the Tile menu on a toolkit window's maximize control; `keep_running` (version 2) so an app outlives its last window; `end_session` (version 3) opens the Bande menu's Log Out / Restart confirmation for Software Update; `set_menu_button`, `show_menus` and `menus_open` (version 4) for a window's menu button; `kept_on_top` (version 11) when the compositor's window menu changes Keep on Top | implemented, every client |
 | `ext-background-effect-v1` | The backdrop of window frames, the Taskbar and menus: the [style](../design/datum.md#styles) decides what fills it (`material.rs` for the wallpaper copy) | implemented: dual-filter Kawase blur (3 passes) clipped to the window's rounded shape, below the window's own shadow, redrawn when anything beneath it changes; a flat scrim on a CPU renderer |

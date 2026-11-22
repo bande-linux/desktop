@@ -2,10 +2,18 @@ use std::fs::OpenOptions;
 use std::io::{self, Read};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
+use std::time::SystemTime;
 
 use rustix::fs::OFlags;
 
 pub const MAX_FILE_BYTES: u64 = 512 << 20;
+
+pub type Stamp = (SystemTime, u64);
+
+pub fn stamp(path: &Path) -> Option<Stamp> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
 
 pub fn read_bounded(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
     let file = OpenOptions::new()

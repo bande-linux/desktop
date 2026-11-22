@@ -22,7 +22,7 @@ pub enum ThumbnailSize {
 }
 
 impl ThumbnailSize {
-    const ALL: [Self; 4] = [Self::Normal, Self::Large, Self::XLarge, Self::XxLarge];
+    pub(crate) const ALL: [Self; 4] = [Self::Normal, Self::Large, Self::XLarge, Self::XxLarge];
 
     pub const fn pixels(self) -> u32 {
         match self {

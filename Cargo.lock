@@ -939,6 +939,7 @@ dependencies = [
  "bande-inbox",
  "bande-l10n",
  "bande-media-view",
+ "bande-thumbnails",
  "bande-toolkit",
  "bande-volumes",
  "bande-xdg",
@@ -1826,6 +1827,7 @@ dependencies = [
 name = "bande-thumbnails"
 version = "0.2.0"
 dependencies = [
+ "bande-content",
  "bande-inbox",
  "bande-volumes",
  "bande-xdg",

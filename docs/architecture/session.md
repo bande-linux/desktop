@@ -298,6 +298,12 @@ UI.
   user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). Prompts
   are `bande-secrets-prompt` processes, so the daemon never links the toolkit; the daemon is not
   dumpable.
+- Calendar and Contacts keep their account passwords under their app ids (`bande_keyring::Passwords`,
+  attribute `account`). "Also use this account for …" leaves the password under
+  `org.bande.AccountOffers` (attribute `offer`) with the server and user in
+  `~/.local/share/bande/account-offers/`; the other app reads it once when it adopts the account
+  (the keyring asks, since the item is the offering app's), saves it as its own and removes the
+  offer.
 
 ### Updates during a session
 

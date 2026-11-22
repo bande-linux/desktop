@@ -72,6 +72,32 @@ pub fn write(title: &str, pages: &[Page]) -> Result<Vec<u8>, Error> {
         .map_err(|error| Error(format!("{error:?}")))
 }
 
+/// A page that is one JPEG picture, `size` points wide and high.
+pub struct Picture {
+    pub jpeg: Arc<Vec<u8>>,
+    pub size: (f32, f32),
+}
+
+/// A PDF with one picture filling each page, kept as the JPEG it is.
+pub fn pictures(title: &str, pages: &[Picture]) -> Result<Vec<u8>, Error> {
+    let mut document = Document::new();
+    document.set_metadata(Metadata::new().title(title.to_owned()));
+    for page in pages {
+        let (width, height) = page.size;
+        let size = Size::from_wh(width, height)
+            .ok_or_else(|| Error(format!("a page cannot be {width} by {height}")))?;
+        let picture = PdfImage::from_jpeg(Arc::clone(&page.jpeg).into(), true).map_err(Error)?;
+        let mut pdf_page = document.start_page_with(PageSettings::new(size));
+        let mut surface = pdf_page.surface();
+        surface.draw_image(picture, size);
+        surface.finish();
+        pdf_page.finish();
+    }
+    document
+        .finish()
+        .map_err(|error| Error(format!("{error:?}")))
+}
+
 type FontKey = (u64, u32, Vec<(u32, u32)>);
 
 #[derive(Default)]

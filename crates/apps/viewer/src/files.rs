@@ -43,7 +43,7 @@ pub fn neighbour(path: &Path, forward: bool) -> Option<PathBuf> {
     let entries: Vec<Entry> = bande_fs::list(folder, false, Sort::default())
         .ok()?
         .into_iter()
-        .filter(|entry| !entry.is_folder() && is_image_name(&entry.path))
+        .filter(|entry| entry.path == path || !entry.is_folder() && is_image_name(&entry.path))
         .collect();
     let at = entries.iter().position(|entry| entry.path == path);
     let count = entries.len();

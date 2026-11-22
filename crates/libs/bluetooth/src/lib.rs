@@ -164,8 +164,11 @@ const SHOWN: [(&str, &[&str]); 3] = [
 ];
 
 pub fn shown_change(message: &zbus::Message) -> bool {
-    if message
-        .header()
+    let header = message.header();
+    if header.message_type() != message::Type::Signal {
+        return false;
+    }
+    if header
         .member()
         .is_none_or(|member| member.as_str() != "PropertiesChanged")
     {

@@ -153,3 +153,6 @@ msgstr "OK"
 
 msgid "no password is saved for this account"
 msgstr "inget lösenord är sparat för kontot"
+
+msgid "There is no folder for the notes, because neither XDG_DATA_HOME nor HOME is set."
+msgstr "Det finns ingen mapp för anteckningarna, eftersom varken XDG_DATA_HOME eller HOME är angiven."

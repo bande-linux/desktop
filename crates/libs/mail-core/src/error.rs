@@ -16,6 +16,7 @@ pub enum Error {
     Secret(String),
     Crypto(String),
     Closed,
+    NoDataFolder,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -51,6 +52,9 @@ impl fmt::Display for Error {
             Self::Secret(error) => tr!("The keyring failed: {error}", error = error),
             Self::Crypto(error) => error.clone(),
             Self::Closed => tr!("The server closed the connection."),
+            Self::NoDataFolder => tr!(
+                "There is no folder for the mail accounts, because neither XDG_DATA_HOME nor HOME is set."
+            ),
         };
         f.write_str(&text)
     }

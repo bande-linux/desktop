@@ -257,7 +257,7 @@ pub struct SettingsView {
     account: usize,
     status: Option<(String, bool)>,
     checking: Option<AccountId>,
-    store_path: PathBuf,
+    store_path: Option<PathBuf>,
     mailroom: Option<Mailroom>,
     network: Network,
     gnupg: GnuPg,
@@ -278,7 +278,11 @@ fn expiry(seconds: Option<i64>) -> String {
 }
 
 impl SettingsView {
-    pub fn new(store_path: PathBuf, appearance: Appearance, text: TextSystem) -> Self {
+    pub fn new(
+        store_path: bande_mail_core::error::Result<PathBuf>,
+        appearance: Appearance,
+        text: TextSystem,
+    ) -> Self {
         let folder = settings_folder();
         let settings = folder
             .as_deref()
@@ -301,9 +305,14 @@ impl SettingsView {
         let mut ui = Ui::new(Box::new(host), Context::new(text, appearance.palette()));
         ui.set_appearance(appearance);
         ui.set_sheet_top(TOOLBAR_HEIGHT);
-        let store = Store::open(&store_path)
+        let store_path = store_path
             .inspect_err(|error| tracing::warn!("cannot read the accounts: {error}"))
             .ok();
+        let store = store_path.as_deref().and_then(|path| {
+            Store::open(path)
+                .inspect_err(|error| tracing::warn!("cannot read the accounts: {error}"))
+                .ok()
+        });
         let mut view = Self {
             ui,
             host: host_id,
@@ -318,7 +327,7 @@ impl SettingsView {
             account: 0,
             status: None,
             checking: None,
-            store_path: store_path.clone(),
+            store_path,
             mailroom: Mailroom::new()
                 .inspect_err(|error| tracing::warn!("cannot check servers: {error}"))
                 .ok(),
@@ -1151,8 +1160,11 @@ impl SettingsView {
     }
 
     fn save_servers(&mut self) {
-        let (Some(account), Some(mailroom)) = (self.accounts.get(self.account), &self.mailroom)
-        else {
+        let (Some(account), Some(mailroom), Some(store_path)) = (
+            self.accounts.get(self.account),
+            &self.mailroom,
+            self.store_path.clone(),
+        ) else {
             return;
         };
         let Some(servers) = self.state.borrow().editing.servers() else {
@@ -1167,7 +1179,7 @@ impl SettingsView {
         self.status = Some((tr!("Checking the account…"), false));
         self.checking = Some(account.id);
         let (id, email, old_host) = (account.id, account.email.clone(), account.imap.host.clone());
-        let (network, store_path) = (self.network.clone(), self.store_path.clone());
+        let network = self.network.clone();
         let notifier = mailroom.notifier();
         let spawned = std::thread::Builder::new()
             .name("check-servers".to_owned())

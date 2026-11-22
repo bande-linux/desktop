@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use rusqlite::{Connection, Row, params};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::net::{Security, Server};
 
 pub type AccountId = i64;
@@ -41,10 +41,14 @@ pub struct Account {
     pub enabled: bool,
 }
 
-pub fn store_path() -> PathBuf {
+pub fn store_path() -> Result<PathBuf> {
     bande_xdg::data_home()
-        .unwrap_or_else(|| PathBuf::from(".local/share"))
-        .join("bande-mail/mail.sqlite3")
+        .map(|home| home.join("bande-mail/mail.sqlite3"))
+        .ok_or(Error::NoDataFolder)
+}
+
+pub fn open_store() -> Result<Connection> {
+    open(&store_path()?)
 }
 
 pub fn open(path: &Path) -> Result<Connection> {

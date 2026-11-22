@@ -18,7 +18,7 @@ pub struct AccountsSettings(Ui);
 
 fn toggles() -> Vec<FormLine> {
     let mut lines = vec![FormLine::Heading(tr!("Accounts"))];
-    let found = accounts::open(&accounts::store_path())
+    let found = accounts::open_store()
         .and_then(|mail| Ok((accounts::list(&mail)?, accounts::notes(&mail)?)));
     let (all, used) = match found {
         Ok(found) => found,
@@ -45,8 +45,8 @@ fn toggles() -> Vec<FormLine> {
             &tr!("Use {email} for Notes", email = account.email.clone()),
             used.contains(&id),
             move |on| {
-                let changed = accounts::open(&accounts::store_path())
-                    .and_then(|mail| accounts::set_notes(&mail, id, on));
+                let changed =
+                    accounts::open_store().and_then(|mail| accounts::set_notes(&mail, id, on));
                 match changed {
                     Ok(()) => {
                         if let Some(changes) = CHANGES.get() {

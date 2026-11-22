@@ -942,8 +942,9 @@ stops the rest, and the pane shows what did install and what waits for a restart
 failure. A device that installs during the restart (UEFI capsules: `needs-reboot`, then update
 state `needs-reboot`) joins the restart flow as "Restart to install", with a note to keep the
 computer plugged in; one that installs while the computer is off (`needs-shutdown`) asks to shut
-down instead ("Shut Down Now"), which also covers any restart. A reopened pane finds them again
-through fwupd's update state. After the restart the outcome of each (`GetHistory`, `GetResults`)
+down instead ("Shut Down Now"), which also covers any restart, and its note says when offline
+packages install on the next start too. A reopened pane, Check Now and Try Again find them again
+through fwupd's update state and keep the restart or shut-down row while anything waits for it. After the restart the outcome of each (`GetHistory`, `GetResults`)
 is shown once, together with the PackageKit offline results, then cleared with `ClearResults`. Firmware is never
 installed by automatic updates; the notification counts it as waiting. fwupd's errors map to
 messages that say what to do.

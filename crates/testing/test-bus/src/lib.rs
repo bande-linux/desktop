@@ -1,5 +1,6 @@
 pub mod atspi;
 pub mod drives;
+pub mod fwupd;
 pub mod packagekit;
 
 use std::io::{BufRead, BufReader, Write};

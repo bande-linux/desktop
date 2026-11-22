@@ -46,7 +46,7 @@ use crate::printers::{PrinterCommand, PrintersState, Support};
 use crate::privacy::focus_after_asking;
 use crate::privilege::Privilege;
 use crate::proxies::ProxySettings;
-use crate::scan::{ScanIntent, ScanState};
+use crate::scan::{Leaving, ScanIntent, ScanState};
 use crate::services::{AudioCommand, BluetoothCommand, NetworkCommand};
 use crate::sharing::{SharingCommand, SharingState};
 use crate::software::{Need, SoftwareCommand, SoftwareState};
@@ -153,6 +153,7 @@ pub(crate) enum Intent {
     CancelQueuedJob(i32),
     PausePrinter((String, bool)),
     Scan(ScanIntent),
+    UnsavedScans(String),
     AskPassword(bool),
     PasswordEntry(usize, String),
     OpenAccount(String),
@@ -336,6 +337,7 @@ pub struct SettingsView {
     pub(crate) installing_printing: Option<Support>,
     pub(crate) printer_address: String,
     pub(crate) scans: HashMap<String, ScanState>,
+    pub(crate) leaving: Option<Leaving>,
     pub(crate) accounts: Option<Vec<Account>>,
     pub(crate) accounts_managed: bool,
     pub(crate) picture_edit: Option<PictureEdit>,
@@ -350,7 +352,7 @@ pub struct SettingsView {
     pub(crate) network: Option<NetworkState>,
     pub(crate) manual_ipv4: bool,
     pub(crate) locale: Option<LocaleState>,
-    ui: Ui,
+    pub(crate) ui: Ui,
     root: WidgetId,
     search: WidgetId,
     pub(crate) anchors: Vec<(Anchor, WidgetId)>,
@@ -457,6 +459,7 @@ impl SettingsView {
             installing_printing: None,
             printer_address: String::new(),
             scans: HashMap::new(),
+            leaving: None,
             accounts: None,
             accounts_managed: false,
             picture_edit: None,
@@ -1267,7 +1270,7 @@ impl SettingsView {
         }
     }
 
-    fn invalidate(&mut self) {
+    pub(crate) fn invalidate(&mut self) {
         self.stale = true;
         if !self.ui.pointer_captured() {
             self.rebuild();
@@ -1813,6 +1816,7 @@ impl SettingsView {
                 | Intent::NewAccountLogin(_)
                 | Intent::NewAccountAdmin(_) => {}
                 Intent::Scan(change) => self.scan_intent(change),
+                Intent::UnsavedScans(choice) => self.unsaved_scans(&choice),
                 Intent::PausePrinter((name, paused)) => {
                     self.focus_next = Some(Anchor::Item("printer-pause".to_owned()));
                     self.commands

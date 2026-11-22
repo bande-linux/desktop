@@ -44,7 +44,7 @@ use crate::printers::{PrinterCommand, PrintersState, follow_printers};
 use crate::privacy::clear_clipboard;
 use crate::privilege::{Privilege, follow_privileges};
 use crate::proxies::{ProxySettings, read_proxy, write_proxy};
-use crate::scan::ScanUpdate;
+use crate::scan::{Leaving, ScanUpdate};
 use crate::security_status::{SecurityStatus, follow_security_status};
 use crate::services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_audio, follow_bluetooth, follow_network,
@@ -161,6 +161,7 @@ pub enum Command {
     Brightness(LevelRequest),
     Reveal(PathBuf),
     EndSession(SessionEnd),
+    Leave(Leaving),
     ImportVpn,
     Proxy(ProxySettings),
     HandOver(HandOverCommand),
@@ -591,6 +592,7 @@ impl Services {
                 .is_some_and(|battery| battery.send(command).is_ok()),
             Command::Reveal(_)
             | Command::EndSession(_)
+            | Command::Leave(_)
             | Command::CopySecret(_)
             | Command::CopyText(_) => false,
             Command::ClearClipboard => {

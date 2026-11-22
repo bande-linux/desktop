@@ -72,6 +72,7 @@ pub use pictures::{Pair, PictureCommand, bundled_pairs, thumbnail};
 pub use pointing::follow_pointing;
 pub use power::charge_text;
 pub use privilege::{Privilege, refused};
+pub use scan::Leaving;
 pub use services::{
     AudioCommand, BluetoothCommand, NetworkCommand, follow_bluetooth, follow_network,
 };

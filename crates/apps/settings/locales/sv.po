@@ -1815,6 +1815,20 @@ msgstr "Skanning"
 msgid "Save Scan"
 msgstr "Spara skanning"
 
+msgid "Save the scanned page?"
+msgid_plural "Save the {count} scanned pages?"
+msgstr[0] "Vill du spara den skannade sidan?"
+msgstr[1] "Vill du spara de {count} skannade sidorna?"
+
+msgid "They will be lost if you don’t save them."
+msgstr "De försvinner om du inte sparar dem."
+
+msgid "Save…"
+msgstr "Spara…"
+
+msgid "Discard"
+msgstr "Släng"
+
 msgid "Saved “{name}”"
 msgstr "Sparade ”{name}”"
 
@@ -1871,17 +1885,11 @@ msgstr "Skannad sida {number}"
 msgid "Save as"
 msgstr "Spara som"
 
-msgid "Save…"
-msgstr "Spara…"
-
 msgid "Save the scanned pages"
 msgstr "Spara de skannade sidorna"
 
 msgid "Keep"
 msgstr "Behåll"
-
-msgid "Discard"
-msgstr "Släng"
 
 msgid "Discard the scanned page?"
 msgid_plural "Discard the {count} scanned pages?"

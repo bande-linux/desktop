@@ -10,7 +10,7 @@ use bande_pdf::Picture;
 use bande_printers::{PrintClient, ScanCapabilities, ScanOptions, ScanSource};
 use bande_toolkit::Image;
 use bande_toolkit::Spacing;
-use bande_toolkit::ui::{Axis, Button, PopUpButton, Stack, Widget};
+use bande_toolkit::ui::{Alert, Axis, Button, PopUpButton, Stack, Widget};
 use image::{ImageFormat, ImageReader};
 use zbus::blocking::Connection;
 
@@ -19,6 +19,7 @@ use crate::pages::{Widgets, boxed, muted_row};
 use crate::printers::PrinterCommand;
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, Preview, Row, Text, Tone};
+use bande_settings_panes::PaneId;
 
 const PLATEN: &str = "Platen";
 const FEEDER: &str = "Feeder";
@@ -76,6 +77,17 @@ pub enum ScanUpdate {
     Scanned(String, Result<(Vec<Page>, Option<Image>), String>),
     Saved(String, Result<Option<String>, String>),
 }
+
+/// Whether the window closes or the app quits once the scanned pages are taken care of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Leaving {
+    Window,
+    App,
+}
+
+const SAVE: &str = "save";
+const DISCARD: &str = "discard";
+const CANCEL: &str = "cancel";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanIntent {
@@ -309,6 +321,84 @@ fn write(path: &Path, pages: &[Page], format: Format) -> Result<(), String> {
 }
 
 impl SettingsView {
+    /// How many scanned pages have not been saved yet.
+    pub fn unsaved_pages(&self) -> usize {
+        self.scans.values().map(|scan| scan.pages.len()).sum()
+    }
+
+    /// Asks what to do with the scanned pages not saved yet before leaving, and answers whether
+    /// there is nothing to ask about.
+    pub fn may_leave(&mut self, leaving: Leaving) -> bool {
+        let unsaved = self.unsaved_pages();
+        if unsaved == 0 {
+            return true;
+        }
+        if self.leaving.is_some() || self.ui.has_sheet() {
+            return false;
+        }
+        self.leaving = Some(leaving);
+        let mut answer = intent(&self.intents, Intent::UnsavedScans);
+        let alert = Alert::new(
+            &trn!(
+                "Save the scanned page?",
+                "Save the {count} scanned pages?",
+                count = unsaved
+            ),
+            &tr!("They will be lost if you don’t save them."),
+            move |choice| answer(choice.to_owned()),
+        )
+        .primary(&tr!("Save…"), SAVE)
+        .other(&tr!("Discard"), DISCARD)
+        .cancel(&tr!("Cancel"), CANCEL);
+        self.ui.present_sheet(alert);
+        self.invalidate();
+        false
+    }
+
+    pub(crate) fn unsaved_scans(&mut self, choice: &str) {
+        self.ui.close_sheet();
+        let Some(leaving) = self.leaving else {
+            return;
+        };
+        match choice {
+            SAVE => {
+                let first = self
+                    .scans
+                    .iter()
+                    .find(|(_, scan)| !scan.pages.is_empty())
+                    .map(|(id, _)| id.clone());
+                if let Some(id) = first {
+                    self.select_pane(PaneId::Printers);
+                    self.detail = Some(Detail::Printer(id.clone()));
+                    self.scan_intent(ScanIntent::Save);
+                    if self.scans.get(&id).and_then(|scan| scan.busy) != Some(Busy::Saving) {
+                        self.leaving = None;
+                    }
+                }
+            }
+            DISCARD => {
+                for scan in self.scans.values_mut() {
+                    scan.discard();
+                }
+                self.leaving = None;
+                self.commands.push(Command::Leave(leaving));
+            }
+            _ => self.leaving = None,
+        }
+    }
+
+    fn saved_while_leaving(&mut self, saved: bool) {
+        let Some(leaving) = self.leaving.take() else {
+            return;
+        };
+        if saved && !self.may_leave(leaving) {
+            return;
+        }
+        if saved {
+            self.commands.push(Command::Leave(leaving));
+        }
+    }
+
     fn opened_scan(&mut self) -> Option<&mut ScanState> {
         let Some(Detail::Printer(id)) = &self.detail else {
             return None;
@@ -342,6 +432,7 @@ impl SettingsView {
             return;
         };
         let mut focus = None;
+        let mut finished = None;
         match update {
             ScanUpdate::Capabilities(_, answer) => {
                 scan.busy = None;
@@ -376,6 +467,7 @@ impl SettingsView {
             }
             ScanUpdate::Saved(_, saved) => {
                 scan.busy = None;
+                finished = Some(matches!(saved, Ok(Some(_))));
                 match saved {
                     Ok(Some(name)) => {
                         scan.discard();
@@ -389,6 +481,9 @@ impl SettingsView {
         }
         if opened && let Some(anchor) = focus {
             self.focus_next = Some(Anchor::Item(anchor.to_owned()));
+        }
+        if let Some(saved) = finished {
+            self.saved_while_leaving(saved);
         }
     }
 

@@ -8,7 +8,7 @@ use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, View, WindowId};
 use bande_app_menu::Entry;
 use bande_l10n::tr;
 use bande_settings::{
-    Command, Displays, Feed, Notice, PaneId, PointingDevices, Services, SettingsView,
+    Command, Displays, Feed, Leaving, Notice, PaneId, PointingDevices, Services, SettingsView,
     SoftwareCommand, UDEV_DATA, UPDATE_NOTICE, announce_translations, announce_updates, feed,
     sidebar_width,
 };
@@ -184,10 +184,17 @@ fn open_main(
 
 impl Settings {
     fn send_commands(&mut self, cx: &mut Cx<Self>) {
-        let Some((window, Pane(view))) = self.main.and_then(|main| cx.window(main)) else {
+        let Some(main) = self.main else {
             return;
         };
+        let Some((_, Pane(view))) = cx.window(main) else {
+            return;
+        };
+        let mut leaving = None;
         for command in view.take_commands() {
+            let Some((window, _)) = cx.window(main) else {
+                return;
+            };
             match command {
                 Command::Reveal(path) => bande_app::show_in_files(Some(window), vec![path]),
                 Command::CopySecret(secret) => {
@@ -203,6 +210,7 @@ impl Settings {
                         tracing::warn!("cannot copy the report: {error}");
                     }
                 }
+                Command::Leave(how) => leaving = Some(how),
                 Command::EndSession(ending) => {
                     if let Err(error) = window.ask_to_end_session(ending) {
                         tracing::warn!("cannot ask to end the session: {error}");
@@ -211,7 +219,15 @@ impl Settings {
                 command => self.services.send(command),
             }
         }
-        window.request_redraw();
+        match leaving {
+            Some(Leaving::Window) => cx.close(main),
+            Some(Leaving::App) => cx.quit(),
+            None => {
+                if let Some((window, _)) = cx.window(main) {
+                    window.request_redraw();
+                }
+            }
+        }
     }
 }
 
@@ -324,6 +340,30 @@ impl Program for Settings {
             }
             self.parked = Some(view);
         }
+    }
+
+    fn should_close(&mut self, cx: &mut Cx<Self>, window: WindowId) -> bool {
+        if self.main != Some(window) {
+            return true;
+        }
+        let leaves = settings_view(cx, self.main, &mut self.parked)
+            .is_none_or(|view| view.may_leave(Leaving::Window));
+        self.send_commands(cx);
+        leaves
+    }
+
+    fn should_quit(&mut self, cx: &mut Cx<Self>) -> bool {
+        if cx.session_ending()
+            || settings_view(cx, self.main, &mut self.parked)
+                .is_none_or(|view| view.unsaved_pages() == 0)
+        {
+            return true;
+        }
+        self.reopen(cx);
+        let leaves = settings_view(cx, self.main, &mut self.parked)
+            .is_none_or(|view| view.may_leave(Leaving::App));
+        self.send_commands(cx);
+        leaves
     }
 
     fn changed(&mut self, cx: &mut Cx<Self>, _window: WindowId) {

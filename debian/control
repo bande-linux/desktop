@@ -898,15 +898,16 @@ Recommends: accountsservice,
  upower,
  network-manager
 Suggests: fwupd
-Description: Bande Settings: panes for the desktop and its devices with ranked search
+Description: Bande Settings: the desktop's settings with ranked search
  Settings of the Bande desktop in four groups: Connections (Wi-Fi with
  known networks, per-network details and hidden networks, Bluetooth,
- network), Desktop (appearance and wallpaper, the bar, notifications per
- app, accessibility), Devices (displays, sound, keyboard, trackpad and
- mouse) and System (power, users and groups, apps that open at login,
- language and time, about this computer with storage, software and
- firmware updates), with a search field that ranks the matching settings and marks
- them. Every pane follows changes made elsewhere while it is open.
+ network, sharing), Desktop (appearance and wallpaper, the taskbar,
+ notifications per app, search, accessibility), Devices (displays, sound,
+ keyboard, mouse and trackpad, printers and scanners) and System (power,
+ users, privacy and security, apps, language and time, software and
+ firmware updates, backup, about this computer). A search field ranks
+ the matching settings and marks them. Every pane follows changes made
+ elsewhere while it is open.
  Desktop settings go through org.bande.Config, which writes config.kdl. A
  polkit rule lets administrators (members of sudo) change the time zone,
  automatic time, language and login screen keyboard layouts without a

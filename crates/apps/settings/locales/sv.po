@@ -884,17 +884,32 @@ msgstr "Språktjänsten"
 msgid "Couldn't read the current language and region."
 msgstr "Det gick inte att läsa det aktuella språket och den aktuella regionen."
 
-msgid "Install"
-msgstr "Installera"
-
 msgid "Settings"
 msgstr "Inställningar"
+
+msgid "Translations installed"
+msgstr "Översättningarna har installerats"
+
+msgid "Apps show them the next time they open."
+msgstr "Apparna visar dem nästa gång de öppnas."
+
+msgid "Something went wrong. Try again later."
+msgstr "Något gick fel. Försök igen senare."
+
+msgid "Couldn't install the translations"
+msgstr "Det gick inte att installera översättningarna"
 
 msgid "Translations are available for your language"
 msgstr "Översättningar finns för ditt språk"
 
 msgid "Some installed software can show its text in your language once its translation is installed."
 msgstr "En del installerade program kan visa sin text på ditt språk när översättningen har installerats."
+
+msgid "Install"
+msgstr "Installera"
+
+msgid "Not Now"
+msgstr "Inte nu"
 
 msgid "Couldn't change the app's language."
 msgstr "Det gick inte att ändra appens språk."
@@ -2029,9 +2044,6 @@ msgstr "Det finns inte tillräckligt med ledigt utrymme. Frigör utrymme och fö
 
 msgid "The update was canceled."
 msgstr "Uppdateringen avbröts."
-
-msgid "Something went wrong. Try again later."
-msgstr "Något gick fel. Försök igen senare."
 
 msgid "The update service stopped. Try again in a moment."
 msgstr "Uppdateringstjänsten stannade. Försök igen om en stund."

@@ -27,8 +27,8 @@ use zbus::message;
 use crate::failure::explained;
 use crate::follow::{Update, Updates, spawn};
 use crate::privilege::may_update_live;
+use bande_notify::Urgency;
 use bande_notify::client::{Request, close, notify};
-use bande_notify::{CloseReason, Urgency};
 
 const FRESH_SECONDS: u32 = 60 * 60;
 const REBOOT_REQUIRED: &str = "/run/reboot-required";
@@ -168,7 +168,7 @@ pub enum SoftwareCommand {
     InstallFirmwareSupport,
 }
 
-fn explain(failure: &Failure) -> String {
+pub(crate) fn explain(failure: &Failure) -> String {
     tracing::warn!("PackageKit: {:?}: {}", failure.code, failure.details);
     match failure.code {
         ErrorCode::NoNetwork => tr!("You're offline. Connect to the internet and try again."),
@@ -813,42 +813,33 @@ impl Notice {
     }
 
     pub fn clicked(self, id: u32) -> zbus::Result<bool> {
-        Ok(self.answer(id)? == Reply::Clicked)
+        Ok(self.answer(id)?.is_some())
     }
 
-    pub fn answer(self, id: u32) -> zbus::Result<Reply> {
+    pub fn answer(self, id: u32) -> zbus::Result<Option<String>> {
         for message in self.messages.flatten() {
             let header = message.header();
             match header.member().map(|member| member.as_str()) {
-                Some("ActionInvoked") if message.body().deserialize::<(u32, String)>()?.0 == id => {
-                    return Ok(Reply::Clicked);
-                }
-                Some("NotificationClosed") => {
-                    let (closed, reason) = message.body().deserialize::<(u32, u32)>()?;
-                    if closed == id {
-                        return Ok(if reason == CloseReason::Dismissed as u32 {
-                            Reply::Dismissed
-                        } else {
-                            Reply::Gone
-                        });
+                Some("ActionInvoked") => {
+                    let (invoked, action) = message.body().deserialize::<(u32, String)>()?;
+                    if invoked == id {
+                        return Ok(Some(action));
                     }
+                }
+                Some("NotificationClosed")
+                    if message.body().deserialize::<(u32, u32)>()?.0 == id =>
+                {
+                    return Ok(None);
                 }
                 Some("NameLost") if message.body().deserialize::<&str>()? == self.name => {
                     close(&self.session, id)?;
-                    return Ok(Reply::Gone);
+                    return Ok(None);
                 }
                 _ => {}
             }
         }
-        Ok(Reply::Gone)
+        Ok(None)
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Reply {
-    Clicked,
-    Dismissed,
-    Gone,
 }
 
 pub(crate) fn restart_hint(firmware: bool) -> String {

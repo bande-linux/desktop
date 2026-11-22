@@ -368,3 +368,76 @@ fn idle_surfaces_that_ask_for_a_frame_without_new_content_still_get_one() {
     client.ask_for_child_frame(child);
     expect_frame(&mut frames, &mut server, &mut client, before);
 }
+
+fn act_as_a_remote_viewer(socket: std::os::unix::net::UnixStream) {
+    use reis::ei;
+    use reis::event::{DeviceCapability, EiEvent};
+
+    let context = ei::Context::new(socket).unwrap();
+    let (connection, events) = context
+        .handshake_blocking("viewer", ei::handshake::ContextType::Sender)
+        .unwrap();
+    let (mut pointer, mut keys, mut sequence) = (None, None, 0);
+    for event in events {
+        match event.unwrap() {
+            EiEvent::SeatAdded(added) => added.seat.bind_capabilities(
+                DeviceCapability::PointerAbsolute
+                    | DeviceCapability::Button
+                    | DeviceCapability::Text,
+            ),
+            EiEvent::DeviceResumed(resumed) => {
+                sequence += 1;
+                resumed
+                    .device
+                    .device()
+                    .start_emulating(connection.serial(), sequence);
+                match resumed.device.has_capability(DeviceCapability::Text) {
+                    true => keys = Some(resumed.device),
+                    false => pointer = Some(resumed.device),
+                }
+            }
+            _ => {}
+        }
+        connection.flush().unwrap();
+        if let (Some(pointer), Some(keys)) = (&pointer, &keys) {
+            let absolute = pointer.interface::<ei::PointerAbsolute>().unwrap();
+            let button = pointer.interface::<ei::Button>().unwrap();
+            absolute.motion_absolute(280.0, 260.0);
+            button.button(BTN_LEFT, ei::button::ButtonState::Press);
+            pointer.device().frame(connection.serial(), 1);
+            button.button(BTN_LEFT, ei::button::ButtonState::Released);
+            pointer.device().frame(connection.serial(), 2);
+            let text = keys.interface::<ei::Text>().unwrap();
+            text.keysym(u32::from('a'), ei::keyboard::KeyState::Press);
+            keys.device().frame(connection.serial(), 3);
+            text.keysym(u32::from('a'), ei::keyboard::KeyState::Released);
+            keys.device().frame(connection.serial(), 4);
+            connection.flush().unwrap();
+            return;
+        }
+    }
+}
+
+#[test]
+fn a_screen_sharing_viewer_clicks_and_types_through_the_screenshot_tools_connection() {
+    let mut server = headless(560, 520);
+    let mut editor = TestClient::window(&mut server, "org.example.Editor");
+    let mut screenshot = TestClient::connect_as_shell(&mut server);
+    let socket = screenshot.connect_remote_input(&mut server);
+    let viewer = thread::spawn(move || act_as_a_remote_viewer(socket));
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !(editor.keys().contains(&(KEY_A, false))
+        && editor.buttons().contains(&(BTN_LEFT, false)))
+    {
+        assert!(
+            Instant::now() < deadline,
+            "the viewer's input never arrived"
+        );
+        roundtrip(&mut server, &mut [&mut editor, &mut screenshot]);
+        thread::sleep(Duration::from_millis(5));
+    }
+    viewer.join().unwrap();
+    assert!(editor.keyboard_focus_on(0));
+    assert!(editor.keys().contains(&(KEY_A, true)));
+    assert!(editor.buttons().contains(&(BTN_LEFT, true)));
+}

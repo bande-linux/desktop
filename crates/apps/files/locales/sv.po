@@ -157,6 +157,15 @@ msgstr "Länk"
 msgid "Icon size"
 msgstr "Ikonstorlek"
 
+msgid "Apply these permissions to everything in “{name}”?"
+msgstr "Använda de här behörigheterna för allt i ”{name}”?"
+
+msgid "Every item inside gets the same access and group. You can’t undo this action."
+msgstr "Alla objekt i mappen får samma åtkomst och grupp. Du kan inte ångra det."
+
+msgid "Apply"
+msgstr "Använd"
+
 msgid "Are you sure you want to permanently erase the items in the Trash?"
 msgstr "Vill du verkligen radera objekten i papperskorgen permanent?"
 
@@ -279,6 +288,15 @@ msgstr "Dölj filändelse"
 
 msgid "Allow running as a program"
 msgstr "Tillåt körning som program"
+
+msgid "Owning group"
+msgstr "Ägande grupp"
+
+msgid "The group couldn’t be changed: {error}"
+msgstr "Gruppen kunde inte ändras: {error}"
+
+msgid "Apply to Enclosed Items…"
+msgstr "Använd för objekt i mappen…"
 
 msgid "The permissions couldn’t be changed: {error}"
 msgstr "Det gick inte att ändra behörigheterna: {error}"

@@ -4,13 +4,13 @@ use std::path::PathBuf;
 
 use crate::controls::{Signal, sender};
 use crate::servers::ServerDone;
-use crate::view::{FilesView, Rename};
+use crate::view::{FilesView, Rename, Sheet};
 use bande_fs::{
-    Access, Class, Entry, access, runnable, set_extension_hidden, set_mode, with_access,
-    with_runnable,
+    Access, Class, Entry, access, apply_to_enclosed, own_groups, runnable, set_extension_hidden,
+    set_group, set_mode, with_access, with_runnable,
 };
 use bande_toolkit::ui::{
-    CheckState, Checkbox, Key, Modifiers, PopUpButton, TextField, Toggle, WidgetId,
+    Button, CheckState, Checkbox, Key, Modifiers, PopUpButton, TextField, Toggle, WidgetId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +29,8 @@ pub(crate) struct InspectorControls {
     pub(crate) name: Option<NameControls>,
     pub(crate) runnable: Option<(WidgetId, bool)>,
     pub(crate) access: Vec<(Class, WidgetId, Access)>,
+    pub(crate) group: Option<(WidgetId, u32)>,
+    pub(crate) enclosed: Option<WidgetId>,
 }
 
 impl InspectorControls {
@@ -39,6 +41,8 @@ impl InspectorControls {
             .flatten()
             .chain(self.runnable.iter().map(|(id, _)| *id))
             .chain(self.access.iter().map(|(_, id, _)| *id))
+            .chain(self.group.map(|(id, _)| id))
+            .chain(self.enclosed)
             .collect()
     }
 }
@@ -266,6 +270,83 @@ impl FilesView {
         ))
     }
 
+    fn group_choices(&self, current: u32) -> Vec<(u32, String)> {
+        let mut groups = own_groups();
+        if !groups.iter().any(|(id, _)| *id == current) {
+            groups.insert(0, (current, current.to_string()));
+        }
+        groups
+    }
+
+    fn group_pop_up(&mut self, current: u32) -> WidgetId {
+        let send = sender(&self.signals);
+        let groups = self.group_choices(current);
+        let selected = groups
+            .iter()
+            .position(|(id, _)| *id == current)
+            .unwrap_or(0);
+        let titles: Vec<String> = groups.into_iter().map(|(_, name)| name).collect();
+        self.insert(PopUpButton::new(
+            &tr!("Owning group"),
+            &titles,
+            selected,
+            move |index| send(Signal::OwningGroup(index)),
+        ))
+    }
+
+    pub(crate) fn set_owning_group(&mut self, index: usize) {
+        let Some((path, _, _)) = self.editable() else {
+            return;
+        };
+        let Some(current) = self.info.as_ref().and_then(|info| info.group) else {
+            return;
+        };
+        let Some((chosen, _)) = self.group_choices(current).get(index).cloned() else {
+            return;
+        };
+        if let Some((_, shown)) = self
+            .inspector_controls
+            .as_mut()
+            .and_then(|controls| controls.group.as_mut())
+        {
+            *shown = chosen;
+        }
+        match set_group(&path, chosen) {
+            Ok(()) => {
+                if let Some(info) = &mut self.info {
+                    info.group = Some(chosen);
+                }
+            }
+            Err(error) => self.show_notice(tr!(
+                "The group couldn’t be changed: {error}",
+                error = error.to_string()
+            )),
+        }
+        self.sync_inspector_controls();
+    }
+
+    pub(crate) fn ask_to_apply_to_enclosed(&mut self) {
+        let Some((folder, true, mode)) = self.editable() else {
+            return;
+        };
+        let group = self.info.as_ref().and_then(|info| info.group);
+        self.present(Sheet::ApplyToEnclosed {
+            folder,
+            mode,
+            group,
+        });
+    }
+
+    pub(crate) fn apply_to_enclosed(&mut self, folder: PathBuf, mode: u32, group: Option<u32>) {
+        self.on_server(move || {
+            ServerDone::Changed(
+                Action::Rename,
+                Vec::new(),
+                apply_to_enclosed(&folder, mode, group).err(),
+            )
+        });
+    }
+
     fn drop_inspector_controls(&mut self) {
         if let Some(controls) = self.inspector_controls.take() {
             for id in controls.ids() {
@@ -286,6 +367,8 @@ impl FilesView {
                 name: None,
                 runnable: None,
                 access: Vec::new(),
+                group: None,
+                enclosed: None,
             });
         self.sync_name_controls(&mut controls, &entry);
         let editable = self.editable();
@@ -327,6 +410,34 @@ impl FilesView {
             access_controls.push((class, id, wanted));
         }
         controls.access = access_controls;
+        let wanted_group = editable
+            .as_ref()
+            .and_then(|_| self.info.as_ref().and_then(|info| info.group));
+        match (controls.group, wanted_group) {
+            (Some((_, shown)), Some(group)) if shown == group => {}
+            (shown, group) => {
+                if let Some((id, _)) = shown {
+                    self.remove(id);
+                }
+                controls.group = group.map(|group| (self.group_pop_up(group), group));
+            }
+        }
+        let wants_enclosed = editable.as_ref().is_some_and(|(_, folder, _)| *folder);
+        match (controls.enclosed, wants_enclosed) {
+            (Some(id), false) => {
+                self.remove(id);
+                controls.enclosed = None;
+            }
+            (None, true) => {
+                let send = sender(&self.signals);
+                controls.enclosed = Some(
+                    self.insert(Button::new(&tr!("Apply to Enclosed Items…"), move || {
+                        send(Signal::ApplyToEnclosed)
+                    })),
+                );
+            }
+            _ => {}
+        }
         self.inspector_controls = Some(controls);
     }
 

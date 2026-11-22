@@ -92,6 +92,7 @@ pub struct Info {
     pub preview: Option<Preview<Image>>,
     pub pixels: Option<(u32, u32)>,
     pub mode: Option<u32>,
+    pub group: Option<u32>,
     pub owned: bool,
 }
 
@@ -108,6 +109,11 @@ pub enum Sheet {
         apply_to_all: bool,
     },
     EmptyTrash,
+    ApplyToEnclosed {
+        folder: PathBuf,
+        mode: u32,
+        group: Option<u32>,
+    },
     Failure,
     NoSpace,
     Busy {
@@ -1071,20 +1077,21 @@ impl FilesView {
             .into_iter()
             .cloned()
             .collect::<Vec<_>>();
-        let (mode, owned) = match entries.as_slice() {
+        let (mode, group, owned) = match entries.as_slice() {
             [entry] if entry.trashed.is_none() && on_connected_volume(&entry.path) => {
-                (entry.mode, entry.owned)
+                (entry.mode, None, entry.owned)
             }
             [entry] if entry.trashed.is_none() => {
                 let metadata = std::fs::symlink_metadata(&entry.path).ok();
                 (
                     metadata.as_ref().map(|metadata| metadata.mode()),
+                    metadata.as_ref().map(|metadata| metadata.gid()),
                     metadata.as_ref().is_some_and(|metadata| {
                         metadata.uid() == rustix::process::getuid().as_raw()
                     }),
                 )
             }
-            _ => (None, false),
+            _ => (None, None, false),
         };
         let previous = self.info.take();
         if previous.as_ref().is_none_or(|info| info.entries != entries) {
@@ -1092,6 +1099,7 @@ impl FilesView {
         }
         if let Some(mut info) = previous.filter(|info| info.entries == entries) {
             info.mode = mode;
+            info.group = group;
             info.owned = owned;
             self.info = Some(info);
             self.sync_inspector_controls();
@@ -1143,6 +1151,7 @@ impl FilesView {
             preview: None,
             pixels: None,
             mode,
+            group,
             owned,
         });
         self.sync_inspector_controls();
@@ -1623,6 +1632,11 @@ impl FilesView {
             Sheet::OpenWith(open_with) if action == "open" => self.open_with_chosen_app(open_with),
             Sheet::Rename(state) if action == "rename" => self.apply_batch_rename(state),
             Sheet::EmptyTrash if action == "confirm" => self.empty_trash(),
+            Sheet::ApplyToEnclosed {
+                folder,
+                mode,
+                group,
+            } if action == "confirm" => self.apply_to_enclosed(folder, mode, group),
             Sheet::EjectFailed { volume, .. } if action == "force" => {
                 self.requests.push(Request::ForceEject(volume));
             }

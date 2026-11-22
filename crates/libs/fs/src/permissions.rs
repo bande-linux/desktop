@@ -1,6 +1,7 @@
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 
 const READ: u32 = 0o4;
@@ -79,4 +80,83 @@ pub fn with_runnable(mode: u32, on: bool) -> u32 {
 
 pub fn set_mode(path: &Path, mode: u32) -> io::Result<()> {
     fs::set_permissions(path, fs::Permissions::from_mode(mode & 0o7777))
+}
+
+pub fn set_group(path: &Path, group: u32) -> io::Result<()> {
+    std::os::unix::fs::lchown(path, None, Some(group))
+}
+
+/// The groups this user belongs to, by id and name, the primary group first.
+pub fn own_groups() -> Vec<(u32, String)> {
+    let names: HashMap<u32, String> = fs::read_to_string("/etc/group")
+        .inspect_err(|error| tracing::debug!("cannot read the groups: {error}"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split(':');
+            let name = fields.next()?;
+            let id = fields.nth(1)?.parse().ok()?;
+            Some((id, name.to_owned()))
+        })
+        .collect();
+    let mut ids = vec![rustix::process::getgid().as_raw()];
+    match rustix::process::getgroups() {
+        Ok(groups) => ids.extend(groups.into_iter().map(|group| group.as_raw())),
+        Err(error) => tracing::warn!("cannot find this user's groups: {error}"),
+    }
+    let mut seen = HashSet::new();
+    ids.retain(|id| seen.insert(*id));
+    ids.into_iter()
+        .map(|id| {
+            (
+                id,
+                names.get(&id).cloned().unwrap_or_else(|| id.to_string()),
+            )
+        })
+        .collect()
+}
+
+/// Gives everything inside `folder`, on the same file system and not through links, the access
+/// `mode` gives each class and, when given, the `group`. Carries on past failures and returns the
+/// first.
+pub fn apply_to_enclosed(folder: &Path, mode: u32, group: Option<u32>) -> io::Result<()> {
+    let device = fs::symlink_metadata(folder)?.dev();
+    let mut first = None;
+    let mut waiting = vec![folder.to_path_buf()];
+    while let Some(next) = waiting.pop() {
+        let entries = match fs::read_dir(&next) {
+            Ok(entries) => entries,
+            Err(error) => {
+                first.get_or_insert(error);
+                continue;
+            }
+        };
+        for entry in entries {
+            let changed = entry.and_then(|entry| {
+                let path = entry.path();
+                let metadata = fs::symlink_metadata(&path)?;
+                if metadata.is_symlink() || metadata.dev() != device {
+                    return Ok(());
+                }
+                let is_folder = metadata.is_dir();
+                let new = Class::ALL.into_iter().fold(metadata.mode(), |old, class| {
+                    with_access(old, class, access(mode, class), is_folder)
+                });
+                if let Some(group) = group.filter(|group| *group != metadata.gid()) {
+                    set_group(&path, group)?;
+                }
+                if new != metadata.mode() {
+                    set_mode(&path, new)?;
+                }
+                if is_folder {
+                    waiting.push(path);
+                }
+                Ok(())
+            });
+            if let Err(error) = changed {
+                first.get_or_insert(error);
+            }
+        }
+    }
+    first.map_or(Ok(()), Err)
 }

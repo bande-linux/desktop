@@ -542,6 +542,37 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
     Ok(true)
 }
 
+fn client_frames(gpu: &mut Gpu, client: &mut VulkanRenderer, format: Format) -> Outcome<bool> {
+    let mut buffers = Vec::new();
+    for _ in 0..2 {
+        let Some(buffer) = allocate(&gpu.gbm, format, GbmBufferFlags::RENDERING) else {
+            return Ok(false);
+        };
+        let dmabuf = buffer.export()?;
+        buffers.push((buffer, dmabuf));
+    }
+    let colours = [
+        [0.75, 0.25, 0.5],
+        [0.25, 0.5, 0.75],
+        [0.5, 0.75, 0.25],
+        [1.0, 1.0, 0.0],
+    ];
+    let whole = Rectangle::from_size(SIZE.into());
+    for (frame, colour) in colours.iter().cycle().take(12).enumerate() {
+        let (_, dmabuf) = &mut buffers[frame % 2];
+        clear(client, dmabuf, *colour, whole)?;
+        let found = drawn(&mut gpu.renderer, dmabuf)?;
+        let [red, green, blue] = colour.map(|value| (value * 255.0).round() as u8);
+        let wanted = [blue, green, red, 0xff];
+        assert!(
+            close(found, wanted, 1),
+            "frame {frame} of a client drawing {format:?} showed {found:?}, not {wanted:?}"
+        );
+    }
+    println!("sampled a client redrawing {format:?} every frame");
+    Ok(true)
+}
+
 #[test]
 fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
     let _ = tracing_subscriber::fmt().with_test_writer().try_init();
@@ -550,7 +581,8 @@ fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
         return Ok(());
     };
     let order = |format: &Format| (format.code as u32, u64::from(format.modifier));
-    let mut sampled: Vec<Format> = gpu.renderer.dmabuf_formats().iter().copied().collect();
+    let sampled_formats = gpu.renderer.dmabuf_formats();
+    let mut sampled: Vec<Format> = sampled_formats.iter().copied().collect();
     sampled.sort_by_key(order);
     let sampled_total = sampled.len();
     let mut sampled_verified = 0;
@@ -559,6 +591,13 @@ fn every_advertised_dma_buf_format_draws_and_scans_out_on_the_gpu() -> Outcome {
     }
     let mut rendered: Vec<Format> = gpu.renderer.render_formats().iter().copied().collect();
     rendered.sort_by_key(order);
+    let mut client = VulkanRenderer::new(gpu.renderer.device_info().render_device)?;
+    for format in rendered
+        .iter()
+        .filter(|format| sampled_formats.contains(format))
+    {
+        client_frames(&mut gpu, &mut client, *format)?;
+    }
     let rendered_total = rendered.len();
     let mut rendered_verified = 0;
     for format in rendered {

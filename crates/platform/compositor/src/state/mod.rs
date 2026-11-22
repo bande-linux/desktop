@@ -144,7 +144,7 @@ pub struct State {
     pub(crate) active_output: String,
     pub(crate) idle: crate::idle::Idle,
     pub(crate) output_power: crate::output_power::OutputPower,
-    pub(crate) lock_states: Option<std::sync::mpsc::Sender<bool>>,
+    pub(crate) lock_states: Option<std::sync::mpsc::Sender<crate::logind::LockReport>>,
     pub(crate) lock: Option<Lock>,
     pub(crate) popup_grab: Option<PopupGrab<State>>,
     pub(crate) menu_relay: Option<crate::menu_button::MenuRelay>,

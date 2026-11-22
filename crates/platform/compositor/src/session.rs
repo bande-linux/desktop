@@ -17,6 +17,7 @@ use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_server::Client;
 
 use crate::environment::{cursor_environment, desktop_environment};
+use crate::logind::LockReport;
 use crate::state::{ClientState, Compositor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,7 +173,7 @@ impl Compositor {
         self.state.lock_screen_requested = !self.state.is_locked();
     }
 
-    pub fn report_lock_states(&mut self, states: std::sync::mpsc::Sender<bool>) {
+    pub fn report_lock_states(&mut self, states: std::sync::mpsc::Sender<LockReport>) {
         self.state.lock_states = Some(states);
     }
 

@@ -238,7 +238,7 @@ impl State {
             Action::CaptureScreen => self.capture_screen(),
             Action::CaptureArea => self.capture_area(),
             Action::CaptureOptions => self.show_capture_options(false),
-            Action::LockScreen => self.lock_screen_requested = !self.is_locked(),
+            Action::LockScreen => self.lock_on_request(),
             Action::ForceQuit => self.open_force_quit(),
             Action::NextInputSource => self.step_input_source(true),
             Action::PreviousInputSource => self.step_input_source(false),

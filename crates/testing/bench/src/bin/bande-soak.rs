@@ -10,8 +10,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_compositor::{
-    Compositor, FrameClock, FrameOutput, FrameScheduler, OutputConfig, REFRESH, RenderError,
-    Renderer, SessionRole, Submission,
+    Compositor, FrameClock, FrameOutput, FrameScheduler, LockReport, OutputConfig, REFRESH,
+    RenderError, Renderer, SessionRole, Submission,
 };
 use rustix::process::{Pid, Signal, kill_process};
 use smithay::utils::{Point, Size};
@@ -100,7 +100,7 @@ struct Soak {
     home: PathBuf,
     apps: BTreeMap<&'static str, Child>,
     services: Vec<Child>,
-    lock_states: Receiver<bool>,
+    lock_states: Receiver<LockReport>,
     locked: bool,
     last_upkeep: Instant,
     last_pump: Instant,
@@ -260,8 +260,10 @@ impl Soak {
                 }
                 self.watch_for_hangs();
             }
-            while let Ok(locked) = self.lock_states.try_recv() {
-                self.locked = locked;
+            while let Ok(report) = self.lock_states.try_recv() {
+                if let LockReport::Locked(locked) = report {
+                    self.locked = locked;
+                }
             }
             thread::sleep(Duration::from_micros(500));
         }

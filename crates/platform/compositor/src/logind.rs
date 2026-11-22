@@ -113,6 +113,12 @@ pub enum SessionRequest {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockReport {
+    Started,
+    Locked(bool),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sleep {
     Starting,
     Ended,
@@ -293,7 +299,7 @@ pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus
 
 pub fn follow_session(
     connection: &Connection,
-    lock_states: Receiver<bool>,
+    lock_reports: Receiver<LockReport>,
     requests: Sender<SessionRequest>,
 ) -> zbus::Result<()> {
     let path = ManagerProxyBlocking::new(connection)?.get_session("auto")?;
@@ -309,9 +315,18 @@ pub fn follow_session(
         }
     });
     thread::spawn(move || {
-        for locked in lock_states {
-            if let Err(error) = session.set_locked_hint(locked) {
-                tracing::warn!("cannot tell logind the session is locked: {error}");
+        for report in lock_reports {
+            match report {
+                LockReport::Started => {
+                    if let Err(error) = session.request_lock() {
+                        tracing::warn!("cannot tell logind about the lock: {error}");
+                    }
+                }
+                LockReport::Locked(locked) => {
+                    if let Err(error) = session.set_locked_hint(locked) {
+                        tracing::warn!("cannot tell logind the session is locked: {error}");
+                    }
+                }
             }
         }
     });

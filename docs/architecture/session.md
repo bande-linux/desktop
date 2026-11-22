@@ -385,7 +385,9 @@ brings up the dialog.
   Properly"; encrypted volumes wait for the UI. `bande-volumes` holds the one UDisks2 client that
   automount, Files, the desktop and Disks share. Eject unmounts every filesystem of the drive,
   locks its encrypted volumes, then calls `Drive.Eject` or else `PowerOff`; a failure is reported
-  to the caller, not only logged.
+  to the caller, not only logged. A drive whose SMART status turns failing posts one critical
+  "A Disk Is Failing" notification; the drive ids already reported are kept in
+  `$XDG_STATE_HOME/bande/failing-disks` until the drive reports healthy again.
 - **Theme propagation**: GTK, Qt (above) and the pointer (`XCURSOR_THEME=Bande-Cursors`,
   `XCURSOR_SIZE`) follow the desktop's appearance.
 

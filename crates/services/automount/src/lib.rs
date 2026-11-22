@@ -1,6 +1,7 @@
 pub mod askpass;
 pub mod devices;
 pub mod discovery;
+mod failing;
 pub mod health;
 pub mod mounts;
 mod mounts_bus;
@@ -16,6 +17,7 @@ use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use bande_volumes::udisks::{BLOCK, Change, FILESYSTEM, Objects, UDISKS, Udisks};
 use devices::Devices;
+use failing::FailingDisks;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -121,6 +123,7 @@ pub struct Automounter {
     session: Connection,
     state: Shared,
     devices: Mutex<Option<Devices>>,
+    failing: FailingDisks,
 }
 
 impl Automounter {
@@ -135,6 +138,7 @@ impl Automounter {
             session: session.clone(),
             state: Shared::default(),
             devices: Mutex::new(None),
+            failing: FailingDisks::new(session),
         });
         match follow_session(system) {
             Ok((login, changes)) => {
@@ -162,6 +166,7 @@ impl Automounter {
     }
 
     fn handle(&self, objects: &Objects, change: &Change) {
+        self.failing.changed(objects, change);
         match change {
             Change::Added(path) => self.appeared(objects, path),
             Change::Removed(path, gone) => self.disappeared(path, gone),

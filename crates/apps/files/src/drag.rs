@@ -182,12 +182,10 @@ impl FilesView {
         self.auto_scroll.map(|(_, last)| last + SCROLL_STEP)
     }
 
-    pub(crate) fn auto_scroll(&mut self, now: Instant) {
-        let Some((at, last)) = self.auto_scroll else {
-            return;
-        };
+    pub fn auto_scroll(&mut self, now: Instant) -> Option<Option<DragAction>> {
+        let (at, last) = self.auto_scroll?;
         if now < last + SCROLL_STEP {
-            return;
+            return None;
         }
         let elapsed = now.saturating_duration_since(last).min(SCROLL_STEP * 4);
         self.auto_scroll = Some((at, now));
@@ -197,7 +195,7 @@ impl FilesView {
             delta: Point::new(0.0, delta),
             ..Scroll::default()
         }));
-        self.drag_moved(at);
+        Some(self.drag_moved(at))
     }
 
     pub fn drag_icon(&mut self, grab: Point) -> DragIcon {

@@ -8,7 +8,7 @@ use std::time::Duration;
 use bande_l10n::tr;
 
 use crate::paint::colored;
-use bande_content::{Contents, confine, run_worker};
+use bande_content::{Contents, confine, only_compute_from_now_on, run_worker};
 use bande_fs::archive_contents;
 use bande_thumbnails::Picture;
 use bande_toolkit::{Color, CpuRenderer, Item, Point, Scene, TextStyle, TextSystem};
@@ -156,6 +156,9 @@ fn font_sample(path: &Path) -> io::Result<Sample> {
     if u64::from(width) * u64::from(height) > MOST_PIXELS {
         return Err(io::Error::other("the sample is too large"));
     }
+    if !only_compute_from_now_on() {
+        return Err(io::Error::other("cannot confine a font reader"));
+    }
     let mut rgba = vec![0; width as usize * height as usize * 4];
     CpuRenderer::new()
         .render_into(&scene, SAMPLE_SCALE, &mut rgba)
@@ -173,6 +176,7 @@ fn run(flag: &str, path: &Path) -> Option<Vec<u8>> {
         MOST_PIXELS * 4 + 64,
         WORKER_TIME,
     )
+    .ok()
 }
 
 fn header(out: &[u8]) -> Option<(u64, u64, &[u8])> {

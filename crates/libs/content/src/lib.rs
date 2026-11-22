@@ -3,6 +3,7 @@ mod decode;
 mod facts;
 mod import;
 pub mod pdf;
+mod sandbox;
 mod text;
 
 use std::fs::{self, File};
@@ -13,13 +14,14 @@ use std::sync::Arc;
 pub use bande_fs::Contents;
 use bande_fs::{Entry, can_extract, is_hidden};
 
-pub use confined::{decode_confined, run_worker, serve_worker};
+pub use confined::{WorkerFailure, decode_confined, run_worker, serve_worker};
 pub use decode::{
-    Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, decode_file,
-    open, read_file,
+    Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, open,
+    read_file,
 };
 pub use facts::{Facts, camera_facts};
 pub use import::Importer;
+pub use sandbox::only_compute_from_now_on;
 pub use text::{Block, Code, Tone, highlight, html, is_code, markdown, rtf};
 
 pub const TEXT_PREVIEW_BYTES: u64 = 64 * 1024;
@@ -77,8 +79,15 @@ fn text_up_to(path: &Path, limit: u64) -> Option<String> {
     }
 }
 
-fn image<I>(path: &Path, picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>) -> Option<I> {
+fn image<I>(
+    path: &Path,
+    picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>,
+) -> Option<(I, (u32, u32))> {
     let decoded = decode_confined(path, IMAGE_PREVIEW_PIXELS).ok()?;
+    let size = decoded
+        .facts
+        .natural
+        .unwrap_or((decoded.width, decoded.height));
     let level = match decoded.pixels {
         Pixels::Still(levels) => levels.into_iter().next()?,
         Pixels::Animation(frames) => Level {
@@ -88,47 +97,36 @@ fn image<I>(path: &Path, picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>) -
         },
     };
     let rgba = Arc::try_unwrap(level.rgba).unwrap_or_else(|shared| (*shared).clone());
-    picture(level.width, level.height, rgba)
+    Some((picture(level.width, level.height, rgba)?, size))
 }
 
-pub fn image_size(path: &Path) -> Option<(u32, u32)> {
-    image::ImageReader::open(path)
-        .ok()?
-        .with_guessed_format()
-        .ok()?
-        .into_dimensions()
-        .ok()
-}
-
+/// Returns the preview of `entry` and, for a picture, its size in pixels.
 pub fn preview<I>(
     entry: &Entry,
     picture: impl FnOnce(u32, u32, Vec<u8>) -> Option<I>,
-) -> Preview<I> {
+) -> (Preview<I>, Option<(u32, u32)>) {
     if entry.is_folder() {
-        return Preview::Folder {
-            items: fs::read_dir(&entry.path).map_or(0, |entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .filter(|entry| !is_hidden(&entry.file_name().to_string_lossy()))
-                    .count()
-            }),
-        };
+        let items = fs::read_dir(&entry.path).map_or(0, |entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| !is_hidden(&entry.file_name().to_string_lossy()))
+                .count()
+        });
+        return (Preview::Folder { items }, None);
     }
     let metadata = fs::metadata(&entry.path);
     if !metadata.as_ref().is_ok_and(fs::Metadata::is_file) {
-        return Preview::Other {
-            size: metadata.map_or(0, |metadata| metadata.len()),
-        };
+        let size = metadata.map_or(0, |metadata| metadata.len());
+        return (Preview::Other { size }, None);
     }
-    if let Some(image) = image(&entry.path, picture) {
-        return Preview::Image(image);
+    if let Some((image, size)) = image(&entry.path, picture) {
+        return (Preview::Image(image), Some(size));
     }
     if let Some(text) = text_up_to(&entry.path, TEXT_PREVIEW_BYTES) {
-        return Preview::Text(text);
+        return (Preview::Text(text), None);
     }
-    Preview::Other {
-        size: fs::metadata(&entry.path).map_or(0, |metadata| metadata.len()),
-    }
+    let size = fs::metadata(&entry.path).map_or(0, |metadata| metadata.len());
+    (Preview::Other { size }, None)
 }
 
 pub fn tree_size(path: &Path, current: &dyn Fn() -> bool) -> Option<(u64, u64)> {

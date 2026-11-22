@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::os::fd::BorrowedFd;
 use std::os::unix::fs::DirBuilderExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -18,6 +18,7 @@ use crate::net::Network;
 use crate::settings::{MailSettings, SortBy};
 use crate::setup::{Found, Outcome, check, find};
 use crate::store::{Account, AccountId, Mailbox, MailboxId, MessageId, RuleAction, Store, Summary};
+use crate::ui::compose_view::attachable;
 use crate::ui::format::full_date;
 use crate::ui::reader::{Entry, Layout, Reading, Remote, Respond, Target, Thread, link_host};
 use crate::ui::setup_sheet::{AccountSheet, Action, Field, Mode, Shared, SheetState};
@@ -612,13 +613,29 @@ impl MailView {
     }
 
     pub fn dragged(&mut self, window: &mut Window, event: &WindowEvent) -> bool {
-        match self.drop.event(window, event, Path::is_file) {
+        match self.drop.event(window, event, attachable) {
             Dropping::Over => true,
             Dropping::Dropped(paths) => {
                 self.requests.push(Request::Attach(paths));
                 true
             }
-            Dropping::Other => false,
+            Dropping::Other => {
+                let handled = match window.drive(&mut self.ui, event.clone()) {
+                    Ok(unhandled) => unhandled.is_none(),
+                    Err(error) => {
+                        tracing::warn!("cannot take the dragged text: {error}");
+                        false
+                    }
+                };
+                self.after_ui();
+                handled
+            }
+        }
+    }
+
+    pub fn start_text_drag(&mut self, window: &mut Window) {
+        if let Err(error) = window.start_text_drag(&mut self.ui) {
+            tracing::warn!("cannot drag the selected text: {error}");
         }
     }
 

@@ -10,10 +10,10 @@ use std::time::{Duration, Instant};
 use bande_xdg::wait_for_exit;
 use serde::{Deserialize, Serialize};
 
-use crate::decode::{Decoded, Failure, Frame, Kind, Level, Pixels, decode_file};
+use crate::decode::{Decoded, Failure, Frame, Kind, Level, Pixels, decode_with, open, svg_options};
 use crate::facts::Facts;
 use crate::pdf::protocol;
-use crate::{confine, worker_program};
+use crate::{confine, only_compute_from_now_on, worker_program};
 
 const PICTURE_FLAG: &str = "--picture-worker";
 const PICTURE_TIME: Duration = Duration::from_secs(20);
@@ -35,37 +35,76 @@ enum Reply {
     Failed(Failure),
 }
 
+/// Why a confined worker gave no output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerFailure {
+    NotStarted,
+    TimedOut,
+    Failed,
+}
+
 /// Runs this program again with `arguments` as a confined worker and returns what it wrote to
 /// standard output, up to `most` bytes, when it succeeds within `time`.
-pub fn run_worker(arguments: &[&OsStr], most: u64, time: Duration) -> Option<Vec<u8>> {
+pub fn run_worker(
+    arguments: &[&OsStr],
+    most: u64,
+    time: Duration,
+) -> Result<Vec<u8>, WorkerFailure> {
     let mut child = Command::new(worker_program())
         .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .inspect_err(|error| tracing::warn!("cannot start a file reader: {error}"))
-        .ok()?;
-    let stdout = child.stdout.take()?;
+        .map_err(|error| {
+            tracing::warn!("cannot start a file reader: {error}");
+            WorkerFailure::NotStarted
+        })?;
+    let stdout = child.stdout.take().ok_or(WorkerFailure::NotStarted)?;
     let reader = thread::Builder::new()
         .name("file reader".to_owned())
         .spawn(move || {
             let mut out = Vec::new();
             stdout.take(most).read_to_end(&mut out).map(|_| out)
-        })
-        .inspect_err(|error| tracing::warn!("cannot read a file reader: {error}"))
-        .ok()?;
-    let exited = wait_for_exit(&mut child, Some(Instant::now() + time), None);
-    let done = matches!(exited, Ok(Some(status)) if status.success());
-    if !done {
-        if let Ok(None) = exited {
-            tracing::warn!("a file reader took too long");
+        });
+    let reader = match reader {
+        Ok(reader) => reader,
+        Err(error) => {
+            tracing::warn!("cannot read a file reader: {error}");
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(WorkerFailure::NotStarted);
         }
+    };
+    let exited = wait_for_exit(&mut child, Some(Instant::now() + time), None);
+    let outcome = match exited {
+        Ok(Some(status)) if status.success() => Ok(()),
+        Ok(None) => {
+            tracing::warn!("a file reader took too long");
+            Err(WorkerFailure::TimedOut)
+        }
+        Ok(Some(_)) => Err(WorkerFailure::Failed),
+        Err(error) => {
+            tracing::warn!("cannot wait for a file reader: {error}");
+            Err(WorkerFailure::Failed)
+        }
+    };
+    if outcome.is_err() {
         let _ = child.kill();
         let _ = child.wait();
     }
-    let out = reader.join().ok()?.ok()?;
-    done.then_some(out)
+    let out = match reader.join() {
+        Ok(Ok(out)) => out,
+        Ok(Err(error)) => {
+            tracing::warn!("cannot read from a file reader: {error}");
+            return Err(outcome.err().unwrap_or(WorkerFailure::Failed));
+        }
+        Err(_) => {
+            tracing::warn!("the file reader thread stopped");
+            return Err(outcome.err().unwrap_or(WorkerFailure::Failed));
+        }
+    };
+    outcome.map(|()| out)
 }
 
 /// Serves the confined readers of this crate. Returns nothing for other arguments.
@@ -85,8 +124,20 @@ pub fn serve_worker(arguments: &[String]) -> Option<ExitCode> {
     }
 }
 
+fn decode_alone(path: &Path) -> Result<Decoded, Failure> {
+    let (kind, bytes) = open(path)?;
+    let svg = svg_options(kind);
+    if !only_compute_from_now_on() {
+        tracing::warn!("cannot confine a picture reader");
+        return Err(Failure::Unreadable);
+    }
+    let mut decoded = decode_with(&bytes, kind, &svg)?;
+    decoded.facts.kind = Some(kind);
+    Ok(decoded)
+}
+
 fn serve_picture(path: &Path, longest: u32) -> ExitCode {
-    let (reply, payload) = match decode_file(path) {
+    let (reply, payload) = match decode_alone(path) {
         Ok(Decoded {
             width,
             height,
@@ -181,7 +232,12 @@ pub fn decode_confined(path: &Path, longest: u32) -> Result<Decoded, Failure> {
         OsStr::new(&longest),
         path.as_os_str(),
     ];
-    let out = run_worker(&arguments, PICTURE_BYTES, PICTURE_TIME).ok_or(Failure::Damaged)?;
+    let out =
+        run_worker(&arguments, PICTURE_BYTES, PICTURE_TIME).map_err(|failure| match failure {
+            WorkerFailure::NotStarted => Failure::Unreadable,
+            WorkerFailure::TimedOut => Failure::TimedOut,
+            WorkerFailure::Failed => Failure::Damaged,
+        })?;
     let mut input = out.as_slice();
     let reply: Reply = protocol::read(&mut input)
         .ok()

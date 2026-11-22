@@ -344,7 +344,7 @@ fn in_worker(cache: &Cache, path: &Path, mime: &str, size: ThumbnailSize) -> Opt
         path.as_os_str(),
         cache.root().as_os_str(),
     ];
-    let out = run_worker(&arguments, LARGEST_OUTPUT, WORKER_TIME)?;
+    let out = run_worker(&arguments, LARGEST_OUTPUT, WORKER_TIME).ok()?;
     picture_from(&out)
 }
 

@@ -99,7 +99,11 @@ impl View for Pane {
         match (self, event) {
             (Self::Main(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
             (Self::Compose(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
-            (Self::Main(view), WindowEvent::Input(input)) => view.handle(&input),
+            (Self::Main(view), WindowEvent::Input(input)) => {
+                let handled = view.handle(&input);
+                view.start_text_drag(window);
+                handled
+            }
             (Self::Compose(view), WindowEvent::Input(input)) => {
                 let handled = view.handle(&input);
                 view.start_text_drag(window);
@@ -351,10 +355,9 @@ impl Mail {
                 Picked::TooLarge(path) => refused.push(path),
             }
         }
+        let refusal = refused.first().map(|path| refusal(path));
         if token == SHARED_FILES {
-            if let Some(path) = refused.first() {
-                tracing::warn!("{} is too large to attach", path.display());
-            }
+            let before: Vec<WindowId> = cx.windows().collect();
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
                 view.compose(Draft {
                     attachments,
@@ -362,6 +365,22 @@ impl Mail {
                 });
             }
             self.serve_main(cx);
+            let Some(refusal) = refusal else {
+                return;
+            };
+            let windows: Vec<WindowId> = cx.windows().collect();
+            let opened = windows.into_iter().find(|window| {
+                !before.contains(window) && matches!(cx.view(*window), Some(Pane::Compose(_)))
+            });
+            match opened {
+                Some(window) => {
+                    if let Some((_, Pane::Compose(view))) = cx.window(window) {
+                        view.show_error(&refusal);
+                    }
+                    refresh(cx, window);
+                }
+                None => tracing::warn!("{refusal}"),
+            }
             return;
         }
         let windows: Vec<WindowId> = cx.windows().collect();
@@ -372,16 +391,8 @@ impl Mail {
         };
         if let Some((_, Pane::Compose(view))) = cx.window(window) {
             view.add_attachments(attachments);
-            if let Some(path) = refused.first() {
-                let name = path
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                view.show_error(&tr!(
-                    "{name} is larger than {limit} and was not attached.",
-                    name = name,
-                    limit = bande_fs::format_size(MAX_ATTACHMENT)
-                ));
+            if let Some(refusal) = refusal {
+                view.show_error(&refusal);
             }
         }
         refresh(cx, window);
@@ -823,4 +834,16 @@ impl Program for Mail {
 
 fn main() -> ExitCode {
     bande_app::run::<Mail>(&INFO)
+}
+
+fn refusal(path: &Path) -> String {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    tr!(
+        "{name} is larger than {limit} and was not attached.",
+        name = name,
+        limit = bande_fs::format_size(MAX_ATTACHMENT)
+    )
 }

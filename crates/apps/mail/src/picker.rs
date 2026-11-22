@@ -54,8 +54,16 @@ impl Picker {
                 let picked = paths()
                     .into_iter()
                     .filter_map(|path| {
-                        let size = std::fs::metadata(&path).ok()?.len();
-                        if size > MAX_ATTACHMENT {
+                        let metadata = std::fs::metadata(&path)
+                            .inspect_err(|error| {
+                                tracing::warn!("cannot read {}: {error}", path.display())
+                            })
+                            .ok()?;
+                        if !metadata.is_file() {
+                            tracing::warn!("{} is not a file to attach", path.display());
+                            return None;
+                        }
+                        if metadata.len() > MAX_ATTACHMENT {
                             return Some(Picked::TooLarge(path));
                         }
                         let mut data = Vec::new();

@@ -894,8 +894,19 @@ impl DesktopView {
             Target::Desktop => &self.folder,
             Target::Folder(folder) => folder,
         };
-        let reference = self.offered.first().unwrap_or(&self.folder);
-        let action = match same_volume(reference, destination) {
+        let rearranging = target == Target::Desktop
+            && matches!(&self.gesture, Gesture::Drag { paths, .. } if *paths == self.offered);
+        let reference = self
+            .offered
+            .iter()
+            .find(|path| {
+                self.desktop
+                    .item(path)
+                    .is_none_or(|item| item.kind != Kind::Volume)
+            })
+            .or(self.offered.first())
+            .unwrap_or(&self.folder);
+        let action = match rearranging || same_volume(reference, destination) {
             true => Some(DragAction::Move),
             false => Some(DragAction::Copy),
         };
@@ -1041,6 +1052,9 @@ impl DesktopView {
         }
         let selected = self.desktop.selected();
         let command = modifiers.control;
+        if !matches!(key, Key::Space | Key::Character(_)) {
+            self.typed.clear();
+        }
         match key {
             Key::Space if !command && !modifiers.alt && self.typed.is_typing(now) => {
                 self.desktop.select_prefix(self.typed.push([' '], now));

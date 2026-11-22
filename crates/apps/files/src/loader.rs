@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
-use bande_content::{Preview, image_size, preview, tree_size};
+use bande_content::{Preview, preview, tree_size};
 use bande_fs::Entry;
 use bande_toolkit::Image;
 
@@ -50,11 +50,7 @@ fn load_one(
     let current = || latest.load(Ordering::Relaxed) == asked;
     let loaded = match request {
         Request::Preview(entry) => {
-            let preview = preview(&entry, Image::from_rgba);
-            let pixels = match preview {
-                Preview::Image(_) => image_size(&entry.path),
-                _ => None,
-            };
+            let (preview, pixels) = preview(&entry, Image::from_rgba);
             Some(Loaded::Preview {
                 path: entry.path.clone(),
                 preview,

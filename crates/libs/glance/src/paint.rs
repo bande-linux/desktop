@@ -14,7 +14,7 @@ use bande_toolkit::{
 use bande_xdg::{ICON_THEMES, data_dirs, find_icon};
 use parley::{Alignment, AlignmentOptions, FontFamily, FontFamilyName, StyleProperty};
 
-use crate::content::{CodeView, DocumentView, FontView, Installation, Picture, Shown};
+use crate::content::{CodeView, DocumentView, FontView, Picture, Shown};
 use crate::pdf::{GAP, PdfView, render};
 use crate::worker::SAMPLE_WIDTH;
 use crate::{Glance, Hit, MIN_SIZE, Resizing, Subject};
@@ -325,14 +325,17 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
                 modified,
             ];
         }
-        Shown::Pdf(pdf) if pdf.phase() == Phase::Failed => tr!("This document cannot be shown"),
-        Shown::Pdf(pdf) if matches!(pdf.phase(), Phase::Locked { .. }) => {
-            tr!("This document is locked")
-        }
         _ if entry.is_folder() => String::new(),
         _ => format_size(entry.size),
     };
-    let reason = match shown {
+    [subject.kind.clone(), size, modified]
+        .into_iter()
+        .chain(reason(shown))
+        .collect()
+}
+
+pub(crate) fn reason(shown: &Shown) -> Option<String> {
+    match shown {
         Shown::Failed(Failure::TooLarge { width, height }) => Some(tr!(
             "Too large to preview ({width} × {height})",
             width = width,
@@ -340,15 +343,18 @@ fn summary_lines(subject: &Subject, shown: &Shown) -> Vec<String> {
         )),
         Shown::Failed(Failure::FileTooLarge) => Some(tr!("Too large to preview")),
         Shown::Failed(Failure::Damaged) => Some(tr!("This image is damaged")),
+        Shown::Failed(Failure::TimedOut) => Some(tr!("Took too long to preview")),
         Shown::Failed(Failure::NotSupported) => Some(tr!("This kind of image can’t be previewed")),
         Shown::Failed(Failure::Unreadable) => Some(tr!("This file can’t be read")),
         Shown::Media(None) => Some(tr!("This can’t be played here")),
+        Shown::Pdf(pdf) if pdf.phase() == Phase::Failed => {
+            Some(tr!("This document cannot be shown"))
+        }
+        Shown::Pdf(pdf) if matches!(pdf.phase(), Phase::Locked { .. }) => {
+            Some(tr!("This document is locked"))
+        }
         _ => None,
-    };
-    [subject.kind.clone(), size, modified]
-        .into_iter()
-        .chain(reason)
-        .collect()
+    }
 }
 
 impl Glance {
@@ -615,17 +621,13 @@ impl Glance {
             );
         }
         if let Shown::Font(font) = &self.shown {
-            right = match font.installation {
-                Installation::Available => {
-                    text_button(painter, right, &tr!("Install"), Hit::Install, self)
-                }
-                Installation::Installing => note(painter, right, &tr!("Installing…")),
-                Installation::Installed => note(painter, right, &tr!("Installed")),
-                Installation::Failed => {
-                    let right = text_button(painter, right, &tr!("Install"), Hit::Install, self);
-                    note(painter, right, &tr!("The font couldn’t be installed."))
-                }
-            };
+            let (offers, status) = (font.offers_install(), font.installation.note());
+            if offers {
+                right = text_button(painter, right, &tr!("Install"), Hit::Install, self);
+            }
+            if let Some(status) = status {
+                right = note(painter, right, &status);
+            }
         }
         right -= BUTTON;
         button(painter, right, "edit-copy-symbolic", Hit::Copy, self);

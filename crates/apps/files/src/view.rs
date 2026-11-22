@@ -950,7 +950,6 @@ impl FilesView {
             self.notice = None;
         }
         self.spring(now);
-        self.auto_scroll(now);
         if let Some((due, path)) = self.pending_rename.take() {
             if due > now {
                 self.pending_rename = Some((due, path));
@@ -1374,6 +1373,7 @@ impl FilesView {
     }
 
     fn click(&mut self, pointer: &Pointer) -> bool {
+        self.typed.clear();
         match pointer.button {
             PointerButton::Back => {
                 self.back();
@@ -1730,6 +1730,9 @@ impl FilesView {
         let shift = modifiers.shift;
         let alt = modifiers.alt;
         let plain = !command && !alt;
+        if !matches!(key, Key::Space | Key::Character(_)) {
+            self.typed.clear();
+        }
         match key {
             Key::Space if plain && self.typed.is_typing(Instant::now()) => {
                 return self.type_select(' ');

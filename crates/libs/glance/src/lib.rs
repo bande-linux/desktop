@@ -280,6 +280,10 @@ impl Glance {
         !self.closing && matches!(&self.shown, Shown::Pdf(pdf) if pdf.is_locked())
     }
 
+    pub fn offers_install(&self) -> bool {
+        !self.closing && matches!(&self.shown, Shown::Font(font) if font.offers_install())
+    }
+
     pub fn plays_media(&self) -> bool {
         !self.closing && matches!(&self.shown, Shown::Media(Some(_)))
     }
@@ -296,10 +300,7 @@ impl Glance {
             return;
         };
         if let Shown::Font(font) = &mut self.shown
-            && matches!(
-                font.installation,
-                Installation::Available | Installation::Failed
-            )
+            && font.offers_install()
         {
             font.installation = Installation::Installing;
             self.loader.install_font(path);
@@ -511,6 +512,7 @@ impl Glance {
                 self.pan = Point::default();
             }
             Key::Character('l' | 'L') if command => return self.rotate(),
+            Key::Character('i' | 'I') if command && modifiers.shift => self.install_font(),
             _ => return false,
         }
         true

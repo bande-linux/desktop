@@ -11,7 +11,7 @@ mod view;
 
 pub use bande_content::pdf::protocol::WORKER_FLAG;
 pub use bande_content::pdf::worker::run as run_pdf_worker;
-pub use bande_content::{Decoded, Failure, Kind, Pixels, decode_file};
+pub use bande_content::{Decoded, Failure, Kind, Pixels};
 pub use canvas::{Canvas, Orientation, Zoom};
 pub use files::{argument_path, is_image_name};
 pub use info::{InfoPanel, Row, document_rows, file_rows, info_ui, picture_rows};

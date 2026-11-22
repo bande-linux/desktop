@@ -5,10 +5,8 @@ use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
-use bande_content::{Importer, confine, worker_program};
+use bande_content::{Importer, confine, only_compute_from_now_on, worker_program};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
-
-use crate::sandbox::only_compute_from_now_on;
 
 pub const MAX_TEXT: usize = 4 << 20;
 const MAX_DOCUMENT: u64 = 256 << 20;

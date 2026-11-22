@@ -12,6 +12,7 @@ use flate2::read::GzDecoder;
 const DICT_PORT: u16 = 2628;
 const DICT_TIMEOUT: Duration = Duration::from_secs(10);
 const ANY_LANGUAGE: &str = "*";
+const LARGEST: u64 = 1 << 30;
 const TARBALLS: [&str; 5] = [".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar"];
 
 #[derive(Debug)]
@@ -78,17 +79,20 @@ fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn read_maybe_gzipped(path: &Path) -> io::Result<Vec<u8>> {
+fn read_maybe_gzipped(path: &Path) -> Result<Vec<u8>, Failure> {
     let mut bytes = Vec::new();
     let file = File::open(path)?;
     match path
         .extension()
         .is_some_and(|extension| extension == "dz" || extension == "gz")
     {
-        true => GzDecoder::new(file).read_to_end(&mut bytes)?,
-        false => BufReader::new(file).read_to_end(&mut bytes)?,
+        true => GzDecoder::new(file).take(LARGEST + 1).read_to_end(&mut bytes)?,
+        false => BufReader::new(file).take(LARGEST + 1).read_to_end(&mut bytes)?,
     };
-    Ok(bytes)
+    match bytes.len() as u64 > LARGEST {
+        true => Err(Failure::Broken(tr!("it is too big once unpacked"))),
+        false => Ok(bytes),
+    }
 }
 
 fn first_existing(base: &Path, endings: &[&str]) -> Option<PathBuf> {

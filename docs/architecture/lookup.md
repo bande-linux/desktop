@@ -42,8 +42,8 @@ optional `.syn`) or a dictd one (`.index` with `.dict` or `.dict.dz`), or a tarb
 (unpacked with `tar`). It is converted on a worker thread into a pack in
 `~/.local/share/bande/dict/`, serving any language (`*`); markup is reduced to text. A DICT server
 (`dict://host[:port]/database`, RFC 2229, unencrypted) is checked and added as a `.source` with
-`protocol=dict`. An unsupported or broken file gets a message naming it. Formats without a public
-specification are not imported.
+`protocol=dict`. An unsupported or broken file gets a message naming it, and so does one over
+1 GiB once unpacked. Formats without a public specification are not imported.
 
 ## Pack format
 

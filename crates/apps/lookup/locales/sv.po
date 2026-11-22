@@ -13,6 +13,9 @@ msgstr "”{name}” är inte en ordbok som Ordbok kan lägga till. Använd en o
 msgid "“{name}” could not be added: {detail}."
 msgstr "”{name}” kunde inte läggas till: {detail}."
 
+msgid "it is too big once unpacked"
+msgstr "den är för stor uppackad"
+
 msgid "Dictionary"
 msgstr "Ordbok"
 

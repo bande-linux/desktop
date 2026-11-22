@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use accesskit::TreeUpdate;
-use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Settings, View, WindowId};
+use bande_app::{Cx, Info, Keys, Kind, Menus, Program, Saved, Settings, View, WindowId};
 use bande_app_settings::{Stored, settings_folder};
 use bande_inbox::Inbox;
 use bande_l10n::tr;
@@ -17,7 +17,7 @@ use bande_mail::message::Attachment;
 use bande_mail::portal::choose_save_path;
 use bande_mail::settings::{Change, MailSettings, listen};
 use bande_mail::ui::{
-    COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Mode, Request, SETTINGS_SIZE,
+    COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Mode, Place, Request, SETTINGS_SIZE,
     SIDEBAR_WIDTH, SettingsView,
 };
 use bande_toolkit::{
@@ -767,6 +767,22 @@ impl Program for Mail {
             }
             Err(error) => tracing::warn!("cannot open the viewer: {error}"),
         }
+    }
+
+    fn save_window(&self, cx: &Cx<Self>, window: WindowId) -> Option<Saved> {
+        match cx.view(window)? {
+            Pane::Main(view) => Saved::of(&view.place().key()),
+            Pane::Compose(_) => None,
+        }
+    }
+
+    fn restore_window(&mut self, cx: &mut Cx<Self>, saved: Saved) {
+        if let Some(place) = saved.read::<String>().and_then(|key| Place::from_key(&key))
+            && let Some(view) = self.parked.as_deref_mut()
+        {
+            view.choose_place(place);
+        }
+        self.reopen(cx);
     }
 
     fn window_closed(&mut self, _cx: &mut Cx<Self>, window: WindowId, view: Pane) {

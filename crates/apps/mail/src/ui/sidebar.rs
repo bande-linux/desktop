@@ -19,6 +19,27 @@ impl Place {
             Self::Mailbox(id) => Scope::Mailbox(*id),
         }
     }
+
+    pub fn key(&self) -> String {
+        match self {
+            Self::All(role) => format!("all:{}", role.name()),
+            Self::Flagged => "flagged".to_owned(),
+            Self::Mailbox(id) => format!("mailbox:{id}"),
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        if key == "flagged" {
+            return Some(Self::Flagged);
+        }
+        if let Some(role) = key.strip_prefix("all:") {
+            return Role::from_name(role).map(Self::All);
+        }
+        key.strip_prefix("mailbox:")?
+            .parse()
+            .ok()
+            .map(Self::Mailbox)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

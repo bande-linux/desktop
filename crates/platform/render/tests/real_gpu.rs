@@ -12,7 +12,7 @@ use smithay::backend::allocator::gbm::{GbmAllocator, GbmBuffer, GbmBufferFlags, 
 use smithay::backend::allocator::{Allocator, Buffer, Format, Fourcc};
 use smithay::backend::renderer::{Bind, Color32F, Frame, ImportDma, Offscreen, Renderer, Texture};
 use smithay::reexports::rustix::{ioctl, mm};
-use smithay::utils::{Rectangle, Transform};
+use smithay::utils::{Physical, Rectangle, Transform};
 
 type Outcome<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -354,11 +354,11 @@ fn clear(
     renderer: &mut VulkanRenderer,
     dmabuf: &mut Dmabuf,
     [red, green, blue]: [f32; 3],
+    damage: Rectangle<i32, Physical>,
 ) -> Outcome {
-    let whole = Rectangle::from_size(SIZE.into());
     let mut framebuffer = renderer.bind(dmabuf)?;
     let mut frame = renderer.render(&mut framebuffer, SIZE.into(), Transform::Normal)?;
-    frame.clear(Color32F::new(red, green, blue, 1.0), &[whole])?;
+    frame.clear(Color32F::new(red, green, blue, 1.0), &[damage])?;
     frame.finish()?.wait()?;
     Ok(())
 }
@@ -428,7 +428,8 @@ fn sample(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
                 }
                 println!("{format:?}: GBM cannot map it ({error}), drawing it instead");
                 let colour = COLOUR.map(|value| f32::from(value) / 255.0);
-                clear(&mut gpu.renderer, &mut buffer.export()?, colour)?;
+                let whole = Rectangle::from_size(SIZE.into());
+                clear(&mut gpu.renderer, &mut buffer.export()?, colour, whole)?;
             }
             (buffer.export()?, [COLOUR[2], COLOUR[1], COLOUR[0], 0xff])
         }
@@ -458,7 +459,11 @@ fn sample(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
     Ok(true)
 }
 
-fn foreign_pixel(gbm: &GbmDevice<Arc<File>>, dmabuf: &Dmabuf) -> Outcome<[u8; 4]> {
+fn foreign_pixels(
+    gbm: &GbmDevice<Arc<File>>,
+    dmabuf: &Dmabuf,
+    points: [(u32, u32); 2],
+) -> Outcome<[[u8; 4]; 2]> {
     let mut fds = [None; 4];
     let (mut strides, mut offsets) = ([0; 4], [0; 4]);
     for (index, ((fd, offset), stride)) in dmabuf
@@ -483,10 +488,13 @@ fn foreign_pixel(gbm: &GbmDevice<Arc<File>>, dmabuf: &Dmabuf) -> Outcome<[u8; 4]
         offsets,
         dmabuf.format().modifier,
     )?;
-    let pixel = imported.map(width / 2, height / 2, 1, 1, |mapped| {
-        <[u8; 4]>::try_from(&mapped.buffer()[..4])
-    })??;
-    Ok(pixel)
+    let mut pixels = [[0; 4]; 2];
+    for (pixel, (x, y)) in pixels.iter_mut().zip(points) {
+        *pixel = imported.map(x, y, 1, 1, |mapped| {
+            <[u8; 4]>::try_from(&mapped.buffer()[..4])
+        })??;
+    }
+    Ok(pixels)
 }
 
 fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
@@ -495,13 +503,24 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
         return Ok(false);
     };
     let mut dmabuf = buffer.export()?;
+    let whole = Rectangle::from_size(SIZE.into());
     let colours = [[0.75, 0.25, 0.5], [0.25, 0.5, 0.75], [0.5, 0.75, 0.25]];
     for colour in colours {
-        clear(&mut gpu.renderer, &mut dmabuf, colour)?;
+        clear(&mut gpu.renderer, &mut dmabuf, colour, whole)?;
     }
-    let last = colours[FRAMES - 1].map(|value: f32| (value * 255.0).round() as u8);
-    let mut wanted = packed(format.code, last).ok_or("not a colour format")?;
-    let found = match foreign_pixel(&gpu.gbm, &dmabuf) {
+    let corner = [0.0, 0.0, 1.0];
+    let damage = Rectangle::from_size((16, 16).into());
+    clear(&mut gpu.renderer, &mut dmabuf, corner, damage)?;
+    let bytes = |colour: [f32; 3]| {
+        packed(
+            format.code,
+            colour.map(|value| (value * 255.0).round() as u8),
+        )
+        .ok_or("not a colour format")
+    };
+    let mut wanted = [bytes(corner)?, bytes(colours[FRAMES - 1])?];
+    let centre = (SIZE.0.unsigned_abs() / 2, SIZE.1.unsigned_abs() / 2);
+    let found = match foreign_pixels(&gpu.gbm, &dmabuf, [(4, 4), centre]) {
         Ok(found) => found,
         Err(error) => {
             println!("scan-out not checked for {format:?}: GBM cannot read it back ({error})");
@@ -510,12 +529,16 @@ fn scan_out(gpu: &mut Gpu, format: Format) -> Outcome<bool> {
     };
     println!("scanned out {format:?}: {found:?}");
     if matches!(format.code, Fourcc::Xrgb8888 | Fourcc::Xbgr8888) {
-        wanted[3] = found[3];
+        for (wanted, found) in wanted.iter_mut().zip(found) {
+            wanted[3] = found[3];
+        }
     }
-    assert!(
-        close(found, wanted, 1),
-        "{format:?} scanned out {found:?}, not {wanted:?}"
-    );
+    for (found, wanted) in found.into_iter().zip(wanted) {
+        assert!(
+            close(found, wanted, 1),
+            "{format:?} kept {found:?} after a partial frame, not {wanted:?}"
+        );
+    }
     Ok(true)
 }
 

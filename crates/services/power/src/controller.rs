@@ -113,14 +113,14 @@ impl IdleController {
     }
 
     pub fn idle_for(&self, idle: Duration) {
-        self.run(|machine| machine.idle_for(idle, boot_now()));
+        self.run(|machine| machine.idle_for(idle, boot_now().unwrap_or_default()));
     }
 
     pub fn password_required(&self) -> bool {
         self.machine
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .password_required(boot_now())
+            .password_required(boot_now().unwrap_or(Duration::MAX))
     }
 
     pub fn sleeping(&self) {
@@ -136,7 +136,7 @@ impl IdleController {
     }
 
     pub fn resumed(&self) {
-        self.run(|machine| machine.resumed(boot_now()));
+        self.run(|machine| machine.resumed(boot_now().unwrap_or_default()));
     }
 
     pub fn set_inhibited(&self, inhibitor: Inhibitor, held: bool) {
@@ -184,8 +184,8 @@ impl IdleController {
     }
 }
 
-fn boot_now() -> Duration {
-    Duration::try_from(clock_gettime(ClockId::Boottime)).unwrap_or_default()
+fn boot_now() -> Option<Duration> {
+    Duration::try_from(clock_gettime(ClockId::Boottime)).ok()
 }
 
 fn policies(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policies> {

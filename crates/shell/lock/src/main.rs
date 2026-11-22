@@ -1,4 +1,5 @@
-use std::os::fd::{AsFd, BorrowedFd};
+use std::cell::Cell;
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::process::ExitCode;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -20,6 +21,7 @@ use bande_toolkit::{
     App, Image, Role, Scene, Scheme, TextSystem, Window, WindowError, WindowEvent,
 };
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
+use zbus::fdo::ConnectionCredentials;
 use zbus::names::BusName;
 use zeroize::Zeroizing;
 
@@ -71,63 +73,71 @@ struct Locker {
 }
 
 struct Power {
-    cached: PowerProxyBlocking<'static>,
-    fresh: zbus::blocking::Connection,
+    bus: zbus::blocking::Connection,
+    required: Cell<bool>,
 }
 
 const POWER_NAME: &str = "org.bande.Power";
 const POWER_UNIT: &str = "bande-power.service";
-const FRESH_READ_TIMEOUT: Duration = Duration::from_secs(1);
+const READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 impl Power {
     fn connect() -> zbus::Result<Self> {
         Ok(Self {
-            cached: PowerProxyBlocking::builder(&bande_bus::session()?)
-                .cache_properties(zbus::proxy::CacheProperties::Yes)
+            bus: zbus::blocking::connection::Builder::session()?
+                .method_timeout(READ_TIMEOUT)
                 .build()?,
-            fresh: zbus::blocking::connection::Builder::session()?
-                .method_timeout(FRESH_READ_TIMEOUT)
-                .build()?,
+            required: Cell::new(false),
         })
     }
 
     fn password_required(&self) -> bool {
-        self.cached
-            .cached_password_required()
-            .ok()
-            .flatten()
-            .unwrap_or(true)
-            || self
-                .fresh_password_required()
-                .inspect_err(|error| {
-                    tracing::warn!("cannot ask whether a password is needed: {error}")
-                })
-                .unwrap_or(true)
+        if self.required.get() {
+            return true;
+        }
+        let required = self
+            .ask()
+            .inspect_err(|error| tracing::warn!("cannot ask whether a password is needed: {error}"))
+            .unwrap_or(true);
+        self.required.set(required);
+        required
     }
 
-    fn fresh_password_required(&self) -> zbus::Result<bool> {
-        let bus = zbus::blocking::fdo::DBusProxy::new(&self.fresh)?;
+    fn ask(&self) -> zbus::Result<bool> {
+        let bus = zbus::blocking::fdo::DBusProxy::new(&self.bus)?;
         let owner = bus.get_name_owner(BusName::try_from(POWER_NAME)?)?;
-        let process = bus.get_connection_unix_process_id(owner.as_ref().into())?;
-        if !runs_in_power_unit(process) {
-            tracing::warn!("{owner} answers for {POWER_NAME} from outside {POWER_UNIT}");
+        let credentials = bus.get_connection_credentials(owner.as_ref().into())?;
+        if !self.runs_power_service(&credentials)? {
+            tracing::warn!(
+                "{owner} answers for {POWER_NAME} but is not the main process of {POWER_UNIT}"
+            );
             return Ok(true);
         }
-        PowerProxyBlocking::builder(&self.fresh)
+        PowerProxyBlocking::builder(&self.bus)
             .destination(owner.into_inner())?
             .cache_properties(zbus::proxy::CacheProperties::No)
             .build()?
             .password_required()
     }
+
+    fn runs_power_service(&self, credentials: &ConnectionCredentials) -> zbus::Result<bool> {
+        let (Some(process), Some(handle)) = (credentials.process_id(), credentials.process_fd())
+        else {
+            return Ok(false);
+        };
+        Ok(pid_of_handle(handle.as_fd()) == Some(process)
+            && bande_bus::systemd::main_pid(&self.bus, POWER_UNIT)? == Some(process))
+    }
 }
 
-fn runs_in_power_unit(process: u32) -> bool {
-    std::fs::read_to_string(format!("/proc/{process}/cgroup")).is_ok_and(|cgroups| {
-        cgroups
-            .lines()
-            .filter_map(|line| line.strip_prefix("0::"))
-            .any(|path| path.rsplit('/').next() == Some(POWER_UNIT))
-    })
+fn pid_of_handle(handle: BorrowedFd<'_>) -> Option<u32> {
+    std::fs::read_to_string(format!("/proc/self/fdinfo/{}", handle.as_raw_fd()))
+        .ok()?
+        .lines()
+        .find_map(|line| line.strip_prefix("Pid:"))?
+        .trim()
+        .parse()
+        .ok()
 }
 
 impl Locker {

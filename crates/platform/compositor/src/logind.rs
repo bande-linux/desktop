@@ -53,6 +53,12 @@ trait Manager {
     fn docked(&self) -> zbus::Result<bool>;
 
     #[zbus(property)]
+    fn handle_lid_switch(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
+    fn handle_lid_switch_external_power(&self) -> zbus::Result<String>;
+
+    #[zbus(property)]
     fn block_inhibited(&self) -> zbus::Result<String>;
 
     fn suspend(&self, interactive: bool) -> zbus::Result<()>;
@@ -317,11 +323,16 @@ pub fn follow_shutdown(connection: &Connection, sender: Sender<OwnedFd>) -> zbus
 }
 
 fn lid_left_to_the_session(manager: &ManagerProxyBlocking<'_>) -> zbus::Result<bool> {
-    Ok(!manager.docked()?
-        && manager
-            .block_inhibited()?
-            .split(':')
-            .any(|what| what == "handle-lid-switch"))
+    if manager.docked()? {
+        return Ok(false);
+    }
+    let ignored = |action: String| action == "ignore";
+    Ok(manager
+        .block_inhibited()?
+        .split(':')
+        .any(|what| what == "handle-lid-switch")
+        || ignored(manager.handle_lid_switch()?)
+        || ignored(manager.handle_lid_switch_external_power()?))
 }
 
 pub fn follow_session(

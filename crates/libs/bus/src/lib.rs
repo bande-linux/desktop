@@ -3,6 +3,7 @@ pub mod logind;
 pub mod portal_settings;
 pub mod power_profiles;
 mod reading;
+pub mod systemd;
 
 pub use reading::Reading;
 

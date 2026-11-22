@@ -199,11 +199,12 @@ impl IdleMachine {
             self.idle_hint = true;
             commands.push(Command::IdleHint(true));
             if !self.locked || self.lock_failed(now) {
-                self.locked = true;
+                let unlocked = !std::mem::replace(&mut self.locked, true);
                 self.locked_when_idle = true;
                 self.lock_pending = true;
                 self.lock_sent = Some(now);
-                if !self.policy.require_password_after.is_zero()
+                if unlocked
+                    && !self.policy.require_password_after.is_zero()
                     && !self.asleep
                     && !self.others_lock
                 {
@@ -459,6 +460,14 @@ mod tests {
                 .is_empty()
         );
         assert!(!machine.password_required(locked_at + minutes(5) - Duration::from_secs(1)));
+        assert!(machine.password_required(locked_at + minutes(5)));
+
+        let mut machine = grace_machine();
+        machine.idle_for(minutes(5), locked_at);
+        machine.set_inhibited(Inhibitor::ScreenSaver, true);
+        machine.set_inhibited(Inhibitor::ScreenSaver, false);
+        let relocked = machine.idle_for(minutes(5), locked_at + minutes(1));
+        assert!(relocked.contains(&Command::Lock));
         assert!(machine.password_required(locked_at + minutes(5)));
 
         let mut machine = grace_machine();

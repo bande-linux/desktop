@@ -51,12 +51,16 @@ graph LR
   logind, sleep and the power button always ask: `bande-power` requires the password on
   logind's `Lock` and on `PrepareForSleep` before it lets the computer sleep, even when the
   saver already rests within its grace period. Only the idle lock `bande-power` asks for gets
-  one: a lock someone else asked logind for (`Super+L` included) never does. The grace period
+  one: a lock someone else asked logind for (`Super+L` included, also on a resting lock screen, where it ends the grace period) never does. The grace period
   is `org.bande.Power`'s `PasswordRequired` property, which ends at a fixed time on the boot
-  clock however long an inhibitor holds the display awake. The lock screen believes a "no"
-  only from the owner of the name running in `bande-power.service`, answering within a second;
-  any process of the user could lengthen it through `config.kdl` anyway, so it adds no new
-  trust.
+  clock however long an inhibitor holds the display awake. The lock screen asks on the first
+  input and believes a "no" only when the name's owner (its process handle from
+  `GetConnectionCredentials`) is the `MainPID` of `bande-power.service` in the user's service
+  manager and answers within a second; any other answer, an error or a timeout requires the
+  password for the rest of that lock. `bande-power` is not dumpable, so other processes of the
+  user cannot trace it. This keeps out a process that takes the name or answers in its place;
+  code of the user that rewrites their own services or `config.kdl` can still lengthen the
+  grace period, so it adds no new trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
   when logind's `CanSuspend` is `yes` (otherwise Sleep leaves the menus and the sleep row in
   Settings shows Never and says why). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
@@ -66,10 +70,12 @@ graph LR
   the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`
   (logind checks swap, resume and Secure Boot), so a sleeping laptop hibernates before its
   battery runs out (`HibernateDelaySec=` in `sleep.conf` decides when). Settings ▸ Power says
-  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`. While someone
-  holds logind's `handle-lid-switch` inhibitor (Settings ▸ Power keeping the computer running
-  with the lid closed on power), closing the lid locks the session through logind unless
-  logind counts the computer as `Docked`.
+  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`. When logind leaves
+  the lid alone, because someone holds its `handle-lid-switch` inhibitor (Settings ▸ Power
+  keeping the computer running with the lid closed on power) or `HandleLidSwitch=` or
+  `HandleLidSwitchExternalPower=` is `ignore`, closing the lid locks the session through logind
+  unless logind counts the computer as `Docked`. Where only one of the two is `ignore`, the
+  other source sleeps as well, which locks anyway.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 

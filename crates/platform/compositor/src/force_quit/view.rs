@@ -96,6 +96,7 @@ impl ForceQuitView {
         .primary();
         button.set_enabled(false);
         let mut cx = Context::new(text, appearance.palette());
+        cx.keyboard_navigation = true;
         let width = [tr!("Relaunch"), tr!("Force Quit")]
             .iter()
             .map(|title| {
@@ -361,7 +362,7 @@ impl ForceQuitView {
                 signals.borrow_mut().push(Signal::Chosen(choice.to_owned()));
             },
         )
-        .primary(&tr!("Force Quit"), FORCE_QUIT)
+        .destructive(&tr!("Force Quit"), FORCE_QUIT)
         .cancel(&tr!("Cancel"), CANCEL);
         let alert = match icon {
             Some(icon) => alert.icon(icon),

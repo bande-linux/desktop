@@ -653,7 +653,7 @@ impl DocumentView {
                     Asking::SavePlain,
                     &tr!("Save “{name}” as plain text?", name = name),
                     &tr!("Its fonts, styles, colors and lists will be lost. To keep them, save it with a name that ends in .rtf."),
-                    &[("make-plain-confirm", Reply::Default), ("cancel", Reply::Other)],
+                    &[("make-plain-confirm", Reply::Destructive), ("cancel", Reply::Other)],
                 );
             }
             (true, None) if self.format != Format::Markdown => {
@@ -1257,7 +1257,7 @@ impl DocumentView {
                 Asking::MakePlain,
                 &tr!("Convert this document to plain text?"),
                 &tr!("Its fonts, styles, colors and lists will be lost. The converted document is saved as a new plain text file."),
-                &[("make-plain-confirm", Reply::Default), ("cancel", Reply::Other)],
+                &[("make-plain-confirm", Reply::Destructive), ("cancel", Reply::Other)],
             );
         }
         self.drop_formatting();

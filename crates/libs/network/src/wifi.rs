@@ -3,11 +3,13 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use std::net::Ipv4Addr;
 
 use crate::connections::{
-    IGNORE_AUTO_DNS, IPV4, configured_ipv4, dns_override, dns_value, merge_ipv4, text,
+    DEVICE_STATE_UNMANAGED, IGNORE_AUTO_DNS, IPV4, configured_ipv4, configured_ipv6, dns_override,
+    dns_value, merge_ipv4, merge_ipv6, text,
 };
 use crate::proxy::SettingsProxyBlocking;
 use crate::{
-    Addressing, CONNECTION, ConnectionSettings, ManualIpv4, NetworkManager, Result, WIRELESS,
+    Addressing, CONNECTION, ConnectionSettings, Ipv6, ManualIpv4, NetworkManager, Outside, Result,
+    WIRELESS,
 };
 
 const AUTOCONNECT: &str = "autoconnect";
@@ -53,6 +55,7 @@ pub struct KnownNetwork {
     pub low_data: bool,
     pub private_address: PrivateAddress,
     pub manual: Option<ManualIpv4>,
+    pub ipv6: Ipv6,
     pub dns: Vec<Ipv4Addr>,
 }
 
@@ -80,6 +83,7 @@ impl KnownNetwork {
             low_data: metered == Some(METERED_YES),
             private_address: PrivateAddress::of(text(wireless, ASSIGNED_MAC).as_deref()),
             manual: configured_ipv4(settings),
+            ipv6: configured_ipv6(settings),
             dns: dns_override(settings),
         })
     }
@@ -97,12 +101,16 @@ pub enum ConnectionChange {
     LowData(bool),
     PrivateAddress(PrivateAddress),
     Ipv4(Option<ManualIpv4>),
+    Ipv6(Ipv6),
     Dns(Vec<Ipv4Addr>),
 }
 
 impl ConnectionChange {
     fn needs_reconnect(&self) -> bool {
-        matches!(self, Self::PrivateAddress(_) | Self::Ipv4(_) | Self::Dns(_))
+        matches!(
+            self,
+            Self::PrivateAddress(_) | Self::Ipv4(_) | Self::Ipv6(_) | Self::Dns(_)
+        )
     }
 
     fn apply(&self, settings: &mut ConnectionSettings) {
@@ -129,6 +137,7 @@ impl ConnectionChange {
                 }
             }
             Self::Ipv4(manual) => merge_ipv4(settings, manual.as_ref()),
+            Self::Ipv6(ipv6) => merge_ipv6(settings, *ipv6),
             Self::Dns(servers) => {
                 let ipv4 = settings.entry(IPV4.to_owned()).or_default();
                 ipv4.remove(DNS);
@@ -168,6 +177,14 @@ impl NetworkManager {
             hardware: device.hw_address()?,
             addressing: self.addressing(&device)?,
         })
+    }
+
+    pub fn wifi_outside(&self) -> Result<Option<Outside>> {
+        let device = self.device(&self.wifi_device()?)?;
+        if device.state()? != DEVICE_STATE_UNMANAGED {
+            return Ok(None);
+        }
+        Ok(Some(Outside::of(&device.interface()?)))
     }
 
     pub fn change_connection(&self, path: &str, change: &ConnectionChange) -> Result<()> {

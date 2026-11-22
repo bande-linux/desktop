@@ -130,8 +130,8 @@ msgstr "Anslut till nätverk och se hur du är ansluten"
 msgid "Connect headphones, keyboards and other devices"
 msgstr "Anslut hörlurar, tangentbord och andra enheter"
 
-msgid "Wired connections and VPNs"
-msgstr "Trådbundna anslutningar och VPN"
+msgid "Wired connections, VPNs, proxy and airplane mode"
+msgstr "Trådbundna anslutningar, VPN, proxy och flygplansläge"
 
 msgid "Light, dark or automatic, accent color, wallpaper and text size"
 msgstr "Ljust, mörkt eller automatiskt, dekorfärg, skrivbordsbild och textstorlek"
@@ -235,8 +235,8 @@ msgstr "trådlöst, wlan, internet, nätverk"
 msgid "wireless, headphones, mouse, keyboard, speaker"
 msgstr "trådlöst, hörlurar, mus, tangentbord, högtalare"
 
-msgid "internet, connection, lan"
-msgstr "internet, anslutning, lan"
+msgid "internet, connection, lan, airplane, proxy"
+msgstr "internet, anslutning, lan, flygplan, proxy"
 
 msgid "theme, look, colour, color, wallpaper, background, desktop picture, picture, photo, image"
 msgstr "tema, look, färg, skrivbordsbild, bakgrund, bild, foto"
@@ -384,8 +384,14 @@ msgstr "kända, ihågkomna, anslut automatiskt, glöm, detaljer, ip-adress, rout
 msgid "Other Networks"
 msgstr "Andra nätverk"
 
-msgid "join, connect, ssid, hidden, other, password"
-msgstr "anslut, ssid, dolt, annat, lösenord"
+msgid "join, connect, ssid, hidden, other, password, enterprise, 802.1x, eduroam, peap, ttls, wep"
+msgstr "anslut, ssid, dolt, annat, lösenord, företag, enterprise, 802.1x, eduroam, peap, ttls, wep"
+
+msgid "Hotspot"
+msgstr "Surfzon"
+
+msgid "share, tethering, access point, personal hotspot"
+msgstr "dela, internetdelning, åtkomstpunkt, personlig surfzon"
 
 msgid "on, off"
 msgstr "på, av"
@@ -402,17 +408,29 @@ msgstr "Enheter i närheten"
 msgid "pair, add, discover, new device"
 msgstr "para ihop, lägg till, hitta, ny enhet"
 
+msgid "Airplane Mode"
+msgstr "Flygplansläge"
+
+msgid "flight mode, radios, wireless off, rfkill"
+msgstr "flygläge, radio, trådlöst av, rfkill"
+
 msgid "Ethernet"
 msgstr "Ethernet"
 
-msgid "wired, cable, lan, ip address, dns, router, gateway, dhcp, static ip, manual address, subnet"
-msgstr "trådbundet, kabel, lan, ip-adress, dns, router, gateway, dhcp, statisk ip, manuell adress, subnät"
+msgid "wired, cable, lan, ip address, ipv6, dns, router, gateway, dhcp, static ip, manual address, subnet, 802.1x, ifupdown"
+msgstr "trådbundet, kabel, lan, ip-adress, ipv6, dns, router, gateway, dhcp, statisk ip, manuell adress, subnät, 802.1x, ifupdown"
 
 msgid "VPN"
 msgstr "VPN"
 
 msgid "wireguard, openvpn, tunnel, private network, import, work network"
 msgstr "wireguard, openvpn, tunnel, privat nätverk, importera, arbetsnätverk"
+
+msgid "Proxy"
+msgstr "Proxy"
+
+msgid "http proxy, https proxy, pac, automatic configuration, bypass"
+msgstr "http-proxy, https-proxy, pac, automatisk konfiguration, förbigå"
 
 msgid "dark mode, light mode, night, theme"
 msgstr "mörkt läge, ljust läge, natt, tema"

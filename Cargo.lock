@@ -1244,6 +1244,9 @@ version = "0.2.0"
 dependencies = [
  "bande-l10n",
  "bande-log",
+ "bande-xdg",
+ "rustix 1.1.6",
+ "tracing",
  "zbus",
 ]
 

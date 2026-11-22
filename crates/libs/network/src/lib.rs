@@ -1,25 +1,36 @@
 mod connections;
+mod enterprise;
+mod handover;
+mod hotspot;
+pub mod ifupdown;
+mod kernel;
 mod proxy;
-pub mod rfkill;
+mod radio;
 mod wifi;
 
 pub use connections::{
-    Addressing, Ethernet, ManualIpv4, Vpn, VpnState, import_vpn, ipv4_settings, missing_vpn_plugin,
-    parse_dns, parse_manual, vpn_type_of,
+    Addressing, Ethernet, Ipv6, ManualIpv4, ManualIpv6, Outside, Vpn, VpnState, import_vpn,
+    ipv4_settings, missing_vpn_plugin, parse_dns, parse_manual, parse_manual_ipv6, vpn_type_of,
 };
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::mpsc::{self, Sender};
+use std::time::Duration;
 
 use bande_l10n::{text, tr};
+pub use enterprise::{Eap, Enterprise};
+pub use hotspot::{Hotspot, valid_hotspot_password};
+pub use radio::{airplane_mode, follow_airplane_mode, set_airplane_mode};
 pub use wifi::{ConnectionChange, KnownNetwork, PrivateAddress, WifiLink};
 
 use proxy::{
     AccessPointProxyBlocking, ActiveConnectionProxyBlocking, DeviceProxyBlocking,
     NetworkManagerProxyBlocking, SettingsConnectionProxyBlocking, SettingsProxyBlocking,
-    WiredProxyBlocking, WirelessProxyBlocking,
+    WirelessProxyBlocking,
 };
-use zbus::blocking::Connection;
+use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
+use zbus::{MatchRule, message};
 
 const DEVICE_TYPE_ETHERNET: u32 = 1;
 const DEVICE_TYPE_WIFI: u32 = 2;
@@ -42,14 +53,19 @@ const ACCESS_POINT: &str = "org.freedesktop.NetworkManager.AccessPoint";
 const STRENGTH: &str = "Strength";
 const LAST_SEEN: &str = "LastSeen";
 const KERNEL_RADIOS: &str = "/sys/class/ieee80211";
+const WEP_KEY: u32 = 1;
+const WEP_PASSPHRASE: u32 = 2;
+const ROOT: &str = "/";
+const NETWORK_MANAGER_SERVICE: &str = "org.freedesktop.NetworkManager";
+const SETTLE: Duration = Duration::from_millis(200);
 
 #[derive(Debug)]
 pub enum Error {
     Bus(zbus::Error),
     NoWifiDevice,
     PasswordRequired,
+    LoginRequired,
     Refused(String),
-    Unsupported(Security),
 }
 
 impl fmt::Display for Error {
@@ -61,11 +77,10 @@ impl fmt::Display for Error {
             ),
             Self::NoWifiDevice => tr!("this computer has no Wi-Fi device"),
             Self::PasswordRequired => tr!("the network needs a password"),
+            Self::LoginRequired => {
+                tr!("the network needs a user name and a password or certificate")
+            }
             Self::Refused(reason) => reason.clone(),
-            Self::Unsupported(security) => tr!(
-                "joining {security} networks is not supported yet",
-                security = security.label()
-            ),
         })
     }
 }
@@ -223,12 +238,6 @@ pub fn set_strength(networks: &mut [Network], access_point: &str, strength: u8) 
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Wired {
-    pub cable: bool,
-    pub connected: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JoinOutcome {
     Joined,
     WrongPassword,
@@ -256,21 +265,103 @@ impl fmt::Display for JoinOutcome {
     }
 }
 
-/// Calls `changed` with whether this computer is online, then again each time that changes, until `changed` returns false.
-pub fn follow_online(system: &Connection, mut changed: impl FnMut(bool) -> bool) -> Result<()> {
+fn managed_interfaces(system: &Connection) -> Result<Option<(bool, Vec<String>)>> {
+    let running = zbus::blocking::fdo::DBusProxy::new(system)?.name_has_owner(
+        zbus::names::WellKnownName::from_static_str_unchecked(NETWORK_MANAGER_SERVICE).into(),
+    )?;
+    if !running {
+        return Ok(None);
+    }
     let manager = NetworkManagerProxyBlocking::new(system)?;
-    let changes = manager.inner().receive_signal("StateChanged")?;
-    let mut online = manager.state()? == STATE_CONNECTED_GLOBAL;
-    if !changed(online) {
+    let mut managed = Vec::new();
+    for path in manager.get_devices()? {
+        let device = DeviceProxyBlocking::builder(system).path(path)?.build()?;
+        if device.state()? != connections::DEVICE_STATE_UNMANAGED {
+            managed.push(device.interface()?);
+        }
+    }
+    Ok(Some((manager.state()? == STATE_CONNECTED_GLOBAL, managed)))
+}
+
+fn online(system: &Connection) -> bool {
+    let routed = kernel::routed_interfaces();
+    match managed_interfaces(system) {
+        Ok(Some((true, _))) => true,
+        Ok(Some((false, managed))) => routed.iter().any(|routed| !managed.contains(routed)),
+        Ok(None) => !routed.is_empty(),
+        Err(error) => {
+            tracing::debug!("cannot ask NetworkManager whether this computer is online: {error}");
+            !routed.is_empty()
+        }
+    }
+}
+
+fn follow_network_manager(system: &Connection, changed: Sender<()>) -> Result<()> {
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .sender(NETWORK_MANAGER_SERVICE)?
+        .member("StateChanged")?
+        .build();
+    let owners = MatchRule::builder()
+        .msg_type(message::Type::Signal)
+        .sender("org.freedesktop.DBus")?
+        .member("NameOwnerChanged")?
+        .add_arg(NETWORK_MANAGER_SERVICE)?
+        .build();
+    let states = MessageIterator::for_match_rule(rule, system, None)?;
+    let appearances = MessageIterator::for_match_rule(owners, system, None)?;
+    let forward = changed.clone();
+    std::thread::Builder::new()
+        .name("network-owner".to_owned())
+        .spawn(move || {
+            for _ in appearances {
+                if forward.send(()).is_err() {
+                    break;
+                }
+            }
+        })
+        .map_err(|error| Error::Bus(zbus::Error::Failure(error.to_string())))?;
+    for _ in states {
+        if changed.send(()).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Calls `changed` with whether this computer is online, then again each time that changes, until `changed` returns false.
+///
+/// Online follows NetworkManager while it manages a device, and otherwise a working default route in the kernel; nothing is sent to the network to find out.
+pub fn follow_online(system: &Connection, mut changed: impl FnMut(bool) -> bool) -> Result<()> {
+    let (sender, changes) = mpsc::channel();
+    let routes = sender.clone();
+    std::thread::Builder::new()
+        .name("network-routes".to_owned())
+        .spawn(move || {
+            if let Err(error) = kernel::follow_routes(routes) {
+                tracing::warn!("cannot follow the kernel's routes: {error}");
+            }
+        })
+        .map_err(|error| Error::Bus(zbus::Error::Failure(error.to_string())))?;
+    let bus = system.clone();
+    std::thread::Builder::new()
+        .name("network-state".to_owned())
+        .spawn(move || {
+            if let Err(error) = follow_network_manager(&bus, sender) {
+                tracing::debug!("cannot follow NetworkManager: {error}");
+            }
+        })
+        .map_err(|error| Error::Bus(zbus::Error::Failure(error.to_string())))?;
+    let mut now = online(system);
+    if !changed(now) {
         return Ok(());
     }
-    for change in changes {
-        let now = change.body().deserialize::<u32>()? == STATE_CONNECTED_GLOBAL;
-        if now != online {
-            online = now;
-            if !changed(now) {
-                break;
-            }
+    while changes.recv().is_ok() {
+        std::thread::sleep(SETTLE);
+        changes.try_iter().count();
+        let then = std::mem::replace(&mut now, online(system));
+        if now != then && !changed(now) {
+            break;
         }
     }
     Ok(())
@@ -278,36 +369,45 @@ pub fn follow_online(system: &Connection, mut changed: impl FnMut(bool) -> bool)
 
 type NewConnection = HashMap<&'static str, HashMap<&'static str, Value<'static>>>;
 
-fn key_management(security: Security) -> Result<Option<&'static str>> {
-    match security {
-        Security::Open => Ok(None),
-        Security::Personal { sae_only: false } => Ok(Some("wpa-psk")),
-        Security::Personal { sae_only: true } => Ok(Some("sae")),
-        other => Err(Error::Unsupported(other)),
+fn wep_key_type(key: &str) -> u32 {
+    let hex = key.chars().all(|c| c.is_ascii_hexdigit());
+    match key.len() {
+        5 | 13 => WEP_KEY,
+        10 | 26 if hex => WEP_KEY,
+        _ => WEP_PASSPHRASE,
     }
 }
 
-fn wireless_settings(
-    ssid: &[u8],
-    key_management: Option<&'static str>,
+fn security_settings(
+    security: Security,
     password: Option<&str>,
-    hidden: bool,
-) -> NewConnection {
+) -> Result<Option<HashMap<&'static str, Value<'static>>>> {
+    let password = password.filter(|password| !password.is_empty());
+    let key_management = match security {
+        Security::Open => return Ok(None),
+        Security::Enterprise => return Err(Error::LoginRequired),
+        Security::Personal { sae_only: false } => "wpa-psk",
+        Security::Personal { sae_only: true } => "sae",
+        Security::Wep => "none",
+    };
+    let password = password.ok_or(Error::PasswordRequired)?.to_owned();
+    let mut settings = HashMap::from([("key-mgmt", Value::from(key_management))]);
+    if security == Security::Wep {
+        settings.insert("auth-alg", Value::from("open"));
+        settings.insert("wep-key-type", Value::from(wep_key_type(&password)));
+        settings.insert("wep-key0", Value::from(password));
+    } else {
+        settings.insert("psk", Value::from(password));
+    }
+    Ok(Some(settings))
+}
+
+fn wireless_settings(ssid: &[u8], hidden: bool) -> NewConnection {
     let mut wireless = HashMap::from([("ssid", Value::from(ssid.to_vec()))]);
     if hidden {
         wireless.insert("hidden", Value::from(true));
     }
-    let mut settings = HashMap::from([(WIRELESS, wireless)]);
-    if let (Some(key_management), Some(psk)) = (key_management, password) {
-        settings.insert(
-            WIRELESS_SECURITY,
-            HashMap::from([
-                ("key-mgmt", Value::from(key_management)),
-                ("psk", Value::from(psk.to_owned())),
-            ]),
-        );
-    }
-    settings
+    HashMap::from([(WIRELESS, wireless)])
 }
 
 pub struct NetworkManager {
@@ -371,26 +471,6 @@ impl NetworkManager {
 
     pub fn has_wifi(&self) -> Result<bool> {
         Ok(!self.devices_of_type(DEVICE_TYPE_WIFI)?.is_empty())
-    }
-
-    pub fn wired(&self) -> Result<Option<Wired>> {
-        let Some(path) = self
-            .devices_of_type(DEVICE_TYPE_ETHERNET)?
-            .into_iter()
-            .next()
-        else {
-            return Ok(None);
-        };
-        let device = DeviceProxyBlocking::builder(&self.bus)
-            .path(path.clone())?
-            .build()?;
-        let wired = WiredProxyBlocking::builder(&self.bus)
-            .path(path.clone())?
-            .build()?;
-        Ok(Some(Wired {
-            cable: wired.carrier()?,
-            connected: device.state()? == DEVICE_STATE_ACTIVATED,
-        }))
     }
 
     pub fn scan(&self) -> Result<()> {
@@ -470,7 +550,6 @@ impl NetworkManager {
     }
 
     pub fn join(&self, network: &Network, password: Option<&str>) -> Result<JoinOutcome> {
-        let key_management = key_management(network.security)?;
         let device = self.wifi_device()?;
         let manager = self.manager()?;
         let saved = self
@@ -478,29 +557,30 @@ impl NetworkManager {
             .into_iter()
             .find(|(ssid, _)| *ssid == network.ssid)
             .map(|(_, path)| path);
-        let connection = match (saved, password) {
-            (Some(connection), password) => {
-                if let Some(psk) = password {
-                    self.replace_password(&connection, psk)?;
-                }
-                let activate = || {
-                    manager
-                        .activate_connection(&connection, &device, &network.access_point)
-                        .map_err(refused)
-                };
-                let active = match activate() {
-                    Err(error) => match self.release_stale_interface(&connection) {
-                        Ok(true) => activate()?,
-                        _ => return Err(error),
-                    },
-                    Ok(active) => active,
-                };
-                return self.wait_for_activation(&active);
-            }
-            (None, None) if key_management.is_some() => return Err(Error::PasswordRequired),
-            (None, password) => wireless_settings(&network.ssid, key_management, password, false),
+        let Some(connection) = saved else {
+            let mut settings = wireless_settings(&network.ssid, false);
+            settings.extend(
+                security_settings(network.security, password)?
+                    .map(|security| (WIRELESS_SECURITY, security)),
+            );
+            return self.add_and_join(settings, &device, &network.access_point);
         };
-        self.add_and_join(connection, &device, &network.access_point)
+        if let Some(password) = password.filter(|password| !password.is_empty()) {
+            self.replace_password(&connection, password)?;
+        }
+        let activate = || {
+            manager
+                .activate_connection(&connection, &device, &network.access_point)
+                .map_err(refused)
+        };
+        let active = match activate() {
+            Err(error) => match self.release_stale_interface(&connection) {
+                Ok(true) => activate()?,
+                _ => return Err(error),
+            },
+            Ok(active) => active,
+        };
+        self.wait_for_activation(&active)
     }
 
     pub fn join_hidden(
@@ -509,16 +589,41 @@ impl NetworkManager {
         security: Security,
         password: Option<&str>,
     ) -> Result<JoinOutcome> {
-        let key_management = key_management(security)?;
-        if key_management.is_some() && password.is_none_or(str::is_empty) {
-            return Err(Error::PasswordRequired);
-        }
+        let mut settings = wireless_settings(ssid, true);
+        settings.extend(
+            security_settings(security, password)?.map(|security| (WIRELESS_SECURITY, security)),
+        );
         let device = self.wifi_device()?;
-        let settings = wireless_settings(ssid, key_management, password, true);
         self.add_and_join(
             settings,
             &device,
-            &ObjectPath::from_static_str_unchecked("/"),
+            &ObjectPath::from_static_str_unchecked(ROOT),
+        )
+    }
+
+    pub fn join_enterprise(
+        &self,
+        ssid: &[u8],
+        hidden: bool,
+        login: &Enterprise,
+    ) -> Result<JoinOutcome> {
+        if !login.is_complete() {
+            return Err(Error::LoginRequired);
+        }
+        let mut settings = wireless_settings(ssid, hidden);
+        settings.insert(
+            WIRELESS_SECURITY,
+            HashMap::from([("key-mgmt", Value::from("wpa-eap"))]),
+        );
+        settings.insert(
+            enterprise::ENTERPRISE,
+            login.settings().into_iter().collect(),
+        );
+        let device = self.wifi_device()?;
+        self.add_and_join(
+            settings,
+            &device,
+            &ObjectPath::from_static_str_unchecked(ROOT),
         )
     }
 
@@ -576,13 +681,18 @@ impl NetworkManager {
         Ok(true)
     }
 
-    fn replace_password(&self, connection: &OwnedObjectPath, psk: &str) -> Result<()> {
+    fn replace_password(&self, connection: &OwnedObjectPath, password: &str) -> Result<()> {
         let proxy = self.settings_connection(connection)?;
         let mut settings: ConnectionSettings = proxy.get_settings()?;
-        settings
-            .entry(WIRELESS_SECURITY.to_owned())
-            .or_default()
-            .insert("psk".to_owned(), OwnedValue::try_from(Value::from(psk))?);
+        let Some(security) = settings.get_mut(WIRELESS_SECURITY) else {
+            return Ok(());
+        };
+        let key = match connections::text(security, "key-mgmt").as_deref() {
+            Some("wpa-psk" | "sae") => "psk",
+            Some("none") => "wep-key0",
+            _ => return Ok(()),
+        };
+        security.insert(key.to_owned(), OwnedValue::try_from(Value::from(password))?);
         Ok(proxy.update(settings)?)
     }
 

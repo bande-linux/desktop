@@ -808,6 +808,8 @@ impl SettingsView {
             List::SoftwareUpdates => self.software_rows(),
             List::Ethernet => self.ethernet_rows(),
             List::Vpns => self.vpn_rows(),
+            List::Hotspot => self.hotspot_rows(),
+            List::Proxy => self.proxy_rows(),
             List::Languages => self.language_rows(),
             List::AppLanguages => self.app_language_rows(),
             List::Regions => self.region_rows(),
@@ -1142,9 +1144,11 @@ impl SettingsView {
 
     fn section_shown(&self, section: &Section) -> bool {
         section.settings.iter().all(|setting| match setting.id {
-            SettingId::KnownNetworks | SettingId::Networks => {
-                self.wifi.present().is_some_and(|wifi| wifi.enabled)
-            }
+            SettingId::Networks => self.wifi.present().is_some_and(|wifi| wifi.enabled),
+            SettingId::KnownNetworks | SettingId::Hotspot => self
+                .wifi
+                .present()
+                .is_some_and(|wifi| wifi.enabled && wifi.outside.is_none()),
             SettingId::PairedDevices | SettingId::NearbyDevices => self
                 .bluetooth
                 .present()
@@ -1380,6 +1384,11 @@ impl SettingsView {
             && let Some(network) = self.network_page()
         {
             return self.page(network);
+        }
+        if pane.id == PaneId::Network
+            && let Some(wired) = self.wired_page()
+        {
+            return self.page(wired);
         }
         if pane.id == PaneId::Diagnostics
             && let Some(report) = self.report_page()

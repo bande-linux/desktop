@@ -219,7 +219,7 @@ impl PaneId {
         match self {
             Self::Wifi => tr!("Join networks and see how you are connected"),
             Self::Bluetooth => tr!("Connect headphones, keyboards and other devices"),
-            Self::Network => tr!("Wired connections and VPNs"),
+            Self::Network => tr!("Wired connections, VPNs, proxy and airplane mode"),
             Self::Appearance => {
                 tr!("Light, dark or automatic, accent color, wallpaper and text size")
             }
@@ -267,7 +267,7 @@ impl PaneId {
         match self {
             Self::Wifi => tr!("wireless, wlan, internet, network"),
             Self::Bluetooth => tr!("wireless, headphones, mouse, keyboard, speaker"),
-            Self::Network => tr!("internet, connection, lan"),
+            Self::Network => tr!("internet, connection, lan, airplane, proxy"),
             Self::Appearance => tr!(
                 "theme, look, colour, color, wallpaper, background, desktop picture, picture, photo, image"
             ),
@@ -371,7 +371,11 @@ pub enum SettingId {
     WifiAddress,
     WifiRouter,
     WifiDns,
+    WifiIpv6Address,
+    WifiIpv6Router,
     OtherNetwork,
+    Hotspot,
+    HotspotName,
     BluetoothPower,
     PairedDevices,
     NearbyDevices,
@@ -471,7 +475,15 @@ pub enum SettingId {
     EthernetAddress,
     EthernetRouter,
     EthernetDns,
+    EthernetIpv6Address,
+    EthernetIpv6Router,
     Vpns,
+    AirplaneMode,
+    Proxy,
+    ProxyHttp,
+    ProxyHttps,
+    ProxyIgnore,
+    ProxyPac,
     Language,
     AppLanguages,
     Region,
@@ -569,6 +581,8 @@ pub enum List {
     SoftwareUpdates,
     Ethernet,
     Vpns,
+    Hotspot,
+    Proxy,
     Languages,
     AppLanguages,
     Regions,
@@ -929,7 +943,11 @@ fn connection_panes() -> Vec<Pane> {
                 ),
                 section(
                     Some(tr!("Other Networks")),
-                    vec![list(SettingId::Networks, tr!("Other Networks"), tr!("join, connect, ssid, hidden, other, password"), List::Networks)],
+                    vec![list(SettingId::Networks, tr!("Other Networks"), tr!("join, connect, ssid, hidden, other, password, enterprise, 802.1x, eduroam, peap, ttls, wep"), List::Networks)],
+                ),
+                section(
+                    Some(tr!("Hotspot")),
+                    vec![list(SettingId::Hotspot, tr!("Hotspot"), tr!("share, tethering, access point, personal hotspot"), List::Hotspot)],
                 ),
             ],
         )
@@ -959,13 +977,18 @@ fn connection_panes() -> Vec<Pane> {
         pane(
             PaneId::Network,
             vec![
+                section(None, vec![switch(SettingId::AirplaneMode, tr!("Airplane Mode"), tr!("flight mode, radios, wireless off, rfkill"))]),
                 section(
                     Some(tr!("Ethernet")),
-                    vec![list(SettingId::Ethernet, tr!("Ethernet"), tr!("wired, cable, lan, ip address, dns, router, gateway, dhcp, static ip, manual address, subnet"), List::Ethernet)],
+                    vec![list(SettingId::Ethernet, tr!("Ethernet"), tr!("wired, cable, lan, ip address, ipv6, dns, router, gateway, dhcp, static ip, manual address, subnet, 802.1x, ifupdown"), List::Ethernet)],
                 ),
                 section(
                     Some(tr!("VPN")),
                     vec![list(SettingId::Vpns, tr!("VPN"), tr!("wireguard, openvpn, tunnel, private network, import, work network"), List::Vpns)],
+                ),
+                section(
+                    Some(tr!("Proxy")),
+                    vec![list(SettingId::Proxy, tr!("Proxy"), tr!("http proxy, https proxy, pac, automatic configuration, bypass"), List::Proxy)],
                 ),
             ],
         ),

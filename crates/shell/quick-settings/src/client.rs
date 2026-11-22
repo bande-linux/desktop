@@ -19,7 +19,7 @@ use bande_bar::menus::bluetooth_menu;
 use bande_bluetooth::{Bluetooth, adapter_in_kernel};
 use bande_config::{BUS_NAME as CONFIG_BUS, NightLightValue, OBJECT_PATH as CONFIG_PATH};
 use bande_inbox::{Inbox, Outbox};
-use bande_network::rfkill::{airplane_mode, set_airplane_mode};
+use bande_network::{airplane_mode, set_airplane_mode};
 use bande_network::{NetworkManager, wifi_in_kernel};
 use bande_notify::client::NotificationsProxy;
 use bande_power::adapter::{POWER_SAVER, PowerProfilesProxyBlocking};

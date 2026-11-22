@@ -31,7 +31,7 @@ views. Packaged as `bande-calendar`.
   `COLOR` (a CSS colour name) or the de-facto `X-APPLE-CALENDAR-COLOR`. The subscription sheet
   also opens for a `webcal:` link given to Calendar.
 - **Offline sync.** Every calendar is cached on disk with its pending changes, so it works
-  without a network and pushes changes as soon as NetworkManager says the network is back.
+  without a network and pushes changes as soon as the network is back (`bande_network::follow_online`).
   Sync is incremental with `sync-token` (RFC 6578), falling back to ctag + etag listings on servers without it. Creates use
   `If-None-Match: *`, edits and deletes `If-Match`; when an edit meets a 412, the server's
   version stays and the local edit is kept beside it as a new event, and the sidebar says so.

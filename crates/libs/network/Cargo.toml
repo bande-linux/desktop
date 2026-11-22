@@ -1,6 +1,6 @@
 [package]
 name = "bande-network"
-description = "Bande NetworkManager client: Wi-Fi power, network list, joining, wired status and connectivity"
+description = "Bande network client: NetworkManager Wi-Fi, wired and hotspot, ifupdown hand-over, airplane mode and connectivity"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,9 @@ repository.workspace = true
 [dependencies]
 bande-l10n.workspace = true
 bande-log.workspace = true
+bande-xdg.workspace = true
+rustix = { workspace = true, features = ["net"] }
+tracing.workspace = true
 zbus.workspace = true
 
 [lints]

@@ -7,6 +7,45 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "NetworkManager has no device called {interface}"
+msgstr "NetworkManager har ingen enhet som heter {interface}"
+
+msgid "NetworkManager still leaves {interface} alone"
+msgstr "NetworkManager låter fortfarande {interface} vara"
+
+msgid "/etc/network/interfaces has no stanza for it"
+msgstr "/etc/network/interfaces har inget avsnitt för den"
+
+msgid "{file} continues lines with a backslash"
+msgstr "{file} fortsätter rader med ett omvänt snedstreck"
+
+msgid "{file} maps interfaces with a mapping stanza"
+msgstr "{file} mappar gränssnitt med ett mapping-avsnitt"
+
+msgid "the configuration reads “{source}” from outside /etc/network/interfaces.d"
+msgstr "konfigurationen läser ”{source}” utanför /etc/network/interfaces.d"
+
+msgid "another stanza in {file} uses it: “{line}”"
+msgstr "ett annat avsnitt i {file} använder den: ”{line}”"
+
+msgid "it has more than one “{family}” stanza"
+msgstr "den har fler än ett ”{family}”-avsnitt"
+
+msgid "NetworkManager has no equivalent of the “{method}” method"
+msgstr "NetworkManager har ingen motsvarighet till metoden ”{method}”"
+
+msgid "NetworkManager has no equivalent of the “{option}” option"
+msgstr "NetworkManager har ingen motsvarighet till alternativet ”{option}”"
+
+msgid "the value of “{option}” is not one Settings understands"
+msgstr "värdet för ”{option}” är inte ett som Inställningar förstår"
+
+msgid "its stanza names no Wi-Fi network (wpa-ssid)"
+msgstr "dess avsnitt anger inget Wi-Fi-nätverk (wpa-ssid)"
+
+msgid "{service} also sets up network interfaces on this computer"
+msgstr "{service} konfigurerar också nätverksgränssnitt på den här datorn"
+
 msgid "NetworkManager did not answer ({error})"
 msgstr "NetworkManager svarade inte ({error})"
 
@@ -16,8 +55,8 @@ msgstr "den här datorn har ingen Wi-Fi-enhet"
 msgid "the network needs a password"
 msgstr "nätverket kräver ett lösenord"
 
-msgid "joining {security} networks is not supported yet"
-msgstr "det går inte att ansluta till {security}-nätverk än"
+msgid "the network needs a user name and a password or certificate"
+msgstr "nätverket kräver ett användarnamn och ett lösenord eller certifikat"
 
 msgid "None"
 msgstr "Ingen"

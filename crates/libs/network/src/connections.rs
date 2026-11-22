@@ -1,37 +1,82 @@
 use std::collections::HashMap;
 use std::io;
-use std::net::Ipv4Addr;
-use std::path::Path;
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 
+use crate::enterprise::ENTERPRISE;
 use crate::proxy::{
     ActiveConnectionProxyBlocking, DeviceProxyBlocking, Ip4ConfigProxyBlocking, WiredProxyBlocking,
 };
 use crate::{
     ACTIVE_STATE_ACTIVATED, ConnectionSettings, DEVICE_STATE_ACTIVATED, DEVICE_TYPE_ETHERNET,
-    NetworkManager, Result,
+    Enterprise, NetworkManager, Result, ifupdown, kernel,
 };
 
 pub(crate) const IGNORE_AUTO_DNS: &str = "ignore-auto-dns";
 pub(crate) const IPV4: &str = "ipv4";
+pub(crate) const IPV6: &str = "ipv6";
+const IFDOWN: &str = "/usr/sbin/ifdown";
 const OPENVPN_PLUGIN: &str = "/usr/lib/NetworkManager/VPN/nm-openvpn-service.name";
 const OPENVPN_PACKAGE: &str = "network-manager-openvpn";
-const DEVICE_STATE_UNMANAGED: u32 = 10;
+pub(crate) const DEVICE_STATE_UNMANAGED: u32 = 10;
 const ACTIVE_STATE_ACTIVATING: u32 = 1;
 const VPN_TYPES: [&str; 2] = ["vpn", "wireguard"];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Outside {
+    pub interface: String,
+    pub addressing: Addressing,
+    pub configured_in: Option<PathBuf>,
+    pub hand_over: bool,
+}
+
+impl Outside {
+    pub(crate) fn of(interface: &str) -> Self {
+        let configuration = ifupdown::read();
+        let configured_in = configuration
+            .as_ref()
+            .ok()
+            .and_then(|configuration| ifupdown::configuring_file(configuration, interface));
+        Self {
+            interface: interface.to_owned(),
+            addressing: kernel::addressing(interface),
+            hand_over: Path::new(IFDOWN).exists()
+                && (configured_in.is_some() || configuration.is_err()),
+            configured_in,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ethernet {
     pub interface: String,
     pub cable: bool,
-    pub managed: bool,
+    pub outside: Option<Outside>,
     pub connected: bool,
     pub addressing: Addressing,
     pub manual: bool,
+    pub ipv6: Ipv6,
     pub connection: Option<String>,
     pub dns: Vec<Ipv4Addr>,
+    pub security: Option<Enterprise>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManualIpv6 {
+    pub address: Ipv6Addr,
+    pub prefix: u32,
+    pub router: Option<Ipv6Addr>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Ipv6 {
+    #[default]
+    Automatic,
+    Manual(ManualIpv6),
+    Off,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -78,6 +123,23 @@ pub fn parse_manual(address: &str, router: &str, dns: &str) -> Option<ManualIpv4
             Some(router.parse().ok()?)
         },
         dns: parse_dns(dns)?,
+    })
+}
+
+pub fn parse_manual_ipv6(address: &str, router: &str) -> Option<ManualIpv6> {
+    let (address, prefix) = match address.trim().split_once('/') {
+        Some((address, prefix)) => (address, prefix.trim().parse().ok()?),
+        None => (address.trim(), 64),
+    };
+    let router = router.trim();
+    Some(ManualIpv6 {
+        address: address.trim().parse().ok()?,
+        prefix: Some(prefix).filter(|prefix| (1..=128).contains(prefix))?,
+        router: if router.is_empty() {
+            None
+        } else {
+            Some(router.parse().ok()?)
+        },
     })
 }
 
@@ -170,6 +232,70 @@ pub fn ipv4_settings(manual: Option<&ManualIpv4>) -> HashMap<String, OwnedValue>
     ipv4
 }
 
+pub(crate) fn ipv6_settings(ipv6: Ipv6) -> HashMap<String, OwnedValue> {
+    let address = |manual: &ManualIpv6| {
+        HashMap::from([
+            (
+                "address".to_owned(),
+                Value::from(manual.address.to_string()),
+            ),
+            ("prefix".to_owned(), Value::from(manual.prefix)),
+        ])
+    };
+    let entries = match ipv6 {
+        Ipv6::Automatic => vec![("method", owned(Value::from("auto")))],
+        Ipv6::Off => vec![("method", owned(Value::from("disabled")))],
+        Ipv6::Manual(manual) => vec![
+            ("method", owned(Value::from("manual"))),
+            ("address-data", owned(Value::from(vec![address(&manual)]))),
+            (
+                "gateway",
+                manual
+                    .router
+                    .and_then(|router| owned(Value::from(router.to_string()))),
+            ),
+        ],
+    };
+    entries
+        .into_iter()
+        .filter_map(|(key, value)| Some((key.to_owned(), value?)))
+        .collect()
+}
+
+pub(crate) fn merge_ipv6(settings: &mut ConnectionSettings, ipv6: Ipv6) {
+    let section = settings.entry(IPV6.to_owned()).or_default();
+    for key in ["method", "address-data", "addresses", "gateway"] {
+        section.remove(key);
+    }
+    section.extend(ipv6_settings(ipv6));
+}
+
+pub(crate) fn configured_ipv6(settings: &ConnectionSettings) -> Ipv6 {
+    let Some(section) = settings.get(IPV6) else {
+        return Ipv6::Automatic;
+    };
+    match text(section, "method").as_deref() {
+        Some("disabled" | "ignore") => Ipv6::Off,
+        Some("manual") => {
+            let manual = || {
+                let first = Vec::<HashMap<String, OwnedValue>>::try_from(
+                    section.get("address-data")?.try_clone().ok()?,
+                )
+                .ok()?
+                .into_iter()
+                .next()?;
+                Some(ManualIpv6 {
+                    address: text(&first, "address")?.parse().ok()?,
+                    prefix: u32::try_from(first.get("prefix")?).ok()?,
+                    router: text(section, "gateway").and_then(|router| router.parse().ok()),
+                })
+            };
+            manual().map_or(Ipv6::Automatic, Ipv6::Manual)
+        }
+        _ => Ipv6::Automatic,
+    }
+}
+
 pub(crate) fn configured_ipv4(settings: &ConnectionSettings) -> Option<ManualIpv4> {
     let ipv4 = settings.get(IPV4)?;
     if text(ipv4, "method")? != "manual" {
@@ -193,13 +319,6 @@ pub(crate) fn text(entry: &HashMap<String, OwnedValue>, key: &str) -> Option<Str
 }
 
 impl NetworkManager {
-    fn ethernet_device(&self) -> Result<Option<OwnedObjectPath>> {
-        Ok(self
-            .devices_of_type(DEVICE_TYPE_ETHERNET)?
-            .into_iter()
-            .next())
-    }
-
     pub(crate) fn device(&self, path: &OwnedObjectPath) -> Result<DeviceProxyBlocking<'_>> {
         Ok(DeviceProxyBlocking::builder(&self.bus)
             .path(path.clone())?
@@ -229,25 +348,39 @@ impl NetworkManager {
         ))
     }
 
-    pub fn ethernet(&self) -> Result<Option<Ethernet>> {
-        let Some(path) = self.ethernet_device()? else {
-            return Ok(None);
-        };
-        let device = self.device(&path)?;
+    pub fn ethernets(&self) -> Result<Vec<Ethernet>> {
+        let mut found = Vec::new();
+        for path in self.devices_of_type(DEVICE_TYPE_ETHERNET)? {
+            found.push(self.ethernet(&path)?);
+        }
+        found.sort_by(|a, b| a.interface.cmp(&b.interface));
+        Ok(found)
+    }
+
+    fn ethernet(&self, path: &OwnedObjectPath) -> Result<Ethernet> {
+        let device = self.device(path)?;
         let wired = WiredProxyBlocking::builder(&self.bus)
             .path(path.clone())?
             .build()?;
         let state = device.state()?;
+        let interface = device.interface()?;
+        let outside = (state == DEVICE_STATE_UNMANAGED).then(|| Outside::of(&interface));
         let mut ethernet = Ethernet {
-            interface: device.interface()?,
+            interface,
             cable: wired.carrier()?,
-            managed: state != DEVICE_STATE_UNMANAGED,
             connected: state == DEVICE_STATE_ACTIVATED,
             addressing: Addressing::default(),
             manual: false,
+            ipv6: Ipv6::Automatic,
             connection: None,
             dns: Vec::new(),
+            security: None,
+            outside,
         };
+        if let Some(outside) = &ethernet.outside {
+            ethernet.addressing = outside.addressing.clone();
+            return Ok(ethernet);
+        }
         if ethernet.connected {
             ethernet.addressing = self.addressing(&device)?;
         }
@@ -255,10 +388,21 @@ impl NetworkManager {
             let settings: ConnectionSettings =
                 self.settings_connection(&connection)?.get_settings()?;
             ethernet.manual = configured_ipv4(&settings).is_some();
+            ethernet.ipv6 = configured_ipv6(&settings);
             ethernet.dns = dns_override(&settings);
+            ethernet.security = settings.get(ENTERPRISE).and_then(Enterprise::of);
             ethernet.connection = Some(connection.to_string());
         }
-        Ok(Some(ethernet))
+        Ok(ethernet)
+    }
+
+    pub(crate) fn device_named(&self, interface: &str) -> Result<Option<OwnedObjectPath>> {
+        for path in self.manager()?.get_devices()? {
+            if self.device(&path)?.interface()? == interface {
+                return Ok(Some(path));
+            }
+        }
+        Ok(None)
     }
 
     pub(crate) fn addressing(&self, device: &DeviceProxyBlocking<'_>) -> Result<Addressing> {
@@ -283,16 +427,35 @@ impl NetworkManager {
         })
     }
 
-    pub fn configure_ethernet(&self, manual: Option<&ManualIpv4>) -> Result<()> {
-        let Some(path) = self.ethernet_device()? else {
+    fn edit_wired(
+        &self,
+        interface: &str,
+        edit: impl FnOnce(&mut ConnectionSettings),
+    ) -> Result<()> {
+        let Some(path) = self.device_named(interface)? else {
             return Ok(());
         };
         let device = self.device(&path)?;
         let Some(connection) = self.connection_of(&device)? else {
             return Ok(());
         };
-        self.edit_connection(&connection, |settings| merge_ipv4(settings, manual))?;
+        self.edit_connection(&connection, edit)?;
         self.reactivate(&connection, &path)
+    }
+
+    pub fn configure_ethernet(&self, interface: &str, manual: Option<&ManualIpv4>) -> Result<()> {
+        self.edit_wired(interface, |settings| merge_ipv4(settings, manual))
+    }
+
+    pub fn secure_ethernet(&self, interface: &str, login: Option<&Enterprise>) -> Result<()> {
+        self.edit_wired(interface, |settings| match login {
+            Some(login) => {
+                settings.insert(ENTERPRISE.to_owned(), login.owned_settings());
+            }
+            None => {
+                settings.remove(ENTERPRISE);
+            }
+        })
     }
 
     pub(crate) fn edit_connection(

@@ -468,6 +468,81 @@ msgstr "Rapport {id}"
 msgid "Saved as {path}"
 msgstr "Sparad som {path}"
 
+msgid "Choose the Network’s Certificate Authority"
+msgstr "Välj nätverkets certifikatutfärdare"
+
+msgid "Choose Your Certificate"
+msgstr "Välj ditt certifikat"
+
+msgid "Choose Your Private Key"
+msgstr "Välj din privata nyckel"
+
+msgid "Choose…"
+msgstr "Välj…"
+
+msgid "Authentication"
+msgstr "Autentisering"
+
+msgid "User name"
+msgstr "Användarnamn"
+
+msgid "name@example.org"
+msgstr "name@example.org"
+
+msgid "Anonymous identity"
+msgstr "Anonym identitet"
+
+msgid "Optional"
+msgstr "Valfritt"
+
+msgid "System Certificates"
+msgstr "Systemets certifikat"
+
+msgid "Certificate File"
+msgstr "Certifikatfil"
+
+msgid "Certificate authority"
+msgstr "Certifikatutfärdare"
+
+msgid "Settings checks that the network’s server is the one your organization runs"
+msgstr "Inställningar kontrollerar att nätverkets server är den som din organisation driver"
+
+msgid "Certificate authority file"
+msgstr "Fil med certifikatutfärdare"
+
+msgid "None chosen"
+msgstr "Ingen vald"
+
+msgid "radius.example.org"
+msgstr "radius.example.org"
+
+msgid "Server domain"
+msgstr "Serverdomän"
+
+msgid "Your certificate"
+msgstr "Ditt certifikat"
+
+msgid "Private key"
+msgstr "Privat nyckel"
+
+msgid "In the certificate file"
+msgstr "I certifikatfilen"
+
+msgid "Private key password"
+msgstr "Lösenord för privat nyckel"
+
+msgid "Type your user name."
+msgstr "Skriv ditt användarnamn."
+
+msgid "Type the server domain, or choose the network’s certificate authority file."
+msgstr "Skriv serverdomänen eller välj nätverkets fil med certifikatutfärdare."
+
+msgid "Choose your certificate."
+msgstr "Välj ditt certifikat."
+
+msgid "Type your password."
+msgstr "Skriv ditt lösenord."
+
 msgid "{service} isn't responding. Try again in a moment."
 msgstr "{service} svarar inte. Försök igen om en stund."
 
@@ -488,6 +563,12 @@ msgstr "Det gick inte att rensa urklippshistoriken."
 
 msgid "Couldn't add this folder to the excluded folders."
 msgstr "Det gick inte att lägga till mappen bland de uteslutna mapparna."
+
+msgid "Couldn't change the proxy."
+msgstr "Det gick inte att ändra proxyn."
+
+msgid "Certificates and keys"
+msgstr "Certifikat och nycklar"
 
 msgid "Import a VPN Configuration"
 msgstr "Importera en VPN-konfiguration"
@@ -803,14 +884,35 @@ msgstr "DNS-servrar"
 msgid "192.0.2.1, 198.51.100.1"
 msgstr "192.0.2.1, 198.51.100.1"
 
-msgid "No Ethernet port"
-msgstr "Ingen Ethernet-port"
+msgid "IPv6 address"
+msgstr "IPv6-adress"
 
-msgid "Set up by the system, outside NetworkManager"
-msgstr "Konfigureras av systemet, utanför NetworkManager"
+msgid "2001:db8::20/64"
+msgstr "2001:db8::20/64"
 
-msgid "Cable unplugged"
-msgstr "Kabeln är urkopplad"
+msgid "IPv6 router"
+msgstr "IPv6-router"
+
+msgid "2001:db8::1"
+msgstr "2001:db8::1"
+
+msgid "Web proxy"
+msgstr "Webbproxy"
+
+msgid "proxy.example.org:3128"
+msgstr "proxy.example.org:3128"
+
+msgid "Secure web proxy"
+msgstr "Säker webbproxy"
+
+msgid "Same as the web proxy"
+msgstr "Samma som webbproxyn"
+
+msgid "Reach directly"
+msgstr "Nå direkt"
+
+msgid "localhost, .example.org"
+msgstr "localhost, .example.org"
 
 msgid "Connected as {address}"
 msgstr "Ansluten som {address}"
@@ -824,17 +926,101 @@ msgstr "Router {address}"
 msgid "DNS {servers}"
 msgstr "DNS {servers}"
 
+msgid "Cable unplugged"
+msgstr "Kabeln är urkopplad"
+
 msgid "Automatically"
 msgstr "Automatiskt"
 
 msgid "Manually"
 msgstr "Manuellt"
 
+msgid "Configure IPv6"
+msgstr "Konfigurera IPv6"
+
+msgid "Type an address such as 2001:db8::20/64, and the router as an address such as 2001:db8::1."
+msgstr "Skriv en adress som 2001:db8::20/64 och routern som en adress som 2001:db8::1."
+
+msgid "{file} sets up {interface}, so Settings doesn’t change this connection."
+msgstr "{file} konfigurerar {interface}, så Inställningar ändrar inte den här anslutningen."
+
+msgid "{interface} is set up outside NetworkManager, for example in /etc/network/interfaces, so Settings doesn’t change this connection."
+msgstr "{interface} konfigureras utanför NetworkManager, till exempel i /etc/network/interfaces, så Inställningar ändrar inte den här anslutningen."
+
+msgid "Let Settings Manage This Connection…"
+msgstr "Låt Inställningar hantera anslutningen…"
+
+msgid "NetworkManager takes over with the same settings, after you authenticate"
+msgstr "NetworkManager tar över med samma inställningar när du har autentiserat dig"
+
+msgid "Reading the setup…"
+msgstr "Läser konfigurationen…"
+
+msgid "Handing the connection to NetworkManager…"
+msgstr "Lämnar över anslutningen till NetworkManager…"
+
+msgid "Settings can’t take this connection over: {reason}."
+msgstr "Inställningar kan inte ta över den här anslutningen: {reason}."
+
+msgid "Nothing was changed: {reason}"
+msgstr "Ingenting ändrades: {reason}"
+
+msgid "Settings turns these lines into comments, keeps a copy of each file next to it and sets up the same connection in NetworkManager:"
+msgstr "Inställningar gör om de här raderna till kommentarer, sparar en kopia av varje fil bredvid den och konfigurerar samma anslutning i NetworkManager:"
+
+msgid "Manage Connection"
+msgstr "Hantera anslutningen"
+
+msgid "Other stanzas are left as they are"
+msgstr "Andra avsnitt lämnas som de är"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "NetworkManager now manages {interface} with the connection “{connection}”."
+msgstr "NetworkManager hanterar nu {interface} med anslutningen ”{connection}”."
+
+msgid "Now comments: {lines}. The original is {backup}."
+msgstr "Nu kommentarer: {lines}. Originalet är {backup}."
+
+msgid "To undo this, put the original file back."
+msgstr "Lägg tillbaka originalfilen för att ångra det här."
+
+msgid "No Ethernet port"
+msgstr "Ingen Ethernet-port"
+
+msgid "Details…"
+msgstr "Detaljer…"
+
+msgid "Addresses"
+msgstr "Adresser"
+
 msgid "Configure IPv4"
 msgstr "Konfigurera IPv4"
 
 msgid "Automatic"
 msgstr "Automatiskt"
+
+msgid "TCP/IP"
+msgstr "TCP/IP"
+
+msgid "802.1X Security"
+msgstr "802.1X-säkerhet"
+
+msgid "Press Return in the password field to save"
+msgstr "Tryck på Retur i lösenordsfältet för att spara"
+
+msgid "Signs in as {identity} with {method}"
+msgstr "Loggar in som {identity} med {method}"
+
+msgid "Off: the network doesn’t ask this computer to sign in"
+msgstr "Av: nätverket ber inte den här datorn att logga in"
+
+msgid "Set Up…"
+msgstr "Konfigurera…"
+
+msgid "Turn Off"
+msgstr "Stäng av"
 
 msgid "Disconnect"
 msgstr "Koppla från"
@@ -862,6 +1048,27 @@ msgstr "Installerar stöd för OpenVPN…"
 
 msgid "Add a WireGuard (.conf) or OpenVPN (.ovpn) file"
 msgstr "Lägg till en WireGuard-fil (.conf) eller OpenVPN-fil (.ovpn)"
+
+msgid "None"
+msgstr "Ingen"
+
+msgid "Manual"
+msgstr "Manuell"
+
+msgid "Proxy"
+msgstr "Proxy"
+
+msgid "Configuration URL"
+msgstr "Konfigurationsadress"
+
+msgid "http://wpad.example.org/wpad.dat"
+msgstr "http://wpad.example.org/wpad.dat"
+
+msgid "Command-line tools don’t read configuration files: give them a manual proxy"
+msgstr "Kommandoradsverktyg läser inte konfigurationsfiler: ge dem en manuell proxy"
+
+msgid "Apps you open after logging out and back in use the proxy"
+msgstr "Appar som du öppnar efter att ha loggat ut och in igen använder proxyn"
 
 msgid "On until {time}"
 msgstr "På till {time}"
@@ -1481,6 +1688,18 @@ msgstr "Sök i den här mappen igen"
 msgid "Files in these folders never appear in search"
 msgstr "Filer i de här mapparna visas aldrig i sökresultat"
 
+msgid "Type the address of the configuration file, such as http://wpad.example.org/wpad.dat."
+msgstr "Skriv konfigurationsfilens adress, till exempel http://wpad.example.org/wpad.dat."
+
+msgid "Type the proxy as a name and port, such as proxy.example.org:3128."
+msgstr "Skriv proxyn som namn och port, till exempel proxy.example.org:3128."
+
+msgid "Separate the names to reach directly with commas, such as localhost, .example.org."
+msgstr "Skilj namnen som ska nås direkt åt med kommatecken, till exempel localhost, .example.org."
+
+msgid "This account has no configuration folder."
+msgstr "Kontot har ingen konfigurationsmapp."
+
 msgid "On. Others on your network can try to sign in over SSH."
 msgstr "På. Andra i ditt nätverk kan försöka logga in via SSH."
 
@@ -1504,6 +1723,18 @@ msgstr "Det gick inte att slå på eller av Wi-Fi."
 
 msgid "Couldn't change the network settings."
 msgstr "Det gick inte att ändra nätverksinställningarna."
+
+msgid "Couldn't change how this connection signs in."
+msgstr "Det gick inte att ändra hur anslutningen loggar in."
+
+msgid "Couldn't turn the hotspot on."
+msgstr "Det gick inte att slå på surfzonen."
+
+msgid "Couldn't turn the hotspot off."
+msgstr "Det gick inte att stänga av surfzonen."
+
+msgid "Couldn't turn airplane mode on or off."
+msgstr "Det gick inte att slå på eller stänga av flygplansläget."
 
 msgid "Couldn't connect to the VPN."
 msgstr "Det gick inte att ansluta till VPN."
@@ -1833,9 +2064,6 @@ msgstr "Tillåt användaren att administrera datorn"
 msgid "Change Password…"
 msgstr "Ändra lösenord…"
 
-msgid "Choose…"
-msgstr "Välj…"
-
 msgid "Picture"
 msgstr "Bild"
 
@@ -1935,6 +2163,9 @@ msgstr "Fast"
 msgid "Rotating"
 msgstr "Roterande"
 
+msgid "WEP is not secure: anyone nearby can read what you send. Join only if the network can’t use WPA2 or WPA3."
+msgstr "WEP är inte säkert: vem som helst i närheten kan läsa det du skickar. Anslut bara om nätverket inte kan använda WPA2 eller WPA3."
+
 msgid "Connected · sign in to use the internet"
 msgstr "Ansluten · logga in för att använda internet"
 
@@ -1949,9 +2180,6 @@ msgstr "Sparat · Ansluter inte automatiskt"
 
 msgid "Saved"
 msgstr "Sparat"
-
-msgid "Details…"
-msgstr "Detaljer…"
 
 msgid "Networks you join are remembered here"
 msgstr "Nätverk du ansluter till sparas här"
@@ -2010,9 +2238,6 @@ msgstr "Wi-Fi-adress"
 msgid "Connection"
 msgstr "Anslutning"
 
-msgid "TCP/IP"
-msgstr "TCP/IP"
-
 msgid "Its password is removed and Bande no longer joins it on its own."
 msgstr "Lösenordet tas bort och Bande ansluter inte till det av sig självt längre."
 
@@ -2021,3 +2246,33 @@ msgstr "Glöm det här nätverket"
 
 msgid "Type the name of the network to join."
 msgstr "Skriv namnet på nätverket du vill ansluta till."
+
+msgid "Sharing as “{name}”"
+msgstr "Delar som ”{name}”"
+
+msgid "Devices nearby can join with the hotspot’s password"
+msgstr "Enheter i närheten kan ansluta med surfzonens lösenord"
+
+msgid "Hotspot name"
+msgstr "Surfzonens namn"
+
+msgid "Name other devices see"
+msgstr "Namnet andra enheter ser"
+
+msgid "Hotspot password"
+msgstr "Surfzonens lösenord"
+
+msgid "Type 8 to 63 characters and press Return to share this computer’s wired connection"
+msgstr "Skriv 8 till 63 tecken och tryck på Retur för att dela datorns trådbundna anslutning"
+
+msgid "Turn On"
+msgstr "Slå på"
+
+msgid "Use the saved password"
+msgstr "Använd det sparade lösenordet"
+
+msgid "Type a hotspot name of up to 32 characters."
+msgstr "Skriv ett namn på surfzonen med högst 32 tecken."
+
+msgid "Use a password of 8 to 63 letters, digits and symbols."
+msgstr "Använd ett lösenord med 8 till 63 bokstäver, siffror och symboler."

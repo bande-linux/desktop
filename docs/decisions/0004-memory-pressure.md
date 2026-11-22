@@ -42,15 +42,16 @@ memory settings stay the system's own.
   services. If the kernel OOM killer still has to act, it picks a big app and never the
   compositor at 100. Without this, apps would inherit the compositor's 100 and tiny session
   services at 200 would score above multi-GB apps.
-- The few session-critical services Bande does not own get the same floor as the compositor,
-  `OOMScoreAdjust=100`, through vendor drop-ins: `dbus.service` (the session bus),
+- The session-critical services Bande does not own, `dbus.service` (the session bus),
   `pipewire.service`, `pipewire-pulse.service`, `wireplumber.service` and
-  `xdg-desktop-portal.service`. At 200, a 10 MB service would score about 196k pages, above a
-  1.9 GB process at adj 0 (about 119k), so a global OOM would kill small session services over
-  and over while the process that caused it lived. At 100 it scores about 98k, below any process
-  over about 1.5 GB. Once the session bus is gone, no session service or app reconnects.
-- The session bus, PipeWire, WirePlumber and the portal also get `ManagedOOMPreference=avoid`,
-  so Debian's backstop on `user@.service` passes them over while an app remains.
+  `xdg-desktop-portal.service`, get `ManagedOOMPreference=avoid` from `bande-session` at start
+  (`systemctl --user set-property --runtime`), so Debian's backstop on `user@.service` passes
+  them over while an app remains. Their units stay as their packages ship them, so other
+  desktops see no change. They keep systemd's `oom_score_adj` of 200, the same as apps, so the
+  kernel's OOM killer still picks a large app before a small service. The exception is a
+  runaway process at adj 0 (a system service): above about 1.5 GB it scores below a 10 MB
+  service at 200. A lower `OOMScoreAdjust` would cover that, but it applies only at exec,
+  through a drop-in on another package's unit for every desktop, so Bande leaves it.
 - Swap kill stays off (`ManagedOOMSwap=auto`, Debian's default): killing on swap use closes
   large apps that are only idle, not thrashing.
 - No `oomd.conf` drop-in: Debian already sets `DefaultMemoryPressureDurationSec=20s`, and the

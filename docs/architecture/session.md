@@ -587,9 +587,9 @@ what the one before could not save:
   and uploads and repaints everything; apps keep running. Without a new device the compositor
   exits.
 - **Memory runs out**: the low-memory window, systemd-oomd on `app.slice` and the notification of
-  a closed app ([decision 0004](../decisions/0004-memory-pressure.md)). The compositor, the session
-  bus, PipeWire, WirePlumber and the portal sit at `OOMScoreAdjust=100` with oomd `avoid`, apps at
-  200.
+  a closed app ([decision 0004](../decisions/0004-memory-pressure.md)). The compositor sits at
+  `OOMScoreAdjust=100` with oomd `avoid`; the session bus, PipeWire, WirePlumber and the portal
+  get oomd `avoid` from `bande-session` at start; apps sit at 200.
 - **Session services crash**: every Bande user service has `Restart=on-failure` with systemd's
   start limit, runs in `session.slice`, and is D-Bus activated again on the next call after that.
 - **Too many processes**: each app scope gets the default `TasksMax` (15 % of the kernel's limit)

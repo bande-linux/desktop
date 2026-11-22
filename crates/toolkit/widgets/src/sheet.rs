@@ -469,16 +469,22 @@ mod tests {
     }
 
     #[test]
-    fn a_click_on_a_button_leaves_the_keyboard_focus_where_it_was() {
+    fn a_click_on_a_button_leaves_the_keyboard_focus_where_it_was_but_a_slider_takes_it() {
         let field = crate::TextField::new("", "", |_| {});
         let field_id = field.id();
         let bold = Button::new("Bold", || {});
         let bold_id = bold.id();
+        let moved = Rc::new(RefCell::new(Vec::new()));
+        let values = moved.clone();
+        let volume = crate::Slider::new("Volume", 0.0, (0.0, 10.0), 1.0, move |value| {
+            values.borrow_mut().push(value)
+        });
+        let volume_id = volume.id();
         let root = crate::Stack::new(
             crate::Axis::Vertical,
             0.0,
             0.0,
-            vec![Box::new(field), Box::new(bold)],
+            vec![Box::new(field), Box::new(bold), Box::new(volume)],
         );
         let cx = Context::new(
             TextSystem::new(),
@@ -487,20 +493,36 @@ mod tests {
         let mut ui = Ui::new(Box::new(root), cx);
         ui.layout(Size::new(300.0, 200.0));
         ui.set_focus(field_id);
-        let centre = ui
+        let centre = |frame: crate::Rect| {
+            crate::Point::new(frame.x + frame.width / 2.0, frame.y + frame.height / 2.0)
+        };
+        let click = |ui: &mut Ui, at: crate::Point| {
+            ui.handle(&Event::PointerDown(crate::Pointer::at(at)));
+            ui.handle(&Event::PointerUp(crate::Pointer::at(at)));
+        };
+        let key = |ui: &mut Ui, key: Key| {
+            ui.handle(&Event::Key {
+                key,
+                modifiers: Modifiers::default(),
+            });
+        };
+        let bold_at = ui
             .widget_ref::<Button>(bold_id)
-            .map(|button| button.frame())
-            .map(|frame| {
-                crate::Point::new(frame.x + frame.width / 2.0, frame.y + frame.height / 2.0)
-            })
+            .map(|button| centre(button.frame()))
             .unwrap_or_default();
-        ui.handle(&Event::PointerDown(crate::Pointer::at(centre)));
-        ui.handle(&Event::PointerUp(crate::Pointer::at(centre)));
+        click(&mut ui, bold_at);
         assert_eq!(ui.focus(), Some(field_id));
-        ui.handle(&Event::Key {
-            key: Key::Tab,
-            modifiers: Modifiers::default(),
-        });
+        key(&mut ui, Key::Tab);
         assert_eq!(ui.focus(), Some(bold_id));
+
+        let volume_at = ui
+            .widget_ref::<crate::Slider>(volume_id)
+            .map(|slider| centre(slider.frame()))
+            .unwrap_or_default();
+        click(&mut ui, volume_at);
+        assert_eq!(ui.focus(), Some(volume_id));
+        let clicked = moved.borrow().last().copied().unwrap_or_default();
+        key(&mut ui, Key::Right);
+        assert!(moved.borrow().last().is_some_and(|value| *value > clicked));
     }
 }

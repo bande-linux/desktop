@@ -389,8 +389,4 @@ impl Widget for SegmentedControl {
     fn accepts_focus(&self, _cx: &Context) -> bool {
         self.enabled
     }
-
-    fn focuses_on_click(&self) -> bool {
-        false
-    }
 }

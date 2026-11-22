@@ -267,8 +267,4 @@ impl Widget for Stepper {
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
     }
-
-    fn focuses_on_click(&self) -> bool {
-        false
-    }
 }

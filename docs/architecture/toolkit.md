@@ -193,9 +193,10 @@ writes a hex value, a corner radius or a font name of its own.
   below, `Table`, `ScrollView`, `Disclosure` and `FreeLayout`, laid out, painted into a `Scene`
   and driven by `Ui`. `Ui::update_widget(id, |widget, cx| ...)` changes a widget from code with the context it needs (e.g. `SegmentedControl::set_selected`, `Slider::set_value`), so the change animates. Buttons and switches act on release inside. Tab moves focus
   through every control in every window and sheet; tabbing into a field selects its text. A
-  click focuses fields, lists and other widgets whose `focuses_on_click` holds, but not
-  buttons, switches, checkboxes, sliders and the other controls, so clicking a toolbar button
-  leaves the keyboard where it was. A widget opens a menu
+  click focuses fields, lists, sliders, steppers, segmented controls and other widgets whose
+  `focuses_on_click` holds, so the arrow keys drive them next, but not buttons, switches,
+  checkboxes, radio groups, pop-up buttons or disclosures, so clicking a toolbar button leaves
+  the keyboard where it was. A widget opens a menu
   of its own (a pop-up button's choices) with `Context::show_menu`; the choice comes back to it
   through `menu_action`.
 - **Controls** (Datum §7). Regular controls are

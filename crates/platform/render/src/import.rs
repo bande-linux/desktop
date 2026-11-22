@@ -21,7 +21,8 @@ use smithay::wayland::shm::with_buffer_contents;
 use crate::formats::{self, Kind};
 use crate::{
     BYTES_PER_PIXEL, Image, PendingCopy, Rect, RenderError, Resource, TEXTURE_FOURCCS,
-    TextureImage, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque, target_format,
+    TextureImage, Use, VulkanRenderer, VulkanTexture, alpha_swizzle, disjoint, is_opaque,
+    target_format,
 };
 
 const GPU_LINEAR_ALIGNMENT: u32 = 16;
@@ -68,50 +69,94 @@ pub(crate) fn single_plane_layout(dmabuf: &Dmabuf) -> Result<PlaneLayout<'_>, Re
     Ok(PlaneLayout { fd, offset, stride })
 }
 
-pub(crate) fn modifier_layout(
-    dmabuf: &Dmabuf,
-    planes: Option<usize>,
-    texel: formats::Texel,
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct MemoryPlane {
+    pub(crate) offset: u32,
+    pub(crate) stride: u32,
+    pub(crate) object_size: u64,
+}
+
+pub(crate) fn memory_layouts(
+    planes: &[MemoryPlane],
+    expected: usize,
+    linear_rows: Option<&[(u64, u64)]>,
 ) -> Result<Vec<vk::SubresourceLayout>, RenderError> {
-    if planes != Some(dmabuf.num_planes()) {
+    if planes.len() != expected || linear_rows.is_some_and(|rows| rows.len() != planes.len()) {
         return Err(RenderError::UnsupportedFormat);
     }
-    let Some(first) = dmabuf.handles().next() else {
-        return Err(RenderError::UnsupportedFormat);
-    };
-    for fd in dmabuf.handles().skip(1) {
-        if !same_object(first, fd)? {
-            return Err(RenderError::UnsupportedFormat);
-        }
-    }
-    let size = File::from(first.try_clone_to_owned()?).seek(SeekFrom::End(0))?;
-    let linear = dmabuf.format().modifier == Modifier::Linear;
-    let extent = dmabuf.size();
-    let rows = texel.plane_rows(extent.w.unsigned_abs(), extent.h.unsigned_abs());
-    dmabuf
-        .offsets()
-        .zip(dmabuf.strides())
-        .zip(rows)
-        .map(|((offset, stride), plane)| {
-            if linear
-                && !(offset.is_multiple_of(GPU_LINEAR_ALIGNMENT)
-                    && stride.is_multiple_of(GPU_LINEAR_ALIGNMENT))
+    planes
+        .iter()
+        .enumerate()
+        .map(|(index, plane)| {
+            let rows = linear_rows.map(|rows| rows[index]);
+            if rows.is_some()
+                && !(plane.offset.is_multiple_of(GPU_LINEAR_ALIGNMENT)
+                    && plane.stride.is_multiple_of(GPU_LINEAR_ALIGNMENT))
             {
                 return Err(RenderError::UnalignedDmabuf);
             }
-            if stride == 0
-                || u64::from(offset) >= size
-                || linear && !fits(offset, stride, plane, size)
+            if plane.stride == 0
+                || u64::from(plane.offset) >= plane.object_size
+                || rows
+                    .is_some_and(|rows| !fits(plane.offset, plane.stride, rows, plane.object_size))
             {
                 return Err(RenderError::BufferOutOfBounds);
             }
             Ok(vk::SubresourceLayout {
-                offset: u64::from(offset),
-                row_pitch: u64::from(stride),
-                ..Default::default()
+                offset: u64::from(plane.offset),
+                size: 0,
+                row_pitch: u64::from(plane.stride),
+                array_pitch: 0,
+                depth_pitch: 0,
             })
         })
         .collect()
+}
+
+pub(crate) struct Planes {
+    pub(crate) layouts: Vec<vk::SubresourceLayout>,
+    pub(crate) objects: Vec<File>,
+    pub(crate) disjoint: bool,
+}
+
+pub(crate) fn dmabuf_planes(
+    dmabuf: &Dmabuf,
+    capability: formats::Capability,
+    texel: formats::Texel,
+) -> Result<Planes, RenderError> {
+    let Some(first) = dmabuf.handles().next() else {
+        return Err(RenderError::UnsupportedFormat);
+    };
+    let mut disjoint = false;
+    for fd in dmabuf.handles().skip(1) {
+        disjoint |= !same_object(first, fd)?;
+    }
+    if disjoint && !capability.disjoint {
+        return Err(RenderError::UnsupportedFormat);
+    }
+    let mut objects = Vec::new();
+    let mut planes = Vec::new();
+    for ((fd, offset), stride) in dmabuf.handles().zip(dmabuf.offsets()).zip(dmabuf.strides()) {
+        let mut object = File::from(fd.try_clone_to_owned()?);
+        let object_size = object.seek(SeekFrom::End(0))?;
+        planes.push(MemoryPlane {
+            offset,
+            stride,
+            object_size,
+        });
+        if disjoint || objects.is_empty() {
+            objects.push(object);
+        }
+    }
+    let extent = dmabuf.size();
+    let rows = (dmabuf.format().modifier == Modifier::Linear)
+        .then(|| texel.plane_rows(extent.w.unsigned_abs(), extent.h.unsigned_abs()));
+    let layouts = memory_layouts(&planes, capability.planes, rows.as_deref())?;
+    Ok(Planes {
+        layouts,
+        objects,
+        disjoint,
+    })
 }
 
 fn chroma_size(width: i32, height: i32) -> (i32, i32) {
@@ -151,6 +196,9 @@ fn video_layout(dmabuf: &Dmabuf) -> Result<(PlaneLayout<'_>, PlaneLayout<'_>), R
 
 #[derive(Default)]
 struct SurfaceTextures(RefCell<Vec<VulkanTexture>>);
+
+#[derive(Default)]
+struct LastShown(RefCell<Option<VulkanTexture>>);
 
 struct MemorySource<'a> {
     pool: &'a [u8],
@@ -340,10 +388,14 @@ impl VulkanRenderer {
         Ok(())
     }
 
-    fn sampled_dmabuf(&mut self, dmabuf: &Dmabuf) -> Result<VulkanTexture, RenderError> {
+    fn sampled_dmabuf(
+        &mut self,
+        dmabuf: &Dmabuf,
+        capability: formats::Capability,
+    ) -> Result<VulkanTexture, RenderError> {
         let code = dmabuf.format().code;
         let texel = formats::texel(code).ok_or(RenderError::UnsupportedFormat)?;
-        let image = self.import_image(dmabuf, texel, formats::SAMPLED)?;
+        let image = self.import_image(dmabuf, texel, (formats::SAMPLED, capability))?;
         let size = (image.width, image.height);
         let (luma_format, chroma_format) = match texel.kind {
             Kind::Colour { opaque } => {
@@ -378,7 +430,7 @@ impl VulkanRenderer {
         let chroma_size = chroma_size(size.0, size.1);
         let chroma_id = self.imported_texture(Image {
             image: vk::Image::null(),
-            memory: vk::DeviceMemory::null(),
+            memory: Vec::new(),
             view: chroma_view,
             width: chroma_size.0,
             height: chroma_size.1,
@@ -422,16 +474,19 @@ impl VulkanRenderer {
         }
     }
 
-    fn sample_directly(&mut self, dmabuf: &Dmabuf) -> Result<VulkanTexture, RenderError> {
+    fn sample_directly(
+        &mut self,
+        dmabuf: &Dmabuf,
+        capability: formats::Capability,
+    ) -> Result<VulkanTexture, RenderError> {
         let weak = dmabuf.weak();
-        let texture = match self.sampled_dmabufs.get(&weak) {
-            Some(texture) => texture.clone(),
-            None => {
-                let texture = self.sampled_dmabuf(dmabuf)?;
-                self.sampled_dmabufs.insert(weak, texture.clone());
-                texture
-            }
-        };
+        if let Some(texture) = self.sampled_dmabufs.get(&weak) {
+            return Ok(texture.clone());
+        }
+        let texture = self.sampled_dmabuf(dmabuf, capability);
+        self.note_import(dmabuf.format(), Use::Sampled, texture.as_ref().err());
+        let texture = texture?;
+        self.sampled_dmabufs.insert(weak, texture.clone());
         Ok(texture)
     }
 
@@ -505,8 +560,8 @@ impl VulkanRenderer {
         surface: Option<&SurfaceData>,
         damage: Option<&[Rectangle<i32, BufferCoords>]>,
     ) -> Result<VulkanTexture, RenderError> {
-        if self.modifiers.sampled.contains_key(&dmabuf.format()) {
-            match self.sample_directly(dmabuf) {
+        if let Some(capability) = self.modifiers.sampled.usable(&dmabuf.format()) {
+            match self.sample_directly(dmabuf, capability) {
                 Ok(texture) => return Ok(texture),
                 Err(error) if dmabuf.format().modifier != Modifier::Linear => return Err(error),
                 Err(error) => tracing::debug!("copying a dma-buf that cannot be sampled: {error}"),
@@ -639,7 +694,7 @@ impl ImportMemWl for VulkanRenderer {
 
 impl ImportDma for VulkanRenderer {
     fn dmabuf_formats(&self) -> FormatSet {
-        self.dmabuf_planes().into_keys().collect()
+        self.advertised_dmabuf_formats()
     }
 
     fn import_dmabuf(
@@ -659,13 +714,99 @@ impl ImportDmaWl for VulkanRenderer {
         damage: &[Rectangle<i32, BufferCoords>],
     ) -> Result<VulkanTexture, RenderError> {
         let dmabuf = get_dmabuf(buffer).map_err(|_| RenderError::UnknownBuffer)?;
-        self.import_dmabuf_into(dmabuf, surface, Some(damage))
+        let imported = self.import_dmabuf_into(dmabuf, surface, Some(damage));
+        let Some(states) = surface else {
+            return imported;
+        };
+        states.data_map.insert_if_missing(LastShown::default);
+        let Some(last) = states.data_map.get::<LastShown>() else {
+            return imported;
+        };
+        let mut last = last.0.borrow_mut();
+        match imported {
+            Ok(texture) => {
+                *last = Some(texture.clone());
+                Ok(texture)
+            }
+            Err(error) => match last.as_ref().filter(|texture| texture.renderer == self.id) {
+                Some(texture) => {
+                    tracing::debug!("showing a surface's last buffer: {error}");
+                    Ok(texture.clone())
+                }
+                None => Err(error),
+            },
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::fits;
+    use super::{MemoryPlane, RenderError, fits, memory_layouts};
+
+    fn plane(offset: u32, stride: u32) -> MemoryPlane {
+        MemoryPlane {
+            offset,
+            stride,
+            object_size: 1 << 20,
+        }
+    }
+
+    #[test]
+    fn every_memory_plane_of_a_modifier_gets_its_own_layout() {
+        let layouts = |planes: &[MemoryPlane], expected, rows: Option<&[(u64, u64)]>| {
+            memory_layouts(planes, expected, rows).map(|layouts| {
+                layouts
+                    .iter()
+                    .map(|layout| {
+                        assert_eq!(
+                            (layout.size, layout.array_pitch, layout.depth_pitch),
+                            (0, 0, 0)
+                        );
+                        (layout.offset, layout.row_pitch)
+                    })
+                    .collect::<Vec<_>>()
+            })
+        };
+        let rows = [(256, 64)];
+        assert_eq!(
+            layouts(&[plane(0, 256)], 1, Some(&rows)).ok(),
+            Some(vec![(0, 256)])
+        );
+        let pixels_and_aux = [plane(0, 512), plane(65536, 128)];
+        assert_eq!(
+            layouts(&pixels_and_aux, 2, None).ok(),
+            Some(vec![(0, 512), (65536, 128)])
+        );
+        let pixels_and_two_aux = [plane(0, 1024), plane(262144, 256), plane(327680, 64)];
+        assert_eq!(
+            layouts(&pixels_and_two_aux, 3, None).ok(),
+            Some(vec![(0, 1024), (262144, 256), (327680, 64)])
+        );
+        assert!(matches!(
+            layouts(&pixels_and_aux[..1], 2, None),
+            Err(RenderError::UnsupportedFormat)
+        ));
+        assert!(matches!(
+            layouts(&pixels_and_aux, 1, None),
+            Err(RenderError::UnsupportedFormat)
+        ));
+        assert!(matches!(
+            layouts(&[plane(1 << 20, 512)], 1, None),
+            Err(RenderError::BufferOutOfBounds)
+        ));
+        assert!(matches!(
+            layouts(&[plane(0, 0)], 1, None),
+            Err(RenderError::BufferOutOfBounds)
+        ));
+        assert!(matches!(
+            layouts(&[plane(0, 128)], 1, Some(&rows)),
+            Err(RenderError::BufferOutOfBounds)
+        ));
+        assert!(matches!(
+            layouts(&[plane(8, 256)], 1, Some(&rows)),
+            Err(RenderError::UnalignedDmabuf)
+        ));
+    }
 
     #[test]
     fn a_plane_fits_only_with_whole_rows_inside_the_buffer() {

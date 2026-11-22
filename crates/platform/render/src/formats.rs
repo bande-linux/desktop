@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ash::vk;
 use smithay::backend::allocator::{Format, Fourcc, Modifier};
@@ -111,12 +111,63 @@ impl Texel {
             Kind::Video { .. } => vk::ImageCreateFlags::MUTABLE_FORMAT,
         }
     }
+
+    pub(crate) fn view_formats(self) -> Vec<vk::Format> {
+        match self.kind {
+            Kind::Colour { .. } => Vec::new(),
+            Kind::Video { luma, chroma } => vec![luma, chroma],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Capability {
+    pub(crate) planes: usize,
+    pub(crate) disjoint: bool,
+    pub(crate) max_extent: (u32, u32),
+}
+
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Supported {
+    listed: HashMap<Format, Capability>,
+    proven: HashSet<Format>,
+    refused: HashSet<Format>,
+}
+
+impl Supported {
+    pub(crate) fn usable(&self, format: &Format) -> Option<Capability> {
+        match self.refused.contains(format) {
+            true => None,
+            false => self.listed.get(format).copied(),
+        }
+    }
+
+    pub(crate) fn listed(&self) -> impl Iterator<Item = (Format, usize)> + '_ {
+        self.listed
+            .iter()
+            .map(|(format, capability)| (*format, capability.planes))
+    }
+
+    pub(crate) fn advertised(&self) -> impl Iterator<Item = Format> + '_ {
+        self.listed
+            .keys()
+            .filter(|format| !self.refused.contains(format))
+            .copied()
+    }
+
+    pub(crate) fn worked(&mut self, format: Format) {
+        self.proven.insert(format);
+    }
+
+    pub(crate) fn failed(&mut self, format: Format) -> bool {
+        !self.proven.contains(&format) && self.refused.insert(format)
+    }
 }
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Modifiers {
-    pub(crate) sampled: HashMap<Format, usize>,
-    pub(crate) rendered: HashMap<Format, usize>,
+    pub(crate) sampled: Supported,
+    pub(crate) rendered: Supported,
 }
 
 fn listed_modifiers(
@@ -144,39 +195,94 @@ fn listed_modifiers(
     modifiers
 }
 
+struct Importable {
+    max_extent: (u32, u32),
+    dedicated_only: bool,
+}
+
 fn importable(
     instance: &ash::Instance,
     physical: vk::PhysicalDevice,
     texel: Texel,
     modifier: u64,
-    usage: vk::ImageUsageFlags,
-) -> bool {
+    (usage, flags): (vk::ImageUsageFlags, vk::ImageCreateFlags),
+) -> Option<Importable> {
     let mut modifier_info = vk::PhysicalDeviceImageDrmFormatModifierInfoEXT::default()
         .drm_format_modifier(modifier)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
     let mut external_info = vk::PhysicalDeviceExternalImageFormatInfo::default()
         .handle_type(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
-    let info = vk::PhysicalDeviceImageFormatInfo2::default()
+    let view_formats = texel.view_formats();
+    let mut list = vk::ImageFormatListCreateInfo::default().view_formats(&view_formats);
+    let mut info = vk::PhysicalDeviceImageFormatInfo2::default()
         .format(texel.format)
         .ty(vk::ImageType::TYPE_2D)
         .tiling(vk::ImageTiling::DRM_FORMAT_MODIFIER_EXT)
         .usage(usage)
-        .flags(texel.flags())
+        .flags(texel.flags() | flags)
         .push_next(&mut modifier_info)
         .push_next(&mut external_info);
+    if !view_formats.is_empty() {
+        info = info.push_next(&mut list);
+    }
     let mut external = vk::ExternalImageFormatProperties::default();
     let mut result = vk::ImageFormatProperties2::default().push_next(&mut external);
     // SAFETY: `physical` belongs to this `instance`; `info`, `result` and the structs chained into
     // them outlive the call.
-    let supported = unsafe {
-        instance.get_physical_device_image_format_properties2(physical, &info, &mut result)
-    };
-    supported.is_ok()
-        && external
-            .external_memory_properties
-            .external_memory_features
-            .contains(vk::ExternalMemoryFeatureFlags::IMPORTABLE)
+    unsafe { instance.get_physical_device_image_format_properties2(physical, &info, &mut result) }
+        .ok()?;
+    let extent = result.image_format_properties.max_extent;
+    let features = external.external_memory_properties.external_memory_features;
+    features
+        .contains(vk::ExternalMemoryFeatureFlags::IMPORTABLE)
+        .then_some(Importable {
+            max_extent: (extent.width, extent.height),
+            dedicated_only: features.contains(vk::ExternalMemoryFeatureFlags::DEDICATED_ONLY),
+        })
 }
+
+fn capability(
+    instance: &ash::Instance,
+    physical: vk::PhysicalDevice,
+    texel: Texel,
+    listed: vk::DrmFormatModifierPropertiesEXT,
+    usage: vk::ImageUsageFlags,
+) -> Option<Capability> {
+    let modifier = listed.drm_format_modifier;
+    let found = importable(
+        instance,
+        physical,
+        texel,
+        modifier,
+        (usage, vk::ImageCreateFlags::empty()),
+    )?;
+    let planes = listed.drm_format_modifier_plane_count as usize;
+    let disjoint = planes > 1
+        && listed
+            .drm_format_modifier_tiling_features
+            .contains(vk::FormatFeatureFlags::DISJOINT)
+        && importable(
+            instance,
+            physical,
+            texel,
+            modifier,
+            (usage, vk::ImageCreateFlags::DISJOINT),
+        )
+        .is_some_and(|disjoint| !disjoint.dedicated_only);
+    Some(Capability {
+        planes,
+        disjoint,
+        max_extent: found.max_extent,
+    })
+}
+
+const RENDER_FEATURES: vk::FormatFeatureFlags = vk::FormatFeatureFlags::from_raw(
+    vk::FormatFeatureFlags::COLOR_ATTACHMENT.as_raw()
+        | vk::FormatFeatureFlags::COLOR_ATTACHMENT_BLEND.as_raw()
+        | vk::FormatFeatureFlags::SAMPLED_IMAGE.as_raw()
+        | vk::FormatFeatureFlags::TRANSFER_SRC.as_raw()
+        | vk::FormatFeatureFlags::TRANSFER_DST.as_raw(),
+);
 
 pub(crate) fn query(instance: &ash::Instance, physical: vk::PhysicalDevice) -> Modifiers {
     let mut found = Modifiers::default();
@@ -187,34 +293,17 @@ pub(crate) fn query(instance: &ash::Instance, physical: vk::PhysicalDevice) -> M
                 modifier: Modifier::from(listed.drm_format_modifier),
             };
             let features = listed.drm_format_modifier_tiling_features;
-            let planes = listed.drm_format_modifier_plane_count as usize;
-            let sampled = features.contains(vk::FormatFeatureFlags::SAMPLED_IMAGE)
-                && importable(
-                    instance,
-                    physical,
-                    texel,
-                    listed.drm_format_modifier,
-                    SAMPLED,
-                );
-            if sampled {
-                found.sampled.insert(format, planes);
+            if features.contains(vk::FormatFeatureFlags::SAMPLED_IMAGE)
+                && let Some(sampled) = capability(instance, physical, texel, listed, SAMPLED)
+            {
+                found.sampled.listed.insert(format, sampled);
             }
-            let rendered = crate::TARGET_FORMATS.contains(&texel.format)
+            if crate::TARGET_FORMATS.contains(&texel.format)
                 && format.modifier != Modifier::Linear
-                && features.contains(
-                    vk::FormatFeatureFlags::COLOR_ATTACHMENT
-                        | vk::FormatFeatureFlags::TRANSFER_SRC
-                        | vk::FormatFeatureFlags::TRANSFER_DST,
-                )
-                && importable(
-                    instance,
-                    physical,
-                    texel,
-                    listed.drm_format_modifier,
-                    RENDERED,
-                );
-            if rendered {
-                found.rendered.insert(format, planes);
+                && features.contains(RENDER_FEATURES)
+                && let Some(rendered) = capability(instance, physical, texel, listed, RENDERED)
+            {
+                found.rendered.listed.insert(format, rendered);
             }
         }
     }
@@ -223,6 +312,6 @@ pub(crate) fn query(instance: &ash::Instance, physical: vk::PhysicalDevice) -> M
 
 impl Modifiers {
     pub(crate) fn any(&self) -> bool {
-        !self.sampled.is_empty() || !self.rendered.is_empty()
+        !self.sampled.listed.is_empty() || !self.rendered.listed.is_empty()
     }
 }

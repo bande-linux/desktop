@@ -32,6 +32,13 @@ when they reach the screen is Bande's own.
   `wp_viewport` crop) for the 90°/270° and flipped 90°/270° transforms and repaints a whole
   90°/270° surface on damage, as Smithay maps their damage the wrong way round. An element the
   renderer cannot draw is left out of the frame with one warning; only a lost device fails it.
+  On a DRM device the compositor logs the chosen Vulkan device, its driver (name, driver ID,
+  driver info) and the device extensions it enabled. When the Vulkan loader offers
+  `VK_EXT_debug_utils`, its messages (and the validation layer's, when enabled with
+  `VK_LOADER_LAYERS_ENABLE`) go to the log. Every submission is waited for before the frame
+  returns, so nothing the GPU does is pending when a buffer goes back to a client or to the
+  display; client fences are waited for before a commit applies (`sync.rs`: the dma-buf's
+  implicit fences, or the `linux-drm-syncobj-v1` acquire point).
 - **Window shape and depth.** Every window that is not full screen is clipped to its
   `xdg_surface` window geometry with 16 pt rounded corners (antialiased in the fragment shader)
   and casts a soft shadow drawn analytically (a Gaussian-blurred rounded box): the focused window's
@@ -93,23 +100,38 @@ when they reach the screen is Bande's own.
   title bar. Everything else in the row is the client's, so free tab-row space stays its own
   move request. Full screen removes the well. The rule is the app id plus client-side, so a build
   that asks for server-side gets a normal title bar, and any other Firefox is left alone.
-- **dma-buf.** `linux-dmabuf-v1` serves every format and modifier the GPU reports it can sample
-  from an imported dma-buf (`VK_EXT_image_drm_format_modifier`, asked once per device in
-  `render/src/formats.rs`): ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and
-  P010 for video (one dma-buf for both planes, BT.709 limited range, converted in the `video`
-  shader), each with its tiled and compressed modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and
-  NV12 always. On a DRM device it is version 4 with feedback: the main tranche names the render
+- **dma-buf.** `linux-dmabuf-v1` serves every format and modifier the GPU can import from a
+  dma-buf for sampling: `render/src/formats.rs` asks once per device, with
+  `VK_EXT_image_drm_format_modifier` (any device but a CPU one), for each format's modifiers and
+  keeps those that `vkGetPhysicalDeviceImageFormatProperties2` accepts as importable dma-buf images
+  for the usage (sampled for textures; colour attachment, blending, sampling and transfers for
+  render targets), with their memory plane count, largest size and whether the planes may be bound
+  apart. The formats are ARGB, XRGB, ABGR and XBGR in 8 and 10 bits per channel, NV12 and P010
+  for video (BT.709 limited range, converted in the `video` shader), each with its tiled and
+  compressed modifiers; LINEAR ARGB8888, XRGB8888, ABGR8888 and NV12 always, also without the
+  extension. On a DRM device it is version 4 with feedback: the main tranche names the render
   device and a scanout tranche lists the primary plane's formats and modifiers that the GPU can
-  also sample; headless it is version 3 with LINEAR only. A buffer is accepted only with exactly
-  the planes its modifier has, all in one dma-buf, and carries the DRM node so that
-  `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan
-  image with its modifier and explicit plane layout and sampled in place every frame, without a copy: a frame acquires it from the foreign queue
-  before its first draw and releases it back in `GENERAL` when the frame ends. A LINEAR buffer that cannot be sampled that way
-  (offset or stride not a multiple of 16, or a driver or lavapipe without the extension) is
-  imported as a Vulkan buffer and its damaged rows copied into the surface's texture, so any
-  stride works. A LINEAR plane whose stride is shorter than a row, or whose last row ends past
-  the dma-buf, is refused. Uploads are submitted with the frame, or on their own when no frame is rendered
-  (a covered window that keeps drawing, direct scanout), so pending staging memory cannot pile
+  also sample; headless it is version 3 with LINEAR only. A buffer is accepted with exactly the
+  memory planes its modifier has (a compressed modifier has more than the format: Intel CCS one
+  for the pixels and one for the compression data, AMD DCC up to three) and carries the DRM node
+  so that `DrmCompositor` can scan it out. Such a buffer is imported once as a Vulkan image with its
+  modifier and one explicit layout per memory plane (offset and stride; size and pitches zero);
+  planes in separate dma-bufs make a `DISJOINT` image with one memory per plane, refused when the
+  modifier cannot be bound that way. Only a LINEAR plane is checked row by row against its buffer,
+  as a tiled layout is the driver's. The image is sampled in place every frame, without a copy: a
+  frame acquires it from the foreign queue in `GENERAL` before its first draw and releases it back
+  in `GENERAL` when the frame ends. The first buffer of each format and modifier tests the import:
+  if the driver refuses it although it reported support, the pair is dropped with one warning
+  naming the device and driver, and the default and per-surface feedback are sent again without
+  it so that clients allocate another; the buffer itself stays accepted (a `create_immed` client
+  is never disconnected for it) and the surface keeps showing its last buffer that worked. A
+  LINEAR buffer that cannot be sampled that way (offset or stride not a multiple of 16, or a
+  driver or lavapipe without the extension) is imported as a Vulkan buffer and its damaged rows
+  copied into the surface's texture, so any stride works; that buffer is acquired from the foreign
+  queue for the copy and released after it. A LINEAR plane whose stride is shorter than a row, or
+  whose last row ends past the dma-buf, is refused. Uploads are submitted with the frame, or on
+  their own when no frame is rendered (a covered window that keeps drawing, direct scanout), so
+  pending staging memory cannot pile
   up. Explicit sync is `linux-drm-syncobj-v1`, offered when the DRM device supports syncobj
   eventfds.
 - **DRM backend.** `bande-compositor` opens the first card with a connected connector (or
@@ -120,11 +142,13 @@ when they reach the screen is Bande's own.
   without a match it takes an integrated GPU before a discrete one. When the GPU can render into
   a tiled modifier of the primary plane, the frames are drawn straight into GBM scanout buffers
   (`GbmAllocator` with `RENDERING | SCANOUT`, the modifier chosen by GBM among those the plane
-  and the GPU share), handed between the GPU and the display through the foreign queue; a colour
-  profile converts into a scratch image and copies back. Otherwise, or after such a buffer once
-  fails to render (the output then switches for the session), it renders into
-  dumb buffers that the renderer binds as dma-bufs: each frame is rendered into its own image and its
-  drawn regions copied out, by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
+  and the GPU share), imported with the same per-memory-plane layouts as client buffers and handed
+  between the GPU and the display through the foreign queue (a buffer's first frame starts from
+  `UNDEFINED`, as it is drawn whole); a colour profile converts into a scratch image and copies
+  back. Otherwise, or after such a buffer once fails to render (its modifier is then dropped and
+  the output switches for the session), it renders into dumb buffers that the renderer binds as
+  dma-bufs: each frame is rendered into its own image and its
+  drawn regions copied out (the buffer acquired from and released to the foreign queue around the copy), by the GPU when the device is a real one that can import the buffer and the first frame read back through a mapping matches what the GPU copied (the buffer is marked first, so a copy that never lands is caught),
   otherwise (lavapipe and `kms_swrast`, or a refused import) through a mapping on the CPU; `--headless` keeps the offscreen output for CI and the bench. Only the first card with a connected display is driven; displays on a second GPU stay dark. udev change
   events probe the connectors again, so plugging a display in or out takes effect without
   restarting the session. A connector that goes away is held as lost for three seconds before it

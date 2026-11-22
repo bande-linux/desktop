@@ -876,6 +876,12 @@ msgstr "Spela upp ljud via"
 msgid "speakers, headphones, output device"
 msgstr "högtalare, hörlurar, utgångsenhet"
 
+msgid "Device profiles"
+msgstr "Enhetsprofiler"
+
+msgid "hdmi, displayport, digital output, bluetooth, a2dp, hfp, headset, high quality, profile, sound card"
+msgstr "hdmi, displayport, digital utgång, bluetooth, a2dp, hfp, headset, hög kvalitet, profil, ljudkort"
+
 msgid "Balance"
 msgstr "Balans"
 

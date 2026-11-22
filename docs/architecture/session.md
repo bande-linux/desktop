@@ -225,7 +225,9 @@ UI.
   `haveAvailableRoutes`, followed live), so Headphones appear only while plugged in. Plugging in
   makes the jack the default once per session (`bande-sound`); unplugging falls back to the
   previous choice. Filter-chain streams are never listed as apps, and a `hide-parent` node hides
-  its raw speaker. Settings ▸ Sound has a balance for stereo outputs.
+  its raw speaker. Settings ▸ Sound has a balance for stereo outputs, and lists the profiles of
+  each card that has a choice (`EnumProfile`, set with `SPA_PARAM_Profile` and saved), so an HDMI
+  or DisplayPort output can be switched on; Bluetooth shows High quality (A2DP) and Headset (HFP).
 - The display and keyboard brightness keys work the same way, also while locked: 16 steps
   (quarter steps with Shift+Alt) on the display under the pointer or the `kbd_backlight` LED, in
   the volume HUD, which names the display when there are several.

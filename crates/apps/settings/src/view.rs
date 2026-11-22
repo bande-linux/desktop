@@ -70,6 +70,7 @@ pub(crate) enum Intent {
     Arrange(String, (i32, i32)),
     KeepDisplays(bool),
     Default(Direction, String),
+    Profile(u32, i32),
     AppVolume(String, f32),
     VolumeFeedback,
     Join(Vec<u8>),
@@ -649,6 +650,7 @@ impl SettingsView {
                 Some(PaneId::Sound),
                 &[
                     SettingId::OutputDevice,
+                    SettingId::DeviceProfiles,
                     SettingId::OutputBalance,
                     SettingId::OutputVolume,
                     SettingId::OutputMuted,
@@ -1729,6 +1731,10 @@ impl SettingsView {
                 Intent::Default(direction, name) => {
                     self.commands
                         .push(Command::Audio(AudioCommand::Default(direction, name)));
+                }
+                Intent::Profile(card, index) => {
+                    self.commands
+                        .push(Command::Audio(AudioCommand::Profile(card, index)));
                 }
                 Intent::AppVolume(name, volume) => {
                     self.commands

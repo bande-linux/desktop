@@ -912,6 +912,12 @@ msgstr "Spela upp ljud för notiser"
 msgid "Apps appear here after they send a notification"
 msgstr "Appar visas här efter att de har skickat en notis"
 
+msgid "High quality (A2DP)"
+msgstr "Hög kvalitet (A2DP)"
+
+msgid "Headset (HFP)"
+msgstr "Headset (HFP)"
+
 msgid "{value} Hz"
 msgstr "{value} Hz"
 
@@ -989,6 +995,9 @@ msgstr "{address} · {status}"
 
 msgid "No devices"
 msgstr "Inga enheter"
+
+msgid "No device has a choice of profiles"
+msgstr "Ingen enhet har profiler att välja mellan"
 
 msgid "No apps are playing sound"
 msgstr "Inga appar spelar upp ljud"

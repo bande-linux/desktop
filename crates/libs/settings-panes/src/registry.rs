@@ -383,6 +383,7 @@ pub enum SettingId {
     OutputVolume,
     OutputMuted,
     OutputDevice,
+    DeviceProfiles,
     InputVolume,
     InputMuted,
     InputDevice,
@@ -549,6 +550,7 @@ pub enum List {
     PairedDevices,
     NearbyDevices,
     OutputDevices,
+    DeviceProfiles,
     InputDevices,
     InputLevel,
     AppVolumes,
@@ -1528,6 +1530,14 @@ fn sound_pane() -> Pane {
                         tr!("Play sound through"),
                         tr!("speakers, headphones, output device"),
                         List::OutputDevices,
+                    ),
+                    list(
+                        SettingId::DeviceProfiles,
+                        tr!("Device profiles"),
+                        tr!(
+                            "hdmi, displayport, digital output, bluetooth, a2dp, hfp, headset, high quality, profile, sound card"
+                        ),
+                        List::DeviceProfiles,
                     ),
                     setting(
                         SettingId::OutputBalance,

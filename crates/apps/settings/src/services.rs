@@ -36,6 +36,7 @@ pub enum AudioCommand {
     Balance(f32),
     Mute(Direction, bool),
     Default(Direction, String),
+    Profile(u32, i32),
     App(String, f32),
     Feedback,
     Listen(bool),
@@ -113,6 +114,20 @@ fn run_audio(audio: &Audio, command: AudioCommand) -> Result<(), bande_audio::Er
                 .device(&name)
                 .ok_or(bande_audio::Error::NoSuchDevice)?;
             audio.set_default(device)
+        }
+        AudioCommand::Profile(card, index) => {
+            let snapshot = audio.snapshot();
+            let card = snapshot
+                .cards
+                .iter()
+                .find(|known| known.id == card)
+                .ok_or(bande_audio::Error::NoSuchDevice)?;
+            let profile = card
+                .profiles
+                .iter()
+                .find(|profile| profile.index == index)
+                .ok_or(bande_audio::Error::NoSuchDevice)?;
+            audio.set_profile(card, profile)
         }
         AudioCommand::App(name, volume) => {
             let snapshot = audio.snapshot();

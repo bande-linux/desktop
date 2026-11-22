@@ -89,11 +89,11 @@ impl App for FileDialog {
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {
-        self.view.listing_fd().into_iter().collect()
+        self.view.sources()
     }
 
     fn source_ready(&mut self, window: &mut Window, _index: usize) {
-        self.view.listing_ready();
+        self.view.source_ready();
         window.request_redraw();
     }
 

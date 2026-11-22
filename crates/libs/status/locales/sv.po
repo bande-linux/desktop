@@ -114,3 +114,24 @@ msgstr "Avslutar appar…"
 
 msgid "{gigabytes} GB"
 msgstr "{gigabytes} GB"
+
+msgid "Change the time zone to {city}?"
+msgstr "Byta tidszon till {city}?"
+
+msgid "Change"
+msgstr "Byt"
+
+msgid "Change the time zone?"
+msgstr "Byta tidszon?"
+
+msgid "Choose…"
+msgstr "Välj…"
+
+msgid "Keep Current"
+msgstr "Behåll nuvarande"
+
+msgid "Date & Time"
+msgstr "Datum och tid"
+
+msgid "The Wi-Fi networks nearby are in a country where the time differs from this computer’s clock."
+msgstr "Wi-Fi-näten i närheten finns i ett land där tiden skiljer sig från datorns klocka."

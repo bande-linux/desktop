@@ -25,6 +25,7 @@ use bande_status::memory::{
     CGROUP_ROOT, MEMINFO, OWN_CGROUP, PressureTrigger, SYSTEM_PRESSURE, Streak, app_slice,
     memory_exhausted,
 };
+use bande_status::time_zone::suggest_time_zones;
 use bande_toolkit::{App, Rect, Role, Scene, Surfaces, TextSystem, Window, WindowEvent};
 use bande_xdg::{
     Apps, config_dirs, data_dirs, follow_oom_kills, forget_saved_windows, reopen_file,
@@ -476,6 +477,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         }
         if let Some(session) = &context.session {
             follow_captive_portal(system, session, open_page);
+            suggest_time_zones(system, session);
         }
     }
     let mut shell = Shell::start(context, root, pressure_trigger())?;

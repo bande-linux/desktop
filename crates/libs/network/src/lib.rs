@@ -6,6 +6,7 @@ pub mod ifupdown;
 mod kernel;
 mod proxy;
 mod radio;
+mod regulatory;
 mod wifi;
 
 pub use connections::{
@@ -21,6 +22,7 @@ use bande_l10n::{text, tr};
 pub use enterprise::{Eap, Enterprise};
 pub use hotspot::{Hotspot, valid_hotspot_password};
 pub use radio::{airplane_mode, follow_airplane_mode, set_airplane_mode};
+pub use regulatory::wifi_country;
 pub use wifi::{ConnectionChange, KnownNetwork, PrivateAddress, WifiLink};
 
 use proxy::{

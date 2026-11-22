@@ -20,7 +20,7 @@ use writeable::{Part, PartsWrite, Writeable};
 
 pub use minute::{ClockChanges, MinuteTimer};
 pub use month::{Month, Week};
-pub use zone::{local_zone, now};
+pub use zone::{ZoneSuggestion, local_zone, now, suggested_zone};
 
 const LOCALE_VARIABLES: [&str; 3] = ["LC_ALL", "LC_TIME", "LANG"];
 const FALLBACK: Locale = locale!("en-US");

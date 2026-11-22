@@ -55,6 +55,7 @@ Paths are under `crates/`.
 | `libs/app/tests/app.rs` | App framework: a second launch reaches the running instance, the app keeps running without windows, launching again reopens a window, the switcher activates it without a window, Ctrl+Q quits. |
 | `toolkit/toolkit/tests/accessibility.rs` | Toolkit: a screen reader finds a button over AT-SPI in a window on the headless compositor and presses it. |
 | `libs/datetime/tests/parse.rs` | Parser: a typed date is read in the locale's own field order (a US 03/04 is 4 March, a British one 3 April), every locale reads back the dates and times it writes, and 12-hour times with the locale's day periods are read. Calendar used to read every date day-first. |
+| `libs/datetime/src/zone.rs` | A time zone is suggested from the Wi-Fi country only when none of its zones shows the clock's time: none for Germany on Stockholm time, London for Britain, a choice for the United States, none on Los Angeles time. |
 | `libs/l10n-source/src/plural.rs` | Parser: gettext plural rules pick the forms their languages need. |
 | `libs/content/src/import.rs` | Parser: words split across Word XML runs stay whole and paragraphs stay apart in the indexed text. |
 | `services/index/src/store.rs` | Parser and tokenizer: a search matches regardless of case and accents (`ø` as `o`), the word being typed as a prefix, quoted words as a phrase and a CJK character on its own; a replaced or removed file's text is no longer found. |

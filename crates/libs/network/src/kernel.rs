@@ -6,20 +6,21 @@ use std::sync::mpsc::Sender;
 
 use rustix::net::netlink::SocketAddrNetlink;
 use rustix::net::{
-    AddressFamily, RecvFlags, SendFlags, SocketFlags, SocketType, bind, recv, sendto, socket_with,
+    AddressFamily, Protocol, RecvFlags, SendFlags, SocketFlags, SocketType, bind, recv, sendto,
+    socket_with,
 };
 
 use crate::Addressing;
 
-const HEADER: usize = 16;
+pub(crate) const HEADER: usize = 16;
 const ADDRESS_HEADER: usize = 8;
 const ATTRIBUTE_HEADER: usize = 4;
 const RTM_NEWADDR: u16 = 20;
 const RTM_GETADDR: u16 = 22;
-const NLMSG_ERROR: u16 = 2;
-const NLMSG_DONE: u16 = 3;
-const NLM_F_REQUEST: u16 = 0x1;
-const NLM_F_DUMP: u16 = 0x300;
+pub(crate) const NLMSG_ERROR: u16 = 2;
+pub(crate) const NLMSG_DONE: u16 = 3;
+pub(crate) const NLM_F_REQUEST: u16 = 0x1;
+pub(crate) const NLM_F_DUMP: u16 = 0x300;
 const IFA_ADDRESS: u16 = 1;
 const IFA_LOCAL: u16 = 2;
 const AF_INET: u8 = 2;
@@ -36,44 +37,66 @@ const LOOPBACK: &str = "lo";
 const ROUTES: &str = "/proc/net/route";
 const IPV6_ROUTES: &str = "/proc/net/ipv6_route";
 const RESOLVER: &str = "/etc/resolv.conf";
-const RECEIVE_BUFFER: usize = 32 * 1024;
+pub(crate) const RECEIVE_BUFFER: usize = 32 * 1024;
 
-fn route_socket(groups: u32) -> io::Result<OwnedFd> {
+pub(crate) fn netlink_socket(protocol: Option<Protocol>, groups: u32) -> io::Result<OwnedFd> {
     let socket = socket_with(
         AddressFamily::NETLINK,
         SocketType::RAW,
         SocketFlags::CLOEXEC,
-        None,
+        protocol,
     )?;
     bind(&socket, &SocketAddrNetlink::new(0, groups))?;
     Ok(socket)
 }
 
-fn u16_at(bytes: &[u8], offset: usize) -> Option<u16> {
+fn route_socket(groups: u32) -> io::Result<OwnedFd> {
+    netlink_socket(None, groups)
+}
+
+pub(crate) fn u16_at(bytes: &[u8], offset: usize) -> Option<u16> {
     Some(u16::from_ne_bytes(
         bytes.get(offset..offset + 2)?.try_into().ok()?,
     ))
 }
 
-fn u32_at(bytes: &[u8], offset: usize) -> Option<u32> {
+pub(crate) fn u32_at(bytes: &[u8], offset: usize) -> Option<u32> {
     Some(u32::from_ne_bytes(
         bytes.get(offset..offset + 4)?.try_into().ok()?,
     ))
 }
 
-fn aligned(length: usize) -> usize {
+pub(crate) fn aligned(length: usize) -> usize {
     (length + 3) & !3
 }
 
-fn address_of(family: u8, prefix: u8, attributes: &[u8]) -> Option<String> {
+pub(crate) fn attributes(bytes: &[u8]) -> impl Iterator<Item = (u16, &[u8])> {
     let mut offset = 0;
-    let (mut local, mut address) = (None, None);
-    while let Some(length) = u16_at(attributes, offset).map(usize::from) {
+    std::iter::from_fn(move || {
+        let length = usize::from(u16_at(bytes, offset)?);
         if length < ATTRIBUTE_HEADER {
             return None;
         }
-        let kind = u16_at(attributes, offset + 2)?;
-        let data = attributes.get(offset + ATTRIBUTE_HEADER..offset + length)?;
+        let kind = u16_at(bytes, offset + 2)?;
+        let data = bytes.get(offset + ATTRIBUTE_HEADER..offset + length)?;
+        offset += aligned(length);
+        Some((kind, data))
+    })
+}
+
+pub(crate) fn attribute(kind: u16, data: &[u8]) -> Vec<u8> {
+    let length = ATTRIBUTE_HEADER + data.len();
+    let mut encoded = Vec::with_capacity(aligned(length));
+    encoded.extend_from_slice(&(length as u16).to_ne_bytes());
+    encoded.extend_from_slice(&kind.to_ne_bytes());
+    encoded.extend_from_slice(data);
+    encoded.resize(aligned(length), 0);
+    encoded
+}
+
+fn address_of(family: u8, prefix: u8, encoded: &[u8]) -> Option<String> {
+    let (mut local, mut address) = (None, None);
+    for (kind, data) in attributes(encoded) {
         let text = match (family, data.len()) {
             (AF_INET, 4) => Ipv4Addr::from(<[u8; 4]>::try_from(data).ok()?).to_string(),
             (AF_INET6, 16) => Ipv6Addr::from(<[u8; 16]>::try_from(data).ok()?).to_string(),
@@ -84,7 +107,6 @@ fn address_of(family: u8, prefix: u8, attributes: &[u8]) -> Option<String> {
             IFA_ADDRESS if !text.is_empty() => address = Some(text),
             _ => {}
         }
-        offset += aligned(length);
     }
     local
         .or(address)

@@ -13,6 +13,7 @@ pub mod session;
 #[cfg(feature = "audio")]
 mod sound;
 pub mod status;
+pub mod time_zone;
 pub mod tray;
 pub mod unread;
 

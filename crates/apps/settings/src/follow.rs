@@ -7,7 +7,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, OnceLock};
 use std::thread;
 
-use bande_app::choose_file;
+use bande_app::{choose_file, choose_folder};
 use bande_bus::Reading;
 use bande_config::{BUS_NAME, DisplaySettings, OBJECT_PATH, Placement};
 use bande_keyboard::Layouts;
@@ -306,7 +306,7 @@ pub fn follow_notifications(session: &Connection, updates: Updates) {
 }
 
 fn exclude_folder(session: &Connection) -> zbus::Result<()> {
-    let Some(folder) = choose_file(session, &tr!("Choose a Folder to Keep Out of Search"), None)?
+    let Some(folder) = choose_folder(session, &tr!("Choose a Folder to Keep Out of Search"))?
     else {
         return Ok(());
     };

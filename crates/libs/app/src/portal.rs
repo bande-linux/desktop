@@ -86,12 +86,14 @@ pub fn choose_file(
     filter: Option<Filter>,
 ) -> zbus::Result<Option<PathBuf>> {
     let mut options = HashMap::new();
-    match filter {
-        Some(filter) => filters(&mut options, filter),
-        None => {
-            options.insert("directory", Value::from(true));
-        }
+    if let Some(filter) = filter {
+        filters(&mut options, filter);
     }
+    Ok(ask(session, "OpenFile", title, options)?.into_iter().next())
+}
+
+pub fn choose_folder(session: &Connection, title: &str) -> zbus::Result<Option<PathBuf>> {
+    let options = HashMap::from([("directory", Value::from(true))]);
     Ok(ask(session, "OpenFile", title, options)?.into_iter().next())
 }
 

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 
-use bande_app::choose_file;
+use bande_app::choose_folder;
 use bande_l10n::tr;
 use bande_packages::Client;
 use bande_toolkit::ui::{Button, SecureField, Toggle, Widget};
@@ -230,7 +230,7 @@ fn run(command: SharingCommand, system: Option<&Connection>, session: Option<&Co
         SharingCommand::Remove(name) => helper(&["remove", &name], None),
         SharingCommand::AddFolder => {
             let chosen = session.and_then(|session| {
-                choose_file(session, &tr!("Choose a folder to share"), None)
+                choose_folder(session, &tr!("Choose a folder to share"))
                     .inspect_err(|error| tracing::warn!("cannot choose a folder: {error}"))
                     .ok()
                     .flatten()

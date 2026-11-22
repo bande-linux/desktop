@@ -8,7 +8,7 @@ use crate::browser::Location;
 use crate::sidebar::{hidden_places, standard_places, volumes_hidden, with_place_shown};
 use crate::view::home;
 use crate::views::{ViewMode, sidebar_file};
-use bande_app::choose_file;
+use bande_app::choose_folder;
 use bande_app_settings::{Shared, Stored, flag, pairs, settings_folder};
 use bande_toolkit::ui::{
     Context, Form, FormLine, PopUpButton, ScrollView, SegmentedControl, Slider, Toggle, Ui, Widget,
@@ -282,7 +282,7 @@ fn choose_new_window_folder(previous: FilesSettings) {
         .name("new window folder".to_owned())
         .spawn(move || {
             let chosen = zbus::blocking::Connection::session()
-                .and_then(|session| choose_file(&session, &title, None))
+                .and_then(|session| choose_folder(&session, &title))
                 .inspect_err(|error| tracing::warn!("cannot choose a folder: {error}"));
             let mut stored = FilesSettings::load(&folder);
             match chosen {

@@ -451,6 +451,7 @@ dependencies = [
  "bande-inbox",
  "bande-l10n",
  "bande-log",
+ "bande-notify",
  "bande-pdf",
  "bande-test-bus",
  "bande-test-wayland",

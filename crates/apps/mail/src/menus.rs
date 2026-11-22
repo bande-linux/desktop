@@ -17,7 +17,20 @@ pub fn window_menu() -> Vec<Entry> {
     vec![Entry::item(&tr!("Message Viewer"), VIEWER)]
 }
 
-pub fn app_menus(view: &MailView, viewer: bool, windowed: bool, composing: bool) -> Vec<Entry> {
+pub struct Shown {
+    pub viewer: bool,
+    pub printable: bool,
+    pub windowed: bool,
+    pub composing: bool,
+}
+
+pub fn app_menus(view: &MailView, shown: Shown) -> Vec<Entry> {
+    let Shown {
+        viewer,
+        printable,
+        windowed,
+        composing,
+    } = shown;
     let targets = view
         .move_targets()
         .into_iter()
@@ -34,7 +47,7 @@ pub fn app_menus(view: &MailView, viewer: bool, windowed: bool, composing: bool)
                 Entry::separator(),
                 selection(text!("Find"), "find"),
                 Entry::separator(),
-                bande_app_menu::print_item(viewer),
+                bande_app_menu::print_item(printable),
             ],
         ),
         edit_submenu(Vec::new()),

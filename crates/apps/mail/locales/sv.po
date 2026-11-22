@@ -414,6 +414,9 @@ msgstr "Kopiera"
 msgid "Select All"
 msgstr "Markera allt"
 
+msgid "There is no Downloads folder, because HOME is not set."
+msgstr "Det finns ingen mapp för hämtade filer, eftersom HOME inte är angiven."
+
 msgid "Show Message from {sender}"
 msgstr "Visa meddelandet från {sender}"
 
@@ -882,6 +885,12 @@ msgstr "Brevlådan kunde inte ändras"
 
 msgid "{count} new messages"
 msgstr "{count} nya meddelanden"
+
+msgid "The new message was not started"
+msgstr "Det nya meddelandet påbörjades inte"
+
+msgid "Mail needs an account to send it from. Add one, then try again."
+msgstr "E-post behöver ett konto att skicka från. Lägg till ett och försök igen."
 
 msgid "Enter your password."
 msgstr "Ange ditt lösenord."

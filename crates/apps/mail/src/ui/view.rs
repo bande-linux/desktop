@@ -238,6 +238,7 @@ pub struct MailView {
     pub(crate) now: Option<Timestamp>,
     requests: Vec<Request>,
     setup: Option<SetupSheet>,
+    waiting: Option<Draft>,
     pub(crate) settings: MailSettings,
     held: Vec<(AccountId, Command)>,
     undo: Vec<Vec<Moved>>,
@@ -302,6 +303,7 @@ impl MailView {
             now: None,
             requests: Vec::new(),
             setup: None,
+            waiting: None,
             settings,
             held: Vec::new(),
             undo: Vec::new(),
@@ -471,30 +473,7 @@ impl MailView {
     }
 
     pub fn printable(&self) -> Option<(String, String)> {
-        let (summary, reading) = self.reader.focused()?;
-        let envelope = &reading.content.envelope;
-        let names = |list: &[crate::message::Address]| {
-            list.iter()
-                .map(crate::message::Address::full)
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        let mut lines = vec![envelope.subject.clone(), names(&envelope.from)];
-        lines.extend(
-            envelope
-                .date
-                .map(|date| full_date(date, &self.zone, &self.formats)),
-        );
-        lines.push(tr!("To: {names}", names = names(&envelope.to)));
-        if !envelope.cc.is_empty() {
-            lines.push(tr!("Cc: {names}", names = names(&envelope.cc)));
-        }
-        let text = format!("{}\n\n{}", lines.join("\n"), reading.content.text());
-        let title = match summary.subject.is_empty() {
-            true => tr!("No Subject"),
-            false => summary.subject.clone(),
-        };
-        Some((title, text))
+        self.reader.printable(&self.zone, &self.formats)
     }
 
     pub fn unread_inbox(&self) -> usize {
@@ -1019,6 +998,9 @@ impl MailView {
                 || self
                     .store
                     .trusts_remote(&reading.content.envelope.sender().email)
+                    .inspect_err(|error| {
+                        tracing::warn!("cannot tell whether to load remote content: {error}")
+                    })
                     .unwrap_or(false))
     }
 
@@ -1500,6 +1482,7 @@ impl MailView {
 
     pub fn compose(&mut self, mut draft: Draft) {
         let Some(account) = self.sending_account() else {
+            self.waiting = Some(draft);
             self.present_setup(Mode::Kind);
             return;
         };
@@ -2068,6 +2051,21 @@ impl MailView {
         }
     }
 
+    fn drop_waiting(&mut self) {
+        if self
+            .waiting
+            .take()
+            .is_some_and(|draft| draft != Draft::default())
+        {
+            self.requests.push(Request::Notify {
+                summary: tr!("The new message was not started"),
+                body: tr!("Mail needs an account to send it from. Add one, then try again."),
+                sound: false,
+                message: None,
+            });
+        }
+    }
+
     fn submit_password(&mut self, field: WidgetId) {
         let previous = self.ui.focus();
         self.ui.set_focus(field);
@@ -2101,7 +2099,10 @@ impl MailView {
             state.borrow_mut().action = None;
         }
         match (action, mode) {
-            (Action::Cancel, _) => self.close_setup(),
+            (Action::Cancel, _) => {
+                self.close_setup();
+                self.drop_waiting();
+            }
             (Action::Primary, Mode::Kind) => self.present_setup(Mode::Address),
             (Action::Primary, Mode::Address) => self.find_servers(&state),
             (Action::Primary, Mode::Servers) => self.sign_in(&state),
@@ -2307,6 +2308,9 @@ impl MailView {
         ));
         self.close_setup();
         self.reload();
+        if let Some(draft) = self.waiting.take() {
+            self.compose(draft);
+        }
     }
 
     pub fn remove_account(&mut self, id: AccountId) {

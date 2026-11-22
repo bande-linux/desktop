@@ -198,10 +198,6 @@ impl Reading {
             self.pictures.insert(source, image);
         }
     }
-
-    fn shown_inline(&self, index: usize) -> bool {
-        self.pictures.contains_key(&part_source(index))
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -891,7 +887,7 @@ fn body(writer: &mut Writer<'_>, id: MessageId, reading: &Reading, quotes: bool)
 
 fn attachments(writer: &mut Writer<'_>, id: MessageId, reading: &Reading) {
     let content = &reading.content;
-    if (0..content.every_attachment().count()).all(|index| reading.shown_inline(index)) {
+    if content.every_attachment().next().is_none() {
         return;
     }
     let palette = *writer.palette;
@@ -900,9 +896,6 @@ fn attachments(writer: &mut Writer<'_>, id: MessageId, reading: &Reading) {
     writer.y += SECTION_GAP;
     let mut x = MARGIN;
     for (index, attachment) in content.every_attachment().enumerate() {
-        if reading.shown_inline(index) {
-            continue;
-        }
         let label = format!(
             "{}  {}",
             attachment.name,

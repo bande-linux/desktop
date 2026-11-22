@@ -476,6 +476,13 @@ impl Content {
         }
     }
 
+    pub fn all_text(&self) -> String {
+        self.sections()
+            .map(Content::text)
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+
     pub fn preview(&self) -> String {
         preview(&self.text())
     }

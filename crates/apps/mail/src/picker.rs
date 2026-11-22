@@ -79,8 +79,11 @@ impl Picker {
                         }
                         let mut data = Vec::new();
                         match std::fs::File::open(&path)
-                            .and_then(|mut file| file.read_to_end(&mut data))
+                            .and_then(|file| file.take(MAX_ATTACHMENT + 1).read_to_end(&mut data))
                         {
+                            Ok(_) if data.len() as u64 > MAX_ATTACHMENT => {
+                                Picked::Refused(path, Refusal::TooLarge)
+                            }
                             Ok(_) => Picked::File(path, data),
                             Err(error) => {
                                 tracing::warn!("cannot read {}: {error}", path.display());

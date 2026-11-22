@@ -91,7 +91,15 @@ pub(crate) fn run<P: Program>(
     let mut cx = Cx::new(info, link, session, background, resume);
     let mut program = match P::start(&mut cx, arguments) {
         Ok(program) => program,
-        Err(error) => return tell_start_failure(info, &cx.link, error),
+        Err(error) => {
+            if let (Some(instance), Some(session)) = (instance, cx.session()) {
+                instance.release(session, info.id);
+            }
+            return match background {
+                true => notify_start_failure(info, cx.session(), error),
+                false => tell_start_failure(info, &cx.link, error),
+            };
+        }
     };
     let prompted = !background && !windowless && reopen_saved_windows(&mut program, &mut cx);
     if plain_launch && !prompted && !cx.resume.has_main_window() {
@@ -165,6 +173,39 @@ impl App for StartFailure {
 
     fn accessibility(&self) -> Option<TreeUpdate> {
         Some(self.ui.accessibility())
+    }
+}
+
+fn notify_start_failure(
+    info: &Info,
+    session: Option<&zbus::blocking::Connection>,
+    error: Error,
+) -> Result<(), Error> {
+    tracing::error!("{error}");
+    let app = (info.name)();
+    let Some(session) = session else {
+        return Err(error);
+    };
+    let posted = bande_notify::client::notify(
+        session,
+        &bande_notify::client::Request {
+            app_name: &app,
+            replaces_id: 0,
+            app_icon: info.id,
+            summary: &tr!("{app} could not be opened", app = app.clone()),
+            body: &error.to_string(),
+            actions: &[],
+            urgency: bande_notify::Urgency::Normal,
+            sound: None,
+            desktop_entry: Some(info.id),
+        },
+    );
+    match posted {
+        Ok(_) => Ok(()),
+        Err(posted) => {
+            tracing::warn!("cannot tell why the app could not start: {posted}");
+            Err(error)
+        }
     }
 }
 

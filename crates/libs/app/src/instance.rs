@@ -135,6 +135,18 @@ pub(crate) fn forward(session: &Connection, id: &str, request: Request) -> Resul
 }
 
 impl Instance {
+    pub(crate) fn release(self, session: &Connection, id: &str) {
+        if let Err(error) = session.release_name(id) {
+            tracing::warn!("cannot let a new launch of {id} start: {error}");
+        }
+        if let Err(error) = session
+            .object_server()
+            .remove::<Application, _>(object_path(id).as_str())
+        {
+            tracing::warn!("cannot stop taking launches of {id}: {error}");
+        }
+    }
+
     pub(crate) fn fd(&self) -> BorrowedFd<'_> {
         self.requests.fd()
     }

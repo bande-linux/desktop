@@ -25,7 +25,8 @@ pub use inhibitors::{SleepBlocker, list_sleep_blockers};
 pub use inspector::{INSPECTOR_SIZE, InspectorView};
 pub use menu::{MenuCommand, Selected, app_menus, process_menu};
 pub use model::{
-    Column, CoreGroup, CoreKind, Filter, Graph, Monitor, Row, RowKey, StopTarget, Tab, stop_all,
+    Column, CoreGroup, CoreKind, Filter, Graph, INTERVAL, Monitor, Row, RowKey, StopTarget, Tab,
+    stop_all,
 };
 pub use monitor_view::{MonitorView, TOOLBAR_HEIGHT};
 pub use power::{BATTERY_HISTORY, BatteryReport, battery_reader};

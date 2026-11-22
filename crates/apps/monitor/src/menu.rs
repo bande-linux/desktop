@@ -1,6 +1,6 @@
 use bande_l10n::{Text, text, tr};
 
-use crate::model::{Column, Filter, Frequency, Tab};
+use crate::model::{Column, Filter, Tab};
 use bande_app_menu::{Entry, edit_submenu};
 use bande_toolkit::ui::{Menu, MenuItem};
 
@@ -18,10 +18,9 @@ pub enum MenuCommand {
     Show(Tab),
     ShowCores,
     Filter(Filter),
-    Frequency(Frequency),
 }
 
-const ACTIONS: [(MenuCommand, &str); 24] = [
+const ACTIONS: [(MenuCommand, &str); 21] = [
     (MenuCommand::Quit, "quit"),
     (MenuCommand::ForceQuit, "force-quit"),
     (MenuCommand::ShowInFiles, "show-in-files"),
@@ -43,15 +42,6 @@ const ACTIONS: [(MenuCommand, &str); 24] = [
     (MenuCommand::Filter(Filter::Active), "filter-active"),
     (MenuCommand::Filter(Filter::Apps), "filter-apps"),
     (MenuCommand::Filter(Filter::Selected), "filter-selected"),
-    (
-        MenuCommand::Frequency(Frequency::VeryOften),
-        "frequency-very-often",
-    ),
-    (MenuCommand::Frequency(Frequency::Often), "frequency-often"),
-    (
-        MenuCommand::Frequency(Frequency::Normally),
-        "frequency-normally",
-    ),
 ];
 
 impl MenuCommand {
@@ -124,13 +114,7 @@ fn entry(message: Text, command: MenuCommand) -> Entry {
     Entry::item(&message.tr(), command.action())
 }
 
-pub fn app_menus(
-    tabs: &[Tab],
-    shown: Filter,
-    frequency: Frequency,
-    windowed: bool,
-    files: bool,
-) -> Vec<Entry> {
+pub fn app_menus(tabs: &[Tab], shown: Filter, windowed: bool, files: bool) -> Vec<Entry> {
     let process = |message: Text, command: MenuCommand| entry(message, command).enabled(windowed);
     let mut view = tabs
         .iter()
@@ -146,15 +130,6 @@ pub fn app_menus(
     }));
     view.extend([
         Entry::separator(),
-        Entry::submenu(
-            &tr!("Update Frequency"),
-            Frequency::ALL
-                .map(|choice| {
-                    Entry::item(&choice.title(), MenuCommand::Frequency(choice).action())
-                        .radio(choice == frequency)
-                })
-                .to_vec(),
-        ),
         entry(text!("Show CPU Cores"), MenuCommand::ShowCores),
         Entry::separator(),
         process(text!("Quit Process…"), MenuCommand::Quit).shortcut("Ctrl+E"),

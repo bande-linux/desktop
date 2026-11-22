@@ -17,6 +17,7 @@ use crate::signal::{SignalError, Stop, stop};
 use crate::system::PressureLevel;
 
 pub const HISTORY: usize = 60;
+pub const INTERVAL: Duration = Duration::from_secs(2);
 const BATTERY_SAMPLES: usize = 145;
 const ENERGY_SAMPLES: usize = 15;
 const WAKEUPS_PER_IMPACT: f64 = 10.0;
@@ -624,7 +625,6 @@ pub struct Monitor {
     uid: u32,
     filter: Filter,
     pinned: Vec<(u32, u64)>,
-    frequency: Frequency,
     impacts: HashMap<(u32, u64), VecDeque<f64>>,
     energy: VecDeque<(f64, f64)>,
     power: Option<BatteryReport>,
@@ -644,47 +644,9 @@ pub struct CoreGroup {
 
 const CORES_STATE: &str = "cores";
 const FILTER_STATE: &str = "filter";
-const FREQUENCY_STATE: &str = "frequency";
 const SORT_STATE: &str = "sort";
 const ASCENDING: &str = "ascending";
 const DESCENDING: &str = "descending";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Frequency {
-    VeryOften,
-    #[default]
-    Often,
-    Normally,
-}
-
-impl Frequency {
-    pub const ALL: [Frequency; 3] = [Frequency::VeryOften, Frequency::Often, Frequency::Normally];
-
-    pub fn interval(self) -> Duration {
-        Duration::from_secs(match self {
-            Frequency::VeryOften => 1,
-            Frequency::Often => 2,
-            Frequency::Normally => 5,
-        })
-    }
-
-    pub fn id(self) -> &'static str {
-        match self {
-            Frequency::VeryOften => "very-often",
-            Frequency::Often => "often",
-            Frequency::Normally => "normally",
-        }
-    }
-
-    pub fn title(self) -> String {
-        let seconds = self.interval().as_secs();
-        match self {
-            Frequency::VeryOften => tr!("Very Often ({seconds} sec)", seconds = seconds),
-            Frequency::Often => tr!("Often ({seconds} sec)", seconds = seconds),
-            Frequency::Normally => tr!("Normally ({seconds} sec)", seconds = seconds),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Filter {
@@ -765,7 +727,6 @@ impl Monitor {
             uid,
             filter: Filter::All,
             pinned: Vec::new(),
-            frequency: Frequency::default(),
             impacts: HashMap::new(),
             energy: VecDeque::new(),
             power: None,
@@ -917,9 +878,6 @@ impl Monitor {
                 ));
             }
         }
-        if self.frequency != Frequency::default() {
-            state.push_str(&format!("{FREQUENCY_STATE} {}\n", self.frequency.id()));
-        }
         state
     }
 
@@ -934,15 +892,6 @@ impl Monitor {
                     .find(|filter| filter.id() == id.trim())
             })
             .unwrap_or(Filter::All);
-        self.frequency = text
-            .lines()
-            .find_map(|line| line.strip_prefix(FREQUENCY_STATE)?.strip_prefix(' '))
-            .and_then(|id| {
-                Frequency::ALL
-                    .into_iter()
-                    .find(|frequency| frequency.id() == id.trim())
-            })
-            .unwrap_or_default();
         for line in text.lines() {
             let mut words = line.split_whitespace();
             if words.clone().next() == Some(SORT_STATE) {
@@ -1356,16 +1305,8 @@ impl Monitor {
         self.filter
     }
 
-    pub fn frequency(&self) -> Frequency {
-        self.frequency
-    }
-
-    pub fn set_frequency(&mut self, frequency: Frequency) {
-        self.frequency = frequency;
-    }
-
     pub fn span(&self) -> String {
-        let minutes = HISTORY as u64 * self.frequency.interval().as_secs() / 60;
+        let minutes = HISTORY as u64 * INTERVAL.as_secs() / 60;
         tr!("{minutes} min", minutes = minutes)
     }
 

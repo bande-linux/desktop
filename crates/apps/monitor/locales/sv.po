@@ -207,9 +207,6 @@ msgstr "Kopiera namn"
 msgid "Copy PID"
 msgstr "Kopiera PID"
 
-msgid "Update Frequency"
-msgstr "Uppdateringsfrekvens"
-
 msgid "Show CPU Cores"
 msgstr "Visa CPU-kärnor"
 
@@ -281,15 +278,6 @@ msgstr "Ja"
 
 msgid "No"
 msgstr "Nej"
-
-msgid "Very Often ({seconds} sec)"
-msgstr "Mycket ofta ({seconds} s)"
-
-msgid "Often ({seconds} sec)"
-msgstr "Ofta ({seconds} s)"
-
-msgid "Normally ({seconds} sec)"
-msgstr "Normalt ({seconds} s)"
 
 msgid "All Processes"
 msgstr "Alla processer"

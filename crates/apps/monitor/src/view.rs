@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use accesskit::{ActionRequest, TreeUpdate};
 use bande_l10n::{tr, trn};
@@ -247,9 +247,5 @@ pub trait Screen {
 
     fn inspects(&self, _pid: u32) -> bool {
         false
-    }
-
-    fn interval(&self) -> Option<Duration> {
-        None
     }
 }

@@ -8,9 +8,9 @@ use bande_l10n::tr;
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, View, WindowId};
 use bande_app_menu::Entry;
 use bande_monitor::{
-    Asked, BatteryReport, Catalog, FILES_APP_ID, INSPECTOR_SIZE, Icons, InspectorView, MenuCommand,
-    Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop, TOOLBAR_HEIGHT,
-    Tab, battery_reader, list_sleep_blockers, stop_all,
+    Asked, BatteryReport, Catalog, FILES_APP_ID, INSPECTOR_SIZE, INTERVAL, Icons, InspectorView,
+    MenuCommand, Monitor, MonitorView, Request, Sampler, Screen, SleepBlocker, Snapshot, Stop,
+    TOOLBAR_HEIGHT, Tab, battery_reader, list_sleep_blockers, stop_all,
 };
 use bande_toolkit::{
     Appearance, FrameRegions, Image, MenuPlacement, Scene, TextSystem, Window, WindowEvent,
@@ -21,7 +21,6 @@ use bande_xdg::{
 
 const APP_ID: &str = "org.bande.SystemMonitor";
 const WINDOW_SIZE: (u32, u32) = (960, 640);
-const INTERVAL: Duration = Duration::from_secs(2);
 const FIRST_INTERVAL: Duration = Duration::from_millis(500);
 const ICON_PIXELS: u32 = 32;
 const PROC_ROOT: &str = "/";
@@ -175,14 +174,7 @@ impl SystemMonitor {
             }
         }
         self.sampling = watched;
-        self.next_sample = Instant::now() + self.interval(cx);
-    }
-
-    fn interval(&self, cx: &Cx<Self>) -> Duration {
-        self.main
-            .and_then(|main| cx.view(main))
-            .and_then(|pane| pane.0.interval())
-            .unwrap_or(INTERVAL)
+        self.next_sample = Instant::now() + INTERVAL;
     }
 
     fn inspect(&mut self, cx: &mut Cx<Self>, pid: u32) {

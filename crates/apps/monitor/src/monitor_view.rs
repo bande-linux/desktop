@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_l10n::tr;
@@ -1082,7 +1082,6 @@ impl Screen for MonitorView {
         Some(app_menus(
             &self.monitor.tabs(),
             self.monitor.filter(),
-            self.monitor.frequency(),
             windowed,
             files,
         ))
@@ -1147,12 +1146,6 @@ impl Screen for MonitorView {
             }
             Some(MenuCommand::ShowCores) => self.toggle_cores(),
             Some(MenuCommand::Filter(filter)) => self.set_filter(filter),
-            Some(MenuCommand::Frequency(frequency)) => {
-                self.monitor.set_frequency(frequency);
-                self.requests.push(Request::SaveState(self.monitor.state()));
-                self.requests.push(Request::Resample);
-                true
-            }
             None => false,
         }
     }
@@ -1249,10 +1242,6 @@ impl Screen for MonitorView {
 
     fn measures_gpu(&self) -> bool {
         self.monitor.measures_gpu()
-    }
-
-    fn interval(&self) -> Option<Duration> {
-        Some(self.monitor.frequency().interval())
     }
 
     fn measures_disk(&self) -> bool {

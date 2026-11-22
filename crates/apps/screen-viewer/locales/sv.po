@@ -22,6 +22,9 @@ msgstr "{computer} delar sin skärm på ett sätt som den här visaren inte stö
 msgid "The connection to {computer} ended: {reason}"
 msgstr "Anslutningen till {computer} bröts: {reason}"
 
+msgid "{computer} no longer offers encryption."
+msgstr "{computer} erbjuder inte längre kryptering."
+
 msgid "Screen Sharing"
 msgstr "Skärmdelning"
 
@@ -42,6 +45,9 @@ msgstr "Anpassa till fönstret"
 
 msgid "Actual Size"
 msgstr "Verklig storlek"
+
+msgid "Share Clipboard"
+msgstr "Dela urklipp"
 
 msgid "{computer} (not encrypted)"
 msgstr "{computer} (okrypterad)"
@@ -85,14 +91,20 @@ msgstr "Certifikatet är inte det som {computer} hade tidigare. Datorn kan ha in
 msgid "Trust the New Certificate"
 msgstr "Lita på det nya certifikatet"
 
+msgid "{computer} no longer offers encryption"
+msgstr "{computer} erbjuder inte längre kryptering"
+
+msgid "{computer} used to connect with encryption and now offers none. Another computer may be pretending to be it to learn the password. Connect only if you know why it changed; the kept password isn’t sent without encryption."
+msgstr "{computer} anslöt tidigare med kryptering och erbjuder nu ingen. En annan dator kan utge sig för att vara den för att komma åt lösenordet. Anslut bara om du vet varför det ändrades; det sparade lösenordet skickas inte utan kryptering."
+
+msgid "Connect Without Encryption"
+msgstr "Anslut utan kryptering"
+
 msgid "This connection isn’t encrypted"
 msgstr "Den här anslutningen är inte krypterad"
 
 msgid "{computer} offers no encryption. Others on the network could see its screen, what you type and its password. Connect only on a network you trust."
 msgstr "{computer} erbjuder ingen kryptering. Andra på nätverket kan se dess skärm, det du skriver och lösenordet. Anslut bara på ett nätverk du litar på."
-
-msgid "Connect Without Encryption"
-msgstr "Anslut utan kryptering"
 
 msgid "Sign in to {computer}"
 msgstr "Logga in på {computer}"

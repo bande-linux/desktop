@@ -54,8 +54,9 @@ pub trait Prompter {
     fn trust(&mut self, fingerprint: &str) -> bool;
     /// The server offers no encryption: whether to go on without.
     fn unencrypted(&mut self) -> bool;
-    /// The password, and with `user` a user name, to sign in with.
-    fn credentials(&mut self, user: bool) -> Option<Credentials>;
+    /// The password, and with `user` a user name, to sign in with; `encrypted` says whether it
+    /// travels over TLS to a trusted certificate.
+    fn credentials(&mut self, user: bool, encrypted: bool) -> Option<Credentials>;
 }
 
 #[derive(Debug)]
@@ -69,6 +70,8 @@ pub enum Failure {
     Cancelled,
     /// The server speaks nothing this viewer does.
     Unsupported,
+    /// A server whose certificate is known offers no encryption now; nothing was sent.
+    Downgraded,
 }
 
 impl From<io::Error> for Failure {
@@ -204,7 +207,9 @@ fn vencrypt(
     }
     let mut transport = Transport::Client(Box::new(stream));
     let plain = chosen == VENCRYPT_X509_PLAIN;
-    let credentials = prompter.credentials(plain).ok_or(Failure::Cancelled)?;
+    let credentials = prompter
+        .credentials(plain, true)
+        .ok_or(Failure::Cancelled)?;
     match plain {
         true => {
             let mut message = (credentials.user.len() as u32).to_be_bytes().to_vec();
@@ -229,16 +234,20 @@ fn unencrypted(
     }
     let mut transport = Transport::Plain(socket);
     if kind == SECURITY_VNC {
-        let credentials = prompter.credentials(false).ok_or(Failure::Cancelled)?;
+        let credentials = prompter
+            .credentials(false, false)
+            .ok_or(Failure::Cancelled)?;
         vnc_authentication(&mut transport, &credentials.password)?;
     }
     Ok(transport)
 }
 
-/// Signs in to the server at the other end of `socket` (`host` as typed).
+/// Signs in to the server at the other end of `socket` (`host` as typed). With `pinned`, a
+/// server known to have offered TLS, a server offering none is refused before anything is sent.
 pub fn connect(
     mut socket: TcpStream,
     host: &str,
+    pinned: bool,
     prompter: &mut dyn Prompter,
 ) -> Result<Session, Failure> {
     let version = parse_version(&read_array::<12>(&mut socket)?).ok_or(Failure::Unsupported)?;
@@ -248,6 +257,7 @@ pub fn connect(
         Version::V3_8 => b"RFB 003.008\n",
     })?;
     let kind = match version {
+        Version::V3_3 if pinned => return Err(Failure::Downgraded),
         Version::V3_3 => match read_u32(&mut socket)? {
             0 => return Err(Failure::Refused(reason(&mut socket)?)),
             kind => u8::try_from(kind).map_err(|_| Failure::Unsupported)?,
@@ -259,6 +269,9 @@ pub fn connect(
             }
             let mut offered = vec![0; usize::from(count)];
             socket.read_exact(&mut offered)?;
+            if pinned && !offered.contains(&SECURITY_VENCRYPT) {
+                return Err(Failure::Downgraded);
+            }
             let kind = [SECURITY_VENCRYPT, SECURITY_VNC, SECURITY_NONE]
                 .into_iter()
                 .find(|wanted| offered.contains(wanted))

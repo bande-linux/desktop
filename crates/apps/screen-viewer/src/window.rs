@@ -69,6 +69,7 @@ pub struct Pane {
     picture: Option<(u32, u32)>,
     view: Option<WidgetId>,
     scaling: SurfaceScaling,
+    sharing_clipboard: bool,
     from_server: Option<String>,
     title: String,
     encrypted: bool,
@@ -172,6 +173,7 @@ impl Pane {
             picture: None,
             view: None,
             scaling: SurfaceScaling::Fit,
+            sharing_clipboard: true,
             from_server: None,
             title: tr!("Screen Sharing"),
             encrypted: false,
@@ -217,6 +219,14 @@ impl Pane {
 
     pub fn scaling(&self) -> SurfaceScaling {
         self.scaling
+    }
+
+    pub fn shares_clipboard(&self) -> bool {
+        self.sharing_clipboard
+    }
+
+    pub fn toggle_clipboard(&mut self) {
+        self.sharing_clipboard = !self.sharing_clipboard;
     }
 
     fn connect(&mut self, target: Target) {
@@ -319,6 +329,18 @@ impl Pane {
                 boxed(Label::new(fingerprint)),
                 boxed(no.primary()),
                 boxed(yes(&tr!("Trust the New Certificate")).destructive()),
+            ],
+            Question::Downgraded => vec![
+                boxed(Label::heading(&tr!(
+                    "{computer} no longer offers encryption",
+                    computer = computer.clone()
+                ))),
+                boxed(Label::new(&tr!(
+                    "{computer} used to connect with encryption and now offers none. Another computer may be pretending to be it to learn the password. Connect only if you know why it changed; the kept password isn’t sent without encryption.",
+                    computer = computer
+                ))),
+                boxed(no.primary()),
+                boxed(yes(&tr!("Connect Without Encryption")).destructive()),
             ],
             Question::Unencrypted => vec![
                 boxed(Label::heading(&tr!("This connection isn’t encrypted"))),
@@ -468,6 +490,7 @@ impl Pane {
                         tracing::warn!("cannot show the screen: {error}");
                     }
                 }
+                Event::Copied(_) if !self.sharing_clipboard => {}
                 Event::Copied(text) => {
                     self.from_server = Some(text.clone());
                     if let Err(error) = window.serve_clipboard(ClipboardRequest::Copy(text)) {
@@ -527,7 +550,9 @@ impl Pane {
                 self.picture = Some((width, height));
                 self.stage = Stage::Viewing;
                 self.rebuild();
-                if let Err(error) = window.paste() {
+                if self.sharing_clipboard
+                    && let Err(error) = window.paste()
+                {
                     tracing::warn!("cannot read the clipboard for the other computer: {error}");
                 }
             }
@@ -547,12 +572,14 @@ impl View for Pane {
 
     fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
         match &event {
-            WindowEvent::ClipboardChanged if self.stage == Stage::Viewing => {
+            WindowEvent::ClipboardChanged
+                if self.stage == Stage::Viewing && self.sharing_clipboard =>
+            {
                 if let Err(error) = window.paste() {
                     tracing::warn!("cannot read the clipboard for the other computer: {error}");
                 }
             }
-            WindowEvent::Pasted(text) if self.stage == Stage::Viewing => {
+            WindowEvent::Pasted(text) if self.stage == Stage::Viewing && self.sharing_clipboard => {
                 if self.from_server.as_ref() != Some(text)
                     && let Some(connection) = &self.connection
                 {
@@ -578,6 +605,13 @@ impl View for Pane {
 
     fn set_active(&mut self, active: bool) {
         self.ui.set_window_active(active);
+        if !active
+            && let Some(view) = self
+                .view
+                .and_then(|view| self.ui.widget_as::<SurfaceView>(view))
+        {
+            view.release_keys();
+        }
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {

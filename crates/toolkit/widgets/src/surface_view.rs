@@ -111,6 +111,17 @@ impl SurfaceView {
         self.cursor = Some(cursor);
     }
 
+    /// Lets go of every key held down, as when the window stops getting keys.
+    pub fn release_keys(&mut self) {
+        for (code, keysym) in std::mem::take(&mut self.held_keys) {
+            (self.on_input)(SurfaceInput::Key {
+                code,
+                keysym,
+                pressed: false,
+            });
+        }
+    }
+
     pub fn is_captured(&self) -> bool {
         self.captured
     }

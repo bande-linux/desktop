@@ -30,6 +30,7 @@ const NEW_CONNECTION: &str = "new-connection";
 const DISCONNECT: &str = "disconnect";
 const FIT: &str = "scale-to-window";
 const ACTUAL_SIZE: &str = "actual-size";
+const SHARE_CLIPBOARD: &str = "share-clipboard";
 const WINDOW_SIZE: (u32, u32) = (960, 640);
 const KIND: &str = "_rfb._tcp";
 
@@ -96,6 +97,7 @@ impl Program for ScreenSharing {
         let focused = cx.focused().and_then(|window| cx.view(window));
         let viewing = focused.is_some_and(Pane::is_viewing);
         let fit = focused.is_none_or(|pane| pane.scaling() == SurfaceScaling::Fit);
+        let sharing = focused.is_none_or(Pane::shares_clipboard);
         Menus {
             menus: vec![
                 Entry::submenu(
@@ -110,6 +112,8 @@ impl Program for ScreenSharing {
                     vec![
                         Entry::item(&tr!("Scale to Window"), FIT).radio(fit),
                         Entry::item(&tr!("Actual Size"), ACTUAL_SIZE).radio(!fit),
+                        Entry::separator(),
+                        Entry::item(&tr!("Share Clipboard"), SHARE_CLIPBOARD).check(sharing),
                     ],
                 ),
             ],
@@ -128,6 +132,7 @@ impl Program for ScreenSharing {
             DISCONNECT => pane.disconnect(),
             FIT => pane.set_scaling(SurfaceScaling::Fit),
             ACTUAL_SIZE => pane.set_scaling(SurfaceScaling::Native),
+            SHARE_CLIPBOARD => pane.toggle_clipboard(),
             _ => {}
         }
         cx.refresh_menus();

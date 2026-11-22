@@ -94,7 +94,8 @@ impl Prompter for Answers {
         panic!("the server offers encryption")
     }
 
-    fn credentials(&mut self, _user: bool) -> Option<Credentials> {
+    fn credentials(&mut self, _user: bool, encrypted: bool) -> Option<Credentials> {
+        assert!(encrypted, "the password goes over TLS");
         Some(Credentials {
             user: "guest".to_owned(),
             password: self.password.to_owned(),
@@ -187,7 +188,7 @@ fn the_viewer_signs_in_over_tls_sees_and_controls_the_screen_and_shares_the_clip
         password: PASSWORD,
         seen: None,
     };
-    let session = client::connect(connected(port), "127.0.0.1", &mut answers).unwrap();
+    let session = client::connect(connected(port), "127.0.0.1", false, &mut answers).unwrap();
     assert_eq!(answers.seen, Some(fingerprint(&certificate)));
     assert_eq!(
         (session.width, session.height, session.name.as_str()),
@@ -283,7 +284,7 @@ fn a_wrong_password_is_refused_and_older_viewers_need_permission() {
         password: "guessed",
         seen: None,
     };
-    match client::connect(connected(port), "127.0.0.1", &mut answers) {
+    match client::connect(connected(port), "127.0.0.1", false, &mut answers) {
         Err(Failure::Denied(reason)) => assert_eq!(reason, "Wrong password."),
         Err(other) => panic!("expected a refused password, got {other:?}"),
         Ok(_) => panic!("a wrong password got in"),

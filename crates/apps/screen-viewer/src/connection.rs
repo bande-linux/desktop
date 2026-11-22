@@ -32,6 +32,7 @@ pub enum Question {
         changed: bool,
     },
     Unencrypted,
+    Downgraded,
     Password {
         user: Option<String>,
         refused: Option<String>,
@@ -155,6 +156,7 @@ struct Asking<'a> {
     saved: Option<String>,
     refused: Option<String>,
     entered: Option<String>,
+    downgrade_allowed: bool,
 }
 
 impl Asking<'_> {
@@ -177,16 +179,19 @@ impl Prompter for Asking<'_> {
         }) == Some(Answer::Yes);
         if trusted {
             remember_fingerprint(&key, fingerprint);
+            if known.is_some() {
+                self.saved = None;
+            }
         }
         trusted
     }
 
     fn unencrypted(&mut self) -> bool {
-        self.ask(Question::Unencrypted) == Some(Answer::Yes)
+        self.downgrade_allowed || self.ask(Question::Unencrypted) == Some(Answer::Yes)
     }
 
-    fn credentials(&mut self, user: bool) -> Option<Credentials> {
-        if let Some(password) = self.saved.take() {
+    fn credentials(&mut self, user: bool, encrypted: bool) -> Option<Credentials> {
+        if let Some(password) = self.saved.take().filter(|_| encrypted) {
             return Some(Credentials {
                 user: login_name(),
                 password,
@@ -198,7 +203,7 @@ impl Prompter for Asking<'_> {
         };
         match self.ask(question)? {
             Answer::Signed(credentials) => {
-                self.entered = Some(credentials.password.clone());
+                self.entered = encrypted.then(|| credentials.password.clone());
                 Some(credentials)
             }
             Answer::Yes | Answer::No => None,
@@ -309,6 +314,7 @@ fn run(
             .flatten()
     });
     let mut refused = None;
+    let mut downgrade_allowed = false;
     loop {
         let socket = match reach(target) {
             Ok(socket) => socket,
@@ -327,8 +333,12 @@ fn run(
             saved: saved.take(),
             refused: refused.take(),
             entered: None,
+            downgrade_allowed,
         };
-        match client::connect(socket, &target.host, &mut asking) {
+        let pinned = !downgrade_allowed && known_fingerprint(&target.key()).is_some();
+        let connected = client::connect(socket, &target.host, pinned, &mut asking);
+        saved = asking.saved.take();
+        match connected {
             Ok(session) => {
                 if let (Some(password), Some(keyring)) = (asking.entered.take(), keyring()) {
                     let label = tr!(
@@ -355,6 +365,14 @@ fn run(
                     false => reason,
                 });
             }
+            Err(Failure::Downgraded) => {
+                feed.send(Event::Ask(Question::Downgraded));
+                if answers.recv().ok() != Some(Answer::Yes) {
+                    return None;
+                }
+                downgrade_allowed = true;
+                saved = None;
+            }
             Err(Failure::Cancelled) => return None,
             Err(failure) => return Some(ended(target, failure)),
         }
@@ -374,6 +392,10 @@ fn ended(target: &Target, failure: Failure) -> String {
             reason = error.to_string()
         ),
         Failure::Cancelled => String::new(),
+        Failure::Downgraded => tr!(
+            "{computer} no longer offers encryption.",
+            computer = target.host.clone()
+        ),
     }
 }
 

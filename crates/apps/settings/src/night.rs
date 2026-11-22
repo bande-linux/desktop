@@ -1,10 +1,11 @@
 use bande_l10n::{text, tr};
 
 use crate::view::SettingsView;
+use bande_datetime::DateFormats;
 use bande_datetime::daylight::{Place, Sky, sky, within_daily};
 use bande_settings_panes::{SettingId, Value};
-use jiff::Zoned;
 use jiff::civil::Time;
+use jiff::{Timestamp, Zoned};
 
 pub const CUSTOM: &str = "custom";
 
@@ -19,6 +20,10 @@ fn time(text: &str) -> Option<Time> {
     let text = clock_text(text)?;
     let (hour, minute) = text.split_once(':')?;
     Time::new(hour.parse().ok()?, minute.parse().ok()?, 0, 0).ok()
+}
+
+fn shown(next: Timestamp, now: &Zoned) -> String {
+    DateFormats::from_env().clock_time(&next.to_zoned(now.time_zone().clone()))
 }
 
 pub fn night_summary(
@@ -39,10 +44,7 @@ pub fn night_summary(
     let Some((night, next)) = scheduled else {
         return tr!("On");
     };
-    let until = next
-        .to_zoned(now.time_zone().clone())
-        .strftime("%H:%M")
-        .to_string();
+    let until = shown(next, now);
     (if night {
         text!("On until {time}")
     } else {
@@ -61,23 +63,23 @@ impl SettingsView {
 
     pub(crate) fn do_not_disturb_summary(&self) -> Option<String> {
         let on = self.values.get(&SettingId::DoNotDisturb) == Some(&Value::Flag(true));
+        let now = (self.clock)();
         let scheduled = (self.values.get(&SettingId::FocusScheduled) == Some(&Value::Flag(true)))
             .then(|| {
-                let from = self.text_value(SettingId::FocusFrom)?;
-                let to = self.text_value(SettingId::FocusTo)?;
-                within_daily(&(self.clock)(), time(from)?, time(to)?)
-                    .map(|(inside, _)| (inside, from, to))
+                let from = time(self.text_value(SettingId::FocusFrom)?)?;
+                let to = time(self.text_value(SettingId::FocusTo)?)?;
+                within_daily(&now, from, to)
             })
             .flatten();
         match (on, scheduled) {
-            (true, Some((true, _, to))) => Some(tr!(
+            (true, Some((true, next))) => Some(tr!(
                 "Do Not Disturb is on until {time}",
-                time = to.to_owned()
+                time = shown(next, &now)
             )),
             (true, _) => Some(tr!("Do Not Disturb is on")),
-            (false, Some((false, from, _))) => Some(tr!(
+            (false, Some((false, next))) => Some(tr!(
                 "Do Not Disturb turns on at {time}",
-                time = from.to_owned()
+                time = shown(next, &now)
             )),
             (false, _) => None,
         }

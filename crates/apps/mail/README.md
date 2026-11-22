@@ -74,10 +74,10 @@ apt install bande-mail
 - **Message files.** A saved message (`.eml`, `message/rfc822`), opened from Files or from a
   message's attachments, opens read-only in a window of its own with the same reader: text,
   pictures, attachments, signatures and encryption, and remote content only on Load Remote
-  Content. The file is read off the UI thread, up to 64 MB; one that cannot be read says why in
+  Content, asked again for any new remote content a decrypted message reveals. The file is read off the UI thread, up to 64 MB; one that cannot be read says why in
   the window. Its attachments open from a private copy in `~/.cache/bande-mail/opened/`, removed
-  like the others. Shortcuts and menus in that window act only on the file: the main window's
-  message commands are disabled there, and Print prints the file.
+  like the others. Shortcuts and menus in that window act only on the file: its menus hold only
+  New Message, Add Account…, Print (the file), Edit and Get Mail.
 - **Signed and encrypted mail**, with OpenPGP (PGP/MIME, RFC 3156, and inline PGP, read only)
   and S/MIME (RFC 8551). The keys are GnuPG's: secret keys stay in `gpg-agent`, which asks for
   their passphrase (pinentry) and uses smartcards; OpenPGP keys come from the GnuPG keyring,

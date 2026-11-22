@@ -7,6 +7,42 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "The connection failed: {error}"
+msgstr "Anslutningen misslyckades: {error}"
+
+msgid "The server did not answer in time."
+msgstr "Servern svarade inte i tid."
+
+msgid "The secure connection failed: {error}"
+msgstr "Den säkra anslutningen misslyckades: {error}"
+
+msgid "The server offers no secure connection."
+msgstr "Servern erbjuder ingen säker anslutning."
+
+msgid "The server sent something unexpected: {error}"
+msgstr "Servern skickade något oväntat: {error}"
+
+msgid "The server refused: {text}"
+msgstr "Servern vägrade: {text}"
+
+msgid "The server refused the login: {text}"
+msgstr "Servern vägrade inloggningen: {text}"
+
+msgid "The offline store failed: {error}"
+msgstr "Det lokala arkivet fungerar inte: {error}"
+
+msgid "The keyring failed: {error}"
+msgstr "Nyckelringen fungerar inte: {error}"
+
+msgid "The server closed the connection."
+msgstr "Servern stängde anslutningen."
+
+msgid "the mailbox name “{path}” is not allowed"
+msgstr "brevlådenamnet ”{path}” är inte tillåtet"
+
+msgid "the name or password has a line break"
+msgstr "namnet eller lösenordet innehåller en radbrytning"
+
 msgid "Mail"
 msgstr "E-post"
 
@@ -157,6 +193,15 @@ msgstr "E-post har inget sparat lösenord för kontot. Ange det igen."
 
 msgid "Mail could not save the account: {error}"
 msgstr "E-post kunde inte spara kontot: {error}"
+
+msgid "“{address}” is not a mail address"
+msgstr "”{address}” är ingen e-postadress"
+
+msgid "the server offers no sign-in method Mail knows: {methods}"
+msgstr "servern erbjuder inget inloggningssätt som E-post kan: {methods}"
+
+msgid "the message has no recipients"
+msgstr "meddelandet har inga mottagare"
 
 msgid "Offline"
 msgstr "Offline"
@@ -701,6 +746,15 @@ msgstr ""
 "Datum: {date}\n"
 "Till: {to}"
 
+msgid "Mail can’t reach the server."
+msgstr "E-post når inte servern."
+
+msgid "“{account}” is offline"
+msgstr "”{account}” är offline"
+
+msgid "Try Again"
+msgstr "Försök igen"
+
 msgid "No account sends from this address any more."
 msgstr "Inget konto skickar längre från den här adressen."
 
@@ -780,3 +834,9 @@ msgstr "Markera som läst"
 
 msgid "Unflag"
 msgstr "Ta bort flagga"
+
+msgid "no password is saved for this account"
+msgstr "inget lösenord är sparat för kontot"
+
+msgid "the account has no Drafts mailbox"
+msgstr "kontot har ingen brevlåda för utkast"

@@ -1,3 +1,4 @@
+use bande_l10n::tr;
 use data_encoding::BASE64;
 
 use crate::error::{Error, Result};
@@ -111,7 +112,10 @@ pub struct Envelope<'a> {
 
 fn checked(address: &str) -> Result<&str> {
     match address.contains(['<', '>', '\r', '\n', ' ']) || !address.contains('@') {
-        true => Err(Error::Refused(format!("{address:?} is not a mail address"))),
+        true => Err(Error::Refused(tr!(
+            "“{address}” is not a mail address",
+            address = address
+        ))),
         false => Ok(address),
     }
 }
@@ -145,9 +149,9 @@ fn open(
             smtp.command(&BASE64.encode(user.as_bytes()), &[334])?;
             smtp.command(&BASE64.encode(password.as_bytes()), &[235])?;
         } else {
-            return Err(Error::Login(format!(
-                "no supported sign-in method among {}",
-                mechanisms.join(" ")
+            return Err(Error::Login(tr!(
+                "the server offers no sign-in method Mail knows: {methods}",
+                methods = mechanisms.join(" ")
             )));
         }
     }
@@ -167,7 +171,7 @@ pub fn send(
     envelope: &Envelope<'_>,
 ) -> Result<()> {
     if envelope.recipients.is_empty() {
-        return Err(Error::Refused("the message has no recipients".to_owned()));
+        return Err(Error::Refused(tr!("the message has no recipients")));
     }
     let (mut smtp, extensions) = open(server, network, login)?;
     let utf8 = match has(&extensions, "SMTPUTF8") && !envelope.from.is_ascii() {

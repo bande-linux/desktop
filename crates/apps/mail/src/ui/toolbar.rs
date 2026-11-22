@@ -33,6 +33,8 @@ pub enum Signal {
     NewMailbox(crate::store::AccountId, String),
     RenameMailbox(crate::store::MailboxId, String),
     DeleteMailbox(crate::store::MailboxId),
+    TryAgain(crate::store::AccountId),
+    ServerSettings,
 }
 
 pub type Signals = Rc<RefCell<Vec<Signal>>>;

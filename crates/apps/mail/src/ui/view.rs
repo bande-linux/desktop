@@ -99,6 +99,7 @@ pub enum Hit {
     Message(MessageId),
     Conversation(MessageId),
     Reader(Target),
+    Offline(AccountId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,6 +198,8 @@ pub struct MailView {
     pub(crate) accounts: Vec<(Account, Vec<Mailbox>)>,
     workers: Vec<Worker>,
     pub(crate) statuses: Vec<(AccountId, Status)>,
+    pub(crate) failures: Vec<(AccountId, String)>,
+    retrying: Vec<AccountId>,
     mailroom: Mailroom,
     network: Network,
     pub(crate) sidebar: Vec<Row>,
@@ -258,6 +261,8 @@ impl MailView {
             accounts: Vec::new(),
             workers: Vec::new(),
             statuses: Vec::new(),
+            failures: Vec::new(),
+            retrying: Vec::new(),
             mailroom: Mailroom::new()?,
             network: Network::default(),
             sidebar: Vec::new(),
@@ -531,7 +536,7 @@ impl MailView {
 
     pub fn cursor(&self) -> Cursor {
         match &self.hover {
-            Some(Hit::Conversation(_)) => Cursor::Pointer,
+            Some(Hit::Conversation(_) | Hit::Offline(_)) => Cursor::Pointer,
             Some(Hit::Reader(target)) if !matches!(target, Target::Card(_)) => Cursor::Pointer,
             _ => self.ui.cursor(),
         }
@@ -1566,9 +1571,52 @@ impl MailView {
     }
 
     pub fn get_mail(&mut self) {
+        self.retrying = self
+            .statuses
+            .iter()
+            .filter(|(_, status)| *status == Status::Offline)
+            .map(|(account, _)| *account)
+            .collect();
         for worker in &self.workers {
             worker.send(Command::Sync);
         }
+    }
+
+    pub(crate) fn offline(&self, account: AccountId) -> bool {
+        self.statuses
+            .iter()
+            .any(|(known, status)| *known == account && *status == Status::Offline)
+    }
+
+    pub(crate) fn failure(&self, account: AccountId) -> String {
+        self.failures
+            .iter()
+            .find(|(known, _)| *known == account)
+            .map(|(_, reason)| reason.clone())
+            .unwrap_or_else(|| tr!("Mail can’t reach the server."))
+    }
+
+    pub(crate) fn show_failure(&mut self, account: AccountId) {
+        let Some(email) = self.account(account).map(|account| account.email.clone()) else {
+            return;
+        };
+        if self.ui.has_sheet() {
+            return;
+        }
+        let signals = Rc::clone(&self.signals);
+        let alert = Alert::new(
+            &tr!("“{account}” is offline", account = email),
+            &self.failure(account),
+            move |choice| match choice {
+                "retry" => signals.borrow_mut().push(Signal::TryAgain(account)),
+                "settings" => signals.borrow_mut().push(Signal::ServerSettings),
+                _ => {}
+            },
+        )
+        .primary(&tr!("Try Again"), "retry")
+        .other(&tr!("Server Settings…"), "settings")
+        .cancel(&tr!("Cancel"), "cancel");
+        self.ui.present_sheet(alert);
     }
 
     fn account_for(&self, draft: &Draft) -> Option<AccountId> {
@@ -1853,6 +1901,10 @@ impl MailView {
             changed |= !matches!(event, MailEvent::Synced(..));
             match event {
                 MailEvent::Status(account, status) => {
+                    if status == Status::Syncing {
+                        self.failures.retain(|(known, _)| *known != account);
+                        self.retrying.retain(|known| *known != account);
+                    }
                     self.statuses.retain(|(known, _)| *known != account);
                     self.statuses.push((account, status));
                 }
@@ -1894,6 +1946,12 @@ impl MailView {
                 }
                 MailEvent::Failed(account, error) => {
                     tracing::warn!("account {account}: {error}");
+                    self.failures.retain(|(known, _)| *known != account);
+                    self.failures.push((account, error));
+                    if let Some(at) = self.retrying.iter().position(|known| *known == account) {
+                        self.retrying.remove(at);
+                        self.show_failure(account);
+                    }
                 }
                 MailEvent::Sent(_) => {}
                 MailEvent::MailboxRefused(reason) => {
@@ -2367,6 +2425,11 @@ impl MailView {
                 signal @ (Signal::NewMailbox(..)
                 | Signal::RenameMailbox(..)
                 | Signal::DeleteMailbox(_)) => self.change_mailboxes(signal),
+                Signal::TryAgain(account) => {
+                    self.retrying.push(account);
+                    self.send_command(account, Command::Sync);
+                }
+                Signal::ServerSettings => self.requests.push(Request::OpenSettings),
             }
         }
         if let Some(request) = self.ui.take_clipboard_request() {
@@ -2819,6 +2882,7 @@ impl MailView {
                 self.focus = Pane::Reader;
                 self.click_reader(target, pointer);
             }
+            Hit::Offline(account) => self.show_failure(account),
         }
         true
     }

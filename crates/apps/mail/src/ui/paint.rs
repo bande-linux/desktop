@@ -16,7 +16,6 @@ use jiff::Timestamp;
 const FLAG_COLORS: [u32; 7] = [
     0xFF3B30, 0xFF9500, 0xFFCC00, 0x34C759, 0x007AFF, 0xAF52DE, 0x8E8E93,
 ];
-use crate::worker::Status;
 
 const CHILD_INDENT: f32 = 14.0;
 const DRAG_LABEL_WIDTH: f32 = 240.0;
@@ -229,24 +228,27 @@ impl MailView {
                         .accounts
                         .iter()
                         .find(|(account, _)| account.email == *title)
-                        .is_some_and(|(account, _)| {
-                            self.statuses.iter().any(|(known, status)| {
-                                *known == account.id && *status == Status::Offline
-                            })
-                        });
-                    if offline {
+                        .map(|(account, _)| account.id)
+                        .filter(|account| self.offline(*account));
+                    if let Some(account) = offline {
+                        let ink = match self.hover == Some(Hit::Offline(account)) {
+                            true => palette.ink,
+                            false => palette.ink3,
+                        };
                         let paragraph = self.text_line(
                             &tr!("Offline"),
-                            TextStyle::role(TextRole::Callout, palette.ink3),
+                            TextStyle::role(TextRole::Callout, ink),
                             80.0,
                         );
-                        drawn.push(Item::Text {
-                            origin: Point::new(
-                                SIDEBAR_WIDTH - SIDEBAR_INSET - 8.0 - paragraph.width(),
-                                y + heading_height - paragraph.height() - 4.0,
-                            ),
-                            paragraph,
-                        });
+                        let origin = Point::new(
+                            SIDEBAR_WIDTH - SIDEBAR_INSET - 8.0 - paragraph.width(),
+                            y + heading_height - paragraph.height() - 4.0,
+                        );
+                        self.hits.push((
+                            Rect::new(origin.x, origin.y, paragraph.width(), paragraph.height()),
+                            Hit::Offline(account),
+                        ));
+                        drawn.push(Item::Text { origin, paragraph });
                     }
                     y += heading_height;
                 }

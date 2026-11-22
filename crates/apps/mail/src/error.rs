@@ -1,6 +1,8 @@
 use std::fmt;
 use std::io;
 
+use bande_l10n::tr;
+
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
@@ -28,18 +30,27 @@ impl Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(error) => write!(f, "{error}"),
-            Self::Timeout => write!(f, "the server did not answer in time"),
-            Self::Tls(error) => write!(f, "secure connection failed: {error}"),
-            Self::Insecure => write!(f, "the server offers no secure connection"),
-            Self::Protocol(error) => write!(f, "the server sent something unexpected: {error}"),
-            Self::Refused(text) => write!(f, "the server refused: {text}"),
-            Self::Login(text) => write!(f, "the server refused the login: {text}"),
-            Self::Store(error) => write!(f, "the mail store failed: {error}"),
-            Self::Secret(error) => write!(f, "the keyring failed: {error}"),
-            Self::Closed => write!(f, "the server closed the connection"),
-        }
+        let text = match self {
+            Self::Io(error) => tr!("The connection failed: {error}", error = error.to_string()),
+            Self::Timeout => tr!("The server did not answer in time."),
+            Self::Tls(error) => tr!("The secure connection failed: {error}", error = error),
+            Self::Insecure => tr!("The server offers no secure connection."),
+            Self::Protocol(error) => {
+                tr!(
+                    "The server sent something unexpected: {error}",
+                    error = error
+                )
+            }
+            Self::Refused(text) => tr!("The server refused: {text}", text = text),
+            Self::Login(text) => tr!("The server refused the login: {text}", text = text),
+            Self::Store(error) => tr!(
+                "The offline store failed: {error}",
+                error = error.to_string()
+            ),
+            Self::Secret(error) => tr!("The keyring failed: {error}", error = error),
+            Self::Closed => tr!("The server closed the connection."),
+        };
+        f.write_str(&text)
     }
 }
 

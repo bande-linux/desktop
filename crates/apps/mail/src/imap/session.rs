@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use bande_l10n::tr;
 use data_encoding::BASE64;
 
 use super::wire::{Response, Status, Value, literal_length, parse_response, quote};
@@ -86,7 +87,7 @@ fn mailbox_argument(path: &str) -> Result<String> {
     Some(path)
         .filter(|path| !path.chars().any(char::is_control))
         .and_then(|path| quote(&utf7::encode(path)))
-        .ok_or_else(|| Error::Refused(format!("the mailbox name {path:?} is not allowed")))
+        .ok_or_else(|| Error::Refused(tr!("the mailbox name “{path}” is not allowed", path = path)))
 }
 
 fn atoms(value: &Value) -> Vec<String> {
@@ -357,7 +358,7 @@ impl Session {
             return Err(Error::Insecure);
         } else {
             let (Some(user), Some(password)) = (quote(user), quote(password)) else {
-                return Err(Error::Login("the name or password has a line break".into()));
+                return Err(Error::Login(tr!("the name or password has a line break")));
             };
             self.run(&format!("LOGIN {user} {password}"))
         };

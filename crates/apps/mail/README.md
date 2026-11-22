@@ -115,7 +115,7 @@ apt install bande-mail
 Every connection has a 15 s connect and 60 s read timeout, IMAP responses are parsed by a
 small parser that rejects malformed input instead of panicking (deep nesting, short literals,
 over-long lines and 128 MB responses are refused), and a lost connection is retried with
-backoff from 5 s to 5 min. A changed `UIDVALIDITY` starts the mailbox over, a server without
+backoff from 5 s to 5 min. An account that can't connect is marked Offline in the sidebar; clicking that, or a Get Mail that fails again, says why, with Try Again and Server Settings…. A changed `UIDVALIDITY` starts the mailbox over, a server without
 `MOVE` gets `COPY` + `EXPUNGE`, and one without `SPECIAL-USE` has its folders recognised by
 their usual English names.
 

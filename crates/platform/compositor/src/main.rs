@@ -5,13 +5,14 @@ use std::time::{Duration, Instant};
 
 use bande_compositor::{
     Awaited, CLIPBOARD_DAEMON, Compositor, CursorTheme, DisplaysHandle, DrmBackend, DrmNotifiers,
-    FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings, REFRESH,
-    REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
+    FirstMode, FrameClock, FrameOutput, FrameRecovery, FrameScheduler, GREETER, InputSettings,
+    REFRESH, REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
     SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
     follow_appearance, follow_input_settings, follow_lid, follow_login_settings, follow_session,
     follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, raise_priority,
     render_material, serve_app_states, serve_displays, serve_global_shortcuts,
-    serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
+    serve_keyboard_monitor, take_display_from_boot_screen, user_config,
+    watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
 use bande_datetime::ClockChanges;
@@ -464,11 +465,14 @@ fn page_flipped(app: &mut App<DrmBackend>, crtc: crtc::Handle, metadata: Option<
     }
 }
 
-fn open_display(device: Option<&Path>) -> Result<(DrmBackend, DrmNotifiers), Box<dyn Error>> {
+fn open_display(
+    device: Option<&Path>,
+    first_mode: FirstMode,
+) -> Result<(DrmBackend, DrmNotifiers), Box<dyn Error>> {
     let mut retrying = false;
     loop {
         DrmBackend::wait_for_display(retrying)?;
-        if let Some(opened) = DrmBackend::open(device)? {
+        if let Some(opened) = DrmBackend::open(device, first_mode)? {
             return Ok(opened);
         }
         retrying = true;
@@ -484,7 +488,14 @@ fn run_drm(
     if let Some(system) = &buses.system {
         raise_priority(system);
     }
-    let (backend, notifiers) = open_display(device)?;
+    let first_mode = match session {
+        Session::Greeter => {
+            take_display_from_boot_screen();
+            FirstMode::OnScreen
+        }
+        Session::User => FirstMode::Preferred,
+    };
+    let (backend, notifiers) = open_display(device, first_mode)?;
     tracing::info!("driving {}", backend.path().display());
     let mut outputs = backend.outputs().into_iter();
     let first = outputs.next().ok_or("no display is connected")?;

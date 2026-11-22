@@ -642,24 +642,35 @@ any time, and when greetd gives up `bande-console-fallback.service` quits Plymou
 `getty@tty1` and brings the console forward.
 
 The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts
-the kernel with `splash`, which the package's `/etc/default/grub.d/bande-splash.cfg` adds
-([packaging.md](packaging.md)) and Settings ▸ About ▸ Show a boot screen turns off and on. It
-hands over the same way. `bande-greeter.service` starts after `plymouth-start.service`,
-conflicts with `plymouth-quit.service` (so the end of boot does not quit it) and runs
-`plymouth deactivate` first, which stops Plymouth drawing and gives up the display while its
-last frame stays on screen; the `-` prefix makes this a no-op on a system without Plymouth.
-greetd and the sessions it starts use VT 1, Plymouth's terminal, so nothing
-switches VT. Before its first commit the login window's compositor reads each display's
-framebuffer (`DRM_IOCTL_MODE_GETFB2`, mapped as a dumb buffer), and once the login window is
-mapped that frame fades out over it with the `standard` spring (`fade` with Reduce Motion). When
-the framebuffer cannot be read while Plymouth runs (`/run/plymouth/pid`), the frame is the boot
-screen's own background and mark at Plymouth's scale, drawn by `bande-splash`. Only root may
-talk to Plymouth, so after its first frame is on screen the compositor creates
-`/run/bande-greeter/shown` (a `_greetd` folder from `debian/bande-greeter.tmpfiles`) and the
-root `bande-greeter-splash.path` runs `plymouth quit --retain-splash`. The background is Datum's
-`deep`, which is also the compositor's clear colour. One frame can still differ: greetd sets
-the VT to text mode and clears it before it starts the greeter, so between Plymouth giving up
-the display and the first commit the console may show.
+the kernel with `splash` and `loglevel=3`, which the package's
+`/etc/default/grub.d/bande-splash.cfg` adds ([packaging.md](packaging.md)) and Settings ▸ About ▸
+Show a boot screen turns off and on. It keeps playing until the login window is on screen and
+hands over without a blank frame or console text. `bande-greeter.service` starts after
+`plymouth-start.service` and conflicts with `plymouth-quit.service`, so the end of boot does not
+quit it. greetd and the sessions it starts use VT 1, Plymouth's terminal, so nothing switches
+VT; greetd sets it to text mode and clears it, which shows nothing while Plymouth holds the
+display. While Plymouth runs (`/run/plymouth/pid`), the login window's compositor sets its
+terminal to graphics mode, so the kernel's console cannot draw once Plymouth lets go, and asks
+for the display: only root may talk to Plymouth, so it creates `handover` in
+`/run/bande-greeter` (a `_greetd` folder from `debian/bande-greeter.tmpfiles`) and the root
+`bande-greeter-handover.path` runs `plymouth deactivate`, which stops Plymouth drawing and gives
+up the display with its last frame on screen, then makes the folder `handed-over` there (a
+`mkdir`, which follows no link `_greetd` could plant). The
+compositor waits for that for at most 3 s and only then takes the seat and the display through
+logind, whose own graphics mode Plymouth would otherwise reset. The theme has no end animation,
+which would wait for the indicator's 2 s cycle; Plymouth hides the indicator when it stops.
+
+Each display starts in the mode Plymouth left on it, on the same CRTC, when the connector lists
+that mode, so the first frame needs no modeset; the person's remembered mode or the highest
+refresh applies when their session's compositor starts. Before its first commit the login
+window's compositor reads each display's framebuffer (`DRM_IOCTL_MODE_GETFB2`, mapped as a dumb
+buffer), which is Plymouth's last frame, and once the login window is mapped that frame fades
+out over it with the `standard` spring (`fade` with Reduce Motion). When the framebuffer cannot
+be read while Plymouth runs, the frame is the boot screen's own background and mark at
+Plymouth's scale, drawn by `bande-splash`. After its first frame is on screen the compositor
+creates `shown` there and the root `bande-greeter-splash.path` runs `plymouth quit
+--retain-splash`. The background is Datum's `deep`, which is also the compositor's clear colour.
+On a system without Plymouth none of this runs.
 
 **Ending the session.** Log Out stops `bande-compositor.service` in the user's manager, never
 logind's `Session.Terminate`, which would leave the compositor holding the seat while greetd

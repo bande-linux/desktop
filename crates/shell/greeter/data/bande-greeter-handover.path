@@ -1,0 +1,5 @@
+[Unit]
+Description=Wait for the login window to ask for the display
+
+[Path]
+PathExists=/run/bande-greeter/handover

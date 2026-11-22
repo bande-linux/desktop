@@ -1,0 +1,8 @@
+[Unit]
+Description=Hand the display from the start screen to the login window
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/bin/plymouth deactivate
+ExecStart=/usr/bin/mkdir -p /run/bande-greeter/handed-over

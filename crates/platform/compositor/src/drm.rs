@@ -34,6 +34,7 @@ use smithay::utils::{Clock, DeviceFd, Monotonic, Size};
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder};
 use bande_render::VulkanRenderer;
 
+use crate::boot_screen::PLYMOUTH_PID;
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::render::{Snapshot, background};
 use crate::reveal::ShownFrame;
@@ -49,7 +50,6 @@ type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), Drm
 
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const DRM_IOCTL_MODE_MAP_DUMB: libc::c_ulong = 0xC010_64B3;
-const PLYMOUTH_PID: &str = "/run/plymouth/pid";
 const CURSOR_SIZE: (u32, u32) = (64, 64);
 const COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Xrgb8888, Fourcc::Argb8888];
 
@@ -68,6 +68,7 @@ struct Head {
     relink_wanted: bool,
     flip_pending: bool,
     refused: bool,
+    kept_mode: Option<Mode>,
     display_profile: Option<Profile>,
     output_colour: Option<(Option<String>, Option<OutputColour>)>,
     converting: bool,
@@ -104,6 +105,13 @@ pub struct DrmBackend {
     libinput: Option<Libinput>,
     kelvin: Option<f64>,
     copies_frames: bool,
+    first_mode: FirstMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FirstMode {
+    OnScreen,
+    Preferred,
 }
 
 pub struct DrmNotifiers {
@@ -205,6 +213,15 @@ fn sorted_modes(info: &connector::Info) -> Vec<Mode> {
         )
     });
     modes.dedup_by_key(|mode| output_mode(mode));
+    modes
+}
+
+fn modes_of(info: &connector::Info, first: Option<Mode>) -> Vec<Mode> {
+    let mut modes = sorted_modes(info);
+    if let Some(first) = first.filter(|first| info.modes().contains(first)) {
+        modes.retain(|mode| output_mode(mode) != output_mode(&first));
+        modes.insert(0, first);
+    }
     modes
 }
 
@@ -401,7 +418,10 @@ impl DrmBackend {
         Ok(())
     }
 
-    pub fn open(path: Option<&Path>) -> Result<Option<(Self, DrmNotifiers)>, DrmBackendError> {
+    pub fn open(
+        path: Option<&Path>,
+        first_mode: FirstMode,
+    ) -> Result<Option<(Self, DrmNotifiers)>, DrmBackendError> {
         let (mut session, session_notifier) = LibSeatSession::new()?;
         let candidates = match path {
             Some(path) => vec![path.to_path_buf()],
@@ -411,7 +431,7 @@ impl DrmBackend {
         for candidate in candidates {
             match Self::open_card(&mut session, &candidate) {
                 Ok((device, notifier)) => {
-                    let mut backend = Self::with_device(session, candidate, device)?;
+                    let mut backend = Self::with_device(session, candidate, device, first_mode)?;
                     backend.rescan()?;
                     if backend.heads.is_empty() {
                         tracing::warn!(
@@ -456,6 +476,7 @@ impl DrmBackend {
         session: LibSeatSession,
         path: PathBuf,
         device: DrmDevice,
+        first_mode: FirstMode,
     ) -> Result<Self, DrmBackendError> {
         let fd = device.device_fd().clone();
         let node = DrmNode::from_file(&fd)?;
@@ -475,22 +496,31 @@ impl DrmBackend {
             libinput: None,
             kelvin: None,
             copies_frames: false,
+            first_mode,
         })
     }
 
-    fn free_crtc(&self, info: &connector::Info) -> Result<Option<crtc::Handle>, DrmBackendError> {
+    fn free_crtc(
+        &self,
+        info: &connector::Info,
+        on_screen: Option<crtc::Handle>,
+    ) -> Result<Option<crtc::Handle>, DrmBackendError> {
         let resources = self.device.resource_handles()?;
         let taken: Vec<crtc::Handle> = self
             .heads
             .iter()
             .map(|head| head.compositor.crtc())
             .collect();
-        Ok(info
+        let free: Vec<crtc::Handle> = info
             .encoders()
             .iter()
             .filter_map(|&encoder| self.device.get_encoder(encoder).ok())
             .flat_map(|encoder| resources.filter_crtcs(encoder.possible_crtcs()))
-            .find(|crtc| !taken.contains(crtc)))
+            .filter(|crtc| !taken.contains(crtc))
+            .collect();
+        Ok(on_screen
+            .filter(|crtc| free.contains(crtc))
+            .or(free.first().copied()))
     }
 
     fn output_compositor(
@@ -537,8 +567,20 @@ impl DrmBackend {
     }
 
     fn create_head(&mut self, info: &connector::Info) -> Result<Option<Head>, DrmBackendError> {
-        let modes = sorted_modes(info);
-        let (Some(mode), Some(crtc)) = (modes.first().copied(), self.free_crtc(info)?) else {
+        let on_screen = current_crtc(&self.device, info.handle())
+            .inspect_err(|error| {
+                tracing::warn!("cannot read what {} shows: {error}", connector_name(info))
+            })
+            .ok()
+            .flatten();
+        let kept_mode = on_screen
+            .filter(|_| self.first_mode == FirstMode::OnScreen)
+            .and_then(|crtc| crtc.mode());
+        let modes = modes_of(info, kept_mode);
+        let (Some(mode), Some(crtc)) = (
+            modes.first().copied(),
+            self.free_crtc(info, on_screen.map(|crtc| crtc.handle()))?,
+        ) else {
             return Ok(None);
         };
         let mut rendered = self.renders_into_scanout_buffers();
@@ -582,6 +624,7 @@ impl DrmBackend {
             relink_wanted: false,
             flip_pending: false,
             refused: false,
+            kept_mode,
             display_profile: edid_of(&self.device, info.handle())
                 .as_ref()
                 .and_then(crate::colour::edid_profile),
@@ -611,7 +654,9 @@ impl DrmBackend {
             match decision {
                 Rescanned::Kept => {
                     let link = link_status(&self.device, head.connector).map(|(_, value)| value);
-                    let modes = info.map(sorted_modes).unwrap_or_default();
+                    let modes = info
+                        .map(|info| modes_of(info, head.kept_mode))
+                        .unwrap_or_default();
                     let head = &mut self.heads[index];
                     head.relink_wanted |= link == Some(LINK_BAD);
                     if head.lost_at.take().is_some() || head.relink_wanted {
@@ -880,14 +925,22 @@ fn splash_for(device: &DrmDevice, head: &Head) -> Option<Snapshot> {
     }
 }
 
-fn shown_frame(device: &DrmDevice, connector: connector::Handle) -> io::Result<Option<Snapshot>> {
+fn current_crtc(
+    device: &DrmDevice,
+    connector: connector::Handle,
+) -> io::Result<Option<crtc::Info>> {
     let Some(encoder) = device.get_connector(connector, false)?.current_encoder() else {
         return Ok(None);
     };
     let Some(crtc) = device.get_encoder(encoder)?.crtc() else {
         return Ok(None);
     };
-    let Some(framebuffer) = device.get_crtc(crtc)?.framebuffer() else {
+    device.get_crtc(crtc).map(Some)
+}
+
+fn shown_frame(device: &DrmDevice, connector: connector::Handle) -> io::Result<Option<Snapshot>> {
+    let Some(framebuffer) = current_crtc(device, connector)?.and_then(|crtc| crtc.framebuffer())
+    else {
         return Ok(None);
     };
     let info = device

@@ -12,8 +12,9 @@ x11=$(dpkg-query -W -f '${db:Status-Status} ${Package}\n' | awk '$1 == "installe
     grep -E '^(xserver-|xwayland$|xorg$|x11-session-utils$|xinit$)' || true)
 [ -z "$x11" ] || { echo "installed: $x11"; exit 1; }
 [ "$(dpkg-query -W -f '${db:Status-Status}' plymouth 2> /dev/null)" != installed ] || { echo "plymouth is installed"; exit 1; }
-verified=$(systemd-analyze verify --man=no bande-greeter.service bande-greeter-splash.path \
-    bande-greeter-splash.service bande-console-fallback.service 2>&1)
+verified=$(systemd-analyze verify --man=no bande-greeter.service bande-greeter-handover.path \
+    bande-greeter-handover.service bande-greeter-splash.path bande-greeter-splash.service \
+    bande-console-fallback.service 2>&1)
 [ -z "$verified" ] || { echo "$verified"; exit 1; }
 [ "$(stat -c '%a %U %G' /run/bande-greeter)" = "755 _greetd _greetd" ]
 

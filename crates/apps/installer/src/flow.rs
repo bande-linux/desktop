@@ -37,6 +37,7 @@ pub enum Problem {
     Unavailable,
     NoNetwork,
     NoSpace,
+    Copy,
     Dependencies,
     Install,
     Remove,

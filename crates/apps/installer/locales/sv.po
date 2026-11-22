@@ -197,6 +197,9 @@ msgstr "Det gick inte att hämta de paket som behövs. Kontrollera din interneta
 msgid "There isn’t enough disk space. Free up some space and try again."
 msgstr "Det finns inte tillräckligt med diskutrymme. Frigör lite utrymme och försök igen."
 
+msgid "The package couldn’t be copied from where it is stored. Check that the device is still connected, or copy the package to your Home folder, then try again."
+msgstr "Paketet kunde inte kopieras från platsen där det finns. Kontrollera att enheten fortfarande är ansluten, eller kopiera paketet till din hemmapp och försök igen."
+
 msgid "It needs packages that can’t be installed right now. Install pending updates in Settings ▸ Software Update, then try again."
 msgstr "Paketet behöver andra paket som inte kan installeras just nu. Installera väntande uppdateringar i Inställningar ▸ Programuppdatering och försök sedan igen."
 

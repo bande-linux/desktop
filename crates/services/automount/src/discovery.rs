@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
@@ -28,17 +29,25 @@ fn preference(url: &str) -> usize {
         .unwrap_or(SERVICES.len())
 }
 
-fn url_of(scheme: &str, host: &str, port: u16) -> String {
+fn plain_host(host: &str) -> bool {
+    !host.is_empty()
+        && host
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '-' | '.' | '_'))
+}
+
+fn url_of(scheme: &str, host: &str, port: u16, path: &str) -> String {
+    let path = match path.starts_with('/') {
+        true => bande_xdg::percent_encode(Path::new(path)),
+        false => String::new(),
+    };
     let default = matches!(
         (scheme, port),
         ("smb", 445) | ("sftp", 22) | ("dav", 80) | ("davs", 443) | ("nfs", 2049)
     );
     match default {
-        true => format!("{scheme}://{host}"),
-        false => match host.split_once('/') {
-            Some((name, path)) => format!("{scheme}://{name}:{port}/{path}"),
-            None => format!("{scheme}://{host}:{port}"),
-        },
+        true => format!("{scheme}://{host}{path}"),
+        false => format!("{scheme}://{host}:{port}{path}"),
     }
 }
 
@@ -120,9 +129,17 @@ impl Discovery {
             .into_iter()
             .filter_map(|service| {
                 let (_, scheme) = SERVICES.iter().find(|(kind, _)| *kind == service.kind)?;
+                if !plain_host(&service.host) {
+                    tracing::debug!(
+                        "ignored {} with the host name {:?}",
+                        service.name,
+                        service.host
+                    );
+                    return None;
+                }
                 let path = service.value("path").unwrap_or_default();
                 Some(Nearby {
-                    url: url_of(scheme, &format!("{}{path}", service.host), service.port),
+                    url: url_of(scheme, &service.host, service.port, &path),
                     name: service.name,
                 })
             })

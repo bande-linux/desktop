@@ -29,8 +29,9 @@ change applies at the next start of each program.
 **Dates and times** (`bande-datetime`). `DateFormats::from_env` formats for the first locale in
 `LC_ALL`, `LC_TIME`, `LANG`, with the Time format chosen in Settings ▸ Language & Time
 (`clock-format`: `automatic`, `24-hour` or `12-hour`), read once per program from
-`org.bande.Config` without starting it. The taskbar clock and the lock screen follow a change at
-once; other programs at their next start.
+`org.bande.Config` without starting it. The taskbar clock, the lock screen and Settings follow a
+change at once; other programs at their next start. The login screen, which has no user yet, uses
+`DateFormats::for_language`, the locale's own clock.
 
 **Checks.** `bande-l10n-tool check ci/l10n-complete` (in `ci/release/lint.sh`) fails on a broken
 `.po`, an entry the code no longer has, a placeholder the English lacks, a wrong number of plural

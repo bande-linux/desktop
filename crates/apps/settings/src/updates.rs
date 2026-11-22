@@ -4,7 +4,6 @@ use crate::pages::{Widgets, boxed};
 use crate::software::{Need, Package, Reboot, SoftwareCommand, SoftwareState, Stage, restart_hint};
 use crate::view::{Anchor, Intent, SettingsView, intent};
 use crate::widgets::{Row, Text, Tone};
-use bande_datetime::DateFormats;
 use bande_fs::format_size;
 use bande_packages::Class;
 use bande_settings_panes::SettingId;
@@ -166,7 +165,9 @@ impl SettingsView {
 
     fn last_check_row(&mut self) -> Option<Box<dyn Widget>> {
         let checked = Timestamp::from_second(self.software_checked?).ok()?;
-        let date = DateFormats::from_env().long_date(&checked.to_zoned(TimeZone::system()));
+        let date = self
+            .date_formats()
+            .long_date(&checked.to_zoned(TimeZone::system()));
         Some(self.status_row(&tr!("Last checked {date}", date = date), None, None))
     }
 

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use bande_printers::{Capabilities, JobInfo, JobOptions, PrinterInfo};
+use bande_printers::{
+    Capabilities, JobInfo, JobOptions, PrinterInfo, ScanCapabilities, ScanOptions, ScannerInfo,
+};
 use zbus::fdo;
 use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
@@ -74,6 +76,25 @@ impl Service {
 
     fn forget(&self, printer: String) {
         self.spool.forget(&printer);
+    }
+
+    fn scanners(&self) -> Vec<ScannerInfo> {
+        self.spool.scanners()
+    }
+
+    async fn scan_capabilities(&self, scanner: String) -> fdo::Result<ScanCapabilities> {
+        let spool = Arc::clone(&self.spool);
+        blocking::unblock(move || spool.scan_capabilities(&scanner))
+            .await
+            .map_err(fdo::Error::Failed)
+    }
+
+    async fn scan(&self, scanner: String, options: ScanOptions) -> fdo::Result<Vec<OwnedFd>> {
+        let spool = Arc::clone(&self.spool);
+        blocking::unblock(move || spool.scan(&scanner, &options))
+            .await
+            .map(|pages| pages.into_iter().map(OwnedFd::from).collect())
+            .map_err(fdo::Error::Failed)
     }
 
     #[zbus(signal)]

@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 use bande_discovery::nearby::{Addresses, Availability, Browser};
 use bande_l10n::tr;
 
+use crate::escl::{self, ScanError, Scanner};
 use crate::link::{Address, is_identity_change, send_document};
-use crate::nearby::{Found, KINDS, printers};
+use crate::nearby::{Found, KINDS, printers, scanners};
 use crate::printer::{
     Payload, RemoteState, abilities, accepted_job, cancel_job, job_state, payload_for,
     print_request, printer_state_reasons,
@@ -20,10 +21,14 @@ use crate::raster::write_document;
 use crate::store::{Known, Pins, Printers, StoredJob, queue_folder};
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
-use bande_printers::{Cups, Error, JobInfo, JobOptions, Kind, PrinterInfo, Result};
+use bande_printers::{
+    Cups, Error, JobInfo, JobOptions, Kind, PrinterInfo, Result, ScanCapabilities, ScanOptions,
+    ScannerInfo,
+};
 use zbus::blocking::Connection;
 
 const CUPS_PREFIX: &str = "cups:";
+const SCANNER_PIN: &str = "scan:";
 const PDF_MAGIC: &[u8] = b"%PDF-";
 const LARGEST_DOCUMENT: u64 = 4 << 30;
 const FOLLOW_EVERY: Duration = Duration::from_secs(5);
@@ -60,6 +65,8 @@ struct Job {
 struct Inner {
     printers: Printers,
     found: HashMap<String, Found>,
+    scanners: HashMap<String, Found>,
+    scanning: usize,
     usb: HashSet<String>,
     watchers: HashSet<String>,
     jobs: Vec<Job>,
@@ -103,6 +110,24 @@ fn keep_unprinted(record: &Path) -> Option<PathBuf> {
             tracing::warn!("cannot keep the document {}: {error}", document.display());
             None
         }
+    }
+}
+
+struct Scanning<'a>(&'a Spool);
+
+impl<'a> Scanning<'a> {
+    fn new(spool: &'a Spool) -> Self {
+        spool.lock().scanning += 1;
+        Self(spool)
+    }
+}
+
+impl Drop for Scanning<'_> {
+    fn drop(&mut self) {
+        let mut inner = self.0.lock();
+        inner.scanning -= 1;
+        drop(inner);
+        self.0.changed.notify_all();
     }
 }
 
@@ -154,7 +179,8 @@ impl Spool {
                 pins: Pins::load(),
                 nearby: Browser::new(&KINDS, Addresses::Ipv4, move || {
                     if let Some(spool) = spool.upgrade() {
-                        spool.found(printers(spool.nearby.services()));
+                        let services = spool.nearby.services();
+                        spool.found(printers(&services), scanners(&services));
                     }
                 }),
                 browsing: Mutex::new(false),
@@ -187,7 +213,7 @@ impl Spool {
     pub fn wait_until_idle(&self) {
         let mut inner = self.lock();
         loop {
-            let busy = !inner.watchers.is_empty() || !inner.jobs.is_empty();
+            let busy = !inner.watchers.is_empty() || !inner.jobs.is_empty() || inner.scanning > 0;
             if busy {
                 inner.last_busy = None;
                 inner = self
@@ -279,8 +305,12 @@ impl Spool {
         self.touched();
     }
 
-    fn found(&self, found: Vec<Found>) {
+    fn found(&self, found: Vec<Found>, scanners: Vec<Found>) {
         let mut inner = self.lock();
+        inner.scanners = scanners
+            .into_iter()
+            .map(|scanner| (scanner.id(), scanner))
+            .collect();
         let before = inner.printers.known.clone();
         inner.found.clear();
         for printer in found {
@@ -403,7 +433,81 @@ impl Spool {
         inner.printers.save();
         drop(inner);
         self.pins.forget(printer);
+        self.pins.forget(&format!("{SCANNER_PIN}{printer}"));
         self.touched();
+    }
+
+    pub fn scanners(&self) -> Vec<ScannerInfo> {
+        let inner = self.lock();
+        let mut list: Vec<ScannerInfo> = inner
+            .scanners
+            .iter()
+            .map(|(id, found)| ScannerInfo {
+                id: id.clone(),
+                name: inner
+                    .printers
+                    .known
+                    .get(id)
+                    .map_or_else(|| found.instance.clone(), |known| known.name.clone()),
+                model: found.model.clone(),
+                location: found.location.clone(),
+            })
+            .collect();
+        list.sort_by_key(|scanner| scanner.name.to_lowercase());
+        list
+    }
+
+    fn reach_scanner(
+        &self,
+        scanner: &str,
+    ) -> std::result::Result<(Scanner, Address, Pins), ScanError> {
+        let found = self
+            .lock()
+            .scanners
+            .get(scanner)
+            .cloned()
+            .ok_or(ScanError::Unreachable)?;
+        let pins = self.pins.of(&format!("{SCANNER_PIN}{scanner}"));
+        let mut last = ScanError::Unreachable;
+        for uri in [&found.secure, &found.plain].into_iter().flatten() {
+            let Some(address) = Address::parse(uri) else {
+                continue;
+            };
+            match escl::capabilities(&address, &pins) {
+                Ok(abilities) => return Ok((abilities, address, pins)),
+                Err(ScanError::IdentityChanged) => return Err(ScanError::IdentityChanged),
+                Err(error) => last = error,
+            }
+        }
+        Err(last)
+    }
+
+    pub fn scan_capabilities(
+        &self,
+        scanner: &str,
+    ) -> std::result::Result<ScanCapabilities, String> {
+        let _scanning = Scanning::new(self);
+        self.reach_scanner(scanner)
+            .map(|(abilities, ..)| abilities.public())
+            .map_err(|error| error.sentence())
+    }
+
+    pub fn scan(
+        &self,
+        scanner: &str,
+        options: &ScanOptions,
+    ) -> std::result::Result<Vec<OwnedFd>, String> {
+        let _scanning = Scanning::new(self);
+        let (abilities, address, pins) = self
+            .reach_scanner(scanner)
+            .map_err(|error| error.sentence())?;
+        let mut pages = Vec::new();
+        escl::scan(&address, &pins, &abilities, options, &mut |page| {
+            pages.push(escl::clean_page(&page, options.color)?);
+            Ok(())
+        })
+        .map_err(|error| error.sentence())?;
+        Ok(pages)
     }
 
     pub fn add_address(&self, address: &str) -> Result<String> {

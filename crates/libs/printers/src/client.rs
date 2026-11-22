@@ -74,6 +74,28 @@ impl JobOptions {
 const LANDSCAPE: i32 = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ScannerInfo {
+    pub id: String,
+    pub name: String,
+    pub model: String,
+    pub location: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, Type)]
+pub struct ScanCapabilities {
+    pub sources: Vec<String>,
+    pub color: bool,
+    pub resolutions: Vec<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ScanOptions {
+    pub source: String,
+    pub color: bool,
+    pub resolution: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct JobInfo {
     pub id: u32,
     pub title: String,
@@ -138,6 +160,19 @@ impl<'a> PrintClient<'a> {
 
     pub fn forget(&self, printer: &str) -> zbus::Result<()> {
         self.proxy.call("Forget", &(printer,))
+    }
+
+    pub fn scanners(&self) -> zbus::Result<Vec<ScannerInfo>> {
+        self.proxy.call("Scanners", &())
+    }
+
+    pub fn scan_capabilities(&self, scanner: &str) -> zbus::Result<ScanCapabilities> {
+        self.proxy.call("ScanCapabilities", &(scanner,))
+    }
+
+    pub fn scan(&self, scanner: &str, options: &ScanOptions) -> zbus::Result<Vec<OwnedFd>> {
+        let pages: Vec<zbus::zvariant::OwnedFd> = self.proxy.call("Scan", &(scanner, options))?;
+        Ok(pages.into_iter().map(OwnedFd::from).collect())
     }
 
     pub fn changes(&self) -> zbus::Result<zbus::blocking::proxy::SignalIterator<'a>> {

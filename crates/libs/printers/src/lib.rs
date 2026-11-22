@@ -8,6 +8,7 @@ use std::process::Command;
 
 pub use client::{
     BUS_NAME, Capabilities, JobInfo, JobOptions, Kind, OBJECT_PATH, PrintClient, PrinterInfo,
+    ScanCapabilities, ScanOptions, ScannerInfo,
 };
 pub use ipp::{Error, Result};
 pub use mechanism::{Mechanism, mechanism_available};

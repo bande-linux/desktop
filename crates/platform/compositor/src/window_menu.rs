@@ -412,6 +412,7 @@ impl State {
         {
             app.kept_on_top(&toplevel, keep);
         }
+        self.needs_redraw = true;
         self.refocus_pointer();
     }
 

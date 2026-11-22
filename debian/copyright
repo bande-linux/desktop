@@ -5,10 +5,9 @@ Files-Excluded: vendor/libloading-*/tests/*.dll
  vendor/vcpkg-*/test-data
  vendor/sevenz-rust2-*/tests/resources/*.exe
  vendor/pdf-writer-*/examples/sRGB_v4.icc
- vendor/libheif-sys-*/vendor
-Comment: The vendored crates come without their prebuilt Windows test programs,
- pdf-writer's example ICC profile, whose licence does not allow modification, and
- libheif-sys's copy of libheif, since Debian's libheif is linked; none is built.
+Comment: The vendored crates come without their prebuilt Windows test programs and
+ pdf-writer's example ICC profile, whose licence does not allow modification; none
+ is built.
 
 Files: *
 Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>
@@ -57,6 +56,11 @@ Copyright: 2018 Hermit Dave
 License: CC-BY-SA-4.0
 Comment: The 30,000 most frequent words of FrequencyWords
  (https://github.com/hermitdave/FrequencyWords), derived from OpenSubtitles.
+
+Files: crates/apps/viewer/tests/data/camera.heic
+Copyright: 2016-2023 KAMADA Ken'ichi
+License: BSD-2-Clause
+Comment: kamadak-exif's tests/exif.heic, a 64 × 64 HEIF photo with camera data.
 
 Files: crates/libs/vm/data/ubuntu.gpg crates/libs/vm/data/fedora.gpg
 Copyright: none
@@ -682,10 +686,6 @@ Copyright: maik klein <maikklein@googlemail.com>
  Maja Kądziołka <maya@compilercrim.es>
 License: MIT or Apache-2.0
 
-Files: vendor/enumn-0.1.14/*
-Copyright: David Tolnay <dtolnay@gmail.com>
-License: MIT or Apache-2.0
-
 Files: vendor/equivalent-1.0.3/*
 Copyright: the equivalent authors
 License: Apache-2.0 or MIT
@@ -800,10 +800,6 @@ License: MIT
 Files: vendor/fontique-0.12.0/*
 Copyright: the fontique authors
 License: Apache-2.0 or MIT
-
-Files: vendor/four-cc-0.4.0/*
-Copyright: David Holroyd <dave@badgers-in-foil.co.uk>
-License: MIT or Apache-2.0
 
 Files: vendor/fs2-0.4.3/*
 Copyright: Dan Burkert <dan@danburkert.com>
@@ -1409,14 +1405,6 @@ License: bzip2-1.0.6
 Files: vendor/libc-0.2.186/*
 Copyright: The Rust Project Developers
 License: MIT or Apache-2.0
-
-Files: vendor/libheif-rs-2.7.0/*
-Copyright: Kirill Kuzminykh <cykooz@gmail.com>
-License: MIT
-
-Files: vendor/libheif-sys-5.3.2+1.23.7/*
-Copyright: Kirill Kuzminykh <cykooz@gmail.com>
-License: MIT
 
 Files: vendor/libloading-0.8.9/*
 Copyright: Simonas Kazlauskas <libloading@kazlauskas.me>

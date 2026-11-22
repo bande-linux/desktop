@@ -87,11 +87,46 @@ fn a_folder_steps_through_pictures_and_hostile_files_never_panic_hang_or_wake() 
     until(&mut view, "a.png, 64 × 48");
 }
 
+fn use_viewer_as_worker() {
+    // SAFETY: the tests of this binary read the environment only through std::env, which
+    // serialises with set_var, and all set the same value.
+    unsafe { std::env::set_var("BANDE_PREVIEW_WORKER", env!("CARGO_BIN_EXE_bande-viewer")) };
+}
+
+#[test]
+fn heif_avif_and_svg_text_decode_in_the_confined_picture_worker() {
+    use_viewer_as_worker();
+    let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+    let mut view = FileView::new(Appearance::default(), vec![data.join("camera.heic")]);
+    until(&mut view, "camera.heic, 64 × 64");
+    view.go(true);
+    until(&mut view, "small.avif, 32 × 24");
+
+    let folder = tempfile::tempdir().unwrap();
+    let svg = folder.path().join("text.svg");
+    std::fs::write(
+        &svg,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60"><text x="10" y="40" font-size="32">Bande</text></svg>"#,
+    )
+    .unwrap();
+    let decoded = bande_content::decode_confined(&svg, 512).unwrap();
+    let bande_content::Pixels::Still(levels) = decoded.pixels else {
+        panic!("an SVG is a still picture");
+    };
+    assert!(
+        levels[0]
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|pixel| pixel[3] > 0),
+        "the text is drawn"
+    );
+}
+
 #[test]
 fn a_pdf_renders_in_its_own_process_finds_text_and_lists_its_outline() {
-    // SAFETY: the other test of this binary reads the environment only through std::env, which
-    // serialises with set_var.
-    unsafe { std::env::set_var("BANDE_PREVIEW_WORKER", env!("CARGO_BIN_EXE_bande-viewer")) };
+    use_viewer_as_worker();
     let folder = tempfile::tempdir().unwrap();
     write_pdf(&folder.path().join("doc.pdf"));
     std::fs::write(folder.path().join("bad.pdf"), "%PDF-1.7\n1 0 obj <<").unwrap();

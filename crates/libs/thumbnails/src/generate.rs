@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_content::pdf::worker::first_page;
-use bande_content::{Pixels, confine, open, run_worker};
+use bande_content::{Kind, Pixels, confine, decode_confined, open, run_worker};
 use bande_xdg::{find_executable, wait_for_exit};
 use image::DynamicImage;
 
@@ -226,7 +226,11 @@ fn fit(image: DynamicImage, size: ThumbnailSize) -> Picture {
 
 fn picture(path: &Path, size: ThumbnailSize) -> Option<Picture> {
     let (kind, bytes) = open(path).ok()?;
-    let decoded = bande_content::decode(&bytes, kind).ok()?;
+    let decoded = match kind {
+        Kind::Heif | Kind::Avif => decode_confined(path, 2 * size.pixels()),
+        _ => bande_content::decode(&bytes, kind),
+    }
+    .ok()?;
     let (width, height, rgba) = match decoded.pixels {
         Pixels::Still(mut levels) => {
             let fitting = levels

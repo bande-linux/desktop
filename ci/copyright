@@ -5,10 +5,9 @@ Files-Excluded: vendor/libloading-*/tests/*.dll
  vendor/vcpkg-*/test-data
  vendor/sevenz-rust2-*/tests/resources/*.exe
  vendor/pdf-writer-*/examples/sRGB_v4.icc
- vendor/libheif-sys-*/vendor
-Comment: The vendored crates come without their prebuilt Windows test programs,
- pdf-writer's example ICC profile, whose licence does not allow modification, and
- libheif-sys's copy of libheif, since Debian's libheif is linked; none is built.
+Comment: The vendored crates come without their prebuilt Windows test programs and
+ pdf-writer's example ICC profile, whose licence does not allow modification; none
+ is built.
 
 Files: *
 Copyright: 2026 Mikael Hug <mikaelhug@gmail.com>

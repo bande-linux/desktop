@@ -1,6 +1,7 @@
 mod confined;
 mod decode;
 mod facts;
+mod heif;
 mod import;
 pub mod pdf;
 mod sandbox;

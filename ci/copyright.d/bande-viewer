@@ -1,0 +1,4 @@
+Files: crates/apps/viewer/tests/data/camera.heic
+Copyright: 2016-2023 KAMADA Ken'ichi
+License: BSD-2-Clause
+Comment: kamadak-exif's tests/exif.heic, a 64 × 64 HEIF photo with camera data.

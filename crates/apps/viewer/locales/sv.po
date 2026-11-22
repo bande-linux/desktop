@@ -256,6 +256,9 @@ msgstr "Filen är för stor för att öppnas."
 msgid "The file took too long to open."
 msgstr "Det tog för lång tid att öppna filen."
 
+msgid "Opening this picture needs the libheif1 package."
+msgstr "Paketet libheif1 behövs för att öppna den här bilden."
+
 msgid "The image is too large to open ({width} × {height} pixels)."
 msgstr "Bilden är för stor för att öppnas ({width} × {height} pixlar)."
 

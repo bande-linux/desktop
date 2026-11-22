@@ -28,7 +28,7 @@ use bande_toolkit::{
 use bande_xdg::{Apps, config_dirs, data_dirs, replace_file};
 
 use crate::notices::{Announcer, Clicked, Notices};
-use crate::picker::{MAX_ATTACHMENT, Picked, Picker};
+use crate::picker::{MAX_ATTACHMENT, Picked, Picker, Refusal};
 
 const ATTACH_FLAG: &str = "--attach";
 const SHARED_FILES: u64 = u64::MAX;
@@ -352,10 +352,10 @@ impl Mail {
                         .unwrap_or_else(|| "attachment".to_owned());
                     attachments.push(Attachment { name, mime, data });
                 }
-                Picked::TooLarge(path) => refused.push(path),
+                Picked::Refused(path, reason) => refused.push((path, reason)),
             }
         }
-        let refusal = refused.first().map(|path| refusal(path));
+        let refusal = refused.first().map(|(path, reason)| refusal(path, *reason));
         if token == SHARED_FILES {
             let before: Vec<WindowId> = cx.windows().collect();
             if let Some(view) = main_view(cx, self.main, &mut self.parked) {
@@ -836,14 +836,21 @@ fn main() -> ExitCode {
     bande_app::run::<Mail>(&INFO)
 }
 
-fn refusal(path: &Path) -> String {
+fn refusal(path: &Path, reason: Refusal) -> String {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    tr!(
-        "{name} is larger than {limit} and was not attached.",
-        name = name,
-        limit = bande_fs::format_size(MAX_ATTACHMENT)
-    )
+    match reason {
+        Refusal::TooLarge => tr!(
+            "{name} is larger than {limit} and was not attached.",
+            name = name,
+            limit = bande_fs::format_size(MAX_ATTACHMENT)
+        ),
+        Refusal::Folder => tr!("{name} is a folder and was not attached.", name = name),
+        Refusal::Unreadable => tr!(
+            "{name} could not be read and was not attached.",
+            name = name
+        ),
+    }
 }

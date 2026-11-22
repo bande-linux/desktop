@@ -344,6 +344,9 @@ pub(crate) fn reason(shown: &Shown) -> Option<String> {
         Shown::Failed(Failure::FileTooLarge) => Some(tr!("Too large to preview")),
         Shown::Failed(Failure::Damaged) => Some(tr!("This image is damaged")),
         Shown::Failed(Failure::TimedOut) => Some(tr!("Took too long to preview")),
+        Shown::Failed(Failure::MissingDecoder) => {
+            Some(tr!("Previewing this needs the libheif1 package"))
+        }
         Shown::Failed(Failure::NotSupported) => Some(tr!("This kind of image can’t be previewed")),
         Shown::Failed(Failure::Unreadable) => Some(tr!("This file can’t be read")),
         Shown::Media(None) => Some(tr!("This can’t be played here")),

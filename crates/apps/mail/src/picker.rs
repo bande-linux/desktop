@@ -11,7 +11,14 @@ pub const MAX_ATTACHMENT: u64 = 25 << 20;
 
 pub enum Picked {
     File(PathBuf, Vec<u8>),
-    TooLarge(PathBuf),
+    Refused(PathBuf, Refusal),
+}
+
+#[derive(Clone, Copy)]
+pub enum Refusal {
+    TooLarge,
+    Folder,
+    Unreadable,
 }
 
 pub struct Picker {
@@ -53,27 +60,33 @@ impl Picker {
             .spawn(move || {
                 let picked = paths()
                     .into_iter()
-                    .filter_map(|path| {
-                        let metadata = std::fs::metadata(&path)
-                            .inspect_err(|error| {
-                                tracing::warn!("cannot read {}: {error}", path.display())
-                            })
-                            .ok()?;
+                    .map(|path| {
+                        let metadata = match std::fs::metadata(&path) {
+                            Ok(metadata) => metadata,
+                            Err(error) => {
+                                tracing::warn!("cannot read {}: {error}", path.display());
+                                return Picked::Refused(path, Refusal::Unreadable);
+                            }
+                        };
+                        if metadata.is_dir() {
+                            return Picked::Refused(path, Refusal::Folder);
+                        }
                         if !metadata.is_file() {
-                            tracing::warn!("{} is not a file to attach", path.display());
-                            return None;
+                            return Picked::Refused(path, Refusal::Unreadable);
                         }
                         if metadata.len() > MAX_ATTACHMENT {
-                            return Some(Picked::TooLarge(path));
+                            return Picked::Refused(path, Refusal::TooLarge);
                         }
                         let mut data = Vec::new();
-                        std::fs::File::open(&path)
+                        match std::fs::File::open(&path)
                             .and_then(|mut file| file.read_to_end(&mut data))
-                            .inspect_err(|error| {
-                                tracing::warn!("cannot read {}: {error}", path.display())
-                            })
-                            .ok()?;
-                        Some(Picked::File(path, data))
+                        {
+                            Ok(_) => Picked::File(path, data),
+                            Err(error) => {
+                                tracing::warn!("cannot read {}: {error}", path.display());
+                                Picked::Refused(path, Refusal::Unreadable)
+                            }
+                        }
                     })
                     .collect();
                 if sender.send((token, picked)).is_ok() {

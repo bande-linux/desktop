@@ -1823,8 +1823,17 @@ msgstr "Det gick inte att glömma enheten."
 msgid "Couldn't pair with this device."
 msgstr "Det gick inte att para ihop med enheten."
 
+msgid "Screen Sharing password"
+msgstr "Lösenord för skärmdelning"
+
 msgid "Choose a folder to share"
 msgstr "Välj en mapp att dela"
+
+msgid "Use at least {count} characters for the Screen Sharing password."
+msgstr "Använd minst {count} tecken i lösenordet för skärmdelning."
+
+msgid "Set a Screen Sharing password first."
+msgstr "Välj först ett lösenord för skärmdelning."
 
 msgid "Others with an account on this computer can sign in with SSH"
 msgstr "Andra med ett konto på den här datorn kan logga in med SSH"
@@ -1849,6 +1858,45 @@ msgstr "Andra använder ditt kontonamn och det här lösenordet för att ansluta
 
 msgid "Shared folders"
 msgstr "Delade mappar"
+
+msgid "Lets others on the local network see and control this screen"
+msgstr "Låter andra på det lokala nätverket se och styra den här skärmen"
+
+msgid "Screen Sharing"
+msgstr "Skärmdelning"
+
+msgid "VNC viewers on the local network connect to vnc://{address}"
+msgstr "VNC-visare på det lokala nätverket ansluter till vnc://{address}"
+
+msgid "Others on the local network can see and control this screen with a VNC viewer"
+msgstr "Andra på det lokala nätverket kan se och styra den här skärmen med en VNC-visare"
+
+msgid "Screen Sharing couldn’t start. Another program may be using port 5900."
+msgstr "Skärmdelningen kunde inte starta. Ett annat program kanske använder port 5900."
+
+msgid "Viewers type this password. Press Return to change it."
+msgstr "Visare skriver det här lösenordet. Tryck på Retur för att ändra det."
+
+msgid "Choose a password of at least {count} characters and press Return."
+msgstr "Välj ett lösenord på minst {count} tecken och tryck på Retur."
+
+msgid "Ask before someone connects"
+msgstr "Fråga innan någon ansluter"
+
+msgid "A viewer that knows the password waits until you allow it"
+msgstr "En visare som kan lösenordet väntar tills du tillåter den"
+
+msgid "Allow older viewers"
+msgstr "Tillåt äldre visare"
+
+msgid "Viewers without encryption check only the first 8 characters of the password, and what is on the screen travels unencrypted. Use it only on a network you trust."
+msgstr "Visare utan kryptering kontrollerar bara de första 8 tecknen i lösenordet, och det som visas på skärmen skickas okrypterat. Använd det bara på ett nätverk du litar på."
+
+msgid "Certificate fingerprint"
+msgstr "Certifikatets fingeravtryck"
+
+msgid "A viewer shows it the first time it connects: {fingerprint}"
+msgstr "En visare visar det första gången den ansluter: {fingerprint}"
 
 msgid "Other computers won’t see this one nearby and must connect by its address. Installing Avahi lets it announce itself."
 msgstr "Andra datorer ser inte den här i närheten och måste ansluta med dess adress. Installera Avahi så annonserar den sig."

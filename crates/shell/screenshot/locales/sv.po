@@ -166,6 +166,9 @@ msgstr "Bande skärmdelning"
 msgid "Sharing your screen. Click to stop."
 msgstr "Din skärm delas. Klicka för att sluta."
 
+msgid "Someone is viewing your screen. Click to stop."
+msgstr "Någon tittar på din skärm. Klicka för att sluta."
+
 msgid "Open"
 msgstr "Öppna"
 

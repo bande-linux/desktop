@@ -4,11 +4,16 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 
 use bande_app::choose_folder;
+use bande_keyring::Keyring;
 use bande_l10n::tr;
 use bande_packages::Client;
+use bande_screen_sharing::setup::{
+    self as screen_sharing, KEYRING_APPLICATION, PASSWORD_KEY, SHORTEST_PASSWORD,
+};
 use bande_toolkit::ui::{Button, SecureField, Toggle, Widget};
 use zbus::blocking::Connection;
 
+use crate::client::ConfigProxyBlocking;
 use crate::follow::{Update, Updates, spawn};
 use crate::pages::{FIELD_SIZE, Widgets, boxed, submit};
 use crate::view::{Anchor, Intent, SettingsView, intent};
@@ -17,6 +22,8 @@ use crate::widgets::{Row, Text, Tone};
 const HELPER: &str = "/usr/libexec/bande-sharing-helper";
 const PKEXEC: &str = "/usr/bin/pkexec";
 const SAMBA: &str = "samba";
+const SCREEN_SHARING: &str = "bande-screen-sharing";
+const SYSTEMCTL: &str = "/usr/bin/systemctl";
 const AVAHI: &str = "avahi-daemon";
 const AVAHI_DAEMON: &str = "/usr/sbin/avahi-daemon";
 const SMBD: &str = "/usr/sbin/smbd";
@@ -30,6 +37,24 @@ pub struct Share {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScreenSharing {
+    pub on: bool,
+    pub running: bool,
+    pub password_set: bool,
+    pub ask: bool,
+    pub older_viewers: bool,
+    pub fingerprint: Option<String>,
+    pub addresses: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Problem {
+    Failed,
+    ShortPassword,
+    NoPassword,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SharingState {
     pub samba_installed: bool,
     pub ssh_installed: bool,
@@ -38,7 +63,8 @@ pub struct SharingState {
     pub folders_allowed: bool,
     pub remote_login: bool,
     pub shares: Vec<Share>,
-    pub failed: bool,
+    pub screen: Option<ScreenSharing>,
+    pub problem: Option<Problem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,14 +77,64 @@ pub enum SharingCommand {
     AddFolder,
     Remove(String),
     Password(String),
+    InstallScreenSharing,
+    ScreenSharing(bool),
+    ScreenPassword(String),
+    AskBeforeViewing(bool),
+    OlderViewers(bool),
 }
 
-fn service_active(unit: &str) -> bool {
-    Command::new("/usr/bin/systemctl")
-        .args(["is-active", "--quiet", unit])
+fn systemctl(arguments: &[&str]) -> bool {
+    Command::new(SYSTEMCTL)
+        .args(arguments)
         .stdin(Stdio::null())
         .status()
         .is_ok_and(|status| status.success())
+}
+
+fn service_active(unit: &str) -> bool {
+    systemctl(&["is-active", "--quiet", unit])
+}
+
+fn screen_password() -> Option<String> {
+    Keyring::open(KEYRING_APPLICATION)
+        .and_then(|keyring| keyring.password(&PASSWORD_KEY))
+        .inspect_err(|error| tracing::warn!("cannot read the Screen Sharing password: {error}"))
+        .ok()
+        .flatten()
+        .filter(|password| !password.is_empty())
+}
+
+fn read_screen_sharing(session: Option<&Connection>) -> Option<ScreenSharing> {
+    if !Path::new(screen_sharing::PROGRAM).exists() {
+        return None;
+    }
+    let config = session.and_then(|session| {
+        ConfigProxyBlocking::new(session)
+            .inspect_err(|error| tracing::warn!("cannot reach the settings service: {error}"))
+            .ok()
+    });
+    let fingerprint = screen_sharing::certificate_file()
+        .and_then(|file| std::fs::read(file).ok())
+        .map(|certificate| screen_sharing::fingerprint(&certificate));
+    Some(ScreenSharing {
+        on: systemctl(&["--user", "is-enabled", "--quiet", screen_sharing::UNIT]),
+        running: systemctl(&["--user", "is-active", "--quiet", screen_sharing::UNIT]),
+        password_set: screen_password().is_some(),
+        ask: config
+            .as_ref()
+            .and_then(|config| config.screen_sharing_ask().ok())
+            .unwrap_or(true),
+        older_viewers: config
+            .as_ref()
+            .and_then(|config| config.screen_sharing_older_viewers().ok())
+            .unwrap_or(false),
+        fingerprint,
+        addresses: bande_screen_sharing::network::addresses()
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+    })
 }
 
 fn parse_shares(listing: &str) -> Vec<Share> {
@@ -123,7 +199,7 @@ fn folders_allowed() -> bool {
     }
 }
 
-fn read_state() -> SharingState {
+fn read_state(session: Option<&Connection>) -> SharingState {
     let samba_installed = Path::new(SMBD).exists();
     let file_sharing = samba_installed && service_active("smbd.service");
     let folders_allowed = file_sharing && folders_allowed();
@@ -138,7 +214,8 @@ fn read_state() -> SharingState {
             true => read_shares(),
             false => Vec::new(),
         },
-        failed: false,
+        screen: read_screen_sharing(session),
+        problem: None,
     }
 }
 
@@ -199,9 +276,85 @@ fn share_name_for(path: &Path, taken: &[Share]) -> String {
     name
 }
 
-fn run(command: SharingCommand, system: Option<&Connection>, session: Option<&Connection>) -> bool {
+fn turn_screen_sharing(on: bool) -> Result<(), Problem> {
+    if on && screen_password().is_none() {
+        return Err(Problem::NoPassword);
+    }
+    let change = match on {
+        true => "enable",
+        false => "disable",
+    };
+    match systemctl(&["--user", change, "--now", screen_sharing::UNIT]) {
+        true => Ok(()),
+        false => Err(Problem::Failed),
+    }
+}
+
+fn save_screen_password(password: &str) -> Result<(), Problem> {
+    if password.chars().count() < SHORTEST_PASSWORD {
+        return Err(Problem::ShortPassword);
+    }
+    Keyring::open(KEYRING_APPLICATION)
+        .and_then(|keyring| keyring.save(&PASSWORD_KEY, &tr!("Screen Sharing password"), password))
+        .map_err(|error| {
+            tracing::warn!("cannot keep the Screen Sharing password: {error}");
+            Problem::Failed
+        })
+}
+
+fn configure(
+    session: Option<&Connection>,
+    change: impl FnOnce(&ConfigProxyBlocking<'_>) -> zbus::Result<()>,
+) -> Result<(), Problem> {
+    session
+        .ok_or(Problem::Failed)
+        .and_then(|session| ConfigProxyBlocking::new(session).map_err(|_| Problem::Failed))
+        .and_then(|config| {
+            change(&config).map_err(|error| {
+                tracing::warn!("cannot change the Screen Sharing settings: {error}");
+                Problem::Failed
+            })
+        })
+}
+
+fn worked(done: bool) -> Result<(), Problem> {
+    match done {
+        true => Ok(()),
+        false => Err(Problem::Failed),
+    }
+}
+
+fn run(
+    command: SharingCommand,
+    system: Option<&Connection>,
+    session: Option<&Connection>,
+) -> Result<(), Problem> {
     match command {
-        SharingCommand::Read => true,
+        SharingCommand::InstallScreenSharing => worked(install(system, SCREEN_SHARING)),
+        SharingCommand::ScreenSharing(on) => turn_screen_sharing(on),
+        SharingCommand::ScreenPassword(password) => save_screen_password(&password),
+        SharingCommand::AskBeforeViewing(ask) => {
+            configure(session, |config| config.set_screen_sharing_ask(ask))
+        }
+        SharingCommand::OlderViewers(allowed) => configure(session, |config| {
+            config.set_screen_sharing_older_viewers(allowed)
+        }),
+        command => worked(run_file_sharing(command, system, session)),
+    }
+}
+
+fn run_file_sharing(
+    command: SharingCommand,
+    system: Option<&Connection>,
+    session: Option<&Connection>,
+) -> bool {
+    match command {
+        SharingCommand::Read
+        | SharingCommand::InstallScreenSharing
+        | SharingCommand::ScreenSharing(_)
+        | SharingCommand::ScreenPassword(_)
+        | SharingCommand::AskBeforeViewing(_)
+        | SharingCommand::OlderViewers(_) => true,
         SharingCommand::FileSharing(on) => helper(
             &[
                 "file-sharing",
@@ -261,10 +414,10 @@ pub fn follow_sharing(
     let (sender, receiver) = mpsc::channel();
     spawn("sharing", move || {
         for command in receiver {
-            let worked = run(command, system.as_ref(), session.as_ref());
+            let problem = run(command, system.as_ref(), session.as_ref()).err();
             let state = SharingState {
-                failed: !worked,
-                ..read_state()
+                problem,
+                ..read_state(session.as_ref())
             };
             if !updates.send(Update::Sharing(state)) {
                 return;
@@ -280,10 +433,15 @@ impl SettingsView {
             return Vec::new();
         };
         let mut rows = Vec::new();
-        if state.failed {
-            rows.push(crate::pages::muted_row(&tr!(
-                "That change didn’t go through."
-            )));
+        if let Some(problem) = state.problem {
+            rows.push(crate::pages::muted_row(&match problem {
+                Problem::Failed => tr!("That change didn’t go through."),
+                Problem::ShortPassword => tr!(
+                    "Use at least {count} characters for the Screen Sharing password.",
+                    count = SHORTEST_PASSWORD
+                ),
+                Problem::NoPassword => tr!("Set a Screen Sharing password first."),
+            }));
         }
         if state.ssh_installed {
             let mut change = intent(&self.intents, Intent::Sharing);
@@ -303,6 +461,7 @@ impl SettingsView {
             );
             rows.push(self.item_row("remote-login".to_owned(), row));
         }
+        rows.extend(self.screen_sharing_rows(&state));
         if !state.samba_installed {
             let mut install = intent(&self.intents, Intent::Sharing);
             let mut button = Button::new(&tr!("Install"), move || {
@@ -385,6 +544,146 @@ impl SettingsView {
             Text::new(&tr!("Shared folders"), Tone::Primary),
             Some(boxed(button)),
         )));
+        rows
+    }
+
+    fn screen_sharing_rows(&mut self, state: &SharingState) -> Widgets {
+        let Some(screen) = &state.screen else {
+            let mut install = intent(&self.intents, Intent::Sharing);
+            let mut button = Button::new(&tr!("Install"), move || {
+                install(SharingCommand::InstallScreenSharing);
+            });
+            button.set_enabled(!self.installing_sharing);
+            let detail = match self.installing_sharing {
+                true => tr!("Installing…"),
+                false => tr!("Lets others on the local network see and control this screen"),
+            };
+            self.anchors.push((
+                Anchor::Item("install-screen-sharing".to_owned()),
+                button.id(),
+            ));
+            return vec![boxed(
+                Row::new(
+                    Text::new(&tr!("Screen Sharing"), Tone::Primary),
+                    Some(boxed(button)),
+                )
+                .detail(Text::new(&detail, Tone::Muted).caption()),
+            )];
+        };
+        let mut rows = Vec::new();
+        let mut change = intent(&self.intents, Intent::Sharing);
+        let toggle = Toggle::new(&tr!("Screen Sharing"), screen.on, move |on| {
+            change(SharingCommand::ScreenSharing(on));
+        });
+        let detail = match (screen.on, screen.addresses.first()) {
+            (true, Some(address)) => tr!(
+                "VNC viewers on the local network connect to vnc://{address}",
+                address = address.clone()
+            ),
+            _ => {
+                tr!("Others on the local network can see and control this screen with a VNC viewer")
+            }
+        };
+        let row = Row::new(
+            Text::new(&tr!("Screen Sharing"), Tone::Primary),
+            Some(boxed(toggle)),
+        )
+        .detail(Text::new(&detail, Tone::Muted).caption());
+        rows.push(self.item_row("screen-sharing".to_owned(), row));
+        if screen.on && !screen.running {
+            rows.push(crate::pages::muted_row(&tr!(
+                "Screen Sharing couldn’t start. Another program may be using port 5900."
+            )));
+        }
+        let field = SecureField::new(
+            &tr!("New password"),
+            FIELD_SIZE,
+            submit(&self.intents, |text| {
+                Intent::Sharing(SharingCommand::ScreenPassword(text))
+            }),
+        );
+        self.anchors.push((
+            Anchor::Item("screen-sharing-password".to_owned()),
+            field.id(),
+        ));
+        let detail = match screen.password_set {
+            true => tr!("Viewers type this password. Press Return to change it."),
+            false => tr!(
+                "Choose a password of at least {count} characters and press Return.",
+                count = SHORTEST_PASSWORD
+            ),
+        };
+        rows.push(boxed(
+            Row::new(
+                Text::new(&tr!("Screen Sharing password"), Tone::Primary),
+                Some(boxed(field)),
+            )
+            .detail(Text::new(&detail, Tone::Muted).caption()),
+        ));
+        if !screen.on {
+            return rows;
+        }
+        let mut change = intent(&self.intents, Intent::Sharing);
+        let toggle = Toggle::new(
+            &tr!("Ask before someone connects"),
+            screen.ask,
+            move |ask| {
+                change(SharingCommand::AskBeforeViewing(ask));
+            },
+        );
+        let row = Row::new(
+            Text::new(&tr!("Ask before someone connects"), Tone::Primary),
+            Some(boxed(toggle)),
+        )
+        .detail(
+            Text::new(
+                &tr!("A viewer that knows the password waits until you allow it"),
+                Tone::Muted,
+            )
+            .caption(),
+        );
+        rows.push(self.item_row("screen-sharing-ask".to_owned(), row));
+        let mut change = intent(&self.intents, Intent::Sharing);
+        let toggle = Toggle::new(
+            &tr!("Allow older viewers"),
+            screen.older_viewers,
+            move |allowed| change(SharingCommand::OlderViewers(allowed)),
+        );
+        let row = Row::new(
+            Text::new(&tr!("Allow older viewers"), Tone::Primary),
+            Some(boxed(toggle)),
+        )
+        .detail(
+            Text::new(
+                &tr!(
+                    "Viewers without encryption check only the first 8 characters of the password, and what is on the screen travels unencrypted. Use it only on a network you trust."
+                ),
+                Tone::Muted,
+            )
+            .caption(),
+        );
+        rows.push(self.item_row("screen-sharing-older".to_owned(), row));
+        if let Some(fingerprint) = &screen.fingerprint {
+            rows.push(boxed(
+                Row::new(
+                    Text::new(&tr!("Certificate fingerprint"), Tone::Primary),
+                    None,
+                )
+                .detail(
+                    Text::new(
+                        &tr!(
+                            "A viewer shows it the first time it connects: {fingerprint}",
+                            fingerprint = fingerprint.clone()
+                        ),
+                        Tone::Muted,
+                    )
+                    .caption(),
+                ),
+            ));
+        }
+        if !state.avahi_installed {
+            rows.push(self.unadvertised_row());
+        }
         rows
     }
 

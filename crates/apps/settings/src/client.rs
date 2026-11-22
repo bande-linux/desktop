@@ -34,6 +34,14 @@ pub trait Config {
     #[zbus(property)]
     fn set_show_previews(&self, shown: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn screen_sharing_ask(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_screen_sharing_ask(&self, ask: bool) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn screen_sharing_older_viewers(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_screen_sharing_older_viewers(&self, allowed: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn lock_message(&self) -> zbus::Result<String>;
     #[zbus(property)]
     fn set_lock_message(&self, message: &str) -> zbus::Result<()>;

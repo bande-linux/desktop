@@ -237,7 +237,9 @@ impl PaneId {
             Self::Mouse => tr!("Buttons, scrolling and tracking speed"),
             Self::Trackpad => tr!("Tapping, clicking, scrolling, tracking speed and gestures"),
             Self::Printers => tr!("Add printers, pick the default and see what is printing"),
-            Self::Sharing => tr!("Share folders with other computers and allow remote login"),
+            Self::Sharing => {
+                tr!("Share folders and the screen with other computers and allow remote login")
+            }
             Self::Power => tr!("Battery, power mode and what the lid does"),
             Self::LockScreen => tr!("Screen saver, display off, sleep and the password"),
             Self::Users => tr!("Your account and the others on this computer"),
@@ -290,7 +292,9 @@ impl PaneId {
             Self::Trackpad => tr!("touchpad, pointer, cursor, tap, click, scroll"),
             Self::Printers => tr!("print, printer, cups, queue, ipp, airprint"),
             Self::Sharing => {
-                tr!("share, file sharing, samba, smb, remote login, ssh, network folder")
+                tr!(
+                    "share, file sharing, samba, smb, remote login, ssh, network folder, screen sharing, vnc, remote desktop"
+                )
             }
             Self::Power => tr!("energy, battery, low power mode, power saver, lid"),
             Self::LockScreen => tr!(
@@ -1009,7 +1013,9 @@ fn connection_panes() -> Vec<Pane> {
                 vec![list(
                     SettingId::Sharing,
                     tr!("Sharing"),
-                    tr!("file sharing, samba, smb, remote login, ssh, shared folders"),
+                    tr!(
+                        "file sharing, samba, smb, remote login, ssh, shared folders, screen sharing, vnc, remote desktop"
+                    ),
                     List::Sharing,
                 )],
             )],

@@ -172,8 +172,8 @@ msgstr "Tryck, klick, scrollning, pekarhastighet och gester"
 msgid "Add printers, pick the default and see what is printing"
 msgstr "Lägg till skrivare, välj standard och se vad som skrivs ut"
 
-msgid "Share folders with other computers and allow remote login"
-msgstr "Dela mappar med andra datorer och tillåt fjärrinloggning"
+msgid "Share folders and the screen with other computers and allow remote login"
+msgstr "Dela mappar och skärmen med andra datorer och tillåt fjärrinloggning"
 
 msgid "Battery, power mode and what the lid does"
 msgstr "Batteri, strömläge och vad locket gör"
@@ -277,8 +277,8 @@ msgstr "touchpad, pekare, markör, tryck, klicka, scrolla"
 msgid "print, printer, cups, queue, ipp, airprint"
 msgstr "skriv ut, skrivare, cups, kö, ipp, airprint"
 
-msgid "share, file sharing, samba, smb, remote login, ssh, network folder"
-msgstr "dela, fildelning, samba, smb, fjärrinloggning, ssh, nätverksmapp"
+msgid "share, file sharing, samba, smb, remote login, ssh, network folder, screen sharing, vnc, remote desktop"
+msgstr "dela, fildelning, samba, smb, fjärrinloggning, ssh, nätverksmapp, skärmdelning, vnc, fjärrskrivbord"
 
 msgid "energy, battery, low power mode, power saver, lid"
 msgstr "energi, batteri, strömsparläge, energisparläge, lock"
@@ -432,8 +432,8 @@ msgstr "Proxy"
 msgid "http proxy, https proxy, bypass"
 msgstr "http-proxy, https-proxy, förbigå"
 
-msgid "file sharing, samba, smb, remote login, ssh, shared folders"
-msgstr "fildelning, samba, smb, fjärrinloggning, ssh, delade mappar"
+msgid "file sharing, samba, smb, remote login, ssh, shared folders, screen sharing, vnc, remote desktop"
+msgstr "fildelning, samba, smb, fjärrinloggning, ssh, delade mappar, skärmdelning, vnc, fjärrskrivbord"
 
 msgid "dark mode, light mode, night, theme"
 msgstr "mörkt läge, ljust läge, natt, tema"

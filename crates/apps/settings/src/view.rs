@@ -1745,7 +1745,9 @@ impl SettingsView {
                 Intent::Sharing(command) => {
                     self.installing_sharing |= matches!(
                         command,
-                        SharingCommand::InstallSamba | SharingCommand::InstallAvahi
+                        SharingCommand::InstallSamba
+                            | SharingCommand::InstallAvahi
+                            | SharingCommand::InstallScreenSharing
                     );
                     self.commands.push(Command::Sharing(command));
                 }

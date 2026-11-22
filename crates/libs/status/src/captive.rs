@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
 use bande_l10n::tr;
-use bande_network::{JoinOutcome, Network, NetworkManager};
+use bande_network::{JoinOutcome, Network, NetworkManager, Security};
 use bande_notify::Urgency;
 use bande_notify::client::{self, Request};
 use zbus::blocking::{Connection, MessageIterator};
@@ -15,7 +15,10 @@ const NETWORK_MANAGER_PATH: &str = "/org/freedesktop/NetworkManager";
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
 const CONNECTIVITY: &str = "Connectivity";
 const SIGN_IN_ACTION: &str = "default";
+const OFFER_ACTION: &str = "sign-in";
 const NETWORK_ICON: &str = "network-wireless-symbolic";
+
+static OFFERED: Mutex<Option<u32>> = Mutex::new(None);
 
 fn lock(shown: &Mutex<Option<u32>>) -> MutexGuard<'_, Option<u32>> {
     shown.lock().unwrap_or_else(PoisonError::into_inner)
@@ -30,7 +33,7 @@ fn sign_in_summary(network: Option<&str>) -> String {
 
 pub fn join_network(network: &NetworkManager, found: &Network) {
     let reason = match network.join(found, None) {
-        Ok(JoinOutcome::Joined) => return,
+        Ok(JoinOutcome::Joined) => return offer_sign_in(network, found),
         Ok(outcome) => outcome.to_string(),
         Err(error) => error.to_string(),
     };
@@ -54,6 +57,40 @@ pub fn join_network(network: &NetworkManager, found: &Network) {
     });
     if let Err(error) = posted {
         tracing::warn!("cannot tell why joining failed: {error}");
+    }
+}
+
+fn offer_sign_in(network: &NetworkManager, found: &Network) {
+    if found.security != Security::Open {
+        return;
+    }
+    match network.detects_sign_in_pages() {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => tracing::debug!("cannot tell whether sign-in pages are detected: {error}"),
+    }
+    let mut offered = lock(&OFFERED);
+    let summary = tr!("{network} may need you to sign in", network = found.name());
+    let open = tr!("Open Sign-In Page");
+    let posted = Connection::session().and_then(|session| {
+        client::notify(
+            &session,
+            &Request {
+                app_name: &tr!("Network"),
+                replaces_id: offered.unwrap_or(0),
+                app_icon: NETWORK_ICON,
+                summary: &summary,
+                body: &tr!("Open networks in hotels, cafés and airports often show a sign-in page before websites open."),
+                actions: &[(OFFER_ACTION, &open)],
+                urgency: Urgency::Normal,
+                sound: None,
+                desktop_entry: None,
+            },
+        )
+    });
+    match posted {
+        Ok(id) => *offered = Some(id),
+        Err(error) => tracing::warn!("cannot offer the network's sign-in page: {error}"),
     }
 }
 
@@ -153,19 +190,28 @@ fn watch_notices(portal: &Portal, signals: MessageIterator, open: &dyn Fn(&str))
         let body = signal.body();
         match header.member().map(|member| member.as_str()) {
             Some("ActionInvoked") => {
-                if let Ok((id, key)) = body.deserialize::<(u32, String)>()
-                    && key == SIGN_IN_ACTION
+                let Ok((id, key)) = body.deserialize::<(u32, String)>() else {
+                    continue;
+                };
+                if key == SIGN_IN_ACTION
                     && *lock(&portal.shown) == Some(id)
                     && let Ok(Some(page)) = portal.network.sign_in_page()
                 {
                     open(&page);
+                } else if key == OFFER_ACTION && *lock(&OFFERED) == Some(id) {
+                    match portal.network.sign_in_probe() {
+                        Ok(page) => open(&page),
+                        Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
+                    }
                 }
             }
             Some("NotificationClosed") => {
                 if let Ok((id, _)) = body.deserialize::<(u32, u32)>() {
-                    let mut shown = lock(&portal.shown);
-                    if *shown == Some(id) {
-                        *shown = None;
+                    for notice in [&portal.shown, &OFFERED] {
+                        let mut shown = lock(notice);
+                        if *shown == Some(id) {
+                            *shown = None;
+                        }
                     }
                 }
             }

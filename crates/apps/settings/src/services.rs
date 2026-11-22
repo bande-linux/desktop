@@ -21,7 +21,7 @@ use zbus::{MatchRule, Message, message};
 use crate::failure::pane_failed;
 use crate::follow::Update;
 use crate::follow::{Updates, spawn};
-use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, WifiState};
+use crate::state::{Answer, BluetoothState, Joined, NetworkState, Question, SignIn, WifiState};
 
 pub(crate) const SETTLE: Duration = Duration::from_millis(200);
 const METER_INTERVAL: Duration = Duration::from_millis(50);
@@ -302,6 +302,22 @@ pub(crate) fn follow_state(
     });
 }
 
+fn sign_in(network: &NetworkManager, enabled: bool, networks: &[bande_network::Network]) -> SignIn {
+    if !enabled {
+        SignIn::Unneeded
+    } else if matches!(network.sign_in_page(), Ok(Some(_))) {
+        SignIn::Required
+    } else if networks
+        .iter()
+        .any(|found| found.current && found.security == Security::Open)
+        && matches!(network.detects_sign_in_pages(), Ok(false))
+    {
+        SignIn::Offered
+    } else {
+        SignIn::Unneeded
+    }
+}
+
 fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiState>> {
     if !network.has_wifi()? {
         return Ok(None);
@@ -317,12 +333,13 @@ fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiStat
     } else {
         (Vec::new(), WifiLink::default())
     };
+    let sign_in = sign_in(network, enabled, &networks);
     Ok(Some(WifiState {
         enabled,
         networks,
         known: network.known_networks()?,
         link,
-        sign_in: enabled && matches!(network.sign_in_page(), Ok(Some(_))),
+        sign_in,
         outside,
         hotspot: network
             .hotspot()
@@ -534,9 +551,8 @@ pub fn follow_network(system: &Connection, updates: Updates) -> Sender<NetworkCo
                     text!("Couldn't forget this network."),
                     network.forget(&ssid),
                 ),
-                NetworkCommand::SignIn => match network.sign_in_page() {
-                    Ok(Some(page)) => bande_status::captive::open_page(&page),
-                    Ok(None) => {}
+                NetworkCommand::SignIn => match network.sign_in_probe() {
+                    Ok(page) => bande_status::captive::open_page(&page),
                     Err(error) => tracing::warn!("cannot find the sign-in page: {error}"),
                 },
                 NetworkCommand::ChangeConnection(pane, path, change) => {

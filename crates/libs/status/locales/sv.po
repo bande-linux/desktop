@@ -19,6 +19,15 @@ msgstr "Det gick inte att ansluta till {network}"
 msgid "Network"
 msgstr "Nätverk"
 
+msgid "{network} may need you to sign in"
+msgstr "Du kan behöva logga in på {network}"
+
+msgid "Open Sign-In Page"
+msgstr "Öppna inloggningssidan"
+
+msgid "Open networks in hotels, cafés and airports often show a sign-in page before websites open."
+msgstr "Öppna nätverk på hotell, kaféer och flygplatser visar ofta en inloggningssida innan webbplatser öppnas."
+
 msgid "Sign In"
 msgstr "Logga in"
 

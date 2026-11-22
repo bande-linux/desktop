@@ -43,6 +43,7 @@ const ACTIVE_STATE_ACTIVATED: u32 = 2;
 const ACTIVE_STATE_DEACTIVATED: u32 = 4;
 const ACTIVE_REASON_NO_SECRETS: u32 = 9;
 const CONNECTIVITY_PORTAL: u32 = 2;
+const SIGN_IN_PROBE: &str = "http://network-test.debian.org/nm";
 const STATE_CONNECTED_GLOBAL: u32 = 70;
 const ACTIVE_REASON_LOGIN_FAILED: u32 = 10;
 const WIRELESS: &str = "802-11-wireless";
@@ -441,6 +442,22 @@ impl NetworkManager {
             return Ok(None);
         }
         Ok(Some(manager.connectivity_check_uri()?).filter(|uri| !uri.is_empty()))
+    }
+
+    /// Whether NetworkManager checks each network for a sign-in page by itself.
+    pub fn detects_sign_in_pages(&self) -> Result<bool> {
+        let manager = self.manager()?;
+        Ok(manager.connectivity_check_available()? && manager.connectivity_check_enabled()?)
+    }
+
+    /// A plain HTTP page to open when the person asks to sign in; a network with a sign-in page redirects it there.
+    pub fn sign_in_probe(&self) -> Result<String> {
+        let uri = self.manager()?.connectivity_check_uri()?;
+        Ok(if uri.is_empty() {
+            SIGN_IN_PROBE.to_owned()
+        } else {
+            uri
+        })
     }
 
     fn devices_of_type(&self, device_type: u32) -> Result<Vec<OwnedObjectPath>> {

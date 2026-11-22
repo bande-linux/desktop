@@ -1,12 +1,19 @@
 use bande_network::{Hotspot, KnownNetwork, Network, Outside, WifiLink};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignIn {
+    Unneeded,
+    Offered,
+    Required,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WifiState {
     pub enabled: bool,
     pub networks: Vec<Network>,
     pub known: Vec<KnownNetwork>,
     pub link: WifiLink,
-    pub sign_in: bool,
+    pub sign_in: SignIn,
     pub outside: Option<Outside>,
     pub hotspot: Option<Hotspot>,
 }

@@ -12,6 +12,7 @@ use crate::forget::Forget;
 use crate::general::info_row;
 use crate::pages::{FIELD_SIZE, Widgets, boxed, muted_row, submit};
 use crate::services::NetworkCommand;
+use crate::state::SignIn;
 use crate::view::{Anchor, Detail, Intent, SettingsView, intent};
 use crate::widgets::{Caption, Card, HEADER_SYMBOL, Header, Row, Signal, Text, Tone};
 
@@ -95,7 +96,12 @@ impl SettingsView {
     fn known_status(&self, known: &KnownNetwork) -> String {
         let nearby = self.nearby(&known.ssid);
         let current = nearby.is_some_and(|network| network.current);
-        if current && self.wifi.present().is_some_and(|wifi| wifi.sign_in) {
+        if current
+            && self
+                .wifi
+                .present()
+                .is_some_and(|wifi| wifi.sign_in == SignIn::Required)
+        {
             tr!("Connected · sign in to use the internet")
         } else if current {
             tr!("Connected")
@@ -137,12 +143,17 @@ impl SettingsView {
             let name = network.name();
             let nearby = self.nearby(&network.ssid).cloned();
             let mut controls = Vec::new();
-            if wifi.sign_in && nearby.as_ref().is_some_and(|nearby| nearby.current) {
+            if wifi.sign_in != SignIn::Unneeded
+                && nearby.as_ref().is_some_and(|nearby| nearby.current)
+            {
                 let mut sign_in =
                     intent(&self.intents, |()| Intent::Network(NetworkCommand::SignIn));
-                controls.push(boxed(
-                    Button::new(&tr!("Sign In…"), move || sign_in(())).primary(),
-                ));
+                let button = Button::new(&tr!("Sign In…"), move || sign_in(()));
+                controls.push(boxed(if wifi.sign_in == SignIn::Required {
+                    button.primary()
+                } else {
+                    button
+                }));
             }
             controls.push(self.details_button(&network.ssid));
             if let Some(nearby) = &nearby {

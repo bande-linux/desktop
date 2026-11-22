@@ -44,6 +44,12 @@ pub trait NetworkManager {
     fn connectivity_check_uri(&self) -> zbus::Result<String>;
 
     #[zbus(property)]
+    fn connectivity_check_available(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn connectivity_check_enabled(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
     fn state(&self) -> zbus::Result<u32>;
 }
 

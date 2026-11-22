@@ -478,7 +478,7 @@ impl SettingsView {
         let Some(account) = self.accounts.get(self.account) else {
             return;
         };
-        let user_id = account.address().full();
+        let user_id = crate::message::Address::from(account).full();
         let state = Rc::clone(&self.state);
         let alert = Alert::new(
             &tr!("Generate an OpenPGP key for {user}?", user = user_id),
@@ -1374,7 +1374,7 @@ impl SettingsView {
                 Signal::GenerateKey => self.generate_key(),
                 Signal::Generate => {
                     if let Some(account) = self.accounts.get(self.account) {
-                        let user_id = account.address().full();
+                        let user_id = crate::message::Address::from(account).full();
                         self.in_background(move |gnupg| {
                             gnupg.generate(&user_id)?;
                             Ok(tr!("The key was generated."))

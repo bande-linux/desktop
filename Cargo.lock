@@ -1213,35 +1213,53 @@ dependencies = [
  "bande-datetime",
  "bande-discovery",
  "bande-fs",
- "bande-https",
  "bande-inbox",
  "bande-keyring",
  "bande-l10n",
+ "bande-mail-core",
  "bande-notify",
  "bande-search",
  "bande-taskbar-model",
  "bande-toolkit",
  "bande-xdg",
  "cms",
- "data-encoding",
  "html5ever",
  "image",
  "jiff",
  "mailparse",
  "nettle",
  "ring",
- "roxmltree 0.21.2",
  "rusqlite",
- "rustix 1.1.6",
- "rustls",
  "rustls-pki-types",
- "rustls-platform-verifier 0.6.2",
  "rustls-webpki",
  "sequoia-gpg-agent",
  "sequoia-openpgp",
  "tempfile",
  "tracing",
  "x509-cert",
+ "zbus",
+ "zeroize",
+]
+
+[[package]]
+name = "bande-mail-core"
+version = "0.2.0"
+dependencies = [
+ "accesskit",
+ "bande-discovery",
+ "bande-https",
+ "bande-l10n",
+ "bande-toolkit",
+ "bande-xdg",
+ "data-encoding",
+ "jiff",
+ "roxmltree 0.21.2",
+ "rusqlite",
+ "rustix 1.1.6",
+ "rustls",
+ "rustls-platform-verifier 0.6.2",
+ "tempfile",
+ "tracing",
  "zbus",
  "zeroize",
 ]
@@ -1293,6 +1311,29 @@ dependencies = [
  "rustix 1.1.6",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "bande-notes"
+version = "0.2.0"
+dependencies = [
+ "accesskit",
+ "bande-app",
+ "bande-app-menu",
+ "bande-discovery",
+ "bande-fs",
+ "bande-inbox",
+ "bande-keyring",
+ "bande-l10n",
+ "bande-mail-core",
+ "bande-rich-text",
+ "bande-toolkit",
+ "bande-xdg",
+ "jiff",
+ "mailparse",
+ "rusqlite",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]
@@ -1506,6 +1547,14 @@ dependencies = [
  "tracing",
  "wayland-client",
  "wayland-protocols",
+]
+
+[[package]]
+name = "bande-rich-text"
+version = "0.2.0"
+dependencies = [
+ "bande-toolkit",
+ "html5ever",
 ]
 
 [[package]]
@@ -1865,12 +1914,12 @@ dependencies = [
  "bande-datetime",
  "bande-inbox",
  "bande-l10n",
+ "bande-rich-text",
  "bande-toolkit",
  "bande-volumes",
  "bande-watch",
  "bande-xdg",
  "encoding_rs",
- "html5ever",
  "jiff",
  "regex",
  "roxmltree 0.21.2",

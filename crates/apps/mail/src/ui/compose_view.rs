@@ -218,7 +218,7 @@ impl ComposeView {
         let from = (senders.len() > 1).then(|| {
             let choices = senders
                 .iter()
-                .map(|account| account.address().full())
+                .map(|account| Address::from(account).full())
                 .collect::<Vec<_>>();
             let chosen = Rc::clone(&signals);
             host.insert(
@@ -660,7 +660,7 @@ impl ComposeView {
             from: self
                 .senders
                 .get(self.sender)
-                .map(Account::address)
+                .map(Address::from)
                 .unwrap_or_else(|| self.draft.from.clone()),
             to: parse_addresses(&self.field_text(self.to)),
             cc: parse_addresses(&self.field_text(self.cc)),

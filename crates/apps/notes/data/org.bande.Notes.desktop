@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Notes
+Name[sv]=Anteckningar
+Comment=Write notes on this computer or in your mail account
+Comment[sv]=Skriv anteckningar på datorn eller i ditt e-postkonto
+Icon=org.bande.Notes
+Exec=bande-notes
+Categories=Office;
+Keywords=notes;note;memo;imap;
+Keywords[sv]=anteckningar;anteckning;minnesanteckning;imap;notes;
+StartupNotify=true
+Actions=new-note;
+
+[Desktop Action new-note]
+Name=New Note
+Name[sv]=Ny anteckning
+Exec=bande-notes --new-note

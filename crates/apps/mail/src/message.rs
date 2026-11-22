@@ -21,6 +21,15 @@ pub struct Address {
     pub email: String,
 }
 
+impl From<&crate::store::Account> for Address {
+    fn from(account: &crate::store::Account) -> Self {
+        Self {
+            name: account.name.clone(),
+            email: account.email.clone(),
+        }
+    }
+}
+
 impl Address {
     pub fn shown(&self) -> &str {
         match self.name.trim().is_empty() {

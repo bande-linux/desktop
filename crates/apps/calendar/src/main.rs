@@ -11,7 +11,7 @@ use bande_app::{
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
 use bande_calendar::alerts::{Due, due_between, last_checked, save_checked};
-use bande_calendar::caldav::Discovered;
+use bande_calendar::caldav::{Discovered, RemoteCalendar};
 use bande_calendar::ical::{CalendarObject, read_file};
 use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION, Subject};
 use bande_calendar::online::System;
@@ -28,7 +28,7 @@ use bande_calendar::worker::{Job, Reply, Worker};
 use bande_datetime::DateFormats;
 use bande_design::{Accent, Scheme};
 use bande_inbox::Inbox;
-use bande_l10n::{Text, text, tr};
+use bande_l10n::{Text, text, tr, trn};
 use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowEvent,
 };
@@ -267,6 +267,7 @@ fn app_menus(view: &CalendarView, time_zones: bool) -> Vec<Entry> {
                 Entry::separator(),
                 entry(text!("New Calendar…"), "new-calendar"),
                 entry(text!("Add Account…"), "add-account"),
+                entry(text!("Open Colleague’s Calendar…"), "open-shared"),
                 entry(text!("Refresh Calendars"), REFRESH).shortcut("Ctrl+R"),
                 Entry::separator(),
                 entry(text!("Import…"), IMPORT),
@@ -298,9 +299,8 @@ fn clock(formats: &DateFormats, at: &Zoned) -> String {
     period.map_or(time.clone(), |period| format!("{time} {period}"))
 }
 
-fn discovered_calendars(account: &str, found: &Discovered) -> Vec<CalendarInfo> {
+fn remote_calendars(account: &str, found: &[RemoteCalendar]) -> Vec<CalendarInfo> {
     found
-        .calendars
         .iter()
         .enumerate()
         .map(|(index, remote)| CalendarInfo {
@@ -321,6 +321,7 @@ fn discovered_calendars(account: &str, found: &Discovered) -> Vec<CalendarInfo> 
             ctag: None,
             sync_token: None,
             refreshed: None,
+            opened: false,
         })
         .collect()
 }
@@ -331,6 +332,13 @@ fn caldav_kind(server: String, user: String, found: Discovered) -> AccountKind {
         user,
         home: found.home,
         addresses: found.addresses,
+    }
+}
+
+fn caldav_of(view: &CalendarView, account: &str) -> Option<(String, String)> {
+    match view.library().account(account).map(|known| &known.kind) {
+        Some(AccountKind::CalDav { user, home, .. }) => Some((user.clone(), home.clone())),
+        _ => None,
     }
 }
 
@@ -499,7 +507,7 @@ impl CalendarApp {
                     true => user.clone(),
                     false => format!("{user}@{}", host_of(&found.principal)),
                 };
-                let calendars = discovered_calendars(&id, &found);
+                let calendars = remote_calendars(&id, &found.calendars);
                 let account = Account {
                     id: id.clone(),
                     name,
@@ -515,7 +523,7 @@ impl CalendarApp {
                 password,
                 found,
             } => {
-                let calendars = discovered_calendars(&account, &found);
+                let calendars = remote_calendars(&account, &found.calendars);
                 let kind = caldav_kind(server, user.clone(), found);
                 view.library_mut().update_account(&account, kind, calendars);
                 (account, user, password)
@@ -574,6 +582,7 @@ impl CalendarApp {
             ctag: None,
             sync_token: None,
             refreshed: Some(Timestamp::now().as_second()),
+            opened: false,
         };
         let outcome = subscription_outcome(&info, data, false);
         view.library_mut().add_account(
@@ -670,7 +679,52 @@ impl CalendarApp {
                         ctag: None,
                         sync_token: None,
                         refreshed: None,
+                        opened: false,
                     });
+                }
+                Reply::Availability(answers) => view.show_availability(answers),
+                Reply::Directory(found) => view.show_directory(found),
+                Reply::Opened {
+                    account,
+                    owner,
+                    calendars,
+                } => {
+                    let status = match calendars {
+                        Ok(found) => {
+                            let library = view.library_mut();
+                            let mut added = 0;
+                            for mut info in remote_calendars(&account, &found) {
+                                if library
+                                    .calendars
+                                    .iter()
+                                    .any(|known| known.info.url == info.url)
+                                {
+                                    continue;
+                                }
+                                info.name = tr!(
+                                    "{calendar} ({owner})",
+                                    calendar = info.name.clone(),
+                                    owner = owner.clone()
+                                );
+                                info.opened = true;
+                                library.add_calendar(info);
+                                added += 1;
+                            }
+                            self.push_soon(Duration::ZERO);
+                            trn!(
+                                "Added {count} calendar of {owner}.",
+                                "Added {count} calendars of {owner}.",
+                                count = added,
+                                owner = owner
+                            )
+                        }
+                        Err(error) => tr!(
+                            "Can’t open the calendars of {owner}: {error}",
+                            owner = owner,
+                            error = error
+                        ),
+                    };
+                    view.set_status(Some(status));
                 }
                 Reply::ChangeFailed(error) => {
                     tracing::warn!("cannot change a calendar: {error}");
@@ -738,6 +792,47 @@ impl CalendarApp {
                     self.session.clone(),
                     Some((name, data)),
                 ),
+                Request::Availability {
+                    account,
+                    organizer,
+                    attendees,
+                    window,
+                } => {
+                    if let Some((user, home)) = caldav_of(view, &account) {
+                        self.worker.send(Job::Availability {
+                            account,
+                            user,
+                            home,
+                            organizer,
+                            attendees,
+                            window,
+                        });
+                    }
+                }
+                Request::OpenCalendars {
+                    account,
+                    home,
+                    owner,
+                } => {
+                    if let Some((user, _)) = caldav_of(view, &account) {
+                        self.worker.send(Job::OpenCalendars {
+                            account,
+                            user,
+                            home,
+                            owner,
+                        });
+                    }
+                }
+                Request::Directory { account, text } => {
+                    if let Some((user, home)) = caldav_of(view, &account) {
+                        self.worker.send(Job::Directory {
+                            account,
+                            user,
+                            home,
+                            text,
+                        });
+                    }
+                }
                 Request::Collection {
                     account,
                     url,

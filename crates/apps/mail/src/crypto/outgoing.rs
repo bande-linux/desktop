@@ -5,7 +5,9 @@ use jiff::Zoned;
 use sequoia_openpgp::cert::Cert;
 use x509_cert::Certificate;
 
-use crate::compose::{Draft, MIME_HEADERS, boundary, entity, envelope_headers, wrapped_base64};
+use bande_mail_core::mime::wrapped_base64;
+
+use crate::compose::{Draft, MIME_HEADERS, boundary, entity, envelope_headers};
 use crate::crypto::{Keys, canonical, openpgp, smime};
 use crate::error::{Error, Result};
 use crate::store::Identity;

@@ -1,34 +1,18 @@
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::Path;
-use std::time::Duration;
 
+use bande_mail_core::accounts;
+pub use bande_mail_core::accounts::{Account, AccountId};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 
 use crate::error::Result;
 use crate::imap::{Fetched, Flag, Flags, Folder, Role};
 use crate::message::{Address, Content, Envelope, parse_addresses};
-use crate::net::{Security, Server};
 use crate::settings::SortBy;
 
-pub type AccountId = i64;
 pub type MailboxId = i64;
 pub type MessageId = i64;
 
 const SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS accounts (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    user TEXT NOT NULL,
-    imap_host TEXT NOT NULL,
-    imap_port INTEGER NOT NULL,
-    imap_security TEXT NOT NULL,
-    smtp_host TEXT NOT NULL,
-    smtp_port INTEGER NOT NULL,
-    smtp_security TEXT NOT NULL,
-    signature TEXT NOT NULL DEFAULT '',
-    enabled INTEGER NOT NULL DEFAULT 1
-);
 CREATE TABLE IF NOT EXISTS mailboxes (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -153,27 +137,6 @@ pub struct Identity {
     pub openpgp: String,
     pub smime: String,
     pub sign: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Account {
-    pub id: AccountId,
-    pub name: String,
-    pub email: String,
-    pub user: String,
-    pub imap: Server,
-    pub smtp: Server,
-    pub signature: String,
-    pub enabled: bool,
-}
-
-impl Account {
-    pub fn address(&self) -> Address {
-        Address {
-            name: self.name.clone(),
-            email: self.email.clone(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -309,31 +272,6 @@ pub struct Pending {
 
 pub struct Store {
     connection: Connection,
-}
-
-fn security(name: String) -> Security {
-    Security::from_name(&name).unwrap_or(Security::Tls)
-}
-
-fn account_from(row: &Row<'_>) -> rusqlite::Result<Account> {
-    Ok(Account {
-        id: row.get(0)?,
-        name: row.get(1)?,
-        email: row.get(2)?,
-        user: row.get(3)?,
-        imap: Server {
-            host: row.get(4)?,
-            port: row.get(5)?,
-            security: security(row.get(6)?),
-        },
-        smtp: Server {
-            host: row.get(7)?,
-            port: row.get(8)?,
-            security: security(row.get(9)?),
-        },
-        signature: row.get(10)?,
-        enabled: row.get(11)?,
-    })
 }
 
 const SUMMARY_COLUMNS: &str = "m.id, m.mailbox, b.account, m.uid, m.subject, m.sender_name, \
@@ -586,34 +524,13 @@ impl Store {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(parent)?;
-        }
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .mode(0o600)
-            .open(path)?;
-        let connection = Connection::open(path)?;
-        connection.busy_timeout(Duration::from_secs(10))?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "foreign_keys", true)?;
+        let connection = accounts::open(path)?;
         connection.execute_batch(SCHEMA)?;
         Ok(Self { connection })
     }
 
     pub fn accounts(&self) -> Result<Vec<Account>> {
-        let mut statement = self.connection.prepare(
-            "SELECT id, name, email, user, imap_host, imap_port, imap_security, \
-             smtp_host, smtp_port, smtp_security, signature, enabled FROM accounts ORDER BY id",
-        )?;
-        let accounts = statement
-            .query_map([], account_from)?
-            .collect::<rusqlite::Result<_>>()?;
-        Ok(accounts)
+        accounts::list(&self.connection)
     }
 
     pub fn account(&self, id: AccountId) -> Result<Option<Account>> {
@@ -624,24 +541,11 @@ impl Store {
     }
 
     pub fn add_account(&self, account: &Account) -> Result<AccountId> {
-        self.connection.execute(
-            "INSERT INTO accounts (name, email, user, imap_host, imap_port, imap_security, \
-             smtp_host, smtp_port, smtp_security, signature) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                account.name,
-                account.email,
-                account.user,
-                account.imap.host,
-                account.imap.port,
-                account.imap.security.name(),
-                account.smtp.host,
-                account.smtp.port,
-                account.smtp.security.name(),
-                account.signature,
-            ],
-        )?;
-        Ok(self.connection.last_insert_rowid())
+        accounts::add(&self.connection, account)
+    }
+
+    pub fn set_notes(&self, account: AccountId, used: bool) -> Result<()> {
+        accounts::set_notes(&self.connection, account, used)
     }
 
     pub fn update_account(&self, account: &Account) -> Result<()> {

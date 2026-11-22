@@ -59,6 +59,8 @@ pub struct CalendarInfo {
     pub sync_token: Option<String>,
     #[serde(default)]
     pub refreshed: Option<i64>,
+    #[serde(default)]
+    pub opened: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -419,6 +421,7 @@ impl Library {
                 ctag: None,
                 sync_token: None,
                 refreshed: None,
+                opened: false,
             });
             self.calendars.push(calendar);
             self.save(self.calendars.len() - 1);
@@ -468,6 +471,7 @@ impl Library {
         self.save_accounts();
         while let Some(index) = self.calendars.iter().position(|calendar| {
             calendar.info.account == id
+                && !calendar.info.opened
                 && !calendars
                     .iter()
                     .any(|found| found.url.is_some() && found.url == calendar.info.url)

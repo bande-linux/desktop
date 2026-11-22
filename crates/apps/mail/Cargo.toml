@@ -16,7 +16,6 @@ bande-app-settings.workspace = true
 bande-datetime.workspace = true
 bande-discovery.workspace = true
 bande-fs.workspace = true
-bande-https.workspace = true
 bande-inbox.workspace = true
 bande-l10n.workspace = true
 bande-notify.workspace = true
@@ -25,18 +24,14 @@ bande-taskbar-model.workspace = true
 bande-toolkit.workspace = true
 bande-xdg.workspace = true
 cms.workspace = true
-data-encoding.workspace = true
 html5ever.workspace = true
 image.workspace = true
 jiff.workspace = true
 mailparse.workspace = true
 nettle.workspace = true
 ring.workspace = true
-roxmltree.workspace = true
 rusqlite.workspace = true
-rustls.workspace = true
 rustls-pki-types.workspace = true
-rustls-platform-verifier.workspace = true
 rustls-webpki.workspace = true
 sequoia-gpg-agent.workspace = true
 sequoia-openpgp.workspace = true
@@ -44,11 +39,12 @@ tracing.workspace = true
 x509-cert.workspace = true
 zbus.workspace = true
 bande-keyring.workspace = true
+bande-mail-core.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
 bande-discovery = { workspace = true, features = ["testing"] }
-rustix = { workspace = true, features = ["process"] }
+bande-mail-core = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 
 [lints]

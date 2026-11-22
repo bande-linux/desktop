@@ -76,6 +76,9 @@ msgstr "Ny kalender…"
 msgid "Add Account…"
 msgstr "Lägg till konto…"
 
+msgid "Open Colleague’s Calendar…"
+msgstr "Öppna kollegas kalender…"
+
 msgid "Refresh Calendars"
 msgstr "Uppdatera kalendrar"
 
@@ -96,6 +99,17 @@ msgstr "”{title}” ändrades på annat håll. Båda versionerna har sparats."
 
 msgid "{name}: {error}"
 msgstr "{name}: {error}"
+
+msgid "{calendar} ({owner})"
+msgstr "{calendar} ({owner})"
+
+msgid "Added {count} calendar of {owner}."
+msgid_plural "Added {count} calendars of {owner}."
+msgstr[0] "La till {count} kalender från {owner}."
+msgstr[1] "La till {count} kalendrar från {owner}."
+
+msgid "Can’t open the calendars of {owner}: {error}"
+msgstr "Kan inte öppna kalendrarna för {owner}: {error}"
 
 msgid "Updated {time}"
 msgstr "Uppdaterad {time}"
@@ -120,6 +134,9 @@ msgstr[1] "{date}, {count} händelser"
 msgid "Calendars"
 msgstr "Kalendrar"
 
+msgid "read-only"
+msgstr "skrivskyddad"
+
 msgid "Next Month"
 msgstr "Nästa månad"
 
@@ -131,6 +148,39 @@ msgstr "Visa alla händelser"
 
 msgid "Search Results"
 msgstr "Sökresultat"
+
+msgid "Not known"
+msgstr "Okänt"
+
+msgid "Free"
+msgstr "Ledig"
+
+msgid "Busy {times}"
+msgstr "Upptagen {times}"
+
+msgid "Availability"
+msgstr "Tillgänglighet"
+
+msgid "Asking the server…"
+msgstr "Frågar servern…"
+
+msgid "Free at:"
+msgstr "Ledigt:"
+
+msgid "Close"
+msgstr "Stäng"
+
+msgid "Can’t get availability: {error}"
+msgstr "Kan inte hämta tillgänglighet: {error}"
+
+msgid "No common free time in the next two weeks."
+msgstr "Ingen gemensam ledig tid de närmaste två veckorna."
+
+msgid "Everyone is free at these times."
+msgstr "Alla är lediga vid de här tiderna."
+
+msgid "The server doesn’t share everyone’s availability."
+msgstr "Servern delar inte allas tillgänglighet."
 
 msgid "first"
 msgstr "första"
@@ -186,6 +236,39 @@ msgstr "Avbryt"
 msgid "OK"
 msgstr "OK"
 
+msgid "room"
+msgstr "rum"
+
+msgid "resource"
+msgstr "resurs"
+
+msgid "group"
+msgstr "grupp"
+
+msgid "People and Rooms"
+msgstr "Personer och rum"
+
+msgid "Name or address"
+msgstr "Namn eller adress"
+
+msgid "Search"
+msgstr "Sök"
+
+msgid "Find:"
+msgstr "Sök:"
+
+msgid "Search the people, rooms and resources on your server."
+msgstr "Sök bland personer, rum och resurser på din server."
+
+msgid "Searching…"
+msgstr "Söker…"
+
+msgid "No one found."
+msgstr "Ingen hittades."
+
+msgid "Can’t search: {error}"
+msgstr "Kan inte söka: {error}"
+
 msgid "This invitation is older than the event in your calendar, or is not from its organizer."
 msgstr "Inbjudan är äldre än händelsen i din kalender, eller kommer inte från dess arrangör."
 
@@ -224,6 +307,33 @@ msgstr "Svaret gäller inte en händelse som du arrangerar, eller kommer inte fr
 
 msgid "“{title}”: answer from {names}"
 msgstr "”{title}”: svar från {names}"
+
+msgid "This proposal is not for an event you organize, or is not from one of its invitees."
+msgstr "Förslaget gäller inte en händelse du organiserar, eller kommer inte från någon av dess inbjudna."
+
+msgid "{when} instead of {current}"
+msgstr "{when} i stället för {current}"
+
+msgid "{name} proposes a new time for “{title}”"
+msgstr "{name} föreslår en ny tid för ”{title}”"
+
+msgid "Decline"
+msgstr "Tacka nej"
+
+msgid "Accept Proposal"
+msgstr "Godta förslaget"
+
+msgid "Proposal declined: {title}"
+msgstr "Förslaget avböjt: {title}"
+
+msgid "“{title}” stays at the time it has."
+msgstr "”{title}” ligger kvar på sin tid."
+
+msgid "The organizer of “{title}” declined the time you proposed."
+msgstr "Organisatören av ”{title}” avböjde tiden du föreslog."
+
+msgid "This answer to a proposal is not from the organizer of an event in your calendars."
+msgstr "Det här svaret på ett förslag kommer inte från organisatören av en händelse i dina kalendrar."
 
 msgid "A cancelled event that is not in your calendars was opened."
 msgstr "En inställd händelse som inte finns i dina kalendrar öppnades."
@@ -269,6 +379,9 @@ msgstr "Grafit"
 
 msgid "Rename…"
 msgstr "Byt namn…"
+
+msgid "Remove Calendar"
+msgstr "Ta bort kalender"
 
 msgid "Delete Calendar"
 msgstr "Radera kalender"
@@ -339,9 +452,6 @@ msgstr "Tacka ja"
 msgid "Maybe"
 msgstr "Kanske"
 
-msgid "Decline"
-msgstr "Tacka nej"
-
 msgid "No Reply"
 msgstr "Inget svar"
 
@@ -360,8 +470,20 @@ msgstr "tackat nej"
 msgid "no reply"
 msgstr "inget svar"
 
+msgid "not sent"
+msgstr "inte skickad"
+
+msgid "sent by {sender}"
+msgstr "skickad av {sender}"
+
 msgid "Invitees:"
 msgstr "Inbjudna:"
+
+msgid "People and Rooms…"
+msgstr "Personer och rum…"
+
+msgid "Availability…"
+msgstr "Tillgänglighet…"
 
 msgid "This calendar is read-only."
 msgstr "Den här kalendern är skrivskyddad."
@@ -435,6 +557,12 @@ msgstr "Lokalt"
 msgid "Untitled"
 msgstr "Namnlös"
 
+msgid "Remove “{name}”?"
+msgstr "Vill du ta bort ”{name}”?"
+
+msgid "It stays on the server for its owner and anyone it is shared with."
+msgstr "Den finns kvar på servern för ägaren och alla den delas med."
+
 msgid "Delete “{name}”?"
 msgstr "Vill du radera ”{name}”?"
 
@@ -443,6 +571,15 @@ msgstr "Kalenderns händelser raderas också, även på servern."
 
 msgid "Delete"
 msgstr "Radera"
+
+msgid "You"
+msgstr "Du"
+
+msgid "Add a CalDAV account to open a colleague’s calendar."
+msgstr "Lägg till ett CalDAV-konto för att öppna en kollegas kalender."
+
+msgid "{owner} shares no calendars with you."
+msgstr "{owner} delar inga kalendrar med dig."
 
 msgid "Add {count} event to “{calendar}”?"
 msgid_plural "Add {count} events to “{calendar}”?"
@@ -460,9 +597,6 @@ msgstr "Bara den här händelsen"
 
 msgid "All Events"
 msgstr "Alla händelser"
-
-msgid "Remove “{name}”?"
-msgstr "Vill du ta bort ”{name}”?"
 
 msgid "Its calendars are removed from this computer. Nothing is deleted on the server."
 msgstr "Kontots kalendrar tas bort från den här datorn. Inget raderas på servern."
@@ -736,6 +870,3 @@ msgstr "Prenumerationer"
 
 msgid "Today"
 msgstr "Idag"
-
-msgid "Search"
-msgstr "Sök"

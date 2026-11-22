@@ -53,6 +53,13 @@ views. Packaged as `bande-calendar`.
 - **Calendars.** New, rename and delete, on this computer or on a CalDAV server (MKCALENDAR,
   PROPPATCH of the name and colour, DELETE): File ▸ New Calendar…, or right-click a calendar or
   an account heading.
+- **Shared calendars.** Calendars others share with you are listed with your own, as the
+  server puts them in your calendar home; one where your `current-user-privilege-set` has no
+  write privilege is marked read-only in the sidebar and opens read-only. File ▸ Open
+  Colleague’s Calendar… (or the account heading's menu) searches the server's directory and
+  adds the calendars of the person picked that the server lets you see (RFC 3744 ACLs decide
+  whether you can read or write them); they stay through a new sign-in, and Remove Calendar
+  takes them off this computer only.
 - **Busy hours.** Overlapping events share the column and widen into free lanes; when there are
   more than fit readably, a "+N" chip opens that day in the Day view.
 - **Editing.** Drag on empty time to create, drag an event to move it (also between days in the
@@ -63,10 +70,31 @@ views. Packaged as `bande-calendar`.
   calendar and notes. Changing a recurring event asks whether it is for this event only (an
   override) or all events.
 - **Invitations** through the server (RFC 6638 implicit scheduling): the inspector lists the organizer and invitees with their
-  answers, Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
+  answers, whether one is a room, resource or group (`CUTYPE`), when the server could not
+  deliver to them (`SCHEDULE-STATUS` 3.x or 5.x) or leaves sending to someone else
+  (`SCHEDULE-AGENT` other than `SERVER`), and who sent an invitation for its organizer
+  (`SENT-BY`). Accept, Maybe and Decline update your own `PARTSTAT` (an invitation's title and
   times stay read-only), and on an event you organise in a CalDAV calendar you can add
-  invitees by address; the server sends the mail. Your addresses come from
+  invitees by address; the server sends the mail, and a change of time, repeat or exceptions
+  raises `SEQUENCE` so it goes out as an update; your own changes to an invitation, such as an
+  alert, keep the organizer's `SEQUENCE`. Your addresses come from
   `calendar-user-address-set`.
+- **People and rooms.** People and Rooms… in the inspector searches the server's directory
+  (RFC 3744 `principal-property-search` on `displayname` and `calendar-user-address-set`) for
+  colleagues, rooms and resources; one picked is added as an invitee, a room or resource with
+  its `CUTYPE`, and its answer shows like anyone's.
+- **Availability.** Availability… in the inspector of a timed event you organise shows, for
+  you and every invitee, when they are busy during the event's working day, with the event
+  outlined, and offers the next three times within working hours (the day's start and end from
+  Settings, on the locale's working days) in the next two weeks when everyone is free; picking
+  one sets the event's times. It asks the account's scheduling outbox (RFC 6638 `VFREEBUSY`
+  `REQUEST`), and for anyone the outbox does not answer for, or on a server without one, a
+  RFC 4791 `free-busy-query` on that person's calendars found through the directory. Someone
+  the server shares nothing about is shown as not known.
+- **What goes to the server.** Directory searches and availability are asked only when you
+  press Search in People and Rooms or open Availability, only of the CalDAV server of the
+  event's own account, and carry only the typed text, or the invitees' addresses and the two
+  weeks asked about; answers are kept only while the sheet is open.
 - **Invitations by mail** (iMIP, RFC 6047), opened from Mail or as a file: a `REQUEST` that
   invites one of your addresses asks Accept, Maybe or Decline, keeps the event with your
   answer and your own alerts (Decline removes it; for one occurrence, only that occurrence is
@@ -75,7 +103,11 @@ views. Packaged as `bande-calendar`.
   attach one. A `REPLY` with one invitee updates that invitee's answer in an event you organise,
   and a `CANCEL` asks to remove the event or the one cancelled occurrence (undoable). An update or
   `CANCEL` from someone other than the stored event's organizer, or with an older `SEQUENCE`, is
-  refused. `METHOD` is never stored.
+  refused. A `COUNTER` from one invitee of an event you organise shows the proposed time beside
+  the current one: Accept Proposal moves the event (or that occurrence) there with a higher
+  `SEQUENCE`, so a CalDAV server sends the update, and Decline opens a message to the invitee in
+  Mail; a `DECLINECOUNTER` from the organizer says your proposal was declined. `METHOD` is never
+  stored.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
   Snooze (5 minutes) and a click that opens Calendar on the event's day. Calendar also shows them when it was never opened or was quit: the autostart
@@ -119,11 +151,12 @@ open on that field and says what to type.
 
 | Path | What it is |
 |---|---|
-| `src/ical/` | iCalendar: content lines, values and durations, time zones, recurrence, events |
-| `src/caldav/` | HTTP, WebDAV XML, DNS SRV, discovery and the CalDAV requests |
+| `src/ical/` | iCalendar: content lines, values and durations, time zones, recurrence, events, free/busy |
+| `src/caldav/` | HTTP, WebDAV XML, DNS SRV, discovery, the CalDAV requests, directory search and free/busy |
 | `src/store.rs` | accounts, calendars and the offline cache in `~/.local/share/bande-calendar` |
 | `src/sync.rs` | push pending changes, pull with sync-token or ctag/etag, apply the outcome |
 | `src/edit.rs` | the edits the UI makes: create, move a series or one occurrence, delete, details |
+| `src/schedule.rs` | free times for a meeting within working hours |
 | `src/alerts.rs` | which alarms fall due |
 | `src/settings.rs` | the settings and the messages the Settings window sends the app |
 | `src/wake.rs` | the wall-clock timer for alerts, the clock and refreshes |
@@ -141,5 +174,7 @@ over 64 MiB. `tests/accounts.rs` finds a CalDAV server from a domain's records a
 Digest after a wrong password, and never sends a password over plain HTTP to anything but this
 computer. `tests/time_zone.rs` moves a repeating event to another zone and checks that its times,
 exceptions and end follow. `tests/undo.rs` undoes a delete while a sync pushes it and checks
-the event comes back at its own address. The whole test list and the reason for each is in
+the event comes back at its own address. `tests/scheduling.rs` runs Debian's `xandikos` (and
+skips itself without it), searches its directory, asks for free/busy times and finds a free
+time around an event. The whole test list and the reason for each is in
 `docs/quality/tests.md`.

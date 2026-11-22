@@ -11,10 +11,9 @@ use bande_l10n::{Text, text, tr, trn};
 
 use crate::compose::{Draft, Original, Outgoing, forward, reply, signed};
 use crate::discover::Settings;
-use crate::discover::Source;
 use crate::error::Result;
 use crate::imap::{Flag, Role};
-use crate::message::{Content, Envelope, parse_addresses};
+use crate::message::{Address, Content, Envelope, parse_addresses};
 use crate::net::Network;
 use crate::settings::{MailSettings, SortBy};
 use crate::setup::{Found, Outcome, check, find};
@@ -1488,7 +1487,7 @@ impl MailView {
             return;
         };
         if draft.from.email.is_empty() {
-            draft.from = account.address();
+            draft.from = Address::from(&account);
         }
         draft.sign = self.signs(account.id);
         draft.body = match draft.body.trim_end() {
@@ -1520,7 +1519,7 @@ impl MailView {
             name = envelope.sender().shown().to_owned()
         );
         let quote = self.settings.quote.then_some(attribution.as_str());
-        let mut draft = reply(&reading.content, &account.address(), all, quote);
+        let mut draft = reply(&reading.content, &Address::from(account), all, quote);
         draft.body = signed(&draft.body, &account.signature);
         draft.sign = self.signs(account.id);
         self.requests.push(Request::Compose(Box::new(Outgoing {
@@ -1550,7 +1549,7 @@ impl MailView {
         };
         let envelope = &reading.content.envelope;
         let draft = Draft {
-            from: account.address(),
+            from: Address::from(account),
             to: envelope.to.clone(),
             cc: envelope.cc.clone(),
             bcc: envelope.bcc.clone(),
@@ -1604,7 +1603,7 @@ impl MailView {
             subject = envelope.subject.clone(),
             to = names(&envelope.to)
         );
-        let mut draft = forward(&reading.content, &account.address(), &heading);
+        let mut draft = forward(&reading.content, &Address::from(account), &heading);
         draft.body = signed(&draft.body, &account.signature);
         draft.sign = self.signs(account.id);
         self.requests.push(Request::Compose(Box::new(Outgoing {
@@ -2160,7 +2159,12 @@ impl MailView {
         if let Some(previous) = self.setup.take() {
             previous.state.borrow_mut().closed = true;
         }
-        let sheet = AccountSheet::new(Rc::clone(&state), mode.clone());
+        let sheet = AccountSheet::new(
+            Rc::clone(&state),
+            mode.clone(),
+            include_bytes!("../../data/org.bande.Mail.svg"),
+            bande_xdg::is_installed("org.bande.Notes"),
+        );
         let password_field = sheet.password_field();
         self.ui.present_sheet(sheet);
         self.setup = Some(SetupSheet {
@@ -2308,25 +2312,7 @@ impl MailView {
             setup.state.borrow_mut().fill(settings);
         }
         self.present_setup(Mode::Servers);
-        let domain = found.domain;
-        let message = match found.settings.map(|(_, source)| source) {
-            Some(Source::Services) => tr!(
-                "Mail found these servers in the DNS records of {domain}. Check that they belong to your mail provider, then sign in.",
-                domain = domain
-            ),
-            Some(Source::Domain) => tr!(
-                "Mail found these servers in the settings {domain} publishes. Check that they belong to your mail provider, then sign in.",
-                domain = domain
-            ),
-            Some(Source::Guess) => tr!(
-                "{domain} publishes no mail settings, so Mail guessed these servers. Check them against what your mail provider gives, then sign in.",
-                domain = domain
-            ),
-            None => tr!(
-                "Mail found no servers for {domain}. Enter the settings your mail provider gives for IMAP and SMTP.",
-                domain = domain
-            ),
-        };
+        let message = found.message();
         if let Some(setup) = &self.setup {
             setup.state.borrow_mut().status = Some((message, false));
         }
@@ -2403,6 +2389,12 @@ impl MailView {
                 return;
             }
         };
+        if state.borrow().notes()
+            && bande_xdg::is_installed("org.bande.Notes")
+            && let Err(error) = self.store.set_notes(id, true)
+        {
+            tracing::warn!("cannot use {} for Notes: {error}", account.email);
+        }
         let account = Account { id, ..account };
         let first = Zeroizing::new(password.to_string());
         let mut handed = false;

@@ -13,6 +13,15 @@ msgstr "This invitation is older than the event in your calendar, or is not from
 msgid "This answer is not to an event you organize, or is not from one of its invitees."
 msgstr "This answer is not to an event you organise, or is not from one of its invitees."
 
+msgid "This proposal is not for an event you organize, or is not from one of its invitees."
+msgstr "This proposal is not for an event you organise, or is not from one of its invitees."
+
+msgid "The organizer of “{title}” declined the time you proposed."
+msgstr "The organiser of “{title}” declined the time you proposed."
+
+msgid "This answer to a proposal is not from the organizer of an event in your calendars."
+msgstr "This answer to a proposal is not from the organiser of an event in your calendars."
+
 msgid "This cancellation is older than the event in your calendar, or is not from its organizer."
 msgstr "This cancellation is older than the event in your calendar, or is not from its organiser."
 

@@ -564,7 +564,7 @@ impl Session {
         self.run(&format!("DELETE {path}")).map(drop)
     }
 
-    pub fn append(&mut self, path: &str, flags: &[Flag], message: &[u8]) -> Result<()> {
+    pub fn append(&mut self, path: &str, flags: &[Flag], message: &[u8]) -> Result<Option<u32>> {
         let flags = flags
             .iter()
             .map(|flag| flag.atom())
@@ -583,7 +583,14 @@ impl Session {
         }
         self.link.send(message)?;
         self.link.send(b"\r\n")?;
-        self.finish(&tag).map(drop)
+        let reply = self.finish(&tag)?;
+        Ok(reply
+            .codes
+            .iter()
+            .find(|code| code.first().is_some_and(|first| first.is_atom("APPENDUID")))
+            .and_then(|code| code.get(2))
+            .and_then(Value::number)
+            .and_then(|uid| u32::try_from(uid).ok()))
     }
 
     pub fn idle(&mut self, wait: Duration) -> Result<bool> {

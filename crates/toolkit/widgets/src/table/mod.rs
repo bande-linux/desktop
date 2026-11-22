@@ -78,6 +78,7 @@ pub struct Table {
     header: bool,
     row: f32,
     sidebar: bool,
+    label: Option<String>,
     lines: Vec<Line>,
     shown: Vec<usize>,
     expanded: HashSet<String>,
@@ -136,6 +137,7 @@ impl Table {
             header: true,
             row: ROW_HEIGHT,
             sidebar: false,
+            label: None,
             lines: Vec::new(),
             shown: Vec::new(),
             expanded: HashSet::new(),
@@ -185,6 +187,13 @@ impl Table {
     pub fn without_header(self) -> Self {
         Self {
             header: false,
+            ..self
+        }
+    }
+
+    pub fn label(self, label: &str) -> Self {
+        Self {
+            label: Some(label.to_owned()),
             ..self
         }
     }
@@ -1484,6 +1493,9 @@ impl Widget for Table {
             true => Role::TreeGrid,
             false => Role::Table,
         });
+        if let Some(label) = &self.label {
+            node.set_label(label.as_str());
+        }
         node.set_row_count(self.shown.len());
         node.set_column_count(self.columns.len());
         node.set_multiselectable();

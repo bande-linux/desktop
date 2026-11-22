@@ -211,7 +211,8 @@ impl SettingsView {
         };
         let mut rows = self.handed_over_rows();
         if let Some(outside) = &wifi.outside {
-            rows.extend(self.outside_rows(outside));
+            let current = wifi.networks.iter().find(|network| network.current);
+            rows.extend(self.outside_rows(outside, current));
             return rows;
         }
         let scanned = !wifi.networks.is_empty();

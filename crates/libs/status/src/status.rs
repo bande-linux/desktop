@@ -50,6 +50,7 @@ impl Wifi {
                     && a.security == b.security
                     && a.known == b.known
                     && a.current == b.current
+                    && a.system == b.system
                     && signal(a.strength) == signal(b.strength)
             })
     }

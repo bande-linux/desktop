@@ -151,6 +151,12 @@ msgstr "Inloggning krävs"
 msgid "Sign In…"
 msgstr "Logga in…"
 
+msgid "Set up by the system"
+msgstr "Konfigurerat av systemet"
+
+msgid "Manage in Settings…"
+msgstr "Hantera i Inställningar…"
+
 msgid "Saved Networks"
 msgstr "Sparade nätverk"
 

@@ -325,12 +325,16 @@ fn wifi_state(network: &NetworkManager) -> bande_network::Result<Option<WifiStat
     }
     let enabled = network.wifi_enabled()?;
     let outside = network.wifi_outside()?;
-    let (networks, link) = if enabled && outside.is_none() {
+    let (networks, link) = if enabled {
         let networks = match network.networks() {
             Err(bande_network::Error::NoWifiDevice) => return Ok(None),
             networks => networks?,
         };
-        (networks, network.wifi_link().unwrap_or_default())
+        let link = match outside {
+            None => network.wifi_link().unwrap_or_default(),
+            Some(_) => WifiLink::default(),
+        };
+        (networks, link)
     } else {
         (Vec::new(), WifiLink::default())
     };

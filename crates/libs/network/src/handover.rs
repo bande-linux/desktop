@@ -3,7 +3,6 @@ use std::fs;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use bande_l10n::tr;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 
 use crate::connections::{DEVICE_STATE_UNMANAGED, IPV4, IPV6, ipv4_settings, ipv6_settings};
@@ -139,9 +138,9 @@ impl NetworkManager {
         settings.reload_connections()?;
         self.manager()?.reload(RELOAD_EVERYTHING)?;
         let missing = || {
-            Error::Refused(tr!(
-                "NetworkManager has no device called {interface}",
-                interface = plan.interface.clone()
+            Error::Refused(format!(
+                "NetworkManager has no device called {}",
+                plan.interface
             ))
         };
         let path = self.device_named(&plan.interface)?.ok_or_else(missing)?;
@@ -154,9 +153,9 @@ impl NetworkManager {
             }
             tries += 1;
             if tries > MANAGED_TRIES {
-                return Err(Error::Refused(tr!(
-                    "NetworkManager still leaves {interface} alone",
-                    interface = plan.interface.clone()
+                return Err(Error::Refused(format!(
+                    "NetworkManager still leaves {} alone",
+                    plan.interface
                 )));
             }
             thread::sleep(MANAGED_WAIT);
@@ -180,16 +179,16 @@ impl NetworkManager {
                 Ok(ACTIVE_STATE_ACTIVATED) => return Ok(id),
                 Ok(state) if state < ACTIVE_STATE_ACTIVATED => {}
                 _ => {
-                    return Err(Error::Refused(tr!(
-                        "NetworkManager could not connect {interface}",
-                        interface = plan.interface.clone()
+                    return Err(Error::Refused(format!(
+                        "NetworkManager could not connect {}",
+                        plan.interface
                     )));
                 }
             }
             if started.elapsed() > ACTIVATION_TIMEOUT {
-                return Err(Error::Refused(tr!(
-                    "NetworkManager did not connect {interface} in time",
-                    interface = plan.interface.clone()
+                return Err(Error::Refused(format!(
+                    "NetworkManager did not connect {} in time",
+                    plan.interface
                 )));
             }
             thread::sleep(MANAGED_WAIT);
@@ -203,19 +202,15 @@ impl NetworkManager {
                 .settings_connection(connection)
                 .and_then(|connection| Ok(connection.delete()?))
         {
-            leftovers.push(tr!(
-                "the new connection is still saved ({error})",
-                error = error.to_string()
-            ));
+            leftovers.push(format!("the new connection is still saved ({error})"));
         }
         if let Some(device) = &taken.device
             && let Err(error) = self
                 .device(device)
                 .and_then(|device| Ok(device.set_managed(false)?))
         {
-            leftovers.push(tr!(
-                "NetworkManager still manages the interface ({error})",
-                error = error.to_string()
+            leftovers.push(format!(
+                "NetworkManager still manages the interface ({error})"
             ));
         }
         leftovers

@@ -1364,6 +1364,7 @@ dependencies = [
  "bande-log",
  "bande-xdg",
  "rustix 1.1.6",
+ "tempfile",
  "tracing",
  "zbus",
 ]

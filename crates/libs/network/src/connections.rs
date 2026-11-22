@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
@@ -29,23 +29,18 @@ const VPN_TYPES: [&str; 2] = ["vpn", "wireguard"];
 pub struct Outside {
     pub interface: String,
     pub addressing: Addressing,
-    pub configured_in: Option<PathBuf>,
     pub hand_over: bool,
 }
 
 impl Outside {
     pub(crate) fn of(interface: &str) -> Self {
-        let configuration = ifupdown::read();
-        let configured_in = configuration
-            .as_ref()
-            .ok()
-            .and_then(|configuration| ifupdown::configuring_file(configuration, interface));
+        let configured = ifupdown::read().map_or(true, |configuration| {
+            ifupdown::configures(&configuration, interface)
+        });
         Self {
             interface: interface.to_owned(),
             addressing: kernel::addressing(interface),
-            hand_over: Path::new(IFDOWN).exists()
-                && (configured_in.is_some() || configuration.is_err()),
-            configured_in,
+            hand_over: configured && Path::new(IFDOWN).exists(),
         }
     }
 }
@@ -379,6 +374,7 @@ impl NetworkManager {
         };
         if let Some(outside) = &ethernet.outside {
             ethernet.addressing = outside.addressing.clone();
+            ethernet.connected = ethernet.addressing.address.is_some();
             return Ok(ethernet);
         }
         if ethernet.connected {

@@ -32,7 +32,7 @@ use crate::diagnostics::{Diagnostics, DiagnosticsCommand};
 use crate::enterprise::{Certificate, EnterpriseField};
 use crate::follow::{Command, Update};
 use crate::forget::Forget;
-use crate::handover::{HandOver, HandOverCommand};
+use crate::handover::HandOver;
 use crate::language::{SAME_AS_LANGUAGE, locale_matches};
 use crate::locale::{DEFAULT_LOCALE, LocaleCommand, LocaleState, same_locale};
 use crate::login::{App, LoginCommand, LoginItems, app_matches, login_matches};
@@ -130,7 +130,7 @@ pub(crate) enum Intent {
     SecureWired(bool),
     SaveWiredSecurity(String),
     Ipv6Mode(PaneId, usize),
-    HandOver(Option<HandOverCommand>),
+    HandOver(Option<HandOver>),
     ProxyMode(usize),
     StartHotspot(Option<String>),
     OpenPrinter(String),
@@ -1726,14 +1726,11 @@ impl SettingsView {
                 }
                 Intent::SaveWiredSecurity(password) => self.save_wired_security(password),
                 Intent::Ipv6Mode(pane, mode) => self.set_ipv6_mode(pane, mode),
-                Intent::HandOver(command) => {
-                    self.handover = command.as_ref().map(|command| match command {
-                        HandOverCommand::Preview(interface) => HandOver::Asking(interface.clone()),
-                        HandOverCommand::Apply(interface) => HandOver::Applying(interface.clone()),
-                    });
-                    if let Some(command) = command {
-                        self.commands.push(Command::HandOver(command));
+                Intent::HandOver(handover) => {
+                    if let Some(HandOver::Applying(interface)) = &handover {
+                        self.commands.push(Command::HandOver(interface.clone()));
                     }
+                    self.handover = handover;
                 }
                 Intent::ProxyMode(index) => self.set_proxy_mode(index),
                 Intent::StartHotspot(password) => self.start_hotspot(password),

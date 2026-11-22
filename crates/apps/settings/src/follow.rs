@@ -32,7 +32,7 @@ use crate::defaults::{DefaultApp, DefaultAppCommand, follow_default_apps};
 use crate::diagnostics::{Diagnostics, DiagnosticsCommand, follow_diagnostics};
 use crate::enterprise::Certificate;
 use crate::failure::{explained, pane_failed, sentence};
-use crate::handover::{HandOver, HandOverCommand, hand_over};
+use crate::handover::{HandOver, hand_over};
 use crate::locale::{LocaleCommand, LocaleState, follow_locale};
 use crate::login::{LoginCommand, LoginItems, follow_login_items};
 use crate::notifications::{AppNotifications, NotificationCommand, follow_app_notifications};
@@ -164,7 +164,7 @@ pub enum Command {
     Leave(Leaving),
     ImportVpn,
     Proxy(ProxySettings),
-    HandOver(HandOverCommand),
+    HandOver(String),
     ChooseCertificate(Certificate),
     ExcludeFolder,
     AddColourProfile(String),
@@ -651,8 +651,8 @@ impl Services {
                 });
                 true
             }
-            Command::HandOver(command) => {
-                hand_over(command, self.updates.clone());
+            Command::HandOver(interface) => {
+                hand_over(interface, self.updates.clone());
                 true
             }
             Command::ChooseCertificate(certificate) => {

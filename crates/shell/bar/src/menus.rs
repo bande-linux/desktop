@@ -188,7 +188,12 @@ pub fn wifi_menu(wifi: &Wifi) -> Menu {
         items.push(note(&tr!("Sign in required")));
         items.push(item(&tr!("Sign In…"), &Command::SignIn));
     }
-    if wifi.enabled {
+    if let Some(network) = wifi.current().filter(|network| network.system) {
+        items.push(MenuItem::separator());
+        items.push(note(&network.name()).radio(true));
+        items.push(note(&tr!("Set up by the system")));
+        items.push(settings(tr!("Manage in Settings…"), "wifi"));
+    } else if wifi.enabled {
         let mut networks: Vec<_> = wifi.networks.iter().collect();
         networks.sort_by(|a, b| {
             (b.current, b.known, b.strength).cmp(&(a.current, a.known, a.strength))

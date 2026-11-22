@@ -51,7 +51,7 @@ graph LR
   logind, sleep and the power button always ask: `bande-power` requires the password on
   logind's `Lock` and on `PrepareForSleep` before it lets the computer sleep, even when the
   saver already rests within its grace period. Only the idle lock `bande-power` asks for gets
-  one: a lock someone else asked logind for (`Super+L` included) never does. The grace period
+  one: a lock someone else asked logind for (`Super+L` included, also on a resting lock screen, where it ends the grace period) never does. The grace period
   is `org.bande.Power`'s `PasswordRequired` property, which ends at a fixed time on the boot
   clock however long an inhibitor holds the display awake. The lock screen believes a "no"
   only from the owner of the name running in `bande-power.service`, answering within a second;

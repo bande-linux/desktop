@@ -4,12 +4,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_compositor::{
-    Compositor, KEYBOARD_MONITOR_NAME, SCREEN_READER_NAME, UNRESPONSIVE_AFTER,
+    Compositor, KEYBOARD_MONITOR_NAME, SCREEN_READER_NAME, SessionReport, UNRESPONSIVE_AFTER,
     serve_keyboard_monitor,
 };
 use bande_test_bus::SessionBus;
 use bande_test_wayland::keys::{
-    BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_LEFTALT, KEY_LEFTCTRL, KEY_Q, KEY_W,
+    BTN_LEFT, KEY_A, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_L, KEY_LEFTALT, KEY_LEFTCTRL, KEY_LEFTMETA,
+    KEY_Q, KEY_W,
 };
 use bande_test_wayland::{
     BLUE, ConstraintAdjustment, Frames, PopupRequest, RED, SeparateApp, ShmImage, TestClient,
@@ -128,6 +129,25 @@ fn while_locked_no_popup_grab_input_method_or_virtual_keyboard_takes_keys_from_t
     assert!(lock.lock_surface_has_keyboard());
     assert!(lock.keys().contains(&(KEY_A, true)));
     assert!(!lock.keys().contains(&(KEY_Q, true)));
+}
+
+#[test]
+fn super_l_on_the_lock_screen_locks_again_instead_of_waking_it() {
+    let (mut server, mut editor) = focused_app();
+    let (reports, reported) = std::sync::mpsc::channel();
+    server.report_session(reports);
+    let mut lock = locked(&mut server);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+
+    chord(&mut server, &[KEY_LEFTMETA, KEY_L]);
+    roundtrip(&mut server, &mut [&mut lock, &mut editor]);
+
+    assert!(!lock.keys().contains(&(KEY_L, true)));
+    assert!(
+        reported
+            .try_iter()
+            .any(|report| report == SessionReport::LockStarted)
+    );
 }
 
 #[test]

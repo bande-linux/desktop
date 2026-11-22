@@ -230,10 +230,9 @@ impl State {
     }
 
     pub(crate) fn lock_on_request(&mut self) {
-        if self.is_locked() {
-            return;
+        if !self.is_locked() {
+            self.lock_screen_requested = true;
         }
-        self.lock_screen_requested = true;
         self.report_to_session(SessionReport::LockStarted);
     }
 

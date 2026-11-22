@@ -121,7 +121,7 @@ fn offset(direction: Direction) -> (i32, i32) {
 }
 
 fn allowed(action: Action, locked: bool, inhibited: bool) -> bool {
-    (!locked || action.area() == Area::Accessibility)
+    (!locked || action == Action::LockScreen || action.area() == Area::Accessibility)
         && (!inhibited || matches!(action, Action::LockScreen | Action::ForceQuit))
         && (action != Action::ToggleScreenReader || crate::assistive::screen_reader_installed())
 }

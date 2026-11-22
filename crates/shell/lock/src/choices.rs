@@ -170,6 +170,10 @@ impl Widget for PeerButton {
     fn accepts_focus(&self, _cx: &Context) -> bool {
         true
     }
+
+    fn focuses_on_click(&self) -> bool {
+        false
+    }
 }
 
 pub struct UserList {
@@ -373,5 +377,9 @@ impl Widget for SourceButton {
 
     fn accepts_focus(&self, _cx: &Context) -> bool {
         self.name.is_some()
+    }
+
+    fn focuses_on_click(&self) -> bool {
+        false
     }
 }

@@ -1246,3 +1246,48 @@ impl LockScreen {
         self.ui.scene(width, height)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bande_toolkit::ui::{Modifiers, Pointer};
+
+    #[test]
+    fn a_click_on_the_input_source_keeps_typing_in_the_password_field() {
+        let user = User {
+            uid: 1000,
+            login: "ada".to_owned(),
+            full_name: "Ada Lovelace".to_owned(),
+        };
+        let mut screen = LockScreen::new(
+            &user,
+            DateFormats::for_locale(&bande_datetime::posix_locale("en_GB.UTF-8")),
+            &"2026-10-28T09:41:00[UTC]".parse().unwrap_or_default(),
+            Appearance::default(),
+            TextSystem::new(),
+            Purpose::Lock,
+        );
+        screen.set_input_source(Some("Svenska".to_owned()));
+        screen.wake(Instant::now());
+        screen.scene(480, 360);
+        let at = screen
+            .ui
+            .widget_ref::<SourceButton>(screen.source)
+            .map(|button| button.frame())
+            .map(|frame| Point::new(frame.x + frame.width / 2.0, frame.y + frame.height / 2.0))
+            .unwrap_or_default();
+        screen.handle(&Event::PointerDown(Pointer::at(at)));
+        screen.handle(&Event::PointerUp(Pointer::at(at)));
+        assert!(screen.take_next_input_source());
+        for key in [Key::Character('a'), Key::Space, Key::Enter] {
+            screen.handle(&Event::Key {
+                key,
+                modifiers: Modifiers::default(),
+            });
+        }
+        assert_eq!(
+            screen.take_answer().as_deref().map(String::as_str),
+            Some("a ")
+        );
+    }
+}

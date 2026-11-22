@@ -505,12 +505,19 @@ fn open_mount(destination: &Destination, commands: Sender<Command>) -> io::Resul
             BROWSE_DIR,
         ])
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()?;
     let stdout = child
         .stdout
         .take()
         .ok_or_else(|| io::Error::other("restic mount has no output"))?;
+    if let Some(stderr) = child.stderr.take() {
+        thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                tracing::info!("restic mount: {line}");
+            }
+        });
+    }
     thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if line.contains("Now serving") && commands.send(Command::BrowserReady).is_err() {

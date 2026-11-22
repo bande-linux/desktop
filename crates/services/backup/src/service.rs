@@ -330,11 +330,21 @@ impl Service {
         Ok(())
     }
 
-    fn open_browser(&self, #[zbus(header)] header: Header<'_>) -> fdo::Result<()> {
+    async fn open_browser(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        authorize(connection, &header, CONTROL).await?;
         self.send(Command::OpenBrowser(sender_of(&header)?))
     }
 
-    fn close_browser(&self, #[zbus(header)] header: Header<'_>) -> fdo::Result<()> {
+    async fn close_browser(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        authorize(connection, &header, CONTROL).await?;
         self.send(Command::CloseBrowser(sender_of(&header)?))
     }
 }

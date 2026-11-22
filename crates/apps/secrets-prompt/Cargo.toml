@@ -1,6 +1,6 @@
 [package]
 name = "bande-secrets-prompt"
-description = "Bande keyring prompts: unlock, allow an app, new keyring, network passwords"
+description = "Bande keyring prompts: unlock, allow an app, new keyring, network passwords, GnuPG passphrases"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

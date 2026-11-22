@@ -298,6 +298,16 @@ UI.
   user confirms with the keyring password (`bande:allowed` remembers "Always Allow"). Prompts
   are `bande-secrets-prompt` processes, so the daemon never links the toolkit; the daemon is not
   dumpable.
+- GnuPG's passphrases and smartcard PINs are asked by the same prompt: `pinentry-bande`
+  (`crates/services/pinentry`, package `pinentry-bande`) speaks the Assuan pinentry protocol to
+  `gpg-agent` (GETPIN with its texts and SETREPEAT for a new passphrase, CONFIRM, MESSAGE, OPTION,
+  SETKEYINFO, cancel) and runs `bande-secrets-prompt --passphrase|--confirm|--message` for each
+  question; neither keeps the passphrase longer than the answer (zeroed, not dumpable). It is the
+  `pinentry` alternative at priority 95, above `pinentry-gnome3` (90) and `pinentry-qt` (80), and
+  outside a Bande Wayland session (no `WAYLAND_DISPLAY`, or `XDG_CURRENT_DESKTOP` without
+  `X-Bande`) it executes the first of `pinentry-gnome3`, `pinentry-qt`, `pinentry-gtk-2`,
+  `pinentry-fltk`, `pinentry-curses` and `pinentry-tty` that is installed, so other desktops and
+  terminals keep their own. It does not register `pinentry-x11`, which is for X11 pinentries.
 
 ### Updates during a session
 

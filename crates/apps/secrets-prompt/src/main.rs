@@ -29,6 +29,22 @@ enum Mode {
     UpdateLogin,
     Network,
     Reveal,
+    Passphrase,
+    Confirm,
+    Message,
+}
+
+#[derive(Default)]
+struct Texts {
+    title: Option<String>,
+    description: Option<String>,
+    label: Option<String>,
+    error: Option<String>,
+    ok: Option<String>,
+    cancel: Option<String>,
+    not_ok: Option<String>,
+    repeat: Option<String>,
+    mismatch: Option<String>,
 }
 
 struct Request {
@@ -36,6 +52,15 @@ struct Request {
     keyring: String,
     app: String,
     items: Vec<String>,
+    texts: Texts,
+}
+
+fn button(label: &Option<String>, standard: String) -> String {
+    label
+        .as_deref()
+        .map(|label| label.replace('_', ""))
+        .filter(|label| !label.trim().is_empty())
+        .unwrap_or(standard)
 }
 
 fn app_name(identity: Option<&str>) -> String {
@@ -65,11 +90,15 @@ fn request() -> Option<Request> {
         "--update-login" => Mode::UpdateLogin,
         "--network" => Mode::Network,
         "--reveal" => Mode::Reveal,
+        "--passphrase" => Mode::Passphrase,
+        "--confirm" => Mode::Confirm,
+        "--message" => Mode::Message,
         _ => return None,
     };
     let mut keyring = String::new();
     let mut app = None;
     let mut items = Vec::new();
+    let mut texts = Texts::default();
     for line in std::io::stdin().lines() {
         let line = line.ok()?;
         if line.is_empty() {
@@ -79,7 +108,21 @@ fn request() -> Option<Request> {
             ("keyring", value) => value.clone_into(&mut keyring),
             ("app", value) => app = Some(value.to_owned()),
             ("item", value) => items.push(value.to_owned()),
-            _ => {}
+            (key, value) => {
+                let field = match key {
+                    "title" => &mut texts.title,
+                    "description" => &mut texts.description,
+                    "label" => &mut texts.label,
+                    "error" => &mut texts.error,
+                    "ok" => &mut texts.ok,
+                    "cancel" => &mut texts.cancel,
+                    "not-ok" => &mut texts.not_ok,
+                    "repeat" => &mut texts.repeat,
+                    "mismatch" => &mut texts.mismatch,
+                    _ => continue,
+                };
+                *field = Some(value.replace('\r', "\n"));
+            }
         }
     }
     Some(Request {
@@ -87,6 +130,7 @@ fn request() -> Option<Request> {
         keyring,
         app: app_name(app.as_deref()),
         items,
+        texts,
     })
 }
 
@@ -179,6 +223,20 @@ impl Prompt {
                 ),
                 tr!("Enter the password to join it."),
             ),
+            (Mode::Passphrase | Mode::Confirm | Mode::Message, verifying) => {
+                let texts = &request.texts;
+                let title = texts.title.clone().unwrap_or_else(|| match request.mode {
+                    Mode::Passphrase => tr!("A passphrase is needed"),
+                    _ => tr!("GnuPG needs your confirmation"),
+                });
+                let description = texts.description.clone().unwrap_or_default();
+                let message = match (verifying, &texts.error) {
+                    (true, _) => tr!("Enter the passphrase again to verify it."),
+                    (false, Some(error)) => format!("{error} {description}"),
+                    (false, None) => description,
+                };
+                (title, message)
+            }
         };
         match note {
             Some(note) => (title, format!("{note} {message}")),
@@ -190,9 +248,15 @@ impl Prompt {
         let (title, message) = self.texts(note);
         let choice = Rc::clone(&self.choice);
         let submitted = Rc::clone(&self.choice);
-        let placeholder = match self.first {
-            Some(_) => tr!("Verify"),
-            None => tr!("Password"),
+        let passphrase = self.request.mode == Mode::Passphrase;
+        let texts = &self.request.texts;
+        let placeholder = match (&self.first, passphrase) {
+            (Some(_), true) => button(&texts.repeat, tr!("Verify")),
+            (Some(_), false) => tr!("Verify"),
+            (None, true) => button(&texts.label, tr!("Passphrase"))
+                .trim_end_matches(':')
+                .to_owned(),
+            (None, false) => tr!("Password"),
         };
         let field = SecureField::new(&placeholder, FIELD_FONT, move |_| {
             submitted
@@ -202,9 +266,23 @@ impl Prompt {
         self.field = field.id();
         let alert = Alert::new(&title, &message, move |action| {
             choice.borrow_mut().get_or_insert_with(|| action.to_owned());
-        })
-        .accessory(field);
+        });
         let alert = match self.request.mode {
+            Mode::Confirm | Mode::Message => alert,
+            _ => alert.accessory(field),
+        };
+        let texts = &self.request.texts;
+        let alert = match self.request.mode {
+            Mode::Passphrase => alert
+                .cancel(&button(&texts.cancel, tr!("Cancel")), "cancel")
+                .primary(&button(&texts.ok, tr!("OK")), "allow"),
+            Mode::Confirm => match &texts.not_ok {
+                Some(_) => alert.other(&button(&texts.not_ok, tr!("No")), "not-ok"),
+                None => alert,
+            }
+            .cancel(&button(&texts.cancel, tr!("Cancel")), "cancel")
+            .primary(&button(&texts.ok, tr!("OK")), "allow"),
+            Mode::Message => alert.primary(&button(&texts.ok, tr!("OK")), "allow"),
             Mode::Unlock => alert
                 .cancel(&tr!("Cancel"), "cancel")
                 .primary(&tr!("OK"), "allow"),
@@ -247,19 +325,37 @@ impl Prompt {
             return false;
         };
         let secret = self.secret();
+        let mode = self.request.mode;
+        let asks_twice = mode == Mode::Create
+            || (mode == Mode::Passphrase && self.request.texts.repeat.is_some());
         match action.as_str() {
-            "allow" | "always" if secret.is_empty() => {
+            "allow" if matches!(mode, Mode::Confirm | Mode::Message) => {
+                self.stage = match reply("allow\n") {
+                    true => Stage::Waiting,
+                    false => Stage::Done,
+                };
+            }
+            "not-ok" => {
+                self.stage = match reply("not-ok\n") {
+                    true => Stage::Waiting,
+                    false => Stage::Done,
+                };
+            }
+            "allow" | "always" if secret.is_empty() && mode != Mode::Passphrase => {
                 self.present(Some(tr!("Type the password to continue.")));
             }
-            "allow" if self.request.mode == Mode::Create && self.first.is_none() => {
+            "allow" if asks_twice && self.first.is_none() => {
                 self.first = Some(secret);
                 self.present(None);
             }
-            "allow"
-                if self.request.mode == Mode::Create && self.first.as_ref() != Some(&secret) =>
-            {
+            "allow" if asks_twice && self.first.as_ref() != Some(&secret) => {
                 self.first = None;
-                self.present(Some(tr!("The passwords don’t match. Try again.")));
+                let note = match (mode, &self.request.texts.mismatch) {
+                    (Mode::Passphrase, Some(mismatch)) => mismatch.clone(),
+                    (Mode::Passphrase, None) => tr!("The passphrases don’t match. Try again."),
+                    _ => tr!("The passwords don’t match. Try again."),
+                };
+                self.present(Some(note));
             }
             "allow" | "always" => {
                 let line = Zeroizing::new(format!("{action}\t{}\n", secret.as_str()));
@@ -403,7 +499,7 @@ fn main() -> ExitCode {
     }
     let Some(request) = request() else {
         tracing::error!(
-            "usage: {NAMESPACE} --unlock|--allow|--create|--update-login|--network|--reveal, with the request on standard input"
+            "usage: {NAMESPACE} --unlock|--allow|--create|--update-login|--network|--reveal|--passphrase|--confirm|--message, with the request on standard input"
         );
         return ExitCode::FAILURE;
     };

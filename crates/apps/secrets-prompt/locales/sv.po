@@ -48,8 +48,20 @@ msgstr "Nätverket ”{network}” kräver ett lösenord."
 msgid "Enter the password to join it."
 msgstr "Ange lösenordet för att ansluta till det."
 
+msgid "A passphrase is needed"
+msgstr "En lösenfras behövs"
+
+msgid "GnuPG needs your confirmation"
+msgstr "GnuPG behöver din bekräftelse"
+
+msgid "Enter the passphrase again to verify it."
+msgstr "Ange lösenfrasen igen för att bekräfta den."
+
 msgid "Verify"
 msgstr "Verifiera"
+
+msgid "Passphrase"
+msgstr "Lösenfras"
 
 msgid "Password"
 msgstr "Lösenord"
@@ -59,6 +71,9 @@ msgstr "Avbryt"
 
 msgid "OK"
 msgstr "OK"
+
+msgid "No"
+msgstr "Nej"
 
 msgid "Always Allow"
 msgstr "Tillåt alltid"
@@ -86,6 +101,9 @@ msgstr "Uppdatera lösenord"
 
 msgid "Type the password to continue."
 msgstr "Skriv lösenordet för att fortsätta."
+
+msgid "The passphrases don’t match. Try again."
+msgstr "Lösenfraserna stämmer inte överens. Försök igen."
 
 msgid "The passwords don’t match. Try again."
 msgstr "Lösenorden stämmer inte överens. Försök igen."

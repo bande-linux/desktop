@@ -670,6 +670,24 @@ Description: Bande keyring: the Secret Service of the Bande desktop
  first. It runs only in a Bande session, so other desktops keep their own
  keyring.
 
+Package: pinentry-bande
+Architecture: any
+Built-Using: ${cargo:Built-Using}
+Static-Built-Using: ${cargo:Static-Built-Using}
+Section: utils
+Depends: ${shlibs:Depends},
+ pinentry-curses,
+ ${misc:Depends}
+Recommends: bande-secrets (= ${binary:Version})
+Enhances: gpg-agent
+Provides: pinentry
+Description: pinentry for GnuPG that asks with the Bande keyring prompt
+ GnuPG's gpg-agent runs a pinentry to ask for the passphrase of a key or
+ the PIN of a smartcard. In a Bande session this one asks with the Bande
+ keyring's prompt, on Wayland, with the screen reader and keyboard like
+ every other prompt; elsewhere it hands over to another installed
+ pinentry, such as pinentry-gnome3, pinentry-qt or pinentry-curses.
+
 Package: libpam-bande-secrets
 Architecture: any
 Built-Using: ${cargo:Built-Using}
@@ -960,7 +978,8 @@ Depends: ${shlibs:Depends},
 Recommends: bande-secrets (= ${binary:Version}) | org.freedesktop.secrets,
  gpg,
  gpg-agent,
- gpgsm
+ gpgsm,
+ pinentry-bande (= ${binary:Version})
 Suggests: scdaemon
 Description: email client for the Bande desktop
  Mail for the Bande desktop, in three panes: mailboxes and a unified

@@ -272,12 +272,18 @@ fn a_wrong_password_is_refused_and_older_viewers_need_permission() {
         [0, 1, 0, 0, 1, 6],
         "only X509Plain, with the whole password, until older viewers are allowed"
     );
-    let mut second = connected(port);
-    let mut greeting = [0; 12];
-    assert!(
-        second.read_exact(&mut greeting).is_err(),
-        "one handshake at a time from one address"
-    );
+    let mut busy = Answers {
+        password: PASSWORD,
+        seen: None,
+    };
+    match client::connect(connected(port), "127.0.0.1", false, &mut busy) {
+        Err(Failure::Refused(reason)) => assert_eq!(
+            reason, "This computer is already connecting.",
+            "one handshake at a time from one address, and the viewer is told why"
+        ),
+        Err(other) => panic!("expected a refusal, got {other:?}"),
+        Ok(_) => panic!("a second handshake from one address got in"),
+    }
     drop(socket);
     thread::sleep(Duration::from_millis(200));
     let mut answers = Answers {

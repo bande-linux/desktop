@@ -28,6 +28,15 @@ msgstr "BMP-bild"
 msgid "Icon"
 msgstr "Ikon"
 
+msgid "HEIF image"
+msgstr "HEIF-bild"
+
+msgid "AVIF image"
+msgstr "AVIF-bild"
+
+msgid "JPEG XL image"
+msgstr "JPEG XL-bild"
+
 msgid "SVG image"
 msgstr "SVG-bild"
 

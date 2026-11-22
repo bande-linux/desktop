@@ -237,7 +237,7 @@ impl State {
             Action::OpenTerminal => self.open_terminal(),
             Action::CaptureScreen => self.capture_screen(),
             Action::CaptureArea => self.capture_area(),
-            Action::CaptureOptions => self.show_capture_options(),
+            Action::CaptureOptions => self.show_capture_options(false),
             Action::LockScreen => self.lock_screen_requested = !self.is_locked(),
             Action::ForceQuit => self.open_force_quit(),
             Action::ShowNotifications => self.toggle_panel(Panel::Notifications),

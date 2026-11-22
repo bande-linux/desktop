@@ -206,7 +206,10 @@ UI.
 - **Screen recording**: a private PipeWire stream into `gst-launch-1.0`, MP4 (H.264, from
   `gstreamer1.0-plugins-ugly`) or else WebM (VP8). A stop symbol sits in the Taskbar; stopping
   sends end of stream, so the file is finalised. Without GStreamer the palette says what to
-  install.
+  install. Quick Settings' Screen Recording tile asks the compositor for the palette with Record
+  Entire Screen chosen (`bande_shell_v1.show_capture_options`, passed on as
+  `bande_capture_v1.show_recording_options`); while recording, the tile is on, reading
+  `org.bande.Screenshot`'s `Recording`, and stops the recording as Print does.
 
 **Third-party toolkits** follow the appearance:
 

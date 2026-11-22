@@ -35,7 +35,7 @@ const LOOK_UP_PATH: &str = "/org/bande/Lookup";
 pub(crate) const PANEL_ORIGIN_SINCE: u32 = 6;
 pub(crate) const OFFER_PLACEMENTS_SINCE: u32 = 8;
 pub(crate) const MOVE_LAYER_SINCE: u32 = 7;
-pub(crate) const SHELL_VERSION: u32 = 8;
+pub(crate) const SHELL_VERSION: u32 = 9;
 const ACT_FOR_APP_SINCE: u32 = 8;
 
 struct Toplevel {
@@ -196,6 +196,11 @@ impl Window {
 
     pub fn show_launcher(&mut self) -> Result<(), WindowError> {
         self.shell()?.show_launcher();
+        self.flush()
+    }
+
+    pub fn show_capture_options(&mut self, recording: bool) -> Result<(), WindowError> {
+        self.shell()?.show_capture_options(u32::from(recording));
         self.flush()
     }
 

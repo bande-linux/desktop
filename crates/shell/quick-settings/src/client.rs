@@ -46,6 +46,8 @@ use zbus::blocking::Connection;
 use zbus::proxy::CacheProperties;
 
 const SETTINGS_APP: &str = "org.bande.Settings";
+const SCREENSHOT: &str = "org.bande.Screenshot";
+const SCREENSHOT_PATH: &str = "/org/bande/Screenshot";
 const SESSION: &str = "session:";
 const ARTWORK_PIXELS: u32 = 128;
 const ARTWORKS_KEPT: usize = 16;
@@ -106,6 +108,7 @@ struct Connected {
     dark_style: Option<bool>,
     power_mode: Option<String>,
     airplane_mode: Option<bool>,
+    recording: Option<bool>,
 }
 
 fn config(session: &Connection) -> zbus::Result<zbus::blocking::Proxy<'static>> {
@@ -125,6 +128,16 @@ fn set_night_light(session: &Connection, on: bool) -> zbus::Result<()> {
     let (_, schedule, from, to, warmth) = read_night_light(session)?;
     config(session)?.set_property("NightLight", (on, schedule, from, to, warmth))?;
     Ok(())
+}
+
+fn read_recording(session: &Connection) -> zbus::Result<bool> {
+    zbus::blocking::proxy::Builder::<zbus::blocking::Proxy<'_>>::new(session)
+        .destination(SCREENSHOT)?
+        .path(SCREENSHOT_PATH)?
+        .interface(SCREENSHOT)?
+        .cache_properties(CacheProperties::No)
+        .build()?
+        .get_property("Recording")
 }
 
 fn read_dark_style(session: &Connection) -> zbus::Result<bool> {
@@ -182,6 +195,8 @@ fn read_connected(
             .and_then(|session| quietly("Night Light", read_night_light(session)))
             .map(|(on, ..)| on),
         dark_style: session.and_then(|session| quietly("the style", read_dark_style(session))),
+        recording: session
+            .and_then(|session| quietly("whether the screen is recorded", read_recording(session))),
         power_mode: system.and_then(|system| {
             quietly(
                 "the power mode",
@@ -366,6 +381,7 @@ impl QuickSettings {
             dark_style,
             power_mode,
             airplane_mode,
+            recording,
             ..
         } = self.connected.clone();
         let snapshot = self.audio.as_deref().map(Audio::snapshot);
@@ -399,6 +415,7 @@ impl QuickSettings {
             dark_style,
             power_mode,
             airplane_mode,
+            recording,
             volume: output.map(|output| output.level.volume),
             outputs,
             output: output.map(|output| output.name.clone()),
@@ -554,6 +571,13 @@ impl QuickSettings {
             Change::AirplaneMode(on) => {
                 report("switch airplane mode", set_airplane_mode(on));
                 self.refresh();
+            }
+            Change::ScreenRecording => {
+                report(
+                    "open the screen recording options",
+                    window.show_capture_options(true),
+                );
+                self.dismiss(window);
             }
             Change::ChooseBluetoothDevice => {
                 if let Some(devices) = &self.connected.devices {

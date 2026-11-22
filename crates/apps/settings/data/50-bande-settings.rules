@@ -2,10 +2,8 @@ polkit.addRule(function(action, subject) {
     var settings = [
         "org.freedesktop.timedate1.set-timezone",
         "org.freedesktop.timedate1.set-ntp",
-        "org.freedesktop.timedate1.set-time",
         "org.bande.locale-helper",
-        "org.freedesktop.hostname1.set-static-hostname",
-        "org.freedesktop.hostname1.set-machine-info"
+        "org.freedesktop.hostname1.set-static-hostname"
     ];
     if (settings.indexOf(action.id) >= 0 &&
         subject.local && subject.active &&

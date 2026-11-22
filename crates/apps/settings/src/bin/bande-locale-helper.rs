@@ -247,6 +247,9 @@ fn finish(result: io::Result<()>) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    if std::env::var_os("PKEXEC_UID").is_none() {
+        return refuse("run this through pkexec");
+    }
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     match arguments.split_first() {
         Some((command, assignments)) if command == "locale" && !assignments.is_empty() => {

@@ -39,6 +39,8 @@ pub enum Setting {
     IdleDisplayOffAfter(Option<Duration>),
     IdleRequirePasswordAfter(Duration),
     IdleSuspend(Suspend),
+    IdleBatteryDisplayOffAfter(Option<Duration>),
+    IdleBatterySuspend(Suspend),
     KeyRepeatRate(u32),
     KeyRepeatDelay(Duration),
     InputSources(Vec<InputSource>),
@@ -225,11 +227,19 @@ impl Setting {
                 &mut document,
                 Some("idle"),
                 "suspend-after",
-                match suspend {
-                    Suspend::WithDisplayOff => None,
-                    Suspend::After(after) => Some(duration(*after).into()),
-                    Suspend::Never => Some("never".into()),
-                },
+                suspend_value(*suspend),
+            ),
+            Self::IdleBatteryDisplayOffAfter(after) => set(
+                &mut document,
+                Some("idle"),
+                "display-off-after-on-battery",
+                Some(after.map_or_else(|| "never".into(), |after| duration(after).into())),
+            ),
+            Self::IdleBatterySuspend(suspend) => set(
+                &mut document,
+                Some("idle"),
+                "suspend-after-on-battery",
+                suspend_value(*suspend),
             ),
             Self::KeyRepeatRate(rate) => set(
                 &mut document,
@@ -690,6 +700,14 @@ fn set_arrangement(document: &mut KdlDocument, config: &Config, placements: &[Pl
 }
 
 const CHILD_INDENT: &str = "    ";
+
+fn suspend_value(suspend: Suspend) -> Option<KdlValue> {
+    match suspend {
+        Suspend::WithDisplayOff => None,
+        Suspend::After(after) => Some(duration(after).into()),
+        Suspend::Never => Some("never".into()),
+    }
+}
 
 fn set(document: &mut KdlDocument, section: Option<&str>, name: &str, value: Option<KdlValue>) {
     set_values(document, section, name, value.map(|value| vec![value]));

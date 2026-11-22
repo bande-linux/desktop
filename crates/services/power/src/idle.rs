@@ -14,6 +14,21 @@ pub struct Policy {
     pub suspend_after: Option<Duration>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Policies {
+    pub on_power: Policy,
+    pub on_battery: Policy,
+}
+
+impl Policies {
+    fn for_source(&self, on_battery: bool) -> Policy {
+        match on_battery {
+            true => self.on_battery,
+            false => self.on_power,
+        }
+    }
+}
+
 impl Policy {
     fn rest_after(&self) -> Option<Duration> {
         match (self.screen_saver_after, self.display_off_after) {
@@ -77,6 +92,7 @@ pub enum Assertion {
 
 #[derive(Debug)]
 pub struct IdleMachine {
+    policies: Policies,
     policy: Policy,
     stage: Stage,
     dimmed: bool,
@@ -97,9 +113,10 @@ pub struct IdleMachine {
 }
 
 impl IdleMachine {
-    pub fn new(policy: Policy) -> Self {
+    pub fn new(policies: Policies) -> Self {
         Self {
-            policy,
+            policies,
+            policy: policies.on_power,
             stage: Stage::Active,
             dimmed: false,
             display_off: false,
@@ -258,6 +275,10 @@ impl IdleMachine {
     pub fn set_power_source(&mut self, on_battery: bool, battery_low: bool) -> Vec<Command> {
         self.on_battery = on_battery;
         self.battery_low = battery_low;
+        let policy = self.policies.for_source(on_battery);
+        if policy != self.policy {
+            return self.follow(policy);
+        }
         if self.sleep_overdue && !self.kept_awake(Duration::ZERO) {
             self.sleep_overdue = false;
             return vec![Command::RestartSleepTimer];
@@ -314,7 +335,12 @@ impl IdleMachine {
         self.require_password()
     }
 
-    pub fn set_policy(&mut self, policy: Policy) -> Vec<Command> {
+    pub fn set_policies(&mut self, policies: Policies) -> Vec<Command> {
+        self.policies = policies;
+        self.follow(policies.for_source(self.on_battery))
+    }
+
+    fn follow(&mut self, policy: Policy) -> Vec<Command> {
         if policy == self.policy {
             return Vec::new();
         }
@@ -351,6 +377,10 @@ mod tests {
             display_off_after: Some(minutes(10)),
             require_password_after: minutes(5),
             suspend_after: Some(minutes(10)),
+        };
+        let policy = Policies {
+            on_power: policy,
+            on_battery: policy,
         };
         for asleep in [true, false] {
             let mut machine = IdleMachine::new(policy);

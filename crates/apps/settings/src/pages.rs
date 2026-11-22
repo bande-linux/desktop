@@ -529,9 +529,12 @@ impl SettingsView {
         if setting.id == SettingId::DisplayResolution && !self.show_all_resolutions {
             return None;
         }
-        let unavailable = (setting.id == SettingId::SleepAfter)
-            .then(|| self.idle_sleep_unavailable.clone())
-            .flatten();
+        let unavailable = matches!(
+            setting.id,
+            SettingId::SleepAfter | SettingId::BatterySleepAfter
+        )
+        .then(|| self.idle_sleep_unavailable.clone())
+        .flatten();
         let (control, focus) = match self.allowed(setting.id) && unavailable.is_none() {
             true => self.control(setting, scope)?,
             false if unavailable.is_some() => {
@@ -1310,6 +1313,7 @@ impl SettingsView {
             SettingId::BatteryLevel => battery,
             SettingId::PowerMode => modes,
             SettingId::LowPowerOnBattery => modes && battery,
+            SettingId::BatteryDisplayOffAfter | SettingId::BatterySleepAfter => battery,
             SettingId::LidOnPower => power.is_some_and(|power| power.lid),
             _ => true,
         }

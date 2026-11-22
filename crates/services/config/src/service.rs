@@ -272,6 +272,21 @@ fn publish_changes(
         {
             announce(guard.idle_suspend_with_display_changed(emitter).await);
         }
+        if before.idle.on_battery.display_off_after != after.idle.on_battery.display_off_after {
+            announce(guard.idle_battery_display_off_after_changed(emitter).await);
+        }
+        if before.idle.on_battery.suspend_after() != after.idle.on_battery.suspend_after() {
+            announce(guard.idle_battery_suspend_after_changed(emitter).await);
+        }
+        if (before.idle.on_battery.suspend == Suspend::WithDisplayOff)
+            != (after.idle.on_battery.suspend == Suspend::WithDisplayOff)
+        {
+            announce(
+                guard
+                    .idle_battery_suspend_with_display_changed(emitter)
+                    .await,
+            );
+        }
         if before.keyboard.repeat_rate != after.keyboard.repeat_rate {
             announce(guard.key_repeat_rate_changed(emitter).await);
         }
@@ -945,6 +960,75 @@ impl ConfigInterface {
         self.write(&Setting::IdleSuspend(suspend))?;
         if idle.suspend_after() != self.store.current().idle.suspend_after() {
             self.idle_suspend_after_changed(&emitter).await?;
+        }
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn idle_battery_display_off_after(&self) -> u64 {
+        seconds_or_never(self.store.current().idle.on_battery.display_off_after)
+    }
+
+    #[zbus(property)]
+    async fn set_idle_battery_display_off_after(
+        &self,
+        seconds: u64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let before = self.store.current().idle.on_battery.suspend_after();
+        self.write(&Setting::IdleBatteryDisplayOffAfter(never_or_seconds(
+            seconds,
+        )))?;
+        if before != self.store.current().idle.on_battery.suspend_after() {
+            self.idle_battery_suspend_after_changed(&emitter).await?;
+        }
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn idle_battery_suspend_after(&self) -> u64 {
+        seconds_or_never(self.store.current().idle.on_battery.suspend_after())
+    }
+
+    #[zbus(property)]
+    async fn set_idle_battery_suspend_after(
+        &self,
+        seconds: u64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let before = self.idle_battery_suspend_with_display();
+        self.write(&Setting::IdleBatterySuspend(
+            never_or_seconds(seconds).map_or(Suspend::Never, Suspend::After),
+        ))?;
+        if before != self.idle_battery_suspend_with_display() {
+            self.idle_battery_suspend_with_display_changed(&emitter)
+                .await?;
+        }
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn idle_battery_suspend_with_display(&self) -> bool {
+        self.store.current().idle.on_battery.suspend == Suspend::WithDisplayOff
+    }
+
+    #[zbus(property)]
+    async fn set_idle_battery_suspend_with_display(
+        &self,
+        with_display: bool,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> zbus::fdo::Result<()> {
+        let battery = self.store.current().idle.on_battery;
+        let suspend = match (with_display, battery.suspend) {
+            (true, _) => Suspend::WithDisplayOff,
+            (false, Suspend::WithDisplayOff) => battery
+                .display_off_after
+                .map_or(Suspend::Never, Suspend::After),
+            (false, explicit) => explicit,
+        };
+        self.write(&Setting::IdleBatterySuspend(suspend))?;
+        if battery.suspend_after() != self.store.current().idle.on_battery.suspend_after() {
+            self.idle_battery_suspend_after_changed(&emitter).await?;
         }
         Ok(())
     }

@@ -193,7 +193,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   ```kdl
   appearance "dark"             // "dark" (default) | "light" | "automatic"
   bar { edge "left"; size 40; auto-hide #false; floating #true; gap 8 }   // edge "left" | "bottom" | "right" | "top"
-  idle { screen-saver-after "5m"; display-off-after "10m"; require-password-after "immediately" }   // or "never"; suspend-after follows the display unless set
+  idle { screen-saver-after "5m"; display-off-after "10m"; require-password-after "immediately"; display-off-after-on-battery "5m" }   // or "never"; suspend-after and suspend-after-on-battery follow the display unless set
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }
   search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false

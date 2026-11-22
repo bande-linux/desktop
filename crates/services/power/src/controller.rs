@@ -10,7 +10,7 @@ use zbus::blocking::Connection;
 use crate::backlight::KeyboardBacklight;
 use crate::battery::{DisplayDeviceProxyBlocking, LOW_WARNING_LEVEL, UPowerProxyBlocking};
 use crate::brightness::Lights;
-use crate::idle::{Assertion, Command, IdleMachine, Inhibitor, Policy};
+use crate::idle::{Assertion, Command, IdleMachine, Inhibitor, Policies, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
 use crate::password::PasswordPolicy;
 
@@ -31,6 +31,12 @@ pub trait Config {
 
     #[zbus(property)]
     fn idle_suspend_after(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn idle_battery_display_off_after(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn idle_battery_suspend_after(&self) -> zbus::Result<u64>;
 }
 
 type Executor = Box<dyn Fn(Command) + Send + Sync>;
@@ -79,9 +85,9 @@ pub struct IdleController {
 }
 
 impl IdleController {
-    pub fn new(policy: Policy, execute: impl Fn(Command) + Send + Sync + 'static) -> Self {
+    pub fn new(policies: Policies, execute: impl Fn(Command) + Send + Sync + 'static) -> Self {
         Self {
-            machine: Mutex::new(IdleMachine::new(policy)),
+            machine: Mutex::new(IdleMachine::new(policies)),
             execute: Box::new(execute),
             wayland_listeners: Mutex::new(Vec::new()),
         }
@@ -141,8 +147,8 @@ impl IdleController {
         self.run(|machine| machine.set_locked(locked));
     }
 
-    pub fn set_policy(&self, policy: Policy) {
-        self.run(|machine| machine.set_policy(policy));
+    pub fn set_policies(&self, policies: Policies) {
+        self.run(|machine| machine.set_policies(policies));
         self.tell_wayland(Command::RestartIdleTimers);
     }
 
@@ -171,18 +177,26 @@ impl IdleController {
     }
 }
 
-fn policy(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policy> {
+fn policies(config: &ConfigProxyBlocking<'_>) -> zbus::Result<Policies> {
     let unless_never = |seconds: u64| (seconds > 0).then(|| Duration::from_secs(seconds));
-    Ok(Policy {
+    let on_power = Policy {
         screen_saver_after: unless_never(config.idle_screen_saver_after()?),
         display_off_after: unless_never(config.idle_display_off_after()?),
         require_password_after: Duration::from_secs(config.idle_require_password_after()?),
         suspend_after: unless_never(config.idle_suspend_after()?),
+    };
+    Ok(Policies {
+        on_power,
+        on_battery: Policy {
+            display_off_after: unless_never(config.idle_battery_display_off_after()?),
+            suspend_after: unless_never(config.idle_battery_suspend_after()?),
+            ..on_power
+        },
     })
 }
 
-pub fn configured_policy(session: &Connection) -> zbus::Result<Policy> {
-    policy(&ConfigProxyBlocking::new(session)?)
+pub fn configured_policies(session: &Connection) -> zbus::Result<Policies> {
+    policies(&ConfigProxyBlocking::new(session)?)
 }
 
 fn refresh_on<T>(
@@ -194,8 +208,8 @@ fn refresh_on<T>(
     let controller = Arc::clone(controller);
     thread::spawn(move || {
         for _ in changes {
-            if let Ok(policy) = policy(&config) {
-                controller.set_policy(policy);
+            if let Ok(policies) = policies(&config) {
+                controller.set_policies(policies);
             }
         }
     });
@@ -223,7 +237,17 @@ pub fn follow_config(session: &Connection, controller: &Arc<IdleController>) -> 
         &config,
         controller,
     );
-    controller.set_policy(policy(&config)?);
+    refresh_on(
+        config.receive_idle_battery_display_off_after_changed(),
+        &config,
+        controller,
+    );
+    refresh_on(
+        config.receive_idle_battery_suspend_after_changed(),
+        &config,
+        controller,
+    );
+    controller.set_policies(policies(&config)?);
     Ok(())
 }
 

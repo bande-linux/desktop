@@ -181,6 +181,18 @@ pub trait Config {
     #[zbus(property)]
     fn set_idle_suspend_with_display(&self, with_display: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn idle_battery_display_off_after(&self) -> zbus::Result<u64>;
+    #[zbus(property)]
+    fn set_idle_battery_display_off_after(&self, seconds: u64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn idle_battery_suspend_after(&self) -> zbus::Result<u64>;
+    #[zbus(property)]
+    fn set_idle_battery_suspend_after(&self, seconds: u64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn idle_battery_suspend_with_display(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_idle_battery_suspend_with_display(&self, with_display: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn key_repeat_rate(&self) -> zbus::Result<u32>;
     #[zbus(property)]
     fn set_key_repeat_rate(&self, rate: u32) -> zbus::Result<()>;
@@ -323,7 +335,7 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
     }
 }
 
-pub const CONFIG_SETTINGS: [SettingId; 81] = [
+pub const CONFIG_SETTINGS: [SettingId; 83] = [
     SettingId::Appearance,
     SettingId::Style,
     SettingId::Clock24Hour,
@@ -368,6 +380,8 @@ pub const CONFIG_SETTINGS: [SettingId; 81] = [
     SettingId::DisplayOffAfter,
     SettingId::RequirePasswordAfter,
     SettingId::SleepAfter,
+    SettingId::BatteryDisplayOffAfter,
+    SettingId::BatterySleepAfter,
     SettingId::KeyRepeatRate,
     SettingId::KeyRepeatDelay,
     SettingId::InputSources,
@@ -606,6 +620,15 @@ impl SettingsClient {
                 Value::Keyword(WITH_DISPLAY.to_owned())
             }
             SettingId::SleepAfter => Value::Seconds(self.config.idle_suspend_after()?),
+            SettingId::BatteryDisplayOffAfter => {
+                Value::Seconds(self.config.idle_battery_display_off_after()?)
+            }
+            SettingId::BatterySleepAfter if self.config.idle_battery_suspend_with_display()? => {
+                Value::Keyword(WITH_DISPLAY.to_owned())
+            }
+            SettingId::BatterySleepAfter => {
+                Value::Seconds(self.config.idle_battery_suspend_after()?)
+            }
             SettingId::KeyRepeatRate => Value::Number(self.config.key_repeat_rate()?),
             SettingId::KeyRepeatDelay => Value::Number(self.config.key_repeat_delay()?),
             SettingId::InputSources => Value::Codes(self.config.input_sources()?),
@@ -774,6 +797,15 @@ impl SettingsClient {
             }
             (SettingId::SleepAfter, Value::Seconds(seconds)) => {
                 self.config.set_idle_suspend_after(*seconds)
+            }
+            (SettingId::BatteryDisplayOffAfter, Value::Seconds(seconds)) => {
+                self.config.set_idle_battery_display_off_after(*seconds)
+            }
+            (SettingId::BatterySleepAfter, Value::Keyword(keyword)) if keyword == WITH_DISPLAY => {
+                self.config.set_idle_battery_suspend_with_display(true)
+            }
+            (SettingId::BatterySleepAfter, Value::Seconds(seconds)) => {
+                self.config.set_idle_battery_suspend_after(*seconds)
             }
             (SettingId::KeyRepeatRate, Value::Number(rate)) => {
                 self.config.set_key_repeat_rate(*rate)

@@ -34,7 +34,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     }
     battery::chime_when_plugged_in(&system, &session)?;
     let idle = Arc::new(IdleController::new(
-        controller::configured_policy(&session)?,
+        controller::configured_policies(&session)?,
         controller::logind_executor(
             ManagerProxyBlocking::new(&system)?,
             logind::own_session(&system)?,

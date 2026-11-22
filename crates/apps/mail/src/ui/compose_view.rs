@@ -5,18 +5,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use bande_app::{Dropping, FileDrop};
-use bande_l10n::{Text, text, tr};
+use bande_l10n::{Text, text, tr, trn};
 
 use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};
 use crate::message::{Address, Attachment, parse_addresses};
 use crate::store::Account;
 use crate::ui::symbols::Symbol;
 use crate::ui::view::{SHORTCUTS, TOOLBAR_HEIGHT};
-use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeUpdate};
+use accesskit::{ActionRequest, Node, Role, TreeUpdate};
 use bande_toolkit::ui::{
     Alert, BUTTON_HEIGHT, Button, ClipboardRequest, Context, Cursor, Event, FreeLayout, Label,
-    Menu, PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget, WidgetId,
-    access_rect, shortcut_pressed,
+    Menu, MenuItem, PopUpButton, Size, TEXT_FIELD_HEIGHT, TextField, TextView, Ui, Widget,
+    WidgetId, access_rect, shortcut_pressed,
 };
 use bande_toolkit::{
     Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Item, Palette, Point, Radius, Rect,
@@ -35,6 +35,9 @@ const BODY_GAP: f32 = 10.0;
 const CHIP_HEIGHT: f32 = 26.0;
 const CHIP_PADDING: f32 = 10.0;
 const CHIP_GAP: f32 = 8.0;
+const REMOVE_SIZE: f32 = 22.0;
+const MORE_PADDING: f32 = 16.0;
+const REMOVE_ACTION: &str = "remove-attachment:";
 const AUTOSAVE_DELAY: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,7 +46,15 @@ enum Signal {
     Attach,
     From(usize),
     Discard,
+    Remove(u64),
+    More,
     Dismissed,
+}
+
+struct Chip {
+    key: u64,
+    remove: WidgetId,
+    frame: Rect,
 }
 
 pub struct ComposeView {
@@ -70,7 +81,12 @@ pub struct ComposeView {
     sent: Option<Outgoing>,
     requests: Vec<ComposeRequest>,
     drop: FileDrop,
-    chips: Vec<(Rect, usize)>,
+    chips: Vec<Chip>,
+    next_chip: u64,
+    shown_chips: usize,
+    more: WidgetId,
+    more_frame: Rect,
+    removed: Vec<(usize, Attachment)>,
     access: WidgetId,
     token: u64,
     closed: bool,
@@ -180,6 +196,7 @@ impl ComposeView {
             TextView::new(&tr!("Write your message"), &draft.body, |_| {}).borderless(),
             Rect::default(),
         );
+        let more = host.insert(Label::new(""), Rect::default());
         let mut view = Self {
             ui: Ui::new(Box::new(host), Context::new(text, palette)),
             host: host_id,
@@ -205,6 +222,11 @@ impl ComposeView {
             requests: Vec::new(),
             drop: FileDrop::default(),
             chips: Vec::new(),
+            next_chip: 0,
+            shown_chips: 0,
+            more,
+            more_frame: Rect::default(),
+            removed: Vec::new(),
             access: WidgetId::next(),
             token,
             closed: false,
@@ -214,6 +236,9 @@ impl ComposeView {
             autosaved: None,
             autosave_at: None,
         };
+        for index in 0..view.draft.attachments.len() {
+            view.insert_chip(index);
+        }
         let first = match view.draft.to.is_empty() {
             true => view.to,
             false => view.body,
@@ -308,6 +333,19 @@ impl ComposeView {
         if !self.draft.attachments.is_empty() {
             y += FIELD_ROW;
         }
+        for (index, chip) in self.chips.iter().enumerate() {
+            let frame = match index < self.shown_chips {
+                true => Rect::new(
+                    chip.frame.x + chip.frame.width - REMOVE_SIZE - 2.0,
+                    chip.frame.y + ((CHIP_HEIGHT - REMOVE_SIZE) / 2.0).round(),
+                    REMOVE_SIZE,
+                    REMOVE_SIZE,
+                ),
+                false => Rect::default(),
+            };
+            frames.push((chip.remove, frame));
+        }
+        frames.push((self.more, self.more_frame));
         frames.push((
             self.body,
             Rect::new(
@@ -335,6 +373,7 @@ impl ComposeView {
 
     pub fn scene(&mut self, width: u32, height: u32) -> Scene {
         self.size = (width as f32, height as f32);
+        self.place_chips();
         let mut placed = Vec::new();
         for _ in 0..3 {
             let frames = self.frames();
@@ -379,7 +418,7 @@ impl ComposeView {
             });
             y += FIELD_ROW;
         }
-        self.paint_attachments(&mut items, y);
+        self.paint_attachments(&mut items);
         items.extend(controls);
         items.extend(sheet);
         Scene {
@@ -390,42 +429,139 @@ impl ComposeView {
         }
     }
 
-    fn paint_attachments(&mut self, items: &mut Vec<Item>, y: f32) {
-        self.chips.clear();
-        let palette = self.palette;
+    fn chip_label(attachment: &Attachment) -> String {
+        format!(
+            "{}  {}",
+            attachment.name,
+            bande_fs::format_size(attachment.data.len() as u64)
+        )
+    }
+
+    fn chip_paragraph(&mut self, text: &str) -> bande_toolkit::Paragraph {
+        let ink = self.palette.ink;
+        self.ui.context().text.paragraph(
+            text,
+            TextStyle::role(TextRole::Callout, ink),
+            None,
+            TextAlign::Start,
+        )
+    }
+
+    fn place_chips(&mut self) {
+        let rows = rows(self.from.is_some(), self.bcc_shown).len() as f32;
+        let chip_y = TOOLBAR_HEIGHT + rows * FIELD_ROW + ((FIELD_ROW - CHIP_HEIGHT) / 2.0).round();
+        let right = self.size.0 - MARGIN;
+        let count = self.chips.len();
+        let more_width = |hidden: usize, view: &mut Self| {
+            let title = trn!("{count} more", "{count} more", count = hidden);
+            view.chip_paragraph(&title).width() + 2.0 * MORE_PADDING
+        };
         let mut x = MARGIN + LABEL_WIDTH;
-        let chip_y = y + ((FIELD_ROW - CHIP_HEIGHT) / 2.0).round();
-        for (index, attachment) in self.draft.attachments.iter().enumerate() {
-            let label = format!(
-                "{}  {}  ×",
-                attachment.name,
-                bande_fs::format_size(attachment.data.len() as u64)
-            );
-            let paragraph = self.ui.context().text.paragraph(
-                &label,
-                TextStyle::role(TextRole::Callout, palette.ink),
-                None,
-                TextAlign::Start,
-            );
-            let width = paragraph.width() + 2.0 * CHIP_PADDING;
-            if x + width > self.size.0 - MARGIN {
+        self.shown_chips = count;
+        for index in 0..count {
+            let Some(label) = self.draft.attachments.get(index).map(Self::chip_label) else {
+                break;
+            };
+            let width = self.chip_paragraph(&label).width() + CHIP_PADDING + REMOVE_SIZE + 4.0;
+            let reserve = match count - index - 1 {
+                0 => 0.0,
+                hidden => CHIP_GAP + more_width(hidden, self),
+            };
+            if x + width + reserve > right {
+                self.shown_chips = index;
                 break;
             }
-            let chip = Rect::new(x, chip_y, width, CHIP_HEIGHT);
+            self.chips[index].frame = Rect::new(x, chip_y, width, CHIP_HEIGHT);
+            x += width + CHIP_GAP;
+        }
+        let hidden = count - self.shown_chips;
+        self.more_frame = match hidden {
+            0 => Rect::default(),
+            _ => Rect::new(x, chip_y, more_width(hidden, self), CHIP_HEIGHT),
+        };
+        let title = trn!("{count} more", "{count} more", count = hidden);
+        let is_button = self.ui.widget_as::<Button>(self.more).is_some();
+        if (hidden > 0) != is_button {
+            let signals = Rc::clone(&self.signals);
+            let replaced =
+                self.ui
+                    .widget_as::<FreeLayout>(self.host)
+                    .and_then(|host| match hidden {
+                        0 => host.replace(self.more, Label::new("")),
+                        _ => host.replace(
+                            self.more,
+                            Button::new(&title, move || signals.borrow_mut().push(Signal::More)),
+                        ),
+                    });
+            if let Some(more) = replaced {
+                self.more = more;
+            }
+        }
+        if let Some(more) = self.ui.widget_as::<Button>(self.more) {
+            more.set_title(&title);
+        }
+        for (index, chip) in self.chips.iter().enumerate() {
+            if let Some(remove) = self.ui.widget_as::<Button>(chip.remove) {
+                remove.set_enabled(index < self.shown_chips);
+            }
+        }
+    }
+
+    fn paint_attachments(&mut self, items: &mut Vec<Item>) {
+        let well = self.palette.well;
+        for index in 0..self.shown_chips {
+            let (Some(chip), Some(attachment)) =
+                (self.chips.get(index), self.draft.attachments.get(index))
+            else {
+                break;
+            };
+            let frame = chip.frame;
+            let label = Self::chip_label(attachment);
+            let paragraph = self.chip_paragraph(&label);
             items.push(Item::Fill {
-                shape: Shape::rounded(chip, Radius::S),
-                paint: palette.well.into(),
+                shape: Shape::rounded(frame, Radius::S),
+                paint: well.into(),
             });
             items.push(Item::Text {
                 origin: Point::new(
-                    chip.x + CHIP_PADDING,
-                    chip.y + ((CHIP_HEIGHT - paragraph.height()) / 2.0).round(),
+                    frame.x + CHIP_PADDING,
+                    frame.y + ((CHIP_HEIGHT - paragraph.height()) / 2.0).round(),
                 ),
                 paragraph,
             });
-            self.chips.push((chip, index));
-            x += width + CHIP_GAP;
         }
+    }
+
+    fn insert_chip(&mut self, index: usize) {
+        let Some(name) = self
+            .draft
+            .attachments
+            .get(index)
+            .map(|attachment| attachment.name.clone())
+        else {
+            return;
+        };
+        let key = self.next_chip;
+        self.next_chip += 1;
+        let signals = Rc::clone(&self.signals);
+        let click = move || signals.borrow_mut().push(Signal::Remove(key));
+        let label = tr!("Remove “{name}”", name = name);
+        let button = match Image::from_svg(Symbol::Remove.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
+            Some(image) => Button::symbol(image, &label, click),
+            None => Button::new(&label, click),
+        };
+        let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) else {
+            return;
+        };
+        let remove = host.insert(button, Rect::default());
+        self.chips.insert(
+            index.min(self.chips.len()),
+            Chip {
+                key,
+                remove,
+                frame: Rect::default(),
+            },
+        );
     }
 
     pub fn token(&self) -> u64 {
@@ -433,7 +569,10 @@ impl ComposeView {
     }
 
     pub fn add_attachments(&mut self, attachments: Vec<Attachment>) {
-        self.draft.attachments.extend(attachments);
+        for attachment in attachments {
+            self.draft.attachments.push(attachment);
+            self.insert_chip(self.draft.attachments.len() - 1);
+        }
         self.schedule_autosave();
     }
 
@@ -559,6 +698,8 @@ impl ComposeView {
                 Signal::Attach => self.requests.push(ComposeRequest::ChooseFiles),
                 Signal::From(index) => self.change_sender(index),
                 Signal::Discard => self.discard(),
+                Signal::Remove(key) => self.remove_attachment(key),
+                Signal::More => self.show_hidden_attachments(),
                 Signal::Dismissed => {}
             }
         }
@@ -611,15 +752,11 @@ impl ComposeView {
             self.try_send();
             return true;
         }
-        if let Event::PointerDown(pointer) = event
+        if shortcut_pressed(event, "Ctrl+Z")
             && !self.ui.has_sheet()
-            && let Some(index) = self
-                .chips
-                .iter()
-                .find(|(chip, _)| chip.contains(pointer.position))
-                .map(|(_, index)| *index)
+            && self.ui.text_input_area().is_none()
+            && self.restore_attachment()
         {
-            self.remove_attachment(index);
             return true;
         }
         let handled = self.ui.handle(event);
@@ -631,6 +768,11 @@ impl ComposeView {
         match action {
             "send" => self.try_send(),
             "discard-draft" => self.confirm_discard(),
+            removal if removal.starts_with(REMOVE_ACTION) => {
+                if let Ok(key) = removal[REMOVE_ACTION.len()..].parse() {
+                    self.remove_attachment(key);
+                }
+            }
             _ => {
                 let handled = self.ui.menu_action(action);
                 self.after_ui();
@@ -687,28 +829,68 @@ impl ComposeView {
         handled
     }
 
-    fn remove_attachment(&mut self, index: usize) {
-        if index < self.draft.attachments.len() {
-            self.draft.attachments.remove(index);
-            self.schedule_autosave();
+    fn remove_attachment(&mut self, key: u64) {
+        let Some(index) = self.chips.iter().position(|chip| chip.key == key) else {
+            return;
+        };
+        if index >= self.draft.attachments.len() {
+            return;
         }
+        let chip = self.chips.remove(index);
+        let attachment = self.draft.attachments.remove(index);
+        let focused = self.ui.focus() == Some(chip.remove);
+        if let Some(host) = self.ui.widget_as::<FreeLayout>(self.host) {
+            host.remove(chip.remove);
+        }
+        self.removed.push((index, attachment));
+        if focused {
+            let next = self
+                .chips
+                .get(index)
+                .or_else(|| {
+                    index
+                        .checked_sub(1)
+                        .and_then(|before| self.chips.get(before))
+                })
+                .map_or(self.attach, |chip| chip.remove);
+            self.ui.set_focus(next);
+        }
+        self.schedule_autosave();
     }
 
-    fn chip_of(&self, node: NodeId) -> Option<usize> {
-        let owner = NodeId::from(self.access).0;
-        (node.0 >> 32 == owner)
-            .then(|| (node.0 & u64::from(u32::MAX)).checked_sub(1))
-            .flatten()
-            .and_then(|index| usize::try_from(index).ok())
+    fn restore_attachment(&mut self) -> bool {
+        let Some((index, attachment)) = self.removed.pop() else {
+            return false;
+        };
+        let index = index.min(self.draft.attachments.len());
+        self.draft.attachments.insert(index, attachment);
+        self.insert_chip(index);
+        self.schedule_autosave();
+        true
+    }
+
+    fn show_hidden_attachments(&mut self) {
+        let items = self
+            .chips
+            .iter()
+            .zip(&self.draft.attachments)
+            .skip(self.shown_chips)
+            .map(|(chip, attachment)| {
+                MenuItem::new(
+                    &tr!("Remove “{name}”", name = attachment.name.as_str()),
+                    &format!("{REMOVE_ACTION}{}", chip.key),
+                )
+            })
+            .collect();
+        let at = Point::new(
+            self.more_frame.x,
+            self.more_frame.y + self.more_frame.height,
+        );
+        self.requests
+            .push(ComposeRequest::ShowMenu(Menu::new(items), at));
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
-        if let Some(index) = self.chip_of(request.target_node) {
-            if request.action == Action::Click {
-                self.remove_attachment(index);
-            }
-            return true;
-        }
         let handled = self.ui.perform(request);
         self.after_ui();
         handled
@@ -763,16 +945,18 @@ impl ComposeView {
     pub fn accessibility(&self) -> TreeUpdate {
         let mut tree = self.ui.accessibility();
         let mut chips = Vec::new();
-        for (rect, index) in &self.chips {
-            let Some(attachment) = self.draft.attachments.get(*index) else {
-                continue;
-            };
-            let mut node = Node::new(Role::Button);
-            node.set_label(tr!("Remove “{name}”", name = attachment.name.as_str()));
+        for (index, (chip, attachment)) in self
+            .chips
+            .iter()
+            .zip(&self.draft.attachments)
+            .take(self.shown_chips)
+            .enumerate()
+        {
+            let mut node = Node::new(Role::Label);
+            node.set_label(attachment.name.as_str());
             node.set_description(bande_fs::format_size(attachment.data.len() as u64));
-            node.set_bounds(access_rect(*rect));
-            node.add_action(Action::Click);
-            let id = self.access.part(*index as u64);
+            node.set_bounds(access_rect(chip.frame));
+            let id = self.access.part(index as u64);
             chips.push(id);
             tree.nodes.push((id, node));
         }

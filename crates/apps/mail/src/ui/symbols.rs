@@ -22,6 +22,7 @@ pub enum Symbol {
     Forward,
     Attachment,
     Remote,
+    Remove,
 }
 
 impl Symbol {
@@ -43,6 +44,7 @@ impl Symbol {
             Self::Forward => include_bytes!("../../data/symbols/forward.svg"),
             Self::Attachment => include_bytes!("../../data/symbols/attachment.svg"),
             Self::Remote => include_bytes!("../../data/symbols/remote.svg"),
+            Self::Remove => include_bytes!("../../data/symbols/remove.svg"),
         }
     }
 

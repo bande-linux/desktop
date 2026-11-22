@@ -90,8 +90,9 @@ apt install bande-mail
   message and thread it (`In-Reply-To`, `References`); forwards keep the attachments. The account's
   signature goes above the quoted text and replaces the previous account's signature when From
   changes. Files are
-  attached through the desktop's file chooser (the portal), up to 25 MB each, and a click on an
-  attachment removes it. A sent message is kept in Sent and the original is marked answered. If
+  attached through the desktop's file chooser (the portal), up to 25 MB each. Each attachment's × button
+  removes it and Undo (Ctrl+Z, outside a text field) brings it back; attachments that don't fit
+  on the line are listed behind “N more”. A sent message is kept in Sent and the original is marked answered. If
   sending fails, the message comes back in a window with the error. A message sent or saved from
   an account that is turned off, or whose servers change before it goes out, stays queued: Mail
   says so and sends it when the account is on again.

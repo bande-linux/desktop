@@ -271,6 +271,14 @@ msgstr "Från:"
 msgid "Write your message"
 msgstr "Skriv ditt meddelande"
 
+msgid "{count} more"
+msgid_plural "{count} more"
+msgstr[0] "{count} till"
+msgstr[1] "{count} till"
+
+msgid "Remove “{name}”"
+msgstr "Ta bort ”{name}”"
+
 msgid "Add at least one recipient."
 msgstr "Lägg till minst en mottagare."
 
@@ -300,9 +308,6 @@ msgstr "Släng"
 
 msgid "Cancel"
 msgstr "Avbryt"
-
-msgid "Remove “{name}”"
-msgstr "Ta bort ”{name}”"
 
 msgid "Yesterday"
 msgstr "Igår"

@@ -360,8 +360,8 @@ impl MailView {
         let mut drawn = Vec::new();
         if self.messages.is_empty() {
             let message = match self.search.is_empty() {
-                true => tr!("No Messages"),
-                false => tr!("No Results"),
+                true => tr!("No messages"),
+                false => tr!("No results"),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,
@@ -596,8 +596,8 @@ impl MailView {
             let chosen = self.also.len() + usize::from(self.selected.is_some());
             let message = match (self.messages.len(), chosen) {
                 (0, _) => String::new(),
-                (_, 0 | 1) => tr!("No Message Selected"),
-                (_, count) => tr!("{count} Messages Selected", count = count),
+                (_, 0 | 1) => tr!("No message selected"),
+                (_, count) => tr!("{count} messages selected", count = count),
             };
             let paragraph = self.ui.context().text.paragraph(
                 &message,

@@ -10,8 +10,8 @@ msgstr ""
 msgid "Mail"
 msgstr "E-post"
 
-msgid "Settings"
-msgstr "Inställningar"
+msgid "Mail Settings"
+msgstr "E-postinställningar"
 
 msgid "Save Attachment"
 msgstr "Spara bilaga"
@@ -241,16 +241,16 @@ msgstr "Ta bort ”{name}”"
 msgid "Yesterday"
 msgstr "Igår"
 
-msgid "No Messages"
+msgid "No messages"
 msgstr "Inga meddelanden"
 
-msgid "No Results"
+msgid "No results"
 msgstr "Inga resultat"
 
-msgid "No Message Selected"
+msgid "No message selected"
 msgstr "Inget meddelande markerat"
 
-msgid "{count} Messages Selected"
+msgid "{count} messages selected"
 msgstr "{count} meddelanden markerade"
 
 msgid "To: {names}"
@@ -294,6 +294,9 @@ msgstr "Till eller kopia"
 
 msgid "Subject"
 msgstr "Ämne"
+
+msgid "Settings"
+msgstr "Inställningar"
 
 msgid "New Messages"
 msgstr "Nya meddelanden"

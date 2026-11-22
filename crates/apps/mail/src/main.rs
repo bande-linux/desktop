@@ -42,7 +42,7 @@ static INFO: Info = Info {
     name: || tr!("Mail"),
     keys: Keys::Standard,
     settings: Some(Settings {
-        title: || tr!("Settings"),
+        title: || tr!("Mail Settings"),
         size: SETTINGS_SIZE,
         view: settings_window,
     }),

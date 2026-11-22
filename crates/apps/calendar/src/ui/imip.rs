@@ -27,6 +27,10 @@ fn title_of(event: &Event) -> String {
 
 impl CalendarView {
     pub fn offer(&mut self, objects: Vec<CalendarObject>, file: &str) -> bool {
+        if self.confirm.is_some() {
+            self.offers.push_back((objects, file.to_owned()));
+            return true;
+        }
         let Some(first) = objects.first().filter(|_| objects.len() == 1) else {
             return self.offer_import(objects, file);
         };
@@ -35,6 +39,14 @@ impl CalendarView {
             Method::Reply => self.take_reply(first),
             Method::Cancel => self.offer_cancel(first),
             _ => self.offer_import(objects, file),
+        }
+    }
+
+    pub(crate) fn offer_next(&mut self) {
+        while self.confirm.is_none()
+            && let Some((objects, file)) = self.offers.pop_front()
+        {
+            self.offer(objects, &file);
         }
     }
 

@@ -14,6 +14,7 @@ mod sidebar;
 mod toolbar;
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 use accesskit::{ActionRequest, TreeUpdate};
@@ -250,6 +251,7 @@ pub struct CalendarView {
     custom: Option<custom::Custom>,
     naming: Option<naming::Naming>,
     confirm: Option<Confirm>,
+    offers: VecDeque<(Vec<CalendarObject>, String)>,
     search: String,
     results: Vec<Found>,
     status: Option<String>,
@@ -313,6 +315,7 @@ impl CalendarView {
             custom: None,
             naming: None,
             confirm: None,
+            offers: VecDeque::new(),
             search: String::new(),
             results: Vec::new(),
             status: None,

@@ -1000,6 +1000,11 @@ pub fn signal(view: &mut CalendarView, signal: Signal) {
 }
 
 fn choose(view: &mut CalendarView, action: &str) {
+    resolve(view, action);
+    view.offer_next();
+}
+
+fn resolve(view: &mut CalendarView, action: &str) {
     let confirm = match view.confirm.take() {
         Some(Confirm::Invitation(object)) => return view.answer_invitation(*object, action),
         Some(Confirm::Cancelled {

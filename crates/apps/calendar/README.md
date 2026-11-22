@@ -83,9 +83,17 @@ views. Packaged as `bande-calendar`.
   Refresh Calendars syncs in the background and Import… and Export… show only the file chooser;
   the window opens when there is something to confirm.
 
-Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Left/Right previous/next, Ctrl+N new event,
-Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the
-selected event, Ctrl+W close and Ctrl+Q quit.
+Shortcuts: Ctrl+1…4 for the views, Ctrl+T today, Page Up/Page Down previous/next, Ctrl+N new
+event, Ctrl+F search, Ctrl+R refresh, Delete to delete, Enter to open the selected event (or the
+focused day, in the month and year views), Ctrl+W close and Ctrl+Q quit. The arrow keys move the
+focused day (Up and Down by a week in the month and year views, and scroll the hours in the day
+and week views), Home and End go to the first and last day shown, and Tab and Shift+Tab select
+the focused day's events in turn. F6 moves between the calendar, the calendar list (Up and Down
+to choose, Space to show or hide, Menu for its menu) and the toolbar. Every day, event and
+calendar is in the accessibility tree.
+
+Dates and times are typed and shown the way the locale writes them; a date that starts with a
+four-digit year is read as year-month-day.
 
 ## Layout
 

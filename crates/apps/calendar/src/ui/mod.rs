@@ -1,3 +1,4 @@
+mod access;
 mod custom;
 pub mod geometry;
 mod input;
@@ -183,6 +184,12 @@ pub(crate) enum Confirm {
     DeleteCalendar(usize),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Pane {
+    Content,
+    Sidebar(usize),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Selection {
     calendar: String,
@@ -194,6 +201,9 @@ pub struct CalendarView {
     library: Library,
     ui: Ui,
     host: WidgetId,
+    access: WidgetId,
+    pane: Pane,
+    keyboard: bool,
     signals: Signals,
     toolbar: toolbar::Toolbar,
     palette: Palette,
@@ -253,6 +263,9 @@ impl CalendarView {
             library,
             ui: Ui::new(Box::new(host), cx),
             host: host_id,
+            access: WidgetId::next(),
+            pane: Pane::Content,
+            keyboard: false,
             signals,
             toolbar,
             palette,
@@ -330,6 +343,25 @@ impl CalendarView {
     pub fn go_to(&mut self, day: Date) {
         self.focus = day;
         self.mini_month = day.first_of_month();
+    }
+
+    pub(crate) fn focus_day(&mut self, day: Date) {
+        self.close_inspector(true);
+        self.ui.clear_focus();
+        self.pane = Pane::Content;
+        if self.selected_found().is_some_and(|found| {
+            found.occurrence.first_day > day || found.occurrence.last_day < day
+        }) {
+            self.selected = None;
+        }
+        self.go_to(day);
+    }
+
+    pub(crate) fn toggle_calendar(&mut self, index: usize) {
+        if let Some(calendar) = self.library.calendars.get_mut(index) {
+            calendar.info.visible = !calendar.info.visible;
+            self.library.save(index);
+        }
     }
 
     pub fn set_settings(&mut self, settings: CalendarSettings) {
@@ -513,11 +545,15 @@ impl CalendarView {
     }
 
     pub fn accessibility(&self) -> TreeUpdate {
-        self.ui.accessibility()
+        let mut tree = self.ui.accessibility();
+        self.describe(&mut tree);
+        tree
     }
 
     pub fn perform(&mut self, request: &ActionRequest) -> bool {
-        let performed = self.ui.perform(request);
+        let performed = self
+            .perform_on_parts(request)
+            .unwrap_or_else(|| self.ui.perform(request));
         self.drain();
         performed
     }
@@ -819,6 +855,7 @@ impl CalendarView {
         self.size = (width as f32, height as f32);
         self.layout();
         let sheet = self.sheet();
+        let keyboard = self.keyboard && self.ui.focus().is_none() && !self.ui.has_sheet();
         let model = ViewModel {
             library: &self.library,
             palette: self.palette,
@@ -838,6 +875,11 @@ impl CalendarView {
             results: &self.results,
             search: &self.search,
             sheet,
+            day_ring: keyboard && self.pane == Pane::Content,
+            calendar_ring: match self.pane {
+                Pane::Sidebar(index) if keyboard => Some(index),
+                _ => None,
+            },
         };
         let mut painter = painter::Painter::new(&mut self.ui.context().text);
         let (shown, grid) = paint::view(&model, &mut painter);
@@ -1293,6 +1335,8 @@ pub(crate) struct ViewModel<'a> {
     pub results: &'a [Found],
     pub search: &'a str,
     pub sheet: Rect,
+    pub day_ring: bool,
+    pub calendar_ring: Option<usize>,
 }
 
 impl ViewModel<'_> {

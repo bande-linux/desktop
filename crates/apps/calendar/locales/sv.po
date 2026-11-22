@@ -97,6 +97,26 @@ msgstr "Det gick inte att logga in på ”{name}”"
 msgid "The server refused the password. Click to enter it again."
 msgstr "Servern avvisade lösenordet. Klicka för att ange det igen."
 
+msgid "{date}, {count} event"
+msgid_plural "{date}, {count} events"
+msgstr[0] "{date}, {count} händelse"
+msgstr[1] "{date}, {count} händelser"
+
+msgid "Calendars"
+msgstr "Kalendrar"
+
+msgid "Next Month"
+msgstr "Nästa månad"
+
+msgid "Previous Month"
+msgstr "Föregående månad"
+
+msgid "Show All Events"
+msgstr "Visa alla händelser"
+
+msgid "Search Results"
+msgstr "Sökresultat"
+
 msgid "first"
 msgstr "första"
 

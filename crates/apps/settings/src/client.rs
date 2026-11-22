@@ -313,6 +313,9 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> DisplaySettings {
             .get("colour-profile")
             .and_then(|value| value.try_clone().ok())
             .and_then(|value| String::try_from(value).ok()),
+        variable_refresh: settings
+            .get("variable-refresh")
+            .and_then(|value| bool::try_from(value).ok()),
     }
 }
 
@@ -471,6 +474,9 @@ impl SettingsClient {
         }
         if let Some(profile) = &display.colour_profile {
             settings.insert("colour-profile", profile.as_str().into());
+        }
+        if let Some(on) = display.variable_refresh {
+            settings.insert("variable-refresh", on.into());
         }
         self.config.set_display(identity, settings)
     }

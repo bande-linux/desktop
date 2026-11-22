@@ -13,6 +13,7 @@ use smithay::backend::drm::compositor::{
 };
 use smithay::backend::drm::{
     DrmDevice, DrmDeviceFd, DrmDeviceNotifier, DrmError, DrmEventMetadata, DrmEventTime, DrmNode,
+    VrrSupport,
 };
 use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
 use smithay::backend::renderer::ImportDma;
@@ -55,6 +56,7 @@ struct Head {
     modes: Vec<Mode>,
     compositor: OutputCompositor,
     rendered: bool,
+    variable_refresh: bool,
     scanned_out: bool,
     dark: bool,
     colour: Colour,
@@ -536,6 +538,10 @@ impl DrmBackend {
             Err(error) => return Err(error),
         };
         let scanout_formats = compositor.surface().plane_info().formats.clone();
+        let variable_refresh = matches!(
+            compositor.vrr_supported(info.handle()),
+            Ok(VrrSupport::Supported)
+        );
         let renderer_formats = self.renderer.dmabuf_formats();
         if self.heads.is_empty() {
             let scanout: FormatSet = scanout_formats
@@ -553,6 +559,7 @@ impl DrmBackend {
             modes,
             compositor,
             rendered,
+            variable_refresh,
             scanned_out: false,
             dark: false,
             colour: Colour::Unknown,
@@ -1057,6 +1064,16 @@ impl DrmBackend {
                     .into(),
                 transform: settings.transform,
             });
+        let variable = head.variable_refresh && compositor.wants_variable_refresh(output);
+        if variable != head.compositor.vrr_enabled() {
+            match head.compositor.use_vrr(variable) {
+                Ok(()) => tracing::info!("{output} variable refresh: {variable}"),
+                Err(error) => {
+                    tracing::warn!("{output} cannot change its refresh to follow frames: {error}");
+                    head.variable_refresh = false;
+                }
+            }
+        }
         let chosen = compositor.colour_profile(output).map(str::to_owned);
         if head
             .output_colour

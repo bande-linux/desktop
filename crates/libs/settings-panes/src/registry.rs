@@ -420,6 +420,7 @@ pub enum SettingId {
     ColourProfile,
     ShowAllResolutions,
     DisplayRotation,
+    VariableRefresh,
     ScreenSaverAfter,
     DisplayOffAfter,
     RequirePasswordAfter,
@@ -1445,6 +1446,11 @@ fn displays_pane() -> Pane {
                         tr!("Rotation"),
                         tr!("rotate, portrait, landscape, orientation, turn"),
                         choice(rotation_choices()),
+                    ),
+                    switch(
+                        SettingId::VariableRefresh,
+                        tr!("Variable refresh rate in full screen"),
+                        tr!("vrr, adaptive sync, freesync, games, video, smooth"),
                     ),
                     setting(
                         SettingId::ColourProfile,

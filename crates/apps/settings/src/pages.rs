@@ -102,6 +102,7 @@ fn display_value(
                 .rotation
                 .map_or(display.rotation, |rotation| rotation.degrees()),
         ),
+        SettingId::VariableRefresh => Value::Flag(output.variable_refresh.unwrap_or(true)),
         _ => return None,
     })
 }

@@ -196,7 +196,7 @@ small `key = value` file each next to it (`files.conf`, `terminal.conf`).
   keyboard { input-sources "se" "us(dvorak)"; caps-lock "escape" }
   trackpad { tap-to-click #true; natural-scrolling #true }
   search { recent-documents #false; exclude "~/Private" }   // every category is shown unless #false
-  display "Example EX27 0001" { scale 1.5; refresh-rate 120 }
+  display "Example EX27 0001" { scale 1.5; refresh-rate 120; variable-refresh #false }   // variable refresh is on unless #false
   arrangement {
       display "Example Panel 0002" x=0 y=0 main=#true
       display "Example EX27 0001" x=1504 y=-300

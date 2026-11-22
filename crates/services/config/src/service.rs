@@ -418,6 +418,9 @@ fn display_settings(settings: &HashMap<String, OwnedValue>) -> zbus::fdo::Result
                         .map_err(|_| mismatch())?,
                 )
             }
+            "variable-refresh" => {
+                display.variable_refresh = Some(bool::try_from(value).map_err(|_| mismatch())?)
+            }
             _ => return Err(InvalidArgs(format!("unknown display setting `{key}`"))),
         }
     }
@@ -1389,6 +1392,10 @@ impl ConfigInterface {
                             .colour_profile
                             .as_deref()
                             .and_then(|profile| owned(profile.into())),
+                    ),
+                    (
+                        "variable-refresh",
+                        display.variable_refresh.and_then(|on| owned(on.into())),
                     ),
                 ]
                 .into_iter()

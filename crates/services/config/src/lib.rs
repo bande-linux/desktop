@@ -180,6 +180,7 @@ pub struct DisplaySettings {
     pub scale: Option<f64>,
     pub rotation: Option<Rotation>,
     pub colour_profile: Option<String>,
+    pub variable_refresh: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1675,6 +1676,7 @@ impl Parser<'_> {
                 }
                 "rotation" => display.rotation = Some(self.rotation(child)?),
                 "colour-profile" => display.colour_profile = Some(self.string(child)?),
+                "variable-refresh" => display.variable_refresh = Some(self.flag(child)?),
                 _ => return Err(self.unknown_child(node.name().value(), child)),
             }
             Ok(())

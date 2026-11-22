@@ -2406,6 +2406,9 @@ impl SettingsView {
             (SettingId::RefreshRate, Value::Number(hertz)) => {
                 display.refresh_rate = Some(f64::from(hertz));
             }
+            (SettingId::VariableRefresh, Value::Flag(on)) => {
+                display.variable_refresh = (!on).then_some(false);
+            }
             (SettingId::ColourProfile, Value::Keyword(profile)) => {
                 if profile == ADD_COLOUR_PROFILE {
                     self.commands.push(Command::AddColourProfile(identity));

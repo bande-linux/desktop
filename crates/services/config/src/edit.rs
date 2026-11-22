@@ -594,6 +594,10 @@ fn set_display(document: &mut KdlDocument, identity: &str, display: &DisplaySett
                 .as_ref()
                 .map(|profile| vec![KdlValue::String(profile.clone())]),
         ),
+        (
+            "variable-refresh",
+            display.variable_refresh.map(|on| vec![KdlValue::Bool(on)]),
+        ),
     ];
     let position = document.nodes().iter().position(|node| {
         node.name().value() == "display"

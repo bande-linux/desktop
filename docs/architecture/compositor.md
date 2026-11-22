@@ -134,7 +134,11 @@ when they reach the screen is Bande's own.
   change event. The link is set good again in the frame path, after any pending flip. A display is named by its EDID (maker from the PNP id, model and serial from the
   descriptors, falling back to the product code and serial number; two displays with the same
   name are told apart by their connector). A fullscreen opaque dma-buf window is put on the
-  primary plane without composition.
+  primary plane without composition. A display whose connector can change its refresh without
+  a mode-set gets variable refresh while a full-screen window on its active workspace says its
+  content is a game or video (`wp_content_type_v1`), unless `variable-refresh #false` is in its
+  settings (Settings ▸ Displays ▸ Variable refresh rate in full screen). Tearing page flips are
+  not offered: Smithay 0.7's `DrmCompositor` cannot ask for `DRM_MODE_PAGE_FLIP_ASYNC`.
 - **Displays.** Every output lives in one logical coordinate space in points. Its mode, scale
   (fractional too), rotation and place come from `display` and `arrangement` in `config.kdl`
   (followed live through `org.bande.Config`): the arrangement remembered for exactly the
@@ -181,7 +185,7 @@ when they reach the screen is Bande's own.
   the keyboard, Space picks a display and the arrows put it on that side of the main display.
   The main display carries a white bar along its top. Each display then offers Use as (Main
   display, Extended, Mirror), Size of text and controls (Default, then Larger Text to More Space, each
-  shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation and Colour profile. Every change is written to
+  shown as the size the desktop looks like at the native resolution), Resolution (up to four sizes of its native shape, under Show all resolutions), Refresh rate, Rotation, Variable refresh rate in full screen and Colour profile. Every change is written to
   `config.kdl` and applied live; a new resolution or rotation shows "Keep these display
   settings?" with Keep and Revert and comes back by itself after 15 s.
 
@@ -442,7 +446,7 @@ Status is what `crates/platform/compositor` serves on `main`.
 | `wp_presentation` | Presentation timing, VSync | implemented |
 | `wp_fifo_v1` | FIFO presentation without frame callbacks (Mesa WSI, SDL, Proton) | implemented: a barrier is lifted when the frame that latched it is presented, a hidden window's at the next presentation of its display |
 | `wp_commit_timing_v1` | Commits that wait for a presentation time | implemented: released at the start of the first frame shown at or after the time; a waiting commit keeps its display's frames coming |
-| `wp_content_type_v1` | Game, video or photo content | implemented |
+| `wp_content_type_v1` | Game, video or photo content | implemented; game and video in full screen turn on variable refresh |
 | `wp_single_pixel_buffer_v1` | One-colour buffers (backgrounds, letterboxing) | implemented, drawn as a solid fill |
 | `wp_alpha_modifier_v1` | Surface opacity set by the client | implemented |
 | `xdg_system_bell_v1` | The terminal bell | implemented: the window's app asks for attention in the taskbar unless it is focused |

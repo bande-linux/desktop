@@ -453,6 +453,7 @@ impl State {
                 self.screens[screen]
                     .colour_profile
                     .clone_from(&display.colour_profile);
+                self.screens[screen].variable_refresh = display.variable_refresh;
             }
         }
         if let Some(main) = arranged

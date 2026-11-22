@@ -831,6 +831,12 @@ msgstr "Rotation"
 msgid "rotate, portrait, landscape, orientation, turn"
 msgstr "rotera, stående, liggande, orientering, vrid"
 
+msgid "Variable refresh rate in full screen"
+msgstr "Variabel uppdateringsfrekvens i helskärm"
+
+msgid "vrr, adaptive sync, freesync, games, video, smooth"
+msgstr "vrr, adaptiv synk, freesync, spel, video, jämn"
+
 msgid "Color profile"
 msgstr "Färgprofil"
 

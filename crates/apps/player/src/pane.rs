@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use accesskit::TreeUpdate;
@@ -10,6 +12,7 @@ use bande_toolkit::ui::{Context, Event, Key, Ui, Widget, WidgetId};
 use bande_toolkit::{Appearance, Rect, Scene, Sizing, TextSystem, Window, WindowEvent};
 
 use crate::mpris::{NowPlaying, Remote};
+use crate::positions::Positions;
 
 pub fn file_title(path: &Path) -> String {
     path.file_stem()
@@ -42,10 +45,15 @@ pub struct Pane {
     menus_changed: bool,
     pending_load: bool,
     drop: FileDrop,
+    positions: Rc<RefCell<Positions>>,
 }
 
 impl Pane {
-    pub fn new(appearance: Appearance, queue: Vec<PathBuf>) -> Self {
+    pub fn new(
+        appearance: Appearance,
+        queue: Vec<PathBuf>,
+        positions: Rc<RefCell<Positions>>,
+    ) -> Self {
         let widget = StageWidget::new();
         let stage = Widget::id(&widget);
         let mut ui = Ui::new(
@@ -66,6 +74,7 @@ impl Pane {
             menus_changed: false,
             drop: FileDrop::default(),
             pending_load: false,
+            positions,
         };
         pane.load();
         pane
@@ -75,10 +84,12 @@ impl Pane {
         let Some(path) = self.queue.get(self.at).cloned() else {
             return;
         };
+        let start_ms = self.positions.borrow().start(&path);
         self.open(
             Opening {
                 path,
-                ..Opening::default()
+                subtitles: None,
+                start_ms,
             },
             true,
         );
@@ -130,7 +141,21 @@ impl Pane {
         self.queue.is_empty()
     }
 
+    pub fn remember(&self) {
+        let (Some(path), Some(session)) = (self.queue.get(self.at), self.session()) else {
+            return;
+        };
+        if session.playback() == Playback::Opening {
+            return;
+        }
+        let length = session.info().duration_ms.map(Duration::from_millis);
+        self.positions
+            .borrow_mut()
+            .remember(path, session.position(Instant::now()), length);
+    }
+
     pub fn add(&mut self, paths: Vec<PathBuf>) {
+        self.remember();
         self.queue = paths;
         self.at = 0;
         self.load();
@@ -196,6 +221,7 @@ impl Pane {
         if self.queue.is_empty() {
             return;
         }
+        self.remember();
         let last = self.queue.len() - 1;
         self.at = match (forward, self.at) {
             (true, at) if at == last => 0,
@@ -279,6 +305,9 @@ impl Pane {
         if playback != self.remembered {
             self.remembered = playback;
             self.menus_changed = true;
+            if matches!(playback, Some(Playback::Paused | Playback::Ended)) {
+                self.remember();
+            }
             if playback == Some(Playback::Ended) {
                 self.ended();
             }

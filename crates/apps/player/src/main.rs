@@ -1,9 +1,12 @@
 mod mpris;
 mod pane;
+mod positions;
 
+use std::cell::RefCell;
 use std::os::fd::BorrowedFd;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::rc::Rc;
 
 use bande_app::{Cx, Info, Keys, Kind, Menus, Program, WindowId};
 use bande_app_menu::Entry;
@@ -13,6 +16,7 @@ use bande_media::Track;
 
 use mpris::{Mpris, Remote};
 use pane::Pane;
+use positions::Positions;
 
 static INFO: Info = Info {
     id: "org.bande.Player",
@@ -24,6 +28,7 @@ static INFO: Info = Info {
 };
 
 const WINDOW_SIZE: (u32, u32) = (720, 480);
+const POSITIONS_FILE: &str = "player-positions";
 const OPEN: &str = "open";
 const ADD_SUBTITLES: &str = "add-subtitles";
 const TOGGLE: &str = "toggle";
@@ -51,6 +56,7 @@ struct Player {
     remote: Option<Inbox<Remote>>,
     mpris: Option<Mpris>,
     current: Option<WindowId>,
+    positions: Rc<RefCell<Positions>>,
 }
 
 impl Player {
@@ -59,8 +65,9 @@ impl Player {
             .first()
             .map(|path| pane::file_title(path))
             .unwrap_or_else(|| tr!("Player"));
+        let positions = Rc::clone(&self.positions);
         match cx.open(Kind::Main, &title, WINDOW_SIZE, |appearance| {
-            Pane::new(appearance, paths)
+            Pane::new(appearance, paths, positions)
         }) {
             Ok(window) => self.current = Some(window),
             Err(error) => tracing::warn!("cannot open a window: {error}"),
@@ -245,6 +252,7 @@ impl Program for Player {
             remote: None,
             mpris: None,
             current: None,
+            positions: Rc::new(RefCell::new(Positions::load(cx.state_file(POSITIONS_FILE)))),
         };
         player.start_mpris(cx);
         let directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
@@ -386,6 +394,7 @@ impl Program for Player {
         shown.request_redraw();
         cx.refresh_menus();
         self.sync_mpris(cx);
+        self.positions.borrow_mut().save();
     }
 
     fn open(&mut self, cx: &mut Cx<Self>, arguments: Vec<String>, directory: &Path) {
@@ -396,7 +405,9 @@ impl Program for Player {
         self.open_window(cx, Vec::new());
     }
 
-    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, _view: Pane) {
+    fn window_closed(&mut self, cx: &mut Cx<Self>, window: WindowId, view: Pane) {
+        view.remember();
+        self.positions.borrow_mut().save();
         if self.current == Some(window) {
             self.current = None;
         }
@@ -411,6 +422,7 @@ impl Program for Player {
             cx.refresh_menus();
         }
         self.sync_mpris(cx);
+        self.positions.borrow_mut().save();
     }
 
     fn sources(&self) -> Vec<BorrowedFd<'_>> {

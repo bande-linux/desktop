@@ -1233,8 +1233,8 @@ Recommends: bande-greeter (>= ${source:Version}),
  fonts-noto-core,
  fonts-noto-cjk,
  pipewire-pulse,
- libspa-0.2-bluetooth
-Suggests: bande-plymouth-theme (>= ${source:Version})
+ libspa-0.2-bluetooth,
+ bande-plymouth-theme (>= ${source:Version})
 Description: Bande desktop environment
  Bande is a Wayland desktop with its own compositor, shell, session
  services, login window and applications.
@@ -1243,8 +1243,8 @@ Description: Bande desktop environment
  shell and lock screen, the keyring, the portal backend, PipeWire for
  sound and a way to log in (the Bande login window under greetd, or the
  display manager the system already has). It recommends the Bande apps,
- fault reporting and systemd-oomd, which closes an app when memory stays
- under pressure.
+ the boot screen, fault reporting and systemd-oomd, which closes an app
+ when memory stays under pressure.
 
 Package: bande-icon-theme
 Build-Profiles: <!pkg.bande.l10n-only>
@@ -1273,9 +1273,10 @@ Description: boot screen of the Bande desktop
  it.
  .
  It is the boot screen only when no other theme is chosen in
- /etc/plymouth/plymouthd.conf or by an installed default theme, and only
- when the kernel command line contains "splash"; Settings ▸ About ▸ Show a
- boot screen adds that for GRUB.
+ /etc/plymouth/plymouthd.conf or by an installed default theme. For GRUB it
+ adds "splash" to the kernel command line through the configuration file
+ /etc/default/grub.d/bande-splash.cfg, which Settings ▸ About ▸ Show a boot
+ screen turns off and on; other boot managers need "splash" added by hand.
 
 Package: bande-desktop-l10n-sv
 Architecture: all

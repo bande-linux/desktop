@@ -53,6 +53,7 @@ pub use about::{About, AboutCommand, chip_name, memory_bytes, static_hostname, s
 pub use backup::{BackupCommand, BackupUpdate};
 pub use bande_settings_panes::{PaneId, SettingId, Value};
 pub use battery::{BatteryCommand, Charge, PowerState, charge_of, follow_battery};
+pub use boot_screen::{SPLASH_DROP_IN, switch_splash};
 pub use client::{CONFIG_SETTINGS, SettingsClient};
 pub use defaults::{DefaultApp, DefaultAppCommand, choose_default, default_apps};
 pub use displays::Displays;

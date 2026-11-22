@@ -1,10 +1,13 @@
 #!/bin/bash
 # The boot screen is a default.plymouth alternative that applies only when no other theme is
 # chosen, the initramfs carries it with its link, plugins and font, and purging it leaves neither
-# the alternative nor the theme in the next initramfs.
+# the alternative nor the theme in the next initramfs. It installs cleanly without GRUB; with GRUB
+# its configuration file adds "splash" once to the kernel command line outside recovery mode,
+# Settings' helper turns that off and on, and purging regenerates grub.cfg without it.
 set -euo pipefail
 themes=/usr/share/plymouth/themes
 theme=$themes/bande/bande.plymouth
+drop_in=/etc/default/grub.d/bande-splash.cfg
 version=0.0.0-boot-screen
 mkdir -p "/usr/lib/modules/$version"
 depmod "$version"
@@ -18,6 +21,17 @@ never() {
         echo "unexpected: $*"
         exit 1
     fi
+}
+splash_times() {
+    local lines
+    lines=$(grep -E '^[[:space:]]*linux[[:space:]]' /boot/grub/grub.cfg | grep -vw single)
+    [ -n "$lines" ] || { echo "grub.cfg has no linux line outside recovery mode"; exit 1; }
+    while read -r line; do
+        [ "$(grep -ow splash <<< "$line" | wc -l)" = "$1" ] || { echo "splash not $1 time(s): $line"; exit 1; }
+    done <<< "$lines"
+}
+helper() {
+    PKEXEC_UID=0 /usr/libexec/bande-boot-screen-helper "$1"
 }
 
 update-alternatives --query default.plymouth | grep -qx "Value: $theme"
@@ -37,10 +51,48 @@ contents=$(initramfs)
 never grep -q "^${themes#/}/bande" <<< "$contents"
 cp "$AUTOPKGTEST_TMP/plymouthd.conf" /etc/plymouth/plymouthd.conf
 
+dpkg-query -W -f '${Conffiles}\n' bande-plymouth-theme | grep -q "^ $drop_in "
+test ! -e /boot/grub/grub.cfg
+
+dpkg-divert --local --rename --add /usr/sbin/grub-probe > /dev/null
+cat > /usr/sbin/grub-probe << 'EOF'
+#!/bin/sh
+for argument; do
+    case $argument in
+        --target=device) echo /dev/vda1 ;;
+        --target=fs | fs) echo ext2 ;;
+        --target=fs_uuid) echo 3c1a0f52-7d55-4f0e-9a0b-3f6d1c2e8b41 ;;
+        --target=partmap) echo msdos ;;
+        --target=drive | drive) echo '(hd0,msdos1)' ;;
+        --target=compatibility_hint) echo hd0,msdos1 ;;
+    esac
+done
+EOF
+chmod 755 /usr/sbin/grub-probe
+[ -e /etc/default/grub ] || cp /usr/share/grub/default/grub /etc/default/grub
+touch "/boot/vmlinuz-$version"
+mkdir -p /boot/grub
+touch /boot/grub/grub.cfg
+DEBIAN_FRONTEND=noninteractive apt-get install --reinstall --yes bande-plymouth-theme > /dev/null
+splash_times 1
+sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
+update-grub
+splash_times 1
+sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet"/' /etc/default/grub
+
+helper off
+splash_times 0
+dpkg --verify bande-plymouth-theme | grep -q " c $drop_in$"
+helper on
+splash_times 1
+[ -z "$(dpkg --verify bande-plymouth-theme)" ] || { dpkg --verify bande-plymouth-theme; exit 1; }
+
 DEBIAN_FRONTEND=noninteractive apt-get purge --yes bande-plymouth-theme > /dev/null
 never grep -q "$theme" <<< "$(update-alternatives --query default.plymouth 2> /dev/null || true)"
 test ! -e "$themes/bande"
+test ! -e "$drop_in"
+splash_times 0
 contents=$(initramfs)
 never grep -q "^${themes#/}/bande" <<< "$contents"
 never grep -q Inter-Regular <<< "$contents"
-echo "the boot screen applies only when chosen by nothing else and leaves with its package"
+echo "the boot screen applies only when chosen by nothing else, adds splash to GRUB once and leaves with its package"

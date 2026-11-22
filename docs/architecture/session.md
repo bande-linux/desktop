@@ -543,11 +543,14 @@ over the desktop, so input reaches the desktop at once. `Ctrl+Alt+F2` reaches a 
 any time, and when greetd gives up `bande-console-fallback.service` quits Plymouth, starts
 `getty@tty1` and brings the console forward.
 
-The boot screen (`bande-plymouth-theme`) hands over the same way. `bande-greeter.service` starts
-after `plymouth-start.service`, conflicts with `plymouth-quit.service` (so the end of boot does
-not quit it) and runs `plymouth deactivate` first, which stops Plymouth drawing and gives up the
-display while its last frame stays on screen; the `-` prefix makes this a no-op on a system
-without Plymouth. greetd and the sessions it starts use VT 1, Plymouth's terminal, so nothing
+The boot screen (`bande-plymouth-theme`, which `bande-desktop` recommends) shows when GRUB starts
+the kernel with `splash`, which the package's `/etc/default/grub.d/bande-splash.cfg` adds
+([packaging.md](packaging.md)) and Settings ▸ About ▸ Show a boot screen turns off and on. It
+hands over the same way. `bande-greeter.service` starts after `plymouth-start.service`,
+conflicts with `plymouth-quit.service` (so the end of boot does not quit it) and runs
+`plymouth deactivate` first, which stops Plymouth drawing and gives up the display while its
+last frame stays on screen; the `-` prefix makes this a no-op on a system without Plymouth.
+greetd and the sessions it starts use VT 1, Plymouth's terminal, so nothing
 switches VT. Before its first commit the login window's compositor reads each display's
 framebuffer (`DRM_IOCTL_MODE_GETFB2`, mapped as a dumb buffer), and once the login window is
 mapped that frame fades out over it with the `standard` spring (`fade` with Reduce Motion). When

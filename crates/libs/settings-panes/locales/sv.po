@@ -1092,6 +1092,9 @@ msgstr "Höger Control"
 msgid "Menu key"
 msgstr "Menytangent"
 
+msgid "Set by the system"
+msgstr "Inställd av systemet"
+
 msgid "Tracking speed"
 msgstr "Pekarhastighet"
 

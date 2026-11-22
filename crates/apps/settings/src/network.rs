@@ -664,7 +664,7 @@ impl SettingsView {
         let Some(proxy) = self.proxy.clone() else {
             return Vec::new();
         };
-        let labels = [tr!("None"), tr!("Manual"), tr!("Automatic")];
+        let labels = [tr!("None"), tr!("Manual")];
         let selected = ProxyMode::ALL.iter().position(|mode| *mode == proxy.mode);
         let segmented = SegmentedControl::new(
             &tr!("Proxy"),
@@ -685,21 +685,6 @@ impl SettingsView {
                     rows.push(self.manual_field(id, label, placeholder));
                 }
             }
-            ProxyMode::Automatic => {
-                rows.push(self.manual_field(
-                    SettingId::ProxyPac,
-                    text!("Configuration URL"),
-                    text!("http://wpad.example.org/wpad.dat"),
-                ));
-                rows.push(boxed(Row::new(
-                    Text::new(
-                        &tr!("Command-line tools don’t read configuration files: give them a manual proxy"),
-                        Tone::Muted,
-                    )
-                    .caption(),
-                    None,
-                )));
-            }
         }
         if proxy.mode != ProxyMode::None {
             rows.push(boxed(Row::new(
@@ -719,7 +704,6 @@ impl SettingsView {
             (SettingId::ProxyHttp, &proxy.http),
             (SettingId::ProxyHttps, &proxy.https),
             (SettingId::ProxyIgnore, &proxy.bypass),
-            (SettingId::ProxyPac, &proxy.pac),
         ] {
             self.values.insert(id, Value::Text(value.clone()));
         }
@@ -748,12 +732,10 @@ impl SettingsView {
             http: text_of(self, SettingId::ProxyHttp),
             https: text_of(self, SettingId::ProxyHttps),
             bypass: text_of(self, SettingId::ProxyIgnore),
-            pac: text_of(self, SettingId::ProxyPac),
         };
         let ready = match mode {
             ProxyMode::None => true,
             ProxyMode::Manual => !settings.http.trim().is_empty(),
-            ProxyMode::Automatic => !settings.pac.trim().is_empty(),
         };
         if ready {
             self.clear_failure();

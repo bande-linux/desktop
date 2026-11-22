@@ -486,7 +486,6 @@ pub enum SettingId {
     ProxyHttp,
     ProxyHttps,
     ProxyIgnore,
-    ProxyPac,
     Language,
     AppLanguages,
     Region,
@@ -995,7 +994,7 @@ fn connection_panes() -> Vec<Pane> {
                 ),
                 section(
                     Some(tr!("Proxy")),
-                    vec![list(SettingId::Proxy, tr!("Proxy"), tr!("http proxy, https proxy, pac, automatic configuration, bypass"), List::Proxy)],
+                    vec![list(SettingId::Proxy, tr!("Proxy"), tr!("http proxy, https proxy, bypass"), List::Proxy)],
                 ),
             ],
         ),

@@ -386,11 +386,14 @@ brings up the dialog.
     (`bande_network::{airplane_mode, set_airplane_mode, follow_airplane_mode}`) blocks every
     rfkill radio through `/dev/rfkill` and remembers in `$XDG_STATE_HOME/bande/airplane-radios`
     which were on, to turn just those back on.
-  - Proxy (none, manual, PAC) is written to `~/.config/environment.d/60-bande-proxy.conf`
-    (`http_proxy`, `https_proxy`, `no_proxy` and their upper-case forms; PAC as libproxy's
-    `pac+URL`) and set in the user manager's and the D-Bus activation environment. libproxy reads
-    these outside GNOME, so GLib apps and the portal's ProxyResolver follow them, as do Qt and
-    command-line tools for a manual proxy; running apps pick them up at the next login.
+  - Proxy (none or manual) is written to `~/.config/bande/proxy` (`http_proxy`, `https_proxy`,
+    `no_proxy` and their upper-case forms) and set in the user manager's and the D-Bus activation
+    environment. `bande-session` sets them from that file when a Bande session starts and unsets
+    them when it ends, so the person's other desktops keep their own proxy. libproxy, so GLib
+    apps and the portal's ProxyResolver, Qt and command-line tools all follow them; running apps
+    pick them up at the next login. There is no PAC mode: libproxy takes a PAC address only from
+    `http_proxy` as `pac+URL`, which every other program rejects, or from GSettings' and
+    `kioslaverc`'s proxy keys, which it reads only when `XDG_CURRENT_DESKTOP` names their desktop.
   - Quick Settings' Airplane mode tile uses the same functions (the active seat reaches
     `/dev/rfkill` through `uaccess`), and its Power Saver tile switches power-profiles-daemon
     between `power-saver` and `balanced`.

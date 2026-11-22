@@ -2262,10 +2262,7 @@ impl SettingsView {
         }
         if matches!(
             id,
-            SettingId::ProxyHttp
-                | SettingId::ProxyHttps
-                | SettingId::ProxyIgnore
-                | SettingId::ProxyPac
+            SettingId::ProxyHttp | SettingId::ProxyHttps | SettingId::ProxyIgnore
         ) {
             self.values.insert(id, value);
             self.change_proxy();

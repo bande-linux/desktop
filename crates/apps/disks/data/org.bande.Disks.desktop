@@ -7,6 +7,6 @@ Comment[sv]=Radera, partitionera och reparera skivor, och arbeta med skivavbildn
 Icon=org.bande.Disks
 Exec=bande-disks
 StartupNotify=true
-Categories=System;Utility;
+Categories=System;
 Keywords=disk;drive;partition;format;erase;usb;iso;image;smart;fsck;
 Keywords[sv]=skiva;disk;enhet;partition;formatera;radera;usb;iso;avbildning;smart;fsck;

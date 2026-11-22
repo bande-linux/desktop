@@ -8,19 +8,11 @@ use std::time::{Duration, Instant};
 const MOST_FAILURES: usize = 5;
 const FAILURE_MEMORY: Duration = Duration::from_secs(600);
 const MOST_HANDSHAKES: usize = 16;
-const MOST_HANDSHAKES_PER_NETWORK: usize = 8;
 const MOST_VIEWERS: usize = 4;
-const IPV6_NETWORK_BITS: u32 = 64;
 const FAILURE_DELAY: Duration = Duration::from_secs(1);
 const FAILURES_BEFORE_BRAKING: usize = 10;
-const LONGEST_BRAKE: Duration = Duration::from_secs(30);
-
-fn network(peer: IpAddr) -> Option<u128> {
-    match peer {
-        IpAddr::V4(_) => None,
-        IpAddr::V6(address) => Some(address.to_bits() >> (128 - IPV6_NETWORK_BITS)),
-    }
-}
+const LONGEST_BRAKE: Duration = Duration::from_secs(16);
+const LONGEST_WAIT: Duration = Duration::from_secs(20);
 
 /// How much each address may try, so one device cannot keep others out, and how fast everyone
 /// together may guess passwords.
@@ -28,7 +20,7 @@ fn network(peer: IpAddr) -> Option<u128> {
 pub struct Limits {
     failures: Mutex<HashMap<IpAddr, Vec<Instant>>>,
     handshaking: Mutex<Vec<IpAddr>>,
-    brake: Mutex<()>,
+    next_answer: Mutex<Option<Instant>>,
     viewers: AtomicUsize,
 }
 
@@ -61,7 +53,7 @@ impl Drop for Seat {
 }
 
 /// How long to wait before answering a password, given the failures of all addresses within
-/// the last ten minutes: a second after a few, doubling after that, at most half a minute.
+/// the last ten minutes: a second after a few, doubling after that, at most sixteen.
 fn brake_for(failures: usize) -> Duration {
     match failures.checked_sub(FAILURES_BEFORE_BRAKING) {
         None => Duration::ZERO,
@@ -96,37 +88,38 @@ impl Limits {
         thread::sleep(FAILURE_DELAY);
     }
 
-    /// Waits before a password is checked once many failed lately, one handshake at a time,
-    /// so guessing from many addresses is slow while a real viewer only waits.
-    pub fn slow_down(&self) {
+    /// Once many passwords failed lately, waits for this handshake's turn: turns are handed
+    /// out one delay apart to everyone, and nobody holds anything while waiting. A turn further
+    /// off than twenty seconds is refused, so nobody queues behind someone guessing.
+    pub fn brake(&self) -> Result<(), &'static str> {
         let failures: usize = self.recent_failures().values().map(Vec::len).sum();
         let delay = brake_for(failures);
         if delay.is_zero() {
-            return;
+            return Ok(());
         }
-        let _turn = lock(&self.brake);
-        thread::sleep(delay);
+        let now = Instant::now();
+        let turn = {
+            let mut next = lock(&self.next_answer);
+            let turn = next.filter(|next| *next > now).unwrap_or(now) + delay;
+            if turn - now > LONGEST_WAIT {
+                return Err("Too many wrong passwords lately. Try again in a minute.");
+            }
+            *next = Some(turn);
+            turn
+        };
+        thread::sleep(turn - now);
+        Ok(())
     }
 
-    /// Starts a handshake from `peer`, unless one from that address is under way, too many are
-    /// from its IPv6 network, or too many are in all.
+    /// Starts a handshake from `peer`, unless one from that address is under way or too many
+    /// are in all.
     pub fn handshake(self: &Arc<Self>, peer: IpAddr) -> Result<Handshake, &'static str> {
         let mut handshaking = lock(&self.handshaking);
-        let from_network = handshaking
-            .iter()
-            .filter(|other| network(**other).is_some() && network(**other) == network(peer))
-            .count();
-        let refusal = match () {
-            () if handshaking.contains(&peer) => Some("This computer is already connecting."),
-            () if handshaking.len() >= MOST_HANDSHAKES
-                || from_network >= MOST_HANDSHAKES_PER_NETWORK =>
-            {
-                Some("Too many computers are connecting. Try again in a minute.")
-            }
-            () => None,
-        };
-        if let Some(refusal) = refusal {
-            return Err(refusal);
+        if handshaking.contains(&peer) {
+            return Err("This computer is already connecting.");
+        }
+        if handshaking.len() >= MOST_HANDSHAKES {
+            return Err("Too many computers are connecting. Try again in a minute.");
         }
         handshaking.push(peer);
         Ok(Handshake {
@@ -151,11 +144,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn failures_from_everywhere_slow_every_answer_down_without_shutting_anyone_out() {
+    fn failures_from_everywhere_hand_out_turns_without_shutting_anyone_out() {
         assert_eq!(brake_for(9), Duration::ZERO);
         assert_eq!(brake_for(10), Duration::from_secs(1));
         assert_eq!(brake_for(12), Duration::from_secs(4));
         assert_eq!(brake_for(1000), LONGEST_BRAKE);
+        let braked = Limits::default();
+        let guesser: IpAddr = "192.168.1.9".parse().unwrap();
+        for _ in 0..14 {
+            lock(&braked.failures)
+                .entry(guesser)
+                .or_default()
+                .push(Instant::now());
+        }
+        *lock(&braked.next_answer) = Some(Instant::now() + Duration::from_secs(10));
+        assert!(
+            braked.brake().is_err(),
+            "a turn too far off is refused, not queued for"
+        );
         let limits = Arc::new(Limits::default());
         let one: IpAddr = "fd00::1".parse().unwrap();
         let other: IpAddr = "fd00::2".parse().unwrap();

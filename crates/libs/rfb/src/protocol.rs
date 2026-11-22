@@ -325,10 +325,9 @@ pub fn rectangle_header(area: Area, encoding: i32, out: &mut Vec<u8>) {
     out.extend_from_slice(&encoding.to_be_bytes());
 }
 
-/// A framebuffer update that only renames the screen (the DesktopName pseudo-encoding).
-pub fn desktop_name(name: &str) -> Vec<u8> {
-    let mut message = Vec::new();
-    update_header(1, &mut message);
+/// A rectangle of a framebuffer update that renames the screen (the DesktopName
+/// pseudo-encoding).
+pub fn desktop_name(name: &str, out: &mut Vec<u8>) {
     rectangle_header(
         Area {
             x: 0,
@@ -337,11 +336,10 @@ pub fn desktop_name(name: &str) -> Vec<u8> {
             height: 0,
         },
         ENCODING_DESKTOP_NAME,
-        &mut message,
+        out,
     );
-    message.extend_from_slice(&(name.len() as u32).to_be_bytes());
-    message.extend_from_slice(name.as_bytes());
-    message
+    out.extend_from_slice(&(name.len() as u32).to_be_bytes());
+    out.extend_from_slice(name.as_bytes());
 }
 
 pub fn update_header(rectangles: u16, out: &mut Vec<u8>) {

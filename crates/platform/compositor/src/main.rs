@@ -9,8 +9,8 @@ use bande_compositor::{
     REVIEW, RecoveryStep, Renderer, SCREENSHOT, SESSION_CLIENT_RESTART_THROTTLE, SHELL,
     SessionRequest, SessionRole, SessionUpkeep, Sleep, export_session_environment, follow_alerts,
     follow_appearance, follow_input_settings, follow_lid, follow_login_settings, follow_session,
-    follow_shutdown, follow_sleep, handle_power_key, notify_service_manager, raise_priority,
-    render_material, serve_app_states, serve_displays, serve_global_shortcuts,
+    follow_shutdown, follow_sleep, handle_power_key, normal_priority, notify_service_manager,
+    raise_priority, render_material, serve_app_states, serve_displays, serve_global_shortcuts,
     serve_keyboard_monitor, user_config, watchdog_keepalive_interval,
 };
 use bande_config::{BUS_NAME, CARRIED_ACCESSIBILITY, OBJECT_PATH, login_accessibility_file};
@@ -698,6 +698,9 @@ fn follow_session_bus<O: FrameOutput + 'static>(
         let spawned = std::thread::Builder::new()
             .name("wallpaper material".to_owned())
             .spawn(move || {
+                if let Err(error) = normal_priority() {
+                    tracing::warn!("the wallpaper material competes with drawing: {error}");
+                }
                 if let Some(picture) = render_material(&request) {
                     let _ = materials.send(picture);
                 }

@@ -2,6 +2,7 @@ use std::fs;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
@@ -68,14 +69,33 @@ trait RealtimeKit {
 
 const HIGH_PRIORITY_NICE_LEVEL: i32 = -11;
 
+static NORMAL_NICE_LEVEL: OnceLock<i32> = OnceLock::new();
+
 pub fn raise_priority(connection: &Connection) {
+    let normal = match rustix::process::getpriority_process(None) {
+        Ok(normal) => normal,
+        Err(error) => {
+            tracing::debug!("drawing and input keep the normal priority: {error}");
+            return;
+        }
+    };
     let thread = rustix::thread::gettid().as_raw_nonzero().get();
     let raised = RealtimeKitProxyBlocking::new(connection).and_then(|rtkit| {
         rtkit.make_thread_high_priority(thread.unsigned_abs().into(), HIGH_PRIORITY_NICE_LEVEL)
     });
     match raised {
-        Ok(()) => tracing::info!("drawing and input run at a higher priority"),
+        Ok(()) => {
+            NORMAL_NICE_LEVEL.get_or_init(|| normal);
+            tracing::info!("drawing and input run at a higher priority");
+        }
         Err(error) => tracing::debug!("drawing and input keep the normal priority: {error}"),
+    }
+}
+
+pub fn normal_priority() -> io::Result<()> {
+    match NORMAL_NICE_LEVEL.get() {
+        Some(&nice) => rustix::process::setpriority_process(None, nice).map_err(io::Error::from),
+        None => Ok(()),
     }
 }
 

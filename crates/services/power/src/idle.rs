@@ -3,6 +3,7 @@ use std::time::Duration;
 pub const LOCKED_DISPLAY_OFF_AFTER: Duration = Duration::from_secs(60);
 pub const DIM_AHEAD: Duration = Duration::from_secs(10);
 pub const LOCK_SETTLES_IN: Duration = Duration::from_secs(5);
+pub const STREAMS_HOLD_ON_BATTERY: Duration = Duration::from_secs(30 * 60);
 pub const SLEEP_AGAIN_AFTER_WAKE: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +92,8 @@ pub struct IdleMachine {
     assertions: Vec<Assertion>,
     sleep_overdue: bool,
     idle_hint: bool,
+    on_battery: bool,
+    battery_low: bool,
 }
 
 impl IdleMachine {
@@ -111,6 +114,8 @@ impl IdleMachine {
             assertions: Vec::new(),
             sleep_overdue: false,
             idle_hint: false,
+            on_battery: false,
+            battery_low: false,
         }
     }
 
@@ -128,6 +133,9 @@ impl IdleMachine {
                 .display_off_after
                 .map(|off| off + LOCK_SETTLES_IN),
             self.policy.computer_sleeps_after(),
+            self.policy
+                .computer_sleeps_after()
+                .map(|after| after + STREAMS_HOLD_ON_BATTERY),
         ]
         .into_iter()
         .flatten()
@@ -185,7 +193,7 @@ impl IdleMachine {
             }
         }
         if self.stage < Stage::Suspended && reached(self.sleep_after()) {
-            if self.assertions.is_empty() {
+            if !self.kept_awake(idle) {
                 self.stage = Stage::Suspended;
                 self.sleep_overdue = false;
                 commands.push(Command::Suspend);
@@ -235,12 +243,34 @@ impl IdleMachine {
         self.undim()
     }
 
+    fn kept_awake(&self, idle: Duration) -> bool {
+        let streams_spent = self.on_battery
+            && (self.battery_low
+                || self
+                    .policy
+                    .computer_sleeps_after()
+                    .is_some_and(|after| idle >= after + STREAMS_HOLD_ON_BATTERY));
+        self.assertions
+            .iter()
+            .any(|assertion| *assertion != Assertion::Streams || !streams_spent)
+    }
+
+    pub fn set_power_source(&mut self, on_battery: bool, battery_low: bool) -> Vec<Command> {
+        self.on_battery = on_battery;
+        self.battery_low = battery_low;
+        if self.sleep_overdue && !self.kept_awake(Duration::ZERO) {
+            self.sleep_overdue = false;
+            return vec![Command::RestartSleepTimer];
+        }
+        Vec::new()
+    }
+
     pub fn set_asserted(&mut self, assertion: Assertion, held: bool) -> Vec<Command> {
         self.assertions.retain(|kind| *kind != assertion);
         if held {
             self.assertions.push(assertion);
         }
-        if self.assertions.is_empty() && std::mem::take(&mut self.sleep_overdue) {
+        if !self.kept_awake(Duration::ZERO) && std::mem::take(&mut self.sleep_overdue) {
             return vec![Command::RestartSleepTimer];
         }
         Vec::new()

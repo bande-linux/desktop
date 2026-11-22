@@ -70,6 +70,9 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     controller::follow_lock_requests(&system, &idle)?;
     controller::follow_idle_inhibitors(&system, &idle)?;
     controller::follow_sleep_inhibitors(&system, &idle)?;
+    if let Err(error) = controller::follow_power_source(&system, &idle) {
+        tracing::warn!("cannot follow the battery for idle sleep: {error}");
+    }
     let streams = Arc::clone(&idle);
     audio::follow_streams(move |streaming| streams.set_asserted(Assertion::Streams, streaming));
     match wayland_client::Connection::connect_to_env() {

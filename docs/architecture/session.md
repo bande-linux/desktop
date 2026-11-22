@@ -82,7 +82,9 @@ graph LR
   paused one, the system's filters or Bande's event sounds), the portal's suspend flag
   (`org.bande.Power.KeepAwake`) and someone else's logind `sleep` inhibitor keep it awake;
   after the last one the computer sleeps after a full `suspend-after`. Audio alone keeps the
-  computer but not the display awake; CPU load, builds and MPRIS keep nothing awake.
+  computer but not the display awake; CPU load, builds and MPRIS keep nothing awake. On battery
+  a stream holds sleep off for at most 30 minutes past the sleep time and not at all once UPower
+  warns the battery is `Low`, since a game, a call app or a silent web page may keep one open.
 - The power button: the compositor holds logind's `handle-power-key` inhibitor while its user
   session is active and logind's configuration leaves `HandlePowerKey=` unset, and on a press
   shorter than five seconds locks the session through logind and asks for `Suspend` when

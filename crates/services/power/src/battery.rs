@@ -12,10 +12,12 @@ pub enum Alert {
     Critical,
 }
 
+pub const LOW_WARNING_LEVEL: u32 = 3;
+
 impl Alert {
     pub fn for_warning_level(warning_level: u32) -> Option<Self> {
         match warning_level {
-            3 => Some(Self::Low),
+            LOW_WARNING_LEVEL => Some(Self::Low),
             4 | 5 => Some(Self::Critical),
             _ => None,
         }

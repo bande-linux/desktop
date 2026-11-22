@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -8,6 +8,7 @@ use std::os::unix::net::UnixStream;
 use zbus::blocking::Connection;
 
 use crate::backlight::KeyboardBacklight;
+use crate::battery::{DisplayDeviceProxyBlocking, LOW_WARNING_LEVEL, UPowerProxyBlocking};
 use crate::brightness::Lights;
 use crate::idle::{Assertion, Command, IdleMachine, Inhibitor, Policy};
 use crate::logind::{self, ManagerProxyBlocking, SessionProxyBlocking};
@@ -132,6 +133,10 @@ impl IdleController {
         self.run(|machine| machine.set_asserted(assertion, held));
     }
 
+    pub fn set_power_source(&self, on_battery: bool, battery_low: bool) {
+        self.run(|machine| machine.set_power_source(on_battery, battery_low));
+    }
+
     pub fn set_locked(&self, locked: bool) {
         self.run(|machine| machine.set_locked(locked));
     }
@@ -240,6 +245,43 @@ pub fn follow_sleep_inhibitors(
     logind::follow_blocked(system, "sleep", move |held| {
         controller.set_asserted(Assertion::Logind, held);
     })
+}
+
+pub fn follow_power_source(
+    system: &Connection,
+    controller: &Arc<IdleController>,
+) -> zbus::Result<()> {
+    let upower = UPowerProxyBlocking::new(system)?;
+    let battery = DisplayDeviceProxyBlocking::new(system)?;
+    let (changed, changes) = mpsc::channel();
+    let plugs = upower.receive_on_battery_changed();
+    let levels = battery.receive_warning_level_changed();
+    let notify = changed.clone();
+    thread::spawn(move || {
+        plugs.for_each(|_| {
+            let _ = notify.send(());
+        })
+    });
+    thread::spawn(move || {
+        levels.for_each(|_| {
+            let _ = changed.send(());
+        })
+    });
+    let controller = Arc::clone(controller);
+    thread::spawn(move || {
+        loop {
+            controller.set_power_source(
+                upower.on_battery().unwrap_or(false),
+                battery
+                    .warning_level()
+                    .is_ok_and(|level| level >= LOW_WARNING_LEVEL),
+            );
+            if changes.recv().is_err() {
+                return;
+            }
+        }
+    });
+    Ok(())
 }
 
 pub fn follow_lock(system: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {

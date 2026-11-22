@@ -365,7 +365,7 @@ pub fn same_volume(a: &Path, b: &Path) -> bool {
     if on_a.is_some() || on_b.is_some() {
         return on_a == on_b;
     }
-    match (fs::metadata(a), fs::metadata(b)) {
+    match (fs::symlink_metadata(a), fs::metadata(b)) {
         (Ok(a), Ok(b)) => a.dev() == b.dev(),
         _ => false,
     }

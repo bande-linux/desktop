@@ -894,8 +894,19 @@ impl DesktopView {
             Target::Desktop => &self.folder,
             Target::Folder(folder) => folder,
         };
-        let reference = self.offered.first().unwrap_or(&self.folder);
-        let action = match same_volume(reference, destination) {
+        let rearranging = target == Target::Desktop
+            && matches!(&self.gesture, Gesture::Drag { paths, .. } if *paths == self.offered);
+        let reference = self
+            .offered
+            .iter()
+            .find(|path| {
+                self.desktop
+                    .item(path)
+                    .is_none_or(|item| item.kind != Kind::Volume)
+            })
+            .or(self.offered.first())
+            .unwrap_or(&self.folder);
+        let action = match rearranging || same_volume(reference, destination) {
             true => Some(DragAction::Move),
             false => Some(DragAction::Copy),
         };

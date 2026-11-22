@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use bande_app::{
     Cx, Dropping, FileDrop, Info, Keys, Kind, Menus, Program, Settings, View, WindowId,
+    choose_file, choose_save_file,
 };
 use bande_app_menu::{Entry, edit_submenu};
 use bande_app_settings::{SettingsWatch, Stored, settings_folder};
@@ -14,7 +15,6 @@ use bande_calendar::caldav::Discovered;
 use bande_calendar::ical::{CalendarObject, read_file};
 use bande_calendar::notice::{Notice, Notices, OPEN, SNOOZE as SNOOZE_ACTION, Subject};
 use bande_calendar::online::System;
-use bande_calendar::portal::{Choose, choose_file};
 use bande_calendar::settings::{CalendarSettings, Change, listen};
 use bande_calendar::store::{Account, AccountKind, CalendarInfo, Library, data_dir, new_uid};
 use bande_calendar::sync::{apply, subscription_outcome};
@@ -34,6 +34,7 @@ use bande_toolkit::{
 };
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp, Zoned};
+use zbus::blocking::Connection;
 
 const APP_ID: &str = "org.bande.Calendar";
 const NEW_EVENT: &str = "new-event";
@@ -74,15 +75,29 @@ enum Chosen {
     Failed(String),
 }
 
-fn choose(outbox: bande_inbox::Outbox<Chosen>, export: Option<(String, String)>) {
+fn choose(
+    outbox: bande_inbox::Outbox<Chosen>,
+    session: Option<Connection>,
+    export: Option<(String, String)>,
+) {
+    let Some(session) = session else {
+        tracing::warn!("cannot choose a file without the session bus");
+        return;
+    };
     let spawned = std::thread::Builder::new()
         .name("choose".to_owned())
         .spawn(move || {
-            let (title, save) = match &export {
-                Some((name, _)) => (tr!("Export Calendar"), Choose::Save(name)),
-                None => (tr!("Import Events"), Choose::Open),
+            let chosen = match &export {
+                Some((name, _)) => choose_save_file(&session, &tr!("Export Calendar"), name),
+                None => {
+                    let filter = (
+                        tr!("iCalendar"),
+                        vec![(0, "*.ics".to_owned()), (1, "text/calendar".to_owned())],
+                    );
+                    choose_file(&session, &tr!("Import Events"), Some(filter))
+                }
             };
-            let chosen = match choose_file(&title, save) {
+            let chosen = match chosen {
                 Ok(Some(path)) => path,
                 Ok(None) => return,
                 Err(error) => {
@@ -121,6 +136,7 @@ struct CalendarApp {
     alarm: WallAlarm,
     changes: Inbox<Change>,
     chosen: Inbox<Chosen>,
+    session: Option<Connection>,
     online: Inbox<System>,
     setups: Inbox<SetupReply>,
     settings: CalendarSettings,
@@ -673,7 +689,11 @@ impl CalendarApp {
                     self.check_alerts(view);
                     view.refresh_search();
                 }
-                Request::Export { name, data } => choose(self.chosen.outbox(), Some((name, data))),
+                Request::Export { name, data } => choose(
+                    self.chosen.outbox(),
+                    self.session.clone(),
+                    Some((name, data)),
+                ),
                 Request::Collection {
                     account,
                     url,
@@ -1012,6 +1032,7 @@ impl Program for CalendarApp {
             alarm: WallAlarm::new()?,
             changes,
             chosen: Inbox::new()?,
+            session: cx.session().cloned(),
             online,
             setups,
             settings,
@@ -1064,7 +1085,7 @@ impl Program for CalendarApp {
                     cx.print(&title, document);
                 }
             }
-            IMPORT => choose(self.chosen.outbox(), None),
+            IMPORT => choose(self.chosen.outbox(), self.session.clone(), None),
             _ => {
                 if self.main.is_none() && command != EXPORT {
                     self.reopen(cx);

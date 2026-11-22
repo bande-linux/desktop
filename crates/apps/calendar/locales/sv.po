@@ -16,6 +16,9 @@ msgstr "Kalenderinställningar"
 msgid "Export Calendar"
 msgstr "Exportera kalender"
 
+msgid "iCalendar"
+msgstr "iCalendar"
+
 msgid "Import Events"
 msgstr "Importera händelser"
 

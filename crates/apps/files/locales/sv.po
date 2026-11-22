@@ -339,9 +339,6 @@ msgstr "Ny mapp"
 msgid "Open"
 msgstr "Öppna"
 
-msgid "Share Screen…"
-msgstr "Dela skärm…"
-
 msgid "Properties"
 msgstr "Egenskaper"
 
@@ -548,6 +545,9 @@ msgstr "Nytt dokument"
 
 msgid "Remove from Sidebar"
 msgstr "Ta bort från sidofältet"
+
+msgid "Share Screen…"
+msgstr "Dela skärm…"
 
 msgid "Forget This Server"
 msgstr "Glöm den här servern"

@@ -22,6 +22,7 @@ use bande_thumbnails::Thumbnails;
 use bande_toolkit::ui::{
     ClipboardRequest, Context, Cursor, Event, FreeLayout, Key, Menu, Modifiers, Pointer,
     PointerButton, Scroll, ScrollState, Slider, TabStrip, TypeSelect, Ui, Widget, WidgetId,
+    opens_menu,
 };
 use bande_toolkit::{Appearance, Image, Item, Palette, Point, Rect, SHEET_INSET, TextSystem};
 use bande_volumes::{
@@ -1749,7 +1750,7 @@ impl FilesView {
             Key::Escape if self.searching.is_some() => self.end_search(),
             Key::Character('f' | 'F') if command && !shift => self.focus_search(),
             Key::Character('h' | 'H') if command && !shift => self.toggle_hidden(),
-            Key::Function(10) if shift => self.keyboard_menu(),
+            _ if opens_menu(key, modifiers) => self.keyboard_menu(),
             Key::Up if alt => {
                 self.browser.enclosing_folder();
                 self.selection_changed();

@@ -124,7 +124,6 @@ pub fn app_menus(view: &FilesView, recent_folders: &[PathBuf]) -> Menus {
         shortcut(text!("New Tab"), "Ctrl+T"),
         shortcut(text!("New Folder"), "Shift+Ctrl+N"),
         shortcut(text!("Open"), "Ctrl+O"),
-        plain(text!("Share Screen…"), "share-screen"),
         Entry::separator(),
         shortcut(text!("Properties"), "Ctrl+I"),
         Entry::item(&tr!("Browse Backups…"), "browse-backups")

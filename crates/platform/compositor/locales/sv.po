@@ -31,6 +31,9 @@ msgstr "Avbryt"
 msgid "Accessibility"
 msgstr "Hjälpmedel"
 
+msgid "Desktop problems"
+msgstr "Problem med skrivbordet"
+
 msgid "The taskbar and desktop keep stopping. Press Ctrl+Alt+Esc to log out."
 msgstr "Aktivitetsfältet och skrivbordet slutar hela tiden fungera. Tryck på Ctrl+Alt+Esc för att logga ut."
 

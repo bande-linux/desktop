@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use smithay::backend::allocator::{Format as DmabufFormat, Fourcc, Modifier};
 use smithay::input::SeatState;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
@@ -41,7 +43,11 @@ use crate::{shell, trust};
 
 const MONOTONIC: u32 = 1;
 
-const DMABUF_FOURCCS: [Fourcc; 3] = [Fourcc::Argb8888, Fourcc::Xrgb8888, Fourcc::Nv12];
+const DMABUF_FOURCCS: [(Fourcc, usize); 3] = [
+    (Fourcc::Argb8888, 1),
+    (Fourcc::Xrgb8888, 1),
+    (Fourcc::Nv12, 2),
+];
 
 pub(crate) struct Globals {
     pub(crate) syncobj_state: Option<DrmSyncobjState>,
@@ -50,6 +56,7 @@ pub(crate) struct Globals {
     pub(crate) data_control_state: DataControlState,
     pub(crate) dmabuf_state: DmabufState,
     _dmabuf_global: DmabufGlobal,
+    pub(crate) dmabuf_planes: HashMap<DmabufFormat, usize>,
     pub(crate) compositor_state: CompositorState,
     pub(crate) xdg_shell_state: XdgShellState,
     pub(crate) shm_state: ShmState,
@@ -89,17 +96,24 @@ impl Globals {
                     .is_some_and(|state| state.role == Some(SessionRole::ClipboardDaemon))
             });
         let mut dmabuf_state = DmabufState::new();
+        let dmabuf_planes: HashMap<DmabufFormat, usize> = match scanout {
+            Some(scanout) => scanout.planes.clone(),
+            None => DMABUF_FOURCCS
+                .into_iter()
+                .map(|(code, planes)| {
+                    let format = DmabufFormat {
+                        code,
+                        modifier: Modifier::Linear,
+                    };
+                    (format, planes)
+                })
+                .collect(),
+        };
         let dmabuf_global = match scanout {
             Some(scanout) => {
                 dmabuf_state.create_global_with_default_feedback::<State>(handle, &scanout.feedback)
             }
-            None => dmabuf_state.create_global::<State>(
-                handle,
-                DMABUF_FOURCCS.map(|code| DmabufFormat {
-                    code,
-                    modifier: Modifier::Linear,
-                }),
-            ),
+            None => dmabuf_state.create_global::<State>(handle, dmabuf_planes.keys().copied()),
         };
         Self {
             syncobj_state: None,
@@ -108,6 +122,7 @@ impl Globals {
             data_control_state,
             dmabuf_state,
             _dmabuf_global: dmabuf_global,
+            dmabuf_planes,
             compositor_state: CompositorState::new::<State>(handle),
             xdg_shell_state: XdgShellState::new_with_capabilities::<State>(
                 handle,

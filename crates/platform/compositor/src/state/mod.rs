@@ -72,6 +72,7 @@ pub const REFRESH: Duration = Duration::from_nanos(1_000_000_000 / 120);
 pub struct ScanoutDevice {
     pub node: DrmNode,
     pub feedback: DmabufFeedback,
+    pub planes: std::collections::HashMap<smithay::backend::allocator::Format, usize>,
 }
 
 pub(crate) struct ExclusiveLayer {

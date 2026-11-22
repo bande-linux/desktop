@@ -4,10 +4,10 @@ use std::os::fd::{AsFd, AsRawFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use smithay::backend::allocator::Fourcc;
+use smithay::backend::allocator::{Fourcc, Modifier};
 use smithay::backend::allocator::dumb::DumbAllocator;
 use smithay::backend::allocator::format::FormatSet;
-use smithay::backend::allocator::gbm::GbmDevice;
+use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
 use smithay::backend::drm::compositor::{
     DrmCompositor, FrameError, FrameFlags, PrimaryPlaneElement,
 };
@@ -35,7 +35,7 @@ use bande_render::VulkanRenderer;
 
 use crate::clock::{FrameOutput, Submission, Vblank};
 use crate::render::background;
-use crate::scanout::ScanoutExporter;
+use crate::scanout::{ScanoutAllocator, ScanoutExporter};
 use crate::screen::{OutputConfig, OutputMode};
 use crate::state::{Compositor, REFRESH, ScanoutDevice};
 use bande_colour::Profile;
@@ -43,7 +43,7 @@ use bande_render::OutputColour;
 
 pub type DrmBackendError = Box<dyn Error>;
 
-type OutputCompositor = DrmCompositor<DumbAllocator, ScanoutExporter, (), DrmDeviceFd>;
+type OutputCompositor = DrmCompositor<ScanoutAllocator, ScanoutExporter, (), DrmDeviceFd>;
 
 const DRM_IOCTL_MODE_CLOSEFB: libc::c_ulong = 0xC008_64D0;
 const CURSOR_SIZE: (u32, u32) = (64, 64);
@@ -54,6 +54,7 @@ struct Head {
     config: OutputConfig,
     modes: Vec<Mode>,
     compositor: OutputCompositor,
+    rendered: bool,
     scanned_out: bool,
     dark: bool,
     colour: Colour,
@@ -86,6 +87,7 @@ pub struct DrmBackend {
     heads: Vec<Head>,
     libinput: Option<Libinput>,
     kelvin: Option<f64>,
+    copies_frames: bool,
 }
 
 pub struct DrmNotifiers {
@@ -442,7 +444,7 @@ impl DrmBackend {
         let fd = device.device_fd().clone();
         let node = DrmNode::from_file(&fd)?;
         let gbm = GbmDevice::new(fd).ok();
-        let renderer = VulkanRenderer::new()?;
+        let renderer = VulkanRenderer::new(Some(node.dev_id()))?;
         let feedback =
             DmabufFeedbackBuilder::new(node.dev_id(), renderer.dmabuf_formats()).build()?;
         Ok(Self {
@@ -456,6 +458,7 @@ impl DrmBackend {
             heads: Vec::new(),
             libinput: None,
             kelvin: None,
+            copies_frames: false,
         })
     }
 
@@ -474,17 +477,23 @@ impl DrmBackend {
             .find(|crtc| !taken.contains(crtc)))
     }
 
-    fn create_head(&mut self, info: &connector::Info) -> Result<Option<Head>, DrmBackendError> {
-        let modes = sorted_modes(info);
-        let (Some(mode), Some(crtc)) = (modes.first().copied(), self.free_crtc(info)?) else {
-            return Ok(None);
+    fn output_compositor(
+        &mut self,
+        crtc: crtc::Handle,
+        mode: Mode,
+        connector: connector::Handle,
+        rendered: bool,
+    ) -> Result<OutputCompositor, DrmBackendError> {
+        let surface = self.device.create_surface(crtc, mode, &[connector])?;
+        let allocator = match (&self.gbm, rendered) {
+            (Some(gbm), true) => ScanoutAllocator::Rendered(GbmAllocator::new(
+                gbm.clone(),
+                GbmBufferFlags::RENDERING | GbmBufferFlags::SCANOUT,
+            )),
+            _ => ScanoutAllocator::Copied(DumbAllocator::new(self.device.device_fd().clone())),
         };
-        let fd = self.device.device_fd().clone();
-        let surface = self.device.create_surface(crtc, mode, &[info.handle()])?;
-        let scanout_formats = surface.plane_info().formats.clone();
-        let renderer_formats = self.renderer.dmabuf_formats();
         let (width, height) = mode.size();
-        let compositor = DrmCompositor::new(
+        Ok(DrmCompositor::new(
             OutputModeSource::Static {
                 size: Size::from((i32::from(width), i32::from(height))),
                 scale: 1.0.into(),
@@ -492,13 +501,42 @@ impl DrmBackend {
             },
             surface,
             None,
-            DumbAllocator::new(fd),
+            allocator,
             ScanoutExporter::new(self.gbm.clone(), self.node),
             COLOR_FORMATS,
-            renderer_formats.clone(),
+            self.renderer.render_formats(),
             Size::from(CURSOR_SIZE),
             self.gbm.clone(),
-        )?;
+        )?)
+    }
+
+    fn renders_into_scanout_buffers(&self) -> bool {
+        !self.copies_frames
+            && self.gbm.is_some()
+            && self
+                .renderer
+                .render_formats()
+                .iter()
+                .any(|format| format.modifier != Modifier::Linear)
+    }
+
+    fn create_head(&mut self, info: &connector::Info) -> Result<Option<Head>, DrmBackendError> {
+        let modes = sorted_modes(info);
+        let (Some(mode), Some(crtc)) = (modes.first().copied(), self.free_crtc(info)?) else {
+            return Ok(None);
+        };
+        let mut rendered = self.renders_into_scanout_buffers();
+        let compositor = match self.output_compositor(crtc, mode, info.handle(), rendered) {
+            Ok(compositor) => compositor,
+            Err(error) if rendered => {
+                tracing::warn!("{} copies its frames: {error}", connector_name(info));
+                rendered = false;
+                self.output_compositor(crtc, mode, info.handle(), false)?
+            }
+            Err(error) => return Err(error),
+        };
+        let scanout_formats = compositor.surface().plane_info().formats.clone();
+        let renderer_formats = self.renderer.dmabuf_formats();
         if self.heads.is_empty() {
             let scanout: FormatSet = scanout_formats
                 .iter()
@@ -514,6 +552,7 @@ impl DrmBackend {
             config: head_config(&self.device, info, &modes),
             modes,
             compositor,
+            rendered,
             scanned_out: false,
             dark: false,
             colour: Colour::Unknown,
@@ -662,6 +701,7 @@ impl DrmBackend {
         ScanoutDevice {
             node: self.node,
             feedback: self.feedback.clone(),
+            planes: self.renderer.dmabuf_planes(),
         }
     }
 
@@ -920,13 +960,32 @@ impl FrameOutput for DrmBackend {
 }
 
 impl DrmBackend {
+    fn copy_frames(&mut self, index: usize) -> Result<(), DrmBackendError> {
+        self.copies_frames = true;
+        let head = self.heads.remove(index);
+        let (crtc, mode) = (head.compositor.crtc(), head.compositor.pending_mode());
+        drop(head.compositor);
+        let compositor = self.output_compositor(crtc, mode, head.connector, false)?;
+        self.heads.insert(
+            index,
+            Head {
+                compositor,
+                rendered: false,
+                flip_pending: false,
+                tone: None,
+                ..head
+            },
+        );
+        Ok(())
+    }
+
     fn renew_renderer(&mut self) -> Result<(), DrmBackendError> {
         tracing::error!(
             "starting the renderer again (lost: {}, holding {})",
             self.renderer.is_lost(),
             self.renderer.memory_use()
         );
-        self.renderer = VulkanRenderer::new()?;
+        self.renderer = VulkanRenderer::new(Some(self.node.dev_id()))?;
         for head in &mut self.heads {
             head.compositor.reset_buffers();
         }
@@ -1023,8 +1082,18 @@ impl DrmBackend {
         };
         let elements = compositor.render_elements_on(&mut self.renderer, output);
         let frame =
-            head.compositor
-                .render_frame(&mut self.renderer, &elements, background(), flags)?;
+            match head
+                .compositor
+                .render_frame(&mut self.renderer, &elements, background(), flags)
+            {
+                Ok(frame) => frame,
+                Err(error) if head.rendered && !self.renderer.is_lost() => {
+                    tracing::warn!("{output} copies its frames from now on: {error}");
+                    self.copy_frames(index)?;
+                    return Ok(Submission::Unchanged);
+                }
+                Err(error) => return Err(error.into()),
+            };
         self.renderer.finish_uploads()?;
         head.scanned_out = matches!(frame.primary_element, PrimaryPlaneElement::Element(_));
         let empty = frame.is_empty;

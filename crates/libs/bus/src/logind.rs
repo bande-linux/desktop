@@ -25,6 +25,10 @@ pub trait Manager {
 
     fn suspend(&self, interactive: bool) -> zbus::Result<()>;
 
+    fn can_suspend_then_hibernate(&self) -> zbus::Result<String>;
+
+    fn suspend_then_hibernate(&self, interactive: bool) -> zbus::Result<()>;
+
     #[zbus(property)]
     fn block_inhibited(&self) -> zbus::Result<String>;
 
@@ -48,6 +52,47 @@ pub trait Session {
 
     #[zbus(signal, name = "Lock")]
     fn lock_requested(&self) -> zbus::Result<()>;
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.UPower.Device",
+    default_service = "org.freedesktop.UPower",
+    default_path = "/org/freedesktop/UPower/devices/DisplayDevice"
+)]
+trait PowerSource {
+    #[zbus(property, name = "Type")]
+    fn kind(&self) -> zbus::Result<u32>;
+
+    #[zbus(property)]
+    fn is_present(&self) -> zbus::Result<bool>;
+}
+
+const UPOWER_BATTERY: u32 = 2;
+
+fn runs_on_a_battery(system: &Connection) -> bool {
+    PowerSourceProxyBlocking::new(system).is_ok_and(|source| {
+        source.is_present().unwrap_or(false)
+            && source.kind().is_ok_and(|kind| kind == UPOWER_BATTERY)
+    })
+}
+
+pub fn hibernates_after_sleep(manager: &ManagerProxyBlocking<'_>) -> zbus::Result<bool> {
+    Ok(runs_on_a_battery(manager.inner().connection())
+        && manager.can_suspend_then_hibernate()? == "yes")
+}
+
+/// Puts the computer to sleep, hibernating before a battery runs out where logind can, and
+/// answers whether logind allowed it.
+pub fn sleep(manager: &ManagerProxyBlocking<'_>, interactive: bool) -> zbus::Result<bool> {
+    if hibernates_after_sleep(manager)? {
+        manager.suspend_then_hibernate(interactive)?;
+        return Ok(true);
+    }
+    if !interactive && manager.can_suspend()? != "yes" {
+        return Ok(false);
+    }
+    manager.suspend(interactive)?;
+    Ok(true)
 }
 
 pub fn own_session(system: &Connection) -> zbus::Result<SessionProxyBlocking<'static>> {

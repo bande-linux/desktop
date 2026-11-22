@@ -4,7 +4,7 @@ use std::time::Duration;
 
 pub use bande_bus::logind::{
     ManagerProxyBlocking, SessionProxyBlocking, follow_blocked, follow_lock_requests,
-    follow_locked_hint, inhibit, own_session,
+    follow_locked_hint, inhibit, own_session, sleep,
 };
 use bande_l10n::tr;
 use zbus::blocking::Connection;

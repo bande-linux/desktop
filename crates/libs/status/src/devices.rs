@@ -75,8 +75,6 @@ struct LogindInhibitor {
     blocking_name = "Login"
 )]
 trait LoginManager {
-    fn suspend(&self, interactive: bool) -> zbus::Result<()>;
-
     fn reboot(&self, interactive: bool) -> zbus::Result<()>;
 
     fn power_off(&self, interactive: bool) -> zbus::Result<()>;
@@ -143,7 +141,7 @@ pub fn hear_if_cannot_sleep() -> std::io::Result<Inbox<()>> {
 pub fn use_power(system: &Connection, power: PowerAction) -> zbus::Result<()> {
     let login = Login::new(system)?;
     match power {
-        PowerAction::Sleep => login.suspend(false),
+        PowerAction::Sleep => sleep_now(system, false),
         PowerAction::Restart => login.reboot(false),
         PowerAction::ShutDown => login.power_off(false),
     }
@@ -352,7 +350,12 @@ pub fn lock_screen(system: &Connection) -> zbus::Result<()> {
 }
 
 pub fn sleep(system: &Connection) -> zbus::Result<()> {
-    Login::new(system)?.suspend(true)
+    sleep_now(system, true)
+}
+
+fn sleep_now(system: &Connection, interactive: bool) -> zbus::Result<()> {
+    let manager = bande_bus::logind::ManagerProxyBlocking::new(system)?;
+    bande_bus::logind::sleep(&manager, interactive).map(drop)
 }
 
 fn shutdown_inhibitors(login: &Login) -> zbus::Result<Vec<Inhibitor>> {

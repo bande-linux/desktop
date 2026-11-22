@@ -58,6 +58,11 @@ graph LR
   hidden). A virtual machine never sleeps when idle: a sleeping guest looks like a crash and
   loses its network. Sleep never comes before the display turns off; Settings says so on a row
   whose choice is overridden.
+- On a computer with a battery, every sleep Bande asks for (idle, the menus, the lock screen,
+  the power button) is logind's `SuspendThenHibernate` when `CanSuspendThenHibernate` is `yes`
+  (logind checks swap, resume and Secure Boot), so a sleeping laptop hibernates before its
+  battery runs out (`HibernateDelaySec=` in `sleep.conf` decides when). Settings ▸ Power says
+  whether it can, or why not. The lid follows logind's own `HandleLidSwitch=`.
 - **Keeping the display awake**: a playing video holds off dimming, display off and the lock,
   whichever path the player uses:
 

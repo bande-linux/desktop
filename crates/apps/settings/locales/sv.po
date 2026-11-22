@@ -1541,6 +1541,18 @@ msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofil
 msgid "This computer doesn't offer power modes."
 msgstr "Den här datorn har inga strömlägen."
 
+msgid "Hibernation"
+msgstr "Viloläge på disk"
+
+msgid "Before the battery runs out during sleep"
+msgstr "Innan batteriet tar slut under vila"
+
+msgid "This computer can't hibernate, so sleep lasts until the battery runs out. Hibernation needs swap space at least as large as memory and isn't possible while Secure Boot locks the kernel."
+msgstr "Den här datorn kan inte gå i viloläge på disk, så vilan varar tills batteriet tar slut. Viloläge på disk kräver växlingsutrymme minst lika stort som minnet och går inte medan Secure Boot låser kärnan."
+
+msgid "The administrator doesn't allow hibernation, so sleep lasts until the battery runs out."
+msgstr "Administratören tillåter inte viloläge på disk, så vilan varar tills batteriet tar slut."
+
 msgid "This computer can't sleep, so it stays on when idle. The display still turns off as set in Lock Screen."
 msgstr "Den här datorn kan inte vila, så den förblir på när den inte används. Skärmen stängs ändå av enligt Låsskärm."
 

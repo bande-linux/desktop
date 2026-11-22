@@ -274,11 +274,7 @@ pub fn logind_executor(
             Command::IdleHint(idle) => session.set_idle_hint(idle),
             Command::RequirePassword(required) => password.require(required),
             Command::Suspend if virtual_machine => Ok(()),
-            Command::Suspend => match manager.can_suspend() {
-                Ok(answer) if answer == "yes" => manager.suspend(false),
-                Ok(_) => Ok(()),
-                Err(error) => Err(error),
-            },
+            Command::Suspend => logind::sleep(&manager, false).map(drop),
             Command::Dim => {
                 let lit = keyboard
                     .as_ref()

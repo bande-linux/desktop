@@ -164,7 +164,8 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
     let session = SessionProxyBlocking::builder(connection)
         .path(manager.get_session("auto")?)?
         .build()?;
-    let inhibitor = manager.clone();
+    let sleeper = bande_bus::logind::ManagerProxyBlocking::new(connection)?;
+    let inhibitor = manager;
     let inhibit = move || {
         inhibitor
             .inhibit(
@@ -196,13 +197,7 @@ pub fn handle_power_key(connection: &Connection, presses: Receiver<()>) -> zbus:
             if let Err(error) = session.request_lock() {
                 tracing::warn!("cannot lock on the power button: {error}");
             }
-            let slept = manager
-                .can_suspend()
-                .and_then(|answer| match answer.as_str() {
-                    "yes" => manager.suspend(false),
-                    _ => Ok(()),
-                });
-            if let Err(error) = slept {
+            if let Err(error) = bande_bus::logind::sleep(&sleeper, false) {
                 tracing::warn!("cannot sleep on the power button: {error}");
             }
         }

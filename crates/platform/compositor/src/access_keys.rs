@@ -194,16 +194,24 @@ fn confirm_sticky_keys(session: Connection, turn_on: bool) {
             )
         };
         let cancel = tr!("Cancel");
-        let Ok(notifications) = zbus::blocking::Proxy::new(
+        let notifications = match zbus::blocking::Proxy::new(
             &session,
             "org.freedesktop.Notifications",
             "/org/freedesktop/Notifications",
             "org.freedesktop.Notifications",
-        ) else {
-            return;
+        ) {
+            Ok(notifications) => notifications,
+            Err(error) => {
+                tracing::warn!("cannot offer Sticky Keys: {error}");
+                return;
+            }
         };
-        let Ok(invoked) = notifications.receive_signal("ActionInvoked") else {
-            return;
+        let invoked = match notifications.receive_signal("ActionInvoked") {
+            Ok(invoked) => invoked,
+            Err(error) => {
+                tracing::warn!("cannot offer Sticky Keys: {error}");
+                return;
+            }
         };
         let hints: HashMap<&str, Value<'_>> = HashMap::from([("urgency", Value::from(2u8))]);
         let shown: zbus::Result<u32> = notifications.call(
@@ -219,8 +227,12 @@ fn confirm_sticky_keys(session: Connection, turn_on: bool) {
                 CONFIRMATION_TIMEOUT,
             ),
         );
-        let Ok(id) = shown else {
-            return;
+        let id = match shown {
+            Ok(id) => id,
+            Err(error) => {
+                tracing::warn!("cannot offer Sticky Keys: {error}");
+                return;
+            }
         };
         for signal in invoked {
             let Ok((invoked_id, action)) = signal.body().deserialize::<(u32, String)>() else {

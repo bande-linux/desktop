@@ -1273,12 +1273,6 @@ msgstr "Kopiera diagnostik"
 msgid "Copies versions, the engine's state and the end of its log, for a bug report"
 msgstr "Kopierar versioner, motorns tillstånd och slutet av dess logg, till en felrapport"
 
-msgid "Notifications"
-msgstr "Notiser"
-
-msgid "Notify when a container stops unexpectedly"
-msgstr "Meddela när en container stoppas oväntat"
-
 msgid "Quick Access"
 msgstr "Snabbåtkomst"
 

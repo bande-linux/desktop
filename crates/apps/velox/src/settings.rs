@@ -17,7 +17,6 @@ const DESKTOP_ENTRY: &str = "org.bande.Velox.desktop";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VeloxSettings {
-    pub notify_crashes: bool,
     pub status_item: bool,
 }
 
@@ -38,7 +37,6 @@ impl Stored for VeloxSettings {
         for (key, value) in pairs(text) {
             let on = flag(value).unwrap_or_default();
             match key {
-                "notify-crashes" => settings.notify_crashes = on,
                 "status-item" => settings.status_item = on,
                 _ => {}
             }
@@ -47,10 +45,7 @@ impl Stored for VeloxSettings {
     }
 
     fn to_text(&self) -> String {
-        format!(
-            "notify-crashes = {}\nstatus-item = {}\n",
-            self.notify_crashes, self.status_item
-        )
+        format!("status-item = {}\n", self.status_item)
     }
 }
 
@@ -162,15 +157,6 @@ pub fn settings_form(appearance: Appearance, settings: &Shared<VeloxSettings>) -
         vec![
             FormLine::Heading(tr!("Startup")),
             FormLine::Row(tr!("Launch Velox at login"), login_toggle()),
-            FormLine::Heading(tr!("Notifications")),
-            FormLine::Row(
-                tr!("Notify when a container stops unexpectedly"),
-                toggle(
-                    settings,
-                    text!("Notify when a container stops unexpectedly"),
-                    |settings| &mut settings.notify_crashes,
-                ),
-            ),
             FormLine::Heading(tr!("Quick Access")),
             FormLine::Row(
                 tr!("Status item in the Taskbar"),

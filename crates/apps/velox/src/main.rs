@@ -1282,10 +1282,10 @@ impl Program for Velox {
             .drain()
             .into_iter()
             .partition(|update| matches!(update, Update::Crashed { .. }));
-        if !crashes.is_empty() && VeloxSettings::current().notify_crashes {
+        if let Some(session) = cx.session() {
             for crash in crashes {
                 if let Update::Crashed { name, code } = crash {
-                    notify_crash(RUNNING_ID, &name, code);
+                    notify_crash(session, RUNNING_ID, &name, code);
                 }
             }
         }

@@ -27,10 +27,6 @@ fn networks() -> Vec<(IpAddr, IpAddr)> {
     let mut first: *mut libc::ifaddrs = std::ptr::null_mut();
     // SAFETY: getifaddrs fills `first` with a list that freeifaddrs releases below.
     if unsafe { libc::getifaddrs(&mut first) } != 0 {
-        tracing::warn!(
-            "cannot list this computer's networks: {}",
-            std::io::Error::last_os_error()
-        );
         return Vec::new();
     }
     let mut found = Vec::new();
@@ -66,4 +62,18 @@ pub fn on_local_network(peer: IpAddr) -> bool {
         || networks().into_iter().any(|(address, mask)| {
             masked(address, mask).is_some_and(|network| masked(peer, mask) == Some(network))
         })
+}
+
+/// The addresses viewers on the local network can reach this computer at.
+pub fn addresses() -> Vec<IpAddr> {
+    let mut found: Vec<IpAddr> = networks()
+        .into_iter()
+        .map(|(address, _)| address)
+        .filter(|address| match address {
+            IpAddr::V4(address) => !address.is_loopback() && !address.is_link_local(),
+            IpAddr::V6(_) => false,
+        })
+        .collect();
+    found.dedup();
+    found
 }

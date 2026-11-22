@@ -1,7 +1,6 @@
 mod capture;
 mod host;
 mod input;
-mod network;
 
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr, TcpListener};
@@ -9,6 +8,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Weak};
 use std::thread;
 
+use bande_screen_sharing::network;
 use bande_screen_sharing::rfb::identity::Identity;
 use bande_screen_sharing::rfb::serve;
 use bande_screen_sharing::setup::PORT;

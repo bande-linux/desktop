@@ -19,7 +19,6 @@ service = [
     "dep:bande-notify",
     "dep:des",
     "dep:flate2",
-    "dep:libc",
     "dep:pipewire",
     "dep:rcgen",
     "dep:reis",
@@ -35,6 +34,7 @@ name = "bande-screen-sharing"
 required-features = ["service"]
 
 [dependencies]
+libc.workspace = true
 sha2.workspace = true
 bande-xdg.workspace = true
 bande-bus = { workspace = true, optional = true }
@@ -46,7 +46,6 @@ bande-log = { workspace = true, optional = true }
 bande-notify = { workspace = true, optional = true }
 des = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
-libc = { workspace = true, optional = true }
 pipewire = { workspace = true, optional = true }
 rcgen = { workspace = true, optional = true }
 reis = { workspace = true, optional = true }

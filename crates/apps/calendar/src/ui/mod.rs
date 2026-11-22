@@ -1452,11 +1452,15 @@ impl CalendarView {
     }
 
     pub(crate) fn ask_scope(&mut self, confirm: Confirm, title: &str) {
+        let deleting = matches!(confirm, Confirm::Delete(_));
         self.confirm = Some(confirm);
         let alert = Alert::new(title, "", self.choice())
             .cancel(&tr!("Cancel"), "cancel")
-            .other(&tr!("Only This Event"), "occurrence")
-            .primary(&tr!("All Events"), "series");
+            .other(&tr!("Only This Event"), "occurrence");
+        let alert = match deleting {
+            true => alert.destructive(&tr!("All Events"), "series"),
+            false => alert.primary(&tr!("All Events"), "series"),
+        };
         self.ui.present_dialog(alert);
     }
 

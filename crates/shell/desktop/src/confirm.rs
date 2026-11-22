@@ -25,7 +25,7 @@ pub fn confirm_delete(count: usize) -> Result<bool, WindowError> {
             move |action| chosen.set(action == "delete"),
         )
         .cancel(&tr!("Cancel"), "cancel")
-        .primary(&tr!("Delete"), "delete")
+        .destructive(&tr!("Delete"), "delete")
     })?;
     Ok(confirmed.get())
 }
@@ -54,8 +54,8 @@ pub fn eject_failed(name: &str, busy: bool, message: &str) -> Result<bool, Windo
                 &tr!("To eject the disk immediately, click Force Eject. Programs using it may lose unsaved changes."),
                 choose,
             )
-            .other(&tr!("Force Eject"), FORCE_EJECT)
-            .primary(&tr!("OK"), "ok"),
+            .destructive(&tr!("Force Eject"), FORCE_EJECT)
+            .safe(&tr!("OK"), "ok"),
             false => Alert::new(
                 &tr!("The disk “{name}” couldn’t be ejected.", name = name.to_owned()),
                 message,

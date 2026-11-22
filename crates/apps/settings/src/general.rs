@@ -155,16 +155,16 @@ impl SettingsView {
         if self.confirming_empty_trash && items > 0 {
             let mut cancel = intent(&self.intents, |()| Intent::AskEmptyTrash(false));
             let mut empty = intent(&self.intents, |()| Intent::EmptyTrash);
-            let erase = Button::new(&tr!("Empty Trash"), move || empty(()));
+            let keep = Button::new(&tr!("Cancel"), move || cancel(())).cancel();
             self.anchors
-                .push((Anchor::Item("empty-trash".to_owned()), erase.id()));
+                .push((Anchor::Item("empty-trash".to_owned()), keep.id()));
             let buttons = Stack::new(
                 Axis::Horizontal,
                 Spacing::S as f32,
                 0.0,
                 vec![
-                    boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
-                    boxed(erase.primary()),
+                    boxed(keep),
+                    boxed(Button::new(&tr!("Empty Trash"), move || empty(())).destructive()),
                 ],
             );
             return boxed(

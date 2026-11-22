@@ -50,16 +50,16 @@ impl SettingsView {
     ) -> Box<dyn Widget> {
         let mut cancel = intent(&self.intents, |()| Intent::AskForget(None));
         let mut forget = intent(&self.intents, |()| Intent::Forget);
-        let confirm = Button::new(action, move || forget(()));
+        let keep = Button::new(&tr!("Cancel"), move || cancel(())).cancel();
         self.anchors
-            .push((Anchor::Item(CONFIRM.to_owned()), confirm.id()));
+            .push((Anchor::Item(CONFIRM.to_owned()), keep.id()));
         let buttons = Stack::new(
             Axis::Horizontal,
             Spacing::S as f32,
             0.0,
             vec![
-                boxed(Button::new(&tr!("Cancel"), move || cancel(())).cancel()),
-                boxed(confirm.primary()),
+                boxed(keep),
+                boxed(Button::new(action, move || forget(())).destructive()),
             ],
         );
         boxed(

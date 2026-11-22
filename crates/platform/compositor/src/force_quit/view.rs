@@ -381,7 +381,7 @@ impl ForceQuitView {
                 signals.borrow_mut().push(Signal::Chosen(choice.to_owned()));
             },
         )
-        .primary(&tr!("Log Out"), LOG_OUT)
+        .destructive(&tr!("Log Out"), LOG_OUT)
         .cancel(&tr!("Cancel"), CANCEL);
         self.confirming.clear();
         self.ui.present_dialog(alert);

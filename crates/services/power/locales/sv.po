@@ -7,12 +7,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Power"
-msgstr "Ström"
-
-msgid "Keep running with the lid closed while on power"
-msgstr "Fortsätt köra med stängt lock när datorn är ansluten till ström"
-
 msgid "Low Battery"
 msgstr "Lågt batteri"
 
@@ -21,6 +15,9 @@ msgstr "{percentage} % av batteriet återstår. Anslut till ström snart."
 
 msgid "Battery Critically Low"
 msgstr "Kritiskt lågt batteri"
+
+msgid "Power"
+msgstr "Ström"
 
 msgid "{percentage}% of the battery remains. Connect to power now, or the computer will shut down and unsaved work will be lost."
 msgstr "{percentage} % av batteriet återstår. Anslut till ström nu, annars stängs datorn av och osparat arbete går förlorat."
@@ -49,5 +46,17 @@ msgstr "{level} % återstår. Ladda den nu."
 msgid "Bluetooth"
 msgstr "Bluetooth"
 
+msgid "Keep running with the lid closed while on power"
+msgstr "Fortsätt köra med stängt lock när datorn är ansluten till ström"
+
+msgid "Sleep with the lid closed and hibernate before the battery runs out"
+msgstr "Gå i vila med stängt lock och gå i viloläge på disk innan batteriet tar slut"
+
 msgid "Lock the screen before the computer sleeps"
 msgstr "Lås skärmen innan datorn försätts i vila"
+
+msgid "The Computer Didn't Sleep"
+msgstr "Datorn gick inte i vila"
+
+msgid "Something on this computer stopped it from sleeping, so it kept running."
+msgstr "Något på datorn hindrade den från att gå i vila, så den fortsatte att köra."

@@ -10,10 +10,10 @@ use bande_power::battery::{self, BatteryNotifier};
 use bande_power::brightness::{Lights, Options};
 use bande_power::controller::{self, IdleController};
 use bande_power::idle::{Assertion, Inhibitor};
-use bande_power::logind::{self, ManagerProxyBlocking, SleepGuard};
+use bande_power::logind::{self, ManagerProxyBlocking, Sleep, SleepGuard};
 use bande_power::password::{self, PasswordPolicy};
 use bande_power::screensaver::InhibitionService;
-use bande_power::{adapter, audio, gadgets};
+use bande_power::{adapter, audio, gadgets, lid};
 use rustix::process::{DumpableBehavior, set_dumpable_behavior};
 use zbus::blocking::Connection;
 
@@ -53,10 +53,25 @@ fn serve() -> Result<Services, Box<dyn Error>> {
         ),
     ));
     password::serve(&session, Arc::clone(&idle))?;
+    let lid = lid::follow(&system, &session)
+        .inspect_err(|error| tracing::warn!("cannot follow the lid: {error}"))
+        .ok()
+        .flatten();
     let sleeper = Arc::clone(&idle);
-    let guard = SleepGuard::start(&system, LOCK_WAIT, move |start| match start {
-        true => sleeper.sleeping(),
-        false => sleeper.woke(),
+    let reporter = session.clone();
+    let guard = SleepGuard::start(&system, LOCK_WAIT, move |sleep| {
+        match sleep {
+            Sleep::Starting => sleeper.sleeping(),
+            Sleep::Woke | Sleep::Failed => sleeper.woke(),
+        }
+        if sleep == Sleep::Failed {
+            logind::report_failed_sleep(&reporter);
+        }
+        if let Some(lid) = &lid
+            && sleep != Sleep::Starting
+        {
+            lid.woke(sleep == Sleep::Woke);
+        }
     })?;
     let logind = system.clone();
     let inhibited = Arc::clone(&idle);

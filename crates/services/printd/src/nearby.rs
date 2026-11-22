@@ -51,10 +51,13 @@ pub fn printers(services: Vec<Service>) -> Vec<Found> {
             .value("rp")
             .filter(|resource| !resource.is_empty())
             .unwrap_or_else(|| RESOURCE.to_owned());
+        let host = match service.host.is_empty() {
+            true => &service.address,
+            false => &service.host,
+        };
         let url = |scheme: &str| {
             format!(
-                "{scheme}://{}:{}/{}",
-                service.address,
+                "{scheme}://{host}:{}/{}",
                 service.port,
                 resource.trim_start_matches('/')
             )

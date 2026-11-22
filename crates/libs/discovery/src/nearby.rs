@@ -62,6 +62,28 @@ trait Avahi {
         address_protocol: i32,
         flags: u32,
     ) -> zbus::Result<Resolved>;
+
+    fn resolve_host_name(
+        &self,
+        interface: i32,
+        protocol: i32,
+        name: &str,
+        address_protocol: i32,
+        flags: u32,
+    ) -> zbus::Result<(i32, i32, String, i32, String, u32)>;
+}
+
+/// The address a `.local` host name resolves to now, asked of Avahi.
+pub fn resolve_host(name: &str, addresses: Addresses) -> zbus::Result<String> {
+    let system = bande_bus::system()?;
+    let (.., address, _) = AvahiProxyBlocking::new(&system)?.resolve_host_name(
+        ANY_INTERFACE,
+        addresses.protocol(),
+        name,
+        addresses.protocol(),
+        0,
+    )?;
+    Ok(address)
 }
 
 /// Which addresses services are browsed over and resolve to.

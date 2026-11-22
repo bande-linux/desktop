@@ -31,11 +31,17 @@ msgstr "Skrivarens lock är öppet."
 msgid "The printer is paused."
 msgstr "Skrivaren är pausad."
 
-msgid "Printing"
-msgstr "Utskrift"
+msgid "A document did not print"
+msgstr "Ett dokument skrevs inte ut"
+
+msgid "Its print settings could not be read. The document is kept at {path}."
+msgstr "Dess utskriftsinställningar gick inte att läsa. Dokumentet finns kvar i {path}."
 
 msgid "“{title}” did not print"
 msgstr "”{title}” skrevs inte ut"
+
+msgid "Printing"
+msgstr "Utskrift"
 
 msgid "The document was lost before it could be sent."
 msgstr "Dokumentet försvann innan det hann skickas."

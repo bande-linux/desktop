@@ -7,6 +7,7 @@ use zbus::zvariant::{ObjectPath, OwnedObjectPath};
 
 pub const AGENT_PATH: &str = "/org/bande/bluetooth/agent";
 const CAPABILITY: &str = "KeyboardDisplay";
+const ALREADY_REGISTERED: &str = "org.bluez.Error.AlreadyExists";
 
 pub trait PairingPrompt: Send + Sync {
     fn confirm_passkey(&self, device: &str, passkey: u32) -> bool;
@@ -155,7 +156,10 @@ impl Agent {
 fn announce(system: &Connection) -> zbus::Result<()> {
     let manager = AgentManagerProxyBlocking::new(system)?;
     let path = ObjectPath::try_from(AGENT_PATH)?;
-    manager.register_agent(&path, CAPABILITY)?;
+    match manager.register_agent(&path, CAPABILITY) {
+        Err(zbus::Error::MethodError(name, _, _)) if name.as_str() == ALREADY_REGISTERED => {}
+        registered => registered?,
+    }
     manager.request_default_agent(&path)
 }
 

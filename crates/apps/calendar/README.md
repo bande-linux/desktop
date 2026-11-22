@@ -96,7 +96,11 @@ views. Packaged as `bande-calendar`.
   attach one. A `REPLY` with one invitee updates that invitee's answer in an event you organise,
   and a `CANCEL` asks to remove the event or the one cancelled occurrence (undoable). An update or
   `CANCEL` from someone other than the stored event's organizer, or with an older `SEQUENCE`, is
-  refused. `METHOD` is never stored.
+  refused. A `COUNTER` from one invitee of an event you organise shows the proposed time beside
+  the current one: Accept Proposal moves the event (or that occurrence) there with a higher
+  `SEQUENCE`, so a CalDAV server sends the update, and Decline opens a message to the invitee in
+  Mail; a `DECLINECOUNTER` from the organizer says your proposal was declined. `METHOD` is never
+  stored.
 - **Search** over title, location and notes, nearest occurrence first.
 - **Alerts** through `org.freedesktop.Notifications`, also while the window is closed, with
   Snooze (5 minutes) and a click that opens Calendar on the event's day. Calendar also shows them when it was never opened or was quit: the autostart

@@ -237,6 +237,12 @@ pub(crate) enum Confirm {
     },
     Delete(Found),
     Invitation(Box<CalendarObject>),
+    Counter {
+        calendar: String,
+        updated: Box<CalendarObject>,
+        proposer: String,
+        title: String,
+    },
     Cancelled {
         calendar: String,
         uid: String,

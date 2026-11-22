@@ -1,4 +1,6 @@
-use crate::ical::{CalendarObject, Event, InstanceKey, Property};
+use jiff::tz::TimeZone;
+
+use crate::ical::{CalendarObject, Event, InstanceKey, Moment, Property};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Answer {
@@ -246,6 +248,8 @@ pub enum Method {
     Request,
     Reply,
     Cancel,
+    Counter,
+    DeclineCounter,
 }
 
 pub fn method(object: &CalendarObject) -> Method {
@@ -258,6 +262,8 @@ pub fn method(object: &CalendarObject) -> Method {
         Some("REQUEST") => Method::Request,
         Some("REPLY") => Method::Reply,
         Some("CANCEL") => Method::Cancel,
+        Some("COUNTER") => Method::Counter,
+        Some("DECLINECOUNTER") => Method::DeclineCounter,
         _ => Method::Publish,
     }
 }
@@ -286,6 +292,10 @@ pub fn is_invited(event: &Event, me: &[String]) -> bool {
 
 fn instance(event: &Event) -> Option<InstanceKey> {
     event.recurrence_id.as_ref().map(|moment| moment.key())
+}
+
+pub fn counterpart_of<'a>(object: &'a CalendarObject, event: &Event) -> Option<&'a Event> {
+    counterpart(object, event).or_else(|| object.master())
 }
 
 fn counterpart<'a>(object: &'a CalendarObject, event: &Event) -> Option<&'a Event> {
@@ -362,14 +372,7 @@ pub fn take_reply(
     if !organized_by(object, me) {
         return None;
     }
-    let mut repliers = reply
-        .events
-        .iter()
-        .flat_map(|event| event.component.all("ATTENDEE"));
-    let replier = invitee(repliers.next()?, false);
-    if repliers.any(|other| !address(&other.value).eq_ignore_ascii_case(&replier.address)) {
-        return None;
-    }
+    let replier = sole_attendee(reply)?;
     let mut updated = object.clone();
     let mut taken = false;
     for answered in &reply.events {
@@ -416,5 +419,65 @@ pub fn settle_sequence(original: &CalendarObject, edited: &mut CalendarObject, m
             None if attending => event.sequence = master,
             _ => {}
         }
+    }
+}
+
+fn sole_attendee(message: &CalendarObject) -> Option<Invitee> {
+    let mut attendees = message
+        .events
+        .iter()
+        .flat_map(|event| event.component.all("ATTENDEE"));
+    let first = invitee(attendees.next()?, false);
+    attendees
+        .all(|other| address(&other.value).eq_ignore_ascii_case(&first.address))
+        .then_some(first)
+}
+
+fn moved_to(stored: &Moment, proposed: &Moment, local: &TimeZone) -> Moment {
+    match (stored, proposed) {
+        (Moment::Date(_), _) | (_, Moment::Date(_)) => proposed.clone(),
+        _ => stored.with_wall(proposed.to_zoned(&stored.zone(local)).datetime()),
+    }
+}
+
+pub fn take_counter(
+    object: &CalendarObject,
+    counter: &CalendarObject,
+    me: &[String],
+    local: &TimeZone,
+) -> Option<(CalendarObject, Invitee)> {
+    let proposer = sole_attendee(counter)?;
+    let invited = object
+        .events
+        .iter()
+        .any(|event| is_invited(event, std::slice::from_ref(&proposer.address)));
+    if !organized_by(object, me) || !invited {
+        return None;
+    }
+    let mut updated = object.clone();
+    for proposed in &counter.events {
+        let slot = match counterpart(&updated, proposed) {
+            Some(_) => updated
+                .events
+                .iter_mut()
+                .find(|event| instance(event) == instance(proposed))?,
+            None => {
+                let exception =
+                    crate::edit::exception_of(updated.master()?, proposed.recurrence_id.clone()?);
+                updated.events.push(exception);
+                updated.events.last_mut()?
+            }
+        };
+        slot.start = moved_to(&slot.start, &proposed.start, local);
+        slot.end = moved_to(&slot.end, &proposed.end, local);
+        slot.sequence += 1;
+    }
+    Some((updated, proposer))
+}
+
+pub fn declined_counter(object: &CalendarObject, decline: &CalendarObject) -> bool {
+    match (organizer_of(object), organizer_of(decline)) {
+        (Some(stored), Some(sender)) => stored.eq_ignore_ascii_case(sender),
+        _ => false,
     }
 }

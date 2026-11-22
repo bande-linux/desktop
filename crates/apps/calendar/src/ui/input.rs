@@ -1019,6 +1019,12 @@ fn choose(view: &mut CalendarView, action: &str) {
 fn resolve(view: &mut CalendarView, action: &str) {
     let confirm = match view.confirm.take() {
         Some(Confirm::Invitation(object)) => return view.answer_invitation(*object, action),
+        Some(Confirm::Counter {
+            calendar,
+            updated,
+            proposer,
+            title,
+        }) => return view.answer_counter(&calendar, *updated, &proposer, &title, action),
         Some(Confirm::Cancelled {
             calendar,
             uid,
@@ -1059,6 +1065,6 @@ fn resolve(view: &mut CalendarView, action: &str) {
             view.requests.push(Request::Changed);
         }
         Confirm::DeleteCalendar(index) => view.delete_calendar(index),
-        Confirm::Invitation(_) | Confirm::Cancelled { .. } => {}
+        Confirm::Invitation(_) | Confirm::Counter { .. } | Confirm::Cancelled { .. } => {}
     }
 }

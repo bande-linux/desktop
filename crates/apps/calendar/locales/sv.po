@@ -291,6 +291,33 @@ msgstr "Svaret gäller inte en händelse som du arrangerar, eller kommer inte fr
 msgid "“{title}”: answer from {names}"
 msgstr "”{title}”: svar från {names}"
 
+msgid "This proposal is not for an event you organize, or is not from one of its invitees."
+msgstr "Förslaget gäller inte en händelse du organiserar, eller kommer inte från någon av dess inbjudna."
+
+msgid "{when} instead of {current}"
+msgstr "{when} i stället för {current}"
+
+msgid "{name} proposes a new time for “{title}”"
+msgstr "{name} föreslår en ny tid för ”{title}”"
+
+msgid "Decline"
+msgstr "Tacka nej"
+
+msgid "Accept Proposal"
+msgstr "Godta förslaget"
+
+msgid "Proposal declined: {title}"
+msgstr "Förslaget avböjt: {title}"
+
+msgid "“{title}” stays at the time it has."
+msgstr "”{title}” ligger kvar på sin tid."
+
+msgid "The organizer of “{title}” declined the time you proposed."
+msgstr "Organisatören av ”{title}” avböjde tiden du föreslog."
+
+msgid "This answer to a proposal is not from the organizer of an event in your calendars."
+msgstr "Det här svaret på ett förslag kommer inte från organisatören av en händelse i dina kalendrar."
+
 msgid "A cancelled event that is not in your calendars was opened."
 msgstr "En inställd händelse som inte finns i dina kalendrar öppnades."
 
@@ -404,9 +431,6 @@ msgstr "Tacka ja"
 
 msgid "Maybe"
 msgstr "Kanske"
-
-msgid "Decline"
-msgstr "Tacka nej"
 
 msgid "No Reply"
 msgstr "Inget svar"

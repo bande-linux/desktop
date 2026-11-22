@@ -59,6 +59,11 @@ apt install bande-mail
   message moved out of the reader leaves the rest of the conversation open. Clicking an attachment opens a private copy in `~/.cache/bande-mail/attachments/`,
   removed when Mail quits unless it was edited; its menu also saves it where you choose (the
   desktop's file chooser) or to the Downloads folder. An encrypted message (PGP/MIME or S/MIME) says that it is encrypted, since Mail can't open it.
+  The reader's text can be selected with the pointer (a double-click selects a word) or, with
+  the reader focused, Select All (Ctrl+A) for the chosen message, and copied with Copy (Ctrl+C)
+  or its context menu; a name or address offers New Message and Copy Address, a link Open Link
+  and Copy Link. Pointing at a link shows where it goes, and a link whose text names another
+  host than the one it leads to asks before it opens.
 - **HTML** is never rendered as a web page: it is turned into paragraphs, headings, lists,
   quotes, links and pictures. Scripts, styles, forms and frames are dropped, and only `http`,
   `https` and `mailto` links survive. Pictures sent inside the message (`cid:`) show at once;
@@ -77,7 +82,7 @@ apt install bande-mail
   shows the first 500 messages and loads more as you scroll. View sorts the list by date, sender, subject, size or unread first,
   either way. Mailbox ▸ Mark All as Read marks the shown mailbox read, and Message ▸ Move To files the
   message in any mailbox of its account. Ctrl+click, Shift+click, Shift+Up/Down and Select All
-  (Ctrl+A) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
+  (Ctrl+A, in the list) select several messages; Delete, Archive, Junk, Move To, Flag and Mark as Read then
   act on all of them, and dragging them onto a mailbox in the sidebar moves them.
   Tab and F6 (Shift for backwards) move between the sidebar, the list, the reader and the
   toolbar; Up, Down, Home, End, Page Up and Page Down choose a mailbox in the sidebar, move the

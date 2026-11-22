@@ -801,6 +801,15 @@ msgstr "{domain} publicerar inga e-postinställningar, så E-post har gissat de 
 msgid "Mail found no servers for {domain}. Enter the settings your mail provider gives for IMAP and SMTP."
 msgstr "E-post hittade inga servrar för {domain}. Ange de inställningar för IMAP och SMTP som din e-postleverantör anger."
 
+msgid "Open Link"
+msgstr "Öppna länk"
+
+msgid "Copy Link"
+msgstr "Kopiera länk"
+
+msgid "Copy Address"
+msgstr "Kopiera adress"
+
 msgid "Open Attachment"
 msgstr "Öppna bilaga"
 
@@ -809,6 +818,18 @@ msgstr "Spara bilaga…"
 
 msgid "Save to Downloads Folder"
 msgstr "Spara i mappen Hämtningar"
+
+msgid "Open this link?"
+msgstr "Öppna länken?"
+
+msgid "The link says “{claimed}”, but it goes to “{real}”."
+msgstr "Länken säger ”{claimed}” men leder till ”{real}”."
+
+msgid "Copy"
+msgstr "Kopiera"
+
+msgid "Select All"
+msgstr "Markera allt"
 
 msgid "Rename Mailbox…"
 msgstr "Byt namn på brevlåda…"

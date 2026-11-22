@@ -35,6 +35,7 @@ pub enum Signal {
     DeleteMailbox(crate::store::MailboxId),
     TryAgain(crate::store::AccountId),
     ServerSettings,
+    OpenLink(String),
 }
 
 pub type Signals = Rc<RefCell<Vec<Signal>>>;

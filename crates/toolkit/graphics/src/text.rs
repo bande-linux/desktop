@@ -726,6 +726,12 @@ impl Paragraph {
         self.layout.len()
     }
 
+    /// The byte offset in [`Paragraph::text`] nearest to a point in the paragraph's coordinates.
+    pub fn byte_at(&self, x: f32, y: f32) -> usize {
+        let y = y.clamp(0.0, (self.height() - 1.0).max(0.0));
+        Cursor::from_point(&self.layout, x, y).index()
+    }
+
     pub fn span_rects(&self, range: Range<usize>) -> Vec<Rect> {
         let mut rects = Vec::new();
         Selection::new(

@@ -310,7 +310,8 @@ impl MailView {
             Target::Respond(_, Respond::Reply) => (Role::Button, tr!("Reply")),
             Target::Respond(_, Respond::ReplyAll) => (Role::Button, tr!("Reply All")),
             Target::Respond(_, Respond::Forward) => (Role::Button, tr!("Forward")),
-            Target::Link(url) => (Role::Link, url.clone()),
+            Target::Link(url, _) => (Role::Link, url.clone()),
+            Target::Address(address) => (Role::Button, address.full()),
             Target::Attachment(id, index) => {
                 let attachment = thread
                     .entry(*id)?
@@ -372,7 +373,7 @@ impl MailView {
                 continue;
             };
             let mut node = clickable(role, &label);
-            if let Target::Link(url) = target {
+            if let Target::Link(url, _) = target {
                 node.set_url(url.as_str());
             }
             self.push(tree, Part::Target(index), node, Some(*rect));

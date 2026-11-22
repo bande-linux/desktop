@@ -5,7 +5,7 @@ use bande_l10n::{text, tr};
 
 use crate::crypto::{Sealed, Security, Standard, Verdict};
 use crate::html::{Block, BlockKind, Document};
-use crate::message::{Address, Content};
+use crate::message::{Address, Content, Envelope};
 use crate::picture::{Picture, decode};
 use crate::settings::MailSettings;
 use crate::store::{MessageId, Summary};
@@ -87,8 +87,7 @@ fn document_of(content: &Content, settings: &MailSettings) -> Document {
     document
 }
 
-fn add_forwarded(document: &mut Document, forwarded: &Content, settings: &MailSettings) {
-    let envelope = &forwarded.envelope;
+fn forwarded_heading(document: &mut Document, envelope: &Envelope) {
     document.blocks.push(line(BlockKind::Rule, String::new()));
     document
         .blocks
@@ -112,16 +111,33 @@ fn add_forwarded(document: &mut Document, forwarded: &Content, settings: &MailSe
     {
         document.blocks.push(line(BlockKind::Paragraph, shown));
     }
-    let body = document_of(forwarded, settings);
-    document.blocks.extend(body.blocks);
-    document.remote_images += body.remote_images;
+}
+
+fn part_source(index: usize) -> String {
+    format!("part:{index}")
 }
 
 impl Reading {
     pub fn new(content: Content, downloaded: bool, settings: &MailSettings) -> Self {
-        let mut document = document_of(&content, settings);
-        for forwarded in &content.forwarded {
-            add_forwarded(&mut document, forwarded, settings);
+        let mut document = Document::default();
+        let mut offset = 0;
+        for (number, section) in content.sections().enumerate() {
+            if number > 0 {
+                forwarded_heading(&mut document, &section.envelope);
+            }
+            let mut body = document_of(section, settings);
+            for source in body
+                .blocks
+                .iter_mut()
+                .filter_map(|block| block.image.as_mut())
+            {
+                if let Some(index) = section.inline_index(source) {
+                    *source = part_source(offset + index);
+                }
+            }
+            document.blocks.extend(body.blocks);
+            document.remote_images += body.remote_images;
+            offset += section.attachments.len();
         }
         let mut pictures = HashMap::new();
         let mut pixels = 0u64;
@@ -136,8 +152,10 @@ impl Reading {
             if pictures.contains_key(source) {
                 continue;
             }
-            let Some(picture) = content
-                .inline_part(source)
+            let Some(picture) = source
+                .strip_prefix("part:")
+                .and_then(|index| index.parse().ok())
+                .and_then(|index| content.every_attachment().nth(index))
                 .and_then(|part| decode(&part.data))
             else {
                 continue;
@@ -182,10 +200,7 @@ impl Reading {
     }
 
     fn shown_inline(&self, index: usize) -> bool {
-        self.content
-            .inline
-            .iter()
-            .any(|(id, part)| *part == index && self.pictures.contains_key(&format!("cid:{id}")))
+        self.pictures.contains_key(&part_source(index))
     }
 }
 
@@ -876,7 +891,7 @@ fn body(writer: &mut Writer<'_>, id: MessageId, reading: &Reading, quotes: bool)
 
 fn attachments(writer: &mut Writer<'_>, id: MessageId, reading: &Reading) {
     let content = &reading.content;
-    if (0..content.attachments.len()).all(|index| reading.shown_inline(index)) {
+    if (0..content.every_attachment().count()).all(|index| reading.shown_inline(index)) {
         return;
     }
     let palette = *writer.palette;
@@ -884,7 +899,7 @@ fn attachments(writer: &mut Writer<'_>, id: MessageId, reading: &Reading) {
     writer.rule();
     writer.y += SECTION_GAP;
     let mut x = MARGIN;
-    for (index, attachment) in content.attachments.iter().enumerate() {
+    for (index, attachment) in content.every_attachment().enumerate() {
         if reading.shown_inline(index) {
             continue;
         }
@@ -1052,7 +1067,81 @@ pub fn focus_bar(thread: &Thread, layout: &Layout, color: Color) -> Option<Item>
 
 #[cfg(test)]
 mod tests {
-    use super::claimed_host;
+    use super::{Reading, claimed_host};
+    use crate::compose::{build, forward};
+    use crate::message::{Address, Content};
+    use crate::settings::MailSettings;
+
+    fn png(width: u32) -> String {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        let written = image::RgbaImage::new(width, 1)
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .is_ok();
+        assert!(written);
+        bande_mail_core::mime::wrapped_base64(bytes.get_ref())
+    }
+
+    fn related(boundary: &str, headers: &str, width: u32, attachment: &str) -> String {
+        format!(
+            "{headers}MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary={boundary}\r\n\r\n\
+             --{boundary}\r\nContent-Type: text/html\r\n\r\n<p>Hi</p><img src=\"cid:logo\">\r\n\
+             --{boundary}\r\nContent-Type: image/png\r\nContent-ID: <logo>\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\n{}\r\n{attachment}--{boundary}--\r\n",
+            png(width)
+        )
+    }
+
+    #[test]
+    fn a_forwarded_message_keeps_its_own_pictures_and_attachments() {
+        let report = "--inner\r\nContent-Type: application/pdf\r\n\
+                      Content-Disposition: attachment; filename=report.pdf\r\n\r\nPDF\r\n";
+        let inner = related(
+            "inner",
+            "From: a@example.org\r\nSubject: Report\r\n",
+            2,
+            report,
+        );
+        let eml = format!(
+            "--outer\r\nContent-Type: message/rfc822\r\n\
+             Content-Disposition: attachment\r\n\r\n{inner}\r\n"
+        );
+        let outer = related("outer", "From: b@example.org\r\nSubject: Fwd\r\n", 1, &eml);
+        let content = Content::parse(outer.as_bytes());
+        let draft = forward(&content, &Address::default(), "Forwarded");
+        let names = |content: &Content| {
+            content
+                .attachments
+                .iter()
+                .map(|part| part.name.clone())
+                .collect::<Vec<_>>()
+        };
+        let sent = vec!["attachment".to_owned(), "message.eml".to_owned()];
+        assert_eq!(
+            draft
+                .attachments
+                .iter()
+                .map(|part| part.name.clone())
+                .collect::<Vec<_>>(),
+            sent
+        );
+        let reopened = Content::parse(&build(&draft, &jiff::Zoned::now()));
+        assert_eq!(names(&reopened), sent);
+
+        let reading = Reading::new(content, true, &MailSettings::default());
+        let widths = reading
+            .document
+            .blocks
+            .iter()
+            .filter_map(|block| block.image.as_ref())
+            .map(|source| reading.pictures.get(source).map(|image| image.width()))
+            .collect::<Vec<_>>();
+        assert_eq!(widths, [Some(1), Some(2)]);
+        let listed = reading
+            .content
+            .every_attachment()
+            .map(|part| part.name.as_str());
+        assert!(listed.eq(["attachment", "message.eml", "attachment", "report.pdf"]));
+    }
 
     #[test]
     fn a_link_that_shows_one_host_and_goes_to_another_asks_first() {

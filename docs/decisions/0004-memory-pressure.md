@@ -18,13 +18,14 @@ memory settings stay the system's own.
 | Layer | What | Owner |
 | :--- | :--- | :--- |
 | 1. Ask the user | at sustained memory stall, the shell's "running low on memory" window with the heaviest apps and Force Quit | `bande-shell` |
-| 2. Act for the user | systemd-oomd kills the app with the most reclaim activity in `app.slice` | `bande-desktop` (drop-in for `app.slice`) and Debian's `systemd-oomd` |
+| 2. Act for the user | systemd-oomd kills the app with the most reclaim activity in `app.slice` | `bande-session` (runtime properties of `app.slice`) and Debian's `systemd-oomd` |
 | 3. Tell the user | a notification naming the app that was closed | `bande-shell` through `bande-xdg` |
 
 ### 1. Kill domain: `app.slice`
 
-- `/usr/lib/systemd/user/app.slice.d/50-bande-oomd.conf`: `ManagedOOMMemoryPressure=kill`,
-  `ManagedOOMMemoryPressureLimit=40%`, with Debian's default duration of 20 s. The systemd manual
+- `bande-session` sets `ManagedOOMMemoryPressure=kill` and `ManagedOOMMemoryPressureLimit=40%`
+  on `app.slice` with `systemctl --user set-property --runtime` as the session starts, so other
+  desktops' apps keep systemd's defaults. Debian's default duration of 20 s stays. The systemd manual
   suggests about 40 % for latency-sensitive user cgroups [3]. The candidates are the apps' scopes
   only. Debian's own 50 % kill on `user@.service` stays as the backstop.
 - Every app already runs in its own `app-bande-<id>-<pid>.scope` in `app.slice`

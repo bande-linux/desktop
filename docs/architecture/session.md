@@ -478,8 +478,8 @@ what the one before could not save:
 - **Session services crash**: every Bande user service has `Restart=on-failure` with systemd's
   start limit, runs in `session.slice`, and is D-Bus activated again on the next call after that.
 - **Too many processes**: each app scope gets the default `TasksMax` (15 % of the kernel's limit)
-  and `app.slice` 25 %, under logind's 33 % for the user, so a fork bomb leaves room for the
-  session.
+  and `app.slice` 25 % (set by `bande-session` at start, with the oomd limit), under logind's 33 %
+  for the user, so a fork bomb leaves room for the session.
 - **The disk is full**: configuration and state are written to a staging file and renamed
   (`bande_xdg::replace_file`), so a failed write leaves the old file whole.
 - **After a crash**: the compositor keeps the open apps in `$XDG_STATE_HOME/bande/running`; after

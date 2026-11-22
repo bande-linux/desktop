@@ -433,7 +433,10 @@ brings up the dialog.
 - **Removable media** (`bande-automount`): every filesystem UDisks2 hints for automounting is
   mounted when it appears, but only while the session is active and unlocked; drives that appear
   while locked are mounted on unlock. A drive removed while mounted posts "Disk Not Ejected
-  Properly"; encrypted volumes wait for the UI. `bande-volumes` holds the one UDisks2 client that
+  Properly". An encrypted volume asks for its passphrase in the `bande-secrets-prompt` dialog
+  (again after a wrong one) and is mounted once unlocked; without the prompt, a notification
+  points to Disks. A volume that fails to mount posts why, offering a read-only mount for NTFS
+  that was not shut down fully. `bande-volumes` holds the one UDisks2 client that
   automount, Files, the desktop and Disks share. Eject unmounts every filesystem of the drive,
   locks its encrypted volumes, then calls `Drive.Eject` or else `PowerOff`; a failure is reported
   to the caller, not only logged. A drive whose SMART status turns failing posts one critical

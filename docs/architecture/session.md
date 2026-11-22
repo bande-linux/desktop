@@ -70,13 +70,17 @@ graph LR
   power button, the lid), plugged in or not, is logind's `SuspendThenHibernate` when
   `CanSuspendThenHibernate` is `yes` and the system would resume: the kernel knows a resume device
   (`/sys/power/resume`, set from `resume=` or the initramfs) and the command line has no
-  `noresume`. Otherwise it is plain `Suspend`. With systemd-sleep's defaults (`HibernateDelaySec=`
-  unset, `HibernateOnACPower=yes`) the computer stays suspended, and wakes at once, for as long as
-  the battery lasts, on the charger overnight included, and hibernates only when the battery,
-  discharging, reaches 5 %, so a laptop unplugged while asleep never runs flat. Where the firmware
-  has no battery alarm (ACPI `_BTP`), systemd-sleep wakes briefly about hourly to read the
-  battery. Bande changes no system configuration. Settings ▸ Power says whether sleep can
-  hibernate, or why not ("isn't set up" without a resume device). Nothing in the session wakes a
+  `noresume`. Otherwise it is plain `Suspend`. `bande-power` ships
+  `/usr/lib/systemd/sleep.conf.d/50-bande.conf` (`HibernateDelaySec=3h`,
+  `HibernateOnACPower=no`), which only `SuspendThenHibernate` reads and any `/etc` setting
+  overrides: on battery the computer hibernates after 3 hours asleep, or sooner when the battery,
+  discharging, reaches 5 % (ACPI `_BTP` alarm or systemd-sleep's discharge estimate), so a laptop
+  left in a bag for days keeps its charge. On the charger it stays suspended and wakes at once:
+  systemd-sleep restarts the 3 hours at each check while on AC, so a laptop unplugged while asleep
+  hibernates about 3 hours later. Where the firmware has no battery alarm,
+  systemd-sleep wakes briefly to read the battery (about hourly, or from the discharge rate it
+  learned). Settings ▸ Power says whether sleep can hibernate, or why not ("isn't set up"
+  without a resume device). Nothing in the session wakes a
   sleeping computer except an alarm or timer the user set in Clock; `mem_sleep` is the kernel's.
 - **The lid**: closing it locks the session and the computer sleeps at once, unless Settings ▸
   Power keeps it running on power or a display is connected (logind's `Docked`), where it keeps

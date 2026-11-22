@@ -1565,11 +1565,8 @@ msgstr "Strömlägen är inte tillgängliga eftersom tjänsten för strömprofil
 msgid "This computer doesn't offer power modes."
 msgstr "Den här datorn har inga strömlägen."
 
-msgid "Hibernation"
-msgstr "Viloläge på disk"
-
-msgid "Before the battery runs out during sleep"
-msgstr "Innan batteriet tar slut under vila"
+msgid "After 3 hours asleep on battery, the computer saves its state and turns off. Waking then takes a few seconds longer."
+msgstr "Efter 3 timmars vila på batteri sparar datorn sitt läge och stängs av. Då tar det några sekunder längre att vakna."
 
 msgid "Hibernation isn't set up, so sleep lasts until the battery runs out."
 msgstr "Viloläge på disk är inte inställt, så vilan varar tills batteriet tar slut."

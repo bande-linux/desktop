@@ -51,6 +51,12 @@ enum Signal {
     Dismissed,
 }
 
+struct Completion {
+    field: WidgetId,
+    typed: String,
+    shown: String,
+}
+
 struct Chip {
     key: u64,
     remove: WidgetId,
@@ -89,7 +95,7 @@ pub struct ComposeView {
     removed: Vec<(usize, Attachment)>,
     known: Vec<Address>,
     typed: Vec<(WidgetId, String)>,
-    completion: Option<(WidgetId, String)>,
+    completion: Option<Completion>,
     access: WidgetId,
     token: u64,
     closed: bool,
@@ -743,8 +749,14 @@ impl ComposeView {
             return;
         };
         let text = self.field_text(field);
-        let completion = self.completion.take().filter(|(id, _)| *id == field);
-        if completion.as_ref().is_some_and(|(_, shown)| *shown == text) {
+        let completion = self
+            .completion
+            .take()
+            .filter(|completion| completion.field == field);
+        if completion
+            .as_ref()
+            .is_some_and(|completion| completion.shown == text)
+        {
             self.completion = completion;
             return;
         }
@@ -753,11 +765,11 @@ impl ComposeView {
             return;
         };
         let before = std::mem::replace(&mut self.typed[at].1, text.clone());
-        if let Some((_, shown)) = completion
-            && let Some(separator) = text.strip_prefix(before.as_str())
+        if let Some(completion) = completion
+            && let Some(separator) = text.strip_prefix(completion.typed.as_str())
             && [",", ";"].contains(&separator)
         {
-            self.set_field(field, &format!("{shown}, "), None);
+            self.set_field(field, &format!("{}, ", completion.shown), None);
             return;
         }
         let selection = self
@@ -788,7 +800,11 @@ impl ComposeView {
         };
         let shown = format!("{text}{rest}");
         self.set_field(field, &shown, Some(text.len()..shown.len()));
-        self.completion = Some((field, shown));
+        self.completion = Some(Completion {
+            field,
+            typed: text,
+            shown,
+        });
     }
 
     fn set_field(&mut self, field: WidgetId, text: &str, selected: Option<std::ops::Range<usize>>) {

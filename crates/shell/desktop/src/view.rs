@@ -890,15 +890,14 @@ impl DesktopView {
 
     pub fn drag_moved(&mut self, at: Point) -> Option<DragAction> {
         let target = self.target(at);
-        let action = match &target {
-            Target::Desktop => Some(DragAction::Move),
-            Target::Folder(folder) => {
-                let reference = self.offered.first().unwrap_or(&self.folder);
-                match same_volume(reference, folder) {
-                    true => Some(DragAction::Move),
-                    false => Some(DragAction::Copy),
-                }
-            }
+        let destination = match &target {
+            Target::Desktop => &self.folder,
+            Target::Folder(folder) => folder,
+        };
+        let reference = self.offered.first().unwrap_or(&self.folder);
+        let action = match same_volume(reference, destination) {
+            true => Some(DragAction::Move),
+            false => Some(DragAction::Copy),
         };
         let kept = self
             .drop

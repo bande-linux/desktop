@@ -980,7 +980,11 @@ impl TerminalWindow {
                 }
             }
             Command::Paste => {
-                if let Err(error) = window.paste() {
+                let pasted = match !self.banner_focused && window.clipboard_has_uris() {
+                    true => window.paste_transfer(),
+                    false => window.paste(),
+                };
+                if let Err(error) = pasted {
                     tracing::warn!("cannot paste: {error}");
                 }
             }
@@ -2091,6 +2095,9 @@ impl View for TerminalWindow {
                 }
             }
             WindowEvent::Pasted(text) => self.paste(window, &text),
+            WindowEvent::PastedTransfer(transfer) => {
+                self.paste(window, &dropped_text(&transfer.uris, &transfer.text));
+            }
             WindowEvent::Drag(drag) => self.drag(window, drag),
             WindowEvent::MenuAction(action) => {
                 self.menu_action(window, &action);

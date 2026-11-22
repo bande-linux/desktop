@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use bande_graphics::{Point, Scene};
+use bande_xdg::path_from_file_uri;
 use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 use rustix::pipe::{PipeFlags, pipe_with};
 use wayland_client::protocol::wl_data_device::{self, WlDataDevice};
@@ -53,8 +54,16 @@ impl Transfer {
     }
 
     pub fn uris(uris: Vec<String>) -> Self {
+        let text = uris
+            .iter()
+            .map(|uri| {
+                path_from_file_uri(uri)
+                    .map_or_else(|| uri.clone(), |path| path.to_string_lossy().into_owned())
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         Self {
-            text: uris.join("\n"),
+            text,
             uris,
             cut: false,
             png: Vec::new(),

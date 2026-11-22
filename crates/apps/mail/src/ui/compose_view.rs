@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
-use bande_app::{Dropping, FileDrop};
+use bande_app::{Dropping, FileDrop, local_files};
 use bande_l10n::{Text, text, tr, trn};
 
 use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};
@@ -20,7 +20,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{
     Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Item, Palette, Point, Radius, Rect,
-    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem, Window, WindowEvent,
+    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem, Transfer, Window, WindowEvent,
 };
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
@@ -964,7 +964,23 @@ impl ComposeView {
                 self.requests.push(ComposeRequest::Attach(paths));
                 true
             }
-            Dropping::Other => false,
+            Dropping::Other => {
+                let handled = match window.drive(&mut self.ui, event.clone()) {
+                    Ok(unhandled) => unhandled.is_none(),
+                    Err(error) => {
+                        tracing::warn!("cannot take the dragged text: {error}");
+                        false
+                    }
+                };
+                self.after_ui();
+                handled
+            }
+        }
+    }
+
+    pub fn start_text_drag(&mut self, window: &mut Window) {
+        if let Err(error) = window.start_text_drag(&mut self.ui) {
+            tracing::warn!("cannot drag the selected text: {error}");
         }
     }
 
@@ -972,6 +988,15 @@ impl ComposeView {
         let handled = self.ui.pasted(text);
         self.after_ui();
         handled
+    }
+
+    pub fn pasted_transfer(&mut self, transfer: &Transfer) -> bool {
+        let paths = local_files(&transfer.uris, Path::is_file);
+        if paths.is_empty() {
+            return self.pasted(&transfer.text);
+        }
+        self.requests.push(ComposeRequest::Attach(paths));
+        true
     }
 
     fn remove_attachment(&mut self, key: u64) {

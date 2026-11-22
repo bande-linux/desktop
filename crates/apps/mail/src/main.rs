@@ -20,6 +20,7 @@ use bande_mail::ui::{
     COMPOSE_SIZE, ComposeRequest, ComposeView, MailView, Mode, Place, Request, SETTINGS_SIZE,
     SIDEBAR_WIDTH, SettingsView,
 };
+use bande_toolkit::ui::ClipboardRequest;
 use bande_toolkit::{
     Appearance, FrameRegions, MenuPlacement, Rect, Scene, TextSystem, Window, WindowError,
     WindowEvent,
@@ -98,11 +99,18 @@ impl View for Pane {
         match (self, event) {
             (Self::Compose(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
             (Self::Main(view), WindowEvent::Input(input)) => view.handle(&input),
-            (Self::Compose(view), WindowEvent::Input(input)) => view.handle(&input),
+            (Self::Compose(view), WindowEvent::Input(input)) => {
+                let handled = view.handle(&input);
+                view.start_text_drag(window);
+                handled
+            }
             (Self::Main(view), WindowEvent::Accessibility(request)) => view.perform(&request),
             (Self::Compose(view), WindowEvent::Accessibility(request)) => view.perform(&request),
             (Self::Main(view), WindowEvent::Pasted(text)) => view.pasted(&text),
             (Self::Compose(view), WindowEvent::Pasted(text)) => view.pasted(&text),
+            (Self::Compose(view), WindowEvent::PastedTransfer(transfer)) => {
+                view.pasted_transfer(&transfer)
+            }
             (Self::Main(view), WindowEvent::MenuAction(action)) => view.menu_action(&action),
             (Self::Compose(view), WindowEvent::MenuAction(action)) => view.menu_action(&action),
             (Self::Main(view), WindowEvent::MenuClosed) => view.menu_closed(),
@@ -399,6 +407,11 @@ impl Mail {
                 }
                 ComposeRequest::ShowMenu(menu, at) => {
                     shown.show_menu(menu, MenuPlacement::AtPoint(at))
+                }
+                ComposeRequest::Clipboard(ClipboardRequest::Paste)
+                    if shown.clipboard_has_uris() =>
+                {
+                    shown.paste_transfer()
                 }
                 ComposeRequest::Clipboard(request) => shown.serve_clipboard(request),
             };

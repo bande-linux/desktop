@@ -100,19 +100,8 @@ impl Painter<'_> {
     }
 }
 
-pub(crate) fn symbol_button(
-    symbol: Option<Image>,
-    label: &str,
-    on_click: impl FnMut() + 'static,
-) -> Button {
-    match symbol {
-        Some(symbol) => Button::symbol(symbol, label, on_click),
-        None => Button::new(label, on_click),
-    }
-}
-
 pub(crate) fn stop_button(on_click: impl FnMut() + 'static) -> Button {
-    symbol_button(
+    Button::symbol(
         Image::from_svg(STOP_SYMBOL, SYMBOL_PIXELS, SYMBOL_PIXELS),
         &tr!("Quit Process"),
         on_click,

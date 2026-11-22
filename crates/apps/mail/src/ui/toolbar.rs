@@ -85,10 +85,7 @@ impl MailView {
         let send = sender(&self.signals);
         let click = move || send(signal.clone());
         let image = Image::from_svg(symbol.svg(), SYMBOL_PIXELS, SYMBOL_PIXELS);
-        match image {
-            Some(image) => Button::symbol(image, label, click),
-            None => Button::new(label, click),
-        }
+        Button::symbol(image, label, click)
     }
 
     pub(crate) fn host_mut(&mut self) -> Option<&mut FreeLayout> {

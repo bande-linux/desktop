@@ -166,10 +166,7 @@ impl MachinesPane {
             let intents = Rc::clone(&self.intents);
             let click = move || push(&intents, intent.clone());
             let label = label.tr();
-            match symbol(svg, self.palette.ink) {
-                Some(image) => Button::symbol(image, &label, click).tooltip(&label),
-                None => Button::new(&label, click),
-            }
+            Button::symbol(symbol(svg, self.palette.ink), &label, click)
         };
         let new = button(NEW_SYMBOL, text!("New Virtual Machine…"), Intent::New);
         let start = button(START_SYMBOL, text!("Start"), Intent::Act(Act::Start));

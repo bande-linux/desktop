@@ -45,10 +45,7 @@ impl FilesView {
     fn symbol_button(&mut self, icon: &str, label: &str, signal: Signal) -> Button {
         let send = sender(&self.signals);
         let click = move || send(signal.clone());
-        match self.icons.first(&[icon], SYMBOL_PIXELS) {
-            Some(image) => Button::symbol(image, label, click),
-            None => Button::new(label, click),
-        }
+        Button::symbol(self.icons.first(&[icon], SYMBOL_PIXELS), label, click)
     }
 
     pub(crate) fn insert_toolbar(&mut self) {

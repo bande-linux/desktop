@@ -165,10 +165,11 @@ const PLUS: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height
 const SYMBOL_PIXELS: u32 = 16;
 
 fn add_button(on_click: impl FnMut() + 'static) -> Button {
-    match Image::from_svg(PLUS.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-        Some(image) => Button::symbol(image, &tr!("Add"), on_click),
-        None => Button::new("+", on_click),
-    }
+    Button::symbol(
+        Image::from_svg(PLUS.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS),
+        &tr!("Add"),
+        on_click,
+    )
 }
 
 fn boxed(widget: impl Widget + 'static) -> Box<dyn Widget> {

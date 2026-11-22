@@ -271,10 +271,11 @@ impl SettingsView {
         let mut add = intent(&self.intents, |()| Intent::EditReplacement(None));
         let title = tr!("Add Text Replacement");
         let ink = self.palette().ink2;
-        let button = match self.symbol(ADD_SYMBOL, SIDEBAR_SYMBOL, ink) {
-            Some(symbol) => Button::symbol(symbol, &title, move || add(())),
-            None => Button::new(&title, move || add(())),
-        };
+        let button = Button::symbol(
+            self.symbol(ADD_SYMBOL, SIDEBAR_SYMBOL, ink),
+            &title,
+            move || add(()),
+        );
         self.anchors
             .push((Anchor::Item(ADD_ANCHOR.to_owned()), button.id()));
         let mut rows: Widgets = vec![boxed(
@@ -361,10 +362,11 @@ impl SettingsView {
         });
         let title = tr!("Remove Text Replacement");
         let ink = self.palette().ink2;
-        boxed(match self.symbol(REMOVE_SYMBOL, SIDEBAR_SYMBOL, ink) {
-            Some(symbol) => Button::symbol(symbol, &title, move || remove(())),
-            None => Button::new(&title, move || remove(())),
-        })
+        boxed(Button::symbol(
+            self.symbol(REMOVE_SYMBOL, SIDEBAR_SYMBOL, ink),
+            &title,
+            move || remove(()),
+        ))
     }
 
     pub(crate) fn replacement_focused(&self) -> bool {

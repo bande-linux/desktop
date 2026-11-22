@@ -67,7 +67,12 @@ impl Button {
         }
     }
 
-    pub fn symbol(symbol: Image, label: &str, on_click: impl FnMut() + 'static) -> Self {
+    /// A button that shows `symbol` with `label` as its name and tooltip, or `label` as text
+    /// when there is no symbol.
+    pub fn symbol(symbol: Option<Image>, label: &str, on_click: impl FnMut() + 'static) -> Self {
+        let Some(symbol) = symbol else {
+            return Self::new(label, on_click);
+        };
         Self {
             symbol: Some(Symbol::new(symbol)),
             tooltip: Some(label.to_owned()),

@@ -1686,10 +1686,7 @@ pub fn line_ending_title(name: &str) -> String {
 fn symbol_button(icon: &str, label: &str, on_click: impl FnMut() + 'static) -> Button {
     let image = find_icon(icon, SYMBOL_PIXELS, &ICON_THEMES, &data_dirs())
         .and_then(|path| Image::load(&path, SYMBOL_PIXELS));
-    match image {
-        Some(image) => Button::symbol(image, label, on_click),
-        None => Button::new(label, on_click),
-    }
+    Button::symbol(image, label, on_click)
 }
 
 fn write_failure(error: &io::Error) -> String {

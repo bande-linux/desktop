@@ -839,12 +839,12 @@ impl LockScreen {
             PowerAction::Restart => "system-reboot-symbolic",
             PowerAction::ShutDown => "system-shutdown-symbolic",
         };
-        match find_icon(icon, POWER_ICON_PIXELS, &["Bande"], &data_dirs())
-            .and_then(|path| Image::load_symbolic(&path, POWER_ICON_PIXELS, color))
-        {
-            Some(image) => Button::symbol(image, title, press),
-            None => Button::new(title, press),
-        }
+        Button::symbol(
+            find_icon(icon, POWER_ICON_PIXELS, &["Bande"], &data_dirs())
+                .and_then(|path| Image::load_symbolic(&path, POWER_ICON_PIXELS, color)),
+            title,
+            press,
+        )
     }
 
     fn show_power_row(&mut self) {

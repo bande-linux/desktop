@@ -95,10 +95,11 @@ type Signals = Rc<RefCell<Vec<Signal>>>;
 fn symbol(svg: &str, label: &str, signals: &Signals, signal: Signal) -> Button {
     let signals = Rc::clone(signals);
     let click = move || signals.borrow_mut().push(signal.clone());
-    match Image::from_svg(svg.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS) {
-        Some(image) => Button::symbol(image, label, click),
-        None => Button::new(label, click),
-    }
+    Button::symbol(
+        Image::from_svg(svg.as_bytes(), SYMBOL_PIXELS, SYMBOL_PIXELS),
+        label,
+        click,
+    )
     .tooltip(label)
 }
 

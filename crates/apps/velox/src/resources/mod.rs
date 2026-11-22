@@ -43,10 +43,7 @@ pub fn tool(svg: &str, label: Text, palette: &Palette, acts: &Acts, act: Act) ->
     let acts = Rc::clone(acts);
     let click = move || push(&acts, act.clone());
     let label = label.tr();
-    match symbol(svg, palette.ink) {
-        Some(image) => Button::symbol(image, &label, click).tooltip(&label),
-        None => Button::new(&label, click),
-    }
+    Button::symbol(symbol(svg, palette.ink), &label, click)
 }
 
 pub fn search(placeholder: Text, text: &str, acts: &Acts) -> SearchField {

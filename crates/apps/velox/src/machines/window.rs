@@ -145,10 +145,7 @@ impl MachineWindow {
             let intents = Rc::clone(intents);
             let click = move || push(&intents, Intent::Act(act));
             let label = label.tr();
-            match symbol(svg, palette.ink) {
-                Some(image) => Button::symbol(image, &label, click).tooltip(&label),
-                None => Button::new(&label, click),
-            }
+            Button::symbol(symbol(svg, palette.ink), &label, click)
         };
         let start = button(START_SYMBOL, text!("Start"), Act::Start);
         let stop = button(STOP_SYMBOL, text!("Shut Down"), Act::ShutDown);

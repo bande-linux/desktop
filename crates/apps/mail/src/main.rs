@@ -95,8 +95,9 @@ impl View for Pane {
         }
     }
 
-    fn event(&mut self, _window: &mut Window, event: WindowEvent) -> bool {
+    fn event(&mut self, window: &mut Window, event: WindowEvent) -> bool {
         match (self, event) {
+            (Self::Compose(view), event @ WindowEvent::Drag(_)) => view.dragged(window, &event),
             (Self::Main(view), WindowEvent::Input(input)) => view.handle(&input),
             (Self::Compose(view), WindowEvent::Input(input)) => view.handle(&input),
             (Self::Main(view), WindowEvent::Accessibility(request)) => view.perform(&request),
@@ -445,6 +446,10 @@ impl Mail {
             let result = match request {
                 ComposeRequest::ChooseFiles => {
                     self.picker.pick(token, tr!("Attach Files"));
+                    Ok(())
+                }
+                ComposeRequest::Attach(paths) => {
+                    self.picker.read(token, paths);
                     Ok(())
                 }
                 ComposeRequest::ShowMenu(menu, at) => {

@@ -1,9 +1,10 @@
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
+use bande_app::{Dropping, FileDrop};
 use bande_l10n::{Text, text, tr};
 
 use crate::compose::{Draft, Original, Outgoing, keep_unsent, unsent_folder};
@@ -19,7 +20,7 @@ use bande_toolkit::ui::{
 };
 use bande_toolkit::{
     Appearance, HEADER_LEADING, HEADER_TRAILING, Header, Image, Item, Palette, Point, Radius, Rect,
-    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem,
+    Scene, Shape, TextAlign, TextRole, TextStyle, TextSystem, Window, WindowEvent,
 };
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
@@ -67,6 +68,7 @@ pub struct ComposeView {
     size: (f32, f32),
     sent: Option<Outgoing>,
     requests: Vec<ComposeRequest>,
+    drop: FileDrop,
     chips: Vec<(Rect, usize)>,
     access: WidgetId,
     token: u64,
@@ -80,6 +82,7 @@ pub struct ComposeView {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComposeRequest {
     ChooseFiles,
+    Attach(Vec<PathBuf>),
     ShowMenu(Menu, Point),
     Clipboard(ClipboardRequest),
 }
@@ -198,6 +201,7 @@ impl ComposeView {
             size: (0.0, 0.0),
             sent: None,
             requests: Vec::new(),
+            drop: FileDrop::default(),
             chips: Vec::new(),
             access: WidgetId::next(),
             token,
@@ -627,6 +631,17 @@ impl ComposeView {
         let handled = self.ui.menu_action(action);
         self.after_ui();
         handled
+    }
+
+    pub fn dragged(&mut self, window: &mut Window, event: &WindowEvent) -> bool {
+        match self.drop.event(window, event, Path::is_file) {
+            Dropping::Over => true,
+            Dropping::Dropped(paths) => {
+                self.requests.push(ComposeRequest::Attach(paths));
+                true
+            }
+            Dropping::Other => false,
+        }
     }
 
     pub fn pasted(&mut self, text: &str) -> bool {

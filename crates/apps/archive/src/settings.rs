@@ -130,7 +130,7 @@ fn choose_folder(field: Field) {
                 return;
             };
             let chosen = zbus::blocking::Connection::session()
-                .and_then(|session| bande_app::choose_file(&session, &tr!("Choose Folder…"), None));
+                .and_then(|session| bande_app::choose_file(&session, &tr!("Choose Folder"), None));
             match chosen {
                 Ok(Some(path)) => {
                     let mut settings = ArchiveSettings::load(&folder);
@@ -157,7 +157,7 @@ fn folder_choice(settings: &Shared<ArchiveSettings>, same: Text, field: Field) -
             .map_or_else(|| folder.to_string_lossy(), |name| name.to_string_lossy())
             .into_owned()
     }));
-    choices.push(tr!("Choose Folder…"));
+    choices.push(tr!("Choose Folder"));
     let other = choices.len() - 1;
     let shared = settings.clone();
     Box::new(PopUpButton::new(

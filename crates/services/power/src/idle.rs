@@ -2,6 +2,7 @@ use std::time::Duration;
 
 pub const LOCKED_DISPLAY_OFF_AFTER: Duration = Duration::from_secs(60);
 pub const DIM_AHEAD: Duration = Duration::from_secs(10);
+pub const SLEEP_AGAIN_AFTER_WAKE: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Policy {
@@ -80,6 +81,8 @@ pub struct IdleMachine {
     display_off: bool,
     locked: bool,
     locked_when_idle: bool,
+    lock_pending: bool,
+    woke_locked: bool,
     password_required: bool,
     inhibitors: Vec<Inhibitor>,
     assertions: Vec<Assertion>,
@@ -96,6 +99,8 @@ impl IdleMachine {
             display_off: false,
             locked: false,
             locked_when_idle: false,
+            lock_pending: false,
+            woke_locked: false,
             password_required: true,
             inhibitors: Vec::new(),
             assertions: Vec::new(),
@@ -104,13 +109,12 @@ impl IdleMachine {
         }
     }
 
-    pub fn computer_sleeps_after(&self) -> Option<Duration> {
-        self.policy.computer_sleeps_after()
-    }
-
     pub fn thresholds(&self) -> Vec<Duration> {
         let mut thresholds: Vec<Duration> = [
             Some(LOCKED_DISPLAY_OFF_AFTER),
+            self.policy
+                .computer_sleeps_after()
+                .map(|_| SLEEP_AGAIN_AFTER_WAKE),
             self.policy.dim_after(),
             self.policy.rest_after(),
             self.policy.password_after(),
@@ -143,6 +147,7 @@ impl IdleMachine {
             if !self.locked {
                 self.locked = true;
                 self.locked_when_idle = true;
+                self.lock_pending = true;
                 if !self.policy.require_password_after.is_zero() {
                     self.password_required = false;
                     commands.push(Command::RequirePassword(false));
@@ -161,7 +166,7 @@ impl IdleMachine {
             self.display_off = true;
             commands.push(Command::DisplayOff);
         }
-        if self.stage < Stage::Suspended && reached(self.policy.computer_sleeps_after()) {
+        if self.stage < Stage::Suspended && reached(self.sleep_after()) {
             if self.assertions.is_empty() {
                 self.stage = Stage::Suspended;
                 self.sleep_overdue = false;
@@ -171,6 +176,39 @@ impl IdleMachine {
             }
         }
         commands
+    }
+
+    pub fn sleep_after(&self) -> Option<Duration> {
+        let after = self.policy.computer_sleeps_after()?;
+        Some(if self.woke_locked && self.locked {
+            after.min(SLEEP_AGAIN_AFTER_WAKE)
+        } else {
+            after
+        })
+    }
+
+    pub fn sleeping(&mut self) -> Vec<Command> {
+        self.require_password()
+    }
+
+    pub fn woke(&mut self) -> Vec<Command> {
+        self.locked_when_idle = false;
+        self.woke_locked = self.locked;
+        Vec::new()
+    }
+
+    pub fn lock_requested(&mut self) -> Vec<Command> {
+        if std::mem::take(&mut self.lock_pending) {
+            return Vec::new();
+        }
+        self.require_password()
+    }
+
+    fn require_password(&mut self) -> Vec<Command> {
+        if std::mem::replace(&mut self.password_required, true) {
+            return Vec::new();
+        }
+        vec![Command::RequirePassword(true)]
     }
 
     pub fn resumed(&mut self) -> Vec<Command> {
@@ -217,10 +255,9 @@ impl IdleMachine {
             return Vec::new();
         }
         self.locked_when_idle = false;
-        if std::mem::replace(&mut self.password_required, true) {
-            return Vec::new();
-        }
-        vec![Command::RequirePassword(true)]
+        self.lock_pending = false;
+        self.woke_locked = false;
+        self.require_password()
     }
 
     pub fn set_policy(&mut self, policy: Policy) -> Vec<Command> {
@@ -244,5 +281,33 @@ impl IdleMachine {
             commands.push(Command::IdleHint(false));
         }
         commands
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sleep_or_a_lock_request_during_the_password_grace_period_requires_the_password() {
+        let minutes = |minutes: u64| Duration::from_secs(minutes * 60);
+        let policy = Policy {
+            screen_saver_after: Some(minutes(5)),
+            display_off_after: Some(minutes(10)),
+            require_password_after: minutes(5),
+            suspend_after: Some(minutes(10)),
+        };
+        for asleep in [true, false] {
+            let mut machine = IdleMachine::new(policy);
+            let saver = machine.idle_for(minutes(5));
+            assert!(saver.contains(&Command::RequirePassword(false)));
+            assert!(machine.lock_requested().is_empty());
+            machine.set_locked(true);
+            let required = match asleep {
+                true => machine.sleeping(),
+                false => machine.lock_requested(),
+            };
+            assert_eq!(required, vec![Command::RequirePassword(true)]);
+        }
     }
 }

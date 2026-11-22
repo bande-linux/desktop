@@ -108,6 +108,18 @@ impl IdleController {
         self.run(|machine| machine.idle_for(idle));
     }
 
+    pub fn sleeping(&self) {
+        self.run(IdleMachine::sleeping);
+    }
+
+    pub fn woke(&self) {
+        self.run(IdleMachine::woke);
+    }
+
+    pub fn lock_requested(&self) {
+        self.run(IdleMachine::lock_requested);
+    }
+
     pub fn resumed(&self) {
         self.run(IdleMachine::resumed);
     }
@@ -139,11 +151,11 @@ impl IdleController {
         Ok(changes)
     }
 
-    pub fn computer_sleeps_after(&self) -> Option<Duration> {
+    pub fn sleep_after(&self) -> Option<Duration> {
         self.machine
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .computer_sleeps_after()
+            .sleep_after()
     }
 
     pub fn thresholds(&self) -> Vec<Duration> {
@@ -233,6 +245,14 @@ pub fn follow_sleep_inhibitors(
 pub fn follow_lock(system: &Connection, controller: &Arc<IdleController>) -> zbus::Result<()> {
     let controller = Arc::clone(controller);
     logind::follow_locked_hint(system, move |locked| controller.set_locked(locked))
+}
+
+pub fn follow_lock_requests(
+    system: &Connection,
+    controller: &Arc<IdleController>,
+) -> zbus::Result<()> {
+    let controller = Arc::clone(controller);
+    logind::follow_lock_requests(system, move || controller.lock_requested())
 }
 
 pub fn logind_executor(

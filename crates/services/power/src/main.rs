@@ -28,7 +28,6 @@ type Services = (
 fn serve() -> Result<Services, Box<dyn Error>> {
     let system = Connection::system()?;
     let session = Connection::session()?;
-    let guard = SleepGuard::start(&system, LOCK_WAIT)?;
     battery::watch(&system, Arc::new(BatteryNotifier::new(&session)))?;
     if let Err(error) = adapter::follow(&system, &session) {
         tracing::warn!("cannot follow the power adapter: {error}");
@@ -48,6 +47,11 @@ fn serve() -> Result<Services, Box<dyn Error>> {
             PasswordPolicy::serve(&session)?,
         ),
     ));
+    let sleeper = Arc::clone(&idle);
+    let guard = SleepGuard::start(&system, LOCK_WAIT, move |start| match start {
+        true => sleeper.sleeping(),
+        false => sleeper.woke(),
+    })?;
     let logind = system.clone();
     let inhibited = Arc::clone(&idle);
     let asserted = Arc::clone(&idle);
@@ -63,6 +67,7 @@ fn serve() -> Result<Services, Box<dyn Error>> {
     )?;
     controller::follow_config(&session, &idle)?;
     controller::follow_lock(&system, &idle)?;
+    controller::follow_lock_requests(&system, &idle)?;
     controller::follow_idle_inhibitors(&system, &idle)?;
     controller::follow_sleep_inhibitors(&system, &idle)?;
     let streams = Arc::clone(&idle);

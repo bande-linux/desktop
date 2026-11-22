@@ -48,7 +48,9 @@ graph LR
   input clears the field and rests again.
 - "Require password after screen saver begins or display is turned off" (default immediately)
   is a grace period: until it passes, any input dismisses the saver. Locks from `Super+L`,
-  logind, sleep and the power button always ask. The grace period is `org.bande.Power`'s
+  logind, sleep and the power button always ask: `bande-power` requires the password on
+  logind's `Lock` and on `PrepareForSleep` before it lets the computer sleep, even when the
+  saver already rests within its grace period. The grace period is `org.bande.Power`'s
   `PasswordRequired` property; any process of the user could lengthen it through `config.kdl`
   anyway, so it adds no new trust.
 - The computer sleeps with the display unless `suspend-after` is later or `"never"`, and only
@@ -89,7 +91,8 @@ graph LR
   `InhibitDelayMaxSec` of 5). Its idle state machine maps the compositor's
   `ext-idle-notify-v1` thresholds to dim, saver, password required, display off and suspend; it
   skips locking a locked session and turns the display off after 60 s on a lock it did not
-  start. Dimming lowers each display with real brightness control to a quarter of its level.
+  start or after waking. A wake nobody unlocks (a wake alarm, a charger, a spurious wake)
+  sleeps again after 2 minutes without input when idle sleep is on. Dimming lowers each display with real brightness control to a quarter of its level.
   Battery alerts follow UPower's `WarningLevel`: a "Low Battery" notification at `Low`, replaced
   by one that stays at `Critical` or `Action`. The compositor follows `Lock` on the session's own
   logind path (from `GetSession("auto")`; logind never signals on `session/auto`).

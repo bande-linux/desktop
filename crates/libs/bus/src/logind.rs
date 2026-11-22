@@ -45,6 +45,9 @@ pub trait Session {
 
     #[zbus(property)]
     fn locked_hint(&self) -> zbus::Result<bool>;
+
+    #[zbus(signal, name = "Lock")]
+    fn lock_requested(&self) -> zbus::Result<()>;
 }
 
 pub fn own_session(system: &Connection) -> zbus::Result<SessionProxyBlocking<'static>> {
@@ -79,6 +82,21 @@ pub fn follow_locked_hint(
             if let Ok(locked) = change.get() {
                 changed(locked);
             }
+        }
+    });
+    Ok(())
+}
+
+pub fn follow_lock_requests(
+    system: &Connection,
+    requested: impl Fn() + Send + 'static,
+) -> zbus::Result<()> {
+    let path = ManagerProxyBlocking::new(system)?.get_session("auto")?;
+    let session = SessionProxyBlocking::builder(system).path(path)?.build()?;
+    let requests = session.receive_lock_requested()?;
+    thread::spawn(move || {
+        for _ in requests {
+            requested();
         }
     });
     Ok(())

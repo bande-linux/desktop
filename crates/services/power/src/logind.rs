@@ -3,8 +3,8 @@ use std::thread;
 use std::time::Duration;
 
 pub use bande_bus::logind::{
-    ManagerProxyBlocking, SessionProxyBlocking, follow_blocked, follow_locked_hint, inhibit,
-    own_session,
+    ManagerProxyBlocking, SessionProxyBlocking, follow_blocked, follow_lock_requests,
+    follow_locked_hint, inhibit, own_session,
 };
 use bande_l10n::tr;
 use zbus::blocking::Connection;
@@ -40,7 +40,11 @@ pub struct SleepGuard {
 }
 
 impl SleepGuard {
-    pub fn start(system: &Connection, lock_wait: Duration) -> zbus::Result<Self> {
+    pub fn start(
+        system: &Connection,
+        lock_wait: Duration,
+        sleeping: impl Fn(bool) + Send + 'static,
+    ) -> zbus::Result<Self> {
         let manager = ManagerProxyBlocking::new(system)?;
         let session = own_session(system)?;
         let hint = Arc::new(LockedHint::default());
@@ -67,7 +71,9 @@ impl SleepGuard {
                 let Ok(arguments) = signal.args() else {
                     continue;
                 };
-                if *arguments.start() {
+                let start = *arguments.start();
+                sleeping(start);
+                if start {
                     lock_and_wait(&session, &hint, lock_wait);
                     held.take();
                 } else if held.is_none() {

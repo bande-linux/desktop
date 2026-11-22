@@ -74,7 +74,7 @@ impl Watcher {
         let (Some(notifier), Some(seat)) = (&self.notifier, &self.seat) else {
             return None;
         };
-        let threshold = self.controller.computer_sleeps_after()?;
+        let threshold = self.controller.sleep_after()?;
         let millis = u32::try_from(threshold.as_millis()).unwrap_or(u32::MAX);
         Some(notifier.get_idle_notification(millis, seat, &queue.handle(), threshold))
     }

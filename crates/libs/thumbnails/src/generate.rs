@@ -9,7 +9,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bande_content::pdf::worker::first_page;
-use bande_content::{Kind, Pixels, confine, decode_confined, open, run_worker};
+use bande_content::{
+    Failure, Kind, MISSING_DECODER_EXIT, Pixels, WorkerFailure, confine, decode_confined, open,
+    run_worker,
+};
 use bande_xdg::{find_executable, wait_for_exit};
 use image::DynamicImage;
 
@@ -224,13 +227,12 @@ fn fit(image: DynamicImage, size: ThumbnailSize) -> Picture {
     }
 }
 
-fn picture(path: &Path, size: ThumbnailSize) -> Option<Picture> {
-    let (kind, bytes) = open(path).ok()?;
+fn picture(path: &Path, size: ThumbnailSize) -> Result<Picture, Failure> {
+    let (kind, bytes) = open(path)?;
     let decoded = match kind {
         Kind::Heif | Kind::Avif => decode_confined(path, 2 * size.pixels()),
         _ => bande_content::decode(&bytes, kind),
-    }
-    .ok()?;
+    }?;
     let (width, height, rgba) = match decoded.pixels {
         Pixels::Still(mut levels) => {
             let fitting = levels
@@ -243,11 +245,11 @@ fn picture(path: &Path, size: ThumbnailSize) -> Option<Picture> {
         Pixels::Animation(frames) => (
             decoded.width,
             decoded.height,
-            frames.into_iter().next()?.rgba,
+            frames.into_iter().next().ok_or(Failure::Damaged)?.rgba,
         ),
     };
     let rgba = Arc::try_unwrap(rgba).unwrap_or_else(|shared| (*shared).clone());
-    fit_pixels(width, height, rgba, size)
+    fit_pixels(width, height, rgba, size).ok_or(Failure::Damaged)
 }
 
 fn decode(path: &Path) -> Option<DynamicImage> {
@@ -306,20 +308,24 @@ fn generate(
     size: ThumbnailSize,
     root: &Path,
     font: FontDrawing<'_>,
-) -> Option<Picture> {
+) -> Result<Picture, Failure> {
     let made = if mime.starts_with("image/") {
         picture(path, size)
     } else if mime == PDF {
         first_page(path, size.pixels())
             .and_then(|(width, height, rgba)| fit_pixels(width, height, rgba, size))
+            .ok_or(Failure::Damaged)
     } else if is_font(mime) {
-        font(path, size.pixels())
+        font(path, size.pixels()).ok_or(Failure::Damaged)
     } else {
-        None
+        Err(Failure::NotSupported)
     };
-    made.or_else(|| {
+    made.or_else(|failure| {
         let thumbnailers = Thumbnailers::load(&bande_xdg::data_dirs());
-        external(root, thumbnailers.for_mime(mime)?, path, size)
+        thumbnailers
+            .for_mime(mime)
+            .and_then(|thumbnailer| external(root, thumbnailer, path, size))
+            .ok_or(failure)
     })
 }
 
@@ -333,10 +339,13 @@ pub fn serve_worker(arguments: &[String], font: FontDrawing<'_>) -> Option<ExitC
         return None;
     }
     confine();
-    let picture = size_of(pixels)
-        .and_then(|size| generate(Path::new(path), mime, size, Path::new(root), font));
-    let Some(picture) = picture else {
+    let Some(size) = size_of(pixels) else {
         return Some(ExitCode::FAILURE);
+    };
+    let picture = match generate(Path::new(path), mime, size, Path::new(root), font) {
+        Ok(picture) => picture,
+        Err(Failure::MissingDecoder) => return Some(ExitCode::from(MISSING_DECODER_EXIT)),
+        Err(_) => return Some(ExitCode::FAILURE),
     };
     let mut out = io::stdout().lock();
     let written = writeln!(out, "{} {}", picture.width, picture.height)
@@ -362,7 +371,12 @@ fn picture_from(out: &[u8]) -> Option<Picture> {
         })
 }
 
-fn in_worker(cache: &Cache, path: &Path, mime: &str, size: ThumbnailSize) -> Option<Picture> {
+fn in_worker(
+    cache: &Cache,
+    path: &Path,
+    mime: &str,
+    size: ThumbnailSize,
+) -> Result<Picture, WorkerFailure> {
     let pixels = size.pixels().to_string();
     let arguments = [
         OsStr::new(WORKER_FLAG),
@@ -371,8 +385,8 @@ fn in_worker(cache: &Cache, path: &Path, mime: &str, size: ThumbnailSize) -> Opt
         path.as_os_str(),
         cache.root().as_os_str(),
     ];
-    let out = run_worker(&arguments, LARGEST_OUTPUT, WORKER_TIME).ok()?;
-    picture_from(&out)
+    let out = run_worker(&arguments, LARGEST_OUTPUT, WORKER_TIME)?;
+    picture_from(&out).ok_or(WorkerFailure::Failed)
 }
 
 pub fn thumbnail(
@@ -398,11 +412,12 @@ pub fn thumbnail(
     }
     let made = in_worker(cache, path, mime, size);
     let stored = match &made {
-        Some(picture) => cache.store(&uri, mtime, size, picture),
-        None => cache.record_failure(&uri, mtime),
+        Ok(picture) => cache.store(&uri, mtime, size, picture),
+        Err(WorkerFailure::MissingDecoder) => Ok(()),
+        Err(_) => cache.record_failure(&uri, mtime),
     };
     if let Err(error) = stored {
         tracing::warn!("cannot store the thumbnail of {}: {error}", path.display());
     }
-    made
+    made.ok()
 }

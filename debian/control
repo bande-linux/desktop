@@ -541,7 +541,6 @@ Depends: ${shlibs:Depends},
  fonts-inter,
  fonts-manrope,
  ${misc:Depends}
-Recommends: libheif1
 Description: Bande portal dialogs: Open and Save, Open With and permissions
  The dialogs of xdg-desktop-portal-bande: the Bande Open and Save dialogs
  (favourite places and volumes in a sidebar, a path bar, a sortable list

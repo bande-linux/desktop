@@ -1,11 +1,16 @@
 const LOAD: u16 = 0x20;
 const JUMP_EQUAL: u16 = 0x15;
+const AND: u16 = 0x54;
 const RETURN: u16 = 0x06;
 const ARCH_OFFSET: u32 = 4;
 const NUMBER_OFFSET: u32 = 0;
+const FIRST_ARGUMENT_OFFSET: u32 = 16;
 const ALLOW: u32 = 0x7fff_0000;
 const KILL: u32 = 0x8000_0000;
-const DENY: u32 = 0x0005_0000 | libc::EPERM as u32;
+const ERROR: u32 = 0x0005_0000;
+const DENY: u32 = ERROR | libc::EPERM as u32;
+const NOT_IMPLEMENTED: u32 = ERROR | libc::ENOSYS as u32;
+const THREAD_FLAGS: u32 = (libc::CLONE_THREAD | libc::CLONE_VM) as u32;
 
 #[cfg(target_arch = "aarch64")]
 const ARCH: u32 = 0xc000_00b7;
@@ -33,7 +38,6 @@ const ALLOWED: &[libc::c_long] = &[
 ];
 
 const THREADS: &[libc::c_long] = &[
-    libc::SYS_clone3,
     libc::SYS_set_robust_list,
     libc::SYS_rseq,
     libc::SYS_sched_getaffinity,
@@ -48,26 +52,41 @@ fn statement(code: u16, k: u32) -> libc::sock_filter {
     }
 }
 
-fn program(allowed: &[libc::c_long]) -> Vec<libc::sock_filter> {
+fn jump_equal(k: u32, jt: u8, jf: u8) -> libc::sock_filter {
+    libc::sock_filter {
+        code: JUMP_EQUAL,
+        jt,
+        jf,
+        k,
+    }
+}
+
+fn threads_only() -> [libc::sock_filter; 8] {
+    [
+        jump_equal(libc::SYS_clone3 as u32, 0, 1),
+        statement(RETURN, NOT_IMPLEMENTED),
+        jump_equal(libc::SYS_clone as u32, 0, 5),
+        statement(LOAD, FIRST_ARGUMENT_OFFSET),
+        statement(AND, THREAD_FLAGS),
+        jump_equal(THREAD_FLAGS, 0, 1),
+        statement(RETURN, ALLOW),
+        statement(RETURN, DENY),
+    ]
+}
+
+fn program(allowed: &[libc::c_long], threads: bool) -> Vec<libc::sock_filter> {
     let count = allowed.len();
     let mut filter = vec![
         statement(LOAD, ARCH_OFFSET),
-        libc::sock_filter {
-            code: JUMP_EQUAL,
-            jt: 1,
-            jf: 0,
-            k: ARCH,
-        },
+        jump_equal(ARCH, 1, 0),
         statement(RETURN, KILL),
         statement(LOAD, NUMBER_OFFSET),
     ];
+    if threads {
+        filter.extend(threads_only());
+    }
     for (index, number) in allowed.iter().enumerate() {
-        filter.push(libc::sock_filter {
-            code: JUMP_EQUAL,
-            jt: (count - index) as u8,
-            jf: 0,
-            k: *number as u32,
-        });
+        filter.push(jump_equal(*number as u32, (count - index) as u8, 0));
     }
     filter.push(statement(RETURN, DENY));
     filter.push(statement(RETURN, ALLOW));
@@ -77,15 +96,15 @@ fn program(allowed: &[libc::c_long]) -> Vec<libc::sock_filter> {
 /// Allows this process only to compute, allocate, read and write open descriptors and exit from
 /// now on; any other system call fails. Returns whether the filter is in place.
 pub fn only_compute_from_now_on() -> bool {
-    confine_to(ALLOWED)
+    confine_to(ALLOWED, false)
 }
 
 pub(crate) fn only_compute_and_start_threads_from_now_on() -> bool {
-    confine_to(&[ALLOWED, THREADS].concat())
+    confine_to(&[ALLOWED, THREADS].concat(), true)
 }
 
-fn confine_to(allowed: &[libc::c_long]) -> bool {
-    let filter = program(allowed);
+fn confine_to(allowed: &[libc::c_long], threads: bool) -> bool {
+    let filter = program(allowed, threads);
     let Ok(len) = u16::try_from(filter.len()) else {
         return false;
     };

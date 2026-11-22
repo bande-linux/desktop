@@ -15,7 +15,9 @@ use std::sync::Arc;
 pub use bande_fs::Contents;
 use bande_fs::{Entry, can_extract, is_hidden};
 
-pub use confined::{WorkerFailure, decode_confined, run_worker, serve_worker};
+pub use confined::{
+    MISSING_DECODER_EXIT, WorkerFailure, decode_confined, run_worker, serve_worker,
+};
 pub use decode::{
     Decoded, Failure, Frame, Kind, Level, MAX_FILE_BYTES, MAX_PIXELS, Pixels, decode, open,
     read_file,

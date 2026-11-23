@@ -248,22 +248,24 @@ fn frame_times(repaint: Repaint) -> Result<(Vec<Duration>, FrameStats), Box<dyn 
     for frame in 0..FRAMES {
         let bytes = &frames[(frame + 1) % 2];
         match repaint {
-            Repaint::OneWindowPatch => client.commit_buffer(
-                WINDOWS - 1,
-                &image(bytes),
-                (
-                    TYPICAL_DAMAGE,
-                    TYPICAL_DAMAGE,
-                    TYPICAL_DAMAGE,
-                    TYPICAL_DAMAGE,
-                ),
-            ),
+            Repaint::OneWindowPatch => {
+                client.commit_buffer(
+                    WINDOWS - 1,
+                    &image(bytes),
+                    (
+                        TYPICAL_DAMAGE,
+                        TYPICAL_DAMAGE,
+                        TYPICAL_DAMAGE,
+                        TYPICAL_DAMAGE,
+                    ),
+                );
+            }
             Repaint::EveryWindow => (0..WINDOWS).for_each(|window| {
                 client.commit_buffer(
                     window,
                     &image(bytes),
                     (0, 0, WINDOW_WIDTH as i32, WINDOW_HEIGHT as i32),
-                )
+                );
             }),
         }
         let composed = Instant::now();

@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use bande_l10n::{tr, trn};
+use bande_pam::Code;
 
 pub const MESSAGE_LIMIT: usize = 400;
 const SHOWN_MESSAGES: usize = 3;
@@ -25,48 +26,23 @@ pub enum Refusal {
     Unavailable,
 }
 
-const PAM_PERM_DENIED: i32 = 6;
-const PAM_AUTH_ERR: i32 = 7;
-const PAM_CRED_INSUFFICIENT: i32 = 8;
-const PAM_AUTHINFO_UNAVAIL: i32 = 9;
-const PAM_USER_UNKNOWN: i32 = 10;
-const PAM_MAXTRIES: i32 = 11;
-const PAM_NEW_AUTHTOK_REQD: i32 = 12;
-const PAM_ACCT_EXPIRED: i32 = 13;
-const PAM_CRED_EXPIRED: i32 = 16;
-const PAM_AUTHTOK_EXPIRED: i32 = 27;
-
-const PAM_NAMES: [(&str, i32); 10] = [
-    ("PERM_DENIED", PAM_PERM_DENIED),
-    ("AUTH_ERR", PAM_AUTH_ERR),
-    ("CRED_INSUFFICIENT", PAM_CRED_INSUFFICIENT),
-    ("AUTHINFO_UNAVAIL", PAM_AUTHINFO_UNAVAIL),
-    ("USER_UNKNOWN", PAM_USER_UNKNOWN),
-    ("MAXTRIES", PAM_MAXTRIES),
-    ("NEW_AUTHTOK_REQD", PAM_NEW_AUTHTOK_REQD),
-    ("ACCT_EXPIRED", PAM_ACCT_EXPIRED),
-    ("CRED_EXPIRED", PAM_CRED_EXPIRED),
-    ("AUTHTOK_EXPIRED", PAM_AUTHTOK_EXPIRED),
-];
-
 impl Refusal {
-    pub fn from_pam(code: i32) -> Self {
+    pub fn from_pam(code: Code) -> Self {
         match code {
-            PAM_AUTH_ERR | PAM_CRED_INSUFFICIENT => Self::WrongAnswer,
-            PAM_USER_UNKNOWN => Self::Unknown,
-            PAM_NEW_AUTHTOK_REQD | PAM_CRED_EXPIRED | PAM_AUTHTOK_EXPIRED => Self::PasswordExpired,
-            PAM_ACCT_EXPIRED => Self::AccountExpired,
-            PAM_PERM_DENIED => Self::Denied,
-            PAM_MAXTRIES => Self::TooManyAttempts,
+            Code::AUTH_ERR | Code::CRED_INSUFFICIENT => Self::WrongAnswer,
+            Code::USER_UNKNOWN => Self::Unknown,
+            Code::NEW_AUTHTOK_REQD | Code::CRED_EXPIRED | Code::AUTHTOK_EXPIRED => {
+                Self::PasswordExpired
+            }
+            Code::ACCT_EXPIRED => Self::AccountExpired,
+            Code::PERM_DENIED => Self::Denied,
+            Code::MAXTRIES => Self::TooManyAttempts,
             _ => Self::Unavailable,
         }
     }
 
     pub fn from_pam_name(name: &str) -> Option<Self> {
-        PAM_NAMES
-            .iter()
-            .find(|(known, _)| *known == name)
-            .map(|(_, code)| Self::from_pam(*code))
+        Code::named(name).map(Self::from_pam)
     }
 
     pub fn counts_as_attempt(self) -> bool {

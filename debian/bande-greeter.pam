@@ -1,6 +1,7 @@
 #%PAM-1.0
 auth    requisite       pam_nologin.so
-auth    required        pam_succeed_if.so user != root quiet_success
+auth    required        pam_succeed_if.so uid ne 0 quiet_success
+auth    required        pam_shells.so
 @include common-auth
 @include common-account
 session [success=ok ignore=ignore module_unknown=ignore default=bad]        pam_selinux.so close

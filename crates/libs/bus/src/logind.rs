@@ -61,6 +61,9 @@ pub trait Session {
     #[zbus(property)]
     fn locked_hint(&self) -> zbus::Result<bool>;
 
+    #[zbus(property)]
+    fn active(&self) -> zbus::Result<bool>;
+
     #[zbus(signal, name = "Lock")]
     fn lock_requested(&self) -> zbus::Result<()>;
 }

@@ -22,12 +22,12 @@ crates/
              velox, calculator, player, viewer, clock, text-editor, disks, archive, template,
              file-chooser, secrets-prompt
   services/  config, notify, power, sound, clipboard, tray, automount, backup, index, printd,
-             spell, reporter, crash-reports, portal, polkit, secrets, secrets-pam
+             spell, reporter, crash-reports, portal, polkit, secrets, secrets-pam, login
   libs/      app, app-menu, app-settings, settings-panes, xdg, fs, content, glance, thumbnails,
              search, status, taskbar-model, packages, audio, network, bluetooth, volumes,
              keyboard, datetime, colour, dict, edid, https, inbox, keyring, media, media-view,
              printers, l10n, l10n-macros, l10n-source, l10n-tool, log, bus, watch, wallpaper,
-             spring, discovery, terminal-view, vm
+             spring, discovery, terminal-view, vm, pam
   testing/   test-bus, test-wayland, bench, sample, review
 data/        shared assets (wallpapers, icons, sounds)
 ```
@@ -47,7 +47,8 @@ data/        shared assets (wallpapers, icons, sounds)
   copied from, and the dialog
   processes of services: `file-chooser` is the portal's dialog and `secrets-prompt` the
   keyring's (`bande-secrets-prompt`, installed by `bande-secrets`).
-- **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande`.
+- **`services/`**: one crate per session service; `portal` is `xdg-desktop-portal-bande` and
+  `login` is `bande-login`, the system service that runs the login window.
 - **`libs/`**: shared logic without UI. `xdg` holds desktop entries, icons, MIME types,
   `mimeapps.list`, user directories, `show_items` (the file manager's `ShowItems`) and `Apps`, the one answer to "which apps open this path";
   `fs` holds folder listings and their sort order, size and date formatting, the trash, file

@@ -927,23 +927,25 @@ Depends: ${shlibs:Depends},
  fonts-inter,
  fonts-manrope,
  fonts-jetbrains-mono,
- greetd (>= 0.10.3-6),
  bande-compositor (= ${binary:Version}),
  kbd,
+ libpam0g,
+ libpam-runtime,
+ libpam-systemd,
  locales,
  ${misc:Depends}
 Provides: x-display-manager
-Description: Bande login window: signs users in through greetd
- The login window of the Bande desktop: greetd runs it as its greeter
- inside bande-compositor --greeter, and it lists the people who can sign
- in, asks for the chosen person's password and has greetd start their
- Bande session.
+Description: Bande login window and login manager
+ The login window of the Bande desktop and bande-login, the login manager
+ that runs it. bande-login runs the login window inside
+ bande-compositor --greeter, opens the session of the person who signs in
+ through PAM and logind, and keeps the login window on screen until their
+ desktop has drawn its first frame. The login window lists the people who
+ can sign in and asks for the chosen person's password.
  .
- It is a display manager of its own, bande-greeter.service, which runs
- greetd with Bande's configuration and leaves greetd.service and
- /etc/greetd/config.toml alone. When several display managers are
- installed, debconf asks which one starts; dpkg-reconfigure bande-greeter
- changes the choice.
+ It is a display manager of its own, bande-greeter.service. When several
+ display managers are installed, debconf asks which one starts;
+ dpkg-reconfigure bande-greeter changes the choice.
 
 Package: bande-terminal
 Architecture: any
@@ -1318,8 +1320,8 @@ Description: Bande desktop environment
  .
  This metapackage installs a complete Bande session: the compositor, the
  shell and lock screen, the keyring, the portal backend, PipeWire for
- sound and a way to log in (the Bande login window under greetd, or the
- display manager the system already has). It recommends the Bande apps,
+ sound and a way to log in (the Bande login window, or the display
+ manager the system already has). It recommends the Bande apps,
  the boot screen, fault reporting and systemd-oomd, which closes an app
  when memory stays under pressure.
 

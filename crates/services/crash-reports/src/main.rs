@@ -12,10 +12,11 @@ use rustix::fs::{FlockOperation, flock};
 
 const STATE: &str = "/var/lib/bande/crash-reports";
 const REPORTED_RESULTS: [&str; 4] = ["exit-code", "timeout", "watchdog", "oom-kill"];
-const UNDUMPABLE: [&str; 5] = [
+const UNDUMPABLE: [&str; 6] = [
     "bande-clipboard",
     "bande-greeter",
     "bande-lock",
+    "bande-login",
     "bande-polkit-agent",
     "bande-secrets",
 ];

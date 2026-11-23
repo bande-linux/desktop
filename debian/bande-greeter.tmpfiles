@@ -1,3 +1,4 @@
 d /var/lib/bande-greeter 0755 root root -
+d /var/lib/bande-greeter/home 0700 _bande-greeter _bande-greeter -
 d /var/lib/bande-greeter/users 0755 root root -
-d /run/bande-greeter 0755 _greetd _greetd -
+d /run/bande-greeter 0755 _bande-greeter _bande-greeter -

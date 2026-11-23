@@ -5,7 +5,7 @@ ConditionPathIsDirectory=/var/lib/bande-greeter/users
 [Service]
 Type=oneshot
 User=%i
-Group=_greetd
+Group=_bande-greeter
 StateDirectory=bande-greeter/users/%i
 StateDirectoryMode=2750
 ExecStart=/usr/bin/true

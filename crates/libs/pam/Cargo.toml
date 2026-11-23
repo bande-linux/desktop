@@ -1,0 +1,16 @@
+[package]
+name = "bande-pam"
+description = "Linux-PAM transactions with a conversation, loaded from libpam at run time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+libc.workspace = true
+libloading.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true
